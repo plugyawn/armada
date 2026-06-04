@@ -1,0 +1,126 @@
+{% extends "zerver/marketing_page.html" %}
+
+{% set PAGE_TITLE = "The Zulip team" %}
+
+{% set PAGE_DESCRIPTION = "Zulip has the most active open-source
+development community of any team chat software, with over 1,500 code
+contributors, and 97+ people with 100+ commits." %}
+
+
+{% block marketing_content %}
+
+<div class="portico-landing why-page">
+    <div class="hero bg-pycon drone">
+        <div class="bg-dimmer"></div>
+        <div class="content">
+            <h1 class="center">The Zulip team</h1>
+            <p>Learn about the people behind Zulip!</p>
+        </div>
+    </div>
+
+    <div class="main">
+        <div class="padded-content markdown">
+            <div class="inner-content team">
+                <p>
+                    Over 1,500 people have contributed to the Zulip
+                    codebase, from high school students to 30 year
+                    industry veterans, from people launching new careers
+                    to people looking for community. Meet the team
+                    below!
+                </p>
+
+                <h1 id="the-core-team">The core team</h1>
+
+                <p>
+                    Zulip is stewarded by the <a
+                    href="https://blog.zulip.com/2026/05/15/announcing-zulip-foundation/">Zulip
+                    Foundation</a>, with a mission of developing the best
+                    possible team chat experience, with a particular focus on
+                    public-interest organizations and communities. The Zulip
+                    Foundation fully owns Kandra Labs, the company responsible
+                    for <a href="/plans/#cloud">hosting</a>,
+                    <a href="/plans/#self-hosted">supporting</a>, and improving
+                    Zulip for use across all industries.
+                </p>
+                <p>
+                    The Kandra Labs team includes 12 amazing people who have an
+                    average of over 4 years of professional experience working
+                    on Zulip, and almost 25,000 Zulip commits between them. They
+                    have shipped major improvements end-to-end across every
+                    facet of the product.
+                </p>
+                <p>
+                    Zulip’s strength is its culture and incredibly disciplined
+                    development process. If that sounds exciting, take a look at
+                    our <a href="/jobs/">job openings</a>!
+                </p>
+
+                <!-- Contributors -->
+                <h1 id="our-amazing-community">Our amazing community</h1>
+                <p>
+                    While the team at Kandra Labs provides important
+                    leadership, Zulip is built by an incredible
+                    distributed community of developers from all
+                    around the world.  You can read about
+                    the <a href="/history/">project's history</a> if
+                    you want to learn more about Zulip's origins.
+                </p>
+                <p>
+                    Here, we recognize the top contributors to the
+                    Zulip project on GitHub.  Zulip's community
+                    is unusual in how many people outside the core
+                    team have made major contributions to the project.
+                </p>
+
+                <div class="contributors-list">
+                    <input id="total" type="radio" name="tabs" checked />
+                    <label for="total"><i class="zulip-icon zulip-icon-globe" aria-hidden="true"></i>&nbsp; Total</label>
+
+                    <input id="server" type="radio" name="tabs" />
+                    <label for="server"><i class="fa fa-server" aria-hidden="true"></i>&nbsp; Server & Web</label>
+
+                    <input id="desktop" type="radio" name="tabs" />
+                    <label for="desktop"><i class="fa fa-desktop" aria-hidden="true"></i>&nbsp; Desktop</label>
+
+                    <input id="mobile" type="radio" name="tabs" />
+                    <label for="mobile"><i class="fa fa-mobile" aria-hidden="true"></i>&nbsp; Mobile</label>
+
+                    <input id="terminal" type="radio" name="tabs" />
+                    <label for="terminal"><i class="fa fa-terminal" aria-hidden="true"></i>&nbsp; Terminal</label>
+
+                    <input id="api-clients" type="radio" name="tabs" />
+                    <label for="api-clients"><i class="fa fa-code" aria-hidden="true"></i>&nbsp; Integrations</label>
+
+                    <input id="devtools" type="radio" name="tabs" />
+                    <label for="devtools"><i class="fa fa-at" aria-hidden="true"></i>&nbsp; Devtools</label>
+                    <div id="tab-total" class="contributors">
+                        <div class="contributors-grid"></div>
+                    </div>
+                    <div id="tab-server" class="contributors">
+                        <div class="contributors-grid"></div>
+                    </div>
+                    <div id="tab-desktop" class="contributors">
+                        <div class="contributors-grid"></div>
+                    </div>
+                    <div id="tab-mobile" class="contributors">
+                        <div class="contributors-grid"></div>
+                    </div>
+                    <div id="tab-terminal" class="contributors">
+                        <div class="contributors-grid"></div>
+                    </div>
+                    <div id="tab-api-clients" class="contributors">
+                        <div class="contributors-grid"></div>
+                    </div>
+                    <div id="tab-devtools" class="contributors">
+                        <div class="contributors-grid"></div>
+                    </div>
+                </div>
+
+                <p class="last-updated">
+                    Last updated: {{ date }}. <a href="https://zulip.readthedocs.io/en/latest/contributing/counting-contributions.html" target="_blank" rel="noopener noreferrer">Methodology</a>.
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

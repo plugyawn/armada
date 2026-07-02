@@ -202,6 +202,60 @@ remote_dirty_tree_matches_local_head() {
     done < <(ssh_zulip "git diff --name-only HEAD --")
 }
 
+remote_webpack_stats_summary() {
+    ssh_zulip_clean "$REMOTE_PATH/.venv/bin/python3 - <<'PY'
+import json
+from pathlib import Path
+
+path = Path('var/webpack-stats-dev.json')
+if not path.exists():
+    print('missing 0 false false')
+    raise SystemExit
+
+data = json.loads(path.read_text())
+assets = data.get('assets', {})
+print(
+    data.get('status', 'unknown'),
+    int(path.stat().st_mtime),
+    str('app.js' in assets).lower(),
+    str('app.css' in assets).lower(),
+)
+PY"
+}
+
+wait_for_frontend_assets() {
+    local restart_epoch="$1"
+    local summary
+    local status
+    local stats_mtime
+    local has_app_js
+    local has_app_css
+
+    echo "Waiting for webpack dev assets to rebuild..."
+    for _ in $(seq 1 60); do
+        summary="$(remote_webpack_stats_summary 2>/dev/null || true)"
+        read -r status stats_mtime has_app_js has_app_css <<<"$summary"
+        if [[
+            "$status" == "done" &&
+            "$has_app_js" == "true" &&
+            "$has_app_css" == "true" &&
+            "$stats_mtime" =~ ^[0-9]+$ &&
+            "$stats_mtime" -ge "$restart_epoch"
+        ]]; then
+            if
+                curl -kfsSI --max-time 10 "https://$FQDN/webpack/app.js" >/dev/null &&
+                    curl -kfsSI --max-time 10 "https://$FQDN/webpack/app.css" >/dev/null
+            then
+                echo "Frontend assets ready: webpack-stats-dev.json status=$status mtime=$stats_mtime"
+                return
+            fi
+        fi
+        sleep 5
+    done
+
+    fail "webpack dev assets did not rebuild after service restart; last status: ${summary:-none}"
+}
+
 SNAPSHOT_DIR=""
 ROLLBACK_READY=false
 ROLLBACK_DONE=false
@@ -378,6 +432,7 @@ else
 fi
 
 echo "Restarting Pear services..."
+RESTART_EPOCH="$(ssh_root 'date +%s')"
 ssh_root 'systemctl restart pear-worker pear-embedded-bots pear-zulip-dev'
 
 echo "Waiting for https://$FQDN/ to serve..."
@@ -392,6 +447,7 @@ done
 if [[ "$SITE_CODE" != "200" && "$SITE_CODE" != "302" && "$SITE_CODE" != "303" ]]; then
     fail "site did not become healthy; last HTTP code: ${SITE_CODE:-none}"
 fi
+wait_for_frontend_assets "$RESTART_EPOCH"
 
 if [[ "$RUN_TESTS" == true ]]; then
     echo "Running Pear backend tests on the box..."

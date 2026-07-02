@@ -18,6 +18,7 @@ import * as dropdown_widget from "./dropdown_widget.ts";
 import type {Option} from "./dropdown_widget.ts";
 import * as hash_util from "./hash_util.ts";
 import * as narrow_state from "./narrow_state.ts";
+import * as pear_runtime_controls from "./pear_runtime_controls.ts";
 import * as popover_menus from "./popover_menus.ts";
 import * as server_events_state from "./server_events_state.ts";
 import * as stream_topic_history from "./stream_topic_history.ts";
@@ -108,6 +109,7 @@ export function initialize(): void {
         // DropdownWidget.render().
     });
     branch_widget.setup();
+    pear_runtime_controls.initialize();
 }
 
 export function rerender(): void {
@@ -131,6 +133,9 @@ export function rerender(): void {
     ) {
         $container.addClass("notdisplayed").empty();
         $stock_header.removeClass("notdisplayed");
+        // Clears the cached context + hides the runtime/mismatch chips
+        // for non-pear narrows.
+        pear_runtime_controls.update_chip();
         return;
     }
     const topic = narrow_state.topic();
@@ -155,4 +160,7 @@ export function rerender(): void {
     stream_topic_history_util.get_server_history(stream_id, () => {
         // no-op; the store is read lazily on dropdown open
     });
+    // Single choke point: refresh the runtime chip + mismatch chip in
+    // the right cluster this rerender just rebuilt (P5d-3).
+    pear_runtime_controls.update_chip();
 }

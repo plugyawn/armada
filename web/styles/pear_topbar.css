@@ -110,3 +110,120 @@
     border-radius: 50%;
     background-color: var(--slack-send-green);
 }
+
+/* Runtime chip (◇ model · effort) in Row A's right cluster + its
+   render-once topic-settings popover (P5d-3). This replaces the panel's
+   diff-patched model <select> + fake effort slider; the popover renders
+   once per open, outside the 125ms-patched #pear-panel subtree, so it
+   no longer fights the user. */
+.pear-runtime-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    height: 24px;
+    padding: 0 10px;
+    border: 1px solid light-dark(var(--slack-hairline), var(--slack-hairline-dark));
+    border-radius: 12px;
+    background-color: light-dark(var(--slack-pane), var(--slack-pane-dark));
+    color: light-dark(var(--slack-text-secondary), var(--slack-text-secondary-dark));
+    font-size: 12px;
+    line-height: 22px;
+    white-space: nowrap;
+    cursor: pointer;
+
+    &:hover {
+        background-color: light-dark(var(--slack-row-hover), var(--slack-row-hover-dark));
+        color: light-dark(var(--slack-ink), var(--slack-ink-dark));
+    }
+
+    &:focus-visible {
+        outline: 2px solid var(--color-outline-focus);
+        outline-offset: 2px;
+    }
+}
+
+.pear-runtime-popover {
+    min-width: 260px;
+}
+
+.pear-effort-segments {
+    display: flex;
+    border: 1px solid light-dark(var(--slack-hairline), var(--slack-hairline-dark));
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+.pear-effort-segment {
+    flex: 1 1 0;
+    padding: 4px 0;
+    border: none;
+    background-color: transparent;
+    color: light-dark(var(--slack-text-secondary), var(--slack-text-secondary-dark));
+    font-size: 12px;
+    cursor: pointer;
+
+    & + & {
+        border-left: 1px solid light-dark(var(--slack-hairline), var(--slack-hairline-dark));
+    }
+
+    &.selected {
+        background-color: var(--slack-sidebar-selected);
+        color: hsl(0deg 0% 100%);
+        font-weight: 600;
+    }
+
+    &:focus-visible {
+        outline: 2px solid var(--color-outline-focus);
+        outline-offset: -2px;
+    }
+}
+
+.pear-runtime-popover-heading {
+    margin: 6px 12px 4px;
+    color: light-dark(var(--slack-text-secondary), var(--slack-text-secondary-dark));
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+}
+
+.pear-runtime-popover-run {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 2px 12px;
+    font-size: 13px;
+}
+
+.pear-runtime-popover-run-summary {
+    flex: 1 1 auto;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.pear-run-pause-toggle {
+    flex: 0 0 auto;
+    padding: 2px 8px;
+    border: 1px solid light-dark(var(--slack-hairline), var(--slack-hairline-dark));
+    border-radius: 4px;
+    background-color: transparent;
+    color: light-dark(var(--slack-link), var(--slack-link-dark));
+    font-size: 12px;
+    cursor: pointer;
+
+    &:focus-visible {
+        outline: 2px solid var(--color-outline-focus);
+        outline-offset: 1px;
+    }
+}
+
+.pear-runtime-popover-error {
+    margin: 4px 12px;
+    color: var(--slack-badge-red);
+    font-size: 12px;
+
+    &.hidden {
+        display: none;
+    }
+}

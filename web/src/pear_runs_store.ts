@@ -110,6 +110,7 @@ export type PearTopicContext = {
     repo_title?: string;
     worktree_label?: string;
     workdir: string;
+    is_paused?: boolean;
     git: PearGitContext;
 };
 

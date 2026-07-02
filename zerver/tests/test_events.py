@@ -258,6 +258,7 @@ from zerver.lib.events import apply_events, fetch_initial_state_data, post_proce
 from zerver.lib.markdown import render_message_markdown
 from zerver.lib.mention import MentionBackend, MentionData
 from zerver.lib.muted_users import get_mute_object
+from zerver.lib.pear import PEAR_EMBEDDED_BOT_SERVICE
 from zerver.lib.streams import check_update_all_streams_active_status, user_has_metadata_access
 from zerver.lib.test_classes import ZulipTestCase
 from zerver.lib.test_helpers import (
@@ -3526,6 +3527,63 @@ class NormalActionsTest(BaseAction):
                 bot_type=UserProfile.EMBEDDED_BOT,
             )
         check_realm_bot_add("events[3]", events[3], UserProfile.EMBEDDED_BOT)
+
+        with self.verify_action(num_events=4) as events:
+            pear_bot = self.create_bot(
+                "pear",
+                full_name="Pear",
+                service_name=PEAR_EMBEDDED_BOT_SERVICE,
+                config_data=orjson.dumps({}).decode(),
+                bot_type=UserProfile.EMBEDDED_BOT,
+            )
+        self.assertEqual(events[3]["type"], "realm_bot")
+        self.assertEqual(events[3]["op"], "add")
+        self.assertEqual(events[3]["bot"]["user_id"], pear_bot.id)
+
+    def test_apply_pear_bot_user_id_realm_bot_events(self) -> None:
+        state: dict[str, Any] = {"realm_bots": [], "pear_bot_user_ids": []}
+        events = [
+            {
+                "type": "realm_bot",
+                "op": "add",
+                "bot": {
+                    "user_id": 10,
+                    "services": [{"service_name": PEAR_EMBEDDED_BOT_SERVICE}],
+                },
+                "id": 0,
+            },
+            {
+                "type": "realm_bot",
+                "op": "update",
+                "bot": {"user_id": 10, "services": [{"service_name": "helloworld"}]},
+                "id": 1,
+            },
+            {
+                "type": "realm_bot",
+                "op": "add",
+                "bot": {
+                    "user_id": 11,
+                    "services": [{"service_name": PEAR_EMBEDDED_BOT_SERVICE}],
+                },
+                "id": 2,
+            },
+            {"type": "realm_bot", "op": "delete", "bot": {"user_id": 11}, "id": 3},
+        ]
+
+        apply_events(
+            self.user_profile,
+            state=state,
+            events=events,
+            fetch_event_types=None,
+            client_gravatar=True,
+            slim_presence=False,
+            include_subscribers=True,
+            linkifier_url_template=True,
+            user_list_incomplete=False,
+            include_deactivated_groups=False,
+        )
+
+        self.assertEqual(state["pear_bot_user_ids"], [])
 
     def test_change_bot_full_name(self) -> None:
         bot = self.create_bot("test")

@@ -55,6 +55,7 @@ from zerver.lib.narrow_helpers import NeverNegatedNarrowTerm, read_stop_words
 from zerver.lib.narrow_predicate import check_narrow_for_events
 from zerver.lib.navigation_views import get_navigation_views_for_user
 from zerver.lib.onboarding_steps import get_next_onboarding_steps
+from zerver.lib.pear import PEAR_EMBEDDED_BOT_SERVICE
 from zerver.lib.presence import get_presence_for_user, get_presences_for_realm
 from zerver.lib.realm_icon import realm_icon_url
 from zerver.lib.realm_logo import get_realm_logo_source, get_realm_logo_url
@@ -110,6 +111,7 @@ from zerver.models import (
     UserStatus,
     UserTopic,
 )
+from zerver.models.bots import Service
 from zerver.models.constants import MAX_TOPIC_NAME_LENGTH
 from zerver.models.custom_profile_fields import custom_profile_fields_for_realm
 from zerver.models.linkifiers import linkifiers_for_realm
@@ -125,6 +127,61 @@ from zerver.models.streams import get_default_stream_groups
 from zerver.models.users import ResolvedTopicNoticeAutoReadPolicyEnum
 from zerver.tornado.django_api import get_user_events, request_event_queue
 from zproject.backends import email_auth_enabled, password_auth_enabled
+
+
+def pear_bot_user_ids_for_realm(realm: Realm) -> list[int]:
+    return list(
+        Service.objects.filter(
+            name=PEAR_EMBEDDED_BOT_SERVICE,
+            user_profile__realm=realm,
+            user_profile__is_active=True,
+            user_profile__bot_type=UserProfile.EMBEDDED_BOT,
+        )
+        .order_by("user_profile_id")
+        .values_list("user_profile_id", flat=True)
+    )
+
+
+def pear_bot_event_services_are_definitive(services: object) -> bool:
+    return isinstance(services, list) and any(
+        isinstance(service, dict) and "service_name" in service for service in services
+    )
+
+
+def pear_bot_event_services_include_pear(services: object) -> bool:
+    return isinstance(services, list) and any(
+        isinstance(service, dict)
+        and service.get("service_name") == PEAR_EMBEDDED_BOT_SERVICE
+        for service in services
+    )
+
+
+def pear_bot_user_id_has_pear_service(user_id: int) -> bool:
+    return Service.objects.filter(
+        name=PEAR_EMBEDDED_BOT_SERVICE,
+        user_profile_id=user_id,
+        user_profile__is_active=True,
+        user_profile__bot_type=UserProfile.EMBEDDED_BOT,
+    ).exists()
+
+
+def add_pear_bot_user_id(state: dict[str, Any], user_id: int) -> None:
+    if "pear_bot_user_ids" not in state:
+        return
+    pear_bot_user_ids = state["pear_bot_user_ids"]
+    if user_id not in pear_bot_user_ids:
+        pear_bot_user_ids.append(user_id)
+        pear_bot_user_ids.sort()
+
+
+def remove_pear_bot_user_id(state: dict[str, Any], user_id: int) -> None:
+    if "pear_bot_user_ids" not in state:
+        return
+    state["pear_bot_user_ids"] = [
+        pear_bot_user_id
+        for pear_bot_user_id in state["pear_bot_user_ids"]
+        if pear_bot_user_id != user_id
+    ]
 
 
 def add_realm_logo_fields(state: dict[str, Any], realm: Realm) -> None:
@@ -765,6 +822,7 @@ def fetch_initial_state_data(
 
     if want("realm_bot"):
         state["realm_bots"] = [] if user_profile is None else get_owned_bot_dicts(user_profile)
+        state["pear_bot_user_ids"] = pear_bot_user_ids_for_realm(realm)
 
     # This does not yet have an apply_event counterpart, since currently,
     # new entries for EMBEDDED_BOTS can only be added directly in the codebase.
@@ -1377,14 +1435,26 @@ def apply_event(
     elif event["type"] == "realm_bot":
         if event["op"] == "add":
             state["realm_bots"].append(event["bot"])
+            services = event["bot"].get("services")
+            if pear_bot_event_services_include_pear(services) or (
+                not pear_bot_event_services_are_definitive(services)
+                and pear_bot_user_id_has_pear_service(event["bot"]["user_id"])
+            ):
+                add_pear_bot_user_id(state, event["bot"]["user_id"])
         elif event["op"] == "delete":
             state["realm_bots"] = [
                 item for item in state["realm_bots"] if item["user_id"] != event["bot"]["user_id"]
             ]
+            remove_pear_bot_user_id(state, event["bot"]["user_id"])
         elif event["op"] == "update":
             for bot in state["realm_bots"]:
                 if bot["user_id"] == event["bot"]["user_id"]:
                     bot.update(event["bot"])
+            if pear_bot_event_services_are_definitive(event["bot"].get("services")):
+                if pear_bot_event_services_include_pear(event["bot"]["services"]):
+                    add_pear_bot_user_id(state, event["bot"]["user_id"])
+                else:
+                    remove_pear_bot_user_id(state, event["bot"]["user_id"])
         else:
             raise AssertionError("Unexpected event type {type}/{op}".format(**event))
     elif event["type"] == "stream":

@@ -446,7 +446,7 @@ def build_pear_codex_developer_instructions() -> str:
             (
                 f"Durable topic context lives in {PEAR_CANVAS_FILE_NAME}; read or edit it "
                 "with file tools when the task depends on standing notes, pinned context, "
-                "routines, or definition of done."
+                "or long-lived constraints."
             ),
             "Use Codex-native skills from CODEX_HOME/skills when a relevant SKILL.md applies.",
             "Keep changes focused on the user's request and verify them before finishing.",
@@ -529,7 +529,7 @@ def build_pear_codex_turn_prompt(active_session: PearActiveSessionSummary, task:
             "Recent artifacts:",
             *artifact_lines,
             "",
-            f"Canvas: durable topic context is in {PEAR_CANVAS_FILE_NAME}; inspect it when this turn depends on saved notes, pinned context, routines, or done criteria.",
+            f"Canvas: durable topic context is in {PEAR_CANVAS_FILE_NAME}; inspect it when this turn depends on saved notes, pinned context, or long-lived constraints.",
         ]
     )
 

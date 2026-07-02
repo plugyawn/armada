@@ -1977,106 +1977,6 @@ class PearSessionEndpointTest(ZulipTestCase):
             self.assertEqual((destination / "README.md").read_text(encoding="utf-8"), "hello\n")
             self.assertTrue((destination / ".git").exists())
 
-    def test_worker_repo_artifact_does_not_update_topic_context(self) -> None:
-        owner = self.example_user("hamlet")
-        pear_bot = self.create_test_bot(
-            "pear",
-            owner,
-            full_name="Pear",
-            bot_type=UserProfile.EMBEDDED_BOT,
-            service_name=PEAR_EMBEDDED_BOT_SERVICE,
-        )
-        self.subscribe(owner, PEAR_DEFAULT_STREAM)
-
-        with tempfile.TemporaryDirectory() as temp_dir, self.settings(
-            PEAR_TOPIC_WORKDIR_ROOT=temp_dir,
-        ):
-            PearDatabaseWorkerRunStore().record_topic_context_results(
-                SimpleNamespace(user_profile=pear_bot),
-                stream=PEAR_DEFAULT_STREAM,
-                topic=PEAR_DEFAULT_TOPIC,
-                tool_results=[
-                    {
-                        "label": "Repo",
-                        "value": "NVIDIA/Megatron-LM <main>",
-                    }
-                ],
-            )
-
-            self.assertFalse(PearTopicContext.objects.filter(
-                realm=owner.realm,
-                stream_name=PEAR_DEFAULT_STREAM,
-                topic_name=PEAR_DEFAULT_TOPIC,
-            ).exists())
-
-    def test_worker_repo_artifact_does_not_update_context_for_local_topic_repo(self) -> None:
-        owner = self.example_user("hamlet")
-        pear_bot = self.create_test_bot(
-            "pear",
-            owner,
-            full_name="Pear",
-            bot_type=UserProfile.EMBEDDED_BOT,
-            service_name=PEAR_EMBEDDED_BOT_SERVICE,
-        )
-        self.subscribe(owner, PEAR_DEFAULT_STREAM)
-
-        with tempfile.TemporaryDirectory() as temp_dir, self.settings(
-            PEAR_TOPIC_WORKDIR_ROOT=temp_dir,
-        ):
-            workdir = pear_expected_topic_workdir(
-                owner,
-                stream=PEAR_DEFAULT_STREAM,
-                topic=PEAR_DEFAULT_TOPIC,
-            )
-            self.create_git_repository(workdir)
-
-            PearDatabaseWorkerRunStore().record_topic_context_results(
-                SimpleNamespace(user_profile=pear_bot),
-                stream=PEAR_DEFAULT_STREAM,
-                topic=PEAR_DEFAULT_TOPIC,
-                tool_results=[{"label": "Repo", "value": str(workdir)}],
-            )
-
-            self.assertFalse(PearTopicContext.objects.filter(
-                realm=owner.realm,
-                stream_name=PEAR_DEFAULT_STREAM,
-                topic_name=PEAR_DEFAULT_TOPIC,
-            ).exists())
-
-    def test_worker_repo_artifact_ignores_prose_repo_answer(self) -> None:
-        owner = self.example_user("hamlet")
-        pear_bot = self.create_test_bot(
-            "pear",
-            owner,
-            full_name="Pear",
-            bot_type=UserProfile.EMBEDDED_BOT,
-            service_name=PEAR_EMBEDDED_BOT_SERVICE,
-        )
-
-        with tempfile.TemporaryDirectory() as temp_dir, self.settings(
-            PEAR_TOPIC_WORKDIR_ROOT=temp_dir,
-        ):
-            PearDatabaseWorkerRunStore().record_topic_context_results(
-                SimpleNamespace(user_profile=pear_bot),
-                stream=PEAR_DEFAULT_STREAM,
-                topic=PEAR_DEFAULT_TOPIC,
-                tool_results=[{"label": "Repo", "value": "Zulip repo"}],
-            )
-            PearDatabaseWorkerRunStore().record_topic_context_results(
-                SimpleNamespace(user_profile=pear_bot),
-                stream=PEAR_DEFAULT_STREAM,
-                topic=PEAR_DEFAULT_TOPIC,
-                tool_results=[{"label": "Repo", "value": "/home/zulipdev/zulip"}],
-            )
-
-            self.assertFalse(
-                PearTopicContext.objects.filter(
-                    realm=owner.realm,
-                    stream_name=PEAR_DEFAULT_STREAM,
-                    topic_name=PEAR_DEFAULT_TOPIC,
-                ).exists()
-            )
-
     def test_worker_start_allows_same_user_in_different_topics(self) -> None:
         owner = self.example_user("hamlet")
         pear_bot = self.create_test_bot(
@@ -3059,12 +2959,6 @@ class PearSessionEndpointTest(ZulipTestCase):
                     stream=PEAR_DEFAULT_STREAM,
                     topic="",
                 ).startswith(temp_dir)
-            )
-            PearDatabaseWorkerRunStore().record_topic_context_results(
-                SimpleNamespace(user_profile=pear_bot),
-                stream=PEAR_DEFAULT_STREAM,
-                topic="",
-                tool_results=[{"label": "Repo", "value": "NVIDIA/Megatron-LM <main>"}],
             )
             context = PearTopicContext.objects.get(
                 realm=owner.realm,

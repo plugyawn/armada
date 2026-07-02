@@ -3142,6 +3142,14 @@ class PearEmbeddedBotHandler:
                 stream=stream,
                 topic=topic,
             ):
+                stale_ack_message = build_pear_worker_start_blocked_message(
+                    "This request was already handled or is no longer claimable."
+                )
+                update_pear_worker_status_message(
+                    bot_handler,
+                    progress_message_id=progress_message_id,
+                    content=stale_ack_message,
+                )
                 return
             self.register_worker_progress_message(
                 bot_handler,
@@ -3658,6 +3666,32 @@ class PearEmbeddedBotHandler:
                             if result_updated
                             else "Posted worker result message."
                         ),
+                        payload={"result_message_id": result_message_id},
+                    )
+            elif result_message_id is not None or progress_message_id is not None:
+                content_to_post = build_pear_worker_completed_message(
+                    task=task,
+                    tool_results=worker_result["tool_results"],
+                    transcript_events=transcript_events,
+                )
+                target_message_id = result_message_id or progress_message_id
+                result_updated = update_pear_worker_status_message(
+                    bot_handler,
+                    progress_message_id=target_message_id,
+                    content=content_to_post,
+                )
+                write_pear_live_run_state(
+                    message_id,
+                    status="done",
+                    content=content_to_post,
+                )
+                if result_updated:
+                    result_message_id = target_message_id
+                    self.record_worker_event(
+                        bot_handler,
+                        message_id,
+                        "result_updated",
+                        summary="Settled worker progress message.",
                         payload={"result_message_id": result_message_id},
                     )
             self.worker_run_store.record(

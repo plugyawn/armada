@@ -54,8 +54,11 @@ from zerver.lib.pear import (
     PEAR_TRIGGER_MESSAGE_KEY,
     PEAR_VERIFY_CHANGES_PROMPT,
     PEAR_WORKER_RUNS_STORAGE_KEY,
+    PearActiveSessionSummary,
     PearEmbeddedBotHandler,
+    PearWorkerRunResult,
     PearWorkerRuntime,
+    PearWorkerTranscriptCallback,
     build_pear_access_ack_message,
     build_pear_access_message,
     build_pear_ack_message,
@@ -5325,7 +5328,7 @@ class PearSessionDefaultsTest(TestCase):
         handler.handle_message(message, bot_handler)
 
         self.assertEqual(len(sent_replies), 2)
-        self.assertEqual(len(updated_replies), 2)
+        self.assertEqual(len(updated_replies), 3)
         self.assertEqual(sent_replies[0], PEAR_ACTIVE_THINKING_MARKDOWN)
         self.assertEqual(updated_replies[0], PEAR_ACTIVE_THINKING_MARKDOWN)
         self.assertEqual(
@@ -5333,6 +5336,11 @@ class PearSessionDefaultsTest(TestCase):
             "Pear worker completed without a visible response.",
         )
         self.assertEqual(sent_replies[1], PEAR_ACTIVE_THINKING_MARKDOWN)
+        self.assertEqual(
+            updated_replies[2],
+            "Pear worker is not starting.\n\n"
+            "Reason: This request was already handled or is no longer claimable.",
+        )
         self.assertEqual(
             bot_handler.storage.values[PEAR_WORKER_RUNS_STORAGE_KEY],
             [
@@ -5439,6 +5447,60 @@ class PearSessionDefaultsTest(TestCase):
         self.assertEqual(
             updated_replies[1],
             "Pear worker completed without a visible response.",
+        )
+
+    def test_embedded_bot_settles_ack_when_worker_start_claim_fails(self) -> None:
+        sent_replies: list[str] = []
+        updated_replies: list[str] = []
+
+        class FakeRunStore:
+            def start(
+                self,
+                bot_handler,
+                message_id: int,
+                *,
+                stream: str,
+                topic: str,
+            ) -> bool:
+                return False
+
+        class FakeBotHandler:
+            def send_reply(self, message: dict[str, object], response: str) -> dict[str, int]:
+                sent_replies.append(response)
+                return {"id": 311}
+
+            def update_message(self, message: dict[str, object]) -> None:
+                content = message.get("content")
+                assert isinstance(content, str)
+                updated_replies.append(content)
+
+        class FailingDispatcher:
+            def dispatch(self, *args: object, **kwargs: object) -> None:
+                raise AssertionError("worker should not be dispatched after a failed start claim")
+
+        message = {
+            "id": 204,
+            "type": "stream",
+            "display_recipient": PEAR_DEFAULT_STREAM,
+            "topic": PEAR_DEFAULT_TOPIC,
+            "content": "@Pear fix the checkout test",
+        }
+
+        PearEmbeddedBotHandler(
+            worker_run_store=FakeRunStore(),
+            worker_dispatcher=FailingDispatcher(),
+        ).handle_message(
+            message,
+            FakeBotHandler(),
+        )
+
+        self.assertEqual(sent_replies, [PEAR_ACTIVE_THINKING_MARKDOWN])
+        self.assertEqual(
+            updated_replies,
+            [
+                "Pear worker is not starting.\n\n"
+                "Reason: This request was already handled or is no longer claimable."
+            ],
         )
 
     def test_queue_worker_dispatcher_enqueues_pear_worker_event(self) -> None:
@@ -5610,6 +5672,125 @@ class PearSessionDefaultsTest(TestCase):
                 ("running", 501, None),
                 ("done", 501, None),
             ],
+        )
+
+    def test_run_worker_turn_settles_progress_for_non_posting_result(self) -> None:
+        updated_messages: list[dict[str, object]] = []
+        recorded_events: list[tuple[str, str]] = []
+
+        class FakeRunStore:
+            def record(
+                self,
+                bot_handler,
+                message_id: int,
+                status: str,
+                *,
+                stream: str,
+                topic: str,
+                result_message_id: int | None = None,
+                error: str | None = None,
+            ) -> None:
+                pass
+
+            def record_event(
+                self,
+                bot_handler,
+                message_id: int,
+                event_type: str,
+                *,
+                summary: str = "",
+                payload: dict[str, object] | None = None,
+            ) -> None:
+                recorded_events.append((event_type, summary))
+
+            def update_metadata(
+                self,
+                bot_handler,
+                message_id: int,
+                **metadata: object,
+            ) -> None:
+                pass
+
+        class FakeBotHandler:
+            def send_reply(
+                self,
+                message: dict[str, object],
+                response: str,
+            ) -> dict[str, int]:
+                raise AssertionError("progress message should be edited in place")
+
+            def update_message(self, message: dict[str, object]) -> None:
+                updated_messages.append(message)
+
+        class NonPostingRuntime(PearWorkerRuntime):
+            def run(
+                self,
+                *,
+                active_session: PearActiveSessionSummary,
+                task: str = "",
+                event_callback: PearWorkerTranscriptCallback | None = None,
+            ) -> PearWorkerRunResult:
+                if event_callback is not None:
+                    event_callback(
+                        {
+                            "kind": "status",
+                            "status": "running",
+                            "title": "Started runtime.",
+                            "body": "",
+                        }
+                    )
+                return {
+                    "should_post": False,
+                    "worker_can_run": True,
+                    "content": None,
+                    "tool_count": 0,
+                    "tool_results": [],
+                }
+
+        payload = get_pear_session_payload()
+        active_session = build_pear_active_session_summary_from_messages(
+            pear_session=payload,
+            source="server",
+            stream_exists=True,
+            messages=[(10, "@Pear run quietly", False)],
+        )
+        trigger_message_id = 9207
+        message = {
+            "id": trigger_message_id,
+            "type": "stream",
+            "display_recipient": PEAR_DEFAULT_STREAM,
+            "topic": PEAR_DEFAULT_TOPIC,
+            "content": "@Pear run quietly",
+        }
+
+        PearEmbeddedBotHandler(
+            worker_runtime=NonPostingRuntime(),
+            worker_run_store=FakeRunStore(),
+        ).run_worker_turn(
+            message,
+            FakeBotHandler(),
+            content="@Pear run quietly",
+            active_session=active_session,
+            message_id=trigger_message_id,
+            stream=PEAR_DEFAULT_STREAM,
+            topic=PEAR_DEFAULT_TOPIC,
+            post_started_progress=True,
+            progress_message_id=502,
+        )
+
+        self.assertEqual(updated_messages[0]["content"], PEAR_ACTIVE_THINKING_MARKDOWN)
+        self.assertEqual(
+            updated_messages[-1]["content"],
+            "Pear worker completed without a visible response.",
+        )
+        self.assertIn(("result_updated", "Settled worker progress message."), recorded_events)
+        live_state = get_pear_live_run_state(trigger_message_id)
+        self.assertIsNotNone(live_state)
+        assert live_state is not None
+        self.assertEqual(live_state["status"], "done")
+        self.assertEqual(
+            live_state["content"],
+            "Pear worker completed without a visible response.",
         )
 
     def test_run_worker_turn_posts_continuation_messages_for_long_result(self) -> None:

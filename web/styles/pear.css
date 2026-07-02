@@ -103,9 +103,7 @@ body.pear-right-area-open {
 }
 
 .pear-panel-header,
-.pear-workspace-row,
-.pear-panel-actions,
-.pear-context-line {
+.pear-panel-actions {
     display: flex;
     align-items: center;
 }
@@ -120,7 +118,6 @@ body.pear-right-area-open {
 }
 
 .pear-panel-actions {
-    width: 104px;
     flex: none;
     justify-content: flex-end;
     gap: 3px;
@@ -128,8 +125,7 @@ body.pear-right-area-open {
 
 .pear-panel-title,
 .pear-context-section-title,
-.pear-field-label,
-.pear-context-label {
+.pear-field-label {
     color: var(--color-text-sidebar-heading);
     font-weight: var(--font-weight-sidebar-heading);
     opacity: var(--opacity-sidebar-heading);
@@ -334,197 +330,136 @@ body.pear-right-area-open {
     font-size: 11px;
 }
 
-.pear-context-line {
-    min-width: 0;
-    gap: 7px;
-    line-height: 15px;
-}
-
-.pear-context-label {
-    flex: none;
-    min-width: 32px;
-    font-size: 11px;
-}
-
-.pear-context-value {
-    min-width: 0;
-    overflow: hidden;
-    color: var(--color-text-sidebar-row);
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.pear-workspace-summary {
-    min-width: 0;
-    padding: 1px 0;
-}
-
-.pear-workspace-row {
-    min-width: 0;
-    gap: 6px;
-}
-
-.pear-workspace-ref {
-    overflow: hidden;
-    margin-left: 39px;
-    color: var(--color-text-item);
-    font-family: monospace;
-    font-size: 11px;
-    line-height: 14px;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.pear-git-dot {
-    width: 6px;
-    height: 6px;
-    flex: none;
-    border-radius: 50%;
-}
-
-.pear-git-clean .pear-git-dot {
-    background: light-dark(hsl(142deg 45% 38%), hsl(142deg 60% 72%));
-}
-
-.pear-git-dirty .pear-git-dot {
-    background: light-dark(hsl(36deg 70% 42%), hsl(38deg 88% 72%));
-}
-
-.pear-workspace-name {
-    min-width: 0;
-    overflow: hidden;
-    color: var(--color-text-sidebar-row);
-    font-weight: 600;
-    line-height: 16px;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.pear-git-ref,
-.pear-git-head,
-.pear-git-status {
-    flex: none;
-    font-size: 11px;
-    line-height: 14px;
-}
-
-.pear-git-ref {
-    min-width: 0;
-    overflow: hidden;
-    color: var(--color-text-item);
-    font-weight: 600;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.pear-git-head {
-    color: var(--color-text-item);
-    font-family: monospace;
-}
-
-.pear-git-status {
-    margin-left: auto;
-    font-weight: 600;
-}
-
-.pear-git-clean .pear-git-status {
-    color: light-dark(hsl(142deg 45% 30%), hsl(142deg 63% 76%));
-}
-
-.pear-git-dirty .pear-git-status {
-    color: light-dark(hsl(31deg 46% 28%), hsl(37deg 88% 80%));
-}
-
-.pear-workdir {
-    overflow: hidden;
-    color: var(--color-text-item);
-    font-family: monospace;
-    font-size: 11px;
-    line-height: 15px;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.pear-worktree-details {
-    min-width: 0;
-    color: var(--color-text-item);
-    font-size: 11px;
-    line-height: 15px;
-}
-
-.pear-worktree-details > summary {
-    cursor: pointer;
-    list-style-position: outside;
-    margin-left: 12px;
-    padding: 1px 0;
-    color: var(--color-text-sidebar-heading);
-    font-weight: var(--font-weight-sidebar-heading);
-    opacity: var(--opacity-sidebar-heading);
-}
-
-.pear-worktree-summary-extra {
-    color: var(--color-text-item);
-    font-family: monospace;
-    font-size: 10px;
-    font-weight: 400;
-    margin-left: 5px;
-}
-
-.pear-worktree-details > .pear-workdir,
-.pear-worktree-details > .pear-commit-list {
-    margin-top: 4px;
-}
-
-.pear-worktree-unavailable {
-    margin-left: 0;
-}
-
-.pear-file-list,
-.pear-commit-list {
+/* One status+verbs row per run (no single-run pick), so multi-run
+   topics never hide a live run: the status pill grows, the verbs sit
+   at the trailing edge. */
+.pear-run-list {
     display: flex;
     flex-direction: column;
-    gap: 3px;
+    /* 6px at the panel's 12px font */
+    gap: 0.5em;
 }
 
-.pear-file-row,
-.pear-commit-row {
-    display: grid;
-    grid-template-columns: max-content minmax(0, 1fr);
-    gap: 6px;
+.pear-run-row {
+    display: flex;
+    align-items: center;
     min-width: 0;
-    line-height: 15px;
+    /* 6px at the panel's 12px font */
+    gap: 0.5em;
 }
 
-.pear-file-status,
-.pear-commit-hash {
-    font-family: monospace;
-    font-size: 11px;
+.pear-run-row .pear-run-status-row {
+    flex: 1;
 }
 
-.pear-file-path,
-.pear-commit-summary {
+.pear-run-session-kind {
+    flex: none;
+    font-weight: 500;
+    opacity: 0.8;
+}
+
+/* The git DELTA row (R3): only what the authoritative chat header
+   can't say — dirty/clean + changed count, ahead/behind, detached
+   HEAD, and the branch≠topic edge case — as small token-styled
+   pills, never a restated repo/branch name. */
+.pear-git-delta-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    /* 5px at the panel's 12px font */
+    gap: 0.417em;
+}
+
+.pear-git-delta-pill,
+.pear-git-delta-chip {
+    --pear-git-color: var(--color-pear-status-idle);
+    display: inline-flex;
+    align-items: center;
+    min-width: 0;
+    /* Match the run status pill: 10px type on a low-alpha wash. */
+    font-size: 10px;
+    font-weight: 600;
+    line-height: 1.2;
+    /* 5px / 2.5px 7.5px / 12px at the pill's 10px font */
+    gap: 0.5em;
+    padding: 0.25em 0.75em;
+    border-radius: 1.2em;
+    background-color: color-mix(
+        in srgb,
+        var(--pear-git-color) 14%,
+        transparent
+    );
+    color: var(--pear-git-color);
+}
+
+.pear-git-dirty .pear-git-delta-pill {
+    --pear-git-color: var(--color-pear-status-attention);
+}
+
+.pear-git-chip-detached {
+    --pear-git-color: var(--color-pear-status-attention);
+}
+
+.pear-git-chip-mismatch {
+    --pear-git-color: var(--color-pear-status-blocked);
+}
+
+.pear-git-delta-head {
     overflow: hidden;
+    font-family: monospace;
+    font-weight: 400;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
 
-.pear-file-added .pear-file-status,
-.pear-file-untracked .pear-file-status {
-    color: light-dark(hsl(142deg 50% 32%), hsl(142deg 58% 72%));
+.pear-git-tree-target:focus-visible {
+    outline: 2px solid var(--color-outline-focus);
+    outline-offset: 1px;
 }
 
-.pear-file-deleted .pear-file-status {
-    color: light-dark(hsl(3deg 58% 42%), hsl(3deg 75% 75%));
+/* Commit-tree hover popover (pear_git_hover.ts): a git log --graph
+   snapshot inside a light-border tippy box. */
+.pear-git-tree-popover {
+    /* Wide enough for graph rails + subject lines; long lines
+       scroll rather than wrap. */
+    max-width: 36em;
+    max-height: 24em;
+    overflow: auto;
+    /* 2.5px at the popover's 11px font */
+    padding: 0.227em 0;
+    color: var(--color-text-default);
+    font-size: 11px;
+    line-height: 1.4;
 }
 
-.pear-file-modified .pear-file-status,
-.pear-file-renamed .pear-file-status,
-.pear-file-changed .pear-file-status {
-    color: light-dark(hsl(38deg 60% 34%), hsl(38deg 78% 76%));
+.pear-git-tree-popover pre {
+    margin: 0;
+    padding: 0;
+    border: none;
+    border-radius: 0;
+    background: transparent;
+    color: inherit;
+    font-size: inherit;
+    line-height: inherit;
+    white-space: pre;
 }
 
-.pear-diff-shortstat,
-.pear-file-more,
+.pear-git-tree-graph,
+.pear-git-tree-status {
+    font-family: monospace;
+}
+
+.pear-git-tree-status {
+    /* 5px at the popover's 11px font */
+    margin-top: 0.455em;
+    padding-top: 0.455em;
+    border-top: 1px solid var(--color-border-popover-menu-separator);
+}
+
+.pear-git-tree-note {
+    color: var(--color-text-item);
+}
+
 .pear-empty-state,
 .pear-panel-error {
     color: var(--color-text-item);

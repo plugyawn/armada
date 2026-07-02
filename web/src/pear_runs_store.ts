@@ -69,32 +69,24 @@ export type PearModelCatalogEntry = {
     supported_reasoning_levels?: PearReasoningEffort[];
 };
 
-export type PearGitChangedFile = {
-    status: string;
-    kind: string;
-    path: string;
-};
-
-export type PearGitCommit = {
-    hash: string;
-    summary: string;
-};
-
+// The P1a git-status DELTA: one `git status --porcelain=v2 --branch`
+// parse, plus the branch==topic check (R3). The panel renders only
+// these fields; names/paths live in the authoritative chat header.
 export type PearGitContext = {
     available: boolean;
     workdir?: string;
     repo_name?: string;
-    repo_label?: string;
-    remote_url?: string;
     worktree_name?: string;
     branch?: string;
     head?: string;
+    head_short?: string;
+    upstream?: string;
+    ahead?: number;
+    behind?: number;
     dirty?: boolean;
     changed_count?: number;
-    changed_files?: PearGitChangedFile[];
-    changed_files_truncated?: boolean;
-    diff_shortstat?: string;
-    recent_commits?: PearGitCommit[];
+    detached?: boolean;
+    branch_matches_topic?: boolean;
 };
 
 export type PearTopicContext = {

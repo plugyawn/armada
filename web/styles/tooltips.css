@@ -3,10 +3,15 @@
      * which have different font-family, we force font-family
      * for tooltips here.
      */
-    font-family: "Source Sans 3 VF", sans-serif !important;
+    font-family:
+        Lato,
+        -apple-system,
+        "Segoe UI",
+        "Helvetica Neue",
+        Helvetica,
+        Arial,
+        sans-serif !important;
     overflow-wrap: anywhere;
-    /* Contains stylistic variant of upper-case character "I" in Source Sans 3 */
-    font-feature-settings: "ss01" on;
 
     /* Affects all tippy tooltips not using any theme. */
     .tippy-box:not([data-theme]) {

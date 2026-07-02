@@ -11,6 +11,7 @@ from django.utils.timezone import now as timezone_now
 from zerver.lib.pear import (
     PEAR_ACTIVE_SESSION_ENDPOINT,
     PEAR_AGENT_RUNTIME_PACKAGES,
+    PEAR_CANVAS_ENDPOINT,
     PEAR_CODEX_MCP_TOOLS,
     PEAR_CONFIG_ENDPOINT,
     PEAR_DEFAULT_STREAM,
@@ -649,6 +650,239 @@ class PearSessionEndpointTest(ZulipTestCase):
                     topic_name=PEAR_DEFAULT_TOPIC,
                 ).exists()
             )
+
+    def test_get_pear_canvas_creates_backfilled_git_excluded_canvas(self) -> None:
+        owner = self.example_user("hamlet")
+        self.subscribe(owner, PEAR_DEFAULT_STREAM)
+        self.login_user(owner)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            base_workdir = Path(temp_dir) / "base"
+            topic_root = str(Path(temp_dir) / "topics")
+            self.create_git_repository(base_workdir)
+            self.send_stream_message(
+                owner,
+                PEAR_DEFAULT_STREAM,
+                content="Memory: Prefer narrow backend tests",
+                topic_name=PEAR_DEFAULT_TOPIC,
+            )
+            self.send_stream_message(
+                owner,
+                PEAR_DEFAULT_STREAM,
+                content="Done: canvas round-trip verified",
+                topic_name=PEAR_DEFAULT_TOPIC,
+            )
+            self.send_stream_message(
+                owner,
+                PEAR_DEFAULT_STREAM,
+                content="Routine: Check CI every weekday",
+                topic_name=PEAR_DEFAULT_TOPIC,
+            )
+
+            with self.settings(
+                PEAR_WORKER_WORKDIR=str(base_workdir),
+                PEAR_TOPIC_WORKDIR_ROOT=topic_root,
+            ):
+                result = self.client_get(
+                    f"/json{PEAR_CANVAS_ENDPOINT}",
+                    {
+                        "stream": PEAR_DEFAULT_STREAM,
+                        "topic": PEAR_DEFAULT_TOPIC,
+                    },
+                    intentionally_undocumented=True,
+                )
+                context = PearTopicContext.objects.get(
+                    realm=owner.realm,
+                    stream_name=PEAR_DEFAULT_STREAM,
+                    topic_name=PEAR_DEFAULT_TOPIC,
+                )
+                delta = pear_git_status_delta(
+                    context.workdir,
+                    topic=pear_topic_branch_name(PEAR_DEFAULT_TOPIC),
+                )
+
+            canvas = self.assert_json_success(result)["pear_canvas"]
+            canvas_path = Path(canvas["path"])
+            exclude_path = Path(
+                subprocess.run(
+                    ["git", "-C", context.workdir, "rev-parse", "--git-path", "info/exclude"],
+                    check=True,
+                    stdout=subprocess.PIPE,
+                    text=True,
+                    timeout=10,
+                ).stdout.strip()
+            )
+            if not exclude_path.is_absolute():
+                exclude_path = Path(context.workdir) / exclude_path
+
+            self.assertEqual(canvas["relative_path"], "CANVAS.md")
+            self.assertTrue(canvas["exists"])
+            self.assertTrue(canvas_path.exists())
+            self.assertIn(f"# {PEAR_DEFAULT_STREAM} > {PEAR_DEFAULT_TOPIC}", canvas["content"])
+            self.assertIn("Backfilled pinned context", canvas["content"])
+            self.assertIn("Prefer narrow backend tests", canvas["content"])
+            self.assertIn("Backfilled definition of done", canvas["content"])
+            self.assertIn("canvas round-trip verified", canvas["content"])
+            self.assertIn("Backfilled routines", canvas["content"])
+            self.assertIn("Check CI every weekday", canvas["content"])
+            self.assertIn("/CANVAS.md", exclude_path.read_text(encoding="utf-8"))
+            self.assertFalse(delta["dirty"])
+            self.assertEqual(delta["changed_count"], 0)
+
+    def test_put_pear_canvas_uses_base_version_and_reports_conflict(self) -> None:
+        owner = self.example_user("hamlet")
+        self.subscribe(owner, PEAR_DEFAULT_STREAM)
+        self.login_user(owner)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            base_workdir = Path(temp_dir) / "base"
+            topic_root = str(Path(temp_dir) / "topics")
+            self.create_git_repository(base_workdir)
+
+            with self.settings(
+                PEAR_WORKER_WORKDIR=str(base_workdir),
+                PEAR_TOPIC_WORKDIR_ROOT=topic_root,
+            ):
+                get_result = self.client_get(
+                    f"/json{PEAR_CANVAS_ENDPOINT}",
+                    {
+                        "stream": PEAR_DEFAULT_STREAM,
+                        "topic": PEAR_DEFAULT_TOPIC,
+                    },
+                    intentionally_undocumented=True,
+                )
+                initial_canvas = self.assert_json_success(get_result)["pear_canvas"]
+                updated_content = "# pair-programming > pear/session\n\n## Notes\n\nSaved.\n"
+                put_result = self.client_put(
+                    f"/json{PEAR_CANVAS_ENDPOINT}",
+                    {
+                        "stream": PEAR_DEFAULT_STREAM,
+                        "topic": PEAR_DEFAULT_TOPIC,
+                        "content": updated_content,
+                        "base_version": initial_canvas["version"],
+                    },
+                    intentionally_undocumented=True,
+                )
+                stale_result = self.client_put(
+                    f"/json{PEAR_CANVAS_ENDPOINT}",
+                    {
+                        "stream": PEAR_DEFAULT_STREAM,
+                        "topic": PEAR_DEFAULT_TOPIC,
+                        "content": "stale write\n",
+                        "base_version": initial_canvas["version"],
+                    },
+                    intentionally_undocumented=True,
+                )
+
+        saved_canvas = self.assert_json_success(put_result)["pear_canvas"]
+        self.assertEqual(saved_canvas["content"], updated_content)
+        self.assertNotEqual(saved_canvas["version"], initial_canvas["version"])
+        self.assert_json_error(
+            stale_result,
+            "Pear canvas changed; reload before saving.",
+            status_code=409,
+        )
+        stale_payload = orjson.loads(stale_result.content)
+        self.assertEqual(stale_payload["pear_canvas"]["content"], updated_content)
+        self.assertEqual(stale_payload["pear_canvas"]["version"], saved_canvas["version"])
+
+    def test_put_pear_canvas_rejects_oversized_content(self) -> None:
+        owner = self.example_user("hamlet")
+        self.subscribe(owner, PEAR_DEFAULT_STREAM)
+        self.login_user(owner)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            base_workdir = Path(temp_dir) / "base"
+            topic_root = str(Path(temp_dir) / "topics")
+            self.create_git_repository(base_workdir)
+
+            with self.settings(
+                PEAR_WORKER_WORKDIR=str(base_workdir),
+                PEAR_TOPIC_WORKDIR_ROOT=topic_root,
+            ):
+                get_result = self.client_get(
+                    f"/json{PEAR_CANVAS_ENDPOINT}",
+                    {
+                        "stream": PEAR_DEFAULT_STREAM,
+                        "topic": PEAR_DEFAULT_TOPIC,
+                    },
+                    intentionally_undocumented=True,
+                )
+                initial_canvas = self.assert_json_success(get_result)["pear_canvas"]
+                result = self.client_put(
+                    f"/json{PEAR_CANVAS_ENDPOINT}",
+                    {
+                        "stream": PEAR_DEFAULT_STREAM,
+                        "topic": PEAR_DEFAULT_TOPIC,
+                        "content": "x" * (64 * 1024 + 1),
+                        "base_version": initial_canvas["version"],
+                    },
+                    intentionally_undocumented=True,
+                )
+
+        self.assert_json_error(result, "Pear canvas is too large.")
+
+    def test_pear_canvas_uses_fallback_when_repo_tracks_canvas_file(self) -> None:
+        owner = self.example_user("hamlet")
+        self.subscribe(owner, PEAR_DEFAULT_STREAM)
+        self.login_user(owner)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            base_workdir = Path(temp_dir) / "base"
+            topic_root = str(Path(temp_dir) / "topics")
+            self.create_git_repository(base_workdir)
+            (base_workdir / "CANVAS.md").write_text("repo-owned canvas\n", encoding="utf-8")
+            subprocess.run(["git", "-C", str(base_workdir), "add", "CANVAS.md"], check=True)
+            subprocess.run(
+                [
+                    "git",
+                    "-C",
+                    str(base_workdir),
+                    "-c",
+                    "user.email=pear@example.com",
+                    "-c",
+                    "user.name=Pear",
+                    "commit",
+                    "--quiet",
+                    "-m",
+                    "track canvas",
+                ],
+                check=True,
+                timeout=10,
+            )
+
+            with self.settings(
+                PEAR_WORKER_WORKDIR=str(base_workdir),
+                PEAR_TOPIC_WORKDIR_ROOT=topic_root,
+            ):
+                result = self.client_get(
+                    f"/json{PEAR_CANVAS_ENDPOINT}",
+                    {
+                        "stream": PEAR_DEFAULT_STREAM,
+                        "topic": PEAR_DEFAULT_TOPIC,
+                    },
+                    intentionally_undocumented=True,
+                )
+                context = PearTopicContext.objects.get(
+                    realm=owner.realm,
+                    stream_name=PEAR_DEFAULT_STREAM,
+                    topic_name=PEAR_DEFAULT_TOPIC,
+                )
+                delta = pear_git_status_delta(
+                    context.workdir,
+                    topic=pear_topic_branch_name(PEAR_DEFAULT_TOPIC),
+                )
+
+            canvas = self.assert_json_success(result)["pear_canvas"]
+
+            self.assertEqual(canvas["relative_path"], ".pear/CANVAS.md")
+            self.assertEqual(
+                (Path(context.workdir) / "CANVAS.md").read_text(),
+                "repo-owned canvas\n",
+            )
+            self.assertEqual(Path(canvas["path"]).read_text(), canvas["content"])
+            self.assertFalse(delta["dirty"])
+            self.assertEqual(delta["changed_count"], 0)
 
     def test_existing_base_workdir_topic_context_is_repaired(self) -> None:
         owner = self.example_user("hamlet")

@@ -44,7 +44,9 @@ from zerver.lib.pear_worker import (
     PearQueueWorkerDispatcher,
     ensure_pear_child_topic_context,
     ensure_pear_topic_context,
+    pear_backfill_canvas_from_topic_history,
     pear_default_worker_reasoning_effort,
+    pear_ensure_topic_canvas,
     pear_git_output,
     pear_git_status_delta,
     pear_logical_repository_label,
@@ -56,14 +58,17 @@ from zerver.lib.pear_worker import (
     pear_topic_context_is_paused,
     pear_topic_context_response_policy,
     pear_topic_os_user_isolation_enabled,
+    pear_read_text_path,
+    pear_sha256_text,
     pear_worker_model_for_topic,
     pear_worker_reasoning_effort_for_topic,
     pear_worker_sandbox_for_topic,
     pear_worker_workdir_for_topic,
+    pear_write_text_path,
     set_pear_topic_context_paused,
     set_pear_topic_context_response_policy,
 )
-from zerver.lib.response import json_success
+from zerver.lib.response import json_response, json_success
 from zerver.lib.streams import access_stream_by_name
 from zerver.lib.timestamp import datetime_to_timestamp
 from zerver.lib.topic import messages_for_topic
@@ -84,6 +89,7 @@ PEAR_RUN_EVENT_LIMIT = 40
 PEAR_GIT_TREE_COMMIT_LIMIT = 20
 PEAR_MODEL_SLUG_LIMIT = 100
 PEAR_MODEL_CATALOG_CACHE_SECONDS = 300
+PEAR_CANVAS_MAX_BYTES = 64 * 1024
 
 pear_model_catalog_cache: tuple[float, list[dict[str, object]]] | None = None
 
@@ -1053,6 +1059,158 @@ def get_pear_git_tree_backend(
                 "status_short": status_short,
                 "delta": delta,
             },
+        },
+    )
+
+
+def pear_canvas_exists(canvas_path: Path, content: str) -> bool:
+    if content:
+        return True
+    try:
+        return canvas_path.exists()
+    except OSError:
+        return False
+
+
+def pear_canvas_payload(
+    *,
+    workdir: str,
+    canvas_path: Path,
+    content: str,
+) -> dict[str, object]:
+    return {
+        "content": content,
+        "version": pear_sha256_text(content),
+        "workdir_path": workdir,
+        "path": str(canvas_path),
+        "relative_path": str(canvas_path.relative_to(workdir)),
+        "exists": pear_canvas_exists(canvas_path, content),
+        "max_bytes": PEAR_CANVAS_MAX_BYTES,
+    }
+
+
+@typed_endpoint
+def get_pear_canvas_backend(
+    request: HttpRequest,
+    user_profile: UserProfile,
+    *,
+    stream_name: Annotated[
+        str,
+        ApiParamConfig("stream", documentation_status=INTENTIONALLY_UNDOCUMENTED),
+    ],
+    topic_name: Annotated[
+        str,
+        ApiParamConfig("topic", documentation_status=INTENTIONALLY_UNDOCUMENTED),
+    ],
+) -> HttpResponse:
+    stream, _sub = access_stream_by_name(user_profile, stream_name)
+    context = ensure_pear_topic_context(user_profile, stream=stream_name, topic=topic_name)
+    assert stream.recipient_id is not None
+    message_rows = list(
+        messages_for_topic(
+            user_profile.realm_id,
+            stream.recipient_id,
+            topic_name,
+        )
+        .order_by("-id")
+        .values_list("id", "content", "sender__is_bot", "sender__full_name")[:50]
+    )
+    backfill_content = pear_backfill_canvas_from_topic_history(list(reversed(message_rows)))
+    workdir = context.workdir.strip()
+    isolation_username = pear_context_isolation_username(
+        context,
+        stream_name=stream_name,
+        topic_name=topic_name,
+        workdir=workdir,
+    )
+    canvas_path = pear_ensure_topic_canvas(
+        workdir,
+        stream=stream_name,
+        topic=topic_name,
+        backfill_content=backfill_content,
+        isolation_username=isolation_username,
+    )
+    content = pear_read_text_path(canvas_path, isolation_username=isolation_username)
+    return json_success(
+        request,
+        data={
+            "pear_canvas": pear_canvas_payload(
+                workdir=workdir,
+                canvas_path=canvas_path,
+                content=content,
+            ),
+        },
+    )
+
+
+@typed_endpoint
+def put_pear_canvas_backend(
+    request: HttpRequest,
+    user_profile: UserProfile,
+    *,
+    stream_name: Annotated[
+        str,
+        ApiParamConfig("stream", documentation_status=INTENTIONALLY_UNDOCUMENTED),
+    ],
+    topic_name: Annotated[
+        str,
+        ApiParamConfig("topic", documentation_status=INTENTIONALLY_UNDOCUMENTED),
+    ],
+    content: Annotated[
+        str,
+        ApiParamConfig("content", documentation_status=INTENTIONALLY_UNDOCUMENTED),
+    ],
+    base_version: Annotated[
+        str,
+        ApiParamConfig("base_version", documentation_status=INTENTIONALLY_UNDOCUMENTED),
+    ],
+) -> HttpResponse:
+    access_stream_by_name(user_profile, stream_name)
+    if len(content.encode("utf-8")) > PEAR_CANVAS_MAX_BYTES:
+        raise JsonableError(_("Pear canvas is too large."))
+    context = ensure_pear_topic_context(user_profile, stream=stream_name, topic=topic_name)
+    workdir = context.workdir.strip()
+    isolation_username = pear_context_isolation_username(
+        context,
+        stream_name=stream_name,
+        topic_name=topic_name,
+        workdir=workdir,
+    )
+    canvas_path = pear_ensure_topic_canvas(
+        workdir,
+        stream=stream_name,
+        topic=topic_name,
+        isolation_username=isolation_username,
+    )
+    current_content = pear_read_text_path(canvas_path, isolation_username=isolation_username)
+    current_version = pear_sha256_text(current_content)
+    if base_version != current_version:
+        return json_response(
+            "error",
+            msg="Pear canvas changed; reload before saving.",
+            data={
+                "pear_canvas": pear_canvas_payload(
+                    workdir=workdir,
+                    canvas_path=canvas_path,
+                    content=current_content,
+                ),
+            },
+            status=409,
+        )
+    if not pear_write_text_path(
+        canvas_path,
+        content,
+        isolation_username=isolation_username,
+    ):
+        raise JsonableError(_("Could not write Pear canvas."))
+    return json_success(
+        request,
+        data={
+            "pear_canvas": pear_canvas_payload(
+                workdir=workdir,
+                canvas_path=canvas_path,
+                content=content,
+            ),
         },
     )
 

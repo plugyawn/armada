@@ -25,6 +25,8 @@ from zerver.lib.pear import (
     PearWorkerToolResult,
     PearWorkerRunStatus,
     PearWorkerRuntime,
+    PEAR_CANVAS_FILE_NAME,
+    PEAR_CANVAS_TEMPLATE,
     PEAR_REASONING_EFFORTS,
     build_pear_active_session_summary,
     build_pear_active_session_summary_from_messages,
@@ -33,6 +35,7 @@ from zerver.lib.pear import (
     pear_message_id,
     pear_message_stream,
     pear_message_topic,
+    parse_pear_artifacts,
 )
 from zerver.lib.pear_agent import (
     PearAgentRuntime,
@@ -104,6 +107,8 @@ pear_git_status_delta_cache: dict[
     tuple[str, str, str],
     tuple[float, dict[str, object]],
 ] = {}
+
+PEAR_CANVAS_FALLBACK_PATH = ".pear/CANVAS.md"
 
 
 @dataclass(frozen=True)
@@ -695,6 +700,258 @@ def pear_rename_topic_branch(path: Path, old_branch_name: str, new_branch_name: 
     return completed.returncode == 0
 
 
+def pear_canvas_template(stream: str, topic: str, *, backfill_content: str = "") -> str:
+    content = PEAR_CANVAS_TEMPLATE.format(
+        stream=stream or "Pear",
+        topic=topic or "general",
+    ).rstrip()
+    if backfill_content.strip():
+        content = f"{content}\n\n{backfill_content.strip()}"
+    return f"{content}\n"
+
+
+def pear_git_workdir_tracks_path(workdir: Path, relative_path: str) -> bool:
+    if not pear_path_is_git_worktree(workdir):
+        return False
+    try:
+        completed = subprocess.run(
+            ["git", "-C", str(workdir), "ls-files", "--error-unmatch", relative_path],
+            check=False,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=10,
+        )
+    except (FileNotFoundError, OSError, subprocess.TimeoutExpired):
+        return False
+    return completed.returncode == 0
+
+
+def pear_topic_canvas_relative_path(workdir: str | Path) -> str:
+    path = Path(workdir)
+    if pear_git_workdir_tracks_path(path, PEAR_CANVAS_FILE_NAME):
+        return PEAR_CANVAS_FALLBACK_PATH
+    return PEAR_CANVAS_FILE_NAME
+
+
+def pear_topic_canvas_path(workdir: str | Path) -> Path:
+    path = Path(workdir)
+    return path / pear_topic_canvas_relative_path(path)
+
+
+def pear_git_exclude_path(workdir: Path) -> Path | None:
+    if not pear_path_is_git_worktree(workdir):
+        return None
+    try:
+        completed = subprocess.run(
+            ["git", "-C", str(workdir), "rev-parse", "--git-path", "info/exclude"],
+            check=False,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            timeout=10,
+        )
+    except (FileNotFoundError, OSError, subprocess.TimeoutExpired):
+        return None
+    if completed.returncode != 0:
+        return None
+    exclude_path = Path(completed.stdout.strip())
+    if not exclude_path.is_absolute():
+        exclude_path = workdir / exclude_path
+    return exclude_path
+
+
+def pear_exclude_canvas_from_git_delta(workdir: str | Path) -> None:
+    path = Path(workdir)
+    exclude_path = pear_git_exclude_path(path)
+    if exclude_path is None:
+        return
+    relative_path = pear_topic_canvas_relative_path(path)
+    exclude_line = f"/{relative_path}\n"
+    try:
+        exclude_path.parent.mkdir(parents=True, exist_ok=True)
+        existing = exclude_path.read_text(encoding="utf-8") if exclude_path.exists() else ""
+        if exclude_line not in existing.splitlines(keepends=True):
+            with exclude_path.open("a", encoding="utf-8") as exclude_file:
+                if existing and not existing.endswith("\n"):
+                    exclude_file.write("\n")
+                exclude_file.write(exclude_line)
+    except OSError:
+        return
+
+
+def pear_backfill_canvas_from_topic_history(
+    messages: list[tuple[int, str, bool | None, str | None]]
+) -> str:
+    done_items: list[str] = []
+    pinned_items: list[str] = []
+    routine_items: list[str] = []
+    notes: list[str] = []
+    for message_id, content, _sender_is_bot, _sender_name in messages:
+        for artifact in parse_pear_artifacts(content, message_id=message_id):
+            value = artifact["value"].strip()
+            if not value:
+                continue
+            kind = artifact["kind"]
+            if kind == "done_criteria":
+                done_items.append(value)
+            elif kind in {"routine", "routine_cadence"}:
+                routine_items.append(f"{artifact['label']}: {value}")
+            elif kind in {
+                "memory",
+                "document",
+                "ticket",
+                "pull_request",
+                "branch",
+                "repository",
+                "reviewers",
+            }:
+                pinned_items.append(f"{artifact['label']}: {value}")
+            elif kind in {"verification", "diff"}:
+                notes.append(f"{artifact['label']}: {value}")
+
+    sections: list[str] = []
+    if done_items:
+        sections.append(
+            "### Backfilled definition of done\n"
+            + "\n".join(f"- {item}" for item in done_items)
+        )
+    if pinned_items:
+        sections.append(
+            "### Backfilled pinned context\n"
+            + "\n".join(f"- {item}" for item in pinned_items)
+        )
+    if routine_items:
+        sections.append(
+            "### Backfilled routines\n" + "\n".join(f"- {item}" for item in routine_items)
+        )
+    if notes:
+        sections.append(
+            "### Backfilled notes\n" + "\n".join(f"- {item}" for item in notes)
+        )
+    return "\n\n".join(sections)
+
+
+def pear_sha256_text(content: str) -> str:
+    return hashlib.sha256(content.encode("utf-8")).hexdigest()
+
+
+def pear_read_text_path(path: Path, *, isolation_username: str | None = None) -> str:
+    if isolation_username is None:
+        try:
+            return path.read_text(encoding="utf-8")
+        except FileNotFoundError:
+            return ""
+    command = [
+        "sudo",
+        "-n",
+        "-u",
+        isolation_username,
+        "/usr/bin/env",
+        "python3",
+        "-c",
+        (
+            "from pathlib import Path; import sys; "
+            "path = Path(sys.argv[1]); "
+            "sys.stdout.write(path.read_text(encoding='utf-8') if path.exists() else '')"
+        ),
+        str(path),
+    ]
+    try:
+        completed = subprocess.run(
+            command,
+            check=False,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            timeout=10,
+        )
+    except (FileNotFoundError, OSError, subprocess.TimeoutExpired):
+        return ""
+    if completed.returncode != 0:
+        return ""
+    return completed.stdout
+
+
+def pear_write_text_path(
+    path: Path,
+    content: str,
+    *,
+    isolation_username: str | None = None,
+) -> bool:
+    if isolation_username is None:
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(content, encoding="utf-8")
+        except OSError:
+            return False
+        return True
+    command = [
+        "sudo",
+        "-n",
+        "-u",
+        isolation_username,
+        "/usr/bin/env",
+        "python3",
+        "-c",
+        (
+            "from pathlib import Path; import sys; "
+            "path = Path(sys.argv[1]); "
+            "path.parent.mkdir(parents=True, exist_ok=True); "
+            "path.write_text(sys.stdin.read(), encoding='utf-8')"
+        ),
+        str(path),
+    ]
+    try:
+        completed = subprocess.run(
+            command,
+            check=False,
+            input=content,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            timeout=10,
+        )
+    except (FileNotFoundError, OSError, subprocess.TimeoutExpired):
+        return False
+    return completed.returncode == 0
+
+
+def pear_ensure_topic_canvas(
+    workdir: str | Path,
+    *,
+    stream: str = "",
+    topic: str = "",
+    backfill_content: str = "",
+    isolation_username: str | None = None,
+) -> Path:
+    path = Path(workdir)
+    pear_exclude_canvas_from_git_delta(path)
+    canvas_path = pear_topic_canvas_path(path)
+    template_content = pear_canvas_template(stream, topic)
+    content_with_backfill = pear_canvas_template(
+        stream,
+        topic,
+        backfill_content=backfill_content,
+    )
+    current_content = pear_read_text_path(
+        canvas_path,
+        isolation_username=isolation_username,
+    )
+    if not current_content:
+        pear_write_text_path(
+            canvas_path,
+            content_with_backfill,
+            isolation_username=isolation_username,
+        )
+    elif backfill_content.strip() and current_content == template_content:
+        pear_write_text_path(
+            canvas_path,
+            content_with_backfill,
+            isolation_username=isolation_username,
+        )
+    return canvas_path
+
+
 def ensure_pear_topic_context(
     user_profile: UserProfile,
     *,
@@ -750,6 +1007,7 @@ def ensure_pear_topic_context(
         repository_url=parent_repository_url,
         branch_name=pear_topic_branch_name(topic),
     )
+    pear_ensure_topic_canvas(context.workdir, stream=stream, topic=topic)
     return context
 
 

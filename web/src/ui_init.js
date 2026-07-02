@@ -94,6 +94,7 @@ import * as onboarding_steps from "./onboarding_steps.ts";
 import * as overlays from "./overlays.ts";
 import {page_params} from "./page_params.ts";
 import * as pear_canvas from "./pear_canvas.ts";
+import * as pear_files from "./pear_files.ts";
 import * as pear_runtime_menu from "./pear_runtime_menu.ts";
 import * as people from "./people.ts";
 import * as personal_menu_popover from "./personal_menu_popover.ts";
@@ -706,6 +707,7 @@ export async function initialize_everything(state_data) {
     // that the #pear-runtime-menu button exists in the DOM.
     pear_runtime_menu.initialize();
     pear_canvas.initialize();
+    pear_files.initialize();
     gif_picker_ui.initialize();
     presence.initialize(state_data.presence);
     settings_preferences.initialize();

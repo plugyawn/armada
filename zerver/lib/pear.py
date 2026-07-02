@@ -23,8 +23,20 @@ PEAR_SESSION_ENDPOINT: Final = "/pear/session"
 PEAR_ACTIVE_SESSION_ENDPOINT: Final = "/pear/session/active"
 PEAR_CONFIG_ENDPOINT: Final = "/pear/config"
 PEAR_TOPIC_CONTEXT_ENDPOINT: Final = "/pear/topic-context"
+PEAR_CANVAS_ENDPOINT: Final = "/pear/canvas"
 PEAR_RUNS_ENDPOINT: Final = "/pear/runs"
 PEAR_SIDE_ENDPOINT: Final = "/pear/side"
+PEAR_CANVAS_FILE_NAME: Final = "CANVAS.md"
+PEAR_CANVAS_TEMPLATE: Final = """# {stream} > {topic}
+
+## Definition of done
+
+## Notes
+
+## Pinned context
+
+## Routines
+"""
 PEAR_OFFICIAL_AGENT_RUNTIME: Final = "codex-app-server"
 PEAR_OFFICIAL_AGENT_RUNTIME_LABEL: Final = "Codex app-server"
 PEAR_AGENT_RUNTIME_PACKAGES: Final = ("openai-agents", "openai-codex")

@@ -32,6 +32,7 @@ import type {MessageViewportInfo} from "./message_viewport.ts";
 import * as muted_users from "./muted_users.ts";
 import * as narrow_state from "./narrow_state.ts";
 import {page_params} from "./page_params.ts";
+import * as pear_run_state from "./pear_run_state.ts";
 import * as people from "./people.ts";
 import * as popovers from "./popovers.ts";
 import * as reactions from "./reactions.ts";
@@ -164,6 +165,18 @@ const pear_thinking_glyphs = [
 let pear_thinking_glyph_index = 0;
 let pear_thinking_glyph_timer: ReturnType<typeof setInterval> | undefined;
 
+function message_has_pear_active_marker(message: Message): boolean {
+    return message.content.includes("<em>✦</em>");
+}
+
+function is_active_pear_message(message: Message, is_pear_message: boolean): boolean {
+    return (
+        is_pear_message &&
+        message_has_pear_active_marker(message) &&
+        pear_run_state.is_active_run_result_message(message.id)
+    );
+}
+
 function pear_thinking_markers($scope: JQuery<HTMLElement | Document> = $(document)): JQuery {
     const $descendant_markers = $scope.find(
         ".message_row.pear-active-message .message_content > p:last-child > em:last-child",
@@ -214,6 +227,28 @@ function maybe_render_pear_thinking_glyph($row: JQuery): void {
     render_pear_thinking_glyph($markers);
     start_pear_thinking_animation();
 }
+
+function update_rendered_pear_active_messages(): void {
+    const $pear_messages = $(".message_row.pear-message");
+    if ($pear_messages.length === 0) {
+        stop_pear_thinking_animation();
+        return;
+    }
+    $pear_messages.each((_index, row) => {
+        const $row = $(row);
+        const message_id_attr = $row.attr("data-message-id");
+        const message_id =
+            message_id_attr === undefined ? undefined : Number.parseFloat(message_id_attr);
+        const message = message_id === undefined ? undefined : message_store.get(message_id);
+        $row.toggleClass(
+            "pear-active-message",
+            message !== undefined && is_active_pear_message(message, true),
+        );
+    });
+    update_pear_thinking_glyphs();
+}
+
+pear_run_state.on_active_run_result_messages_changed(update_rendered_pear_active_messages);
 
 type BoundaryMessageContainerInfo = {
     message_group: MessageGroup;
@@ -794,7 +829,7 @@ export class MessageListView {
         if (is_pear_message) {
             include_sender = false;
         }
-        const is_pear_active_message = is_pear_message && message.content.includes("<em>✦</em>");
+        const is_pear_active_message = is_active_pear_message(message, is_pear_message);
         const sender_is_guest = people.sender_is_guest(message);
         const sender_is_deactivated = people.sender_is_deactivated(message);
         const should_add_guest_indicator_for_sender = people.should_add_guest_user_indicator(

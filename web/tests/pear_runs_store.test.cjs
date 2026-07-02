@@ -10,12 +10,19 @@ mock_esm("../src/narrow_state", {
     stream_name: () => "devel",
     topic: () => "pear-smoke",
 });
+const rerendered_result_message_ids = [];
+mock_esm("../src/message_live_update", {
+    rerender_messages_view_by_message_ids(message_ids) {
+        rerendered_result_message_ids.push(message_ids);
+    },
+});
 
 const pear_runs_store = zrequire("pear_runs_store");
 
 function make_run(id, status, overrides = {}) {
     return {
         id,
+        result_message_id: id + 1000,
         status,
         session_kind: "shared",
         source_stream: "devel",
@@ -32,6 +39,7 @@ function make_run(id, status, overrides = {}) {
 }
 
 run_test("open_gated_polling_and_transitions", () => {
+    rerendered_result_message_ids.length = 0;
     const get_calls = [];
     channel.get = (opts) => {
         get_calls.push(opts);
@@ -67,6 +75,7 @@ run_test("open_gated_polling_and_transitions", () => {
         pear_topic_context: null,
     });
     get_calls[0].complete();
+    assert.deepEqual(rerendered_result_message_ids, []);
 
     assert.equal(snapshots.length, 2);
     assert.equal(snapshots[1].runs[0].status, "running");
@@ -83,6 +92,7 @@ run_test("open_gated_polling_and_transitions", () => {
 
     get_calls[1].success({pear_runs: [make_run(7, "done")]});
     get_calls[1].complete();
+    assert.deepEqual(rerendered_result_message_ids, [[1007]]);
 
     // The running→done status transition is emitted per run id.
     assert.equal(transitions.length, 2);

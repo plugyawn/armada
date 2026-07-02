@@ -87,7 +87,6 @@ function make_state(overrides = {}) {
         stream: "devel",
         topic: "pear-smoke",
         error: "",
-        model_error: "",
         ...overrides,
     };
 }
@@ -95,8 +94,8 @@ function make_state(overrides = {}) {
 // The state sequence a real panel session walks through: no topic,
 // context loads, runs start and stream (two at once — no single-run
 // pick), the delta dirties/diverges, a model error appears and
-// clears, the runs finish (leaving a detached, mismatched worktree),
-// a fetch error shows up.
+// the runs finish (leaving a detached, mismatched worktree), then a
+// fetch error shows up.
 function lifecycle_states() {
     return [
         make_state({
@@ -117,10 +116,7 @@ function lifecycle_states() {
                 }),
             }),
         }),
-        make_state({
-            runs: [make_run(7, "running")],
-            model_error: "Model change failed.",
-        }),
+        make_state({runs: [make_run(7, "running")]}),
         make_state({
             runs: [make_run(7, "done")],
             topic_context: make_topic_context({
@@ -177,22 +173,17 @@ run_test("patch_preserves_focus_identity_and_draft", () => {
     pear_dom_patch.patch_html(root, pear_panel.render_panel_html(states[3]));
 
     const textarea = document.querySelector("#pear-side-request");
-    const select = document.querySelector("#pear-topic-model-select");
     assert.ok(textarea !== null);
-    assert.ok(select !== null);
     textarea.value = "look into the flaky test";
     textarea.focus();
     assert.equal(document.activeElement, textarea);
 
-    // A live tick that adds a model error above the side box and
-    // flips run status must not recreate, blank, or blur the
-    // side-request textarea, and stable controls keep their identity
-    // (so tooltips/handlers/animations survive).
+    // Live ticks that flip run/worktree state must not recreate, blank,
+    // or blur the side-request textarea.
     pear_dom_patch.patch_html(root, pear_panel.render_panel_html(states[4]));
     pear_dom_patch.patch_html(root, pear_panel.render_panel_html(states[5]));
 
     assert.equal(document.querySelector("#pear-side-request"), textarea);
     assert.equal(textarea.value, "look into the flaky test");
     assert.equal(document.activeElement, textarea);
-    assert.equal(document.querySelector("#pear-topic-model-select"), select);
 });

@@ -4,6 +4,7 @@ import re
 import shutil
 import subprocess
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
@@ -57,6 +58,7 @@ PEAR_WORKER_RUN_BUSY_STATUSES = frozenset((PearWorkerRun.QUEUED, PearWorkerRun.R
 PEAR_WORKER_RUN_TERMINAL_STATUSES = frozenset(
     (PearWorkerRun.DONE, PearWorkerRun.CANCELLED)
 )
+PEAR_WORKER_MAX_CLAIM_ATTEMPTS = 2
 PEAR_RUN_LEGAL_TRANSITIONS: dict[PearWorkerRunStatus, frozenset[PearWorkerRunStatus]] = {
     PearWorkerRun.QUEUED: frozenset(
         (PearWorkerRun.RUNNING, PearWorkerRun.FAILED, PearWorkerRun.CANCELLED)
@@ -1505,6 +1507,114 @@ class PearDatabaseWorkerRunStore:
         except IntegrityError:
             return False
 
+    def claim_for_run(
+        self,
+        bot_handler: Any,
+        message_id: int,
+        *,
+        stream: str,
+        topic: str,
+    ) -> bool:
+        if message_id <= 0:
+            return True
+
+        user_profile = bot_handler.user_profile
+        assert isinstance(user_profile, UserProfile)
+
+        current_time = timezone_now()
+        try:
+            with transaction.atomic():
+                run = (
+                    PearWorkerRun.objects.select_for_update()
+                    .filter(bot_profile=user_profile, trigger_message_id=message_id)
+                    .first()
+                )
+                if run is None:
+                    run = PearWorkerRun.objects.create(
+                        realm=user_profile.realm,
+                        bot_profile=user_profile,
+                        trigger_message_id=message_id,
+                        stream_name=stream,
+                        topic_name=topic,
+                        status=PearWorkerRun.RUNNING,
+                        attempts=1,
+                        heartbeat_at=current_time,
+                        runtime_label=self._runtime_label(),
+                        model=self._model_label(user_profile, stream=stream, topic=topic),
+                        sandbox=self._sandbox_label(
+                            user_profile,
+                            stream=stream,
+                            topic=topic,
+                        ),
+                        approval_policy=self._approval_policy_label(),
+                        workdir=self._workdir_label(user_profile, stream=stream, topic=topic),
+                    )
+                    self._record_event(
+                        run,
+                        "claimed",
+                        summary="Claimed Pear worker run.",
+                        payload={
+                            "stream": stream,
+                            "topic": topic,
+                            "attempts": run.attempts,
+                            "created": True,
+                        },
+                    )
+                    return True
+
+                if run.status == PearWorkerRun.QUEUED:
+                    return self._claim_locked_run(
+                        run,
+                        stream=stream,
+                        topic=topic,
+                        current_time=current_time,
+                        stale_reclaim=False,
+                    )
+
+                if run.status == PearWorkerRun.RUNNING:
+                    if not self._run_is_stale(run, current_time=current_time):
+                        self._record_claim_dropped(
+                            run,
+                            stream=stream,
+                            topic=topic,
+                            reason="already_running",
+                        )
+                        return False
+                    if run.attempts >= PEAR_WORKER_MAX_CLAIM_ATTEMPTS:
+                        self._transition(
+                            run,
+                            PearWorkerRun.FAILED,
+                            stream=stream,
+                            topic=topic,
+                            result_message_id=run.result_message_id,
+                            error="Pear worker run exceeded its stale-claim retry limit.",
+                            allow_requeue=False,
+                        )
+                        self._record_claim_dropped(
+                            run,
+                            stream=stream,
+                            topic=topic,
+                            reason="stale_retry_limit",
+                        )
+                        return False
+                    return self._claim_locked_run(
+                        run,
+                        stream=stream,
+                        topic=topic,
+                        current_time=current_time,
+                        stale_reclaim=True,
+                    )
+
+                self._record_claim_dropped(
+                    run,
+                    stream=stream,
+                    topic=topic,
+                    reason=f"terminal_or_finished_{run.status}",
+                )
+                return False
+        except IntegrityError:
+            return False
+
     def record(
         self,
         bot_handler: Any,
@@ -1572,6 +1682,68 @@ class PearDatabaseWorkerRunStore:
                     "error": error,
                 },
             )
+
+    def _claim_locked_run(
+        self,
+        run: PearWorkerRun,
+        *,
+        stream: str,
+        topic: str,
+        current_time: datetime,
+        stale_reclaim: bool,
+    ) -> bool:
+        if not self._transition(
+            run,
+            PearWorkerRun.RUNNING,
+            stream=stream,
+            topic=topic,
+            result_message_id=run.result_message_id,
+            error=None,
+            allow_requeue=False,
+        ):
+            return False
+        run.attempts += 1
+        run.heartbeat_at = current_time
+        run.date_updated = current_time
+        run.save(update_fields=["attempts", "heartbeat_at", "date_updated"])
+        self._record_event(
+            run,
+            "claimed",
+            summary="Claimed Pear worker run.",
+            payload={
+                "stream": stream,
+                "topic": topic,
+                "attempts": run.attempts,
+                "stale_reclaim": stale_reclaim,
+            },
+        )
+        return True
+
+    def _record_claim_dropped(
+        self,
+        run: PearWorkerRun,
+        *,
+        stream: str,
+        topic: str,
+        reason: str,
+    ) -> None:
+        self._record_event(
+            run,
+            "claim_dropped",
+            summary="Dropped duplicate Pear worker delivery.",
+            payload={
+                "stream": stream,
+                "topic": topic,
+                "status": run.status,
+                "attempts": run.attempts,
+                "reason": reason,
+            },
+        )
+
+    def _run_is_stale(self, run: PearWorkerRun, *, current_time: datetime) -> bool:
+        stale_after_seconds = int(getattr(settings, "PEAR_WORKER_TIMEOUT_SECONDS", 1800)) + 300
+        last_seen = run.heartbeat_at or run.date_updated
+        return last_seen <= current_time - timedelta(seconds=stale_after_seconds)
 
     def update_metadata(
         self,

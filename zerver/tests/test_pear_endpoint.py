@@ -1,10 +1,12 @@
 import subprocess
 import tempfile
+from datetime import timedelta
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
 import orjson
+from django.utils.timezone import now as timezone_now
 
 from zerver.lib.pear import (
     PEAR_ACTIVE_SESSION_ENDPOINT,
@@ -1703,6 +1705,168 @@ class PearSessionEndpointTest(ZulipTestCase):
         run.refresh_from_db()
         self.assertEqual(run.status, PearWorkerRun.QUEUED)
         self.assertIsNone(run.error)
+
+    def test_worker_run_store_claims_queued_run_once(self) -> None:
+        owner = self.example_user("hamlet")
+        pear_bot = self.create_test_bot(
+            "pear",
+            owner,
+            full_name="Pear",
+            bot_type=UserProfile.EMBEDDED_BOT,
+            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+        )
+        bot_handler = SimpleNamespace(user_profile=pear_bot)
+        store = PearDatabaseWorkerRunStore()
+        run = PearWorkerRun.objects.create(
+            realm=owner.realm,
+            bot_profile=pear_bot,
+            requesting_user=owner,
+            trigger_message_id=908,
+            stream_name=PEAR_DEFAULT_STREAM,
+            topic_name="topic-a",
+            status=PearWorkerRun.QUEUED,
+        )
+
+        self.assertTrue(
+            store.claim_for_run(
+                bot_handler,
+                run.trigger_message_id,
+                stream=PEAR_DEFAULT_STREAM,
+                topic="topic-a",
+            )
+        )
+        run.refresh_from_db()
+        self.assertEqual(run.status, PearWorkerRun.RUNNING)
+        self.assertEqual(run.attempts, 1)
+        self.assertIsNotNone(run.heartbeat_at)
+
+        self.assertFalse(
+            store.claim_for_run(
+                bot_handler,
+                run.trigger_message_id,
+                stream=PEAR_DEFAULT_STREAM,
+                topic="topic-a",
+            )
+        )
+        run.refresh_from_db()
+        self.assertEqual(run.status, PearWorkerRun.RUNNING)
+        self.assertEqual(run.attempts, 1)
+        self.assertEqual(
+            PearWorkerRunEvent.objects.filter(run=run, event_type="claimed").count(),
+            1,
+        )
+        self.assertEqual(
+            PearWorkerRunEvent.objects.get(run=run, event_type="claim_dropped").payload["reason"],
+            "already_running",
+        )
+
+    def test_worker_run_store_drops_completed_redelivery(self) -> None:
+        owner = self.example_user("hamlet")
+        pear_bot = self.create_test_bot(
+            "pear",
+            owner,
+            full_name="Pear",
+            bot_type=UserProfile.EMBEDDED_BOT,
+            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+        )
+        bot_handler = SimpleNamespace(user_profile=pear_bot)
+        store = PearDatabaseWorkerRunStore()
+        run = PearWorkerRun.objects.create(
+            realm=owner.realm,
+            bot_profile=pear_bot,
+            requesting_user=owner,
+            trigger_message_id=909,
+            stream_name=PEAR_DEFAULT_STREAM,
+            topic_name="topic-a",
+            status=PearWorkerRun.DONE,
+            result_message_id=400,
+        )
+
+        self.assertFalse(
+            store.claim_for_run(
+                bot_handler,
+                run.trigger_message_id,
+                stream=PEAR_DEFAULT_STREAM,
+                topic="topic-a",
+            )
+        )
+        run.refresh_from_db()
+        self.assertEqual(run.status, PearWorkerRun.DONE)
+        self.assertEqual(run.result_message_id, 400)
+        self.assertEqual(
+            PearWorkerRunEvent.objects.get(run=run, event_type="claim_dropped").payload["reason"],
+            "terminal_or_finished_done",
+        )
+
+    def test_worker_run_store_reclaims_stale_running_once(self) -> None:
+        owner = self.example_user("hamlet")
+        pear_bot = self.create_test_bot(
+            "pear",
+            owner,
+            full_name="Pear",
+            bot_type=UserProfile.EMBEDDED_BOT,
+            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+        )
+        bot_handler = SimpleNamespace(user_profile=pear_bot)
+        store = PearDatabaseWorkerRunStore()
+        stale_time = timezone_now() - timedelta(seconds=400)
+        run = PearWorkerRun.objects.create(
+            realm=owner.realm,
+            bot_profile=pear_bot,
+            requesting_user=owner,
+            trigger_message_id=910,
+            stream_name=PEAR_DEFAULT_STREAM,
+            topic_name="topic-a",
+            status=PearWorkerRun.RUNNING,
+            attempts=1,
+            heartbeat_at=stale_time,
+            date_updated=stale_time,
+        )
+
+        with self.settings(PEAR_WORKER_TIMEOUT_SECONDS=1):
+            self.assertTrue(
+                store.claim_for_run(
+                    bot_handler,
+                    run.trigger_message_id,
+                    stream=PEAR_DEFAULT_STREAM,
+                    topic="topic-a",
+                )
+            )
+            run.refresh_from_db()
+            self.assertEqual(run.status, PearWorkerRun.RUNNING)
+            self.assertEqual(run.attempts, 2)
+            self.assertGreater(run.heartbeat_at, stale_time)
+            self.assertEqual(
+                PearWorkerRunEvent.objects.get(run=run, event_type="claimed").payload[
+                    "stale_reclaim"
+                ],
+                True,
+            )
+
+            PearWorkerRun.objects.filter(id=run.id).update(
+                heartbeat_at=stale_time,
+                date_updated=stale_time,
+            )
+            self.assertFalse(
+                store.claim_for_run(
+                    bot_handler,
+                    run.trigger_message_id,
+                    stream=PEAR_DEFAULT_STREAM,
+                    topic="topic-a",
+                )
+            )
+            run.refresh_from_db()
+            self.assertEqual(run.status, PearWorkerRun.FAILED)
+            self.assertEqual(
+                run.error,
+                "Pear worker run exceeded its stale-claim retry limit.",
+            )
+            self.assertEqual(
+                PearWorkerRunEvent.objects.filter(run=run, event_type="claim_dropped")
+                .latest("id")
+                .payload["reason"],
+                "stale_retry_limit",
+            )
 
     def test_pear_codex_model_catalog_uses_visible_priority_and_reasoning(self) -> None:
         catalog = extract_pear_codex_model_catalog(

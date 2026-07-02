@@ -1,3 +1,12 @@
+// The Pear panel: live run status, run verbs, runtime controls, and
+// workspace state for the current topic. It renders as an on-demand
+// pane inside the reclaimed right area (#pear-right-area) — not on a
+// permanent rail — and is a diff-patching subscriber of
+// pear_runs_store: opening the pane subscribes (starting the poll),
+// closing unsubscribes (stopping it), and every update is patched
+// into the existing DOM so clicks, focus, tooltips, and the side
+// textarea survive a 125ms live tick.
+
 import $ from "jquery";
 
 import render_pear_panel from "../templates/pear_panel.hbs";
@@ -6,125 +15,17 @@ import * as blueslip from "./blueslip.ts";
 import * as channel from "./channel.ts";
 import {$t} from "./i18n.ts";
 import * as narrow_state from "./narrow_state.ts";
-
-type PearRunEvent = {
-    id: number;
-    event_type: string;
-    summary: string;
-    payload?: {
-        kind?: string;
-        status?: string;
-        title?: string;
-        body?: string;
-    };
-};
-
-type PearUsage = {
-    input_tokens?: number;
-    cached_input_tokens?: number;
-    output_tokens?: number;
-    reasoning_output_tokens?: number;
-    total_tokens?: number;
-    cache_percent?: number;
-    duration_seconds?: number | null;
-    summary?: string;
-};
-
-type PearLiveRun = {
-    status: string;
-    content: string;
-    updated_at: number;
-};
-
-type PearRun = {
-    id: number;
-    status: string;
-    session_kind: string;
-    source_stream: string;
-    source_topic: string;
-    summary: string;
-    current_activity: string;
-    runtime_label: string;
-    sandbox: string;
-    approval_policy: string;
-    workdir: string;
-    codex_thread_id: string;
-    usage?: PearUsage | null;
-    live?: PearLiveRun | null;
-    events?: PearRunEvent[];
-};
-
-type PearRunsResponse = {
-    pear_runs: PearRun[];
-    pear_topic_context?: PearTopicContext | null;
-    runtime_config?: {
-        model?: string | null;
-        model_choices?: string[];
-        model_catalog?: PearModelCatalogEntry[];
-        reasoning_effort?: string | null;
-        reasoning_efforts?: PearReasoningEffort[];
-    };
-};
-
-type PearReasoningEffort = {
-    effort: string;
-    label: string;
-    description?: string;
-};
-
-type PearModelCatalogEntry = {
-    slug: string;
-    display_name: string;
-    default_reasoning_level?: string;
-    supported_reasoning_levels?: PearReasoningEffort[];
-};
-
-type PearGitChangedFile = {
-    status: string;
-    kind: string;
-    path: string;
-};
-
-type PearGitCommit = {
-    hash: string;
-    summary: string;
-};
-
-type PearGitContext = {
-    available: boolean;
-    workdir?: string;
-    repo_name?: string;
-    repo_label?: string;
-    remote_url?: string;
-    worktree_name?: string;
-    branch?: string;
-    head?: string;
-    dirty?: boolean;
-    changed_count?: number;
-    changed_files?: PearGitChangedFile[];
-    changed_files_truncated?: boolean;
-    diff_shortstat?: string;
-    recent_commits?: PearGitCommit[];
-};
-
-type PearTopicContext = {
-    stream: string;
-    topic: string;
-    model: string;
-    default_model: string;
-    model_choices: string[];
-    model_catalog?: PearModelCatalogEntry[];
-    reasoning_effort: string;
-    default_reasoning_effort: string;
-    reasoning_efforts: PearReasoningEffort[];
-    github_repo: string;
-    pinned_repo?: string;
-    repo_label?: string;
-    repo_title?: string;
-    worktree_label?: string;
-    workdir: string;
-    git: PearGitContext;
-};
+import {patch_html} from "./pear_dom_patch.ts";
+import * as pear_runs_store from "./pear_runs_store.ts";
+import type {
+    PearReasoningEffort,
+    PearRun,
+    PearRunEvent,
+    PearSnapshot,
+    PearStatusTransition,
+    PearTopicContext,
+    PearUsage,
+} from "./pear_runs_store.ts";
 
 type PearModelChoice = {
     value: string;
@@ -138,17 +39,17 @@ type PearEffortChoice = PearReasoningEffort & {
 };
 
 let initialized = false;
-let refresh_timer: number | undefined;
-let live_refresh_timer: number | undefined;
-let live_refresh_in_flight = false;
+let panel_open = false;
+let unsubscribe_from_store: (() => void) | undefined;
 let last_error = "";
 let last_model_error = "";
 let last_runs: PearRun[] = [];
 let last_topic_context: PearTopicContext | null | undefined;
 let rendered_context_key = "";
 const worktree_details_open_by_context = new Map<string, boolean>();
-const LIVE_REFRESH_INTERVAL_MS = 125;
-const FULL_REFRESH_INTERVAL_MS = 5000;
+// Matches the pear-status-flash animation duration in pear.css.
+const STATUS_FLASH_DURATION_MS = 900;
+const flash_by_run_id = new Map<number, {css_class: string; timer: number}>();
 
 const fallback_efforts: PearReasoningEffort[] = [
     {effort: "low", label: "Low"},
@@ -280,8 +181,17 @@ function context_key(stream: string | undefined, topic: string | undefined): str
     return `${stream}\n${topic}`;
 }
 
+function panel_element(): Element | null {
+    // Guarded for the node-test environment, where there is no real
+    // DOM for the panel to mount into.
+    if (typeof document === "undefined") {
+        return null;
+    }
+    return document.querySelector("#pear-panel");
+}
+
 function remember_worktree_details_state(): void {
-    if (rendered_context_key === "") {
+    if (rendered_context_key === "" || typeof document === "undefined") {
         return;
     }
     const details = document.querySelector<HTMLDetailsElement>(
@@ -308,6 +218,7 @@ function display_run(run: PearRun): PearRun & {
     has_usage: boolean;
     usage_label: string;
     usage_title: string;
+    flash_class: string;
     events: PearRunEvent[];
 } {
     const events = (run.events ?? []).map((event) => display_event(event));
@@ -338,6 +249,7 @@ function display_run(run: PearRun): PearRun & {
         has_actions: can_pause || can_resume || can_cancel,
         has_events: events.length > 0,
         ...usage,
+        flash_class: flash_by_run_id.get(run.id)?.css_class ?? "",
         events,
     };
 }
@@ -479,118 +391,110 @@ function active_display_run(runs: PearRun[]): ReturnType<typeof display_run> | u
     return active_run === undefined ? undefined : display_run(active_run);
 }
 
-function run_is_active(run: {status: string} | undefined): boolean {
-    return run?.status === "running" || run?.status === "queued";
+// Pure rendering helper, shared by render() and the node test that
+// asserts patch-vs-render equivalence.
+export function render_panel_html(state: {
+    runs: PearRun[];
+    topic_context: PearTopicContext | null | undefined;
+    stream: string | undefined;
+    topic: string | undefined;
+    error: string;
+    model_error: string;
+}): string {
+    const has_topic = state.stream !== undefined && state.topic !== undefined;
+    const active_run = active_display_run(state.runs);
+    const panel_status = active_run?.status ?? "idle";
+    return render_pear_panel({
+        has_topic,
+        context_label: has_topic ? `${state.stream} > ${state.topic}` : "",
+        topic_context: display_topic_context(state.topic_context),
+        active_run,
+        error: state.error,
+        model_error: state.model_error,
+        status_label: panel_status,
+        status_class: status_class(panel_status),
+    });
 }
 
-function clear_live_refresh(): void {
-    if (live_refresh_timer !== undefined) {
-        window.clearTimeout(live_refresh_timer);
-        live_refresh_timer = undefined;
-    }
-}
-
-function schedule_live_refresh(active_run: {status: string} | undefined): void {
-    if (!initialized || !run_is_active(active_run)) {
-        clear_live_refresh();
+function render(): void {
+    const element = panel_element();
+    if (element === null) {
         return;
     }
-    if (live_refresh_timer !== undefined || live_refresh_in_flight) {
-        return;
-    }
-    live_refresh_timer = window.setTimeout(() => {
-        live_refresh_timer = undefined;
-        refresh({live: true});
-    }, LIVE_REFRESH_INTERVAL_MS);
-}
-
-function render(
-    runs: PearRun[] = last_runs,
-    topic_context: PearTopicContext | null | undefined = last_topic_context,
-): void {
-    last_runs = runs;
-    last_topic_context = topic_context;
     remember_worktree_details_state();
     const {stream, topic} = current_context();
-    const has_topic = stream !== undefined && topic !== undefined;
-    const next_context_key = context_key(stream, topic);
-    const active_run = active_display_run(runs);
-    const panel_status = active_run?.status ?? "idle";
-    $("#pear-panel").html(
-        render_pear_panel({
-            has_topic,
-            context_label: has_topic ? `${stream} > ${topic}` : "",
-            topic_context: display_topic_context(topic_context),
-            active_run,
+    patch_html(
+        element,
+        render_panel_html({
+            runs: last_runs,
+            topic_context: last_topic_context,
+            stream,
+            topic,
             error: last_error,
             model_error: last_model_error,
-            status_label: panel_status,
-            status_class: status_class(panel_status),
         }),
     );
-    rendered_context_key = next_context_key;
-    schedule_live_refresh(active_run);
+    rendered_context_key = context_key(stream, topic);
 }
 
-export function refresh(options: {live?: boolean} = {}): void {
-    const live = options.live === true;
-    if (live && live_refresh_in_flight) {
+function on_store_update(snapshot: PearSnapshot): void {
+    last_runs = snapshot.runs;
+    last_topic_context = snapshot.topic_context;
+    last_error = snapshot.error;
+    render();
+}
+
+function on_status_transition(transition: PearStatusTransition): void {
+    if (transition.from_status === undefined) {
+        // First sighting of a run is not a transition worth flashing.
         return;
     }
-    const {stream, topic} = current_context();
-    const data: Record<string, string | boolean> = {
-        include_events: false,
-        include_context: !live,
-    };
-    if (stream !== undefined && topic !== undefined) {
-        data["stream"] = stream;
-        data["topic"] = topic;
+    let css_class;
+    if (transition.to_status === "done") {
+        css_class = "pear-run-status-flash-done";
+    } else if (transition.to_status === "failed" || transition.to_status === "cancelled") {
+        css_class = "pear-run-status-flash-failed";
+    } else {
+        return;
     }
-    if (live) {
-        live_refresh_in_flight = true;
+    const existing = flash_by_run_id.get(transition.run_id);
+    if (existing !== undefined) {
+        window.clearTimeout(existing.timer);
     }
-    void channel.get({
-        url: "/json/pear/runs",
-        data,
-        success(raw_data) {
-            const data = raw_data as PearRunsResponse;
-            last_error = "";
-            const topic_context = live
-                ? (data.pear_topic_context ?? last_topic_context)
-                : data.pear_topic_context === undefined
-                  ? last_topic_context
-                  : data.pear_topic_context;
-            render(data.pear_runs, topic_context);
-        },
-        error(xhr) {
-            if (xhr.readyState === 0) {
-                return;
-            }
-            last_error = $t({defaultMessage: "Pear status is unavailable."});
-            blueslip.warn(`Failed to fetch Pear runs: ${xhr.responseText}`);
-            render();
-        },
-        complete() {
-            if (live) {
-                live_refresh_in_flight = false;
-                schedule_live_refresh(active_display_run(last_runs));
-            }
-        },
+    const timer = window.setTimeout(() => {
+        flash_by_run_id.delete(transition.run_id);
+        render();
+    }, STATUS_FLASH_DURATION_MS);
+    flash_by_run_id.set(transition.run_id, {css_class, timer});
+    render();
+}
+
+export function is_open(): boolean {
+    return panel_open;
+}
+
+export function open(): void {
+    if (panel_open) {
+        return;
+    }
+    panel_open = true;
+    // Subscribing starts the store's polling; the panel re-renders on
+    // every snapshot.
+    unsubscribe_from_store = pear_runs_store.subscribe("narrow", on_store_update, {
+        on_status_transition,
     });
 }
 
-function post_run_action(run_id: string, action: string): void {
-    void channel.post({
-        url: `/json/pear/runs/${run_id}/${action}`,
-        success() {
-            refresh();
-        },
-        error(xhr) {
-            if (xhr.readyState !== 0) {
-                blueslip.warn(`Failed to ${action} Pear run: ${xhr.responseText}`);
-            }
-        },
-    });
+export function close(): void {
+    if (!panel_open) {
+        return;
+    }
+    panel_open = false;
+    if (unsubscribe_from_store !== undefined) {
+        // Dropping the last subscriber stops the store's polling.
+        unsubscribe_from_store();
+        unsubscribe_from_store = undefined;
+    }
 }
 
 function start_side_session(): void {
@@ -612,7 +516,7 @@ function start_side_session(): void {
         },
         success(raw_data) {
             $("#pear-side-request").val("");
-            refresh();
+            pear_runs_store.refresh();
             const data = raw_data as {dm_narrow_url?: string};
             if (data.dm_narrow_url !== undefined) {
                 window.location.hash = data.dm_narrow_url.slice(1);
@@ -675,8 +579,11 @@ function save_topic_context(): void {
         success(raw_data) {
             const data = raw_data as {pear_topic_context?: PearTopicContext};
             last_model_error = "";
-            render(last_runs, data.pear_topic_context);
-            refresh();
+            if (data.pear_topic_context !== undefined) {
+                last_topic_context = data.pear_topic_context;
+            }
+            render();
+            pear_runs_store.refresh();
         },
         error(xhr) {
             if (xhr.readyState !== 0) {
@@ -693,12 +600,11 @@ function save_topic_context(): void {
 
 export function initialize(): void {
     if (initialized) {
-        refresh();
         return;
     }
     initialized = true;
     $("body").on("click", "#pear-panel-refresh", () => {
-        refresh();
+        pear_runs_store.refresh();
     });
     $("body").on("click", ".pear-run-action", function () {
         const $button = $(this);
@@ -707,7 +613,7 @@ export function initialize(): void {
         if (run_id === undefined || action === undefined) {
             return;
         }
-        post_run_action(run_id, action);
+        pear_runs_store.post_run_action(run_id, action);
     });
     $("body").on("click", "#pear-side-start", () => {
         start_side_session();
@@ -721,15 +627,4 @@ export function initialize(): void {
     $("body").on("change", "#pear-reasoning-effort-slider", () => {
         save_topic_context();
     });
-    refresh();
-    refresh_timer = window.setInterval(refresh, FULL_REFRESH_INTERVAL_MS);
-}
-
-export function stop(): void {
-    if (refresh_timer !== undefined) {
-        window.clearInterval(refresh_timer);
-        refresh_timer = undefined;
-    }
-    clear_live_refresh();
-    live_refresh_in_flight = false;
 }

@@ -56,7 +56,7 @@
                     </div>
                 </div>
                 {{#if active_run}}
-                    <div class="pear-run-status-row pear-run-status-{{active_run.status_class}}">
+                    <div class="pear-run-status-row pear-run-status-{{active_run.status_class}}{{#if active_run.flash_class}} {{active_run.flash_class}}{{/if}}">
                         <span class="pear-run-status-dot"></span>
                         <span class="pear-run-status-text">{{active_run.status_label}}</span>
                         {{#if active_run.has_usage}}

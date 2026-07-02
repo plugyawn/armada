@@ -93,6 +93,7 @@ import * as navigation_views from "./navigation_views.ts";
 import * as onboarding_steps from "./onboarding_steps.ts";
 import * as overlays from "./overlays.ts";
 import {page_params} from "./page_params.ts";
+import * as pear_split_view from "./pear_split_view.ts";
 import * as people from "./people.ts";
 import * as personal_menu_popover from "./personal_menu_popover.ts";
 import * as playground_links_popover from "./playground_links_popover.ts";
@@ -541,6 +542,7 @@ export async function initialize_everything(state_data) {
     initialize_bottom_whitespace();
     sidebar_ui.initialize_left_sidebar();
     sidebar_ui.initialize_right_sidebar();
+    pear_split_view.initialize();
     initialize_compose_box();
     settings.initialize();
     initialize_navbar();

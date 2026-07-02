@@ -1,6 +1,8 @@
 import json
 import subprocess
 import sys
+from pathlib import Path
+from tempfile import TemporaryDirectory
 from types import ModuleType, SimpleNamespace
 from unittest import TestCase
 from unittest.mock import patch
@@ -166,7 +168,9 @@ from zerver.lib.pear_agent import (
     PearGeminiInteractionsAddressingIntentClassifier,
     PearProcessIsolation,
     build_pear_addressing_router_prompt,
+    build_pear_codex_developer_instructions,
     build_pear_codex_prompt,
+    build_pear_codex_turn_prompt,
     build_pear_topic_state_agent_tools,
     ensure_pear_runtime_result,
     merge_pear_tool_results,
@@ -178,7 +182,11 @@ from zerver.lib.pear_agent import (
     pear_tool_results_from_text,
     pear_topic_state_tool_name,
 )
-from zerver.lib.pear_worker import PEAR_WORKER_QUEUE_NAME, PearQueueWorkerDispatcher
+from zerver.lib.pear_worker import (
+    PEAR_WORKER_QUEUE_NAME,
+    PearQueueWorkerDispatcher,
+    pear_provision_codex_skills,
+)
 
 
 class PearSessionDefaultsTest(TestCase):
@@ -2990,7 +2998,8 @@ class PearSessionDefaultsTest(TestCase):
             "- contract: the Zulip stream maps to the repository, and the Zulip topic/subthread maps to the Git branch.",
             prompt,
         )
-        self.assertIn("Treat channel memory as durable context", prompt)
+        self.assertIn("Durable topic context lives in CANVAS.md", prompt)
+        self.assertIn("Use Codex-native skills from CODEX_HOME/skills", prompt)
         self.assertIn(
             "For casual, conversational, choice-only, or answer-only requests, respond directly.",
             prompt,
@@ -3010,17 +3019,13 @@ class PearSessionDefaultsTest(TestCase):
             "#11 Pear (bot): Verification: pytest zerver/tests/test_pear.py",
             prompt,
         )
-        self.assertIn("Pear agent skill definitions:", prompt)
-        self.assertIn("Skill: standing-routines", prompt)
-        self.assertIn("scheduled jobs or recurring digests", prompt)
-        self.assertIn("channel or topic watches", prompt)
-        self.assertIn("pull-request subscriptions or follow-up monitors", prompt)
-        self.assertIn("Preserve the user's request as durable topic state", prompt)
-        self.assertIn("Channel memory:\n- Prefer small focused PRs", prompt)
-        self.assertIn("Forgotten memory:\n- Run terminal tests first", prompt)
-        self.assertIn("Definition of done:\n- Tests pass and draft PR is posted", prompt)
-        self.assertIn("Standing routines:\n- Watch PR status for pear/runtime", prompt)
-        self.assertIn("Routine cadence:\n- manual", prompt)
+        self.assertIn("Canvas: durable topic context is in CANVAS.md", prompt)
+        self.assertNotIn("Pear agent skill definitions:", prompt)
+        self.assertNotIn("\nChannel memory:\n", prompt)
+        self.assertNotIn("\nForgotten memory:\n", prompt)
+        self.assertNotIn("\nDefinition of done:\n", prompt)
+        self.assertNotIn("\nStanding routines:\n", prompt)
+        self.assertNotIn("\nRoutine cadence:\n", prompt)
         self.assertIn("Verification: <command or check result>", prompt)
         self.assertIn(
             "Session: <session record URL or Codex thread reference>", prompt
@@ -3028,13 +3033,65 @@ class PearSessionDefaultsTest(TestCase):
         self.assertIn("Ticket: <ticket URL, ID, or path>", prompt)
         self.assertIn("Issue: <issue URL, ID, or path>", prompt)
         self.assertIn("Reviewers: <reviewer handles or teams>", prompt)
-        self.assertIn("Routine: <standing follow-up or watch instruction>", prompt)
-        self.assertIn("Routine cadence: <manual or watch cadence>", prompt)
-        self.assertIn("Memory: <channel-scoped note Pear should remember>", prompt)
         self.assertIn(
-            "Memory forgotten: <channel-scoped note Pear should ignore>", prompt
+            "Recent artifacts:\n- Verification: pytest zerver/tests/test_pear.py",
+            prompt,
         )
-        self.assertIn("Done: <definition of done or success criteria>", prompt)
+        self.assertNotIn("Recent artifacts:\n- Memory", prompt)
+        self.assertNotIn("Recent artifacts:\n- Routine", prompt)
+        self.assertNotIn("Recent artifacts:\n- Done", prompt)
+        self.assertNotIn("Done: <definition of done or success criteria>", prompt)
+
+    def test_codex_developer_instructions_are_byte_stable(self) -> None:
+        payload = get_pear_session_payload()
+        active_session_a = build_pear_active_session_summary_from_messages(
+            pear_session=payload,
+            source="server",
+            stream_exists=True,
+            messages=[(10, "@Pear fix checkout", False)],
+        )
+        active_session_b = build_pear_active_session_summary_from_messages(
+            pear_session=payload,
+            source="server",
+            stream_exists=True,
+            messages=[
+                (20, "@Pear remember this decision", False),
+                (21, "Memory: Prefer small PRs", False),
+                (22, "Routine: Check the PR every weekday", False),
+            ],
+        )
+
+        instructions = build_pear_codex_developer_instructions()
+
+        self.assertEqual(instructions, build_pear_codex_developer_instructions())
+        self.assertNotIn("Memory: <channel-scoped note Pear should remember>", instructions)
+        self.assertNotIn("Routine: <standing follow-up", instructions)
+        self.assertIn("CANVAS.md", instructions)
+        self.assertNotIn(instructions, build_pear_codex_turn_prompt(active_session_a, "fix"))
+        self.assertNotIn(instructions, build_pear_codex_turn_prompt(active_session_b, "fix"))
+
+    def test_codex_skills_are_provisioned_into_codex_home(self) -> None:
+        with TemporaryDirectory() as source_root, TemporaryDirectory() as codex_home:
+            source_skill = Path(source_root) / "pear-canvas"
+            source_skill.mkdir()
+            (source_skill / "SKILL.md").write_text(
+                "# pear-canvas\n\nUse CANVAS.md for topic state.\n",
+                encoding="utf-8",
+            )
+            ignored_dir = Path(source_root) / "not-a-skill"
+            ignored_dir.mkdir()
+            (ignored_dir / "notes.md").write_text("not copied\n", encoding="utf-8")
+
+            with patch("zerver.lib.pear_worker.settings.PEAR_CODEX_SKILLS_DIR", source_root):
+                provisioned = pear_provision_codex_skills(codex_home)
+
+            destination = Path(codex_home) / "skills" / "pear-canvas" / "SKILL.md"
+            self.assertEqual(provisioned, ["pear-canvas"])
+            self.assertEqual(
+                destination.read_text(encoding="utf-8"),
+                "# pear-canvas\n\nUse CANVAS.md for topic state.\n",
+            )
+            self.assertFalse((Path(codex_home) / "skills" / "not-a-skill").exists())
 
     def test_agent_text_results_parse_artifact_lines(self) -> None:
         results = pear_tool_results_from_text(
@@ -3245,6 +3302,8 @@ class PearSessionDefaultsTest(TestCase):
                 'service_tier="fast"',
                 "--config",
                 "features.fast_mode=true",
+                "--config",
+                "features.memories=true",
                 "--cd",
                 "/workspace",
                 "--model",
@@ -3336,6 +3395,8 @@ class PearSessionDefaultsTest(TestCase):
                 "--config",
                 "features.fast_mode=true",
                 "--config",
+                "features.memories=true",
+                "--config",
                 'sandbox_mode="workspace-write"',
                 "--model",
                 "gpt-5.5",
@@ -3343,6 +3404,8 @@ class PearSessionDefaultsTest(TestCase):
                 "-",
             ],
         )
+        self.assertNotIn("You are Pear, a Codex-powered pair-programming agent", calls[0][1]["input"])
+        self.assertIn("Task: continue the checkout fix", calls[0][1]["input"])
         self.assertEqual(
             results,
             [
@@ -3469,6 +3532,26 @@ class PearSessionDefaultsTest(TestCase):
             ],
         )
         self.assertIn("/srv/zulip-node/bin/codex", runner.build_command())
+
+    def test_codex_app_server_resume_does_not_resend_developer_instructions(self) -> None:
+        runner = PearCodexAppServerToolRunner(
+            codex_bin="codex",
+            workdir="/workspace",
+            model="gpt-5.5",
+            sandbox="workspace-write",
+            approval_policy="never",
+            timeout_seconds=900,
+            output_limit=200,
+            service_tier="fast",
+            fast_mode_enabled=True,
+        )
+
+        self.assertIn("developerInstructions", runner.thread_params())
+        resumed_params = runner.thread_params(existing_thread_id="thread-existing")
+
+        self.assertEqual(resumed_params["threadId"], "thread-existing")
+        self.assertNotIn("developerInstructions", resumed_params)
+        self.assertNotIn("ephemeral", resumed_params)
 
     def test_codex_exec_addressing_router_uses_persisted_thread(self) -> None:
         payload = get_pear_session_payload()
@@ -4052,6 +4135,8 @@ class PearSessionDefaultsTest(TestCase):
                 "--config",
                 "features.fast_mode=true",
                 "--config",
+                "features.memories=true",
+                "--config",
                 'model_reasoning_effort="medium"',
             ],
         )
@@ -4060,6 +4145,12 @@ class PearSessionDefaultsTest(TestCase):
             sent_methods,
             ["initialize", "initialized", "thread/start", "turn/start", "turn/steer"],
         )
+        thread_start_request = processes[0].stdin.lines[2]
+        self.assertIn(
+            "developerInstructions",
+            thread_start_request["params"],
+        )
+        self.assertIn("CANVAS.md", thread_start_request["params"]["developerInstructions"])
         steering_request = processes[0].stdin.lines[-1]
         self.assertEqual(steering_request["params"]["expectedTurnId"], "turn-app")
         self.assertEqual(
@@ -4341,6 +4432,7 @@ class PearSessionDefaultsTest(TestCase):
         self.assertEqual(calls[2], ("trace_enter",))
         self.assertIn("threadId: thread-existing", calls[3][2])
         self.assertIn("Do not pass approval-policy", calls[3][2])
+        self.assertNotIn("You are Pear, a Codex-powered pair-programming agent", calls[3][2])
         self.assertEqual(calls[4], ("trace_exit", None))
         self.assertEqual(
             results,
@@ -4803,7 +4895,10 @@ class PearSessionDefaultsTest(TestCase):
                 "config",
                 {
                     "codex_bin": "/opt/codex",
-                    "config_overrides": ("features.fast_mode=true",),
+                    "config_overrides": (
+                        "features.fast_mode=true",
+                        "features.memories=true",
+                    ),
                 },
             ),
         )
@@ -4970,6 +5065,7 @@ class PearSessionDefaultsTest(TestCase):
         )
         self.assertEqual(calls[2][0], "run")
         self.assertIn("Task: continue the checkout fix", calls[2][1])
+        self.assertNotIn("You are Pear, a Codex-powered pair-programming agent", calls[2][1])
         self.assertEqual(
             results,
             [

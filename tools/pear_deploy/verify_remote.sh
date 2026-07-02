@@ -191,3 +191,27 @@ print(
     )
 )
 PY
+
+echo
+echo "Pear live health:"
+ssh -F "$SSH_CONFIG" pear-staging-root \
+    "sudo -Hu zulipdev bash -lc 'cd /home/zulipdev/zulip && set -a && . /home/zulipdev/pear.env && set +a && /home/zulipdev/zulip/tools/pear-health-report --max-active-runs 0 --max-stale-active-runs 0 --max-orphan-active-markers 0'"
+
+echo
+echo "Pear queue health:"
+ssh -F "$SSH_CONFIG" pear-staging-root 'rabbitmqctl list_queues name messages_ready messages_unacknowledged consumers | awk '"'"'
+$1 == "pear_worker" || $1 == "embedded_bots" {
+    seen += 1
+    print
+    if ($2 != 0 || $3 != 0 || $4 < 1) {
+        bad = 1
+    }
+}
+END {
+    if (seen < 2) {
+        print "missing Pear queues" > "/dev/stderr"
+        exit 1
+    }
+    exit bad
+}
+'"'"

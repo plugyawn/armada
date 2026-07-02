@@ -9,6 +9,7 @@ import {$t} from "./i18n.ts";
 import * as inbox_util from "./inbox_util.ts";
 import * as narrow_state from "./narrow_state.ts";
 import {page_params} from "./page_params.ts";
+import * as pear_topbar from "./pear_topbar.ts";
 import * as peer_data from "./peer_data.ts";
 import * as recent_view_util from "./recent_view_util.ts";
 import * as rendered_markdown from "./rendered_markdown.ts";
@@ -222,6 +223,11 @@ export function initialize(): void {
 export function render_title_area(): void {
     const filter = narrow_state.filter();
     build_message_view_header(filter);
+    // Pear git-native topbar (Row A) mirrors the narrow: it takes over
+    // for stream/topic narrows and hides itself elsewhere. Single hook
+    // for the whole topbar — later P5d slices extend rerender(), not
+    // this call site.
+    pear_topbar.rerender();
 }
 
 // This function checks if "modified_sub" which is the stream whose values

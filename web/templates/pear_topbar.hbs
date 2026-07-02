@@ -1,0 +1,16 @@
+<div class="pear-topbar-row-a">
+    <a class="pear-topbar-stream" href="{{stream_url}}">
+        <span class="pear-topbar-hash">#</span>{{stream_name}}
+    </a>
+    {{#if has_topic}}
+    <span id="pear-branch-switcher_widget" class="pear-branch-trigger" tabindex="0" role="button" aria-haspopup="listbox" aria-label="{{t 'Switch branch' }}">
+        <span class="pear-branch-glyph" aria-hidden="true">⎇</span>
+        <span class="pear-branch-name">{{topic_display_name}}</span>
+        <i class="zulip-icon zulip-icon-chevron-down" aria-hidden="true"></i>
+    </span>
+    <span class="pear-branch-mismatch-chip notdisplayed" data-tippy-content="{{t 'The checked-out branch does not match this topic.' }}">{{t 'branch ≠ topic' }}</span>
+    {{/if}}
+    <div class="pear-topbar-right-cluster">
+        {{! Runtime chip (P5d-3) and later clusters mount here. }}
+    </div>
+</div>

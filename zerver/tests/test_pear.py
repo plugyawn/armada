@@ -7547,7 +7547,7 @@ class PearSessionDefaultsTest(TestCase):
         )
 
         self.assertEqual(len(sent_replies), 2)
-        self.assertEqual(sent_replies[1], "Pear worker failed.")
+        self.assertEqual(sent_replies[1], "Pear worker failed.\n\nError: codex adapter failed")
         self.assertEqual(
             bot_handler.storage.values[PEAR_WORKER_RUNS_STORAGE_KEY],
             [

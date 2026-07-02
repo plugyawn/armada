@@ -17,11 +17,15 @@ DEPLOY_UNTRACKED_ALLOW_PREFIXES=(
     'output/'
     'prod-static/'
     'staticfiles/'
+    'static/generated/'
+    'locale/language_name_map.json'
     '.mypy_cache/'
     '.pytest_cache/'
     '.ruff_cache/'
     'web/.parcel-cache/'
     'web/coverage/'
+    'web/generated/'
+    'zproject/dev-secrets.conf'
 )
 
 filter_deploy_untracked_source_files() {
@@ -131,7 +135,7 @@ remote_untracked_source="$(
     git ls-files --others --exclude-standard |
     while IFS= read -r file; do
         case "$file" in
-            .playwright-cli/*|.venv/*|.vagrant/*|.pnpm-store/*|node_modules/*|var/*|output/*|prod-static/*|staticfiles/*|.mypy_cache/*|.pytest_cache/*|.ruff_cache/*|web/.parcel-cache/*|web/coverage/*)
+            .playwright-cli/*|.venv/*|.vagrant/*|.pnpm-store/*|node_modules/*|var/*|output/*|prod-static/*|staticfiles/*|static/generated/*|locale/language_name_map.json|.mypy_cache/*|.pytest_cache/*|.ruff_cache/*|web/.parcel-cache/*|web/coverage/*|web/generated/*|zproject/dev-secrets.conf)
                 ;;
             *)
                 printf "%s\n" "$file"

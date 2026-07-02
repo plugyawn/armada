@@ -77,7 +77,6 @@ function render_to_dom(state_overrides = {}) {
         stream: "devel",
         topic: "pear-smoke",
         error: "",
-        model_error: "",
         ...state_overrides,
     });
     const dom = new JSDOM(`<!doctype html><html><body>${html}</body></html>`);

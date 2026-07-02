@@ -15,6 +15,23 @@ RUN_MIGRATE=true
 RUN_COMPAT=true
 STATE_PATH="$DEFAULT_STATE_PATH"
 
+DEPLOY_UNTRACKED_ALLOW_PREFIXES=(
+    '.playwright-cli/'
+    '.venv/'
+    '.vagrant/'
+    '.pnpm-store/'
+    'node_modules/'
+    'var/'
+    'output/'
+    'prod-static/'
+    'staticfiles/'
+    '.mypy_cache/'
+    '.pytest_cache/'
+    '.ruff_cache/'
+    'web/.parcel-cache/'
+    'web/coverage/'
+)
+
 RSYNC_EXCLUDES=(
     --exclude '/.playwright-cli/'
     --exclude '/.venv/'
@@ -148,6 +165,37 @@ run_local_compat() {
     (cd "$REPO_ROOT/.." && python3 tools/check_pear_compat.py)
 }
 
+filter_deploy_untracked_source_files() {
+    local file
+    local allowed_prefix
+    local allowed
+    while IFS= read -r file; do
+        if [[ -z "$file" ]]; then
+            continue
+        fi
+        allowed=false
+        for allowed_prefix in "${DEPLOY_UNTRACKED_ALLOW_PREFIXES[@]}"; do
+            if [[ "$file" == "$allowed_prefix"* ]]; then
+                allowed=true
+                break
+            fi
+        done
+        if [[ "$allowed" != true ]]; then
+            printf '%s\n' "$file"
+        fi
+    done
+}
+
+local_untracked_source_files() {
+    git -C "$REPO_ROOT" ls-files --others --exclude-standard |
+        filter_deploy_untracked_source_files
+}
+
+remote_untracked_source_files() {
+    ssh_zulip_clean "git ls-files --others --exclude-standard" |
+        filter_deploy_untracked_source_files
+}
+
 remote_dirty_tree_matches_local_head() {
     local file
     local local_sha
@@ -240,6 +288,7 @@ LOCAL_BRANCH="$(git -C "$REPO_ROOT" branch --show-current)"
 LOCAL_SHA="$(git -C "$REPO_ROOT" rev-parse HEAD)"
 LOCAL_GIT_COMMON_DIR="$(git -C "$REPO_ROOT" rev-parse --git-common-dir)"
 LOCAL_STATUS="$(git -C "$REPO_ROOT" status --porcelain --untracked-files=no)"
+LOCAL_UNTRACKED_SOURCE="$(local_untracked_source_files)"
 
 if [[ "$LOCAL_BRANCH" != "pear-main" ]]; then
     fail "local branch is $LOCAL_BRANCH, expected pear-main"
@@ -248,11 +297,16 @@ if [[ -n "$LOCAL_STATUS" ]]; then
     echo "$LOCAL_STATUS" >&2
     fail "local tracked tree is dirty; commit or revert tracked changes before deploying"
 fi
+if [[ -n "$LOCAL_UNTRACKED_SOURCE" ]]; then
+    echo "$LOCAL_UNTRACKED_SOURCE" >&2
+    fail "local source tree has untracked files that rsync would omit; add, ignore, or remove them before deploying"
+fi
 
 echo "Preflight: local $LOCAL_BRANCH $LOCAL_SHA is tracked-clean."
 
 PREV_SHA="$(ssh_zulip "git rev-parse HEAD")"
 REMOTE_STATUS="$(ssh_zulip "git status --porcelain --untracked-files=no")"
+REMOTE_UNTRACKED_SOURCE="$(remote_untracked_source_files)"
 
 echo "Preflight: remote HEAD $PREV_SHA"
 if [[ -n "$REMOTE_STATUS" ]]; then
@@ -263,6 +317,10 @@ if [[ -n "$REMOTE_STATUS" ]]; then
         fail "remote tracked tree has box-only content; sync/commit it back before deploying"
     fi
 fi
+if [[ -n "$REMOTE_UNTRACKED_SOURCE" ]]; then
+    echo "$REMOTE_UNTRACKED_SOURCE" >&2
+    fail "remote source tree has untracked files that rsync --delete would remove; sync/commit them back before deploying"
+fi
 if ! git -C "$REPO_ROOT" cat-file -e "$PREV_SHA^{commit}" 2>/dev/null; then
     fail "remote HEAD $PREV_SHA is not present in the local checkout; refusing to clobber unknown box history"
 fi
@@ -270,7 +328,7 @@ if ! git -C "$REPO_ROOT" merge-base --is-ancestor "$PREV_SHA" "$LOCAL_SHA"; then
     fail "remote HEAD $PREV_SHA is not an ancestor of local HEAD $LOCAL_SHA"
 fi
 
-echo "Preflight: remote tracked tree is clean and not ahead of local pear-main."
+echo "Preflight: remote tracked/untracked source tree is clean and not ahead of local pear-main."
 if [[ "$PREV_SHA" != "$LOCAL_SHA" ]]; then
     echo
     echo "Deploy delta:"

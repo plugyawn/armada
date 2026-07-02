@@ -513,12 +513,14 @@ function render(
 ): void {
     last_runs = runs;
     last_topic_context = topic_context;
-    pear_run_state.set_active_run_result_messages(runs);
     remember_worktree_details_state();
     const {stream, topic} = current_context();
     const has_topic = stream !== undefined && topic !== undefined;
     const next_context_key = context_key(stream, topic);
     const active_run = active_display_run(runs);
+    pear_run_state.set_active_run_result_messages(runs, {
+        force_reconcile: active_run === undefined,
+    });
     const panel_status = active_run?.status ?? "idle";
     $("#pear-panel").html(
         render_pear_panel({

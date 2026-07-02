@@ -14,15 +14,13 @@ from typing import Any, Literal
 from zerver.lib.pear import (
     PEAR_ADDRESSING_ROUTER_STORAGE_KEY,
     PEAR_CANVAS_FILE_NAME,
-    PEAR_TOPIC_STATE_TOOL_NAMES,
-    PEAR_TOPIC_STATE_TOOLS,
     PearActiveSessionSummary,
     PearWorkerToolResult,
     PearWorkerTranscriptCallback,
     PearWorkerTranscriptEvent,
+    pear_is_retired_visible_artifact_line,
     pear_normalize_token_usage,
     parse_pear_artifacts,
-    pear_topic_state_tool_name,
 )
 
 PearAgentRuntime = Literal[
@@ -31,19 +29,6 @@ PearAgentRuntime = Literal[
 PearSubprocessRunner = Callable[..., subprocess.CompletedProcess[str]]
 PearSubprocessPopen = Callable[..., subprocess.Popen[str]]
 PearUrlOpen = Callable[..., Any]
-PEAR_CODEX_PROMPT_RETIRED_ARTIFACT_KINDS = frozenset(
-    (
-        "routine",
-        "routine_cadence",
-        "routine_disabled",
-        "memory",
-        "memory_forgotten",
-        "done_criteria",
-        "response_policy",
-    )
-)
-
-
 @dataclass(frozen=True)
 class PearProcessIsolation:
     username: str
@@ -501,11 +486,7 @@ def build_pear_codex_turn_prompt(active_session: PearActiveSessionSummary, task:
         f"- head: {workspace_context.get('head') or 'unknown'}",
         "- contract: the Zulip stream maps to the repository, and the Zulip topic/subthread maps to the Git branch.",
     ]
-    artifacts = [
-        artifact
-        for artifact in active_session["artifacts"]
-        if artifact["kind"] not in PEAR_CODEX_PROMPT_RETIRED_ARTIFACT_KINDS
-    ][:5]
+    artifacts = active_session["artifacts"][:5]
     artifact_lines = [
         f"- {artifact['label']}: {artifact['value']}" for artifact in artifacts
     ] or ["- None"]
@@ -570,7 +551,10 @@ def pear_tool_results_from_text(
     artifacts = parse_pear_artifacts(text, message_id=0)
     if artifacts:
         prose = "\n".join(
-            line for line in text.splitlines() if not parse_pear_artifacts(line, message_id=0)
+            line
+            for line in text.splitlines()
+            if not parse_pear_artifacts(line, message_id=0)
+            and not pear_is_retired_visible_artifact_line(line)
         ).strip()
         results: list[PearWorkerToolResult] = []
         if prose:
@@ -657,45 +641,6 @@ def merge_pear_tool_results(
             seen.add(key)
             merged.append(result)
     return merged
-
-
-def build_pear_topic_state_agent_tools(
-    function_tool: Callable[..., object],
-    recorded_results: list[PearWorkerToolResult],
-    *,
-    output_limit: int,
-) -> list[Any]:
-    if len(PEAR_TOPIC_STATE_TOOL_NAMES) != len(PEAR_TOPIC_STATE_TOOLS):
-        raise AssertionError("Pear topic-state tool labels and names are out of sync")
-    tools: list[Any] = []
-
-    def make_tool(label: str, tool_name: str) -> object:
-        def record_artifact(value: str) -> str:
-            trimmed_value = trim_pear_agent_text(value, limit=output_limit)
-            result: PearWorkerToolResult = {"label": label, "value": trimmed_value}
-            recorded_results.append(result)
-            return f"{label}: {trimmed_value}"
-
-        record_artifact.__name__ = tool_name
-        return function_tool(
-            record_artifact,
-            name_override=tool_name,
-            description_override=(
-                "Record a durable Pear topic-state artifact by posting a "
-                f"`{label}:` value back to the Zulip topic."
-            ),
-            use_docstring_info=False,
-        )
-
-    for label, tool_name in zip(PEAR_TOPIC_STATE_TOOLS, PEAR_TOPIC_STATE_TOOL_NAMES):
-        expected_tool_name = pear_topic_state_tool_name(label)
-        if tool_name != expected_tool_name:
-            raise AssertionError(
-                f"Pear topic-state tool name {tool_name!r} does not match "
-                f"{expected_tool_name!r} for {label!r}"
-            )
-        tools.append(make_tool(label, tool_name))
-    return tools
 
 
 def pear_tool_results_from_codex_jsonl(
@@ -2109,7 +2054,7 @@ class PearCodexAgentsMcpToolRunner:
         task: str,
     ) -> Sequence[PearWorkerToolResult]:
         try:
-            from agents import Agent, Runner, function_tool, trace
+            from agents import Agent, Runner, trace
             from agents.mcp import MCPServerStdio
         except ImportError as error:
             raise PearAgentRuntimeError(
@@ -2120,12 +2065,6 @@ class PearCodexAgentsMcpToolRunner:
         existing_thread_id = pear_codex_thread_id_from_active_session(active_session)
         codex_tool = "codex-reply" if existing_thread_id is not None else "codex"
         prompt = self.build_prompt(active_session, task, existing_thread_id)
-        recorded_tool_results: list[PearWorkerToolResult] = []
-        topic_state_tools: Any = build_pear_topic_state_agent_tools(
-            function_tool,
-            recorded_tool_results,
-            output_limit=self.output_limit,
-        )
         mcp_command = pear_isolated_command(
             [self.codex_bin, "mcp-server"],
             self.process_isolation,
@@ -2141,7 +2080,6 @@ class PearCodexAgentsMcpToolRunner:
             agent = Agent(
                 name="Pear Codex Orchestrator",
                 instructions=self.build_instructions(existing_thread_id),
-                tools=topic_state_tools,
                 mcp_servers=[codex_mcp_server],
             )
             with trace("Pear Codex MCP worker"):
@@ -2155,10 +2093,7 @@ class PearCodexAgentsMcpToolRunner:
 
         final_text = self.result_text(result)
         thread_id = existing_thread_id or pear_codex_thread_id_from_agents_objects(result)
-        results = merge_pear_tool_results(
-            recorded_tool_results,
-            pear_tool_results_from_text(final_text, output_limit=self.output_limit),
-        )
+        results = pear_tool_results_from_text(final_text, output_limit=self.output_limit)
         results = ensure_pear_runtime_result(results, self.runtime_value())
         return append_pear_codex_thread_artifact(
             results,
@@ -2172,14 +2107,9 @@ class PearCodexAgentsMcpToolRunner:
             "Do not implement repository edits yourself; delegate repository work to Codex MCP.",
             f"Call the `{codex_tool}` MCP tool for this turn and report its final result.",
             "Do not shell out to Codex manually; the connected MCP tool is the runtime boundary.",
-            "Use the provided `pear_record_*` tools to record Pear topic-state artifacts "
-            "as first-class tool calls instead of relying only on prose.",
-            "For standing routines, call `pear_record_routine`; call "
-            "`pear_record_routine_cadence` only when the user gave an explicit cadence.",
             "Preserve Codex tool output as Pear artifact lines when it includes "
             "`Verification:`, `Diff:`, `Branch:`, `Repo:`, `Runtime:`, "
-            "`PR:`, `Ticket:`, `Issue:`, `Reviewers:`, `Routine:`, "
-            "`Memory:`, `Session:`, or `Doc:`.",
+            "`PR:`, `Ticket:`, `Issue:`, `Reviewers:`, `Session:`, or `Doc:`.",
             "If the Codex MCP response includes structuredContent.threadId, include "
             "`Session: Codex thread <threadId>` in the final response.",
         ]

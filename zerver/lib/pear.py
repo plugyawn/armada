@@ -45,77 +45,33 @@ PEAR_CODEX_MCP_TOOLS: Final = ("codex", "codex-reply")
 PEAR_TOPIC_STATE_TOOLS: Final = (
     "Repo",
     "Runtime",
-    "Verification",
-    "Diff",
     "Branch",
     "PR",
+    "Diff",
+    "Verification",
+    "Screenshot",
     "Session",
+    "Doc",
     "Ticket",
     "Issue",
     "Reviewers",
-    "Routine",
-    "Routine cadence",
-    "Routine disabled",
-    "Memory",
-    "Memory forgotten",
-    "Done",
-    "Doc",
 )
 PEAR_TOPIC_STATE_TOOL_NAMES: Final = (
     "pear_record_repo",
     "pear_record_runtime",
-    "pear_record_verification",
-    "pear_record_diff",
     "pear_record_branch",
     "pear_record_pr",
+    "pear_record_diff",
+    "pear_record_verification",
+    "pear_record_screenshot",
     "pear_record_session",
+    "pear_record_doc",
     "pear_record_ticket",
     "pear_record_issue",
     "pear_record_reviewers",
-    "pear_record_routine",
-    "pear_record_routine_cadence",
-    "pear_record_routine_disabled",
-    "pear_record_memory",
-    "pear_record_memory_forgotten",
-    "pear_record_done",
-    "pear_record_doc",
 )
 
-
-def pear_topic_state_tool_name(label: str) -> str:
-    slug = "".join(
-        character.lower() if character.isalnum() else "_" for character in label
-    )
-    while "__" in slug:
-        slug = slug.replace("__", "_")
-    return f"pear_record_{slug.strip('_')}"
-
-
-PEAR_AGENT_SKILLS: Final = ("standing-routines",)
 PEAR_REASONING_EFFORTS: Final[tuple[str, ...]] = ("low", "medium", "high", "xhigh")
-PEAR_AGENT_SKILL_DEFINITIONS: Final[tuple[dict[str, Any], ...]] = (
-    {
-        "name": "standing-routines",
-        "description": "Use when a Pear request asks for standing work such as a scheduled job, channel watch, or pull-request subscription.",
-        "applies_to": [
-            "scheduled jobs or recurring digests",
-            "channel or topic watches",
-            "pull-request subscriptions or follow-up monitors",
-        ],
-        "instructions": [
-            "Do not run the standing work immediately unless the user explicitly asks to run it now.",
-            "Preserve the user's request as durable topic state with a Routine artifact line.",
-            "Add a Routine cadence artifact only when the user gave an explicit cadence.",
-            "Keep the acknowledgement concise and suitable for the Zulip topic.",
-            "If the request is ambiguous between a one-off task and standing work, treat it as a normal task and continue the pair-programming workflow.",
-        ],
-        "artifact_tools": [
-            "Routine",
-            "Routine cadence",
-            "Verification",
-        ],
-    },
-)
 PEAR_SERVER_CONTRACT_VERSION: Final = 38
 PEAR_URL_RE: Final = r"https?://[^\s<>]+"
 PEAR_STEER_PROMPT: Final = "Steering update:"
@@ -133,16 +89,6 @@ PEAR_SAVE_WORK_PROMPT: Final = "Save work:"
 PEAR_VERIFY_CHANGES_PROMPT: Final = "Verify changes:"
 PEAR_DRAFT_ARTIFACT_PROMPT: Final = "Draft artifact:"
 PEAR_ACCESS_PROMPT: Final = "What can you access from this topic?"
-PEAR_MEMORY_PROMPT: Final = "Remember:"
-PEAR_MEMORY_STATUS_PROMPT: Final = "What do you remember about this topic?"
-PEAR_MEMORY_FORGET_PROMPT: Final = "Forget memory:"
-PEAR_DONE_PROMPT: Final = "Definition of done:"
-PEAR_RESPONSE_POLICY_PROMPT: Final = "Response policy:"
-PEAR_ROUTINE_CADENCE_PROMPT: Final = "Routine cadence:"
-PEAR_ROUTINE_STATUS_PROMPT: Final = "What routines do you have set up in this topic?"
-PEAR_RUN_ROUTINE_PROMPT: Final = "Run routine:"
-PEAR_DISABLE_ROUTINE_PROMPT: Final = "Disable routine:"
-PEAR_UPDATE_ROUTINE_PROMPT: Final = "Update routine:"
 PEAR_PAUSE_PROMPT: Final = "Pause session:"
 PEAR_RESUME_PROMPT: Final = "Resume session:"
 PEAR_SELECTED_BOT_CONFIG_KEY: Final = "pear_selected"
@@ -151,60 +97,6 @@ PEAR_WORKER_RUNS_STORAGE_KEY: Final = "pear_worker_runs"
 PEAR_ADDRESSING_ROUTER_STORAGE_KEY: Final = "pear_addressing_router"
 PEAR_WORKER_RUNS_STORAGE_LIMIT: Final = 50
 PEAR_MAX_STEERING_SEGMENTS: Final = 4
-PEAR_WORKER_INTENT_TERMS: Final = (
-    "apply",
-    "branch",
-    "bug",
-    "build",
-    "catch up",
-    "check",
-    "checkpoint",
-    "ci",
-    "code",
-    "codex",
-    "commit",
-    "debug",
-    "deploy",
-    "diagnose",
-    "diff",
-    "draft",
-    "edit",
-    "fix",
-    "handoff",
-    "implement",
-    "investigate",
-    "issue",
-    "merge",
-    "pair",
-    "pairing",
-    "plan",
-    "pr",
-    "refactor",
-    "repo",
-    "review",
-    "runtime",
-    "server",
-    "smoke",
-    "status",
-    "test",
-    "triage",
-    "verify",
-    "workspace",
-)
-PEAR_STANDING_WORK_INTENT_TERMS: Final = (
-    "cadence",
-    "daily",
-    "digest",
-    "every day",
-    "every weekday",
-    "follow up",
-    "monitor",
-    "routine",
-    "schedule",
-    "subscribe",
-    "watch",
-    "weekly",
-)
 PEAR_SESSION_CHECKLIST: Final = (
     "Confirm repo, branch, and target runtime.",
     "State the first concrete edit before changing files.",
@@ -226,12 +118,16 @@ PEAR_ARTIFACT_PATTERN: Final = (
     r"^\s*(?:[-*]\s*)?"
     r"(Repo|Repository|Runtime|Branch|PR|Pull request|Diff|Test|Tests|Verification|Screenshot|"
     r"Session|Session record|Pear session|Codex session|"
-    r"Doc|Docs|Issue|Ticket|Reviewer|Reviewers|Routine disabled|Disabled routine|Routine off|"
-    r"Routine|Routines|Routine cadence|Cadence|"
-    r"Schedule|Watch cadence|Memory forgotten|Forgotten memory|Memory off|"
-    r"Memory|Memories|Done|"
-    r"Definition of done|Success criteria|Ambient|Response policy|Followups|Follow-up mode):"
+    r"Doc|Docs|Issue|Ticket|Reviewer|Reviewers):"
     r"[ \t]*([^\r\n]*?)[ \t]*$"
+)
+PEAR_RETIRED_VISIBLE_ARTIFACT_PATTERN: Final = (
+    r"^\s*(?:[-*]\s*)?"
+    r"(Routine disabled|Disabled routine|Routine off|Routine|Routines|"
+    r"Routine cadence|Cadence|Schedule|Watch cadence|"
+    r"Memory forgotten|Forgotten memory|Memory off|Memory|Memories|"
+    r"Done|Definition of done|Success criteria|Ambient|Response policy|"
+    r"Followups|Follow-up mode):"
 )
 PEAR_VISIBLE_ARTIFACT_FALLBACK_PATTERN: Final = (
     r"^\s*(?:[-*]\s*)?(Result|Done):[ \t]*([^\r\n]*?)[ \t]*$"
@@ -265,13 +161,6 @@ PearArtifactKind = Literal[
     "document",
     "ticket",
     "reviewers",
-    "routine",
-    "routine_cadence",
-    "routine_disabled",
-    "memory",
-    "memory_forgotten",
-    "done_criteria",
-    "response_policy",
 ]
 PearInterruptionKind = Literal["pause", "resume"]
 PEAR_ARTIFACT_KIND_BY_LABEL: Final[dict[str, PearArtifactKind]] = {
@@ -296,28 +185,17 @@ PEAR_ARTIFACT_KIND_BY_LABEL: Final[dict[str, PearArtifactKind]] = {
     "ticket": "ticket",
     "reviewer": "reviewers",
     "reviewers": "reviewers",
-    "routine disabled": "routine_disabled",
-    "disabled routine": "routine_disabled",
-    "routine off": "routine_disabled",
-    "routine": "routine",
-    "routines": "routine",
-    "routine cadence": "routine_cadence",
-    "cadence": "routine_cadence",
-    "schedule": "routine_cadence",
-    "watch cadence": "routine_cadence",
-    "memory forgotten": "memory_forgotten",
-    "forgotten memory": "memory_forgotten",
-    "memory off": "memory_forgotten",
-    "memory": "memory",
-    "memories": "memory",
-    "done": "done_criteria",
-    "definition of done": "done_criteria",
-    "success criteria": "done_criteria",
-    "ambient": "response_policy",
-    "response policy": "response_policy",
-    "followups": "response_policy",
-    "follow-up mode": "response_policy",
 }
+
+
+def pear_is_retired_visible_artifact_line(text: str) -> bool:
+    return bool(
+        search(
+            PEAR_RETIRED_VISIBLE_ARTIFACT_PATTERN,
+            text.strip(),
+            MULTILINE | IGNORECASE,
+        )
+    )
 
 
 @dataclass(frozen=True)
@@ -353,15 +231,6 @@ class PearSessionPayload(TypedDict):
     verify_changes_message: str
     draft_artifact_message: str
     access_message: str
-    memory_message: str
-    memory_status_message: str
-    memory_forget_message: str
-    done_message: str
-    response_policy_message: str
-    routine_cadence_message: str
-    routine_status_message: str
-    disable_routine_message: str
-    update_routine_message: str
     pause_message: str
     resume_message: str
     official_agent_runtime: str
@@ -371,8 +240,6 @@ class PearSessionPayload(TypedDict):
     codex_mcp_tools: list[str]
     pear_topic_state_tools: list[str]
     pear_topic_state_tool_names: list[str]
-    pear_agent_skills: list[str]
-    pear_agent_skill_definitions: list[dict[str, object]]
     server_contract_version: int
 
 
@@ -450,28 +317,7 @@ class PearActiveSessionSummary(TypedDict):
     latest_session_record_kind: str | None
     latest_session_record_url: str | None
     latest_codex_thread_id: str | None
-    routine_count: int
-    latest_routine_message_id: int | None
-    latest_routine: str | None
-    memory_count: int
-    latest_memory_message_id: int | None
-    latest_memory: str | None
-    memory_forgotten_count: int
-    latest_memory_forgotten_message_id: int | None
-    latest_memory_forgotten: str | None
-    done_criteria_count: int
-    latest_done_criteria_message_id: int | None
-    latest_done_criteria: str | None
-    response_policy_count: int
-    latest_response_policy_message_id: int | None
-    latest_response_policy: str | None
     response_policy: PearResponsePolicy
-    routine_cadence_count: int
-    latest_routine_cadence_message_id: int | None
-    latest_routine_cadence: str | None
-    routine_disabled_count: int
-    latest_routine_disabled_message_id: int | None
-    latest_routine_disabled: str | None
     steering_count: int
     latest_steering_message_id: int | None
     latest_steering_instruction: str | None
@@ -829,13 +675,13 @@ def build_pear_triage_message(request: str = "") -> str:
             f"{PEAR_AGENT_MENTION} {PEAR_TRIAGE_PROMPT}",
             "",
             request_line,
-            "Possible duplicate or related work: check this topic's artifacts, memory, routines, linked PRs, and linked issues.",
+            "Possible duplicate or related work: check this topic's artifacts, canvas, linked PRs, and linked issues.",
             "Answer if already known: summarize the settled answer or decision from this topic.",
-            "Suggested owner or reviewer: infer from Reviewers, Routine, PR, Ticket, or Issue artifacts when possible.",
+            "Suggested owner or reviewer: infer from Reviewers, PR, Ticket, or Issue artifacts when possible.",
             "Suggested scope: classify as bug, feature, verification, docs, or follow-up work.",
             "Priority and risk: ",
             "Next action: ",
-            "Durable output: include Ticket, Issue, Reviewers, Routine, or Done artifact lines only when they are concrete.",
+            "Durable output: include Ticket, Issue, Reviewers, Doc, or Verification artifact lines only when they are concrete.",
         ]
     )
 
@@ -972,72 +818,6 @@ def build_pear_draft_artifact_message(artifact: str = "") -> str:
 
 def build_pear_access_message() -> str:
     return f"{PEAR_AGENT_MENTION} {PEAR_ACCESS_PROMPT}"
-
-
-def build_pear_memory_message(memory: str = "") -> str:
-    memory = memory.strip()
-    if memory:
-        return f"{PEAR_AGENT_MENTION} {PEAR_MEMORY_PROMPT}\n\nMemory: {memory}"
-    return f"{PEAR_AGENT_MENTION} {PEAR_MEMORY_PROMPT}\n\nMemory: "
-
-
-def build_pear_memory_status_message() -> str:
-    return f"{PEAR_AGENT_MENTION} {PEAR_MEMORY_STATUS_PROMPT}"
-
-
-def build_pear_memory_forget_message(memory: str = "") -> str:
-    memory = memory.strip()
-    if memory:
-        return f"{PEAR_AGENT_MENTION} {PEAR_MEMORY_FORGET_PROMPT}\n\nMemory forgotten: {memory}"
-    return f"{PEAR_AGENT_MENTION} {PEAR_MEMORY_FORGET_PROMPT}\n\nMemory forgotten: "
-
-
-def build_pear_done_message(done_criteria: str = "") -> str:
-    done_criteria = done_criteria.strip()
-    if done_criteria:
-        return f"{PEAR_AGENT_MENTION} {PEAR_DONE_PROMPT}\n\nDone: {done_criteria}"
-    return f"{PEAR_AGENT_MENTION} {PEAR_DONE_PROMPT}\n\nDone: "
-
-
-def build_pear_response_policy_message(policy: str = "mentions only") -> str:
-    policy = policy.strip()
-    if policy:
-        return f"{PEAR_AGENT_MENTION} {PEAR_RESPONSE_POLICY_PROMPT}\n\nAmbient: {policy}"
-    return f"{PEAR_AGENT_MENTION} {PEAR_RESPONSE_POLICY_PROMPT}\n\nAmbient: "
-
-
-def build_pear_routine_cadence_message(cadence: str = "manual") -> str:
-    cadence = cadence.strip()
-    if cadence:
-        return f"{PEAR_AGENT_MENTION} {PEAR_ROUTINE_CADENCE_PROMPT}\n\nRoutine cadence: {cadence}"
-    return f"{PEAR_AGENT_MENTION} {PEAR_ROUTINE_CADENCE_PROMPT}\n\nRoutine cadence: "
-
-
-def build_pear_routine_status_message() -> str:
-    return f"{PEAR_AGENT_MENTION} {PEAR_ROUTINE_STATUS_PROMPT}"
-
-
-def build_pear_disable_routine_message(routine: str = "") -> str:
-    routine = routine.strip()
-    if routine:
-        return f"{PEAR_AGENT_MENTION} {PEAR_DISABLE_ROUTINE_PROMPT}\n\nRoutine disabled: {routine}"
-    return f"{PEAR_AGENT_MENTION} {PEAR_DISABLE_ROUTINE_PROMPT}\n\nRoutine disabled: "
-
-
-def build_pear_update_routine_message(
-    old_routine: str = "",
-    updated_routine: str = "",
-) -> str:
-    old_routine = old_routine.strip()
-    updated_routine = updated_routine.strip()
-    return "\n".join(
-        [
-            f"{PEAR_AGENT_MENTION} {PEAR_UPDATE_ROUTINE_PROMPT}",
-            "",
-            f"Routine disabled: {old_routine}",
-            f"Routine: {updated_routine}",
-        ]
-    )
 
 
 def build_pear_pause_message(reason: str = "") -> str:
@@ -1296,7 +1076,9 @@ def pear_visible_assistant_text(
                 visible_lines.append("")
             previous_blank = True
             continue
-        if search(PEAR_ARTIFACT_PATTERN, stripped, MULTILINE | IGNORECASE):
+        if search(
+            PEAR_ARTIFACT_PATTERN, stripped, MULTILINE | IGNORECASE
+        ) or pear_is_retired_visible_artifact_line(stripped):
             previous_blank = True
             continue
         visible_lines.append(line.rstrip())
@@ -1695,36 +1477,8 @@ def build_pear_access_ack_message(
     else:
         worker_access = "unknown until a Pear request starts"
     artifact_count = active_session["artifact_count"] if active_session is not None else 0
-    routine_count = active_session["routine_count"] if active_session is not None else 0
-    memory_count = active_session["memory_count"] if active_session is not None else 0
-    done_criteria_count = (
-        active_session["done_criteria_count"] if active_session is not None else 0
-    )
-    routine_cadence_count = (
-        active_session["routine_cadence_count"] if active_session is not None else 0
-    )
     response_policy = (
         active_session["response_policy"] if active_session is not None else "unknown"
-    )
-    latest_routine = (
-        active_session["latest_routine"] or "none"
-        if active_session is not None
-        else "none"
-    )
-    latest_memory = (
-        active_session["latest_memory"] or "none"
-        if active_session is not None
-        else "none"
-    )
-    latest_done_criteria = (
-        active_session["latest_done_criteria"] or "none"
-        if active_session is not None
-        else "none"
-    )
-    latest_routine_cadence = (
-        active_session["latest_routine_cadence"] or "manual"
-        if active_session is not None
-        else "manual"
     )
     latest_verification = (
         active_session["latest_verification"] or "none"
@@ -1736,219 +1490,24 @@ def build_pear_access_ack_message(
             f"I can work from this Zulip topic: {stream} > {topic}.",
             "",
             "Pear can read the durable topic context, including the request, "
-            "checklist, steering replies, pause/resume controls, and artifact "
+            "checklist, recent topic transcript, steering replies, pause/resume controls, "
+            "the topic canvas, Codex-native memories and skills, and artifact "
             "lines such as Repo, Runtime, Branch, PR, Diff, Verification, "
-            "Screenshot, Doc, Reviewers, Routine, Routine cadence, Memory, "
-            "Done, and Ambient.",
+            "Screenshot, Doc, Ticket, Issue, Reviewers, and Session.",
             "When the server worker is enabled, Pear runs the configured Codex "
             "runtime with the server's explicit workdir, sandbox, approval "
             "policy, and model settings.",
             "zulip-terminal can act on posted artifacts: open links, copy values, "
             "check out branches, open compares, create draft PRs, mark PRs "
-            "ready, post PR status, request reviewers, record PR-watch routines, "
-            "and record or recall topic memory.",
+            "ready, post PR status, and request reviewers.",
             "",
             f"Worker state: {worker_state}",
             f"Worker access: {worker_access}",
             f"Artifacts seen: {artifact_count}",
-            f"Routines seen: {routine_count}",
-            f"Latest routine: {latest_routine}",
-            f"Routine cadence records seen: {routine_cadence_count}",
-            f"Latest routine cadence: {latest_routine_cadence}",
-            f"Memories seen: {memory_count}",
-            f"Latest memory: {latest_memory}",
-            f"Done criteria seen: {done_criteria_count}",
-            f"Latest done criteria: {latest_done_criteria}",
             f"Response policy: {response_policy}",
             f"Latest verification: {latest_verification}",
         ]
     )
-
-
-def build_pear_memory_ack_message(memory: str = "") -> str:
-    memory = memory.strip()
-    lines = [
-        "Saved. I'll treat this as Pear memory for this topic.",
-    ]
-    if memory:
-        lines.extend(["", f"Memory: {memory}"])
-    return "\n".join(lines)
-
-
-def build_pear_memory_status_ack_message(
-    active_session: PearActiveSessionSummary | None = None,
-) -> str:
-    if active_session is None:
-        return "\n".join(
-            [
-                "I cannot read Pear memory for this topic yet.",
-                "",
-                "Reason: topic context is unavailable.",
-            ]
-        )
-
-    memory_artifacts = active_pear_memory_artifacts(active_session["artifacts"])
-    if not memory_artifacts:
-        return "\n".join(
-            [
-                f"I do not have Pear memory recorded for {active_session['stream']} > {active_session['topic']} yet.",
-                "",
-                "Use `@Pear Remember:` or zulip-terminal Meta M to add one. If memory was forgotten, repost a newer `Memory:` line to restore it.",
-            ]
-        )
-
-    memory_lines = [
-        f"- {artifact['value']}" for artifact in memory_artifacts[:10]
-    ]
-    return "\n".join(
-        [
-            f"I remember these notes for {active_session['stream']} > {active_session['topic']}:",
-            "",
-            *memory_lines,
-            "",
-            f"Forgotten memory records seen: {active_session['memory_forgotten_count']}",
-        ]
-    )
-
-
-def build_pear_memory_forget_ack_message(
-    memory: str = "",
-    active_session: PearActiveSessionSummary | None = None,
-) -> str:
-    memory = memory.strip()
-    if not memory and active_session is not None and active_session["latest_memory"]:
-        memory = active_session["latest_memory"]
-    if not memory:
-        return "\n".join(
-            [
-                "I do not know which Pear memory to forget yet.",
-                "",
-                "Use `@Pear Forget memory:` with a `Memory forgotten:` line, or record memory first and ask `@Pear forget latest memory`.",
-            ]
-        )
-    return "\n".join(
-        [
-            "Noted. Pear will treat this memory as forgotten in this topic.",
-            "",
-            f"Memory forgotten: {memory}",
-        ]
-    )
-
-
-def parse_pear_done_instruction(content: str) -> str:
-    done_criteria = content.strip()
-    for mention in (PEAR_AGENT_MENTION, "@Pear"):
-        if done_criteria.startswith(mention):
-            done_criteria = done_criteria[len(mention) :].strip()
-            break
-    if done_criteria.startswith(PEAR_DONE_PROMPT):
-        done_criteria = done_criteria[len(PEAR_DONE_PROMPT) :].strip()
-    if done_criteria.lower().startswith("done:"):
-        done_criteria = done_criteria[len("done:") :].strip()
-    return done_criteria
-
-
-def parse_pear_response_policy_instruction(content: str) -> str:
-    response_policy_artifacts = [
-        artifact
-        for artifact in parse_pear_artifacts(content, message_id=0)
-        if artifact["kind"] == "response_policy"
-    ]
-    if response_policy_artifacts:
-        return response_policy_artifacts[0]["value"]
-    if not is_pear_response_policy_template_message(content):
-        policy_value = pear_response_policy_request_value(content)
-        if policy_value is not None:
-            return policy_value
-
-    instruction = content.strip()
-    for mention in (PEAR_AGENT_MENTION, "@Pear"):
-        if instruction.startswith(mention):
-            instruction = instruction[len(mention) :].strip()
-            break
-    if instruction.startswith(PEAR_RESPONSE_POLICY_PROMPT):
-        instruction = instruction[len(PEAR_RESPONSE_POLICY_PROMPT) :].strip()
-    if instruction.lower().startswith("ambient:"):
-        instruction = instruction[len("ambient:") :].strip()
-    return instruction
-
-
-def parse_pear_routine_cadence_instruction(content: str) -> str:
-    routine_cadence_artifacts = [
-        artifact
-        for artifact in parse_pear_artifacts(content, message_id=0)
-        if artifact["kind"] == "routine_cadence"
-    ]
-    if routine_cadence_artifacts:
-        return routine_cadence_artifacts[0]["value"]
-
-    instruction = content.strip()
-    for mention in (PEAR_AGENT_MENTION, "@Pear"):
-        if instruction.startswith(mention):
-            instruction = instruction[len(mention) :].strip()
-            break
-    if instruction.startswith(PEAR_ROUTINE_CADENCE_PROMPT):
-        instruction = instruction[len(PEAR_ROUTINE_CADENCE_PROMPT) :].strip()
-    if instruction.lower().startswith("routine cadence:"):
-        instruction = instruction[len("routine cadence:") :].strip()
-    return instruction
-
-
-def parse_pear_disable_routine_instruction(
-    content: str,
-    active_session: PearActiveSessionSummary | None = None,
-) -> str:
-    routine_disabled_artifacts = [
-        artifact
-        for artifact in parse_pear_artifacts(content, message_id=0)
-        if artifact["kind"] == "routine_disabled"
-    ]
-    if routine_disabled_artifacts:
-        return routine_disabled_artifacts[0]["value"]
-
-    instruction = content.strip()
-    for mention in (PEAR_AGENT_MENTION, "@Pear"):
-        if instruction.startswith(mention):
-            instruction = instruction[len(mention) :].strip()
-            break
-    normalized = " ".join(
-        instruction.lower().replace("?", " ").replace("-", " ").split()
-    )
-    if (
-        active_session is not None
-        and active_session["latest_routine"]
-        and (
-            normalized in {"disable latest routine", "disable the latest routine"}
-            or normalized in {"stop latest routine", "stop the latest routine"}
-            or normalized in {"turn off latest routine", "turn off the latest routine"}
-        )
-    ):
-        return active_session["latest_routine"]
-    if instruction.startswith(PEAR_DISABLE_ROUTINE_PROMPT):
-        instruction = instruction[len(PEAR_DISABLE_ROUTINE_PROMPT) :].strip()
-    for prefix in ("routine disabled:", "disabled routine:", "routine off:"):
-        if instruction.lower().startswith(prefix):
-            instruction = instruction[len(prefix) :].strip()
-            break
-    return instruction
-
-
-def parse_pear_update_routine_instruction(
-    content: str,
-    active_session: PearActiveSessionSummary | None = None,
-) -> tuple[str, str]:
-    artifacts = parse_pear_artifacts(content, message_id=0)
-    old_routines = [
-        artifact["value"] for artifact in artifacts if artifact["kind"] == "routine_disabled"
-    ]
-    updated_routines = [
-        artifact["value"] for artifact in artifacts if artifact["kind"] == "routine"
-    ]
-    old_routine = old_routines[0] if old_routines else ""
-    updated_routine = updated_routines[0] if updated_routines else ""
-    if not old_routine and active_session is not None and active_session["latest_routine"]:
-        old_routine = active_session["latest_routine"]
-    return old_routine, updated_routine
 
 
 def normalize_pear_response_policy(value: str | None) -> PearResponsePolicy:
@@ -1972,172 +1531,6 @@ def normalize_pear_response_policy(value: str | None) -> PearResponsePolicy:
     return "ambient"
 
 
-def build_pear_done_ack_message(done_criteria: str = "") -> str:
-    done_criteria = done_criteria.strip()
-    lines = [
-        "Noted. I'll use this definition of done for the active Pear session.",
-    ]
-    if done_criteria:
-        lines.extend(["", f"Done: {done_criteria}"])
-    return "\n".join(lines)
-
-
-def build_pear_response_policy_ack_message(policy: str = "") -> str:
-    response_policy = normalize_pear_response_policy(policy)
-    if response_policy == "mentions_only":
-        return "\n".join(
-            [
-                "Noted. Pear will only start follow-up worker turns when mentioned in this topic.",
-                "",
-                "Ambient: mentions only",
-            ]
-        )
-    return "\n".join(
-        [
-            "Noted. Pear will run on active-topic follow-up replies in this topic.",
-            "",
-            "Ambient: on",
-        ]
-    )
-
-
-def build_pear_routine_cadence_ack_message(cadence: str = "") -> str:
-    cadence = cadence.strip() or "manual"
-    return "\n".join(
-        [
-            "Noted. Pear will treat this as the routine cadence for this topic.",
-            "",
-            f"Routine cadence: {cadence}",
-        ]
-    )
-
-
-def build_pear_routine_status_ack_message(
-    active_session: PearActiveSessionSummary | None = None,
-) -> str:
-    if active_session is None:
-        return "\n".join(
-            [
-                "I cannot read Pear routines for this topic yet.",
-                "",
-                "Reason: topic context is unavailable.",
-            ]
-        )
-
-    routine_artifacts = active_pear_routine_artifacts(active_session["artifacts"])
-    if not routine_artifacts:
-        return "\n".join(
-            [
-                f"I do not see any Pear routines recorded for {active_session['stream']} > {active_session['topic']} yet.",
-                "",
-                "Use `Routine:` or zulip-terminal Meta C to add one. If routines were disabled, repost a newer `Routine:` to re-enable one.",
-            ]
-        )
-
-    routine_lines = [
-        f"- {artifact['value']}" for artifact in routine_artifacts[:10]
-    ]
-    remaining_count = len(routine_artifacts) - len(routine_lines)
-    if remaining_count > 0:
-        routine_lines.append(f"- ...and {remaining_count} more")
-    return "\n".join(
-        [
-            f"Pear routines recorded for {active_session['stream']} > {active_session['topic']}:",
-            "",
-            *routine_lines,
-            "",
-            f"Latest routine cadence: {active_session['latest_routine_cadence'] or 'manual'}",
-            f"Disabled routine records seen: {active_session['routine_disabled_count']}",
-        ]
-    )
-
-
-def build_pear_disable_routine_ack_message(
-    routine: str = "",
-    active_session: PearActiveSessionSummary | None = None,
-) -> str:
-    routine = routine.strip()
-    if not routine and active_session is not None and active_session["latest_routine"]:
-        routine = active_session["latest_routine"]
-    if not routine:
-        return "\n".join(
-            [
-                "I do not know which Pear routine to disable yet.",
-                "",
-                "Use `@Pear Disable routine:` with a `Routine disabled:` line, or record a routine first and ask `@Pear disable latest routine`.",
-            ]
-        )
-    return "\n".join(
-        [
-            "Noted. Pear will treat this routine as disabled in this topic.",
-            "",
-            f"Routine disabled: {routine}",
-        ]
-    )
-
-
-def build_pear_update_routine_ack_message(
-    old_routine: str = "",
-    updated_routine: str = "",
-) -> str:
-    old_routine = old_routine.strip()
-    updated_routine = updated_routine.strip()
-    if not updated_routine:
-        return "\n".join(
-            [
-                "I need the updated Pear routine before I can record the change.",
-                "",
-                "Use `@Pear Update routine:` with both `Routine disabled:` and `Routine:` lines.",
-            ]
-        )
-    lines = [
-        "Updated. Pear will treat this as the current routine in this topic.",
-        "",
-    ]
-    if old_routine:
-        lines.append(f"Routine disabled: {old_routine}")
-    lines.append(f"Routine: {updated_routine}")
-    return "\n".join(lines)
-
-
-def build_pear_run_routine_ack_message(
-    active_session: PearActiveSessionSummary | None = None,
-) -> str:
-    if active_session is None:
-        return "\n".join(
-            [
-                "I cannot run a Pear routine for this topic yet.",
-                "",
-                "Reason: topic context is unavailable.",
-            ]
-        )
-    if not active_session["latest_routine"]:
-        return "\n".join(
-            [
-                "I do not see a Pear routine recorded for this topic yet.",
-                "",
-                "Use `Routine:` or zulip-terminal Meta C to record one first.",
-            ]
-        )
-    if not active_session["worker_can_run"]:
-        reason = active_session["worker_blocked_reason"] or "Pear worker is not ready."
-        return "\n".join(
-            [
-                "I found the latest Pear routine, but I cannot run it yet.",
-                "",
-                f"Reason: {reason}",
-            ]
-        )
-    return "\n".join(
-        [
-            "Running the latest Pear routine for this topic.",
-            "",
-            f"Routine: {active_session['latest_routine']}",
-            f"Routine cadence: {active_session['latest_routine_cadence'] or 'manual'}",
-        ]
-    )
-
-
 def clean_pear_task_text(content: str = "") -> str:
     task = content.strip()
     for mention in (PEAR_AGENT_MENTION, "@Pear"):
@@ -2158,37 +1551,14 @@ def normalize_pear_explicit_request_content(
     return content
 
 
-def normalized_pear_request_text(content: str) -> str:
-    return " ".join(
-        content.lower()
-        .replace("?", " ")
-        .replace(":", " ")
-        .replace("-", " ")
-        .replace("'", " ")
-        .split()
-    )
-
-
 def is_pear_thread_request_message(content: str) -> bool:
     if not is_pear_request_message(content):
         return False
     if is_pear_interruption_template_message(content):
         return PEAR_RESUME_PROMPT in content
-    if is_pear_run_routine_request_message(content):
-        return True
     if (
         is_pear_steering_template_message(content)
         or is_pear_access_request_message(content)
-        or is_pear_memory_status_request_message(content)
-        or is_pear_memory_forget_request_message(content)
-        or is_pear_memory_template_message(content)
-        or is_pear_done_template_message(content)
-        or is_pear_response_policy_template_message(content)
-        or is_pear_response_policy_request_message(content)
-        or is_pear_routine_cadence_template_message(content)
-        or is_pear_routine_status_request_message(content)
-        or is_pear_disable_routine_request_message(content)
-        or is_pear_update_routine_request_message(content)
     ):
         return False
     return True
@@ -2219,75 +1589,11 @@ def pear_session_record_kind(value: str | None) -> str | None:
     return "text"
 
 
-def is_pear_run_routine_request_message(content: str) -> bool:
-    if not is_pear_request_message(content):
-        return False
-    normalized = normalized_pear_request_text(content)
-    return (
-        "run routine" in normalized
-        or "run the routine" in normalized
-        or "run latest routine" in normalized
-        or "run the latest routine" in normalized
-        or "check routine" in normalized
-        or PEAR_RUN_ROUTINE_PROMPT.lower().rstrip(":") in normalized
-    )
-
-
-def is_pear_disable_routine_request_message(content: str) -> bool:
-    if not is_pear_request_message(content):
-        return False
-    normalized = normalized_pear_request_text(content)
-    return (
-        PEAR_DISABLE_ROUTINE_PROMPT.lower().rstrip(":") in normalized
-        or "disable routine" in normalized
-        or "disable latest routine" in normalized
-        or "disable the latest routine" in normalized
-        or "stop routine" in normalized
-        or "stop latest routine" in normalized
-        or "stop the latest routine" in normalized
-        or "turn off routine" in normalized
-        or "turn off latest routine" in normalized
-        or "turn off the latest routine" in normalized
-    )
-
-
-def is_pear_update_routine_request_message(content: str) -> bool:
-    return search(r"\bupdate routine\s*:", content, IGNORECASE) is not None
-
-
-def is_pear_memory_forget_request_message(content: str) -> bool:
-    if not is_pear_request_message(content):
-        return False
-    normalized = normalized_pear_request_text(content)
-    return (
-        PEAR_MEMORY_FORGET_PROMPT.lower().rstrip(":") in normalized
-        or "forget memory" in normalized
-        or "forget latest memory" in normalized
-        or "forget the latest memory" in normalized
-        or "remove memory" in normalized
-        or "remove latest memory" in normalized
-        or "remove the latest memory" in normalized
-        or "drop memory" in normalized
-        or "drop latest memory" in normalized
-        or "drop the latest memory" in normalized
-    )
-
-
 def pear_worker_task_for_message(
     content: str,
     active_session: PearActiveSessionSummary | None = None,
 ) -> str:
-    if (
-        active_session is not None
-        and is_pear_run_routine_request_message(content)
-        and active_session["latest_routine"]
-    ):
-        return "\n".join(
-            [
-                f"Run the latest Pear routine: {active_session['latest_routine']}",
-                f"Routine cadence: {active_session['latest_routine_cadence'] or 'manual'}",
-            ]
-        )
+    del active_session
     return clean_pear_task_text(content)
 
 
@@ -2310,27 +1616,11 @@ def pear_worker_should_start(
     if (
         is_pear_steering_template_message(content)
         or is_pear_access_request_message(content)
-        or is_pear_memory_status_request_message(content)
-        or is_pear_memory_forget_request_message(content)
-        or is_pear_memory_template_message(content)
-        or is_pear_done_template_message(content)
-        or is_pear_response_policy_template_message(content)
-        or is_pear_response_policy_request_message(content)
-        or is_pear_routine_cadence_template_message(content)
-        or is_pear_routine_status_request_message(content)
-        or is_pear_disable_routine_request_message(content)
-        or is_pear_update_routine_request_message(content)
         or PEAR_PAUSE_PROMPT in content
         or parse_pear_checklist(content)
         or parse_pear_artifacts(content, message_id=0)
     ):
         return False
-    if is_pear_run_routine_request_message(content):
-        return (
-            active_session is not None
-            and active_session["latest_routine"] is not None
-            and active_session["worker_can_run"]
-        )
     if is_pear_request_message(content):
         if (
             synthetic_explicit_request
@@ -2909,52 +2199,6 @@ def parse_pear_artifacts(content: str, message_id: int) -> list[PearArtifact]:
     return artifacts
 
 
-def normalize_pear_routine_value(value: str) -> str:
-    return " ".join(value.lower().split())
-
-
-def normalize_pear_memory_value(value: str) -> str:
-    return " ".join(value.lower().split())
-
-
-def active_pear_memory_artifacts(artifacts: Sequence[PearArtifact]) -> list[PearArtifact]:
-    forgotten_memories: set[str] = set()
-    active_memories: list[PearArtifact] = []
-    for artifact in sorted(
-        artifacts, key=lambda artifact: artifact["message_id"], reverse=True
-    ):
-        if artifact["kind"] == "memory_forgotten":
-            normalized = normalize_pear_memory_value(artifact["value"])
-            if normalized:
-                forgotten_memories.add(normalized)
-            continue
-        if artifact["kind"] != "memory":
-            continue
-        normalized = normalize_pear_memory_value(artifact["value"])
-        if normalized and normalized not in forgotten_memories:
-            active_memories.append(artifact)
-    return active_memories
-
-
-def active_pear_routine_artifacts(artifacts: Sequence[PearArtifact]) -> list[PearArtifact]:
-    disabled_routines: set[str] = set()
-    active_routines: list[PearArtifact] = []
-    for artifact in sorted(
-        artifacts, key=lambda artifact: artifact["message_id"], reverse=True
-    ):
-        if artifact["kind"] == "routine_disabled":
-            normalized = normalize_pear_routine_value(artifact["value"])
-            if normalized:
-                disabled_routines.add(normalized)
-            continue
-        if artifact["kind"] != "routine":
-            continue
-        normalized = normalize_pear_routine_value(artifact["value"])
-        if normalized and normalized not in disabled_routines:
-            active_routines.append(artifact)
-    return active_routines
-
-
 def is_pear_steering_template_message(content: str) -> bool:
     return PEAR_STEER_PROMPT in content
 
@@ -2971,249 +2215,15 @@ def is_pear_access_request_message(content: str) -> bool:
     )
 
 
-def is_pear_memory_status_request_message(content: str) -> bool:
-    if not is_pear_request_message(content):
-        return False
-    normalized = " ".join(content.lower().replace("?", " ").split())
-    return (
-        "what do you remember" in normalized
-        or "what does pear remember" in normalized
-        or "what memory do you have" in normalized
-        or "list pear memory" in normalized
-        or PEAR_MEMORY_STATUS_PROMPT.lower().rstrip("?") in normalized
-    )
-
-
-def is_pear_routine_status_request_message(content: str) -> bool:
-    if not is_pear_request_message(content):
-        return False
-    normalized = " ".join(
-        content.lower()
-        .replace("?", " ")
-        .replace(":", " ")
-        .replace("-", " ")
-        .split()
-    )
-    return (
-        "what routines do you have" in normalized
-        or "what routines are set up" in normalized
-        or "what routines are configured" in normalized
-        or "list routines" in normalized
-        or "list pear routines" in normalized
-        or "show routines" in normalized
-        or PEAR_ROUTINE_STATUS_PROMPT.lower().rstrip("?") in normalized
-    )
-
-
 def is_pear_interruption_template_message(content: str) -> bool:
     return PEAR_PAUSE_PROMPT in content or PEAR_RESUME_PROMPT in content
-
-
-def is_pear_memory_template_message(content: str) -> bool:
-    return PEAR_MEMORY_PROMPT in content or pear_memory_request_value(content) is not None
-
-
-def is_pear_done_template_message(content: str) -> bool:
-    return PEAR_DONE_PROMPT in content
-
-
-def is_pear_response_policy_template_message(content: str) -> bool:
-    return PEAR_RESPONSE_POLICY_PROMPT in content
-
-
-def pear_memory_request_value(content: str) -> str | None:
-    instruction = clean_pear_task_text(content)
-    lowered_instruction = instruction.lower()
-    for prefix in (
-        "remember for this channel",
-        "remember for the channel",
-        "remember in this channel",
-        "remember for this stream",
-        "remember for the stream",
-        "remember in this stream",
-        "remember for this topic",
-        "remember in this topic",
-        "remember for this thread",
-        "remember in this thread",
-        "remember for this conversation",
-        "remember in this conversation",
-    ):
-        prefix_index = lowered_instruction.find(prefix)
-        if prefix_index < 0:
-            continue
-        if prefix_index > 0 and not is_pear_request_message(content):
-            continue
-        value = instruction[prefix_index + len(prefix) :].strip()
-        if value.startswith(":"):
-            value = value[1:].strip()
-        if value.lower().startswith("that "):
-            value = value[5:].strip()
-        return value
-    return None
-
-
-def pear_response_policy_request_value(content: str) -> str | None:
-    if not is_pear_request_message(content):
-        return None
-    if pear_memory_request_value(content) is not None:
-        return None
-    normalized = normalized_pear_request_text(content)
-    mentions_only_phrases = (
-        "only respond when",
-        "only reply when",
-        "only answer when",
-        "respond only when",
-        "reply only when",
-        "answer only when",
-        "respond only if",
-        "reply only if",
-        "answer only if",
-        "do not respond unless",
-        "do not reply unless",
-        "don t respond unless",
-        "don t reply unless",
-        "dont respond unless",
-        "dont reply unless",
-        "stop following this thread",
-        "stop following this topic",
-        "stay quiet",
-        "be quiet",
-        "quiet this thread",
-        "quiet this topic",
-        "quiet down",
-        "mentions only",
-        "mention only",
-        "tag only",
-        "tagged only",
-        "ambient off",
-        "followups off",
-        "follow ups off",
-        "follow up replies off",
-        "turn off followups",
-        "turn off follow ups",
-        "unprompted replies off",
-    )
-    if any(phrase in normalized for phrase in mentions_only_phrases) and (
-        "mention" in normalized
-        or "tag" in normalized
-        or "quiet" in normalized
-        or "follow" in normalized
-        or "ambient" in normalized
-        or "unprompted" in normalized
-    ):
-        return "mentions only"
-
-    ambient_phrases = (
-        "ambient on",
-        "followups on",
-        "follow ups on",
-        "followups back on",
-        "follow ups back on",
-        "follow up replies on",
-        "turn on followups",
-        "turn on follow ups",
-        "turn followups on",
-        "turn follow ups on",
-        "turn followups back on",
-        "turn follow ups back on",
-        "resume followups",
-        "resume follow ups",
-        "respond to follow up replies",
-        "run on follow up replies",
-        "respond without mention",
-        "respond without being mentioned",
-        "unprompted replies on",
-    )
-    if any(phrase in normalized for phrase in ambient_phrases):
-        return "on"
-    return None
-
-
-def is_pear_response_policy_request_message(content: str) -> bool:
-    return pear_response_policy_request_value(content) is not None
-
-
-def is_pear_routine_cadence_template_message(content: str) -> bool:
-    return PEAR_ROUTINE_CADENCE_PROMPT in content
 
 
 def is_pear_control_template_message(content: str) -> bool:
     return (
         is_pear_steering_template_message(content)
         or is_pear_interruption_template_message(content)
-        or is_pear_memory_status_request_message(content)
-        or is_pear_memory_forget_request_message(content)
-        or is_pear_routine_status_request_message(content)
-        or is_pear_disable_routine_request_message(content)
-        or is_pear_update_routine_request_message(content)
-        or is_pear_memory_template_message(content)
-        or is_pear_done_template_message(content)
-        or is_pear_response_policy_template_message(content)
-        or is_pear_response_policy_request_message(content)
-        or is_pear_routine_cadence_template_message(content)
     )
-
-
-def parse_pear_memory_instruction(content: str) -> str:
-    memory_artifacts = [
-        artifact
-        for artifact in parse_pear_artifacts(content, message_id=0)
-        if artifact["kind"] == "memory"
-    ]
-    if memory_artifacts:
-        return memory_artifacts[0]["value"]
-
-    memory_request_value = pear_memory_request_value(content)
-    if memory_request_value is not None:
-        return memory_request_value
-
-    instruction = content.strip()
-    for mention in (PEAR_AGENT_MENTION, "@Pear"):
-        if instruction.startswith(mention):
-            instruction = instruction[len(mention) :].strip()
-            break
-    if instruction.startswith(PEAR_MEMORY_PROMPT):
-        instruction = instruction[len(PEAR_MEMORY_PROMPT) :].strip()
-    return instruction
-
-
-def parse_pear_memory_forget_instruction(
-    content: str,
-    active_session: PearActiveSessionSummary | None = None,
-) -> str:
-    memory_forgotten_artifacts = [
-        artifact
-        for artifact in parse_pear_artifacts(content, message_id=0)
-        if artifact["kind"] == "memory_forgotten"
-    ]
-    if memory_forgotten_artifacts:
-        return memory_forgotten_artifacts[0]["value"]
-
-    instruction = content.strip()
-    for mention in (PEAR_AGENT_MENTION, "@Pear"):
-        if instruction.startswith(mention):
-            instruction = instruction[len(mention) :].strip()
-            break
-    normalized = " ".join(
-        instruction.lower().replace("?", " ").replace("-", " ").split()
-    )
-    if (
-        active_session is not None
-        and active_session["latest_memory"]
-        and (
-            normalized in {"forget latest memory", "forget the latest memory"}
-            or normalized in {"remove latest memory", "remove the latest memory"}
-            or normalized in {"drop latest memory", "drop the latest memory"}
-        )
-    ):
-        return active_session["latest_memory"]
-    if instruction.startswith(PEAR_MEMORY_FORGET_PROMPT):
-        instruction = instruction[len(PEAR_MEMORY_FORGET_PROMPT) :].strip()
-    for prefix in ("memory forgotten:", "forgotten memory:", "memory off:"):
-        if instruction.lower().startswith(prefix):
-            instruction = instruction[len(prefix) :].strip()
-            break
-    return instruction
 
 
 def parse_pear_interruption_event(
@@ -3273,12 +2283,6 @@ def parse_pear_steering_event(
     if (
         is_pear_interruption_template_message(content)
         or is_pear_access_request_message(content)
-        or is_pear_memory_status_request_message(content)
-        or is_pear_memory_forget_request_message(content)
-        or is_pear_routine_status_request_message(content)
-        or is_pear_disable_routine_request_message(content)
-        or is_pear_update_routine_request_message(content)
-        or is_pear_run_routine_request_message(content)
         or (
             is_pear_control_template_message(content)
             and not is_pear_steering_template_message(content)
@@ -3373,45 +2377,7 @@ def build_pear_active_session_summary(
     response_policy: str | None = None,
 ) -> PearActiveSessionSummary:
     artifact_list = list(artifacts or [])
-    routine_artifacts = active_pear_routine_artifacts(artifact_list)
-    latest_routine = routine_artifacts[0] if routine_artifacts else None
-    routine_disabled_artifacts = [
-        artifact for artifact in artifact_list if artifact["kind"] == "routine_disabled"
-    ]
-    latest_routine_disabled = (
-        routine_disabled_artifacts[0] if routine_disabled_artifacts else None
-    )
-    memory_artifacts = active_pear_memory_artifacts(artifact_list)
-    latest_memory = memory_artifacts[0] if memory_artifacts else None
-    memory_forgotten_artifacts = [
-        artifact for artifact in artifact_list if artifact["kind"] == "memory_forgotten"
-    ]
-    latest_memory_forgotten = (
-        memory_forgotten_artifacts[0] if memory_forgotten_artifacts else None
-    )
-    done_criteria_artifacts = [
-        artifact for artifact in artifact_list if artifact["kind"] == "done_criteria"
-    ]
-    latest_done_criteria = (
-        done_criteria_artifacts[0] if done_criteria_artifacts else None
-    )
-    response_policy_artifacts = [
-        artifact for artifact in artifact_list if artifact["kind"] == "response_policy"
-    ]
-    latest_response_policy = (
-        response_policy_artifacts[0] if response_policy_artifacts else None
-    )
-    normalized_response_policy = normalize_pear_response_policy(
-        response_policy
-        if response_policy is not None
-        else (latest_response_policy["value"] if latest_response_policy is not None else None)
-    )
-    routine_cadence_artifacts = [
-        artifact for artifact in artifact_list if artifact["kind"] == "routine_cadence"
-    ]
-    latest_routine_cadence = (
-        routine_cadence_artifacts[0] if routine_cadence_artifacts else None
-    )
+    normalized_response_policy = normalize_pear_response_policy(response_policy)
     steering_event_list = list(steering_events or [])
     interruption_event_list = list(interruption_events or [])
     latest_interruption = interruption_event_list[0] if interruption_event_list else None
@@ -3483,52 +2449,7 @@ def build_pear_active_session_summary(
             latest_session_record_value
         ),
         "latest_codex_thread_id": latest_codex_thread_id,
-        "routine_count": len(routine_artifacts),
-        "latest_routine_message_id": latest_routine["message_id"]
-        if latest_routine is not None
-        else None,
-        "latest_routine": latest_routine["value"] if latest_routine is not None else None,
-        "memory_count": len(memory_artifacts),
-        "latest_memory_message_id": latest_memory["message_id"]
-        if latest_memory is not None
-        else None,
-        "latest_memory": latest_memory["value"] if latest_memory is not None else None,
-        "memory_forgotten_count": len(memory_forgotten_artifacts),
-        "latest_memory_forgotten_message_id": latest_memory_forgotten["message_id"]
-        if latest_memory_forgotten is not None
-        else None,
-        "latest_memory_forgotten": latest_memory_forgotten["value"]
-        if latest_memory_forgotten is not None
-        else None,
-        "done_criteria_count": len(done_criteria_artifacts),
-        "latest_done_criteria_message_id": latest_done_criteria["message_id"]
-        if latest_done_criteria is not None
-        else None,
-        "latest_done_criteria": latest_done_criteria["value"]
-        if latest_done_criteria is not None
-        else None,
-        "response_policy_count": len(response_policy_artifacts),
-        "latest_response_policy_message_id": latest_response_policy["message_id"]
-        if latest_response_policy is not None
-        else None,
-        "latest_response_policy": latest_response_policy["value"]
-        if latest_response_policy is not None
-        else None,
         "response_policy": normalized_response_policy,
-        "routine_cadence_count": len(routine_cadence_artifacts),
-        "latest_routine_cadence_message_id": latest_routine_cadence["message_id"]
-        if latest_routine_cadence is not None
-        else None,
-        "latest_routine_cadence": latest_routine_cadence["value"]
-        if latest_routine_cadence is not None
-        else None,
-        "routine_disabled_count": len(routine_disabled_artifacts),
-        "latest_routine_disabled_message_id": latest_routine_disabled["message_id"]
-        if latest_routine_disabled is not None
-        else None,
-        "latest_routine_disabled": latest_routine_disabled["value"]
-        if latest_routine_disabled is not None
-        else None,
         "steering_count": len(steering_event_list),
         "latest_steering_message_id": steering_event_list[0]["message_id"]
         if steering_event_list
@@ -4120,56 +3041,6 @@ class PearEmbeddedBotHandler:
             return
         if is_pear_access_request_message(content):
             response = build_pear_access_ack_message(active_session)
-        elif is_pear_memory_status_request_message(content):
-            response = build_pear_memory_status_ack_message(active_session)
-        elif is_pear_memory_forget_request_message(content):
-            response = build_pear_memory_forget_ack_message(
-                parse_pear_memory_forget_instruction(content, active_session),
-                active_session,
-            )
-        elif is_pear_routine_status_request_message(content):
-            response = build_pear_routine_status_ack_message(active_session)
-        elif is_pear_disable_routine_request_message(content):
-            response = build_pear_disable_routine_ack_message(
-                parse_pear_disable_routine_instruction(content, active_session),
-                active_session,
-            )
-        elif is_pear_update_routine_request_message(content):
-            old_routine, updated_routine = parse_pear_update_routine_instruction(
-                content,
-                active_session,
-            )
-            response = build_pear_update_routine_ack_message(
-                old_routine,
-                updated_routine,
-            )
-        elif is_pear_memory_template_message(content):
-            response = build_pear_memory_ack_message(
-                parse_pear_memory_instruction(content)
-            )
-        elif is_pear_done_template_message(content):
-            response = build_pear_done_ack_message(
-                parse_pear_done_instruction(content)
-            )
-        elif is_pear_response_policy_template_message(
-            content
-        ) or is_pear_response_policy_request_message(content):
-            response_policy = parse_pear_response_policy_instruction(content)
-            self.set_topic_response_policy(
-                bot_handler,
-                stream=stream,
-                topic=topic,
-                response_policy=response_policy,
-            )
-            if active_session is not None:
-                active_session["response_policy"] = normalize_pear_response_policy(response_policy)
-            response = build_pear_response_policy_ack_message(response_policy)
-        elif is_pear_routine_cadence_template_message(content):
-            response = build_pear_routine_cadence_ack_message(
-                parse_pear_routine_cadence_instruction(content)
-            )
-        elif is_pear_run_routine_request_message(content):
-            response = build_pear_run_routine_ack_message(active_session)
         elif interruption_event is not None:
             if interruption_event["kind"] == "pause":
                 response = build_pear_pause_ack_message(interruption_event["instruction"])
@@ -4902,15 +3773,6 @@ def get_pear_session_payload(
         "verify_changes_message": build_pear_verify_changes_message(),
         "draft_artifact_message": build_pear_draft_artifact_message(),
         "access_message": build_pear_access_message(),
-        "memory_message": build_pear_memory_message(),
-        "memory_status_message": build_pear_memory_status_message(),
-        "memory_forget_message": build_pear_memory_forget_message(),
-        "done_message": build_pear_done_message(),
-        "response_policy_message": build_pear_response_policy_message(),
-        "routine_cadence_message": build_pear_routine_cadence_message(),
-        "routine_status_message": build_pear_routine_status_message(),
-        "disable_routine_message": build_pear_disable_routine_message(),
-        "update_routine_message": build_pear_update_routine_message(),
         "pause_message": build_pear_pause_message(),
         "resume_message": build_pear_resume_message(),
         "official_agent_runtime": PEAR_OFFICIAL_AGENT_RUNTIME,
@@ -4920,16 +3782,5 @@ def get_pear_session_payload(
         "codex_mcp_tools": list(PEAR_CODEX_MCP_TOOLS),
         "pear_topic_state_tools": list(PEAR_TOPIC_STATE_TOOLS),
         "pear_topic_state_tool_names": list(PEAR_TOPIC_STATE_TOOL_NAMES),
-        "pear_agent_skills": list(PEAR_AGENT_SKILLS),
-        "pear_agent_skill_definitions": [
-            {
-                "name": skill["name"],
-                "description": skill["description"],
-                "applies_to": list(skill["applies_to"]),
-                "instructions": list(skill["instructions"]),
-                "artifact_tools": list(skill["artifact_tools"]),
-            }
-            for skill in PEAR_AGENT_SKILL_DEFINITIONS
-        ],
         "server_contract_version": PEAR_SERVER_CONTRACT_VERSION,
     }

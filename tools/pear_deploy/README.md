@@ -70,11 +70,14 @@ To reset the hosted dev database to a quiet six-user devlogin realm, run:
 
 ```bash
 tools/pear_deploy/reset_remote_dev_data.sh
+tools/pear_deploy/reset_remote_dev_data.sh --yes
 ```
 
-This removes generated message history, keeps only `plugyawn`, `sidbing`,
-`jayesh`, `berry`, `glitchfix`, and `ritvi` as active human devlogin users,
-and re-creates the embedded `Pear` bot.
+The first command is a read-only dry run. The `--yes` run removes generated
+message history, Pear worker runs, topic contexts, sessions, drafts, scheduled
+messages, and extra generated users; keeps only `plugyawn`, `sidbing`,
+`jayesh`, `berry`, `glitchfix`, and `ritvi` as active human devlogin users; and
+re-creates the embedded `Pear` bot.
 
 ## SSH
 

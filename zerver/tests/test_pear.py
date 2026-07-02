@@ -4524,7 +4524,7 @@ class PearSessionDefaultsTest(TestCase):
         self.assertEqual(recorded_events[0][1], "steering")
         self.assertEqual(recorded_events[0][2], "make it the 30th")
 
-    def test_embedded_bot_handler_routes_natural_routine_setup_to_worker(self) -> None:
+    def test_embedded_bot_handler_routes_standing_request_to_worker(self) -> None:
         payload = get_pear_session_payload()
         loaded_session = build_pear_active_session_summary_from_messages(
             pear_session=payload,

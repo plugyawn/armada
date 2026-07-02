@@ -1,0 +1,9 @@
+<div class="pear-canvas-modal-body">
+    <div class="pear-canvas-loading"></div>
+    <div class="pear-canvas-toolbar">
+        {{> components/action_button label=(t "Edit") custom_classes="pear-canvas-edit-toggle" icon="edit" variant="subtle" intent="neutral" hidden=true }}
+        <span class="pear-canvas-byte-info"></span>
+    </div>
+    <div class="pear-canvas-rendered rendered_markdown"></div>
+    <textarea class="modal-textarea pear-canvas-editor hide" name="pear-canvas-content" rows="14" spellcheck="false"></textarea>
+</div>

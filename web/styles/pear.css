@@ -441,6 +441,29 @@
     opacity: 0.5;
 }
 
+/* Pear canvas modal (dialog_widget body); see web/src/pear_canvas.ts. */
+.pear-canvas-modal-body {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.pear-canvas-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.pear-canvas-byte-info {
+    color: var(--color-text-item);
+    font-size: 12px;
+}
+
+.pear-canvas-rendered {
+    overflow-wrap: anywhere;
+}
+
 /* Navbar Pear runtime popover menu; mirrors the radio-list layout
    used by #buddy-list-actions-menu-popover in right_sidebar.css. */
 #pear-runtime-menu-popover {

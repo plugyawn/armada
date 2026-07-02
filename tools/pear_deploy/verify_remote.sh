@@ -7,6 +7,44 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 DEFAULT_STATE_PATH="$REPO_ROOT/output/pear-staging/server.json"
 STATE_PATH="$DEFAULT_STATE_PATH"
 
+DEPLOY_UNTRACKED_ALLOW_PREFIXES=(
+    '.playwright-cli/'
+    '.venv/'
+    '.vagrant/'
+    '.pnpm-store/'
+    'node_modules/'
+    'var/'
+    'output/'
+    'prod-static/'
+    'staticfiles/'
+    '.mypy_cache/'
+    '.pytest_cache/'
+    '.ruff_cache/'
+    'web/.parcel-cache/'
+    'web/coverage/'
+)
+
+filter_deploy_untracked_source_files() {
+    local file
+    local allowed_prefix
+    local allowed
+    while IFS= read -r file; do
+        if [[ -z "$file" ]]; then
+            continue
+        fi
+        allowed=false
+        for allowed_prefix in "${DEPLOY_UNTRACKED_ALLOW_PREFIXES[@]}"; do
+            if [[ "$file" == "$allowed_prefix"* ]]; then
+                allowed=true
+                break
+            fi
+        done
+        if [[ "$allowed" != true ]]; then
+            printf '%s\n' "$file"
+        fi
+    done
+}
+
 usage() {
     cat <<EOF
 Usage: tools/pear_deploy/verify_remote.sh [options] [state.json]
@@ -68,9 +106,16 @@ PY
 )"
 
 LOCAL_SHA="$(git -C "$REPO_ROOT" rev-parse HEAD)"
+LOCAL_UNTRACKED_SOURCE="$(git -C "$REPO_ROOT" ls-files --others --exclude-standard | filter_deploy_untracked_source_files)"
 
 echo "Deployment metadata:"
 echo "local_head=$LOCAL_SHA"
+if [[ -n "$LOCAL_UNTRACKED_SOURCE" ]]; then
+    echo "local_untracked_source:"
+    printf "%s\n" "$LOCAL_UNTRACKED_SOURCE"
+else
+    echo "local_untracked_source=clean"
+fi
 ssh -F "$SSH_CONFIG" pear-staging-root 'sudo -Hu zulipdev bash -lc '"'"'
 set -euo pipefail
 cd /home/zulipdev/zulip
@@ -82,6 +127,24 @@ if [[ -n "$remote_status" ]]; then
     exit 1
 fi
 echo "remote_tracked_status=clean"
+remote_untracked_source="$(
+    git ls-files --others --exclude-standard |
+    while IFS= read -r file; do
+        case "$file" in
+            .playwright-cli/*|.venv/*|.vagrant/*|.pnpm-store/*|node_modules/*|var/*|output/*|prod-static/*|staticfiles/*|.mypy_cache/*|.pytest_cache/*|.ruff_cache/*|web/.parcel-cache/*|web/coverage/*)
+                ;;
+            *)
+                printf "%s\n" "$file"
+                ;;
+        esac
+    done
+)"
+if [[ -n "$remote_untracked_source" ]]; then
+    echo "remote_untracked_source:"
+    printf "%s\n" "$remote_untracked_source"
+    exit 1
+fi
+echo "remote_untracked_source=clean"
 if [[ -f /home/zulipdev/pear-deployed-sha ]]; then
     echo "deployed_record=$(cat /home/zulipdev/pear-deployed-sha)"
 else

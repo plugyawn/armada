@@ -130,11 +130,15 @@ rsync -az --delete \
     --exclude '/output/' \
     --exclude '/prod-static/' \
     --exclude '/staticfiles/' \
+    --exclude '/static/generated/' \
+    --exclude '/locale/language_name_map.json' \
     --exclude '/.mypy_cache/' \
     --exclude '/.pytest_cache/' \
     --exclude '/.ruff_cache/' \
     --exclude '/web/.parcel-cache/' \
     --exclude '/web/coverage/' \
+    --exclude '/web/generated/' \
+    --exclude '/zproject/dev-secrets.conf' \
     -e "ssh -F $SSH_CONFIG" \
     "$REPO_ROOT/" \
     "root@$IP_ADDRESS:/home/zulipdev/zulip/"

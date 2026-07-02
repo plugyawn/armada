@@ -1585,6 +1585,125 @@ class PearSessionEndpointTest(ZulipTestCase):
 
         self.assertEqual(reason, "This topic already has an active Pear worker run.")
 
+    def test_worker_run_store_rejects_illegal_terminal_transitions(self) -> None:
+        owner = self.example_user("hamlet")
+        pear_bot = self.create_test_bot(
+            "pear",
+            owner,
+            full_name="Pear",
+            bot_type=UserProfile.EMBEDDED_BOT,
+            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+        )
+        bot_handler = SimpleNamespace(user_profile=pear_bot)
+        store = PearDatabaseWorkerRunStore()
+        done_run = PearWorkerRun.objects.create(
+            realm=owner.realm,
+            bot_profile=pear_bot,
+            requesting_user=owner,
+            trigger_message_id=905,
+            stream_name=PEAR_DEFAULT_STREAM,
+            topic_name="topic-a",
+            status=PearWorkerRun.DONE,
+        )
+        cancelled_run = PearWorkerRun.objects.create(
+            realm=owner.realm,
+            bot_profile=pear_bot,
+            requesting_user=owner,
+            trigger_message_id=906,
+            stream_name=PEAR_DEFAULT_STREAM,
+            topic_name="topic-a",
+            status=PearWorkerRun.CANCELLED,
+        )
+
+        store.record(
+            bot_handler,
+            done_run.trigger_message_id,
+            PearWorkerRun.RUNNING,
+            stream=PEAR_DEFAULT_STREAM,
+            topic="topic-a",
+        )
+        store.record(
+            bot_handler,
+            cancelled_run.trigger_message_id,
+            PearWorkerRun.DONE,
+            stream=PEAR_DEFAULT_STREAM,
+            topic="topic-a",
+        )
+
+        done_run.refresh_from_db()
+        cancelled_run.refresh_from_db()
+        self.assertEqual(done_run.status, PearWorkerRun.DONE)
+        self.assertEqual(cancelled_run.status, PearWorkerRun.CANCELLED)
+        done_rejection = PearWorkerRunEvent.objects.get(
+            run=done_run,
+            event_type="transition_rejected",
+        )
+        cancelled_rejection = PearWorkerRunEvent.objects.get(
+            run=cancelled_run,
+            event_type="transition_rejected",
+        )
+        self.assertEqual(
+            done_rejection.payload["reason"],
+            "illegal_transition",
+        )
+        self.assertEqual(
+            cancelled_rejection.payload["new_status"],
+            PearWorkerRun.DONE,
+        )
+
+    def test_worker_run_store_only_requeues_failed_runs_explicitly(self) -> None:
+        owner = self.example_user("hamlet")
+        pear_bot = self.create_test_bot(
+            "pear",
+            owner,
+            full_name="Pear",
+            bot_type=UserProfile.EMBEDDED_BOT,
+            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+        )
+        bot_handler = SimpleNamespace(user_profile=pear_bot)
+        store = PearDatabaseWorkerRunStore()
+        run = PearWorkerRun.objects.create(
+            realm=owner.realm,
+            bot_profile=pear_bot,
+            requesting_user=owner,
+            trigger_message_id=907,
+            stream_name=PEAR_DEFAULT_STREAM,
+            topic_name="topic-a",
+            status=PearWorkerRun.FAILED,
+            error="crashed",
+        )
+
+        store.record(
+            bot_handler,
+            run.trigger_message_id,
+            PearWorkerRun.QUEUED,
+            stream=PEAR_DEFAULT_STREAM,
+            topic="topic-a",
+        )
+        run.refresh_from_db()
+        self.assertEqual(run.status, PearWorkerRun.FAILED)
+        self.assertEqual(run.error, "crashed")
+        implicit_requeue_rejection = PearWorkerRunEvent.objects.get(
+            run=run,
+            event_type="transition_rejected",
+        )
+        self.assertEqual(
+            implicit_requeue_rejection.payload["reason"],
+            "implicit_requeue",
+        )
+
+        self.assertTrue(
+            store.start(
+                bot_handler,
+                run.trigger_message_id,
+                stream=PEAR_DEFAULT_STREAM,
+                topic="topic-a",
+            )
+        )
+        run.refresh_from_db()
+        self.assertEqual(run.status, PearWorkerRun.QUEUED)
+        self.assertIsNone(run.error)
+
     def test_pear_codex_model_catalog_uses_visible_priority_and_reasoning(self) -> None:
         catalog = extract_pear_codex_model_catalog(
             {

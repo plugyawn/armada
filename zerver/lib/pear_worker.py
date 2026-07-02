@@ -54,6 +54,20 @@ PEAR_WORKER_RUN_ACTIVE_STATUSES = frozenset(
     (PearWorkerRun.QUEUED, PearWorkerRun.RUNNING, PearWorkerRun.DONE)
 )
 PEAR_WORKER_RUN_BUSY_STATUSES = frozenset((PearWorkerRun.QUEUED, PearWorkerRun.RUNNING))
+PEAR_WORKER_RUN_TERMINAL_STATUSES = frozenset(
+    (PearWorkerRun.DONE, PearWorkerRun.CANCELLED)
+)
+PEAR_RUN_LEGAL_TRANSITIONS: dict[PearWorkerRunStatus, frozenset[PearWorkerRunStatus]] = {
+    PearWorkerRun.QUEUED: frozenset(
+        (PearWorkerRun.RUNNING, PearWorkerRun.FAILED, PearWorkerRun.CANCELLED)
+    ),
+    PearWorkerRun.RUNNING: frozenset(
+        (PearWorkerRun.DONE, PearWorkerRun.FAILED, PearWorkerRun.CANCELLED)
+    ),
+    PearWorkerRun.FAILED: frozenset((PearWorkerRun.QUEUED,)),
+    PearWorkerRun.DONE: frozenset(),
+    PearWorkerRun.CANCELLED: frozenset(),
+}
 PEAR_REPOSITORY_CLONE_TIMEOUT_SECONDS = 180
 PEAR_TOPIC_WORKDIR_OVERLAY_PATHS = frozenset(
     (
@@ -1471,14 +1485,16 @@ class PearDatabaseWorkerRunStore:
                     return True
                 if run.status in PEAR_WORKER_RUN_ACTIVE_STATUSES:
                     return False
-                self._update_run(
+                if not self._update_run(
                     run,
                     "queued",
                     stream=stream,
                     topic=topic,
                     result_message_id=None,
                     error=None,
-                )
+                    allow_requeue=True,
+                ):
+                    return False
                 self._record_event(
                     run,
                     "queued",
@@ -1536,14 +1552,15 @@ class PearDatabaseWorkerRunStore:
                     payload={"stream": stream, "topic": topic},
                 )
                 return
-            self._update_run(
+            if not self._update_run(
                 run,
                 status,
                 stream=stream,
                 topic=topic,
                 result_message_id=result_message_id,
                 error=error,
-            )
+            ):
+                return
             self._record_event(
                 run,
                 status,
@@ -1743,7 +1760,62 @@ class PearDatabaseWorkerRunStore:
         topic: str,
         result_message_id: int | None,
         error: str | None,
-    ) -> None:
+        allow_requeue: bool = False,
+    ) -> bool:
+        return self._transition(
+            run,
+            status,
+            stream=stream,
+            topic=topic,
+            result_message_id=result_message_id,
+            error=error,
+            allow_requeue=allow_requeue,
+        )
+
+    def _transition(
+        self,
+        run: PearWorkerRun,
+        status: PearWorkerRunStatus,
+        *,
+        stream: str,
+        topic: str,
+        result_message_id: int | None,
+        error: str | None,
+        allow_requeue: bool,
+    ) -> bool:
+        old_status = run.status
+        same_status = old_status == status
+        legal_statuses = PEAR_RUN_LEGAL_TRANSITIONS.get(old_status, frozenset())
+        is_explicit_requeue = (
+            old_status == PearWorkerRun.FAILED
+            and status == PearWorkerRun.QUEUED
+            and allow_requeue
+        )
+        if not same_status and status not in legal_statuses:
+            self._record_transition_rejected(
+                run,
+                old_status=old_status,
+                new_status=status,
+                stream=stream,
+                topic=topic,
+                reason="illegal_transition",
+            )
+            return False
+        if (
+            old_status == PearWorkerRun.FAILED
+            and status == PearWorkerRun.QUEUED
+            and not is_explicit_requeue
+        ):
+            self._record_transition_rejected(
+                run,
+                old_status=old_status,
+                new_status=status,
+                stream=stream,
+                topic=topic,
+                reason="implicit_requeue",
+            )
+            return False
+
         run.stream_name = stream
         run.topic_name = topic
         run.status = status
@@ -1764,6 +1836,30 @@ class PearDatabaseWorkerRunStore:
                 "date_updated",
                 "date_finished",
             ]
+        )
+        return True
+
+    def _record_transition_rejected(
+        self,
+        run: PearWorkerRun,
+        *,
+        old_status: str,
+        new_status: str,
+        stream: str,
+        topic: str,
+        reason: str,
+    ) -> None:
+        self._record_event(
+            run,
+            "transition_rejected",
+            summary=f"Rejected Pear worker status transition: {old_status} -> {new_status}.",
+            payload={
+                "old_status": old_status,
+                "new_status": new_status,
+                "stream": stream,
+                "topic": topic,
+                "reason": reason,
+            },
         )
 
     def _record_event(

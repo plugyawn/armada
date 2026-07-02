@@ -26,6 +26,7 @@ DEPLOY_UNTRACKED_ALLOW_PREFIXES=(
     'prod-static/'
     'staticfiles/'
     'static/generated/'
+    'locale/language_name_map.json'
     '.mypy_cache/'
     '.pytest_cache/'
     '.ruff_cache/'
@@ -46,6 +47,7 @@ RSYNC_EXCLUDES=(
     --exclude '/prod-static/'
     --exclude '/staticfiles/'
     --exclude '/static/generated/'
+    --exclude '/locale/language_name_map.json'
     --exclude '/.mypy_cache/'
     --exclude '/.pytest_cache/'
     --exclude '/.ruff_cache/'
@@ -262,6 +264,7 @@ rsync -a --delete \
     --exclude '/prod-static/' \
     --exclude '/staticfiles/' \
     --exclude '/static/generated/' \
+    --exclude '/locale/language_name_map.json' \
     --exclude '/.mypy_cache/' \
     --exclude '/.pytest_cache/' \
     --exclude '/.ruff_cache/' \
@@ -395,6 +398,7 @@ rsync -a --delete \
     --exclude '/prod-static/' \
     --exclude '/staticfiles/' \
     --exclude '/static/generated/' \
+    --exclude '/locale/language_name_map.json' \
     --exclude '/.mypy_cache/' \
     --exclude '/.pytest_cache/' \
     --exclude '/.ruff_cache/' \
@@ -442,7 +446,7 @@ ssh_root 'systemctl restart pear-worker pear-embedded-bots pear-zulip-dev'
 echo "Waiting for https://$FQDN/ to serve..."
 SITE_CODE=""
 for _ in $(seq 1 60); do
-    SITE_CODE="$(curl -ksS -o /dev/null -w '%{http_code}' "https://$FQDN/" || true)"
+    SITE_CODE="$(curl -kfsS --max-time 10 -o /dev/null -w '%{http_code}' "https://$FQDN/" || true)"
     if [[ "$SITE_CODE" == "200" || "$SITE_CODE" == "302" || "$SITE_CODE" == "303" ]]; then
         break
     fi

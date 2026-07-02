@@ -85,6 +85,7 @@ from zerver.views.users import add_bot_backend
 
 PEAR_ACTIVE_SESSION_MESSAGE_LIMIT = 50
 PEAR_RUN_LIST_LIMIT = 20
+PEAR_RUN_IDS_FILTER_LIMIT = 20
 PEAR_RUN_EVENT_LIMIT = 40
 PEAR_GIT_TREE_COMMIT_LIMIT = 20
 PEAR_MODEL_SLUG_LIMIT = 100
@@ -871,6 +872,30 @@ def get_visible_pear_worker_run(
     return run
 
 
+def get_visible_pear_worker_runs_by_id(
+    user_profile: UserProfile,
+    run_ids: list[int],
+) -> list[PearWorkerRun]:
+    normalized_run_ids = list(dict.fromkeys(run_ids))
+    if len(normalized_run_ids) > PEAR_RUN_IDS_FILTER_LIMIT:
+        raise JsonableError(_("Too many Pear runs requested."))
+    if any(run_id <= 0 for run_id in normalized_run_ids):
+        raise JsonableError(_("Pear run not found."))
+
+    runs = list(
+        PearWorkerRun.objects.select_related("bot_profile", "requesting_user").filter(
+            id__in=normalized_run_ids,
+            realm=user_profile.realm,
+        )
+    )
+    runs_by_id = {run.id: run for run in runs}
+    if len(runs_by_id) != len(normalized_run_ids):
+        raise JsonableError(_("Pear run not found."))
+    for run in runs_by_id.values():
+        check_can_access_pear_worker_run(user_profile, run)
+    return list(runs_by_id.values())
+
+
 def set_selected_pear_bot(user_profile: UserProfile, selected_bot_user_id: int | None) -> bool:
     pear_bots = list(get_pear_bot_query(user_profile))
     if not pear_bots:
@@ -1419,29 +1444,50 @@ def get_pear_runs_backend(
         Json[bool] | None,
         ApiParamConfig("include_context", documentation_status=INTENTIONALLY_UNDOCUMENTED),
     ] = True,
+    run_ids: Annotated[
+        Json[list[int]] | None,
+        ApiParamConfig("run_ids", documentation_status=INTENTIONALLY_UNDOCUMENTED),
+    ] = None,
 ) -> HttpResponse:
-    query = PearWorkerRun.objects.select_related("bot_profile", "requesting_user").filter(
-        realm=user_profile.realm
+    requested_runs = (
+        get_visible_pear_worker_runs_by_id(user_profile, run_ids) if run_ids is not None else []
     )
+    topic_runs: list[PearWorkerRun]
     if stream_name is not None and topic_name is not None:
         access_stream_by_name(user_profile, stream_name)
-        query = query.filter(
-            Q(
-                session_kind=PearWorkerRun.SHARED,
-                stream_name=stream_name,
-                topic_name=topic_name,
+        topic_runs = list(
+            PearWorkerRun.objects.select_related("bot_profile", "requesting_user")
+            .filter(realm=user_profile.realm)
+            .filter(
+                Q(
+                    session_kind=PearWorkerRun.SHARED,
+                    stream_name=stream_name,
+                    topic_name=topic_name,
+                )
+                | Q(
+                    session_kind=PearWorkerRun.SIDE,
+                    requesting_user=user_profile,
+                    source_stream_name=stream_name,
+                    source_topic_name=topic_name,
+                )
             )
-            | Q(
+            .order_by("-date_created", "-id")[:PEAR_RUN_LIST_LIMIT]
+        )
+    elif requested_runs:
+        topic_runs = []
+    else:
+        topic_runs = list(
+            PearWorkerRun.objects.select_related("bot_profile", "requesting_user")
+            .filter(
+                realm=user_profile.realm,
                 session_kind=PearWorkerRun.SIDE,
                 requesting_user=user_profile,
-                source_stream_name=stream_name,
-                source_topic_name=topic_name,
             )
+            .order_by("-date_created", "-id")[:PEAR_RUN_LIST_LIMIT]
         )
-    else:
-        query = query.filter(session_kind=PearWorkerRun.SIDE, requesting_user=user_profile)
 
-    runs = list(query.order_by("-date_created", "-id")[:PEAR_RUN_LIST_LIMIT])
+    runs_by_id = {run.id: run for run in [*topic_runs, *requested_runs]}
+    runs = sorted(runs_by_id.values(), key=lambda run: (run.date_created, run.id), reverse=True)
     topic_context = None
     if bool(include_context) and stream_name is not None and topic_name is not None:
         topic_context = serialize_pear_topic_context(

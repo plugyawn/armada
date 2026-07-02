@@ -20,6 +20,7 @@ from zerver.lib.pear import (
     PEAR_OFFICIAL_AGENT_RUNTIME,
     PEAR_OFFICIAL_AGENT_RUNTIME_LABEL,
     PEAR_OFFICIAL_CODEX_SDK_PACKAGES,
+    PEAR_RUNS_ENDPOINT,
     PEAR_SESSION_CHECKLIST,
     PEAR_SESSION_ENDPOINT,
     PEAR_SIDE_ENDPOINT,
@@ -493,6 +494,107 @@ class PearSessionEndpointTest(ZulipTestCase):
         self.assertEqual(live["status"], "running")
         self.assertEqual(live["content"], "Streaming answer")
         self.assertIsInstance(live["updated_at"], float)
+
+    def test_get_pear_runs_includes_requested_run_ids_outside_topic_window(self) -> None:
+        owner = self.example_user("hamlet")
+        self.subscribe(owner, PEAR_DEFAULT_STREAM)
+        pear_bot = self.create_test_bot(
+            "pear",
+            owner,
+            full_name="Pear",
+            bot_type=UserProfile.EMBEDDED_BOT,
+            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+        )
+        requested_run = PearWorkerRun.objects.create(
+            realm=owner.realm,
+            bot_profile=pear_bot,
+            requesting_user=owner,
+            trigger_message_id=101,
+            stream_name=PEAR_DEFAULT_STREAM,
+            topic_name="pinned older run",
+            status=PearWorkerRun.DONE,
+        )
+        topic_runs = [
+            PearWorkerRun.objects.create(
+                realm=owner.realm,
+                bot_profile=pear_bot,
+                requesting_user=owner,
+                trigger_message_id=200 + index,
+                stream_name=PEAR_DEFAULT_STREAM,
+                topic_name=PEAR_DEFAULT_TOPIC,
+                status=PearWorkerRun.DONE,
+            )
+            for index in range(25)
+        ]
+        self.login_user(owner)
+
+        result = self.client_get(
+            f"/json{PEAR_RUNS_ENDPOINT}",
+            {
+                "stream": PEAR_DEFAULT_STREAM,
+                "topic": PEAR_DEFAULT_TOPIC,
+                "run_ids": orjson.dumps([requested_run.id]).decode(),
+                "include_context": orjson.dumps(False).decode(),
+            },
+            intentionally_undocumented=True,
+        )
+
+        result_dict = self.assert_json_success(result)
+        run_ids = [run["id"] for run in result_dict["pear_runs"]]
+        self.assertIn(requested_run.id, run_ids)
+        self.assertIn(topic_runs[-1].id, run_ids)
+        self.assertNotIn(topic_runs[0].id, run_ids)
+        self.assertIsNone(result_dict["pear_topic_context"])
+
+    def test_get_pear_runs_rejects_inaccessible_requested_run_id(self) -> None:
+        owner = self.example_user("hamlet")
+        other_user = self.example_user("othello")
+        pear_bot = self.create_test_bot(
+            "pear",
+            owner,
+            full_name="Pear",
+            bot_type=UserProfile.EMBEDDED_BOT,
+            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+        )
+        other_side_run = PearWorkerRun.objects.create(
+            realm=owner.realm,
+            bot_profile=pear_bot,
+            requesting_user=other_user,
+            trigger_message_id=301,
+            stream_name="direct messages",
+            topic_name="side",
+            session_kind=PearWorkerRun.SIDE,
+            source_stream_name=PEAR_DEFAULT_STREAM,
+            source_topic_name=PEAR_DEFAULT_TOPIC,
+            status=PearWorkerRun.DONE,
+        )
+        self.login_user(owner)
+
+        result = self.client_get(
+            f"/json{PEAR_RUNS_ENDPOINT}",
+            {
+                "run_ids": orjson.dumps([other_side_run.id]).decode(),
+                "include_context": orjson.dumps(False).decode(),
+            },
+            intentionally_undocumented=True,
+        )
+
+        self.assert_json_error(result, "Pear run not found.")
+
+    def test_get_pear_runs_limits_requested_run_ids(self) -> None:
+        owner = self.example_user("hamlet")
+        self.login_user(owner)
+
+        result = self.client_get(
+            f"/json{PEAR_RUNS_ENDPOINT}",
+            {
+                "run_ids": orjson.dumps(list(range(1, 22))).decode(),
+                "include_context": orjson.dumps(False).decode(),
+            },
+            intentionally_undocumented=True,
+        )
+
+        self.assert_json_error(result, "Too many Pear runs requested.")
 
     def test_post_pear_config_creates_bot(self) -> None:
         owner = self.example_user("iago")

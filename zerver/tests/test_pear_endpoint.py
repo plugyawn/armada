@@ -640,6 +640,7 @@ class PearSessionEndpointTest(ZulipTestCase):
             self.assertIn("gpt-5.5-mini", context_payload["model_choices"])
             self.assertEqual(context_payload["reasoning_effort"], "medium")
             self.assertEqual(context_payload["default_reasoning_effort"], "medium")
+            self.assertEqual(context_payload["response_policy"], "mentions_only")
             self.assertEqual(context_payload["workdir"], "/workspace/base")
             self.assertFalse(
                 PearTopicContext.objects.filter(
@@ -2268,6 +2269,44 @@ class PearSessionEndpointTest(ZulipTestCase):
         self.assertEqual(run.status, PearWorkerRun.CANCELLED)
         self.assertIsNotNone(run.cancel_requested_at)
 
+    def test_worker_run_store_sets_topic_response_policy(self) -> None:
+        owner = self.example_user("hamlet")
+        pear_bot = self.create_test_bot(
+            "pear",
+            owner,
+            full_name="Pear",
+            bot_type=UserProfile.EMBEDDED_BOT,
+            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+        )
+        self.subscribe(owner, PEAR_DEFAULT_STREAM)
+
+        with tempfile.TemporaryDirectory() as temp_dir, self.settings(
+            PEAR_TOPIC_WORKDIR_ROOT=temp_dir,
+        ):
+            store = PearDatabaseWorkerRunStore()
+            bot_handler = SimpleNamespace(user_profile=pear_bot)
+            store.set_topic_response_policy(
+                bot_handler,
+                stream=PEAR_DEFAULT_STREAM,
+                topic=PEAR_DEFAULT_TOPIC,
+                response_policy="on",
+            )
+            context = PearTopicContext.objects.get(
+                realm=owner.realm,
+                stream_name=PEAR_DEFAULT_STREAM,
+                topic_name=PEAR_DEFAULT_TOPIC,
+            )
+
+        self.assertEqual(context.response_policy, "ambient")
+        self.assertEqual(
+            store.topic_response_policy(
+                bot_handler,
+                stream=PEAR_DEFAULT_STREAM,
+                topic=PEAR_DEFAULT_TOPIC,
+            ),
+            "ambient",
+        )
+
     def test_pear_codex_model_catalog_uses_visible_priority_and_reasoning(self) -> None:
         catalog = extract_pear_codex_model_catalog(
             {
@@ -2352,6 +2391,10 @@ class PearSessionEndpointTest(ZulipTestCase):
             self.assertTrue(result_dict["changed"])
             self.assertEqual(result_dict["pear_topic_context"]["model"], "gpt-5.5-mini")
             self.assertEqual(result_dict["pear_topic_context"]["reasoning_effort"], "high")
+            self.assertEqual(
+                result_dict["pear_topic_context"]["response_policy"],
+                "mentions_only",
+            )
             self.assertEqual(model, "gpt-5.5-mini")
             self.assertEqual(reasoning_effort, "high")
             self.assertTrue(workdir.startswith(temp_dir))
@@ -2362,6 +2405,46 @@ class PearSessionEndpointTest(ZulipTestCase):
             note.content,
             "King Hamlet changed current model to `gpt-5.5-mini`.",
         )
+
+    def test_post_pear_topic_context_changes_response_policy_without_model(self) -> None:
+        owner = self.example_user("hamlet")
+        self.subscribe(owner, PEAR_DEFAULT_STREAM)
+        self.login_user(owner)
+
+        with tempfile.TemporaryDirectory() as temp_dir, self.settings(
+            PEAR_WORKER_MODEL="gpt-5.5",
+            PEAR_TOPIC_WORKDIR_ROOT=temp_dir,
+        ):
+            result = self.client_post(
+                f"/json{PEAR_TOPIC_CONTEXT_ENDPOINT}",
+                {
+                    "stream": PEAR_DEFAULT_STREAM,
+                    "topic": PEAR_DEFAULT_TOPIC,
+                    "response_policy": "ambient",
+                },
+                intentionally_undocumented=True,
+            )
+            active_session_result = self.client_get(
+                f"/json{PEAR_ACTIVE_SESSION_ENDPOINT}",
+                {
+                    "stream": PEAR_DEFAULT_STREAM,
+                    "topic": PEAR_DEFAULT_TOPIC,
+                },
+                intentionally_undocumented=True,
+            )
+
+            result_dict = self.assert_json_success(result)
+            active_session_dict = self.assert_json_success(active_session_result)
+            context = PearTopicContext.objects.get(
+                realm=owner.realm,
+                stream_name=PEAR_DEFAULT_STREAM,
+                topic_name=PEAR_DEFAULT_TOPIC,
+            )
+
+        self.assertTrue(result_dict["changed"])
+        self.assertEqual(result_dict["pear_topic_context"]["response_policy"], "ambient")
+        self.assertEqual(context.response_policy, "ambient")
+        self.assertEqual(active_session_dict["active_session"]["response_policy"], "ambient")
 
     def test_side_session_uses_child_context_workdir_and_parent_model(self) -> None:
         owner = self.example_user("hamlet")

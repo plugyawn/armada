@@ -29,6 +29,7 @@ from zerver.lib.pear import (
     build_pear_active_session_summary,
     build_pear_active_session_summary_from_messages,
     get_pear_session_payload,
+    normalize_pear_response_policy,
     pear_message_id,
     pear_message_stream,
     pear_message_topic,
@@ -147,6 +148,42 @@ def set_pear_topic_context_paused(
     context.is_paused = is_paused
     context.date_updated = timezone_now()
     context.save(update_fields=["is_paused", "date_updated"])
+
+
+def pear_topic_context_response_policy(
+    user_profile: UserProfile,
+    *,
+    stream: str,
+    topic: str,
+) -> str:
+    if not stream:
+        return "mentions_only"
+    context = PearTopicContext.objects.filter(
+        realm=user_profile.realm,
+        stream_name=stream,
+        topic_name=topic,
+    ).first()
+    if context is None:
+        return "mentions_only"
+    return normalize_pear_response_policy(context.response_policy)
+
+
+def set_pear_topic_context_response_policy(
+    user_profile: UserProfile,
+    *,
+    stream: str,
+    topic: str,
+    response_policy: str,
+) -> None:
+    if not stream:
+        return
+    clean_response_policy = normalize_pear_response_policy(response_policy)
+    context = ensure_pear_topic_context(user_profile, stream=stream, topic=topic)
+    if context.response_policy == clean_response_policy:
+        return
+    context.response_policy = clean_response_policy
+    context.date_updated = timezone_now()
+    context.save(update_fields=["response_policy", "date_updated"])
 
 
 def reap_stale_pear_worker_runs(
@@ -2271,6 +2308,38 @@ class PearDatabaseWorkerRunStore:
             is_paused=is_paused,
         )
 
+    def topic_response_policy(
+        self,
+        bot_handler: Any,
+        *,
+        stream: str,
+        topic: str,
+    ) -> str:
+        user_profile = bot_handler.user_profile
+        assert isinstance(user_profile, UserProfile)
+        return pear_topic_context_response_policy(
+            user_profile,
+            stream=stream,
+            topic=topic,
+        )
+
+    def set_topic_response_policy(
+        self,
+        bot_handler: Any,
+        *,
+        stream: str,
+        topic: str,
+        response_policy: str,
+    ) -> None:
+        user_profile = bot_handler.user_profile
+        assert isinstance(user_profile, UserProfile)
+        set_pear_topic_context_response_policy(
+            user_profile,
+            stream=stream,
+            topic=topic,
+            response_policy=response_policy,
+        )
+
     def steering_events_after(
         self,
         bot_handler: Any,
@@ -2612,6 +2681,11 @@ def load_pear_active_session_from_zulip(
         latest_codex_thread_id=latest_codex_thread_id,
         workspace_context=workspace_context,
         is_paused=pear_topic_context_is_paused(
+            user_profile,
+            stream=pear_session["stream"],
+            topic=pear_session["topic"],
+        ),
+        response_policy=pear_topic_context_response_policy(
             user_profile,
             stream=pear_session["stream"],
             topic=pear_session["topic"],

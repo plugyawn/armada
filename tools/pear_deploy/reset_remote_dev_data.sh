@@ -4,7 +4,59 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-STATE_PATH="${1:-$REPO_ROOT/output/pear-staging/server.json}"
+DEFAULT_STATE_PATH="$REPO_ROOT/output/pear-staging/server.json"
+STATE_PATH="$DEFAULT_STATE_PATH"
+YES=false
+
+usage() {
+    cat <<EOF
+Usage: tools/pear_deploy/reset_remote_dev_data.sh [options] [state.json]
+
+Reset the hosted Pear/Zulip dev database to a quiet six-user demo realm.
+This is destructive and requires --yes.
+
+Options:
+  --yes         Stop Pear services, reset the dev database, recreate demo users, restart services.
+  --state PATH  Use a specific pear_do.py state file.
+  -h, --help    Show this help.
+EOF
+}
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --yes)
+            YES=true
+            shift
+            ;;
+        --state)
+            if [[ $# -lt 2 ]]; then
+                echo "Missing value for --state" >&2
+                exit 2
+            fi
+            STATE_PATH="$2"
+            shift 2
+            ;;
+        -h | --help)
+            usage
+            exit 0
+            ;;
+        *)
+            if [[ "$STATE_PATH" != "$DEFAULT_STATE_PATH" ]]; then
+                echo "Unexpected argument: $1" >&2
+                usage >&2
+                exit 2
+            fi
+            STATE_PATH="$1"
+            shift
+            ;;
+    esac
+done
+
+if [[ ! -f "$STATE_PATH" ]]; then
+    echo "Missing state file: $STATE_PATH" >&2
+    echo "Run: python3 tools/pear_deploy/pear_do.py create" >&2
+    exit 1
+fi
 
 eval "$(
     python3 - "$STATE_PATH" <<'PY'
@@ -25,6 +77,20 @@ PY
 ssh_root() {
     ssh -F "$SSH_CONFIG" pear-staging-root "$@"
 }
+
+if [[ "$YES" != true ]]; then
+    cat <<EOF
+Dry run complete. No services were stopped and no database was reset.
+
+Target: https://$FQDN
+State:  $STATE_PATH
+
+This command will delete hosted dev conversation history, Pear worker runs,
+topic contexts, sessions, drafts, scheduled messages, and extra generated users.
+Re-run with --yes to reset the remote dev data.
+EOF
+    exit 0
+fi
 
 echo "Removing HTTP basic auth from Caddy..."
 ssh_root "cat >/etc/caddy/Caddyfile" <<EOF

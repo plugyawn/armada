@@ -364,6 +364,7 @@ if [[ "$PREV_SHA" != "$LOCAL_SHA" ]]; then
         web/src \
         web/styles \
         web/templates \
+        tools/pear-health-report \
         tools/pear_deploy || true
 else
     echo "Deploy delta: remote already has this HEAD."
@@ -455,6 +456,27 @@ if [[ "$RUN_TESTS" == true ]]; then
 else
     echo "Skipping test-backend by request."
 fi
+
+echo "Pear live health:"
+ssh_zulip "$REMOTE_PATH/tools/pear-health-report --max-active-runs 0 --max-stale-active-runs 0 --max-orphan-active-markers 0"
+
+echo "Pear queue health:"
+ssh_root 'rabbitmqctl list_queues name messages_ready messages_unacknowledged consumers | awk '"'"'
+$1 == "pear_worker" || $1 == "embedded_bots" {
+    seen += 1
+    print
+    if ($2 != 0 || $3 != 0 || $4 < 1) {
+        bad = 1
+    }
+}
+END {
+    if (seen < 2) {
+        print "missing Pear queues" > "/dev/stderr"
+        exit 1
+    }
+    exit bad
+}
+'"'"
 
 echo "Migration tail:"
 ssh_zulip "$REMOTE_PATH/.venv/bin/python3 $REMOTE_PATH/manage.py showmigrations zerver | tail"

@@ -496,6 +496,38 @@ class PearSessionEndpointTest(ZulipTestCase):
         self.assertEqual(live["content"], "Streaming answer")
         self.assertIsInstance(live["updated_at"], float)
 
+    def test_serialize_pear_worker_run_hides_stale_active_live_state(self) -> None:
+        user = self.example_user("hamlet")
+        pear_bot = self.create_test_bot(
+            "pear",
+            user,
+            full_name="Pear",
+            bot_type=UserProfile.EMBEDDED_BOT,
+            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+        )
+        run = PearWorkerRun.objects.create(
+            realm=user.realm,
+            bot_profile=pear_bot,
+            trigger_message_id=1,
+            requesting_user=user,
+            status=PearWorkerRun.DONE,
+            stream_name="devel",
+            topic_name="cache test",
+            runtime_label="Codex app-server",
+            model="gpt-5.5",
+            workdir="/workspace",
+        )
+        write_pear_live_run_state(
+            run.trigger_message_id,
+            status=PearWorkerRun.RUNNING,
+            content="Thinking",
+        )
+
+        serialized_run = serialize_pear_worker_run(run)
+
+        self.assertEqual(serialized_run["status"], PearWorkerRun.DONE)
+        self.assertIsNone(serialized_run["live"])
+
     def test_get_pear_runs_includes_requested_run_ids_outside_topic_window(self) -> None:
         owner = self.example_user("hamlet")
         self.subscribe(owner, PEAR_DEFAULT_STREAM)

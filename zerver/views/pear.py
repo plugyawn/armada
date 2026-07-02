@@ -801,6 +801,12 @@ def serialize_pear_worker_run(
     include_events: bool = False,
 ) -> dict[str, object]:
     live_state = get_pear_live_run_state(run.trigger_message_id)
+    if (
+        run.status not in {PearWorkerRun.QUEUED, PearWorkerRun.RUNNING}
+        and live_state is not None
+        and live_state["status"] in {PearWorkerRun.QUEUED, PearWorkerRun.RUNNING}
+    ):
+        live_state = None
     payload: dict[str, object] = {
         "id": run.id,
         "trigger_message_id": run.trigger_message_id,

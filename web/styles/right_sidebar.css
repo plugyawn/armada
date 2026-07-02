@@ -211,10 +211,10 @@
             font-size: 0.625em;
             bottom: -0.5px;
             right: -0.5px;
-            background-color: var(--color-background);
+            background-color: var(--color-background-sidebar);
             /* A 1.5px border provides better results than
                a 1px border, especially at smaller font sizes. */
-            border: 1.5px solid var(--color-background);
+            border: 1.5px solid var(--color-background-sidebar);
             border-radius: 50%;
 
             &.user-circle-offline {
@@ -273,11 +273,11 @@
         )
         / var(--right-sidebar-header-icon-toggle-width) minmax(0, 1fr);
     cursor: pointer;
-    background-color: var(--color-background);
+    background-color: var(--color-background-sidebar);
     position: sticky;
     top: 0;
     z-index: 1;
-    color: var(--color-text-default);
+    color: var(--color-text-sidebar-row);
     border-radius: 4px;
     margin-right: var(--width-simplebar-scroll-hover);
     transition: box-shadow 150ms ease-out;
@@ -538,7 +538,7 @@
        menus to line up. */
     padding-right: var(--width-simplebar-scroll-hover);
     padding-bottom: var(--sidebar-filter-bottom-spacing);
-    background-color: var(--color-background);
+    background-color: var(--color-background-sidebar);
 
     #buddy-list-menu-icon {
         color: var(--color-vdots-visible);

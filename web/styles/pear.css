@@ -3,6 +3,14 @@
     padding: 8px var(--right-sidebar-padding-left) 10px;
     color: var(--color-text-sidebar-row);
     font-size: 12px;
+    /* The panel sits on the sidebar rail, which is dark in BOTH
+       themes; re-scope tokens whose light values are tuned for the
+       white pane so that panel text and status dots keep ≥3:1
+       contrast on the aubergine rail. */
+    --color-text-item: var(--color-text-sidebar-row);
+    --color-pear-status-active: hsl(146deg 33% 55%);
+    --color-pear-status-blocked: hsl(342deg 70% 70%);
+    --color-pear-status-idle: hsl(229deg 10% 78%);
 }
 
 .pear-panel-inner {
@@ -147,15 +155,15 @@
     width: 6px;
     height: 6px;
     border-radius: 50%;
-    background: var(--color-text-item);
+    background: var(--color-pear-status-idle);
 }
 
 .pear-run-status-active .pear-run-status-dot {
-    background: hsl(142deg 55% 52%);
+    background: var(--color-pear-status-active);
 }
 
 .pear-run-status-blocked .pear-run-status-dot {
-    background: hsl(5deg 65% 55%);
+    background: var(--color-pear-status-blocked);
 }
 
 .pear-run-status-text {

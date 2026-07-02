@@ -35,7 +35,15 @@ body {
         var(--legacy-body-line-height-unitless),
         var(--base-line-height-unitless)
     );
-    font-family: "Source Sans 3 VF", sans-serif;
+    font-family:
+        Lato,
+        -apple-system,
+        "Segoe UI",
+        "Helvetica Neue",
+        Helvetica,
+        Arial,
+        sans-serif;
+    -webkit-font-smoothing: antialiased;
     color: var(--color-text-default);
     background-color: var(--color-background);
 
@@ -609,6 +617,21 @@ body.has-overlay-scrollbar {
     .column-right .right-sidebar {
         position: fixed;
         z-index: 100;
+        /* The Slack-style rail: dark in both themes. min-height
+           stretches the painted rail to the viewport bottom without
+           affecting the JS-sized scroll containers within. */
+        background-color: var(--color-background-sidebar);
+        min-height: var(--full-height-dynamic-viewport);
+        /* Rail-scoped re-assignments for tokens shared with pane
+           surfaces (inbox, recent view) that cannot flip globally
+           now that the rail is dark in both themes. */
+        --color-vdots-visible: hsl(0deg 0% 100% / 72%);
+        --color-vdots-hover: hsl(0deg 0% 100%);
+        --color-vdots-hint: hsl(0deg 0% 100% / 45%);
+        --color-background-sidebar-action-hover: hsl(0deg 0% 100% / 12%);
+        --color-unread-counter-normal: hsl(0deg 0% 100% / 85%);
+        --color-background-unread-counter-normal: hsl(0deg 0% 100% / 16%);
+        --color-unread-counter-quiet: hsl(0deg 0% 100% / 60%);
     }
 
     .column-left .left-sidebar {
@@ -1637,7 +1660,7 @@ div.topic_edit_spinner .loading_indicator_spinner {
                 height: 100%;
                 width: var(--right-sidebar-width);
                 right: 0;
-                background-color: var(--color-background);
+                background-color: var(--color-background-sidebar);
             }
         }
     }
@@ -1700,7 +1723,7 @@ div.topic_edit_spinner .loading_indicator_spinner {
             top: 0;
 
             .left-sidebar {
-                background-color: var(--color-background);
+                background-color: var(--color-background-sidebar);
                 box-shadow: 0 2px 3px 0 hsl(0deg 0% 0% / 10%);
                 border-right: 1px solid var(--color-border-sidebar);
                 height: 100%;

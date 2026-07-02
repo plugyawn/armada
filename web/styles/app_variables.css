@@ -162,6 +162,30 @@
     --red-950: #280100;
     --red-1000: #1a0200;
 
+    /* Slack-skin palette (Pear). Raw brand values consumed by the
+       semantic light-dark() tokens below; do not use these directly
+       in component files. */
+    --slack-pane: #fff;
+    --slack-pane-dark: #1a1d21;
+    --slack-ink: #1d1c1d;
+    --slack-ink-dark: #d1d2d3;
+    --slack-text-secondary: #616061;
+    --slack-text-secondary-dark: #ababad;
+    /* 13%-alpha ink hairline; #21 ≈ 13% of #ff. */
+    --slack-hairline: #1d1c1d21;
+    --slack-hairline-dark: #35373b;
+    --slack-row-hover: #f8f8f8;
+    --slack-row-hover-dark: #222529;
+    --slack-link: #1264a3;
+    --slack-link-hover: #0b4c8c;
+    --slack-link-dark: #1d9bd1;
+    --slack-link-dark-hover: #40b3e4;
+    --slack-sidebar: #3f0e40;
+    --slack-sidebar-dark: #19171d;
+    --slack-sidebar-selected: #1164a3;
+    --slack-badge-red: #e01e5a;
+    --slack-send-green: #007a5a;
+
     color-scheme: light;
 
     /* Variable for setting the viewport to full height.
@@ -824,12 +848,28 @@
         hsl(46deg 7% 16%)
     );
     --color-background-stream-message-content: light-dark(
-        hsl(0deg 0% 100%),
-        hsl(0deg 0% 13.5%)
+        var(--slack-pane),
+        var(--slack-pane-dark)
     );
+    /* A barely-there step off the pane background; matches the
+       Slack row-hover tint. */
     --color-background-pear-message-content: light-dark(
-        hsl(0deg 0% 94%),
-        hsl(0deg 0% 18%)
+        var(--slack-row-hover),
+        var(--slack-row-hover-dark)
+    );
+    /* Pear run/status colors; light values hold ≥3:1 against the
+       white pane for non-text indicators. */
+    --color-pear-status-active: light-dark(
+        hsl(164deg 100% 24%),
+        hsl(146deg 33% 55%)
+    );
+    --color-pear-status-blocked: light-dark(
+        hsl(342deg 76% 50%),
+        hsl(342deg 70% 70%)
+    );
+    --color-pear-status-idle: light-dark(
+        hsl(229deg 9% 48%),
+        hsl(229deg 10% 78%)
     );
     --color-selected-message-outline: light-dark(
         hsl(217deg 64% 59% / 60%),
@@ -844,20 +884,20 @@
         hsl(217deg 95% 59% / 60%)
     );
     --color-message-list-border: light-dark(
-        hsl(0deg 0% 0% / 16%),
-        hsl(0deg 0% 0% / 40%)
+        var(--slack-hairline),
+        var(--slack-hairline-dark)
     );
     --color-message-header-contents-border: light-dark(
-        hsl(0deg 0% 0% / 10%),
-        hsl(0deg 0% 0% / 60%)
+        var(--slack-hairline),
+        var(--slack-hairline-dark)
     );
     --color-private-message-header-border: light-dark(
         hsl(0deg 0% 0% / 10%),
         hsl(0deg 0% 0% / 48%)
     );
     --color-message-header-contents-border-bottom: light-dark(
-        hsl(0deg 0% 0% / 5%),
-        hsl(0deg 0% 0% / 50%)
+        var(--slack-hairline),
+        var(--slack-hairline-dark)
     );
     --color-private-message-header-border-bottom: light-dark(
         hsl(0deg 0% 0% / 7%),
@@ -871,7 +911,7 @@
         hsl(0deg 0% 0%),
         hsl(0deg 0% 100%)
     );
-    --color-background: light-dark(hsl(0deg 0% 94%), hsl(0deg 0% 11%));
+    --color-background: light-dark(var(--slack-pane), var(--slack-pane-dark));
     --color-background-widget-input: light-dark(
         hsl(0deg 0% 100%),
         hsl(225deg 6% 10%)
@@ -880,27 +920,25 @@
         hsl(0deg 0% 100%),
         hsl(0deg 0% 0% / 20%)
     );
-    --color-background-navbar: light-dark(hsl(0deg 0% 97%), hsl(0deg 0% 13%));
+    --color-background-navbar: light-dark(
+        var(--slack-pane),
+        var(--slack-pane-dark)
+    );
+    /* The sidebar rail is dark in BOTH themes (classic aubergine in
+       light, near-black plum in dark), so every token painted on the
+       rail below supplies light-on-dark values for both themes. */
+    --color-background-sidebar: light-dark(
+        var(--slack-sidebar),
+        var(--slack-sidebar-dark)
+    );
     --color-text-sidebar-row: light-dark(
-        hsl(0deg 0% 20%),
-        hsl(0deg 0% 100% / 85%)
+        hsl(0deg 0% 100% / 72%),
+        var(--slack-text-secondary-dark)
     );
-    --color-text-active-narrow-filter: light-dark(
-        hsl(0deg 0% 15%),
-        hsl(0deg 0% 90%)
-    );
-    --color-background-active-narrow-filter: light-dark(
-        hsl(0deg 0% 100%),
-        color-mix(in srgb, hsl(0deg 0% 100%) 8%, hsl(0deg 0% 11%))
-    );
-    --color-background-hover-narrow-filter: light-dark(
-        hsl(0deg 0% 97%),
-        color-mix(in srgb, hsl(0deg 0% 97%) 8%, hsl(0deg 0% 11%))
-    );
-    --color-shadow-sidebar-row-hover: light-dark(
-        hsl(0deg 0% 0% / 30%),
-        hsl(0deg 0% 100% / 30%)
-    );
+    --color-text-active-narrow-filter: hsl(0deg 0% 100%);
+    --color-background-active-narrow-filter: var(--slack-sidebar-selected);
+    --color-background-hover-narrow-filter: hsl(0deg 0% 100% / 6%);
+    --color-shadow-sidebar-row-hover: hsl(0deg 0% 100% / 30%);
     /* Layered drop shadow for sticky sidebar headers when scrolled content
        passes beneath them. Dark mode overrides to full-opacity black in the
        dark-theme block below, since shadows over a dark background need more
@@ -910,28 +948,21 @@
         0 3px 4px -5px hsl(0deg 0% 0% / 40%),
         0 4px 9px -10px hsl(0deg 0% 0% / 45%),
         0 12px 12px -13px hsl(0deg 0% 0% / 30%);
-    --color-sidebar-action: light-dark(
-        hsl(240deg 30% 40%),
-        hsl(240deg 35% 68%)
-    );
-    --color-sidebar-action-hover: light-dark(
-        hsl(240deg 100% 15%),
-        hsl(240deg 100% 90%)
-    );
+    --color-sidebar-action: hsl(0deg 0% 100% / 72%);
+    --color-sidebar-action-hover: hsl(0deg 0% 100%);
+    /* Also consumed by inbox rows on the pane; the rail re-scopes
+       it to a white-alpha chip in zulip.css. */
     --color-background-sidebar-action-hover: light-dark(
         hsl(240deg 100% 93%),
         hsl(240deg 25% 35%)
     );
-    --color-background-navigation-item-hover: light-dark(
-        hsl(240deg 100% 50% / 7%),
-        hsl(240deg 100% 75% / 20%)
-    );
+    --color-background-navigation-item-hover: hsl(0deg 0% 100% / 6%);
     --color-background-sidebar-action-heading-hover: var(
         --color-background-navigation-item-hover
     );
     --color-navbar-bottom-border: light-dark(
-        hsl(0deg 0% 80%),
-        hsl(0deg 0% 0% / 60%)
+        var(--slack-hairline),
+        var(--slack-hairline-dark)
     );
     --color-left-sidebar-direct-messages-bottom-divider: light-dark(
         hsl(0deg 0% 0% / 15%),
@@ -941,20 +972,20 @@
         hsl(0deg 0% 0% / 20%),
         hsl(0deg 0% 0% / 80%)
     );
-    --color-left-sidebar-middle-box-shadow: var(--color-background);
+    --color-left-sidebar-middle-box-shadow: var(--color-background-sidebar);
     --color-left-sidebar-outer-box-shadow: light-dark(
-        hsl(0deg 0% 94% / 20%),
-        hsl(0deg 0% 11% / 30%)
+        hsl(299deg 64% 15% / 20%),
+        hsl(255deg 12% 10% / 30%)
     );
+    /* Approximates 6% white (the rail hover tint) mixed over the
+       rail background, since box-shadow colors cannot use alpha
+       stacking here. */
     --color-left-sidebar-middle-box-shadow-hover: light-dark(
-        hsl(244deg 36% 91%),
-        hsl(240deg 19% 24%)
+        hsl(299deg 45% 20%),
+        hsl(260deg 8% 16%)
     );
-    --color-left-sidebar-outer-box-shadow-hover: light-dark(
-        hsl(240deg 100% 50% / 7%),
-        hsl(240deg 100% 75% / 20%)
-    );
-    --color-unread-marker: hsl(217deg 64% 59%);
+    --color-left-sidebar-outer-box-shadow-hover: hsl(0deg 0% 100% / 6%);
+    --color-unread-marker: var(--slack-badge-red);
     --color-masked-unread-marker: light-dark(
         hsl(0deg 0% 80%),
         hsl(0deg 0% 30%)
@@ -1013,14 +1044,17 @@
         hsl(0deg 0% 0% / 20%)
     );
     --color-unmuted-or-followed-topic-list-item: light-dark(
-        hsl(0deg 0% 20%),
+        hsl(0deg 0% 100% / 88%),
         hsl(236deg 33% 90%)
     );
     --color-topic-indent-border: light-dark(
         hsl(0deg 0% 0% / 19%),
         hsl(0deg 0% 100% / 19%)
     );
-    --color-outline-focus: hsl(215deg 47% 50%);
+    --color-outline-focus: light-dark(
+        var(--slack-link),
+        var(--slack-link-dark)
+    );
     --focus-ring-width-in-views: 1.5px;
     /* Standard focus ring stroke; used by `:focus-visible`
        outlines on inbox rows, recent-view rows, action-button
@@ -1092,10 +1126,9 @@
         hsl(0deg 0% 0% / 10%),
         hsl(0deg 0% 100% / 20%)
     );
-    --color-background-unread-counter-prominent: light-dark(
-        hsl(240deg 10% 50% / 70%),
-        hsl(240deg 18.37% 34.42%)
-    );
+    /* Slack badge red; holds 4.66:1 with the white counter text in
+       both themes (WCAG AA), on the rail and the pane alike. */
+    --color-background-unread-counter-prominent: var(--slack-badge-red);
     --color-background-unread-counter-normal: light-dark(
         hsl(240deg 10% 50% / 20%),
         hsl(240deg 10% 50% / 35%)
@@ -1115,7 +1148,7 @@
     --color-background-unread-counter: var(
         --color-background-unread-counter-prominent
     );
-    --color-unread-counter-muted: hsl(240deg 10% 50% / 35%);
+    --color-unread-counter-muted: hsl(0deg 0% 100% / 45%);
     --color-border-add-subscription-button-focus: light-dark(
         hsl(0deg 0% 20%),
         hsl(0deg 0% 67%)
@@ -1124,14 +1157,15 @@
        views, they should not have an alpha.
        The first color corresponds to
        --color-background-unread-counter-normal.
-       The second color aligns with light mode's
-       --color-background. */
+       The second color aligns with
+       --color-background-sidebar, where these
+       counters are painted. */
     --color-background-unread-counter-no-alpha: light-dark(
-        color-mix(in srgb, hsl(240deg 10% 50%) 20%, hsl(0deg 0% 94%)),
-        color-mix(in srgb, hsl(240deg 10% 50%) 35%, hsl(0deg 0% 11%))
+        color-mix(in srgb, hsl(240deg 10% 50%) 20%, hsl(299deg 64% 15%)),
+        color-mix(in srgb, hsl(240deg 10% 50%) 35%, hsl(255deg 12% 10%))
     );
     --color-background-unread-counter-dot: light-dark(
-        hsl(240deg 30% 40%),
+        hsl(0deg 0% 100% / 72%),
         hsl(240deg 35% 68%)
     );
     --color-border-unread-counter: light-dark(
@@ -1174,12 +1208,12 @@
         hsl(0deg 0% 0% / 10%),
         hsl(0deg 0% 100% / 10%)
     );
-    --color-border-sidebar: light-dark(hsl(0deg 0% 87%), hsl(0deg 0% 0% / 20%));
-    --color-text-sidebar-base: light-dark(hsl(0deg 0% 0%), hsl(0deg 0% 100%));
-    --color-border-sidebar-subheader: light-dark(
-        hsl(0deg 0% 0% / 15%),
-        hsl(0deg 0% 100% / 15%)
+    --color-border-sidebar: light-dark(
+        hsl(0deg 0% 100% / 14%),
+        var(--slack-hairline-dark)
     );
+    --color-text-sidebar-base: hsl(0deg 0% 100%);
+    --color-border-sidebar-subheader: hsl(0deg 0% 100% / 15%);
     --color-request-progress-status-alert-text: light-dark(
         hsl(0deg 0% 20%),
         hsl(236deg 33% 90%)
@@ -1326,8 +1360,8 @@
         hsl(0deg 0% 0% / 40%)
     );
     --color-compose-send-button-icon-color: hsl(0deg 0% 100%);
-    --color-compose-send-button-background: hsl(240deg 96% 68%);
-    --color-compose-send-button-background-interactive: hsl(240deg 41% 50%);
+    --color-compose-send-button-background: var(--slack-send-green);
+    --color-compose-send-button-background-interactive: hsl(164deg 100% 18%);
     --color-compose-send-button-focus-border: hsl(232deg 20% 10%);
     --color-compose-send-button-focus-shadow: light-dark(
         hsl(230deg 100% 20%),
@@ -1532,11 +1566,11 @@
     );
 
     /* Text colors */
-    --color-text-default: light-dark(hsl(0deg 0% 20%), hsl(0deg 0% 87%));
+    --color-text-default: light-dark(var(--slack-ink), var(--slack-ink-dark));
     /* Unlike the light theme, the dark theme renders message
        text in the default color. */
     --color-text-message-default: light-dark(
-        hsl(0deg 0% 15%),
+        var(--slack-ink),
         var(--color-text-default)
     );
     --color-text-message-blockquote-border: light-dark(
@@ -1583,7 +1617,10 @@
         hsl(0deg 0% 100% / 80%)
     );
     --color-text-full-name: light-dark(hsl(0deg 0% 15%), hsl(0deg 0% 100%));
-    --color-text-item: light-dark(hsl(0deg 0% 40%), hsl(0deg 0% 50%));
+    --color-text-item: light-dark(
+        var(--slack-text-secondary),
+        var(--slack-text-secondary-dark)
+    );
     --color-text-personal-menu-no-status: light-dark(
         hsl(0deg 0% 50%),
         hsl(0deg 0% 100% 35%)
@@ -1592,18 +1629,11 @@
         hsl(0deg 0% 40%),
         hsl(0deg 0% 100% 50%)
     );
-    --color-text-sidebar-heading: light-dark(
-        hsl(216deg 65% 20%),
-        hsl(216deg 50% 75%)
-    );
-    --color-text-sidebar-action-heading: light-dark(
-        hsl(240deg 30% 40%),
-        hsl(240deg 35% 68%)
-    );
-    --color-text-sidebar-action-heading-hover: light-dark(
-        hsl(240deg 100% 15%),
-        hsl(240deg 100% 90%)
-    );
+    /* Full white; the sidebar-heading opacity variable dims this to
+       roughly Slack's 72%-white rail text. */
+    --color-text-sidebar-heading: hsl(0deg 0% 100%);
+    --color-text-sidebar-action-heading: hsl(0deg 0% 100% / 72%);
+    --color-text-sidebar-action-heading-hover: hsl(0deg 0% 100%);
     --color-text-sidebar-popover-menu: light-dark(
         hsl(0deg 0% 20%),
         hsl(236deg 33% 90%)
@@ -1664,23 +1694,24 @@
         hsl(0deg 0% 17%)
     );
 
-    /* Link colors */
-    --color-text-link: light-dark(hsl(210deg 94% 42%), hsl(200deg 100% 50%));
+    /* Link colors: Slack blue #1264a3 (light) / #1d9bd1 (dark),
+       hovering toward #0b4c8c / #40b3e4. */
+    --color-text-link: light-dark(hsl(206deg 80% 35%), hsl(198deg 76% 47%));
     --color-text-link-decoration: light-dark(
-        color-mix(in oklch, hsl(210deg 94% 42%) 20%, transparent),
-        color-mix(in oklch, hsl(200deg 100% 50%) 20%, transparent)
+        color-mix(in oklch, hsl(206deg 80% 35%) 20%, transparent),
+        color-mix(in oklch, hsl(198deg 76% 47%) 20%, transparent)
     );
     --color-text-link-hover: light-dark(
-        hsl(212deg 100% 50%),
-        hsl(200deg 100% 60%)
+        hsl(210deg 85% 30%),
+        hsl(198deg 75% 57%)
     );
     --color-text-link-decoration-hover: light-dark(
-        color-mix(in oklch, hsl(212deg 100% 50%) 70%, transparent),
-        color-mix(in oklch, hsl(200deg 100% 60%) 70%, transparent)
+        color-mix(in oklch, hsl(210deg 85% 30%) 70%, transparent),
+        color-mix(in oklch, hsl(198deg 75% 57%) 70%, transparent)
     );
     --color-text-link-active: light-dark(
-        hsl(212deg 100% 30%),
-        hsl(200deg 100% 50%)
+        hsl(210deg 85% 25%),
+        hsl(198deg 76% 47%)
     );
     /* These colors are from Bootstrap. */
     --color-text-generic-link: #08c;
@@ -1911,20 +1942,10 @@
         hsl(217deg 41% 90% / 100%)
     );
     --color-message-star-action: hsl(41deg 100% 47% / 100%);
-    --color-left-sidebar-follow-icon-hover: light-dark(
-        hsl(0deg 0% 0%),
-        hsl(0deg 0% 100%)
-    );
-    /* The gray on the filter icons is the same as
-       what's set on ul.filters, but with 70% opacity. */
-    --color-left-sidebar-navigation-icon: light-dark(
-        hsl(240deg 30% 40%),
-        hsl(240deg 35% 68%)
-    );
-    --color-left-sidebar-dm-partners-icon: light-dark(
-        hsl(240deg 30% 60%),
-        hsl(240deg 35% 58%)
-    );
+    --color-left-sidebar-follow-icon-hover: hsl(0deg 0% 100%);
+    /* White-alpha icons on the dark sidebar rail, both themes. */
+    --color-left-sidebar-navigation-icon: hsl(0deg 0% 100% / 72%);
+    --color-left-sidebar-dm-partners-icon: hsl(0deg 0% 100% / 60%);
     --color-vdots-hint: light-dark(hsl(240deg 30% 80%), hsl(240deg 35% 38%));
     --color-vdots-visible: light-dark(hsl(240deg 30% 40%), hsl(240deg 35% 68%));
     --color-vdots-hover: light-dark(hsl(240deg 100% 15%), hsl(240deg 100% 90%));
@@ -2128,38 +2149,38 @@
         hsl(183deg 52% 40% / 30%)
     );
 
-    /* Input pills */
+    /* Input pills, re-hued from periwinkle to the Slack blue family. */
     --color-background-input-pill: light-dark(
-        hsl(237deg 68% 94%),
-        hsl(240deg 65% 60% / 38%)
+        hsl(198deg 68% 94%),
+        hsl(198deg 65% 60% / 38%)
     );
     /* Tuned pill for the search bar in dark mode. */
     --color-background-input-pill-search: light-dark(
-        hsl(237deg 68% 94%),
-        hsl(240deg 65% 60% / 30%)
+        hsl(198deg 68% 94%),
+        hsl(198deg 65% 60% / 30%)
     );
     --color-background-input-pill-hover: light-dark(
-        hsl(240deg 70% 70% / 30%),
-        hsl(240deg 52% 60% / 45%)
+        hsl(198deg 70% 70% / 30%),
+        hsl(198deg 52% 60% / 45%)
     );
     --color-border-input-pill-image: light-dark(
-        hsl(237deg 68% 94% / 50%),
-        hsl(240deg 65% 60% / 60%)
+        hsl(198deg 68% 94% / 50%),
+        hsl(198deg 65% 60% / 60%)
     );
     --color-outline-low-attention-input-pill: light-dark(
-        hsl(237deg 68% 88%),
-        hsl(240deg 65% 60% / 22%)
+        hsl(198deg 68% 88%),
+        hsl(198deg 65% 60% / 22%)
     );
     --color-focus-outline-input-pill: light-dark(
-        hsl(240deg 50% 50%),
+        hsl(206deg 80% 35%),
         hsl(0deg 0% 100% / 60%)
     );
     --color-input-pill-close: light-dark(
-        hsl(240deg 60% 65%),
-        hsl(240deg 50% 74%)
+        hsl(202deg 60% 45%),
+        hsl(198deg 50% 74%)
     );
     --color-background-input-pill-exit-hover: light-dark(
-        hsl(240deg 70% 70% / 15%),
+        hsl(198deg 70% 70% / 15%),
         hsl(0deg 0% 100% / 7%)
     );
     --color-background-deactivated-user-pill: light-dark(
@@ -2331,8 +2352,8 @@
        directly so that this gets compiled down to
        an rgb() value by PostCSS Preset Env. */
     --color-header-button-hover-no-alpha: light-dark(
-        color-mix(in srgb, hsl(0deg 0% 0%) 5%, hsl(0deg 0% 97%)),
-        color-mix(in srgb, hsl(0deg 0% 100%) 4%, hsl(0deg 0% 13%))
+        color-mix(in srgb, hsl(0deg 0% 0%) 5%, hsl(0deg 0% 100%)),
+        color-mix(in srgb, hsl(0deg 0% 100%) 4%, hsl(216deg 12% 12%))
     );
     --color-header-button-focus: light-dark(
         hsl(0deg 0% 0% / 8%),
@@ -2341,8 +2362,8 @@
     /* The second color value aligns with
        --color-background-navbar */
     --color-header-button-focus-no-alpha: light-dark(
-        color-mix(in srgb, hsl(0deg 0% 0%) 8%, hsl(0deg 0% 97%)),
-        color-mix(in srgb, hsl(0deg 0% 100%) 7%, hsl(0deg 0% 13%))
+        color-mix(in srgb, hsl(0deg 0% 0%) 8%, hsl(0deg 0% 100%)),
+        color-mix(in srgb, hsl(0deg 0% 100%) 7%, hsl(216deg 12% 12%))
     );
     --color-fill-hover-copy-icon: hsl(200deg 100% 40%);
     --color-fill-user-invite-copy-icon: light-dark(
@@ -2524,50 +2545,48 @@
         color-mix(in oklch, hsl(229deg 9% 36%) 11%, transparent),
         color-mix(in oklch, hsl(230deg 9% 60%) 18%, transparent)
     );
-    /* Action buttons -- Brand Variant */
+    /* Action buttons -- Brand Variant (Slack blue #1264a3 family;
+       solid holds 6.22:1 with white text, WCAG AA). */
     --color-text-brand-solid-action-button: light-dark(
         hsl(0deg 0% 100%),
         color-mix(in oklch, hsl(0deg 0% 100%) 85%, transparent)
     );
-    --color-background-brand-solid-action-button: light-dark(
-        hsl(254deg 99% 68%),
-        hsl(261deg 79% 43%)
-    );
+    --color-background-brand-solid-action-button: var(--slack-link);
     --color-background-brand-solid-action-button-hover: light-dark(
-        hsl(255deg 81% 61%),
-        hsl(258deg 66% 51%)
+        hsl(210deg 85% 30%),
+        hsl(206deg 72% 42%)
     );
     --color-background-brand-solid-action-button-active: light-dark(
-        hsl(258deg 66% 51%),
-        hsl(261deg 79% 43%)
+        hsl(210deg 85% 26%),
+        hsl(206deg 80% 35%)
     );
     --color-text-brand-subtle-action-button: light-dark(
-        hsl(264deg 95% 34%),
-        hsl(244deg 96% 82%)
+        hsl(210deg 85% 30%),
+        hsl(198deg 75% 57%)
     );
     --color-background-brand-subtle-action-button: light-dark(
-        color-mix(in oklch, hsl(254deg 99% 68%) 12%, transparent),
-        color-mix(in oklch, hsl(246deg 96% 79%) 12%, transparent)
+        color-mix(in oklch, hsl(206deg 80% 35%) 12%, transparent),
+        color-mix(in oklch, hsl(198deg 76% 47%) 12%, transparent)
     );
     --color-background-brand-subtle-action-button-hover: light-dark(
-        color-mix(in oklch, hsl(254deg 99% 68%) 17%, transparent),
-        color-mix(in oklch, hsl(246deg 96% 79%) 17%, transparent)
+        color-mix(in oklch, hsl(206deg 80% 35%) 17%, transparent),
+        color-mix(in oklch, hsl(198deg 76% 47%) 17%, transparent)
     );
     --color-background-brand-subtle-action-button-active: light-dark(
-        color-mix(in oklch, hsl(254deg 99% 68%) 22%, transparent),
-        color-mix(in oklch, hsl(246deg 96% 79%) 12%, transparent)
+        color-mix(in oklch, hsl(206deg 80% 35%) 22%, transparent),
+        color-mix(in oklch, hsl(198deg 76% 47%) 12%, transparent)
     );
     --color-text-brand-text-action-button: light-dark(
-        hsl(255deg 54% 50%),
-        hsl(246deg 96% 79%)
+        hsl(206deg 80% 35%),
+        hsl(198deg 76% 47%)
     );
     --color-background-brand-text-action-button-hover: light-dark(
-        color-mix(in oklch, hsl(264deg 100% 22%) 5%, transparent),
-        color-mix(in oklch, hsl(251deg 100% 72%) 14%, transparent)
+        color-mix(in oklch, hsl(210deg 85% 22%) 5%, transparent),
+        color-mix(in oklch, hsl(198deg 75% 72%) 14%, transparent)
     );
     --color-background-brand-text-action-button-active: light-dark(
-        color-mix(in oklch, hsl(264deg 100% 22%) 10%, transparent),
-        color-mix(in oklch, hsl(251deg 100% 72%) 18%, transparent)
+        color-mix(in oklch, hsl(210deg 85% 22%) 10%, transparent),
+        color-mix(in oklch, hsl(198deg 75% 72%) 18%, transparent)
     );
     /* Action buttons -- Info Variant */
     --color-text-info-solid-action-button: light-dark(

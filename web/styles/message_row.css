@@ -626,7 +626,9 @@
 
             .sender_name {
                 display: inline-flex;
-                font-weight: 700;
+                /* Lato Black; the strongest single Slack signal in
+                   the message feed. */
+                font-weight: 900;
                 color: var(--color-text-sender-name);
                 column-gap: 3px;
                 overflow: hidden;

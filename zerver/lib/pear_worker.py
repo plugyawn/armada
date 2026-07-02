@@ -817,6 +817,52 @@ def pear_exclude_canvas_from_git_delta(workdir: str | Path) -> None:
         return
 
 
+PEAR_LEGACY_CANVAS_BACKFILL_PATTERN = re.compile(
+    r"^\s*(?:[-*]\s*)?"
+    r"(Routine disabled|Disabled routine|Routine off|Routine|Routines|"
+    r"Routine cadence|Cadence|Schedule|Watch cadence|Memory forgotten|"
+    r"Forgotten memory|Memory off|Memory|Memories|Done|Definition of done|"
+    r"Success criteria):[ \t]*([^\r\n]*?)[ \t]*$",
+    re.IGNORECASE,
+)
+
+
+def pear_legacy_canvas_backfill_items(content: str) -> list[tuple[str, str, str]]:
+    items: list[tuple[str, str, str]] = []
+    for match in PEAR_LEGACY_CANVAS_BACKFILL_PATTERN.finditer(content):
+        label = match.group(1).strip()
+        value = match.group(2).strip()
+        if not value:
+            continue
+        normalized_label = " ".join(label.lower().split())
+        if normalized_label in {"done", "definition of done", "success criteria"}:
+            section = "done"
+        elif normalized_label in {
+            "routine",
+            "routines",
+            "routine cadence",
+            "cadence",
+            "schedule",
+            "watch cadence",
+        }:
+            section = "routine"
+        elif normalized_label in {
+            "memory",
+            "memories",
+            "memory forgotten",
+            "forgotten memory",
+            "memory off",
+            "routine disabled",
+            "disabled routine",
+            "routine off",
+        }:
+            section = "pinned"
+        else:
+            section = "notes"
+        items.append((section, label, value))
+    return items
+
+
 def pear_backfill_canvas_from_topic_history(
     messages: list[tuple[int, str, bool | None, str | None]]
 ) -> str:
@@ -830,12 +876,7 @@ def pear_backfill_canvas_from_topic_history(
             if not value:
                 continue
             kind = artifact["kind"]
-            if kind == "done_criteria":
-                done_items.append(value)
-            elif kind in {"routine", "routine_cadence"}:
-                routine_items.append(f"{artifact['label']}: {value}")
-            elif kind in {
-                "memory",
+            if kind in {
                 "document",
                 "ticket",
                 "pull_request",
@@ -846,6 +887,15 @@ def pear_backfill_canvas_from_topic_history(
                 pinned_items.append(f"{artifact['label']}: {value}")
             elif kind in {"verification", "diff"}:
                 notes.append(f"{artifact['label']}: {value}")
+        for section, label, value in pear_legacy_canvas_backfill_items(content):
+            if section == "done":
+                done_items.append(value)
+            elif section == "routine":
+                routine_items.append(f"{label}: {value}")
+            elif section == "pinned":
+                pinned_items.append(f"{label}: {value}")
+            else:
+                notes.append(f"{label}: {value}")
 
     sections: list[str] = []
     if done_items:

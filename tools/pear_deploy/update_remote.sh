@@ -158,7 +158,7 @@ remote_dirty_tree_matches_local_head() {
                 git -C "$REPO_ROOT" show "$LOCAL_SHA:$file" | shasum -a 256 | awk '{print $1}'
             )"
             remote_sha="$(
-                ssh_root "if [[ -f $quoted_remote_path ]]; then sha256sum $quoted_remote_path | awk '{print \\\$1}'; else echo MISSING; fi"
+                ssh_root "if [[ -f $quoted_remote_path ]]; then sha256sum $quoted_remote_path | cut -d' ' -f1; else echo MISSING; fi"
             )"
             if [[ "$remote_sha" != "$local_sha" ]]; then
                 echo "Remote dirty file differs from local HEAD: $file" >&2

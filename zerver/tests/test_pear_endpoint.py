@@ -1868,6 +1868,96 @@ class PearSessionEndpointTest(ZulipTestCase):
                 "stale_retry_limit",
             )
 
+    def test_worker_run_store_busy_reader_reaps_stale_running_run(self) -> None:
+        owner = self.example_user("hamlet")
+        pear_bot = self.create_test_bot(
+            "pear",
+            owner,
+            full_name="Pear",
+            bot_type=UserProfile.EMBEDDED_BOT,
+            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+        )
+        bot_handler = SimpleNamespace(user_profile=pear_bot)
+        stale_time = timezone_now() - timedelta(seconds=400)
+        run = PearWorkerRun.objects.create(
+            realm=owner.realm,
+            bot_profile=pear_bot,
+            requesting_user=owner,
+            trigger_message_id=911,
+            stream_name=PEAR_DEFAULT_STREAM,
+            topic_name="topic-a",
+            status=PearWorkerRun.RUNNING,
+            attempts=1,
+            heartbeat_at=stale_time,
+            date_updated=stale_time,
+        )
+
+        with self.settings(PEAR_WORKER_TIMEOUT_SECONDS=1):
+            self.assertIsNone(
+                PearDatabaseWorkerRunStore().active_worker_run_message_id(
+                    bot_handler,
+                    stream=PEAR_DEFAULT_STREAM,
+                    topic="topic-a",
+                )
+            )
+
+        run.refresh_from_db()
+        self.assertEqual(run.status, PearWorkerRun.FAILED)
+        self.assertEqual(run.error, "Pear worker run became stale and was recovered.")
+        self.assertEqual(
+            PearWorkerRunEvent.objects.get(run=run, event_type="stale_reaped").payload[
+                "stale_after_seconds"
+            ],
+            301,
+        )
+
+    def test_worker_run_store_events_refresh_heartbeat_when_due(self) -> None:
+        owner = self.example_user("hamlet")
+        pear_bot = self.create_test_bot(
+            "pear",
+            owner,
+            full_name="Pear",
+            bot_type=UserProfile.EMBEDDED_BOT,
+            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+        )
+        bot_handler = SimpleNamespace(user_profile=pear_bot)
+        old_heartbeat = timezone_now() - timedelta(seconds=20)
+        run = PearWorkerRun.objects.create(
+            realm=owner.realm,
+            bot_profile=pear_bot,
+            requesting_user=owner,
+            trigger_message_id=912,
+            stream_name=PEAR_DEFAULT_STREAM,
+            topic_name="topic-a",
+            status=PearWorkerRun.RUNNING,
+            attempts=1,
+            heartbeat_at=old_heartbeat,
+            date_updated=old_heartbeat,
+        )
+        store = PearDatabaseWorkerRunStore()
+
+        store.record_event(
+            bot_handler,
+            run.trigger_message_id,
+            "transcript",
+            summary="Ran tool.",
+            payload={},
+        )
+        run.refresh_from_db()
+        refreshed_heartbeat = run.heartbeat_at
+        self.assertIsNotNone(refreshed_heartbeat)
+        self.assertGreater(refreshed_heartbeat, old_heartbeat)
+
+        store.record_event(
+            bot_handler,
+            run.trigger_message_id,
+            "transcript",
+            summary="Ran another tool.",
+            payload={},
+        )
+        run.refresh_from_db()
+        self.assertEqual(run.heartbeat_at, refreshed_heartbeat)
+
     def test_pear_codex_model_catalog_uses_visible_priority_and_reasoning(self) -> None:
         catalog = extract_pear_codex_model_catalog(
             {

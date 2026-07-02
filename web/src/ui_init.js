@@ -93,10 +93,6 @@ import * as navigation_views from "./navigation_views.ts";
 import * as onboarding_steps from "./onboarding_steps.ts";
 import * as overlays from "./overlays.ts";
 import {page_params} from "./page_params.ts";
-import * as pear_icon_rail from "./pear_icon_rail.ts";
-import * as pear_split_view from "./pear_split_view.ts";
-import * as pear_topbar from "./pear_topbar.ts";
-import * as pear_topbar_tabs from "./pear_topbar_tabs.ts";
 import * as people from "./people.ts";
 import * as personal_menu_popover from "./personal_menu_popover.ts";
 import * as playground_links_popover from "./playground_links_popover.ts";
@@ -210,14 +206,18 @@ function initialize_bottom_whitespace() {
 }
 
 function initialize_navbar() {
-    // The personal-menu avatar lives on the Pear icon rail
-    // (pear_icon_rail.ts), which tracks its own image load.
     const rendered_navbar = render_navbar({
         embedded: page_params.narrow_stream !== undefined,
+        user_avatar: current_user.avatar_url_medium,
+        realm_icon_url: realm.realm_icon_url,
         realm_name: realm.realm_name,
     });
 
     $("#header-container").html(rendered_navbar);
+    // Track when the image is loaded to updated CSS properties.
+    $("#header-container img.header-button-avatar-image").on("load", (e) => {
+        e.currentTarget.classList.add("avatar-loaded");
+    });
 }
 
 function initialize_compose_box() {
@@ -541,10 +541,6 @@ export async function initialize_everything(state_data) {
     initialize_bottom_whitespace();
     sidebar_ui.initialize_left_sidebar();
     sidebar_ui.initialize_right_sidebar();
-    pear_icon_rail.initialize();
-    pear_split_view.initialize();
-    pear_topbar.initialize();
-    pear_topbar_tabs.initialize();
     initialize_compose_box();
     settings.initialize();
     initialize_navbar();

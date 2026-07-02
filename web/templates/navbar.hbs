@@ -20,8 +20,6 @@
                     </a>
                 </div>
                 <div class="top-navbar-container">
-                    {{! Pear git-native topbar (Row A); stable container, innerHTML re-rendered per narrow by pear_topbar.ts. }}
-                    <div id="pear-topbar" class="notdisplayed"></div>
                     <div id="message_view_header" class="notdisplayed">
                     </div>
                     <div id="searchbox">
@@ -55,15 +53,21 @@
                     <i class="zulip-icon zulip-icon-gear" aria-hidden="true"></i>
                 </a>
             </div>
-            {{! The personal menu lives on the Pear icon rail; see pear_icon_rail.hbs. }}
+            <div id="personal-menu" class="hidden-for-spectators navbar-item">
+                <a class="header-button tippy-zulip-delayed-tooltip" tabindex="0" role="button" data-tooltip-template-id="personal-menu-tooltip-template" aria-label="{{t 'Personal menu' }}">
+                    <div class="header-button-avatar">
+                        <img class="header-button-avatar-image" src="{{user_avatar}}"/>
+                    </div>
+                </a>
+            </div>
             <div class="spectator_narrow_login_button only-visible-for-spectators" data-tippy-content="{{t 'Log in' }}" data-tippy-placement="bottom" aria-label="{{t 'Log in' }}">
                 <a id="login_button" class="header-button login_button navbar-item" tabindex="0">
                     <i class="zulip-icon zulip-icon-log-in-navbar"></i>
                 </a>
             </div>
-            <div id="pear-pane-toggle" class="hidden-for-spectators">
-                <a id="pear-pane-toggle-button" role="button" class="header-button navbar-item" tabindex="0" aria-label="{{t 'Toggle Pear panel' }}" aria-expanded="false">
-                    <i class="zulip-icon zulip-icon-bot"></i>
+            <div id="userlist-toggle" class="hidden-for-spectators">
+                <a id="userlist-toggle-button" role="button" class="header-button navbar-item" tabindex="0" aria-label="{{t 'Toggle user list' }}" aria-expanded="true">
+                    <i class="zulip-icon zulip-icon-user-list"></i>
                 </a>
             </div>
         </div>

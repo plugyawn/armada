@@ -4,6 +4,27 @@
             <span class="pear-panel-title">{{t "Context" }}</span>
         </div>
         <div class="pear-panel-actions">
+            {{#if active_run}}
+                {{#if active_run.has_actions}}
+                    <div class="pear-run-actions" data-run-id="{{active_run.id}}">
+                        {{#if active_run.can_pause}}
+                            <button type="button" class="pear-run-action icon-button icon-button-square icon-button-neutral tippy-zulip-delayed-tooltip" data-action="pause" data-run-id="{{active_run.id}}" aria-label="{{t 'Pause' }}" data-tippy-content="{{t 'Pause' }}">
+                                <i class="zulip-icon zulip-icon-stop-circle" aria-hidden="true"></i>
+                            </button>
+                        {{/if}}
+                        {{#if active_run.can_resume}}
+                            <button type="button" class="pear-run-action icon-button icon-button-square icon-button-neutral tippy-zulip-delayed-tooltip" data-action="resume" data-run-id="{{active_run.id}}" aria-label="{{t 'Resume' }}" data-tippy-content="{{t 'Resume' }}">
+                                <i class="zulip-icon zulip-icon-play-circle" aria-hidden="true"></i>
+                            </button>
+                        {{/if}}
+                        {{#if active_run.can_cancel}}
+                            <button type="button" class="pear-run-action icon-button icon-button-square icon-button-danger tippy-zulip-delayed-tooltip" data-action="cancel" data-run-id="{{active_run.id}}" aria-label="{{t 'Cancel' }}" data-tippy-content="{{t 'Cancel' }}">
+                                <i class="zulip-icon zulip-icon-circle-x" aria-hidden="true"></i>
+                            </button>
+                        {{/if}}
+                    </div>
+                {{/if}}
+            {{/if}}
             <button type="button" id="pear-panel-refresh" class="pear-icon-button icon-button icon-button-square icon-button-neutral tippy-zulip-delayed-tooltip" aria-label="{{t 'Refresh Pear context' }}" data-tippy-content="{{t 'Refresh Pear context' }}">
                 <i class="zulip-icon zulip-icon-reset" aria-hidden="true"></i>
             </button>
@@ -12,72 +33,106 @@
 
     {{#if has_topic}}
         {{#if topic_context}}
-            {{#if has_runs}}
-                <div class="pear-run-list">
-                    {{#each display_runs}}
-                        <div class="pear-run-row" data-run-id="{{id}}">
-                            <div class="pear-run-status-row pear-run-status-{{status_class}}{{#if flash_class}} {{flash_class}}{{/if}}">
-                                <span class="pear-run-status-dot"></span>
-                                <span class="pear-run-status-text">{{status_label}}</span>
-                                {{#if show_session_kind}}
-                                    <span class="pear-run-session-kind">{{session_kind_label}}</span>
-                                {{/if}}
-                                {{#if has_usage}}
-                                    <span class="pear-run-status-usage tippy-zulip-delayed-tooltip" data-tippy-content="{{usage_title}}">
-                                        {{usage_label}}
-                                    </span>
-                                {{/if}}
-                            </div>
-                            {{#if has_actions}}
-                                <div class="pear-run-actions" data-run-id="{{id}}">
-                                    {{#if can_pause}}
-                                        <button type="button" class="pear-run-action icon-button icon-button-square icon-button-neutral tippy-zulip-delayed-tooltip" data-action="pause" data-run-id="{{id}}" aria-label="{{t 'Pause' }}" data-tippy-content="{{t 'Pause' }}">
-                                            <i class="zulip-icon zulip-icon-stop-circle" aria-hidden="true"></i>
-                                        </button>
-                                    {{/if}}
-                                    {{#if can_resume}}
-                                        <button type="button" class="pear-run-action icon-button icon-button-square icon-button-neutral tippy-zulip-delayed-tooltip" data-action="resume" data-run-id="{{id}}" aria-label="{{t 'Resume' }}" data-tippy-content="{{t 'Resume' }}">
-                                            <i class="zulip-icon zulip-icon-play-circle" aria-hidden="true"></i>
-                                        </button>
-                                    {{/if}}
-                                    {{#if can_cancel}}
-                                        <button type="button" class="pear-run-action icon-button icon-button-square icon-button-danger tippy-zulip-delayed-tooltip" data-action="cancel" data-run-id="{{id}}" aria-label="{{t 'Cancel' }}" data-tippy-content="{{t 'Cancel' }}">
-                                            <i class="zulip-icon zulip-icon-circle-x" aria-hidden="true"></i>
-                                        </button>
-                                    {{/if}}
-                                </div>
-                            {{/if}}
-                        </div>
-                    {{/each}}
+            <section class="pear-context-section pear-runtime-section">
+                <div class="pear-context-section-title">{{t "Runtime" }}</div>
+                <div class="pear-runtime-row">
+                    <label class="pear-field-label" for="pear-topic-model-select">{{t "Model" }}</label>
+                    <select id="pear-topic-model-select" class="pear-topic-model-select pear-topic-runtime-control">
+                        {{#each topic_context.display_model_choices}}
+                            <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+                        {{/each}}
+                    </select>
                 </div>
-            {{/if}}
-
-            {{! R3: the chat header is authoritative for stream > topic ==
-                repo > branch, so the panel shows only the git DELTA the
-                header can't: dirty/clean, ahead/behind, detached HEAD,
-                and the branch-differs-from-topic edge case. }}
-            <section class="pear-context-section pear-git-section">
-                <div class="pear-context-section-title">{{t "Git" }}</div>
-                {{#if topic_context.git_available}}
-                    <div class="pear-git-delta-row pear-git-{{topic_context.git_status_class}}">
-                        <span class="pear-git-delta-pill pear-git-tree-target" tabindex="0" data-stream="{{topic_context.stream}}" data-topic="{{topic_context.topic}}" aria-label="{{t 'Git status; hover for the commit tree' }}">
-                            <span class="pear-git-delta-status">{{topic_context.git_status_label}}</span>
-                            {{#if topic_context.git_head_short}}
-                                <span class="pear-git-delta-head">{{topic_context.git_head_short}}</span>
-                            {{/if}}
-                        </span>
-                        {{#if topic_context.show_ahead_behind}}
-                            <span class="pear-git-delta-chip pear-git-chip-ahead-behind tippy-zulip-delayed-tooltip" data-tippy-content="{{topic_context.ahead_behind_title}}">{{topic_context.ahead_behind_label}}</span>
-                        {{/if}}
-                        {{#if topic_context.show_detached}}
-                            <span class="pear-git-delta-chip pear-git-chip-detached tippy-zulip-delayed-tooltip" data-tippy-content="{{topic_context.detached_title}}">{{t "detached HEAD" }}</span>
-                        {{/if}}
-                        {{#if topic_context.show_branch_mismatch}}
-                            <span class="pear-git-delta-chip pear-git-chip-mismatch tippy-zulip-delayed-tooltip" data-tippy-content="{{topic_context.branch_mismatch_title}}">{{t "branch ≠ topic" }}</span>
+                <div class="pear-runtime-row pear-effort-row">
+                    <div class="pear-effort-header">
+                        <label class="pear-field-label" for="pear-reasoning-effort-slider">{{t "Thinking" }}</label>
+                        <span id="pear-reasoning-effort-value" class="pear-effort-value">{{topic_context.effort_label}}</span>
+                    </div>
+                    <input id="pear-reasoning-effort-slider" class="pear-reasoning-effort-slider pear-topic-runtime-control" type="range" min="0" max="{{topic_context.max_effort_index}}" step="1" value="{{topic_context.effort_index}}" aria-label="{{t 'Thinking effort' }}" />
+                    <div class="pear-effort-ticks">
+                        {{#each topic_context.display_reasoning_efforts}}
+                            <span class="{{#if selected}}selected{{/if}}">{{label}}</span>
+                        {{/each}}
+                    </div>
+                </div>
+                {{#if active_run}}
+                    <div class="pear-run-status-row pear-run-status-{{active_run.status_class}}">
+                        <span class="pear-run-status-dot"></span>
+                        <span class="pear-run-status-text">{{active_run.status_label}}</span>
+                        {{#if active_run.has_usage}}
+                            <span class="pear-run-status-usage tippy-zulip-delayed-tooltip" data-tippy-content="{{active_run.usage_title}}">
+                                {{active_run.usage_label}}
+                            </span>
                         {{/if}}
                     </div>
+                {{/if}}
+            </section>
+            {{#if model_error}}
+                <div class="pear-panel-error">{{model_error}}</div>
+            {{/if}}
+
+            <section class="pear-context-section">
+                <div class="pear-context-section-title">{{t "Workspace" }}</div>
+                <div class="pear-workspace-summary pear-git-{{topic_context.git_status_class}}">
+                    <div class="pear-workspace-row">
+                        <span class="pear-context-label">{{topic_context.workspace_kind_label}}</span>
+                        {{#if topic_context.git_available}}
+                            <span class="pear-git-dot"></span>
+                        {{/if}}
+                        <span class="pear-workspace-name" title="{{topic_context.workspace_primary_title}}">{{topic_context.workspace_primary_name}}</span>
+                        {{#if topic_context.show_primary_git_status}}
+                            <span class="pear-git-status">{{topic_context.git_status_label}}</span>
+                        {{/if}}
+                    </div>
+                    {{#if topic_context.workspace_ref_label}}
+                        <div class="pear-workspace-ref">{{topic_context.workspace_ref_label}}</div>
+                    {{/if}}
+                </div>
+
+                {{#if topic_context.git_available}}
+                    {{#if topic_context.has_changed_files}}
+                        <div class="pear-file-list">
+                            {{#each topic_context.git.changed_files}}
+                                <div class="pear-file-row pear-file-{{kind}}">
+                                    <span class="pear-file-status">{{status}}</span>
+                                    <span class="pear-file-path">{{path}}</span>
+                                </div>
+                            {{/each}}
+                            {{#if topic_context.git.changed_files_truncated}}
+                                <div class="pear-file-more">{{t "More changed files not shown." }}</div>
+                            {{/if}}
+                        </div>
+                    {{/if}}
+
+                    {{#if topic_context.git.diff_shortstat}}
+                        <div class="pear-diff-shortstat">{{topic_context.git.diff_shortstat}}</div>
+                    {{/if}}
+
+                    <details class="pear-worktree-details" {{#if topic_context.worktree_details_open}}open{{/if}}>
+                        <summary>
+                            <span>{{t "Worktree" }}</span>
+                            {{#if topic_context.local_worktree_summary_label}}
+                                <span class="pear-worktree-summary-extra">{{topic_context.local_worktree_summary_label}}</span>
+                            {{/if}}
+                        </summary>
+                        <div class="pear-workdir" title="{{topic_context.workdir}}">{{topic_context.workdir}}</div>
+                        {{#if topic_context.has_recent_commits}}
+                            <div class="pear-commit-list">
+                                {{#each topic_context.git.recent_commits}}
+                                    <div class="pear-commit-row">
+                                        <span class="pear-commit-hash">{{hash}}</span>
+                                        <span class="pear-commit-summary">{{summary}}</span>
+                                    </div>
+                                {{/each}}
+                            </div>
+                        {{/if}}
+                    </details>
                 {{else}}
-                    <div class="pear-empty-state">{{t "No Git workspace." }}</div>
+                    {{#if topic_context.workdir}}
+                        <div class="pear-worktree-details pear-worktree-unavailable">
+                            <div class="pear-workdir" title="{{topic_context.workdir}}">{{topic_context.workdir}}</div>
+                        </div>
+                    {{/if}}
                 {{/if}}
             </section>
         {{else}}

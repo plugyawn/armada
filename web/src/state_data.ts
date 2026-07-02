@@ -688,7 +688,6 @@ export const split_state_data_schema = z.object({
     reminders: z.object({reminders: z.array(reminder_schema)}),
     server_events_state: z.object({
         queue_id: z.nullable(z.string()),
-        pear_bot_user_ids: z.optional(z.array(z.number())),
     }),
     server_events: z.object({
         server_generation: NOT_TYPED_YET,

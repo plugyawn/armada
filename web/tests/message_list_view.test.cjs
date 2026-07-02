@@ -11,7 +11,6 @@ const $ = require("./lib/zjquery.cjs");
 set_global("document", "document-stub");
 
 let sender_is_bot = () => false;
-let pear_settle_watch_count = 0;
 
 // timerender calls setInterval when imported
 mock_esm("../src/timerender", {
@@ -32,17 +31,11 @@ mock_esm("../src/people", {
     get_muted_user_avatar_url: () => "fake/muted_user/avatar/url",
     maybe_get_user_by_id: noop,
 });
-mock_esm("../src/pear_runs_store", {
-    watch_current_narrow_until_idle() {
-        pear_settle_watch_count += 1;
-    },
-});
 
 const {Filter} = zrequire("../src/filter");
 const {MessageListView} = zrequire("../src/message_list_view");
 const message_list = zrequire("message_list");
 const {MessageListData} = zrequire("message_list_data");
-const message_lists = zrequire("message_lists");
 const muted_users = zrequire("muted_users");
 
 let next_timestamp = 1500000000;
@@ -50,8 +43,6 @@ let next_timestamp = 1500000000;
 function test(label, f) {
     run_test(label, ({override, mock_template}) => {
         sender_is_bot = () => false;
-        pear_settle_watch_count = 0;
-        message_lists.set_current(undefined);
         muted_users.set_muted_users([]);
         mock_template("message_list.hbs", false, () => "<message-list-stub>");
         f({override, mock_template});
@@ -571,10 +562,9 @@ test("pear_message_vars", () => {
 
     let result = calculate_variables(
         build_message_context({
-            sender_email: "renamed-agent@example.com",
-            sender_full_name: "Renamed Agent",
+            sender_email: "pear@zulip.com",
+            sender_full_name: "Pear",
             sender_id: 25,
-            is_pear_message: true,
             content: "<p><em>Thinking</em> <em>✦</em></p>",
         }),
     );
@@ -584,10 +574,9 @@ test("pear_message_vars", () => {
 
     result = calculate_variables(
         build_message_context({
-            sender_email: "renamed-agent@example.com",
-            sender_full_name: "Renamed Agent",
+            sender_email: "pear@zulip.com",
+            sender_full_name: "Pear",
             sender_id: 25,
-            is_pear_message: true,
             content: "<p>Done.</p>",
         }),
     );
@@ -597,39 +586,14 @@ test("pear_message_vars", () => {
 
     result = calculate_variables(
         build_message_context({
-            sender_email: "pear@zulip.com",
-            sender_full_name: "Pear",
-            sender_id: 25,
-            is_pear_message: false,
+            sender_email: "build-bot@zulip.com",
+            sender_full_name: "Build Bot",
+            sender_id: 26,
         }),
     );
     assert.equal(result.is_pear_message, false);
     assert.equal(result.is_pear_active_message, false);
     assert.equal(result.include_sender, true);
-});
-
-test("pear_active_message_starts_settle_watch", () => {
-    const list = new MessageListView(
-        {
-            id: 1,
-        },
-        true,
-        true,
-    );
-
-    list.maybe_watch_active_pear_messages([{is_pear_active_message: false}]);
-    assert.equal(pear_settle_watch_count, 0);
-
-    message_lists.set_current(list.list);
-    list.maybe_watch_active_pear_messages([{is_pear_active_message: false}]);
-    assert.equal(pear_settle_watch_count, 0);
-
-    list.maybe_watch_active_pear_messages([{is_pear_active_message: true}]);
-    assert.equal(pear_settle_watch_count, 1);
-
-    message_lists.set_current(undefined);
-    list.maybe_watch_active_pear_messages([{is_pear_active_message: true}]);
-    assert.equal(pear_settle_watch_count, 1);
 });
 
 test("merge_message_groups", ({mock_template}) => {

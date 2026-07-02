@@ -19,6 +19,7 @@ import * as message_lists from "./message_lists.ts";
 import * as message_reminder from "./message_reminder.ts";
 import * as message_viewport from "./message_viewport.ts";
 import {page_params} from "./page_params.ts";
+import * as pear_panel from "./pear_panel.ts";
 import * as pm_list from "./pm_list.ts";
 import * as popover_menus from "./popover_menus.ts";
 import * as popovers from "./popovers.ts";
@@ -29,7 +30,7 @@ import * as settings_config from "./settings_config.ts";
 import * as settings_data from "./settings_data.ts";
 import * as settings_preferences from "./settings_preferences.ts";
 import * as spectators from "./spectators.ts";
-import {current_user, realm} from "./state_data.ts";
+import {current_user} from "./state_data.ts";
 import * as stream_list from "./stream_list.ts";
 import * as ui_util from "./ui_util.ts";
 import {user_settings} from "./user_settings.ts";
@@ -42,6 +43,12 @@ export let left_sidebar_cursor: ListCursor<JQuery>;
 function save_sidebar_toggle_status(): void {
     const ls = localstorage();
     ls.set("left-sidebar", $("body").hasClass("hide-left-sidebar"));
+
+    if (!page_params.is_spectator) {
+        // The right sidebar is never shown in the spectator mode;
+        // avoid interacting with local storage state for it.
+        ls.set("right-sidebar", $("body").hasClass("hide-right-sidebar"));
+    }
 }
 
 export function restore_sidebar_toggle_status(): void {
@@ -50,25 +57,30 @@ export function restore_sidebar_toggle_status(): void {
         $("body").addClass("hide-left-sidebar");
     }
 
-    // The right buddy rail is permanently hidden: the reclaimed
-    // right area is an on-demand pane host, and the buddy list only
-    // ever opens as a temporary overlay. Any "show" preference
-    // stored before the rail was retired is deliberately ignored.
-    $("body").addClass("hide-right-sidebar");
+    if (!page_params.is_spectator && ls.get("right-sidebar")) {
+        // The right sidebar is never shown in the spectator mode;
+        // avoid processing local storage state for hiding the right
+        // sidebar.
+        $("body").addClass("hide-right-sidebar");
+    }
 }
 
 export let left_sidebar_expanded_as_overlay = false;
 export let right_sidebar_expanded_as_overlay = false;
 
 export function update_sidebar_aria_expanded(): void {
-    // Reflect current left sidebar visibility on the toggle buttons.
-    // State is tracked differently per viewport: at wide viewports
-    // the body's hide-left-sidebar class is authoritative; at narrow
-    // viewports the overlay flag is.
+    // Reflect current sidebar visibility on the toggle buttons. State is
+    // tracked differently per viewport: at wide viewports the body's
+    // hide-*-sidebar classes are authoritative; at narrow viewports the
+    // overlay flags are.
     const left_expanded = ui_util.matches_viewport_state("gte_md_min")
         ? !$("body").hasClass("hide-left-sidebar")
         : left_sidebar_expanded_as_overlay;
+    const right_expanded = ui_util.matches_viewport_state("gte_xl_min")
+        ? !$("body").hasClass("hide-right-sidebar")
+        : right_sidebar_expanded_as_overlay;
     $(".left-sidebar-toggle-button").attr("aria-expanded", String(left_expanded));
+    $("#userlist-toggle-button").attr("aria-expanded", String(right_expanded));
 }
 
 export function hide_userlist_sidebar(): void {
@@ -86,8 +98,13 @@ export function show_userlist_sidebar(): void {
         return;
     }
 
-    // There is no persistent buddy rail in the full-bleed frame; the
-    // user list always opens as a temporary overlay, at any width.
+    if (ui_util.matches_viewport_state("gte_xl_min")) {
+        $("body").removeClass("hide-right-sidebar");
+        fix_invite_user_button_flicker();
+        update_sidebar_aria_expanded();
+        return;
+    }
+
     $userlist_sidebar.addClass("expanded");
     if (left_sidebar_expanded_as_overlay) {
         $userlist_sidebar.addClass("topmost-overlay");
@@ -184,6 +201,33 @@ export function initialize(): void {
         }
     });
 
+    $("#userlist-toggle-button").on("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+
+        if (ui_util.matches_viewport_state("gte_xl_min")) {
+            $("body").toggleClass("hide-right-sidebar");
+            if (!$("body").hasClass("hide-right-sidebar")) {
+                fix_invite_user_button_flicker();
+            }
+            // We recheck the scrolling-button status of the compose
+            // box, which may change for users who've chosen to
+            // use full width on wide screens.
+            compose_ui.maybe_show_scrolling_formatting_buttons(
+                "#message-formatting-controls-container",
+            );
+            save_sidebar_toggle_status();
+            update_sidebar_aria_expanded();
+            return;
+        }
+
+        if (right_sidebar_expanded_as_overlay) {
+            hide_userlist_sidebar();
+            return;
+        }
+        show_userlist_sidebar();
+    });
+
     $(".left-sidebar-toggle-button").on("click", (e) => {
         e.preventDefault();
         e.stopPropagation();
@@ -235,7 +279,10 @@ export function initialize(): void {
 
             const $elt = $(e.target);
             // Since sidebar toggle buttons have their own click handlers, don't handle them here.
-            if ($elt.closest(".left-sidebar-toggle-button").length > 0) {
+            if (
+                $elt.closest(".left-sidebar-toggle-button").length > 0 ||
+                $elt.closest("#userlist-toggle-button").length > 0
+            ) {
                 return;
             }
 
@@ -328,7 +375,6 @@ export function initialize_left_sidebar(): void {
         is_spectator: page_params.is_spectator,
         primary_condensed_views,
         expanded_views,
-        realm_name: realm.realm_name,
         LEFT_SIDEBAR_NAVIGATION_AREA_TITLE,
         LEFT_SIDEBAR_DIRECT_MESSAGES_TITLE: pm_list.LEFT_SIDEBAR_DIRECT_MESSAGES_TITLE,
     });
@@ -354,6 +400,7 @@ export function initialize_right_sidebar(): void {
     $("#right-sidebar-container").html(rendered_sidebar);
 
     buddy_list.initialize_tooltips();
+    pear_panel.initialize();
 
     update_invite_user_option();
 
@@ -534,21 +581,13 @@ function all_rows(): JQuery {
         "#left-sidebar-topic-search-hint.hidden .left-sidebar-topic-search-hint-link",
     );
 
-    // The VIEWS block is hidden while the Pear icon rail carries its
-    // entries; keep its rows out of keyboard navigation.
-    const $hidden_navigation_rows = $(
-        "#left-sidebar-navigation-area .top_left_row," +
-            " #left-sidebar-navigation-area #views-label-container",
-    );
-
     const $filtered_rows = $all_rows
         .not($inactive_or_muted_rows)
         .not($collapsed_views)
         .not($collapsed_channels)
         .not($hidden_topic_rows)
         .not($toggle_inactive_or_muted_channels_row)
-        .not($hidden_topic_search_hint_row)
-        .not($hidden_navigation_rows);
+        .not($hidden_topic_search_hint_row);
 
     // With a "topic:" prefix search, keyboard navigation only lands on
     // topic rows, not channel header rows.

@@ -32,7 +32,6 @@ import type {MessageViewportInfo} from "./message_viewport.ts";
 import * as muted_users from "./muted_users.ts";
 import * as narrow_state from "./narrow_state.ts";
 import {page_params} from "./page_params.ts";
-import * as pear_runs_store from "./pear_runs_store.ts";
 import * as people from "./people.ts";
 import * as popovers from "./popovers.ts";
 import * as reactions from "./reactions.ts";
@@ -140,11 +139,81 @@ type RenderingPlan = {
     append_messages: MessageContainer[];
 };
 
-// The ✦ "thinking" marker on an active Pear message (the trailing
-// `<em>✦</em>` the server appends while the agent is writing) is
-// animated purely in CSS; see `.pear-active-message` in
-// message_row.css. The `is_pear_message` flag is server-sourced from
-// the configured Pear bot identity.
+const pear_thinking_glyphs = [
+    "·",
+    "∙",
+    "⋅",
+    "✦",
+    "✧",
+    "✩",
+    "✶",
+    "✷",
+    "✸",
+    "✹",
+    "✺",
+    "✹",
+    "✸",
+    "✷",
+    "✶",
+    "✩",
+    "✧",
+    "✦",
+    "⋅",
+    "∙",
+] as const;
+let pear_thinking_glyph_index = 0;
+let pear_thinking_glyph_timer: ReturnType<typeof setInterval> | undefined;
+
+function pear_thinking_markers($scope: JQuery<HTMLElement | Document> = $(document)): JQuery {
+    const $descendant_markers = $scope.find(
+        ".message_row.pear-active-message .message_content > p:last-child > em:last-child",
+    );
+    if (!$scope.hasClass("pear-active-message")) {
+        return $descendant_markers;
+    }
+    return $descendant_markers.add($scope.find(".message_content > p:last-child > em:last-child"));
+}
+
+function render_pear_thinking_glyph($markers: JQuery): void {
+    if ($markers.length === 0) {
+        return;
+    }
+    $markers.text(pear_thinking_glyphs[pear_thinking_glyph_index]!);
+    pear_thinking_glyph_index = (pear_thinking_glyph_index + 1) % pear_thinking_glyphs.length;
+}
+
+function stop_pear_thinking_animation(): void {
+    if (pear_thinking_glyph_timer === undefined) {
+        return;
+    }
+    clearInterval(pear_thinking_glyph_timer);
+    pear_thinking_glyph_timer = undefined;
+}
+
+function update_pear_thinking_glyphs(): void {
+    const $markers = pear_thinking_markers();
+    if ($markers.length === 0) {
+        stop_pear_thinking_animation();
+        return;
+    }
+    render_pear_thinking_glyph($markers);
+}
+
+function start_pear_thinking_animation(): void {
+    if (pear_thinking_glyph_timer !== undefined) {
+        return;
+    }
+    pear_thinking_glyph_timer = setInterval(update_pear_thinking_glyphs, 100);
+}
+
+function maybe_render_pear_thinking_glyph($row: JQuery): void {
+    if (!$row.hasClass("pear-active-message")) {
+        return;
+    }
+    const $markers = pear_thinking_markers($row);
+    render_pear_thinking_glyph($markers);
+    start_pear_thinking_animation();
+}
 
 type BoundaryMessageContainerInfo = {
     message_group: MessageGroup;
@@ -713,7 +782,15 @@ export class MessageListView {
         }
 
         const sender_is_bot = people.sender_is_bot(message);
-        const is_pear_message = !is_hidden && message.is_pear_message;
+        const sender_full_name = message.sender_full_name?.toLowerCase() ?? "";
+        const sender_email = message.sender_email?.toLowerCase() ?? "";
+        const is_pear_message =
+            !is_hidden &&
+            sender_is_bot &&
+            (sender_full_name === "pear" ||
+                sender_full_name.startsWith("pear ") ||
+                sender_email === "pear@zulip.com" ||
+                sender_email.startsWith("pear-bot@"));
         if (is_pear_message) {
             include_sender = false;
         }
@@ -1306,6 +1383,7 @@ export class MessageListView {
         const $content = $row.find(".message_content");
 
         rendered_markdown.update_elements($content);
+        maybe_render_pear_thinking_glyph($row);
 
         const id = rows.id($row);
         message_edit.maybe_show_edit($row, id);
@@ -1363,20 +1441,6 @@ export class MessageListView {
             message_container,
             this.get_edited_notice_locations(include_sender, is_hidden, status_message),
         );
-    }
-
-    maybe_watch_active_pear_messages(message_containers: MessageContainer[]): void {
-        if (this.list !== message_lists.current) {
-            return;
-        }
-        if (
-            !message_containers.some(
-                (message_container) => message_container.is_pear_active_message,
-            )
-        ) {
-            return;
-        }
-        pear_runs_store.watch_current_narrow_until_idle();
     }
 
     get_edited_notice_locations(
@@ -1443,7 +1507,6 @@ export class MessageListView {
 
         const new_message_groups = this.build_message_groups(messages);
         const message_containers = new_message_groups.flatMap((group) => group.message_containers);
-        this.maybe_watch_active_pear_messages(message_containers);
         this.set_subscription_dividers_and_markers(new_message_groups, where);
         const message_actions = this.merge_message_groups(new_message_groups, where);
         const new_dom_elements = [];
@@ -1999,7 +2062,6 @@ export class MessageListView {
                 message_containers.push(message_container);
             }
         }
-        this.maybe_watch_active_pear_messages(message_containers);
 
         // Rerender each message row, collecting the distinct recipient
         // bars they belong to by their row's rendered group id. The

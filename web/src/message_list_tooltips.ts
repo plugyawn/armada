@@ -19,8 +19,8 @@ import {message_edit_history_visibility_policy_values} from "./settings_config.t
 import {realm} from "./state_data.ts";
 import * as timerender from "./timerender.ts";
 import {
-    INSTANT_HOVER_DELAY,
     INTERACTIVE_HOVER_DELAY,
+    LONG_HOVER_DELAY,
     topic_visibility_policy_tooltip_props,
 } from "./tippyjs.ts";
 import {parse_html} from "./ui_util.ts";
@@ -168,7 +168,7 @@ function get_time_string(timestamp: number): string {
 
 export function initialize(): void {
     message_list_tooltip(".tippy-narrow-tooltip", {
-        delay: INSTANT_HOVER_DELAY,
+        delay: LONG_HOVER_DELAY,
         onCreate(instance) {
             // We sniff the href, rather than looking up the user's settings
             // so that the tooltip always matches the link.
@@ -228,7 +228,7 @@ export function initialize(): void {
     });
 
     message_list_tooltip(".message_reactions .reaction_button", {
-        delay: INSTANT_HOVER_DELAY,
+        delay: LONG_HOVER_DELAY,
         placement: "bottom",
         onShow(instance) {
             if (!document.body.contains(instance.reference)) {
@@ -262,7 +262,7 @@ export function initialize(): void {
     });
 
     message_list_tooltip(".message_control_button", {
-        delay: INSTANT_HOVER_DELAY,
+        delay: LONG_HOVER_DELAY,
         onShow(instance) {
             // Handle dynamic "starred messages" and "edit" widgets.
             const $elem = $(instance.reference);
@@ -368,7 +368,7 @@ export function initialize(): void {
     );
 
     message_list_tooltip("#message_feed_container .recipient-bar-control-icon", {
-        delay: INSTANT_HOVER_DELAY,
+        delay: LONG_HOVER_DELAY,
         onShow(instance) {
             const $reference = $(instance.reference);
             if ($reference.hasClass("loading-resolve-topic-state")) {
@@ -412,7 +412,7 @@ export function initialize(): void {
     });
 
     message_list_tooltip(".media-audio-download", {
-        delay: INSTANT_HOVER_DELAY,
+        delay: LONG_HOVER_DELAY,
         onShow(instance) {
             const title = $(instance.reference).attr("aria-label");
             assert(title !== undefined);
@@ -424,7 +424,7 @@ export function initialize(): void {
     });
 
     message_list_tooltip(".view_user_card_tooltip", {
-        delay: INSTANT_HOVER_DELAY,
+        delay: LONG_HOVER_DELAY,
         onShow(instance) {
             const is_bot = $(instance.reference).attr("data-is-bot") === "true";
             if (is_bot) {
@@ -440,7 +440,7 @@ export function initialize(): void {
 
     message_list_tooltip(".message_edit_notice, .edit-notifications", {
         trigger: "mouseenter",
-        delay: INSTANT_HOVER_DELAY,
+        delay: LONG_HOVER_DELAY,
         popperOptions: {
             modifiers: [
                 {
@@ -508,7 +508,7 @@ export function initialize(): void {
     });
 
     message_list_tooltip(".message_expander, .message_condenser", {
-        delay: INSTANT_HOVER_DELAY,
+        delay: LONG_HOVER_DELAY,
         onShow(instance) {
             const is_disabled = $(instance.reference).attr("data-enable-tooltip") === "false";
             if (is_disabled) {

@@ -1376,11 +1376,6 @@ export class Filter {
         if (_.isEqual(term_types, ["is-followed"])) {
             return true;
         }
-        if (_.isEqual(term_types, ["channel", "topic", "has-attachment"])) {
-            // The Pear Files tab: a conversation narrowed to messages
-            // with attachments keeps the normal channel header.
-            return true;
-        }
         if (
             _.isEqual(term_types, ["sender", "has-reaction"]) &&
             this.terms_with_operator("sender")[0]!.operand === people.my_current_user_id()
@@ -1568,8 +1563,6 @@ export class Filter {
         if (
             (term_types.length === 3 && _.isEqual(term_types, ["channel", "topic", "near"])) ||
             (term_types.length === 3 && _.isEqual(term_types, ["channel", "topic", "with"])) ||
-            (term_types.length === 3 &&
-                _.isEqual(term_types, ["channel", "topic", "has-attachment"])) ||
             (term_types.length === 2 && _.isEqual(term_types, ["channel", "topic"])) ||
             (term_types.length === 1 && _.isEqual(term_types, ["channel"]))
         ) {

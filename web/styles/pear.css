@@ -1,78 +1,8 @@
-/* The reclaimed right area (R2): an on-demand pane host appended to
-   .app-main by pear_split_view.ts. It replaces the permanent right
-   rail as the home for Pear surfaces; hidden unless the body carries
-   pear-right-area-open. */
-#pear-right-area {
-    display: none;
-}
-
-body.pear-right-area-open {
-    /* The open pane host claims its width from the full-bleed frame;
-       the middle column's margin-right consumes this variable. */
-    --pear-right-pane-width: var(--pear-right-area-width);
-
-    #pear-right-area {
-        position: fixed;
-        top: 0;
-        right: 0;
-        z-index: 100;
-        display: flex;
-        flex-direction: column;
-        box-sizing: border-box;
-        width: var(--pear-right-area-width);
-        height: 100%;
-        min-height: var(--full-height-dynamic-viewport);
-        padding-top: calc(
-            var(--navbar-fixed-height) + var(--header-padding-bottom)
-        );
-        border-left: 1px solid var(--color-border-sidebar);
-        background-color: var(--color-background);
-    }
-}
-
-.pear-pane {
-    display: flex;
-    flex: 1;
-    flex-direction: column;
-    min-height: 0;
-}
-
-.pear-pane-header {
-    display: flex;
-    flex: none;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.5em;
-    padding: 0.5em 0.75em;
-    border-bottom: 1px solid var(--color-border-sidebar);
-}
-
-.pear-pane-title {
-    overflow: hidden;
-    color: var(--color-text-default);
-    font-weight: 700;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.pear-pane-body {
-    flex: 1;
-    min-height: 0;
-    overflow-y: auto;
-}
-
 #pear-panel {
-    /* 8px 10px 10px at the panel's 12px font */
-    padding: 0.667em 0.833em 0.833em;
-    color: var(--color-text-default);
+    border-top: 1px solid var(--color-border-sidebar-subheader);
+    padding: 8px var(--right-sidebar-padding-left) 10px;
+    color: var(--color-text-sidebar-row);
     font-size: 12px;
-    /* The panel renders as a pane on the app canvas now, not on the
-       dark sidebar rail; re-point the rail-scoped sidebar text tokens
-       used throughout the panel at pane values. The global
-       --color-text-item and --color-pear-status-* tokens already
-       carry pane-appropriate light-dark pairs. */
-    --color-text-sidebar-row: var(--color-text-default);
-    --color-text-sidebar-heading: var(--color-text-default);
 }
 
 .pear-panel-inner {
@@ -82,7 +12,9 @@ body.pear-right-area-open {
 }
 
 .pear-panel-header,
-.pear-panel-actions {
+.pear-workspace-row,
+.pear-panel-actions,
+.pear-context-line {
     display: flex;
     align-items: center;
 }
@@ -97,6 +29,7 @@ body.pear-right-area-open {
 }
 
 .pear-panel-actions {
+    width: 104px;
     flex: none;
     justify-content: flex-end;
     gap: 3px;
@@ -104,7 +37,8 @@ body.pear-right-area-open {
 
 .pear-panel-title,
 .pear-context-section-title,
-.pear-field-label {
+.pear-field-label,
+.pear-context-label {
     color: var(--color-text-sidebar-heading);
     font-weight: var(--font-weight-sidebar-heading);
     opacity: var(--opacity-sidebar-heading);
@@ -118,73 +52,94 @@ body.pear-right-area-open {
     font-size: 14px;
 }
 
+.pear-runtime-section {
+    gap: 7px;
+}
+
+.pear-runtime-row {
+    display: grid;
+    grid-template-columns: 52px minmax(0, 1fr);
+    align-items: center;
+    gap: 7px;
+}
+
+.pear-topic-model-select {
+    min-width: 0;
+    width: 100%;
+    height: 24px;
+    border: 1px solid var(--color-border-legacy-input);
+    border-radius: 4px;
+    background: var(--color-background-input);
+    color: var(--color-text-input);
+    padding: 2px 6px;
+    font: inherit;
+    font-size: 12px;
+    line-height: 18px;
+}
+
+.pear-topic-model-select:focus,
+.pear-reasoning-effort-slider:focus,
 .pear-side-request:focus {
     border-color: var(--color-border-legacy-input-focus);
+    outline: none;
 }
 
-.pear-side-request:focus-visible {
-    outline: 2px solid var(--color-outline-focus);
-    outline-offset: 1px;
+.pear-effort-row {
+    grid-template-columns: 1fr;
+    gap: 4px;
 }
 
-/* Run status as a Slack pill: low-alpha wash of the status color
-   behind solid status-color text. */
+.pear-effort-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.pear-effort-value {
+    color: var(--color-text-sidebar-row);
+    font-size: 11px;
+    font-weight: 600;
+}
+
+.pear-reasoning-effort-slider {
+    width: 100%;
+    min-width: 0;
+    height: 14px;
+    margin: 0;
+    accent-color: var(--color-background-selected);
+}
+
+.pear-effort-ticks {
+    display: flex;
+    justify-content: space-between;
+    gap: 6px;
+    color: var(--color-text-item);
+    font-size: 10px;
+    line-height: 12px;
+}
+
+.pear-effort-ticks span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.pear-effort-ticks .selected {
+    color: var(--color-text-sidebar-row);
+    font-weight: 600;
+}
+
 .pear-run-status-row {
-    --pear-status-color: var(--color-pear-status-idle);
     display: flex;
     align-items: center;
     min-width: 0;
     gap: 5px;
-    /* 2.5px 7.5px at the 10px status font */
-    padding: 0.25em 0.75em;
-    border-radius: 12px;
-    background-color: color-mix(
-        in srgb,
-        var(--pear-status-color) 14%,
-        transparent
-    );
-    color: var(--pear-status-color);
+    color: var(--color-text-item);
     font-size: 10px;
     font-weight: 600;
     line-height: 12px;
-}
-
-.pear-run-status-active {
-    --pear-status-color: var(--color-pear-status-active);
-}
-
-.pear-run-status-blocked {
-    --pear-status-color: var(--color-pear-status-blocked);
-}
-
-/* Terminal-state flash: the pill blinks green on done / red on
-   failed as a run resolves. The panel applies these classes on the
-   status transition (store wiring lands with the P3b slice). */
-.pear-run-status-flash-done {
-    --pear-status-color: var(--color-pear-status-active);
-}
-
-.pear-run-status-flash-failed {
-    --pear-status-color: var(--color-pear-status-blocked);
-}
-
-.pear-run-status-flash-done,
-.pear-run-status-flash-failed {
-    animation: pear-status-flash 900ms ease-out;
-
-    @media (prefers-reduced-motion: reduce) {
-        animation: none;
-    }
-}
-
-@keyframes pear-status-flash {
-    from {
-        background-color: color-mix(
-            in srgb,
-            var(--pear-status-color) 45%,
-            transparent
-        );
-    }
 }
 
 .pear-run-status-dot {
@@ -192,22 +147,15 @@ body.pear-right-area-open {
     width: 6px;
     height: 6px;
     border-radius: 50%;
-    background: var(--pear-status-color);
+    background: var(--color-text-item);
 }
 
-/* A live run breathes. */
 .pear-run-status-active .pear-run-status-dot {
-    animation: pear-status-pulse 1.6s ease-in-out infinite;
-
-    @media (prefers-reduced-motion: reduce) {
-        animation: none;
-    }
+    background: hsl(142deg 55% 52%);
 }
 
-@keyframes pear-status-pulse {
-    50% {
-        opacity: 0.4;
-    }
+.pear-run-status-blocked .pear-run-status-dot {
+    background: hsl(5deg 65% 55%);
 }
 
 .pear-run-status-text {
@@ -231,138 +179,200 @@ body.pear-right-area-open {
 
 .pear-context-section-title {
     font-size: 11px;
+    text-transform: uppercase;
 }
 
-/* One status+verbs row per run (no single-run pick), so multi-run
-   topics never hide a live run: the status pill grows, the verbs sit
-   at the trailing edge. */
-.pear-run-list {
-    display: flex;
-    flex-direction: column;
-    /* 6px at the panel's 12px font */
-    gap: 0.5em;
-}
-
-.pear-run-row {
-    display: flex;
-    align-items: center;
+.pear-context-line {
     min-width: 0;
-    /* 6px at the panel's 12px font */
-    gap: 0.5em;
+    gap: 7px;
+    line-height: 15px;
 }
 
-.pear-run-row .pear-run-status-row {
-    flex: 1;
-}
-
-.pear-run-session-kind {
+.pear-context-label {
     flex: none;
-    font-weight: 500;
-    opacity: 0.8;
+    min-width: 32px;
+    font-size: 11px;
 }
 
-/* The git DELTA row (R3): only what the authoritative chat header
-   can't say — dirty/clean + changed count, ahead/behind, detached
-   HEAD, and the branch≠topic edge case — as small token-styled
-   pills, never a restated repo/branch name. */
-.pear-git-delta-row {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    /* 5px at the panel's 12px font */
-    gap: 0.417em;
-}
-
-.pear-git-delta-pill,
-.pear-git-delta-chip {
-    --pear-git-color: var(--color-pear-status-idle);
-    display: inline-flex;
-    align-items: center;
+.pear-context-value {
     min-width: 0;
-    /* Match the run status pill: 10px type on a low-alpha wash. */
-    font-size: 10px;
-    font-weight: 600;
-    line-height: 1.2;
-    /* 5px / 2.5px 7.5px / 12px at the pill's 10px font */
-    gap: 0.5em;
-    padding: 0.25em 0.75em;
-    border-radius: 1.2em;
-    background-color: color-mix(
-        in srgb,
-        var(--pear-git-color) 14%,
-        transparent
-    );
-    color: var(--pear-git-color);
-}
-
-.pear-git-dirty .pear-git-delta-pill {
-    --pear-git-color: var(--color-pear-status-attention);
-}
-
-.pear-git-chip-detached {
-    --pear-git-color: var(--color-pear-status-attention);
-}
-
-.pear-git-chip-mismatch {
-    --pear-git-color: var(--color-pear-status-blocked);
-}
-
-.pear-git-delta-head {
     overflow: hidden;
-    font-family: monospace;
-    font-weight: 400;
+    color: var(--color-text-sidebar-row);
     text-overflow: ellipsis;
     white-space: nowrap;
 }
 
-.pear-git-tree-target:focus-visible {
-    outline: 2px solid var(--color-outline-focus);
-    outline-offset: 1px;
+.pear-workspace-summary {
+    min-width: 0;
+    padding: 1px 0;
 }
 
-/* Commit-tree hover popover (pear_git_hover.ts): a git log --graph
-   snapshot inside a light-border tippy box. */
-.pear-git-tree-popover {
-    /* Wide enough for graph rails + subject lines; long lines
-       scroll rather than wrap. */
-    max-width: 36em;
-    max-height: 24em;
-    overflow: auto;
-    /* 2.5px at the popover's 11px font */
-    padding: 0.227em 0;
-    color: var(--color-text-default);
+.pear-workspace-row {
+    min-width: 0;
+    gap: 6px;
+}
+
+.pear-workspace-ref {
+    overflow: hidden;
+    margin-left: 39px;
+    color: var(--color-text-item);
+    font-family: monospace;
     font-size: 11px;
-    line-height: 1.4;
+    line-height: 14px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
-.pear-git-tree-popover pre {
-    margin: 0;
-    padding: 0;
-    border: none;
-    border-radius: 0;
-    background: transparent;
-    color: inherit;
-    font-size: inherit;
-    line-height: inherit;
-    white-space: pre;
+.pear-git-dot {
+    width: 6px;
+    height: 6px;
+    flex: none;
+    border-radius: 50%;
 }
 
-.pear-git-tree-graph,
-.pear-git-tree-status {
+.pear-git-clean .pear-git-dot {
+    background: light-dark(hsl(142deg 45% 38%), hsl(142deg 60% 72%));
+}
+
+.pear-git-dirty .pear-git-dot {
+    background: light-dark(hsl(36deg 70% 42%), hsl(38deg 88% 72%));
+}
+
+.pear-workspace-name {
+    min-width: 0;
+    overflow: hidden;
+    color: var(--color-text-sidebar-row);
+    font-weight: 600;
+    line-height: 16px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.pear-git-ref,
+.pear-git-head,
+.pear-git-status {
+    flex: none;
+    font-size: 11px;
+    line-height: 14px;
+}
+
+.pear-git-ref {
+    min-width: 0;
+    overflow: hidden;
+    color: var(--color-text-item);
+    font-weight: 600;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.pear-git-head {
+    color: var(--color-text-item);
     font-family: monospace;
 }
 
-.pear-git-tree-status {
-    /* 5px at the popover's 11px font */
-    margin-top: 0.455em;
-    padding-top: 0.455em;
-    border-top: 1px solid var(--color-border-popover-menu-separator);
+.pear-git-status {
+    margin-left: auto;
+    font-weight: 600;
 }
 
-.pear-git-tree-note {
+.pear-git-clean .pear-git-status {
+    color: light-dark(hsl(142deg 45% 30%), hsl(142deg 63% 76%));
+}
+
+.pear-git-dirty .pear-git-status {
+    color: light-dark(hsl(31deg 46% 28%), hsl(37deg 88% 80%));
+}
+
+.pear-workdir {
+    overflow: hidden;
     color: var(--color-text-item);
+    font-family: monospace;
+    font-size: 11px;
+    line-height: 15px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
+.pear-worktree-details {
+    min-width: 0;
+    color: var(--color-text-item);
+    font-size: 11px;
+    line-height: 15px;
+}
+
+.pear-worktree-details > summary {
+    cursor: pointer;
+    list-style-position: outside;
+    margin-left: 12px;
+    padding: 1px 0;
+    color: var(--color-text-sidebar-heading);
+    font-weight: var(--font-weight-sidebar-heading);
+    opacity: var(--opacity-sidebar-heading);
+}
+
+.pear-worktree-summary-extra {
+    color: var(--color-text-item);
+    font-family: monospace;
+    font-size: 10px;
+    font-weight: 400;
+    margin-left: 5px;
+}
+
+.pear-worktree-details > .pear-workdir,
+.pear-worktree-details > .pear-commit-list {
+    margin-top: 4px;
+}
+
+.pear-worktree-unavailable {
+    margin-left: 0;
+}
+
+.pear-file-list,
+.pear-commit-list {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.pear-file-row,
+.pear-commit-row {
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr);
+    gap: 6px;
+    min-width: 0;
+    line-height: 15px;
+}
+
+.pear-file-status,
+.pear-commit-hash {
+    font-family: monospace;
+    font-size: 11px;
+}
+
+.pear-file-path,
+.pear-commit-summary {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.pear-file-added .pear-file-status,
+.pear-file-untracked .pear-file-status {
+    color: light-dark(hsl(142deg 50% 32%), hsl(142deg 58% 72%));
+}
+
+.pear-file-deleted .pear-file-status {
+    color: light-dark(hsl(3deg 58% 42%), hsl(3deg 75% 75%));
+}
+
+.pear-file-modified .pear-file-status,
+.pear-file-renamed .pear-file-status,
+.pear-file-changed .pear-file-status {
+    color: light-dark(hsl(38deg 60% 34%), hsl(38deg 78% 76%));
+}
+
+.pear-diff-shortstat,
+.pear-file-more,
 .pear-empty-state,
 .pear-panel-error {
     color: var(--color-text-item);
@@ -380,62 +390,23 @@ body.pear-right-area-open {
     gap: 3px;
 }
 
-/* "Pear is working…" typing-dots liveness signal, shown in
-   #typing_notifications while a run is streaming. Markup contract
-   (the server-side typing emit is a separate slice):
-
-   <li class="typing_notification pear-typing-notification">
-       <span class="pear-typing-dots" aria-hidden="true">
-           <span></span><span></span><span></span>
-       </span>
-       {{t "Pear is working…" }}
-   </li>
-*/
-.pear-typing-notification {
-    display: flex;
-    align-items: center;
-    gap: 0.4em;
-}
-
-.pear-typing-dots {
-    display: inline-flex;
-    align-items: center;
-    gap: 3px;
-}
-
-.pear-typing-dots span {
-    width: 4px;
-    height: 4px;
+.pear-run-dot {
+    width: 7px;
+    height: 7px;
+    flex: none;
     border-radius: 50%;
-    background: currentcolor;
-    animation: pear-typing-dot 1.2s ease-in-out infinite;
-
-    @media (prefers-reduced-motion: reduce) {
-        animation: none;
-        opacity: 0.6;
-    }
 }
 
-.pear-typing-dots span:nth-child(2) {
-    animation-delay: 0.16s;
+.pear-status-active {
+    background: light-dark(hsl(148deg 45% 36%), hsl(148deg 58% 76%));
 }
 
-.pear-typing-dots span:nth-child(3) {
-    animation-delay: 0.32s;
+.pear-status-blocked {
+    background: light-dark(hsl(6deg 54% 45%), hsl(7deg 100% 78%));
 }
 
-@keyframes pear-typing-dot {
-    0%,
-    60%,
-    100% {
-        opacity: 0.35;
-        transform: translateY(0);
-    }
-
-    30% {
-        opacity: 1;
-        transform: translateY(-1px);
-    }
+.pear-status-idle {
+    background: light-dark(hsl(229deg 9% 48%), hsl(229deg 10% 78%));
 }
 
 .pear-side {
@@ -468,170 +439,4 @@ body.pear-right-area-open {
 
 .pear-side-start:disabled {
     opacity: 0.5;
-}
-
-/* The Slack-style icon rail: a fixed 64px nav owning the left edge
-   of the full-bleed frame, prepended to .app-main by
-   pear_icon_rail.ts. Painted a step darker than the channel sidebar
-   in both themes; its buttons rebind existing surfaces only (home
-   view, DM/mentions/drafts narrows, the other-views and add-streams
-   popovers, the theme setting, and the relocated personal menu). */
-#pear-icon-rail {
-    position: fixed;
-    top: 0;
-    left: 0;
-    z-index: 101;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    box-sizing: border-box;
-    width: var(--pear-left-rail-width);
-    height: 100%;
-    min-height: var(--full-height-dynamic-viewport);
-    padding: 10px 0 14px;
-    gap: 6px;
-    background-color: var(--color-background-icon-rail);
-
-    .pear-rail-bottom {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        gap: 6px;
-        margin-top: auto;
-    }
-
-    .pear-rail-button {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        box-sizing: border-box;
-        width: 36px;
-        height: 36px;
-        margin: 0;
-        padding: 0;
-        border: none;
-        border-radius: 8px;
-        background: none;
-        color: hsl(0deg 0% 100% / 78%);
-        cursor: pointer;
-
-        .zulip-icon {
-            font-size: 20px;
-            color: inherit;
-        }
-
-        &:hover,
-        &:focus {
-            color: hsl(0deg 0% 100%);
-            text-decoration: none;
-        }
-
-        &:hover {
-            background-color: hsl(0deg 0% 100% / 12%);
-        }
-
-        &:focus-visible {
-            outline: 2px solid var(--color-outline-focus);
-            outline-offset: -2px;
-        }
-
-        /* Slack's selected rail state: white/22% radius-8 square. */
-        &.selected {
-            background-color: hsl(0deg 0% 100% / 22%);
-            color: hsl(0deg 0% 100%);
-        }
-    }
-
-    .pear-rail-workspace {
-        margin-bottom: 2px;
-
-        .pear-rail-workspace-icon {
-            width: 32px;
-            height: 32px;
-            border-radius: 8px;
-            object-fit: cover;
-        }
-    }
-
-    /* The relocated add-streams button; its popover is delegated on
-       #add_streams_button, so it works unchanged from the rail. */
-    #add_streams_button {
-        color: hsl(0deg 0% 100% / 78%);
-
-        &:hover {
-            color: hsl(0deg 0% 100%);
-            background-color: hsl(0deg 0% 100% / 12%);
-        }
-    }
-
-    /* The theme toggle advertises the theme a click switches to:
-       moon while light, sun while dark (matching the effective
-       scheme when the preference is automatic). */
-    .pear-rail-theme-toggle .zulip-icon-sun {
-        display: none;
-    }
-
-    /* The relocated personal menu keeps its navbar markup (the
-       popover and avatar live-update bind to it); restyle its
-       header-button geometry for the rail. */
-    #personal-menu .header-button {
-        width: 36px;
-        height: 36px;
-        border-radius: 8px;
-
-        &:hover {
-            background-color: hsl(0deg 0% 100% / 12%);
-        }
-
-        &:focus-visible {
-            background-color: hsl(0deg 0% 100% / 22%);
-        }
-
-        .header-button-avatar {
-            width: 1.625em; /* 26px at 16px em */
-            height: 1.625em; /* 26px at 16px em */
-            border-radius: 6px;
-        }
-    }
-
-    .navbar-item.active-navbar-menu .header-button {
-        background-color: hsl(0deg 0% 100% / 22%);
-    }
-}
-
-:root.dark-theme #pear-icon-rail .pear-rail-theme-toggle {
-    .zulip-icon-moon {
-        display: none;
-    }
-
-    .zulip-icon-sun {
-        display: block;
-    }
-}
-
-@media (prefers-color-scheme: dark) {
-    :root.color-scheme-automatic #pear-icon-rail .pear-rail-theme-toggle {
-        .zulip-icon-moon {
-            display: none;
-        }
-
-        .zulip-icon-sun {
-            display: block;
-        }
-    }
-}
-
-/* The rail collapses with the frame below the left column's
-   auto-collapse point; zulip.css zeroes --pear-left-rail-width and
-   --pear-frame-inset at the same thresholds. */
-@media (width < $md_min) {
-    #pear-icon-rail {
-        display: none;
-    }
-}
-
-@container app (width < $cq_md_min) {
-    #pear-icon-rail {
-        display: none;
-    }
 }

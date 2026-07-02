@@ -14,8 +14,6 @@ from zerver.lib.pear import (
     PEAR_ACTIVE_THINKING_MARKDOWN,
     PEAR_AGENT_MENTION,
     PEAR_AGENT_RUNTIME_PACKAGES,
-    PEAR_AGENT_SKILL_DEFINITIONS,
-    PEAR_AGENT_SKILLS,
     PEAR_APPLY_PLAN_PROMPT,
     PEAR_BOT_SHORT_NAME,
     PEAR_CATCH_UP_PROMPT,
@@ -24,8 +22,6 @@ from zerver.lib.pear import (
     PEAR_CONFIG_ENDPOINT,
     PEAR_DEFAULT_STREAM,
     PEAR_DEFAULT_TOPIC,
-    PEAR_DISABLE_ROUTINE_PROMPT,
-    PEAR_DONE_PROMPT,
     PEAR_DRAFT_ARTIFACT_PROMPT,
     PEAR_EMBEDDED_BOT_SERVICE,
     PEAR_EXPLICIT_MENTION_MESSAGE_KEY,
@@ -33,20 +29,13 @@ from zerver.lib.pear import (
     PEAR_FIX_BUG_PROMPT,
     PEAR_FOLLOWUP_TRIGGER,
     PEAR_HANDOFF_PROMPT,
-    PEAR_MEMORY_FORGET_PROMPT,
-    PEAR_MEMORY_PROMPT,
-    PEAR_MEMORY_STATUS_PROMPT,
     PEAR_OFFICIAL_AGENT_RUNTIME,
     PEAR_OFFICIAL_AGENT_RUNTIME_LABEL,
     PEAR_OFFICIAL_CODEX_SDK_PACKAGES,
     PEAR_PAUSE_PROMPT,
     PEAR_PLAN_PROMPT,
-    PEAR_RESPONSE_POLICY_PROMPT,
     PEAR_RESUME_PROMPT,
     PEAR_REVIEW_PROMPT,
-    PEAR_ROUTINE_CADENCE_PROMPT,
-    PEAR_ROUTINE_STATUS_PROMPT,
-    PEAR_RUN_ROUTINE_PROMPT,
     PEAR_RUNS_ENDPOINT,
     PEAR_SAVE_WORK_PROMPT,
     PEAR_SERVER_CONTRACT_VERSION,
@@ -61,7 +50,6 @@ from zerver.lib.pear import (
     PEAR_TOPIC_STATE_TOOL_NAMES,
     PEAR_TOPIC_STATE_TOOLS,
     PEAR_TRIGGER_MESSAGE_KEY,
-    PEAR_UPDATE_ROUTINE_PROMPT,
     PEAR_VERIFY_CHANGES_PROMPT,
     PEAR_WORKER_RUNS_STORAGE_KEY,
     PearEmbeddedBotHandler,
@@ -76,41 +64,22 @@ from zerver.lib.pear import (
     build_pear_checklist_lines,
     build_pear_checkpoint_message,
     build_pear_config_payload,
-    build_pear_disable_routine_ack_message,
-    build_pear_disable_routine_message,
-    build_pear_done_ack_message,
-    build_pear_done_message,
     build_pear_draft_artifact_message,
     build_pear_find_answer_message,
     build_pear_fix_bug_message,
     build_pear_handoff_message,
-    build_pear_memory_ack_message,
-    build_pear_memory_forget_ack_message,
-    build_pear_memory_forget_message,
-    build_pear_memory_message,
-    build_pear_memory_status_ack_message,
-    build_pear_memory_status_message,
     build_pear_pause_ack_message,
     build_pear_pause_message,
     build_pear_plan_message,
-    build_pear_response_policy_ack_message,
-    build_pear_response_policy_message,
     build_pear_resume_ack_message,
     build_pear_resume_message,
     build_pear_review_message,
-    build_pear_routine_cadence_ack_message,
-    build_pear_routine_cadence_message,
-    build_pear_routine_status_ack_message,
-    build_pear_routine_status_message,
-    build_pear_run_routine_ack_message,
     build_pear_save_work_message,
     build_pear_seed_message,
     build_pear_status_check_message,
     build_pear_steer_message,
     build_pear_steering_ack_message,
     build_pear_triage_message,
-    build_pear_update_routine_ack_message,
-    build_pear_update_routine_message,
     build_pear_verify_changes_message,
     build_pear_worker_completed_message,
     build_pear_worker_completed_message_chunks,
@@ -119,35 +88,15 @@ from zerver.lib.pear import (
     get_pear_session_defaults,
     get_pear_session_payload,
     is_pear_access_request_message,
-    is_pear_disable_routine_request_message,
-    is_pear_done_template_message,
-    is_pear_memory_forget_request_message,
-    is_pear_memory_status_request_message,
-    is_pear_memory_template_message,
     is_pear_request_message,
-    is_pear_response_policy_request_message,
-    is_pear_response_policy_template_message,
-    is_pear_routine_cadence_template_message,
-    is_pear_routine_status_request_message,
-    is_pear_run_routine_request_message,
     is_pear_thread_request_message,
-    is_pear_update_routine_request_message,
     load_pear_worker_run_records,
     normalize_pear_response_policy,
     parse_pear_artifacts,
     parse_pear_checklist,
-    parse_pear_disable_routine_instruction,
-    parse_pear_done_instruction,
     parse_pear_interruption_event,
-    parse_pear_memory_forget_instruction,
-    parse_pear_memory_instruction,
-    parse_pear_response_policy_instruction,
-    parse_pear_routine_cadence_instruction,
     parse_pear_steering_event,
-    parse_pear_update_routine_instruction,
     pear_normalize_token_usage,
-    pear_memory_request_value,
-    pear_response_policy_request_value,
     pear_session_record_kind,
     pear_session_record_url,
     pear_worker_already_started,
@@ -171,7 +120,6 @@ from zerver.lib.pear_agent import (
     build_pear_codex_developer_instructions,
     build_pear_codex_prompt,
     build_pear_codex_turn_prompt,
-    build_pear_topic_state_agent_tools,
     ensure_pear_runtime_result,
     merge_pear_tool_results,
     parse_pear_addressing_router_output,
@@ -180,7 +128,6 @@ from zerver.lib.pear_agent import (
     pear_codex_thread_id_from_agents_objects,
     pear_tool_results_from_codex_jsonl,
     pear_tool_results_from_text,
-    pear_topic_state_tool_name,
 )
 from zerver.lib.pear_worker import (
     PEAR_WORKER_QUEUE_NAME,
@@ -230,22 +177,6 @@ class PearSessionDefaultsTest(TestCase):
         self.assertEqual(PEAR_DRAFT_ARTIFACT_PROMPT, "Draft artifact:")
         self.assertEqual(PEAR_HANDOFF_PROMPT, "Handoff summary:")
         self.assertEqual(PEAR_ACCESS_PROMPT, "What can you access from this topic?")
-        self.assertEqual(PEAR_MEMORY_PROMPT, "Remember:")
-        self.assertEqual(
-            PEAR_MEMORY_STATUS_PROMPT,
-            "What do you remember about this topic?",
-        )
-        self.assertEqual(PEAR_MEMORY_FORGET_PROMPT, "Forget memory:")
-        self.assertEqual(PEAR_DONE_PROMPT, "Definition of done:")
-        self.assertEqual(PEAR_RESPONSE_POLICY_PROMPT, "Response policy:")
-        self.assertEqual(PEAR_ROUTINE_CADENCE_PROMPT, "Routine cadence:")
-        self.assertEqual(
-            PEAR_ROUTINE_STATUS_PROMPT,
-            "What routines do you have set up in this topic?",
-        )
-        self.assertEqual(PEAR_RUN_ROUTINE_PROMPT, "Run routine:")
-        self.assertEqual(PEAR_DISABLE_ROUTINE_PROMPT, "Disable routine:")
-        self.assertEqual(PEAR_UPDATE_ROUTINE_PROMPT, "Update routine:")
         self.assertEqual(PEAR_PAUSE_PROMPT, "Pause session:")
         self.assertEqual(PEAR_RESUME_PROMPT, "Resume session:")
 
@@ -437,58 +368,6 @@ class PearSessionDefaultsTest(TestCase):
             "@**Pear** What can you access from this topic?",
         )
 
-    def test_build_memory_message(self) -> None:
-        memory_message = build_pear_memory_message("Prefer small focused PRs")
-
-        self.assertEqual(
-            memory_message,
-            "@**Pear** Remember:\n\nMemory: Prefer small focused PRs",
-        )
-        self.assertEqual(build_pear_memory_message(), "@**Pear** Remember:\n\nMemory: ")
-
-    def test_build_memory_status_message(self) -> None:
-        self.assertEqual(
-            build_pear_memory_status_message(),
-            "@**Pear** What do you remember about this topic?",
-        )
-
-    def test_build_memory_forget_message(self) -> None:
-        self.assertEqual(
-            build_pear_memory_forget_message("Prefer small focused PRs"),
-            "@**Pear** Forget memory:\n\nMemory forgotten: Prefer small focused PRs",
-        )
-        self.assertEqual(
-            build_pear_memory_forget_message(),
-            "@**Pear** Forget memory:\n\nMemory forgotten: ",
-        )
-
-    def test_build_done_message(self) -> None:
-        self.assertEqual(
-            build_pear_done_message("All tests and a draft PR are posted"),
-            "@**Pear** Definition of done:\n\nDone: All tests and a draft PR are posted",
-        )
-        self.assertEqual(build_pear_done_message(), "@**Pear** Definition of done:\n\nDone: ")
-
-    def test_build_response_policy_message(self) -> None:
-        self.assertEqual(
-            build_pear_response_policy_message(),
-            "@**Pear** Response policy:\n\nAmbient: mentions only",
-        )
-        self.assertEqual(
-            build_pear_response_policy_message("on"),
-            "@**Pear** Response policy:\n\nAmbient: on",
-        )
-
-    def test_build_routine_cadence_message(self) -> None:
-        self.assertEqual(
-            build_pear_routine_cadence_message(),
-            "@**Pear** Routine cadence:\n\nRoutine cadence: manual",
-        )
-        self.assertEqual(
-            build_pear_routine_cadence_message("every 30 minutes"),
-            "@**Pear** Routine cadence:\n\nRoutine cadence: every 30 minutes",
-        )
-
     def test_build_access_ack_message(self) -> None:
         active_session = build_pear_active_session_summary_from_messages(
             pear_session=get_pear_session_payload(
@@ -500,16 +379,11 @@ class PearSessionDefaultsTest(TestCase):
             messages=[
                 (10, "@Pear fix the checkout test", False),
                 (11, "Verification: pytest zerver/tests/test_pear.py", True),
-                (
-                    12,
-                    "Routine: Watch PR status for https://github.com/example/pear/pull/7",
-                    True,
-                ),
-                (13, "Memory: Prefer small focused PRs", False),
-                (14, "Done: Tests pass and draft PR is posted", False),
-                (15, "Ambient: mentions only", False),
-                (16, "Routine cadence: manual", False),
+                (12, "PR: https://github.com/example/pear/pull/7", True),
+                (13, "Doc: CANVAS.md", False),
+                (14, "Reviewers: @qa", False),
             ],
+            response_policy="ambient",
         )
 
         access_ack = build_pear_access_ack_message(active_session)
@@ -519,19 +393,8 @@ class PearSessionDefaultsTest(TestCase):
         self.assertIn("configured Codex runtime", access_ack)
         self.assertIn("zulip-terminal can act on posted artifacts", access_ack)
         self.assertIn("Worker state: ready", access_ack)
-        self.assertIn("Artifacts seen: 6", access_ack)
-        self.assertIn("Routines seen: 1", access_ack)
-        self.assertIn("Routine cadence records seen: 1", access_ack)
-        self.assertIn("Latest routine cadence: manual", access_ack)
-        self.assertIn("Memories seen: 1", access_ack)
-        self.assertIn("Latest memory: Prefer small focused PRs", access_ack)
-        self.assertIn("Done criteria seen: 1", access_ack)
-        self.assertIn("Latest done criteria: Tests pass and draft PR is posted", access_ack)
-        self.assertIn("Response policy: mentions_only", access_ack)
-        self.assertIn(
-            "Latest routine: Watch PR status for https://github.com/example/pear/pull/7",
-            access_ack,
-        )
+        self.assertIn("Artifacts seen: 4", access_ack)
+        self.assertIn("Response policy: ambient", access_ack)
         self.assertIn("pytest zerver/tests/test_pear.py", access_ack)
 
     def test_build_steer_message_with_empty_instruction(self) -> None:
@@ -574,144 +437,12 @@ class PearSessionDefaultsTest(TestCase):
         steering_ack = build_pear_steering_ack_message("keep the fix minimal")
         pause_ack = build_pear_pause_ack_message("waiting for CI")
         resume_ack = build_pear_resume_ack_message("continue with rollout")
-        memory_ack = build_pear_memory_ack_message("Prefer small focused PRs")
-        memory_forget_ack = build_pear_memory_forget_ack_message(
-            "Prefer small focused PRs"
-        )
-        done_ack = build_pear_done_ack_message("Tests pass and draft PR is posted")
-        response_policy_ack = build_pear_response_policy_ack_message("mentions only")
-        routine_cadence_ack = build_pear_routine_cadence_ack_message("manual")
 
         self.assertEqual(steering_ack, "Steering queued.")
         self.assertIn("Paused.", pause_ack)
         self.assertIn("Reason: waiting for CI", pause_ack)
         self.assertIn("Resuming.", resume_ack)
         self.assertIn("Request: continue with rollout", resume_ack)
-        self.assertIn("Saved.", memory_ack)
-        self.assertIn("Memory: Prefer small focused PRs", memory_ack)
-        self.assertIn("forgotten", memory_forget_ack)
-        self.assertIn("Memory forgotten: Prefer small focused PRs", memory_forget_ack)
-        self.assertIn("definition of done", done_ack)
-        self.assertIn("Done: Tests pass and draft PR is posted", done_ack)
-        self.assertIn("only start follow-up worker turns", response_policy_ack)
-        self.assertIn("Ambient: mentions only", response_policy_ack)
-        self.assertIn("routine cadence", routine_cadence_ack)
-        self.assertIn("Routine cadence: manual", routine_cadence_ack)
-
-    def test_build_run_routine_ack_message(self) -> None:
-        payload = get_pear_session_payload()
-        active_session = build_pear_active_session_summary_from_messages(
-            pear_session=payload,
-            source="server",
-            stream_exists=True,
-            messages=[
-                (10, "@Pear fix the checkout test", False),
-                (11, "- [~] State the first concrete edit before changing files.", True),
-                (12, "Routine: Watch PR status for pear/runtime", False),
-                (13, "Routine cadence: manual", False),
-            ],
-        )
-
-        ack = build_pear_run_routine_ack_message(active_session)
-
-        self.assertIn("Running the latest Pear routine", ack)
-        self.assertIn("Routine: Watch PR status for pear/runtime", ack)
-        self.assertIn("Routine cadence: manual", ack)
-        self.assertIn("topic context is unavailable", build_pear_run_routine_ack_message())
-
-    def test_build_routine_status_ack_message(self) -> None:
-        payload = get_pear_session_payload()
-        active_session = build_pear_active_session_summary_from_messages(
-            pear_session=payload,
-            source="server",
-            stream_exists=True,
-            messages=[
-                (10, "@Pear fix the checkout test", False),
-                (11, "- [~] State the first concrete edit before changing files.", True),
-                (12, "Routine: Watch PR status for pear/runtime", False),
-                (13, "Routine: Refresh mergeability after review", False),
-                (14, "Routine cadence: every 30 minutes", False),
-            ],
-        )
-
-        ack = build_pear_routine_status_ack_message(active_session)
-
-        self.assertIn("Pear routines recorded", ack)
-        self.assertIn("- Watch PR status for pear/runtime", ack)
-        self.assertIn("- Refresh mergeability after review", ack)
-        self.assertIn("Latest routine cadence: every 30 minutes", ack)
-        self.assertIn(
-            "topic context is unavailable",
-            build_pear_routine_status_ack_message(),
-        )
-        self.assertIn(
-            "do not see any Pear routines",
-            build_pear_routine_status_ack_message(
-                build_pear_active_session_summary_from_messages(
-                    pear_session=payload,
-                    source="server",
-                    stream_exists=True,
-                    messages=[],
-                )
-            ),
-        )
-
-    def test_build_disable_routine_ack_message(self) -> None:
-        payload = get_pear_session_payload()
-        active_session = build_pear_active_session_summary_from_messages(
-            pear_session=payload,
-            source="server",
-            stream_exists=True,
-            messages=[
-                (10, "@Pear fix the checkout test", False),
-                (11, "- [~] State the first concrete edit before changing files.", True),
-                (12, "Routine: Watch PR status for pear/runtime", False),
-            ],
-        )
-
-        ack = build_pear_disable_routine_ack_message("", active_session)
-
-        self.assertIn("Routine disabled: Watch PR status for pear/runtime", ack)
-        self.assertIn(
-            "Routine disabled: Refresh mergeability",
-            build_pear_disable_routine_ack_message("Refresh mergeability"),
-        )
-        self.assertIn(
-            "do not know which Pear routine to disable",
-            build_pear_disable_routine_ack_message(),
-        )
-
-    def test_build_update_routine_message(self) -> None:
-        self.assertEqual(
-            build_pear_update_routine_message(
-                "Watch PR status for pear/runtime",
-                "Watch PR status for pear/runtime every weekday",
-            ),
-            "@**Pear** Update routine:\n\n"
-            "Routine disabled: Watch PR status for pear/runtime\n"
-            "Routine: Watch PR status for pear/runtime every weekday",
-        )
-        self.assertEqual(
-            build_pear_update_routine_message(),
-            "@**Pear** Update routine:\n\nRoutine disabled: \nRoutine: ",
-        )
-
-    def test_build_update_routine_ack_message(self) -> None:
-        ack = build_pear_update_routine_ack_message(
-            "Watch PR status for pear/runtime",
-            "Watch PR status for pear/runtime every weekday",
-        )
-
-        self.assertIn("Updated.", ack)
-        self.assertIn("Routine disabled: Watch PR status for pear/runtime", ack)
-        self.assertIn(
-            "Routine: Watch PR status for pear/runtime every weekday",
-            ack,
-        )
-        self.assertIn(
-            "I need the updated Pear routine",
-            build_pear_update_routine_ack_message("Watch PR status for pear/runtime"),
-        )
 
     def test_session_payload(self) -> None:
         payload = get_pear_session_payload()
@@ -747,36 +478,6 @@ class PearSessionDefaultsTest(TestCase):
             build_pear_draft_artifact_message(),
         )
         self.assertEqual(payload["access_message"], build_pear_access_message())
-        self.assertEqual(payload["memory_message"], build_pear_memory_message())
-        self.assertEqual(
-            payload["memory_status_message"],
-            build_pear_memory_status_message(),
-        )
-        self.assertEqual(
-            payload["memory_forget_message"],
-            build_pear_memory_forget_message(),
-        )
-        self.assertEqual(payload["done_message"], build_pear_done_message())
-        self.assertEqual(
-            payload["response_policy_message"],
-            build_pear_response_policy_message(),
-        )
-        self.assertEqual(
-            payload["routine_cadence_message"],
-            build_pear_routine_cadence_message(),
-        )
-        self.assertEqual(
-            payload["routine_status_message"],
-            build_pear_routine_status_message(),
-        )
-        self.assertEqual(
-            payload["disable_routine_message"],
-            build_pear_disable_routine_message(),
-        )
-        self.assertEqual(
-            payload["update_routine_message"],
-            build_pear_update_routine_message(),
-        )
         self.assertEqual(payload["pause_message"], build_pear_pause_message())
         self.assertEqual(payload["resume_message"], build_pear_resume_message())
         self.assertEqual(
@@ -803,20 +504,6 @@ class PearSessionDefaultsTest(TestCase):
         self.assertEqual(
             payload["pear_topic_state_tool_names"],
             list(PEAR_TOPIC_STATE_TOOL_NAMES),
-        )
-        self.assertEqual(payload["pear_agent_skills"], list(PEAR_AGENT_SKILLS))
-        self.assertEqual(
-            payload["pear_agent_skill_definitions"],
-            [
-                {
-                    "name": skill["name"],
-                    "description": skill["description"],
-                    "applies_to": list(skill["applies_to"]),
-                    "instructions": list(skill["instructions"]),
-                    "artifact_tools": list(skill["artifact_tools"]),
-                }
-                for skill in PEAR_AGENT_SKILL_DEFINITIONS
-            ],
         )
         self.assertEqual(
             payload["server_contract_version"],
@@ -1045,6 +732,7 @@ class PearSessionDefaultsTest(TestCase):
                     "Session: Codex thread thread-123",
                     "* Verification: pytest zerver/tests/test_pear.py",
                     "Reviewers: alice, example/team-reviewers",
+                    "Screenshot: https://example.com/screenshot.png",
                     "Routine: Watch PR status for https://github.com/example/pear/pull/7",
                     "Memory: Prefer small focused PRs",
                     "Done: Tests pass and draft PR is posted",
@@ -1104,33 +792,9 @@ class PearSessionDefaultsTest(TestCase):
                     "message_id": 81,
                 },
                 {
-                    "kind": "routine",
-                    "label": "Routine",
-                    "value": "Watch PR status for https://github.com/example/pear/pull/7",
-                    "message_id": 81,
-                },
-                {
-                    "kind": "memory",
-                    "label": "Memory",
-                    "value": "Prefer small focused PRs",
-                    "message_id": 81,
-                },
-                {
-                    "kind": "done_criteria",
-                    "label": "Done",
-                    "value": "Tests pass and draft PR is posted",
-                    "message_id": 81,
-                },
-                {
-                    "kind": "response_policy",
-                    "label": "Ambient",
-                    "value": "mentions only",
-                    "message_id": 81,
-                },
-                {
-                    "kind": "routine_cadence",
-                    "label": "Routine cadence",
-                    "value": "manual",
+                    "kind": "screenshot",
+                    "label": "Screenshot",
+                    "value": "https://example.com/screenshot.png",
                     "message_id": 81,
                 },
                 {
@@ -1254,124 +918,6 @@ class PearSessionDefaultsTest(TestCase):
         self.assertFalse(is_pear_thread_request_message("@Pear What can you access?"))
         self.assertFalse(is_pear_thread_request_message("debug the flaky parser test"))
 
-    def test_is_pear_run_routine_request_message(self) -> None:
-        self.assertTrue(is_pear_run_routine_request_message("@Pear run routine"))
-        self.assertTrue(
-            is_pear_run_routine_request_message("@**Pear** Run routine:")
-        )
-        self.assertTrue(is_pear_run_routine_request_message("@Pear check routine"))
-        self.assertFalse(
-            is_pear_run_routine_request_message(
-                "@Pear Routine cadence:\n\nRoutine cadence: manual"
-            )
-        )
-        self.assertFalse(is_pear_run_routine_request_message("run routine"))
-
-    def test_is_pear_routine_status_request_message(self) -> None:
-        self.assertTrue(
-            is_pear_routine_status_request_message(
-                "@Pear what routines do you have set up in this topic?"
-            )
-        )
-        self.assertTrue(is_pear_routine_status_request_message("@Pear list routines"))
-        self.assertTrue(
-            is_pear_routine_status_request_message("@**Pear** show routines")
-        )
-        self.assertFalse(is_pear_routine_status_request_message("list routines"))
-        self.assertFalse(is_pear_routine_status_request_message("@Pear run routine"))
-
-    def test_is_pear_disable_routine_request_message(self) -> None:
-        self.assertTrue(
-            is_pear_disable_routine_request_message("@Pear Disable routine:")
-        )
-        self.assertTrue(
-            is_pear_disable_routine_request_message("@Pear disable latest routine")
-        )
-        self.assertTrue(is_pear_disable_routine_request_message("@Pear stop routine"))
-        self.assertTrue(
-            is_pear_disable_routine_request_message("@Pear turn off the latest routine")
-        )
-        self.assertFalse(is_pear_disable_routine_request_message("disable routine"))
-        self.assertFalse(is_pear_disable_routine_request_message("@Pear run routine"))
-
-    def test_is_pear_update_routine_request_message(self) -> None:
-        self.assertTrue(
-            is_pear_update_routine_request_message("@Pear Update routine:")
-        )
-        self.assertTrue(is_pear_update_routine_request_message("Update routine:"))
-        self.assertTrue(
-            is_pear_update_routine_request_message(
-                "@**Pear** Update routine:\n\nRoutine disabled: old\nRoutine: new"
-            )
-        )
-        self.assertFalse(is_pear_update_routine_request_message("@Pear change routine"))
-        self.assertFalse(is_pear_update_routine_request_message("update routine"))
-        self.assertFalse(is_pear_update_routine_request_message("@Pear run routine"))
-
-    def test_parse_pear_disable_routine_instruction(self) -> None:
-        payload = get_pear_session_payload()
-        active_session = build_pear_active_session_summary_from_messages(
-            pear_session=payload,
-            source="server",
-            stream_exists=True,
-            messages=[
-                (10, "@Pear fix the checkout test", False),
-                (11, "- [~] State the first concrete edit before changing files.", True),
-                (12, "Routine: Watch PR status for pear/runtime", False),
-            ],
-        )
-
-        self.assertEqual(
-            parse_pear_disable_routine_instruction(
-                "@Pear Disable routine:\n\nRoutine disabled: Refresh mergeability",
-                active_session,
-            ),
-            "Refresh mergeability",
-        )
-        self.assertEqual(
-            parse_pear_disable_routine_instruction(
-                "@Pear disable latest routine",
-                active_session,
-            ),
-            "Watch PR status for pear/runtime",
-        )
-
-    def test_parse_pear_update_routine_instruction(self) -> None:
-        payload = get_pear_session_payload()
-        active_session = build_pear_active_session_summary_from_messages(
-            pear_session=payload,
-            source="server",
-            stream_exists=True,
-            messages=[
-                (10, "@Pear fix the checkout test", False),
-                (11, "Routine: Watch PR status for pear/runtime", False),
-            ],
-        )
-
-        self.assertEqual(
-            parse_pear_update_routine_instruction(
-                "@Pear Update routine:\n\n"
-                "Routine disabled: Watch PR status for pear/runtime\n"
-                "Routine: Watch PR status for pear/runtime every weekday",
-                active_session,
-            ),
-            (
-                "Watch PR status for pear/runtime",
-                "Watch PR status for pear/runtime every weekday",
-            ),
-        )
-        self.assertEqual(
-            parse_pear_update_routine_instruction(
-                "@Pear Update routine:\n\nRoutine disabled: \n"
-                "Routine: Watch PR status for pear/runtime every weekday",
-                active_session,
-            ),
-            (
-                "Watch PR status for pear/runtime",
-                "Watch PR status for pear/runtime every weekday",
-            ),
-        )
-
     def test_is_pear_access_request_message(self) -> None:
         self.assertTrue(
             is_pear_access_request_message(
@@ -1380,223 +926,6 @@ class PearSessionDefaultsTest(TestCase):
         )
         self.assertTrue(is_pear_access_request_message("@Pear what can you reach?"))
         self.assertFalse(is_pear_access_request_message("@Pear fix the checkout test"))
-
-    def test_pear_memory_template_message(self) -> None:
-        content = "@**Pear** Remember:\n\nMemory: Prefer small focused PRs"
-
-        self.assertTrue(is_pear_memory_template_message(content))
-        self.assertEqual(
-            parse_pear_memory_instruction(content),
-            "Prefer small focused PRs",
-        )
-        self.assertEqual(
-            parse_pear_memory_instruction("@Pear Remember: prefer pytest first"),
-            "prefer pytest first",
-        )
-        self.assertTrue(
-            is_pear_memory_template_message(
-                "@Pear remember for this channel: only respond when someone @-mentions you directly."
-            )
-        )
-        self.assertEqual(
-            pear_memory_request_value(
-                "@Pear remember for this channel: only respond when someone @-mentions you directly."
-            ),
-            "only respond when someone @-mentions you directly.",
-        )
-        self.assertEqual(
-            pear_memory_request_value(
-                '<span class="user-mention">@Pear</span> remember for this channel: only respond when someone @-mentions you directly.'
-            ),
-            "only respond when someone @-mentions you directly.",
-        )
-        self.assertEqual(
-            pear_memory_request_value(
-                "remember for this channel: only respond when someone @-mentions you directly."
-            ),
-            "only respond when someone @-mentions you directly.",
-        )
-        self.assertEqual(
-            parse_pear_memory_instruction(
-                "@Pear remember for this topic that prefer terminal smoke before handoff"
-            ),
-            "prefer terminal smoke before handoff",
-        )
-        self.assertFalse(is_pear_request_message("Memory: Prefer small focused PRs"))
-
-    def test_pear_memory_status_request_message(self) -> None:
-        self.assertTrue(
-            is_pear_memory_status_request_message(
-                "@**Pear** What do you remember about this topic?"
-            )
-        )
-        self.assertTrue(is_pear_memory_status_request_message("@Pear list Pear memory"))
-        self.assertFalse(
-            is_pear_memory_status_request_message("@Pear Remember: prefer pytest first")
-        )
-
-    def test_pear_memory_forget_request_message(self) -> None:
-        self.assertTrue(is_pear_memory_forget_request_message("@Pear Forget memory:"))
-        self.assertTrue(
-            is_pear_memory_forget_request_message("@Pear forget latest memory")
-        )
-        self.assertTrue(
-            is_pear_memory_forget_request_message("@Pear remove the latest memory")
-        )
-        self.assertFalse(is_pear_memory_forget_request_message("forget memory"))
-        self.assertFalse(is_pear_memory_forget_request_message("@Pear Remember: foo"))
-
-    def test_parse_pear_memory_forget_instruction(self) -> None:
-        payload = get_pear_session_payload()
-        active_session = build_pear_active_session_summary_from_messages(
-            pear_session=payload,
-            source="server",
-            stream_exists=True,
-            messages=[(11, "Memory: Prefer small focused PRs", False)],
-        )
-
-        self.assertEqual(
-            parse_pear_memory_forget_instruction(
-                "@Pear Forget memory:\n\nMemory forgotten: Prefer small focused PRs",
-                active_session,
-            ),
-            "Prefer small focused PRs",
-        )
-        self.assertEqual(
-            parse_pear_memory_forget_instruction(
-                "@Pear forget latest memory",
-                active_session,
-            ),
-            "Prefer small focused PRs",
-        )
-
-    def test_pear_done_template_message(self) -> None:
-        content = "@**Pear** Definition of done:\n\nDone: Tests pass and draft PR is posted"
-
-        self.assertTrue(is_pear_done_template_message(content))
-        self.assertEqual(
-            parse_pear_done_instruction(content),
-            "Tests pass and draft PR is posted",
-        )
-        self.assertEqual(
-            parse_pear_done_instruction("@Pear Definition of done: PR posted"),
-            "PR posted",
-        )
-
-    def test_pear_response_policy_template_message(self) -> None:
-        content = "@**Pear** Response policy:\n\nAmbient: mentions only"
-
-        self.assertTrue(is_pear_response_policy_template_message(content))
-        self.assertTrue(
-            is_pear_response_policy_request_message(
-                "@Pear only respond when I @-mention you"
-            )
-        )
-        self.assertTrue(
-            is_pear_response_policy_request_message(
-                "@Pear stay quiet in this topic unless tagged"
-            )
-        )
-        self.assertTrue(
-            is_pear_response_policy_request_message(
-                "@Pear turn follow-ups back on"
-            )
-        )
-        self.assertEqual(parse_pear_response_policy_instruction(content), "mentions only")
-        self.assertEqual(
-            parse_pear_response_policy_instruction("@Pear Response policy: off"),
-            "off",
-        )
-        self.assertEqual(
-            parse_pear_response_policy_instruction(
-                "@Pear only respond when I @-mention you"
-            ),
-            "mentions only",
-        )
-        self.assertEqual(
-            parse_pear_response_policy_instruction("@Pear turn follow-ups back on"),
-            "on",
-        )
-        self.assertEqual(
-            pear_response_policy_request_value("@Pear debug the flaky parser test"),
-            None,
-        )
-        self.assertEqual(
-            pear_response_policy_request_value(
-                "@Pear remember for this channel: only respond when someone @-mentions you directly."
-            ),
-            None,
-        )
-        self.assertEqual(normalize_pear_response_policy("mentions only"), "mentions_only")
-        self.assertEqual(normalize_pear_response_policy("off"), "mentions_only")
-        self.assertEqual(normalize_pear_response_policy("on"), "ambient")
-        self.assertEqual(normalize_pear_response_policy("ambient"), "ambient")
-
-    def test_pear_routine_cadence_template_message(self) -> None:
-        content = "@**Pear** Routine cadence:\n\nRoutine cadence: manual"
-
-        self.assertTrue(is_pear_routine_cadence_template_message(content))
-        self.assertEqual(parse_pear_routine_cadence_instruction(content), "manual")
-        self.assertEqual(
-            parse_pear_routine_cadence_instruction(
-                "@Pear Routine cadence: every 30 minutes"
-            ),
-            "every 30 minutes",
-        )
-
-    def test_build_memory_status_ack_message(self) -> None:
-        payload = get_pear_session_payload(stream="frontend", topic="checkout/regression")
-        active_session = build_pear_active_session_summary_from_messages(
-            pear_session=payload,
-            source="server",
-            stream_exists=True,
-            messages=[
-                (10, "@Pear fix the checkout test", False),
-                (11, "Memory: Prefer small focused PRs", False),
-                (12, "Memory: Run terminal tests before server smoke", False),
-            ],
-        )
-
-        response = build_pear_memory_status_ack_message(active_session)
-
-        self.assertIn("frontend > checkout/regression", response)
-        self.assertIn("- Run terminal tests before server smoke", response)
-        self.assertIn("- Prefer small focused PRs", response)
-
-    def test_build_memory_status_ack_message_without_memory(self) -> None:
-        payload = get_pear_session_payload(stream="frontend", topic="checkout/regression")
-        active_session = build_pear_active_session_summary_from_messages(
-            pear_session=payload,
-            source="server",
-            stream_exists=True,
-            messages=[(10, "@Pear fix the checkout test", False)],
-        )
-
-        response = build_pear_memory_status_ack_message(active_session)
-
-        self.assertIn("do not have Pear memory recorded", response)
-        self.assertIn("Meta M", response)
-
-    def test_build_memory_forget_ack_message(self) -> None:
-        payload = get_pear_session_payload(stream="frontend", topic="checkout/regression")
-        active_session = build_pear_active_session_summary_from_messages(
-            pear_session=payload,
-            source="server",
-            stream_exists=True,
-            messages=[(11, "Memory: Prefer small focused PRs", False)],
-        )
-
-        ack = build_pear_memory_forget_ack_message("", active_session)
-
-        self.assertIn("Memory forgotten: Prefer small focused PRs", ack)
-        self.assertIn(
-            "Memory forgotten: Run terminal tests first",
-            build_pear_memory_forget_ack_message("Run terminal tests first"),
-        )
-        self.assertIn(
-            "which Pear memory to forget",
-            build_pear_memory_forget_ack_message(),
-        )
 
     def test_build_active_session_summary(self) -> None:
         payload = get_pear_session_payload()
@@ -1627,25 +956,7 @@ class PearSessionDefaultsTest(TestCase):
         self.assertIsNone(summary["latest_session_record_kind"])
         self.assertIsNone(summary["latest_session_record_url"])
         self.assertIsNone(summary["latest_codex_thread_id"])
-        self.assertEqual(summary["routine_count"], 0)
-        self.assertIsNone(summary["latest_routine_message_id"])
-        self.assertIsNone(summary["latest_routine"])
-        self.assertEqual(summary["memory_count"], 0)
-        self.assertIsNone(summary["latest_memory_message_id"])
-        self.assertIsNone(summary["latest_memory"])
-        self.assertEqual(summary["memory_forgotten_count"], 0)
-        self.assertIsNone(summary["latest_memory_forgotten_message_id"])
-        self.assertIsNone(summary["latest_memory_forgotten"])
-        self.assertEqual(summary["done_criteria_count"], 0)
-        self.assertIsNone(summary["latest_done_criteria_message_id"])
-        self.assertIsNone(summary["latest_done_criteria"])
-        self.assertEqual(summary["response_policy_count"], 0)
-        self.assertIsNone(summary["latest_response_policy_message_id"])
-        self.assertIsNone(summary["latest_response_policy"])
         self.assertEqual(summary["response_policy"], "mentions_only")
-        self.assertEqual(summary["routine_cadence_count"], 0)
-        self.assertIsNone(summary["latest_routine_cadence_message_id"])
-        self.assertIsNone(summary["latest_routine_cadence"])
         self.assertEqual(summary["artifacts"], [])
         self.assertEqual(summary["steering_count"], 0)
         self.assertIsNone(summary["latest_steering_message_id"])
@@ -1682,7 +993,6 @@ class PearSessionDefaultsTest(TestCase):
                             "- [~] State the first concrete edit before changing files.",
                             "Branch: pear/runtime-artifacts",
                             "Session: Codex thread thread-123",
-                            "Routine: Watch PR status for pear/runtime-artifacts",
                             "Verification: pytest zerver/tests/test_pear.py",
                         ]
                     ),
@@ -1703,27 +1013,8 @@ class PearSessionDefaultsTest(TestCase):
                     "@**Pear** Resume session:\n\nRequest: continue with rollout",
                     False,
                 ),
-                (
-                    17,
-                    "@**Pear** Remember:\n\nMemory: Prefer small focused PRs",
-                    False,
-                ),
-                (
-                    18,
-                    "@**Pear** Definition of done:\n\nDone: Tests pass and draft PR is posted",
-                    False,
-                ),
-                (
-                    19,
-                    "@**Pear** Response policy:\n\nAmbient: mentions only",
-                    False,
-                ),
-                (
-                    20,
-                    "@**Pear** Routine cadence:\n\nRoutine cadence: manual",
-                    False,
-                ),
             ],
+            response_policy="ambient",
         )
 
         self.assertEqual(summary["state"], "active")
@@ -1733,8 +1024,8 @@ class PearSessionDefaultsTest(TestCase):
         self.assertEqual(summary["topic_message_count"], 10)
         self.assertEqual(summary["done_count"], 1)
         self.assertEqual(summary["in_progress_count"], 1)
-        self.assertEqual(summary["artifact_count"], 8)
-        self.assertEqual(summary["latest_artifact_message_id"], 20)
+        self.assertEqual(summary["artifact_count"], 3)
+        self.assertEqual(summary["latest_artifact_message_id"], 13)
         self.assertEqual(
             summary["latest_verification"],
             "pytest zerver/tests/test_pear.py",
@@ -1745,42 +1036,10 @@ class PearSessionDefaultsTest(TestCase):
         self.assertEqual(summary["latest_session_record_kind"], "codex_thread")
         self.assertIsNone(summary["latest_session_record_url"])
         self.assertIsNone(summary["latest_codex_thread_id"])
-        self.assertEqual(summary["routine_count"], 1)
-        self.assertEqual(summary["latest_routine_message_id"], 13)
-        self.assertEqual(
-            summary["latest_routine"],
-            "Watch PR status for pear/runtime-artifacts",
-        )
-        self.assertEqual(summary["memory_count"], 1)
-        self.assertEqual(summary["latest_memory_message_id"], 17)
-        self.assertEqual(summary["latest_memory"], "Prefer small focused PRs")
-        self.assertEqual(summary["memory_forgotten_count"], 0)
-        self.assertIsNone(summary["latest_memory_forgotten_message_id"])
-        self.assertIsNone(summary["latest_memory_forgotten"])
-        self.assertEqual(summary["done_criteria_count"], 1)
-        self.assertEqual(summary["latest_done_criteria_message_id"], 18)
-        self.assertEqual(
-            summary["latest_done_criteria"],
-            "Tests pass and draft PR is posted",
-        )
-        self.assertEqual(summary["response_policy_count"], 1)
-        self.assertEqual(summary["latest_response_policy_message_id"], 19)
-        self.assertEqual(summary["latest_response_policy"], "mentions only")
-        self.assertEqual(summary["response_policy"], "mentions_only")
-        self.assertEqual(summary["routine_cadence_count"], 1)
-        self.assertEqual(summary["latest_routine_cadence_message_id"], 20)
-        self.assertEqual(summary["latest_routine_cadence"], "manual")
-        self.assertEqual(summary["routine_disabled_count"], 0)
-        self.assertIsNone(summary["latest_routine_disabled_message_id"])
-        self.assertIsNone(summary["latest_routine_disabled"])
-        self.assertEqual(summary["artifacts"][0]["kind"], "routine_cadence")
-        self.assertEqual(summary["artifacts"][1]["kind"], "response_policy")
-        self.assertEqual(summary["artifacts"][2]["kind"], "done_criteria")
-        self.assertEqual(summary["artifacts"][3]["kind"], "memory")
-        self.assertEqual(summary["artifacts"][4]["kind"], "branch")
-        self.assertEqual(summary["artifacts"][5]["kind"], "session_record")
-        self.assertEqual(summary["artifacts"][6]["kind"], "routine")
-        self.assertEqual(summary["artifacts"][7]["kind"], "verification")
+        self.assertEqual(summary["response_policy"], "ambient")
+        self.assertEqual(summary["artifacts"][0]["kind"], "branch")
+        self.assertEqual(summary["artifacts"][1]["kind"], "session_record")
+        self.assertEqual(summary["artifacts"][2]["kind"], "verification")
         self.assertEqual(summary["steering_count"], 2)
         self.assertEqual(summary["latest_steering_message_id"], 14)
         self.assertEqual(summary["latest_steering_instruction"], "keep the fix minimal")
@@ -1838,60 +1097,6 @@ class PearSessionDefaultsTest(TestCase):
                     "content": "Agent, do the above",
                 },
             ],
-        )
-
-    def test_disabled_routine_is_not_latest_active_routine(self) -> None:
-        payload = get_pear_session_payload()
-        summary = build_pear_active_session_summary_from_messages(
-            pear_session=payload,
-            source="server",
-            stream_exists=True,
-            messages=[
-                (10, "@Pear fix the checkout test", False),
-                (11, "- [~] State the first concrete edit before changing files.", True),
-                (12, "Routine: Watch PR status for pear/runtime", False),
-                (13, "Routine disabled: Watch PR status for pear/runtime", False),
-            ],
-        )
-
-        self.assertEqual(summary["routine_count"], 0)
-        self.assertIsNone(summary["latest_routine"])
-        self.assertEqual(summary["routine_disabled_count"], 1)
-        self.assertEqual(summary["latest_routine_disabled_message_id"], 13)
-        self.assertEqual(
-            summary["latest_routine_disabled"],
-            "Watch PR status for pear/runtime",
-        )
-        self.assertFalse(pear_worker_should_start("@Pear run routine", summary))
-
-    def test_update_routine_message_replaces_active_routine(self) -> None:
-        payload = get_pear_session_payload()
-        summary = build_pear_active_session_summary_from_messages(
-            pear_session=payload,
-            source="server",
-            stream_exists=True,
-            messages=[
-                (10, "@Pear fix the checkout test", False),
-                (11, "- [~] State the first concrete edit before changing files.", True),
-                (12, "Routine: Watch PR status for pear/runtime", False),
-                (
-                    13,
-                    "Routine disabled: Watch PR status for pear/runtime\n"
-                    "Routine: Watch PR status for pear/runtime every weekday",
-                    False,
-                ),
-            ],
-        )
-
-        self.assertEqual(summary["routine_count"], 1)
-        self.assertEqual(
-            summary["latest_routine"],
-            "Watch PR status for pear/runtime every weekday",
-        )
-        self.assertEqual(summary["routine_disabled_count"], 1)
-        self.assertEqual(
-            summary["latest_routine_disabled"],
-            "Watch PR status for pear/runtime",
         )
 
     def test_build_active_session_summary_from_paused_messages(self) -> None:
@@ -1973,151 +1178,6 @@ class PearSessionDefaultsTest(TestCase):
         self.assertEqual(summary["worker_state"], "ready")
         self.assertTrue(summary["worker_can_run"])
 
-    def test_memory_note_does_not_start_active_session(self) -> None:
-        payload = get_pear_session_payload()
-
-        summary = build_pear_active_session_summary_from_messages(
-            pear_session=payload,
-            source="server",
-            stream_exists=True,
-            messages=[
-                (13, "@Pear Remember:\n\nMemory: Prefer small focused PRs", False)
-            ],
-        )
-
-        self.assertEqual(summary["state"], "not_started")
-        self.assertEqual(summary["request_count"], 0)
-        self.assertEqual(summary["artifact_count"], 1)
-        self.assertEqual(summary["memory_count"], 1)
-        self.assertEqual(summary["latest_memory"], "Prefer small focused PRs")
-        self.assertEqual(summary["worker_state"], "ready")
-        self.assertTrue(summary["worker_can_run"])
-
-    def test_forgotten_memory_is_not_latest_active_memory(self) -> None:
-        payload = get_pear_session_payload()
-
-        summary = build_pear_active_session_summary_from_messages(
-            pear_session=payload,
-            source="server",
-            stream_exists=True,
-            messages=[
-                (11, "Memory: Prefer small focused PRs", False),
-                (12, "Memory forgotten: Prefer small focused PRs", False),
-            ],
-        )
-
-        self.assertEqual(summary["state"], "not_started")
-        self.assertEqual(summary["request_count"], 0)
-        self.assertEqual(summary["artifact_count"], 2)
-        self.assertEqual(summary["memory_count"], 0)
-        self.assertIsNone(summary["latest_memory"])
-        self.assertEqual(summary["memory_forgotten_count"], 1)
-        self.assertEqual(summary["latest_memory_forgotten_message_id"], 12)
-        self.assertEqual(
-            summary["latest_memory_forgotten"],
-            "Prefer small focused PRs",
-        )
-
-    def test_memory_forget_note_does_not_start_active_session(self) -> None:
-        payload = get_pear_session_payload()
-
-        summary = build_pear_active_session_summary_from_messages(
-            pear_session=payload,
-            source="server",
-            stream_exists=True,
-            messages=[
-                (
-                    13,
-                    "@Pear Forget memory:\n\nMemory forgotten: Prefer small focused PRs",
-                    False,
-                )
-            ],
-        )
-
-        self.assertEqual(summary["state"], "not_started")
-        self.assertEqual(summary["request_count"], 0)
-        self.assertEqual(summary["artifact_count"], 1)
-        self.assertEqual(summary["memory_forgotten_count"], 1)
-        self.assertEqual(summary["latest_memory_forgotten"], "Prefer small focused PRs")
-        self.assertEqual(summary["worker_state"], "ready")
-        self.assertTrue(summary["worker_can_run"])
-
-    def test_done_note_does_not_start_active_session(self) -> None:
-        payload = get_pear_session_payload()
-
-        summary = build_pear_active_session_summary_from_messages(
-            pear_session=payload,
-            source="server",
-            stream_exists=True,
-            messages=[
-                (
-                    13,
-                    "@Pear Definition of done:\n\nDone: Tests pass and draft PR is posted",
-                    False,
-                )
-            ],
-        )
-
-        self.assertEqual(summary["state"], "not_started")
-        self.assertEqual(summary["request_count"], 0)
-        self.assertEqual(summary["artifact_count"], 1)
-        self.assertEqual(summary["done_criteria_count"], 1)
-        self.assertEqual(
-            summary["latest_done_criteria"],
-            "Tests pass and draft PR is posted",
-        )
-        self.assertEqual(summary["worker_state"], "ready")
-        self.assertTrue(summary["worker_can_run"])
-
-    def test_response_policy_note_does_not_start_active_session(self) -> None:
-        payload = get_pear_session_payload()
-
-        summary = build_pear_active_session_summary_from_messages(
-            pear_session=payload,
-            source="server",
-            stream_exists=True,
-            messages=[
-                (
-                    13,
-                    "@Pear Response policy:\n\nAmbient: mentions only",
-                    False,
-                )
-            ],
-        )
-
-        self.assertEqual(summary["state"], "not_started")
-        self.assertEqual(summary["request_count"], 0)
-        self.assertEqual(summary["artifact_count"], 1)
-        self.assertEqual(summary["response_policy_count"], 1)
-        self.assertEqual(summary["latest_response_policy"], "mentions only")
-        self.assertEqual(summary["response_policy"], "mentions_only")
-        self.assertEqual(summary["worker_state"], "ready")
-        self.assertTrue(summary["worker_can_run"])
-
-    def test_routine_cadence_note_does_not_start_active_session(self) -> None:
-        payload = get_pear_session_payload()
-
-        summary = build_pear_active_session_summary_from_messages(
-            pear_session=payload,
-            source="server",
-            stream_exists=True,
-            messages=[
-                (
-                    13,
-                    "@Pear Routine cadence:\n\nRoutine cadence: manual",
-                    False,
-                )
-            ],
-        )
-
-        self.assertEqual(summary["state"], "not_started")
-        self.assertEqual(summary["request_count"], 0)
-        self.assertEqual(summary["artifact_count"], 1)
-        self.assertEqual(summary["routine_cadence_count"], 1)
-        self.assertEqual(summary["latest_routine_cadence"], "manual")
-        self.assertEqual(summary["worker_state"], "ready")
-        self.assertTrue(summary["worker_can_run"])
-
     def test_worker_should_start_for_active_topic_followup(self) -> None:
         payload = get_pear_session_payload()
         active_session = build_pear_active_session_summary_from_messages(
@@ -2127,9 +1187,9 @@ class PearSessionDefaultsTest(TestCase):
             messages=[
                 (10, "@Pear fix the checkout test", False),
                 (11, "- [~] State the first concrete edit before changing files.", True),
-                (12, "Ambient: on", False),
                 (13, "Fold in the failing terminal UI test too.", False),
             ],
+            response_policy="ambient",
         )
 
         self.assertFalse(
@@ -2236,60 +1296,6 @@ class PearSessionDefaultsTest(TestCase):
                 active_session,
             )
         )
-        self.assertFalse(pear_worker_should_start("Memory: Prefer pytest", active_session))
-        self.assertFalse(
-            pear_worker_should_start(
-                "@Pear Forget memory:\n\nMemory forgotten: Prefer pytest",
-                active_session,
-            )
-        )
-        self.assertFalse(
-            pear_worker_should_start("@Pear forget latest memory", active_session)
-        )
-        self.assertFalse(
-            pear_worker_should_start(
-                "@Pear Definition of done:\n\nDone: tests pass",
-                active_session,
-            )
-        )
-        self.assertFalse(
-            pear_worker_should_start(
-                "@Pear Routine cadence:\n\nRoutine cadence: manual",
-                active_session,
-            )
-        )
-        self.assertFalse(
-            pear_worker_should_start(
-                "@Pear only respond when I @-mention you",
-                active_session,
-            )
-        )
-        self.assertFalse(
-            pear_worker_should_start(
-                "@Pear turn follow-ups back on",
-                active_session,
-            )
-        )
-        self.assertFalse(
-            pear_worker_should_start(
-                "@Pear what routines do you have set up in this topic?",
-                active_session,
-            )
-        )
-        self.assertFalse(
-            pear_worker_should_start(
-                "@Pear Disable routine:\n\nRoutine disabled: Watch PR status for pear/runtime",
-                active_session,
-            )
-        )
-        self.assertFalse(
-            pear_worker_should_start(
-                "@Pear Update routine:\n\n"
-                "Routine disabled: Watch PR status for pear/runtime\n"
-                "Routine: Watch PR status for pear/runtime every weekday",
-                active_session,
-            )
-        )
         mentions_only_session = build_pear_active_session_summary_from_messages(
             pear_session=payload,
             source="server",
@@ -2297,8 +1303,8 @@ class PearSessionDefaultsTest(TestCase):
             messages=[
                 (10, "@Pear fix the checkout test", False),
                 (11, "- [~] State the first concrete edit before changing files.", True),
-                (12, "Ambient: mentions only", False),
             ],
+            response_policy="mentions_only",
         )
         self.assertFalse(
             pear_worker_should_start(
@@ -2337,66 +1343,6 @@ class PearSessionDefaultsTest(TestCase):
                 mentions_only_session,
                 explicitly_addressed=True,
                 response_policy="ambient",
-            )
-        )
-
-    def test_worker_should_start_for_run_routine_request_with_routine(self) -> None:
-        payload = get_pear_session_payload()
-        active_session = build_pear_active_session_summary_from_messages(
-            pear_session=payload,
-            source="server",
-            stream_exists=True,
-            messages=[
-                (10, "@Pear fix the checkout test", False),
-                (11, "- [~] State the first concrete edit before changing files.", True),
-                (12, "Routine: Watch PR status for pear/runtime", False),
-                (13, "Routine cadence: every 30 minutes", False),
-            ],
-        )
-        empty_session = build_pear_active_session_summary_from_messages(
-            pear_session=payload,
-            source="server",
-            stream_exists=True,
-            messages=[
-                (10, "@Pear fix the checkout test", False),
-                (11, "- [~] State the first concrete edit before changing files.", True),
-            ],
-        )
-        paused_session = build_pear_active_session_summary_from_messages(
-            pear_session=payload,
-            source="server",
-            stream_exists=True,
-            messages=[
-                (10, "@Pear fix the checkout test", False),
-                (11, "- [~] State the first concrete edit before changing files.", True),
-                (12, "Routine: Watch PR status for pear/runtime", False),
-                (13, "@Pear Pause session:\n\nReason: waiting for CI", False),
-            ],
-        )
-
-        self.assertTrue(pear_worker_should_start("@Pear run routine", active_session))
-        self.assertTrue(
-            pear_worker_should_start(
-                "run routine",
-                active_session,
-                explicitly_addressed=True,
-            )
-        )
-        self.assertFalse(pear_worker_should_start("@Pear run routine", empty_session))
-        self.assertFalse(pear_worker_should_start("@Pear run routine", paused_session))
-        self.assertEqual(
-            pear_worker_task_for_message("@Pear run routine", active_session),
-            "Run the latest Pear routine: Watch PR status for pear/runtime\n"
-            "Routine cadence: every 30 minutes",
-        )
-
-    def test_routine_status_request_is_not_steering(self) -> None:
-        self.assertIsNone(
-            parse_pear_steering_event(
-                "@Pear what routines do you have set up in this topic?",
-                44,
-                sender_is_bot=False,
-                session_started=True,
             )
         )
 
@@ -2962,17 +1908,17 @@ class PearSessionDefaultsTest(TestCase):
             messages=[
                 (10, "@Pear fix the checkout test", False, "plugyawn"),
                 (11, "Verification: pytest zerver/tests/test_pear.py", True, "Pear"),
-                (
-                    12,
-                    "@Pear Steering update:\n\nRequest: keep the patch small",
-                    False,
-                    "plugyawn",
-                ),
                 (13, "Memory: Prefer small focused PRs", False, "plugyawn"),
                 (14, "Routine: Watch PR status for pear/runtime", False, "plugyawn"),
                 (15, "Done: Tests pass and draft PR is posted", False, "plugyawn"),
                 (16, "Routine cadence: manual", False, "plugyawn"),
                 (17, "Memory forgotten: Run terminal tests first", False, "plugyawn"),
+                (
+                    18,
+                    "@Pear Steering update:\n\nRequest: keep the patch small",
+                    False,
+                    "plugyawn",
+                ),
             ],
             workspace_context={
                 "repository": "zulip/zulip",
@@ -3117,14 +2063,6 @@ class PearSessionDefaultsTest(TestCase):
                     "label": "Diff",
                     "value": "updated Pear runtime",
                 },
-                {
-                    "label": "Memory",
-                    "value": "Prefer small focused PRs",
-                },
-                {
-                    "label": "Routine cadence",
-                    "value": "manual",
-                },
             ],
         )
 
@@ -3149,60 +2087,56 @@ class PearSessionDefaultsTest(TestCase):
             ],
         )
 
-    def test_topic_state_agent_tools_record_artifacts(self) -> None:
-        recorded_results: list[dict[str, str]] = []
-        created_tools = {}
-
-        def fake_function_tool(func, **kwargs):
-            created_tools[kwargs["name_override"]] = {
-                "func": func,
-                "description": kwargs["description_override"],
-                "use_docstring_info": kwargs["use_docstring_info"],
-            }
-            return SimpleNamespace(name=kwargs["name_override"])
-
-        tools = build_pear_topic_state_agent_tools(
-            fake_function_tool,
-            recorded_results,
-            output_limit=200,
+    def test_topic_state_tool_lists_only_message_layer_labels(self) -> None:
+        self.assertEqual(
+            list(PEAR_TOPIC_STATE_TOOLS),
+            [
+                "Repo",
+                "Runtime",
+                "Branch",
+                "PR",
+                "Diff",
+                "Verification",
+                "Screenshot",
+                "Session",
+                "Doc",
+                "Ticket",
+                "Issue",
+                "Reviewers",
+            ],
         )
-
-        self.assertEqual(len(tools), len(PEAR_TOPIC_STATE_TOOLS))
         self.assertEqual(
             list(PEAR_TOPIC_STATE_TOOL_NAMES),
-            [pear_topic_state_tool_name(label) for label in PEAR_TOPIC_STATE_TOOLS],
-        )
-        self.assertIn("pear_record_routine", created_tools)
-        self.assertIn("pear_record_routine_cadence", created_tools)
-        self.assertEqual(
-            pear_topic_state_tool_name("Memory forgotten"),
-            "pear_record_memory_forgotten",
-        )
-        self.assertIn("`Routine:`", created_tools["pear_record_routine"]["description"])
-        self.assertFalse(created_tools["pear_record_routine"]["use_docstring_info"])
-        self.assertEqual(
-            created_tools["pear_record_routine"]["func"]("Watch PR status every weekday"),
-            "Routine: Watch PR status every weekday",
-        )
-        self.assertEqual(
-            recorded_results,
-            [{"label": "Routine", "value": "Watch PR status every weekday"}],
+            [
+                "pear_record_repo",
+                "pear_record_runtime",
+                "pear_record_branch",
+                "pear_record_pr",
+                "pear_record_diff",
+                "pear_record_verification",
+                "pear_record_screenshot",
+                "pear_record_session",
+                "pear_record_doc",
+                "pear_record_ticket",
+                "pear_record_issue",
+                "pear_record_reviewers",
+            ],
         )
 
     def test_merge_pear_tool_results_deduplicates_artifacts(self) -> None:
         self.assertEqual(
             merge_pear_tool_results(
                 [
-                    {"label": "Routine", "value": "Watch PR status"},
+                    {"label": "Repo", "value": "zulip/zulip"},
                     {"label": "Verification", "value": "Codex completed"},
                 ],
                 [
-                    {"label": "Routine", "value": "Watch PR status"},
+                    {"label": "Repo", "value": "zulip/zulip"},
                     {"label": "Diff", "value": "updated worker"},
                 ],
             ),
             [
-                {"label": "Routine", "value": "Watch PR status"},
+                {"label": "Repo", "value": "zulip/zulip"},
                 {"label": "Verification", "value": "Codex completed"},
                 {"label": "Diff", "value": "updated worker"},
             ],
@@ -4224,15 +3158,6 @@ class PearSessionDefaultsTest(TestCase):
             @staticmethod
             async def run(agent, prompt):
                 calls.append(("runner_run", agent.kwargs, prompt))
-                routine_tool = next(
-                    tool
-                    for tool in agent.kwargs["tools"]
-                    if tool.name == "pear_record_routine"
-                )
-                self.assertEqual(
-                    routine_tool.func("Watch PR status every weekday"),
-                    "Routine: Watch PR status every weekday",
-                )
                 return SimpleNamespace(
                     final_output="Verification: Codex MCP completed",
                     structuredContent={"threadId": "thread-mcp-123"},
@@ -4248,13 +3173,9 @@ class PearSessionDefaultsTest(TestCase):
             def __exit__(self, exc_type, exc, traceback):
                 calls.append(("trace_exit", exc_type))
 
-        def fake_function_tool(func, **kwargs):
-            return SimpleNamespace(name=kwargs["name_override"], func=func)
-
         agents_module = ModuleType("agents")
         agents_module.Agent = FakeAgent
         agents_module.Runner = FakeRunner
-        agents_module.function_tool = fake_function_tool
         agents_module.trace = FakeTrace
         agents_mcp_module = ModuleType("agents.mcp")
         agents_mcp_module.MCPServerStdio = FakeMCPServerStdio
@@ -4300,15 +3221,10 @@ class PearSessionDefaultsTest(TestCase):
         )
         agent_kwargs = calls[2][1]
         self.assertEqual(agent_kwargs["mcp_servers"], ["codex-mcp-server"])
-        self.assertIn(
-            "pear_record_routine",
-            [tool.name for tool in agent_kwargs["tools"]],
-        )
+        self.assertNotIn("tools", agent_kwargs)
         self.assertIn("Codex CLI MCP server", agent_kwargs["instructions"])
         self.assertIn("`codex`", agent_kwargs["instructions"])
         self.assertIn("connected MCP tool is the runtime boundary", agent_kwargs["instructions"])
-        self.assertIn("`pear_record_*` tools", agent_kwargs["instructions"])
-        self.assertIn("`pear_record_routine`", agent_kwargs["instructions"])
         self.assertIn("Set `approval-policy` to `never`", agent_kwargs["instructions"])
         self.assertIn("Set `sandbox` to `workspace-write`", agent_kwargs["instructions"])
         self.assertEqual(calls[3], ("trace", "Pear Codex MCP worker"))
@@ -4329,7 +3245,6 @@ class PearSessionDefaultsTest(TestCase):
                         "approval_policy=never model=gpt-5.5"
                     ),
                 },
-                {"label": "Routine", "value": "Watch PR status every weekday"},
                 {"label": "Verification", "value": "Codex MCP completed"},
                 {"label": "Session", "value": "Codex thread thread-mcp-123"},
             ],
@@ -4382,13 +3297,9 @@ class PearSessionDefaultsTest(TestCase):
             def __exit__(self, exc_type, exc, traceback):
                 calls.append(("trace_exit", exc_type))
 
-        def fake_function_tool(func, **kwargs):
-            return SimpleNamespace(name=kwargs["name_override"], func=func)
-
         agents_module = ModuleType("agents")
         agents_module.Agent = FakeAgent
         agents_module.Runner = FakeRunner
-        agents_module.function_tool = fake_function_tool
         agents_module.trace = FakeTrace
         agents_mcp_module = ModuleType("agents.mcp")
         agents_mcp_module.MCPServerStdio = FakeMCPServerStdio
@@ -4422,10 +3333,7 @@ class PearSessionDefaultsTest(TestCase):
                 sys.modules["agents.mcp"] = original_agents_mcp
 
         self.assertIn("`codex-reply`", calls[0][1]["instructions"])
-        self.assertIn(
-            "pear_record_routine",
-            [tool.name for tool in calls[0][1]["tools"]],
-        )
+        self.assertNotIn("tools", calls[0][1])
         self.assertIn("threadId `thread-existing`", calls[0][1]["instructions"])
         self.assertIn("accepts only `prompt` and `threadId`", calls[0][1]["instructions"])
         self.assertEqual(calls[1], ("trace", "Pear Codex MCP worker"))
@@ -5169,9 +4077,9 @@ class PearSessionDefaultsTest(TestCase):
             messages=[
                 (10, "@Pear fix the checkout test", False),
                 (11, "- [~] State the first concrete edit before changing files.", True),
-                (12, "Ambient: on", False),
                 (13, "Fold in the failing terminal UI test too.", False),
             ],
+            response_policy="ambient",
         )
         seen_tasks: list[str] = []
         sent_replies: list[str] = []
@@ -5265,8 +4173,8 @@ class PearSessionDefaultsTest(TestCase):
             stream_exists=True,
             messages=[
                 (10, "@Pear fix the checkout test", False),
-                (11, "Ambient: on", False),
             ],
+            response_policy="ambient",
         )
         sent_replies: list[str] = []
 
@@ -5573,12 +4481,8 @@ class PearSessionDefaultsTest(TestCase):
             seen_tasks.append(task)
             return [
                 {
-                    "label": "Routine",
-                    "value": "every weekday at 9am, check the linked PRs and post a one-line status",
-                },
-                {
-                    "label": "Routine cadence",
-                    "value": "every weekday at 9am",
+                    "label": "Verification",
+                    "value": "Standing request routed to Codex",
                 },
             ]
 
@@ -5645,383 +4549,6 @@ class PearSessionDefaultsTest(TestCase):
         self.assertEqual(sent_replies[0], PEAR_ACTIVE_THINKING_MARKDOWN)
         self.assertEqual(sent_replies[1], PEAR_ACTIVE_THINKING_MARKDOWN)
 
-    def test_embedded_bot_handler_runs_latest_routine_request(self) -> None:
-        payload = get_pear_session_payload()
-        loaded_session = build_pear_active_session_summary_from_messages(
-            pear_session=payload,
-            source="server",
-            stream_exists=True,
-            messages=[
-                (10, "@Pear fix the checkout test", False),
-                (11, "- [~] State the first concrete edit before changing files.", True),
-                (12, "Routine: Watch PR status for pear/runtime", False),
-                (13, "Routine cadence: manual", False),
-            ],
-        )
-        seen_tasks: list[str] = []
-        sent_replies: list[str] = []
-
-        def active_session_loader(message, bot_handler):
-            return loaded_session
-
-        def tool_runner(active_session, task):
-            seen_tasks.append(task)
-            return [
-                {
-                    "label": "Verification",
-                    "value": "Routine run accepted",
-                }
-            ]
-
-        class FakeRunStore:
-            def __init__(self) -> None:
-                self.starts: list[tuple[int, str, str]] = []
-
-            def start(
-                self,
-                bot_handler,
-                message_id: int,
-                *,
-                stream: str,
-                topic: str,
-            ) -> bool:
-                self.starts.append((message_id, stream, topic))
-                return True
-
-            def record(
-                self,
-                bot_handler,
-                message_id: int,
-                status: str,
-                *,
-                stream: str,
-                topic: str,
-                result_message_id: int | None = None,
-                error: str | None = None,
-            ) -> None:
-                pass
-
-        class FakeBotHandler:
-            def send_reply(self, message: dict[str, object], response: str) -> dict[str, int]:
-                sent_replies.append(response)
-                return {"id": 400 + len(sent_replies)}
-
-        run_store = FakeRunStore()
-        message = {
-            "id": 204,
-            "type": "stream",
-            "display_recipient": PEAR_DEFAULT_STREAM,
-            "topic": PEAR_DEFAULT_TOPIC,
-            "content": "@Pear run routine",
-        }
-
-        PearEmbeddedBotHandler(
-            worker_runtime=PearWorkerRuntime(tool_runner),
-            active_session_loader=active_session_loader,
-            worker_run_store=run_store,
-        ).handle_message(message, FakeBotHandler())
-
-        self.assertEqual(run_store.starts, [(204, PEAR_DEFAULT_STREAM, PEAR_DEFAULT_TOPIC)])
-        self.assertEqual(
-            seen_tasks,
-            [
-                "Run the latest Pear routine: Watch PR status for pear/runtime\n"
-                "Routine cadence: manual"
-            ],
-        )
-        self.assertEqual(len(sent_replies), 2)
-        self.assertIn("Running the latest Pear routine", sent_replies[0])
-        self.assertIn("Routine: Watch PR status for pear/runtime", sent_replies[0])
-        self.assertEqual(sent_replies[1], PEAR_ACTIVE_THINKING_MARKDOWN)
-
-    def test_embedded_bot_handler_lists_routines_without_worker(self) -> None:
-        payload = get_pear_session_payload()
-        loaded_session = build_pear_active_session_summary_from_messages(
-            pear_session=payload,
-            source="server",
-            stream_exists=True,
-            messages=[
-                (10, "@Pear fix the checkout test", False),
-                (11, "- [~] State the first concrete edit before changing files.", True),
-                (12, "Routine: Watch PR status for pear/runtime", False),
-                (13, "Routine cadence: manual", False),
-            ],
-        )
-        sent_replies: list[str] = []
-
-        def active_session_loader(message, bot_handler):
-            return loaded_session
-
-        class FakeRunStore:
-            def __init__(self) -> None:
-                self.starts: list[tuple[int, str, str]] = []
-
-            def start(
-                self,
-                bot_handler,
-                message_id: int,
-                *,
-                stream: str,
-                topic: str,
-            ) -> bool:
-                self.starts.append((message_id, stream, topic))
-                return True
-
-            def record(
-                self,
-                bot_handler,
-                message_id: int,
-                status: str,
-                *,
-                stream: str,
-                topic: str,
-                result_message_id: int | None = None,
-                error: str | None = None,
-            ) -> None:
-                pass
-
-        class FakeBotHandler:
-            def send_reply(self, message: dict[str, object], response: str) -> dict[str, int]:
-                sent_replies.append(response)
-                return {"id": 300 + len(sent_replies)}
-
-            def update_message(self, message: dict[str, object]) -> None:
-                content = message.get("content")
-                assert isinstance(content, str)
-                updated_replies.append(content)
-
-        run_store = FakeRunStore()
-        PearEmbeddedBotHandler(
-            active_session_loader=active_session_loader,
-            worker_run_store=run_store,
-        ).handle_message(
-            {
-                "id": 205,
-                "type": "stream",
-                "display_recipient": PEAR_DEFAULT_STREAM,
-                "topic": PEAR_DEFAULT_TOPIC,
-                "content": "@Pear what routines do you have set up in this topic?",
-            },
-            FakeBotHandler(),
-        )
-
-        self.assertEqual(run_store.starts, [])
-        self.assertEqual(len(sent_replies), 1)
-        self.assertIn("Pear routines recorded", sent_replies[0])
-        self.assertIn("- Watch PR status for pear/runtime", sent_replies[0])
-        self.assertIn("Latest routine cadence: manual", sent_replies[0])
-
-    def test_embedded_bot_handler_disables_latest_routine_without_worker(self) -> None:
-        payload = get_pear_session_payload()
-        loaded_session = build_pear_active_session_summary_from_messages(
-            pear_session=payload,
-            source="server",
-            stream_exists=True,
-            messages=[
-                (10, "@Pear fix the checkout test", False),
-                (11, "- [~] State the first concrete edit before changing files.", True),
-                (12, "Routine: Watch PR status for pear/runtime", False),
-            ],
-        )
-        sent_replies: list[str] = []
-
-        def active_session_loader(message, bot_handler):
-            return loaded_session
-
-        class FakeRunStore:
-            def __init__(self) -> None:
-                self.starts: list[tuple[int, str, str]] = []
-
-            def start(
-                self,
-                bot_handler,
-                message_id: int,
-                *,
-                stream: str,
-                topic: str,
-            ) -> bool:
-                self.starts.append((message_id, stream, topic))
-                return True
-
-            def record(
-                self,
-                bot_handler,
-                message_id: int,
-                status: str,
-                *,
-                stream: str,
-                topic: str,
-                result_message_id: int | None = None,
-                error: str | None = None,
-            ) -> None:
-                pass
-
-        class FakeBotHandler:
-            def send_reply(self, message: dict[str, object], response: str) -> None:
-                sent_replies.append(response)
-
-        run_store = FakeRunStore()
-        PearEmbeddedBotHandler(
-            active_session_loader=active_session_loader,
-            worker_run_store=run_store,
-        ).handle_message(
-            {
-                "id": 206,
-                "type": "stream",
-                "display_recipient": PEAR_DEFAULT_STREAM,
-                "topic": PEAR_DEFAULT_TOPIC,
-                "content": "@Pear disable latest routine",
-            },
-            FakeBotHandler(),
-        )
-
-        self.assertEqual(run_store.starts, [])
-        self.assertEqual(len(sent_replies), 1)
-        self.assertIn("Routine disabled: Watch PR status for pear/runtime", sent_replies[0])
-
-    def test_embedded_bot_handler_updates_routine_without_worker(self) -> None:
-        payload = get_pear_session_payload()
-        loaded_session = build_pear_active_session_summary_from_messages(
-            pear_session=payload,
-            source="server",
-            stream_exists=True,
-            messages=[
-                (10, "@Pear fix the checkout test", False),
-                (11, "- [~] State the first concrete edit before changing files.", True),
-                (12, "Routine: Watch PR status for pear/runtime", False),
-            ],
-        )
-        sent_replies: list[str] = []
-
-        def active_session_loader(message, bot_handler):
-            return loaded_session
-
-        class FakeRunStore:
-            def __init__(self) -> None:
-                self.starts: list[tuple[int, str, str]] = []
-
-            def start(
-                self,
-                bot_handler,
-                message_id: int,
-                *,
-                stream: str,
-                topic: str,
-            ) -> bool:
-                self.starts.append((message_id, stream, topic))
-                return True
-
-            def record(
-                self,
-                bot_handler,
-                message_id: int,
-                status: str,
-                *,
-                stream: str,
-                topic: str,
-                result_message_id: int | None = None,
-                error: str | None = None,
-            ) -> None:
-                pass
-
-        class FakeBotHandler:
-            def send_reply(self, message: dict[str, object], response: str) -> None:
-                sent_replies.append(response)
-
-        run_store = FakeRunStore()
-        PearEmbeddedBotHandler(
-            active_session_loader=active_session_loader,
-            worker_run_store=run_store,
-        ).handle_message(
-            {
-                "id": 207,
-                "type": "stream",
-                "display_recipient": PEAR_DEFAULT_STREAM,
-                "topic": PEAR_DEFAULT_TOPIC,
-                "content": "@Pear Update routine:\n\n"
-                "Routine disabled: Watch PR status for pear/runtime\n"
-                "Routine: Watch PR status for pear/runtime every weekday",
-            },
-            FakeBotHandler(),
-        )
-
-        self.assertEqual(run_store.starts, [])
-        self.assertEqual(len(sent_replies), 1)
-        self.assertIn("Updated.", sent_replies[0])
-        self.assertIn("Routine disabled: Watch PR status for pear/runtime", sent_replies[0])
-        self.assertIn(
-            "Routine: Watch PR status for pear/runtime every weekday",
-            sent_replies[0],
-        )
-
-    def test_embedded_bot_handler_forgets_latest_memory_without_worker(self) -> None:
-        payload = get_pear_session_payload()
-        loaded_session = build_pear_active_session_summary_from_messages(
-            pear_session=payload,
-            source="server",
-            stream_exists=True,
-            messages=[
-                (10, "@Pear fix the checkout test", False),
-                (11, "- [~] State the first concrete edit before changing files.", True),
-                (12, "Memory: Prefer small focused PRs", False),
-            ],
-        )
-        sent_replies: list[str] = []
-
-        def active_session_loader(message, bot_handler):
-            return loaded_session
-
-        class FakeRunStore:
-            def __init__(self) -> None:
-                self.starts: list[tuple[int, str, str]] = []
-
-            def start(
-                self,
-                bot_handler,
-                message_id: int,
-                *,
-                stream: str,
-                topic: str,
-            ) -> bool:
-                self.starts.append((message_id, stream, topic))
-                return True
-
-            def record(
-                self,
-                bot_handler,
-                message_id: int,
-                status: str,
-                *,
-                stream: str,
-                topic: str,
-                result_message_id: int | None = None,
-                error: str | None = None,
-            ) -> None:
-                pass
-
-        class FakeBotHandler:
-            def send_reply(self, message: dict[str, object], response: str) -> None:
-                sent_replies.append(response)
-
-        run_store = FakeRunStore()
-        PearEmbeddedBotHandler(
-            active_session_loader=active_session_loader,
-            worker_run_store=run_store,
-        ).handle_message(
-            {
-                "id": 207,
-                "type": "stream",
-                "display_recipient": PEAR_DEFAULT_STREAM,
-                "topic": PEAR_DEFAULT_TOPIC,
-                "content": "@Pear forget latest memory",
-            },
-            FakeBotHandler(),
-        )
-
-        self.assertEqual(run_store.starts, [])
-        self.assertEqual(len(sent_replies), 1)
-        self.assertIn("Memory forgotten: Prefer small focused PRs", sent_replies[0])
-
     def test_embedded_bot_handler_honors_mentions_only_followup_policy(self) -> None:
         payload = get_pear_session_payload()
         loaded_session = build_pear_active_session_summary_from_messages(
@@ -6031,8 +4558,8 @@ class PearSessionDefaultsTest(TestCase):
             messages=[
                 (10, "@Pear fix the checkout test", False),
                 (11, "- [~] State the first concrete edit before changing files.", True),
-                (12, "Ambient: mentions only", False),
             ],
+            response_policy="mentions_only",
         )
         seen_tasks: list[str] = []
         sent_replies: list[str] = []
@@ -6120,8 +4647,8 @@ class PearSessionDefaultsTest(TestCase):
             messages=[
                 (10, "@Pear fix the checkout test", False),
                 (11, "- [~] State the first concrete edit before changing files.", True),
-                (12, "Ambient: mentions only", False),
             ],
+            response_policy="mentions_only",
         )
         seen_tasks: list[str] = []
         sent_replies: list[str] = []
@@ -6285,8 +4812,8 @@ class PearSessionDefaultsTest(TestCase):
             stream_exists=True,
             messages=[
                 (10, "@Pear fix the checkout test", False),
-                (11, "Ambient: mentions only", False),
             ],
+            response_policy="mentions_only",
         )
         seen_tasks: list[str] = []
         sent_replies: list[str] = []
@@ -6375,8 +4902,8 @@ class PearSessionDefaultsTest(TestCase):
             stream_exists=True,
             messages=[
                 (10, "@Pear fix the checkout test", False),
-                (11, "Ambient: mentions only", False),
             ],
+            response_policy="mentions_only",
         )
         sent_replies: list[str] = []
 
@@ -6549,27 +5076,6 @@ class PearSessionDefaultsTest(TestCase):
         resume_replies = self.run_embedded_bot_handler(
             "@**Pear** Resume session:\n\nRequest: continue with rollout",
         )
-        memory_replies = self.run_embedded_bot_handler(
-            "@**Pear** Remember:\n\nMemory: Prefer small focused PRs",
-        )
-        channel_memory_replies = self.run_embedded_bot_handler(
-            "@Pear remember for this channel: only respond when someone @-mentions you directly.",
-        )
-        done_replies = self.run_embedded_bot_handler(
-            "@**Pear** Definition of done:\n\nDone: Tests pass and draft PR is posted",
-        )
-        response_policy_replies = self.run_embedded_bot_handler(
-            "@**Pear** Response policy:\n\nAmbient: mentions only",
-        )
-        natural_quiet_replies = self.run_embedded_bot_handler(
-            "@Pear only respond when I @-mention you",
-        )
-        natural_ambient_replies = self.run_embedded_bot_handler(
-            "@Pear turn follow-ups back on",
-        )
-        routine_cadence_replies = self.run_embedded_bot_handler(
-            "@**Pear** Routine cadence:\n\nRoutine cadence: manual",
-        )
 
         self.assertEqual(steering_replies[0], "Steering queued.")
         self.assertNotIn("Confirm repo, branch, and target runtime", steering_replies[0])
@@ -6579,48 +5085,9 @@ class PearSessionDefaultsTest(TestCase):
         self.assertIn("Resuming.", resume_replies[0])
         self.assertIn("Request: continue with rollout", resume_replies[0])
         self.assertNotIn("Confirm repo, branch, and target runtime", resume_replies[0])
-        self.assertIn("Saved.", memory_replies[0])
-        self.assertIn("Memory: Prefer small focused PRs", memory_replies[0])
-        self.assertNotIn("Confirm repo, branch, and target runtime", memory_replies[0])
-        self.assertIn("Saved.", channel_memory_replies[0])
-        self.assertIn(
-            "Memory: only respond when someone @-mentions you directly.",
-            channel_memory_replies[0],
-        )
-        self.assertNotIn(
-            "Ambient: mentions only",
-            channel_memory_replies[0],
-        )
-        self.assertIn("definition of done", done_replies[0])
-        self.assertIn("Done: Tests pass and draft PR is posted", done_replies[0])
-        self.assertNotIn("Confirm repo, branch, and target runtime", done_replies[0])
-        self.assertIn(
-            "only start follow-up worker turns",
-            response_policy_replies[0],
-        )
-        self.assertIn("Ambient: mentions only", response_policy_replies[0])
-        self.assertIn("Ambient: mentions only", natural_quiet_replies[0])
-        self.assertIn("Ambient: on", natural_ambient_replies[0])
-        self.assertNotIn(
-            "Confirm repo, branch, and target runtime",
-            response_policy_replies[0],
-        )
-        self.assertIn("routine cadence", routine_cadence_replies[0])
-        self.assertIn("Routine cadence: manual", routine_cadence_replies[0])
-        self.assertNotIn(
-            "Confirm repo, branch, and target runtime",
-            routine_cadence_replies[0],
-        )
         self.assertEqual(len(steering_replies), 1)
         self.assertEqual(len(pause_replies), 1)
         self.assertEqual(len(resume_replies), 2)
-        self.assertEqual(len(memory_replies), 1)
-        self.assertEqual(len(channel_memory_replies), 1)
-        self.assertEqual(len(done_replies), 1)
-        self.assertEqual(len(response_policy_replies), 1)
-        self.assertEqual(len(natural_quiet_replies), 1)
-        self.assertEqual(len(natural_ambient_replies), 1)
-        self.assertEqual(len(routine_cadence_replies), 1)
         self.assertEqual(resume_replies[1], PEAR_ACTIVE_THINKING_MARKDOWN)
 
     def test_embedded_bot_handler_replies_to_access_request_without_worker(self) -> None:
@@ -6634,45 +5101,6 @@ class PearSessionDefaultsTest(TestCase):
         self.assertIn("configured Codex runtime", sent_replies[0])
         self.assertIn("zulip-terminal can act on posted artifacts", sent_replies[0])
         self.assertIn("Worker state:", sent_replies[0])
-        self.assertNotIn("Status: working...", sent_replies[0])
-
-    def test_embedded_bot_handler_replies_to_memory_status_without_worker(self) -> None:
-        payload = get_pear_session_payload()
-        loaded_session = build_pear_active_session_summary_from_messages(
-            pear_session=payload,
-            source="server",
-            stream_exists=True,
-            messages=[
-                (10, "@Pear fix the checkout test", False),
-                (11, "Memory: Prefer small focused PRs", False),
-            ],
-        )
-
-        def active_session_loader(message, bot_handler):
-            return loaded_session
-
-        sent_replies: list[str] = []
-
-        class FakeBotHandler:
-            def send_reply(self, message: dict[str, object], response: str) -> None:
-                sent_replies.append(response)
-
-        message = {
-            "id": 13,
-            "type": "stream",
-            "display_recipient": PEAR_DEFAULT_STREAM,
-            "topic": PEAR_DEFAULT_TOPIC,
-            "content": "@Pear What do you remember about this topic?",
-        }
-
-        PearEmbeddedBotHandler(active_session_loader=active_session_loader).handle_message(
-            message,
-            FakeBotHandler(),
-        )
-
-        self.assertEqual(len(sent_replies), 1)
-        self.assertIn("I remember these notes", sent_replies[0])
-        self.assertIn("- Prefer small focused PRs", sent_replies[0])
         self.assertNotIn("Status: working...", sent_replies[0])
 
     def test_embedded_bot_worker_uses_loaded_topic_history(self) -> None:

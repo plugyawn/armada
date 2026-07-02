@@ -59,6 +59,7 @@ import * as scheduled_messages from "./scheduled_messages.ts";
 import * as scheduled_messages_feed_ui from "./scheduled_messages_feed_ui.ts";
 import * as scheduled_messages_overlay_ui from "./scheduled_messages_overlay_ui.ts";
 import * as scheduled_messages_ui from "./scheduled_messages_ui.ts";
+import * as server_events_state from "./server_events_state.ts";
 import * as settings_account from "./settings_account.ts";
 import * as settings_bots from "./settings_bots.ts";
 import * as settings_components from "./settings_components.ts";
@@ -495,6 +496,10 @@ export function dispatch_normal_event(event) {
             switch (event.op) {
                 case "add": {
                     bot_data.add(event.bot);
+                    server_events_state.maybe_update_pear_bot_user_id_from_services(
+                        event.bot.user_id,
+                        event.bot.services,
+                    );
                     const user = people.get_by_user_id(event.bot.user_id);
                     if (user.bot_owner_id === current_user.user_id) {
                         settings_bots.redraw_your_bots_list();
@@ -505,12 +510,17 @@ export function dispatch_normal_event(event) {
                 }
                 case "delete":
                     bot_data.del(event.bot.user_id);
+                    server_events_state.remove_pear_bot_user_id(event.bot.user_id);
                     settings_bots.redraw_your_bots_list();
                     settings_bots.toggle_bot_config_download_container();
                     settings_bots.update_lock_icon_in_sidebar();
                     break;
                 case "update":
                     bot_data.update(event.bot.user_id, event.bot);
+                    server_events_state.maybe_update_pear_bot_user_id_from_services(
+                        event.bot.user_id,
+                        event.bot.services,
+                    );
                     break;
                 default:
                     blueslip.error("Unexpected event type realm_bot/" + event.op);

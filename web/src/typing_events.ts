@@ -8,6 +8,7 @@ import render_typing_notifications from "../templates/typing_notifications.hbs";
 import * as message_lists from "./message_lists.ts";
 import * as narrow_state from "./narrow_state.ts";
 import * as people from "./people.ts";
+import * as server_events_state from "./server_events_state.ts";
 import {current_user, realm} from "./state_data.ts";
 import * as typing_data from "./typing_data.ts";
 
@@ -111,14 +112,21 @@ export function render_notifications_for_narrow(): void {
     const users_typing = user_ids
         .map((user_id) => people.get_user_by_id_assert_valid(user_id))
         .filter((person) => !person.is_inaccessible_user);
-    const num_of_users_typing = users_typing.length;
+    const pear_working = users_typing.some((person) =>
+        server_events_state.is_pear_bot_user_id(person.user_id),
+    );
+    const non_pear_users_typing = users_typing.filter(
+        (person) => !server_events_state.is_pear_bot_user_id(person.user_id),
+    );
+    const num_of_users_typing = non_pear_users_typing.length;
 
-    if (num_of_users_typing === 0) {
+    if (num_of_users_typing === 0 && !pear_working) {
         $("#typing_notifications").hide();
     } else {
         $("#typing_notifications").html(
             render_typing_notifications({
-                users: users_typing,
+                pear_working,
+                users: non_pear_users_typing,
                 several_users: num_of_users_typing > MAX_USERS_TO_DISPLAY_NAME,
             }),
         );

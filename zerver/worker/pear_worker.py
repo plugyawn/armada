@@ -85,6 +85,14 @@ class PearWorker(QueueProcessingWorker):
             progress_message_id = None
         context_stream = stream or source_stream
         context_topic = topic or source_topic
+        worker_run_store = PearDatabaseWorkerRunStore()
+        if not worker_run_store.claim_for_run(
+            bot_handler,
+            message_id,
+            stream=stream,
+            topic=topic,
+        ):
+            return
         model = pear_worker_model_for_topic(user_profile, stream=context_stream, topic=context_topic)
         reasoning_effort = pear_worker_reasoning_effort_for_topic(
             user_profile,
@@ -114,7 +122,7 @@ class PearWorker(QueueProcessingWorker):
                 isolation_error,
             ),
             active_session_loader=load_pear_active_session_from_zulip,
-            worker_run_store=PearDatabaseWorkerRunStore(),
+            worker_run_store=worker_run_store,
         )
         active_session = pear_handler.load_active_session(message, bot_handler, content)
         pear_handler.run_worker_turn(

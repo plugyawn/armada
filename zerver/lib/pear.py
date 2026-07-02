@@ -4358,16 +4358,17 @@ class PearEmbeddedBotHandler:
                         message,
                         content,
                     )
-                )
+            )
             task = pear_worker_task_for_message(content, active_session)
             runtime_label = self.worker_runtime.runtime_value()
-            self.worker_run_store.record(
-                bot_handler,
-                message_id,
-                "running",
-                stream=stream,
-                topic=topic,
-            )
+            if not callable(getattr(self.worker_run_store, "claim_for_run", None)):
+                self.worker_run_store.record(
+                    bot_handler,
+                    message_id,
+                    "running",
+                    stream=stream,
+                    topic=topic,
+                )
             self.update_worker_metadata(
                 bot_handler,
                 message_id,

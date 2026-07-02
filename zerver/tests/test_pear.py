@@ -120,6 +120,7 @@ from zerver.lib.pear_agent import (
     PearProcessIsolation,
     build_pear_addressing_router_prompt,
     build_pear_codex_developer_instructions,
+    build_pear_codex_initial_exec_prompt,
     build_pear_codex_prompt,
     build_pear_codex_turn_prompt,
     ensure_pear_runtime_result,
@@ -1530,7 +1531,7 @@ class PearSessionDefaultsTest(TestCase):
                     "kind": "assistant",
                     "status": "running",
                     "title": "Assistant",
-                    "body": "Done: Status checked.",
+                    "body": "Result: Status checked.",
                     "item_id": "msg-2",
                 },
             ],
@@ -1547,7 +1548,7 @@ class PearSessionDefaultsTest(TestCase):
                 ]
             ),
         )
-        self.assertNotIn("Done: Status checked.", progress_message)
+        self.assertNotIn("Result: Status checked.", progress_message)
 
     def test_build_worker_progress_message_collapses_running_tool_group(self) -> None:
         progress_message = build_pear_worker_progress_message(
@@ -1827,7 +1828,7 @@ class PearSessionDefaultsTest(TestCase):
                         [
                             "Repo: `/home/vagrant/zulip`",
                             "Verification: `git status --short --branch` completed successfully",
-                            "Done: Status checked; ready for the next concrete task.",
+                            "Result: Status checked; ready for the next concrete task.",
                         ]
                     ),
                     "item_id": "msg-2",
@@ -1851,6 +1852,7 @@ class PearSessionDefaultsTest(TestCase):
         self.assertNotIn("*✦*", completed_message)
         self.assertNotIn("Repo:", completed_message)
         self.assertNotIn("Verification:", completed_message)
+        self.assertNotIn("Result:", completed_message)
 
     def test_worker_completed_message_preserves_final_answer_after_long_tool_details(self) -> None:
         transcript_events = [
@@ -1986,6 +1988,10 @@ class PearSessionDefaultsTest(TestCase):
         )
 
         prompt = build_pear_codex_prompt(active_session, "fix the checkout test")
+        initial_exec_prompt = build_pear_codex_initial_exec_prompt(
+            active_session,
+            "fix the checkout test",
+        )
 
         self.assertIn("Task: fix the checkout test", prompt)
         self.assertIn(f"Zulip stream: {PEAR_DEFAULT_STREAM}", prompt)
@@ -1999,20 +2005,22 @@ class PearSessionDefaultsTest(TestCase):
             "- contract: the Zulip stream maps to the repository, and the Zulip topic/subthread maps to the Git branch.",
             prompt,
         )
-        self.assertIn("Durable topic context lives in CANVAS.md", prompt)
-        self.assertIn("Use Codex-native skills from CODEX_HOME/skills", prompt)
-        self.assertIn(
+        self.assertNotIn("Durable topic context lives in CANVAS.md", prompt)
+        self.assertNotIn("Use Codex-native skills from CODEX_HOME/skills", prompt)
+        self.assertNotIn(
             "For casual, conversational, choice-only, or answer-only requests, respond directly.",
             prompt,
         )
-        self.assertIn(
+        self.assertNotIn(
             "Do not run repository/session checks just to make a casual reply sound grounded.",
             prompt,
         )
-        self.assertIn(
+        self.assertNotIn(
             "Resolve references like 'above', 'that', 'what did I ask', and 'who is here'",
             prompt,
         )
+        self.assertIn("Durable topic context lives in CANVAS.md", initial_exec_prompt)
+        self.assertIn("Use Codex-native skills from CODEX_HOME/skills", initial_exec_prompt)
         self.assertIn("Visible recent human participants:\n- plugyawn", prompt)
         self.assertIn("Recent Zulip topic transcript, oldest to newest:", prompt)
         self.assertIn("#10 plugyawn (human): @Pear fix the checkout test", prompt)
@@ -2027,13 +2035,14 @@ class PearSessionDefaultsTest(TestCase):
         self.assertNotIn("\nDefinition of done:\n", prompt)
         self.assertNotIn("\nStanding routines:\n", prompt)
         self.assertNotIn("\nRoutine cadence:\n", prompt)
-        self.assertIn("Verification: <command or check result>", prompt)
-        self.assertIn(
+        self.assertNotIn("Verification: <command or check result>", prompt)
+        self.assertNotIn(
             "Session: <session record URL or Codex thread reference>", prompt
         )
-        self.assertIn("Ticket: <ticket URL, ID, or path>", prompt)
-        self.assertIn("Issue: <issue URL, ID, or path>", prompt)
-        self.assertIn("Reviewers: <reviewer handles or teams>", prompt)
+        self.assertNotIn("Ticket: <ticket URL, ID, or path>", prompt)
+        self.assertNotIn("Issue: <issue URL, ID, or path>", prompt)
+        self.assertNotIn("Reviewers: <reviewer handles or teams>", prompt)
+        self.assertIn("Verification: <command or check result>", initial_exec_prompt)
         self.assertIn(
             "Recent artifacts:\n- Verification: pytest zerver/tests/test_pear.py",
             prompt,

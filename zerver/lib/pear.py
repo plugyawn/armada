@@ -130,7 +130,7 @@ PEAR_RETIRED_VISIBLE_ARTIFACT_PATTERN: Final = (
     r"Followups|Follow-up mode):"
 )
 PEAR_VISIBLE_ARTIFACT_FALLBACK_PATTERN: Final = (
-    r"^\s*(?:[-*]\s*)?(Result|Done):[ \t]*([^\r\n]*?)[ \t]*$"
+    r"^\s*(?:[-*]\s*)?(Result):[ \t]*([^\r\n]*?)[ \t]*$"
 )
 PEAR_TRANSCRIPT_TOOL_DETAIL_KINDS: Final = frozenset(
     {"command", "file_change", "tool"}
@@ -1044,12 +1044,11 @@ def pear_visible_assistant_artifact_fallback_text(
         value = str(match.group(2)).strip()
         if value:
             fallback_by_label[label] = value
-    for label in ("result", "done"):
-        if label in fallback_by_label:
-            value = normalize_pear_visible_markdown(fallback_by_label[label])
-            if limit is None:
-                return value
-            return trim_pear_text(value, limit=limit)
+    if "result" in fallback_by_label:
+        value = normalize_pear_visible_markdown(fallback_by_label["result"])
+        if limit is None:
+            return value
+        return trim_pear_text(value, limit=limit)
     return ""
 
 

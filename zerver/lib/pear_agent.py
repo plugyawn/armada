@@ -535,6 +535,13 @@ def build_pear_codex_turn_prompt(active_session: PearActiveSessionSummary, task:
 
 
 def build_pear_codex_prompt(active_session: PearActiveSessionSummary, task: str) -> str:
+    return build_pear_codex_turn_prompt(active_session, task)
+
+
+def build_pear_codex_initial_exec_prompt(
+    active_session: PearActiveSessionSummary,
+    task: str,
+) -> str:
     return "\n\n".join(
         [
             build_pear_codex_developer_instructions(),
@@ -1345,7 +1352,7 @@ class PearCodexExecToolRunner:
         thread_id = pear_codex_thread_id_from_active_session(active_session)
         command = self.build_command(thread_id)
         if thread_id is None:
-            prompt = build_pear_codex_prompt(active_session, task)
+            prompt = build_pear_codex_initial_exec_prompt(active_session, task)
         else:
             prompt = build_pear_codex_turn_prompt(active_session, task)
         if self.run_command is not None:

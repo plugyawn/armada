@@ -19,7 +19,6 @@ import * as components from "./components.ts";
 import type {Toggle} from "./components.ts";
 import type {Filter} from "./filter.ts";
 import {$t} from "./i18n.ts";
-import * as message_view from "./message_view.ts";
 import * as narrow_state from "./narrow_state.ts";
 import {postprocess_content} from "./postprocess_content.ts";
 import * as rendered_markdown from "./rendered_markdown.ts";
@@ -254,6 +253,15 @@ function close_canvas(): void {
     $("#pear-canvas-view").addClass("notdisplayed");
 }
 
+function show_terms(terms: NarrowTerm[]): void {
+    // Avoid a startup module cycle: message_view imports enough of the
+    // message-list stack to trip filter.ts initialization when pulled
+    // through pear_topbar -> pear_topbar_tabs.
+    void import("./message_view.ts").then((message_view) => {
+        message_view.show(terms, {trigger: "pear-topbar-tabs", change_hash: true});
+    });
+}
+
 function handle_tab_click(key: string): void {
     switch (key) {
         case "messages": {
@@ -262,7 +270,7 @@ function handle_tab_click(key: string): void {
             if (narrow_state.filter()?.has_operand("has", "attachment")) {
                 const terms = conversation_terms(false);
                 if (terms !== undefined) {
-                    message_view.show(terms, {trigger: "pear-topbar-tabs", change_hash: true});
+                    show_terms(terms);
                 }
             }
             break;
@@ -276,7 +284,7 @@ function handle_tab_click(key: string): void {
             if (!narrow_state.filter()?.has_operand("has", "attachment")) {
                 const terms = conversation_terms(true);
                 if (terms !== undefined) {
-                    message_view.show(terms, {trigger: "pear-topbar-tabs", change_hash: true});
+                    show_terms(terms);
                 }
             }
             break;

@@ -7,6 +7,7 @@
 import * as blueslip from "./blueslip.ts";
 import * as channel from "./channel.ts";
 import {$t} from "./i18n.ts";
+import * as message_live_update from "./message_live_update.ts";
 import * as narrow_state from "./narrow_state.ts";
 
 export type PearRunEvent = {
@@ -40,6 +41,7 @@ export type PearLiveRun = {
 
 export type PearRun = {
     id: number;
+    result_message_id?: number | null;
     status: string;
     session_kind: string;
     source_stream: string;
@@ -227,6 +229,25 @@ export function any_active_run(runs: PearRun[]): boolean {
     return runs.some((run) => run_is_active(run));
 }
 
+function run_is_terminal(run: {status: string}): boolean {
+    return run.status === "done" || run.status === "failed" || run.status === "cancelled";
+}
+
+function settle_terminal_result_messages(runs: PearRun[]): void {
+    const result_message_ids = [
+        ...new Set(
+            runs
+                .filter((run) => run_is_terminal(run))
+                .map((run) => run.result_message_id)
+                .filter((message_id): message_id is number => typeof message_id === "number"),
+        ),
+    ];
+    if (result_message_ids.length === 0) {
+        return;
+    }
+    message_live_update.rerender_messages_view_by_message_ids(result_message_ids);
+}
+
 function clear_live_refresh(): void {
     if (live_refresh_timer !== undefined) {
         window.clearTimeout(live_refresh_timer);
@@ -282,6 +303,7 @@ export function refresh(options: {live?: boolean} = {}): void {
                   ? last_topic_context
                   : response.pear_topic_context;
             last_runs = response.pear_runs;
+            settle_terminal_result_messages(last_runs);
             emit_status_transitions(last_runs);
             notify_subscribers();
         },

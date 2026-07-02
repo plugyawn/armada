@@ -92,8 +92,21 @@ sudo journalctl -u pear-zulip-dev -u pear-embedded-bots -u pear-worker -f
 
 ## Re-sync after local edits
 
-Run the bootstrap script again. Zulip provisioning is idempotent, and the script
-will restart the services after syncing.
+Use the guarded update script instead of re-running the full bootstrap:
+
+```bash
+tools/pear_deploy/update_remote.sh
+tools/pear_deploy/update_remote.sh --yes
+```
+
+The first command is a read-only gate. It verifies that the local tracked tree is
+clean, the remote tracked tree is clean, and the remote HEAD is not ahead of the
+local `pear-main` history. The `--yes` run snapshots the current remote checkout,
+syncs this checkout with the same excludes as bootstrap, applies `zerver`
+migrations, restarts `pear-worker`, `pear-embedded-bots`, and `pear-zulip-dev`
+together, verifies the Pear backend tests, and records the deployed SHA in
+`/home/zulipdev/pear-deployed-sha`. If a post-snapshot step fails, it restores
+the pre-deploy snapshot and restarts the Pear services.
 
 ## Cleanup
 

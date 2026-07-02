@@ -418,7 +418,7 @@
        Prominent rows include things like headers (e.g., VIEWS)
        as well as navigation items. Everything else takes
        the smaller line-height. */
-    --line-height-sidebar-row-prominent: 1.7142em; /* 24px / 14px em */
+    --line-height-sidebar-row-prominent: 2em; /* 28px / 14px em */
     --line-height-sidebar-row: 1.5714em; /* 22px / 14px em */
     --line-height-sidebar-row-with-avatars: 1.3571em; /* 19px / 14px em */
     --line-height-sidebar-topic-inner: 1.2em;
@@ -556,35 +556,28 @@
        message area as needed.
        2px at 20px/1em */
     --message-box-link-focus-ring-block-padding: 0.1em;
-    /* 35px at 14px/1em */
-    --message-box-avatar-width: 2.5em;
+    /* 36px at 15px/1em */
+    --message-box-avatar-width: 2.4em;
     --message-box-avatar-height: var(--message-box-avatar-width);
-    /* 46px at 14px/1em */
-    --message-box-avatar-column-width: 3.2857em;
+    /* 44px at 15px/1em */
+    --message-box-avatar-column-width: 2.9333em;
     /* Increase the margin here to account for the
        focus ring, which is offset by -1px, as well
        as the vertical height between the hover icons
        and focus ring. */
     --message-box-vertical-margin: calc(
-        var(--markdown-interelement-space-px) * 1.4
+        var(--markdown-interelement-space-px) * 1.2
     );
     --message-box-markdown-aligned-vertical-space: var(
         --markdown-interelement-space-px
     );
-    /* 25px at 16px/1em */
-    --message-box-icon-height: 1.6667em;
-    --message-box-height-senderless-single-line-message: calc(
-        var(--base-line-height-unitless) * var(--base-font-size-px) +
-            calc(var(--markdown-interelement-space-px) * 2)
-    );
-    /* The line-height on the sender line should coordinate with the
-       height of a single-line, senderless message, but never be smaller
-       than the height of the hover icons. The sender line never wraps,
-       so this just keeps everything in line with the grid definition. */
-    --message-box-sender-line-height: max(
-        var(--message-box-icon-height),
-        var(--message-box-height-senderless-single-line-message)
-    );
+    /* Slack sender line: a tight name row, 22px at the default
+       15px base font. Calculated in px so that the sender name
+       and its inline timestamp (which have different font sizes)
+       resolve to the same line box and share a baseline. The
+       hover controls chip floats over the row boundary via its
+       negative margins, so it no longer constrains this height. */
+    --message-box-sender-line-height: calc(var(--base-font-size-px) * 1.4667);
     /* This width is updated with an exact pixel
        width upon UI initialization. */
     --message-box-timestamp-column-width: 0;
@@ -845,11 +838,6 @@
 
     /* Message date divider variables */
     --date-divider-text-padding: 12px;
-    --date-divider-line-gap: 4px;
-    --date-divider-right-edge-offset: 2px;
-    --date-divider-line-inset: calc(
-        var(--date-divider-text-padding) - var(--date-divider-line-gap)
-    );
 
     /* Colors used across the app */
     --color-date: light-dark(hsl(0deg 0% 15% / 75%), hsl(0deg 0% 100% / 75%));

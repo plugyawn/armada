@@ -42,10 +42,10 @@ const BODY_FONT_CONTENT_BOX = BODY_FONT_ASCENT + BODY_FONT_DESCENT;
 // than the line-height.
 const MAXIMUM_BLOCK_HEIGHT_IN_EMS = BODY_FONT_CONTENT_BOX / BODY_FONT_EM_SIZE;
 
-// Slack-style density: 15px body text at a 1.47 line-height
-// (~22px line boxes).
+// Slack-style density: 15px body text at a 1.38 line-height
+// (~20.7px line boxes). 138 is a supported line-height step.
 export const NON_COMPACT_MODE_FONT_SIZE_PX = 15;
-export const NON_COMPACT_MODE_LINE_HEIGHT_PERCENT = 147;
+export const NON_COMPACT_MODE_LINE_HEIGHT_PERCENT = 138;
 
 export const INFO_DENSITY_VALUES_DICT = {
     web_font_size_px: {
@@ -110,10 +110,11 @@ export function set_base_typography_css_variables(): void {
     const line_height_percent = user_settings.web_line_height_percent;
     const line_height_unitless = line_height_percent / 100;
     const line_height_px = line_height_unitless * font_size_px;
-    /* This percentage is a legacy value, rounding up from .294;
-       additional logic might be useful to make this adjustable;
-       likewise with the doubled value. */
-    const markdown_interelement_space_fraction = 0.3;
+    /* Slack-tight interelement spacing: a quarter of the line
+       height (~5.2px at the default 15px/1.38); additional logic
+       might be useful to make this adjustable, likewise with the
+       doubled value. */
+    const markdown_interelement_space_fraction = 0.25;
     const markdown_interelement_space_px = line_height_px * markdown_interelement_space_fraction;
 
     $(":root").css("--base-line-height-unitless", `${line_height_unitless}`);

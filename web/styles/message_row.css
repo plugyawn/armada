@@ -326,27 +326,28 @@
     display: grid;
     align-content: baseline;
     padding-left: 10px;
-    /* Prevent the message column from overflowing the 1fr
-       space allotted by specifying `minmax(0,1fr)`, which
-       sets 0 as the minimum size, not the grid default of
-       `auto`.
+    /* Slack-style columns: gutter, sender (sized to its content
+       so the timestamp can sit inline right after the name), a
+       flexible fill column, and the hover-controls reserve.
 
-        The calculated `--message-box-timestamp-column-width`
-        should match `max-content` exactly, but `max-content`
-        ensures the timestamp will always have enough space
-        in the column. */
+       Message content spans the sender and fill columns; because
+       that span crosses the flexible column, it contributes
+       nothing to the sender column's max-content sizing, and
+       `minmax(0, 1fr)` (rather than the grid default minimum of
+       `auto`) prevents wide content from overflowing the fill
+       column. */
     grid-template:
         minmax(var(--message-box-sender-line-height), auto) repeat(4, auto) /
-        var(--message-box-avatar-column-width) minmax(0, 1fr) max-content
-        8px minmax(var(--message-box-timestamp-column-width), max-content);
+        var(--message-box-avatar-column-width) minmax(0, max-content)
+        minmax(0, 1fr) max-content;
     /* Named grid areas provide flexibility for positioning grid items
        reliably, even if the row or column definitions of the grid change. */
     grid-template-areas:
-        "edited message   controls . time"
-        ".      message   .        . .   "
-        ".      more      .        . .   "
-        ".      reactions .        . .   "
-        ".      reminders .        . .   ";
+        "edited message   message   controls"
+        ".      message   message   .       "
+        ".      more      more      .       "
+        ".      reactions reactions .       "
+        ".      reminders reminders .       ";
 
     &:has(.message-reminders) {
         .message_reactions {
@@ -361,11 +362,8 @@
         /* Set the controls area to 0 to give more space
            to the edit/source view area. */
         grid-template-columns:
-            var(--message-box-avatar-column-width) minmax(0, 1fr)
-            0 8px minmax(
-                var(--message-box-timestamp-column-width),
-                max-content
-            );
+            var(--message-box-avatar-column-width) minmax(0, max-content)
+            minmax(0, 1fr) 0;
 
         /* Hide reactions, scheduled reminders, and the hover
            controls chip in edit mode; the controls column is
@@ -378,14 +376,16 @@
         }
     }
 
-    .message_edit_notice {
-        grid-area: edited;
-        align-self: center;
-    }
-
+    .message_edit_notice,
     .edit-notifications {
         grid-area: edited;
         align-self: center;
+
+        /* On grouped rows, the hover-only gutter timestamp paints
+           in this same cell; yield to it while the row is hovered. */
+        .message_row:hover .messagebox-content > & {
+            visibility: hidden;
+        }
     }
 
     .slow-send-spinner {
@@ -395,7 +395,9 @@
         margin-top: 1px;
         margin-right: 10px;
         text-align: end;
-        grid-area: time;
+        /* Grouped rows have no timestamp column; the spinner
+           spins in the gutter, where the timestamp lives. */
+        grid-area: edited;
     }
 
     .message_content:not(.status-message) {
@@ -572,27 +574,36 @@
 .messagebox-includes-sender {
     .messagebox-content {
         grid-template-areas:
-            "avatar sender    controls . time"
-            "avatar message   .        . .   "
-            ".      more      .        . .   "
-            ".      reactions .        . .   "
-            ".      reminders .        . .   ";
+            "avatar sender    time      controls"
+            "avatar message   message   .       "
+            ".      more      more      .       "
+            ".      reactions reactions .       "
+            ".      reminders reminders .       ";
 
         .message_edit {
             /* No top margin when there's a sender row */
             margin-top: 0;
         }
 
+        .slow-send-spinner {
+            grid-area: time;
+        }
+
         &.is-me-message {
-            grid-template-areas:
-                ".      .         .        . .   "
-                "avatar sender    controls . time"
-                ".      more      .        . .   "
-                ".      reactions .        . .   "
-                ".      reminders .        . .   ";
-            grid-template-rows:
-                var(--message-box-vertical-margin)
-                minmax(var(--message-box-avatar-height), auto) repeat(3, auto);
+            /* The sender line of a me-message is the message
+               itself, so the sender takes the flexible column
+               and the timestamp keeps to the far edge. */
+            grid-template:
+                ".      .         .        .   " var(--message-box-vertical-margin)
+                "avatar sender    controls time" minmax(
+                    var(--message-box-avatar-height),
+                    auto
+                )
+                ".      more      .        .   "
+                ".      reactions .        .   "
+                ".      reminders .        .   " /
+                var(--message-box-avatar-column-width) minmax(0, 1fr)
+                max-content max-content;
             /* We align items to the baseline on me messages,
                and unset the align-content property. */
             align-items: baseline;
@@ -809,9 +820,11 @@
     border: 1px solid transparent;
     /* The 32px buttons make the chip taller than the sender
        line; negative vertical margins let it float over the
-       row boundary instead of growing the row. */
-    /* -7px at 16px/1em */
-    margin: -0.4375em 0;
+       row boundary instead of growing the row. The right inset
+       keeps the chip off the pane edge now that no timestamp
+       column buffers it. */
+    /* -7px at 16px/1em; 8px at 15px/1em */
+    margin: -0.4375em 0.5333em -0.4375em 0;
     /* Paint the floating chip above neighboring rows it
        may overlap. */
     position: relative;
@@ -1004,28 +1017,65 @@
 }
 
 .message-time {
-    justify-self: end;
-    padding-right: 5px;
-    /* Maintain first-line baseline regardless of
-       what happens in the message-content area (e.g., a
-       collapsed message, or source/edit view). This
-       line-height also keeps EDITED/MOVED messages
-       in place, care of their baseline-group participation
-       within the grid. */
-    line-height: var(--message-box-sender-line-height);
-    grid-area: time;
+    /* Grouped rows: a hover-only stamp in the left gutter,
+       right-aligned toward the message text like the avatar
+       above it. */
+    grid-area: edited;
+    place-self: start end;
+    /* Center the stamp on the first line of the message by
+       matching the message content's top padding and resolving
+       the same line box in px, independent of the stamp's own
+       font size. */
+    padding-top: var(--message-box-markdown-aligned-vertical-space);
+    padding-right: 0.7273em; /* 8px at 11px/1em */
+    line-height: calc(
+        var(--base-line-height-unitless) * var(--base-font-size-px)
+    );
     display: block;
-    /* 13px at 14px/1em */
-    font-size: 0.9286em;
-    font-weight: 350;
+    white-space: nowrap;
+    /* 11px at 15px/1em */
+    font-size: 0.7333em;
+    font-weight: 400;
     text-align: end;
-    opacity: 0.8;
+    opacity: 0;
     color: var(--color-text-default);
     letter-spacing: 0.02em;
+
+    .message_row:hover &,
+    &:focus-visible {
+        opacity: 0.62;
+    }
+
     /* Disable blue link styling for the message timestamp link. */
     &:hover {
         text-decoration: none;
         color: var(--color-message-action-interactive);
+    }
+
+    /* Sender rows: the stamp sits inline, right after the
+       sender name, and is always visible. */
+    .messagebox-includes-sender & {
+        grid-area: time;
+        place-self: auto start;
+        padding: 0;
+        margin-left: 0.5em; /* 6px at 12px/1em */
+        /* Share a line box (and so a baseline) with the sender
+           name; the variable resolves in px. */
+        line-height: var(--message-box-sender-line-height);
+        white-space: nowrap;
+        /* 12px at 15px/1em */
+        font-size: 0.8em;
+        text-align: start;
+        opacity: 0.62;
+    }
+
+    /* Me-messages keep the stamp on the far edge; their sender
+       line is the message itself, so there is no stable name to
+       sit after. */
+    .messagebox-includes-sender .is-me-message & {
+        justify-self: end;
+        margin-left: 0;
+        text-align: end;
     }
 
     &.notvisible {
@@ -1400,37 +1450,32 @@
 }
 
 .message_feed_divider {
-    display: grid;
+    /* Slack-style divider: hairlines flank centered content
+       (the date pill and/or the subscription status). */
+    display: flex;
     grid-area: message_feed_divider_content;
-    grid-template: auto / minmax(20px, 1fr) auto minmax(max-content, 1fr);
-    grid-template-areas: "left_divider_content middle_divider_content right_divider_content";
     align-items: center;
     padding: 8px 0;
 
-    &::before {
-        grid-area: left_divider_content;
+    &::before,
+    &::after {
         content: " ";
         height: 0;
-        border-bottom: 1px solid var(--color-border-message-group-spacer-line);
-    }
-
-    &:has(.timerender-content)::after {
-        display: none;
-    }
-
-    &:not(:has(.timerender-content))::after {
-        grid-area: right_divider_content;
+        flex: 1 1 auto;
         min-width: 20px;
-        content: " ";
-        height: 0;
-        width: calc(100% - 2px);
         border-bottom: 1px solid var(--color-border-message-group-spacer-line);
     }
 
     .stream-status {
-        grid-area: middle_divider_content;
         white-space: nowrap;
         text-overflow: ellipsis;
+        overflow: hidden;
+        text-transform: uppercase;
+        font-size: calc(12em / 14);
+        font-style: normal;
+        font-weight: 600;
+        line-height: 17px; /* identical to box height, or 131% */
+        color: var(--color-date);
         /* Same as timerender-content at 16px */
         letter-spacing: 0.5486px;
         padding: 0 0.25em;
@@ -1444,55 +1489,27 @@
     }
 
     .date-divider-content {
-        position: relative;
-        grid-area: right_divider_content;
         display: flex;
         align-items: center;
-        justify-content: end;
         white-space: nowrap;
-        letter-spacing: 0.04em;
+        font-style: normal;
 
-        &::before {
-            position: relative;
-            min-width: 20px;
-            width: 100%;
-            right: calc(-1 * var(--date-divider-line-inset));
-            margin-left: -50%;
-        }
-
-        &::after {
-            position: absolute;
-            right: var(--date-divider-right-edge-offset);
-            width: calc(
-                var(--date-divider-line-inset) -
-                    var(--date-divider-right-edge-offset)
-            );
-        }
-
-        &::before,
-        &::after {
-            content: " ";
-            height: 0;
-            border-bottom: 1px solid
-                var(--color-border-message-group-spacer-line);
-        }
-
+        /* The centered Slack date pill. The background stays
+           transparent so tinted rows (mentions, Pear) show
+           through inside the hairline ring. */
         .date_row_text {
+            display: inline-block;
             padding: 0 var(--date-divider-text-padding);
+            border: 1px solid var(--color-message-list-border);
+            border-radius: 2em;
+            /* 12px at 15px/1em */
+            font-size: 0.8em;
+            font-weight: 700;
+            line-height: 1.8333em; /* 22px at 12px/1em */
+            letter-spacing: 0.02em;
+            color: var(--color-date);
             cursor: pointer;
         }
-    }
-
-    .stream-status,
-    .date-divider-content {
-        overflow: hidden;
-        text-transform: uppercase;
-        font-size: calc(12em / 14);
-        font-style: normal;
-        font-weight: 600;
-        line-height: 17px; /* identical to box height, or 131% */
-        text-align: right;
-        color: var(--color-date);
     }
 }
 

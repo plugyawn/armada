@@ -72,7 +72,7 @@ PEAR_TOPIC_STATE_TOOL_NAMES: Final = (
 )
 
 PEAR_REASONING_EFFORTS: Final[tuple[str, ...]] = ("low", "medium", "high", "xhigh")
-PEAR_SERVER_CONTRACT_VERSION: Final = 38
+PEAR_SERVER_CONTRACT_VERSION: Final = 39
 PEAR_URL_RE: Final = r"https?://[^\s<>]+"
 PEAR_STEER_PROMPT: Final = "Steering update:"
 PEAR_FIX_BUG_PROMPT: Final = "Fix bug:"

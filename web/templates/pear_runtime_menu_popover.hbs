@@ -1,6 +1,21 @@
 <div class="popover-menu" id="pear-runtime-menu-popover" aria-labelledby="pear-runtime-menu" data-simplebar data-simplebar-tab-index="-1">
     <ul role="menu" class="popover-menu-list">
         {{#if has_runtime}}
+        {{#if git}}
+        <li role="none" class="link-item">
+            <div class="pear-runtime-git-info" role="menuitem">
+                {{#if git.has_repo_branch}}
+                <div class="pear-runtime-git-row">
+                    <span class="popover-menu-label">{{git.repo_branch_label}}{{#if git.head}} · {{git.head}}{{/if}}</span>
+                </div>
+                {{/if}}
+                <div class="pear-runtime-git-row pear-runtime-git-status-row">
+                    <span class="popover-menu-label">{{git.status_label}}</span>
+                </div>
+            </div>
+        </li>
+        <li role="separator" class="popover-menu-separator"></li>
+        {{/if}}
         <li role="none" class="link-item">
             <label class="pear-runtime-group-header popover-menu-link" role="menuitem">
                 <span class="popover-menu-label">{{t 'Model' }}</span>

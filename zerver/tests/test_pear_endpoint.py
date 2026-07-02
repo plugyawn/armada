@@ -45,6 +45,7 @@ from zerver.lib.pear_worker import (
     pear_git_status_delta,
     pear_reconcile_topic_branch,
     pear_topic_branch_name,
+    pear_topic_isolation_username,
     pear_topic_workdir_root,
     pear_topic_process_isolation,
     pear_worker_process_isolation_error,
@@ -752,6 +753,33 @@ class PearSessionEndpointTest(ZulipTestCase):
                     topic_name=PEAR_DEFAULT_TOPIC,
                 ).exists()
             )
+
+    def test_ensure_pear_topic_context_uses_isolation_for_canvas(self) -> None:
+        owner = self.example_user("hamlet")
+        topic_name = "isolated topic"
+
+        with tempfile.TemporaryDirectory() as temp_dir, self.settings(
+            PEAR_TOPIC_ISOLATION_BACKEND="os-user",
+            PEAR_TOPIC_WORKDIR_ROOT=temp_dir,
+        ), patch("zerver.lib.pear_worker.ensure_pear_topic_workdir"), patch(
+            "zerver.lib.pear_worker.pear_ensure_topic_canvas"
+        ) as ensure_canvas:
+            context = ensure_pear_topic_context(
+                owner,
+                stream=PEAR_DEFAULT_STREAM,
+                topic=topic_name,
+            )
+
+        ensure_canvas.assert_called_once_with(
+            context.workdir,
+            stream=PEAR_DEFAULT_STREAM,
+            topic=topic_name,
+            isolation_username=pear_topic_isolation_username(
+                owner,
+                stream=PEAR_DEFAULT_STREAM,
+                topic=topic_name,
+            ),
+        )
 
     def test_get_pear_canvas_creates_backfilled_git_excluded_canvas(self) -> None:
         owner = self.example_user("hamlet")

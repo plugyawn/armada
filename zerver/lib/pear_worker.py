@@ -1095,7 +1095,17 @@ def ensure_pear_topic_context(
         repository_url=parent_repository_url,
         branch_name=pear_topic_branch_name(topic),
     )
-    pear_ensure_topic_canvas(context.workdir, stream=stream, topic=topic)
+    isolation_username = (
+        pear_topic_isolation_username(user_profile, stream=stream, topic=topic)
+        if pear_topic_os_user_isolation_enabled()
+        else None
+    )
+    pear_ensure_topic_canvas(
+        context.workdir,
+        stream=stream,
+        topic=topic,
+        isolation_username=isolation_username,
+    )
     return context
 
 

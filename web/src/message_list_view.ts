@@ -139,81 +139,11 @@ type RenderingPlan = {
     append_messages: MessageContainer[];
 };
 
-const pear_thinking_glyphs = [
-    "·",
-    "∙",
-    "⋅",
-    "✦",
-    "✧",
-    "✩",
-    "✶",
-    "✷",
-    "✸",
-    "✹",
-    "✺",
-    "✹",
-    "✸",
-    "✷",
-    "✶",
-    "✩",
-    "✧",
-    "✦",
-    "⋅",
-    "∙",
-] as const;
-let pear_thinking_glyph_index = 0;
-let pear_thinking_glyph_timer: ReturnType<typeof setInterval> | undefined;
-
-function pear_thinking_markers($scope: JQuery = $(document)): JQuery {
-    const $descendant_markers = $scope.find(
-        ".message_row.pear-active-message .message_content > p:last-child > em:last-child",
-    );
-    if (!$scope.hasClass("pear-active-message")) {
-        return $descendant_markers;
-    }
-    return $descendant_markers.add($scope.find(".message_content > p:last-child > em:last-child"));
-}
-
-function render_pear_thinking_glyph($markers: JQuery): void {
-    if ($markers.length === 0) {
-        return;
-    }
-    $markers.text(pear_thinking_glyphs[pear_thinking_glyph_index]);
-    pear_thinking_glyph_index = (pear_thinking_glyph_index + 1) % pear_thinking_glyphs.length;
-}
-
-function stop_pear_thinking_animation(): void {
-    if (pear_thinking_glyph_timer === undefined) {
-        return;
-    }
-    clearInterval(pear_thinking_glyph_timer);
-    pear_thinking_glyph_timer = undefined;
-}
-
-function update_pear_thinking_glyphs(): void {
-    const $markers = pear_thinking_markers();
-    if ($markers.length === 0) {
-        stop_pear_thinking_animation();
-        return;
-    }
-    render_pear_thinking_glyph($markers);
-}
-
-function start_pear_thinking_animation(): void {
-    if (pear_thinking_glyph_timer !== undefined) {
-        return;
-    }
-    pear_thinking_glyph_timer = setInterval(update_pear_thinking_glyphs, 100);
-}
-
-function maybe_render_pear_thinking_glyph($row: JQuery): void {
-    if (!$row.hasClass("pear-active-message")) {
-        return;
-    }
-    const $markers = pear_thinking_markers($row);
-    render_pear_thinking_glyph($markers);
-    start_pear_thinking_animation();
-}
+// The ✦ "thinking" marker on an active Pear message (the trailing
+// `<em>✦</em>` the server appends while the agent is writing) is
+// animated purely in CSS; see `.pear-active-message` in
+// message_row.css. The marker contract and the `is_pear_message`
+// detection below are unchanged.
 
 type BoundaryMessageContainerInfo = {
     message_group: MessageGroup;
@@ -1383,7 +1313,6 @@ export class MessageListView {
         const $content = $row.find(".message_content");
 
         rendered_markdown.update_elements($content);
-        maybe_render_pear_thinking_glyph($row);
 
         const id = rows.id($row);
         message_edit.maybe_show_edit($row, id);

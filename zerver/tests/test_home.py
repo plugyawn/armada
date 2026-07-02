@@ -138,6 +138,7 @@ class HomeTest(ZulipTestCase):
         "realm_billing",
         "realm_bot_domain",
         "realm_bots",
+        "pear_bot_user_ids",
         "realm_can_access_all_users_group",
         "realm_can_add_custom_emoji_group",
         "realm_can_add_subscribers_group",
@@ -307,7 +308,7 @@ class HomeTest(ZulipTestCase):
 
         # Verify succeeds once logged-in
         with (
-            self.assert_database_query_count(56),
+            self.assert_database_query_count(57),
             patch("zerver.lib.cache.cache_set") as cache_mock,
         ):
             result = self._get_home_page(stream="Denmark")

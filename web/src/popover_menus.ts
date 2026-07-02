@@ -229,6 +229,11 @@ export const default_popover_props: Partial<tippy.Props> = {
     trigger: "click",
     interactive: true,
     hideOnClick: true,
+    // Menus ease in over ~120ms with a fade+scale (see the
+    // [data-animation="fade"] rules in popovers.css) and leave
+    // faster than they arrive. Tooltips stay animation-free.
+    animation: "fade",
+    duration: [120, 80],
     // The maxWidth has been set to "none" to avoid the default value of 300px.
     maxWidth: "none",
     touch: true,

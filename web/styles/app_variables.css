@@ -554,10 +554,6 @@
     --message-box-markdown-aligned-vertical-space: var(
         --markdown-interelement-space-px
     );
-    /* 22px matches to the width of the padded icon.
-       22px at 16px/1em
-    */
-    --message-box-icon-width: 1.375em;
     /* 25px at 16px/1em */
     --message-box-icon-height: 1.6667em;
     --message-box-height-senderless-single-line-message: calc(
@@ -575,7 +571,8 @@
     /* This width is updated with an exact pixel
        width upon UI initialization. */
     --message-box-timestamp-column-width: 0;
-    --last-message-row-border-radius: 0 0 7px 7px;
+    /* The Slack-flat feed has no rounded recipient blocks. */
+    --last-message-row-border-radius: 0;
 
     /* This length is the primary reference for height
        and image width on URL preview embeds. 112px
@@ -851,6 +848,12 @@
         var(--slack-pane),
         var(--slack-pane-dark)
     );
+    /* Instant row tint under the pointer; a barely-there step
+       off the pane background. */
+    --color-background-message-row-hover: light-dark(
+        var(--slack-row-hover),
+        var(--slack-row-hover-dark)
+    );
     /* A barely-there step off the pane background; matches the
        Slack row-hover tint. */
     --color-background-pear-message-content: light-dark(
@@ -1118,10 +1121,9 @@
         hsl(220deg 12% 5% / 7%),
         hsl(220deg 12% 95% / 7%)
     );
-    --color-border-popover-menu: light-dark(
-        hsl(0deg 0% 0% / 40%),
-        hsl(0deg 0% 0%)
-    );
+    /* The hairline ring lives in --box-shadow-popover-menu; the
+       border only reserves the pixel of geometry. */
+    --color-border-popover-menu: transparent;
     --color-border-personal-menu-avatar: light-dark(
         hsl(0deg 0% 0% / 10%),
         hsl(0deg 0% 100% / 20%)
@@ -1334,10 +1336,11 @@
         hsl(0deg 0% 100% / 58%)
     );
 
-    /* Compose box colors */
+    /* Compose box colors. The tray shares the pane background so
+       the compose area reads as one bordered container. */
     --color-compose-box-background: light-dark(
-        hsl(232deg 30% 92%),
-        hsl(228deg 11% 17%)
+        var(--slack-pane),
+        var(--slack-pane-dark)
     );
     --color-compose-message-content-background: light-dark(
         hsl(0deg 0% 100%),
@@ -1355,9 +1358,11 @@
         hsl(50deg 75% 92%),
         hsl(50deg 75% 12%)
     );
+    /* Slack's compose shell border: a stronger 30%-ink hairline
+       so the container reads against the white pane. */
     --color-border-compose-content: light-dark(
-        hsl(0deg 0% 0% / 10%),
-        hsl(0deg 0% 0% / 40%)
+        hsl(300deg 2% 11% / 30%),
+        var(--slack-hairline-dark)
     );
     --color-compose-send-button-icon-color: hsl(0deg 0% 100%);
     --color-compose-send-button-background: var(--slack-send-green);
@@ -1395,7 +1400,7 @@
        with the compose box's background color,
        --color-compose-box-background. */
     --color-compose-recipient-box-border-color: light-dark(
-        color-mix(in srgb, hsl(0deg 0% 0%) 10%, hsl(232deg 20% 92%)),
+        color-mix(in srgb, hsl(0deg 0% 0%) 10%, hsl(0deg 0% 100%)),
         hsl(0deg 0% 0% / 80%)
     );
     --color-compose-recipient-box-hover: light-dark(
@@ -1728,10 +1733,9 @@
         hsl(240deg 20% 98%),
         hsl(240deg 5% 16%)
     );
-    --color-border-dropdown-widget: light-dark(
-        hsl(0deg 0% 0% / 40%),
-        hsl(0deg 0% 0%)
-    );
+    /* The hairline ring lives in --box-shadow-popover-menu; the
+       border only reserves the pixel of geometry. */
+    --color-border-dropdown-widget: transparent;
     --color-border-dropdown-widget-button: light-dark(
         hsl(0deg 0% 80%),
         hsl(0deg 0% 0% / 60%)
@@ -2048,10 +2052,6 @@
         hsl(210deg 30% 96%),
         hsl(0deg 0% 100% / 10%)
     );
-    --color-message-reaction-shadow-inner: light-dark(
-        hsl(210deg 50% 50% / 8%),
-        transparent /* No shadow in dark mode. */
-    );
     --color-message-reaction-text: light-dark(
         hsl(210deg 20% 25% / 100%),
         hsl(0deg 0% 100% / 75%)
@@ -2278,21 +2278,11 @@
        dark mode uses the --grey-300 equivalent. */
     --color-inbox-row-chevron: light-dark(#535663, #aaadba);
 
-    /* Navbar dropdown menu constants - Values from Figma design */
+    /* Slack's single menu recipe: a hairline ring plus one soft
+       drop; structure comes from hairlines, not shadow stacks. */
     --box-shadow-popover-menu:
-        0 2.78px 4.11px 0 hsl(0deg 0% 0% / 6%),
-        0 5.5113px 8.5783px 0 hsl(0deg 0% 0% / 7%),
-        0 8.438px 13.9271px 0 hsl(0deg 0% 0% / 8%),
-        0 12.177px 21.4737px 0 hsl(0deg 0% 0% / 9%),
-        0 18.7257px 35.4802px 0 hsl(0deg 0% 0% / 9%),
-        0 41px 80px 0 hsl(0deg 0% 0% / 13%);
-    --box-shadow-gear-menu:
-        0 2.7798px 4.1129px 0 hsl(0deg 0% 0% / 10%),
-        0 5.5113px 8.5783px 0 hsl(0deg 0% 0% / 9%),
-        0 8.4377px 13.9271px 0 hsl(0deg 0% 0% / 11%),
-        0 12.177px 21.4737px 0 hsl(0deg 0% 0% / 11%),
-        0 18.7257px 35.4802px 0 hsl(0deg 0% 0% / 15%),
-        0 41px 80px 0 hsl(0deg 0% 0% / 20%);
+        0 0 0 1px light-dark(var(--slack-hairline), var(--slack-hairline-dark)),
+        0 4px 12px hsl(0deg 0% 0% / 12%);
     --color-navbar-icon: light-dark(hsl(240deg 20% 50%), hsl(240deg 35% 60%));
     --color-navbar-spectator-low-attention-brand-button-text: light-dark(
         hsl(240deg 40% 50%),
@@ -3258,14 +3248,6 @@
 
     /* Reaction container colors */
     --font-weight-message-reaction: 550;
-    /* Navbar dropdown menu constants - Values from Figma design */
-    --box-shadow-popover-menu:
-        0 2.78px 4.12px 0 hsl(0deg 0% 0% / 10%),
-        0 5.5113px 8.5783px 0 hsl(0deg 0% 0% / 9%),
-        0 8.4377px 13.9271px 0 hsl(0deg 0% 0% / 11%),
-        0 12.177px 21.4737px 0 hsl(0deg 0% 0% / 11%),
-        0 18.7257px 35.4802px 0 hsl(0deg 0% 0% / 15%),
-        0 41px 80px 0 hsl(0deg 0% 0% / 20%);
     --icon-chevron-down: url("data:image/svg+xml,%3Csvg width='16' height='16' viewBox='0 0 16 16' fill='%23DEDEDE' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath clip-rule='evenodd' d='M3.52977 5.52973C3.78947 5.27004 4.21053 5.27004 4.47023 5.52973L8 9.05951L11.5298 5.52973C11.7895 5.27004 12.2105 5.27004 12.4702 5.52973C12.7299 5.78943 12.7299 6.21049 12.4702 6.47019L8.47023 10.4702C8.21053 10.7299 7.78947 10.7299 7.52977 10.4702L3.52977 6.47019C3.27008 6.21049 3.27008 5.78943 3.52977 5.52973Z'/%3E%3C/svg%3E");
 
     /* Button colors on modals and message editing. */

@@ -19,6 +19,13 @@
     border-right: 1px solid var(--color-message-list-border);
     background-color: var(--color-background-stream-message-content);
 
+    /* Instant row tint on hover; mention/private/pear rows below
+       keep their own stronger tints (their selectors follow this
+       one, so they win at equal specificity). */
+    &:hover {
+        background-color: var(--color-background-message-row-hover);
+    }
+
     &.private-message {
         background-color: var(--color-background-private-message-content);
 
@@ -125,18 +132,42 @@
                 overflow: visible;
             }
 
+            /* The trailing `<em>✦</em>` marker the server appends
+               while the agent is writing. The literal marker text is
+               hidden and the pulsing glyph cycle renders in ::after,
+               animated via the `content` property (a discrete,
+               compositor-free animation). Browsers that don't animate
+               `content` (Firefox) and reduced-motion users get the
+               static ✦ fallback. */
             .message_content > p:last-child > em:last-child {
+                position: relative;
                 display: inline-block;
                 min-width: 1.35em;
                 margin-left: 0.15em;
-                color: var(--color-text-message-default);
-                font-size: var(--base-font-size-px);
+                color: var(--color-text-item);
+                font-size: 1em;
                 font-style: normal;
                 line-height: 1;
                 text-align: center;
                 vertical-align: -0.02em;
                 white-space: nowrap;
                 font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+                /* Hide the literal ✦; the animated twin below is
+                   what the user sees. */
+                visibility: hidden;
+
+                &::after {
+                    content: "✦";
+                    visibility: visible;
+                    position: absolute;
+                    inset: 0;
+                    text-align: center;
+                    animation: pear-thinking 2s step-end infinite;
+
+                    @media (prefers-reduced-motion: reduce) {
+                        animation: none;
+                    }
+                }
             }
         }
     }
@@ -161,6 +192,95 @@
     }
 }
 
+/* The ✦ thinking pulse: 20 frames at 100ms each, matching the
+   original JS glyph cycle exactly. `content` animates discretely,
+   so step-end holds each glyph for its full frame. */
+/* stylelint-disable plugin/no-low-performance-animation-properties --
+   The discrete `content` swap is one glyph repaint per 100ms frame,
+   replacing a 10Hz JS setInterval that overwrote the DOM. */
+@keyframes pear-thinking {
+    0% {
+        content: "·";
+    }
+
+    5% {
+        content: "∙";
+    }
+
+    10% {
+        content: "⋅";
+    }
+
+    15% {
+        content: "✦";
+    }
+
+    20% {
+        content: "✧";
+    }
+
+    25% {
+        content: "✩";
+    }
+
+    30% {
+        content: "✶";
+    }
+
+    35% {
+        content: "✷";
+    }
+
+    40% {
+        content: "✸";
+    }
+
+    45% {
+        content: "✹";
+    }
+
+    50% {
+        content: "✺";
+    }
+
+    55% {
+        content: "✹";
+    }
+
+    60% {
+        content: "✸";
+    }
+
+    65% {
+        content: "✷";
+    }
+
+    70% {
+        content: "✶";
+    }
+
+    75% {
+        content: "✩";
+    }
+
+    80% {
+        content: "✧";
+    }
+
+    85% {
+        content: "✦";
+    }
+
+    90% {
+        content: "⋅";
+    }
+
+    95% {
+        content: "∙";
+    }
+}
+/* stylelint-enable plugin/no-low-performance-animation-properties */
+
 .messagebox {
     grid-area: messagebox;
     overflow-wrap: break-word;
@@ -171,6 +291,13 @@
     padding: 0 5px 0 3px;
 
     &:hover .message_controls {
+        /* The floating chip frame: pane-colored with a hairline
+           and a whisper of depth. Appears instantly — the hover
+           path is the action path. */
+        background-color: var(--color-background-popover-menu);
+        border-color: var(--color-message-list-border);
+        box-shadow: 0 1px 3px hsl(0deg 0% 0% / 8%);
+
         > .message_control_button {
             opacity: 1;
             visibility: visible;
@@ -242,9 +369,13 @@
                 max-content
             );
 
-        /* Hide reactions, scheduled reminders in edit mode. */
+        /* Hide reactions, scheduled reminders, and the hover
+           controls chip in edit mode; the controls column is
+           zeroed out above, and the fixed-width chip buttons
+           would otherwise overflow it. */
         .message_reactions,
-        .message-reminders {
+        .message-reminders,
+        .message_controls {
             display: none;
         }
     }
@@ -664,17 +795,29 @@
 
 .message_controls {
     grid-area: controls;
-    /* Let the controls occupy the entire height
-       of the row; inner flexboxes handle the
-       centering of the icons. */
-    align-self: stretch;
-    /* Controls flex to the height of the top
-       row of the message box, and center
-       themselves within it. */
+    /* The controls read as a floating chip centered on the
+       sender line; the frame itself is only painted on row
+       hover (see .messagebox:hover below). */
+    align-self: center;
     display: flex;
     align-items: center;
     /* Ensure square icons for better centering. */
     line-height: 1;
+    /* 2px at 16px/1em */
+    padding: 0.125em;
+    border-radius: 6px;
+    /* Reserve the frame at rest so the chip doesn't shift
+       when the hairline paints on hover. */
+    border: 1px solid transparent;
+    /* The 32px buttons make the chip taller than the sender
+       line; negative vertical margins let it float over the
+       row boundary instead of growing the row. */
+    /* -7px at 16px/1em */
+    margin: -0.4375em 0;
+    /* Paint the floating chip above neighboring rows it
+       may overlap. */
+    position: relative;
+    z-index: 1;
 
     @container message-lists (width < $cq_sm_min) {
         /* This is intended to target the first message_controls child
@@ -698,28 +841,28 @@
         }
     }
 
-    /* This is a bit tricky; we need to reserve space for the message
-       controls even when the message isn't hovered, so that hover
-       doesn't disturb the layout.  Usually that would be just
-       visibility: hidden, but that cannot be animated, so we set
-       opacity as well, which can be animated. */
+    /* We reserve space for the message controls even when the
+       message isn't hovered, so that hover doesn't disturb the
+       layout. The buttons appear instantly on hover — the hover
+       path is the action path, so it never animates. */
     .message_control_button {
         opacity: 0;
         visibility: hidden;
-        transition: 0.2s ease;
-        transition-property: opacity, visibility;
-        /* Allow buttons to grow to fill the available space,
-           in concord with the column calculated for the
-           .messagebox-content grid. */
-        flex: 1 0 0;
-        /* Set the height to 100% to effectively flex open
-           on the vertical axis. */
-        height: 100%;
+        /* 32px square buttons at 16px/1em */
+        width: 2em;
+        height: 2em;
+        flex: none;
+        border-radius: 4px;
         /* Control buttons are their own flex containers,
            to more gracefully center the icons. */
         display: flex;
         place-items: center center;
+        justify-content: center;
         color: var(--color-message-action-visible);
+
+        &:hover {
+            background-color: var(--color-background-hover-popover-menu);
+        }
 
         .emoji-message-control-button-container {
             /* This button has an extra div for Tippy purposes,
@@ -729,11 +872,10 @@
 
         & .message-controls-icon {
             cursor: pointer;
-            /* The icon body is 16px square at 16px/1em; the clickable
-               area for the icon is 26px wide by 25px tall, so these
-               values ensure a 26px x 25px clickable area for the icon. */
-            /* 2.5px at 16px/1em; 3px at 16px/1em */
-            padding: 0.1563em 0.1875em;
+            /* The icon body is 16px square at 16px/1em; the padding
+               extends the click target to the full 32px button. */
+            /* 8px at 16px/1em */
+            padding: 0.5em;
 
             &::before {
                 /* We specify block display so the
@@ -778,7 +920,8 @@
     }
 
     .edit_content {
-        width: var(--message-box-icon-width);
+        /* Match the standard 32px control button. */
+        width: 2em;
 
         .move_message_button,
         .edit_content_button {
@@ -1227,16 +1370,16 @@
 
 /* Placehold the control buttons, unless there's a failure. */
 .locally-echoed {
-    .messagebox:hover
-        .message_controls
+    .messagebox:hover .message_controls {
+        /* No control buttons are available yet, so don't paint
+           the chip frame either. */
+        background-color: transparent;
+        border-color: transparent;
+        box-shadow: none;
+
         .message_control_button:not(.failed_message_action) {
-        visibility: hidden;
-    }
-    /* The actual star icon is not added to the DOM when a
-       message is locally echoed, so we set the equivalent
-       width on its container. */
-    .star_container {
-        width: var(--message-box-icon-width);
+            visibility: hidden;
+        }
     }
 }
 

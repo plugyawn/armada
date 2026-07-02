@@ -1,3 +1,27 @@
+/* Menus and popovers animate in with a short ease-out fade+scale
+   (Slack's menu grammar; tooltips stay instant with animation
+   disabled). Tippy's built-in "fade" animation drives opacity; the
+   scale rides on the same transition. */
+.tippy-box[data-animation="fade"] {
+    transition-timing-function: ease-out;
+
+    &[data-state="hidden"] {
+        transform: scale(0.97);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .tippy-box[data-animation="fade"] {
+        /* Tippy sets transition-duration inline, so !important is
+           required to zero it out. */
+        transition-duration: 0ms !important;
+
+        &[data-state="hidden"] {
+            transform: none;
+        }
+    }
+}
+
 /*
   Our Tippy popovers use the strangely named "light-border" Tippy
   theme, so this block defines the common styling for all of our Tippy
@@ -58,10 +82,7 @@
     border-radius: 6px;
     background-color: var(--color-background-dropdown-widget);
     border: 1px solid var(--color-border-dropdown-widget);
-    box-shadow:
-        0 7px 13px light-dark(hsl(0deg 0% 0% / 15%), hsl(0deg 0% 0% / 35%)),
-        0 5px 8px light-dark(hsl(0deg 0% 0% / 12%), hsl(0deg 0% 0% / 32%)),
-        0 2px 4px light-dark(hsl(0deg 0% 0% / 10%), hsl(0deg 0% 0% / 20%));
+    box-shadow: var(--box-shadow-popover-menu);
     /* Tippy dropdown widgets scale with the base font-size. */
     font-size: var(--base-font-size-px);
 
@@ -119,10 +140,6 @@
     /* Since the GIPHY banner at the popover is black,
        match the arrow color with the banner. */
     color: hsl(0deg 0% 0%);
-}
-
-.tippy-box[data-theme="popover-menu"]:has(#gear-menu-dropdown) {
-    --box-shadow-popover-menu: var(--box-shadow-gear-menu);
 }
 
 .user_full_name {

@@ -24,9 +24,11 @@
         hsl(0deg 0% 96%),
         hsl(0deg 0% 20%)
     );
+    /* Slack hairline ring; depth comes from the single soft
+       drop shadow on .modal__container. */
     --color-border-modal: light-dark(
-        hsl(0deg 0% 55%),
-        color-mix(in oklch, hsl(0deg 0% 100%) 15%, transparent)
+        hsl(300deg 2% 11% / 13%),
+        hsl(220deg 5% 22%)
     );
     --color-border-modal-bar: light-dark(
         hsl(0deg 0% 76%),
@@ -53,7 +55,9 @@
     width: 37.1428em; /* 520px at 14px em */
     overflow: hidden;
     border: 1px solid var(--color-border-modal);
-    border-radius: 7px;
+    border-radius: 8px;
+    /* Slack's modal elevation: one deep, soft drop. */
+    box-shadow: 0 18px 48px hsl(0deg 0% 0% / 35%);
     box-sizing: border-box;
 }
 

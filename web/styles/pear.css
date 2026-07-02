@@ -89,7 +89,13 @@
 .pear-reasoning-effort-slider:focus,
 .pear-side-request:focus {
     border-color: var(--color-border-legacy-input-focus);
-    outline: none;
+}
+
+.pear-topic-model-select:focus-visible,
+.pear-reasoning-effort-slider:focus-visible,
+.pear-side-request:focus-visible {
+    outline: 2px solid var(--color-outline-focus);
+    outline-offset: 1px;
 }
 
 .pear-effort-row {
@@ -139,15 +145,64 @@
     font-weight: 600;
 }
 
+/* Run status as a Slack pill: low-alpha wash of the status color
+   behind solid status-color text. */
 .pear-run-status-row {
+    --pear-status-color: var(--color-pear-status-idle);
     display: flex;
     align-items: center;
     min-width: 0;
     gap: 5px;
-    color: var(--color-text-item);
+    /* 2.5px 7.5px at the 10px status font */
+    padding: 0.25em 0.75em;
+    border-radius: 12px;
+    background-color: color-mix(
+        in srgb,
+        var(--pear-status-color) 14%,
+        transparent
+    );
+    color: var(--pear-status-color);
     font-size: 10px;
     font-weight: 600;
     line-height: 12px;
+}
+
+.pear-run-status-active {
+    --pear-status-color: var(--color-pear-status-active);
+}
+
+.pear-run-status-blocked {
+    --pear-status-color: var(--color-pear-status-blocked);
+}
+
+/* Terminal-state flash: the pill blinks green on done / red on
+   failed as a run resolves. The panel applies these classes on the
+   status transition (store wiring lands with the P3b slice). */
+.pear-run-status-flash-done {
+    --pear-status-color: var(--color-pear-status-active);
+}
+
+.pear-run-status-flash-failed {
+    --pear-status-color: var(--color-pear-status-blocked);
+}
+
+.pear-run-status-flash-done,
+.pear-run-status-flash-failed {
+    animation: pear-status-flash 900ms ease-out;
+
+    @media (prefers-reduced-motion: reduce) {
+        animation: none;
+    }
+}
+
+@keyframes pear-status-flash {
+    from {
+        background-color: color-mix(
+            in srgb,
+            var(--pear-status-color) 45%,
+            transparent
+        );
+    }
 }
 
 .pear-run-status-dot {
@@ -155,15 +210,22 @@
     width: 6px;
     height: 6px;
     border-radius: 50%;
-    background: var(--color-pear-status-idle);
+    background: var(--pear-status-color);
 }
 
+/* A live run breathes. */
 .pear-run-status-active .pear-run-status-dot {
-    background: var(--color-pear-status-active);
+    animation: pear-status-pulse 1.6s ease-in-out infinite;
+
+    @media (prefers-reduced-motion: reduce) {
+        animation: none;
+    }
 }
 
-.pear-run-status-blocked .pear-run-status-dot {
-    background: var(--color-pear-status-blocked);
+@keyframes pear-status-pulse {
+    50% {
+        opacity: 0.4;
+    }
 }
 
 .pear-run-status-text {
@@ -187,7 +249,6 @@
 
 .pear-context-section-title {
     font-size: 11px;
-    text-transform: uppercase;
 }
 
 .pear-context-line {
@@ -398,23 +459,62 @@
     gap: 3px;
 }
 
-.pear-run-dot {
-    width: 7px;
-    height: 7px;
-    flex: none;
+/* "Pear is working…" typing-dots liveness signal, shown in
+   #typing_notifications while a run is streaming. Markup contract
+   (the server-side typing emit is a separate slice):
+
+   <li class="typing_notification pear-typing-notification">
+       <span class="pear-typing-dots" aria-hidden="true">
+           <span></span><span></span><span></span>
+       </span>
+       {{t "Pear is working…" }}
+   </li>
+*/
+.pear-typing-notification {
+    display: flex;
+    align-items: center;
+    gap: 0.4em;
+}
+
+.pear-typing-dots {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+}
+
+.pear-typing-dots span {
+    width: 4px;
+    height: 4px;
     border-radius: 50%;
+    background: currentcolor;
+    animation: pear-typing-dot 1.2s ease-in-out infinite;
+
+    @media (prefers-reduced-motion: reduce) {
+        animation: none;
+        opacity: 0.6;
+    }
 }
 
-.pear-status-active {
-    background: light-dark(hsl(148deg 45% 36%), hsl(148deg 58% 76%));
+.pear-typing-dots span:nth-child(2) {
+    animation-delay: 0.16s;
 }
 
-.pear-status-blocked {
-    background: light-dark(hsl(6deg 54% 45%), hsl(7deg 100% 78%));
+.pear-typing-dots span:nth-child(3) {
+    animation-delay: 0.32s;
 }
 
-.pear-status-idle {
-    background: light-dark(hsl(229deg 9% 48%), hsl(229deg 10% 78%));
+@keyframes pear-typing-dot {
+    0%,
+    60%,
+    100% {
+        opacity: 0.35;
+        transform: translateY(0);
+    }
+
+    30% {
+        opacity: 1;
+        transform: translateY(-1px);
+    }
 }
 
 .pear-side {

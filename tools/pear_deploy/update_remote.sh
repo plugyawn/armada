@@ -15,6 +15,37 @@ RUN_MIGRATE=true
 RUN_COMPAT=true
 STATE_PATH="$DEFAULT_STATE_PATH"
 
+fail() {
+    echo "ERROR: $*" >&2
+    exit 1
+}
+
+validate_local_deploy_git_metadata() {
+    local dotgit="$REPO_ROOT/.git"
+    local gitfile
+    local gitdir
+    local local_git_dir
+    local local_git_common_dir
+
+    if [[ ! -f "$dotgit" ]]; then
+        fail "local checkout must be the canonical Zulip submodule with a relative .git gitfile; refusing to deploy from a checkout with a .git directory or missing .git file"
+    fi
+    IFS= read -r gitfile <"$dotgit" || gitfile=""
+    if [[ "$gitfile" != gitdir:\ * ]]; then
+        fail "local .git file is not a gitdir file; refusing to deploy"
+    fi
+    gitdir="${gitfile#gitdir: }"
+    if [[ -z "$gitdir" || "$gitdir" == /* ]]; then
+        fail "local .git points at an absolute gitdir ($gitdir); deploy from the main /Users/progyan/codack/zulip checkout, not a git worktree"
+    fi
+
+    local_git_dir="$(git -C "$REPO_ROOT" rev-parse --path-format=absolute --git-dir)"
+    local_git_common_dir="$(git -C "$REPO_ROOT" rev-parse --path-format=absolute --git-common-dir)"
+    if [[ "$local_git_dir" != "$local_git_common_dir" ]]; then
+        fail "local checkout is a linked Git worktree ($local_git_dir); deploy from the main checkout so the remote .git gitfile resolves to /home/zulipdev/.git/modules/zulip"
+    fi
+}
+
 DEPLOY_UNTRACKED_ALLOW_PREFIXES=(
     '.playwright-cli/'
     '.venv/'
@@ -158,11 +189,6 @@ ssh_zulip_clean() {
     ssh_root "sudo -Hu zulipdev bash -lc $wrapped"
 }
 
-fail() {
-    echo "ERROR: $*" >&2
-    exit 1
-}
-
 run_local_compat() {
     local checker="$REPO_ROOT/../tools/check_pear_compat.py"
     if [[ ! -f "$checker" ]]; then
@@ -301,6 +327,8 @@ LOCAL_SHA="$(git -C "$REPO_ROOT" rev-parse HEAD)"
 LOCAL_GIT_COMMON_DIR="$(git -C "$REPO_ROOT" rev-parse --git-common-dir)"
 LOCAL_STATUS="$(git -C "$REPO_ROOT" status --porcelain --untracked-files=no)"
 LOCAL_UNTRACKED_SOURCE="$(local_untracked_source_files)"
+
+validate_local_deploy_git_metadata
 
 if [[ "$LOCAL_BRANCH" != "pear-main" ]]; then
     fail "local branch is $LOCAL_BRANCH, expected pear-main"

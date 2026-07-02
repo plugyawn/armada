@@ -6,6 +6,37 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 STATE_PATH="${1:-$REPO_ROOT/output/pear-staging/server.json}"
 
+fail() {
+    echo "ERROR: $*" >&2
+    exit 1
+}
+
+validate_local_deploy_git_metadata() {
+    local dotgit="$REPO_ROOT/.git"
+    local gitfile
+    local gitdir
+    local local_git_dir
+    local local_git_common_dir
+
+    if [[ ! -f "$dotgit" ]]; then
+        fail "local checkout must be the canonical Zulip submodule with a relative .git gitfile; refusing to deploy from a checkout with a .git directory or missing .git file"
+    fi
+    IFS= read -r gitfile <"$dotgit" || gitfile=""
+    if [[ "$gitfile" != gitdir:\ * ]]; then
+        fail "local .git file is not a gitdir file; refusing to deploy"
+    fi
+    gitdir="${gitfile#gitdir: }"
+    if [[ -z "$gitdir" || "$gitdir" == /* ]]; then
+        fail "local .git points at an absolute gitdir ($gitdir); deploy from the main /Users/progyan/codack/zulip checkout, not a git worktree"
+    fi
+
+    local_git_dir="$(git -C "$REPO_ROOT" rev-parse --path-format=absolute --git-dir)"
+    local_git_common_dir="$(git -C "$REPO_ROOT" rev-parse --path-format=absolute --git-common-dir)"
+    if [[ "$local_git_dir" != "$local_git_common_dir" ]]; then
+        fail "local checkout is a linked Git worktree ($local_git_dir); deploy from the main checkout so the remote .git gitfile resolves to /home/zulipdev/.git/modules/zulip"
+    fi
+}
+
 if [[ ! -f "$STATE_PATH" ]]; then
     echo "Missing state file: $STATE_PATH" >&2
     echo "Run: python3 tools/pear_deploy/pear_do.py create" >&2
@@ -52,6 +83,7 @@ ssh_root() {
     ssh -F "$SSH_CONFIG" pear-staging-root "$@"
 }
 
+validate_local_deploy_git_metadata
 LOCAL_GIT_COMMON_DIR="$(git -C "$REPO_ROOT" rev-parse --git-common-dir)"
 
 echo "Waiting for SSH on $IP_ADDRESS..."

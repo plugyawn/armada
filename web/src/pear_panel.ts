@@ -6,6 +6,7 @@ import * as blueslip from "./blueslip.ts";
 import * as channel from "./channel.ts";
 import {$t} from "./i18n.ts";
 import * as narrow_state from "./narrow_state.ts";
+import * as pear_run_state from "./pear_run_state.ts";
 
 type PearRunEvent = {
     id: number;
@@ -38,6 +39,8 @@ type PearLiveRun = {
 
 type PearRun = {
     id: number;
+    trigger_message_id: number;
+    result_message_id?: number | null;
     status: string;
     session_kind: string;
     source_stream: string;
@@ -510,6 +513,7 @@ function render(
 ): void {
     last_runs = runs;
     last_topic_context = topic_context;
+    pear_run_state.set_active_run_result_messages(runs);
     remember_worktree_details_state();
     const {stream, topic} = current_context();
     const has_topic = stream !== undefined && topic !== undefined;

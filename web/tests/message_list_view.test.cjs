@@ -37,12 +37,18 @@ const {MessageListView} = zrequire("../src/message_list_view");
 const message_list = zrequire("message_list");
 const {MessageListData} = zrequire("message_list_data");
 const muted_users = zrequire("muted_users");
+const pear_run_state = zrequire("../src/pear_run_state");
 
 let next_timestamp = 1500000000;
 
 function test(label, f) {
     run_test(label, ({override, mock_template}) => {
         sender_is_bot = () => false;
+        $("document-stub").set_find_results(
+            ".message_row.pear-active-message .message_content > p:last-child > em:last-child",
+            [],
+        );
+        pear_run_state.set_active_run_result_messages([]);
         muted_users.set_muted_users([]);
         mock_template("message_list.hbs", false, () => "<message-list-stub>");
         f({override, mock_template});
@@ -560,8 +566,10 @@ test("pear_message_vars", () => {
 
     sender_is_bot = (message) => message.sender_id === 25 || message.sender_id === 26;
 
+    pear_run_state.set_active_run_result_messages([{status: "running", result_message_id: 1001}]);
     let result = calculate_variables(
         build_message_context({
+            id: 1001,
             sender_email: "pear@zulip.com",
             sender_full_name: "Pear",
             sender_id: 25,
@@ -570,6 +578,19 @@ test("pear_message_vars", () => {
     );
     assert.equal(result.is_pear_message, true);
     assert.equal(result.is_pear_active_message, true);
+    assert.equal(result.include_sender, false);
+
+    result = calculate_variables(
+        build_message_context({
+            id: 1002,
+            sender_email: "pear@zulip.com",
+            sender_full_name: "Pear",
+            sender_id: 25,
+            content: "<p><em>Thinking</em> <em>✦</em></p>",
+        }),
+    );
+    assert.equal(result.is_pear_message, true);
+    assert.equal(result.is_pear_active_message, false);
     assert.equal(result.include_sender, false);
 
     result = calculate_variables(

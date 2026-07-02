@@ -303,6 +303,7 @@ export function get_built_in_primary_condensed_views(): navigation_views.BuiltIn
 }
 
 export function get_built_in_popover_condensed_views(): navigation_views.BuiltInViewMetadata[] {
+    const visible_condensed_views = get_built_in_primary_condensed_views();
     const all_views = navigation_views.get_built_in_views();
     return all_views.filter((view) => {
         if (view.fragment === "scheduled") {
@@ -324,10 +325,10 @@ export function get_built_in_popover_condensed_views(): navigation_views.BuiltIn
         if (view.fragment === "drafts") {
             view.unread_count = drafts.draft_model.getDraftCount();
         }
-        // With the sidebar VIEWS block hidden in favor of the Pear
-        // icon rail, this popover is the only full list of views, so
-        // it must not filter out the "already visible" ones.
-        return true;
+        // Remove views that are already visible.
+        return !visible_condensed_views.some(
+            (visible_view) => visible_view.fragment === view.fragment,
+        );
     });
 }
 

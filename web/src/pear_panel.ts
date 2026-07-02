@@ -1,14 +1,3 @@
-// The Pear panel: live run status, run verbs, side requests, and the
-// git-status delta for the current topic (R3: the chat header is
-// authoritative for stream > topic == repo > branch, so the panel
-// shows only what the header can't). It renders as an on-demand
-// pane inside the reclaimed right area (#pear-right-area) — not on a
-// permanent rail — and is a diff-patching subscriber of
-// pear_runs_store: opening the pane subscribes (starting the poll),
-// closing unsubscribes (stopping it), and every update is patched
-// into the existing DOM so clicks, focus, tooltips, and the side
-// textarea survive a 125ms live tick.
-
 import $ from "jquery";
 
 import render_pear_panel from "../templates/pear_panel.hbs";
@@ -17,26 +6,176 @@ import * as blueslip from "./blueslip.ts";
 import * as channel from "./channel.ts";
 import {$t} from "./i18n.ts";
 import * as narrow_state from "./narrow_state.ts";
-import {patch_html} from "./pear_dom_patch.ts";
-import * as pear_runs_store from "./pear_runs_store.ts";
-import type {
-    PearRun,
-    PearRunEvent,
-    PearSnapshot,
-    PearStatusTransition,
-    PearTopicContext,
-    PearUsage,
-} from "./pear_runs_store.ts";
+
+type PearRunEvent = {
+    id: number;
+    event_type: string;
+    summary: string;
+    payload?: {
+        kind?: string;
+        status?: string;
+        title?: string;
+        body?: string;
+    };
+};
+
+type PearUsage = {
+    input_tokens?: number;
+    cached_input_tokens?: number;
+    output_tokens?: number;
+    reasoning_output_tokens?: number;
+    total_tokens?: number;
+    cache_percent?: number;
+    duration_seconds?: number | null;
+    summary?: string;
+};
+
+type PearLiveRun = {
+    status: string;
+    content: string;
+    updated_at: number;
+};
+
+type PearRun = {
+    id: number;
+    status: string;
+    session_kind: string;
+    source_stream: string;
+    source_topic: string;
+    summary: string;
+    current_activity: string;
+    runtime_label: string;
+    sandbox: string;
+    approval_policy: string;
+    workdir: string;
+    codex_thread_id: string;
+    usage?: PearUsage | null;
+    live?: PearLiveRun | null;
+    events?: PearRunEvent[];
+};
+
+type PearRunsResponse = {
+    pear_runs: PearRun[];
+    pear_topic_context?: PearTopicContext | null;
+    runtime_config?: {
+        model?: string | null;
+        model_choices?: string[];
+        model_catalog?: PearModelCatalogEntry[];
+        reasoning_effort?: string | null;
+        reasoning_efforts?: PearReasoningEffort[];
+    };
+};
+
+type PearReasoningEffort = {
+    effort: string;
+    label: string;
+    description?: string;
+};
+
+type PearModelCatalogEntry = {
+    slug: string;
+    display_name: string;
+    default_reasoning_level?: string;
+    supported_reasoning_levels?: PearReasoningEffort[];
+};
+
+type PearGitChangedFile = {
+    status: string;
+    kind: string;
+    path: string;
+};
+
+type PearGitCommit = {
+    hash: string;
+    summary: string;
+};
+
+type PearGitContext = {
+    available: boolean;
+    workdir?: string;
+    repo_name?: string;
+    repo_label?: string;
+    remote_url?: string;
+    worktree_name?: string;
+    branch?: string;
+    head?: string;
+    dirty?: boolean;
+    changed_count?: number;
+    changed_files?: PearGitChangedFile[];
+    changed_files_truncated?: boolean;
+    diff_shortstat?: string;
+    recent_commits?: PearGitCommit[];
+};
+
+type PearTopicContext = {
+    stream: string;
+    topic: string;
+    model: string;
+    default_model: string;
+    model_choices: string[];
+    model_catalog?: PearModelCatalogEntry[];
+    reasoning_effort: string;
+    default_reasoning_effort: string;
+    reasoning_efforts: PearReasoningEffort[];
+    github_repo: string;
+    pinned_repo?: string;
+    repo_label?: string;
+    repo_title?: string;
+    worktree_label?: string;
+    workdir: string;
+    git: PearGitContext;
+};
+
+type PearModelChoice = {
+    value: string;
+    label: string;
+    selected: boolean;
+};
+
+type PearEffortChoice = PearReasoningEffort & {
+    index: number;
+    selected: boolean;
+};
 
 let initialized = false;
-let panel_open = false;
-let unsubscribe_from_store: (() => void) | undefined;
+let refresh_timer: number | undefined;
+let live_refresh_timer: number | undefined;
+let live_refresh_in_flight = false;
 let last_error = "";
+let last_model_error = "";
 let last_runs: PearRun[] = [];
 let last_topic_context: PearTopicContext | null | undefined;
-// Matches the pear-status-flash animation duration in pear.css.
-const STATUS_FLASH_DURATION_MS = 900;
-const flash_by_run_id = new Map<number, {css_class: string; timer: number}>();
+let rendered_context_key = "";
+const worktree_details_open_by_context = new Map<string, boolean>();
+const LIVE_REFRESH_INTERVAL_MS = 125;
+const FULL_REFRESH_INTERVAL_MS = 5000;
+
+const fallback_efforts: PearReasoningEffort[] = [
+    {effort: "low", label: "Low"},
+    {effort: "medium", label: "Medium"},
+    {effort: "high", label: "High"},
+    {effort: "xhigh", label: "XHigh"},
+];
+
+function model_reasoning_efforts(
+    topic_context: PearTopicContext | null | undefined,
+    model: string | undefined,
+): PearReasoningEffort[] {
+    const selected_model_entry = topic_context?.model_catalog?.find(
+        (entry) => entry.slug === model,
+    );
+    const model_efforts = selected_model_entry?.supported_reasoning_levels;
+    if (model_efforts !== undefined && model_efforts.length > 0) {
+        return model_efforts;
+    }
+    if (
+        topic_context?.reasoning_efforts !== undefined &&
+        topic_context.reasoning_efforts.length > 0
+    ) {
+        return topic_context.reasoning_efforts;
+    }
+    return fallback_efforts;
+}
 
 function compact_panel_text(text: string): string {
     return text
@@ -134,13 +273,23 @@ function current_context(): {stream: string | undefined; topic: string | undefin
     };
 }
 
-function panel_element(): Element | null {
-    // Guarded for the node-test environment, where there is no real
-    // DOM for the panel to mount into.
-    if (typeof document === "undefined") {
-        return null;
+function context_key(stream: string | undefined, topic: string | undefined): string {
+    if (stream === undefined || topic === undefined) {
+        return "";
     }
-    return document.querySelector("#pear-panel");
+    return `${stream}\n${topic}`;
+}
+
+function remember_worktree_details_state(): void {
+    if (rendered_context_key === "") {
+        return;
+    }
+    const details = document.querySelector<HTMLDetailsElement>(
+        "#pear-panel details.pear-worktree-details",
+    );
+    if (details !== null) {
+        worktree_details_open_by_context.set(rendered_context_key, details.open);
+    }
 }
 
 function display_run(run: PearRun): PearRun & {
@@ -159,7 +308,6 @@ function display_run(run: PearRun): PearRun & {
     has_usage: boolean;
     usage_label: string;
     usage_title: string;
-    flash_class: string;
     events: PearRunEvent[];
 } {
     const events = (run.events ?? []).map((event) => display_event(event));
@@ -190,201 +338,259 @@ function display_run(run: PearRun): PearRun & {
         has_actions: can_pause || can_resume || can_cancel,
         has_events: events.length > 0,
         ...usage,
-        flash_class: flash_by_run_id.get(run.id)?.css_class ?? "",
         events,
     };
 }
 
 function display_topic_context(topic_context: PearTopicContext | undefined | null):
     | (PearTopicContext & {
+          has_model_choices: boolean;
+          display_model_choices: PearModelChoice[];
+          display_reasoning_efforts: PearEffortChoice[];
+          effort_index: number;
+          max_effort_index: number;
+          effort_label: string;
           git_available: boolean;
           git_status_class: string;
           git_status_label: string;
-          git_head_short: string;
-          show_ahead_behind: boolean;
-          ahead_behind_label: string;
-          ahead_behind_title: string;
-          show_detached: boolean;
-          detached_title: string;
-          show_branch_mismatch: boolean;
-          branch_mismatch_title: string;
+          has_changed_files: boolean;
+          has_recent_commits: boolean;
+          changed_label: string;
+          has_pinned_repo: boolean;
+          workspace_primary_name: string;
+          workspace_primary_title: string;
+          workspace_kind_label: string;
+          workspace_ref_label: string;
+          worktree_name: string;
+          worktree_details_open: boolean;
+          local_worktree_summary_label: string;
+          show_primary_git_status: boolean;
       })
     | undefined {
     if (topic_context === undefined || topic_context === null) {
         return undefined;
     }
-    // The git DELTA row (R3): the chat header already states
-    // stream > topic == repo > branch, so the panel renders only what
-    // the header cannot say — dirty/clean, ahead/behind, detached
-    // HEAD, and the branch≠topic edge case.
     const git = topic_context.git;
     const changed_count = git.changed_count ?? 0;
     const changed_label =
         changed_count === 1
-            ? $t({defaultMessage: "1 changed"})
-            : $t({defaultMessage: "{changed_count} changed"}, {changed_count});
-    const git_status_label = git.dirty ? changed_label : $t({defaultMessage: "Clean"});
-    const ahead = git.ahead ?? 0;
-    const behind = git.behind ?? 0;
-    const ahead_behind_parts = [];
-    if (ahead > 0) {
-        ahead_behind_parts.push(`↑${ahead}`);
+            ? $t({defaultMessage: "1 changed file"})
+            : $t({defaultMessage: "{changed_count} changed files"}, {changed_count});
+    const model_catalog = topic_context.model_catalog ?? [];
+    const model_choices_from_catalog = model_catalog.map((entry) => ({
+        value: entry.slug,
+        label: entry.display_name || entry.slug,
+        selected: entry.slug === topic_context.model,
+    }));
+    const seen_models = new Set(model_choices_from_catalog.map((entry) => entry.value));
+    const display_model_choices = [...model_choices_from_catalog];
+    for (const model of topic_context.model_choices ?? []) {
+        if (!seen_models.has(model)) {
+            display_model_choices.push({
+                value: model,
+                label: model,
+                selected: model === topic_context.model,
+            });
+            seen_models.add(model);
+        }
     }
-    if (behind > 0) {
-        ahead_behind_parts.push(`↓${behind}`);
+    if (topic_context.model && !seen_models.has(topic_context.model)) {
+        display_model_choices.unshift({
+            value: topic_context.model,
+            label: topic_context.model,
+            selected: true,
+        });
     }
-    const upstream = git.upstream?.trim() ?? "";
-    const ahead_behind_title = upstream
-        ? $t(
-              {defaultMessage: "{ahead} ahead, {behind} behind {upstream}"},
-              {ahead, behind, upstream},
-          )
-        : $t({defaultMessage: "{ahead} ahead, {behind} behind"}, {ahead, behind});
-    const detached = git.detached === true;
-    const git_head_short = git.head_short?.trim() ?? git.head?.trim() ?? "";
-    const detached_title = git_head_short
-        ? $t({defaultMessage: "Detached HEAD at {head}"}, {head: git_head_short})
-        : $t({defaultMessage: "Detached HEAD"});
-    const checked_out_branch = git.branch?.trim() ?? "";
-    // Detached worktrees show only the detached badge; the mismatch
-    // badge covers the named-branch ≠ topic edge case.
-    const show_branch_mismatch = git.available && !detached && git.branch_matches_topic === false;
-    const branch_mismatch_title = checked_out_branch
-        ? $t(
-              {defaultMessage: "Checked out {branch}, which is not this topic's branch."},
-              {branch: checked_out_branch},
-          )
-        : $t({defaultMessage: "The checked-out branch does not match this topic."});
-
+    const reasoning_efforts = model_reasoning_efforts(topic_context, topic_context.model);
+    const selected_effort_index = Math.max(
+        0,
+        reasoning_efforts.findIndex((effort) => effort.effort === topic_context.reasoning_effort),
+    );
+    const display_reasoning_efforts = reasoning_efforts.map((effort, index) => ({
+        ...effort,
+        index,
+        selected: index === selected_effort_index,
+    }));
+    const github_repo = topic_context.github_repo.trim();
+    const pinned_repo = topic_context.pinned_repo?.trim() ?? "";
+    const has_pinned_repo = pinned_repo.length > 0;
+    const git_repo_label = git.repo_label?.trim() ?? "";
+    const repo_label = topic_context.repo_label?.trim() || git_repo_label;
+    const has_workspace_repo =
+        repo_label.length > 0 || has_pinned_repo || (git.available && git_repo_label.length > 0);
+    const workdir_parts = topic_context.workdir.split("/").filter((part) => part.trim().length > 0);
+    const worktree_name =
+        topic_context.worktree_label?.trim() ||
+        git.worktree_name ||
+        workdir_parts[workdir_parts.length - 1] ||
+        "";
+    const workspace_primary_name = repo_label || $t({defaultMessage: "No repo pinned"});
+    const workspace_ref_parts = [git.branch, git.head].filter(
+        (part): part is string => part !== undefined && part.trim().length > 0,
+    );
+    const git_status_label = git.dirty ? changed_label : $t({defaultMessage: "clean"});
+    const local_worktree_ref_label = workspace_ref_parts.join(" / ");
+    const local_worktree_summary_label = [worktree_name, git_status_label, local_worktree_ref_label]
+        .filter((part) => part.trim().length > 0)
+        .join(" / ");
     return {
         ...topic_context,
-        github_repo: topic_context.github_repo.trim(),
+        github_repo,
         model_choices: topic_context.model_choices ?? [],
+        has_model_choices: display_model_choices.length > 0,
+        display_model_choices,
+        display_reasoning_efforts,
+        effort_index: selected_effort_index,
+        max_effort_index: Math.max(0, display_reasoning_efforts.length - 1),
+        effort_label:
+            display_reasoning_efforts[selected_effort_index]?.label ??
+            topic_context.reasoning_effort,
         git_available: git.available,
         git_status_class: git.dirty ? "dirty" : "clean",
         git_status_label,
-        git_head_short,
-        show_ahead_behind: ahead_behind_parts.length > 0,
-        ahead_behind_label: ahead_behind_parts.join(" "),
-        ahead_behind_title,
-        show_detached: detached,
-        detached_title,
-        show_branch_mismatch,
-        branch_mismatch_title,
+        has_changed_files: (git.changed_files ?? []).length > 0,
+        has_recent_commits: (git.recent_commits ?? []).length > 0,
+        changed_label,
+        has_pinned_repo,
+        workspace_primary_name,
+        workspace_primary_title:
+            topic_context.repo_title?.trim() ||
+            pinned_repo ||
+            (has_workspace_repo
+                ? topic_context.workdir
+                : $t({defaultMessage: "Ask Pear to pin a Git repository for this topic."})),
+        workspace_kind_label: $t({defaultMessage: "Repo"}),
+        workspace_ref_label: "",
+        worktree_name,
+        worktree_details_open:
+            worktree_details_open_by_context.get(
+                context_key(topic_context.stream, topic_context.topic),
+            ) ?? false,
+        local_worktree_summary_label,
+        show_primary_git_status: has_workspace_repo && git.available,
     };
 }
 
-// Every active run gets its own status+verbs row, so multi-run topics
-// never silently hide a live run; with nothing active, the most
-// recent run keeps its terminal status (and done/failed flash)
-// visible.
-function display_runs(runs: PearRun[]): ReturnType<typeof display_run>[] {
-    const active_runs = runs.filter(
-        (run) => run.status === "running" || run.status === "queued" || run.status === "paused",
-    );
-    if (active_runs.length > 0) {
-        return active_runs.map((run) => display_run(run));
+function active_display_run(runs: PearRun[]): ReturnType<typeof display_run> | undefined {
+    const active_run =
+        runs.find(
+            (run) => run.status === "running" || run.status === "queued" || run.status === "paused",
+        ) ?? runs[0];
+    return active_run === undefined ? undefined : display_run(active_run);
+}
+
+function run_is_active(run: {status: string} | undefined): boolean {
+    return run?.status === "running" || run?.status === "queued";
+}
+
+function clear_live_refresh(): void {
+    if (live_refresh_timer !== undefined) {
+        window.clearTimeout(live_refresh_timer);
+        live_refresh_timer = undefined;
     }
-    return runs.slice(0, 1).map((run) => display_run(run));
 }
 
-// Pure rendering helper, shared by render() and the node test that
-// asserts patch-vs-render equivalence.
-export function render_panel_html(state: {
-    runs: PearRun[];
-    topic_context: PearTopicContext | null | undefined;
-    stream: string | undefined;
-    topic: string | undefined;
-    error: string;
-}): string {
-    const has_topic = state.stream !== undefined && state.topic !== undefined;
-    const runs = display_runs(state.runs);
-    return render_pear_panel({
-        has_topic,
-        context_label: has_topic ? `${state.stream} > ${state.topic}` : "",
-        topic_context: display_topic_context(state.topic_context),
-        display_runs: runs,
-        has_runs: runs.length > 0,
-        error: state.error,
-    });
+function schedule_live_refresh(active_run: {status: string} | undefined): void {
+    if (!initialized || !run_is_active(active_run)) {
+        clear_live_refresh();
+        return;
+    }
+    if (live_refresh_timer !== undefined || live_refresh_in_flight) {
+        return;
+    }
+    live_refresh_timer = window.setTimeout(() => {
+        live_refresh_timer = undefined;
+        refresh({live: true});
+    }, LIVE_REFRESH_INTERVAL_MS);
 }
 
-function render(): void {
-    const element = panel_element();
-    if (element === null) {
+function render(
+    runs: PearRun[] = last_runs,
+    topic_context: PearTopicContext | null | undefined = last_topic_context,
+): void {
+    last_runs = runs;
+    last_topic_context = topic_context;
+    remember_worktree_details_state();
+    const {stream, topic} = current_context();
+    const has_topic = stream !== undefined && topic !== undefined;
+    const next_context_key = context_key(stream, topic);
+    const active_run = active_display_run(runs);
+    const panel_status = active_run?.status ?? "idle";
+    $("#pear-panel").html(
+        render_pear_panel({
+            has_topic,
+            context_label: has_topic ? `${stream} > ${topic}` : "",
+            topic_context: display_topic_context(topic_context),
+            active_run,
+            error: last_error,
+            model_error: last_model_error,
+            status_label: panel_status,
+            status_class: status_class(panel_status),
+        }),
+    );
+    rendered_context_key = next_context_key;
+    schedule_live_refresh(active_run);
+}
+
+export function refresh(options: {live?: boolean} = {}): void {
+    const live = options.live === true;
+    if (live && live_refresh_in_flight) {
         return;
     }
     const {stream, topic} = current_context();
-    patch_html(
-        element,
-        render_panel_html({
-            runs: last_runs,
-            topic_context: last_topic_context,
-            stream,
-            topic,
-            error: last_error,
-        }),
-    );
-}
-
-function on_store_update(snapshot: PearSnapshot): void {
-    last_runs = snapshot.runs;
-    last_topic_context = snapshot.topic_context;
-    last_error = snapshot.error;
-    render();
-}
-
-function on_status_transition(transition: PearStatusTransition): void {
-    if (transition.from_status === undefined) {
-        // First sighting of a run is not a transition worth flashing.
-        return;
+    const data: Record<string, string | boolean> = {
+        include_events: false,
+        include_context: !live,
+    };
+    if (stream !== undefined && topic !== undefined) {
+        data["stream"] = stream;
+        data["topic"] = topic;
     }
-    let css_class;
-    if (transition.to_status === "done") {
-        css_class = "pear-run-status-flash-done";
-    } else if (transition.to_status === "failed" || transition.to_status === "cancelled") {
-        css_class = "pear-run-status-flash-failed";
-    } else {
-        return;
+    if (live) {
+        live_refresh_in_flight = true;
     }
-    const existing = flash_by_run_id.get(transition.run_id);
-    if (existing !== undefined) {
-        window.clearTimeout(existing.timer);
-    }
-    const timer = window.setTimeout(() => {
-        flash_by_run_id.delete(transition.run_id);
-        render();
-    }, STATUS_FLASH_DURATION_MS);
-    flash_by_run_id.set(transition.run_id, {css_class, timer});
-    render();
-}
-
-export function is_open(): boolean {
-    return panel_open;
-}
-
-export function open(): void {
-    if (panel_open) {
-        return;
-    }
-    panel_open = true;
-    // Subscribing starts the store's polling; the panel re-renders on
-    // every snapshot.
-    unsubscribe_from_store = pear_runs_store.subscribe("narrow", on_store_update, {
-        on_status_transition,
+    void channel.get({
+        url: "/json/pear/runs",
+        data,
+        success(raw_data) {
+            const data = raw_data as PearRunsResponse;
+            last_error = "";
+            const topic_context = live
+                ? (data.pear_topic_context ?? last_topic_context)
+                : data.pear_topic_context === undefined
+                  ? last_topic_context
+                  : data.pear_topic_context;
+            render(data.pear_runs, topic_context);
+        },
+        error(xhr) {
+            if (xhr.readyState === 0) {
+                return;
+            }
+            last_error = $t({defaultMessage: "Pear status is unavailable."});
+            blueslip.warn(`Failed to fetch Pear runs: ${xhr.responseText}`);
+            render();
+        },
+        complete() {
+            if (live) {
+                live_refresh_in_flight = false;
+                schedule_live_refresh(active_display_run(last_runs));
+            }
+        },
     });
 }
 
-export function close(): void {
-    if (!panel_open) {
-        return;
-    }
-    panel_open = false;
-    if (unsubscribe_from_store !== undefined) {
-        // Dropping the last subscriber stops the store's polling.
-        unsubscribe_from_store();
-        unsubscribe_from_store = undefined;
-    }
+function post_run_action(run_id: string, action: string): void {
+    void channel.post({
+        url: `/json/pear/runs/${run_id}/${action}`,
+        success() {
+            refresh();
+        },
+        error(xhr) {
+            if (xhr.readyState !== 0) {
+                blueslip.warn(`Failed to ${action} Pear run: ${xhr.responseText}`);
+            }
+        },
+    });
 }
 
 function start_side_session(): void {
@@ -406,7 +612,7 @@ function start_side_session(): void {
         },
         success(raw_data) {
             $("#pear-side-request").val("");
-            pear_runs_store.refresh();
+            refresh();
             const data = raw_data as {dm_narrow_url?: string};
             if (data.dm_narrow_url !== undefined) {
                 window.location.hash = data.dm_narrow_url.slice(1);
@@ -420,13 +626,79 @@ function start_side_session(): void {
     });
 }
 
+function current_reasoning_effort_from_slider(): string {
+    const slider_value = $("#pear-reasoning-effort-slider").val();
+    const selected_model_value = $("#pear-topic-model-select").val();
+    const selected_model =
+        typeof selected_model_value === "string" ? selected_model_value : undefined;
+    const efforts = model_reasoning_efforts(last_topic_context, selected_model);
+    const effort_count = efforts.length;
+    const index =
+        typeof slider_value === "string"
+            ? Math.min(Math.max(Number.parseInt(slider_value, 10) || 0, 0), effort_count - 1)
+            : 0;
+    return efforts[index]?.effort ?? last_topic_context?.reasoning_effort ?? "medium";
+}
+
+function update_reasoning_effort_label(): void {
+    const effort = current_reasoning_effort_from_slider();
+    const selected_model_value = $("#pear-topic-model-select").val();
+    const selected_model =
+        typeof selected_model_value === "string" ? selected_model_value : undefined;
+    const choices = model_reasoning_efforts(last_topic_context, selected_model);
+    const label = choices.find((choice) => choice.effort === effort)?.label ?? effort;
+    $("#pear-reasoning-effort-value").text(label);
+}
+
+function save_topic_context(): void {
+    const {stream, topic} = current_context();
+    const model = $("#pear-topic-model-select").val();
+    if (stream === undefined || topic === undefined || typeof model !== "string") {
+        return;
+    }
+    const clean_model = model.trim();
+    if (!clean_model) {
+        last_model_error = $t({defaultMessage: "Choose a model."});
+        render();
+        return;
+    }
+    const reasoning_effort = current_reasoning_effort_from_slider();
+    $(".pear-topic-runtime-control").prop("disabled", true);
+    void channel.post({
+        url: "/json/pear/topic-context",
+        data: {
+            stream,
+            topic,
+            model: clean_model,
+            reasoning_effort,
+        },
+        success(raw_data) {
+            const data = raw_data as {pear_topic_context?: PearTopicContext};
+            last_model_error = "";
+            render(last_runs, data.pear_topic_context);
+            refresh();
+        },
+        error(xhr) {
+            if (xhr.readyState !== 0) {
+                last_model_error = $t({defaultMessage: "Model change failed."});
+                blueslip.warn(`Failed to update Pear topic model: ${xhr.responseText}`);
+                render();
+            }
+        },
+        complete() {
+            $(".pear-topic-runtime-control").prop("disabled", false);
+        },
+    });
+}
+
 export function initialize(): void {
     if (initialized) {
+        refresh();
         return;
     }
     initialized = true;
     $("body").on("click", "#pear-panel-refresh", () => {
-        pear_runs_store.refresh();
+        refresh();
     });
     $("body").on("click", ".pear-run-action", function () {
         const $button = $(this);
@@ -435,9 +707,29 @@ export function initialize(): void {
         if (run_id === undefined || action === undefined) {
             return;
         }
-        pear_runs_store.post_run_action(run_id, action);
+        post_run_action(run_id, action);
     });
     $("body").on("click", "#pear-side-start", () => {
         start_side_session();
     });
+    $("body").on("change", "#pear-topic-model-select", () => {
+        save_topic_context();
+    });
+    $("body").on("input", "#pear-reasoning-effort-slider", () => {
+        update_reasoning_effort_label();
+    });
+    $("body").on("change", "#pear-reasoning-effort-slider", () => {
+        save_topic_context();
+    });
+    refresh();
+    refresh_timer = window.setInterval(refresh, FULL_REFRESH_INTERVAL_MS);
+}
+
+export function stop(): void {
+    if (refresh_timer !== undefined) {
+        window.clearInterval(refresh_timer);
+        refresh_timer = undefined;
+    }
+    clear_live_refresh();
+    live_refresh_in_flight = false;
 }

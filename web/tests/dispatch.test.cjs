@@ -68,6 +68,7 @@ const scheduled_messages = mock_esm("../src/scheduled_messages");
 const scheduled_messages_feed_ui = mock_esm("../src/scheduled_messages_feed_ui");
 const scheduled_messages_overlay_ui = mock_esm("../src/scheduled_messages_overlay_ui");
 const scheduled_messages_ui = mock_esm("../src/scheduled_messages_ui");
+const scroll_bar = mock_esm("../src/scroll_bar");
 const settings_account = mock_esm("../src/settings_account");
 const settings_bots = mock_esm("../src/settings_bots");
 const settings_data = mock_esm("../src/settings_data");
@@ -162,7 +163,6 @@ const onboarding_steps = zrequire("onboarding_steps");
 const user_groups = zrequire("user_groups");
 
 const server_events_dispatch = zrequire("server_events_dispatch");
-const server_events_state = zrequire("server_events_state");
 
 function dispatch(ev) {
     server_events_dispatch.dispatch_normal_event(ev);
@@ -887,52 +887,6 @@ run_test("realm_bot update", ({override}) => {
     assert_same(args.bot, event.bot);
 });
 
-run_test("realm_bot Pear identity updates", ({override}) => {
-    server_events_state.initialize({
-        queue_id: null,
-        pear_bot_user_ids: [],
-        assert_get_events_running() {},
-        restart_get_events() {},
-    });
-    override(current_user, "user_id", test_user.user_id);
-    override(bot_data, "add", noop);
-    override(bot_data, "del", noop);
-    override(bot_data, "update", noop);
-    override(settings_bots, "redraw_your_bots_list", noop);
-    override(settings_bots, "toggle_bot_config_download_container", noop);
-    override(settings_bots, "update_lock_icon_in_sidebar", noop);
-
-    dispatch({
-        ...event_fixtures.realm_bot__add,
-        bot: {
-            ...event_fixtures.realm_bot__add.bot,
-            services: [{service_name: "pear", config_data: {}}],
-        },
-    });
-    assert.equal(server_events_state.is_pear_bot_user_id(42), true);
-
-    dispatch(event_fixtures.realm_bot__delete);
-    assert.equal(server_events_state.is_pear_bot_user_id(42), false);
-
-    dispatch({
-        ...event_fixtures.realm_bot__update,
-        bot: {
-            ...event_fixtures.realm_bot__update.bot,
-            services: [{service_name: "pear", config_data: {}}],
-        },
-    });
-    assert.equal(server_events_state.is_pear_bot_user_id(4321), true);
-
-    dispatch({
-        ...event_fixtures.realm_bot__update,
-        bot: {
-            ...event_fixtures.realm_bot__update.bot,
-            services: [{service_name: "github", config_data: {}}],
-        },
-    });
-    assert.equal(server_events_state.is_pear_bot_user_id(4321), false);
-});
-
 run_test("realm_emoji", ({override}) => {
     const ui_func_names = [
         [settings_emoji, "populate_emoji"],
@@ -1442,6 +1396,7 @@ run_test("user_settings", ({override}) => {
     dispatch(event);
     assert_same(user_settings.receives_typing_notifications, false);
 
+    override(scroll_bar, "set_layout_width", noop);
     event = event_fixtures.user_settings__fluid_layout_width;
     override(user_settings, "fluid_layout_width", false);
     dispatch(event);

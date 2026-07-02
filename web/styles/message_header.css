@@ -19,12 +19,17 @@
         height: 1.8666em; /* 28px at 15px em */
         border: 1px solid var(--color-message-header-contents-border);
         border-bottom-color: var(--color-message-header-contents-border-bottom);
-        /* Slack-flat: recipient bars are square, structure comes
-           from the hairline borders alone. */
-        border-radius: 0;
+        border-radius: 7px 7px 0 0;
     }
 
     &.message_header_stream {
+        /* Add box shadow to hide message border (first one) and message
+           selected box shadow (second one) that are visible
+           due to top borders of sticky recipient bar being curved. */
+        box-shadow:
+            -1px -5px 0 5px var(--color-background),
+            1px -5px 0 0 var(--color-background);
+
         & .message_label_clickable {
             user-select: text;
             color: var(--color-text-message-header);
@@ -107,12 +112,18 @@
     #report-message-preview-container & {
         /* We don't need these effects applied for message preview in the report
         message modal. */
+        box-shadow: none;
         border: 0;
         background: transparent;
     }
 }
 
 .message_header_private_message {
+    /* This is required for box-shadow appear above the message content. */
+    z-index: 1;
+    box-shadow:
+        -1px -5px 0 5px var(--color-background),
+        1px -5px 0 0 var(--color-background);
     background-color: var(--color-background);
 
     .message-header-contents {
@@ -167,12 +178,19 @@
         /* Browser overlaps extra top padding of message header and
            the bottom border message if this margin is not present. */
         margin-bottom: 1px;
+        border-radius: 5px;
 
         .message_row:last-of-type {
             border-radius: var(--last-message-row-border-radius);
             border-bottom: 1px solid var(--color-message-list-border);
 
+            .unread-marker-fill {
+                border-radius: 0 0 0 7px;
+                height: calc(100% - 2px);
+            }
+
             .messagebox {
+                border-radius: 0 0 7px 7px;
                 padding-bottom: 4px;
             }
         }

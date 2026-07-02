@@ -35,25 +35,81 @@ body {
         var(--legacy-body-line-height-unitless),
         var(--base-line-height-unitless)
     );
-    font-family:
-        Lato,
-        -apple-system,
-        "Segoe UI",
-        "Helvetica Neue",
-        Helvetica,
-        Arial,
-        sans-serif;
-    -webkit-font-smoothing: antialiased;
+    font-family: "Source Sans 3 VF", sans-serif;
     color: var(--color-text-default);
     background-color: var(--color-background);
 
-    /* The full-bleed frame: the layout is always full width, with
-       no centering max-width. The retired fluid_layout_width
-       setting's behavior is now unconditional. */
+    /* Implementation for fluid layout width setting. */
     .header-main,
     .app .app-main,
     #compose-container {
-        max-width: none;
+        max-width: calc(
+            var(--left-sidebar-max-width) + var(--message-area-max-width) +
+                var(--right-sidebar-max-width)
+        );
+    }
+
+    /* When sidebars are manually hidden, we set the max-width
+       for the layout to a different maximum width. This keeps
+       the message area predictably readable. */
+    &.hide-left-sidebar:not(.fluid_layout_width) {
+        .header-main,
+        .app .app-main,
+        #compose-container {
+            max-width: calc(
+                var(--message-area-max-width) + var(--right-sidebar-max-width)
+            );
+
+            /* When we're less than the xl_min breakpoint, we instead
+               constrain to just the message area's max-width, since
+               the right column will be hidden below that point. */
+            @container header-container (width < $cq_xl_min) {
+                max-width: var(--message-area-max-width);
+            }
+
+            @container app (width < $cq_xl_min) {
+                max-width: var(--message-area-max-width);
+            }
+        }
+    }
+
+    /* Fallback media query. */
+    @media (width < $xl_min) {
+        &.without-container-query-support.hide-left-sidebar:not(
+                .fluid_layout_width
+            ) {
+            .header-main,
+            .app .app-main,
+            #compose-container {
+                max-width: var(--message-area-max-width);
+            }
+        }
+    }
+
+    &.hide-right-sidebar:not(.fluid_layout_width) {
+        .header-main,
+        .app .app-main,
+        #compose-container {
+            max-width: calc(
+                var(--left-sidebar-max-width) + var(--message-area-max-width)
+            );
+        }
+    }
+
+    &.hide-left-sidebar.hide-right-sidebar:not(.fluid_layout_width) {
+        .header-main,
+        .app .app-main,
+        #compose-container {
+            max-width: var(--message-area-max-width);
+        }
+    }
+
+    &.fluid_layout_width {
+        .header-main,
+        .app .app-main,
+        #compose-container {
+            max-width: inherit;
+        }
     }
 }
 
@@ -297,27 +353,12 @@ p.n-margin {
 #navbar-fixed-container {
     position: fixed;
     top: 0;
-    /* The full-bleed frame: the rail and left sidebar paint from
-       y=0, so the navbar starts at the frame seam instead of
-       spanning above them. */
-    left: var(--pear-frame-inset);
     z-index: 102;
-    /* Adjust width so fixed elements aren't visible in the
-       background when an overlay / modal is open. */
-    width: calc(
-        100% - var(--pear-frame-inset) - var(--disabled-scrollbar-width)
-    );
-
-    /* The container itself is already inset to the frame seam, so
-       descendants (e.g. #navbar-middle) must not apply the frame
-       inset a second time. */
-    > * {
-        --pear-frame-inset: 0px;
-    }
 }
 
 /* Adjust width of any fixed / absolute positioned elements that might be visible in
    the background when a overlay / modal is open. */
+#navbar-fixed-container,
 #compose {
     width: calc(100% - var(--disabled-scrollbar-width));
 }
@@ -348,7 +389,7 @@ p.n-margin {
 .app-main,
 .header-main {
     width: 100%;
-    margin: 0;
+    margin: 0 auto;
     padding: 0;
     position: relative;
 }
@@ -543,11 +584,8 @@ body.has-overlay-scrollbar {
     z-index: 15;
 }
 
-/* The left sidebar is absent here: it paints from y=0, since the
-   navbar no longer spans it. The right sidebar only ever opens as
-   an overlay beneath the full-width navbar, so it keeps the
-   padding. */
 #message_feed_container,
+.app-main .column-left .left-sidebar,
 .app-main .column-right .right-sidebar {
     padding-top: calc(
         var(--navbar-fixed-height) + var(--header-padding-bottom)
@@ -571,27 +609,6 @@ body.has-overlay-scrollbar {
     .column-right .right-sidebar {
         position: fixed;
         z-index: 100;
-        /* The Slack-style rail: dark in both themes. min-height
-           stretches the painted rail to the viewport bottom without
-           affecting the JS-sized scroll containers within. */
-        background-color: var(--color-background-sidebar);
-        min-height: var(--full-height-dynamic-viewport);
-        /* Rail-scoped re-assignments for tokens shared with pane
-           surfaces (inbox, recent view) that cannot flip globally
-           now that the rail is dark in both themes. */
-        --color-vdots-visible: hsl(0deg 0% 100% / 72%);
-        --color-vdots-hover: hsl(0deg 0% 100%);
-        --color-vdots-hint: hsl(0deg 0% 100% / 45%);
-        --color-background-sidebar-action-hover: hsl(0deg 0% 100% / 12%);
-        --color-unread-counter-normal: hsl(0deg 0% 100% / 85%);
-        --color-background-unread-counter-normal: hsl(0deg 0% 100% / 16%);
-        --color-unread-counter-quiet: hsl(0deg 0% 100% / 60%);
-    }
-
-    .column-left {
-        /* The fixed icon rail owns the leftmost strip of the frame;
-           the channel sidebar column starts at its right edge. */
-        left: var(--pear-left-rail-width);
     }
 
     .column-left .left-sidebar {
@@ -656,11 +673,10 @@ body.has-overlay-scrollbar {
 
 .column-middle,
 #compose-content {
-    /* The full-bleed frame: with no pane open the middle column
-       runs to the right viewport edge; an open Pear pane claims
-       its width through --pear-right-pane-width. */
-    margin-right: var(--pear-right-pane-width);
-    margin-left: var(--pear-frame-inset);
+    margin-right: var(--right-sidebar-width);
+    margin-left: calc(
+        var(--left-sidebar-width) + var(--left-sidebar-padding-left)
+    );
     position: relative;
 }
 
@@ -1621,7 +1637,7 @@ div.topic_edit_spinner .loading_indicator_spinner {
                 height: 100%;
                 width: var(--right-sidebar-width);
                 right: 0;
-                background-color: var(--color-background-sidebar);
+                background-color: var(--color-background);
             }
         }
     }
@@ -1634,6 +1650,11 @@ div.topic_edit_spinner .loading_indicator_spinner {
 
     #navbar-middle {
         margin-right: var(--right-column-collapsed-sidebar-width);
+    }
+
+    #compose-content,
+    .app-main .column-middle {
+        margin-right: 7px;
     }
 }
 
@@ -1675,24 +1696,15 @@ div.topic_edit_spinner .loading_indicator_spinner {
             display: block;
             position: absolute;
             float: none;
-            /* The overlay drawer opens at the rail seam; narrow
-               viewports zero the rail width, putting it back at
-               the viewport edge. */
-            left: var(--pear-left-rail-width);
+            left: 0;
             top: 0;
 
             .left-sidebar {
-                background-color: var(--color-background-sidebar);
+                background-color: var(--color-background);
                 box-shadow: 0 2px 3px 0 hsl(0deg 0% 0% / 10%);
                 border-right: 1px solid var(--color-border-sidebar);
                 height: 100%;
                 padding-left: 10px;
-                /* The overlay drawer opens beneath the full-width
-                   navbar (the frame inset is zero whenever the left
-                   column is collapsed), so pad its top back out. */
-                padding-top: calc(
-                    var(--navbar-fixed-height) + var(--header-padding-bottom)
-                );
                 width: var(--left-sidebar-width);
             }
         }
@@ -1700,14 +1712,13 @@ div.topic_edit_spinner .loading_indicator_spinner {
 }
 
 .hide-left-sidebar {
-    /* With the left column hidden, the icon rail still owns the
-       left edge at desktop widths: the navbar and the middle
-       column start at the rail seam. Narrow viewports zero the
-       rail width itself, collapsing the inset to 0. */
-    --pear-frame-inset: var(--pear-left-rail-width);
-
     .app-main {
         @extend %hide-left-sidebar;
+    }
+
+    #compose-content,
+    .app-main .column-middle {
+        margin-left: 7px;
     }
 
     @container header-container (width > $cq_md_min) {
@@ -1725,6 +1736,13 @@ div.topic_edit_spinner .loading_indicator_spinner {
     @container header-container (width < $cq_md_min) {
         #navbar-middle {
             margin-left: 0;
+        }
+    }
+
+    @container app (width < $cq_xl_min) {
+        #compose-content,
+        .app-main .column-middle {
+            margin-left: 7px;
         }
     }
 }
@@ -1745,23 +1763,6 @@ body:not(.hide-left-sidebar) {
        we don't need an indicator here as it will only serve as a disctraction. */
     #header-container .column-left .left-sidebar-toggle-unreadcount {
         display: none !important;
-    }
-
-    /* While the left sidebar is visible, the navbar is inset to the
-       frame seam, so the header's own left column (toggle + wide
-       logo) would overlap the message view header. Hide it and let
-       the in-middle hamburger toggle stand in for it, exactly as at
-       narrow widths. */
-    .header-main .column-left {
-        display: none;
-    }
-
-    #streamlist-toggle {
-        display: block;
-    }
-
-    .top-navbar-container {
-        margin-left: var(--header-height);
     }
 }
 
@@ -1790,6 +1791,16 @@ body:not(.spectator-view) {
 @container app (width < $cq_xl_min) {
     .app-main {
         @extend %hide-right-sidebar;
+
+        .column-middle {
+            margin-right: 7px;
+        }
+    }
+
+    #typing_notifications,
+    #scheduled_message_indicator,
+    #compose-content {
+        margin-right: 7px;
     }
 }
 
@@ -1818,17 +1829,21 @@ body:not(.spectator-view) {
     .app-main {
         @extend %hide-left-sidebar;
 
-        /* The auto-collapsed left column zeroes the frame inset and
-           the icon rail width for everything in the app column; the
-           navbar's own inset is zeroed by the fallback media query
-           below, since container queries cannot reach outside .app. */
-        --pear-frame-inset: 0px;
-        --pear-left-rail-width: 0px;
+        .column-middle {
+            margin-left: 7px;
+            margin-right: 7px;
+        }
 
         .column-middle .column-middle-inner {
             margin-left: 0;
             margin-right: 0;
         }
+    }
+
+    #typing_notifications,
+    #scheduled_message_indicator,
+    #compose-content {
+        margin-left: 7px;
     }
 }
 
@@ -1859,6 +1874,10 @@ body:not(.spectator-view) {
     .without-container-query-support {
         .app-main {
             @extend %hide-right-sidebar;
+
+            .column-middle {
+                margin-right: 7px;
+            }
         }
 
         #navbar-middle {
@@ -1866,7 +1885,18 @@ body:not(.spectator-view) {
             margin-right: calc(var(--header-height) * 4 + 3px);
         }
 
+        #typing_notifications,
+        #scheduled_message_indicator,
+        #compose-content {
+            margin-right: 7px;
+        }
+
         .hide-left-sidebar {
+            #compose-content,
+            .app-main .column-middle {
+                margin-left: 7px;
+            }
+
             #top_navbar .column-left {
                 width: auto;
             }
@@ -1875,20 +1905,14 @@ body:not(.spectator-view) {
 }
 
 @media (width < $md_min) {
-    /* Below the left column's auto-collapse point, the frame has no
-       left inset and the icon rail collapses. This zeroes the
-       navbar's inset in all browsers (container queries cannot reach
-       the navbar, which sits outside .app), and stands in for the
-       app container query above in browsers without container query
-       support. */
-    body {
-        --pear-frame-inset: 0px;
-        --pear-left-rail-width: 0px;
-    }
-
     .without-container-query-support {
         .app-main {
             @extend %hide-left-sidebar;
+
+            .column-middle {
+                margin-left: 7px;
+                margin-right: 7px;
+            }
 
             .column-middle .column-middle-inner {
                 margin-left: 0;
@@ -1916,6 +1940,12 @@ body:not(.spectator-view) {
             width: calc(90% - 30px);
             left: 5%;
             top: 5%;
+        }
+
+        #typing_notifications,
+        #scheduled_message_indicator,
+        #compose-content {
+            margin-left: 7px;
         }
     }
 }
@@ -2048,6 +2078,11 @@ body:not(.spectator-view) {
         /* Adjust in response to shorter navbar. */
         top: 5px;
         right: 4px;
+    }
+
+    #top_navbar .column-right #personal-menu .header-button-avatar {
+        width: 1.25em; /* 20px at 16px em */
+        height: 1.25em; /* 20px at 16px em */
     }
 }
 

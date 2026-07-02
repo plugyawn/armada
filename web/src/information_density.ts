@@ -9,32 +9,33 @@ import {stringify_time} from "./timerender.ts";
 import {user_settings} from "./user_settings.ts";
 import * as util from "./util.ts";
 
-// These are all relative-unit values for Lato (the self-hosted
-// body font in web/fonts/lato/), as reported by its font tables.
-// Lato reports an em size of 2000, which is necessary to know to
-// calculate proper em units.
-const BODY_FONT_EM_SIZE = 2000;
-// Both Chrome and Firefox size Lato's content box from the
-// hhea/usWin metrics (Lato does not set USE_TYPO_METRICS). The
-// ascent is reported as 1974; it represents the portion of the
-// content box above the baseline.
-const BODY_FONT_ASCENT = 1974;
-// The hhea/usWin descent value is reported as 426. It is the
-// portion of the content box below the baseline.
-const BODY_FONT_DESCENT = 426;
+// These are all relative-unit values for Source Sans Pro VF,
+// as opened and inspected in FontForge.
+// Source Sans Prof VF reports an em size of 1000, which is
+// necessary to know to calculate proper em units.
+const BODY_FONT_EM_SIZE = 1000;
+// The Typo Ascent Value is reported as 1024, but both Chrome
+// and Firefox act as though it is 1025, so that value is used
+// here. It represents the portion of the content box above the
+// baseline.
+const BODY_FONT_ASCENT = 1025;
+// The Typo Descent Value is reported as 400. It is the portion
+// of the content box below the baseline.
+const BODY_FONT_DESCENT = 400;
 // The BODY_FONT_CONTENT_BOX size is calculated by adding the
-// ascent and descent values. The content box for Lato exceeds
-// the size of its em box, meaning that the `font-size` value
-// will render text that is smaller than the size of the content
-// area. For example, setting `font-size: 100px` on Lato produces
-// a content area of 120px.
+// Typo Ascent and Typo Descent values. The content box for
+// Source Sans Pro VF exceeds the size of its em box, meaning
+// that the `font-size` value will render text that is smaller
+// than the size of the content area. For example, setting
+// `font-size: 100px` on Source Sans Prof VF produces a content
+// area of 142.5px.
 // Note also that the content box is therefore clipped when the
 // line-height (in ems or as a unitless value) is less than the
 // MAXIMUM_BLOCK_HEIGHT_IN_EMS as calculated below.
 const BODY_FONT_CONTENT_BOX = BODY_FONT_ASCENT + BODY_FONT_DESCENT;
 // The maximum block height is derived from the content area
-// made by an anonymous text node in Lato.
-// This ensures that even as line heights scale above 1.2,
+// made by an anonymous text node in Source Sans Pro VF.
+// This ensures that even as line heights scale above 1.425,
 // text-adjacent elements can be sized in scale to the text's
 // content area. This is necessary to know, because an element
 // such as a checkbox or emoji looks nice occupying the full
@@ -42,10 +43,8 @@ const BODY_FONT_CONTENT_BOX = BODY_FONT_ASCENT + BODY_FONT_DESCENT;
 // than the line-height.
 const MAXIMUM_BLOCK_HEIGHT_IN_EMS = BODY_FONT_CONTENT_BOX / BODY_FONT_EM_SIZE;
 
-// Slack-style density: 15px body text at a 1.38 line-height
-// (~20.7px line boxes). 138 is a supported line-height step.
-export const NON_COMPACT_MODE_FONT_SIZE_PX = 15;
-export const NON_COMPACT_MODE_LINE_HEIGHT_PERCENT = 138;
+export const NON_COMPACT_MODE_FONT_SIZE_PX = 16;
+export const NON_COMPACT_MODE_LINE_HEIGHT_PERCENT = 140;
 
 export const INFO_DENSITY_VALUES_DICT = {
     web_font_size_px: {
@@ -57,23 +56,23 @@ export const INFO_DENSITY_VALUES_DICT = {
     },
     web_line_height_percent: {
         default: NON_COMPACT_MODE_LINE_HEIGHT_PERCENT,
-        minimum: 129,
-        maximum: 156,
+        minimum: 122,
+        maximum: 158,
         // by how much the value will be changed on clicking +/- buttons.
         step_value: 9,
     },
 };
 
 // TODO: Compute these from INFO_DENSITY_VALUES_DICT, rather than repeating it.
-const line_height_supported_values = [129, 138, 147, 156];
+const line_height_supported_values = [122, 131, 140, 149, 158];
 
 export const MIN_VALUES = {
     web_font_size_px: 12,
-    web_line_height_percent: 129,
+    web_line_height_percent: 122,
 };
 export const MAX_VALUES = {
     web_font_size_px: 20,
-    web_line_height_percent: 156,
+    web_line_height_percent: 158,
 };
 
 function set_vertical_alignment_values(line_height_unitless: number): void {
@@ -110,11 +109,10 @@ export function set_base_typography_css_variables(): void {
     const line_height_percent = user_settings.web_line_height_percent;
     const line_height_unitless = line_height_percent / 100;
     const line_height_px = line_height_unitless * font_size_px;
-    /* Slack-tight interelement spacing: a quarter of the line
-       height (~5.2px at the default 15px/1.38); additional logic
-       might be useful to make this adjustable, likewise with the
-       doubled value. */
-    const markdown_interelement_space_fraction = 0.25;
+    /* This percentage is a legacy value, rounding up from .294;
+       additional logic might be useful to make this adjustable;
+       likewise with the doubled value. */
+    const markdown_interelement_space_fraction = 0.3;
     const markdown_interelement_space_px = line_height_px * markdown_interelement_space_fraction;
 
     $(":root").css("--base-line-height-unitless", `${line_height_unitless}`);

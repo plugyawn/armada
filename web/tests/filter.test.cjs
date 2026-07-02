@@ -2722,11 +2722,6 @@ test("navbar_helpers", ({override}) => {
         {operator: "topic", operand: "bar"},
         {operator: "with", operand: "12"},
     ];
-    const channel_topic_has_attachment = [
-        {operator: "channel", operand: foo_stream_id.toString()},
-        {operator: "topic", operand: "bar"},
-        {operator: "has", operand: "attachment"},
-    ];
 
     const test_cases = [
         {
@@ -3007,13 +3002,6 @@ test("navbar_helpers", ({override}) => {
         },
         {
             terms: channel_with,
-            is_common_narrow: true,
-            zulip_icon: "hashtag",
-            title: "Foo",
-            redirect_url_with_search: "#",
-        },
-        {
-            terms: channel_topic_has_attachment,
             is_common_narrow: true,
             zulip_icon: "hashtag",
             title: "Foo",

@@ -1,13 +1,16 @@
 // The Pear runs store owns the one `GET /json/pear/runs` polling
 // cadence (5s idle / 125ms while a run is live) that surfaces like the
-// Pear panel subscribe to. Polling is open-gated: the store makes zero
-// requests unless at least one subscriber is registered, so closing
-// the Pear right area stops all `/json/pear/runs` traffic.
+// Pear panel subscribe to. Polling is interest-gated: a visible
+// subscriber or a short post-send settle watch keeps it alive.
+
+import * as z from "zod/mini";
 
 import * as blueslip from "./blueslip.ts";
 import * as channel from "./channel.ts";
 import {$t} from "./i18n.ts";
+import * as message_helper from "./message_helper.ts";
 import * as message_live_update from "./message_live_update.ts";
+import {raw_message_schema} from "./message_store.ts";
 import * as narrow_state from "./narrow_state.ts";
 
 export type PearRunEvent = {
@@ -155,6 +158,7 @@ type PearSubscriber = {
 
 export const LIVE_REFRESH_INTERVAL_MS = 125;
 export const FULL_REFRESH_INTERVAL_MS = 5000;
+export const NARROW_SETTLE_WATCH_MS = 60_000;
 
 const subscribers = new Set<PearSubscriber>();
 let full_refresh_timer: number | undefined;
@@ -164,6 +168,9 @@ let last_runs: PearRun[] = [];
 let last_topic_context: PearTopicContext | null | undefined;
 let last_error = "";
 let status_by_run_id = new Map<number, string>();
+let narrow_settle_watch_until = 0;
+const refreshing_result_message_ids = new Set<number>();
+const refreshed_result_message_ids = new Set<number>();
 
 function current_context(): {stream: string | undefined; topic: string | undefined} {
     return {
@@ -246,6 +253,54 @@ function settle_terminal_result_messages(runs: PearRun[]): void {
         return;
     }
     message_live_update.rerender_messages_view_by_message_ids(result_message_ids);
+    const message_ids_to_fetch = result_message_ids.filter(
+        (message_id) =>
+            !refreshed_result_message_ids.has(message_id) &&
+            !refreshing_result_message_ids.has(message_id),
+    );
+    if (message_ids_to_fetch.length === 0) {
+        return;
+    }
+    for (const message_id of message_ids_to_fetch) {
+        refreshing_result_message_ids.add(message_id);
+    }
+    void channel.get({
+        url: "/json/messages",
+        data: {
+            message_ids: JSON.stringify(message_ids_to_fetch),
+            allow_empty_topic_name: true,
+        },
+        success(raw_data) {
+            const parsed_data = z
+                .object({
+                    messages: z.array(raw_message_schema),
+                })
+                .parse(raw_data);
+            for (const raw_message of parsed_data.messages) {
+                message_helper.process_new_server_message(raw_message);
+                refreshed_result_message_ids.add(raw_message.id);
+            }
+            message_live_update.rerender_messages_view_by_message_ids(message_ids_to_fetch);
+        },
+        error(xhr) {
+            if (xhr.readyState !== 0) {
+                blueslip.warn(`Failed to refresh Pear result messages: ${xhr.responseText}`);
+            }
+        },
+        complete() {
+            for (const message_id of message_ids_to_fetch) {
+                refreshing_result_message_ids.delete(message_id);
+            }
+        },
+    });
+}
+
+function narrow_settle_watch_is_active(): boolean {
+    return Date.now() < narrow_settle_watch_until;
+}
+
+function has_polling_interest(): boolean {
+    return subscribers.size > 0 || narrow_settle_watch_is_active();
 }
 
 function clear_live_refresh(): void {
@@ -256,7 +311,7 @@ function clear_live_refresh(): void {
 }
 
 function schedule_live_refresh(): void {
-    if (subscribers.size === 0 || !any_active_run(last_runs)) {
+    if (!has_polling_interest() || !any_active_run(last_runs)) {
         clear_live_refresh();
         return;
     }
@@ -270,9 +325,9 @@ function schedule_live_refresh(): void {
 }
 
 export function refresh(options: {live?: boolean} = {}): void {
-    if (subscribers.size === 0) {
-        // Open-gated: no subscriber surface is open, so we make no
-        // requests at all.
+    if (!has_polling_interest()) {
+        // Polling is interest-gated: no subscriber surface and no
+        // post-send settle watch means zero /json/pear/runs traffic.
         return;
     }
     const live = options.live === true;
@@ -319,6 +374,10 @@ export function refresh(options: {live?: boolean} = {}): void {
             if (live) {
                 live_refresh_in_flight = false;
             }
+            if (!has_polling_interest()) {
+                stop_polling();
+                return;
+            }
             schedule_live_refresh();
         },
     });
@@ -330,6 +389,10 @@ function start_polling(): void {
     }
     refresh();
     full_refresh_timer = window.setInterval(() => {
+        if (!has_polling_interest()) {
+            stop_polling();
+            return;
+        }
         refresh();
     }, FULL_REFRESH_INTERVAL_MS);
 }
@@ -345,6 +408,14 @@ function stop_polling(): void {
 
 export function is_polling(): boolean {
     return full_refresh_timer !== undefined;
+}
+
+export function watch_current_narrow_until_idle(): void {
+    narrow_settle_watch_until = Math.max(
+        narrow_settle_watch_until,
+        Date.now() + NARROW_SETTLE_WATCH_MS,
+    );
+    start_polling();
 }
 
 export function subscribe(
@@ -370,7 +441,7 @@ export function subscribe(
         if (!subscribers.delete(subscriber)) {
             return;
         }
-        if (subscribers.size === 0) {
+        if (subscribers.size === 0 && !narrow_settle_watch_is_active()) {
             stop_polling();
         }
     };

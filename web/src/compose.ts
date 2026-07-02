@@ -447,6 +447,7 @@ export function do_post_send_tasks(): void {
     // TODO: Do we want to perform below tasks even if the send failed due
     // to a server-side error?
     message_viewport.bottom_of_feed.reset();
+    pear_runs_store.watch_current_narrow_until_idle();
     typing.stop_typing_notifications();
     reload.maybe_reset_pending_reload_timeout("compose_end");
 }

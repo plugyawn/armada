@@ -38,7 +38,7 @@ function make_run(id, status, overrides = {}) {
     };
 }
 
-run_test("open_gated_polling_and_transitions", () => {
+run_test("interest_gated_polling_and_transitions", () => {
     rerendered_result_message_ids.length = 0;
     const get_calls = [];
     channel.get = (opts) => {
@@ -88,11 +88,16 @@ run_test("open_gated_polling_and_transitions", () => {
     // A live run schedules the 125ms live cadence, without context.
     clock.tick(pear_runs_store.LIVE_REFRESH_INTERVAL_MS);
     assert.equal(get_calls.length, 2);
+    assert.equal(get_calls[1].url, "/json/pear/runs");
     assert.equal(get_calls[1].data.include_context, false);
 
     get_calls[1].success({pear_runs: [make_run(7, "done")]});
     get_calls[1].complete();
     assert.deepEqual(rerendered_result_message_ids, [[1007]]);
+    assert.equal(get_calls.length, 3);
+    assert.equal(get_calls[2].url, "/json/messages");
+    assert.equal(get_calls[2].data.message_ids, JSON.stringify([1007]));
+    get_calls[2].complete();
 
     // The running→done status transition is emitted per run id.
     assert.equal(transitions.length, 2);
@@ -102,16 +107,16 @@ run_test("open_gated_polling_and_transitions", () => {
 
     // With no active run, the live cadence stops.
     clock.tick(1000);
-    assert.equal(get_calls.length, 2);
+    assert.equal(get_calls.length, 3);
 
     // The 5s idle cadence still fires.
     clock.tick(pear_runs_store.FULL_REFRESH_INTERVAL_MS);
-    assert.equal(get_calls.length, 3);
-    get_calls[2].success({pear_runs: [], pear_topic_context: null});
-    get_calls[2].complete();
+    assert.equal(get_calls.length, 4);
+    get_calls[3].success({pear_runs: [], pear_topic_context: null});
+    get_calls[3].complete();
 
-    // Closing the last subscriber stops polling entirely: zero
-    // /json/pear/runs requests while the right area is closed.
+    // Closing the last subscriber stops polling entirely when no
+    // post-send settle watch is active.
     unsubscribe();
     assert.equal(pear_runs_store.is_polling(), false);
     const calls_after_close = get_calls.length;
@@ -167,6 +172,42 @@ run_test("scoped_subscription_filters_runs", () => {
     const calls_after_close = get_calls.length;
     clock.tick(60 * 1000);
     assert.equal(get_calls.length, calls_after_close);
+});
+
+run_test("post_send_watch_polls_without_panel_subscriber", () => {
+    rerendered_result_message_ids.length = 0;
+    const get_calls = [];
+    channel.get = (opts) => {
+        get_calls.push(opts);
+    };
+
+    assert.equal(pear_runs_store.is_polling(), false);
+    pear_runs_store.watch_current_narrow_until_idle();
+    assert.equal(pear_runs_store.is_polling(), true);
+    assert.equal(get_calls.length, 1);
+    assert.equal(get_calls[0].url, "/json/pear/runs");
+
+    get_calls[0].success({
+        pear_runs: [make_run(11, "running")],
+        pear_topic_context: null,
+    });
+    get_calls[0].complete();
+
+    clock.tick(pear_runs_store.LIVE_REFRESH_INTERVAL_MS);
+    assert.equal(get_calls.length, 2);
+    assert.equal(get_calls[1].data.include_context, false);
+
+    get_calls[1].success({pear_runs: [make_run(11, "done")]});
+    get_calls[1].complete();
+    assert.deepEqual(rerendered_result_message_ids, [[1011]]);
+    assert.equal(get_calls.length, 3);
+    assert.equal(get_calls[2].url, "/json/messages");
+    assert.equal(get_calls[2].data.message_ids, JSON.stringify([1011]));
+    get_calls[2].complete();
+
+    clock.tick(pear_runs_store.NARROW_SETTLE_WATCH_MS);
+    clock.tick(pear_runs_store.FULL_REFRESH_INTERVAL_MS);
+    assert.equal(pear_runs_store.is_polling(), false);
 });
 
 run_test("post_run_action_refreshes", () => {

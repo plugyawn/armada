@@ -522,9 +522,9 @@ def build_pear_codex_turn_prompt(active_session: PearActiveSessionSummary, task:
         f"- remote: {workspace_context.get('remote_url') or 'unknown'}",
         f"- worktree: {workspace_context.get('worktree') or 'unknown'}",
         f"- workdir: {workspace_context.get('workdir') or 'unknown'}",
-        f"- branch: {workspace_context.get('branch') or 'detached'}",
+        f"- branch: {workspace_context.get('branch') or 'unknown'}",
         f"- head: {workspace_context.get('head') or 'unknown'}",
-        "- contract: the Zulip topic/subthread maps to this worktree; the topic is not itself a Git branch.",
+        "- contract: the Zulip stream maps to the repository, and the Zulip topic/subthread maps to the Git branch.",
     ]
     artifacts = active_session["artifacts"][:5]
     artifact_lines = [

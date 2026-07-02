@@ -294,6 +294,40 @@ def pear_topic_workdir_slug(
     return f"{human_slug[:48]}-{digest}"
 
 
+def pear_git_branch_name_is_valid(branch_name: str) -> bool:
+    if not branch_name or branch_name.startswith("-"):
+        return False
+    try:
+        completed = subprocess.run(
+            ["git", "check-ref-format", "--branch", branch_name],
+            check=False,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=10,
+        )
+    except (FileNotFoundError, OSError, subprocess.TimeoutExpired):
+        return re.fullmatch(r"[A-Za-z0-9._/-]+", branch_name) is not None
+    return completed.returncode == 0
+
+
+def pear_topic_branch_name(topic: str) -> str:
+    raw_topic = topic.strip()
+    if pear_git_branch_name_is_valid(raw_topic):
+        return raw_topic
+
+    branch_name = re.sub(r"[^a-zA-Z0-9._-]+", "-", raw_topic).strip("-.")
+    branch_name = re.sub(r"\.{2,}", ".", branch_name)
+    if branch_name.endswith(".lock"):
+        branch_name = branch_name.removesuffix(".lock")
+    if not branch_name:
+        branch_name = "topic"
+    if pear_git_branch_name_is_valid(branch_name):
+        return branch_name
+
+    digest = hashlib.sha256(raw_topic.encode()).hexdigest()[:12]
+    return f"topic-{digest}"
+
+
 def pear_expected_topic_workdir(
     user_profile: UserProfile,
     *,
@@ -500,11 +534,9 @@ def pear_try_add_worktree(
     base_path: Path,
     path: Path,
     *,
-    branch_name: str | None,
+    branch_name: str,
 ) -> bool:
-    if branch_name is None:
-        args = ["git", "-C", str(base_path), "worktree", "add", "--detach", str(path), "HEAD"]
-    elif pear_git_branch_exists(base_path, branch_name):
+    if pear_git_branch_exists(base_path, branch_name):
         args = ["git", "-C", str(base_path), "worktree", "add", str(path), branch_name]
     else:
         args = [
@@ -525,6 +557,104 @@ def pear_try_add_worktree(
         stderr=subprocess.DEVNULL,
         timeout=30,
     )
+    return completed.returncode == 0
+
+
+def pear_switch_workdir_to_branch(path: Path, branch_name: str) -> bool:
+    try:
+        if pear_git_branch_exists(path, branch_name):
+            args = ["git", "-C", str(path), "switch", branch_name]
+        else:
+            args = ["git", "-C", str(path), "switch", "-c", branch_name]
+        completed = subprocess.run(
+            args,
+            check=False,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=30,
+        )
+    except (FileNotFoundError, OSError, subprocess.TimeoutExpired):
+        return False
+    return completed.returncode == 0
+
+
+def pear_git_workdir_has_changes(path: Path) -> bool:
+    try:
+        completed = subprocess.run(
+            ["git", "-C", str(path), "status", "--porcelain=v1"],
+            check=False,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            timeout=10,
+        )
+    except (FileNotFoundError, OSError, subprocess.TimeoutExpired):
+        return True
+    return completed.returncode != 0 or bool(completed.stdout.strip())
+
+
+def pear_reconcile_topic_branch(
+    user_profile: UserProfile,
+    *,
+    stream: str,
+    topic: str,
+) -> bool:
+    if not stream:
+        return False
+    context = ensure_pear_topic_context(user_profile, stream=stream, topic=topic)
+    workdir = context.workdir.strip()
+    if not workdir:
+        return False
+    path = Path(workdir)
+    if not pear_path_is_git_worktree(path):
+        return False
+
+    target_branch = pear_topic_branch_name(topic)
+    delta = pear_git_status_delta(workdir, topic=target_branch)
+    if delta.get("branch_matches_topic") is True:
+        return True
+    if pear_git_workdir_has_changes(path):
+        return False
+    switched = pear_switch_workdir_to_branch(path, target_branch)
+    if switched:
+        invalidate_pear_git_status_delta(workdir)
+    return switched
+
+
+def pear_rename_topic_branch(path: Path, old_branch_name: str, new_branch_name: str) -> bool:
+    if old_branch_name == new_branch_name or not pear_path_is_git_worktree(path):
+        return True
+    if pear_git_workdir_has_changes(path):
+        return False
+    try:
+        if pear_git_branch_exists(path, new_branch_name):
+            completed = subprocess.run(
+                ["git", "-C", str(path), "switch", new_branch_name],
+                check=False,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=30,
+            )
+        elif pear_git_branch_exists(path, old_branch_name):
+            completed = subprocess.run(
+                ["git", "-C", str(path), "branch", "-m", old_branch_name, new_branch_name],
+                check=False,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=30,
+            )
+        else:
+            completed = subprocess.run(
+                ["git", "-C", str(path), "switch", "-C", new_branch_name],
+                check=False,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=30,
+            )
+    except (FileNotFoundError, OSError, subprocess.TimeoutExpired):
+        return False
+    if completed.returncode == 0:
+        invalidate_pear_git_status_delta(str(path))
     return completed.returncode == 0
 
 
@@ -581,6 +711,7 @@ def ensure_pear_topic_context(
         context.workdir,
         base_workdir=parent_workdir,
         repository_url=parent_repository_url,
+        branch_name=pear_topic_branch_name(topic),
     )
     return context
 
@@ -613,9 +744,10 @@ def ensure_pear_topic_workdir(
     *,
     base_workdir: str | Path | None = None,
     repository_url: str | None = None,
-    branch_candidates: tuple[str, ...] = (),
+    branch_name: str | None = None,
 ) -> None:
     path = Path(workdir)
+    branch_name = pear_topic_branch_name(branch_name or Path(workdir).name)
     if pear_topic_os_user_isolation_enabled():
         if path.exists():
             if not pear_path_is_git_worktree(path):
@@ -629,9 +761,11 @@ def ensure_pear_topic_workdir(
                     )
                 except (FileNotFoundError, OSError, subprocess.TimeoutExpired):
                     pass
+                pear_switch_workdir_to_branch(path, branch_name)
             return
         if repository_url:
             clone_or_update_pear_repository_workdir(repository_url, path)
+            pear_switch_workdir_to_branch(path, branch_name)
             return
         path.mkdir(parents=True, exist_ok=True)
         try:
@@ -644,24 +778,30 @@ def ensure_pear_topic_workdir(
             )
         except (FileNotFoundError, OSError, subprocess.TimeoutExpired):
             pass
+        pear_switch_workdir_to_branch(path, branch_name)
         return
     base_path = Path(base_workdir) if base_workdir is not None else Path(pear_default_worker_workdir())
     base_is_git_worktree = pear_path_is_git_worktree(base_path)
+    path_was_empty = not ((path / ".git").exists() or path.exists() and any(path.iterdir()))
     worktree_added = False
-    if not ((path / ".git").exists() or path.exists() and any(path.iterdir())):
+    if path_was_empty:
         path.parent.mkdir(parents=True, exist_ok=True)
         try:
-            for branch_name in branch_candidates:
-                if pear_try_add_worktree(base_path, path, branch_name=branch_name):
-                    worktree_added = True
-                    break
+            worktree_added = pear_try_add_worktree(base_path, path, branch_name=branch_name)
             if not worktree_added:
-                pear_try_add_worktree(base_path, path, branch_name=None)
+                digest = hashlib.sha256(str(path).encode()).hexdigest()[:12]
+                worktree_added = pear_try_add_worktree(
+                    base_path,
+                    path,
+                    branch_name=f"{branch_name}-{digest}",
+                )
         except (FileNotFoundError, OSError, subprocess.TimeoutExpired):
             pass
     if base_is_git_worktree and not ((path / ".git").exists() or worktree_added):
         return
     path.mkdir(parents=True, exist_ok=True)
+    if path_was_empty and not worktree_added and pear_path_is_git_worktree(path):
+        pear_switch_workdir_to_branch(path, branch_name)
 
 
 def clean_pear_repository_url(repository_url: str) -> str:
@@ -773,20 +913,24 @@ def pear_move_workdir_for_topic_rename(
     *,
     stream: str,
     topic: str,
+    old_topic: str = "",
 ) -> tuple[bool, str]:
     old_workdir = context.workdir.strip()
     new_workdir = pear_expected_topic_workdir(user_profile, stream=stream, topic=topic)
+    old_branch_name = pear_topic_branch_name(old_topic or context.topic_name)
+    new_branch_name = pear_topic_branch_name(topic)
     if not old_workdir:
         return True, str(new_workdir)
 
     old_path = Path(old_workdir)
     if pear_normalize_path(old_path) == pear_normalize_path(new_workdir):
+        pear_rename_topic_branch(old_path, old_branch_name, new_branch_name)
         return True, str(new_workdir)
     if pear_normalize_path(old_path) == pear_normalize_path(pear_default_worker_workdir()):
-        ensure_pear_topic_workdir(str(new_workdir))
+        ensure_pear_topic_workdir(str(new_workdir), branch_name=new_branch_name)
         return True, str(new_workdir)
     if not old_path.exists():
-        ensure_pear_topic_workdir(str(new_workdir))
+        ensure_pear_topic_workdir(str(new_workdir), branch_name=new_branch_name)
         return True, str(new_workdir)
 
     root = pear_normalize_path(pear_topic_workdir_root())
@@ -822,6 +966,7 @@ def pear_move_workdir_for_topic_rename(
             moved = True
         except (OSError, shutil.Error):
             return False, old_workdir
+    pear_rename_topic_branch(new_workdir, old_branch_name, new_branch_name)
     return True, str(new_workdir)
 
 
@@ -907,6 +1052,7 @@ def maybe_refactor_pear_topic_context_on_move(
         context,
         stream=new_stream.name,
         topic=new_topic,
+        old_topic=old_topic,
     )
     if not workdir_moved:
         return PearTopicRenameRefactorResult(
@@ -1190,33 +1336,6 @@ def build_pear_workspace_context(
         else None
     )
     workdir = context.workdir.strip() or pear_default_worker_workdir()
-    isolation_username = None
-    if pear_topic_os_user_isolation_enabled() and pear_repo_artifact_value_is_durable(workdir):
-        isolation_username = pear_topic_isolation_username(
-            user_profile,
-            stream=stream,
-            topic=topic,
-        )
-    repo_root = pear_git_output(
-        workdir,
-        ["rev-parse", "--show-toplevel"],
-        isolation_username=isolation_username,
-    )
-    remote_url = pear_git_output(
-        workdir,
-        ["config", "--get", "remote.origin.url"],
-        isolation_username=isolation_username,
-    )
-    branch = pear_git_output(
-        workdir,
-        ["branch", "--show-current"],
-        isolation_username=isolation_username,
-    )
-    head = pear_git_output(
-        workdir,
-        ["rev-parse", "--short", "HEAD"],
-        isolation_username=isolation_username,
-    )
     context_repo = context.github_repo.strip()
     parent_repo = parent_context.github_repo.strip() if parent_context is not None else ""
     repository = pear_logical_repository_label(
@@ -1227,15 +1346,16 @@ def build_pear_workspace_context(
     worktree = pear_logical_worktree_label(
         stream=stream,
         topic=topic,
-        fallback=Path(repo_root or workdir).name,
+        fallback=Path(workdir).name,
     )
     return {
         "repository": repository,
-        "remote_url": remote_url if repository else "",
+        "remote_url": pear_pinned_repository_value(context_repo)
+        or pear_pinned_repository_value(parent_repo),
         "worktree": worktree,
         "workdir": workdir,
-        "branch": branch,
-        "head": head,
+        "branch": pear_topic_branch_name(topic),
+        "head": "",
     }
 
 
@@ -2208,30 +2328,7 @@ class PearDatabaseWorkerRunStore:
         topic: str,
         tool_results: list[PearWorkerToolResult],
     ) -> None:
-        if not stream:
-            return
-        repo_value = next(
-            (
-                result["value"].strip()
-                for result in tool_results
-                if result["label"].strip().lower() in {"repo", "repository"}
-                and result["value"].strip()
-            ),
-            "",
-        )
-        if not repo_value:
-            return
-        if not pear_repo_artifact_value_is_durable(repo_value):
-            return
-
-        user_profile = bot_handler.user_profile
-        assert isinstance(user_profile, UserProfile)
-        context = ensure_pear_topic_context(user_profile, stream=stream, topic=topic)
-        if context.github_repo == repo_value:
-            return
-        context.github_repo = repo_value
-        context.date_updated = timezone_now()
-        context.save(update_fields=["github_repo", "date_updated"])
+        return
 
     def _update_run(
         self,

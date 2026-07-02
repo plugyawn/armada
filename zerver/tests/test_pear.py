@@ -2955,8 +2955,8 @@ class PearSessionDefaultsTest(TestCase):
                 "remote_url": "https://github.com/zulip/zulip.git",
                 "worktree": "devel-pear-efficient-smoke",
                 "workdir": "/home/zulipdev/pear-workspaces/devel-pear-efficient-smoke",
-                "branch": "",
-                "head": "037efd7",
+                "branch": "devel-pear-efficient-smoke",
+                "head": "",
             },
         )
 
@@ -2969,9 +2969,9 @@ class PearSessionDefaultsTest(TestCase):
         self.assertIn("Workspace context:", prompt)
         self.assertIn("- repository: zulip/zulip", prompt)
         self.assertIn("- worktree: devel-pear-efficient-smoke", prompt)
-        self.assertIn("- branch: detached", prompt)
+        self.assertIn("- branch: devel-pear-efficient-smoke", prompt)
         self.assertIn(
-            "- contract: the Zulip topic/subthread maps to this worktree; the topic is not itself a Git branch.",
+            "- contract: the Zulip stream maps to the repository, and the Zulip topic/subthread maps to the Git branch.",
             prompt,
         )
         self.assertIn("Treat channel memory as durable context", prompt)

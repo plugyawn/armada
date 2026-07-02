@@ -17,6 +17,7 @@ from zerver.lib.pear_worker import (
     build_pear_worker_runtime_from_settings,
     load_pear_active_session_from_zulip,
     pear_topic_process_isolation,
+    pear_reconcile_topic_branch,
     pear_worker_process_isolation_error,
     pear_worker_model_for_topic,
     pear_worker_reasoning_effort_for_topic,
@@ -101,6 +102,11 @@ class PearWorker(QueueProcessingWorker):
             return
         model = pear_worker_model_for_topic(user_profile, stream=context_stream, topic=context_topic)
         reasoning_effort = pear_worker_reasoning_effort_for_topic(
+            user_profile,
+            stream=context_stream,
+            topic=context_topic,
+        )
+        pear_reconcile_topic_branch(
             user_profile,
             stream=context_stream,
             topic=context_topic,

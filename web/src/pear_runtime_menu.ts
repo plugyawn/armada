@@ -55,16 +55,16 @@ const pear_runtime_response_schema = z.object({
     pear_topic_context: z.nullish(pear_runtime_context_schema),
 });
 
-type PearReasoningEffort = z.infer<typeof pear_reasoning_effort_schema>;
-type PearRuntimeContext = z.infer<typeof pear_runtime_context_schema>;
+export type PearReasoningEffort = z.infer<typeof pear_reasoning_effort_schema>;
+export type PearRuntimeContext = z.infer<typeof pear_runtime_context_schema>;
 
-type PearRuntimeMenuChoice = {
+export type PearRuntimeMenuChoice = {
     value: string;
     label: string;
     selected: boolean;
 };
 
-type PearGitDisplay = {
+export type PearGitDisplay = {
     has_repo_branch: boolean;
     repo_branch_label: string;
     head: string;
@@ -97,71 +97,70 @@ function narrow_context_key(stream: string | undefined, topic: string | undefine
     return `${stream}\n${topic}`;
 }
 
-function model_reasoning_efforts(model: string | undefined): PearReasoningEffort[] {
-    const catalog_entry = topic_context?.model_catalog?.find((entry) => entry.slug === model);
+export function model_reasoning_efforts(
+    context: PearRuntimeContext | undefined,
+    model: string | undefined,
+): PearReasoningEffort[] {
+    const catalog_entry = context?.model_catalog?.find((entry) => entry.slug === model);
     const model_efforts = catalog_entry?.supported_reasoning_levels;
     if (model_efforts !== undefined && model_efforts.length > 0) {
         return model_efforts;
     }
-    if (
-        topic_context?.reasoning_efforts !== undefined &&
-        topic_context.reasoning_efforts.length > 0
-    ) {
-        return topic_context.reasoning_efforts;
+    if (context?.reasoning_efforts !== undefined && context.reasoning_efforts.length > 0) {
+        return context.reasoning_efforts;
     }
     return fallback_efforts;
 }
 
-function model_choices(): PearRuntimeMenuChoice[] {
-    if (topic_context === undefined) {
+export function model_choices(context: PearRuntimeContext | undefined): PearRuntimeMenuChoice[] {
+    if (context === undefined) {
         return [];
     }
-    const catalog = topic_context.model_catalog ?? [];
+    const catalog = context.model_catalog ?? [];
     const choices = catalog.map((entry) => ({
         value: entry.slug,
         label: entry.display_name || entry.slug,
-        selected: entry.slug === topic_context!.model,
+        selected: entry.slug === context.model,
     }));
     const seen_models = new Set(choices.map((choice) => choice.value));
-    for (const model of topic_context.model_choices ?? []) {
+    for (const model of context.model_choices ?? []) {
         if (!seen_models.has(model)) {
             choices.push({
                 value: model,
                 label: model,
-                selected: model === topic_context.model,
+                selected: model === context.model,
             });
             seen_models.add(model);
         }
     }
-    if (topic_context.model && !seen_models.has(topic_context.model)) {
+    if (context.model && !seen_models.has(context.model)) {
         choices.unshift({
-            value: topic_context.model,
-            label: topic_context.model,
+            value: context.model,
+            label: context.model,
             selected: true,
         });
     }
     return choices;
 }
 
-function effort_choices(): PearRuntimeMenuChoice[] {
-    if (topic_context === undefined) {
+export function effort_choices(context: PearRuntimeContext | undefined): PearRuntimeMenuChoice[] {
+    if (context === undefined) {
         return [];
     }
-    return model_reasoning_efforts(topic_context.model).map((choice) => ({
+    return model_reasoning_efforts(context, context.model).map((choice) => ({
         value: choice.effort,
         label: choice.label,
-        selected: choice.effort === topic_context!.reasoning_effort,
+        selected: choice.effort === context.reasoning_effort,
     }));
 }
 
-function git_display(): PearGitDisplay | undefined {
-    const git = topic_context?.git;
+export function git_display(context: PearRuntimeContext | undefined): PearGitDisplay | undefined {
+    const git = context?.git;
     if (git?.available !== true) {
         // Read-only context block is hidden entirely when git is unavailable.
         return undefined;
     }
-    const repo =
-        (topic_context?.github_repo ?? "").trim() || (topic_context?.repo_label ?? "").trim();
+    const repo = (context?.github_repo ?? "").trim() || (context?.repo_label ?? "").trim();
     const branch = git.branch?.trim() ?? "";
     const repo_branch_label = [repo, branch].filter((part) => part.length > 0).join(" · ");
     let status_label: string;
@@ -214,9 +213,9 @@ function popover_context(): {
     return {
         has_runtime: true,
         status_message: "",
-        git: git_display(),
-        model_choices: model_choices(),
-        effort_choices: effort_choices(),
+        git: git_display(topic_context),
+        model_choices: model_choices(topic_context),
+        effort_choices: effort_choices(topic_context),
     };
 }
 
@@ -246,7 +245,7 @@ function update_navbar_button_label(): void {
         );
         const model_label = catalog_entry?.display_name ?? topic_context.model;
         const effort_label =
-            model_reasoning_efforts(topic_context.model).find(
+            model_reasoning_efforts(topic_context, topic_context.model).find(
                 (choice) => choice.effort === topic_context!.reasoning_effort,
             )?.label ?? topic_context.reasoning_effort;
         label = $t(
@@ -342,7 +341,7 @@ function checked_choice(name: string): string | undefined {
 }
 
 function on_model_change(model: string): void {
-    const efforts = model_reasoning_efforts(model);
+    const efforts = model_reasoning_efforts(topic_context, model);
     let effort =
         checked_choice("pear-runtime-effort") ?? topic_context?.reasoning_effort ?? "medium";
     if (!efforts.some((choice) => choice.effort === effort)) {

@@ -4,6 +4,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+# shellcheck source=tools/pear_deploy/deploy_common.sh
+source "$SCRIPT_DIR/deploy_common.sh"
 DEFAULT_STATE_PATH="$REPO_ROOT/output/pear-staging/server.json"
 REMOTE_PATH="/home/zulipdev/zulip"
 REMOTE_GIT_COMMON_DIR="/home/zulipdev/.git/modules/zulip"
@@ -45,48 +47,6 @@ validate_local_deploy_git_metadata() {
         fail "local checkout is a linked Git worktree ($local_git_dir); deploy from the main checkout so the remote .git gitfile resolves to /home/zulipdev/.git/modules/zulip"
     fi
 }
-
-DEPLOY_UNTRACKED_ALLOW_PREFIXES=(
-    '.playwright-cli/'
-    '.venv/'
-    '.vagrant/'
-    '.pnpm-store/'
-    'node_modules/'
-    'var/'
-    'output/'
-    'prod-static/'
-    'staticfiles/'
-    'static/generated/'
-    'locale/language_name_map.json'
-    '.mypy_cache/'
-    '.pytest_cache/'
-    '.ruff_cache/'
-    'web/.parcel-cache/'
-    'web/coverage/'
-    'web/generated/'
-    'zproject/dev-secrets.conf'
-)
-
-RSYNC_EXCLUDES=(
-    --exclude '/.playwright-cli/'
-    --exclude '/.venv/'
-    --exclude '/.vagrant/'
-    --exclude '/.pnpm-store/'
-    --exclude '/node_modules/'
-    --exclude '/var/'
-    --exclude '/output/'
-    --exclude '/prod-static/'
-    --exclude '/staticfiles/'
-    --exclude '/static/generated/'
-    --exclude '/locale/language_name_map.json'
-    --exclude '/.mypy_cache/'
-    --exclude '/.pytest_cache/'
-    --exclude '/.ruff_cache/'
-    --exclude '/web/.parcel-cache/'
-    --exclude '/web/coverage/'
-    --exclude '/web/generated/'
-    --exclude '/zproject/dev-secrets.conf'
-)
 
 usage() {
     cat <<EOF
@@ -199,27 +159,6 @@ run_local_compat() {
     (cd "$REPO_ROOT/.." && python3 tools/check_pear_compat.py)
 }
 
-filter_deploy_untracked_source_files() {
-    local file
-    local allowed_prefix
-    local allowed
-    while IFS= read -r file; do
-        if [[ -z "$file" ]]; then
-            continue
-        fi
-        allowed=false
-        for allowed_prefix in "${DEPLOY_UNTRACKED_ALLOW_PREFIXES[@]}"; do
-            if [[ "$file" == "$allowed_prefix"* ]]; then
-                allowed=true
-                break
-            fi
-        done
-        if [[ "$allowed" != true ]]; then
-            printf '%s\n' "$file"
-        fi
-    done
-}
-
 local_untracked_source_files() {
     git -C "$REPO_ROOT" ls-files --others --exclude-standard |
         filter_deploy_untracked_source_files
@@ -273,31 +212,16 @@ rollback_on_error() {
         echo
         echo "Update failed after snapshot; rolling back from $SNAPSHOT_DIR" >&2
         set +e
-        ssh_root bash -s -- "$SNAPSHOT_DIR" "$REMOTE_PATH" "$REMOTE_GIT_COMMON_DIR" <<'REMOTE'
+        ssh_root bash -s -- "$SNAPSHOT_DIR" "$REMOTE_PATH" "$REMOTE_GIT_COMMON_DIR" "${PEAR_DEPLOY_RSYNC_EXCLUDES[@]}" <<'REMOTE'
 set -euo pipefail
 SNAPSHOT_DIR="$1"
 REMOTE_PATH="$2"
 REMOTE_GIT_COMMON_DIR="$3"
+shift 3
+RSYNC_EXCLUDES=("$@")
 
 rsync -a --delete \
-    --exclude '/.playwright-cli/' \
-    --exclude '/.venv/' \
-    --exclude '/.vagrant/' \
-    --exclude '/.pnpm-store/' \
-    --exclude '/node_modules/' \
-    --exclude '/var/' \
-    --exclude '/output/' \
-    --exclude '/prod-static/' \
-    --exclude '/staticfiles/' \
-    --exclude '/static/generated/' \
-    --exclude '/locale/language_name_map.json' \
-    --exclude '/.mypy_cache/' \
-    --exclude '/.pytest_cache/' \
-    --exclude '/.ruff_cache/' \
-    --exclude '/web/.parcel-cache/' \
-    --exclude '/web/coverage/' \
-    --exclude '/web/generated/' \
-    --exclude '/zproject/dev-secrets.conf' \
+    "${RSYNC_EXCLUDES[@]}" \
     "$SNAPSHOT_DIR/worktree/" "$REMOTE_PATH/"
 
 if [[ -d "$SNAPSHOT_DIR/git-common" ]]; then
@@ -408,32 +332,17 @@ SNAPSHOT_STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 SNAPSHOT_DIR="$SNAPSHOT_ROOT/zulip-$SNAPSHOT_STAMP-${PREV_SHA:0:12}"
 echo
 echo "Snapshotting remote tree to $SNAPSHOT_DIR"
-ssh_root bash -s -- "$REMOTE_PATH" "$REMOTE_GIT_COMMON_DIR" "$SNAPSHOT_DIR" <<'REMOTE'
+ssh_root bash -s -- "$REMOTE_PATH" "$REMOTE_GIT_COMMON_DIR" "$SNAPSHOT_DIR" "${PEAR_DEPLOY_RSYNC_EXCLUDES[@]}" <<'REMOTE'
 set -euo pipefail
 REMOTE_PATH="$1"
 REMOTE_GIT_COMMON_DIR="$2"
 SNAPSHOT_DIR="$3"
+shift 3
+RSYNC_EXCLUDES=("$@")
 
 install -d -m 755 "$SNAPSHOT_DIR/worktree" "$SNAPSHOT_DIR/git-common"
 rsync -a --delete \
-    --exclude '/.playwright-cli/' \
-    --exclude '/.venv/' \
-    --exclude '/.vagrant/' \
-    --exclude '/.pnpm-store/' \
-    --exclude '/node_modules/' \
-    --exclude '/var/' \
-    --exclude '/output/' \
-    --exclude '/prod-static/' \
-    --exclude '/staticfiles/' \
-    --exclude '/static/generated/' \
-    --exclude '/locale/language_name_map.json' \
-    --exclude '/.mypy_cache/' \
-    --exclude '/.pytest_cache/' \
-    --exclude '/.ruff_cache/' \
-    --exclude '/web/.parcel-cache/' \
-    --exclude '/web/coverage/' \
-    --exclude '/web/generated/' \
-    --exclude '/zproject/dev-secrets.conf' \
+    "${RSYNC_EXCLUDES[@]}" \
     "$REMOTE_PATH/" "$SNAPSHOT_DIR/worktree/"
 if [[ -d "$REMOTE_GIT_COMMON_DIR" ]]; then
     rsync -a --delete "$REMOTE_GIT_COMMON_DIR/" "$SNAPSHOT_DIR/git-common/"
@@ -443,7 +352,7 @@ ROLLBACK_READY=true
 
 echo "Syncing checkout to $REMOTE_PATH..."
 rsync -az --delete \
-    "${RSYNC_EXCLUDES[@]}" \
+    "${PEAR_DEPLOY_RSYNC_EXCLUDES[@]}" \
     -e "ssh -F $SSH_CONFIG" \
     "$REPO_ROOT/" \
     "root@$IP_ADDRESS:$REMOTE_PATH/"

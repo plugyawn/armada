@@ -4,6 +4,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+# shellcheck source=tools/pear_deploy/deploy_common.sh
+source "$SCRIPT_DIR/deploy_common.sh"
 STATE_PATH="${1:-$REPO_ROOT/output/pear-staging/server.json}"
 
 fail() {
@@ -121,24 +123,7 @@ REMOTE
 
 echo "Syncing checkout to /home/zulipdev/zulip..."
 rsync -az --delete \
-    --exclude '/.playwright-cli/' \
-    --exclude '/.venv/' \
-    --exclude '/.vagrant/' \
-    --exclude '/.pnpm-store/' \
-    --exclude '/node_modules/' \
-    --exclude '/var/' \
-    --exclude '/output/' \
-    --exclude '/prod-static/' \
-    --exclude '/staticfiles/' \
-    --exclude '/static/generated/' \
-    --exclude '/locale/language_name_map.json' \
-    --exclude '/.mypy_cache/' \
-    --exclude '/.pytest_cache/' \
-    --exclude '/.ruff_cache/' \
-    --exclude '/web/.parcel-cache/' \
-    --exclude '/web/coverage/' \
-    --exclude '/web/generated/' \
-    --exclude '/zproject/dev-secrets.conf' \
+    "${PEAR_DEPLOY_RSYNC_EXCLUDES[@]}" \
     -e "ssh -F $SSH_CONFIG" \
     "$REPO_ROOT/" \
     "root@$IP_ADDRESS:/home/zulipdev/zulip/"

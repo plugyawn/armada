@@ -19,6 +19,7 @@ import type {Option} from "./dropdown_widget.ts";
 import * as hash_util from "./hash_util.ts";
 import * as narrow_state from "./narrow_state.ts";
 import * as pear_runtime_controls from "./pear_runtime_controls.ts";
+import * as pear_topbar_tabs from "./pear_topbar_tabs.ts";
 import * as popover_menus from "./popover_menus.ts";
 import * as server_events_state from "./server_events_state.ts";
 import * as stream_topic_history from "./stream_topic_history.ts";
@@ -119,6 +120,9 @@ export function rerender(): void {
     }
     const $stock_header = $("#message_view_header");
     const filter = narrow_state.filter();
+    // Row C tabs sync on every narrow change, including the
+    // early-return branches below (P5d-5).
+    pear_topbar_tabs.handle_narrow_change(filter);
     const stream_id = narrow_state.stream_id();
     const sub = narrow_state.stream_sub();
     // Own only stream / stream+topic common narrows. Everything else

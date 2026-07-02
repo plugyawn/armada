@@ -440,3 +440,32 @@
 .pear-side-start:disabled {
     opacity: 0.5;
 }
+
+/* Navbar Pear runtime popover menu; mirrors the radio-list layout
+   used by #buddy-list-actions-menu-popover in right_sidebar.css. */
+#pear-runtime-menu-popover {
+    /* No hover effect on the group header labels. */
+    .pear-runtime-group-header:hover {
+        background: inherit;
+        cursor: default;
+    }
+
+    .popover-menu-link:not(.pear-runtime-group-header) {
+        display: grid;
+        grid-template: "left-icon row-content" auto / 18px minmax(
+                max-content,
+                1fr
+            );
+        align-items: center;
+
+        .pear-runtime-model-choice,
+        .pear-runtime-effort-choice {
+            grid-area: left-icon;
+            justify-self: baseline;
+        }
+
+        .popover-menu-label {
+            grid-area: row-content;
+        }
+    }
+}

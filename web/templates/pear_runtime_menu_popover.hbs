@@ -1,0 +1,39 @@
+<div class="popover-menu" id="pear-runtime-menu-popover" aria-labelledby="pear-runtime-menu" data-simplebar data-simplebar-tab-index="-1">
+    <ul role="menu" class="popover-menu-list">
+        {{#if has_runtime}}
+        <li role="none" class="link-item">
+            <label class="pear-runtime-group-header popover-menu-link" role="menuitem">
+                <span class="popover-menu-label">{{t 'Model' }}</span>
+            </label>
+        </li>
+        {{#each model_choices}}
+        <li role="none" class="link-item">
+            <label class="popover-menu-link" role="menuitemradio" tabindex="0">
+                <input type="radio" class="pear-runtime-model-choice" name="pear-runtime-model" value="{{value}}" {{#if selected}}checked{{/if}} tabindex="-1"/>
+                <span class="popover-menu-label">{{label}}</span>
+            </label>
+        </li>
+        {{/each}}
+        <li role="separator" class="popover-menu-separator"></li>
+        <li role="none" class="link-item">
+            <label class="pear-runtime-group-header popover-menu-link" role="menuitem">
+                <span class="popover-menu-label">{{t 'Reasoning effort' }}</span>
+            </label>
+        </li>
+        {{#each effort_choices}}
+        <li role="none" class="link-item">
+            <label class="popover-menu-link" role="menuitemradio" tabindex="0">
+                <input type="radio" class="pear-runtime-effort-choice" name="pear-runtime-effort" value="{{value}}" {{#if selected}}checked{{/if}} tabindex="-1"/>
+                <span class="popover-menu-label">{{label}}</span>
+            </label>
+        </li>
+        {{/each}}
+        {{else}}
+        <li role="none" class="link-item">
+            <label class="pear-runtime-group-header popover-menu-link" role="menuitem">
+                <span class="popover-menu-label">{{status_message}}</span>
+            </label>
+        </li>
+        {{/if}}
+    </ul>
+</div>

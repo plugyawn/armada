@@ -95,6 +95,7 @@ import * as overlays from "./overlays.ts";
 import {page_params} from "./page_params.ts";
 import * as pear_icon_rail from "./pear_icon_rail.ts";
 import * as pear_split_view from "./pear_split_view.ts";
+import * as pear_topbar from "./pear_topbar.ts";
 import * as people from "./people.ts";
 import * as personal_menu_popover from "./personal_menu_popover.ts";
 import * as playground_links_popover from "./playground_links_popover.ts";
@@ -541,6 +542,7 @@ export async function initialize_everything(state_data) {
     sidebar_ui.initialize_right_sidebar();
     pear_icon_rail.initialize();
     pear_split_view.initialize();
+    pear_topbar.initialize();
     initialize_compose_box();
     settings.initialize();
     initialize_navbar();

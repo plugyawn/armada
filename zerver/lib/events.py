@@ -56,6 +56,7 @@ from zerver.lib.narrow_predicate import check_narrow_for_events
 from zerver.lib.navigation_views import get_navigation_views_for_user
 from zerver.lib.onboarding_steps import get_next_onboarding_steps
 from zerver.lib.pear import PEAR_EMBEDDED_BOT_SERVICE
+from zerver.lib.pear_identity import pear_bot_user_id_has_pear_service, pear_bot_user_ids_for_realm
 from zerver.lib.presence import get_presence_for_user, get_presences_for_realm
 from zerver.lib.realm_icon import realm_icon_url
 from zerver.lib.realm_logo import get_realm_logo_source, get_realm_logo_url
@@ -111,7 +112,6 @@ from zerver.models import (
     UserStatus,
     UserTopic,
 )
-from zerver.models.bots import Service
 from zerver.models.constants import MAX_TOPIC_NAME_LENGTH
 from zerver.models.custom_profile_fields import custom_profile_fields_for_realm
 from zerver.models.linkifiers import linkifiers_for_realm
@@ -129,19 +129,6 @@ from zerver.tornado.django_api import get_user_events, request_event_queue
 from zproject.backends import email_auth_enabled, password_auth_enabled
 
 
-def pear_bot_user_ids_for_realm(realm: Realm) -> list[int]:
-    return list(
-        Service.objects.filter(
-            name=PEAR_EMBEDDED_BOT_SERVICE,
-            user_profile__realm=realm,
-            user_profile__is_active=True,
-            user_profile__bot_type=UserProfile.EMBEDDED_BOT,
-        )
-        .order_by("user_profile_id")
-        .values_list("user_profile_id", flat=True)
-    )
-
-
 def pear_bot_event_services_are_definitive(services: object) -> bool:
     return isinstance(services, list) and any(
         isinstance(service, dict) and "service_name" in service for service in services
@@ -154,15 +141,6 @@ def pear_bot_event_services_include_pear(services: object) -> bool:
         and service.get("service_name") == PEAR_EMBEDDED_BOT_SERVICE
         for service in services
     )
-
-
-def pear_bot_user_id_has_pear_service(user_id: int) -> bool:
-    return Service.objects.filter(
-        name=PEAR_EMBEDDED_BOT_SERVICE,
-        user_profile_id=user_id,
-        user_profile__is_active=True,
-        user_profile__bot_type=UserProfile.EMBEDDED_BOT,
-    ).exists()
 
 
 def add_pear_bot_user_id(state: dict[str, Any], user_id: int) -> None:

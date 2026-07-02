@@ -1,6 +1,7 @@
 from typing import Any
 from unittest import mock
 
+import orjson
 from django.utils.timezone import now as timezone_now
 
 from zerver.lib.cache import cache_delete, to_dict_cache_key_id
@@ -8,6 +9,7 @@ from zerver.lib.display_recipient import get_display_recipient
 from zerver.lib.markdown import version as markdown_version
 from zerver.lib.message import messages_for_ids
 from zerver.lib.message_cache import MessageDict, sew_messages_and_reactions
+from zerver.lib.pear import PEAR_EMBEDDED_BOT_SERVICE
 from zerver.lib.per_request_cache import flush_per_request_caches
 from zerver.lib.test_classes import ZulipTestCase
 from zerver.lib.test_helpers import make_client
@@ -20,6 +22,41 @@ from zerver.models.streams import get_stream
 
 
 class MessageDictTest(ZulipTestCase):
+    def test_pear_message_flag(self) -> None:
+        user_profile = self.example_user("hamlet")
+        pear_bot = self.create_test_bot(
+            "pear",
+            user_profile,
+            full_name="Pear",
+            bot_type=UserProfile.EMBEDDED_BOT,
+            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+            config_data=orjson.dumps({}).decode(),
+        )
+        other_bot = self.create_test_bot(
+            "other-embedded",
+            user_profile,
+            full_name="Other Embedded",
+            bot_type=UserProfile.EMBEDDED_BOT,
+            service_name="helloworld",
+            config_data=orjson.dumps({}).decode(),
+        )
+
+        pear_message_id = self.send_stream_message(pear_bot, "Denmark", content="pear")
+        other_message_id = self.send_stream_message(other_bot, "Denmark", content="other")
+
+        expected_by_id = {
+            pear_message_id: True,
+            other_message_id: False,
+        }
+        for message_id, expected in expected_by_id.items():
+            message = Message.objects.get(id=message_id)
+            self.assertEqual(MessageDict.wide_dict(message)["is_pear_message"], expected)
+
+        fetched_dicts = MessageDict.ids_to_dict([pear_message_id, other_message_id])
+        fetched_by_id = {message_dict["id"]: message_dict for message_dict in fetched_dicts}
+        for message_id, expected in expected_by_id.items():
+            self.assertEqual(fetched_by_id[message_id]["is_pear_message"], expected)
+
     def test_both_codepaths(self) -> None:
         """
         We have two different codepaths that

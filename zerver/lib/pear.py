@@ -1077,6 +1077,10 @@ def pear_visible_assistant_text(
             continue
         if search(
             PEAR_ARTIFACT_PATTERN, stripped, MULTILINE | IGNORECASE
+        ) or search(
+            PEAR_VISIBLE_ARTIFACT_FALLBACK_PATTERN,
+            stripped,
+            MULTILINE | IGNORECASE,
         ) or pear_is_retired_visible_artifact_line(stripped):
             previous_blank = True
             continue

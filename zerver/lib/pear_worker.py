@@ -2749,16 +2749,6 @@ class PearDatabaseWorkerRunStore:
             )
         return pending_events
 
-    def record_topic_context_results(
-        self,
-        bot_handler: Any,
-        *,
-        stream: str,
-        topic: str,
-        tool_results: list[PearWorkerToolResult],
-    ) -> None:
-        return
-
     def _update_run(
         self,
         run: PearWorkerRun,

@@ -3465,11 +3465,6 @@ class PearEmbeddedBotHandler:
                         ),
                         payload={"result_message_id": result_message_id},
                     )
-            record_topic_context_results = getattr(
-                self.worker_run_store,
-                "record_topic_context_results",
-                None,
-            )
             steering_events_after = getattr(
                 self.worker_run_store,
                 "steering_events_after",
@@ -3484,13 +3479,6 @@ class PearEmbeddedBotHandler:
                     event_callback=handle_transcript_event,
                 )
                 raise_if_cancel_requested()
-                if callable(record_topic_context_results):
-                    record_topic_context_results(
-                        bot_handler,
-                        stream=stream,
-                        topic=topic,
-                        tool_results=segment_result["tool_results"],
-                    )
                 segment_summary = pear_worker_summary_from_tool_results(
                     segment_result["tool_results"]
                 )

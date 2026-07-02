@@ -13,15 +13,13 @@ from typing import Any, Literal
 
 from zerver.lib.pear import (
     PEAR_ADDRESSING_ROUTER_STORAGE_KEY,
-    PEAR_AGENT_SKILL_DEFINITIONS,
+    PEAR_CANVAS_FILE_NAME,
     PEAR_TOPIC_STATE_TOOL_NAMES,
     PEAR_TOPIC_STATE_TOOLS,
     PearActiveSessionSummary,
     PearWorkerToolResult,
     PearWorkerTranscriptCallback,
     PearWorkerTranscriptEvent,
-    active_pear_memory_artifacts,
-    active_pear_routine_artifacts,
     pear_normalize_token_usage,
     parse_pear_artifacts,
     pear_topic_state_tool_name,
@@ -33,6 +31,17 @@ PearAgentRuntime = Literal[
 PearSubprocessRunner = Callable[..., subprocess.CompletedProcess[str]]
 PearSubprocessPopen = Callable[..., subprocess.Popen[str]]
 PearUrlOpen = Callable[..., Any]
+PEAR_CODEX_PROMPT_RETIRED_ARTIFACT_KINDS = frozenset(
+    (
+        "routine",
+        "routine_cadence",
+        "routine_disabled",
+        "memory",
+        "memory_forgotten",
+        "done_criteria",
+        "response_policy",
+    )
+)
 
 
 @dataclass(frozen=True)
@@ -440,28 +449,6 @@ class PearGeminiInteractionsAddressingIntentClassifier:
 
 
 def build_pear_codex_developer_instructions() -> str:
-    topic_state_tool_lines = [f"- {tool}" for tool in PEAR_TOPIC_STATE_TOOLS]
-    agent_skill_lines = [
-        f"- {skill['name']}: {skill['description']}"
-        for skill in PEAR_AGENT_SKILL_DEFINITIONS
-    ]
-    agent_skill_definition_lines: list[str] = []
-    for skill in PEAR_AGENT_SKILL_DEFINITIONS:
-        agent_skill_definition_lines.extend(
-            [
-                f"Skill: {skill['name']}",
-                f"Description: {skill['description']}",
-                "Applies to:",
-                *[f"- {item}" for item in skill["applies_to"]],
-                "Instructions:",
-                *[f"- {item}" for item in skill["instructions"]],
-                "Artifact tools:",
-                *[f"- {tool}" for tool in skill["artifact_tools"]],
-                "",
-            ]
-        )
-    if not agent_skill_definition_lines:
-        agent_skill_definition_lines = ["- None"]
     return "\n".join(
         [
             "You are Pear, a Codex-powered pair-programming agent working from a Zulip topic.",
@@ -471,25 +458,18 @@ def build_pear_codex_developer_instructions() -> str:
                 "server checkout is not the user's target repo unless the topic context "
                 "explicitly pins it."
             ),
+            (
+                f"Durable topic context lives in {PEAR_CANVAS_FILE_NAME}; read or edit it "
+                "with file tools when the task depends on standing notes, pinned context, "
+                "routines, or definition of done."
+            ),
+            "Use Codex-native skills from CODEX_HOME/skills when a relevant SKILL.md applies.",
             "Keep changes focused on the user's request and verify them before finishing.",
             "For casual, conversational, choice-only, or answer-only requests, respond directly.",
             "Do not run repository/session checks just to make a casual reply sound grounded.",
             "Use tools only when the request needs workspace facts, code changes, external lookup, or verification.",
             "Resolve references like 'above', 'that', 'what did I ask', and 'who is here' from the recent Zulip transcript below.",
             "Do not claim you cannot see recent topic history when the transcript below contains the answer.",
-            "Treat channel memory as durable context for this topic.",
-            "Use Pear topic-state tools by posting artifact lines with the exact prefixes listed below.",
-            "Treat Pear agent skills as standing operating procedures for deciding which artifact tools to use.",
-            "",
-            "Pear topic-state tools:",
-            *topic_state_tool_lines,
-            "",
-            "Pear agent skills:",
-            *agent_skill_lines,
-            "",
-            "Pear agent skill definitions:",
-            *agent_skill_definition_lines,
-            "",
             "Final response requirements:",
             "- Keep the response concise and suitable for posting back into the Zulip topic.",
             "- Include artifact lines using these exact prefixes where applicable:",
@@ -503,11 +483,6 @@ def build_pear_codex_developer_instructions() -> str:
             "  Ticket: <ticket URL, ID, or path>",
             "  Issue: <issue URL, ID, or path>",
             "  Reviewers: <reviewer handles or teams>",
-            "  Routine: <standing follow-up or watch instruction>",
-            "  Routine cadence: <manual or watch cadence>",
-            "  Memory: <channel-scoped note Pear should remember>",
-            "  Memory forgotten: <channel-scoped note Pear should ignore>",
-            "  Done: <definition of done or success criteria>",
             "  Doc: <document or thread reference>",
         ]
     )
@@ -526,38 +501,14 @@ def build_pear_codex_turn_prompt(active_session: PearActiveSessionSummary, task:
         f"- head: {workspace_context.get('head') or 'unknown'}",
         "- contract: the Zulip stream maps to the repository, and the Zulip topic/subthread maps to the Git branch.",
     ]
-    artifacts = active_session["artifacts"][:5]
+    artifacts = [
+        artifact
+        for artifact in active_session["artifacts"]
+        if artifact["kind"] not in PEAR_CODEX_PROMPT_RETIRED_ARTIFACT_KINDS
+    ][:5]
     artifact_lines = [
         f"- {artifact['label']}: {artifact['value']}" for artifact in artifacts
     ] or ["- None"]
-    memory_lines = [
-        f"- {artifact['value']}"
-        for artifact in active_pear_memory_artifacts(active_session["artifacts"])
-    ][:5] or ["- None"]
-    forgotten_memory_lines = [
-        f"- {artifact['value']}"
-        for artifact in active_session["artifacts"]
-        if artifact["kind"] == "memory_forgotten"
-    ][:5] or ["- None"]
-    done_criteria_lines = [
-        f"- {artifact['value']}"
-        for artifact in active_session["artifacts"]
-        if artifact["kind"] == "done_criteria"
-    ][:5] or ["- None"]
-    routine_lines = [
-        f"- {artifact['value']}"
-        for artifact in active_pear_routine_artifacts(active_session["artifacts"])
-    ][:5] or ["- None"]
-    disabled_routine_lines = [
-        f"- {artifact['value']}"
-        for artifact in active_session["artifacts"]
-        if artifact["kind"] == "routine_disabled"
-    ][:5] or ["- None"]
-    routine_cadence_lines = [
-        f"- {artifact['value']}"
-        for artifact in active_session["artifacts"]
-        if artifact["kind"] == "routine_cadence"
-    ][:5] or ["- manual"]
     recent_messages = active_session.get("recent_messages", [])
     recent_human_participants = list(
         dict.fromkeys(
@@ -597,23 +548,7 @@ def build_pear_codex_turn_prompt(active_session: PearActiveSessionSummary, task:
             "Recent artifacts:",
             *artifact_lines,
             "",
-            "Channel memory:",
-            *memory_lines,
-            "",
-            "Forgotten memory:",
-            *forgotten_memory_lines,
-            "",
-            "Definition of done:",
-            *done_criteria_lines,
-            "",
-            "Standing routines:",
-            *routine_lines,
-            "",
-            "Disabled routines:",
-            *disabled_routine_lines,
-            "",
-            "Routine cadence:",
-            *routine_cadence_lines,
+            f"Canvas: durable topic context is in {PEAR_CANVAS_FILE_NAME}; inspect it when this turn depends on saved notes, pinned context, routines, or done criteria.",
         ]
     )
 
@@ -1448,6 +1383,7 @@ class PearCodexExecToolRunner:
             args.extend(["--config", f'service_tier="{self.service_tier}"'])
         if self.fast_mode_enabled:
             args.extend(["--config", "features.fast_mode=true"])
+        args.extend(["--config", "features.memories=true"])
         if self.reasoning_effort:
             args.extend(
                 ["--config", f'model_reasoning_effort="{self.reasoning_effort}"']
@@ -1461,8 +1397,12 @@ class PearCodexExecToolRunner:
         *,
         event_callback: PearWorkerTranscriptCallback | None = None,
     ) -> Sequence[PearWorkerToolResult]:
-        command = self.build_command(pear_codex_thread_id_from_active_session(active_session))
-        prompt = build_pear_codex_prompt(active_session, task)
+        thread_id = pear_codex_thread_id_from_active_session(active_session)
+        command = self.build_command(thread_id)
+        if thread_id is None:
+            prompt = build_pear_codex_prompt(active_session, task)
+        else:
+            prompt = build_pear_codex_turn_prompt(active_session, task)
         if self.run_command is not None:
             return self.run_legacy_completed_process(
                 command,
@@ -1706,6 +1646,7 @@ class PearCodexAppServerToolRunner:
             args.extend(["--config", f'service_tier="{self.service_tier}"'])
         if self.fast_mode_enabled:
             args.extend(["--config", "features.fast_mode=true"])
+        args.extend(["--config", "features.memories=true"])
         if self.reasoning_effort:
             args.extend(
                 ["--config", f'model_reasoning_effort="{self.reasoning_effort}"']
@@ -1890,7 +1831,6 @@ class PearCodexAppServerToolRunner:
     def thread_params(self, *, existing_thread_id: str | None = None) -> dict[str, Any]:
         params: dict[str, Any] = {
             "approvalPolicy": self.approval_policy,
-            "developerInstructions": build_pear_codex_developer_instructions(),
             "cwd": self.workdir,
             "ephemeral": self.ephemeral,
             "serviceTier": self.service_tier,
@@ -1901,6 +1841,8 @@ class PearCodexAppServerToolRunner:
         if existing_thread_id is not None:
             params["threadId"] = existing_thread_id
             params.pop("ephemeral", None)
+        else:
+            params["developerInstructions"] = build_pear_codex_developer_instructions()
         return {key: value for key, value in params.items() if value is not None}
 
     def turn_params(self, thread_id: str, prompt: str) -> dict[str, Any]:
@@ -2271,7 +2213,10 @@ class PearCodexAgentsMcpToolRunner:
         task: str,
         existing_thread_id: str | None,
     ) -> str:
-        prompt = build_pear_codex_prompt(active_session, task)
+        if existing_thread_id is None:
+            prompt = build_pear_codex_prompt(active_session, task)
+        else:
+            prompt = build_pear_codex_turn_prompt(active_session, task)
         codex_config = [
             "",
             "Codex MCP tool arguments:",
@@ -2359,7 +2304,10 @@ class PearCodexSdkToolRunner:
         codex, Sandbox, ApprovalMode = self.codex_client()
         thread_kwargs = self.thread_kwargs(Sandbox, ApprovalMode)
         existing_thread_id = pear_codex_thread_id_from_active_session(active_session)
-        prompt = build_pear_codex_prompt(active_session, task)
+        if existing_thread_id is None:
+            prompt = build_pear_codex_prompt(active_session, task)
+        else:
+            prompt = build_pear_codex_turn_prompt(active_session, task)
 
         if existing_thread_id is not None:
             if hasattr(codex, "thread_resume"):
@@ -2417,6 +2365,7 @@ class PearCodexSdkToolRunner:
                     config_overrides = ["features.fast_mode=true"]
                 else:
                     config_overrides = []
+                config_overrides.append("features.memories=true")
                 if self.reasoning_effort:
                     config_overrides.append(
                         f'model_reasoning_effort="{self.reasoning_effort}"'

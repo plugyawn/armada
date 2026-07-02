@@ -423,6 +423,42 @@ def pear_topic_process_isolation(
     )
 
 
+def pear_shared_codex_home() -> Path:
+    return Path(os.getenv("CODEX_HOME") or Path.home() / ".codex").expanduser()
+
+
+def pear_codex_skills_source_dir() -> Path | None:
+    configured_path = getattr(settings, "PEAR_CODEX_SKILLS_DIR", None)
+    if isinstance(configured_path, str) and configured_path.strip():
+        return pear_normalize_path(configured_path)
+    deploy_root = getattr(settings, "DEPLOY_ROOT", None)
+    if isinstance(deploy_root, str) and deploy_root.strip():
+        return pear_normalize_path(Path(deploy_root).parent / "pear" / "skills")
+    return None
+
+
+def pear_provision_codex_skills(codex_home: str | Path) -> list[str]:
+    source_dir = pear_codex_skills_source_dir()
+    if source_dir is None or not source_dir.is_dir():
+        return []
+
+    skills_home = Path(codex_home).expanduser() / "skills"
+    skills_home.mkdir(parents=True, exist_ok=True)
+    provisioned_skills: list[str] = []
+    for source_skill_dir in sorted(source_dir.iterdir(), key=lambda path: path.name):
+        if not source_skill_dir.is_dir() or not (source_skill_dir / "SKILL.md").is_file():
+            continue
+        destination = skills_home / source_skill_dir.name
+        shutil.copytree(
+            source_skill_dir,
+            destination,
+            dirs_exist_ok=True,
+            ignore=shutil.ignore_patterns("__pycache__", "*.pyc"),
+        )
+        provisioned_skills.append(source_skill_dir.name)
+    return provisioned_skills
+
+
 def pear_normalize_path(path: str | Path) -> Path:
     return Path(path).expanduser().resolve(strict=False)
 
@@ -486,9 +522,11 @@ def pear_worker_process_isolation_error(
             "worktree. Recreate this topic workspace as an independent clone first."
         )
 
-    codex_home_source = os.getenv("CODEX_HOME")
-    if not codex_home_source:
-        codex_home_source = str(Path.home() / ".codex")
+    codex_home_source = str(pear_shared_codex_home())
+    try:
+        pear_provision_codex_skills(codex_home_source)
+    except OSError as error:
+        return f"Pear Codex skills provisioning failed: {error}"
     command = [
         "sudo",
         "-n",
@@ -1804,6 +1842,13 @@ def build_pear_worker_runtime_from_settings(
         return PearWorkerRuntime(PearDisabledAgentRunner(isolation_error))
     if runtime != "disabled" and process_isolation_error is not None:
         return PearWorkerRuntime(PearDisabledAgentRunner(process_isolation_error))
+    if runtime != "disabled" and process_isolation_override is None:
+        try:
+            pear_provision_codex_skills(pear_shared_codex_home())
+        except OSError as error:
+            return PearWorkerRuntime(
+                PearDisabledAgentRunner(f"Pear Codex skills provisioning failed: {error}")
+            )
     if runtime == "codex-sdk" and process_isolation_override is not None:
         return PearWorkerRuntime(
             PearDisabledAgentRunner(

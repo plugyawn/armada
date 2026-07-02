@@ -227,3 +227,17 @@
         display: none;
     }
 }
+
+/* Recipient-bar de-green (P5d-6). The stream-tinted "green bar" on feed
+   group headers is very un-Slack; flatten it to the header's existing
+   hairline. Scoped to .message-feed stream headers so the report-message
+   modal preview, the color-picker preview, and DM headers keep their own
+   styling. Stream/topic labels + the date stay visible — hiding them
+   loses context in the combined feed, which is a separate UX decision.
+   !important beats the inline background that
+   stream_color.update_stream_recipient_color re-applies via jQuery on
+   stream-color changes (message_list_view.ts), not just the removed
+   template style. */
+.message-feed .message_header.message_header_stream .message-header-contents {
+    background: transparent !important;
+}

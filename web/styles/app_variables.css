@@ -878,6 +878,12 @@
         hsl(229deg 9% 48%),
         hsl(229deg 10% 78%)
     );
+    /* Needs-attention amber for the git delta (dirty worktree,
+       detached HEAD); ≥4.5:1 against the white pane as pill text. */
+    --color-pear-status-attention: light-dark(
+        hsl(36deg 90% 28%),
+        hsl(38deg 80% 70%)
+    );
     --color-selected-message-outline: light-dark(
         hsl(217deg 64% 59% / 60%),
         hsl(217deg 64% 59% / 70%)

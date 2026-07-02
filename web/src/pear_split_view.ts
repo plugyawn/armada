@@ -9,6 +9,7 @@ import $ from "jquery";
 import render_pear_right_area from "../templates/pear_right_area.hbs";
 
 import * as compose_ui from "./compose_ui.ts";
+import * as pear_git_hover from "./pear_git_hover.ts";
 import * as pear_panel from "./pear_panel.ts";
 
 let initialized = false;
@@ -74,6 +75,7 @@ export function initialize(): void {
     }
     initialized = true;
     pear_panel.initialize();
+    pear_git_hover.initialize();
     $("body").on("click", "#pear-pane-toggle-button", (e) => {
         e.preventDefault();
         e.stopPropagation();

@@ -42,16 +42,18 @@ function make_git(overrides = {}) {
     return {
         available: true,
         workdir: "/srv/pear/devel-pear-smoke",
-        repo_label: "zulip",
+        repo_name: "devel-pear-smoke",
         worktree_name: "devel-pear-smoke",
         branch: "pear-smoke",
         head: "abc1234",
+        head_short: "abc1234",
+        upstream: "origin/pear-smoke",
+        ahead: 0,
+        behind: 0,
         dirty: false,
         changed_count: 0,
-        changed_files: [],
-        changed_files_truncated: false,
-        diff_shortstat: "",
-        recent_commits: [{hash: "abc1234", summary: "Initial commit"}],
+        detached: false,
+        branch_matches_topic: true,
         ...overrides,
     };
 }
@@ -91,8 +93,10 @@ function make_state(overrides = {}) {
 }
 
 // The state sequence a real panel session walks through: no topic,
-// context loads, a run starts and streams, a model error appears and
-// clears, the run finishes, a fetch error shows up.
+// context loads, runs start and stream (two at once — no single-run
+// pick), the delta dirties/diverges, a model error appears and
+// clears, the runs finish (leaving a detached, mismatched worktree),
+// a fetch error shows up.
 function lifecycle_states() {
     return [
         make_state({
@@ -103,16 +107,13 @@ function lifecycle_states() {
         make_state(),
         make_state({runs: [make_run(7, "queued")]}),
         make_state({
-            runs: [make_run(7, "running")],
+            runs: [make_run(8, "running", {session_kind: "side"}), make_run(7, "running")],
             topic_context: make_topic_context({
                 git: make_git({
                     dirty: true,
                     changed_count: 2,
-                    changed_files: [
-                        {status: "M", kind: "modified", path: "web/src/pear_panel.ts"},
-                        {status: "A", kind: "added", path: "web/src/pear_runs_store.ts"},
-                    ],
-                    diff_shortstat: "2 files changed, 40 insertions(+)",
+                    ahead: 2,
+                    behind: 1,
                 }),
             }),
         }),
@@ -120,9 +121,24 @@ function lifecycle_states() {
             runs: [make_run(7, "running")],
             model_error: "Model change failed.",
         }),
-        make_state({runs: [make_run(7, "done")]}),
         make_state({
             runs: [make_run(7, "done")],
+            topic_context: make_topic_context({
+                git: make_git({
+                    branch: "",
+                    detached: true,
+                    branch_matches_topic: false,
+                }),
+            }),
+        }),
+        make_state({
+            runs: [make_run(7, "done")],
+            topic_context: make_topic_context({
+                git: make_git({
+                    branch: "hotfix-thing",
+                    branch_matches_topic: false,
+                }),
+            }),
             error: "Pear status is unavailable.",
         }),
     ];

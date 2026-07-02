@@ -1,5 +1,7 @@
 // The Pear panel: live run status, run verbs, runtime controls, and
-// workspace state for the current topic. It renders as an on-demand
+// the git-status delta for the current topic (R3: the chat header is
+// authoritative for stream > topic == repo > branch, so the panel
+// shows only what the header can't). It renders as an on-demand
 // pane inside the reclaimed right area (#pear-right-area) — not on a
 // permanent rail — and is a diff-patching subscriber of
 // pear_runs_store: opening the pane subscribes (starting the poll),
@@ -45,8 +47,6 @@ let last_error = "";
 let last_model_error = "";
 let last_runs: PearRun[] = [];
 let last_topic_context: PearTopicContext | null | undefined;
-let rendered_context_key = "";
-const worktree_details_open_by_context = new Map<string, boolean>();
 // Matches the pear-status-flash animation duration in pear.css.
 const STATUS_FLASH_DURATION_MS = 900;
 const flash_by_run_id = new Map<number, {css_class: string; timer: number}>();
@@ -174,13 +174,6 @@ function current_context(): {stream: string | undefined; topic: string | undefin
     };
 }
 
-function context_key(stream: string | undefined, topic: string | undefined): string {
-    if (stream === undefined || topic === undefined) {
-        return "";
-    }
-    return `${stream}\n${topic}`;
-}
-
 function panel_element(): Element | null {
     // Guarded for the node-test environment, where there is no real
     // DOM for the panel to mount into.
@@ -188,18 +181,6 @@ function panel_element(): Element | null {
         return null;
     }
     return document.querySelector("#pear-panel");
-}
-
-function remember_worktree_details_state(): void {
-    if (rendered_context_key === "" || typeof document === "undefined") {
-        return;
-    }
-    const details = document.querySelector<HTMLDetailsElement>(
-        "#pear-panel details.pear-worktree-details",
-    );
-    if (details !== null) {
-        worktree_details_open_by_context.set(rendered_context_key, details.open);
-    }
 }
 
 function display_run(run: PearRun): PearRun & {
@@ -265,29 +246,19 @@ function display_topic_context(topic_context: PearTopicContext | undefined | nul
           git_available: boolean;
           git_status_class: string;
           git_status_label: string;
-          has_changed_files: boolean;
-          has_recent_commits: boolean;
-          changed_label: string;
-          has_pinned_repo: boolean;
-          workspace_primary_name: string;
-          workspace_primary_title: string;
-          workspace_kind_label: string;
-          workspace_ref_label: string;
-          worktree_name: string;
-          worktree_details_open: boolean;
-          local_worktree_summary_label: string;
-          show_primary_git_status: boolean;
+          git_head_short: string;
+          show_ahead_behind: boolean;
+          ahead_behind_label: string;
+          ahead_behind_title: string;
+          show_detached: boolean;
+          detached_title: string;
+          show_branch_mismatch: boolean;
+          branch_mismatch_title: string;
       })
     | undefined {
     if (topic_context === undefined || topic_context === null) {
         return undefined;
     }
-    const git = topic_context.git;
-    const changed_count = git.changed_count ?? 0;
-    const changed_label =
-        changed_count === 1
-            ? $t({defaultMessage: "1 changed file"})
-            : $t({defaultMessage: "{changed_count} changed files"}, {changed_count});
     const model_catalog = topic_context.model_catalog ?? [];
     const model_choices_from_catalog = model_catalog.map((entry) => ({
         value: entry.slug,
@@ -323,31 +294,53 @@ function display_topic_context(topic_context: PearTopicContext | undefined | nul
         index,
         selected: index === selected_effort_index,
     }));
-    const github_repo = topic_context.github_repo.trim();
-    const pinned_repo = topic_context.pinned_repo?.trim() ?? "";
-    const has_pinned_repo = pinned_repo.length > 0;
-    const git_repo_label = git.repo_label?.trim() ?? "";
-    const repo_label = topic_context.repo_label?.trim() || git_repo_label;
-    const has_workspace_repo =
-        repo_label.length > 0 || has_pinned_repo || (git.available && git_repo_label.length > 0);
-    const workdir_parts = topic_context.workdir.split("/").filter((part) => part.trim().length > 0);
-    const worktree_name =
-        topic_context.worktree_label?.trim() ||
-        git.worktree_name ||
-        workdir_parts[workdir_parts.length - 1] ||
-        "";
-    const workspace_primary_name = repo_label || $t({defaultMessage: "No repo pinned"});
-    const workspace_ref_parts = [git.branch, git.head].filter(
-        (part): part is string => part !== undefined && part.trim().length > 0,
-    );
-    const git_status_label = git.dirty ? changed_label : $t({defaultMessage: "clean"});
-    const local_worktree_ref_label = workspace_ref_parts.join(" / ");
-    const local_worktree_summary_label = [worktree_name, git_status_label, local_worktree_ref_label]
-        .filter((part) => part.trim().length > 0)
-        .join(" / ");
+
+    // The git DELTA row (R3): the chat header already states
+    // stream > topic == repo > branch, so the panel renders only what
+    // the header cannot say — dirty/clean, ahead/behind, detached
+    // HEAD, and the branch≠topic edge case.
+    const git = topic_context.git;
+    const changed_count = git.changed_count ?? 0;
+    const changed_label =
+        changed_count === 1
+            ? $t({defaultMessage: "1 changed"})
+            : $t({defaultMessage: "{changed_count} changed"}, {changed_count});
+    const git_status_label = git.dirty ? changed_label : $t({defaultMessage: "Clean"});
+    const ahead = git.ahead ?? 0;
+    const behind = git.behind ?? 0;
+    const ahead_behind_parts = [];
+    if (ahead > 0) {
+        ahead_behind_parts.push(`↑${ahead}`);
+    }
+    if (behind > 0) {
+        ahead_behind_parts.push(`↓${behind}`);
+    }
+    const upstream = git.upstream?.trim() ?? "";
+    const ahead_behind_title = upstream
+        ? $t(
+              {defaultMessage: "{ahead} ahead, {behind} behind {upstream}"},
+              {ahead, behind, upstream},
+          )
+        : $t({defaultMessage: "{ahead} ahead, {behind} behind"}, {ahead, behind});
+    const detached = git.detached === true;
+    const git_head_short = git.head_short?.trim() ?? git.head?.trim() ?? "";
+    const detached_title = git_head_short
+        ? $t({defaultMessage: "Detached HEAD at {head}"}, {head: git_head_short})
+        : $t({defaultMessage: "Detached HEAD"});
+    const checked_out_branch = git.branch?.trim() ?? "";
+    // Detached worktrees show only the detached badge; the mismatch
+    // badge covers the named-branch ≠ topic edge case.
+    const show_branch_mismatch = git.available && !detached && git.branch_matches_topic === false;
+    const branch_mismatch_title = checked_out_branch
+        ? $t(
+              {defaultMessage: "Checked out {branch}, which is not this topic's branch."},
+              {branch: checked_out_branch},
+          )
+        : $t({defaultMessage: "The checked-out branch does not match this topic."});
+
     return {
         ...topic_context,
-        github_repo,
+        github_repo: topic_context.github_repo.trim(),
         model_choices: topic_context.model_choices ?? [],
         has_model_choices: display_model_choices.length > 0,
         display_model_choices,
@@ -360,35 +353,29 @@ function display_topic_context(topic_context: PearTopicContext | undefined | nul
         git_available: git.available,
         git_status_class: git.dirty ? "dirty" : "clean",
         git_status_label,
-        has_changed_files: (git.changed_files ?? []).length > 0,
-        has_recent_commits: (git.recent_commits ?? []).length > 0,
-        changed_label,
-        has_pinned_repo,
-        workspace_primary_name,
-        workspace_primary_title:
-            topic_context.repo_title?.trim() ||
-            pinned_repo ||
-            (has_workspace_repo
-                ? topic_context.workdir
-                : $t({defaultMessage: "Ask Pear to pin a Git repository for this topic."})),
-        workspace_kind_label: $t({defaultMessage: "Repo"}),
-        workspace_ref_label: "",
-        worktree_name,
-        worktree_details_open:
-            worktree_details_open_by_context.get(
-                context_key(topic_context.stream, topic_context.topic),
-            ) ?? false,
-        local_worktree_summary_label,
-        show_primary_git_status: has_workspace_repo && git.available,
+        git_head_short,
+        show_ahead_behind: ahead_behind_parts.length > 0,
+        ahead_behind_label: ahead_behind_parts.join(" "),
+        ahead_behind_title,
+        show_detached: detached,
+        detached_title,
+        show_branch_mismatch,
+        branch_mismatch_title,
     };
 }
 
-function active_display_run(runs: PearRun[]): ReturnType<typeof display_run> | undefined {
-    const active_run =
-        runs.find(
-            (run) => run.status === "running" || run.status === "queued" || run.status === "paused",
-        ) ?? runs[0];
-    return active_run === undefined ? undefined : display_run(active_run);
+// Every active run gets its own status+verbs row, so multi-run topics
+// never silently hide a live run; with nothing active, the most
+// recent run keeps its terminal status (and done/failed flash)
+// visible.
+function display_runs(runs: PearRun[]): ReturnType<typeof display_run>[] {
+    const active_runs = runs.filter(
+        (run) => run.status === "running" || run.status === "queued" || run.status === "paused",
+    );
+    if (active_runs.length > 0) {
+        return active_runs.map((run) => display_run(run));
+    }
+    return runs.slice(0, 1).map((run) => display_run(run));
 }
 
 // Pure rendering helper, shared by render() and the node test that
@@ -402,17 +389,15 @@ export function render_panel_html(state: {
     model_error: string;
 }): string {
     const has_topic = state.stream !== undefined && state.topic !== undefined;
-    const active_run = active_display_run(state.runs);
-    const panel_status = active_run?.status ?? "idle";
+    const runs = display_runs(state.runs);
     return render_pear_panel({
         has_topic,
         context_label: has_topic ? `${state.stream} > ${state.topic}` : "",
         topic_context: display_topic_context(state.topic_context),
-        active_run,
+        display_runs: runs,
+        has_runs: runs.length > 0,
         error: state.error,
         model_error: state.model_error,
-        status_label: panel_status,
-        status_class: status_class(panel_status),
     });
 }
 
@@ -421,7 +406,6 @@ function render(): void {
     if (element === null) {
         return;
     }
-    remember_worktree_details_state();
     const {stream, topic} = current_context();
     patch_html(
         element,
@@ -434,7 +418,6 @@ function render(): void {
             model_error: last_model_error,
         }),
     );
-    rendered_context_key = context_key(stream, topic);
 }
 
 function on_store_update(snapshot: PearSnapshot): void {

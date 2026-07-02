@@ -22,6 +22,7 @@ from zerver.lib.pear_worker import (
     pear_worker_reasoning_effort_for_topic,
     pear_worker_sandbox_for_workdir,
     pear_worker_workdir_for_topic,
+    reap_stale_pear_worker_runs,
 )
 from zerver.models.users import get_user_profile_by_id
 from zerver.worker.base import QueueProcessingWorker, assign_queue
@@ -59,6 +60,11 @@ class PearWorker(QueueProcessingWorker):
     # Codex turns can legitimately take minutes; the embedded_bots queue should
     # only dispatch to this worker, not own the runtime budget.
     MAX_CONSUME_SECONDS = None
+
+    @override
+    def setup(self) -> None:
+        super().setup()
+        reap_stale_pear_worker_runs()
 
     @override
     def consume(self, event: dict[str, Any]) -> None:

@@ -11,6 +11,7 @@ from urllib.parse import urlparse
 
 from django.conf import settings
 from django.db import IntegrityError, transaction
+from django.db.models import Q
 from django.utils.translation import gettext as _
 from django.utils.timezone import now as timezone_now
 
@@ -59,6 +60,7 @@ PEAR_WORKER_RUN_TERMINAL_STATUSES = frozenset(
     (PearWorkerRun.DONE, PearWorkerRun.CANCELLED)
 )
 PEAR_WORKER_MAX_CLAIM_ATTEMPTS = 2
+PEAR_WORKER_HEARTBEAT_INTERVAL_SECONDS = 15
 PEAR_RUN_LEGAL_TRANSITIONS: dict[PearWorkerRunStatus, frozenset[PearWorkerRunStatus]] = {
     PearWorkerRun.QUEUED: frozenset(
         (PearWorkerRun.RUNNING, PearWorkerRun.FAILED, PearWorkerRun.CANCELLED)
@@ -102,6 +104,74 @@ class PearTopicRenameRefactorResult:
     stream_name: str
     topic_name: str
     message: str
+
+
+def pear_worker_stale_after_seconds() -> int:
+    return int(getattr(settings, "PEAR_WORKER_TIMEOUT_SECONDS", 1800)) + 300
+
+
+def pear_worker_run_is_stale(run: PearWorkerRun, *, current_time: datetime) -> bool:
+    last_seen = run.heartbeat_at or run.date_updated
+    return last_seen <= current_time - timedelta(seconds=pear_worker_stale_after_seconds())
+
+
+def reap_stale_pear_worker_runs(
+    *,
+    realm: Any | None = None,
+    bot_profile: UserProfile | None = None,
+    stream: str | None = None,
+    topic: str | None = None,
+) -> int:
+    current_time = timezone_now()
+    cutoff = current_time - timedelta(seconds=pear_worker_stale_after_seconds())
+    stale_runs = PearWorkerRun.objects.filter(status=PearWorkerRun.RUNNING).filter(
+        Q(heartbeat_at__isnull=False, heartbeat_at__lte=cutoff)
+        | Q(heartbeat_at__isnull=True, date_updated__lte=cutoff)
+    )
+    if realm is not None:
+        stale_runs = stale_runs.filter(realm=realm)
+    if bot_profile is not None:
+        stale_runs = stale_runs.filter(bot_profile=bot_profile)
+    if stream is not None:
+        stale_runs = stale_runs.filter(stream_name=stream)
+    if topic is not None:
+        stale_runs = stale_runs.filter(topic_name=topic)
+
+    stale_run_ids = list(stale_runs.values_list("id", flat=True)[:100])
+    reaped_count = 0
+    store = PearDatabaseWorkerRunStore()
+    for run_id in stale_run_ids:
+        with transaction.atomic():
+            run = (
+                PearWorkerRun.objects.select_for_update()
+                .filter(id=run_id, status=PearWorkerRun.RUNNING)
+                .first()
+            )
+            if run is None or not pear_worker_run_is_stale(run, current_time=current_time):
+                continue
+            if not store._transition(
+                run,
+                PearWorkerRun.FAILED,
+                stream=run.stream_name,
+                topic=run.topic_name,
+                result_message_id=run.result_message_id,
+                error="Pear worker run became stale and was recovered.",
+                allow_requeue=False,
+            ):
+                continue
+            store._record_event(
+                run,
+                "stale_reaped",
+                summary="Recovered stale Pear worker run.",
+                payload={
+                    "stale_after_seconds": pear_worker_stale_after_seconds(),
+                    "heartbeat_at": run.heartbeat_at.isoformat()
+                    if run.heartbeat_at is not None
+                    else None,
+                },
+            )
+            reaped_count += 1
+    return reaped_count
 
 
 def latest_pear_codex_thread_id_for_topic(
@@ -775,6 +845,19 @@ def maybe_refactor_pear_topic_context_on_move(
         status__in=PEAR_WORKER_RUN_BUSY_STATUSES,
     ).exists()
     if busy_run_exists:
+        reap_stale_pear_worker_runs(
+            realm=user_profile.realm,
+            stream=old_stream.name,
+            topic=old_topic,
+        )
+        busy_run_exists = PearWorkerRun.objects.filter(
+            realm=user_profile.realm,
+            stream_name=old_stream.name,
+            topic_name=old_topic,
+            session_kind=PearWorkerRun.SHARED,
+            status__in=PEAR_WORKER_RUN_BUSY_STATUSES,
+        ).exists()
+    if busy_run_exists:
         return PearTopicRenameRefactorResult(
             stream_name=new_stream.name,
             topic_name=new_topic,
@@ -1303,6 +1386,12 @@ class PearDatabaseWorkerRunStore:
 
         user_profile = bot_handler.user_profile
         assert isinstance(user_profile, UserProfile)
+        reap_stale_pear_worker_runs(
+            realm=user_profile.realm,
+            bot_profile=user_profile,
+            stream=stream,
+            topic=topic,
+        )
 
         run = (
             PearWorkerRun.objects.filter(
@@ -1331,6 +1420,12 @@ class PearDatabaseWorkerRunStore:
 
         user_profile = bot_handler.user_profile
         assert isinstance(user_profile, UserProfile)
+        reap_stale_pear_worker_runs(
+            realm=user_profile.realm,
+            bot_profile=user_profile,
+            stream=stream,
+            topic=topic,
+        )
 
         run = (
             PearWorkerRun.objects.filter(
@@ -1405,6 +1500,7 @@ class PearDatabaseWorkerRunStore:
 
         user_profile = bot_handler.user_profile
         assert isinstance(user_profile, UserProfile)
+        reap_stale_pear_worker_runs(realm=user_profile.realm)
 
         try:
             requesting_user = UserProfile.objects.get(
@@ -1741,9 +1837,27 @@ class PearDatabaseWorkerRunStore:
         )
 
     def _run_is_stale(self, run: PearWorkerRun, *, current_time: datetime) -> bool:
-        stale_after_seconds = int(getattr(settings, "PEAR_WORKER_TIMEOUT_SECONDS", 1800)) + 300
-        last_seen = run.heartbeat_at or run.date_updated
-        return last_seen <= current_time - timedelta(seconds=stale_after_seconds)
+        return pear_worker_run_is_stale(run, current_time=current_time)
+
+    def _heartbeat_due(self, run: PearWorkerRun, *, current_time: datetime) -> bool:
+        if run.status != PearWorkerRun.RUNNING:
+            return False
+        last_heartbeat = run.heartbeat_at or run.date_updated
+        return last_heartbeat <= current_time - timedelta(
+            seconds=PEAR_WORKER_HEARTBEAT_INTERVAL_SECONDS
+        )
+
+    def _apply_heartbeat_if_due(
+        self,
+        run: PearWorkerRun,
+        *,
+        update_fields: list[str],
+        current_time: datetime,
+    ) -> None:
+        if not self._heartbeat_due(run, current_time=current_time):
+            return
+        run.heartbeat_at = current_time
+        update_fields.append("heartbeat_at")
 
     def update_metadata(
         self,
@@ -1816,7 +1930,13 @@ class PearDatabaseWorkerRunStore:
                 topic=context_topic,
             )
             update_fields.extend(["model", "sandbox", "approval_policy", "workdir"])
-            run.date_updated = timezone_now()
+            current_time = timezone_now()
+            run.date_updated = current_time
+            self._apply_heartbeat_if_due(
+                run,
+                update_fields=update_fields,
+                current_time=current_time,
+            )
             run.save(update_fields=list(dict.fromkeys(update_fields)))
 
     def record_event(
@@ -2048,6 +2168,11 @@ class PearDatabaseWorkerRunStore:
             summary=summary,
             payload=payload,
         )
+        current_time = timezone_now()
+        if self._heartbeat_due(run, current_time=current_time):
+            run.heartbeat_at = current_time
+            run.date_updated = current_time
+            run.save(update_fields=["heartbeat_at", "date_updated"])
 
     def _runtime_label(self) -> str:
         return str(getattr(settings, "PEAR_WORKER_AGENT_RUNTIME", "disabled") or "")

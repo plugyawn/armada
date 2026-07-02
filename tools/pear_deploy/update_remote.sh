@@ -25,11 +25,13 @@ DEPLOY_UNTRACKED_ALLOW_PREFIXES=(
     'output/'
     'prod-static/'
     'staticfiles/'
+    'static/generated/'
     '.mypy_cache/'
     '.pytest_cache/'
     '.ruff_cache/'
     'web/.parcel-cache/'
     'web/coverage/'
+    'web/generated/'
     'zproject/dev-secrets.conf'
 )
 
@@ -43,11 +45,13 @@ RSYNC_EXCLUDES=(
     --exclude '/output/'
     --exclude '/prod-static/'
     --exclude '/staticfiles/'
+    --exclude '/static/generated/'
     --exclude '/.mypy_cache/'
     --exclude '/.pytest_cache/'
     --exclude '/.ruff_cache/'
     --exclude '/web/.parcel-cache/'
     --exclude '/web/coverage/'
+    --exclude '/web/generated/'
     --exclude '/zproject/dev-secrets.conf'
 )
 
@@ -257,11 +261,13 @@ rsync -a --delete \
     --exclude '/output/' \
     --exclude '/prod-static/' \
     --exclude '/staticfiles/' \
+    --exclude '/static/generated/' \
     --exclude '/.mypy_cache/' \
     --exclude '/.pytest_cache/' \
     --exclude '/.ruff_cache/' \
     --exclude '/web/.parcel-cache/' \
     --exclude '/web/coverage/' \
+    --exclude '/web/generated/' \
     --exclude '/zproject/dev-secrets.conf' \
     "$SNAPSHOT_DIR/worktree/" "$REMOTE_PATH/"
 
@@ -388,11 +394,13 @@ rsync -a --delete \
     --exclude '/output/' \
     --exclude '/prod-static/' \
     --exclude '/staticfiles/' \
+    --exclude '/static/generated/' \
     --exclude '/.mypy_cache/' \
     --exclude '/.pytest_cache/' \
     --exclude '/.ruff_cache/' \
     --exclude '/web/.parcel-cache/' \
     --exclude '/web/coverage/' \
+    --exclude '/web/generated/' \
     --exclude '/zproject/dev-secrets.conf' \
     "$REMOTE_PATH/" "$SNAPSHOT_DIR/worktree/"
 if [[ -d "$REMOTE_GIT_COMMON_DIR" ]]; then

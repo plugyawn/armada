@@ -51,6 +51,7 @@ from zerver.lib.pear_worker import (
     pear_pinned_repository_value,
     pear_repo_artifact_value_is_durable,
     pear_topic_isolation_username_for_realm,
+    pear_topic_branch_name,
     pear_topic_context_is_paused,
     pear_topic_os_user_isolation_enabled,
     pear_worker_model_for_topic,
@@ -634,7 +635,7 @@ def serialize_pear_topic_context(
         "parent_context_id": context.parent_context_id if context is not None else None,
         "git": build_pear_git_context(
             workdir,
-            topic=topic_name,
+            topic=pear_topic_branch_name(topic_name),
             isolation_username=isolation_username,
         ),
     }
@@ -1018,7 +1019,7 @@ def get_pear_git_tree_backend(
     )
     delta = build_pear_git_context(
         workdir,
-        topic=topic_name,
+        topic=pear_topic_branch_name(topic_name),
         isolation_username=isolation_username,
     )
     graph = ""

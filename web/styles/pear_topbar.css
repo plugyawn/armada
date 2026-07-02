@@ -1,0 +1,112 @@
+/* Pear git-native topbar (P5d).
+
+   Row A ("# stream  ⎇ topic" context + branch switcher) lives here now;
+   the runtime chip (P5d-3), Row C tabs + Canvas view (P5d-5), and the
+   recipient-bar demotion (P5d-6) land in this same file as they ship,
+   so the whole git-native header is one stylesheet.
+
+   Painted with the same navbar tokens as #navbar-fixed-container
+   (zulip.css) so Row A reads as one surface with the full-bleed frame. */
+
+#pear-topbar {
+    &.notdisplayed {
+        display: none;
+    }
+
+    .pear-topbar-row-a {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        height: 40px;
+        padding: 0 12px;
+        background-color: var(--color-background-navbar);
+        box-shadow: inset 0 -1px 0 var(--color-navbar-bottom-border);
+    }
+
+    .pear-topbar-stream {
+        display: inline-flex;
+        align-items: center;
+        gap: 3px;
+        font-weight: 700;
+        font-size: 15px;
+        color: var(--color-text-default);
+        text-decoration: none;
+    }
+
+    .pear-topbar-hash {
+        color: light-dark(var(--slack-text-secondary), var(--slack-text-secondary-dark));
+    }
+
+    .pear-branch-trigger {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 2px 4px;
+        border-radius: 4px;
+        cursor: pointer;
+
+        &:hover {
+            background-color: light-dark(
+                hsl(240deg 2% 11% / 6%),
+                hsl(0deg 0% 100% / 8%)
+            );
+        }
+    }
+
+    .pear-branch-glyph {
+        font-family: monospace;
+        color: light-dark(var(--slack-text-secondary), var(--slack-text-secondary-dark));
+    }
+
+    .pear-branch-name {
+        font-family: monospace;
+        font-size: 14px;
+        color: light-dark(var(--slack-link), var(--slack-link-dark));
+    }
+
+    .pear-branch-trigger .zulip-icon {
+        font-size: 12px;
+        color: light-dark(var(--slack-text-secondary), var(--slack-text-secondary-dark));
+    }
+
+    .pear-branch-mismatch-chip {
+        padding: 1px 6px;
+        border-radius: 4px;
+        color: hsl(0deg 0% 100%);
+        background-color: var(--slack-badge-red);
+        font-size: 11px;
+        font-weight: 600;
+
+        &.notdisplayed {
+            display: none;
+        }
+    }
+
+    .pear-topbar-right-cluster {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-left: auto;
+    }
+}
+
+/* Branch-switcher dropdown option decorations, rendered into the
+   DropdownWidget popper by pear_topbar.ts decorate_options(). */
+.pear-branch-unread {
+    margin-left: 6px;
+    border-radius: 8px;
+    padding: 0 6px;
+    background-color: var(--slack-badge-red);
+    color: hsl(0deg 0% 100%);
+    font-size: 11px;
+    font-weight: 700;
+}
+
+.pear-branch-live-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    margin-left: 6px;
+    border-radius: 50%;
+    background-color: var(--slack-send-green);
+}

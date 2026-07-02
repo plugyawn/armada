@@ -292,8 +292,13 @@
     window width / language, we sync its height in navbar_alerts.js
     */
     --navbar-alerts-wrapper-height: 0px;
+    /* Pear topbar extra rows (Row C tabs, later Row B) grow the fixed
+       navbar height. 0px until a row is shown, so sticky recipient
+       headers and feed padding follow the extra chrome automatically. */
+    --pear-topbar-extra-height: 0px;
     --navbar-fixed-height: calc(
-        var(--header-height) + var(--navbar-alerts-wrapper-height)
+        var(--header-height) + var(--navbar-alerts-wrapper-height) +
+            var(--pear-topbar-extra-height)
     );
     /* Keep content from colliding with the search box. */
     --navbar-content-righthand-offset: 5px;

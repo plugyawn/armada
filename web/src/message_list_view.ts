@@ -32,6 +32,7 @@ import type {MessageViewportInfo} from "./message_viewport.ts";
 import * as muted_users from "./muted_users.ts";
 import * as narrow_state from "./narrow_state.ts";
 import {page_params} from "./page_params.ts";
+import * as pear_runs_store from "./pear_runs_store.ts";
 import * as people from "./people.ts";
 import * as popovers from "./popovers.ts";
 import * as reactions from "./reactions.ts";
@@ -1364,6 +1365,20 @@ export class MessageListView {
         );
     }
 
+    maybe_watch_active_pear_messages(message_containers: MessageContainer[]): void {
+        if (this.list !== message_lists.current) {
+            return;
+        }
+        if (
+            !message_containers.some(
+                (message_container) => message_container.is_pear_active_message,
+            )
+        ) {
+            return;
+        }
+        pear_runs_store.watch_current_narrow_until_idle();
+    }
+
     get_edited_notice_locations(
         include_sender: boolean,
         is_hidden: boolean,
@@ -1428,6 +1443,7 @@ export class MessageListView {
 
         const new_message_groups = this.build_message_groups(messages);
         const message_containers = new_message_groups.flatMap((group) => group.message_containers);
+        this.maybe_watch_active_pear_messages(message_containers);
         this.set_subscription_dividers_and_markers(new_message_groups, where);
         const message_actions = this.merge_message_groups(new_message_groups, where);
         const new_dom_elements = [];
@@ -1983,6 +1999,7 @@ export class MessageListView {
                 message_containers.push(message_container);
             }
         }
+        this.maybe_watch_active_pear_messages(message_containers);
 
         // Rerender each message row, collecting the distinct recipient
         // bars they belong to by their row's rendered group id. The

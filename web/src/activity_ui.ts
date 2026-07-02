@@ -461,7 +461,9 @@ export function rewire_set_cursor_and_filter(value: typeof set_cursor_and_filter
 
 export function initiate_search(): void {
     if (user_filter) {
-        $("body").removeClass("hide-right-sidebar");
+        // The buddy list opens as an overlay (via expand_column in
+        // user_search.ts); the permanent hide-right-sidebar class
+        // stays put.
         popovers.hide_all();
         user_filter.initiate_search();
     }

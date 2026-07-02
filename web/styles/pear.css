@@ -7,6 +7,10 @@
 }
 
 body.pear-right-area-open {
+    /* The open pane host claims its width from the full-bleed frame;
+       the middle column's margin-right consumes this variable. */
+    --pear-right-pane-width: var(--pear-right-area-width);
+
     #pear-right-area {
         position: fixed;
         top: 0;
@@ -23,31 +27,6 @@ body.pear-right-area-open {
         );
         border-left: 1px solid var(--color-border-sidebar);
         background-color: var(--color-background);
-    }
-
-    /* The open pane host pushes the middle column, exactly like the
-       right sidebar does; 7px matches the gutter .hide-right-sidebar
-       leaves beside the feed. */
-    .app-main .column-middle,
-    #compose-content {
-        margin-right: calc(var(--pear-right-area-width) + 7px);
-    }
-
-    @media (width >= $xl_min) {
-        /* When the buddy-list right sidebar is also visible (wide
-           viewports only), the pane host sits inboard of it. */
-        &:not(.hide-right-sidebar) {
-            #pear-right-area {
-                right: var(--right-sidebar-width);
-            }
-
-            .app-main .column-middle,
-            #compose-content {
-                margin-right: calc(
-                    var(--right-sidebar-width) + var(--pear-right-area-width)
-                );
-            }
-        }
     }
 }
 

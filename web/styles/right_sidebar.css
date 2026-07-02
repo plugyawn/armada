@@ -511,20 +511,6 @@
     }
 }
 
-#userlist-toggle {
-    text-align: center;
-    vertical-align: middle;
-}
-
-#userlist-toggle-button {
-    text-decoration: none;
-    color: hsl(0deg 0% 60%);
-
-    &:hover {
-        color: inherit;
-    }
-}
-
 .right-sidebar-items:first-of-type #userlist-header {
     border-top: none;
 }

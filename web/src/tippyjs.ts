@@ -740,24 +740,6 @@ export function initialize(): void {
     });
 
     tippy.delegate("body", {
-        target: "#userlist-toggle-button",
-        delay: LONG_HOVER_DELAY,
-        placement: "bottom",
-        appendTo: () => document.body,
-        onShow(instance) {
-            let template = "show-userlist-tooltip-template";
-            if ($("#right-sidebar-container").css("display") !== "none") {
-                template = "hide-userlist-tooltip-template";
-            }
-            $(instance.reference).attr("data-tooltip-template-id", template);
-            instance.setContent(get_tooltip_content(instance.reference));
-        },
-        onHidden(instance) {
-            instance.destroy();
-        },
-    });
-
-    tippy.delegate("body", {
         target: "#realm-navbar-wide-logo",
         placement: "right",
         appendTo: () => document.body,

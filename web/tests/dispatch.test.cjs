@@ -68,7 +68,6 @@ const scheduled_messages = mock_esm("../src/scheduled_messages");
 const scheduled_messages_feed_ui = mock_esm("../src/scheduled_messages_feed_ui");
 const scheduled_messages_overlay_ui = mock_esm("../src/scheduled_messages_overlay_ui");
 const scheduled_messages_ui = mock_esm("../src/scheduled_messages_ui");
-const scroll_bar = mock_esm("../src/scroll_bar");
 const settings_account = mock_esm("../src/settings_account");
 const settings_bots = mock_esm("../src/settings_bots");
 const settings_data = mock_esm("../src/settings_data");
@@ -1396,7 +1395,6 @@ run_test("user_settings", ({override}) => {
     dispatch(event);
     assert_same(user_settings.receives_typing_notifications, false);
 
-    override(scroll_bar, "set_layout_width", noop);
     event = event_fixtures.user_settings__fluid_layout_width;
     override(user_settings, "fluid_layout_width", false);
     dispatch(event);

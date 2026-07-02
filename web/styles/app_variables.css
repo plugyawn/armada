@@ -370,6 +370,19 @@
        surfaces (panel now; session panes and canvas later). 300px to
        400px at 16px/1em, tracking the viewport in between. */
     --pear-right-area-width: clamp(18.75em, 24vw, 25em);
+    /* The full-bleed frame. The icon rail lands in a later slice, so
+       its width is 0 for now; the right pane width is nonzero only
+       while a Pear pane is open (body.pear-right-area-open). With
+       both at 0, the middle column paints edge-to-edge. */
+    --pear-left-rail-width: 0px;
+    --pear-right-pane-width: 0px;
+    /* Everything left of the middle column. The navbar and the
+       middle column share this seam; it collapses to 0 whenever the
+       left column is hidden (body class or narrow viewport). */
+    --pear-frame-inset: calc(
+        var(--pear-left-rail-width) + var(--left-sidebar-width) +
+            var(--left-sidebar-padding-left)
+    );
     /* 25px at 16px/1em */
     --right-sidebar-vdots-width: 1.5625em;
     /* The width of the icon is reduced by 2px, to account for 2px

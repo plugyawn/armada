@@ -42,12 +42,6 @@ export let left_sidebar_cursor: ListCursor<JQuery>;
 function save_sidebar_toggle_status(): void {
     const ls = localstorage();
     ls.set("left-sidebar", $("body").hasClass("hide-left-sidebar"));
-
-    if (!page_params.is_spectator) {
-        // The right sidebar is never shown in the spectator mode;
-        // avoid interacting with local storage state for it.
-        ls.set("right-sidebar", $("body").hasClass("hide-right-sidebar"));
-    }
 }
 
 export function restore_sidebar_toggle_status(): void {
@@ -56,32 +50,25 @@ export function restore_sidebar_toggle_status(): void {
         $("body").addClass("hide-left-sidebar");
     }
 
-    if (!page_params.is_spectator && ls.get("right-sidebar") !== false) {
-        // The right sidebar defaults to hidden: the reclaimed right
-        // area is an on-demand pane host, so only an explicit stored
-        // preference (the user toggled the sidebar visible) keeps it
-        // open. The right sidebar is never shown in the spectator
-        // mode; avoid processing local storage state for it.
-        $("body").addClass("hide-right-sidebar");
-    }
+    // The right buddy rail is permanently hidden: the reclaimed
+    // right area is an on-demand pane host, and the buddy list only
+    // ever opens as a temporary overlay. Any "show" preference
+    // stored before the rail was retired is deliberately ignored.
+    $("body").addClass("hide-right-sidebar");
 }
 
 export let left_sidebar_expanded_as_overlay = false;
 export let right_sidebar_expanded_as_overlay = false;
 
 export function update_sidebar_aria_expanded(): void {
-    // Reflect current sidebar visibility on the toggle buttons. State is
-    // tracked differently per viewport: at wide viewports the body's
-    // hide-*-sidebar classes are authoritative; at narrow viewports the
-    // overlay flags are.
+    // Reflect current left sidebar visibility on the toggle buttons.
+    // State is tracked differently per viewport: at wide viewports
+    // the body's hide-left-sidebar class is authoritative; at narrow
+    // viewports the overlay flag is.
     const left_expanded = ui_util.matches_viewport_state("gte_md_min")
         ? !$("body").hasClass("hide-left-sidebar")
         : left_sidebar_expanded_as_overlay;
-    const right_expanded = ui_util.matches_viewport_state("gte_xl_min")
-        ? !$("body").hasClass("hide-right-sidebar")
-        : right_sidebar_expanded_as_overlay;
     $(".left-sidebar-toggle-button").attr("aria-expanded", String(left_expanded));
-    $("#userlist-toggle-button").attr("aria-expanded", String(right_expanded));
 }
 
 export function hide_userlist_sidebar(): void {
@@ -99,13 +86,8 @@ export function show_userlist_sidebar(): void {
         return;
     }
 
-    if (ui_util.matches_viewport_state("gte_xl_min")) {
-        $("body").removeClass("hide-right-sidebar");
-        fix_invite_user_button_flicker();
-        update_sidebar_aria_expanded();
-        return;
-    }
-
+    // There is no persistent buddy rail in the full-bleed frame; the
+    // user list always opens as a temporary overlay, at any width.
     $userlist_sidebar.addClass("expanded");
     if (left_sidebar_expanded_as_overlay) {
         $userlist_sidebar.addClass("topmost-overlay");
@@ -202,33 +184,6 @@ export function initialize(): void {
         }
     });
 
-    $("#userlist-toggle-button").on("click", (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-
-        if (ui_util.matches_viewport_state("gte_xl_min")) {
-            $("body").toggleClass("hide-right-sidebar");
-            if (!$("body").hasClass("hide-right-sidebar")) {
-                fix_invite_user_button_flicker();
-            }
-            // We recheck the scrolling-button status of the compose
-            // box, which may change for users who've chosen to
-            // use full width on wide screens.
-            compose_ui.maybe_show_scrolling_formatting_buttons(
-                "#message-formatting-controls-container",
-            );
-            save_sidebar_toggle_status();
-            update_sidebar_aria_expanded();
-            return;
-        }
-
-        if (right_sidebar_expanded_as_overlay) {
-            hide_userlist_sidebar();
-            return;
-        }
-        show_userlist_sidebar();
-    });
-
     $(".left-sidebar-toggle-button").on("click", (e) => {
         e.preventDefault();
         e.stopPropagation();
@@ -280,10 +235,7 @@ export function initialize(): void {
 
             const $elt = $(e.target);
             // Since sidebar toggle buttons have their own click handlers, don't handle them here.
-            if (
-                $elt.closest(".left-sidebar-toggle-button").length > 0 ||
-                $elt.closest("#userlist-toggle-button").length > 0
-            ) {
+            if ($elt.closest(".left-sidebar-toggle-button").length > 0) {
                 return;
             }
 

@@ -104,7 +104,7 @@ PEAR_AGENT_SKILL_DEFINITIONS: Final[tuple[dict[str, Any], ...]] = (
         ],
     },
 )
-PEAR_SERVER_CONTRACT_VERSION: Final = 37
+PEAR_SERVER_CONTRACT_VERSION: Final = 38
 PEAR_URL_RE: Final = r"https?://[^\s<>]+"
 PEAR_STEER_PROMPT: Final = "Steering update:"
 PEAR_FIX_BUG_PROMPT: Final = "Fix bug:"

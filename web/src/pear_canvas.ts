@@ -32,6 +32,20 @@ const pear_canvas_response_schema = z.object({
 
 type PearCanvas = z.infer<typeof pear_canvas_schema>;
 
+// What the read view should show for a given canvas body: either the
+// fixed "empty" placeholder text, or the Markdown source to render.
+type ReadViewPlan = {mode: "empty"; text: string} | {mode: "render"; content: string};
+
+// The subset of a fresh canvas payload that a save conflict adopts,
+// plus the signal that the user's editor draft must be preserved.
+type CanvasConflictResolution = {
+    base_version: string;
+    max_bytes: number;
+    relative_path: string;
+    content: string;
+    keep_draft: true;
+};
+
 // Stream/topic for the currently open canvas modal; the canvas is
 // per-topic, so we pin the narrow that the modal was opened from.
 let open_context: {stream: string; topic: string} | undefined;
@@ -41,9 +55,60 @@ let canvas_max_bytes: number | undefined;
 // the read view has been re-rendered.
 let render_sequence = 0;
 
-function utf8_byte_length(text: string): number {
+// --- Pure, DOM-free helpers (unit-tested in pear_canvas.test.cjs) ---
+
+export function utf8_byte_length(text: string): number {
     return new TextEncoder().encode(text).length;
 }
+
+// The canvas may not exceed max_bytes when measured as UTF-8, matching
+// the server-side check in put_pear_canvas_backend.
+export function content_within_byte_limit(content: string, max_bytes: number): boolean {
+    return utf8_byte_length(content) <= max_bytes;
+}
+
+// A canvas that is blank or whitespace-only shows a placeholder rather
+// than an (empty) rendered-Markdown body.
+export function is_canvas_empty(content: string): boolean {
+    return content.trim() === "";
+}
+
+export function read_view_plan(content: string): ReadViewPlan {
+    if (is_canvas_empty(content)) {
+        return {mode: "empty", text: $t({defaultMessage: "This canvas is empty."})};
+    }
+    return {mode: "render", content};
+}
+
+// Extract the canvas document from a `{pear_canvas: {...}}` response
+// body. Unknown keys (e.g. the server's workdir_path/path) are stripped.
+export function parse_canvas_response(raw: unknown): PearCanvas {
+    return pear_canvas_response_schema.parse(raw).pear_canvas;
+}
+
+// On an HTTP 409 CAS conflict, the PUT response carries the fresh
+// document. We adopt its version and max_bytes for the next save
+// attempt, but keep_draft signals that the caller must NOT overwrite
+// the user's editor text. Returns undefined when the body doesn't
+// parse, in which case the generic save-failed error is left visible.
+export function resolve_canvas_conflict(
+    response_json: unknown,
+): CanvasConflictResolution | undefined {
+    const parsed = pear_canvas_response_schema.safeParse(response_json);
+    if (!parsed.success) {
+        return undefined;
+    }
+    const fresh = parsed.data.pear_canvas;
+    return {
+        base_version: fresh.version,
+        max_bytes: fresh.max_bytes,
+        relative_path: fresh.relative_path,
+        content: fresh.content,
+        keep_draft: true,
+    };
+}
+
+// --- End pure helpers ---
 
 function modal_is_open_for(stream: string, topic: string): boolean {
     return (
@@ -77,15 +142,16 @@ function render_read_view(content: string): void {
     if ($rendered.length === 0) {
         return;
     }
-    if (content.trim() === "") {
-        $rendered.text($t({defaultMessage: "This canvas is empty."}));
+    const plan = read_view_plan(content);
+    if (plan.mode === "empty") {
+        $rendered.text(plan.text);
         return;
     }
     // Render the Markdown document server-side, like the compose
     // box preview does.
     void channel.post({
         url: "/json/messages/render",
-        data: {content},
+        data: {content: plan.content},
         success(raw_data) {
             if (sequence !== render_sequence) {
                 return;
@@ -137,8 +203,7 @@ function load_canvas(stream: string, topic: string): void {
                 return;
             }
             stop_loading_indicator();
-            const data = pear_canvas_response_schema.parse(raw_data);
-            apply_canvas(data.pear_canvas);
+            apply_canvas(parse_canvas_response(raw_data));
         },
         error(xhr) {
             if (!modal_is_open_for(stream, topic)) {
@@ -174,7 +239,7 @@ function validate_before_save(): boolean {
         // safe to save yet.
         return false;
     }
-    if (utf8_byte_length(editor_content()) > canvas_max_bytes) {
+    if (!content_within_byte_limit(editor_content(), canvas_max_bytes)) {
         ui_report.client_error(
             $t_html(
                 {defaultMessage: "The canvas is too large to save ({max_bytes} byte limit)."},
@@ -188,18 +253,18 @@ function validate_before_save(): boolean {
 }
 
 function handle_save_conflict(xhr: JQuery.jqXHR): void {
-    const parsed = pear_canvas_response_schema.safeParse(xhr.responseJSON);
-    if (!parsed.success) {
+    const resolution = resolve_canvas_conflict(xhr.responseJSON);
+    if (resolution === undefined) {
         // Leave the generic save-failed error visible.
         return;
     }
-    const fresh = parsed.data.pear_canvas;
     // Adopt the fresh document version for the next save attempt,
-    // but keep the user's draft in the textarea untouched.
-    base_version = fresh.version;
-    canvas_max_bytes = fresh.max_bytes;
-    $("#pear-canvas-modal .dialog_heading").text(fresh.relative_path);
-    render_read_view(fresh.content);
+    // but keep the user's draft in the textarea untouched
+    // (resolution.keep_draft).
+    base_version = resolution.base_version;
+    canvas_max_bytes = resolution.max_bytes;
+    $("#pear-canvas-modal .dialog_heading").text(resolution.relative_path);
+    render_read_view(resolution.content);
     update_byte_info();
     ui_report.client_error(
         $t_html({

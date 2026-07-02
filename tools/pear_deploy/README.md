@@ -103,13 +103,14 @@ tools/pear_deploy/update_remote.sh --yes
 ```
 
 The first command is a read-only gate. It verifies that the local tracked tree is
-clean, the remote tracked tree is clean, and the remote HEAD is not ahead of the
-local `pear-main` history. The `--yes` run snapshots the current remote checkout,
-syncs this checkout with the same excludes as bootstrap, applies `zerver`
-migrations, restarts `pear-worker`, `pear-embedded-bots`, and `pear-zulip-dev`
-together, verifies the Pear backend tests, and records the deployed SHA in
-`/home/zulipdev/pear-deployed-sha`. If a post-snapshot step fails, it restores
-the pre-deploy snapshot and restarts the Pear services.
+clean, the checkout is the main `zulip/` submodule rather than a linked Git
+worktree, the remote tracked tree is clean, and the remote HEAD is not ahead of
+the local `pear-main` history. The `--yes` run snapshots the current remote
+checkout, syncs this checkout with the same excludes as bootstrap, applies
+`zerver` migrations, restarts `pear-worker`, `pear-embedded-bots`, and
+`pear-zulip-dev` together, verifies the Pear backend tests, and records the
+deployed SHA in `/home/zulipdev/pear-deployed-sha`. If a post-snapshot step
+fails, it restores the pre-deploy snapshot and restarts the Pear services.
 
 ## Cleanup
 

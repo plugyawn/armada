@@ -204,6 +204,9 @@ function stop_pear_thinking_animation(): void {
 }
 
 function update_pear_thinking_glyphs(): void {
+    if (pear_run_state.expire_stale_active_run_result_messages()) {
+        return;
+    }
     const $markers = pear_thinking_markers();
     if ($markers.length === 0) {
         stop_pear_thinking_animation();

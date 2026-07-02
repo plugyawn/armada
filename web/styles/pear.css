@@ -468,4 +468,17 @@
             grid-area: row-content;
         }
     }
+
+    /* Read-only git-status context block at the top of the menu. */
+    .pear-runtime-git-info {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        padding: 5px 15px;
+    }
+
+    .pear-runtime-git-status-row {
+        color: var(--color-text-item);
+        font-size: 0.9em;
+    }
 }

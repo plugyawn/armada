@@ -30,6 +30,7 @@ DEPLOY_UNTRACKED_ALLOW_PREFIXES=(
     '.ruff_cache/'
     'web/.parcel-cache/'
     'web/coverage/'
+    'zproject/dev-secrets.conf'
 )
 
 RSYNC_EXCLUDES=(
@@ -47,6 +48,7 @@ RSYNC_EXCLUDES=(
     --exclude '/.ruff_cache/'
     --exclude '/web/.parcel-cache/'
     --exclude '/web/coverage/'
+    --exclude '/zproject/dev-secrets.conf'
 )
 
 usage() {
@@ -260,6 +262,7 @@ rsync -a --delete \
     --exclude '/.ruff_cache/' \
     --exclude '/web/.parcel-cache/' \
     --exclude '/web/coverage/' \
+    --exclude '/zproject/dev-secrets.conf' \
     "$SNAPSHOT_DIR/worktree/" "$REMOTE_PATH/"
 
 if [[ -d "$SNAPSHOT_DIR/git-common" ]]; then
@@ -390,6 +393,7 @@ rsync -a --delete \
     --exclude '/.ruff_cache/' \
     --exclude '/web/.parcel-cache/' \
     --exclude '/web/coverage/' \
+    --exclude '/zproject/dev-secrets.conf' \
     "$REMOTE_PATH/" "$SNAPSHOT_DIR/worktree/"
 if [[ -d "$REMOTE_GIT_COMMON_DIR" ]]; then
     rsync -a --delete "$REMOTE_GIT_COMMON_DIR/" "$SNAPSHOT_DIR/git-common/"

@@ -31,7 +31,10 @@ function notify_active_result_message_change_listeners(): void {
     }
 }
 
-export function set_active_run_result_messages(runs: PearRunForActiveMessage[]): void {
+export function set_active_run_result_messages(
+    runs: PearRunForActiveMessage[],
+    options: {force_reconcile?: boolean} = {},
+): void {
     const next_active_result_message_ids = new Set<number>();
     for (const run of runs) {
         const result_message_id = run.result_message_id;
@@ -46,6 +49,9 @@ export function set_active_run_result_messages(runs: PearRunForActiveMessage[]):
     }
     active_result_message_ids_refreshed_at = Date.now();
     if (sets_equal(active_result_message_ids, next_active_result_message_ids)) {
+        if (options.force_reconcile === true) {
+            notify_active_result_message_change_listeners();
+        }
         return;
     }
     active_result_message_ids.clear();

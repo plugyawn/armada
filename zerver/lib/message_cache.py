@@ -11,6 +11,7 @@ from zerver.lib.cache import cache_set_many, cache_with_key, to_dict_cache_key, 
 from zerver.lib.display_recipient import bulk_fetch_display_recipients
 from zerver.lib.markdown import render_message_markdown, topic_links
 from zerver.lib.markdown import version as markdown_version
+from zerver.lib.pear_identity import pear_bot_user_ids_from_user_ids
 from zerver.lib.query_helpers import query_for_ids
 from zerver.lib.timestamp import datetime_to_timestamp
 from zerver.lib.topic import DB_TOPIC_NAME, TOPIC_LINKS, TOPIC_NAME
@@ -150,6 +151,7 @@ class MessageDict:
         processor.
         """
         MessageDict.bulk_hydrate_sender_info([obj])
+        MessageDict.bulk_hydrate_pear_message_flags([obj])
         MessageDict.bulk_hydrate_recipient_info([obj])
 
         return obj
@@ -172,6 +174,7 @@ class MessageDict:
               often fetching hundreds of messages.
         """
         MessageDict.bulk_hydrate_sender_info(objs)
+        MessageDict.bulk_hydrate_pear_message_flags(objs)
         MessageDict.bulk_hydrate_recipient_info(objs)
 
         for obj in objs:
@@ -324,7 +327,9 @@ class MessageDict:
         ]
 
         MessageDict.sew_submessages_and_reactions_to_msgs(message_rows)
-        return [MessageDict.build_dict_from_raw_db_row(row) for row in message_rows]
+        message_dicts = [MessageDict.build_dict_from_raw_db_row(row) for row in message_rows]
+        MessageDict.bulk_hydrate_pear_message_flags(message_dicts)
+        return message_dicts
 
     @staticmethod
     def ids_to_dict(needed_ids: list[int]) -> list[dict[str, Any]]:
@@ -349,7 +354,9 @@ class MessageDict:
         # Uses index: zerver_message_pkey
         messages = Message.objects.filter(id__in=needed_ids).values(*fields)
         MessageDict.sew_submessages_and_reactions_to_msgs(messages)
-        return [MessageDict.build_dict_from_raw_db_row(row) for row in messages]
+        message_dicts = [MessageDict.build_dict_from_raw_db_row(row) for row in messages]
+        MessageDict.bulk_hydrate_pear_message_flags(message_dicts)
+        return message_dicts
 
     @staticmethod
     def build_dict_from_raw_db_row(row: dict[str, Any]) -> dict[str, Any]:
@@ -500,6 +507,16 @@ class MessageDict:
             obj["sender_avatar_version"] = user_row["avatar_version"]
             obj["sender_is_mirror_dummy"] = user_row["is_mirror_dummy"]
             obj["sender_email_address_visibility"] = user_row["email_address_visibility"]
+
+    @staticmethod
+    def bulk_hydrate_pear_message_flags(objs: list[dict[str, Any]]) -> None:
+        objs_to_hydrate = [obj for obj in objs if "is_pear_message" not in obj]
+        pear_bot_user_ids = pear_bot_user_ids_from_user_ids(
+            obj["sender_id"] for obj in objs_to_hydrate
+        )
+
+        for obj in objs_to_hydrate:
+            obj["is_pear_message"] = obj["sender_id"] in pear_bot_user_ids
 
     @staticmethod
     def hydrate_recipient_info(obj: dict[str, Any], display_recipient: DisplayRecipientT) -> None:

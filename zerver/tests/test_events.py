@@ -737,6 +737,27 @@ class NormalActionsTest(BaseAction):
             )
         self.assertEqual(events[0]["message"][TOPIC_NAME], "")
 
+    def test_pear_send_message_event_is_flagged(self) -> None:
+        pear_bot = self.create_test_bot(
+            "pear",
+            self.user_profile,
+            full_name="Pear",
+            bot_type=UserProfile.EMBEDDED_BOT,
+            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+            config_data=orjson.dumps({}).decode(),
+        )
+
+        with self.verify_action(event_types=["message"]) as events:
+            self.send_stream_message(
+                pear_bot,
+                "Denmark",
+                content="pear status",
+                skip_capture_on_commit_callbacks=True,
+            )
+
+        check_message("events[0]", events[0])
+        self.assertTrue(events[0]["message"]["is_pear_message"])
+
     def test_user_creation_events_on_sending_messages(self) -> None:
         self.set_up_db_for_testing_user_access()
         polonius = self.example_user("polonius")

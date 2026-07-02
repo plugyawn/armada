@@ -168,6 +168,7 @@ class MessageFieldForDirectMessageEvent(BaseModel):
     content_type: Literal["text/html"]
     id: int
     is_me_message: bool
+    is_pear_message: bool
     reactions: list[dict[str, object]]
     recipient_id: int
     sender_realm_str: str
@@ -244,6 +245,7 @@ class MessageFieldForMessageEvent(BaseModel):
     content_type: Literal["text/html"]
     id: int
     is_me_message: bool
+    is_pear_message: bool
     reactions: list[dict[str, object]]
     recipient_id: int
     sender_realm_str: str

@@ -8960,6 +8960,7 @@ paths:
                                 edit_history: {}
                                 id: {}
                                 is_me_message: {}
+                                is_pear_message: {}
                                 last_edit_timestamp: {}
                                 last_moved_timestamp: {}
                                 reactions: {}
@@ -9046,6 +9047,7 @@ paths:
                                 ],
                               "content_type": "text/html",
                               "is_me_message": false,
+                              "is_pear_message": false,
                               "timestamp": 1527921326,
                               "sender_id": 4,
                               "sender_full_name": "King Hamlet",
@@ -9068,6 +9070,7 @@ paths:
                               "display_recipient": "Verona",
                               "content_type": "text/html",
                               "is_me_message": false,
+                              "is_pear_message": false,
                               "timestamp": 1527939746,
                               "sender_id": 4,
                               "sender_full_name": "King Hamlet",
@@ -10351,6 +10354,7 @@ paths:
                               edit_history: {}
                               id: {}
                               is_me_message: {}
+                              is_pear_message: {}
                               last_edit_timestamp: {}
                               last_moved_timestamp: {}
                               reactions: {}
@@ -10418,6 +10422,7 @@ paths:
                               ],
                             "content_type": "text/html",
                             "is_me_message": false,
+                            "is_pear_message": false,
                             "timestamp": 1527921326,
                             "sender_id": 4,
                             "sender_full_name": "King Hamlet",
@@ -27076,6 +27081,7 @@ paths:
                           edit_history: {}
                           id: {}
                           is_me_message: {}
+                          is_pear_message: {}
                           last_edit_timestamp: {}
                           last_moved_timestamp: {}
                           reactions: {}
@@ -27120,6 +27126,7 @@ paths:
                         "type": "stream",
                         "id": 112,
                         "is_me_message": false,
+                        "is_pear_message": false,
                         "reactions": [],
                         "sender_realm_str": "zulip",
                       },
@@ -28956,6 +28963,7 @@ components:
             edit_history: {}
             id: {}
             is_me_message: {}
+            is_pear_message: {}
             last_edit_timestamp: {}
             last_moved_timestamp: {}
             reactions: {}
@@ -29155,6 +29163,10 @@ components:
             Whether the message is a [/me status message][status-messages]
 
             [status-messages]: /help/format-your-message-using-markdown#status-messages
+        is_pear_message:
+          type: boolean
+          description: |
+            Whether the message was sent by the Pear embedded bot.
         last_edit_timestamp:
           type: integer
           description: |

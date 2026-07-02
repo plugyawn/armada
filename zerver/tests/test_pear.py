@@ -2315,6 +2315,22 @@ class PearSessionDefaultsTest(TestCase):
                 explicitly_addressed=True,
             )
         )
+        self.assertFalse(
+            pear_worker_should_start(
+                "Fold in the failing terminal UI test too.",
+                active_session,
+                explicitly_addressed=True,
+                response_policy="mentions_only",
+            )
+        )
+        self.assertTrue(
+            pear_worker_should_start(
+                "Fold in the failing terminal UI test too.",
+                mentions_only_session,
+                explicitly_addressed=True,
+                response_policy="ambient",
+            )
+        )
 
     def test_worker_should_start_for_run_routine_request_with_routine(self) -> None:
         payload = get_pear_session_payload()

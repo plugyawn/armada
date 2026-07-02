@@ -36,6 +36,7 @@ from zerver.lib.pear import (
     build_pear_config_payload,
     get_pear_session_payload,
     get_pear_live_run_state,
+    normalize_pear_response_policy,
     pear_normalize_token_usage,
     pear_token_usage_summary,
 )
@@ -53,12 +54,14 @@ from zerver.lib.pear_worker import (
     pear_topic_isolation_username_for_realm,
     pear_topic_branch_name,
     pear_topic_context_is_paused,
+    pear_topic_context_response_policy,
     pear_topic_os_user_isolation_enabled,
     pear_worker_model_for_topic,
     pear_worker_reasoning_effort_for_topic,
     pear_worker_sandbox_for_topic,
     pear_worker_workdir_for_topic,
     set_pear_topic_context_paused,
+    set_pear_topic_context_response_policy,
 )
 from zerver.lib.response import json_success
 from zerver.lib.streams import access_stream_by_name
@@ -573,6 +576,9 @@ def serialize_pear_topic_context(
             else default_reasoning_effort
         )
     )
+    selected_response_policy = normalize_pear_response_policy(
+        context.response_policy if context is not None else None
+    )
     workdir = (
         context.workdir.strip()
         if context is not None and context.workdir.strip()
@@ -625,6 +631,7 @@ def serialize_pear_topic_context(
         "reasoning_effort": selected_reasoning_effort,
         "default_reasoning_effort": default_reasoning_effort,
         "reasoning_efforts": runtime_config["reasoning_efforts"],
+        "response_policy": selected_response_policy,
         "github_repo": github_repo,
         "pinned_repo": pinned_repo,
         "repo_label": repo_label,
@@ -1064,19 +1071,28 @@ def post_pear_topic_context_backend(
         ApiParamConfig("topic", documentation_status=INTENTIONALLY_UNDOCUMENTED),
     ],
     model: Annotated[
-        str,
+        str | None,
         ApiParamConfig("model", documentation_status=INTENTIONALLY_UNDOCUMENTED),
-    ],
+    ] = None,
     reasoning_effort: Annotated[
         str | None,
         ApiParamConfig("reasoning_effort", documentation_status=INTENTIONALLY_UNDOCUMENTED),
     ] = None,
+    response_policy: Annotated[
+        str | None,
+        ApiParamConfig("response_policy", documentation_status=INTENTIONALLY_UNDOCUMENTED),
+    ] = None,
 ) -> HttpResponse:
     stream, _sub = access_stream_by_name(user_profile, stream_name)
-    model = clean_pear_model_slug(model)
+    clean_model = clean_pear_model_slug(model) if model is not None else None
     clean_reasoning_effort = (
         clean_pear_reasoning_effort(reasoning_effort)
         if reasoning_effort is not None
+        else None
+    )
+    clean_response_policy = (
+        normalize_pear_response_policy(response_policy)
+        if response_policy is not None
         else None
     )
     context = ensure_pear_topic_context(user_profile, stream=stream_name, topic=topic_name)
@@ -1090,17 +1106,26 @@ def post_pear_topic_context_backend(
         stream=stream_name,
         topic=topic_name,
     )
-    model_changed = previous_model != model
+    previous_response_policy = pear_topic_context_response_policy(
+        user_profile,
+        stream=stream_name,
+        topic=topic_name,
+    )
+    model_changed = clean_model is not None and previous_model != clean_model
     reasoning_effort_changed = (
         clean_reasoning_effort is not None
         and previous_reasoning_effort != clean_reasoning_effort
     )
-    if model_changed:
-        context.model = model
+    response_policy_changed = (
+        clean_response_policy is not None
+        and previous_response_policy != clean_response_policy
+    )
+    if model_changed and clean_model is not None:
+        context.model = clean_model
         context.date_updated = timezone_now()
         context.save(update_fields=["model", "date_updated"])
-    elif not context.model:
-        context.model = model
+    elif clean_model is not None and not context.model:
+        context.model = clean_model
         context.date_updated = timezone_now()
         context.save(update_fields=["model", "date_updated"])
 
@@ -1110,8 +1135,17 @@ def post_pear_topic_context_backend(
             context.date_updated = timezone_now()
             context.save(update_fields=["reasoning_effort", "date_updated"])
 
-    changed = model_changed or reasoning_effort_changed
-    if model_changed:
+    if clean_response_policy is not None:
+        set_pear_topic_context_response_policy(
+            user_profile,
+            stream=stream_name,
+            topic=topic_name,
+            response_policy=clean_response_policy,
+        )
+        context.refresh_from_db(fields=["response_policy", "date_updated"])
+
+    changed = model_changed or reasoning_effort_changed or response_policy_changed
+    if model_changed and clean_model is not None:
         pear_bot = get_selected_pear_bot(user_profile)
         if pear_bot is None:
             raise JsonableError(_("Pear bot is not configured."))
@@ -1119,7 +1153,7 @@ def post_pear_topic_context_backend(
             pear_bot.user_profile,
             stream,
             topic_name,
-            f"{user_profile.full_name} changed current model to `{model}`.",
+            f"{user_profile.full_name} changed current model to `{clean_model}`.",
             mark_as_read_for_acting_user=True,
             acting_user=user_profile,
         )
@@ -1186,6 +1220,11 @@ def get_pear_active_session_backend(
             messages=message_rows,
             topic_message_count=message_count,
             is_paused=pear_topic_context_is_paused(
+                user_profile,
+                stream=pear_session["stream"],
+                topic=pear_session["topic"],
+            ),
+            response_policy=pear_topic_context_response_policy(
                 user_profile,
                 stream=pear_session["stream"],
                 topic=pear_session["topic"],

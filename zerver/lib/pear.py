@@ -2284,7 +2284,11 @@ def pear_worker_should_start(
     active_session: PearActiveSessionSummary | None = None,
     *,
     explicitly_addressed: bool = False,
+    response_policy: str | None = None,
 ) -> bool:
+    synthetic_explicit_request = explicitly_addressed and not is_pear_request_message(
+        content
+    )
     content = normalize_pear_explicit_request_content(
         content,
         explicitly_addressed=explicitly_addressed,
@@ -2316,12 +2320,21 @@ def pear_worker_should_start(
             and active_session["worker_can_run"]
         )
     if is_pear_request_message(content):
+        if (
+            synthetic_explicit_request
+            and response_policy is not None
+            and normalize_pear_response_policy(response_policy) != "ambient"
+        ):
+            return False
         return is_pear_thread_request_message(content)
     if not explicitly_addressed:
         return False
     if active_session is None:
         return False
-    if active_session["response_policy"] != "ambient":
+    effective_response_policy = normalize_pear_response_policy(
+        response_policy if response_policy is not None else active_session["response_policy"]
+    )
+    if effective_response_policy != "ambient":
         return False
     return active_session["state"] in {"requested", "active"} and active_session[
         "worker_can_run"
@@ -3345,6 +3358,7 @@ def build_pear_active_session_summary(
     recent_messages: list[PearRecentMessage] | None = None,
     workspace_context: PearWorkspaceContext | None = None,
     is_paused: bool = False,
+    response_policy: str | None = None,
 ) -> PearActiveSessionSummary:
     artifact_list = list(artifacts or [])
     routine_artifacts = active_pear_routine_artifacts(artifact_list)
@@ -3375,8 +3389,10 @@ def build_pear_active_session_summary(
     latest_response_policy = (
         response_policy_artifacts[0] if response_policy_artifacts else None
     )
-    response_policy = normalize_pear_response_policy(
-        latest_response_policy["value"] if latest_response_policy is not None else None
+    normalized_response_policy = normalize_pear_response_policy(
+        response_policy
+        if response_policy is not None
+        else (latest_response_policy["value"] if latest_response_policy is not None else None)
     )
     routine_cadence_artifacts = [
         artifact for artifact in artifact_list if artifact["kind"] == "routine_cadence"
@@ -3486,7 +3502,7 @@ def build_pear_active_session_summary(
         "latest_response_policy": latest_response_policy["value"]
         if latest_response_policy is not None
         else None,
-        "response_policy": response_policy,
+        "response_policy": normalized_response_policy,
         "routine_cadence_count": len(routine_cadence_artifacts),
         "latest_routine_cadence_message_id": latest_routine_cadence["message_id"]
         if latest_routine_cadence is not None
@@ -3541,6 +3557,7 @@ def build_pear_active_session_summary_from_messages(
     latest_codex_thread_id: str | None = None,
     workspace_context: PearWorkspaceContext | None = None,
     is_paused: bool = False,
+    response_policy: str | None = None,
 ) -> PearActiveSessionSummary:
     latest_message_id: int | None = None
     latest_request_message_id: int | None = None
@@ -3602,6 +3619,7 @@ def build_pear_active_session_summary_from_messages(
         recent_messages=build_pear_recent_messages(sorted_messages),
         workspace_context=workspace_context,
         is_paused=is_paused,
+        response_policy=response_policy,
     )
 
 
@@ -3940,6 +3958,44 @@ class PearEmbeddedBotHandler:
                 is_paused=is_paused,
             )
 
+    def topic_response_policy(
+        self,
+        bot_handler: Any,
+        *,
+        stream: str,
+        topic: str,
+    ) -> str | None:
+        topic_response_policy = getattr(self.worker_run_store, "topic_response_policy", None)
+        if not callable(topic_response_policy):
+            return None
+        response_policy = topic_response_policy(
+            bot_handler,
+            stream=stream,
+            topic=topic,
+        )
+        return normalize_pear_response_policy(response_policy)
+
+    def set_topic_response_policy(
+        self,
+        bot_handler: Any,
+        *,
+        stream: str,
+        topic: str,
+        response_policy: str,
+    ) -> None:
+        set_topic_response_policy = getattr(
+            self.worker_run_store,
+            "set_topic_response_policy",
+            None,
+        )
+        if callable(set_topic_response_policy):
+            set_topic_response_policy(
+                bot_handler,
+                stream=stream,
+                topic=topic,
+                response_policy=response_policy,
+            )
+
     def register_worker_progress_message(
         self,
         bot_handler: Any,
@@ -3978,6 +4034,17 @@ class PearEmbeddedBotHandler:
         message_id = pear_message_id(message)
         stream = pear_message_stream(message)
         topic = pear_message_topic(message)
+        db_response_policy = (
+            self.topic_response_policy(
+                bot_handler,
+                stream=stream,
+                topic=topic,
+            )
+            if message.get("type") == "stream"
+            else None
+        )
+        if active_session is not None and db_response_policy is not None:
+            active_session["response_policy"] = db_response_policy
         requesting_user_id_value = message.get("sender_id")
         requesting_user_id = (
             requesting_user_id_value if isinstance(requesting_user_id_value, int) else None
@@ -4025,9 +4092,10 @@ class PearEmbeddedBotHandler:
             ),
         )
         should_start_worker = message.get("type") == "stream" and pear_worker_should_start(
-            content,
+            raw_content,
             active_session,
             explicitly_addressed=explicitly_addressed,
+            response_policy=db_response_policy,
         )
         should_steer_active_run = (
             explicitly_addressed
@@ -4074,9 +4142,16 @@ class PearEmbeddedBotHandler:
         elif is_pear_response_policy_template_message(
             content
         ) or is_pear_response_policy_request_message(content):
-            response = build_pear_response_policy_ack_message(
-                parse_pear_response_policy_instruction(content)
+            response_policy = parse_pear_response_policy_instruction(content)
+            self.set_topic_response_policy(
+                bot_handler,
+                stream=stream,
+                topic=topic,
+                response_policy=response_policy,
             )
+            if active_session is not None:
+                active_session["response_policy"] = normalize_pear_response_policy(response_policy)
+            response = build_pear_response_policy_ack_message(response_policy)
         elif is_pear_routine_cadence_template_message(content):
             response = build_pear_routine_cadence_ack_message(
                 parse_pear_routine_cadence_instruction(content)

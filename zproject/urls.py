@@ -95,6 +95,20 @@ from zerver.views.navigation_views import (
     update_navigation_view,
 )
 from zerver.views.onboarding_steps import mark_onboarding_step_as_read
+from zerver.views.pear import (
+    get_pear_active_session_backend,
+    get_pear_config_backend,
+    get_pear_run_backend,
+    get_pear_runs_backend,
+    get_pear_session_backend,
+    get_pear_topic_context_backend,
+    post_pear_config_backend,
+    post_pear_run_cancel_backend,
+    post_pear_run_pause_backend,
+    post_pear_run_resume_backend,
+    post_pear_side_backend,
+    post_pear_topic_context_backend,
+)
 from zerver.views.presence import (
     get_presence_backend,
     get_status_backend,
@@ -388,6 +402,48 @@ v1_api_and_json_patterns = [
     rest_path("drafts/<int:draft_id>", PATCH=edit_draft, DELETE=delete_draft),
     # navigation_views -> zerver.views.navigation_views
     rest_path("navigation_views", GET=get_navigation_views, POST=add_navigation_view),
+    rest_path(
+        "pear/session",
+        GET=(get_pear_session_backend, {"intentionally_undocumented"}),
+    ),
+    rest_path(
+        "pear/session/active",
+        GET=(get_pear_active_session_backend, {"intentionally_undocumented"}),
+    ),
+    rest_path(
+        "pear/config",
+        GET=(get_pear_config_backend, {"intentionally_undocumented"}),
+        POST=(post_pear_config_backend, {"intentionally_undocumented"}),
+    ),
+    rest_path(
+        "pear/topic-context",
+        GET=(get_pear_topic_context_backend, {"intentionally_undocumented"}),
+        POST=(post_pear_topic_context_backend, {"intentionally_undocumented"}),
+    ),
+    rest_path(
+        "pear/runs",
+        GET=(get_pear_runs_backend, {"intentionally_undocumented"}),
+    ),
+    rest_path(
+        "pear/runs/<int:run_id>",
+        GET=(get_pear_run_backend, {"intentionally_undocumented"}),
+    ),
+    rest_path(
+        "pear/runs/<int:run_id>/cancel",
+        POST=(post_pear_run_cancel_backend, {"intentionally_undocumented"}),
+    ),
+    rest_path(
+        "pear/runs/<int:run_id>/pause",
+        POST=(post_pear_run_pause_backend, {"intentionally_undocumented"}),
+    ),
+    rest_path(
+        "pear/runs/<int:run_id>/resume",
+        POST=(post_pear_run_resume_backend, {"intentionally_undocumented"}),
+    ),
+    rest_path(
+        "pear/side",
+        POST=(post_pear_side_backend, {"intentionally_undocumented"}),
+    ),
     rest_path(
         "navigation_views/<path:fragment>",
         PATCH=update_navigation_view,

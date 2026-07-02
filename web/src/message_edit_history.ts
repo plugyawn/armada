@@ -32,7 +32,8 @@ type EditHistoryEntry = {
     initial_entry_for_move_history: boolean;
     edited_at_time: string;
     edited_by_notice: string;
-    timestamp: number; // require to set data-message-id for overlay message row
+    timestamp: number;
+    message_edit_history_id: string;
     is_stream: boolean;
     recipient_bar_color: string | undefined;
     body_to_render: string | undefined;
@@ -230,6 +231,7 @@ export function fetch_and_render_message_history(message: Message): void {
                     edited_at_time,
                     edited_by_notice,
                     timestamp: msg.timestamp,
+                    message_edit_history_id: `${msg.timestamp}-${content_edit_history.length}`,
                     is_stream: message.is_stream,
                     recipient_bar_color: undefined,
                     body_to_render,
@@ -315,11 +317,13 @@ export function fetch_and_render_message_history(message: Message): void {
                     $img.removeClass("image-loading-placeholder");
                 });
 
-            const first_element_id = content_edit_history[0]!.timestamp;
-            messages_overlay_ui.set_initial_element(
-                String(first_element_id),
-                keyboard_handling_context,
-            );
+            const first_element = content_edit_history[0];
+            if (first_element !== undefined) {
+                messages_overlay_ui.set_initial_element(
+                    first_element.message_edit_history_id,
+                    keyboard_handling_context,
+                );
+            }
         },
         error(xhr) {
             ui_report.error(

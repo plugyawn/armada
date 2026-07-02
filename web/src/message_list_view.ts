@@ -58,6 +58,8 @@ export type MessageContainer = {
     year_changed: boolean;
     include_recipient: boolean;
     include_sender: boolean;
+    is_pear_active_message: boolean;
+    is_pear_message: boolean;
     is_hidden: boolean;
     last_edit_timestamp: number | undefined;
     last_moved_timestamp: number | undefined;
@@ -136,6 +138,82 @@ type RenderingPlan = {
     rerender_groups: MessageGroup[];
     append_messages: MessageContainer[];
 };
+
+const pear_thinking_glyphs = [
+    "·",
+    "∙",
+    "⋅",
+    "✦",
+    "✧",
+    "✩",
+    "✶",
+    "✷",
+    "✸",
+    "✹",
+    "✺",
+    "✹",
+    "✸",
+    "✷",
+    "✶",
+    "✩",
+    "✧",
+    "✦",
+    "⋅",
+    "∙",
+] as const;
+let pear_thinking_glyph_index = 0;
+let pear_thinking_glyph_timer: ReturnType<typeof setInterval> | undefined;
+
+function pear_thinking_markers($scope: JQuery = $(document)): JQuery {
+    const $descendant_markers = $scope.find(
+        ".message_row.pear-active-message .message_content > p:last-child > em:last-child",
+    );
+    if (!$scope.hasClass("pear-active-message")) {
+        return $descendant_markers;
+    }
+    return $descendant_markers.add($scope.find(".message_content > p:last-child > em:last-child"));
+}
+
+function render_pear_thinking_glyph($markers: JQuery): void {
+    if ($markers.length === 0) {
+        return;
+    }
+    $markers.text(pear_thinking_glyphs[pear_thinking_glyph_index]);
+    pear_thinking_glyph_index = (pear_thinking_glyph_index + 1) % pear_thinking_glyphs.length;
+}
+
+function stop_pear_thinking_animation(): void {
+    if (pear_thinking_glyph_timer === undefined) {
+        return;
+    }
+    clearInterval(pear_thinking_glyph_timer);
+    pear_thinking_glyph_timer = undefined;
+}
+
+function update_pear_thinking_glyphs(): void {
+    const $markers = pear_thinking_markers();
+    if ($markers.length === 0) {
+        stop_pear_thinking_animation();
+        return;
+    }
+    render_pear_thinking_glyph($markers);
+}
+
+function start_pear_thinking_animation(): void {
+    if (pear_thinking_glyph_timer !== undefined) {
+        return;
+    }
+    pear_thinking_glyph_timer = setInterval(update_pear_thinking_glyphs, 100);
+}
+
+function maybe_render_pear_thinking_glyph($row: JQuery): void {
+    if (!$row.hasClass("pear-active-message")) {
+        return;
+    }
+    const $markers = pear_thinking_markers($row);
+    render_pear_thinking_glyph($markers);
+    start_pear_thinking_animation();
+}
 
 type BoundaryMessageContainerInfo = {
     message_group: MessageGroup;
@@ -581,6 +659,32 @@ export class MessageListView {
         };
     }
 
+    _get_visible_message_edited_and_moved_vars(
+        message: Message,
+        is_pear_message: boolean,
+    ): {
+        last_edit_timestamp: number | undefined;
+        last_moved_timestamp: number | undefined;
+        edited: boolean;
+        moved: boolean;
+        modified: boolean;
+        widget_edited: boolean;
+    } {
+        const edited_and_moved_vars = this._get_message_edited_and_moved_vars(message);
+        if (!is_pear_message) {
+            return edited_and_moved_vars;
+        }
+        return {
+            ...edited_and_moved_vars,
+            last_edit_timestamp: undefined,
+            last_moved_timestamp: undefined,
+            edited: false,
+            moved: false,
+            modified: false,
+            widget_edited: false,
+        };
+    }
+
     is_current_message_list(): boolean {
         return this.list === message_lists.current;
     }
@@ -600,6 +704,8 @@ export class MessageListView {
         is_hidden: boolean;
         mention_classname: string | undefined;
         include_sender: boolean;
+        is_pear_active_message: boolean;
+        is_pear_message: boolean;
         status_message: string | false;
         last_edit_timestamp: number | undefined;
         last_moved_timestamp: number | undefined;
@@ -676,6 +782,19 @@ export class MessageListView {
         }
 
         const sender_is_bot = people.sender_is_bot(message);
+        const sender_full_name = message.sender_full_name?.toLowerCase() ?? "";
+        const sender_email = message.sender_email?.toLowerCase() ?? "";
+        const is_pear_message =
+            !is_hidden &&
+            sender_is_bot &&
+            (sender_full_name === "pear" ||
+                sender_full_name.startsWith("pear ") ||
+                sender_email === "pear@zulip.com" ||
+                sender_email.startsWith("pear-bot@"));
+        if (is_pear_message) {
+            include_sender = false;
+        }
+        const is_pear_active_message = is_pear_message && message.content.includes("<em>✦</em>");
         const sender_is_guest = people.sender_is_guest(message);
         const sender_is_deactivated = people.sender_is_deactivated(message);
         const should_add_guest_indicator_for_sender = people.should_add_guest_user_indicator(
@@ -702,8 +821,10 @@ export class MessageListView {
             is_hidden,
             mention_classname,
             include_sender,
+            is_pear_active_message,
+            is_pear_message,
             ...this._maybe_get_me_message(is_hidden, message),
-            ...this._get_message_edited_and_moved_vars(message),
+            ...this._get_visible_message_edited_and_moved_vars(message, is_pear_message),
         };
     }
 
@@ -1057,7 +1178,7 @@ export class MessageListView {
                 year_changed,
                 ...calculated_variables,
                 ...this.get_edited_notice_locations(
-                    include_sender,
+                    calculated_variables.include_sender,
                     calculated_variables.is_hidden,
                     Boolean(calculated_variables.status_message),
                 ),
@@ -1262,6 +1383,7 @@ export class MessageListView {
         const $content = $row.find(".message_content");
 
         rendered_markdown.update_elements($content);
+        maybe_render_pear_thinking_glyph($row);
 
         const id = rows.id($row);
         message_edit.maybe_show_edit($row, id);
@@ -1865,7 +1987,7 @@ export class MessageListView {
         this.set_edited_notice_locations(message_container);
 
         const $rendered_msg = $(this._get_message_template(message_container));
-        if (message_content_edited) {
+        if (message_content_edited && !message_container.is_pear_message) {
             $rendered_msg.addClass("fade-in-message");
         }
         this._post_process($rendered_msg);

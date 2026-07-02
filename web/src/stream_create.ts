@@ -286,6 +286,7 @@ function update_announce_stream_state(): void {
 function create_stream(): void {
     const stream_name = $<HTMLInputElement>("input#create_stream_name").val()!.trim();
     const description = $<HTMLInputElement>("input#create_stream_description").val()!.trim();
+    const repository_url = $<HTMLInputElement>("input#create_stream_repository_url").val()!.trim();
     created_stream = stream_name;
 
     // Even though we already check to make sure that while typing the user cannot enter
@@ -395,15 +396,31 @@ function create_stream(): void {
         // new stream will not be added to any folder.
         data["folder_id"] = JSON.stringify(folder_id);
     }
+    if (repository_url !== "") {
+        data["pear_repository_url"] = repository_url;
+    }
 
     // Subscribe yourself and possible other people to a new stream.
     void channel.post({
         url: "/json/users/me/subscriptions",
         data,
-        success(): void {
+        success(raw_data): void {
+            const response = z
+                .object({pear_repository_error: z.optional(z.string())})
+                .parse(raw_data);
             $("#create_stream_name").val("");
             $("#create_stream_description").val("");
+            $("#create_stream_repository_url").val("");
             loading.destroy_indicator($("#stream_creating_indicator"));
+            if (response.pear_repository_error !== undefined) {
+                ui_report.client_error(
+                    $t_html({
+                        defaultMessage:
+                            "Channel created, but Pear could not clone the Git repository.",
+                    }),
+                    $(".stream_create_info"),
+                );
+            }
             // The rest of the work is done via the subscribe event we will get
         },
         error(xhr): void {
@@ -471,6 +488,7 @@ export function show_new_stream_modal(): void {
     $(".right .settings").hide();
 
     stream_create_subscribers.build_widgets();
+    $("#create_stream_repository_url").val("");
 
     // Make the options default to the same each time
 
@@ -646,7 +664,7 @@ export function set_up_handlers(): void {
 
     // Do not allow the user to enter newline characters while typing out the
     // stream's description during it's creation.
-    $container.on("keydown", "#create_stream_description", (e) => {
+    $container.on("keydown", "#create_stream_description, #create_stream_repository_url", (e) => {
         if (keydown_util.is_enter_event(e)) {
             e.preventDefault();
         }

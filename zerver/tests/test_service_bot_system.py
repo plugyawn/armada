@@ -423,6 +423,11 @@ class TestServiceBotConfigHandler(ZulipTestCase):
         self.assertTrue(isinstance(bot_config, dict))
         self.assert_length(bot_config, 0)
 
+    def test_load_bot_config_template_for_pear(self) -> None:
+        bot_config = load_bot_config_template("pear")
+        self.assertTrue(isinstance(bot_config, dict))
+        self.assert_length(bot_config, 0)
+
     def test_bot_send_pm_with_empty_recipients_list(self) -> None:
         with self.assertRaisesRegex(
             EmbeddedBotEmptyRecipientsListError, "Message must have recipients!"

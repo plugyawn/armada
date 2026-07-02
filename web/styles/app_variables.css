@@ -827,6 +827,10 @@
         hsl(0deg 0% 100%),
         hsl(0deg 0% 13.5%)
     );
+    --color-background-pear-message-content: light-dark(
+        hsl(0deg 0% 94%),
+        hsl(0deg 0% 18%)
+    );
     --color-selected-message-outline: light-dark(
         hsl(217deg 64% 59% / 60%),
         hsl(217deg 64% 59% / 70%)

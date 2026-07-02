@@ -27,6 +27,24 @@ from zerver.models.users import get_active_user
 
 
 def get_bot_handler(service_name: str) -> Any:
+    if service_name == "pear":
+        from zerver.lib.pear import PearEmbeddedBotHandler
+        from zerver.lib.pear_worker import (
+            PearDatabaseWorkerRunStore,
+            PearQueueWorkerDispatcher,
+            build_pear_addressing_intent_classifier_from_settings,
+            build_pear_worker_runtime_from_settings,
+            load_pear_active_session_from_zulip,
+        )
+
+        return PearEmbeddedBotHandler(
+            worker_runtime=build_pear_worker_runtime_from_settings(),
+            active_session_loader=load_pear_active_session_from_zulip,
+            worker_run_store=PearDatabaseWorkerRunStore(),
+            worker_dispatcher=PearQueueWorkerDispatcher(),
+            addressing_intent_classifier=build_pear_addressing_intent_classifier_from_settings(),
+        )
+
     # Check that this service is present in EMBEDDED_BOTS, add exception handling.
     configured_service = ""
     for embedded_bot_service in EMBEDDED_BOTS:
@@ -141,7 +159,33 @@ class EmbeddedBotHandler:
         return {"id": result["id"]}
 
     def update_message(self, message: dict[str, Any]) -> None:
-        pass  # Not implemented
+        message_id = message.get("message_id")
+        content = message.get("content")
+        if not isinstance(message_id, int):
+            raise ValueError("message_id must be an integer")
+        if not isinstance(content, str):
+            raise ValueError("content must be a string")
+
+        rendering_only = message.get("rendering_only") is True
+        if rendering_only:
+            from zerver.actions.message_edit import check_update_message_rendering_only
+
+            check_update_message_rendering_only(
+                self.user_profile,
+                message_id,
+                content=content,
+            )
+            return
+
+        from zerver.actions.message_edit import check_update_message
+
+        check_update_message(
+            self.user_profile,
+            message_id,
+            content=content,
+            send_notification_to_old_thread=False,
+            send_notification_to_new_thread=False,
+        )
 
     # The bot_name argument exists only to comply with ExternalBotHandler.get_config_info().
     def get_config_info(self, bot_name: str, optional: bool = False) -> dict[str, str]:

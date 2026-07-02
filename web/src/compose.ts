@@ -17,10 +17,12 @@ import * as compose_validate from "./compose_validate.ts";
 import * as drafts from "./drafts.ts";
 import * as echo from "./echo.ts";
 import type {PostMessageAPIData} from "./echo.ts";
+import {$t} from "./i18n.ts";
 import * as message_events from "./message_events.ts";
 import type {LocalMessage} from "./message_helper.ts";
 import * as message_viewport from "./message_viewport.ts";
 import * as onboarding_steps from "./onboarding_steps.ts";
+import * as pear_panel from "./pear_panel.ts";
 import * as reload from "./reload.ts";
 import * as scheduled_messages from "./scheduled_messages.ts";
 import * as sent_messages from "./sent_messages.ts";
@@ -164,7 +166,64 @@ export function send_message_success(
     }
 }
 
+function try_start_pear_side_session(): boolean {
+    const content = compose_state.message_content();
+    if (!content.startsWith("/side")) {
+        return false;
+    }
+    if (compose_state.get_message_type() !== "stream") {
+        return false;
+    }
+
+    const side_request = content.slice("/side".length).trim();
+    if (!side_request) {
+        compose_banner.show_error_message(
+            $t({defaultMessage: "Add a request after /side."}),
+            compose_banner.CLASSNAMES.generic_compose_error,
+            $("#compose_banners"),
+            $("textarea#compose-textarea"),
+        );
+        return true;
+    }
+
+    void channel.post({
+        url: "/json/pear/side",
+        data: {
+            stream: compose_state.stream_name(),
+            topic: compose_state.topic(),
+            request: side_request,
+        },
+        success(raw_data) {
+            clear_compose_box();
+            pear_panel.refresh();
+            const data = raw_data as {dm_narrow_url?: string};
+            if (data.dm_narrow_url !== undefined) {
+                window.location.hash = data.dm_narrow_url.slice(1);
+            }
+        },
+        error(xhr) {
+            if (xhr.readyState === 0) {
+                return;
+            }
+            compose_banner.show_error_message(
+                channel.xhr_error_message(
+                    $t({defaultMessage: "Error starting Pear side session"}),
+                    xhr,
+                ),
+                compose_banner.CLASSNAMES.generic_compose_error,
+                $("#compose_banners"),
+                $("textarea#compose-textarea"),
+            );
+        },
+    });
+    return true;
+}
+
 export let send_message = (): void => {
+    if (try_start_pear_side_session()) {
+        return;
+    }
+
     // Changes here must also be kept in sync with echo.try_deliver_locally
     compose_state.set_recipient_edited_manually(false);
     compose_state.set_is_content_unedited_restored_draft(false);

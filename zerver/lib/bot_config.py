@@ -66,6 +66,9 @@ def set_bot_config(bot_profile: UserProfile, key: str, value: str) -> None:
 
 
 def load_bot_config_template(bot: str) -> dict[str, str]:
+    if bot == "pear":
+        return {}
+
     bot_module_name = f"zulip_bots.bots.{bot}"
     bot_module = importlib.import_module(bot_module_name)
     assert bot_module.__file__ is not None

@@ -23,6 +23,7 @@ normal_queues = [
     "missedmessage_emails",
     "missedmessage_mobile_notifications",
     "outgoing_webhooks",
+    "pear_worker",
     "thumbnail",
     "user_activity",
     "user_activity_interval",

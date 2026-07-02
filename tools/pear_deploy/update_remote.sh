@@ -126,6 +126,13 @@ ssh_zulip() {
     ssh_root "sudo -Hu zulipdev bash -lc $wrapped"
 }
 
+ssh_zulip_clean() {
+    local command="$1"
+    local wrapped
+    wrapped="$(printf '%q' "cd $REMOTE_PATH && $command")"
+    ssh_root "sudo -Hu zulipdev bash -lc $wrapped"
+}
+
 fail() {
     echo "ERROR: $*" >&2
     exit 1
@@ -377,7 +384,7 @@ fi
 
 if [[ "$RUN_TESTS" == true ]]; then
     echo "Running Pear backend tests on the box..."
-    ssh_zulip "./tools/test-backend zerver.tests.test_pear zerver.tests.test_pear_endpoint"
+    ssh_zulip_clean "./tools/test-backend zerver.tests.test_pear zerver.tests.test_pear_endpoint"
 else
     echo "Skipping test-backend by request."
 fi

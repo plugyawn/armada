@@ -1440,6 +1440,7 @@ class PearCodexExecToolRunner:
         self.process_isolation = process_isolation
         self.run_command = run_command
         self.popen_command = popen_command
+        self.active_process: subprocess.Popen[str] | None = None
 
     def config_args(self) -> list[str]:
         args = ["--config", f'approval_policy="{self.approval_policy}"']
@@ -1544,6 +1545,7 @@ class PearCodexExecToolRunner:
         except FileNotFoundError as error:
             raise PearAgentRuntimeError(f"Codex executable not found: {self.codex_bin}") from error
 
+        self.active_process = process
         assert process.stdin is not None
         assert process.stdout is not None
         process.stdin.write(prompt)
@@ -1577,6 +1579,11 @@ class PearCodexExecToolRunner:
             returncode = process.wait()
         finally:
             timeout_timer.cancel()
+            if self.active_process is process:
+                self.active_process = None
+            poll = getattr(process, "poll", None)
+            if callable(poll) and poll() is None:
+                process.kill()
         if timed_out:
             process.kill()
             raise PearAgentRuntimeError(
@@ -1594,6 +1601,13 @@ class PearCodexExecToolRunner:
             output_limit=self.output_limit,
         )
         return ensure_pear_runtime_result(results, self.runtime_value())
+
+    def interrupt(self) -> bool:
+        process = self.active_process
+        if process is None or process.poll() is not None:
+            return False
+        process.kill()
+        return True
 
     def build_command(self, thread_id: str | None = None) -> list[str]:
         if thread_id is not None:
@@ -2062,6 +2076,25 @@ class PearCodexAppServerToolRunner:
                         "threadId": self.active_thread_id,
                         "expectedTurnId": self.active_turn_id,
                         "input": [{"type": "text", "text": instruction}],
+                    },
+                }
+            )
+            return True
+
+    def interrupt(self) -> bool:
+        with self.lock:
+            if self.process is None or self.process.poll() is not None:
+                return False
+            if self.active_thread_id is None or self.active_turn_id is None:
+                return False
+            request_id = self.next_id()
+            self.send_message(
+                {
+                    "id": request_id,
+                    "method": "turn/interrupt",
+                    "params": {
+                        "threadId": self.active_thread_id,
+                        "expectedTurnId": self.active_turn_id,
                     },
                 }
             )

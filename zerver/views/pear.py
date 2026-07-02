@@ -49,11 +49,13 @@ from zerver.lib.pear_worker import (
     pear_pinned_repository_value,
     pear_repo_artifact_value_is_durable,
     pear_topic_isolation_username_for_realm,
+    pear_topic_context_is_paused,
     pear_topic_os_user_isolation_enabled,
     pear_worker_model_for_topic,
     pear_worker_reasoning_effort_for_topic,
     pear_worker_sandbox_for_topic,
     pear_worker_workdir_for_topic,
+    set_pear_topic_context_paused,
 )
 from zerver.lib.response import json_success
 from zerver.lib.streams import access_stream_by_name
@@ -676,6 +678,7 @@ def serialize_pear_topic_context(
         "repo_title": pinned_repo or workdir,
         "worktree_label": worktree_label,
         "workdir": workdir,
+        "is_paused": bool(context is not None and context.is_paused),
         "parent_context_id": context.parent_context_id if context is not None else None,
         "git": build_pear_git_context(workdir, isolation_username=isolation_username),
     }
@@ -1157,6 +1160,11 @@ def get_pear_active_session_backend(
             stream_exists=True,
             messages=message_rows,
             topic_message_count=message_count,
+            is_paused=pear_topic_context_is_paused(
+                user_profile,
+                stream=pear_session["stream"],
+                topic=pear_session["topic"],
+            ),
         )
 
     return json_success(
@@ -1256,13 +1264,16 @@ def update_pear_run_control_event(
 ) -> PearWorkerRun:
     run = get_visible_pear_worker_run(user_profile, run_id)
     if event_type == "cancel" and run.status in {PearWorkerRun.QUEUED, PearWorkerRun.RUNNING}:
+        timestamp = timezone_now()
+        run.cancel_requested_at = timestamp
         run.status = PearWorkerRun.CANCELLED
         run.current_activity = "Cancelled from the Pear panel."
         run.summary = "Cancelled."
-        run.date_updated = timezone_now()
-        run.date_finished = run.date_updated
+        run.date_updated = timestamp
+        run.date_finished = timestamp
         run.save(
             update_fields=[
+                "cancel_requested_at",
                 "status",
                 "current_activity",
                 "summary",
@@ -1271,6 +1282,14 @@ def update_pear_run_control_event(
             ]
         )
     elif event_type in {"pause", "resume"}:
+        control_stream = run.source_stream_name if run.session_kind == PearWorkerRun.SIDE else ""
+        control_topic = run.source_topic_name if run.session_kind == PearWorkerRun.SIDE else ""
+        set_pear_topic_context_paused(
+            run.bot_profile,
+            stream=control_stream or run.stream_name,
+            topic=control_topic or run.topic_name,
+            is_paused=event_type == "pause",
+        )
         run.current_activity = summary
         run.date_updated = timezone_now()
         run.save(update_fields=["current_activity", "date_updated"])

@@ -1,0 +1,267 @@
+#!/usr/bin/env python3
+"""Report Pear Codex prompt-cache usage from worker run events."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import sys
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
+
+
+BASE_DIR = Path(__file__).resolve().parents[1]
+PearTokenUsage = dict[str, int | float]
+
+
+@dataclass(frozen=True)
+class RunUsage:
+    run: Any
+    events: list[Any]
+    usages: list[PearTokenUsage]
+
+    @property
+    def first_usage(self) -> PearTokenUsage:
+        return self.usages[0]
+
+    @property
+    def last_usage(self) -> PearTokenUsage:
+        return self.usages[-1]
+
+
+def pear_token_usage_int(value: object) -> int | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int | float):
+        return int(value)
+    return None
+
+
+def normalize_token_usage(value: object) -> PearTokenUsage | None:
+    raw_usage = value
+    if isinstance(raw_usage, dict):
+        token_usage = raw_usage.get("tokenUsage")
+        if isinstance(token_usage, dict):
+            raw_usage = token_usage
+    if isinstance(raw_usage, dict):
+        last_usage = raw_usage.get("last")
+        if isinstance(last_usage, dict):
+            raw_usage = last_usage
+    if not isinstance(raw_usage, dict):
+        return None
+
+    sources = {
+        "input_tokens": ("input_tokens", "inputTokens", "prompt_tokens"),
+        "cached_input_tokens": ("cached_input_tokens", "cachedInputTokens"),
+        "output_tokens": ("output_tokens", "outputTokens", "completion_tokens"),
+        "reasoning_output_tokens": ("reasoning_output_tokens", "reasoningOutputTokens"),
+        "total_tokens": ("total_tokens", "totalTokens"),
+    }
+    usage: PearTokenUsage = {}
+    for normalized_key, source_keys in sources.items():
+        for source_key in source_keys:
+            token_value = pear_token_usage_int(raw_usage.get(source_key))
+            if token_value is not None:
+                usage[normalized_key] = token_value
+                break
+
+    input_tokens = usage.get("input_tokens", 0)
+    cached_input_tokens = usage.get("cached_input_tokens", 0)
+    if input_tokens:
+        usage["cache_percent"] = round(cached_input_tokens * 100 / input_tokens, 1)
+    if not usage:
+        return None
+    return usage
+
+
+def usage_from_event_payload(payload: object) -> PearTokenUsage | None:
+    if isinstance(payload, dict):
+        usage = normalize_token_usage(payload.get("usage"))
+        if usage is not None:
+            return usage
+        metadata = payload.get("metadata")
+        if isinstance(metadata, dict):
+            usage = normalize_token_usage(metadata.get("usage"))
+            if usage is not None:
+                return usage
+    return normalize_token_usage(payload)
+
+
+def cache_percent(usage: PearTokenUsage) -> float | None:
+    value = usage.get("cache_percent")
+    if isinstance(value, int | float):
+        return float(value)
+    input_tokens = usage.get("input_tokens", 0)
+    cached_input_tokens = usage.get("cached_input_tokens", 0)
+    if input_tokens:
+        return round(cached_input_tokens * 100 / input_tokens, 1)
+    return None
+
+
+def setup_django_models() -> tuple[Any, Any]:
+    sys.path.append(str(BASE_DIR))
+    from scripts.lib.setup_path import setup_path
+
+    setup_path()
+
+    os.environ.setdefault("DJANGO_SETTINGS_MODULE", "zproject.settings")
+
+    import django
+
+    django.setup()
+
+    from zerver.models.bots import PearWorkerRun, PearWorkerRunEvent
+
+    return PearWorkerRun, PearWorkerRunEvent
+
+
+def collect_run_usage(*, stream: str | None, topic: str | None, limit: int) -> list[RunUsage]:
+    PearWorkerRun, PearWorkerRunEvent = setup_django_models()
+    runs = (
+        PearWorkerRun.objects.select_related("realm", "bot_profile", "requesting_user")
+        .order_by("-date_created")
+        .all()
+    )
+    if stream:
+        runs = runs.filter(stream_name=stream)
+    if topic:
+        runs = runs.filter(topic_name=topic)
+
+    result: list[RunUsage] = []
+    for run in runs[: max(limit * 5, limit)]:
+        events = list(
+            PearWorkerRunEvent.objects.filter(run=run)
+            .filter(event_type__in=("usage", "transcript"))
+            .order_by("date_created")
+        )
+        usages = [
+            usage
+            for event in events
+            if (usage := usage_from_event_payload(event.payload)) is not None
+        ]
+        if usages:
+            result.append(RunUsage(run=run, events=events, usages=usages))
+        if len(result) >= limit:
+            break
+    return result
+
+
+def usage_to_json(row: RunUsage) -> dict[str, Any]:
+    first_cache = cache_percent(row.first_usage)
+    last_cache = cache_percent(row.last_usage)
+    return {
+        "run_id": row.run.id,
+        "created": row.run.date_created.isoformat(),
+        "finished": row.run.date_finished.isoformat() if row.run.date_finished else None,
+        "stream": row.run.stream_name,
+        "topic": row.run.topic_name,
+        "status": row.run.status,
+        "model": row.run.model,
+        "codex_thread_id": row.run.codex_thread_id,
+        "usage_event_count": len(row.usages),
+        "first_cache_percent": first_cache,
+        "last_cache_percent": last_cache,
+        "last_input_tokens": row.last_usage.get("input_tokens", 0),
+        "last_cached_input_tokens": row.last_usage.get("cached_input_tokens", 0),
+        "last_output_tokens": row.last_usage.get("output_tokens", 0),
+        "last_reasoning_output_tokens": row.last_usage.get("reasoning_output_tokens", 0),
+    }
+
+
+def render_table(rows: list[RunUsage]) -> str:
+    headers = [
+        "run",
+        "status",
+        "stream",
+        "topic",
+        "events",
+        "first cached",
+        "last cached",
+        "last input",
+        "last cached input",
+        "model",
+    ]
+    values: list[list[str]] = []
+    for row in rows:
+        first_cache = cache_percent(row.first_usage)
+        last_cache = cache_percent(row.last_usage)
+        values.append(
+            [
+                str(row.run.id),
+                row.run.status,
+                row.run.stream_name,
+                row.run.topic_name,
+                str(len(row.usages)),
+                f"{first_cache:.1f}%" if first_cache is not None else "-",
+                f"{last_cache:.1f}%" if last_cache is not None else "-",
+                f"{row.last_usage.get('input_tokens', 0):,}",
+                f"{row.last_usage.get('cached_input_tokens', 0):,}",
+                row.run.model or "-",
+            ]
+        )
+
+    widths = [
+        max(len(headers[index]), *(len(value[index]) for value in values))
+        for index in range(len(headers))
+    ]
+    lines = [
+        "  ".join(header.ljust(widths[index]) for index, header in enumerate(headers)),
+        "  ".join("-" * width for width in widths),
+    ]
+    lines.extend(
+        "  ".join(value[index].ljust(widths[index]) for index in range(len(headers)))
+        for value in values
+    )
+    return "\n".join(lines)
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description=(
+            "Report cached-input token rates for recent Pear worker runs. "
+            "Run this inside the Zulip checkout, usually with pear.env loaded on the box."
+        )
+    )
+    parser.add_argument("--stream", help="Only include runs from this stream.")
+    parser.add_argument("--topic", help="Only include runs from this topic.")
+    parser.add_argument("--limit", type=int, default=10, help="Maximum runs with usage to report.")
+    parser.add_argument(
+        "--min-last-cache-percent",
+        type=float,
+        help="Exit non-zero unless at least one reported run has this last cache percent.",
+    )
+    parser.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
+    return parser.parse_args()
+
+
+def main() -> int:
+    args = parse_args()
+    if args.limit <= 0:
+        raise SystemExit("--limit must be positive")
+
+    rows = collect_run_usage(stream=args.stream, topic=args.topic, limit=args.limit)
+    if args.json:
+        print(json.dumps([usage_to_json(row) for row in rows], indent=2, sort_keys=True))
+    elif rows:
+        print(render_table(rows))
+    else:
+        print("No Pear usage events found.")
+
+    if args.min_last_cache_percent is not None:
+        if not rows:
+            return 1
+        best = max((cache_percent(row.last_usage) or 0.0) for row in rows)
+        if best < args.min_last_cache_percent:
+            print(
+                f"Best last cache percent {best:.1f}% is below "
+                f"{args.min_last_cache_percent:.1f}%.",
+                file=sys.stderr,
+            )
+            return 1
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

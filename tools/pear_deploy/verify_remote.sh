@@ -4,7 +4,52 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-STATE_PATH="${1:-$REPO_ROOT/output/pear-staging/server.json}"
+DEFAULT_STATE_PATH="$REPO_ROOT/output/pear-staging/server.json"
+STATE_PATH="$DEFAULT_STATE_PATH"
+
+usage() {
+    cat <<EOF
+Usage: tools/pear_deploy/verify_remote.sh [options] [state.json]
+
+Read-only verification for the hosted Pear/Zulip dev server.
+
+Options:
+  --state PATH  Use a specific pear_do.py state file.
+  -h, --help    Show this help.
+EOF
+}
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --state)
+            if [[ $# -lt 2 ]]; then
+                echo "Missing value for --state" >&2
+                exit 2
+            fi
+            STATE_PATH="$2"
+            shift 2
+            ;;
+        -h | --help)
+            usage
+            exit 0
+            ;;
+        *)
+            if [[ "$STATE_PATH" != "$DEFAULT_STATE_PATH" ]]; then
+                echo "Unexpected argument: $1" >&2
+                usage >&2
+                exit 2
+            fi
+            STATE_PATH="$1"
+            shift
+            ;;
+    esac
+done
+
+if [[ ! -f "$STATE_PATH" ]]; then
+    echo "Missing state file: $STATE_PATH" >&2
+    echo "Run: python3 tools/pear_deploy/pear_do.py create" >&2
+    exit 1
+fi
 
 eval "$(
     python3 - "$STATE_PATH" <<'PY'
@@ -22,6 +67,29 @@ for key, value in values.items():
 PY
 )"
 
+LOCAL_SHA="$(git -C "$REPO_ROOT" rev-parse HEAD)"
+
+echo "Deployment metadata:"
+echo "local_head=$LOCAL_SHA"
+ssh -F "$SSH_CONFIG" pear-staging-root 'sudo -Hu zulipdev bash -lc '"'"'
+set -euo pipefail
+cd /home/zulipdev/zulip
+echo "remote_head=$(git rev-parse HEAD)"
+remote_status="$(git status --porcelain --untracked-files=no)"
+if [[ -n "$remote_status" ]]; then
+    echo "remote_tracked_status:"
+    printf "%s\n" "$remote_status"
+    exit 1
+fi
+echo "remote_tracked_status=clean"
+if [[ -f /home/zulipdev/pear-deployed-sha ]]; then
+    echo "deployed_record=$(cat /home/zulipdev/pear-deployed-sha)"
+else
+    echo "deployed_record=missing"
+fi
+'"'"
+
+echo
 echo "DNS:"
 dig +short "$FQDN" A || true
 

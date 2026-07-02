@@ -133,6 +133,9 @@ class PearWorkerRun(models.Model):
     codex_thread_id = models.TextField(blank=True)
     result_message_id = models.IntegerField(null=True)
     error = models.TextField(null=True)
+    attempts = models.PositiveSmallIntegerField(default=0)
+    heartbeat_at = models.DateTimeField(null=True)
+    cancel_requested_at = models.DateTimeField(null=True)
     date_created = models.DateTimeField(default=timezone_now, db_index=True)
     date_updated = models.DateTimeField(default=timezone_now)
     date_finished = models.DateTimeField(null=True)
@@ -147,6 +150,10 @@ class PearWorkerRun(models.Model):
             models.Index(
                 fields=["realm", "session_kind", "date_created"],
                 name="zerver_pear_run_realm_kind",
+            ),
+            models.Index(
+                fields=["realm", "status", "heartbeat_at"],
+                name="zerver_pear_run_st_hb",
             ),
         ]
 
@@ -181,6 +188,7 @@ class PearTopicContext(models.Model):
     reasoning_effort = models.CharField(max_length=16, blank=True)
     github_repo = models.TextField(blank=True)
     workdir = models.TextField(blank=True)
+    is_paused = models.BooleanField(default=False)
     date_created = models.DateTimeField(default=timezone_now, db_index=True)
     date_updated = models.DateTimeField(default=timezone_now)
 

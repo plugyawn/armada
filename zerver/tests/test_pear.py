@@ -5803,6 +5803,122 @@ class PearSessionDefaultsTest(TestCase):
         self.assertEqual(live_state["status"], "done")
         self.assertEqual(live_state["content"], "AB")
 
+    def test_run_worker_turn_sends_typing_heartbeat(self) -> None:
+        typing_calls: list[tuple[str, str, str]] = []
+
+        class FakeRunStore:
+            def record(
+                self,
+                bot_handler,
+                message_id: int,
+                status: str,
+                *,
+                stream: str,
+                topic: str,
+                result_message_id: int | None = None,
+                error: str | None = None,
+            ) -> None:
+                pass
+
+            def record_event(
+                self,
+                bot_handler,
+                message_id: int,
+                event_type: str,
+                *,
+                summary: str = "",
+                payload: dict[str, object] | None = None,
+            ) -> None:
+                pass
+
+            def update_metadata(
+                self,
+                bot_handler,
+                message_id: int,
+                **metadata: object,
+            ) -> None:
+                pass
+
+        class FakeBotHandler:
+            user_profile = object()
+
+            def send_reply(
+                self,
+                message: dict[str, object],
+                response: str,
+            ) -> dict[str, int]:
+                raise AssertionError("progress message should be edited in place")
+
+            def update_message(self, message: dict[str, object]) -> None:
+                pass
+
+        def tool_runner(active_session, task: str, *, event_callback) -> list[dict[str, str]]:
+            event_callback(
+                {
+                    "kind": "tool",
+                    "status": "running",
+                    "title": "Running command",
+                    "body": "python script.py",
+                }
+            )
+            return [{"label": "Result", "value": "done"}]
+
+        def fake_typing_notification(
+            bot_handler,
+            *,
+            stream: str,
+            topic: str,
+            operator: str,
+        ) -> bool:
+            typing_calls.append((operator, stream, topic))
+            return True
+
+        payload = get_pear_session_payload()
+        active_session = build_pear_active_session_summary_from_messages(
+            pear_session=payload,
+            source="server",
+            stream_exists=True,
+            messages=[(10, "@Pear run a script", False)],
+        )
+        message = {
+            "id": 9207,
+            "type": "stream",
+            "display_recipient": PEAR_DEFAULT_STREAM,
+            "topic": PEAR_DEFAULT_TOPIC,
+            "content": "@Pear run a script",
+        }
+
+        with (
+            patch(
+                "zerver.lib.pear.PEAR_TYPING_HEARTBEAT_INTERVAL_SECONDS",
+                0,
+            ),
+            patch(
+                "zerver.lib.pear.do_send_pear_stream_typing_notification",
+                side_effect=fake_typing_notification,
+            ),
+        ):
+            PearEmbeddedBotHandler(
+                worker_runtime=PearWorkerRuntime(tool_runner),
+                worker_run_store=FakeRunStore(),
+            ).run_worker_turn(
+                message,
+                FakeBotHandler(),
+                content="@Pear run a script",
+                active_session=active_session,
+                message_id=9207,
+                stream=PEAR_DEFAULT_STREAM,
+                topic=PEAR_DEFAULT_TOPIC,
+                post_started_progress=True,
+                progress_message_id=502,
+            )
+
+        self.assertGreaterEqual(
+            typing_calls.count(("start", PEAR_DEFAULT_STREAM, PEAR_DEFAULT_TOPIC)),
+            2,
+        )
+        self.assertEqual(typing_calls[-1], ("stop", PEAR_DEFAULT_STREAM, PEAR_DEFAULT_TOPIC))
+
     def test_run_worker_turn_cancels_runtime_when_cancel_requested(self) -> None:
         updated_messages: list[dict[str, object]] = []
         recorded_statuses: list[tuple[str, int | None, str | None]] = []

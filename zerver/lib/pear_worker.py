@@ -119,7 +119,7 @@ class PearTopicRenameRefactorResult:
 
 
 def pear_worker_stale_after_seconds() -> int:
-    return int(getattr(settings, "PEAR_WORKER_TIMEOUT_SECONDS", 1800)) + 300
+    return settings.PEAR_WORKER_TIMEOUT_SECONDS + 300
 
 
 def pear_worker_run_is_stale(run: PearWorkerRun, *, current_time: datetime) -> bool:
@@ -275,26 +275,26 @@ def latest_pear_codex_thread_id_for_topic(
 
 
 def pear_default_worker_model() -> str:
-    return str(getattr(settings, "PEAR_WORKER_MODEL", "") or "")
+    return str(settings.PEAR_WORKER_MODEL or "")
 
 
 def pear_default_worker_reasoning_effort() -> str:
-    effort = str(getattr(settings, "PEAR_WORKER_REASONING_EFFORT", "") or "").strip()
+    effort = str(settings.PEAR_WORKER_REASONING_EFFORT or "").strip()
     if effort in PEAR_REASONING_EFFORTS:
         return effort
     return "medium"
 
 
 def pear_default_worker_workdir() -> str:
-    return str(getattr(settings, "PEAR_WORKER_WORKDIR", None) or Path.cwd())
+    return str(settings.PEAR_WORKER_WORKDIR or Path.cwd())
 
 
 def pear_configured_worker_sandbox() -> str:
-    return str(getattr(settings, "PEAR_WORKER_SANDBOX", "read-only") or "read-only")
+    return str(settings.PEAR_WORKER_SANDBOX or "read-only")
 
 
 def pear_topic_isolation_backend() -> str:
-    return str(getattr(settings, "PEAR_TOPIC_ISOLATION_BACKEND", "codex-sandbox") or "codex-sandbox")
+    return str(settings.PEAR_TOPIC_ISOLATION_BACKEND or "codex-sandbox")
 
 
 def pear_topic_os_user_isolation_enabled() -> bool:
@@ -308,7 +308,7 @@ def pear_topic_workdir_root() -> Path:
         if pear_topic_os_user_isolation_enabled()
         else base_workdir.parent / "pear-workspaces"
     )
-    configured_root = getattr(settings, "PEAR_TOPIC_WORKDIR_ROOT", None)
+    configured_root = settings.PEAR_TOPIC_WORKDIR_ROOT
     if isinstance(configured_root, str) and configured_root.strip():
         root = pear_normalize_path(configured_root.strip())
         if root == base_workdir or root.is_relative_to(base_workdir):
@@ -428,7 +428,7 @@ def pear_shared_codex_home() -> Path:
 
 
 def pear_codex_skills_source_dir() -> Path | None:
-    configured_path = getattr(settings, "PEAR_CODEX_SKILLS_DIR", None)
+    configured_path = settings.PEAR_CODEX_SKILLS_DIR
     if isinstance(configured_path, str) and configured_path.strip():
         return pear_normalize_path(configured_path)
     deploy_root = getattr(settings, "DEPLOY_ROOT", None)
@@ -505,10 +505,7 @@ def pear_worker_process_isolation_error(
 ) -> str | None:
     if process_isolation is None:
         return None
-    helper = str(
-        getattr(settings, "PEAR_TOPIC_ISOLATION_HELPER", "/usr/local/sbin/pear-topic-isolate")
-        or ""
-    )
+    helper = str(settings.PEAR_TOPIC_ISOLATION_HELPER or "")
     if not helper:
         return "Pear per-topic OS-user isolation is enabled, but no isolation helper is configured."
     if pear_worker_runtime_isolation_error(workdir) is not None:
@@ -1884,7 +1881,7 @@ def build_pear_worker_runtime_from_settings(
     process_isolation_override: PearProcessIsolation | None = None,
     process_isolation_error: str | None = None,
 ) -> PearWorkerRuntime:
-    runtime = getattr(settings, "PEAR_WORKER_AGENT_RUNTIME", "disabled")
+    runtime = settings.PEAR_WORKER_AGENT_RUNTIME
     model = model_override if model_override is not None else settings.PEAR_WORKER_MODEL
     workdir = workdir_override if workdir_override is not None else settings.PEAR_WORKER_WORKDIR
     sandbox = (
@@ -2001,7 +1998,7 @@ def build_pear_worker_runtime_from_settings(
 def build_pear_addressing_intent_classifier_from_settings() -> (
     PearAddressingIntentClassifier | None
 ):
-    runtime = getattr(settings, "PEAR_ADDRESSING_ROUTER_RUNTIME", "disabled")
+    runtime = settings.PEAR_ADDRESSING_ROUTER_RUNTIME
     if runtime == "codex-exec":
         return PearCodexExecAddressingIntentClassifier(
             codex_bin=settings.PEAR_WORKER_CODEX_BIN,
@@ -2164,14 +2161,14 @@ class PearDatabaseWorkerRunStore:
         except UserProfile.DoesNotExist:
             return "Pear could not identify the requesting user."
 
-        trusted_user_ids = set(getattr(settings, "PEAR_WORKER_TRUSTED_USER_IDS", []))
+        trusted_user_ids = set(settings.PEAR_WORKER_TRUSTED_USER_IDS)
         if trusted_user_ids and not requesting_user.is_realm_admin and requesting_user.id not in trusted_user_ids:
             return "This user is not allowed to start Pear worker runs."
         if pear_topic_context_is_paused(user_profile, stream=stream, topic=topic):
             return "Pear session is paused until a resume control is posted."
 
-        topic_limit = int(getattr(settings, "PEAR_WORKER_MAX_ACTIVE_RUNS_PER_TOPIC", 1))
-        realm_limit = int(getattr(settings, "PEAR_WORKER_MAX_ACTIVE_RUNS_PER_REALM", 3))
+        topic_limit = settings.PEAR_WORKER_MAX_ACTIVE_RUNS_PER_TOPIC
+        realm_limit = settings.PEAR_WORKER_MAX_ACTIVE_RUNS_PER_REALM
         busy_runs = PearWorkerRun.objects.filter(
             realm=user_profile.realm,
             status__in=PEAR_WORKER_RUN_BUSY_STATUSES,
@@ -2898,7 +2895,7 @@ class PearDatabaseWorkerRunStore:
             run.save(update_fields=["heartbeat_at", "date_updated"])
 
     def _runtime_label(self) -> str:
-        return str(getattr(settings, "PEAR_WORKER_AGENT_RUNTIME", "disabled") or "")
+        return str(settings.PEAR_WORKER_AGENT_RUNTIME or "")
 
     def _model_label(
         self,
@@ -2919,7 +2916,7 @@ class PearDatabaseWorkerRunStore:
         return pear_worker_sandbox_for_topic(user_profile, stream=stream, topic=topic)
 
     def _approval_policy_label(self) -> str:
-        return str(getattr(settings, "PEAR_WORKER_APPROVAL_POLICY", "") or "")
+        return str(settings.PEAR_WORKER_APPROVAL_POLICY or "")
 
     def _workdir_label(
         self,

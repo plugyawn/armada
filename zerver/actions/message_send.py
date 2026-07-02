@@ -653,7 +653,7 @@ def get_pear_followup_service_bot_event(
     if selected_pear_service.user_profile_id in mentioned_user_ids:
         return None
 
-    if getattr(settings, "PEAR_ADDRESSING_ROUTER_RUNTIME", "disabled") != "disabled":
+    if settings.PEAR_ADDRESSING_ROUTER_RUNTIME != "disabled":
         return {
             "trigger": PEAR_FOLLOWUP_TRIGGER,
             "user_profile_id": selected_pear_service.user_profile_id,

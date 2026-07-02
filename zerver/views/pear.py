@@ -103,7 +103,7 @@ def pear_python_module_available(module_name: str) -> bool:
 
 
 def pear_worker_runtime_dependency_status(worker_agent_runtime: str) -> tuple[bool, str]:
-    codex_bin = getattr(settings, "PEAR_WORKER_CODEX_BIN", "codex")
+    codex_bin = settings.PEAR_WORKER_CODEX_BIN
     codex_path = which(codex_bin)
     if worker_agent_runtime == "codex-agents-mcp":
         missing = []
@@ -140,7 +140,7 @@ def pear_worker_runtime_dependency_status(worker_agent_runtime: str) -> tuple[bo
 
 
 def pear_codex_login_command() -> str:
-    return f"{getattr(settings, 'PEAR_WORKER_CODEX_BIN', 'codex')} login"
+    return f"{settings.PEAR_WORKER_CODEX_BIN} login"
 
 
 def pear_codex_auth_file_available() -> bool:
@@ -179,7 +179,7 @@ def pear_openai_agents_auth_available() -> bool:
 def pear_worker_runtime_auth_status(
     worker_agent_runtime: str,
 ) -> tuple[bool, str, str | None, str | None, str | None, str | None]:
-    codex_bin = getattr(settings, "PEAR_WORKER_CODEX_BIN", "codex")
+    codex_bin = settings.PEAR_WORKER_CODEX_BIN
     login_command = pear_codex_login_command()
     codex_logged_in = pear_codex_login_available(codex_bin)
     codex_auth_file_available = pear_codex_auth_file_available()
@@ -360,8 +360,8 @@ def configured_pear_model_choices() -> list[str]:
         dict.fromkeys(
             model.strip()
             for model in [
-                getattr(settings, "PEAR_WORKER_MODEL", None),
-                *getattr(settings, "PEAR_WORKER_MODEL_CHOICES", []),
+                settings.PEAR_WORKER_MODEL,
+                *settings.PEAR_WORKER_MODEL_CHOICES,
             ]
             if isinstance(model, str) and model.strip()
         )
@@ -439,7 +439,7 @@ def build_pear_codex_model_catalog(model_choices: list[str]) -> list[dict[str, o
     else:
         try:
             completed = subprocess.run(
-                [getattr(settings, "PEAR_WORKER_CODEX_BIN", "codex"), "debug", "models"],
+                [settings.PEAR_WORKER_CODEX_BIN, "debug", "models"],
                 check=False,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.DEVNULL,
@@ -589,7 +589,7 @@ def serialize_pear_topic_context(
     workdir = (
         context.workdir.strip()
         if context is not None and context.workdir.strip()
-        else str(getattr(settings, "PEAR_WORKER_WORKDIR", None) or os.getcwd())
+        else str(settings.PEAR_WORKER_WORKDIR or os.getcwd())
     )
     context_github_repo = context.github_repo.strip() if context is not None else ""
     parent_github_repo = parent_context.github_repo.strip() if parent_context is not None else ""
@@ -660,27 +660,25 @@ def build_pear_runtime_config_payload() -> dict[str, object]:
     model_catalog = build_pear_codex_model_catalog(configured_model_choices)
     model_choices = [str(entry["slug"]) for entry in model_catalog]
     return {
-        "agent_runtime": getattr(settings, "PEAR_WORKER_AGENT_RUNTIME", "disabled"),
-        "model": getattr(settings, "PEAR_WORKER_MODEL", None),
+        "agent_runtime": settings.PEAR_WORKER_AGENT_RUNTIME,
+        "model": settings.PEAR_WORKER_MODEL,
         "model_choices": model_choices,
         "model_catalog": model_catalog,
         "reasoning_effort": pear_default_worker_reasoning_effort(),
         "reasoning_efforts": build_pear_reasoning_effort_payload(),
-        "service_tier": getattr(settings, "PEAR_WORKER_SERVICE_TIER", None),
-        "fast_mode": getattr(settings, "PEAR_WORKER_FAST_MODE", False),
-        "sandbox": getattr(settings, "PEAR_WORKER_SANDBOX", ""),
-        "approval_policy": getattr(settings, "PEAR_WORKER_APPROVAL_POLICY", ""),
-        "workdir": getattr(settings, "PEAR_WORKER_WORKDIR", None),
-        "trusted_user_ids_configured": bool(
-            getattr(settings, "PEAR_WORKER_TRUSTED_USER_IDS", [])
-        ),
-        "max_active_runs_per_topic": getattr(settings, "PEAR_WORKER_MAX_ACTIVE_RUNS_PER_TOPIC", 1),
-        "max_active_runs_per_realm": getattr(settings, "PEAR_WORKER_MAX_ACTIVE_RUNS_PER_REALM", 3),
+        "service_tier": settings.PEAR_WORKER_SERVICE_TIER,
+        "fast_mode": settings.PEAR_WORKER_FAST_MODE,
+        "sandbox": settings.PEAR_WORKER_SANDBOX,
+        "approval_policy": settings.PEAR_WORKER_APPROVAL_POLICY,
+        "workdir": settings.PEAR_WORKER_WORKDIR,
+        "trusted_user_ids_configured": bool(settings.PEAR_WORKER_TRUSTED_USER_IDS),
+        "max_active_runs_per_topic": settings.PEAR_WORKER_MAX_ACTIVE_RUNS_PER_TOPIC,
+        "max_active_runs_per_realm": settings.PEAR_WORKER_MAX_ACTIVE_RUNS_PER_REALM,
     }
 
 
 def build_pear_config_for_user(user_profile: UserProfile) -> PearConfigPayload:
-    worker_agent_runtime = getattr(settings, "PEAR_WORKER_AGENT_RUNTIME", "disabled")
+    worker_agent_runtime = settings.PEAR_WORKER_AGENT_RUNTIME
     worker_runtime_available, worker_runtime_detail = pear_worker_runtime_dependency_status(
         worker_agent_runtime
     )
@@ -746,8 +744,8 @@ def build_pear_config_for_user(user_profile: UserProfile) -> PearConfigPayload:
         worker_runtime_login_command=worker_runtime_login_command,
         worker_runtime_login_target=worker_runtime_login_target,
         worker_runtime_login_instructions=worker_runtime_login_instructions,
-        worker_service_tier=getattr(settings, "PEAR_WORKER_SERVICE_TIER", None),
-        worker_fast_mode=getattr(settings, "PEAR_WORKER_FAST_MODE", False),
+        worker_service_tier=settings.PEAR_WORKER_SERVICE_TIER,
+        worker_fast_mode=settings.PEAR_WORKER_FAST_MODE,
     )
 
 
@@ -1047,7 +1045,7 @@ def get_pear_git_tree_backend(
     workdir = (
         context.workdir.strip()
         if context is not None and context.workdir.strip()
-        else str(getattr(settings, "PEAR_WORKER_WORKDIR", None) or os.getcwd())
+        else str(settings.PEAR_WORKER_WORKDIR or os.getcwd())
     )
     isolation_username = pear_context_isolation_username(
         context,
@@ -1282,7 +1280,7 @@ def post_pear_topic_context_backend(
     previous_model = (
         context.model.strip()
         if context.model.strip()
-        else str(getattr(settings, "PEAR_WORKER_MODEL", "") or "")
+        else str(settings.PEAR_WORKER_MODEL or "")
     )
     previous_reasoning_effort = pear_worker_reasoning_effort_for_topic(
         user_profile,
@@ -1687,7 +1685,7 @@ def post_pear_side_backend(
         status=PearWorkerRun.QUEUED,
         summary="Queued side session.",
         current_activity=side_request,
-        runtime_label=str(getattr(settings, "PEAR_WORKER_AGENT_RUNTIME", "disabled") or ""),
+        runtime_label=str(settings.PEAR_WORKER_AGENT_RUNTIME or ""),
         model=pear_worker_model_for_topic(
             pear_bot.user_profile,
             stream=side_context_stream,
@@ -1698,7 +1696,7 @@ def post_pear_side_backend(
             stream=side_context_stream,
             topic=side_context_topic,
         ),
-        approval_policy=str(getattr(settings, "PEAR_WORKER_APPROVAL_POLICY", "") or ""),
+        approval_policy=str(settings.PEAR_WORKER_APPROVAL_POLICY or ""),
         workdir=pear_worker_workdir_for_topic(
             pear_bot.user_profile,
             stream=side_context_stream,

@@ -19,7 +19,6 @@ import * as message_lists from "./message_lists.ts";
 import * as message_reminder from "./message_reminder.ts";
 import * as message_viewport from "./message_viewport.ts";
 import {page_params} from "./page_params.ts";
-import * as pear_panel from "./pear_panel.ts";
 import * as pm_list from "./pm_list.ts";
 import * as popover_menus from "./popover_menus.ts";
 import * as popovers from "./popovers.ts";
@@ -57,10 +56,12 @@ export function restore_sidebar_toggle_status(): void {
         $("body").addClass("hide-left-sidebar");
     }
 
-    if (!page_params.is_spectator && ls.get("right-sidebar")) {
-        // The right sidebar is never shown in the spectator mode;
-        // avoid processing local storage state for hiding the right
-        // sidebar.
+    if (!page_params.is_spectator && ls.get("right-sidebar") !== false) {
+        // The right sidebar defaults to hidden: the reclaimed right
+        // area is an on-demand pane host, so only an explicit stored
+        // preference (the user toggled the sidebar visible) keeps it
+        // open. The right sidebar is never shown in the spectator
+        // mode; avoid processing local storage state for it.
         $("body").addClass("hide-right-sidebar");
     }
 }
@@ -400,7 +401,6 @@ export function initialize_right_sidebar(): void {
     $("#right-sidebar-container").html(rendered_sidebar);
 
     buddy_list.initialize_tooltips();
-    pear_panel.initialize();
 
     update_invite_user_option();
 

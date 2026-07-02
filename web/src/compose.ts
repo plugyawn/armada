@@ -22,7 +22,7 @@ import * as message_events from "./message_events.ts";
 import type {LocalMessage} from "./message_helper.ts";
 import * as message_viewport from "./message_viewport.ts";
 import * as onboarding_steps from "./onboarding_steps.ts";
-import * as pear_panel from "./pear_panel.ts";
+import * as pear_runs_store from "./pear_runs_store.ts";
 import * as reload from "./reload.ts";
 import * as scheduled_messages from "./scheduled_messages.ts";
 import * as sent_messages from "./sent_messages.ts";
@@ -195,7 +195,7 @@ function try_start_pear_side_session(): boolean {
         },
         success(raw_data) {
             clear_compose_box();
-            pear_panel.refresh();
+            pear_runs_store.refresh();
             const data = raw_data as {dm_narrow_url?: string};
             if (data.dm_narrow_url !== undefined) {
                 window.location.hash = data.dm_narrow_url.slice(1);

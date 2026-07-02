@@ -1,16 +1,99 @@
+/* The reclaimed right area (R2): an on-demand pane host appended to
+   .app-main by pear_split_view.ts. It replaces the permanent right
+   rail as the home for Pear surfaces; hidden unless the body carries
+   pear-right-area-open. */
+#pear-right-area {
+    display: none;
+}
+
+body.pear-right-area-open {
+    #pear-right-area {
+        position: fixed;
+        top: 0;
+        right: 0;
+        z-index: 100;
+        display: flex;
+        flex-direction: column;
+        box-sizing: border-box;
+        width: var(--pear-right-area-width);
+        height: 100%;
+        min-height: var(--full-height-dynamic-viewport);
+        padding-top: calc(
+            var(--navbar-fixed-height) + var(--header-padding-bottom)
+        );
+        border-left: 1px solid var(--color-border-sidebar);
+        background-color: var(--color-background);
+    }
+
+    /* The open pane host pushes the middle column, exactly like the
+       right sidebar does; 7px matches the gutter .hide-right-sidebar
+       leaves beside the feed. */
+    .app-main .column-middle,
+    #compose-content {
+        margin-right: calc(var(--pear-right-area-width) + 7px);
+    }
+
+    @media (width >= $xl_min) {
+        /* When the buddy-list right sidebar is also visible (wide
+           viewports only), the pane host sits inboard of it. */
+        &:not(.hide-right-sidebar) {
+            #pear-right-area {
+                right: var(--right-sidebar-width);
+            }
+
+            .app-main .column-middle,
+            #compose-content {
+                margin-right: calc(
+                    var(--right-sidebar-width) + var(--pear-right-area-width)
+                );
+            }
+        }
+    }
+}
+
+.pear-pane {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-height: 0;
+}
+
+.pear-pane-header {
+    display: flex;
+    flex: none;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5em;
+    padding: 0.5em 0.75em;
+    border-bottom: 1px solid var(--color-border-sidebar);
+}
+
+.pear-pane-title {
+    overflow: hidden;
+    color: var(--color-text-default);
+    font-weight: 700;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.pear-pane-body {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+}
+
 #pear-panel {
-    border-top: 1px solid var(--color-border-sidebar-subheader);
-    padding: 8px var(--right-sidebar-padding-left) 10px;
-    color: var(--color-text-sidebar-row);
+    /* 8px 10px 10px at the panel's 12px font */
+    padding: 0.667em 0.833em 0.833em;
+    color: var(--color-text-default);
     font-size: 12px;
-    /* The panel sits on the sidebar rail, which is dark in BOTH
-       themes; re-scope tokens whose light values are tuned for the
-       white pane so that panel text and status dots keep ≥3:1
-       contrast on the aubergine rail. */
-    --color-text-item: var(--color-text-sidebar-row);
-    --color-pear-status-active: hsl(146deg 33% 55%);
-    --color-pear-status-blocked: hsl(342deg 70% 70%);
-    --color-pear-status-idle: hsl(229deg 10% 78%);
+    /* The panel renders as a pane on the app canvas now, not on the
+       dark sidebar rail; re-point the rail-scoped sidebar text tokens
+       used throughout the panel at pane values. The global
+       --color-text-item and --color-pear-status-* tokens already
+       carry pane-appropriate light-dark pairs. */
+    --color-text-sidebar-row: var(--color-text-default);
+    --color-text-sidebar-heading: var(--color-text-default);
 }
 
 .pear-panel-inner {

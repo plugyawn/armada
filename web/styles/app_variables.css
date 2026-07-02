@@ -366,6 +366,10 @@
     /* We open the right sidebar at xl_min at a size of 240px,
        here expressed as precisely 20% of the viewport. */
     --right-sidebar-width: min(20vw, var(--right-sidebar-max-width));
+    /* The reclaimed right area: the on-demand pane host for Pear
+       surfaces (panel now; session panes and canvas later). 300px to
+       400px at 16px/1em, tracking the viewport in between. */
+    --pear-right-area-width: clamp(18.75em, 24vw, 25em);
     /* 25px at 16px/1em */
     --right-sidebar-vdots-width: 1.5625em;
     /* The width of the icon is reduced by 2px, to account for 2px

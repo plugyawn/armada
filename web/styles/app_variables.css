@@ -182,6 +182,8 @@
     --slack-link-dark-hover: #40b3e4;
     --slack-sidebar: #3f0e40;
     --slack-sidebar-dark: #19171d;
+    --slack-rail: #350d36;
+    --slack-rail-dark: #121016;
     --slack-sidebar-selected: #1164a3;
     --slack-badge-red: #e01e5a;
     --slack-send-green: #007a5a;
@@ -352,12 +354,10 @@
     --middle-column-left-margin-fluid-layout: calc(
         var(--header-height) + var(--realm-logo-current-width) + 10px
     );
-    /* Sidebar width is 1/3 of the screen at smaller
-       sizes, but gets held to the left sidebar's max width.
-       This is very useful for areas in the CSS codebase
-       that rely on this value, but not necessarily as
-       applied to `width:` or `max-width:`. */
-    --left-sidebar-width: min(33.3333vw, var(--left-sidebar-max-width));
+    /* The Slack-style channel sidebar is pinned to a fixed width;
+       260px at 16px/1em. Areas across the CSS codebase rely on this
+       value, not only `width:` or `max-width:` declarations. */
+    --left-sidebar-width: 16.25em;
     --right-sidebar-left-spacing: 5px;
     /* 50px per icon * 4 icons + 3px space (legacy) = 203px at 20px/1em */
     --right-column-collapsed-sidebar-width: 10.15em;
@@ -370,11 +370,12 @@
        surfaces (panel now; session panes and canvas later). 300px to
        400px at 16px/1em, tracking the viewport in between. */
     --pear-right-area-width: clamp(18.75em, 24vw, 25em);
-    /* The full-bleed frame. The icon rail lands in a later slice, so
-       its width is 0 for now; the right pane width is nonzero only
-       while a Pear pane is open (body.pear-right-area-open). With
-       both at 0, the middle column paints edge-to-edge. */
-    --pear-left-rail-width: 0px;
+    /* The full-bleed frame. The fixed icon rail owns the left edge
+       (pear_icon_rail.ts); narrow viewports zero its width alongside
+       the frame inset (see zulip.css). The right pane width is
+       nonzero only while a Pear pane is open
+       (body.pear-right-area-open). */
+    --pear-left-rail-width: 64px;
     --pear-right-pane-width: 0px;
     /* Everything left of the middle column. The navbar and the
        middle column share this seam; it collapses to 0 whenever the
@@ -944,6 +945,12 @@
     --color-background-sidebar: light-dark(
         var(--slack-sidebar),
         var(--slack-sidebar-dark)
+    );
+    /* The icon rail sits left of the channel sidebar and is a step
+       darker than it in both themes. */
+    --color-background-icon-rail: light-dark(
+        var(--slack-rail),
+        var(--slack-rail-dark)
     );
     --color-text-sidebar-row: light-dark(
         hsl(0deg 0% 100% / 72%),

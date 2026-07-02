@@ -66,7 +66,9 @@
 
 #stream_filters,
 #left-sidebar-navigation-list {
-    margin-right: var(--left-sidebar-right-margin);
+    /* Slack-style rows run the full sidebar width, so the selection
+       highlight reaches the right edge. */
+    margin-right: 0;
 }
 
 .add-stream-icon-container {
@@ -436,16 +438,15 @@
         var(--left-sidebar-vdots-width);
 }
 
-.spectator-view #left-sidebar-search {
-    grid-template-columns: minmax(0, 1fr);
-}
-
 #left-sidebar-search {
     display: grid;
-    grid-template-areas: "filter-container add-channel channel-folders-option";
-    grid-template-columns:
-        minmax(0, 1fr) var(--left-sidebar-header-icon-width)
-        auto;
+    /* The Slack-style header: a workspace-name row above a
+       full-width "Find a conversation" pill. The add-streams
+       button lives on the icon rail (pear_icon_rail.hbs). */
+    grid-template-areas:
+        "workspace-header"
+        "filter-container";
+    grid-template-columns: minmax(0, 1fr);
     position: sticky;
     top: 0;
     background: var(--color-background-sidebar);
@@ -457,9 +458,52 @@
         display: none;
     }
 
+    #left-sidebar-workspace-header {
+        grid-area: workspace-header;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.3571em; /* 5px at 14px/1em */
+        padding: 0.5714em 0 0.4286em 0.3571em; /* 8px 0 6px 5px at 14px/1em */
+    }
+
+    .left-sidebar-workspace-name {
+        overflow: hidden;
+        color: hsl(0deg 0% 100%);
+        font-size: 1.2857em; /* 18px at 14px/1em */
+        font-weight: 900;
+        line-height: 1.2;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    > .input-wrapper-for-tooltip {
+        grid-area: filter-container;
+    }
+
+    .left-sidebar-search-section {
+        /* The Slack "Find a conversation" pill: a white-alpha
+           bordered pill on the aubergine sidebar, in both themes. */
+        --color-background-input: hsl(0deg 0% 100% / 8%);
+        --color-background-input-focus: hsl(0deg 0% 100% / 14%);
+        --color-outline-input: hsl(0deg 0% 100% / 30%);
+        --color-outline-input-hover: hsl(0deg 0% 100% / 45%);
+        --color-outline-input-focus: hsl(0deg 0% 100% / 70%);
+        --color-text-input: hsl(0deg 0% 100%);
+        --color-text-neutral-icon-button: hsl(0deg 0% 100% / 72%);
+
+        .input-element {
+            border-radius: 6px;
+
+            &::placeholder {
+                color: hsl(0deg 0% 100% / 72%);
+            }
+        }
+    }
+
     .channel-folders-sidebar-menu-icon {
-        grid-area: channel-folders-option;
         display: grid;
+        flex: none;
         /* width excluding left & right margin */
         width: calc(var(--left-sidebar-vdots-width) - 3px);
         cursor: pointer;
@@ -852,11 +896,11 @@
     background-color: var(--color-background-active-narrow-filter);
 
     &#direct-messages-section-header {
-        border-radius: 4px 4px 0 0;
+        border-radius: 6px 6px 0 0;
     }
 
     #direct-messages-list {
-        border-radius: 0 0 4px 4px;
+        border-radius: 0 0 6px 6px;
     }
 }
 
@@ -864,7 +908,7 @@
 .bottom_left_row {
     /* Ensure a border radius on any interactive
        state that might show a highlight. */
-    border-radius: 4px;
+    border-radius: 6px;
 
     /* Always show the box-shadow outline on hover and
        an open left-sidebar menu (vdots) */
@@ -1245,9 +1289,9 @@ ul.filters {
 li.active-filter,
 li.top-left-active-filter,
 li.active-sub-filter {
-    font-weight: 600 !important;
+    font-weight: 700 !important;
     position: relative;
-    border-radius: 4px;
+    border-radius: 6px;
     color: var(--color-text-active-narrow-filter);
     background-color: var(--color-background-active-narrow-filter);
 
@@ -2492,7 +2536,11 @@ li.topic-list-item {
     display: none !important;
 }
 
-#left-sidebar-navigation-area.hidden-by-filters {
+/* The VIEWS block is collapsed while the Pear icon rail carries its
+   entries (Home, Activity, Files, and the other-views popover on the
+   rail's More button); keyboard navigation skips these rows in
+   sidebar_ui.all_rows. */
+#left-sidebar-navigation-area {
     display: none;
 }
 

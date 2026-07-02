@@ -29,7 +29,7 @@ import * as settings_config from "./settings_config.ts";
 import * as settings_data from "./settings_data.ts";
 import * as settings_preferences from "./settings_preferences.ts";
 import * as spectators from "./spectators.ts";
-import {current_user} from "./state_data.ts";
+import {current_user, realm} from "./state_data.ts";
 import * as stream_list from "./stream_list.ts";
 import * as ui_util from "./ui_util.ts";
 import {user_settings} from "./user_settings.ts";
@@ -328,6 +328,7 @@ export function initialize_left_sidebar(): void {
         is_spectator: page_params.is_spectator,
         primary_condensed_views,
         expanded_views,
+        realm_name: realm.realm_name,
         LEFT_SIDEBAR_NAVIGATION_AREA_TITLE,
         LEFT_SIDEBAR_DIRECT_MESSAGES_TITLE: pm_list.LEFT_SIDEBAR_DIRECT_MESSAGES_TITLE,
     });
@@ -533,13 +534,21 @@ function all_rows(): JQuery {
         "#left-sidebar-topic-search-hint.hidden .left-sidebar-topic-search-hint-link",
     );
 
+    // The VIEWS block is hidden while the Pear icon rail carries its
+    // entries; keep its rows out of keyboard navigation.
+    const $hidden_navigation_rows = $(
+        "#left-sidebar-navigation-area .top_left_row," +
+            " #left-sidebar-navigation-area #views-label-container",
+    );
+
     const $filtered_rows = $all_rows
         .not($inactive_or_muted_rows)
         .not($collapsed_views)
         .not($collapsed_channels)
         .not($hidden_topic_rows)
         .not($toggle_inactive_or_muted_channels_row)
-        .not($hidden_topic_search_hint_row);
+        .not($hidden_topic_search_hint_row)
+        .not($hidden_navigation_rows);
 
     // With a "topic:" prefix search, keyboard navigation only lands on
     // topic rows, not channel header rows.

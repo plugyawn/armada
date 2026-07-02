@@ -545,3 +545,169 @@ body.pear-right-area-open {
 .pear-side-start:disabled {
     opacity: 0.5;
 }
+
+/* The Slack-style icon rail: a fixed 64px nav owning the left edge
+   of the full-bleed frame, prepended to .app-main by
+   pear_icon_rail.ts. Painted a step darker than the channel sidebar
+   in both themes; its buttons rebind existing surfaces only (home
+   view, DM/mentions/drafts narrows, the other-views and add-streams
+   popovers, the theme setting, and the relocated personal menu). */
+#pear-icon-rail {
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: 101;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    box-sizing: border-box;
+    width: var(--pear-left-rail-width);
+    height: 100%;
+    min-height: var(--full-height-dynamic-viewport);
+    padding: 10px 0 14px;
+    gap: 6px;
+    background-color: var(--color-background-icon-rail);
+
+    .pear-rail-bottom {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 6px;
+        margin-top: auto;
+    }
+
+    .pear-rail-button {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-sizing: border-box;
+        width: 36px;
+        height: 36px;
+        margin: 0;
+        padding: 0;
+        border: none;
+        border-radius: 8px;
+        background: none;
+        color: hsl(0deg 0% 100% / 78%);
+        cursor: pointer;
+
+        .zulip-icon {
+            font-size: 20px;
+            color: inherit;
+        }
+
+        &:hover,
+        &:focus {
+            color: hsl(0deg 0% 100%);
+            text-decoration: none;
+        }
+
+        &:hover {
+            background-color: hsl(0deg 0% 100% / 12%);
+        }
+
+        &:focus-visible {
+            outline: 2px solid var(--color-outline-focus);
+            outline-offset: -2px;
+        }
+
+        /* Slack's selected rail state: white/22% radius-8 square. */
+        &.selected {
+            background-color: hsl(0deg 0% 100% / 22%);
+            color: hsl(0deg 0% 100%);
+        }
+    }
+
+    .pear-rail-workspace {
+        margin-bottom: 2px;
+
+        .pear-rail-workspace-icon {
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+            object-fit: cover;
+        }
+    }
+
+    /* The relocated add-streams button; its popover is delegated on
+       #add_streams_button, so it works unchanged from the rail. */
+    #add_streams_button {
+        color: hsl(0deg 0% 100% / 78%);
+
+        &:hover {
+            color: hsl(0deg 0% 100%);
+            background-color: hsl(0deg 0% 100% / 12%);
+        }
+    }
+
+    /* The theme toggle advertises the theme a click switches to:
+       moon while light, sun while dark (matching the effective
+       scheme when the preference is automatic). */
+    .pear-rail-theme-toggle .zulip-icon-sun {
+        display: none;
+    }
+
+    /* The relocated personal menu keeps its navbar markup (the
+       popover and avatar live-update bind to it); restyle its
+       header-button geometry for the rail. */
+    #personal-menu .header-button {
+        width: 36px;
+        height: 36px;
+        border-radius: 8px;
+
+        &:hover {
+            background-color: hsl(0deg 0% 100% / 12%);
+        }
+
+        &:focus-visible {
+            background-color: hsl(0deg 0% 100% / 22%);
+        }
+
+        .header-button-avatar {
+            width: 1.625em; /* 26px at 16px em */
+            height: 1.625em; /* 26px at 16px em */
+            border-radius: 6px;
+        }
+    }
+
+    .navbar-item.active-navbar-menu .header-button {
+        background-color: hsl(0deg 0% 100% / 22%);
+    }
+}
+
+:root.dark-theme #pear-icon-rail .pear-rail-theme-toggle {
+    .zulip-icon-moon {
+        display: none;
+    }
+
+    .zulip-icon-sun {
+        display: block;
+    }
+}
+
+@media (prefers-color-scheme: dark) {
+    :root.color-scheme-automatic #pear-icon-rail .pear-rail-theme-toggle {
+        .zulip-icon-moon {
+            display: none;
+        }
+
+        .zulip-icon-sun {
+            display: block;
+        }
+    }
+}
+
+/* The rail collapses with the frame below the left column's
+   auto-collapse point; zulip.css zeroes --pear-left-rail-width and
+   --pear-frame-inset at the same thresholds. */
+@media (width < $md_min) {
+    #pear-icon-rail {
+        display: none;
+    }
+}
+
+@container app (width < $cq_md_min) {
+    #pear-icon-rail {
+        display: none;
+    }
+}

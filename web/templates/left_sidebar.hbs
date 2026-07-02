@@ -1,14 +1,14 @@
 <div class="left-sidebar" id="left-sidebar" role="navigation">
     <div id="left-sidebar-search">
+        <div id="left-sidebar-workspace-header">
+            <span class="left-sidebar-workspace-name">{{realm_name}}</span>
+            <span class="sidebar-menu-icon channel-folders-sidebar-menu-icon hidden-for-spectators" tabindex="0"><i class="zulip-icon zulip-icon-more-vertical" aria-label="{{t 'Show channel folders'}}"></i></span>
+        </div>
         <div class="input-wrapper-for-tooltip tippy-zulip-delayed-tooltip" data-tooltip-template-id="filter-left-sidebar-tooltip-template">
             {{#> components/input_wrapper input_type="filter-input" custom_classes="left-sidebar-search-section" icon="search" input_button_icon="close"}}
-                <input type="text" class="input-element left-sidebar-search-input" autocomplete="off" placeholder="{{t 'Filter left sidebar' }}" />
+                <input type="text" class="input-element left-sidebar-search-input" autocomplete="off" placeholder="{{t 'Find a conversation' }}" />
             {{/components/input_wrapper}}
         </div>
-        <span id="add_streams_button" class="add-stream-icon-container hidden-for-spectators" tabindex="0">
-            <i id="streams_inline_icon" class="add_stream_icon zulip-icon zulip-icon-square-plus" aria-hidden="true" ></i>
-        </span>
-        <span class="sidebar-menu-icon channel-folders-sidebar-menu-icon hidden-for-spectators" tabindex="0"><i class="zulip-icon zulip-icon-more-vertical" aria-label="{{t 'Show channel folders'}}"></i></span>
     </div>
     <ul id="left-sidebar-empty-list-message" class="hidden">
         {{> empty_list_widget_for_list

@@ -588,6 +588,12 @@ body.has-overlay-scrollbar {
         --color-unread-counter-quiet: hsl(0deg 0% 100% / 60%);
     }
 
+    .column-left {
+        /* The fixed icon rail owns the leftmost strip of the frame;
+           the channel sidebar column starts at its right edge. */
+        left: var(--pear-left-rail-width);
+    }
+
     .column-left .left-sidebar {
         width: var(--left-sidebar-width);
         padding-left: var(--left-sidebar-padding-left);
@@ -1669,7 +1675,10 @@ div.topic_edit_spinner .loading_indicator_spinner {
             display: block;
             position: absolute;
             float: none;
-            left: 0;
+            /* The overlay drawer opens at the rail seam; narrow
+               viewports zero the rail width, putting it back at
+               the viewport edge. */
+            left: var(--pear-left-rail-width);
             top: 0;
 
             .left-sidebar {
@@ -1691,10 +1700,11 @@ div.topic_edit_spinner .loading_indicator_spinner {
 }
 
 .hide-left-sidebar {
-    /* With the left column hidden, the frame has no left inset:
-       the navbar spans the full width and the middle column
-       reaches the left viewport edge. */
-    --pear-frame-inset: 0px;
+    /* With the left column hidden, the icon rail still owns the
+       left edge at desktop widths: the navbar and the middle
+       column start at the rail seam. Narrow viewports zero the
+       rail width itself, collapsing the inset to 0. */
+    --pear-frame-inset: var(--pear-left-rail-width);
 
     .app-main {
         @extend %hide-left-sidebar;
@@ -1808,11 +1818,12 @@ body:not(.spectator-view) {
     .app-main {
         @extend %hide-left-sidebar;
 
-        /* The auto-collapsed left column zeroes the frame inset for
-           everything in the app column; the navbar's own inset is
-           zeroed by the fallback media query below, since container
-           queries cannot reach outside .app. */
+        /* The auto-collapsed left column zeroes the frame inset and
+           the icon rail width for everything in the app column; the
+           navbar's own inset is zeroed by the fallback media query
+           below, since container queries cannot reach outside .app. */
         --pear-frame-inset: 0px;
+        --pear-left-rail-width: 0px;
 
         .column-middle .column-middle-inner {
             margin-left: 0;
@@ -1865,12 +1876,14 @@ body:not(.spectator-view) {
 
 @media (width < $md_min) {
     /* Below the left column's auto-collapse point, the frame has no
-       left inset. This zeroes the navbar's inset in all browsers
-       (container queries cannot reach the navbar, which sits outside
-       .app), and stands in for the app container query above in
-       browsers without container query support. */
+       left inset and the icon rail collapses. This zeroes the
+       navbar's inset in all browsers (container queries cannot reach
+       the navbar, which sits outside .app), and stands in for the
+       app container query above in browsers without container query
+       support. */
     body {
         --pear-frame-inset: 0px;
+        --pear-left-rail-width: 0px;
     }
 
     .without-container-query-support {
@@ -2035,11 +2048,6 @@ body:not(.spectator-view) {
         /* Adjust in response to shorter navbar. */
         top: 5px;
         right: 4px;
-    }
-
-    #top_navbar .column-right #personal-menu .header-button-avatar {
-        width: 1.25em; /* 20px at 16px em */
-        height: 1.25em; /* 20px at 16px em */
     }
 }
 

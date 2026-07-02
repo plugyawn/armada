@@ -35,10 +35,12 @@ from zerver.lib.pear_worker import (
     configure_pear_channel_repository_context,
     ensure_pear_topic_context,
     ensure_pear_topic_workdir,
+    invalidate_pear_git_status_delta,
     load_pear_active_session_from_zulip,
     maybe_refactor_pear_stream_contexts_on_rename,
     maybe_refactor_pear_topic_context_on_move,
     pear_expected_topic_workdir,
+    pear_git_status_delta,
     pear_topic_workdir_root,
     pear_topic_process_isolation,
     pear_worker_process_isolation_error,
@@ -608,7 +610,7 @@ class PearSessionEndpointTest(ZulipTestCase):
 
         self.assert_json_error(result, "Invalid Pear bot selection.")
 
-    def test_get_pear_topic_context_creates_scoped_workdir(self) -> None:
+    def test_get_pear_topic_context_is_read_only_without_existing_context(self) -> None:
         owner = self.example_user("hamlet")
         self.subscribe(owner, PEAR_DEFAULT_STREAM)
         self.login_user(owner)
@@ -630,19 +632,20 @@ class PearSessionEndpointTest(ZulipTestCase):
 
             result_dict = self.assert_json_success(result)
             context_payload = result_dict["pear_topic_context"]
-            context = PearTopicContext.objects.get(
-                realm=owner.realm,
-                stream_name=PEAR_DEFAULT_STREAM,
-                topic_name=PEAR_DEFAULT_TOPIC,
-            )
 
             self.assertEqual(context_payload["model"], "gpt-5.5")
             self.assertIn("gpt-5.5", context_payload["model_choices"])
             self.assertIn("gpt-5.5-mini", context_payload["model_choices"])
             self.assertEqual(context_payload["reasoning_effort"], "medium")
             self.assertEqual(context_payload["default_reasoning_effort"], "medium")
-            self.assertTrue(context.workdir.startswith(temp_dir))
-            self.assertEqual(context_payload["workdir"], context.workdir)
+            self.assertEqual(context_payload["workdir"], "/workspace/base")
+            self.assertFalse(
+                PearTopicContext.objects.filter(
+                    realm=owner.realm,
+                    stream_name=PEAR_DEFAULT_STREAM,
+                    topic_name=PEAR_DEFAULT_TOPIC,
+                ).exists()
+            )
 
     def test_existing_base_workdir_topic_context_is_repaired(self) -> None:
         owner = self.example_user("hamlet")
@@ -983,7 +986,7 @@ class PearSessionEndpointTest(ZulipTestCase):
 
             self.assertTrue((workdir / ".git").is_dir())
 
-    def test_git_context_distinguishes_repo_from_worktree(self) -> None:
+    def test_git_context_reports_status_delta_for_worktree(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             base_workdir = Path(temp_dir) / "base"
             topic_workdir = Path(temp_dir) / "devel-pear-efficient-smoke"
@@ -1017,12 +1020,106 @@ class PearSessionEndpointTest(ZulipTestCase):
                 timeout=30,
             )
 
-            git_context = build_pear_git_context(str(topic_workdir))
+            git_context = build_pear_git_context(
+                str(topic_workdir),
+                topic="devel-pear-efficient-smoke",
+            )
 
-            self.assertEqual(git_context["repo_label"], "zulip/zulip")
-            self.assertEqual(git_context["remote_url"], "https://github.com/zulip/zulip.git")
             self.assertEqual(git_context["worktree_name"], "devel-pear-efficient-smoke")
             self.assertEqual(git_context["branch"], "")
+            self.assertEqual(git_context["ahead"], 0)
+            self.assertEqual(git_context["behind"], 0)
+            self.assertFalse(git_context["dirty"])
+            self.assertEqual(git_context["changed_count"], 0)
+            self.assertTrue(git_context["detached"])
+            self.assertFalse(git_context["branch_matches_topic"])
+
+    def test_pear_git_status_delta_uses_cache_until_invalidated(self) -> None:
+        invalidate_pear_git_status_delta()
+        clean_status = "\n".join(
+            [
+                "# branch.oid 1234567890abcdef",
+                "# branch.head topic-a",
+                "# branch.upstream origin/topic-a",
+                "# branch.ab +2 -1",
+            ]
+        )
+        dirty_status = "\n".join([clean_status, "1 .M N... 100644 100644 100644 a b file.txt"])
+
+        with patch(
+            "zerver.lib.pear_worker.pear_git_output",
+            side_effect=[clean_status, dirty_status],
+        ) as git_output:
+            clean_delta = pear_git_status_delta("/repo", topic="topic-a")
+            cached_delta = pear_git_status_delta("/repo", topic="topic-a")
+            invalidate_pear_git_status_delta("/repo")
+            dirty_delta = pear_git_status_delta("/repo", topic="topic-a")
+
+        self.assertEqual(git_output.call_count, 2)
+        self.assertEqual(clean_delta["head"], "1234567")
+        self.assertEqual(clean_delta["ahead"], 2)
+        self.assertEqual(clean_delta["behind"], 1)
+        self.assertTrue(clean_delta["branch_matches_topic"])
+        self.assertFalse(clean_delta["dirty"])
+        self.assertEqual(cached_delta, clean_delta)
+        self.assertTrue(dirty_delta["dirty"])
+        self.assertEqual(dirty_delta["changed_count"], 1)
+
+    def test_pear_git_status_delta_runs_one_porcelain_command(self) -> None:
+        invalidate_pear_git_status_delta()
+        status_output = "\n".join(
+            [
+                "# branch.oid 1234567890abcdef",
+                "# branch.head topic-a",
+                "# branch.ab +0 -0",
+                "? new.txt",
+            ]
+        )
+        completed = subprocess.CompletedProcess(
+            ["git"],
+            0,
+            stdout=status_output,
+            stderr="",
+        )
+        with patch("zerver.lib.pear_worker.subprocess.run", return_value=completed) as run_mock:
+            delta = pear_git_status_delta("/repo", topic="topic-b")
+
+        run_mock.assert_called_once()
+        self.assertTrue(delta["dirty"])
+        self.assertEqual(delta["changed_count"], 1)
+        self.assertFalse(delta["branch_matches_topic"])
+
+    def test_get_pear_git_tree_returns_on_demand_graph(self) -> None:
+        owner = self.example_user("hamlet")
+        self.subscribe(owner, PEAR_DEFAULT_STREAM)
+        self.login_user(owner)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workdir = Path(temp_dir) / "topic"
+            self.create_git_repository(workdir)
+            (workdir / "notes.txt").write_text("dirty\n", encoding="utf-8")
+            PearTopicContext.objects.create(
+                realm=owner.realm,
+                stream_name=PEAR_DEFAULT_STREAM,
+                topic_name=PEAR_DEFAULT_TOPIC,
+                workdir=str(workdir),
+            )
+
+            result = self.client_get(
+                "/json/pear/git-tree",
+                {
+                    "stream": PEAR_DEFAULT_STREAM,
+                    "topic": PEAR_DEFAULT_TOPIC,
+                },
+                intentionally_undocumented=True,
+            )
+
+        git_tree = self.assert_json_success(result)["git_tree"]
+        self.assertTrue(git_tree["available"])
+        self.assertIn("*", git_tree["graph"])
+        self.assertIn("initial", git_tree["graph"])
+        self.assertIn("?? notes.txt", git_tree["status_short"])
+        self.assertTrue(git_tree["delta"]["dirty"])
 
     def test_workspace_context_reports_local_topic_repo_without_external_pin(self) -> None:
         owner = self.example_user("hamlet")

@@ -44,6 +44,8 @@ from zerver.lib.pear_worker import (
     ensure_pear_child_topic_context,
     ensure_pear_topic_context,
     pear_default_worker_reasoning_effort,
+    pear_git_output,
+    pear_git_status_delta,
     pear_logical_repository_label,
     pear_logical_worktree_label,
     pear_pinned_repository_value,
@@ -75,8 +77,7 @@ from zerver.views.users import add_bot_backend
 PEAR_ACTIVE_SESSION_MESSAGE_LIMIT = 50
 PEAR_RUN_LIST_LIMIT = 20
 PEAR_RUN_EVENT_LIMIT = 40
-PEAR_GIT_STATUS_LIMIT = 12
-PEAR_GIT_COMMIT_LIMIT = 5
+PEAR_GIT_TREE_COMMIT_LIMIT = 20
 PEAR_MODEL_SLUG_LIMIT = 100
 PEAR_MODEL_CATALOG_CACHE_SECONDS = 300
 
@@ -479,20 +480,6 @@ def pear_git_command(
     return completed.stdout.strip()
 
 
-def classify_git_status(status_code: str) -> str:
-    if "?" in status_code:
-        return "untracked"
-    if "A" in status_code:
-        return "added"
-    if "D" in status_code:
-        return "deleted"
-    if "R" in status_code:
-        return "renamed"
-    if "M" in status_code:
-        return "modified"
-    return "changed"
-
-
 def pear_git_remote_label(remote_url: str, repo_root: str) -> str:
     clean_url = remote_url.strip()
     if clean_url:
@@ -510,81 +497,51 @@ def pear_git_remote_label(remote_url: str, repo_root: str) -> str:
 def build_pear_git_context(
     workdir: str,
     *,
+    topic: str = "",
     isolation_username: str | None = None,
 ) -> dict[str, object]:
-    if not workdir:
-        return {"available": False}
-    repo_root = pear_git_command(
+    return pear_git_status_delta(
         workdir,
-        ["rev-parse", "--show-toplevel"],
+        topic=topic,
         isolation_username=isolation_username,
     )
-    if not repo_root:
-        return {"available": False, "workdir": workdir}
 
-    branch = pear_git_command(
-        workdir,
-        ["branch", "--show-current"],
-        isolation_username=isolation_username,
-    )
-    head = pear_git_command(
-        workdir,
-        ["rev-parse", "--short", "HEAD"],
-        isolation_username=isolation_username,
-    )
-    remote_url = pear_git_command(
-        workdir,
-        ["config", "--get", "remote.origin.url"],
-        isolation_username=isolation_username,
-    )
-    status_lines = pear_git_command(
-        workdir,
-        ["status", "--short"],
-        isolation_username=isolation_username,
-    ).splitlines()
-    recent_commits = [
-        {"hash": line.split("\t", 1)[0], "summary": line.split("\t", 1)[1]}
-        for line in pear_git_command(
-            workdir,
-            ["log", f"-{PEAR_GIT_COMMIT_LIMIT}", "--pretty=format:%h%x09%s"],
-            isolation_username=isolation_username,
-        ).splitlines()
-        if "\t" in line
-    ]
-    changed_files = []
-    for line in status_lines[:PEAR_GIT_STATUS_LIMIT]:
-        if len(line) < 4:
-            continue
-        status_code = line[:2]
-        changed_files.append(
-            {
-                "status": status_code.strip() or "changed",
-                "kind": classify_git_status(status_code),
-                "path": line[3:].strip(),
-            }
+
+def pear_context_isolation_username(
+    context: PearTopicContext | None,
+    *,
+    stream_name: str,
+    topic_name: str,
+    workdir: str,
+) -> str | None:
+    if (
+        context is not None
+        and pear_topic_os_user_isolation_enabled()
+        and pear_repo_artifact_value_is_durable(workdir)
+    ):
+        return pear_topic_isolation_username_for_realm(
+            context.realm_id,
+            stream=stream_name,
+            topic=topic_name,
         )
+    return None
 
-    return {
-        "available": True,
-        "workdir": workdir,
-        "repo_root": repo_root,
-        "repo_name": Path(repo_root).name,
-        "remote_url": remote_url,
-        "repo_label": pear_git_remote_label(remote_url, repo_root),
-        "worktree_name": Path(repo_root).name,
-        "branch": branch,
-        "head": head,
-        "dirty": bool(status_lines),
-        "changed_count": len(status_lines),
-        "changed_files": changed_files,
-        "changed_files_truncated": len(status_lines) > PEAR_GIT_STATUS_LIMIT,
-        "diff_shortstat": pear_git_command(
-            workdir,
-            ["diff", "--shortstat"],
-            isolation_username=isolation_username,
-        ),
-        "recent_commits": recent_commits,
-    }
+
+def pear_topic_context_for_request(
+    user_profile: UserProfile,
+    *,
+    stream_name: str,
+    topic_name: str,
+) -> PearTopicContext | None:
+    return (
+        PearTopicContext.objects.select_related("parent_context")
+        .filter(
+            realm=user_profile.realm,
+            stream_name=stream_name,
+            topic_name=topic_name,
+        )
+        .first()
+    )
 
 
 def serialize_pear_topic_context(
@@ -651,17 +608,12 @@ def serialize_pear_topic_context(
         topic=topic_name,
         fallback=Path(workdir).name,
     )
-    isolation_username = None
-    if (
-        context is not None
-        and pear_topic_os_user_isolation_enabled()
-        and pear_repo_artifact_value_is_durable(workdir)
-    ):
-        isolation_username = pear_topic_isolation_username_for_realm(
-            context.realm_id,
-            stream=stream_name,
-            topic=topic_name,
-        )
+    isolation_username = pear_context_isolation_username(
+        context,
+        stream_name=stream_name,
+        topic_name=topic_name,
+        workdir=workdir,
+    )
     return {
         "stream": stream_name,
         "topic": topic_name,
@@ -680,7 +632,11 @@ def serialize_pear_topic_context(
         "workdir": workdir,
         "is_paused": bool(context is not None and context.is_paused),
         "parent_context_id": context.parent_context_id if context is not None else None,
-        "git": build_pear_git_context(workdir, isolation_username=isolation_username),
+        "git": build_pear_git_context(
+            workdir,
+            topic=topic_name,
+            isolation_username=isolation_username,
+        ),
     }
 
 
@@ -1012,7 +968,11 @@ def get_pear_topic_context_backend(
     ],
 ) -> HttpResponse:
     access_stream_by_name(user_profile, stream_name)
-    context = ensure_pear_topic_context(user_profile, stream=stream_name, topic=topic_name)
+    context = pear_topic_context_for_request(
+        user_profile,
+        stream_name=stream_name,
+        topic_name=topic_name,
+    )
     return json_success(
         request,
         data={
@@ -1021,6 +981,70 @@ def get_pear_topic_context_backend(
                 stream_name=stream_name,
                 topic_name=topic_name,
             ),
+        },
+    )
+
+
+@typed_endpoint
+def get_pear_git_tree_backend(
+    request: HttpRequest,
+    user_profile: UserProfile,
+    *,
+    stream_name: Annotated[
+        str,
+        ApiParamConfig("stream", documentation_status=INTENTIONALLY_UNDOCUMENTED),
+    ],
+    topic_name: Annotated[
+        str,
+        ApiParamConfig("topic", documentation_status=INTENTIONALLY_UNDOCUMENTED),
+    ],
+) -> HttpResponse:
+    access_stream_by_name(user_profile, stream_name)
+    context = pear_topic_context_for_request(
+        user_profile,
+        stream_name=stream_name,
+        topic_name=topic_name,
+    )
+    workdir = (
+        context.workdir.strip()
+        if context is not None and context.workdir.strip()
+        else str(getattr(settings, "PEAR_WORKER_WORKDIR", None) or os.getcwd())
+    )
+    isolation_username = pear_context_isolation_username(
+        context,
+        stream_name=stream_name,
+        topic_name=topic_name,
+        workdir=workdir,
+    )
+    delta = build_pear_git_context(
+        workdir,
+        topic=topic_name,
+        isolation_username=isolation_username,
+    )
+    graph = ""
+    status_short = ""
+    if delta.get("available") is True:
+        graph = pear_git_output(
+            workdir,
+            ["log", "--graph", "--oneline", "--decorate", f"-{PEAR_GIT_TREE_COMMIT_LIMIT}"],
+            isolation_username=isolation_username,
+        )
+        status_short = pear_git_output(
+            workdir,
+            ["status", "--short"],
+            isolation_username=isolation_username,
+        )
+
+    return json_success(
+        request,
+        data={
+            "git_tree": {
+                "available": delta.get("available") is True,
+                "workdir": workdir,
+                "graph": graph,
+                "status_short": status_short,
+                "delta": delta,
+            },
         },
     )
 

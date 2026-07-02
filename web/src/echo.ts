@@ -97,6 +97,7 @@ export type RawLocalMessage = MessageRequestObject & {
     locally_echoed: boolean;
     resend: boolean;
     id: number;
+    is_pear_message: boolean;
     topic_links: TopicLink[];
     reactions: MessageReaction[];
     draft_id: string;
@@ -272,6 +273,7 @@ export function insert_local_message(
         locally_echoed: true,
         id: local_id_float,
         resend: false,
+        is_pear_message: false,
         is_me_message: false,
         topic_links: markdown.get_topic_links(topic),
         reactions: [],

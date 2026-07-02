@@ -562,9 +562,10 @@ test("pear_message_vars", () => {
 
     let result = calculate_variables(
         build_message_context({
-            sender_email: "pear@zulip.com",
-            sender_full_name: "Pear",
+            sender_email: "renamed-agent@example.com",
+            sender_full_name: "Renamed Agent",
             sender_id: 25,
+            is_pear_message: true,
             content: "<p><em>Thinking</em> <em>✦</em></p>",
         }),
     );
@@ -574,9 +575,10 @@ test("pear_message_vars", () => {
 
     result = calculate_variables(
         build_message_context({
-            sender_email: "pear@zulip.com",
-            sender_full_name: "Pear",
+            sender_email: "renamed-agent@example.com",
+            sender_full_name: "Renamed Agent",
             sender_id: 25,
+            is_pear_message: true,
             content: "<p>Done.</p>",
         }),
     );
@@ -586,9 +588,10 @@ test("pear_message_vars", () => {
 
     result = calculate_variables(
         build_message_context({
-            sender_email: "build-bot@zulip.com",
-            sender_full_name: "Build Bot",
-            sender_id: 26,
+            sender_email: "pear@zulip.com",
+            sender_full_name: "Pear",
+            sender_id: 25,
+            is_pear_message: false,
         }),
     );
     assert.equal(result.is_pear_message, false);

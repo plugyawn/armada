@@ -89,6 +89,7 @@ export const raw_message_schema = z.intersection(
             display_recipient: display_recipient_schema,
             edit_history: z.optional(z.array(message_edit_history_entry_schema)),
             id: z.number(),
+            is_pear_message: z.boolean(),
             is_me_message: z.boolean(),
             last_edit_timestamp: z.optional(z.number()),
             last_moved_timestamp: z.optional(z.number()),

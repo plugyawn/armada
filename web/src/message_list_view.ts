@@ -142,8 +142,8 @@ type RenderingPlan = {
 // The ✦ "thinking" marker on an active Pear message (the trailing
 // `<em>✦</em>` the server appends while the agent is writing) is
 // animated purely in CSS; see `.pear-active-message` in
-// message_row.css. The marker contract and the `is_pear_message`
-// detection below are unchanged.
+// message_row.css. The `is_pear_message` flag is server-sourced from
+// the configured Pear bot identity.
 
 type BoundaryMessageContainerInfo = {
     message_group: MessageGroup;
@@ -712,15 +712,7 @@ export class MessageListView {
         }
 
         const sender_is_bot = people.sender_is_bot(message);
-        const sender_full_name = message.sender_full_name?.toLowerCase() ?? "";
-        const sender_email = message.sender_email?.toLowerCase() ?? "";
-        const is_pear_message =
-            !is_hidden &&
-            sender_is_bot &&
-            (sender_full_name === "pear" ||
-                sender_full_name.startsWith("pear ") ||
-                sender_email === "pear@zulip.com" ||
-                sender_email.startsWith("pear-bot@"));
+        const is_pear_message = !is_hidden && message.is_pear_message;
         if (is_pear_message) {
             include_sender = false;
         }

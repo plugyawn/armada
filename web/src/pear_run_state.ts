@@ -5,6 +5,9 @@ type PearRunForActiveMessage = {
 
 const active_result_message_ids = new Set<number>();
 const active_result_message_change_listeners = new Set<() => void>();
+let active_result_message_ids_refreshed_at = 0;
+
+const ACTIVE_RESULT_MESSAGE_TTL_MS = 15_000;
 
 function is_active_status(status: string): boolean {
     return status === "queued" || status === "running";
@@ -41,6 +44,7 @@ export function set_active_run_result_messages(runs: PearRunForActiveMessage[]):
             next_active_result_message_ids.add(result_message_id);
         }
     }
+    active_result_message_ids_refreshed_at = Date.now();
     if (sets_equal(active_result_message_ids, next_active_result_message_ids)) {
         return;
     }
@@ -49,6 +53,18 @@ export function set_active_run_result_messages(runs: PearRunForActiveMessage[]):
         active_result_message_ids.add(message_id);
     }
     notify_active_result_message_change_listeners();
+}
+
+export function expire_stale_active_run_result_messages(): boolean {
+    if (active_result_message_ids.size === 0) {
+        return false;
+    }
+    if (Date.now() - active_result_message_ids_refreshed_at <= ACTIVE_RESULT_MESSAGE_TTL_MS) {
+        return false;
+    }
+    active_result_message_ids.clear();
+    notify_active_result_message_change_listeners();
+    return true;
 }
 
 export function is_active_run_result_message(message_id: number | undefined): boolean {

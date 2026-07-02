@@ -149,6 +149,7 @@ let last_model_error = "";
 let last_runs: PearRun[] = [];
 let last_topic_context: PearTopicContext | null | undefined;
 let rendered_context_key = "";
+let last_render_state_key = "";
 const worktree_details_open_by_context = new Map<string, boolean>();
 const LIVE_REFRESH_INTERVAL_MS = 125;
 const FULL_REFRESH_INTERVAL_MS = 5000;
@@ -507,6 +508,17 @@ function schedule_live_refresh(active_run: {status: string} | undefined): void {
     }, LIVE_REFRESH_INTERVAL_MS);
 }
 
+function render_state_key(render_state: object): string {
+    return JSON.stringify(render_state);
+}
+
+export function render_state_changed_for_testing(
+    previous_key: string,
+    render_state: object,
+): boolean {
+    return previous_key !== render_state_key(render_state);
+}
+
 function render(
     runs: PearRun[] = last_runs,
     topic_context: PearTopicContext | null | undefined = last_topic_context,
@@ -522,18 +534,25 @@ function render(
         force_reconcile: active_run === undefined,
     });
     const panel_status = active_run?.status ?? "idle";
-    $("#pear-panel").html(
-        render_pear_panel({
-            has_topic,
-            context_label: has_topic ? `${stream} > ${topic}` : "",
-            topic_context: display_topic_context(topic_context),
-            active_run,
-            error: last_error,
-            model_error: last_model_error,
-            status_label: panel_status,
-            status_class: status_class(panel_status),
-        }),
-    );
+    const render_state = {
+        has_topic,
+        context_label: has_topic ? `${stream} > ${topic}` : "",
+        topic_context: display_topic_context(topic_context),
+        active_run,
+        error: last_error,
+        model_error: last_model_error,
+        status_label: panel_status,
+        status_class: status_class(panel_status),
+    };
+    const next_render_state_key = render_state_key(render_state);
+    if (last_render_state_key !== next_render_state_key) {
+        const side_request = $("#pear-side-request").val();
+        $("#pear-panel").html(render_pear_panel(render_state));
+        if (typeof side_request === "string") {
+            $("#pear-side-request").val(side_request);
+        }
+        last_render_state_key = next_render_state_key;
+    }
     rendered_context_key = next_context_key;
     schedule_live_refresh(active_run);
 }

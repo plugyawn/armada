@@ -98,6 +98,7 @@ from zerver.views.onboarding_steps import mark_onboarding_step_as_read
 from zerver.views.pear import (
     get_pear_active_session_backend,
     get_pear_config_backend,
+    get_pear_git_tree_backend,
     get_pear_run_backend,
     get_pear_runs_backend,
     get_pear_session_backend,
@@ -419,6 +420,10 @@ v1_api_and_json_patterns = [
         "pear/topic-context",
         GET=(get_pear_topic_context_backend, {"intentionally_undocumented"}),
         POST=(post_pear_topic_context_backend, {"intentionally_undocumented"}),
+    ),
+    rest_path(
+        "pear/git-tree",
+        GET=(get_pear_git_tree_backend, {"intentionally_undocumented"}),
     ),
     rest_path(
         "pear/runs",

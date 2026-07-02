@@ -3,6 +3,7 @@ import os
 import re
 import shutil
 import subprocess
+import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -73,6 +74,7 @@ PEAR_RUN_LEGAL_TRANSITIONS: dict[PearWorkerRunStatus, frozenset[PearWorkerRunSta
     PearWorkerRun.CANCELLED: frozenset(),
 }
 PEAR_REPOSITORY_CLONE_TIMEOUT_SECONDS = 180
+PEAR_GIT_STATUS_DELTA_TTL_SECONDS = 3
 PEAR_TOPIC_WORKDIR_OVERLAY_PATHS = frozenset(
     (
         "tools/pear_deploy/README.md",
@@ -97,6 +99,10 @@ PEAR_TOPIC_WORKDIR_OVERLAY_PATHS = frozenset(
         "zerver/worker/pear_worker.py",
     )
 )
+pear_git_status_delta_cache: dict[
+    tuple[str, str, str],
+    tuple[float, dict[str, object]],
+] = {}
 
 
 @dataclass(frozen=True)
@@ -1057,6 +1063,106 @@ def pear_git_output(
     if completed.returncode != 0:
         return ""
     return completed.stdout.strip()
+
+
+def parse_pear_git_status_delta(
+    status_output: str,
+    *,
+    workdir: str,
+    topic: str = "",
+) -> dict[str, object]:
+    branch = ""
+    head_short = ""
+    upstream = ""
+    ahead = 0
+    behind = 0
+    detached = False
+    changed_count = 0
+
+    for line in status_output.splitlines():
+        if not line.strip():
+            continue
+        if not line.startswith("# "):
+            changed_count += 1
+            continue
+        if line.startswith("# branch.oid "):
+            oid = line.removeprefix("# branch.oid ").strip()
+            if oid and oid not in {"(initial)", "(unknown)"}:
+                head_short = oid[:7]
+            continue
+        if line.startswith("# branch.head "):
+            branch_head = line.removeprefix("# branch.head ").strip()
+            if branch_head == "(detached)":
+                detached = True
+                branch = ""
+            else:
+                branch = branch_head
+            continue
+        if line.startswith("# branch.upstream "):
+            upstream = line.removeprefix("# branch.upstream ").strip()
+            continue
+        if line.startswith("# branch.ab "):
+            for part in line.removeprefix("# branch.ab ").split():
+                if part.startswith("+"):
+                    ahead = int(part[1:] or "0")
+                elif part.startswith("-"):
+                    behind = int(part[1:] or "0")
+
+    return {
+        "available": True,
+        "workdir": workdir,
+        "repo_name": Path(workdir).name,
+        "worktree_name": Path(workdir).name,
+        "branch": branch,
+        "head": head_short,
+        "head_short": head_short,
+        "upstream": upstream,
+        "ahead": ahead,
+        "behind": behind,
+        "dirty": changed_count > 0,
+        "changed_count": changed_count,
+        "detached": detached,
+        "branch_matches_topic": bool(topic and not detached and branch == topic),
+    }
+
+
+def invalidate_pear_git_status_delta(workdir: str | None = None) -> None:
+    if workdir is None:
+        pear_git_status_delta_cache.clear()
+        return
+    for cache_key in list(pear_git_status_delta_cache):
+        if cache_key[0] == workdir:
+            del pear_git_status_delta_cache[cache_key]
+
+
+def pear_git_status_delta(
+    workdir: str,
+    *,
+    topic: str = "",
+    isolation_username: str | None = None,
+) -> dict[str, object]:
+    if not workdir:
+        return {"available": False}
+
+    cache_key = (workdir, isolation_username or "", topic)
+    current_time = time.monotonic()
+    cached = pear_git_status_delta_cache.get(cache_key)
+    if cached is not None:
+        cached_at, delta = cached
+        if current_time - cached_at < PEAR_GIT_STATUS_DELTA_TTL_SECONDS:
+            return dict(delta)
+
+    status_output = pear_git_output(
+        workdir,
+        ["status", "--porcelain=v2", "--branch"],
+        isolation_username=isolation_username,
+    )
+    if not status_output:
+        return {"available": False, "workdir": workdir}
+
+    delta = parse_pear_git_status_delta(status_output, workdir=workdir, topic=topic)
+    pear_git_status_delta_cache[cache_key] = (current_time, dict(delta))
+    return delta
 
 
 def pear_git_remote_label(remote_url: str, repo_root: str) -> str:
@@ -2213,6 +2319,8 @@ class PearDatabaseWorkerRunStore:
                 "date_finished",
             ]
         )
+        if run.workdir:
+            invalidate_pear_git_status_delta(run.workdir)
         return True
 
     def _record_transition_rejected(
@@ -2252,6 +2360,8 @@ class PearDatabaseWorkerRunStore:
             summary=summary,
             payload=payload,
         )
+        if run.workdir:
+            invalidate_pear_git_status_delta(run.workdir)
         current_time = timezone_now()
         if self._heartbeat_due(run, current_time=current_time):
             run.heartbeat_at = current_time

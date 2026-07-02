@@ -7,6 +7,8 @@ from types import ModuleType, SimpleNamespace
 from unittest import TestCase
 from unittest.mock import patch
 
+from zproject import computed_settings as pear_computed_settings
+
 from zerver.lib.pear import (
     PEAR_ACCESS_PROMPT,
     PEAR_ACTIVE_MARKDOWN_PREFIX,
@@ -134,6 +136,59 @@ from zerver.lib.pear_worker import (
     PearQueueWorkerDispatcher,
     pear_provision_codex_skills,
 )
+
+
+class PearComputedSettingsEnvTest(TestCase):
+    def test_pear_env_override_table_parses_runtime_knobs(self) -> None:
+        env = {
+            "PEAR_WORKER_AGENT_RUNTIME": "codex-app-server",
+            "PEAR_WORKER_MODEL": "",
+            "PEAR_WORKER_MODEL_CHOICES": "gpt-5.5,gpt-5.4-mini gpt-5.3-codex-spark",
+            "PEAR_WORKER_FAST_MODE": "off",
+            "PEAR_WORKER_TIMEOUT_SECONDS": "42",
+            "PEAR_WORKER_CODEX_EXTRA_ARGS": "--ignore-rules --foo",
+            "PEAR_WORKER_TRUSTED_USER_IDS": "1, 2 3",
+        }
+
+        with patch.dict("os.environ", env, clear=False):
+            values = {
+                setting_name: parser(setting_name)
+                for setting_name, parser in pear_computed_settings._PEAR_ENV_OVERRIDES.items()
+            }
+
+        self.assertEqual(values["PEAR_WORKER_AGENT_RUNTIME"], "codex-app-server")
+        self.assertIsNone(values["PEAR_WORKER_MODEL"])
+        self.assertEqual(
+            values["PEAR_WORKER_MODEL_CHOICES"],
+            ["gpt-5.5", "gpt-5.4-mini", "gpt-5.3-codex-spark"],
+        )
+        self.assertFalse(values["PEAR_WORKER_FAST_MODE"])
+        self.assertEqual(values["PEAR_WORKER_TIMEOUT_SECONDS"], 42)
+        self.assertEqual(values["PEAR_WORKER_CODEX_EXTRA_ARGS"], ["--ignore-rules", "--foo"])
+        self.assertEqual(values["PEAR_WORKER_TRUSTED_USER_IDS"], [1, 2, 3])
+
+    def test_pear_env_override_table_uses_gemini_key_aliases(self) -> None:
+        with patch.dict("os.environ", {"GOOGLE_GENAI_API_KEY": "gemini-key"}, clear=True):
+            api_key = pear_computed_settings._PEAR_ENV_OVERRIDES[
+                "PEAR_ADDRESSING_ROUTER_GEMINI_API_KEY"
+            ]("PEAR_ADDRESSING_ROUTER_GEMINI_API_KEY")
+
+        self.assertEqual(api_key, "gemini-key")
+
+    def test_pear_model_choices_default_to_configured_worker_model(self) -> None:
+        with patch.dict("os.environ", {"PEAR_WORKER_MODEL": "gpt-5.4-mini"}, clear=True):
+            choices = pear_computed_settings._PEAR_ENV_OVERRIDES["PEAR_WORKER_MODEL_CHOICES"](
+                "PEAR_WORKER_MODEL_CHOICES"
+            )
+
+        self.assertEqual(choices, ["gpt-5.4-mini"])
+
+    def test_pear_env_bool_rejects_invalid_value(self) -> None:
+        with patch.dict("os.environ", {"PEAR_WORKER_FAST_MODE": "sometimes"}, clear=False):
+            with self.assertRaisesRegex(ValueError, "PEAR_WORKER_FAST_MODE"):
+                pear_computed_settings._PEAR_ENV_OVERRIDES["PEAR_WORKER_FAST_MODE"](
+                    "PEAR_WORKER_FAST_MODE"
+                )
 
 
 class PearSessionDefaultsTest(TestCase):

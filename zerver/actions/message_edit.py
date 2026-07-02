@@ -50,6 +50,7 @@ from zerver.lib.message import (
     truncate_topic,
 )
 from zerver.lib.message_cache import update_message_cache
+from zerver.lib.pear_worker import maybe_refactor_pear_topic_context_on_move
 from zerver.lib.queue import queue_event_on_commit
 from zerver.lib.stream_subscription import get_active_subscriptions_for_stream_id
 from zerver.lib.stream_topic import StreamTopicTarget
@@ -490,6 +491,94 @@ def do_update_embedded_data(
         "rendering_only": True,
     }
 
+    users_to_notify = event_recipient_ids_for_action_on_messages(
+        [message.id], message.is_channel_message
+    )
+    filtered_ums = [um for um in ums if um.user_profile_id in users_to_notify]
+
+    def user_info(um: UserMessage) -> dict[str, Any]:
+        return {
+            "id": um.user_profile_id,
+            "flags": um.flags_list(),
+        }
+
+    send_event_on_commit(user_profile.realm, event, list(map(user_info, filtered_ums)))
+
+
+@transaction.atomic(durable=True)
+def check_update_message_rendering_only(
+    user_profile: UserProfile,
+    message_id: int,
+    *,
+    content: str,
+) -> None:
+    message = access_message(user_profile, message_id, lock_message=True, is_modifying_message=True)
+    if message.sender_id != user_profile.id:
+        raise JsonableError(_("You don't have permission to edit this message"))
+
+    validate_message_edit_payload(
+        message,
+        stream_id=None,
+        topic_name=None,
+        propagate_mode="change_one",
+        content=content,
+        prev_content_sha256=None,
+    )
+
+    mention_backend = MentionBackend(user_profile.realm_id)
+    mention_data = MentionData(
+        mention_backend=mention_backend,
+        content=content,
+        message_sender=message.sender,
+    )
+    rendering_result = render_incoming_message(
+        message,
+        content,
+        user_profile.realm,
+        mention_data=mention_data,
+    )
+
+    if message.is_channel_message and rendering_result.mentions_stream_wildcard:
+        stream = access_stream_by_id(user_profile, message.recipient.type_id)[0]
+        if not stream_wildcard_mention_allowed(message.sender, stream, message.realm):
+            raise StreamWildcardMentionNotAllowedError
+
+    topic_participant_user_ids: set[int] = set()
+    if message.is_channel_message and rendering_result.mentions_topic_wildcard:
+        topic_participant_user_ids = participants_for_topic(
+            message.realm.id, message.recipient.id, message.topic_name()
+        )
+        if not topic_wildcard_mention_allowed(
+            message.sender, len(topic_participant_user_ids), message.realm
+        ):
+            raise TopicWildcardMentionNotAllowedError
+
+    if rendering_result.mentions_user_group_ids:
+        mentioned_group_ids = list(rendering_result.mentions_user_group_ids)
+        check_user_group_mention_allowed(user_profile, mentioned_group_ids)
+
+    ums = UserMessage.objects.filter(message=message.id)
+    for group_id in rendering_result.mentions_user_group_ids:
+        members = mention_data.get_group_members(group_id)
+        rendering_result.mentions_user_ids.update(members)
+    update_user_message_flags(rendering_result, ums, topic_participant_user_ids)
+
+    message.content = content
+    message.rendered_content = rendering_result.rendered_content
+    message.rendered_content_version = markdown_version
+    message.save(update_fields=["content", "rendered_content", "rendered_content_version"])
+
+    update_message_cache([message])
+    event: dict[str, Any] = {
+        "type": "update_message",
+        "user_id": None,
+        "edit_timestamp": datetime_to_timestamp(timezone_now()),
+        "message_id": message.id,
+        "message_ids": [message.id],
+        "content": message.content,
+        "rendered_content": message.rendered_content,
+        "rendering_only": True,
+    }
     users_to_notify = event_recipient_ids_for_action_on_messages(
         [message.id], message.is_channel_message
     )
@@ -1347,6 +1436,17 @@ def do_update_message(
             )
         )
 
+    pear_context_refactor = None
+    if message_edit_request.is_nontrivial_move:
+        pear_context_refactor = maybe_refactor_pear_topic_context_on_move(
+            user_profile,
+            old_stream=stream_being_edited,
+            old_topic=orig_topic_name,
+            new_stream=message_edit_request.target_stream,
+            new_topic=message_edit_request.target_topic_name,
+            moved_all_visible_messages=moved_all_visible_messages,
+        )
+
     if message_edit_request.is_nontrivial_move:
         # Notify users that the topic was moved.
         old_thread_notification_string = None
@@ -1420,6 +1520,16 @@ def do_update_message(
             new_thread_notification_string,
             changed_messages_count,
         )
+        if pear_context_refactor is not None:
+            sender = get_system_bot(settings.NOTIFICATION_BOT, realm.id)
+            internal_send_stream_message(
+                sender,
+                message_edit_request.target_stream,
+                pear_context_refactor.topic_name,
+                pear_context_refactor.message,
+                mark_as_read_for_acting_user=True,
+                acting_user=user_profile,
+            )
 
     return UpdateMessageResult(
         changed_messages_count, attachment_reference_change.detached_attachments

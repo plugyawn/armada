@@ -369,6 +369,9 @@ DATABASES: dict[str, dict[str, Any]] = {
         },
     }
 }
+database_conn_max_age = os.getenv("ZULIP_DATABASE_CONN_MAX_AGE")
+if database_conn_max_age is not None:
+    DATABASES["default"]["CONN_MAX_AGE"] = int(database_conn_max_age)
 
 if DEVELOPMENT:
     LOCAL_DATABASE_PASSWORD = get_secret("local_database_password")

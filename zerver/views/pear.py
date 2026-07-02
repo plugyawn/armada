@@ -1,0 +1,1471 @@
+import json
+import os
+import subprocess
+import time
+from importlib.util import find_spec
+from pathlib import Path
+from shutil import which
+from types import SimpleNamespace
+from typing import Annotated, Any
+from urllib.parse import urlparse
+
+from django.conf import settings
+from django.db.models import Q
+from django.http import HttpRequest, HttpResponse
+from django.utils.timezone import now as timezone_now
+from django.utils.translation import gettext as _
+from pydantic import Json
+
+from zerver.actions.message_send import internal_send_private_message, internal_send_stream_message
+from zerver.decorator import require_realm_admin
+from zerver.lib.bot_config import get_bot_configs, set_bot_config
+from zerver.lib.exceptions import JsonableError
+from zerver.lib.pear import (
+    PEAR_AGENT_NAME,
+    PEAR_BOT_SHORT_NAME,
+    PEAR_EMBEDDED_BOT_SERVICE,
+    PEAR_REASONING_EFFORTS,
+    PEAR_SELECTED_BOT_CONFIG_KEY,
+    PEAR_SELECTED_BOT_CONFIG_VALUE,
+    PEAR_SIDE_ENDPOINT,
+    PearEmbeddedBotHandler,
+    PearConfigPayload,
+    PearTokenUsage,
+    build_pear_active_session_summary,
+    build_pear_active_session_summary_from_messages,
+    build_pear_config_payload,
+    get_pear_session_payload,
+    get_pear_live_run_state,
+    pear_normalize_token_usage,
+    pear_token_usage_summary,
+)
+from zerver.lib.pear_worker import (
+    PearQueueWorkerDispatcher,
+    ensure_pear_child_topic_context,
+    ensure_pear_topic_context,
+    pear_default_worker_reasoning_effort,
+    pear_logical_repository_label,
+    pear_logical_worktree_label,
+    pear_pinned_repository_value,
+    pear_repo_artifact_value_is_durable,
+    pear_topic_isolation_username_for_realm,
+    pear_topic_os_user_isolation_enabled,
+    pear_worker_model_for_topic,
+    pear_worker_reasoning_effort_for_topic,
+    pear_worker_sandbox_for_topic,
+    pear_worker_workdir_for_topic,
+)
+from zerver.lib.response import json_success
+from zerver.lib.streams import access_stream_by_name
+from zerver.lib.timestamp import datetime_to_timestamp
+from zerver.lib.topic import messages_for_topic
+from zerver.lib.typed_endpoint import (
+    INTENTIONALLY_UNDOCUMENTED,
+    ApiParamConfig,
+    typed_endpoint,
+    typed_endpoint_without_parameters,
+)
+from zerver.models.bots import PearTopicContext, PearWorkerRun, PearWorkerRunEvent, Service
+from zerver.models.users import UserProfile
+from zerver.views.users import add_bot_backend
+
+
+PEAR_ACTIVE_SESSION_MESSAGE_LIMIT = 50
+PEAR_RUN_LIST_LIMIT = 20
+PEAR_RUN_EVENT_LIMIT = 40
+PEAR_GIT_STATUS_LIMIT = 12
+PEAR_GIT_COMMIT_LIMIT = 5
+PEAR_MODEL_SLUG_LIMIT = 100
+PEAR_MODEL_CATALOG_CACHE_SECONDS = 300
+
+pear_model_catalog_cache: tuple[float, list[dict[str, object]]] | None = None
+
+
+def pear_python_module_available(module_name: str) -> bool:
+    try:
+        return find_spec(module_name) is not None
+    except (ImportError, ValueError):
+        return False
+
+
+def pear_worker_runtime_dependency_status(worker_agent_runtime: str) -> tuple[bool, str]:
+    codex_bin = getattr(settings, "PEAR_WORKER_CODEX_BIN", "codex")
+    codex_path = which(codex_bin)
+    if worker_agent_runtime == "codex-agents-mcp":
+        missing = []
+        if codex_path is None:
+            missing.append(f"{codex_bin} executable")
+        if not pear_python_module_available("agents") or not pear_python_module_available(
+            "agents.mcp"
+        ):
+            missing.append("openai-agents package")
+        if missing:
+            return (
+                False,
+                "Missing "
+                + " and ".join(missing)
+                + "; install openai-agents and make `codex mcp-server` available.",
+            )
+        return True, f"codex mcp-server via {codex_path}; openai-agents installed."
+    if worker_agent_runtime == "codex-sdk":
+        if not pear_python_module_available("openai_codex"):
+            return False, "Missing openai-codex package."
+        return True, "openai-codex package installed."
+    if worker_agent_runtime == "codex-app-server":
+        if codex_path is None:
+            return False, f"Missing {codex_bin} executable."
+        return True, f"codex app-server via {codex_path}."
+    if worker_agent_runtime == "codex-exec":
+        if codex_path is None:
+            return False, f"Missing {codex_bin} executable."
+        return True, f"codex exec via {codex_path}."
+    return (
+        False,
+        "Set PEAR_WORKER_AGENT_RUNTIME to codex-app-server, codex-agents-mcp, codex-sdk, or codex-exec.",
+    )
+
+
+def pear_codex_login_command() -> str:
+    return f"{getattr(settings, 'PEAR_WORKER_CODEX_BIN', 'codex')} login"
+
+
+def pear_codex_auth_file_available() -> bool:
+    codex_home = os.environ.get("CODEX_HOME")
+    auth_paths = (
+        [Path(codex_home) / "auth.json"]
+        if codex_home is not None
+        else [Path.home() / ".codex" / "auth.json"]
+    )
+    return any(path.exists() for path in auth_paths)
+
+
+def pear_codex_login_available(codex_bin: str) -> bool:
+    try:
+        completed = subprocess.run(
+            [codex_bin, "login", "status"],
+            check=False,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            timeout=10,
+        )
+    except (FileNotFoundError, OSError, subprocess.TimeoutExpired):
+        return False
+    output = "\n".join((completed.stdout, completed.stderr))
+    return completed.returncode == 0 and "Logged in" in output
+
+
+def pear_openai_agents_auth_available() -> bool:
+    return any(
+        os.environ.get(name)
+        for name in ("OPENAI_API_KEY", "OPENAI_ADMIN_KEY", "OPENAI_WORKLOAD_IDENTITY")
+    )
+
+
+def pear_worker_runtime_auth_status(
+    worker_agent_runtime: str,
+) -> tuple[bool, str, str | None, str | None, str | None, str | None]:
+    codex_bin = getattr(settings, "PEAR_WORKER_CODEX_BIN", "codex")
+    login_command = pear_codex_login_command()
+    codex_logged_in = pear_codex_login_available(codex_bin)
+    codex_auth_file_available = pear_codex_auth_file_available()
+    codex_login_instructions = "Run Codex CLI login inside the worker environment used by Pear."
+    agents_login_instructions = (
+        "Run Codex CLI login inside the worker environment and provide "
+        "OPENAI_API_KEY or OPENAI_ADMIN_KEY for the OpenAI Agents SDK."
+    )
+
+    if worker_agent_runtime == "codex-agents-mcp":
+        missing = []
+        if not pear_openai_agents_auth_available():
+            missing.append(
+                "OpenAI Agents SDK credentials; set OPENAI_API_KEY or OPENAI_ADMIN_KEY "
+                "in the worker environment"
+            )
+        if not codex_logged_in:
+            missing.append(f"Codex CLI login; run `{login_command}` inside the worker environment")
+        if missing:
+            return (
+                False,
+                "Missing " + " and ".join(missing) + ".",
+                "codex-cli-and-openai-api-key",
+                login_command,
+                "worker-environment",
+                agents_login_instructions,
+            )
+        return (
+            True,
+            "OpenAI Agents SDK credentials present; Codex CLI is logged in.",
+            "codex-cli-and-openai-api-key",
+            login_command,
+            "worker-environment",
+            agents_login_instructions,
+        )
+
+    if worker_agent_runtime in {"codex-app-server", "codex-exec"}:
+        if codex_logged_in:
+            return (
+                True,
+                "Codex CLI is logged in.",
+                "codex-cli",
+                login_command,
+                "worker-environment",
+                codex_login_instructions,
+            )
+        return (
+            False,
+            f"Run `{login_command}` inside the worker environment.",
+            "codex-cli",
+            login_command,
+            "worker-environment",
+            codex_login_instructions,
+        )
+
+    if worker_agent_runtime == "codex-sdk":
+        if codex_auth_file_available or codex_logged_in:
+            return (
+                True,
+                "Codex login auth is available to the worker.",
+                "codex-cli",
+                login_command,
+                "worker-environment",
+                codex_login_instructions,
+            )
+        return (
+            False,
+            f"Run `{login_command}` inside the worker environment.",
+            "codex-cli",
+            login_command,
+            "worker-environment",
+            codex_login_instructions,
+        )
+
+    return (
+        False,
+        "Select a supported worker runtime before logging in.",
+        None,
+        None,
+        None,
+        None,
+    )
+
+
+def get_pear_bot_query(user_profile: UserProfile) -> Any:
+    return (
+        Service.objects.select_related("user_profile")
+        .filter(
+            name=PEAR_EMBEDDED_BOT_SERVICE,
+            user_profile__realm=user_profile.realm,
+            user_profile__is_active=True,
+            user_profile__is_bot=True,
+            user_profile__bot_type=UserProfile.EMBEDDED_BOT,
+        )
+        .order_by("user_profile_id")
+    )
+
+
+def get_selected_pear_bot(user_profile: UserProfile) -> Service | None:
+    pear_bots = list(get_pear_bot_query(user_profile))
+    if not pear_bots:
+        return None
+    bot_configs = get_bot_configs([bot.user_profile_id for bot in pear_bots])
+    return next(
+        (
+            bot
+            for bot in pear_bots
+            if bot_configs.get(bot.user_profile_id, {}).get(PEAR_SELECTED_BOT_CONFIG_KEY)
+            == PEAR_SELECTED_BOT_CONFIG_VALUE
+        ),
+        pear_bots[0],
+    )
+
+
+def clean_pear_model_slug(model: str) -> str:
+    model = model.strip()
+    if not model:
+        raise JsonableError(_("Pear model cannot be empty."))
+    if len(model) > PEAR_MODEL_SLUG_LIMIT or any(character.isspace() for character in model):
+        raise JsonableError(_("Pear model must be a short model slug without whitespace."))
+    return model
+
+
+def clean_pear_reasoning_effort(reasoning_effort: str) -> str:
+    reasoning_effort = reasoning_effort.strip()
+    if reasoning_effort not in PEAR_REASONING_EFFORTS:
+        raise JsonableError(_("Pear reasoning effort must be low, medium, high, or xhigh."))
+    return reasoning_effort
+
+
+def pear_reasoning_effort_label(reasoning_effort: str) -> str:
+    labels = {
+        "low": "Low",
+        "medium": "Medium",
+        "high": "High",
+        "xhigh": "XHigh",
+    }
+    return labels.get(reasoning_effort, reasoning_effort)
+
+
+def build_pear_reasoning_effort_payload(
+    levels: object | None = None,
+) -> list[dict[str, str]]:
+    payload: list[dict[str, str]] = []
+    if isinstance(levels, list):
+        for level in levels:
+            if isinstance(level, dict):
+                effort = str(level.get("effort") or "").strip()
+                description = str(level.get("description") or "").strip()
+            elif isinstance(level, str):
+                effort = level.strip()
+                description = ""
+            else:
+                continue
+            if effort not in PEAR_REASONING_EFFORTS:
+                continue
+            payload.append(
+                {
+                    "effort": effort,
+                    "label": pear_reasoning_effort_label(effort),
+                    "description": description,
+                }
+            )
+    if payload:
+        return payload
+    return [
+        {
+            "effort": effort,
+            "label": pear_reasoning_effort_label(effort),
+            "description": "",
+        }
+        for effort in PEAR_REASONING_EFFORTS
+    ]
+
+
+def configured_pear_model_choices() -> list[str]:
+    return list(
+        dict.fromkeys(
+            model.strip()
+            for model in [
+                getattr(settings, "PEAR_WORKER_MODEL", None),
+                *getattr(settings, "PEAR_WORKER_MODEL_CHOICES", []),
+            ]
+            if isinstance(model, str) and model.strip()
+        )
+    )
+
+
+def pear_model_catalog_entry(model: dict[str, object]) -> dict[str, object] | None:
+    if model.get("visibility") != "list":
+        return None
+    slug = str(model.get("slug") or "").strip()
+    if not slug:
+        return None
+    display_name = str(model.get("display_name") or slug).strip()
+    return {
+        "slug": slug,
+        "display_name": display_name or slug,
+        "description": str(model.get("description") or "").strip(),
+        "priority": model.get("priority") if isinstance(model.get("priority"), int) else 1000,
+        "default_reasoning_level": str(
+            model.get("default_reasoning_level") or pear_default_worker_reasoning_effort()
+        ).strip(),
+        "supported_reasoning_levels": build_pear_reasoning_effort_payload(
+            model.get("supported_reasoning_levels")
+        ),
+        "supported_in_api": bool(model.get("supported_in_api", False)),
+        "service_tiers": model.get("service_tiers") if isinstance(model.get("service_tiers"), list) else [],
+        "additional_speed_tiers": model.get("additional_speed_tiers")
+        if isinstance(model.get("additional_speed_tiers"), list)
+        else [],
+    }
+
+
+def extract_pear_codex_model_catalog(data: object) -> list[dict[str, object]]:
+    if not isinstance(data, dict) or not isinstance(data.get("models"), list):
+        return []
+    entries = [
+        entry
+        for model in data["models"]
+        if isinstance(model, dict)
+        for entry in [pear_model_catalog_entry(model)]
+        if entry is not None
+    ]
+    def priority_key(entry: dict[str, object]) -> tuple[int, str]:
+        priority = entry.get("priority")
+        return priority if isinstance(priority, int) else 1000, str(entry["slug"])
+
+    return sorted(entries, key=priority_key)
+
+
+def fallback_pear_model_catalog(model_choices: list[str]) -> list[dict[str, object]]:
+    return [
+        {
+            "slug": model,
+            "display_name": model,
+            "description": "",
+            "priority": index,
+            "default_reasoning_level": pear_default_worker_reasoning_effort(),
+            "supported_reasoning_levels": build_pear_reasoning_effort_payload(),
+            "supported_in_api": False,
+            "service_tiers": [],
+            "additional_speed_tiers": [],
+        }
+        for index, model in enumerate(model_choices)
+    ]
+
+
+def build_pear_codex_model_catalog(model_choices: list[str]) -> list[dict[str, object]]:
+    global pear_model_catalog_cache
+    now = time.monotonic()
+    if (
+        pear_model_catalog_cache is not None
+        and now - pear_model_catalog_cache[0] < PEAR_MODEL_CATALOG_CACHE_SECONDS
+    ):
+        catalog = [dict(entry) for entry in pear_model_catalog_cache[1]]
+    else:
+        try:
+            completed = subprocess.run(
+                [getattr(settings, "PEAR_WORKER_CODEX_BIN", "codex"), "debug", "models"],
+                check=False,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+                text=True,
+                timeout=5,
+            )
+        except (FileNotFoundError, OSError, subprocess.TimeoutExpired):
+            catalog = []
+        else:
+            catalog = []
+            if completed.returncode == 0:
+                try:
+                    catalog = extract_pear_codex_model_catalog(json.loads(completed.stdout))
+                except json.JSONDecodeError:
+                    catalog = []
+        if not catalog:
+            catalog = fallback_pear_model_catalog([])
+        pear_model_catalog_cache = (now, [dict(entry) for entry in catalog])
+
+    slugs = {str(entry["slug"]) for entry in catalog}
+    for entry in fallback_pear_model_catalog(model_choices):
+        if str(entry["slug"]) not in slugs:
+            catalog.append(entry)
+    return catalog
+
+
+def pear_git_command(
+    workdir: str,
+    args: list[str],
+    *,
+    isolation_username: str | None = None,
+) -> str:
+    command = ["git", "-C", workdir, *args]
+    if isolation_username is not None:
+        command = ["sudo", "-n", "-u", isolation_username, "/usr/bin/env", *command]
+    try:
+        completed = subprocess.run(
+            command,
+            check=False,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            timeout=2,
+        )
+    except (FileNotFoundError, OSError, subprocess.TimeoutExpired):
+        return ""
+    if completed.returncode != 0:
+        return ""
+    return completed.stdout.strip()
+
+
+def classify_git_status(status_code: str) -> str:
+    if "?" in status_code:
+        return "untracked"
+    if "A" in status_code:
+        return "added"
+    if "D" in status_code:
+        return "deleted"
+    if "R" in status_code:
+        return "renamed"
+    if "M" in status_code:
+        return "modified"
+    return "changed"
+
+
+def pear_git_remote_label(remote_url: str, repo_root: str) -> str:
+    clean_url = remote_url.strip()
+    if clean_url:
+        if clean_url.startswith("git@") and ":" in clean_url:
+            path = clean_url.split(":", 1)[1]
+            return path.removesuffix(".git").strip("/") or clean_url
+        parsed = urlparse(clean_url)
+        if parsed.scheme and parsed.netloc:
+            path = parsed.path.removesuffix(".git").strip("/")
+            return path or parsed.netloc
+        return Path(clean_url.removesuffix(".git")).name or clean_url
+    return Path(repo_root).name
+
+
+def build_pear_git_context(
+    workdir: str,
+    *,
+    isolation_username: str | None = None,
+) -> dict[str, object]:
+    if not workdir:
+        return {"available": False}
+    repo_root = pear_git_command(
+        workdir,
+        ["rev-parse", "--show-toplevel"],
+        isolation_username=isolation_username,
+    )
+    if not repo_root:
+        return {"available": False, "workdir": workdir}
+
+    branch = pear_git_command(
+        workdir,
+        ["branch", "--show-current"],
+        isolation_username=isolation_username,
+    )
+    head = pear_git_command(
+        workdir,
+        ["rev-parse", "--short", "HEAD"],
+        isolation_username=isolation_username,
+    )
+    remote_url = pear_git_command(
+        workdir,
+        ["config", "--get", "remote.origin.url"],
+        isolation_username=isolation_username,
+    )
+    status_lines = pear_git_command(
+        workdir,
+        ["status", "--short"],
+        isolation_username=isolation_username,
+    ).splitlines()
+    recent_commits = [
+        {"hash": line.split("\t", 1)[0], "summary": line.split("\t", 1)[1]}
+        for line in pear_git_command(
+            workdir,
+            ["log", f"-{PEAR_GIT_COMMIT_LIMIT}", "--pretty=format:%h%x09%s"],
+            isolation_username=isolation_username,
+        ).splitlines()
+        if "\t" in line
+    ]
+    changed_files = []
+    for line in status_lines[:PEAR_GIT_STATUS_LIMIT]:
+        if len(line) < 4:
+            continue
+        status_code = line[:2]
+        changed_files.append(
+            {
+                "status": status_code.strip() or "changed",
+                "kind": classify_git_status(status_code),
+                "path": line[3:].strip(),
+            }
+        )
+
+    return {
+        "available": True,
+        "workdir": workdir,
+        "repo_root": repo_root,
+        "repo_name": Path(repo_root).name,
+        "remote_url": remote_url,
+        "repo_label": pear_git_remote_label(remote_url, repo_root),
+        "worktree_name": Path(repo_root).name,
+        "branch": branch,
+        "head": head,
+        "dirty": bool(status_lines),
+        "changed_count": len(status_lines),
+        "changed_files": changed_files,
+        "changed_files_truncated": len(status_lines) > PEAR_GIT_STATUS_LIMIT,
+        "diff_shortstat": pear_git_command(
+            workdir,
+            ["diff", "--shortstat"],
+            isolation_username=isolation_username,
+        ),
+        "recent_commits": recent_commits,
+    }
+
+
+def serialize_pear_topic_context(
+    context: PearTopicContext | None,
+    *,
+    stream_name: str,
+    topic_name: str,
+) -> dict[str, object]:
+    runtime_config = build_pear_runtime_config_payload()
+    default_model = str(runtime_config.get("model") or "")
+    default_reasoning_effort = str(runtime_config.get("reasoning_effort") or "medium")
+    selected_model = (
+        context.model.strip()
+        if context is not None and context.model.strip()
+        else default_model
+    )
+    parent_context = (
+        context.parent_context
+        if context is not None and context.parent_context_id is not None
+        else None
+    )
+    selected_reasoning_effort = (
+        context.reasoning_effort.strip()
+        if context is not None and context.reasoning_effort.strip()
+        else (
+            parent_context.reasoning_effort.strip()
+            if parent_context is not None and parent_context.reasoning_effort.strip()
+            else default_reasoning_effort
+        )
+    )
+    workdir = (
+        context.workdir.strip()
+        if context is not None and context.workdir.strip()
+        else str(getattr(settings, "PEAR_WORKER_WORKDIR", None) or os.getcwd())
+    )
+    context_github_repo = context.github_repo.strip() if context is not None else ""
+    parent_github_repo = parent_context.github_repo.strip() if parent_context is not None else ""
+    github_repo = next(
+        (
+            repo_value
+            for repo_value in (context_github_repo, parent_github_repo)
+            if pear_repo_artifact_value_is_durable(repo_value)
+        ),
+        "",
+    )
+    pinned_repo = next(
+        (
+            repo_value
+            for repo_value in (
+                pear_pinned_repository_value(context_github_repo),
+                pear_pinned_repository_value(parent_github_repo),
+            )
+            if repo_value
+        ),
+        "",
+    )
+    repo_label = pear_logical_repository_label(
+        stream=stream_name,
+        context_repo=context_github_repo,
+        parent_repo=parent_github_repo,
+    )
+    worktree_label = pear_logical_worktree_label(
+        stream=stream_name,
+        topic=topic_name,
+        fallback=Path(workdir).name,
+    )
+    isolation_username = None
+    if (
+        context is not None
+        and pear_topic_os_user_isolation_enabled()
+        and pear_repo_artifact_value_is_durable(workdir)
+    ):
+        isolation_username = pear_topic_isolation_username_for_realm(
+            context.realm_id,
+            stream=stream_name,
+            topic=topic_name,
+        )
+    return {
+        "stream": stream_name,
+        "topic": topic_name,
+        "model": selected_model,
+        "default_model": default_model,
+        "model_choices": runtime_config["model_choices"],
+        "model_catalog": runtime_config["model_catalog"],
+        "reasoning_effort": selected_reasoning_effort,
+        "default_reasoning_effort": default_reasoning_effort,
+        "reasoning_efforts": runtime_config["reasoning_efforts"],
+        "github_repo": github_repo,
+        "pinned_repo": pinned_repo,
+        "repo_label": repo_label,
+        "repo_title": pinned_repo or workdir,
+        "worktree_label": worktree_label,
+        "workdir": workdir,
+        "parent_context_id": context.parent_context_id if context is not None else None,
+        "git": build_pear_git_context(workdir, isolation_username=isolation_username),
+    }
+
+
+def build_pear_runtime_config_payload() -> dict[str, object]:
+    configured_model_choices = configured_pear_model_choices()
+    model_catalog = build_pear_codex_model_catalog(configured_model_choices)
+    model_choices = [str(entry["slug"]) for entry in model_catalog]
+    return {
+        "agent_runtime": getattr(settings, "PEAR_WORKER_AGENT_RUNTIME", "disabled"),
+        "model": getattr(settings, "PEAR_WORKER_MODEL", None),
+        "model_choices": model_choices,
+        "model_catalog": model_catalog,
+        "reasoning_effort": pear_default_worker_reasoning_effort(),
+        "reasoning_efforts": build_pear_reasoning_effort_payload(),
+        "service_tier": getattr(settings, "PEAR_WORKER_SERVICE_TIER", None),
+        "fast_mode": getattr(settings, "PEAR_WORKER_FAST_MODE", False),
+        "sandbox": getattr(settings, "PEAR_WORKER_SANDBOX", ""),
+        "approval_policy": getattr(settings, "PEAR_WORKER_APPROVAL_POLICY", ""),
+        "workdir": getattr(settings, "PEAR_WORKER_WORKDIR", None),
+        "trusted_user_ids_configured": bool(
+            getattr(settings, "PEAR_WORKER_TRUSTED_USER_IDS", [])
+        ),
+        "max_active_runs_per_topic": getattr(settings, "PEAR_WORKER_MAX_ACTIVE_RUNS_PER_TOPIC", 1),
+        "max_active_runs_per_realm": getattr(settings, "PEAR_WORKER_MAX_ACTIVE_RUNS_PER_REALM", 3),
+    }
+
+
+def build_pear_config_for_user(user_profile: UserProfile) -> PearConfigPayload:
+    worker_agent_runtime = getattr(settings, "PEAR_WORKER_AGENT_RUNTIME", "disabled")
+    worker_runtime_available, worker_runtime_detail = pear_worker_runtime_dependency_status(
+        worker_agent_runtime
+    )
+    (
+        worker_runtime_auth_available,
+        worker_runtime_auth_detail,
+        worker_runtime_login_method,
+        worker_runtime_login_command,
+        worker_runtime_login_target,
+        worker_runtime_login_instructions,
+    ) = pear_worker_runtime_auth_status(worker_agent_runtime)
+    pear_bot_query = get_pear_bot_query(user_profile)
+    pear_bots = list(pear_bot_query)
+    bot_count = len(pear_bots)
+    bot_profile_ids = [bot.user_profile_id for bot in pear_bots]
+    bot_configs = get_bot_configs(bot_profile_ids)
+    selected_pear_bot = next(
+        (
+            bot
+            for bot in pear_bots
+            if bot_configs.get(bot.user_profile_id, {}).get(PEAR_SELECTED_BOT_CONFIG_KEY)
+            == PEAR_SELECTED_BOT_CONFIG_VALUE
+        ),
+        pear_bots[0] if pear_bots else None,
+    )
+    return build_pear_config_payload(
+        embedded_bots_enabled=settings.EMBEDDED_BOTS_ENABLED,
+        bot_count=bot_count,
+        bot_user_id=selected_pear_bot.user_profile_id
+        if selected_pear_bot is not None
+        else None,
+        bot_full_name=selected_pear_bot.user_profile.full_name
+        if selected_pear_bot is not None
+        else None,
+        bot_email=selected_pear_bot.user_profile.email
+        if selected_pear_bot is not None
+        else None,
+        selected_bot_user_id=selected_pear_bot.user_profile_id
+        if selected_pear_bot is not None
+        else None,
+        selected_bot_full_name=selected_pear_bot.user_profile.full_name
+        if selected_pear_bot is not None
+        else None,
+        selected_bot_email=selected_pear_bot.user_profile.email
+        if selected_pear_bot is not None
+        else None,
+        bot_identities=[
+            {
+                "bot_user_id": bot.user_profile_id,
+                "bot_full_name": bot.user_profile.full_name,
+                "bot_email": bot.user_profile.email,
+                "selected": selected_pear_bot is not None
+                and bot.user_profile_id == selected_pear_bot.user_profile_id,
+            }
+            for bot in pear_bots
+        ],
+        worker_agent_runtime=worker_agent_runtime,
+        worker_runtime_available=worker_runtime_available,
+        worker_runtime_detail=worker_runtime_detail,
+        worker_runtime_auth_available=worker_runtime_auth_available,
+        worker_runtime_auth_detail=worker_runtime_auth_detail,
+        worker_runtime_login_method=worker_runtime_login_method,
+        worker_runtime_login_command=worker_runtime_login_command,
+        worker_runtime_login_target=worker_runtime_login_target,
+        worker_runtime_login_instructions=worker_runtime_login_instructions,
+        worker_service_tier=getattr(settings, "PEAR_WORKER_SERVICE_TIER", None),
+        worker_fast_mode=getattr(settings, "PEAR_WORKER_FAST_MODE", False),
+    )
+
+
+def serialize_pear_worker_run_event(event: PearWorkerRunEvent) -> dict[str, object]:
+    return {
+        "id": event.id,
+        "event_type": event.event_type,
+        "summary": event.summary,
+        "payload": event.payload,
+        "date_created": datetime_to_timestamp(event.date_created),
+    }
+
+
+def pear_usage_from_event_payload(payload: object) -> PearTokenUsage | None:
+    if not isinstance(payload, dict):
+        return None
+    usage = pear_normalize_token_usage(payload.get("usage"))
+    if usage is not None:
+        return usage
+    metadata = payload.get("metadata")
+    if isinstance(metadata, dict):
+        usage = pear_normalize_token_usage(metadata.get("usage"))
+        if usage is not None:
+            return usage
+    return pear_normalize_token_usage(payload)
+
+
+def serialize_pear_worker_run_usage(run: PearWorkerRun) -> dict[str, object] | None:
+    event = (
+        run.events.filter(Q(event_type="usage") | Q(event_type="transcript"))
+        .order_by("-date_created", "-id")
+        .first()
+    )
+    usage = pear_usage_from_event_payload(event.payload) if event is not None else None
+    if usage is None:
+        return None
+    duration_seconds = None
+    if run.date_finished is not None:
+        duration_seconds = round((run.date_finished - run.date_created).total_seconds(), 1)
+    elif run.status in {PearWorkerRun.QUEUED, PearWorkerRun.RUNNING}:
+        duration_seconds = round((timezone_now() - run.date_created).total_seconds(), 1)
+    return {
+        **usage,
+        "summary": pear_token_usage_summary(usage),
+        "duration_seconds": duration_seconds,
+        "event_id": event.id if event is not None else None,
+    }
+
+
+def serialize_pear_worker_run(
+    run: PearWorkerRun,
+    *,
+    include_events: bool = False,
+) -> dict[str, object]:
+    live_state = get_pear_live_run_state(run.trigger_message_id)
+    payload: dict[str, object] = {
+        "id": run.id,
+        "trigger_message_id": run.trigger_message_id,
+        "result_message_id": run.result_message_id,
+        "stream": run.stream_name,
+        "topic": run.topic_name,
+        "session_kind": run.session_kind,
+        "source_stream": run.source_stream_name,
+        "source_topic": run.source_topic_name,
+        "source_message_id": run.source_message_id,
+        "status": run.status,
+        "summary": run.summary,
+        "current_activity": run.current_activity,
+        "runtime_label": run.runtime_label,
+        "model": run.model,
+        "sandbox": run.sandbox,
+        "approval_policy": run.approval_policy,
+        "workdir": run.workdir,
+        "codex_thread_id": run.codex_thread_id,
+        "error": run.error,
+        "date_created": datetime_to_timestamp(run.date_created),
+        "date_updated": datetime_to_timestamp(run.date_updated),
+        "date_finished": datetime_to_timestamp(run.date_finished)
+        if run.date_finished is not None
+        else None,
+        "bot_user_id": run.bot_profile_id,
+        "requesting_user_id": run.requesting_user_id,
+        "requesting_user_full_name": run.requesting_user.full_name
+        if run.requesting_user is not None
+        else None,
+        "usage": serialize_pear_worker_run_usage(run),
+        "live": live_state,
+    }
+    if include_events:
+        payload["events"] = [
+            serialize_pear_worker_run_event(event)
+            for event in run.events.order_by("-date_created", "-id")[:PEAR_RUN_EVENT_LIMIT]
+        ]
+    return payload
+
+
+def check_can_access_pear_worker_run(
+    user_profile: UserProfile,
+    run: PearWorkerRun,
+) -> None:
+    if run.realm_id != user_profile.realm_id:
+        raise JsonableError(_("Pear run not found."))
+    if run.session_kind == PearWorkerRun.SIDE:
+        if run.requesting_user_id != user_profile.id:
+            raise JsonableError(_("Pear run not found."))
+        return
+    access_stream_by_name(user_profile, run.stream_name)
+
+
+def get_visible_pear_worker_run(
+    user_profile: UserProfile,
+    run_id: int,
+) -> PearWorkerRun:
+    try:
+        run = PearWorkerRun.objects.select_related("bot_profile", "requesting_user").get(
+            id=run_id,
+            realm=user_profile.realm,
+        )
+    except PearWorkerRun.DoesNotExist as error:
+        raise JsonableError(_("Pear run not found.")) from error
+    check_can_access_pear_worker_run(user_profile, run)
+    return run
+
+
+def set_selected_pear_bot(user_profile: UserProfile, selected_bot_user_id: int | None) -> bool:
+    pear_bots = list(get_pear_bot_query(user_profile))
+    if not pear_bots:
+        return False
+
+    pear_bot_by_user_id = {bot.user_profile_id: bot for bot in pear_bots}
+    if selected_bot_user_id is None:
+        bot_configs = get_bot_configs(list(pear_bot_by_user_id))
+        selected_bot = next(
+            (
+                bot
+                for bot in pear_bots
+                if bot_configs.get(bot.user_profile_id, {}).get(PEAR_SELECTED_BOT_CONFIG_KEY)
+                == PEAR_SELECTED_BOT_CONFIG_VALUE
+            ),
+            pear_bots[0],
+        )
+        selected_bot_user_id = selected_bot.user_profile_id
+    elif selected_bot_user_id not in pear_bot_by_user_id:
+        raise JsonableError(_("Invalid Pear bot selection."))
+
+    changed = False
+    bot_configs = get_bot_configs(list(pear_bot_by_user_id))
+    for bot in pear_bots:
+        selected_value = (
+            PEAR_SELECTED_BOT_CONFIG_VALUE
+            if bot.user_profile_id == selected_bot_user_id
+            else "false"
+        )
+        previous_value = bot_configs.get(bot.user_profile_id, {}).get(
+            PEAR_SELECTED_BOT_CONFIG_KEY
+        )
+        if previous_value != selected_value:
+            changed = True
+        set_bot_config(bot.user_profile, PEAR_SELECTED_BOT_CONFIG_KEY, selected_value)
+    return changed
+
+
+@typed_endpoint_without_parameters
+def get_pear_session_backend(request: HttpRequest, user_profile: UserProfile) -> HttpResponse:
+    return json_success(
+        request,
+        data={
+            "pear_session": get_pear_session_payload(),
+        },
+    )
+
+
+@typed_endpoint_without_parameters
+def get_pear_config_backend(request: HttpRequest, user_profile: UserProfile) -> HttpResponse:
+    return json_success(
+        request,
+        data={
+            "pear_config": build_pear_config_for_user(user_profile),
+        },
+    )
+
+
+@require_realm_admin
+@typed_endpoint
+def post_pear_config_backend(
+    request: HttpRequest,
+    user_profile: UserProfile,
+    *,
+    selected_bot_user_id: Json[int] | None = None,
+) -> HttpResponse:
+    pear_config = build_pear_config_for_user(user_profile)
+    created = False
+    if not pear_config["configured"] and selected_bot_user_id is not None:
+        raise JsonableError(_("Invalid Pear bot selection."))
+    if not pear_config["configured"]:
+        add_bot_backend(
+            request,
+            user_profile,
+            bot_type=UserProfile.EMBEDDED_BOT,
+            config_data={PEAR_SELECTED_BOT_CONFIG_KEY: PEAR_SELECTED_BOT_CONFIG_VALUE},
+            full_name_raw=PEAR_AGENT_NAME,
+            interface_type=Service.GENERIC,
+            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+            short_name_raw=PEAR_BOT_SHORT_NAME,
+        )
+        created = True
+        pear_config = build_pear_config_for_user(user_profile)
+    selection_changed = set_selected_pear_bot(user_profile, selected_bot_user_id)
+    pear_config = build_pear_config_for_user(user_profile)
+
+    return json_success(
+        request,
+        data={
+            "created": created,
+            "selection_changed": selection_changed,
+            "pear_config": pear_config,
+        },
+    )
+
+
+@typed_endpoint
+def get_pear_topic_context_backend(
+    request: HttpRequest,
+    user_profile: UserProfile,
+    *,
+    stream_name: Annotated[
+        str,
+        ApiParamConfig("stream", documentation_status=INTENTIONALLY_UNDOCUMENTED),
+    ],
+    topic_name: Annotated[
+        str,
+        ApiParamConfig("topic", documentation_status=INTENTIONALLY_UNDOCUMENTED),
+    ],
+) -> HttpResponse:
+    access_stream_by_name(user_profile, stream_name)
+    context = ensure_pear_topic_context(user_profile, stream=stream_name, topic=topic_name)
+    return json_success(
+        request,
+        data={
+            "pear_topic_context": serialize_pear_topic_context(
+                context,
+                stream_name=stream_name,
+                topic_name=topic_name,
+            ),
+        },
+    )
+
+
+@typed_endpoint
+def post_pear_topic_context_backend(
+    request: HttpRequest,
+    user_profile: UserProfile,
+    *,
+    stream_name: Annotated[
+        str,
+        ApiParamConfig("stream", documentation_status=INTENTIONALLY_UNDOCUMENTED),
+    ],
+    topic_name: Annotated[
+        str,
+        ApiParamConfig("topic", documentation_status=INTENTIONALLY_UNDOCUMENTED),
+    ],
+    model: Annotated[
+        str,
+        ApiParamConfig("model", documentation_status=INTENTIONALLY_UNDOCUMENTED),
+    ],
+    reasoning_effort: Annotated[
+        str | None,
+        ApiParamConfig("reasoning_effort", documentation_status=INTENTIONALLY_UNDOCUMENTED),
+    ] = None,
+) -> HttpResponse:
+    stream, _sub = access_stream_by_name(user_profile, stream_name)
+    model = clean_pear_model_slug(model)
+    clean_reasoning_effort = (
+        clean_pear_reasoning_effort(reasoning_effort)
+        if reasoning_effort is not None
+        else None
+    )
+    context = ensure_pear_topic_context(user_profile, stream=stream_name, topic=topic_name)
+    previous_model = (
+        context.model.strip()
+        if context.model.strip()
+        else str(getattr(settings, "PEAR_WORKER_MODEL", "") or "")
+    )
+    previous_reasoning_effort = pear_worker_reasoning_effort_for_topic(
+        user_profile,
+        stream=stream_name,
+        topic=topic_name,
+    )
+    model_changed = previous_model != model
+    reasoning_effort_changed = (
+        clean_reasoning_effort is not None
+        and previous_reasoning_effort != clean_reasoning_effort
+    )
+    if model_changed:
+        context.model = model
+        context.date_updated = timezone_now()
+        context.save(update_fields=["model", "date_updated"])
+    elif not context.model:
+        context.model = model
+        context.date_updated = timezone_now()
+        context.save(update_fields=["model", "date_updated"])
+
+    if clean_reasoning_effort is not None:
+        if reasoning_effort_changed or not context.reasoning_effort:
+            context.reasoning_effort = clean_reasoning_effort
+            context.date_updated = timezone_now()
+            context.save(update_fields=["reasoning_effort", "date_updated"])
+
+    changed = model_changed or reasoning_effort_changed
+    if model_changed:
+        pear_bot = get_selected_pear_bot(user_profile)
+        if pear_bot is None:
+            raise JsonableError(_("Pear bot is not configured."))
+        internal_send_stream_message(
+            pear_bot.user_profile,
+            stream,
+            topic_name,
+            f"{user_profile.full_name} changed current model to `{model}`.",
+            mark_as_read_for_acting_user=True,
+            acting_user=user_profile,
+        )
+
+    return json_success(
+        request,
+        data={
+            "changed": changed,
+            "pear_topic_context": serialize_pear_topic_context(
+                context,
+                stream_name=stream_name,
+                topic_name=topic_name,
+            ),
+        },
+    )
+
+
+@typed_endpoint
+def get_pear_active_session_backend(
+    request: HttpRequest,
+    user_profile: UserProfile,
+    *,
+    stream_name: Annotated[
+        str | None,
+        ApiParamConfig("stream", documentation_status=INTENTIONALLY_UNDOCUMENTED),
+    ] = None,
+    topic_name: Annotated[
+        str | None,
+        ApiParamConfig("topic", documentation_status=INTENTIONALLY_UNDOCUMENTED),
+    ] = None,
+) -> HttpResponse:
+    pear_session = get_pear_session_payload(stream=stream_name, topic=topic_name)
+    try:
+        stream, _sub = access_stream_by_name(user_profile, pear_session["stream"])
+    except JsonableError:
+        active_session = build_pear_active_session_summary(
+            pear_session=pear_session,
+            source="server",
+            stream_exists=False,
+            topic_message_count=0,
+            latest_message_id=None,
+            checklist=[],
+        )
+    else:
+        assert stream.recipient_id is not None
+        message_query = messages_for_topic(
+            user_profile.realm_id,
+            stream.recipient_id,
+            pear_session["topic"],
+        )
+        message_count = message_query.count()
+        message_rows = list(
+            message_query.order_by("-id").values_list(
+                "id",
+                "content",
+                "sender__is_bot",
+                "sender__full_name",
+            )[:PEAR_ACTIVE_SESSION_MESSAGE_LIMIT]
+        )
+        active_session = build_pear_active_session_summary_from_messages(
+            pear_session=pear_session,
+            source="server",
+            stream_exists=True,
+            messages=message_rows,
+            topic_message_count=message_count,
+        )
+
+    return json_success(
+        request,
+        data={
+            "pear_session": pear_session,
+            "active_session": active_session,
+        },
+    )
+
+
+@typed_endpoint
+def get_pear_runs_backend(
+    request: HttpRequest,
+    user_profile: UserProfile,
+    *,
+    stream_name: Annotated[
+        str | None,
+        ApiParamConfig("stream", documentation_status=INTENTIONALLY_UNDOCUMENTED),
+    ] = None,
+    topic_name: Annotated[
+        str | None,
+        ApiParamConfig("topic", documentation_status=INTENTIONALLY_UNDOCUMENTED),
+    ] = None,
+    include_events: Annotated[
+        Json[bool] | None,
+        ApiParamConfig("include_events", documentation_status=INTENTIONALLY_UNDOCUMENTED),
+    ] = False,
+    include_context: Annotated[
+        Json[bool] | None,
+        ApiParamConfig("include_context", documentation_status=INTENTIONALLY_UNDOCUMENTED),
+    ] = True,
+) -> HttpResponse:
+    query = PearWorkerRun.objects.select_related("bot_profile", "requesting_user").filter(
+        realm=user_profile.realm
+    )
+    if stream_name is not None and topic_name is not None:
+        access_stream_by_name(user_profile, stream_name)
+        query = query.filter(
+            Q(
+                session_kind=PearWorkerRun.SHARED,
+                stream_name=stream_name,
+                topic_name=topic_name,
+            )
+            | Q(
+                session_kind=PearWorkerRun.SIDE,
+                requesting_user=user_profile,
+                source_stream_name=stream_name,
+                source_topic_name=topic_name,
+            )
+        )
+    else:
+        query = query.filter(session_kind=PearWorkerRun.SIDE, requesting_user=user_profile)
+
+    runs = list(query.order_by("-date_created", "-id")[:PEAR_RUN_LIST_LIMIT])
+    topic_context = None
+    if bool(include_context) and stream_name is not None and topic_name is not None:
+        topic_context = serialize_pear_topic_context(
+            ensure_pear_topic_context(user_profile, stream=stream_name, topic=topic_name),
+            stream_name=stream_name,
+            topic_name=topic_name,
+        )
+    return json_success(
+        request,
+        data={
+            "pear_runs": [
+                serialize_pear_worker_run(run, include_events=bool(include_events))
+                for run in runs
+            ],
+            "runtime_config": build_pear_runtime_config_payload(),
+            "pear_topic_context": topic_context,
+        },
+    )
+
+
+@typed_endpoint_without_parameters
+def get_pear_run_backend(
+    request: HttpRequest,
+    user_profile: UserProfile,
+    run_id: int,
+) -> HttpResponse:
+    run = get_visible_pear_worker_run(user_profile, run_id)
+    return json_success(
+        request,
+        data={
+            "pear_run": serialize_pear_worker_run(run, include_events=True),
+            "runtime_config": build_pear_runtime_config_payload(),
+        },
+    )
+
+
+def update_pear_run_control_event(
+    user_profile: UserProfile,
+    run_id: int,
+    event_type: str,
+    summary: str,
+) -> PearWorkerRun:
+    run = get_visible_pear_worker_run(user_profile, run_id)
+    if event_type == "cancel" and run.status in {PearWorkerRun.QUEUED, PearWorkerRun.RUNNING}:
+        run.status = PearWorkerRun.CANCELLED
+        run.current_activity = "Cancelled from the Pear panel."
+        run.summary = "Cancelled."
+        run.date_updated = timezone_now()
+        run.date_finished = run.date_updated
+        run.save(
+            update_fields=[
+                "status",
+                "current_activity",
+                "summary",
+                "date_updated",
+                "date_finished",
+            ]
+        )
+    elif event_type in {"pause", "resume"}:
+        run.current_activity = summary
+        run.date_updated = timezone_now()
+        run.save(update_fields=["current_activity", "date_updated"])
+    PearWorkerRunEvent.objects.create(
+        run=run,
+        event_type=event_type,
+        summary=summary,
+        payload={"user_id": user_profile.id},
+    )
+    return run
+
+
+@typed_endpoint_without_parameters
+def post_pear_run_cancel_backend(
+    request: HttpRequest,
+    user_profile: UserProfile,
+    run_id: int,
+) -> HttpResponse:
+    run = update_pear_run_control_event(user_profile, run_id, "cancel", "Cancelled by user.")
+    return json_success(
+        request,
+        data={"pear_run": serialize_pear_worker_run(run, include_events=True)},
+    )
+
+
+@typed_endpoint_without_parameters
+def post_pear_run_pause_backend(
+    request: HttpRequest,
+    user_profile: UserProfile,
+    run_id: int,
+) -> HttpResponse:
+    run = update_pear_run_control_event(user_profile, run_id, "pause", "Paused by user.")
+    return json_success(
+        request,
+        data={"pear_run": serialize_pear_worker_run(run, include_events=True)},
+    )
+
+
+@typed_endpoint_without_parameters
+def post_pear_run_resume_backend(
+    request: HttpRequest,
+    user_profile: UserProfile,
+    run_id: int,
+) -> HttpResponse:
+    run = update_pear_run_control_event(user_profile, run_id, "resume", "Resumed by user.")
+    return json_success(
+        request,
+        data={"pear_run": serialize_pear_worker_run(run, include_events=True)},
+    )
+
+
+@typed_endpoint
+def post_pear_side_backend(
+    request: HttpRequest,
+    user_profile: UserProfile,
+    *,
+    side_request: Annotated[
+        str,
+        ApiParamConfig("request", documentation_status=INTENTIONALLY_UNDOCUMENTED),
+    ],
+    stream_name: Annotated[
+        str | None,
+        ApiParamConfig("stream", documentation_status=INTENTIONALLY_UNDOCUMENTED),
+    ] = None,
+    topic_name: Annotated[
+        str | None,
+        ApiParamConfig("topic", documentation_status=INTENTIONALLY_UNDOCUMENTED),
+    ] = None,
+    source_message_id: Annotated[
+        Json[int] | None,
+        ApiParamConfig("message_id", documentation_status=INTENTIONALLY_UNDOCUMENTED),
+    ] = None,
+) -> HttpResponse:
+    side_request = side_request.strip()
+    if not side_request:
+        raise JsonableError(_("Pear side request cannot be empty."))
+    if stream_name is not None:
+        access_stream_by_name(user_profile, stream_name)
+
+    pear_bot = get_selected_pear_bot(user_profile)
+    if pear_bot is None:
+        raise JsonableError(_("Pear bot is not configured."))
+
+    source_label = (
+        f"{stream_name} > {topic_name}"
+        if stream_name is not None and topic_name is not None
+        else "current Zulip context"
+    )
+    dm_intro = "\n".join(
+        [
+            "Pear side session started.",
+            "",
+            f"Source: {source_label}",
+            f"Task: {side_request}",
+        ]
+    )
+    dm_message_id = internal_send_private_message(
+        pear_bot.user_profile,
+        user_profile,
+        dm_intro,
+        disable_external_notifications=True,
+    )
+    if dm_message_id is None:
+        raise JsonableError(_("Pear could not open a side DM."))
+
+    side_context_stream = "direct messages"
+    side_context_topic = f"side/{dm_message_id}"
+    ensure_pear_child_topic_context(
+        pear_bot.user_profile,
+        stream=side_context_stream,
+        topic=side_context_topic,
+        parent_stream=stream_name or "",
+        parent_topic=topic_name or "",
+    )
+
+    run = PearWorkerRun.objects.create(
+        realm=user_profile.realm,
+        bot_profile=pear_bot.user_profile,
+        requesting_user=user_profile,
+        trigger_message_id=dm_message_id,
+        stream_name=side_context_stream,
+        topic_name=side_context_topic,
+        session_kind=PearWorkerRun.SIDE,
+        source_stream_name=stream_name or "",
+        source_topic_name=topic_name or "",
+        source_message_id=source_message_id,
+        status=PearWorkerRun.QUEUED,
+        summary="Queued side session.",
+        current_activity=side_request,
+        runtime_label=str(getattr(settings, "PEAR_WORKER_AGENT_RUNTIME", "disabled") or ""),
+        model=pear_worker_model_for_topic(
+            pear_bot.user_profile,
+            stream=side_context_stream,
+            topic=side_context_topic,
+        ),
+        sandbox=pear_worker_sandbox_for_topic(
+            pear_bot.user_profile,
+            stream=side_context_stream,
+            topic=side_context_topic,
+        ),
+        approval_policy=str(getattr(settings, "PEAR_WORKER_APPROVAL_POLICY", "") or ""),
+        workdir=pear_worker_workdir_for_topic(
+            pear_bot.user_profile,
+            stream=side_context_stream,
+            topic=side_context_topic,
+        ),
+    )
+    PearWorkerRunEvent.objects.create(
+        run=run,
+        event_type="queued",
+        summary="Queued private Pear side session.",
+        payload={
+            "source_stream": stream_name,
+            "source_topic": topic_name,
+            "source_message_id": source_message_id,
+        },
+    )
+
+    worker_message = {
+        "id": dm_message_id,
+        "type": "private",
+        "display_recipient": [
+            {
+                "id": user_profile.id,
+                "email": user_profile.email,
+                "full_name": user_profile.full_name,
+            }
+        ],
+        "sender_id": user_profile.id,
+        "sender_email": user_profile.email,
+        "content": side_request,
+    }
+    PearQueueWorkerDispatcher().dispatch(
+        PearEmbeddedBotHandler(),
+        SimpleNamespace(user_profile=pear_bot.user_profile),
+        worker_message,
+        content=side_request,
+        active_session=None,
+        message_id=dm_message_id,
+        stream=side_context_stream,
+        topic=side_context_topic,
+        requesting_user_id=user_profile.id,
+        session_kind=PearWorkerRun.SIDE,
+        source_stream=stream_name or "",
+        source_topic=topic_name or "",
+        source_message_id=source_message_id,
+        progress_message_id=dm_message_id,
+    )
+
+    return json_success(
+        request,
+        data={
+            "pear_run": serialize_pear_worker_run(run, include_events=True),
+            "dm_message_id": dm_message_id,
+            "dm_narrow_url": f"/#narrow/dm/{pear_bot.user_profile_id}",
+            "side_endpoint": PEAR_SIDE_ENDPOINT,
+        },
+    )

@@ -1,6 +1,8 @@
 from django.db import models
-from django.db.models import CASCADE
+from django.db.models import CASCADE, SET_NULL
+from django.utils.timezone import now as timezone_now
 
+from zerver.models.constants import MAX_TOPIC_NAME_LENGTH
 from zerver.models.users import UserProfile
 
 # Interfaces for services
@@ -78,3 +80,119 @@ class BotConfigData(models.Model):
 
     class Meta:
         unique_together = ("bot_profile", "key")
+
+
+class PearWorkerRun(models.Model):
+    QUEUED = "queued"
+    RUNNING = "running"
+    DONE = "done"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+
+    SHARED = "shared"
+    SIDE = "side"
+
+    STATUS_CHOICES = [
+        (QUEUED, "queued"),
+        (RUNNING, "running"),
+        (DONE, "done"),
+        (FAILED, "failed"),
+        (CANCELLED, "cancelled"),
+    ]
+
+    SESSION_KIND_CHOICES = [
+        (SHARED, "shared"),
+        (SIDE, "side"),
+    ]
+
+    realm = models.ForeignKey("zerver.Realm", on_delete=CASCADE)
+    bot_profile = models.ForeignKey(UserProfile, on_delete=CASCADE)
+    requesting_user = models.ForeignKey(
+        UserProfile,
+        null=True,
+        on_delete=SET_NULL,
+        related_name="pear_requested_runs",
+    )
+    trigger_message_id = models.IntegerField()
+    stream_name = models.CharField(max_length=60)
+    topic_name = models.CharField(max_length=MAX_TOPIC_NAME_LENGTH)
+    session_kind = models.CharField(
+        max_length=16, choices=SESSION_KIND_CHOICES, default=SHARED, db_index=True
+    )
+    source_stream_name = models.CharField(max_length=60, blank=True)
+    source_topic_name = models.CharField(max_length=MAX_TOPIC_NAME_LENGTH, blank=True)
+    source_message_id = models.IntegerField(null=True)
+    status = models.CharField(max_length=16, choices=STATUS_CHOICES, db_index=True)
+    summary = models.TextField(blank=True)
+    current_activity = models.TextField(blank=True)
+    runtime_label = models.TextField(blank=True)
+    model = models.TextField(blank=True)
+    sandbox = models.CharField(max_length=64, blank=True)
+    approval_policy = models.CharField(max_length=64, blank=True)
+    workdir = models.TextField(blank=True)
+    codex_thread_id = models.TextField(blank=True)
+    result_message_id = models.IntegerField(null=True)
+    error = models.TextField(null=True)
+    date_created = models.DateTimeField(default=timezone_now, db_index=True)
+    date_updated = models.DateTimeField(default=timezone_now)
+    date_finished = models.DateTimeField(null=True)
+
+    class Meta:
+        unique_together = ("bot_profile", "trigger_message_id")
+        indexes = [
+            models.Index(
+                fields=["realm", "status", "date_created"],
+                name="zerver_pear_run_realm_status",
+            ),
+            models.Index(
+                fields=["realm", "session_kind", "date_created"],
+                name="zerver_pear_run_realm_kind",
+            ),
+        ]
+
+
+class PearWorkerRunEvent(models.Model):
+    run = models.ForeignKey(PearWorkerRun, on_delete=CASCADE, related_name="events")
+    event_type = models.CharField(max_length=64, db_index=True)
+    summary = models.TextField(blank=True)
+    payload = models.JSONField(default=dict)
+    date_created = models.DateTimeField(default=timezone_now, db_index=True)
+
+    class Meta:
+        indexes = [
+            models.Index(
+                fields=["run", "date_created"],
+                name="zerver_pear_run_event_run_date",
+            ),
+        ]
+
+
+class PearTopicContext(models.Model):
+    realm = models.ForeignKey("zerver.Realm", on_delete=CASCADE)
+    stream_name = models.CharField(max_length=60)
+    topic_name = models.CharField(max_length=MAX_TOPIC_NAME_LENGTH)
+    parent_context = models.ForeignKey(
+        "self",
+        null=True,
+        on_delete=SET_NULL,
+        related_name="child_contexts",
+    )
+    model = models.TextField(blank=True)
+    reasoning_effort = models.CharField(max_length=16, blank=True)
+    github_repo = models.TextField(blank=True)
+    workdir = models.TextField(blank=True)
+    date_created = models.DateTimeField(default=timezone_now, db_index=True)
+    date_updated = models.DateTimeField(default=timezone_now)
+
+    class Meta:
+        unique_together = ("realm", "stream_name", "topic_name")
+        indexes = [
+            models.Index(
+                fields=["realm", "stream_name", "topic_name"],
+                name="zerver_pear_topic_context",
+            ),
+            models.Index(
+                fields=["realm", "date_updated"],
+                name="zerver_pear_topic_updated",
+            ),
+        ]

@@ -1,0 +1,442 @@
+#pear-panel {
+    border-top: 1px solid var(--color-border-sidebar-subheader);
+    padding: 8px var(--right-sidebar-padding-left) 10px;
+    color: var(--color-text-sidebar-row);
+    font-size: 12px;
+}
+
+.pear-panel-inner {
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+}
+
+.pear-panel-header,
+.pear-workspace-row,
+.pear-panel-actions,
+.pear-context-line {
+    display: flex;
+    align-items: center;
+}
+
+.pear-panel-header {
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.pear-panel-title-row {
+    min-width: 0;
+}
+
+.pear-panel-actions {
+    width: 104px;
+    flex: none;
+    justify-content: flex-end;
+    gap: 3px;
+}
+
+.pear-panel-title,
+.pear-context-section-title,
+.pear-field-label,
+.pear-context-label {
+    color: var(--color-text-sidebar-heading);
+    font-weight: var(--font-weight-sidebar-heading);
+    opacity: var(--opacity-sidebar-heading);
+}
+
+.pear-icon-button,
+.pear-run-action {
+    width: 22px;
+    height: 22px;
+    padding: 3px;
+    font-size: 14px;
+}
+
+.pear-runtime-section {
+    gap: 7px;
+}
+
+.pear-runtime-row {
+    display: grid;
+    grid-template-columns: 52px minmax(0, 1fr);
+    align-items: center;
+    gap: 7px;
+}
+
+.pear-topic-model-select {
+    min-width: 0;
+    width: 100%;
+    height: 24px;
+    border: 1px solid var(--color-border-legacy-input);
+    border-radius: 4px;
+    background: var(--color-background-input);
+    color: var(--color-text-input);
+    padding: 2px 6px;
+    font: inherit;
+    font-size: 12px;
+    line-height: 18px;
+}
+
+.pear-topic-model-select:focus,
+.pear-reasoning-effort-slider:focus,
+.pear-side-request:focus {
+    border-color: var(--color-border-legacy-input-focus);
+    outline: none;
+}
+
+.pear-effort-row {
+    grid-template-columns: 1fr;
+    gap: 4px;
+}
+
+.pear-effort-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.pear-effort-value {
+    color: var(--color-text-sidebar-row);
+    font-size: 11px;
+    font-weight: 600;
+}
+
+.pear-reasoning-effort-slider {
+    width: 100%;
+    min-width: 0;
+    height: 14px;
+    margin: 0;
+    accent-color: var(--color-background-selected);
+}
+
+.pear-effort-ticks {
+    display: flex;
+    justify-content: space-between;
+    gap: 6px;
+    color: var(--color-text-item);
+    font-size: 10px;
+    line-height: 12px;
+}
+
+.pear-effort-ticks span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.pear-effort-ticks .selected {
+    color: var(--color-text-sidebar-row);
+    font-weight: 600;
+}
+
+.pear-run-status-row {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+    gap: 5px;
+    color: var(--color-text-item);
+    font-size: 10px;
+    font-weight: 600;
+    line-height: 12px;
+}
+
+.pear-run-status-dot {
+    flex: none;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--color-text-item);
+}
+
+.pear-run-status-active .pear-run-status-dot {
+    background: hsl(142deg 55% 52%);
+}
+
+.pear-run-status-blocked .pear-run-status-dot {
+    background: hsl(5deg 65% 55%);
+}
+
+.pear-run-status-text {
+    flex: none;
+}
+
+.pear-run-status-usage {
+    min-width: 0;
+    margin-left: auto;
+    overflow: hidden;
+    font-weight: 500;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.pear-context-section {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.pear-context-section-title {
+    font-size: 11px;
+    text-transform: uppercase;
+}
+
+.pear-context-line {
+    min-width: 0;
+    gap: 7px;
+    line-height: 15px;
+}
+
+.pear-context-label {
+    flex: none;
+    min-width: 32px;
+    font-size: 11px;
+}
+
+.pear-context-value {
+    min-width: 0;
+    overflow: hidden;
+    color: var(--color-text-sidebar-row);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.pear-workspace-summary {
+    min-width: 0;
+    padding: 1px 0;
+}
+
+.pear-workspace-row {
+    min-width: 0;
+    gap: 6px;
+}
+
+.pear-workspace-ref {
+    overflow: hidden;
+    margin-left: 39px;
+    color: var(--color-text-item);
+    font-family: monospace;
+    font-size: 11px;
+    line-height: 14px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.pear-git-dot {
+    width: 6px;
+    height: 6px;
+    flex: none;
+    border-radius: 50%;
+}
+
+.pear-git-clean .pear-git-dot {
+    background: light-dark(hsl(142deg 45% 38%), hsl(142deg 60% 72%));
+}
+
+.pear-git-dirty .pear-git-dot {
+    background: light-dark(hsl(36deg 70% 42%), hsl(38deg 88% 72%));
+}
+
+.pear-workspace-name {
+    min-width: 0;
+    overflow: hidden;
+    color: var(--color-text-sidebar-row);
+    font-weight: 600;
+    line-height: 16px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.pear-git-ref,
+.pear-git-head,
+.pear-git-status {
+    flex: none;
+    font-size: 11px;
+    line-height: 14px;
+}
+
+.pear-git-ref {
+    min-width: 0;
+    overflow: hidden;
+    color: var(--color-text-item);
+    font-weight: 600;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.pear-git-head {
+    color: var(--color-text-item);
+    font-family: monospace;
+}
+
+.pear-git-status {
+    margin-left: auto;
+    font-weight: 600;
+}
+
+.pear-git-clean .pear-git-status {
+    color: light-dark(hsl(142deg 45% 30%), hsl(142deg 63% 76%));
+}
+
+.pear-git-dirty .pear-git-status {
+    color: light-dark(hsl(31deg 46% 28%), hsl(37deg 88% 80%));
+}
+
+.pear-workdir {
+    overflow: hidden;
+    color: var(--color-text-item);
+    font-family: monospace;
+    font-size: 11px;
+    line-height: 15px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.pear-worktree-details {
+    min-width: 0;
+    color: var(--color-text-item);
+    font-size: 11px;
+    line-height: 15px;
+}
+
+.pear-worktree-details > summary {
+    cursor: pointer;
+    list-style-position: outside;
+    margin-left: 12px;
+    padding: 1px 0;
+    color: var(--color-text-sidebar-heading);
+    font-weight: var(--font-weight-sidebar-heading);
+    opacity: var(--opacity-sidebar-heading);
+}
+
+.pear-worktree-summary-extra {
+    color: var(--color-text-item);
+    font-family: monospace;
+    font-size: 10px;
+    font-weight: 400;
+    margin-left: 5px;
+}
+
+.pear-worktree-details > .pear-workdir,
+.pear-worktree-details > .pear-commit-list {
+    margin-top: 4px;
+}
+
+.pear-worktree-unavailable {
+    margin-left: 0;
+}
+
+.pear-file-list,
+.pear-commit-list {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.pear-file-row,
+.pear-commit-row {
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr);
+    gap: 6px;
+    min-width: 0;
+    line-height: 15px;
+}
+
+.pear-file-status,
+.pear-commit-hash {
+    font-family: monospace;
+    font-size: 11px;
+}
+
+.pear-file-path,
+.pear-commit-summary {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.pear-file-added .pear-file-status,
+.pear-file-untracked .pear-file-status {
+    color: light-dark(hsl(142deg 50% 32%), hsl(142deg 58% 72%));
+}
+
+.pear-file-deleted .pear-file-status {
+    color: light-dark(hsl(3deg 58% 42%), hsl(3deg 75% 75%));
+}
+
+.pear-file-modified .pear-file-status,
+.pear-file-renamed .pear-file-status,
+.pear-file-changed .pear-file-status {
+    color: light-dark(hsl(38deg 60% 34%), hsl(38deg 78% 76%));
+}
+
+.pear-diff-shortstat,
+.pear-file-more,
+.pear-empty-state,
+.pear-panel-error {
+    color: var(--color-text-item);
+    line-height: 16px;
+    overflow-wrap: anywhere;
+}
+
+.pear-panel-error {
+    color: var(--color-text-danger-text-action-button);
+}
+
+.pear-run-actions {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+}
+
+.pear-run-dot {
+    width: 7px;
+    height: 7px;
+    flex: none;
+    border-radius: 50%;
+}
+
+.pear-status-active {
+    background: light-dark(hsl(148deg 45% 36%), hsl(148deg 58% 76%));
+}
+
+.pear-status-blocked {
+    background: light-dark(hsl(6deg 54% 45%), hsl(7deg 100% 78%));
+}
+
+.pear-status-idle {
+    background: light-dark(hsl(229deg 9% 48%), hsl(229deg 10% 78%));
+}
+
+.pear-side {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 6px;
+}
+
+.pear-side-request {
+    min-height: 38px;
+    resize: vertical;
+    border: 1px solid var(--color-border-legacy-input);
+    border-radius: 4px;
+    background: var(--color-background-input);
+    color: var(--color-text-input);
+    padding: 5px 6px;
+    font: inherit;
+    font-size: 12px;
+    line-height: 16px;
+}
+
+.pear-side-start {
+    align-self: start;
+    min-width: 0;
+    height: 24px;
+    padding: 0 8px;
+    font-size: 12px;
+    line-height: 1;
+}
+
+.pear-side-start:disabled {
+    opacity: 0.5;
+}

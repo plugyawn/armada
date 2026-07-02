@@ -19,6 +19,7 @@ import * as message_lists from "./message_lists.ts";
 import * as message_reminder from "./message_reminder.ts";
 import * as message_viewport from "./message_viewport.ts";
 import {page_params} from "./page_params.ts";
+import * as pear_panel from "./pear_panel.ts";
 import * as pm_list from "./pm_list.ts";
 import * as popover_menus from "./popover_menus.ts";
 import * as popovers from "./popovers.ts";
@@ -399,6 +400,7 @@ export function initialize_right_sidebar(): void {
     $("#right-sidebar-container").html(rendered_sidebar);
 
     buddy_list.initialize_tooltips();
+    pear_panel.initialize();
 
     update_invite_user_option();
 

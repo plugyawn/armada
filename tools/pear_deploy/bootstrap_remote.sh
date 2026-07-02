@@ -1,0 +1,477 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+STATE_PATH="${1:-$REPO_ROOT/output/pear-staging/server.json}"
+
+if [[ ! -f "$STATE_PATH" ]]; then
+    echo "Missing state file: $STATE_PATH" >&2
+    echo "Run: python3 tools/pear_deploy/pear_do.py create" >&2
+    exit 1
+fi
+
+eval "$(
+    python3 - "$STATE_PATH" <<'PY'
+import json
+import shlex
+import sys
+
+state = json.load(open(sys.argv[1]))
+values = {
+    "FQDN": state["fqdn"],
+    "IP_ADDRESS": state["ip_address"],
+    "SSH_CONFIG": state["ssh_config"],
+}
+for key, value in values.items():
+    print(f"{key}={shlex.quote(str(value))}")
+PY
+)"
+
+LOCAL_CODEX_VERSION="$(
+    if command -v codex >/dev/null 2>&1; then
+        codex --version | awk '{print $2}'
+    fi
+)"
+if [[ -z "$LOCAL_CODEX_VERSION" ]]; then
+    LOCAL_CODEX_VERSION="0.139.0"
+fi
+
+for env_file in "$REPO_ROOT/../env.local" "$REPO_ROOT/.env.local"; do
+    if [[ -f "$env_file" ]]; then
+        set -a
+        # shellcheck source=/dev/null
+        source "$env_file"
+        set +a
+    fi
+done
+PEAR_GEMINI_API_KEY="${PEAR_ADDRESSING_ROUTER_GEMINI_API_KEY:-${GEMINI_API_KEY:-${GEMINI_KEY:-${GOOGLE_API_KEY:-${GOOGLE_GENAI_API_KEY:-}}}}}"
+
+ssh_root() {
+    ssh -F "$SSH_CONFIG" pear-staging-root "$@"
+}
+
+LOCAL_GIT_COMMON_DIR="$(git -C "$REPO_ROOT" rev-parse --git-common-dir)"
+
+echo "Waiting for SSH on $IP_ADDRESS..."
+for _ in $(seq 1 90); do
+    if ssh_root true >/dev/null 2>&1; then
+        break
+    fi
+    sleep 5
+done
+ssh_root true
+
+echo "Waiting for cloud-init..."
+ssh_root 'cloud-init status --wait || true'
+
+echo "Installing base packages and Caddy..."
+ssh_root 'bash -s' <<'REMOTE'
+set -euo pipefail
+export DEBIAN_FRONTEND=noninteractive
+
+if ! id -u zulipdev >/dev/null 2>&1; then
+    useradd -U -G sudo -m zulipdev -s /bin/bash
+    echo "zulipdev ALL=(ALL) NOPASSWD:ALL" >/etc/sudoers.d/90-zulipdev
+fi
+chmod 711 /home/zulipdev
+install -d -m 750 -o zulipdev -g zulipdev /home/zulipdev/zulip
+
+apt-get update
+apt-get install -y ca-certificates caddy curl git gnupg nodejs npm python3 python3-venv rsync ufw
+
+ufw allow OpenSSH
+ufw allow 80/tcp
+ufw allow 443/tcp
+ufw --force enable
+REMOTE
+
+echo "Syncing checkout to /home/zulipdev/zulip..."
+rsync -az --delete \
+    --exclude '/.playwright-cli/' \
+    --exclude '/.venv/' \
+    --exclude '/.vagrant/' \
+    --exclude '/.pnpm-store/' \
+    --exclude '/node_modules/' \
+    --exclude '/var/' \
+    --exclude '/output/' \
+    --exclude '/prod-static/' \
+    --exclude '/staticfiles/' \
+    --exclude '/.mypy_cache/' \
+    --exclude '/.pytest_cache/' \
+    --exclude '/.ruff_cache/' \
+    --exclude '/web/.parcel-cache/' \
+    --exclude '/web/coverage/' \
+    -e "ssh -F $SSH_CONFIG" \
+    "$REPO_ROOT/" \
+    "root@$IP_ADDRESS:/home/zulipdev/zulip/"
+
+if [[ -d "$LOCAL_GIT_COMMON_DIR" ]]; then
+    echo "Syncing Git metadata for this worktree..."
+    ssh_root 'install -d -m 755 /home/zulipdev/.git/modules/zulip'
+    rsync -az --delete \
+        -e "ssh -F $SSH_CONFIG" \
+        "$LOCAL_GIT_COMMON_DIR/" \
+        "root@$IP_ADDRESS:/home/zulipdev/.git/modules/zulip/"
+fi
+
+ssh_root 'chown -R zulipdev:zulipdev /home/zulipdev/zulip'
+ssh_root 'chmod 711 /home/zulipdev && chmod 750 /home/zulipdev/zulip'
+ssh_root 'chown -R zulipdev:zulipdev /home/zulipdev/.git 2>/dev/null || true'
+ssh_root 'sudo -Hu zulipdev git config --global --add safe.directory /home/zulipdev/zulip'
+ssh_root 'sudo -Hu zulipdev bash -lc '"'"'
+cd /home/zulipdev/zulip
+if [[ -d .vagrant ]]; then
+    echo "Removing copied host .vagrant marker before remote provisioning..."
+    rm -rf .vagrant
+fi
+if [[ -f .venv/bin/activate ]] && grep -q "/Users/" .venv/bin/activate; then
+    echo "Removing stale copied local virtualenv before remote provisioning..."
+    rm -rf .venv
+fi
+'"'"''
+
+echo "Provisioning Zulip on the server. This can take a while the first time..."
+ssh_root 'sudo -Hu zulipdev bash -lc "cd /home/zulipdev/zulip && SKIP_VENV_SHELL_WARNING=1 ./tools/provision"'
+ssh_root 'rm -f /etc/sudoers.d/90-zulipdev && gpasswd -d zulipdev sudo >/dev/null 2>&1 || true'
+
+echo "Installing Codex CLI @openai/codex@$LOCAL_CODEX_VERSION..."
+ssh_root "npm install -g @openai/codex@$LOCAL_CODEX_VERSION"
+
+if [[ -f "$HOME/.codex/auth.json" ]]; then
+    echo "Copying Codex auth to the server without printing credentials..."
+    ssh_root 'install -d -m 700 -o zulipdev -g zulipdev /home/zulipdev/.codex'
+    rsync -az -e "ssh -F $SSH_CONFIG" "$HOME/.codex/auth.json" \
+        "root@$IP_ADDRESS:/home/zulipdev/.codex/auth.json"
+    ssh_root 'chown zulipdev:zulipdev /home/zulipdev/.codex/auth.json && chmod 600 /home/zulipdev/.codex/auth.json'
+else
+    echo "WARNING: $HOME/.codex/auth.json is missing; run codex login on the server before using Pear." >&2
+fi
+
+echo "Writing Caddy and systemd config..."
+ssh -F "$SSH_CONFIG" pear-staging-root bash -s -- "$FQDN" <<'REMOTE'
+set -euo pipefail
+FQDN="$1"
+
+cat >/etc/caddy/Caddyfile <<EOF
+${FQDN} {
+    encode zstd gzip
+
+    reverse_proxy 127.0.0.1:9991
+}
+EOF
+
+cat >/home/zulipdev/pear.env <<EOF
+EXTERNAL_HOST=${FQDN}
+BEHIND_HTTPS_PROXY=1
+ZULIP_DATABASE_CONN_MAX_AGE=0
+PEAR_WORKER_AGENT_RUNTIME=codex-app-server
+PEAR_WORKER_CODEX_BIN=/srv/zulip-node/bin/codex
+PEAR_WORKER_WORKDIR=/home/zulipdev/zulip
+PEAR_TOPIC_WORKDIR_ROOT=/srv/pear-workspaces
+PEAR_TOPIC_ISOLATION_BACKEND=os-user
+PEAR_TOPIC_ISOLATION_HELPER=/usr/local/sbin/pear-topic-isolate
+PEAR_WORKER_MODEL=gpt-5.5
+PEAR_WORKER_SERVICE_TIER=fast
+PEAR_WORKER_FAST_MODE=true
+PEAR_WORKER_REASONING_EFFORT=medium
+PEAR_WORKER_SANDBOX=danger-full-access
+PEAR_WORKER_APPROVAL_POLICY=never
+PEAR_WORKER_MAX_ACTIVE_RUNS_PER_TOPIC=1
+PEAR_WORKER_MAX_ACTIVE_RUNS_PER_REALM=6
+PEAR_ADDRESSING_ROUTER_RUNTIME=gemini-interactions
+PEAR_ADDRESSING_ROUTER_MODEL=gpt-5.5
+PEAR_ADDRESSING_ROUTER_REASONING_EFFORT=low
+PEAR_ADDRESSING_ROUTER_TIMEOUT_SECONDS=20
+PEAR_ADDRESSING_ROUTER_GEMINI_MODEL=gemini-3.1-flash-lite
+PEAR_ADDRESSING_ROUTER_GEMINI_THINKING_LEVEL=minimal
+EOF
+chown zulipdev:zulipdev /home/zulipdev/pear.env
+chmod 600 /home/zulipdev/pear.env
+groupadd --force pear-topic
+install -d -m 711 -o zulipdev -g pear-topic /srv/pear-workspaces
+
+cat >/usr/local/sbin/pear-topic-isolate <<'EOF'
+#!/usr/bin/env python3
+import argparse
+import os
+import re
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+
+def fail(message: str) -> None:
+    print(message, file=sys.stderr)
+    raise SystemExit(1)
+
+
+def resolve(path: str) -> Path:
+    return Path(path).expanduser().resolve(strict=False)
+
+
+parser = argparse.ArgumentParser()
+parser.add_argument("--user", required=True)
+parser.add_argument("--workdir", required=True)
+parser.add_argument("--topic-root", required=True)
+parser.add_argument("--codex-home-source", required=True)
+args = parser.parse_args()
+
+if os.geteuid() != 0:
+    fail("pear-topic-isolate must run as root")
+if re.fullmatch(r"pear-[0-9a-f]{24}", args.user) is None:
+    fail("invalid Pear topic user")
+
+topic_root = resolve(args.topic_root)
+workdir = resolve(args.workdir)
+if workdir != topic_root and topic_root not in workdir.parents:
+    fail("workdir is outside topic root")
+
+topic_root.mkdir(parents=True, exist_ok=True)
+os.chmod(topic_root, 0o711)
+Path(args.workdir).mkdir(parents=True, exist_ok=True)
+strict_workdir = Path(args.workdir).resolve(strict=True)
+if strict_workdir != topic_root and topic_root not in strict_workdir.parents:
+    fail("resolved workdir is outside topic root")
+if (strict_workdir / ".git").is_file():
+    fail("refusing shared Git worktree; topic checkout must have a private .git directory")
+if not (strict_workdir / ".git").exists():
+    subprocess.run(
+        ["git", "-C", str(strict_workdir), "init", "--quiet"],
+        check=False,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+
+subprocess.run(["groupadd", "--force", "pear-topic"], check=True)
+try:
+    subprocess.run(["id", "-u", args.user], check=True, stdout=subprocess.DEVNULL)
+except subprocess.CalledProcessError:
+    subprocess.run(
+        [
+            "useradd",
+            "--system",
+            "--create-home",
+            "--gid",
+            "pear-topic",
+            "--home-dir",
+            f"/home/{args.user}",
+            "--shell",
+            "/usr/sbin/nologin",
+            args.user,
+        ],
+        check=True,
+    )
+else:
+    subprocess.run(["usermod", "--gid", "pear-topic", args.user], check=True)
+
+home = Path(f"/home/{args.user}")
+home.mkdir(parents=True, exist_ok=True)
+codex_source = Path(args.codex_home_source).expanduser()
+codex_target = home / ".codex"
+codex_target.mkdir(parents=True, exist_ok=True)
+if codex_source.exists():
+    for filename in ("auth.json", "config.toml", "models_cache.json"):
+        source_file = codex_source / filename
+        if source_file.exists():
+            shutil.copy2(source_file, codex_target / filename)
+    for dirname in ("plugins", "skills"):
+        source_dir = codex_source / dirname
+        target_dir = codex_target / dirname
+        if source_dir.exists():
+            if target_dir.exists():
+                shutil.rmtree(target_dir)
+            shutil.copytree(source_dir, target_dir, symlinks=False)
+
+subprocess.run(["chown", "-R", f"{args.user}:pear-topic", str(home)], check=True)
+os.chmod(home, 0o700)
+os.chmod(codex_target, 0o700)
+auth_json = codex_target / "auth.json"
+if auth_json.exists():
+    os.chmod(auth_json, 0o600)
+
+subprocess.run(["chown", "-R", f"{args.user}:pear-topic", str(strict_workdir)], check=True)
+for root, dirs, files in os.walk(strict_workdir):
+    os.chmod(root, 0o700)
+    for dirname in dirs:
+        path = Path(root) / dirname
+        if not path.is_symlink():
+            os.chmod(path, 0o700)
+    for filename in files:
+        path = Path(root) / filename
+        if not path.is_symlink():
+            mode = path.stat().st_mode
+            os.chmod(path, 0o700 if mode & 0o111 else 0o600)
+EOF
+chmod 755 /usr/local/sbin/pear-topic-isolate
+
+cat >/etc/sudoers.d/91-pear-topic-isolation <<'EOF'
+zulipdev ALL=(root) NOPASSWD: /usr/local/sbin/pear-topic-isolate
+zulipdev ALL=(%pear-topic) NOPASSWD: /usr/bin/env *
+EOF
+chmod 440 /etc/sudoers.d/91-pear-topic-isolation
+
+cat >/usr/local/bin/pear-run-zulip-dev <<'EOF'
+#!/usr/bin/env python3
+import os
+import signal
+import subprocess
+import sys
+
+repo = "/home/zulipdev/zulip"
+venv = os.path.join(repo, ".venv")
+env = os.environ.copy()
+env["PATH"] = os.path.join(venv, "bin") + os.pathsep + env.get("PATH", "")
+env["VIRTUAL_ENV"] = venv
+os.chdir(repo)
+
+process = subprocess.Popen(
+    [os.path.join(repo, "tools/run-dev"), "--behind-https-proxy", "--streamlined"],
+    env=env,
+)
+
+
+def stop(signum: int, frame: object) -> None:
+    if process.poll() is None:
+        process.terminate()
+
+
+signal.signal(signal.SIGTERM, stop)
+signal.signal(signal.SIGINT, stop)
+sys.exit(process.wait())
+EOF
+chmod 755 /usr/local/bin/pear-run-zulip-dev
+
+cat >/etc/systemd/system/pear-zulip-dev.service <<'EOF'
+[Unit]
+Description=Pear Zulip development server
+After=network-online.target postgresql.service rabbitmq-server.service redis-server.service memcached.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=zulipdev
+WorkingDirectory=/home/zulipdev/zulip
+EnvironmentFile=/home/zulipdev/pear.env
+ExecStart=/usr/local/bin/pear-run-zulip-dev
+Restart=always
+RestartSec=5
+KillSignal=SIGINT
+TimeoutStopSec=30
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+cat >/etc/systemd/system/pear-embedded-bots.service <<'EOF'
+[Unit]
+Description=Pear Zulip embedded bot queue
+After=network-online.target pear-zulip-dev.service
+Wants=pear-zulip-dev.service
+
+[Service]
+Type=simple
+User=zulipdev
+WorkingDirectory=/home/zulipdev/zulip
+EnvironmentFile=/home/zulipdev/pear.env
+ExecStart=/bin/bash -lc 'cd /home/zulipdev/zulip && exec /home/zulipdev/zulip/.venv/bin/python3 /home/zulipdev/zulip/manage.py process_queue --queue_name embedded_bots --automated'
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+cat >/etc/systemd/system/pear-worker.service <<'EOF'
+[Unit]
+Description=Pear Codex worker queue
+After=network-online.target pear-zulip-dev.service
+Wants=pear-zulip-dev.service
+
+[Service]
+Type=simple
+User=zulipdev
+WorkingDirectory=/home/zulipdev/zulip
+EnvironmentFile=/home/zulipdev/pear.env
+ExecStart=/bin/bash -lc 'cd /home/zulipdev/zulip && exec /home/zulipdev/zulip/.venv/bin/python3 /home/zulipdev/zulip/manage.py process_queue --queue_name pear_worker --automated'
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+systemctl daemon-reload
+systemctl enable caddy pear-zulip-dev pear-embedded-bots pear-worker
+systemctl restart caddy pear-zulip-dev pear-embedded-bots pear-worker
+REMOTE
+
+if [[ -n "$PEAR_GEMINI_API_KEY" ]]; then
+    echo "Copying Gemini addressing-router key to the server without printing it..."
+    printf 'PEAR_ADDRESSING_ROUTER_GEMINI_API_KEY=%s\n' "$PEAR_GEMINI_API_KEY" |
+        ssh_root 'cat >>/home/zulipdev/pear.env && chown zulipdev:zulipdev /home/zulipdev/pear.env && chmod 600 /home/zulipdev/pear.env'
+else
+    echo "WARNING: No Gemini key found in local env; ambient addressing will fail closed." >&2
+fi
+
+echo "Ensuring Pear embedded bot is configured..."
+ssh -F "$SSH_CONFIG" pear-staging-root \
+    "sudo -Hu zulipdev bash -lc 'cd /home/zulipdev/zulip && set -a && . /home/zulipdev/pear.env && set +a && /home/zulipdev/zulip/.venv/bin/python3 /home/zulipdev/zulip/manage.py shell'" <<'PY'
+from django.test import RequestFactory
+
+from zerver.models.users import UserProfile
+from zerver.views.pear import build_pear_config_for_user, post_pear_config_backend
+
+owner = (
+    UserProfile.objects.filter(
+        realm__string_id="zulip",
+        is_active=True,
+        is_bot=False,
+        role=UserProfile.ROLE_REALM_OWNER,
+    )
+    .order_by("id")
+    .first()
+)
+if owner is None:
+    owner = (
+        UserProfile.objects.filter(
+            realm__string_id="zulip",
+            is_active=True,
+            is_bot=False,
+        )
+        .order_by("role", "id")
+        .first()
+    )
+if owner is None:
+    raise SystemExit("No active human user found in the zulip realm.")
+
+request = RequestFactory().post("/json/pear/config")
+request.user = owner
+response = post_pear_config_backend(request, owner)
+if response.status_code != 200:
+    raise SystemExit(f"Pear config failed with HTTP {response.status_code}: {response.content!r}")
+
+config = build_pear_config_for_user(owner)
+print(
+    "Pear configured:",
+    {
+        "enabled": config["enabled"],
+        "bot_user_id": config["bot_user_id"],
+        "bot_full_name": config["bot_full_name"],
+        "worker_agent_runtime": config["worker_agent_runtime"],
+        "worker_runtime_ready": config["worker_runtime_ready"],
+        "worker_runtime_auth_ready": config["worker_runtime_auth_ready"],
+    },
+)
+PY
+
+ssh_root 'systemctl restart pear-zulip-dev pear-embedded-bots pear-worker'
+
+echo "Remote services:"
+ssh_root 'systemctl --no-pager --full status caddy pear-zulip-dev pear-embedded-bots pear-worker | sed -n "1,220p"'
+
+echo
+echo "Done. Verify with:"
+echo "  tools/pear_deploy/verify_remote.sh $STATE_PATH"

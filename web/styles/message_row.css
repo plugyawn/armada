@@ -55,6 +55,92 @@
         }
     }
 
+    &.pear-message {
+        background-color: var(--color-background-pear-message-content);
+
+        .message_embed .data-container::after {
+            background: linear-gradient(
+                0deg,
+                var(--color-background-pear-message-content),
+                transparent 100%
+            );
+        }
+
+        .message_content {
+            padding-right: 0.35em;
+            overflow-wrap: anywhere;
+
+            .spoiler-block {
+                max-width: min(100%, 58rem);
+                margin: 0.25em 0 0.6em;
+                padding: 0;
+                border-color: var(--color-message-content-container-border);
+                border-radius: 6px;
+                font-size: 0.82em;
+                line-height: 1.28;
+                opacity: 0.88;
+            }
+
+            .spoiler-header {
+                min-height: 0;
+                padding: 3px 7px;
+                font-weight: 600;
+            }
+
+            .spoiler-header .spoiler-header-text {
+                margin: 0;
+            }
+
+            .spoiler-button {
+                transform: scale(0.78);
+                transform-origin: center right;
+            }
+
+            .spoiler-content.spoiler-content-open {
+                padding: 5px 8px 7px;
+            }
+
+            .spoiler-content {
+                ul {
+                    margin: 0.1em 0 0.15em 1.1em;
+                }
+
+                li {
+                    margin: 0.12em 0;
+                    padding-left: 0.15em;
+                }
+
+                p {
+                    margin: 0.15em 0;
+                }
+
+                code {
+                    font-size: 0.94em;
+                }
+            }
+        }
+
+        &.pear-active-message {
+            .message_content:not(.status-message) {
+                overflow: visible;
+            }
+
+            .message_content > p:last-child > em:last-child {
+                display: inline-block;
+                min-width: 1.35em;
+                margin-left: 0.15em;
+                color: var(--color-text-message-default);
+                font-size: var(--base-font-size-px);
+                font-style: normal;
+                line-height: 1;
+                text-align: center;
+                vertical-align: -0.02em;
+                white-space: nowrap;
+                font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+            }
+        }
+    }
+
     &.sender_info_hovered {
         .sender_name {
             cursor: pointer;

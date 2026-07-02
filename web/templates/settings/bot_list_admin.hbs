@@ -2,6 +2,9 @@
     <div class="bot-settings-tip banner-wrapper" id="{{prefix}}-bot-settings-tip">
     </div>
     <div class="clear-float"></div>
+    {{#if (eq prefix "admin")}}
+        {{> pear_config_admin }}
+    {{/if}}
     <div>
         {{> ../components/action_button
           label=(t "Add a new bot")

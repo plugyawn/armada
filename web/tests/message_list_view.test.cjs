@@ -10,6 +10,8 @@ const $ = require("./lib/zjquery.cjs");
 
 set_global("document", "document-stub");
 
+let sender_is_bot = () => false;
+
 // timerender calls setInterval when imported
 mock_esm("../src/timerender", {
     render_date(time) {
@@ -21,7 +23,7 @@ mock_esm("../src/timerender", {
 });
 
 mock_esm("../src/people", {
-    sender_is_bot: () => false,
+    sender_is_bot: (message) => sender_is_bot(message),
     sender_is_guest: () => false,
     sender_is_deactivated: () => false,
     should_add_guest_user_indicator: () => false,
@@ -40,6 +42,7 @@ let next_timestamp = 1500000000;
 
 function test(label, f) {
     run_test(label, ({override, mock_template}) => {
+        sender_is_bot = () => false;
         muted_users.set_muted_users([]);
         mock_template("message_list.hbs", false, () => "<message-list-stub>");
         f({override, mock_template});
@@ -201,6 +204,28 @@ test("msg_edited_and_moved_vars", () => {
         assert.equal(result[3].widget_edited, false);
         assert.equal(result[3].edited, false);
         assert.equal(result[3].modified, false);
+    })();
+
+    (function test_pear_message_hides_edit_notice_vars() {
+        const message = {
+            last_edit_timestamp: (next_timestamp += 1),
+            last_moved_timestamp: (next_timestamp += 1),
+        };
+        const list = build_list([]);
+
+        const normal_result = list._get_visible_message_edited_and_moved_vars(message, false);
+        assert.equal(normal_result.edited, true);
+        assert.equal(normal_result.moved, true);
+        assert.equal(normal_result.modified, true);
+        assert.equal(normal_result.last_edit_timestamp, message.last_edit_timestamp);
+        assert.equal(normal_result.last_moved_timestamp, message.last_moved_timestamp);
+
+        const pear_result = list._get_visible_message_edited_and_moved_vars(message, true);
+        assert.equal(pear_result.edited, false);
+        assert.equal(pear_result.moved, false);
+        assert.equal(pear_result.modified, false);
+        assert.equal(pear_result.last_edit_timestamp, undefined);
+        assert.equal(pear_result.last_moved_timestamp, undefined);
     })();
 });
 
@@ -497,6 +522,78 @@ test("muted_message_vars", () => {
         // which has a mention, since we don't want to display hidden mentions so visibly.
         assert.equal(result[1].mention_classname, undefined);
     })();
+});
+
+test("pear_message_vars", () => {
+    function build_message_context(message = {}, message_context = {}) {
+        return {
+            include_sender: true,
+            ...message_context,
+            msg: {
+                sender_email: "user@example.com",
+                sender_full_name: "Regular User",
+                sender_id: 10,
+                content: "<message-stub>",
+                ...message,
+            },
+        };
+    }
+
+    function build_list() {
+        const list = new MessageListView(
+            {
+                id: 1,
+            },
+            true,
+            true,
+        );
+        list._get_message_edited_and_moved_vars = noop;
+        return list;
+    }
+
+    function calculate_variables(message_container) {
+        return build_list().get_calculated_message_container_variables(
+            message_container.msg,
+            message_container.include_sender,
+        );
+    }
+
+    sender_is_bot = (message) => message.sender_id === 25 || message.sender_id === 26;
+
+    let result = calculate_variables(
+        build_message_context({
+            sender_email: "pear@zulip.com",
+            sender_full_name: "Pear",
+            sender_id: 25,
+            content: "<p><em>Thinking</em> <em>✦</em></p>",
+        }),
+    );
+    assert.equal(result.is_pear_message, true);
+    assert.equal(result.is_pear_active_message, true);
+    assert.equal(result.include_sender, false);
+
+    result = calculate_variables(
+        build_message_context({
+            sender_email: "pear@zulip.com",
+            sender_full_name: "Pear",
+            sender_id: 25,
+            content: "<p>Done.</p>",
+        }),
+    );
+    assert.equal(result.is_pear_message, true);
+    assert.equal(result.is_pear_active_message, false);
+    assert.equal(result.include_sender, false);
+
+    result = calculate_variables(
+        build_message_context({
+            sender_email: "build-bot@zulip.com",
+            sender_full_name: "Build Bot",
+            sender_id: 26,
+        }),
+    );
+    assert.equal(result.is_pear_message, false);
+    assert.equal(result.is_pear_active_message, false);
+    assert.equal(result.include_sender, true);
 });
 
 test("merge_message_groups", ({mock_template}) => {

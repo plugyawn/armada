@@ -677,7 +677,10 @@ IS_DEV_DROPLET = False
 NAGIOS_BOT_HOST = SYSTEM_BOT_REALM + "." + EXTERNAL_HOST
 
 # Use half of the available CPUs for data import purposes.
-DEFAULT_DATA_EXPORT_IMPORT_PARALLELISM = (len(os.sched_getaffinity(0)) // 2) or 1
+AVAILABLE_CPU_COUNT = (
+    len(os.sched_getaffinity(0)) if hasattr(os, "sched_getaffinity") else (os.cpu_count() or 1)
+)
+DEFAULT_DATA_EXPORT_IMPORT_PARALLELISM = (AVAILABLE_CPU_COUNT // 2) or 1
 
 # Use the default tmpfile path for automated imports
 IMPORT_TMPFILE_DIRECTORY: str | None = None
@@ -768,6 +771,48 @@ MAX_DEACTIVATED_REALM_DELETION_DAYS: int | None = None
 TOPIC_SUMMARIZATION_MODEL: str | None = None
 TOPIC_SUMMARIZATION_API_BASE: str | None = None
 TOPIC_SUMMARIZATION_PARAMETERS: dict[str, Any] = {}
+
+# Pear pair-programming worker runtime. Prefer "codex-app-server" for direct
+# Codex app-server control with persistent threads, streaming events, and
+# same-turn steering. "codex-agents-mcp" uses the OpenAI Agents SDK with Codex
+# exposed as an MCP server. "codex-sdk" uses the official `openai-codex`
+# Python SDK when it is installed in the worker environment. "codex-exec" is a
+# non-interactive Codex CLI fallback that consumes the JSONL event stream.
+PEAR_WORKER_AGENT_RUNTIME: Literal[
+    "disabled", "codex-app-server", "codex-agents-mcp", "codex-exec", "codex-sdk"
+] = "disabled"
+PEAR_WORKER_CODEX_BIN = "codex"
+PEAR_WORKER_WORKDIR: str | None = None
+PEAR_TOPIC_WORKDIR_ROOT: str | None = None
+PEAR_TOPIC_ISOLATION_BACKEND: Literal["codex-sandbox", "os-user"] = "codex-sandbox"
+PEAR_TOPIC_ISOLATION_HELPER = "/usr/local/sbin/pear-topic-isolate"
+PEAR_WORKER_MODEL: str | None = "gpt-5.5"
+PEAR_WORKER_MODEL_CHOICES: list[str] = ["gpt-5.5"]
+PEAR_WORKER_SERVICE_TIER: str | None = "fast"
+PEAR_WORKER_FAST_MODE = True
+PEAR_WORKER_REASONING_EFFORT: Literal["low", "medium", "high", "xhigh"] = "medium"
+PEAR_WORKER_SANDBOX: Literal["read-only", "workspace-write", "danger-full-access"] = "read-only"
+PEAR_WORKER_APPROVAL_POLICY: Literal["untrusted", "on-request", "never"] = "on-request"
+PEAR_WORKER_TIMEOUT_SECONDS = 1800
+PEAR_WORKER_OUTPUT_LIMIT = 50000
+PEAR_WORKER_CODEX_EPHEMERAL = False
+PEAR_WORKER_CODEX_EXTRA_ARGS: list[str] = []
+PEAR_WORKER_TRUSTED_USER_IDS: list[int] = []
+PEAR_WORKER_MAX_ACTIVE_RUNS_PER_TOPIC = 1
+PEAR_WORKER_MAX_ACTIVE_RUNS_PER_REALM = 3
+PEAR_ADDRESSING_ROUTER_RUNTIME: Literal["disabled", "codex-exec", "gemini-interactions"] = (
+    "disabled"
+)
+PEAR_ADDRESSING_ROUTER_MODEL: str | None = "gpt-5.5"
+PEAR_ADDRESSING_ROUTER_REASONING_EFFORT: Literal["low", "medium", "high", "xhigh"] = "low"
+PEAR_ADDRESSING_ROUTER_TIMEOUT_SECONDS = 20
+PEAR_ADDRESSING_ROUTER_OUTPUT_LIMIT = 1000
+PEAR_ADDRESSING_ROUTER_CODEX_EXTRA_ARGS: list[str] = ["--ignore-rules"]
+PEAR_ADDRESSING_ROUTER_GEMINI_API_KEY = ""
+PEAR_ADDRESSING_ROUTER_GEMINI_MODEL = "gemini-3.1-flash-lite"
+PEAR_ADDRESSING_ROUTER_GEMINI_THINKING_LEVEL: str | None = "minimal"
+PEAR_ADDRESSING_ROUTER_GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/interactions"
+
 # Price per token for input and output tokens, and maximum cost. Units
 # are arbitrarily, but typically will be USD.
 INPUT_COST_PER_GIGATOKEN: int = 0

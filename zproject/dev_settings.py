@@ -1,5 +1,6 @@
 import os
 import pwd
+from typing import Literal, cast
 
 from scripts.lib.zulip_tools import deport
 from zproject.settings_types import SCIMConfigDict
@@ -98,6 +99,87 @@ TERMS_OF_SERVICE_VERSION = "1.0"
 TERMS_OF_SERVICE_MESSAGE: str | None = "Description of changes to the ToS!"
 
 EMBEDDED_BOTS_ENABLED = True
+PEAR_WORKER_AGENT_RUNTIME = cast(
+    Literal["disabled", "codex-app-server", "codex-agents-mcp", "codex-exec", "codex-sdk"],
+    os.getenv("PEAR_WORKER_AGENT_RUNTIME", "disabled"),
+)
+PEAR_WORKER_CODEX_BIN = os.getenv("PEAR_WORKER_CODEX_BIN", "codex")
+PEAR_WORKER_WORKDIR = os.getenv("PEAR_WORKER_WORKDIR") or None
+PEAR_TOPIC_WORKDIR_ROOT = os.getenv("PEAR_TOPIC_WORKDIR_ROOT") or None
+PEAR_TOPIC_ISOLATION_BACKEND = cast(
+    Literal["codex-sandbox", "os-user"],
+    os.getenv("PEAR_TOPIC_ISOLATION_BACKEND", "codex-sandbox"),
+)
+PEAR_TOPIC_ISOLATION_HELPER = os.getenv(
+    "PEAR_TOPIC_ISOLATION_HELPER", "/usr/local/sbin/pear-topic-isolate"
+)
+PEAR_WORKER_MODEL = os.getenv("PEAR_WORKER_MODEL", "gpt-5.5") or None
+PEAR_WORKER_MODEL_CHOICES = [
+    model
+    for model in os.getenv("PEAR_WORKER_MODEL_CHOICES", PEAR_WORKER_MODEL or "gpt-5.5")
+    .replace(",", " ")
+    .split()
+    if model
+]
+PEAR_WORKER_SERVICE_TIER = os.getenv("PEAR_WORKER_SERVICE_TIER", "fast") or None
+PEAR_WORKER_FAST_MODE = os.getenv("PEAR_WORKER_FAST_MODE", "true").lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
+PEAR_WORKER_REASONING_EFFORT = cast(
+    Literal["low", "medium", "high", "xhigh"],
+    os.getenv("PEAR_WORKER_REASONING_EFFORT", "medium"),
+)
+PEAR_WORKER_SANDBOX = cast(
+    Literal["read-only", "workspace-write", "danger-full-access"],
+    os.getenv("PEAR_WORKER_SANDBOX", "read-only"),
+)
+PEAR_WORKER_APPROVAL_POLICY = cast(
+    Literal["untrusted", "on-request", "never"],
+    os.getenv("PEAR_WORKER_APPROVAL_POLICY", "on-request"),
+)
+PEAR_WORKER_TRUSTED_USER_IDS = [
+    int(user_id)
+    for user_id in os.getenv("PEAR_WORKER_TRUSTED_USER_IDS", "").replace(",", " ").split()
+]
+PEAR_WORKER_MAX_ACTIVE_RUNS_PER_TOPIC = int(os.getenv("PEAR_WORKER_MAX_ACTIVE_RUNS_PER_TOPIC", "1"))
+PEAR_WORKER_MAX_ACTIVE_RUNS_PER_REALM = int(os.getenv("PEAR_WORKER_MAX_ACTIVE_RUNS_PER_REALM", "3"))
+PEAR_ADDRESSING_ROUTER_RUNTIME = cast(
+    Literal["disabled", "codex-exec", "gemini-interactions"],
+    os.getenv("PEAR_ADDRESSING_ROUTER_RUNTIME", "disabled"),
+)
+PEAR_ADDRESSING_ROUTER_MODEL = os.getenv("PEAR_ADDRESSING_ROUTER_MODEL", "gpt-5.5") or None
+PEAR_ADDRESSING_ROUTER_REASONING_EFFORT = cast(
+    Literal["low", "medium", "high", "xhigh"],
+    os.getenv("PEAR_ADDRESSING_ROUTER_REASONING_EFFORT", "low"),
+)
+PEAR_ADDRESSING_ROUTER_TIMEOUT_SECONDS = int(
+    os.getenv("PEAR_ADDRESSING_ROUTER_TIMEOUT_SECONDS", "20")
+)
+PEAR_ADDRESSING_ROUTER_OUTPUT_LIMIT = int(os.getenv("PEAR_ADDRESSING_ROUTER_OUTPUT_LIMIT", "1000"))
+PEAR_ADDRESSING_ROUTER_CODEX_EXTRA_ARGS = os.getenv(
+    "PEAR_ADDRESSING_ROUTER_CODEX_EXTRA_ARGS", "--ignore-rules"
+).split()
+PEAR_ADDRESSING_ROUTER_GEMINI_API_KEY = (
+    os.getenv("PEAR_ADDRESSING_ROUTER_GEMINI_API_KEY")
+    or os.getenv("GEMINI_API_KEY")
+    or os.getenv("GEMINI_KEY")
+    or os.getenv("GOOGLE_API_KEY")
+    or os.getenv("GOOGLE_GENAI_API_KEY")
+    or ""
+)
+PEAR_ADDRESSING_ROUTER_GEMINI_MODEL = os.getenv(
+    "PEAR_ADDRESSING_ROUTER_GEMINI_MODEL", "gemini-3.1-flash-lite"
+)
+PEAR_ADDRESSING_ROUTER_GEMINI_THINKING_LEVEL = (
+    os.getenv("PEAR_ADDRESSING_ROUTER_GEMINI_THINKING_LEVEL", "minimal") or None
+)
+PEAR_ADDRESSING_ROUTER_GEMINI_URL = os.getenv(
+    "PEAR_ADDRESSING_ROUTER_GEMINI_URL",
+    "https://generativelanguage.googleapis.com/v1beta/interactions",
+)
 
 SYSTEM_ONLY_REALMS: set[str] = set()
 USING_PGROONGA = True

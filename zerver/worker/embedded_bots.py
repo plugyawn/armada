@@ -35,6 +35,7 @@ class EmbeddedBotWorker(QueueProcessingWorker):
         # TODO: Do we actually want to allow multiple Services per bot user?
         services = get_bot_services(user_profile_id)
         for service in services:
+            service_message = dict(message)
             bot_handler = get_bot_handler(str(service.name))
             if bot_handler is None:
                 logging.error(
@@ -46,14 +47,20 @@ class EmbeddedBotWorker(QueueProcessingWorker):
             try:
                 if hasattr(bot_handler, "initialize"):
                     bot_handler.initialize(self.get_bot_api_client(user_profile))
+                if service.name == "pear":
+                    from zerver.lib.pear import PEAR_TRIGGER_MESSAGE_KEY
+
+                    service_message[PEAR_TRIGGER_MESSAGE_KEY] = event["trigger"]
                 if event["trigger"] == "mention":
-                    message["content"] = extract_query_without_mention(
-                        message=message,
+                    service_message["content"] = extract_query_without_mention(
+                        message=service_message,
                         client=self.get_bot_api_client(user_profile),
                     )
-                    assert message["content"] is not None
+                    assert service_message["content"] is not None
+                    if service.name == "pear":
+                        service_message["pear_explicit_mention"] = True
                 bot_handler.handle_message(
-                    message=message,
+                    message=service_message,
                     bot_handler=self.get_bot_api_client(user_profile),
                 )
             except EmbeddedBotQuitError as e:

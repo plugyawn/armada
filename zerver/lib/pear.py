@@ -235,6 +235,12 @@ PEAR_DEFAULT_RESPONSE_POLICY: Final[PearResponsePolicy] = "mentions_only"
 logger = logging.getLogger(__name__)
 PearWorkerState = Literal["ready", "blocked_missing_stream", "blocked_paused"]
 PearWorkerRunStatus = Literal["queued", "running", "done", "failed", "cancelled"]
+
+
+class PearRunCancelled(Exception):
+    pass
+
+
 PearArtifactKind = Literal[
     "repository",
     "runtime",
@@ -1500,6 +1506,8 @@ def pear_visible_response_text(
         return diagnostic_text
     if status == "failed":
         return "Pear worker failed."
+    if status == "cancelled":
+        return "Pear worker cancelled."
     if status == "done":
         return "Pear worker completed without a visible response."
     return ""
@@ -2598,6 +2606,14 @@ class PearWorkerRuntime:
             return False
         return bool(steer(instruction))
 
+    def interrupt(self) -> bool:
+        if self.tool_runner is None:
+            return False
+        interrupt = getattr(self.tool_runner, "interrupt", None)
+        if not callable(interrupt):
+            return False
+        return bool(interrupt())
+
     def runtime_value(self) -> str:
         if self.tool_runner is None:
             return "built-in"
@@ -3328,6 +3344,7 @@ def build_pear_active_session_summary(
     interruption_events: list[PearInterruptionEvent] | None = None,
     recent_messages: list[PearRecentMessage] | None = None,
     workspace_context: PearWorkspaceContext | None = None,
+    is_paused: bool = False,
 ) -> PearActiveSessionSummary:
     artifact_list = list(artifacts or [])
     routine_artifacts = active_pear_routine_artifacts(artifact_list)
@@ -3371,7 +3388,7 @@ def build_pear_active_session_summary(
     interruption_event_list = list(interruption_events or [])
     latest_interruption = interruption_event_list[0] if interruption_event_list else None
 
-    if latest_interruption is not None and latest_interruption["kind"] == "pause":
+    if is_paused or (latest_interruption is not None and latest_interruption["kind"] == "pause"):
         state: PearActiveSessionState = "paused"
     elif latest_message_id is not None:
         state = "active"
@@ -3523,6 +3540,7 @@ def build_pear_active_session_summary_from_messages(
     topic_message_count: int | None = None,
     latest_codex_thread_id: str | None = None,
     workspace_context: PearWorkspaceContext | None = None,
+    is_paused: bool = False,
 ) -> PearActiveSessionSummary:
     latest_message_id: int | None = None
     latest_request_message_id: int | None = None
@@ -3583,6 +3601,7 @@ def build_pear_active_session_summary_from_messages(
         interruption_events=list(reversed(interruption_events)),
         recent_messages=build_pear_recent_messages(sorted_messages),
         workspace_context=workspace_context,
+        is_paused=is_paused,
     )
 
 
@@ -3894,6 +3913,33 @@ class PearEmbeddedBotHandler:
         if callable(update_metadata):
             update_metadata(bot_handler, message_id, **metadata)
 
+    def worker_run_cancel_requested(
+        self,
+        bot_handler: Any,
+        message_id: int,
+    ) -> bool:
+        cancel_requested = getattr(self.worker_run_store, "cancel_requested", None)
+        if not callable(cancel_requested):
+            return False
+        return bool(cancel_requested(bot_handler, message_id))
+
+    def set_topic_paused(
+        self,
+        bot_handler: Any,
+        *,
+        stream: str,
+        topic: str,
+        is_paused: bool,
+    ) -> None:
+        set_topic_paused = getattr(self.worker_run_store, "set_topic_paused", None)
+        if callable(set_topic_paused):
+            set_topic_paused(
+                bot_handler,
+                stream=stream,
+                topic=topic,
+                is_paused=is_paused,
+            )
+
     def register_worker_progress_message(
         self,
         bot_handler: Any,
@@ -4042,6 +4088,12 @@ class PearEmbeddedBotHandler:
                 response = build_pear_pause_ack_message(interruption_event["instruction"])
             else:
                 response = build_pear_resume_ack_message(interruption_event["instruction"])
+            self.set_topic_paused(
+                bot_handler,
+                stream=stream,
+                topic=topic,
+                is_paused=interruption_event["kind"] == "pause",
+            )
         elif should_steer_active_run and steering_event is not None:
             response = build_pear_steering_ack_message(steering_event["instruction"])
         elif is_pear_steering_template_message(content):
@@ -4156,6 +4208,12 @@ class PearEmbeddedBotHandler:
         last_steering_event_id = 0
         steering_segment_count = 0
 
+        def raise_if_cancel_requested() -> None:
+            if not self.worker_run_cancel_requested(bot_handler, message_id):
+                return
+            self.worker_runtime.interrupt()
+            raise PearRunCancelled("Cancelled by user.")
+
         def update_live_transcript(
             status: PearWorkerRunStatus,
             *,
@@ -4258,6 +4316,7 @@ class PearEmbeddedBotHandler:
 
         def handle_transcript_event(event: PearWorkerTranscriptEvent) -> None:
             nonlocal assistant_persistent_flush_seen, assistant_volatile_flush_seen
+            raise_if_cancel_requested()
             transcript_events.append(event)
             title = event.get("title", "").strip()
             body = event.get("body", "").strip()
@@ -4349,8 +4408,8 @@ class PearEmbeddedBotHandler:
                             message,
                             bot_handler,
                         )
-                    except Exception:
-                        loaded_active_session = None
+                    except Exception as error:
+                        raise RuntimeError("Pear active session loader failed.") from error
                 active_session = (
                     loaded_active_session
                     or active_session
@@ -4460,11 +4519,13 @@ class PearEmbeddedBotHandler:
             )
 
             def run_runtime_segment(segment_task: str, *, segment_index: int) -> dict[str, Any]:
+                raise_if_cancel_requested()
                 segment_result = self.worker_runtime.run(
                     active_session=active_session,
                     task=segment_task,
                     event_callback=handle_transcript_event,
                 )
+                raise_if_cancel_requested()
                 if callable(record_topic_context_results):
                     record_topic_context_results(
                         bot_handler,
@@ -4613,6 +4674,52 @@ class PearEmbeddedBotHandler:
                 "done",
                 summary=result_summary or "Completed.",
                 payload={"result_message_id": result_message_id},
+            )
+        except PearRunCancelled as error:
+            self.worker_run_store.record(
+                bot_handler,
+                message_id,
+                "cancelled",
+                stream=stream,
+                topic=topic,
+                result_message_id=result_message_id,
+                error=str(error),
+            )
+            self.update_worker_metadata(
+                bot_handler,
+                message_id,
+                summary=str(error),
+                current_activity="Cancelled.",
+            )
+            self.record_worker_event(
+                bot_handler,
+                message_id,
+                "cancelled",
+                summary=str(error),
+                payload={"result_message_id": result_message_id},
+            )
+            transcript_events.append(
+                {
+                    "kind": "status",
+                    "status": "cancelled",
+                    "title": "Pear worker cancelled.",
+                    "body": str(error),
+                }
+            )
+            cancelled_message = build_pear_live_transcript_message(
+                task=task,
+                status="cancelled",
+                transcript_events=transcript_events,
+            )
+            write_pear_live_run_state(
+                message_id,
+                status="cancelled",
+                content=cancelled_message,
+            )
+            update_pear_worker_status_message(
+                bot_handler,
+                progress_message_id=result_message_id or progress_message_id,
+                content=cancelled_message,
             )
         except Exception as error:
             self.worker_run_store.record(

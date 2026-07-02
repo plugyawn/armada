@@ -115,6 +115,34 @@ def pear_worker_run_is_stale(run: PearWorkerRun, *, current_time: datetime) -> b
     return last_seen <= current_time - timedelta(seconds=pear_worker_stale_after_seconds())
 
 
+def pear_topic_context_is_paused(user_profile: UserProfile, *, stream: str, topic: str) -> bool:
+    if not stream:
+        return False
+    return PearTopicContext.objects.filter(
+        realm=user_profile.realm,
+        stream_name=stream,
+        topic_name=topic,
+        is_paused=True,
+    ).exists()
+
+
+def set_pear_topic_context_paused(
+    user_profile: UserProfile,
+    *,
+    stream: str,
+    topic: str,
+    is_paused: bool,
+) -> None:
+    if not stream:
+        return
+    context = ensure_pear_topic_context(user_profile, stream=stream, topic=topic)
+    if context.is_paused == is_paused:
+        return
+    context.is_paused = is_paused
+    context.date_updated = timezone_now()
+    context.save(update_fields=["is_paused", "date_updated"])
+
+
 def reap_stale_pear_worker_runs(
     *,
     realm: Any | None = None,
@@ -1513,6 +1541,8 @@ class PearDatabaseWorkerRunStore:
         trusted_user_ids = set(getattr(settings, "PEAR_WORKER_TRUSTED_USER_IDS", []))
         if trusted_user_ids and not requesting_user.is_realm_admin and requesting_user.id not in trusted_user_ids:
             return "This user is not allowed to start Pear worker runs."
+        if pear_topic_context_is_paused(user_profile, stream=stream, topic=topic):
+            return "Pear session is paused until a resume control is posted."
 
         topic_limit = int(getattr(settings, "PEAR_WORKER_MAX_ACTIVE_RUNS_PER_TOPIC", 1))
         realm_limit = int(getattr(settings, "PEAR_WORKER_MAX_ACTIVE_RUNS_PER_REALM", 3))
@@ -1620,12 +1650,19 @@ class PearDatabaseWorkerRunStore:
         current_time = timezone_now()
         try:
             with transaction.atomic():
+                topic_is_paused = pear_topic_context_is_paused(
+                    user_profile,
+                    stream=stream,
+                    topic=topic,
+                )
                 run = (
                     PearWorkerRun.objects.select_for_update()
                     .filter(bot_profile=user_profile, trigger_message_id=message_id)
                     .first()
                 )
                 if run is None:
+                    if topic_is_paused:
+                        return False
                     run = PearWorkerRun.objects.create(
                         realm=user_profile.realm,
                         bot_profile=user_profile,
@@ -1657,6 +1694,25 @@ class PearDatabaseWorkerRunStore:
                         },
                     )
                     return True
+
+                if topic_is_paused:
+                    if run.status in PEAR_WORKER_RUN_BUSY_STATUSES:
+                        self._transition(
+                            run,
+                            PearWorkerRun.FAILED,
+                            stream=stream,
+                            topic=topic,
+                            result_message_id=run.result_message_id,
+                            error="Pear topic is paused.",
+                            allow_requeue=False,
+                        )
+                    self._record_claim_dropped(
+                        run,
+                        stream=stream,
+                        topic=topic,
+                        reason="topic_paused",
+                    )
+                    return False
 
                 if run.status == PearWorkerRun.QUEUED:
                     return self._claim_locked_run(
@@ -1960,6 +2016,34 @@ class PearDatabaseWorkerRunStore:
         if run is None:
             return
         self._record_event(run, event_type, summary=summary, payload=payload or {})
+
+    def cancel_requested(self, bot_handler: Any, message_id: int) -> bool:
+        if message_id <= 0:
+            return False
+
+        user_profile = bot_handler.user_profile
+        assert isinstance(user_profile, UserProfile)
+        return PearWorkerRun.objects.filter(
+            bot_profile=user_profile,
+            trigger_message_id=message_id,
+        ).filter(Q(cancel_requested_at__isnull=False) | Q(status=PearWorkerRun.CANCELLED)).exists()
+
+    def set_topic_paused(
+        self,
+        bot_handler: Any,
+        *,
+        stream: str,
+        topic: str,
+        is_paused: bool,
+    ) -> None:
+        user_profile = bot_handler.user_profile
+        assert isinstance(user_profile, UserProfile)
+        set_pear_topic_context_paused(
+            user_profile,
+            stream=stream,
+            topic=topic,
+            is_paused=is_paused,
+        )
 
     def steering_events_after(
         self,
@@ -2320,4 +2404,9 @@ def load_pear_active_session_from_zulip(
         topic_message_count=message_count,
         latest_codex_thread_id=latest_codex_thread_id,
         workspace_context=workspace_context,
+        is_paused=pear_topic_context_is_paused(
+            user_profile,
+            stream=pear_session["stream"],
+            topic=pear_session["topic"],
+        ),
     )

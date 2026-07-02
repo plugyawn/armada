@@ -1958,6 +1958,133 @@ class PearSessionEndpointTest(ZulipTestCase):
         run.refresh_from_db()
         self.assertEqual(run.heartbeat_at, refreshed_heartbeat)
 
+    def test_worker_run_store_refuses_paused_topic_at_start_and_claim(self) -> None:
+        owner = self.example_user("hamlet")
+        pear_bot = self.create_test_bot(
+            "pear",
+            owner,
+            full_name="Pear",
+            bot_type=UserProfile.EMBEDDED_BOT,
+            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+        )
+        bot_handler = SimpleNamespace(user_profile=pear_bot)
+        context = ensure_pear_topic_context(
+            pear_bot,
+            stream=PEAR_DEFAULT_STREAM,
+            topic="topic-a",
+        )
+        context.is_paused = True
+        context.save(update_fields=["is_paused"])
+        store = PearDatabaseWorkerRunStore()
+
+        self.assertEqual(
+            store.start_blocked_reason(
+                bot_handler,
+                913,
+                stream=PEAR_DEFAULT_STREAM,
+                topic="topic-a",
+                requesting_user_id=owner.id,
+            ),
+            "Pear session is paused until a resume control is posted.",
+        )
+        run = PearWorkerRun.objects.create(
+            realm=owner.realm,
+            bot_profile=pear_bot,
+            requesting_user=owner,
+            trigger_message_id=913,
+            stream_name=PEAR_DEFAULT_STREAM,
+            topic_name="topic-a",
+            status=PearWorkerRun.QUEUED,
+        )
+        self.assertFalse(
+            store.claim_for_run(
+                bot_handler,
+                run.trigger_message_id,
+                stream=PEAR_DEFAULT_STREAM,
+                topic="topic-a",
+            )
+        )
+        run.refresh_from_db()
+        self.assertEqual(run.status, PearWorkerRun.FAILED)
+        self.assertEqual(run.error, "Pear topic is paused.")
+        self.assertEqual(
+            PearWorkerRunEvent.objects.get(run=run, event_type="claim_dropped").payload["reason"],
+            "topic_paused",
+        )
+
+    def test_active_session_reflects_database_pause_flag(self) -> None:
+        user = self.example_user("hamlet")
+        self.subscribe(user, PEAR_DEFAULT_STREAM)
+        context = ensure_pear_topic_context(
+            user,
+            stream=PEAR_DEFAULT_STREAM,
+            topic=PEAR_DEFAULT_TOPIC,
+        )
+        context.is_paused = True
+        context.save(update_fields=["is_paused"])
+        self.login_user(user)
+
+        result = self.client_get(
+            f"/json{PEAR_ACTIVE_SESSION_ENDPOINT}",
+            intentionally_undocumented=True,
+        )
+
+        active_session = self.assert_json_success(result)["active_session"]
+        self.assertEqual(active_session["state"], "paused")
+        self.assertTrue(active_session["is_paused"])
+        self.assertFalse(active_session["worker_can_run"])
+
+    def test_run_controls_request_cancel_and_toggle_topic_pause(self) -> None:
+        owner = self.example_user("hamlet")
+        self.subscribe(owner, PEAR_DEFAULT_STREAM)
+        pear_bot = self.create_test_bot(
+            "pear",
+            owner,
+            full_name="Pear",
+            bot_type=UserProfile.EMBEDDED_BOT,
+            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+        )
+        context = ensure_pear_topic_context(
+            pear_bot,
+            stream=PEAR_DEFAULT_STREAM,
+            topic="topic-a",
+        )
+        run = PearWorkerRun.objects.create(
+            realm=owner.realm,
+            bot_profile=pear_bot,
+            requesting_user=owner,
+            trigger_message_id=914,
+            stream_name=PEAR_DEFAULT_STREAM,
+            topic_name="topic-a",
+            status=PearWorkerRun.RUNNING,
+        )
+        self.login_user(owner)
+
+        pause_result = self.client_post(
+            f"/json/pear/runs/{run.id}/pause",
+            intentionally_undocumented=True,
+        )
+        self.assert_json_success(pause_result)
+        context.refresh_from_db()
+        self.assertTrue(context.is_paused)
+
+        resume_result = self.client_post(
+            f"/json/pear/runs/{run.id}/resume",
+            intentionally_undocumented=True,
+        )
+        self.assert_json_success(resume_result)
+        context.refresh_from_db()
+        self.assertFalse(context.is_paused)
+
+        cancel_result = self.client_post(
+            f"/json/pear/runs/{run.id}/cancel",
+            intentionally_undocumented=True,
+        )
+        self.assert_json_success(cancel_result)
+        run.refresh_from_db()
+        self.assertEqual(run.status, PearWorkerRun.CANCELLED)
+        self.assertIsNotNone(run.cancel_requested_at)
+
     def test_pear_codex_model_catalog_uses_visible_priority_and_reasoning(self) -> None:
         catalog = extract_pear_codex_model_catalog(
             {

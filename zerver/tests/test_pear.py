@@ -7199,6 +7199,224 @@ class PearSessionDefaultsTest(TestCase):
         self.assertEqual(live_state["status"], "done")
         self.assertEqual(live_state["content"], "AB")
 
+    def test_run_worker_turn_cancels_runtime_when_cancel_requested(self) -> None:
+        updated_messages: list[dict[str, object]] = []
+        recorded_statuses: list[tuple[str, int | None, str | None]] = []
+        recorded_events: list[tuple[str, str]] = []
+        metadata_updates: list[dict[str, object]] = []
+
+        class FakeRunStore:
+            def __init__(self) -> None:
+                self.cancel_checks = 0
+
+            def record(
+                self,
+                bot_handler,
+                message_id: int,
+                status: str,
+                *,
+                stream: str,
+                topic: str,
+                result_message_id: int | None = None,
+                error: str | None = None,
+            ) -> None:
+                recorded_statuses.append((status, result_message_id, error))
+
+            def record_event(
+                self,
+                bot_handler,
+                message_id: int,
+                event_type: str,
+                *,
+                summary: str = "",
+                payload: dict[str, object] | None = None,
+            ) -> None:
+                recorded_events.append((event_type, summary))
+
+            def update_metadata(
+                self,
+                bot_handler,
+                message_id: int,
+                **metadata: object,
+            ) -> None:
+                metadata_updates.append(metadata)
+
+            def cancel_requested(self, bot_handler, message_id: int) -> bool:
+                self.cancel_checks += 1
+                return self.cancel_checks >= 2
+
+        class FakeBotHandler:
+            def send_reply(
+                self,
+                message: dict[str, object],
+                response: str,
+            ) -> dict[str, int]:
+                raise AssertionError("cancelled run should keep editing the progress message")
+
+            def update_message(self, message: dict[str, object]) -> None:
+                updated_messages.append(message)
+
+        class InterruptibleToolRunner:
+            def __init__(self) -> None:
+                self.interrupted = False
+
+            def __call__(self, active_session, task: str, *, event_callback):
+                event_callback(
+                    {
+                        "kind": "tool",
+                        "status": "running",
+                        "title": "Running command",
+                        "body": "python script.py",
+                    }
+                )
+                return [{"label": "Result", "value": "should not complete"}]
+
+            def interrupt(self) -> bool:
+                self.interrupted = True
+                return True
+
+        payload = get_pear_session_payload()
+        active_session = build_pear_active_session_summary_from_messages(
+            pear_session=payload,
+            source="server",
+            stream_exists=True,
+            messages=[(10, "@Pear run a script", False)],
+        )
+        trigger_message_id = 9210
+        message = {
+            "id": trigger_message_id,
+            "type": "stream",
+            "display_recipient": PEAR_DEFAULT_STREAM,
+            "topic": PEAR_DEFAULT_TOPIC,
+            "content": "@Pear run a script",
+        }
+        run_store = FakeRunStore()
+        tool_runner = InterruptibleToolRunner()
+
+        PearEmbeddedBotHandler(
+            worker_runtime=PearWorkerRuntime(tool_runner),
+            worker_run_store=run_store,
+        ).run_worker_turn(
+            message,
+            FakeBotHandler(),
+            content="@Pear run a script",
+            active_session=active_session,
+            message_id=trigger_message_id,
+            stream=PEAR_DEFAULT_STREAM,
+            topic=PEAR_DEFAULT_TOPIC,
+            post_started_progress=True,
+            progress_message_id=502,
+        )
+
+        self.assertTrue(tool_runner.interrupted)
+        self.assertIn(("cancelled", 502, "Cancelled by user."), recorded_statuses)
+        self.assertNotIn(("done", 502, None), recorded_statuses)
+        self.assertIn(("cancelled", "Cancelled by user."), recorded_events)
+        self.assertIn(
+            {
+                "summary": "Cancelled by user.",
+                "current_activity": "Cancelled.",
+            },
+            metadata_updates,
+        )
+        self.assertEqual(updated_messages[-1]["message_id"], 502)
+        self.assertIn("Pear worker cancelled.", str(updated_messages[-1]["content"]))
+        live_state = get_pear_live_run_state(trigger_message_id)
+        self.assertIsNotNone(live_state)
+        assert live_state is not None
+        self.assertEqual(live_state["status"], "cancelled")
+
+    def test_run_worker_turn_fails_closed_when_active_session_loader_fails(self) -> None:
+        sent_replies: list[str] = []
+        recorded_statuses: list[tuple[str, int | None, str | None]] = []
+        recorded_events: list[tuple[str, str]] = []
+
+        class FakeRunStore:
+            def record(
+                self,
+                bot_handler,
+                message_id: int,
+                status: str,
+                *,
+                stream: str,
+                topic: str,
+                result_message_id: int | None = None,
+                error: str | None = None,
+            ) -> None:
+                recorded_statuses.append((status, result_message_id, error))
+
+            def record_event(
+                self,
+                bot_handler,
+                message_id: int,
+                event_type: str,
+                *,
+                summary: str = "",
+                payload: dict[str, object] | None = None,
+            ) -> None:
+                recorded_events.append((event_type, summary))
+
+            def update_metadata(
+                self,
+                bot_handler,
+                message_id: int,
+                **metadata: object,
+            ) -> None:
+                pass
+
+        class FakeBotHandler:
+            def send_reply(self, message: dict[str, object], response: str) -> dict[str, int]:
+                sent_replies.append(response)
+                return {"id": 800 + len(sent_replies)}
+
+            def update_message(self, message: dict[str, object]) -> None:
+                raise AssertionError("loader failure has no progress message to update")
+
+        def active_session_loader(message, bot_handler):
+            raise RuntimeError("database unavailable")
+
+        def tool_runner(active_session, task: str) -> list[dict[str, str]]:
+            raise AssertionError("runtime must not run after a loader failure")
+
+        message = {
+            "id": 9211,
+            "type": "stream",
+            "display_recipient": PEAR_DEFAULT_STREAM,
+            "topic": PEAR_DEFAULT_TOPIC,
+            "content": "@Pear run a script",
+        }
+
+        PearEmbeddedBotHandler(
+            worker_runtime=PearWorkerRuntime(tool_runner),
+            active_session_loader=active_session_loader,
+            worker_run_store=FakeRunStore(),
+        ).run_worker_turn(
+            message,
+            FakeBotHandler(),
+            content="@Pear run a script",
+            active_session=None,
+            message_id=9211,
+            stream=PEAR_DEFAULT_STREAM,
+            topic=PEAR_DEFAULT_TOPIC,
+            post_started_progress=False,
+        )
+
+        self.assertEqual(
+            recorded_statuses,
+            [("failed", None, "Pear active session loader failed.")],
+        )
+        self.assertEqual(
+            recorded_events,
+            [("failed", "Pear active session loader failed.")],
+        )
+        self.assertEqual(len(sent_replies), 1)
+        self.assertIn("Pear worker failed.", sent_replies[0])
+        self.assertIn("Pear active session loader failed.", sent_replies[0])
+        live_state = get_pear_live_run_state(9211)
+        self.assertIsNotNone(live_state)
+        assert live_state is not None
+        self.assertEqual(live_state["status"], "failed")
+
     def test_run_worker_turn_refreshes_shared_topic_context_before_tools(self) -> None:
         sent_replies: list[str] = []
         updated_messages: list[dict[str, object]] = []

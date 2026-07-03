@@ -4,9 +4,12 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+PEAR_ROOT="$(cd "$REPO_ROOT/.." && pwd)"
 # shellcheck source=tools/pear_deploy/deploy_common.sh
 source "$SCRIPT_DIR/deploy_common.sh"
 STATE_PATH="${1:-$REPO_ROOT/output/pear-staging/server.json}"
+LOCAL_PEAR_SKILLS_DIR="$PEAR_ROOT/pear/skills"
+REMOTE_PEAR_SKILLS_DIR="/home/zulipdev/pear/skills"
 
 fail() {
     echo "ERROR: $*" >&2
@@ -86,6 +89,9 @@ ssh_root() {
 }
 
 validate_local_deploy_git_metadata
+if [[ ! -d "$LOCAL_PEAR_SKILLS_DIR" ]]; then
+    fail "local Pear skills directory is missing: $LOCAL_PEAR_SKILLS_DIR"
+fi
 LOCAL_GIT_COMMON_DIR="$(git -C "$REPO_ROOT" rev-parse --git-common-dir)"
 
 echo "Waiting for SSH on $IP_ADDRESS..."
@@ -128,6 +134,13 @@ rsync -az --delete \
     "$REPO_ROOT/" \
     "root@$IP_ADDRESS:/home/zulipdev/zulip/"
 
+echo "Syncing Pear Codex skills to $REMOTE_PEAR_SKILLS_DIR..."
+ssh_root "install -d -m 755 $REMOTE_PEAR_SKILLS_DIR"
+rsync -az --delete \
+    -e "ssh -F $SSH_CONFIG" \
+    "$LOCAL_PEAR_SKILLS_DIR/" \
+    "root@$IP_ADDRESS:$REMOTE_PEAR_SKILLS_DIR/"
+
 if [[ -d "$LOCAL_GIT_COMMON_DIR" ]]; then
     echo "Syncing Git metadata for this worktree..."
     ssh_root 'install -d -m 755 /home/zulipdev/.git/modules/zulip'
@@ -138,6 +151,7 @@ if [[ -d "$LOCAL_GIT_COMMON_DIR" ]]; then
 fi
 
 ssh_root 'chown -R zulipdev:zulipdev /home/zulipdev/zulip'
+ssh_root 'chown -R zulipdev:zulipdev /home/zulipdev/pear'
 ssh_root 'chmod 711 /home/zulipdev && chmod 750 /home/zulipdev/zulip'
 ssh_root 'chown -R zulipdev:zulipdev /home/zulipdev/.git 2>/dev/null || true'
 ssh_root 'sudo -Hu zulipdev git config --global --add safe.directory /home/zulipdev/zulip'
@@ -190,6 +204,7 @@ ZULIP_DATABASE_CONN_MAX_AGE=0
 PEAR_WORKER_AGENT_RUNTIME=codex-app-server
 PEAR_WORKER_CODEX_BIN=/srv/zulip-node/bin/codex
 PEAR_WORKER_WORKDIR=/home/zulipdev/zulip
+PEAR_CODEX_SKILLS_DIR=/home/zulipdev/pear/skills
 PEAR_TOPIC_WORKDIR_ROOT=/srv/pear-workspaces
 PEAR_TOPIC_ISOLATION_BACKEND=os-user
 PEAR_TOPIC_ISOLATION_HELPER=/usr/local/sbin/pear-topic-isolate

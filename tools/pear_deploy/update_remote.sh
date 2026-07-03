@@ -394,12 +394,15 @@ if [[ "$PREV_SHA" != "$LOCAL_SHA" ]]; then
     git -C "$REPO_ROOT" diff --stat "$PREV_SHA..$LOCAL_SHA" -- \
         zproject/default_settings.py \
         zerver/lib/pear.py \
+        zerver/lib/pear_gate.py \
         zerver/lib/pear_agent.py \
         zerver/lib/pear_worker.py \
         zerver/worker/pear_worker.py \
         zerver/views/pear.py \
+        zerver/views/users.py \
         zerver/models/bots.py \
         zerver/migrations \
+        zerver/tests/test_service_bot_system.py \
         zerver/tests/test_pear.py \
         zerver/tests/test_pear_endpoint.py \
         web/src \

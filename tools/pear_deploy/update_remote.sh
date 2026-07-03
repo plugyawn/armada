@@ -4,11 +4,15 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+PEAR_ROOT="$(cd "$REPO_ROOT/.." && pwd)"
 # shellcheck source=tools/pear_deploy/deploy_common.sh
 source "$SCRIPT_DIR/deploy_common.sh"
 DEFAULT_STATE_PATH="$REPO_ROOT/output/pear-staging/server.json"
 REMOTE_PATH="/home/zulipdev/zulip"
 REMOTE_GIT_COMMON_DIR="/home/zulipdev/.git/modules/zulip"
+LOCAL_PEAR_SKILLS_DIR="$PEAR_ROOT/pear/skills"
+REMOTE_PEAR_DIR="/home/zulipdev/pear"
+REMOTE_PEAR_SKILLS_DIR="$REMOTE_PEAR_DIR/skills"
 DEPLOY_RECORD_PATH="/home/zulipdev/pear-deployed-sha"
 SNAPSHOT_ROOT="/home/zulipdev/pear-deploy-snapshots"
 YES=false
@@ -191,18 +195,22 @@ ssh_zulip_clean() {
 }
 
 run_local_compat() {
-    local checker="$REPO_ROOT/../tools/check_pear_compat.py"
+    local checker="$PEAR_ROOT/tools/check_pear_compat.py"
     if [[ ! -f "$checker" ]]; then
         echo "Skipping compat check: $checker not found."
         return
     fi
     echo "Running local Pear contract compatibility check..."
-    (cd "$REPO_ROOT/.." && python3 tools/check_pear_compat.py)
+    (cd "$PEAR_ROOT" && python3 tools/check_pear_compat.py)
 }
 
 local_untracked_source_files() {
     git -C "$REPO_ROOT" ls-files --others --exclude-standard |
         filter_deploy_untracked_source_files
+}
+
+local_pear_skills_status() {
+    git -C "$PEAR_ROOT" status --porcelain --untracked-files=all -- pear/skills
 }
 
 remote_untracked_source_files() {
@@ -307,12 +315,14 @@ rollback_on_error() {
         echo
         echo "Update failed after snapshot; rolling back from $SNAPSHOT_DIR" >&2
         set +e
-        ssh_root bash -s -- "$SNAPSHOT_DIR" "$REMOTE_PATH" "$REMOTE_GIT_COMMON_DIR" "${PEAR_DEPLOY_RSYNC_EXCLUDES[@]}" <<'REMOTE'
+        ssh_root bash -s -- "$SNAPSHOT_DIR" "$REMOTE_PATH" "$REMOTE_GIT_COMMON_DIR" "$REMOTE_PEAR_DIR" "$REMOTE_PEAR_SKILLS_DIR" "${PEAR_DEPLOY_RSYNC_EXCLUDES[@]}" <<'REMOTE'
 set -euo pipefail
 SNAPSHOT_DIR="$1"
 REMOTE_PATH="$2"
 REMOTE_GIT_COMMON_DIR="$3"
-shift 3
+REMOTE_PEAR_DIR="$4"
+REMOTE_PEAR_SKILLS_DIR="$5"
+shift 5
 RSYNC_EXCLUDES=("$@")
 
 rsync -a --delete \
@@ -323,9 +333,16 @@ if [[ -d "$SNAPSHOT_DIR/git-common" ]]; then
     install -d -m 755 "$(dirname "$REMOTE_GIT_COMMON_DIR")"
     rsync -a --delete "$SNAPSHOT_DIR/git-common/" "$REMOTE_GIT_COMMON_DIR/"
 fi
+if [[ -f "$SNAPSHOT_DIR/pear-skills.exists" ]]; then
+    install -d -m 755 "$REMOTE_PEAR_SKILLS_DIR"
+    rsync -a --delete "$SNAPSHOT_DIR/pear-skills/" "$REMOTE_PEAR_SKILLS_DIR/"
+else
+    rm -rf "$REMOTE_PEAR_SKILLS_DIR"
+fi
 
 chown -R zulipdev:zulipdev "$REMOTE_PATH"
 chown -R zulipdev:zulipdev /home/zulipdev/.git 2>/dev/null || true
+chown -R zulipdev:zulipdev "$REMOTE_PEAR_DIR" 2>/dev/null || true
 systemctl restart pear-worker pear-embedded-bots pear-zulip-dev
 REMOTE
         local rollback_status=$?
@@ -346,6 +363,7 @@ LOCAL_SHA="$(git -C "$REPO_ROOT" rev-parse HEAD)"
 LOCAL_GIT_COMMON_DIR="$(git -C "$REPO_ROOT" rev-parse --git-common-dir)"
 LOCAL_STATUS="$(git -C "$REPO_ROOT" status --porcelain --untracked-files=no)"
 LOCAL_UNTRACKED_SOURCE="$(local_untracked_source_files)"
+LOCAL_PEAR_SKILLS_STATUS="$(local_pear_skills_status)"
 
 validate_local_deploy_git_metadata
 
@@ -360,8 +378,16 @@ if [[ -n "$LOCAL_UNTRACKED_SOURCE" ]]; then
     echo "$LOCAL_UNTRACKED_SOURCE" >&2
     fail "local source tree has untracked files that rsync would omit; add, ignore, or remove them before deploying"
 fi
+if [[ ! -d "$LOCAL_PEAR_SKILLS_DIR" ]]; then
+    fail "local Pear skills directory is missing: $LOCAL_PEAR_SKILLS_DIR"
+fi
+if [[ -n "$LOCAL_PEAR_SKILLS_STATUS" ]]; then
+    echo "$LOCAL_PEAR_SKILLS_STATUS" >&2
+    fail "local pear/skills tree is dirty; commit or revert skill changes before deploying"
+fi
 
 echo "Preflight: local $LOCAL_BRANCH $LOCAL_SHA is tracked-clean."
+echo "Preflight: local pear/skills is tracked-clean."
 
 PREV_SHA="$(ssh_zulip "git rev-parse HEAD")"
 REMOTE_STATUS="$(ssh_zulip "git status --porcelain --untracked-files=no")"
@@ -431,12 +457,13 @@ SNAPSHOT_STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 SNAPSHOT_DIR="$SNAPSHOT_ROOT/zulip-$SNAPSHOT_STAMP-${PREV_SHA:0:12}"
 echo
 echo "Snapshotting remote tree to $SNAPSHOT_DIR"
-ssh_root bash -s -- "$REMOTE_PATH" "$REMOTE_GIT_COMMON_DIR" "$SNAPSHOT_DIR" "${PEAR_DEPLOY_RSYNC_EXCLUDES[@]}" <<'REMOTE'
+ssh_root bash -s -- "$REMOTE_PATH" "$REMOTE_GIT_COMMON_DIR" "$REMOTE_PEAR_SKILLS_DIR" "$SNAPSHOT_DIR" "${PEAR_DEPLOY_RSYNC_EXCLUDES[@]}" <<'REMOTE'
 set -euo pipefail
 REMOTE_PATH="$1"
 REMOTE_GIT_COMMON_DIR="$2"
-SNAPSHOT_DIR="$3"
-shift 3
+REMOTE_PEAR_SKILLS_DIR="$3"
+SNAPSHOT_DIR="$4"
+shift 4
 RSYNC_EXCLUDES=("$@")
 
 install -d -m 755 "$SNAPSHOT_DIR/worktree" "$SNAPSHOT_DIR/git-common"
@@ -445,6 +472,11 @@ rsync -a --delete \
     "$REMOTE_PATH/" "$SNAPSHOT_DIR/worktree/"
 if [[ -d "$REMOTE_GIT_COMMON_DIR" ]]; then
     rsync -a --delete "$REMOTE_GIT_COMMON_DIR/" "$SNAPSHOT_DIR/git-common/"
+fi
+if [[ -d "$REMOTE_PEAR_SKILLS_DIR" ]]; then
+    install -d -m 755 "$SNAPSHOT_DIR/pear-skills"
+    rsync -a --delete "$REMOTE_PEAR_SKILLS_DIR/" "$SNAPSHOT_DIR/pear-skills/"
+    touch "$SNAPSHOT_DIR/pear-skills.exists"
 fi
 REMOTE
 ROLLBACK_READY=true
@@ -455,6 +487,13 @@ rsync -az --delete \
     -e "ssh -F $SSH_CONFIG" \
     "$REPO_ROOT/" \
     "root@$IP_ADDRESS:$REMOTE_PATH/"
+
+echo "Syncing Pear Codex skills to $REMOTE_PEAR_SKILLS_DIR..."
+ssh_root "install -d -m 755 $REMOTE_PEAR_SKILLS_DIR"
+rsync -az --delete \
+    -e "ssh -F $SSH_CONFIG" \
+    "$LOCAL_PEAR_SKILLS_DIR/" \
+    "root@$IP_ADDRESS:$REMOTE_PEAR_SKILLS_DIR/"
 
 if [[ -d "$LOCAL_GIT_COMMON_DIR" ]]; then
     echo "Syncing Git metadata for this worktree..."
@@ -467,6 +506,7 @@ fi
 
 ssh_root "chown -R zulipdev:zulipdev $REMOTE_PATH"
 ssh_root 'chown -R zulipdev:zulipdev /home/zulipdev/.git 2>/dev/null || true'
+ssh_root "chown -R zulipdev:zulipdev $REMOTE_PEAR_DIR"
 ssh_root "sudo -Hu zulipdev git config --global --add safe.directory $REMOTE_PATH"
 
 if [[ "$RUN_MIGRATE" == true ]]; then

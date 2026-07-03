@@ -220,14 +220,18 @@ def parse_args() -> argparse.Namespace:
 
 
 def maybe_reexec_with_checkout_venv() -> None:
-    venv_python = BASE_DIR / ".venv" / "bin" / "python3"
+    venv_dir = BASE_DIR / ".venv"
+    venv_python = venv_dir / "bin" / "python3"
     if not venv_python.exists():
         return
-    current_python = Path(sys.executable).resolve()
-    target_python = venv_python.resolve()
-    if current_python == target_python:
+    if Path(sys.prefix).resolve() == venv_dir.resolve():
         return
-    os.execv(str(target_python), [str(target_python), *sys.argv])
+    env = os.environ.copy()
+    env.pop("PYTHONHOME", None)
+    env.pop("PYTHONPATH", None)
+    env["VIRTUAL_ENV"] = str(venv_dir)
+    env["PATH"] = f"{venv_dir / 'bin'}:{env.get('PATH', '')}"
+    os.execve(str(venv_python), [str(venv_python), *sys.argv], env)
 
 
 def main() -> int:

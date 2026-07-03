@@ -5816,6 +5816,121 @@ class PearSessionDefaultsTest(TestCase):
             "Pear worker completed without a visible response.",
         )
 
+    def test_run_worker_turn_chunks_non_posting_transcript_result(self) -> None:
+        sent_replies: list[str] = []
+        updated_messages: list[dict[str, object]] = []
+        long_answer = "\n\n".join(
+            f"Section {index}: {'quiet transcript text ' * 80}" for index in range(12)
+        )
+
+        class FakeRunStore:
+            def record(
+                self,
+                bot_handler,
+                message_id: int,
+                status: str,
+                *,
+                stream: str,
+                topic: str,
+                result_message_id: int | None = None,
+                error: str | None = None,
+            ) -> None:
+                pass
+
+            def record_event(
+                self,
+                bot_handler,
+                message_id: int,
+                event_type: str,
+                *,
+                summary: str = "",
+                payload: dict[str, object] | None = None,
+            ) -> None:
+                pass
+
+            def update_metadata(
+                self,
+                bot_handler,
+                message_id: int,
+                **metadata: object,
+            ) -> None:
+                pass
+
+        class FakeBotHandler:
+            def send_reply(self, message: dict[str, object], response: str) -> dict[str, int]:
+                sent_replies.append(response)
+                return {"id": 900 + len(sent_replies)}
+
+            def update_message(self, message: dict[str, object]) -> None:
+                updated_messages.append(message)
+
+        class QuietTranscriptRuntime(PearWorkerRuntime):
+            def run(
+                self,
+                *,
+                active_session: PearActiveSessionSummary,
+                task: str = "",
+                event_callback: PearWorkerTranscriptCallback | None = None,
+            ) -> PearWorkerRunResult:
+                if event_callback is not None:
+                    event_callback(
+                        {
+                            "kind": "assistant",
+                            "status": "done",
+                            "title": "Codex",
+                            "body": long_answer,
+                            "item_id": "answer",
+                        }
+                    )
+                return {
+                    "should_post": False,
+                    "worker_can_run": True,
+                    "content": None,
+                    "tool_count": 0,
+                    "tool_results": [],
+                }
+
+        payload = get_pear_session_payload()
+        active_session = build_pear_active_session_summary_from_messages(
+            pear_session=payload,
+            source="server",
+            stream_exists=True,
+            messages=[(10, "@Pear run quietly", False)],
+        )
+        trigger_message_id = 9208
+        message = {
+            "id": trigger_message_id,
+            "type": "stream",
+            "display_recipient": PEAR_DEFAULT_STREAM,
+            "topic": PEAR_DEFAULT_TOPIC,
+            "content": "@Pear run quietly",
+        }
+
+        PearEmbeddedBotHandler(
+            worker_runtime=QuietTranscriptRuntime(),
+            worker_run_store=FakeRunStore(),
+        ).run_worker_turn(
+            message,
+            FakeBotHandler(),
+            content="@Pear run quietly",
+            active_session=active_session,
+            message_id=trigger_message_id,
+            stream=PEAR_DEFAULT_STREAM,
+            topic=PEAR_DEFAULT_TOPIC,
+            post_started_progress=True,
+            progress_message_id=503,
+        )
+
+        self.assertGreater(len(sent_replies), 0)
+        all_persisted_text = "\n\n".join(
+            [str(updated_messages[-1]["content"]), *sent_replies]
+        )
+        self.assertIn("Section 0:", all_persisted_text)
+        self.assertIn("Section 11:", all_persisted_text)
+        self.assertNotIn("[earlier progress details truncated]", all_persisted_text)
+        self.assertNotIn("[truncated]", all_persisted_text)
+        self.assertTrue(all(len(reply) <= 5000 for reply in sent_replies))
+
     def test_run_worker_turn_posts_continuation_messages_for_long_result(self) -> None:
         sent_replies: list[str] = []
         updated_messages: list[dict[str, object]] = []

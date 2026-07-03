@@ -574,6 +574,18 @@ function render_state_key(render_state: object): string {
     return JSON.stringify(render_state);
 }
 
+export function topic_context_after_refresh_for_testing(options: {
+    include_context: boolean;
+    live: boolean;
+    response_topic_context: PearTopicContext | null | undefined;
+    last_topic_context: PearTopicContext | null | undefined;
+}): PearTopicContext | null | undefined {
+    if (options.live || !options.include_context) {
+        return options.response_topic_context ?? options.last_topic_context;
+    }
+    return options.response_topic_context ?? null;
+}
+
 export function render_state_changed_for_testing(
     previous_key: string,
     render_state: object,
@@ -648,11 +660,12 @@ export function refresh(options: {force_context?: boolean; live?: boolean} = {})
             last_error = "";
             const had_active_run = has_active_run(last_runs);
             const has_active_run_after_refresh = has_active_run(data.pear_runs);
-            const topic_context = live
-                ? (data.pear_topic_context ?? last_topic_context)
-                : data.pear_topic_context === undefined
-                  ? last_topic_context
-                  : data.pear_topic_context;
+            const topic_context = topic_context_after_refresh_for_testing({
+                include_context,
+                live,
+                response_topic_context: data.pear_topic_context,
+                last_topic_context,
+            });
             if (data.pear_topic_context !== undefined && data.pear_topic_context !== null) {
                 record_context_refresh(stream, topic);
             }

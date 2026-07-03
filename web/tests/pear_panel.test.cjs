@@ -78,3 +78,45 @@ run_test("should_refresh_context_for_testing", () => {
         true,
     );
 });
+
+run_test("topic_context_after_refresh_for_testing", () => {
+    const cached_context = {stream: "devel", topic: "pear", model: "gpt-5.5"};
+    const fresh_context = {stream: "devel", topic: "pear", model: "gpt-5.5-mini"};
+
+    assert.equal(
+        pear_panel.topic_context_after_refresh_for_testing({
+            include_context: false,
+            live: false,
+            response_topic_context: null,
+            last_topic_context: cached_context,
+        }),
+        cached_context,
+    );
+    assert.equal(
+        pear_panel.topic_context_after_refresh_for_testing({
+            include_context: false,
+            live: true,
+            response_topic_context: undefined,
+            last_topic_context: cached_context,
+        }),
+        cached_context,
+    );
+    assert.equal(
+        pear_panel.topic_context_after_refresh_for_testing({
+            include_context: true,
+            live: false,
+            response_topic_context: fresh_context,
+            last_topic_context: cached_context,
+        }),
+        fresh_context,
+    );
+    assert.equal(
+        pear_panel.topic_context_after_refresh_for_testing({
+            include_context: true,
+            live: false,
+            response_topic_context: null,
+            last_topic_context: cached_context,
+        }),
+        null,
+    );
+});

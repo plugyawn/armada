@@ -40,6 +40,7 @@ from zerver.lib.pear import (
     pear_normalize_token_usage,
     pear_token_usage_summary,
 )
+from zerver.lib.pear_gate import invalidate_pear_selected_bot_cache
 from zerver.lib.pear_worker import (
     PearQueueWorkerDispatcher,
     ensure_pear_child_topic_context,
@@ -935,6 +936,8 @@ def set_selected_pear_bot(user_profile: UserProfile, selected_bot_user_id: int |
         if previous_value != selected_value:
             changed = True
         set_bot_config(bot.user_profile, PEAR_SELECTED_BOT_CONFIG_KEY, selected_value)
+    if changed:
+        invalidate_pear_selected_bot_cache(user_profile.realm_id)
     return changed
 
 
@@ -982,6 +985,7 @@ def post_pear_config_backend(
             short_name_raw=PEAR_BOT_SHORT_NAME,
         )
         created = True
+        invalidate_pear_selected_bot_cache(user_profile.realm_id)
         pear_config = build_pear_config_for_user(user_profile)
     selection_changed = set_selected_pear_bot(user_profile, selected_bot_user_id)
     pear_config = build_pear_config_for_user(user_profile)

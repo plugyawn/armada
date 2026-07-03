@@ -1,10 +1,70 @@
 from typing import Any
 
 from django.conf import settings
+from django.core.cache import cache
 
 from zerver.models import Recipient, UserProfile
 
 PEAR_FOLLOWUP_TOPIC_HISTORY_LIMIT = 50
+PEAR_SELECTED_BOT_CACHE_SECONDS = 60
+
+
+def pear_selected_bot_cache_key(realm_id: int) -> str:
+    return f"pear:selected_bot:{realm_id}"
+
+
+def invalidate_pear_selected_bot_cache(realm_id: int) -> None:
+    cache.delete(pear_selected_bot_cache_key(realm_id))
+
+
+def get_selected_pear_bot_user_id_for_realm(realm_id: int) -> int | None:
+    cached = cache.get(pear_selected_bot_cache_key(realm_id))
+    if isinstance(cached, dict) and "user_profile_id" in cached:
+        user_profile_id = cached["user_profile_id"]
+        if isinstance(user_profile_id, int):
+            return user_profile_id
+        return None
+
+    from zerver.lib.bot_config import get_bot_configs
+    from zerver.lib.pear import (
+        PEAR_EMBEDDED_BOT_SERVICE,
+        PEAR_SELECTED_BOT_CONFIG_KEY,
+        PEAR_SELECTED_BOT_CONFIG_VALUE,
+    )
+    from zerver.models.bots import Service
+
+    pear_services = list(
+        Service.objects.filter(
+            name=PEAR_EMBEDDED_BOT_SERVICE,
+            user_profile__realm_id=realm_id,
+            user_profile__is_active=True,
+            user_profile__is_bot=True,
+            user_profile__bot_type=UserProfile.EMBEDDED_BOT,
+        ).order_by("user_profile_id")
+    )
+    if not pear_services:
+        selected_bot_user_id = None
+    else:
+        bot_configs = get_bot_configs([service.user_profile_id for service in pear_services])
+        selected_pear_service = next(
+            (
+                service
+                for service in pear_services
+                if bot_configs.get(service.user_profile_id, {}).get(
+                    PEAR_SELECTED_BOT_CONFIG_KEY
+                )
+                == PEAR_SELECTED_BOT_CONFIG_VALUE
+            ),
+            pear_services[0],
+        )
+        selected_bot_user_id = selected_pear_service.user_profile_id
+
+    cache.set(
+        pear_selected_bot_cache_key(realm_id),
+        {"user_profile_id": selected_bot_user_id},
+        timeout=PEAR_SELECTED_BOT_CACHE_SECONDS,
+    )
+    return selected_bot_user_id
 
 
 def get_pear_followup_service_bot_event(
@@ -26,12 +86,8 @@ def get_pear_followup_service_bot_event(
     ):
         return None
 
-    from zerver.lib.bot_config import get_bot_configs
     from zerver.lib.pear import (
-        PEAR_EMBEDDED_BOT_SERVICE,
         PEAR_FOLLOWUP_TRIGGER,
-        PEAR_SELECTED_BOT_CONFIG_KEY,
-        PEAR_SELECTED_BOT_CONFIG_VALUE,
         build_pear_active_session_summary_from_messages,
         get_pear_session_payload,
         is_pear_control_template_message,
@@ -41,7 +97,6 @@ def get_pear_followup_service_bot_event(
         pear_worker_should_start,
     )
     from zerver.lib.topic import messages_for_topic
-    from zerver.models.bots import Service
 
     if (
         is_pear_request_message(content)
@@ -51,39 +106,16 @@ def get_pear_followup_service_bot_event(
     ):
         return None
 
-    pear_services = list(
-        Service.objects.select_related("user_profile")
-        .filter(
-            name=PEAR_EMBEDDED_BOT_SERVICE,
-            user_profile__realm_id=realm_id,
-            user_profile__is_active=True,
-            user_profile__is_bot=True,
-            user_profile__bot_type=UserProfile.EMBEDDED_BOT,
-        )
-        .order_by("user_profile_id")
-    )
-    if not pear_services:
+    selected_pear_bot_user_id = get_selected_pear_bot_user_id_for_realm(realm_id)
+    if selected_pear_bot_user_id is None:
         return None
-
-    bot_configs = get_bot_configs([service.user_profile_id for service in pear_services])
-    selected_pear_service = next(
-        (
-            service
-            for service in pear_services
-            if bot_configs.get(service.user_profile_id, {}).get(
-                PEAR_SELECTED_BOT_CONFIG_KEY
-            )
-            == PEAR_SELECTED_BOT_CONFIG_VALUE
-        ),
-        pear_services[0],
-    )
-    if selected_pear_service.user_profile_id in mentioned_user_ids:
+    if selected_pear_bot_user_id in mentioned_user_ids:
         return None
 
     if settings.PEAR_ADDRESSING_ROUTER_RUNTIME != "disabled":
         return {
             "trigger": PEAR_FOLLOWUP_TRIGGER,
-            "user_profile_id": selected_pear_service.user_profile_id,
+            "user_profile_id": selected_pear_bot_user_id,
         }
 
     message_rows = list(
@@ -106,5 +138,5 @@ def get_pear_followup_service_bot_event(
 
     return {
         "trigger": PEAR_FOLLOWUP_TRIGGER,
-        "user_profile_id": selected_pear_service.user_profile_id,
+        "user_profile_id": selected_pear_bot_user_id,
     }

@@ -6,6 +6,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 import orjson
+from django.core.cache import cache
 from django.utils.timezone import now as timezone_now
 
 from zerver.lib.pear import (
@@ -28,6 +29,10 @@ from zerver.lib.pear import (
     build_pear_active_session_summary_from_messages,
     get_pear_session_payload,
     write_pear_live_run_state,
+)
+from zerver.lib.pear_gate import (
+    get_selected_pear_bot_user_id_for_realm,
+    pear_selected_bot_cache_key,
 )
 from zerver.lib.pear_worker import (
     PearDatabaseWorkerRunStore,
@@ -632,6 +637,10 @@ class PearSessionEndpointTest(ZulipTestCase):
     def test_post_pear_config_creates_bot(self) -> None:
         owner = self.example_user("iago")
         self.login_user(owner)
+        cache.set(
+            pear_selected_bot_cache_key(owner.realm_id),
+            {"user_profile_id": None},
+        )
 
         with self.settings(EMBEDDED_BOTS_ENABLED=True):
             result = self.client_post(
@@ -656,6 +665,10 @@ class PearSessionEndpointTest(ZulipTestCase):
             )
             self.assertEqual(len(pear_config["bot_identities"]), 1)
             self.assertTrue(pear_config["bot_identities"][0]["selected"])
+            self.assertEqual(
+                get_selected_pear_bot_user_id_for_realm(owner.realm_id),
+                pear_config["bot_user_id"],
+            )
 
             second_result = self.client_post(
                 f"/json{PEAR_CONFIG_ENDPOINT}",
@@ -692,6 +705,10 @@ class PearSessionEndpointTest(ZulipTestCase):
                 service_name=PEAR_EMBEDDED_BOT_SERVICE,
             )
             self.login_user(owner)
+            self.assertEqual(
+                get_selected_pear_bot_user_id_for_realm(owner.realm_id),
+                pear_bot.id,
+            )
 
             result = self.client_post(
                 f"/json{PEAR_CONFIG_ENDPOINT}",
@@ -732,6 +749,10 @@ class PearSessionEndpointTest(ZulipTestCase):
         followup_result_dict = self.assert_json_success(followup_result)
         self.assertEqual(
             followup_result_dict["pear_config"]["selected_bot_user_id"],
+            pear_infra_bot.id,
+        )
+        self.assertEqual(
+            get_selected_pear_bot_user_id_for_realm(owner.realm_id),
             pear_infra_bot.id,
         )
 

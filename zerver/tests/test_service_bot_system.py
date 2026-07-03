@@ -11,7 +11,12 @@ from typing_extensions import ParamSpec, override
 
 from zerver.actions.create_user import do_create_user
 from zerver.actions.message_send import get_service_bot_events
-from zerver.lib.bot_config import ConfigError, load_bot_config_template, set_bot_config
+from zerver.lib.bot_config import (
+    ConfigError,
+    get_bot_configs,
+    load_bot_config_template,
+    set_bot_config,
+)
 from zerver.lib.bot_lib import EmbeddedBotEmptyRecipientsListError, EmbeddedBotHandler, StateHandler
 from zerver.lib.bot_storage import StateError
 from zerver.lib.pear import PEAR_EMBEDDED_BOT_SERVICE, PEAR_FOLLOWUP_TRIGGER
@@ -215,6 +220,47 @@ class TestServiceBotBasics(ZulipTestCase):
                 ],
             },
         )
+
+    @override_settings(
+        EMBEDDED_BOTS_ENABLED=True,
+        PEAR_ADDRESSING_ROUTER_RUNTIME="codex-exec",
+    )
+    def test_service_events_for_pear_followup_reuses_selected_bot_cache(self) -> None:
+        sender = self.example_user("hamlet")
+        owner = self.example_user("cordelia")
+        pear_bot = self.create_test_bot(
+            "pear",
+            owner,
+            full_name="Pear",
+            bot_type=UserProfile.EMBEDDED_BOT,
+            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+        )
+        stream = get_stream("Denmark", sender.realm)
+
+        def route_pear_followup() -> dict[str, list[dict[str, Any]]]:
+            return get_service_bot_events(
+                sender=sender,
+                service_bot_tuples=[],
+                active_user_ids=set(),
+                mentioned_user_ids=set(),
+                recipient_type=Recipient.STREAM,
+                recipient_id=stream.recipient_id,
+                stream_name=stream.name,
+                topic_name="followup",
+                content="agent, can you check the failing parser test?",
+            )
+
+        with mock.patch("zerver.lib.bot_config.get_bot_configs", wraps=get_bot_configs) as mock_get:
+            self.assertEqual(
+                route_pear_followup()["embedded_bots"][0]["user_profile_id"],
+                pear_bot.id,
+            )
+            self.assertEqual(
+                route_pear_followup()["embedded_bots"][0]["user_profile_id"],
+                pear_bot.id,
+            )
+
+        self.assertEqual(mock_get.call_count, 1)
 
 
 class TestServiceBotStateHandler(ZulipTestCase):

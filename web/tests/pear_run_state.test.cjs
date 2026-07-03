@@ -33,21 +33,39 @@ test("set_active_run_result_messages tracks only active result messages", () => 
 });
 
 test("done run clears active result message immediately", () => {
-    pear_run_state.set_active_run_result_messages([{status: "running", result_message_id: 4}]);
-    assert.ok(pear_run_state.is_active_run_result_message(4));
+    const changes = [];
+    const unsubscribe = pear_run_state.on_active_run_result_messages_changed((change) =>
+        changes.push(change),
+    );
+    try {
+        pear_run_state.set_active_run_result_messages([{status: "running", result_message_id: 4}]);
+        assert.ok(pear_run_state.is_active_run_result_message(4));
 
-    pear_run_state.set_active_run_result_messages([{status: "done", result_message_id: 4}]);
-    assert.ok(!pear_run_state.is_active_run_result_message(4));
+        pear_run_state.set_active_run_result_messages([{status: "done", result_message_id: 4}]);
+        assert.ok(!pear_run_state.is_active_run_result_message(4));
+        assert.deepEqual(changes.map((change) => change.removed_message_ids), [[], [4]]);
+    } finally {
+        unsubscribe();
+    }
 });
 
 test("active result message self-expires without another panel refresh", () => {
-    pear_run_state.set_active_run_result_messages([{status: "running", result_message_id: 5}]);
+    const changes = [];
+    const unsubscribe = pear_run_state.on_active_run_result_messages_changed((change) =>
+        changes.push(change),
+    );
+    try {
+        pear_run_state.set_active_run_result_messages([{status: "running", result_message_id: 5}]);
 
-    clock.tick(14_999);
-    assert.ok(pear_run_state.is_active_run_result_message(5));
+        clock.tick(14_999);
+        assert.ok(pear_run_state.is_active_run_result_message(5));
 
-    clock.tick(1);
-    assert.ok(!pear_run_state.is_active_run_result_message(5));
+        clock.tick(1);
+        assert.ok(!pear_run_state.is_active_run_result_message(5));
+        assert.deepEqual(changes.map((change) => change.removed_message_ids), [[], [5]]);
+    } finally {
+        unsubscribe();
+    }
 });
 
 test("active result message refresh prevents stale expiry", () => {

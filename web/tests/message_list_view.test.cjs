@@ -11,6 +11,7 @@ const $ = require("./lib/zjquery.cjs");
 set_global("document", "document-stub");
 
 let sender_is_bot = () => false;
+let channel_get_handler = () => undefined;
 
 // timerender calls setInterval when imported
 mock_esm("../src/timerender", {
@@ -32,10 +33,17 @@ mock_esm("../src/people", {
     maybe_get_user_by_id: noop,
 });
 
+mock_esm("../src/channel", {
+    get(opts) {
+        return channel_get_handler(opts);
+    },
+});
+
 const {Filter} = zrequire("../src/filter");
 const {MessageListView} = zrequire("../src/message_list_view");
 const message_list = zrequire("message_list");
 const {MessageListData} = zrequire("message_list_data");
+const message_store = zrequire("message_store");
 const muted_users = zrequire("muted_users");
 const pear_run_state = zrequire("../src/pear_run_state");
 
@@ -44,11 +52,13 @@ let next_timestamp = 1500000000;
 function test(label, f) {
     run_test(label, ({override, mock_template}) => {
         sender_is_bot = () => false;
+        channel_get_handler = () => undefined;
         $("document-stub").set_find_results(
             ".message_row.pear-active-message .message_content > p:last-child > em:last-child",
             [],
         );
         pear_run_state.clear_for_testing();
+        message_store.clear_for_testing();
         muted_users.set_muted_users([]);
         mock_template("message_list.hbs", false, () => "<message-list-stub>");
         f({override, mock_template});
@@ -610,6 +620,36 @@ test("pear_message_vars", () => {
     assert.equal(result.is_pear_message, false);
     assert.equal(result.is_pear_active_message, false);
     assert.equal(result.include_sender, true);
+});
+
+test("pear_stale_thinking_row_refreshes_without_removed_active_id", () => {
+    new MessageListView({id: 1}, true, true);
+    const message_id = 1003;
+    message_store.set_messages_for_tests([
+        {
+            message: {
+                id: message_id,
+                content: "<p><em>Thinking</em> <em>✦</em></p>",
+            },
+        },
+    ]);
+    const $row = $.create(".pear-stale-row");
+    $row.attr("data-message-id", String(message_id));
+    $.reset_selector(".message_row.pear-message");
+    $.set_results(".message_row.pear-message", [$row[0]]);
+
+    let channel_get_opts;
+    channel_get_handler = (opts) => {
+        channel_get_opts = opts;
+    };
+
+    pear_run_state.set_active_run_result_messages([], {force_reconcile: true});
+
+    assert.equal(channel_get_opts.url, "/json/messages");
+    assert.deepEqual(channel_get_opts.data, {
+        message_ids: JSON.stringify([message_id]),
+        allow_empty_topic_name: true,
+    });
 });
 
 test("merge_message_groups", ({mock_template}) => {

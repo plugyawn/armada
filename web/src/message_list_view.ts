@@ -234,6 +234,25 @@ function maybe_render_pear_thinking_glyph($row: JQuery): void {
     start_pear_thinking_animation();
 }
 
+function rendered_stale_pear_active_message_ids(): number[] {
+    const message_ids: number[] = [];
+    const $pear_messages = $(".message_row.pear-message");
+    $pear_messages.each((_index, row) => {
+        const message_id_attr = $(row).attr("data-message-id");
+        const message_id =
+            message_id_attr === undefined ? undefined : Number.parseFloat(message_id_attr);
+        const message = message_id === undefined ? undefined : message_store.get(message_id);
+        if (
+            message !== undefined &&
+            message_has_pear_active_marker(message) &&
+            !pear_run_state.is_active_run_result_message(message.id)
+        ) {
+            message_ids.push(message.id);
+        }
+    });
+    return message_ids;
+}
+
 function update_rendered_pear_active_messages(): void {
     const $pear_messages = $(".message_row.pear-message");
     if ($pear_messages.length === 0) {
@@ -307,8 +326,9 @@ function refresh_settled_pear_result_messages(message_ids: number[]): void {
 }
 
 pear_run_state.on_active_run_result_messages_changed((change = {removed_message_ids: []}) => {
+    const stale_message_ids = rendered_stale_pear_active_message_ids();
     update_rendered_pear_active_messages();
-    refresh_settled_pear_result_messages(change.removed_message_ids);
+    refresh_settled_pear_result_messages([...change.removed_message_ids, ...stale_message_ids]);
 });
 
 type BoundaryMessageContainerInfo = {

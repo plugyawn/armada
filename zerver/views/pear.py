@@ -1451,7 +1451,7 @@ def get_pear_runs_backend(
     include_context: Annotated[
         Json[bool] | None,
         ApiParamConfig("include_context", documentation_status=INTENTIONALLY_UNDOCUMENTED),
-    ] = True,
+    ] = False,
     run_ids: Annotated[
         Json[list[int]] | None,
         ApiParamConfig("run_ids", documentation_status=INTENTIONALLY_UNDOCUMENTED),

@@ -15,6 +15,10 @@ YES=false
 RUN_TESTS=true
 RUN_MIGRATE=true
 RUN_COMPAT=true
+RUN_RUNTIME_SMOKE=false
+RUNTIME_SMOKE_ADMIN_EMAIL=""
+RUNTIME_SMOKE_TIMEOUT=150
+RUNTIME_SMOKE_EVIDENCE=""
 STATE_PATH="$DEFAULT_STATE_PATH"
 
 fail() {
@@ -61,6 +65,15 @@ Options:
   --skip-tests      Skip test-backend verification.
   --skip-migrate    Skip manage.py migrate zerver --noinput.
   --skip-compat     Skip the local contract compatibility checker.
+  --run-runtime-smoke
+                   Run an opt-in live Pear runtime smoke after queue health.
+                   This posts a real @Pear request and spends a real Codex turn.
+  --runtime-smoke-admin-email EMAIL
+                   Admin/devlogin email for --run-runtime-smoke.
+  --runtime-smoke-timeout SECONDS
+                   Runtime smoke timeout in seconds (default: 150).
+  --runtime-smoke-evidence PATH
+                   Write runtime smoke JSON evidence to PATH.
   --state PATH      Use a specific pear_do.py state file.
   -h, --help        Show this help.
 EOF
@@ -83,6 +96,34 @@ while [[ $# -gt 0 ]]; do
         --skip-compat)
             RUN_COMPAT=false
             shift
+            ;;
+        --run-runtime-smoke)
+            RUN_RUNTIME_SMOKE=true
+            shift
+            ;;
+        --runtime-smoke-admin-email)
+            if [[ $# -lt 2 ]]; then
+                echo "Missing value for --runtime-smoke-admin-email" >&2
+                exit 2
+            fi
+            RUNTIME_SMOKE_ADMIN_EMAIL="$2"
+            shift 2
+            ;;
+        --runtime-smoke-timeout)
+            if [[ $# -lt 2 ]]; then
+                echo "Missing value for --runtime-smoke-timeout" >&2
+                exit 2
+            fi
+            RUNTIME_SMOKE_TIMEOUT="$2"
+            shift 2
+            ;;
+        --runtime-smoke-evidence)
+            if [[ $# -lt 2 ]]; then
+                echo "Missing value for --runtime-smoke-evidence" >&2
+                exit 2
+            fi
+            RUNTIME_SMOKE_EVIDENCE="$2"
+            shift 2
             ;;
         --state)
             if [[ $# -lt 2 ]]; then
@@ -477,6 +518,30 @@ END {
     exit bad
 }
 '"'"
+
+if [[ "$RUN_RUNTIME_SMOKE" == true ]]; then
+    runtime_smoke="$REPO_ROOT/../tools/pear_dev_smoke.py"
+    if [[ ! -f "$runtime_smoke" ]]; then
+        fail "runtime smoke helper not found: $runtime_smoke"
+    fi
+    if [[ -z "$RUNTIME_SMOKE_EVIDENCE" ]]; then
+        RUNTIME_SMOKE_EVIDENCE="$REPO_ROOT/../var/pear-deploy-runtime-smoke-result.json"
+    fi
+    runtime_smoke_args=(
+        "$runtime_smoke"
+        --use-existing-server
+        --site "https://$FQDN"
+        --smoke-timeout "$RUNTIME_SMOKE_TIMEOUT"
+        --evidence-json "$RUNTIME_SMOKE_EVIDENCE"
+    )
+    if [[ -n "$RUNTIME_SMOKE_ADMIN_EMAIL" ]]; then
+        runtime_smoke_args+=(--admin-email "$RUNTIME_SMOKE_ADMIN_EMAIL")
+    fi
+    echo "Running opt-in Pear runtime smoke..."
+    (cd "$REPO_ROOT/.." && python3 "${runtime_smoke_args[@]}")
+else
+    echo "Skipping opt-in Pear runtime smoke. Pass --run-runtime-smoke to post a real @Pear smoke request."
+fi
 
 echo "Migration tail:"
 ssh_zulip "$REMOTE_PATH/.venv/bin/python3 $REMOTE_PATH/manage.py showmigrations zerver | tail"

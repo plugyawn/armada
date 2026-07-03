@@ -48,6 +48,7 @@ import * as stream_data from "./stream_data.ts";
 import * as sub_store from "./sub_store.ts";
 import * as submessage from "./submessage.ts";
 import * as timerender from "./timerender.ts";
+import {is_pear_bot_user_id} from "./state_data.ts";
 import type {TopicLink} from "./types.ts";
 import * as typing_data from "./typing_data.ts";
 import * as typing_events from "./typing_events.ts";
@@ -178,6 +179,13 @@ function is_active_pear_message(message: Message, is_pear_message: boolean): boo
         message_has_pear_active_marker(message) &&
         pear_run_state.is_active_run_result_message(message.id)
     );
+}
+
+function message_is_pear_message(message: Message, is_hidden: boolean): boolean {
+    if (is_hidden) {
+        return false;
+    }
+    return message.is_pear_message || is_pear_bot_user_id(message.sender_id);
 }
 
 function pear_thinking_markers($scope: JQuery<HTMLElement | Document> = $(document)): JQuery {
@@ -898,7 +906,7 @@ export class MessageListView {
         }
 
         const sender_is_bot = people.sender_is_bot(message);
-        const is_pear_message = !is_hidden && message.is_pear_message === true;
+        const is_pear_message = message_is_pear_message(message, is_hidden);
         if (is_pear_message) {
             include_sender = false;
         }

@@ -13,7 +13,7 @@ const settings_data = mock_esm("../src/settings_data");
 
 const message_lists = zrequire("message_lists");
 const people = zrequire("people");
-const {set_current_user, set_realm} = zrequire("state_data");
+const {set_current_user, set_pear_bot_user_ids, set_realm} = zrequire("state_data");
 const typing_data = zrequire("typing_data");
 const typing_events = zrequire("typing_events");
 
@@ -51,6 +51,7 @@ people.add_active_user(levin);
 people.add_active_user(kitty);
 
 run_test("render_notifications_for_narrow", ({override, mock_template}) => {
+    set_pear_bot_user_ids([]);
     override(current_user, "user_id", anna.user_id);
     override(settings_data, "user_can_access_all_other_users", () => true);
     const group = [anna.user_id, vronsky.user_id, levin.user_id, kitty.user_id];
@@ -105,4 +106,31 @@ run_test("render_notifications_for_narrow", ({override, mock_template}) => {
     typing_data.add_typist(conversation_key, 21);
     typing_events.render_notifications_for_narrow();
     assert.ok(!$typing_notifications.visible());
+});
+
+run_test("display_notification ignores Pear bot typists", ({override}) => {
+    override(current_user, "user_id", anna.user_id);
+    const group = [anna.user_id, vronsky.user_id];
+    message_lists.set_current(make_message_list([{operator: "dm", operand: group}]));
+
+    const $typing_notifications = $("#typing_notifications");
+
+    set_pear_bot_user_ids([vronsky.user_id]);
+    typing_events.display_notification({
+        id: 1,
+        type: "typing",
+        op: "start",
+        message_type: "direct",
+        sender: {
+            email: vronsky.email,
+            user_id: vronsky.user_id,
+        },
+        recipients: [
+            {email: anna.email, user_id: anna.user_id},
+            {email: vronsky.email, user_id: vronsky.user_id},
+        ],
+    });
+
+    assert.ok(!$typing_notifications.visible());
+    set_pear_bot_user_ids([]);
 });

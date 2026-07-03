@@ -80,7 +80,12 @@ import * as settings_streams from "./settings_streams.ts";
 import * as sidebar_ui from "./sidebar_ui.ts";
 import * as starred_messages from "./starred_messages.ts";
 import * as starred_messages_ui from "./starred_messages_ui.ts";
-import {current_user, realm} from "./state_data.ts";
+import {
+    add_pear_bot_user_id,
+    current_user,
+    realm,
+    remove_pear_bot_user_id,
+} from "./state_data.ts";
 import * as stream_data from "./stream_data.ts";
 import * as stream_events from "./stream_events.ts";
 import * as stream_list from "./stream_list.ts";
@@ -104,6 +109,29 @@ import {user_settings} from "./user_settings.ts";
 import * as user_status from "./user_status.ts";
 import * as user_topics from "./user_topics.ts";
 import * as user_topics_ui from "./user_topics_ui.ts";
+
+const PEAR_EMBEDDED_BOT_SERVICE = "pear";
+
+function event_services_are_definitive(services) {
+    return (
+        Array.isArray(services) &&
+        services.some(
+            (service) => typeof service === "object" && service !== null && "service_name" in service,
+        )
+    );
+}
+
+function event_services_include_pear(services) {
+    return (
+        Array.isArray(services) &&
+        services.some(
+            (service) =>
+                typeof service === "object" &&
+                service !== null &&
+                service.service_name === PEAR_EMBEDDED_BOT_SERVICE,
+        )
+    );
+}
 
 export function dispatch_normal_event(event) {
     const noop = function () {
@@ -496,6 +524,9 @@ export function dispatch_normal_event(event) {
             switch (event.op) {
                 case "add": {
                     bot_data.add(event.bot);
+                    if (event_services_include_pear(event.bot.services)) {
+                        add_pear_bot_user_id(event.bot.user_id);
+                    }
                     const user = people.get_by_user_id(event.bot.user_id);
                     if (user.bot_owner_id === current_user.user_id) {
                         settings_bots.redraw_your_bots_list();
@@ -506,12 +537,20 @@ export function dispatch_normal_event(event) {
                 }
                 case "delete":
                     bot_data.del(event.bot.user_id);
+                    remove_pear_bot_user_id(event.bot.user_id);
                     settings_bots.redraw_your_bots_list();
                     settings_bots.toggle_bot_config_download_container();
                     settings_bots.update_lock_icon_in_sidebar();
                     break;
                 case "update":
                     bot_data.update(event.bot.user_id, event.bot);
+                    if (event_services_are_definitive(event.bot.services)) {
+                        if (event_services_include_pear(event.bot.services)) {
+                            add_pear_bot_user_id(event.bot.user_id);
+                        } else {
+                            remove_pear_bot_user_id(event.bot.user_id);
+                        }
+                    }
                     break;
                 default:
                     blueslip.error("Unexpected event type realm_bot/" + event.op);

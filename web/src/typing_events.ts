@@ -8,7 +8,7 @@ import render_typing_notifications from "../templates/typing_notifications.hbs";
 import * as message_lists from "./message_lists.ts";
 import * as narrow_state from "./narrow_state.ts";
 import * as people from "./people.ts";
-import {current_user, realm} from "./state_data.ts";
+import {current_user, is_pear_bot_user_id, realm} from "./state_data.ts";
 import * as typing_data from "./typing_data.ts";
 
 // See docs/subsystems/typing-indicators.md for details on typing indicators.
@@ -179,6 +179,9 @@ export function hide_message_edit_notification(event: TypingMessageEditEvent): v
 
 export function display_notification(event: TypingEvent): void {
     const sender_id = event.sender.user_id;
+    if (is_pear_bot_user_id(sender_id)) {
+        return;
+    }
 
     const key = get_key(event);
     typing_data.add_typist(key, sender_id);
@@ -195,6 +198,9 @@ export function display_notification(event: TypingEvent): void {
 }
 
 export function display_message_edit_notification(event: TypingMessageEditEvent): void {
+    if (is_pear_bot_user_id(event.sender_id)) {
+        return;
+    }
     const message_id = event.message_id;
     const key = JSON.stringify(message_id);
     typing_data.add_edit_message_typing_id(message_id);

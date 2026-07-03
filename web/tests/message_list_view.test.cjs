@@ -46,6 +46,7 @@ const {MessageListData} = zrequire("message_list_data");
 const message_store = zrequire("message_store");
 const muted_users = zrequire("muted_users");
 const pear_run_state = zrequire("../src/pear_run_state");
+const state_data = zrequire("state_data");
 
 let next_timestamp = 1500000000;
 
@@ -58,6 +59,7 @@ function test(label, f) {
             [],
         );
         pear_run_state.clear_for_testing();
+        state_data.set_pear_bot_user_ids([]);
         message_store.clear_for_testing();
         muted_users.set_muted_users([]);
         mock_template("message_list.hbs", false, () => "<message-list-stub>");
@@ -575,6 +577,13 @@ test("pear_message_vars", () => {
         );
     }
 
+    function calculate_real_variables(message_container) {
+        return new MessageListView({id: 1}, true, true).get_calculated_message_container_variables(
+            message_container.msg,
+            message_container.include_sender,
+        );
+    }
+
     sender_is_bot = (message) => message.sender_id === 25 || message.sender_id === 26;
 
     pear_run_state.set_active_run_result_messages([{status: "running", result_message_id: 1001}]);
@@ -620,6 +629,24 @@ test("pear_message_vars", () => {
     assert.equal(result.is_pear_message, false);
     assert.equal(result.is_pear_active_message, false);
     assert.equal(result.include_sender, true);
+
+    state_data.set_pear_bot_user_ids([25]);
+    result = calculate_real_variables(
+        build_message_context({
+            id: 1001,
+            sender_email: "pear@zulip.com",
+            sender_full_name: "Pear",
+            sender_id: 25,
+            content: "<p><em>Thinking</em> <em>✦</em></p>",
+            is_pear_message: undefined,
+            last_edit_timestamp: 123,
+        }),
+    );
+    assert.equal(result.is_pear_message, true);
+    assert.equal(result.is_pear_active_message, true);
+    assert.equal(result.include_sender, false);
+    assert.equal(result.edited, false);
+    assert.equal(result.last_edit_timestamp, undefined);
 });
 
 test("pear_stale_thinking_row_refreshes_without_removed_active_id", () => {

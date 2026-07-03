@@ -638,7 +638,10 @@ export const split_state_data_schema = z.object({
     alert_words: z.object({alert_words: z.array(z.string())}),
     emoji: z.object({realm_emoji: realm_emoji_map_schema}),
     realm_billing: z.object({realm_billing: realm_billing_schema}),
-    bot: z.object({realm_bots: z.array(server_add_bot_schema)}),
+    bot: z.object({
+        realm_bots: z.array(server_add_bot_schema),
+        pear_bot_user_ids: z.optional(z.array(z.number())),
+    }),
     people: z.object({
         realm_users: z.array(user_schema),
         realm_non_active_users: z.array(user_schema),
@@ -722,6 +725,7 @@ export type RealmBilling = StateData["realm_billing"]["realm_billing"];
 export let current_user: CurrentUser;
 export let realm: Realm;
 export let realm_billing: RealmBilling;
+export let pear_bot_user_ids: number[] = [];
 
 export function set_current_user(initial_current_user: CurrentUser): void {
     current_user = initial_current_user;
@@ -733,4 +737,24 @@ export function set_realm(initial_realm: Realm): void {
 
 export function set_realm_billing(params: StateData["realm_billing"]): void {
     realm_billing = params.realm_billing;
+}
+
+export function set_pear_bot_user_ids(user_ids: number[]): void {
+    pear_bot_user_ids = [...new Set(user_ids)].sort((a, b) => a - b);
+}
+
+export function add_pear_bot_user_id(user_id: number): void {
+    if (!pear_bot_user_ids.includes(user_id)) {
+        set_pear_bot_user_ids([...pear_bot_user_ids, user_id]);
+    }
+}
+
+export function remove_pear_bot_user_id(user_id: number): void {
+    if (pear_bot_user_ids.includes(user_id)) {
+        set_pear_bot_user_ids(pear_bot_user_ids.filter((id) => id !== user_id));
+    }
+}
+
+export function is_pear_bot_user_id(user_id: number): boolean {
+    return pear_bot_user_ids.includes(user_id);
 }

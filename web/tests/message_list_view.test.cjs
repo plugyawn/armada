@@ -540,6 +540,7 @@ test("pear_message_vars", () => {
                 sender_full_name: "Regular User",
                 sender_id: 10,
                 content: "<message-stub>",
+                is_pear_message: false,
                 ...message,
             },
         };
@@ -570,10 +571,8 @@ test("pear_message_vars", () => {
     let result = calculate_variables(
         build_message_context({
             id: 1001,
-            sender_email: "pear@zulip.com",
-            sender_full_name: "Pear",
-            sender_id: 25,
             content: "<p><em>Thinking</em> <em>✦</em></p>",
+            is_pear_message: true,
         }),
     );
     assert.equal(result.is_pear_message, true);
@@ -583,10 +582,18 @@ test("pear_message_vars", () => {
     result = calculate_variables(
         build_message_context({
             id: 1002,
-            sender_email: "pear@zulip.com",
-            sender_full_name: "Pear",
-            sender_id: 25,
             content: "<p><em>Thinking</em> <em>✦</em></p>",
+            is_pear_message: true,
+        }),
+    );
+    assert.equal(result.is_pear_message, true);
+    assert.equal(result.is_pear_active_message, false);
+    assert.equal(result.include_sender, false);
+
+    result = calculate_variables(
+        build_message_context({
+            content: "<p>Done.</p>",
+            is_pear_message: true,
         }),
     );
     assert.equal(result.is_pear_message, true);
@@ -598,18 +605,6 @@ test("pear_message_vars", () => {
             sender_email: "pear@zulip.com",
             sender_full_name: "Pear",
             sender_id: 25,
-            content: "<p>Done.</p>",
-        }),
-    );
-    assert.equal(result.is_pear_message, true);
-    assert.equal(result.is_pear_active_message, false);
-    assert.equal(result.include_sender, false);
-
-    result = calculate_variables(
-        build_message_context({
-            sender_email: "build-bot@zulip.com",
-            sender_full_name: "Build Bot",
-            sender_id: 26,
         }),
     );
     assert.equal(result.is_pear_message, false);

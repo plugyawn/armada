@@ -1302,6 +1302,7 @@ class PearSessionEndpointTest(ZulipTestCase):
             PEAR_TOPIC_WORKDIR_ROOT=temp_dir,
             PEAR_TOPIC_ISOLATION_BACKEND="os-user",
             PEAR_TOPIC_ISOLATION_HELPER="/usr/local/sbin/pear-topic-isolate",
+            PEAR_CODEX_SKILLS_DIR=str(Path(temp_dir) / "missing-skills"),
         ):
             workdir = str(Path(temp_dir) / "topic")
             Path(workdir).mkdir()
@@ -1335,6 +1336,7 @@ class PearSessionEndpointTest(ZulipTestCase):
             PEAR_TOPIC_WORKDIR_ROOT=temp_dir,
             PEAR_TOPIC_ISOLATION_BACKEND="os-user",
             PEAR_TOPIC_ISOLATION_HELPER="/usr/local/sbin/pear-topic-isolate",
+            PEAR_CODEX_SKILLS_DIR=str(Path(temp_dir) / "missing-skills"),
         ):
             workdir = Path(temp_dir) / "private-topic"
             workdir.mkdir()

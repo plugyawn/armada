@@ -24,6 +24,7 @@ from zerver.lib.test_classes import ZulipTestCase
 from zerver.lib.test_helpers import mock_queue_publish
 from zerver.lib.validator import check_string
 from zerver.models import Recipient, UserProfile
+from zerver.models.bots import PearTopicContext
 from zerver.models.messages import UserMessage
 from zerver.models.realms import get_realm
 from zerver.models.scheduled_jobs import NotificationTriggers
@@ -196,6 +197,12 @@ class TestServiceBotBasics(ZulipTestCase):
             service_name=PEAR_EMBEDDED_BOT_SERVICE,
         )
         stream = get_stream("Denmark", sender.realm)
+        PearTopicContext.objects.create(
+            realm=sender.realm,
+            stream_name=stream.name,
+            topic_name="followup",
+            response_policy="ambient",
+        )
 
         event_dict = get_service_bot_events(
             sender=sender,
@@ -236,6 +243,12 @@ class TestServiceBotBasics(ZulipTestCase):
             service_name=PEAR_EMBEDDED_BOT_SERVICE,
         )
         stream = get_stream("Denmark", sender.realm)
+        PearTopicContext.objects.create(
+            realm=sender.realm,
+            stream_name=stream.name,
+            topic_name="followup",
+            response_policy="ambient",
+        )
 
         def route_pear_followup() -> dict[str, list[dict[str, Any]]]:
             return get_service_bot_events(
@@ -261,6 +274,140 @@ class TestServiceBotBasics(ZulipTestCase):
             )
 
         self.assertEqual(mock_get.call_count, 1)
+
+    @override_settings(
+        EMBEDDED_BOTS_ENABLED=True,
+        PEAR_ADDRESSING_ROUTER_RUNTIME="disabled",
+    )
+    def test_service_events_for_pear_followup_uses_topic_response_policy(self) -> None:
+        sender = self.example_user("hamlet")
+        owner = self.example_user("cordelia")
+        pear_bot = self.create_test_bot(
+            "pear",
+            owner,
+            full_name="Pear",
+            bot_type=UserProfile.EMBEDDED_BOT,
+            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+        )
+        stream = get_stream("Denmark", sender.realm)
+
+        PearTopicContext.objects.create(
+            realm=sender.realm,
+            stream_name=stream.name,
+            topic_name="ambient",
+            response_policy="ambient",
+        )
+        event_dict = get_service_bot_events(
+            sender=sender,
+            service_bot_tuples=[],
+            active_user_ids=set(),
+            mentioned_user_ids=set(),
+            recipient_type=Recipient.STREAM,
+            recipient_id=stream.recipient_id,
+            stream_name=stream.name,
+            topic_name="ambient",
+            content="agent, can you check the failing parser test?",
+        )
+        self.assertEqual(
+            event_dict,
+            {
+                "embedded_bots": [
+                    {
+                        "trigger": PEAR_FOLLOWUP_TRIGGER,
+                        "user_profile_id": pear_bot.id,
+                    },
+                ],
+            },
+        )
+
+        PearTopicContext.objects.create(
+            realm=sender.realm,
+            stream_name=stream.name,
+            topic_name="mentions only",
+            response_policy="mentions_only",
+        )
+        event_dict = get_service_bot_events(
+            sender=sender,
+            service_bot_tuples=[],
+            active_user_ids=set(),
+            mentioned_user_ids=set(),
+            recipient_type=Recipient.STREAM,
+            recipient_id=stream.recipient_id,
+            stream_name=stream.name,
+            topic_name="mentions only",
+            content="agent, can you check the failing parser test?",
+        )
+        self.assertEqual(event_dict["embedded_bots"], [])
+
+        PearTopicContext.objects.create(
+            realm=sender.realm,
+            stream_name=stream.name,
+            topic_name="paused",
+            response_policy="ambient",
+            is_paused=True,
+        )
+        event_dict = get_service_bot_events(
+            sender=sender,
+            service_bot_tuples=[],
+            active_user_ids=set(),
+            mentioned_user_ids=set(),
+            recipient_type=Recipient.STREAM,
+            recipient_id=stream.recipient_id,
+            stream_name=stream.name,
+            topic_name="paused",
+            content="agent, can you check the failing parser test?",
+        )
+        self.assertEqual(event_dict["embedded_bots"], [])
+
+    @override_settings(
+        EMBEDDED_BOTS_ENABLED=True,
+        PEAR_ADDRESSING_ROUTER_RUNTIME="disabled",
+    )
+    def test_service_events_for_pear_followup_does_not_parse_topic_history(self) -> None:
+        sender = self.example_user("hamlet")
+        owner = self.example_user("cordelia")
+        pear_bot = self.create_test_bot(
+            "pear",
+            owner,
+            full_name="Pear",
+            bot_type=UserProfile.EMBEDDED_BOT,
+            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+        )
+        stream = get_stream("Denmark", sender.realm)
+        PearTopicContext.objects.create(
+            realm=sender.realm,
+            stream_name=stream.name,
+            topic_name="followup",
+            response_policy="ambient",
+        )
+
+        with mock.patch(
+            "zerver.lib.pear.build_pear_active_session_summary_from_messages",
+            side_effect=AssertionError("send gate must not parse topic history"),
+        ):
+            event_dict = get_service_bot_events(
+                sender=sender,
+                service_bot_tuples=[],
+                active_user_ids=set(),
+                mentioned_user_ids=set(),
+                recipient_type=Recipient.STREAM,
+                recipient_id=stream.recipient_id,
+                stream_name=stream.name,
+                topic_name="followup",
+                content="agent, can you check the failing parser test?",
+            )
+
+        self.assertEqual(
+            event_dict,
+            {
+                "embedded_bots": [
+                    {
+                        "trigger": PEAR_FOLLOWUP_TRIGGER,
+                        "user_profile_id": pear_bot.id,
+                    },
+                ],
+            },
+        )
 
 
 class TestServiceBotStateHandler(ZulipTestCase):

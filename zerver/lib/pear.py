@@ -8,7 +8,6 @@ from typing import Any, Final, Literal, Protocol, TypedDict
 
 from django.core.cache import cache
 
-
 PEAR_AGENT_NAME: Final = "Pear"
 PEAR_BOT_SHORT_NAME: Final = "pear"
 PEAR_EMBEDDED_BOT_SERVICE: Final = "pear"
@@ -22,10 +21,17 @@ PEAR_DEFAULT_TOPIC: Final = "pear/session"
 PEAR_SESSION_ENDPOINT: Final = "/pear/session"
 PEAR_ACTIVE_SESSION_ENDPOINT: Final = "/pear/session/active"
 PEAR_CONFIG_ENDPOINT: Final = "/pear/config"
+PEAR_FIRST_RUN_ENDPOINT: Final = "/pear/first-run"
 PEAR_TOPIC_CONTEXT_ENDPOINT: Final = "/pear/topic-context"
 PEAR_CANVAS_ENDPOINT: Final = "/pear/canvas"
 PEAR_RUNS_ENDPOINT: Final = "/pear/runs"
 PEAR_SIDE_ENDPOINT: Final = "/pear/side"
+PEAR_FIRST_RUN_STREAM: Final = "pear-sandbox"
+PEAR_FIRST_RUN_TOPIC: Final = "first run"
+PEAR_FIRST_RUN_STARTER_MESSAGE: Final = (
+    f"{PEAR_AGENT_MENTION} Start the sandbox session by saying what you can see "
+    "from this topic and the current workspace."
+)
 PEAR_CANVAS_FILE_NAME: Final = "CANVAS.md"
 PEAR_CANVAS_TEMPLATE: Final = """# {stream} > {topic}
 

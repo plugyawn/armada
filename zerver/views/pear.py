@@ -17,6 +17,7 @@ from django.utils.translation import gettext as _
 from pydantic import Json
 
 from zerver.actions.message_send import internal_send_private_message, internal_send_stream_message
+from zerver.actions.streams import bulk_add_subscriptions
 from zerver.decorator import require_realm_admin
 from zerver.lib.bot_config import get_bot_configs, set_bot_config
 from zerver.lib.exceptions import JsonableError
@@ -24,18 +25,21 @@ from zerver.lib.pear import (
     PEAR_AGENT_NAME,
     PEAR_BOT_SHORT_NAME,
     PEAR_EMBEDDED_BOT_SERVICE,
+    PEAR_FIRST_RUN_STARTER_MESSAGE,
+    PEAR_FIRST_RUN_STREAM,
+    PEAR_FIRST_RUN_TOPIC,
     PEAR_REASONING_EFFORTS,
     PEAR_SELECTED_BOT_CONFIG_KEY,
     PEAR_SELECTED_BOT_CONFIG_VALUE,
     PEAR_SIDE_ENDPOINT,
-    PearEmbeddedBotHandler,
     PearConfigPayload,
+    PearEmbeddedBotHandler,
     PearTokenUsage,
     build_pear_active_session_summary,
     build_pear_active_session_summary_from_messages,
     build_pear_config_payload,
-    get_pear_session_payload,
     get_pear_live_run_state,
+    get_pear_session_payload,
     normalize_pear_response_policy,
     pear_normalize_token_usage,
     pear_token_usage_summary,
@@ -53,14 +57,14 @@ from zerver.lib.pear_worker import (
     pear_logical_repository_label,
     pear_logical_worktree_label,
     pear_pinned_repository_value,
+    pear_read_text_path,
     pear_repo_artifact_value_is_durable,
-    pear_topic_isolation_username_for_realm,
+    pear_sha256_text,
     pear_topic_branch_name,
     pear_topic_context_is_paused,
     pear_topic_context_response_policy,
+    pear_topic_isolation_username_for_realm,
     pear_topic_os_user_isolation_enabled,
-    pear_read_text_path,
-    pear_sha256_text,
     pear_worker_model_for_topic,
     pear_worker_reasoning_effort_for_topic,
     pear_worker_sandbox_for_topic,
@@ -70,7 +74,7 @@ from zerver.lib.pear_worker import (
     set_pear_topic_context_response_policy,
 )
 from zerver.lib.response import json_response, json_success
-from zerver.lib.streams import access_stream_by_name
+from zerver.lib.streams import access_stream_by_name, create_stream_if_needed
 from zerver.lib.timestamp import datetime_to_timestamp
 from zerver.lib.topic import messages_for_topic
 from zerver.lib.typed_endpoint import (
@@ -79,10 +83,10 @@ from zerver.lib.typed_endpoint import (
     typed_endpoint,
     typed_endpoint_without_parameters,
 )
+from zerver.lib.url_encoding import topic_narrow_url
 from zerver.models.bots import PearTopicContext, PearWorkerRun, PearWorkerRunEvent, Service
 from zerver.models.users import UserProfile
 from zerver.views.users import add_bot_backend
-
 
 PEAR_ACTIVE_SESSION_MESSAGE_LIMIT = 50
 PEAR_RUN_LIST_LIMIT = 20
@@ -941,6 +945,38 @@ def set_selected_pear_bot(user_profile: UserProfile, selected_bot_user_id: int |
     return changed
 
 
+def ensure_pear_configured_bot(
+    request: HttpRequest,
+    user_profile: UserProfile,
+    *,
+    selected_bot_user_id: int | None = None,
+) -> tuple[Service, PearConfigPayload, bool, bool]:
+    pear_config = build_pear_config_for_user(user_profile)
+    created = False
+    if not pear_config["configured"] and selected_bot_user_id is not None:
+        raise JsonableError(_("Invalid Pear bot selection."))
+    if not pear_config["configured"]:
+        add_bot_backend(
+            request,
+            user_profile,
+            bot_type=UserProfile.EMBEDDED_BOT,
+            config_data={PEAR_SELECTED_BOT_CONFIG_KEY: PEAR_SELECTED_BOT_CONFIG_VALUE},
+            full_name_raw=PEAR_AGENT_NAME,
+            interface_type=Service.GENERIC,
+            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+            short_name_raw=PEAR_BOT_SHORT_NAME,
+        )
+        created = True
+        invalidate_pear_selected_bot_cache(user_profile.realm_id)
+
+    selection_changed = set_selected_pear_bot(user_profile, selected_bot_user_id)
+    pear_config = build_pear_config_for_user(user_profile)
+    pear_bot = get_selected_pear_bot(user_profile)
+    if pear_bot is None:
+        raise JsonableError(_("Pear bot is not configured."))
+    return pear_bot, pear_config, created, selection_changed
+
+
 @typed_endpoint_without_parameters
 def get_pear_session_backend(request: HttpRequest, user_profile: UserProfile) -> HttpResponse:
     return json_success(
@@ -969,26 +1005,11 @@ def post_pear_config_backend(
     *,
     selected_bot_user_id: Json[int] | None = None,
 ) -> HttpResponse:
-    pear_config = build_pear_config_for_user(user_profile)
-    created = False
-    if not pear_config["configured"] and selected_bot_user_id is not None:
-        raise JsonableError(_("Invalid Pear bot selection."))
-    if not pear_config["configured"]:
-        add_bot_backend(
-            request,
-            user_profile,
-            bot_type=UserProfile.EMBEDDED_BOT,
-            config_data={PEAR_SELECTED_BOT_CONFIG_KEY: PEAR_SELECTED_BOT_CONFIG_VALUE},
-            full_name_raw=PEAR_AGENT_NAME,
-            interface_type=Service.GENERIC,
-            service_name=PEAR_EMBEDDED_BOT_SERVICE,
-            short_name_raw=PEAR_BOT_SHORT_NAME,
-        )
-        created = True
-        invalidate_pear_selected_bot_cache(user_profile.realm_id)
-        pear_config = build_pear_config_for_user(user_profile)
-    selection_changed = set_selected_pear_bot(user_profile, selected_bot_user_id)
-    pear_config = build_pear_config_for_user(user_profile)
+    _pear_bot, pear_config, created, selection_changed = ensure_pear_configured_bot(
+        request,
+        user_profile,
+        selected_bot_user_id=selected_bot_user_id,
+    )
 
     return json_success(
         request,
@@ -996,6 +1017,81 @@ def post_pear_config_backend(
             "created": created,
             "selection_changed": selection_changed,
             "pear_config": pear_config,
+        },
+    )
+
+
+@require_realm_admin
+@typed_endpoint_without_parameters
+def post_pear_first_run_backend(
+    request: HttpRequest,
+    user_profile: UserProfile,
+) -> HttpResponse:
+    pear_bot, pear_config, bot_created, selection_changed = ensure_pear_configured_bot(
+        request,
+        user_profile,
+    )
+    stream, stream_created = create_stream_if_needed(
+        user_profile.realm,
+        PEAR_FIRST_RUN_STREAM,
+        stream_description="Pear sandbox for first-run Codex sessions.",
+        acting_user=user_profile,
+    )
+    bulk_add_subscriptions(
+        user_profile.realm,
+        [stream],
+        [user_profile, pear_bot.user_profile],
+        acting_user=user_profile,
+    )
+
+    assert stream.recipient_id is not None
+    existing_message = (
+        messages_for_topic(
+            user_profile.realm_id,
+            stream.recipient_id,
+            PEAR_FIRST_RUN_TOPIC,
+        )
+        .filter(content=PEAR_FIRST_RUN_STARTER_MESSAGE)
+        .order_by("id")
+        .first()
+    )
+    if existing_message is None:
+        starter_message_id = internal_send_stream_message(
+            user_profile,
+            stream,
+            PEAR_FIRST_RUN_TOPIC,
+            PEAR_FIRST_RUN_STARTER_MESSAGE,
+            mark_as_read_for_acting_user=True,
+            acting_user=user_profile,
+        )
+        if starter_message_id is None:
+            raise JsonableError(_("Pear could not post the first-run message."))
+        message_created = True
+    else:
+        starter_message_id = existing_message.id
+        message_created = False
+
+    narrow_url = topic_narrow_url(
+        realm=user_profile.realm,
+        stream=stream,
+        topic_name=PEAR_FIRST_RUN_TOPIC,
+    )
+    return json_success(
+        request,
+        data={
+            "narrow_url": narrow_url,
+            "pear_first_run": {
+                "stream": stream.name,
+                "stream_id": stream.id,
+                "topic": PEAR_FIRST_RUN_TOPIC,
+                "message_id": starter_message_id,
+                "narrow_url": narrow_url,
+                "bot_created": bot_created,
+                "stream_created": stream_created,
+                "message_created": message_created,
+                "selection_changed": selection_changed,
+                "pear_config": pear_config,
+            },
         },
     )
 

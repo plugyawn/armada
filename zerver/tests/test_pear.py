@@ -7,8 +7,6 @@ from types import ModuleType, SimpleNamespace
 from unittest import TestCase
 from unittest.mock import patch
 
-from zproject import computed_settings as pear_computed_settings
-
 from zerver.lib.pear import (
     PEAR_ACCESS_PROMPT,
     PEAR_ACTIVE_MARKDOWN_PREFIX,
@@ -28,6 +26,7 @@ from zerver.lib.pear import (
     PEAR_EMBEDDED_BOT_SERVICE,
     PEAR_EXPLICIT_MENTION_MESSAGE_KEY,
     PEAR_FIND_ANSWER_PROMPT,
+    PEAR_FIRST_RUN_ENDPOINT,
     PEAR_FIX_BUG_PROMPT,
     PEAR_FOLLOWUP_TRIGGER,
     PEAR_HANDOFF_PROMPT,
@@ -140,6 +139,7 @@ from zerver.lib.pear_worker import (
     PearQueueWorkerDispatcher,
     pear_provision_codex_skills,
 )
+from zproject import computed_settings as pear_computed_settings
 
 
 class PearComputedSettingsEnvTest(TestCase):
@@ -586,6 +586,7 @@ class PearSessionDefaultsTest(TestCase):
         self.assertEqual(PEAR_SESSION_ENDPOINT, "/pear/session")
         self.assertEqual(PEAR_ACTIVE_SESSION_ENDPOINT, "/pear/session/active")
         self.assertEqual(PEAR_CONFIG_ENDPOINT, "/pear/config")
+        self.assertEqual(PEAR_FIRST_RUN_ENDPOINT, "/pear/first-run")
         self.assertEqual(PEAR_RUNS_ENDPOINT, "/pear/runs")
         self.assertEqual(PEAR_SIDE_ENDPOINT, "/pear/side")
 

@@ -18,6 +18,10 @@ from zerver.lib.pear import (
     PEAR_DEFAULT_STREAM,
     PEAR_DEFAULT_TOPIC,
     PEAR_EMBEDDED_BOT_SERVICE,
+    PEAR_FIRST_RUN_ENDPOINT,
+    PEAR_FIRST_RUN_STARTER_MESSAGE,
+    PEAR_FIRST_RUN_STREAM,
+    PEAR_FIRST_RUN_TOPIC,
     PEAR_OFFICIAL_AGENT_RUNTIME,
     PEAR_OFFICIAL_AGENT_RUNTIME_LABEL,
     PEAR_OFFICIAL_CODEX_SDK_PACKAGES,
@@ -36,8 +40,8 @@ from zerver.lib.pear_gate import (
 )
 from zerver.lib.pear_worker import (
     PearDatabaseWorkerRunStore,
-    build_pear_workspace_context,
     build_pear_worker_runtime_from_settings,
+    build_pear_workspace_context,
     clone_or_update_pear_repository_workdir,
     configure_pear_channel_repository_context,
     ensure_pear_topic_context,
@@ -51,18 +55,18 @@ from zerver.lib.pear_worker import (
     pear_reconcile_topic_branch,
     pear_topic_branch_name,
     pear_topic_isolation_username,
-    pear_topic_workdir_root,
     pear_topic_process_isolation,
-    pear_worker_process_isolation_error,
-    pear_worker_runtime_isolation_error,
+    pear_topic_workdir_root,
     pear_worker_model_for_topic,
+    pear_worker_process_isolation_error,
     pear_worker_reasoning_effort_for_topic,
+    pear_worker_runtime_isolation_error,
     pear_worker_sandbox_for_topic,
     pear_worker_workdir_for_topic,
     sync_pear_topic_workdir_overlay,
 )
 from zerver.lib.test_classes import ZulipTestCase
-from zerver.models import Message, UserProfile
+from zerver.models import Message, Subscription, UserProfile
 from zerver.models.bots import PearTopicContext, PearWorkerRun, PearWorkerRunEvent
 from zerver.models.streams import get_stream
 from zerver.views.pear import (
@@ -706,6 +710,95 @@ class PearSessionEndpointTest(ZulipTestCase):
             second_result_dict["pear_config"]["selected_bot_user_id"],
             pear_config["selected_bot_user_id"],
         )
+
+    def test_post_pear_first_run_creates_sandbox_once(self) -> None:
+        owner = self.example_user("iago")
+        self.login_user(owner)
+        cache.set(
+            pear_selected_bot_cache_key(owner.realm_id),
+            {"user_profile_id": None},
+        )
+
+        with self.settings(EMBEDDED_BOTS_ENABLED=True):
+            result = self.client_post(
+                f"/json{PEAR_FIRST_RUN_ENDPOINT}",
+                {},
+                intentionally_undocumented=True,
+            )
+            second_result = self.client_post(
+                f"/json{PEAR_FIRST_RUN_ENDPOINT}",
+                {},
+                intentionally_undocumented=True,
+            )
+
+        result_dict = self.assert_json_success(result)
+        first_run = result_dict["pear_first_run"]
+        self.assertEqual(result_dict["narrow_url"], first_run["narrow_url"])
+        self.assertEqual(first_run["stream"], PEAR_FIRST_RUN_STREAM)
+        self.assertEqual(first_run["topic"], PEAR_FIRST_RUN_TOPIC)
+        self.assertTrue(first_run["bot_created"])
+        self.assertTrue(first_run["stream_created"])
+        self.assertTrue(first_run["message_created"])
+        self.assertTrue(first_run["pear_config"]["enabled"])
+        self.assertEqual(
+            get_selected_pear_bot_user_id_for_realm(owner.realm_id),
+            first_run["pear_config"]["bot_user_id"],
+        )
+        self.assertIn("/#narrow/channel/", first_run["narrow_url"])
+        self.assertIn("/topic/", first_run["narrow_url"])
+
+        stream = get_stream(PEAR_FIRST_RUN_STREAM, owner.realm)
+        self.assertEqual(first_run["stream_id"], stream.id)
+        pear_bot = UserProfile.objects.get(id=first_run["pear_config"]["bot_user_id"])
+        for subscriber in (owner, pear_bot):
+            self.assertTrue(
+                Subscription.objects.filter(
+                    user_profile=subscriber,
+                    recipient=stream.recipient,
+                    active=True,
+                ).exists()
+            )
+
+        message = Message.objects.get(id=first_run["message_id"])
+        self.assertEqual(message.sender_id, owner.id)
+        self.assertEqual(message.recipient_id, stream.recipient_id)
+        self.assertEqual(message.topic_name(), PEAR_FIRST_RUN_TOPIC)
+        self.assertEqual(message.content, PEAR_FIRST_RUN_STARTER_MESSAGE)
+        self.assertEqual(
+            Message.objects.filter(
+                realm=owner.realm,
+                recipient=stream.recipient,
+                content=PEAR_FIRST_RUN_STARTER_MESSAGE,
+            ).count(),
+            1,
+        )
+
+        second_result_dict = self.assert_json_success(second_result)
+        second_first_run = second_result_dict["pear_first_run"]
+        self.assertFalse(second_first_run["bot_created"])
+        self.assertFalse(second_first_run["stream_created"])
+        self.assertFalse(second_first_run["message_created"])
+        self.assertFalse(second_first_run["selection_changed"])
+        self.assertEqual(second_first_run["message_id"], first_run["message_id"])
+        self.assertEqual(
+            Message.objects.filter(
+                realm=owner.realm,
+                recipient=stream.recipient,
+                content=PEAR_FIRST_RUN_STARTER_MESSAGE,
+            ).count(),
+            1,
+        )
+
+    def test_post_pear_first_run_requires_admin(self) -> None:
+        self.login("hamlet")
+
+        result = self.client_post(
+            f"/json{PEAR_FIRST_RUN_ENDPOINT}",
+            {},
+            intentionally_undocumented=True,
+        )
+
+        self.assert_json_error(result, "Must be an organization administrator")
 
     def test_post_pear_config_selects_existing_bot(self) -> None:
         owner = self.example_user("iago")

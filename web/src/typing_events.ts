@@ -109,6 +109,7 @@ function get_users_typing_for_narrow(): number[] {
 export function render_notifications_for_narrow(): void {
     const user_ids = get_users_typing_for_narrow();
     const users_typing = user_ids
+        .filter((user_id) => !is_pear_bot_user_id(user_id))
         .map((user_id) => people.get_user_by_id_assert_valid(user_id))
         .filter((person) => !person.is_inaccessible_user);
     const num_of_users_typing = users_typing.length;

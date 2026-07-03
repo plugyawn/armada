@@ -1,10 +1,14 @@
 import $ from "jquery";
+import * as z from "zod/mini";
 
 import render_pear_panel from "../templates/pear_panel.hbs";
 
 import * as blueslip from "./blueslip.ts";
 import * as channel from "./channel.ts";
 import {$t} from "./i18n.ts";
+import * as message_helper from "./message_helper.ts";
+import * as message_live_update from "./message_live_update.ts";
+import * as message_store from "./message_store.ts";
 import * as narrow_state from "./narrow_state.ts";
 import * as pear_run_state from "./pear_run_state.ts";
 
@@ -487,6 +491,45 @@ function run_is_active(run: {status: string} | undefined): boolean {
     return run?.status === "running" || run?.status === "queued";
 }
 
+function refresh_settled_pear_result_messages(message_ids: number[]): void {
+    const unique_message_ids = [...new Set(message_ids)];
+    if (unique_message_ids.length === 0) {
+        return;
+    }
+    void channel.get({
+        url: "/json/messages",
+        data: {
+            message_ids: JSON.stringify(unique_message_ids),
+            allow_empty_topic_name: true,
+        },
+        success(raw_data) {
+            const data = z
+                .object({messages: z.array(message_store.raw_message_schema)})
+                .parse(raw_data);
+            const refreshed_message_ids: number[] = [];
+            for (const raw_message of data.messages) {
+                const message = message_store.get(raw_message.id);
+                if (message === undefined) {
+                    message_helper.process_new_server_message(raw_message);
+                } else {
+                    message_store.update_message_content(message, raw_message.content);
+                    message_store.update_booleans(message, raw_message.flags);
+                    message.is_me_message = raw_message.is_me_message;
+                    message.last_edit_timestamp = raw_message.last_edit_timestamp;
+                    message.last_moved_timestamp = raw_message.last_moved_timestamp;
+                }
+                refreshed_message_ids.push(raw_message.id);
+            }
+            message_live_update.rerender_messages_view_by_message_ids(refreshed_message_ids);
+        },
+        error(xhr) {
+            if (xhr.readyState !== 0) {
+                blueslip.warn(`Failed to refresh settled Pear message: ${xhr.responseText}`);
+            }
+        },
+    });
+}
+
 function clear_live_refresh(): void {
     if (live_refresh_timer !== undefined) {
         window.clearTimeout(live_refresh_timer);
@@ -722,6 +765,9 @@ export function initialize(): void {
         return;
     }
     initialized = true;
+    pear_run_state.on_active_run_result_messages_changed((change) => {
+        refresh_settled_pear_result_messages(change.removed_message_ids);
+    });
     $("body").on("click", "#pear-panel-refresh", () => {
         refresh();
     });

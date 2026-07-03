@@ -48,7 +48,7 @@ function test(label, f) {
             ".message_row.pear-active-message .message_content > p:last-child > em:last-child",
             [],
         );
-        pear_run_state.set_active_run_result_messages([]);
+        pear_run_state.clear_for_testing();
         muted_users.set_muted_users([]);
         mock_template("message_list.hbs", false, () => "<message-list-stub>");
         f({override, mock_template});

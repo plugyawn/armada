@@ -1237,6 +1237,29 @@ class PearSessionDefaultsTest(TestCase):
         self.assertEqual(summary["worker_state"], "ready")
         self.assertTrue(summary["worker_can_run"])
 
+    def test_plain_bot_reply_settles_requested_session(self) -> None:
+        payload = get_pear_session_payload()
+
+        summary = build_pear_active_session_summary_from_messages(
+            pear_session=payload,
+            source="server",
+            stream_exists=True,
+            messages=[
+                (13, "@Pear reply with only ok", False),
+                (14, "ok", True, "Pear"),
+            ],
+        )
+
+        self.assertEqual(summary["state"], "active")
+        self.assertEqual(summary["request_count"], 1)
+        self.assertEqual(summary["latest_request_message_id"], 13)
+        self.assertEqual(summary["latest_message_id"], 14)
+        self.assertEqual(summary["pending_count"], 0)
+        self.assertEqual(summary["done_count"], 0)
+        self.assertEqual(summary["recent_messages"][1]["content"], "ok")
+        self.assertEqual(summary["worker_state"], "ready")
+        self.assertTrue(summary["worker_can_run"])
+
     def test_worker_should_start_for_active_topic_followup(self) -> None:
         payload = get_pear_session_payload()
         active_session = build_pear_active_session_summary_from_messages(

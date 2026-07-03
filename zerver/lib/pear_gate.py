@@ -5,7 +5,6 @@ from django.core.cache import cache
 
 from zerver.models import Recipient, UserProfile
 
-PEAR_FOLLOWUP_TOPIC_HISTORY_LIMIT = 50
 PEAR_SELECTED_BOT_CACHE_SECONDS = 60
 
 
@@ -67,6 +66,29 @@ def get_selected_pear_bot_user_id_for_realm(realm_id: int) -> int | None:
     return selected_bot_user_id
 
 
+def pear_followup_topic_context_allows_candidate(
+    *,
+    realm_id: int,
+    stream_name: str,
+    topic_name: str,
+) -> bool:
+    from zerver.lib.pear import normalize_pear_response_policy
+    from zerver.models.bots import PearTopicContext
+
+    context = (
+        PearTopicContext.objects.filter(
+            realm_id=realm_id,
+            stream_name=stream_name,
+            topic_name=topic_name,
+        )
+        .values("is_paused", "response_policy")
+        .first()
+    )
+    if context is None or context["is_paused"]:
+        return False
+    return normalize_pear_response_policy(str(context["response_policy"])) == "ambient"
+
+
 def get_pear_followup_service_bot_event(
     *,
     realm_id: int,
@@ -88,15 +110,11 @@ def get_pear_followup_service_bot_event(
 
     from zerver.lib.pear import (
         PEAR_FOLLOWUP_TRIGGER,
-        build_pear_active_session_summary_from_messages,
-        get_pear_session_payload,
         is_pear_control_template_message,
         is_pear_request_message,
         parse_pear_artifacts,
         parse_pear_checklist,
-        pear_worker_should_start,
     )
-    from zerver.lib.topic import messages_for_topic
 
     if (
         is_pear_request_message(content)
@@ -112,28 +130,11 @@ def get_pear_followup_service_bot_event(
     if selected_pear_bot_user_id in mentioned_user_ids:
         return None
 
-    if settings.PEAR_ADDRESSING_ROUTER_RUNTIME != "disabled":
-        return {
-            "trigger": PEAR_FOLLOWUP_TRIGGER,
-            "user_profile_id": selected_pear_bot_user_id,
-        }
-
-    message_rows = list(
-        messages_for_topic(realm_id, recipient_id, topic_name)
-        .order_by("-id")
-        .values_list("id", "content", "sender__is_bot")[
-            :PEAR_FOLLOWUP_TOPIC_HISTORY_LIMIT
-        ]
-    )
-    active_session = build_pear_active_session_summary_from_messages(
-        pear_session=get_pear_session_payload(stream=stream_name, topic=topic_name),
-        source="server",
-        stream_exists=True,
-        messages=message_rows,
-    )
-    # pear_worker_should_start enforces active_session["response_policy"] so
-    # mention-only topics do not queue ambient follow-up workers.
-    if not pear_worker_should_start(content, active_session):
+    if not pear_followup_topic_context_allows_candidate(
+        realm_id=realm_id,
+        stream_name=stream_name,
+        topic_name=topic_name,
+    ):
         return None
 
     return {

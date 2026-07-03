@@ -90,6 +90,7 @@ export const raw_message_schema = z.intersection(
             edit_history: z.optional(z.array(message_edit_history_entry_schema)),
             id: z.number(),
             is_me_message: z.boolean(),
+            is_pear_message: z.optional(z.boolean()),
             last_edit_timestamp: z.optional(z.number()),
             last_moved_timestamp: z.optional(z.number()),
             reactions: z.array(message_reaction_schema),
@@ -133,6 +134,7 @@ type Booleans = {
     mentioned_me_directly: boolean;
     stream_wildcard_mentioned: boolean;
     topic_wildcard_mentioned: boolean;
+    is_pear_message: boolean;
     collapsed: boolean;
     condensed?: boolean;
     alerted: boolean;
@@ -320,6 +322,8 @@ export function convert_raw_message_to_message_with_booleans(opts: NewMessage):
         mentioned_me_directly: convert_flag("mentioned"),
         stream_wildcard_mentioned: convert_flag("stream_wildcard_mentioned"),
         topic_wildcard_mentioned: convert_flag("topic_wildcard_mentioned"),
+        is_pear_message:
+            opts.type === "server_message" && opts.raw_message.is_pear_message === true,
         collapsed: convert_flag("collapsed"),
         alerted: convert_flag("has_alert_word"),
     };

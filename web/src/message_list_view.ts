@@ -820,15 +820,7 @@ export class MessageListView {
         }
 
         const sender_is_bot = people.sender_is_bot(message);
-        const sender_full_name = message.sender_full_name?.toLowerCase() ?? "";
-        const sender_email = message.sender_email?.toLowerCase() ?? "";
-        const is_pear_message =
-            !is_hidden &&
-            sender_is_bot &&
-            (sender_full_name === "pear" ||
-                sender_full_name.startsWith("pear ") ||
-                sender_email === "pear@zulip.com" ||
-                sender_email.startsWith("pear-bot@"));
+        const is_pear_message = !is_hidden && message.is_pear_message === true;
         if (is_pear_message) {
             include_sender = false;
         }

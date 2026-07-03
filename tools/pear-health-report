@@ -219,6 +219,17 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def maybe_reexec_with_checkout_venv() -> None:
+    venv_python = BASE_DIR / ".venv" / "bin" / "python3"
+    if not venv_python.exists():
+        return
+    current_python = Path(sys.executable).resolve()
+    target_python = venv_python.resolve()
+    if current_python == target_python:
+        return
+    os.execv(str(target_python), [str(target_python), *sys.argv])
+
+
 def main() -> int:
     args = parse_args()
     for name in (
@@ -233,6 +244,8 @@ def main() -> int:
             raise SystemExit(f"--{name.replace('_', '-')} must be non-negative")
     if args.stale_run_age_seconds is not None and args.stale_run_age_seconds <= 0:
         raise SystemExit("--stale-run-age-seconds must be positive")
+
+    maybe_reexec_with_checkout_venv()
 
     report = collect_health(
         stale_run_age_seconds=args.stale_run_age_seconds,

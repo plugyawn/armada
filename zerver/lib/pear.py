@@ -2520,6 +2520,8 @@ def build_pear_active_session_summary_from_messages(
     response_policy: str | None = None,
 ) -> PearActiveSessionSummary:
     latest_message_id: int | None = None
+    latest_checklist_message_id: int | None = None
+    latest_bot_reply_message_id: int | None = None
     latest_request_message_id: int | None = None
     request_count = 0
     checklist: list[PearChecklistItem] = []
@@ -2534,12 +2536,28 @@ def build_pear_active_session_summary_from_messages(
             request_count += 1
             if latest_request_message_id is None:
                 latest_request_message_id = message_id
-        if latest_message_id is None:
+        if latest_checklist_message_id is None:
             message_checklist = parse_pear_checklist(content)
-            if not message_checklist:
-                continue
-            latest_message_id = message_id
-            checklist = message_checklist
+            if message_checklist:
+                latest_checklist_message_id = message_id
+                checklist = message_checklist
+        if (
+            latest_bot_reply_message_id is None
+            and _sender_is_bot is True
+            and content.strip()
+        ):
+            latest_bot_reply_message_id = message_id
+
+    if latest_request_message_id is not None:
+        if (
+            latest_bot_reply_message_id is not None
+            and latest_bot_reply_message_id > latest_request_message_id
+        ):
+            latest_message_id = latest_bot_reply_message_id
+        else:
+            latest_message_id = latest_checklist_message_id
+    else:
+        latest_message_id = latest_checklist_message_id
 
     session_started = False
     for message_id, content, sender_is_bot, _sender_name in reversed(sorted_messages):

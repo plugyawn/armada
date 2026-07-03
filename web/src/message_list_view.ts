@@ -3,6 +3,7 @@ import {isSameDay} from "date-fns";
 import $ from "jquery";
 import _ from "lodash";
 import assert from "minimalistic-assert";
+import * as z from "zod/mini";
 
 import render_bookend from "../templates/bookend.hbs";
 import render_login_to_view_image_button from "../templates/login_to_view_image_button.hbs";
@@ -14,16 +15,19 @@ import render_single_message from "../templates/single_message.hbs";
 
 import * as activity from "./activity.ts";
 import * as blueslip from "./blueslip.ts";
+import * as channel from "./channel.ts";
 import * as compose_fade from "./compose_fade.ts";
 import * as condense from "./condense.ts";
 import * as hash_util from "./hash_util.ts";
 import {$t} from "./i18n.ts";
 import * as internal_url from "./internal_url.ts";
 import * as message_edit from "./message_edit.ts";
+import * as message_helper from "./message_helper.ts";
 import type {MessageList} from "./message_list.ts";
 import * as message_list_hover from "./message_list_hover.ts";
 import * as message_list_tooltips from "./message_list_tooltips.ts";
 import * as message_lists from "./message_lists.ts";
+import * as message_live_update from "./message_live_update.ts";
 import * as message_reminder from "./message_reminder.ts";
 import * as message_store from "./message_store.ts";
 import type {Message} from "./message_store.ts";
@@ -251,7 +255,49 @@ function update_rendered_pear_active_messages(): void {
     update_pear_thinking_glyphs();
 }
 
-pear_run_state.on_active_run_result_messages_changed(update_rendered_pear_active_messages);
+function refresh_settled_pear_result_messages(message_ids: number[]): void {
+    const unique_message_ids = [...new Set(message_ids)];
+    if (unique_message_ids.length === 0) {
+        return;
+    }
+    void channel.get({
+        url: "/json/messages",
+        data: {
+            message_ids: JSON.stringify(unique_message_ids),
+            allow_empty_topic_name: true,
+        },
+        success(raw_data) {
+            const data = z
+                .object({messages: z.array(message_store.raw_message_schema)})
+                .parse(raw_data);
+            const refreshed_message_ids: number[] = [];
+            for (const raw_message of data.messages) {
+                const message = message_store.get(raw_message.id);
+                if (message === undefined) {
+                    message_helper.process_new_server_message(raw_message);
+                } else {
+                    message_store.update_message_content(message, raw_message.content);
+                    message_store.update_booleans(message, raw_message.flags);
+                    message.is_me_message = raw_message.is_me_message;
+                    message.last_edit_timestamp = raw_message.last_edit_timestamp;
+                    message.last_moved_timestamp = raw_message.last_moved_timestamp;
+                }
+                refreshed_message_ids.push(raw_message.id);
+            }
+            message_live_update.rerender_messages_view_by_message_ids(refreshed_message_ids);
+        },
+        error(xhr) {
+            if (xhr.readyState !== 0) {
+                blueslip.warn(`Failed to refresh settled Pear message: ${xhr.responseText}`);
+            }
+        },
+    });
+}
+
+pear_run_state.on_active_run_result_messages_changed((change) => {
+    update_rendered_pear_active_messages();
+    refresh_settled_pear_result_messages(change.removed_message_ids);
+});
 
 type BoundaryMessageContainerInfo = {
     message_group: MessageGroup;

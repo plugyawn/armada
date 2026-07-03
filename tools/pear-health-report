@@ -31,6 +31,17 @@ class PearHealthReport:
     old_orphan_active_marker_samples: list[dict[str, Any]]
 
 
+@dataclass(frozen=True)
+class PearMarkerSettlement:
+    message_id: int
+    sender_id: int
+    topic: str
+    old_content: str
+    new_content: str
+    dry_run: bool
+    error: str | None = None
+
+
 def health_violations(
     report: PearHealthReport,
     *,
@@ -107,6 +118,32 @@ def render_report(report: PearHealthReport) -> str:
     return "\n".join(lines)
 
 
+def settled_active_marker_content(content: str, pear_active_markdown_prefix: str) -> str:
+    text = content.rstrip()
+    if not text.endswith(pear_active_markdown_prefix):
+        return content
+    settled_content = text[: -len(pear_active_markdown_prefix)].rstrip()
+    if settled_content in {"", "*Thinking*", "_Thinking_", "Thinking"}:
+        return "Pear worker is no longer marked active."
+    return settled_content
+
+
+def render_settlement_results(settlements: list[PearMarkerSettlement]) -> str:
+    if not settlements:
+        return "No old orphan active markers to settle."
+    mode = "dry-run" if settlements[0].dry_run else "applied"
+    lines = [f"Pear marker settlements ({mode}):"]
+    for settlement in settlements:
+        status = f"ERROR: {settlement.error}" if settlement.error else "ok"
+        lines.append(
+            "- "
+            f"id={settlement.message_id} sender={settlement.sender_id} "
+            f"topic={settlement.topic!r} status={status} "
+            f"new_content={settlement.new_content!r}"
+        )
+    return "\n".join(lines)
+
+
 def setup_django() -> tuple[Any, Any, Any, str, int, Any]:
     sys.path.append(str(BASE_DIR))
     from scripts.lib.setup_path import setup_path
@@ -133,6 +170,23 @@ def setup_django() -> tuple[Any, Any, Any, str, int, Any]:
         PEAR_ACTIVE_MARKDOWN_PREFIX,
         pear_worker_stale_after_seconds(),
         timezone_now,
+    )
+
+
+def old_orphan_active_marker_queryset(
+    Message: Any,
+    *,
+    pear_active_markdown_prefix: str,
+    marker_window_cutoff: Any,
+    active_result_message_ids: set[int],
+) -> Any:
+    return (
+        Message.objects.filter(
+            content__contains=pear_active_markdown_prefix,
+            date_sent__lt=marker_window_cutoff,
+        )
+        .exclude(id__in=active_result_message_ids)
+        .order_by("-date_sent", "-id")
     )
 
 
@@ -200,13 +254,11 @@ def collect_health(
         .exclude(id__in=active_result_message_ids)
         .order_by("-date_sent", "-id")
     )
-    old_orphan_active_markers = (
-        Message.objects.filter(
-            content__contains=pear_active_markdown_prefix,
-            date_sent__lt=marker_window_cutoff,
-        )
-        .exclude(id__in=active_result_message_ids)
-        .order_by("-date_sent", "-id")
+    old_orphan_active_markers = old_orphan_active_marker_queryset(
+        Message,
+        pear_active_markdown_prefix=pear_active_markdown_prefix,
+        marker_window_cutoff=marker_window_cutoff,
+        active_result_message_ids=active_result_message_ids,
     )
 
     return PearHealthReport(
@@ -230,6 +282,102 @@ def collect_health(
     )
 
 
+def update_message_content_as_sender_without_edit_limit(message: Any, content: str) -> None:
+    from django.db import transaction
+    from zerver.actions.message_edit import (
+        build_message_edit_request,
+        do_update_message,
+        get_mentions_for_message_updates,
+    )
+    from zerver.actions.message_send import render_incoming_message
+    from zerver.lib.mention import MentionBackend, MentionData
+
+    Message = type(message)
+    with transaction.atomic(durable=True):
+        locked_message = Message.objects.select_for_update().get(id=message.id)
+        user_profile = locked_message.sender
+        mention_backend = MentionBackend(user_profile.realm_id)
+        mention_data = MentionData(
+            mention_backend=mention_backend,
+            content=content,
+            message_sender=locked_message.sender,
+        )
+        rendering_result = render_incoming_message(
+            locked_message,
+            content,
+            user_profile.realm,
+            mention_data=mention_data,
+        )
+        message_edit_request = build_message_edit_request(
+            message=locked_message,
+            user_profile=user_profile,
+            propagate_mode="change_one",
+            stream_id=None,
+            topic_name=None,
+            content=content,
+        )
+        do_update_message(
+            user_profile,
+            locked_message,
+            message_edit_request,
+            False,
+            False,
+            rendering_result,
+            get_mentions_for_message_updates(locked_message),
+            mention_data,
+        )
+
+
+def settle_old_orphan_active_markers(
+    *,
+    marker_window_seconds: int,
+    limit: int,
+    dry_run: bool,
+) -> list[PearMarkerSettlement]:
+    (
+        PearWorkerRun,
+        Message,
+        _Q,
+        pear_active_markdown_prefix,
+        _default_stale_run_age_seconds,
+        timezone_now,
+    ) = setup_django()
+    active_runs = PearWorkerRun.objects.filter(status__in=["queued", "running"])
+    active_result_message_ids = set(
+        active_runs.exclude(result_message_id=None).values_list("result_message_id", flat=True)
+    )
+    marker_window_cutoff = timezone_now() - timedelta(seconds=marker_window_seconds)
+    old_markers = old_orphan_active_marker_queryset(
+        Message,
+        pear_active_markdown_prefix=pear_active_markdown_prefix,
+        marker_window_cutoff=marker_window_cutoff,
+        active_result_message_ids=active_result_message_ids,
+    )
+    settlements = []
+    for message in old_markers[:limit]:
+        new_content = settled_active_marker_content(message.content, pear_active_markdown_prefix)
+        error = None
+        if new_content == message.content:
+            error = "active marker is not a trailing marker"
+        elif not dry_run:
+            try:
+                update_message_content_as_sender_without_edit_limit(message, new_content)
+            except Exception as exception:
+                error = str(exception)
+        settlements.append(
+            PearMarkerSettlement(
+                message_id=message.id,
+                sender_id=message.sender_id,
+                topic=message.topic_name(),
+                old_content=message.content,
+                new_content=new_content,
+                dry_run=dry_run,
+                error=error,
+            )
+        )
+    return settlements
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
@@ -245,6 +393,16 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--stale-marker-age-seconds", type=int, default=60)
     parser.add_argument("--marker-window-seconds", type=int, default=24 * 60 * 60)
     parser.add_argument("--sample-limit", type=int, default=5)
+    parser.add_argument(
+        "--settle-old-orphan-active-markers",
+        action="store_true",
+        help=(
+            "Dry-run settling old persisted Pear active markers. Add --yes to edit "
+            "messages through Zulip's normal update-message event path."
+        ),
+    )
+    parser.add_argument("--settle-limit", type=int, default=20)
+    parser.add_argument("--yes", action="store_true")
     parser.add_argument("--json", action="store_true")
     return parser.parse_args()
 
@@ -273,6 +431,7 @@ def main() -> int:
         "stale_marker_age_seconds",
         "marker_window_seconds",
         "sample_limit",
+        "settle_limit",
     ):
         if getattr(args, name) < 0:
             raise SystemExit(f"--{name.replace('_', '-')} must be non-negative")
@@ -283,6 +442,14 @@ def main() -> int:
 
     maybe_reexec_with_checkout_venv()
 
+    settlements = []
+    if args.settle_old_orphan_active_markers:
+        settlements = settle_old_orphan_active_markers(
+            marker_window_seconds=args.marker_window_seconds,
+            limit=args.settle_limit,
+            dry_run=not args.yes,
+        )
+
     report = collect_health(
         stale_run_age_seconds=args.stale_run_age_seconds,
         stale_marker_age_seconds=args.stale_marker_age_seconds,
@@ -290,9 +457,28 @@ def main() -> int:
         sample_limit=args.sample_limit,
     )
     if args.json:
-        print(json.dumps(report_to_json(report), indent=2, sort_keys=True))
+        payload = report_to_json(report)
+        if args.settle_old_orphan_active_markers:
+            payload["settlements"] = [
+                {
+                    "message_id": settlement.message_id,
+                    "sender_id": settlement.sender_id,
+                    "topic": settlement.topic,
+                    "old_content": settlement.old_content,
+                    "new_content": settlement.new_content,
+                    "dry_run": settlement.dry_run,
+                    "error": settlement.error,
+                }
+                for settlement in settlements
+            ]
+        print(json.dumps(payload, indent=2, sort_keys=True))
     else:
+        if args.settle_old_orphan_active_markers:
+            print(render_settlement_results(settlements))
         print(render_report(report))
+
+    if any(settlement.error for settlement in settlements):
+        return 1
 
     violations = health_violations(
         report,

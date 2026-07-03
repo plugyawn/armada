@@ -14,6 +14,7 @@ from zerver.actions.message_send import get_service_bot_events
 from zerver.lib.bot_config import ConfigError, load_bot_config_template, set_bot_config
 from zerver.lib.bot_lib import EmbeddedBotEmptyRecipientsListError, EmbeddedBotHandler, StateHandler
 from zerver.lib.bot_storage import StateError
+from zerver.lib.pear import PEAR_EMBEDDED_BOT_SERVICE, PEAR_FOLLOWUP_TRIGGER
 from zerver.lib.test_classes import ZulipTestCase
 from zerver.lib.test_helpers import mock_queue_publish
 from zerver.lib.validator import check_string
@@ -21,6 +22,7 @@ from zerver.models import Recipient, UserProfile
 from zerver.models.messages import UserMessage
 from zerver.models.realms import get_realm
 from zerver.models.scheduled_jobs import NotificationTriggers
+from zerver.models.streams import get_stream
 
 BOT_TYPE_TO_QUEUE_NAME = {
     UserProfile.OUTGOING_WEBHOOK_BOT: "outgoing_webhooks",
@@ -172,6 +174,46 @@ class TestServiceBotBasics(ZulipTestCase):
         self.assertEqual(
             m.output,
             [f"ERROR:root:Unexpected bot_type for Service bot id={bot.id}: {wrong_bot_type}"],
+        )
+
+    @override_settings(
+        EMBEDDED_BOTS_ENABLED=True,
+        PEAR_ADDRESSING_ROUTER_RUNTIME="codex-exec",
+    )
+    def test_service_events_for_pear_followup_router(self) -> None:
+        sender = self.example_user("hamlet")
+        owner = self.example_user("cordelia")
+        pear_bot = self.create_test_bot(
+            "pear",
+            owner,
+            full_name="Pear",
+            bot_type=UserProfile.EMBEDDED_BOT,
+            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+        )
+        stream = get_stream("Denmark", sender.realm)
+
+        event_dict = get_service_bot_events(
+            sender=sender,
+            service_bot_tuples=[],
+            active_user_ids=set(),
+            mentioned_user_ids=set(),
+            recipient_type=Recipient.STREAM,
+            recipient_id=stream.recipient_id,
+            stream_name=stream.name,
+            topic_name="followup",
+            content="agent, can you check the failing parser test?",
+        )
+
+        self.assertEqual(
+            event_dict,
+            {
+                "embedded_bots": [
+                    {
+                        "trigger": PEAR_FOLLOWUP_TRIGGER,
+                        "user_profile_id": pear_bot.id,
+                    },
+                ],
+            },
         )
 
 

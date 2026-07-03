@@ -584,6 +584,26 @@ class PearSessionEndpointTest(ZulipTestCase):
         self.assertNotIn(topic_runs[0].id, run_ids)
         self.assertIsNone(result_dict["pear_topic_context"])
 
+    def test_get_pear_runs_defaults_to_cheap_without_topic_context(self) -> None:
+        owner = self.example_user("hamlet")
+        self.subscribe(owner, PEAR_DEFAULT_STREAM)
+        self.login_user(owner)
+
+        with patch("zerver.views.pear.ensure_pear_topic_context") as ensure_context:
+            result = self.client_get(
+                f"/json{PEAR_RUNS_ENDPOINT}",
+                {
+                    "stream": PEAR_DEFAULT_STREAM,
+                    "topic": PEAR_DEFAULT_TOPIC,
+                },
+                intentionally_undocumented=True,
+            )
+
+        result_dict = self.assert_json_success(result)
+        self.assertEqual(result_dict["pear_runs"], [])
+        self.assertIsNone(result_dict["pear_topic_context"])
+        ensure_context.assert_not_called()
+
     def test_get_pear_runs_rejects_inaccessible_requested_run_id(self) -> None:
         owner = self.example_user("hamlet")
         other_user = self.example_user("othello")

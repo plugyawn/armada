@@ -143,6 +143,31 @@ type RenderingPlan = {
     append_messages: MessageContainer[];
 };
 
+const pear_thinking_glyphs = [
+    "·",
+    "∙",
+    "⋅",
+    "✦",
+    "✧",
+    "✩",
+    "✶",
+    "✷",
+    "✸",
+    "✹",
+    "✺",
+    "✹",
+    "✸",
+    "✷",
+    "✶",
+    "✩",
+    "✧",
+    "✦",
+    "⋅",
+    "∙",
+] as const;
+let pear_thinking_glyph_index = 0;
+let pear_thinking_glyph_timer: ReturnType<typeof setInterval> | undefined;
+
 function message_has_pear_active_marker(message: Message): boolean {
     return message.content.includes("<em>✦</em>");
 }
@@ -155,13 +180,66 @@ function is_active_pear_message(message: Message, is_pear_message: boolean): boo
     );
 }
 
+function pear_thinking_markers($scope: JQuery<HTMLElement | Document> = $(document)): JQuery {
+    const $descendant_markers = $scope.find(
+        ".message_row.pear-active-message .message_content > p:last-child > em:last-child",
+    );
+    if (!$scope.hasClass("pear-active-message")) {
+        return $descendant_markers;
+    }
+    return $descendant_markers.add($scope.find(".message_content > p:last-child > em:last-child"));
+}
+
+function render_pear_thinking_glyph($markers: JQuery): void {
+    if ($markers.length === 0) {
+        return;
+    }
+    $markers.text(pear_thinking_glyphs[pear_thinking_glyph_index]!);
+    pear_thinking_glyph_index = (pear_thinking_glyph_index + 1) % pear_thinking_glyphs.length;
+}
+
+function stop_pear_thinking_animation(): void {
+    if (pear_thinking_glyph_timer === undefined) {
+        return;
+    }
+    clearInterval(pear_thinking_glyph_timer);
+    pear_thinking_glyph_timer = undefined;
+}
+
+function update_pear_thinking_glyphs(): void {
+    if (pear_run_state.expire_stale_active_run_result_messages()) {
+        return;
+    }
+    const $markers = pear_thinking_markers();
+    if ($markers.length === 0) {
+        stop_pear_thinking_animation();
+        return;
+    }
+    render_pear_thinking_glyph($markers);
+}
+
+function start_pear_thinking_animation(): void {
+    if (pear_thinking_glyph_timer !== undefined) {
+        return;
+    }
+    pear_thinking_glyph_timer = setInterval(update_pear_thinking_glyphs, 100);
+}
+
+function maybe_render_pear_thinking_glyph($row: JQuery): void {
+    if (!$row.hasClass("pear-active-message")) {
+        return;
+    }
+    const $markers = pear_thinking_markers($row);
+    render_pear_thinking_glyph($markers);
+    start_pear_thinking_animation();
+}
+
 function update_rendered_pear_active_messages(): void {
-    // The pulsing "✦" glyph is animated entirely in CSS (@keyframes
-    // pear-thinking) whenever a row carries the .pear-active-message
-    // class, so this only needs to keep that class in sync with the
-    // active-run set. Stale markers are expired by pear_run_state's own
-    // TTL timer, which notifies us via on_active_run_result_messages_changed.
     const $pear_messages = $(".message_row.pear-message");
+    if ($pear_messages.length === 0) {
+        stop_pear_thinking_animation();
+        return;
+    }
     $pear_messages.each((_index, row) => {
         const $row = $(row);
         const message_id_attr = $row.attr("data-message-id");
@@ -173,6 +251,7 @@ function update_rendered_pear_active_messages(): void {
             message !== undefined && is_active_pear_message(message, true),
         );
     });
+    update_pear_thinking_glyphs();
 }
 
 function rerender_pear_result_messages(message_ids: number[]): void {
@@ -1392,6 +1471,7 @@ export class MessageListView {
         const $content = $row.find(".message_content");
 
         rendered_markdown.update_elements($content);
+        maybe_render_pear_thinking_glyph($row);
 
         const id = rows.id($row);
         message_edit.maybe_show_edit($row, id);

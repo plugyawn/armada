@@ -125,7 +125,14 @@
                 overflow: visible;
             }
 
+            /* The literal "✦" marker is visibility-hidden and reserves
+               its width via min-width; the pulsing glyph cycle renders
+               in an absolutely-positioned ::after twin animated purely
+               in CSS, so there is no 10Hz JS timer overwriting the DOM.
+               Browsers that don't animate `content` show the static
+               "✦" fallback. */
             .message_content > p:last-child > em:last-child {
+                position: relative;
                 display: inline-block;
                 min-width: 1.35em;
                 margin-left: 0.15em;
@@ -137,6 +144,20 @@
                 vertical-align: -0.02em;
                 white-space: nowrap;
                 font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+                visibility: hidden;
+
+                &::after {
+                    content: "✦";
+                    visibility: visible;
+                    position: absolute;
+                    inset: 0;
+                    text-align: center;
+                    animation: pear-thinking 2s step-end infinite;
+
+                    @media (prefers-reduced-motion: reduce) {
+                        animation: none;
+                    }
+                }
             }
         }
     }
@@ -160,6 +181,93 @@
         border: 1px solid var(--color-message-list-border);
     }
 }
+
+/* stylelint-disable plugin/no-low-performance-animation-properties --
+   The Pear "thinking" glyph cycle swaps the `content` string on a
+   single ::after pseudo-element; it is a tiny text substitution, not a
+   layout or paint hotspot, and step-end avoids interpolation. */
+@keyframes pear-thinking {
+    0% {
+        content: "·";
+    }
+
+    5% {
+        content: "∙";
+    }
+
+    10% {
+        content: "⋅";
+    }
+
+    15% {
+        content: "✦";
+    }
+
+    20% {
+        content: "✧";
+    }
+
+    25% {
+        content: "✩";
+    }
+
+    30% {
+        content: "✶";
+    }
+
+    35% {
+        content: "✷";
+    }
+
+    40% {
+        content: "✸";
+    }
+
+    45% {
+        content: "✹";
+    }
+
+    50% {
+        content: "✺";
+    }
+
+    55% {
+        content: "✹";
+    }
+
+    60% {
+        content: "✸";
+    }
+
+    65% {
+        content: "✷";
+    }
+
+    70% {
+        content: "✶";
+    }
+
+    75% {
+        content: "✩";
+    }
+
+    80% {
+        content: "✧";
+    }
+
+    85% {
+        content: "✦";
+    }
+
+    90% {
+        content: "⋅";
+    }
+
+    95% {
+        content: "∙";
+    }
+}
+/* stylelint-enable plugin/no-low-performance-animation-properties */
 
 .messagebox {
     grid-area: messagebox;

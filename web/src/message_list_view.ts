@@ -3,6 +3,7 @@ import {isSameDay} from "date-fns";
 import $ from "jquery";
 import _ from "lodash";
 import assert from "minimalistic-assert";
+import * as z from "zod/mini";
 
 import render_bookend from "../templates/bookend.hbs";
 import render_login_to_view_image_button from "../templates/login_to_view_image_button.hbs";
@@ -14,12 +15,14 @@ import render_single_message from "../templates/single_message.hbs";
 
 import * as activity from "./activity.ts";
 import * as blueslip from "./blueslip.ts";
+import * as channel from "./channel.ts";
 import * as compose_fade from "./compose_fade.ts";
 import * as condense from "./condense.ts";
 import * as hash_util from "./hash_util.ts";
 import {$t} from "./i18n.ts";
 import * as internal_url from "./internal_url.ts";
 import * as message_edit from "./message_edit.ts";
+import * as message_helper from "./message_helper.ts";
 import type {MessageList} from "./message_list.ts";
 import * as message_list_hover from "./message_list_hover.ts";
 import * as message_list_tooltips from "./message_list_tooltips.ts";
@@ -140,31 +143,6 @@ type RenderingPlan = {
     append_messages: MessageContainer[];
 };
 
-const pear_thinking_glyphs = [
-    "·",
-    "∙",
-    "⋅",
-    "✦",
-    "✧",
-    "✩",
-    "✶",
-    "✷",
-    "✸",
-    "✹",
-    "✺",
-    "✹",
-    "✸",
-    "✷",
-    "✶",
-    "✩",
-    "✧",
-    "✦",
-    "⋅",
-    "∙",
-] as const;
-let pear_thinking_glyph_index = 0;
-let pear_thinking_glyph_timer: ReturnType<typeof setInterval> | undefined;
-
 function message_has_pear_active_marker(message: Message): boolean {
     return message.content.includes("<em>✦</em>");
 }
@@ -177,66 +155,13 @@ function is_active_pear_message(message: Message, is_pear_message: boolean): boo
     );
 }
 
-function pear_thinking_markers($scope: JQuery<HTMLElement | Document> = $(document)): JQuery {
-    const $descendant_markers = $scope.find(
-        ".message_row.pear-active-message .message_content > p:last-child > em:last-child",
-    );
-    if (!$scope.hasClass("pear-active-message")) {
-        return $descendant_markers;
-    }
-    return $descendant_markers.add($scope.find(".message_content > p:last-child > em:last-child"));
-}
-
-function render_pear_thinking_glyph($markers: JQuery): void {
-    if ($markers.length === 0) {
-        return;
-    }
-    $markers.text(pear_thinking_glyphs[pear_thinking_glyph_index]!);
-    pear_thinking_glyph_index = (pear_thinking_glyph_index + 1) % pear_thinking_glyphs.length;
-}
-
-function stop_pear_thinking_animation(): void {
-    if (pear_thinking_glyph_timer === undefined) {
-        return;
-    }
-    clearInterval(pear_thinking_glyph_timer);
-    pear_thinking_glyph_timer = undefined;
-}
-
-function update_pear_thinking_glyphs(): void {
-    if (pear_run_state.expire_stale_active_run_result_messages()) {
-        return;
-    }
-    const $markers = pear_thinking_markers();
-    if ($markers.length === 0) {
-        stop_pear_thinking_animation();
-        return;
-    }
-    render_pear_thinking_glyph($markers);
-}
-
-function start_pear_thinking_animation(): void {
-    if (pear_thinking_glyph_timer !== undefined) {
-        return;
-    }
-    pear_thinking_glyph_timer = setInterval(update_pear_thinking_glyphs, 100);
-}
-
-function maybe_render_pear_thinking_glyph($row: JQuery): void {
-    if (!$row.hasClass("pear-active-message")) {
-        return;
-    }
-    const $markers = pear_thinking_markers($row);
-    render_pear_thinking_glyph($markers);
-    start_pear_thinking_animation();
-}
-
 function update_rendered_pear_active_messages(): void {
+    // The pulsing "✦" glyph is animated entirely in CSS (@keyframes
+    // pear-thinking) whenever a row carries the .pear-active-message
+    // class, so this only needs to keep that class in sync with the
+    // active-run set. Stale markers are expired by pear_run_state's own
+    // TTL timer, which notifies us via on_active_run_result_messages_changed.
     const $pear_messages = $(".message_row.pear-message");
-    if ($pear_messages.length === 0) {
-        stop_pear_thinking_animation();
-        return;
-    }
     $pear_messages.each((_index, row) => {
         const $row = $(row);
         const message_id_attr = $row.attr("data-message-id");
@@ -248,10 +173,64 @@ function update_rendered_pear_active_messages(): void {
             message !== undefined && is_active_pear_message(message, true),
         );
     });
-    update_pear_thinking_glyphs();
 }
 
-pear_run_state.on_active_run_result_messages_changed(update_rendered_pear_active_messages);
+function rerender_pear_result_messages(message_ids: number[]): void {
+    const messages_to_render = [];
+    for (const id of message_ids) {
+        const message = message_store.get(id);
+        if (message !== undefined) {
+            messages_to_render.push(message);
+        }
+    }
+    for (const list of message_lists.all_rendered_message_lists()) {
+        list.view.rerender_messages(messages_to_render);
+    }
+}
+
+function refresh_settled_pear_result_messages(message_ids: number[]): void {
+    const unique_message_ids = [...new Set(message_ids)];
+    if (unique_message_ids.length === 0) {
+        return;
+    }
+    void channel.get({
+        url: "/json/messages",
+        data: {
+            message_ids: JSON.stringify(unique_message_ids),
+            allow_empty_topic_name: true,
+        },
+        success(raw_data) {
+            const data = z
+                .object({messages: z.array(message_store.raw_message_schema)})
+                .parse(raw_data);
+            const refreshed_message_ids: number[] = [];
+            for (const raw_message of data.messages) {
+                const message = message_store.get(raw_message.id);
+                if (message === undefined) {
+                    message_helper.process_new_server_message(raw_message);
+                } else {
+                    message_store.update_message_content(message, raw_message.content);
+                    message_store.update_booleans(message, raw_message.flags);
+                    message.is_me_message = raw_message.is_me_message;
+                    message.last_edit_timestamp = raw_message.last_edit_timestamp;
+                    message.last_moved_timestamp = raw_message.last_moved_timestamp;
+                }
+                refreshed_message_ids.push(raw_message.id);
+            }
+            rerender_pear_result_messages(refreshed_message_ids);
+        },
+        error(xhr) {
+            if (xhr.readyState !== 0) {
+                blueslip.warn(`Failed to refresh settled Pear message: ${xhr.responseText}`);
+            }
+        },
+    });
+}
+
+pear_run_state.on_active_run_result_messages_changed((change = {removed_message_ids: []}) => {
+    update_rendered_pear_active_messages();
+    refresh_settled_pear_result_messages(change.removed_message_ids);
+});
 
 type BoundaryMessageContainerInfo = {
     message_group: MessageGroup;
@@ -1413,7 +1392,6 @@ export class MessageListView {
         const $content = $row.find(".message_content");
 
         rendered_markdown.update_elements($content);
-        maybe_render_pear_thinking_glyph($row);
 
         const id = rows.id($row);
         message_edit.maybe_show_edit($row, id);

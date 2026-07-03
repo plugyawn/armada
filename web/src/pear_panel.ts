@@ -150,9 +150,12 @@ let last_runs: PearRun[] = [];
 let last_topic_context: PearTopicContext | null | undefined;
 let rendered_context_key = "";
 let last_render_state_key = "";
+let last_context_refresh_key = "";
+let last_context_refresh_at = 0;
 const worktree_details_open_by_context = new Map<string, boolean>();
 const LIVE_REFRESH_INTERVAL_MS = 125;
 const FULL_REFRESH_INTERVAL_MS = 5000;
+const CONTEXT_REFRESH_INTERVAL_MS = 60_000;
 
 const fallback_efforts: PearReasoningEffort[] = [
     {effort: "low", label: "Low"},
@@ -487,6 +490,65 @@ function run_is_active(run: {status: string} | undefined): boolean {
     return run?.status === "running" || run?.status === "queued";
 }
 
+function has_active_run(runs: {status: string}[]): boolean {
+    return runs.some((run) => run.status === "running" || run.status === "queued");
+}
+
+export function should_refresh_context_for_testing(options: {
+    context_key_value: string;
+    force_context: boolean;
+    live: boolean;
+    now: number;
+    last_refresh_key: string;
+    last_refresh_at: number;
+    has_context: boolean;
+}): boolean {
+    if (options.live) {
+        return false;
+    }
+    if (options.context_key_value === "") {
+        return false;
+    }
+    if (options.force_context) {
+        return true;
+    }
+    if (!options.has_context) {
+        return true;
+    }
+    if (options.last_refresh_key !== options.context_key_value) {
+        return true;
+    }
+    return options.now - options.last_refresh_at >= CONTEXT_REFRESH_INTERVAL_MS;
+}
+
+function should_refresh_context(
+    stream: string | undefined,
+    topic: string | undefined,
+    options: {
+        force_context: boolean;
+        live: boolean;
+    },
+): boolean {
+    return should_refresh_context_for_testing({
+        context_key_value:
+            stream === undefined || topic === undefined ? "" : context_key(stream, topic),
+        force_context: options.force_context,
+        live: options.live,
+        now: Date.now(),
+        last_refresh_key: last_context_refresh_key,
+        last_refresh_at: last_context_refresh_at,
+        has_context: last_topic_context !== undefined && last_topic_context !== null,
+    });
+}
+
+function record_context_refresh(stream: string | undefined, topic: string | undefined): void {
+    if (stream === undefined || topic === undefined) {
+        return;
+    }
+    last_context_refresh_key = context_key(stream, topic);
+    last_context_refresh_at = Date.now();
+}
+
 function clear_live_refresh(): void {
     if (live_refresh_timer !== undefined) {
         window.clearTimeout(live_refresh_timer);
@@ -557,15 +619,19 @@ function render(
     schedule_live_refresh(active_run);
 }
 
-export function refresh(options: {live?: boolean} = {}): void {
+export function refresh(options: {force_context?: boolean; live?: boolean} = {}): void {
     const live = options.live === true;
     if (live && live_refresh_in_flight) {
         return;
     }
     const {stream, topic} = current_context();
+    const include_context = should_refresh_context(stream, topic, {
+        force_context: options.force_context === true,
+        live,
+    });
     const data: Record<string, string | boolean> = {
         include_events: false,
-        include_context: !live,
+        include_context,
     };
     if (stream !== undefined && topic !== undefined) {
         data["stream"] = stream;
@@ -580,12 +646,20 @@ export function refresh(options: {live?: boolean} = {}): void {
         success(raw_data) {
             const data = raw_data as PearRunsResponse;
             last_error = "";
+            const had_active_run = has_active_run(last_runs);
+            const has_active_run_after_refresh = has_active_run(data.pear_runs);
             const topic_context = live
                 ? (data.pear_topic_context ?? last_topic_context)
                 : data.pear_topic_context === undefined
                   ? last_topic_context
                   : data.pear_topic_context;
+            if (data.pear_topic_context !== undefined && data.pear_topic_context !== null) {
+                record_context_refresh(stream, topic);
+            }
             render(data.pear_runs, topic_context);
+            if (had_active_run && !has_active_run_after_refresh && !include_context) {
+                refresh({force_context: true});
+            }
         },
         error(xhr) {
             if (xhr.readyState === 0) {
@@ -608,7 +682,7 @@ function post_run_action(run_id: string, action: string): void {
     void channel.post({
         url: `/json/pear/runs/${run_id}/${action}`,
         success() {
-            refresh();
+            refresh({force_context: true});
         },
         error(xhr) {
             if (xhr.readyState !== 0) {
@@ -637,7 +711,7 @@ function start_side_session(): void {
         },
         success(raw_data) {
             $("#pear-side-request").val("");
-            refresh();
+            refresh({force_context: true});
             const data = raw_data as {dm_narrow_url?: string};
             if (data.dm_narrow_url !== undefined) {
                 window.location.hash = data.dm_narrow_url.slice(1);
@@ -700,6 +774,9 @@ function save_topic_context(): void {
         success(raw_data) {
             const data = raw_data as {pear_topic_context?: PearTopicContext};
             last_model_error = "";
+            if (data.pear_topic_context !== undefined && data.pear_topic_context !== null) {
+                record_context_refresh(stream, topic);
+            }
             render(last_runs, data.pear_topic_context);
             refresh();
         },
@@ -723,7 +800,7 @@ export function initialize(): void {
     }
     initialized = true;
     $("body").on("click", "#pear-panel-refresh", () => {
-        refresh();
+        refresh({force_context: true});
     });
     $("body").on("click", ".pear-run-action", function () {
         const $button = $(this);

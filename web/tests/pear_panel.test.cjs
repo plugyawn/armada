@@ -34,3 +34,47 @@ run_test("render_state_changed_for_testing", () => {
         pear_panel.render_state_changed_for_testing(JSON.stringify(first_state), changed_state),
     );
 });
+
+run_test("should_refresh_context_for_testing", () => {
+    const base_options = {
+        context_key_value: "devel\u0000general chat",
+        force_context: false,
+        live: false,
+        now: 100_000,
+        last_refresh_key: "devel\u0000general chat",
+        last_refresh_at: 90_000,
+        has_context: true,
+    };
+
+    assert.equal(pear_panel.should_refresh_context_for_testing(base_options), false);
+    assert.equal(
+        pear_panel.should_refresh_context_for_testing({...base_options, live: true}),
+        false,
+    );
+    assert.equal(
+        pear_panel.should_refresh_context_for_testing({...base_options, context_key_value: ""}),
+        false,
+    );
+    assert.equal(
+        pear_panel.should_refresh_context_for_testing({...base_options, force_context: true}),
+        true,
+    );
+    assert.equal(
+        pear_panel.should_refresh_context_for_testing({...base_options, has_context: false}),
+        true,
+    );
+    assert.equal(
+        pear_panel.should_refresh_context_for_testing({
+            ...base_options,
+            last_refresh_key: "devel\u0000old topic",
+        }),
+        true,
+    );
+    assert.equal(
+        pear_panel.should_refresh_context_for_testing({
+            ...base_options,
+            last_refresh_at: 39_999,
+        }),
+        true,
+    );
+});

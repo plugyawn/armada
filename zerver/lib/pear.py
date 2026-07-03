@@ -108,7 +108,6 @@ PEAR_ACTIVE_THINKING_MARKDOWN: Final = f"*Thinking* {PEAR_ACTIVE_MARKDOWN_PREFIX
 PEAR_VOLATILE_ASSISTANT_FLUSH_INTERVAL_SECONDS: Final = 0.033
 PEAR_PERSISTENT_ASSISTANT_FLUSH_INTERVAL_SECONDS: Final = 0.2
 PEAR_BACKGROUND_TRANSCRIPT_FLUSH_INTERVAL_SECONDS: Final = 0.5
-PEAR_TYPING_HEARTBEAT_INTERVAL_SECONDS: Final = 8.0
 PEAR_LIVE_RUN_CACHE_KEY_PREFIX: Final = "pear:live-run:"
 PEAR_LIVE_RUN_CACHE_TTL_SECONDS: Final = 3600
 PEAR_MARKDOWN_IMAGE_PATTERN: Final = (
@@ -1380,29 +1379,6 @@ def build_pear_live_transcript_message(
 
 def pear_live_run_cache_key(trigger_message_id: int) -> str:
     return f"{PEAR_LIVE_RUN_CACHE_KEY_PREFIX}{trigger_message_id}"
-
-
-def do_send_pear_stream_typing_notification(
-    bot_handler: Any,
-    *,
-    stream: str,
-    topic: str,
-    operator: Literal["start", "stop"],
-) -> bool:
-    sender = getattr(bot_handler, "user_profile", None)
-    realm = getattr(sender, "realm", None)
-    if sender is None or realm is None:
-        return False
-    try:
-        from zerver.actions.typing import do_send_stream_typing_notification
-        from zerver.models.streams import get_stream
-
-        stream_obj = get_stream(stream, realm)
-        do_send_stream_typing_notification(sender, operator, stream_obj, topic)
-    except Exception:
-        logger.warning("Pear worker typing notification failed.", exc_info=True)
-        return False
-    return True
 
 
 def write_pear_live_run_state(
@@ -3218,44 +3194,12 @@ class PearEmbeddedBotHandler:
         steering_events_after = None
         last_steering_event_id = 0
         steering_segment_count = 0
-        last_typing_heartbeat_at = 0.0
-        typing_notification_started = False
 
         def raise_if_cancel_requested() -> None:
             if not self.worker_run_cancel_requested(bot_handler, message_id):
                 return
             self.worker_runtime.interrupt()
             raise PearRunCancelled("Cancelled by user.")
-
-        def send_typing_heartbeat(*, force: bool = False) -> None:
-            nonlocal last_typing_heartbeat_at, typing_notification_started
-            current_time = time.monotonic()
-            if (
-                not force
-                and current_time - last_typing_heartbeat_at
-                < PEAR_TYPING_HEARTBEAT_INTERVAL_SECONDS
-            ):
-                return
-            if do_send_pear_stream_typing_notification(
-                bot_handler,
-                stream=stream,
-                topic=topic,
-                operator="start",
-            ):
-                last_typing_heartbeat_at = current_time
-                typing_notification_started = True
-
-        def stop_typing_heartbeat() -> None:
-            nonlocal typing_notification_started
-            if not typing_notification_started:
-                return
-            do_send_pear_stream_typing_notification(
-                bot_handler,
-                stream=stream,
-                topic=topic,
-                operator="stop",
-            )
-            typing_notification_started = False
 
         def update_live_transcript(
             status: PearWorkerRunStatus,
@@ -3360,7 +3304,6 @@ class PearEmbeddedBotHandler:
         def handle_transcript_event(event: PearWorkerTranscriptEvent) -> None:
             nonlocal assistant_persistent_flush_seen, assistant_volatile_flush_seen
             raise_if_cancel_requested()
-            send_typing_heartbeat()
             transcript_events.append(event)
             title = event.get("title", "").strip()
             body = event.get("body", "").strip()
@@ -3498,7 +3441,6 @@ class PearEmbeddedBotHandler:
                 },
             )
             if active_session["worker_can_run"]:
-                send_typing_heartbeat(force=True)
                 initial_tool_results: list[PearWorkerToolResult] = [
                     {
                         "label": "Runtime",
@@ -3831,8 +3773,6 @@ class PearEmbeddedBotHandler:
                 content=failure_message,
             ):
                 bot_handler.send_reply(message, failure_message)
-        finally:
-            stop_typing_heartbeat()
 
 
 def clean_pear_session_target(

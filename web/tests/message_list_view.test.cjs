@@ -55,7 +55,11 @@ function test(label, f) {
         sender_is_bot = () => false;
         channel_get_handler = () => undefined;
         $("document-stub").set_find_results(
-            ".message_row.pear-active-message .message_content > p:last-child > em:last-child",
+            ".message_row.pear-active-message .message_content > p:last-child > .pear-thinking-glyph, .message_row.pear-active-message .message_content > p:last-child > em:last-child",
+            [],
+        );
+        $("document-stub").set_find_results(
+            ".message_row.pear-active-message .message_content > p:last-child",
             [],
         );
         pear_run_state.clear_for_testing();
@@ -601,7 +605,18 @@ test("pear_message_vars", () => {
     result = calculate_variables(
         build_message_context({
             id: 1002,
-            content: "<p><em>Thinking</em> <em>✦</em></p>",
+            content: "<p><em>Thinking</em> ✦</p>",
+            is_pear_message: true,
+        }),
+    );
+    assert.equal(result.is_pear_message, true);
+    assert.equal(result.is_pear_active_message, true);
+    assert.equal(result.include_sender, false);
+
+    result = calculate_variables(
+        build_message_context({
+            id: 1003,
+            content: "<p>I’ll check the current workspace. ✦</p>",
             is_pear_message: true,
         }),
     );
@@ -654,7 +669,7 @@ test("pear_message_vars", () => {
             sender_email: "unhydrated-pear@example.com",
             sender_full_name: "Pear",
             sender_id: 26,
-            content: "<p><em>Thinking</em> <em>✦</em></p>",
+            content: "<p><em>Thinking</em> ✦</p>",
             is_pear_message: undefined,
             last_edit_timestamp: 456,
         }),

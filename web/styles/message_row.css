@@ -125,6 +125,7 @@
                 overflow: visible;
             }
 
+            .message_content > p:last-child > .pear-thinking-glyph,
             .message_content > p:last-child > em:last-child {
                 display: inline-block;
                 min-width: 1.35em;

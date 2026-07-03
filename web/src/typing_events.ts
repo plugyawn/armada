@@ -128,6 +128,9 @@ export function render_notifications_for_narrow(): void {
 }
 
 function apply_message_edit_notifications($row: JQuery, is_typing: boolean): void {
+    if ($row.hasClass("pear-message") || $row.hasClass("pear-active-message")) {
+        return;
+    }
     const $editing_notifications = $row.find(".edit-notifications");
     if (is_typing) {
         $row.find(".message_edit_notice").addClass("hide");

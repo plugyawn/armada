@@ -166,15 +166,20 @@ const pear_thinking_glyphs = [
     "⋅",
     "∙",
 ] as const;
+const PEAR_ACTIVE_GLYPH = "✦";
 let pear_thinking_glyph_index = 0;
 let pear_thinking_glyph_timer: ReturnType<typeof setInterval> | undefined;
 
 function message_has_pear_active_marker(message: Message): boolean {
-    return message.content.includes("<em>✦</em>");
+    return message.content.includes(PEAR_ACTIVE_GLYPH);
 }
 
 function is_active_pear_message(message: Message, is_pear_message: boolean): boolean {
-    return is_pear_message && message_has_pear_active_marker(message);
+    return (
+        is_pear_message &&
+        (pear_run_state.is_active_run_result_message(message.id) ||
+            message_has_pear_active_marker(message))
+    );
 }
 
 function message_is_pear_message(
@@ -193,13 +198,74 @@ function message_is_pear_message(
 }
 
 function pear_thinking_markers($scope: JQuery<HTMLElement | Document> = $(document)): JQuery {
+    wrap_bare_pear_thinking_glyphs($scope);
     const $descendant_markers = $scope.find(
-        ".message_row.pear-active-message .message_content > p:last-child > em:last-child",
+        ".message_row.pear-active-message .message_content > p:last-child > .pear-thinking-glyph, .message_row.pear-active-message .message_content > p:last-child > em:last-child",
     );
     if (!$scope.hasClass("pear-active-message")) {
         return $descendant_markers;
     }
-    return $descendant_markers.add($scope.find(".message_content > p:last-child > em:last-child"));
+    return $descendant_markers.add(
+        $scope.find(
+            ".message_content > p:last-child > .pear-thinking-glyph, .message_content > p:last-child > em:last-child",
+        ),
+    );
+}
+
+function wrap_bare_pear_thinking_glyphs($scope: JQuery<HTMLElement | Document>): void {
+    if (
+        typeof document === "undefined" ||
+        typeof document.createElementNS !== "function" ||
+        typeof document.createTextNode !== "function"
+    ) {
+        return;
+    }
+    let $paragraphs = $scope.find(
+        ".message_row.pear-active-message .message_content > p:last-child",
+    );
+    if ($scope.hasClass("pear-active-message")) {
+        $paragraphs = $paragraphs.add($scope.find(".message_content > p:last-child"));
+    }
+
+    $paragraphs.each((_index, paragraph) => {
+        if (paragraph.querySelector(".pear-thinking-glyph") !== null) {
+            return;
+        }
+
+        const text_nodes = [...paragraph.childNodes].filter(
+            (node) =>
+                node.nodeType === Node.TEXT_NODE && node.textContent?.includes(PEAR_ACTIVE_GLYPH),
+        );
+        const marker_node = text_nodes.at(-1);
+        if (marker_node === undefined) {
+            return;
+        }
+        const marker_text = marker_node.textContent;
+        if (marker_text === null) {
+            return;
+        }
+
+        const marker_index = marker_text.lastIndexOf(PEAR_ACTIVE_GLYPH);
+        if (marker_index === -1) {
+            return;
+        }
+
+        const before = marker_text.slice(0, marker_index);
+        const after = marker_text.slice(marker_index + PEAR_ACTIVE_GLYPH.length);
+        const glyph = document.createElementNS("http://www.w3.org/1999/xhtml", "span");
+        glyph.classList.add("pear-thinking-glyph");
+        glyph.textContent = PEAR_ACTIVE_GLYPH;
+
+        const replacements: Node[] = [];
+        if (before) {
+            replacements.push(document.createTextNode(before));
+        }
+        replacements.push(glyph);
+        if (after) {
+            replacements.push(document.createTextNode(after));
+        }
+        marker_node.replaceWith(...replacements);
+    });
 }
 
 function render_pear_thinking_glyph($markers: JQuery): void {
@@ -842,15 +908,6 @@ export class MessageListView {
         modified: boolean;
         widget_edited: boolean;
     } {
-        const is_typing = typing_data.is_message_editing(message.id);
-        if (is_typing) {
-            // Ensure the typing animation is rendered when a user switches
-            // to a view where someone is editing a message.
-            setTimeout(() => {
-                typing_events.render_message_editing_typing(message.id, true);
-            }, 0);
-        }
-
         /*
             If the message needs to be hidden because the sender was muted, we do
             a few things:
@@ -915,6 +972,14 @@ export class MessageListView {
             include_sender = false;
         }
         const is_pear_active_message = is_active_pear_message(message, is_pear_message);
+        const is_typing = typing_data.is_message_editing(message.id);
+        if (is_typing && !is_pear_message) {
+            // Ensure the typing animation is rendered when a user switches
+            // to a view where someone is editing a message.
+            setTimeout(() => {
+                typing_events.render_message_editing_typing(message.id, true);
+            }, 0);
+        }
         const sender_is_guest = people.sender_is_guest(message);
         const sender_is_deactivated = people.sender_is_deactivated(message);
         const should_add_guest_indicator_for_sender = people.should_add_guest_user_indicator(

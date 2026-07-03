@@ -6122,8 +6122,8 @@ class PearSessionDefaultsTest(TestCase):
         self.assertEqual(live_state["status"], "done")
         self.assertEqual(live_state["content"], "AB")
 
-    def test_run_worker_turn_sends_typing_heartbeat(self) -> None:
-        typing_calls: list[tuple[str, str, str]] = []
+    def test_run_worker_turn_uses_live_message_instead_of_typing_heartbeat(self) -> None:
+        updated_messages: list[dict[str, object]] = []
 
         class FakeRunStore:
             def record(
@@ -6169,7 +6169,7 @@ class PearSessionDefaultsTest(TestCase):
                 raise AssertionError("progress message should be edited in place")
 
             def update_message(self, message: dict[str, object]) -> None:
-                pass
+                updated_messages.append(message)
 
         def tool_runner(active_session, task: str, *, event_callback) -> list[dict[str, str]]:
             event_callback(
@@ -6181,16 +6181,6 @@ class PearSessionDefaultsTest(TestCase):
                 }
             )
             return [{"label": "Result", "value": "done"}]
-
-        def fake_typing_notification(
-            bot_handler,
-            *,
-            stream: str,
-            topic: str,
-            operator: str,
-        ) -> bool:
-            typing_calls.append((operator, stream, topic))
-            return True
 
         payload = get_pear_session_payload()
         active_session = build_pear_active_session_summary_from_messages(
@@ -6207,36 +6197,29 @@ class PearSessionDefaultsTest(TestCase):
             "content": "@Pear run a script",
         }
 
-        with (
-            patch(
-                "zerver.lib.pear.PEAR_TYPING_HEARTBEAT_INTERVAL_SECONDS",
-                0,
-            ),
-            patch(
-                "zerver.lib.pear.do_send_pear_stream_typing_notification",
-                side_effect=fake_typing_notification,
-            ),
-        ):
-            PearEmbeddedBotHandler(
-                worker_runtime=PearWorkerRuntime(tool_runner),
-                worker_run_store=FakeRunStore(),
-            ).run_worker_turn(
-                message,
-                FakeBotHandler(),
-                content="@Pear run a script",
-                active_session=active_session,
-                message_id=9207,
-                stream=PEAR_DEFAULT_STREAM,
-                topic=PEAR_DEFAULT_TOPIC,
-                post_started_progress=True,
-                progress_message_id=502,
-            )
-
-        self.assertGreaterEqual(
-            typing_calls.count(("start", PEAR_DEFAULT_STREAM, PEAR_DEFAULT_TOPIC)),
-            2,
+        PearEmbeddedBotHandler(
+            worker_runtime=PearWorkerRuntime(tool_runner),
+            worker_run_store=FakeRunStore(),
+        ).run_worker_turn(
+            message,
+            FakeBotHandler(),
+            content="@Pear run a script",
+            active_session=active_session,
+            message_id=9207,
+            stream=PEAR_DEFAULT_STREAM,
+            topic=PEAR_DEFAULT_TOPIC,
+            post_started_progress=True,
+            progress_message_id=502,
         )
-        self.assertEqual(typing_calls[-1], ("stop", PEAR_DEFAULT_STREAM, PEAR_DEFAULT_TOPIC))
+
+        updated_contents = [str(message["content"]) for message in updated_messages]
+        self.assertTrue(
+            any(
+                content.rstrip().endswith(PEAR_ACTIVE_MARKDOWN_PREFIX)
+                for content in updated_contents
+            )
+        )
+        self.assertFalse(updated_contents[-1].rstrip().endswith(PEAR_ACTIVE_MARKDOWN_PREFIX))
 
     def test_run_worker_turn_cancels_runtime_when_cancel_requested(self) -> None:
         updated_messages: list[dict[str, object]] = []

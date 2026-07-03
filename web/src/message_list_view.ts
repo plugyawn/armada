@@ -43,12 +43,12 @@ import * as rendered_markdown from "./rendered_markdown.ts";
 import * as resolved_topic from "./resolved_topic.ts";
 import * as rows from "./rows.ts";
 import * as sidebar_ui from "./sidebar_ui.ts";
+import {is_pear_bot_user_id} from "./state_data.ts";
 import * as stream_color from "./stream_color.ts";
 import * as stream_data from "./stream_data.ts";
 import * as sub_store from "./sub_store.ts";
 import * as submessage from "./submessage.ts";
 import * as timerender from "./timerender.ts";
-import {is_pear_bot_user_id} from "./state_data.ts";
 import type {TopicLink} from "./types.ts";
 import * as typing_data from "./typing_data.ts";
 import * as typing_events from "./typing_events.ts";
@@ -174,18 +174,22 @@ function message_has_pear_active_marker(message: Message): boolean {
 }
 
 function is_active_pear_message(message: Message, is_pear_message: boolean): boolean {
-    return (
-        is_pear_message &&
-        message_has_pear_active_marker(message) &&
-        pear_run_state.is_active_run_result_message(message.id)
-    );
+    return is_pear_message && message_has_pear_active_marker(message);
 }
 
-function message_is_pear_message(message: Message, is_hidden: boolean): boolean {
+function message_is_pear_message(
+    message: Message,
+    is_hidden: boolean,
+    sender_is_bot: boolean,
+): boolean {
     if (is_hidden) {
         return false;
     }
-    return message.is_pear_message || is_pear_bot_user_id(message.sender_id);
+    return (
+        message.is_pear_message ||
+        is_pear_bot_user_id(message.sender_id) ||
+        (sender_is_bot && message_has_pear_active_marker(message))
+    );
 }
 
 function pear_thinking_markers($scope: JQuery<HTMLElement | Document> = $(document)): JQuery {
@@ -333,7 +337,7 @@ function refresh_settled_pear_result_messages(message_ids: number[]): void {
     });
 }
 
-pear_run_state.on_active_run_result_messages_changed((change = {removed_message_ids: []}) => {
+pear_run_state.on_active_run_result_messages_changed((change) => {
     const stale_message_ids = rendered_stale_pear_active_message_ids();
     update_rendered_pear_active_messages();
     refresh_settled_pear_result_messages([...change.removed_message_ids, ...stale_message_ids]);
@@ -906,7 +910,7 @@ export class MessageListView {
         }
 
         const sender_is_bot = people.sender_is_bot(message);
-        const is_pear_message = message_is_pear_message(message, is_hidden);
+        const is_pear_message = message_is_pear_message(message, is_hidden, sender_is_bot);
         if (is_pear_message) {
             include_sender = false;
         }

@@ -134,3 +134,22 @@ run_test("display_notification ignores Pear bot typists", ({override}) => {
     assert.ok(!$typing_notifications.visible());
     set_pear_bot_user_ids([]);
 });
+
+run_test(
+    "render_notifications_for_narrow filters already-recorded Pear bot typists",
+    ({override}) => {
+        override(current_user, "user_id", anna.user_id);
+        const group = [anna.user_id, vronsky.user_id];
+        const conversation_key = typing_data.get_direct_message_conversation_key(group);
+        message_lists.set_current(make_message_list([{operator: "dm", operand: group}]));
+
+        const $typing_notifications = $("#typing_notifications");
+
+        set_pear_bot_user_ids([vronsky.user_id]);
+        typing_data.add_typist(conversation_key, vronsky.user_id);
+        typing_events.render_notifications_for_narrow();
+
+        assert.ok(!$typing_notifications.visible());
+        set_pear_bot_user_ids([]);
+    },
+);

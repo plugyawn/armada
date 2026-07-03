@@ -606,7 +606,7 @@ test("pear_message_vars", () => {
         }),
     );
     assert.equal(result.is_pear_message, true);
-    assert.equal(result.is_pear_active_message, false);
+    assert.equal(result.is_pear_active_message, true);
     assert.equal(result.include_sender, false);
 
     result = calculate_variables(
@@ -647,6 +647,22 @@ test("pear_message_vars", () => {
     assert.equal(result.include_sender, false);
     assert.equal(result.edited, false);
     assert.equal(result.last_edit_timestamp, undefined);
+
+    result = calculate_real_variables(
+        build_message_context({
+            id: 1004,
+            sender_email: "unhydrated-pear@example.com",
+            sender_full_name: "Pear",
+            sender_id: 26,
+            content: "<p><em>Thinking</em> <em>✦</em></p>",
+            is_pear_message: undefined,
+            last_edit_timestamp: 456,
+        }),
+    );
+    assert.equal(result.is_pear_message, true);
+    assert.equal(result.is_pear_active_message, true);
+    assert.equal(result.include_sender, false);
+    assert.equal(result.edited, false);
 });
 
 test("pear_stale_thinking_row_refreshes_without_removed_active_id", () => {

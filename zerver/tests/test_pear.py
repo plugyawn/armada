@@ -436,12 +436,19 @@ class PearSessionDefaultsTest(TestCase):
             source="server",
             stream_exists=True,
             messages=[
-                (10, "@Pear fix the checkout test", False),
-                (11, "Verification: pytest zerver/tests/test_pear.py", True),
-                (12, "PR: https://github.com/example/pear/pull/7", True),
-                (13, "Doc: CANVAS.md", False),
-                (14, "Reviewers: @qa", False),
+                (10, "@Pear fix the checkout test", False, "Ada"),
+                (11, "Verification: pytest zerver/tests/test_pear.py", True, "Pear"),
+                (12, "PR: https://github.com/example/pear/pull/7", True, "Pear"),
+                (13, "Doc: CANVAS.md", False, "Grace"),
+                (14, "Reviewers: @qa", False, "Grace"),
             ],
+            latest_codex_thread_id="codex-thread-7",
+            workspace_context={
+                "repository": "zulip/zulip",
+                "workdir": "/srv/pear-workspaces/frontend-checkout-regression",
+                "branch": "checkout/regression",
+                "head": "abc1234",
+            },
             response_policy="ambient",
         )
 
@@ -451,6 +458,14 @@ class PearSessionDefaultsTest(TestCase):
         self.assertIn("durable topic context", access_ack)
         self.assertIn("configured Codex runtime", access_ack)
         self.assertIn("zulip-terminal can act on posted artifacts", access_ack)
+        self.assertIn("Loaded transcript: 5 recent message(s) from 5 topic message(s)", access_ack)
+        self.assertIn("Visible senders: Ada, Pear, Grace", access_ack)
+        self.assertIn(
+            "Workspace: zulip/zulip at /srv/pear-workspaces/frontend-checkout-regression",
+            access_ack,
+        )
+        self.assertIn("on checkout/regression (abc1234)", access_ack)
+        self.assertIn("Codex thread: codex-thread-7", access_ack)
         self.assertIn("Worker state: ready", access_ack)
         self.assertIn("Artifacts seen: 4", access_ack)
         self.assertIn("Response policy: ambient", access_ack)

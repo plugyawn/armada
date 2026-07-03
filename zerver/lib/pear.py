@@ -3687,17 +3687,21 @@ class PearEmbeddedBotHandler:
                         payload={"result_message_id": result_message_id},
                     )
             elif result_message_id is not None or progress_message_id is not None:
-                content_to_post = build_pear_worker_completed_message(
+                content_chunks = build_pear_worker_completed_message_chunks(
                     task=task,
                     tool_results=worker_result["tool_results"],
                     transcript_events=transcript_events,
                 )
+                content_to_post = content_chunks[0] if content_chunks else ""
                 target_message_id = result_message_id or progress_message_id
                 result_updated = update_pear_worker_status_message(
                     bot_handler,
                     progress_message_id=target_message_id,
                     content=content_to_post,
                 )
+                if result_updated:
+                    for continuation_content in content_chunks[1:]:
+                        bot_handler.send_reply(message, continuation_content)
                 write_pear_live_run_state(
                     message_id,
                     status="done",

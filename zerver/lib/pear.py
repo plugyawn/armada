@@ -1465,6 +1465,37 @@ def build_pear_resume_ack_message(instruction: str = "") -> str:
     return "\n".join(lines)
 
 
+def pear_access_participants(active_session: PearActiveSessionSummary | None) -> str:
+    if active_session is None:
+        return "unknown until the topic transcript loads"
+    participants: list[str] = []
+    for message in active_session["recent_messages"]:
+        sender = message["sender"].strip()
+        if sender and sender not in participants:
+            participants.append(sender)
+    if not participants:
+        return "none in the loaded recent transcript"
+    if len(participants) > 8:
+        visible_participants = ", ".join(participants[:8])
+        return f"{visible_participants}, and {len(participants) - 8} more"
+    return ", ".join(participants)
+
+
+def pear_access_workspace_line(
+    active_session: PearActiveSessionSummary | None,
+) -> str:
+    if active_session is None:
+        return "Workspace: unknown until a Pear request starts"
+    workspace_context = active_session["workspace_context"]
+    if not workspace_context:
+        return "Workspace: no topic workspace has been pinned or loaded yet"
+    repository = workspace_context.get("repository") or "unlabeled"
+    workdir = workspace_context.get("workdir") or workspace_context.get("worktree") or "unknown"
+    branch = workspace_context.get("branch") or "unknown"
+    head = workspace_context.get("head") or "unknown"
+    return f"Workspace: {repository} at {workdir} on {branch} ({head})"
+
+
 def build_pear_access_ack_message(
     active_session: PearActiveSessionSummary | None = None,
 ) -> str:
@@ -1488,6 +1519,17 @@ def build_pear_access_ack_message(
         if active_session is not None
         else "none"
     )
+    topic_message_count = (
+        active_session["topic_message_count"] if active_session is not None else 0
+    )
+    recent_message_count = (
+        len(active_session["recent_messages"]) if active_session is not None else 0
+    )
+    codex_thread_id = (
+        active_session["latest_codex_thread_id"] or "none yet"
+        if active_session is not None
+        else "unknown"
+    )
     return "\n".join(
         [
             f"I can work from this Zulip topic: {stream} > {topic}.",
@@ -1504,6 +1546,10 @@ def build_pear_access_ack_message(
             "check out branches, open compares, create draft PRs, mark PRs "
             "ready, post PR status, and request reviewers.",
             "",
+            f"Loaded transcript: {recent_message_count} recent message(s) from {topic_message_count} topic message(s).",
+            f"Visible senders: {pear_access_participants(active_session)}",
+            pear_access_workspace_line(active_session),
+            f"Codex thread: {codex_thread_id}",
             f"Worker state: {worker_state}",
             f"Worker access: {worker_access}",
             f"Artifacts seen: {artifact_count}",

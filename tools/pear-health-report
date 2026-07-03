@@ -21,12 +21,14 @@ class PearHealthReport:
     active_run_count: int
     stale_active_run_count: int
     orphan_active_marker_count: int
+    old_orphan_active_marker_count: int
     stale_run_age_seconds: int
     stale_marker_age_seconds: int
     marker_window_seconds: int
     active_run_samples: list[dict[str, Any]]
     stale_active_run_samples: list[dict[str, Any]]
     orphan_active_marker_samples: list[dict[str, Any]]
+    old_orphan_active_marker_samples: list[dict[str, Any]]
 
 
 def health_violations(
@@ -35,6 +37,7 @@ def health_violations(
     max_active_runs: int,
     max_stale_active_runs: int,
     max_orphan_active_markers: int,
+    max_old_orphan_active_markers: int | None,
 ) -> list[str]:
     violations = []
     if report.active_run_count > max_active_runs:
@@ -51,6 +54,14 @@ def health_violations(
             f"orphan_active_marker_count={report.orphan_active_marker_count} exceeds "
             f"{max_orphan_active_markers}"
         )
+    if (
+        max_old_orphan_active_markers is not None
+        and report.old_orphan_active_marker_count > max_old_orphan_active_markers
+    ):
+        violations.append(
+            "old_orphan_active_marker_count="
+            f"{report.old_orphan_active_marker_count} exceeds {max_old_orphan_active_markers}"
+        )
     return violations
 
 
@@ -59,12 +70,14 @@ def report_to_json(report: PearHealthReport) -> dict[str, Any]:
         "active_run_count": report.active_run_count,
         "stale_active_run_count": report.stale_active_run_count,
         "orphan_active_marker_count": report.orphan_active_marker_count,
+        "old_orphan_active_marker_count": report.old_orphan_active_marker_count,
         "stale_run_age_seconds": report.stale_run_age_seconds,
         "stale_marker_age_seconds": report.stale_marker_age_seconds,
         "marker_window_seconds": report.marker_window_seconds,
         "active_run_samples": report.active_run_samples,
         "stale_active_run_samples": report.stale_active_run_samples,
         "orphan_active_marker_samples": report.orphan_active_marker_samples,
+        "old_orphan_active_marker_samples": report.old_orphan_active_marker_samples,
     }
 
 
@@ -74,6 +87,7 @@ def render_report(report: PearHealthReport) -> str:
         f"active_runs={report.active_run_count}",
         f"stale_active_runs={report.stale_active_run_count}",
         f"orphan_active_markers={report.orphan_active_marker_count}",
+        f"old_orphan_active_markers={report.old_orphan_active_marker_count}",
         f"stale_run_age_seconds={report.stale_run_age_seconds}",
         f"stale_marker_age_seconds={report.stale_marker_age_seconds}",
         f"marker_window_seconds={report.marker_window_seconds}",
@@ -87,6 +101,9 @@ def render_report(report: PearHealthReport) -> str:
     if report.orphan_active_marker_samples:
         lines.append("orphan_active_marker_samples:")
         lines.extend(f"- {sample}" for sample in report.orphan_active_marker_samples)
+    if report.old_orphan_active_marker_samples:
+        lines.append("old_orphan_active_marker_samples:")
+        lines.extend(f"- {sample}" for sample in report.old_orphan_active_marker_samples)
     return "\n".join(lines)
 
 
@@ -183,11 +200,20 @@ def collect_health(
         .exclude(id__in=active_result_message_ids)
         .order_by("-date_sent", "-id")
     )
+    old_orphan_active_markers = (
+        Message.objects.filter(
+            content__contains=pear_active_markdown_prefix,
+            date_sent__lt=marker_window_cutoff,
+        )
+        .exclude(id__in=active_result_message_ids)
+        .order_by("-date_sent", "-id")
+    )
 
     return PearHealthReport(
         active_run_count=active_runs.count(),
         stale_active_run_count=stale_active_runs.count(),
         orphan_active_marker_count=orphan_active_markers.count(),
+        old_orphan_active_marker_count=old_orphan_active_markers.count(),
         stale_run_age_seconds=stale_run_age_seconds,
         stale_marker_age_seconds=stale_marker_age_seconds,
         marker_window_seconds=marker_window_seconds,
@@ -197,6 +223,9 @@ def collect_health(
         ],
         orphan_active_marker_samples=[
             marker_sample(message) for message in orphan_active_markers[:sample_limit]
+        ],
+        old_orphan_active_marker_samples=[
+            marker_sample(message) for message in old_orphan_active_markers[:sample_limit]
         ],
     )
 
@@ -211,6 +240,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max-active-runs", type=int, default=0)
     parser.add_argument("--max-stale-active-runs", type=int, default=0)
     parser.add_argument("--max-orphan-active-markers", type=int, default=0)
+    parser.add_argument("--max-old-orphan-active-markers", type=int)
     parser.add_argument("--stale-run-age-seconds", type=int)
     parser.add_argument("--stale-marker-age-seconds", type=int, default=60)
     parser.add_argument("--marker-window-seconds", type=int, default=24 * 60 * 60)
@@ -246,6 +276,8 @@ def main() -> int:
     ):
         if getattr(args, name) < 0:
             raise SystemExit(f"--{name.replace('_', '-')} must be non-negative")
+    if args.max_old_orphan_active_markers is not None and args.max_old_orphan_active_markers < 0:
+        raise SystemExit("--max-old-orphan-active-markers must be non-negative")
     if args.stale_run_age_seconds is not None and args.stale_run_age_seconds <= 0:
         raise SystemExit("--stale-run-age-seconds must be positive")
 
@@ -267,6 +299,7 @@ def main() -> int:
         max_active_runs=args.max_active_runs,
         max_stale_active_runs=args.max_stale_active_runs,
         max_orphan_active_markers=args.max_orphan_active_markers,
+        max_old_orphan_active_markers=args.max_old_orphan_active_markers,
     )
     if violations:
         print("Pear health check failed:", file=sys.stderr)

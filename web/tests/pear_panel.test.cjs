@@ -184,7 +184,24 @@ run_test("work_cursor_state_for_testing", () => {
             repo_label: "Megatron-LM",
             github_repo: "",
         }).status_label,
-        "translated: +4",
+        "translated: 4 files",
+    );
+
+    assert.equal(
+        pear_panel.work_cursor_state_for_testing({
+            stream: "devel",
+            topic: "pear",
+            model: "gpt-5.5",
+            git: {
+                available: true,
+                dirty: true,
+                changed_count: 4,
+                diff_shortstat: "4 files changed, 16 insertions(+), 3 deletions(-)",
+            },
+            repo_label: "Megatron-LM",
+            github_repo: "",
+        }).status_label,
+        "+16 -3",
     );
 
     assert.equal(

@@ -365,6 +365,37 @@ function git_has_history(git: PearGitContext): boolean {
     return git.available || (git.recent_commits ?? []).length > 0;
 }
 
+function pear_git_shortstat_count(shortstat: string, label: "insertion" | "deletion"): number {
+    const match = new RegExp(`(\\d+) ${label}s?\\(`).exec(shortstat);
+    return match === null ? 0 : Number.parseInt(match[1]!, 10);
+}
+
+function work_cursor_dirty_status_label(git: PearGitContext): string {
+    const shortstat = git.diff_shortstat?.trim() ?? "";
+    if (shortstat !== "") {
+        const insertions = pear_git_shortstat_count(shortstat, "insertion");
+        const deletions = pear_git_shortstat_count(shortstat, "deletion");
+        const parts = [];
+        if (insertions > 0) {
+            parts.push(`+${insertions}`);
+        }
+        if (deletions > 0) {
+            parts.push(`-${deletions}`);
+        }
+        if (parts.length > 0) {
+            return parts.join(" ");
+        }
+    }
+    const changed_count = git.changed_count ?? 0;
+    if (changed_count === 1) {
+        return $t({defaultMessage: "1 file"});
+    }
+    if (changed_count > 0) {
+        return $t({defaultMessage: "{changed_count} files"}, {changed_count});
+    }
+    return $t({defaultMessage: "changed"});
+}
+
 export function workbench_view_for_testing(options: {
     requested: string | undefined;
     has_diff: boolean;
@@ -692,13 +723,10 @@ export function work_cursor_state_for_testing(
         sync_parts.push($t({defaultMessage: "-{behind}"}, {behind}));
     }
     const sync_label = sync_parts.join(" ");
-    const changed_count = git.changed_count ?? 0;
     const status_label = git.detached
         ? $t({defaultMessage: "detached"})
         : git.dirty
-          ? changed_count > 0
-              ? $t({defaultMessage: "+{changed_count}"}, {changed_count})
-              : $t({defaultMessage: "changed"})
+          ? work_cursor_dirty_status_label(git)
           : $t({defaultMessage: "clean"});
     const status_marker = git.dirty ? "✶" : "·";
     const parts = [repo_label, branch_label, head_label, sync_label, status_label].filter(

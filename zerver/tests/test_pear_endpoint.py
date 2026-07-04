@@ -52,6 +52,7 @@ from zerver.lib.pear_worker import (
     maybe_refactor_pear_topic_context_on_move,
     pear_expected_topic_workdir,
     pear_git_status_delta,
+    pear_read_text_path,
     pear_reconcile_topic_branch,
     pear_topic_branch_name,
     pear_topic_isolation_username,
@@ -951,6 +952,13 @@ class PearSessionEndpointTest(ZulipTestCase):
                 topic=topic_name,
             ),
         )
+
+    def test_pear_read_text_path_treats_unreadable_file_as_missing(self) -> None:
+        with patch(
+            "zerver.lib.pear_worker.Path.read_text",
+            side_effect=PermissionError,
+        ):
+            self.assertEqual(pear_read_text_path(Path("/unreadable/CANVAS.md")), "")
 
     def test_get_pear_canvas_creates_backfilled_git_excluded_canvas(self) -> None:
         owner = self.example_user("hamlet")

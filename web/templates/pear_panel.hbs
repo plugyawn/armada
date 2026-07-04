@@ -56,8 +56,12 @@
                     </div>
                 </div>
                 {{#if active_run}}
-                    <div class="pear-run-status-row pear-run-status-{{active_run.status_class}}">
-                        <span class="pear-run-status-dot"></span>
+                    <div class="pear-run-status-row pear-run-status-{{active_run.status_class}}{{#if active_run.is_active}} pear-liveness-active{{/if}}">
+                        {{#if active_run.is_active}}
+                            <span class="pear-run-status-glyph pear-thinking-glyph" aria-hidden="true">✦</span>
+                        {{else}}
+                            <span class="pear-run-status-dot"></span>
+                        {{/if}}
                         <span class="pear-run-status-text">{{active_run.status_label}}</span>
                         {{#if active_run.has_usage}}
                             <span class="pear-run-status-usage tippy-zulip-delayed-tooltip" data-tippy-content="{{active_run.usage_title}}">

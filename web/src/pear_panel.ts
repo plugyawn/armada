@@ -307,6 +307,7 @@ function display_run(run: PearRun): PearRun & {
     source_label: string;
     model_label: string;
     details_open: boolean;
+    is_active: boolean;
     can_pause: boolean;
     can_resume: boolean;
     can_cancel: boolean;
@@ -339,6 +340,7 @@ function display_run(run: PearRun): PearRun & {
         source_label,
         model_label: model_label(run.runtime_label),
         details_open: run.status === "running" || run.status === "queued",
+        is_active: run.status === "running" || run.status === "queued",
         can_pause,
         can_resume,
         can_cancel,
@@ -625,6 +627,7 @@ function render(
         if (typeof side_request === "string") {
             $("#pear-side-request").val(side_request);
         }
+        $(document).trigger("pear_liveness_markers_changed");
         last_render_state_key = next_render_state_key;
     }
     rendered_context_key = next_context_key;

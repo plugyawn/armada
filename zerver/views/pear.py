@@ -1,5 +1,6 @@
 import json
 import os
+import pwd
 import subprocess
 import time
 from importlib.util import find_spec
@@ -535,11 +536,16 @@ def pear_context_isolation_username(
         and pear_topic_os_user_isolation_enabled()
         and pear_repo_artifact_value_is_durable(workdir)
     ):
-        return pear_topic_isolation_username_for_realm(
+        username = pear_topic_isolation_username_for_realm(
             context.realm_id,
             stream=stream_name,
             topic=topic_name,
         )
+        try:
+            pwd.getpwnam(username)
+        except KeyError:
+            return None
+        return username
     return None
 
 

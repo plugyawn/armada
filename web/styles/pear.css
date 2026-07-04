@@ -226,8 +226,9 @@ body.pear-workbench-split-open {
 }
 
 .pear-workbench-context-row {
-    flex-wrap: wrap;
-    gap: 7px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    gap: 6px;
 }
 
 .pear-workbench-head-row {
@@ -295,6 +296,8 @@ body.pear-workbench-split-open {
     display: flex;
     min-width: 0;
     flex: 1 1 auto;
+    grid-column: 1;
+    grid-row: 1;
     align-items: center;
     gap: 5px;
 }
@@ -370,10 +373,11 @@ body.pear-workbench-split-open {
     display: flex;
     min-width: 0;
     width: 100%;
-    flex: 1 1 100%;
+    flex: none;
+    grid-column: 1 / -1;
+    grid-row: 2;
     gap: 2px;
     margin-left: 0;
-    order: 3;
     padding: 2px;
     border: 1px solid var(--color-border-sidebar-subheader);
     border-radius: 7px;
@@ -386,8 +390,9 @@ body.pear-workbench-split-open {
 
 .pear-workbench-close {
     flex: 0 0 auto;
+    grid-column: 3;
+    grid-row: 1;
     color: var(--color-text-item);
-    order: 2;
     opacity: 0.62;
 }
 
@@ -967,14 +972,12 @@ body.pear-workbench-split-open {
 }
 
 @media (width <= 900px) {
-    .pear-workbench-context-row,
     .pear-workbench-head-row {
         flex-wrap: wrap;
     }
 
     .pear-workbench-tabs {
-        width: 100%;
-        flex: 1 1 100%;
+        min-width: 0;
     }
 
     .pear-workbench-tab {
@@ -1064,6 +1067,8 @@ body.pear-workbench-split-open {
     max-width: 106px;
     height: 22px;
     flex: 0 1 auto;
+    grid-column: 2;
+    grid-row: 1;
     align-items: center;
     justify-content: center;
     gap: 4px;
@@ -1086,7 +1091,6 @@ body.pear-workbench-split-open {
     font-family: monospace;
     font-size: 10.5px;
     line-height: 1;
-    order: 2;
     padding: 0 7px 0 5px;
 }
 

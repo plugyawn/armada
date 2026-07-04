@@ -100,16 +100,16 @@
     display: flex;
     min-width: 0;
     flex-direction: column;
-    gap: 6px;
+    gap: 8px;
     color: var(--color-text-item);
     font-size: 11px;
-    line-height: 15px;
+    line-height: 14px;
 }
 
 .pear-workbench-header {
     display: flex;
     min-width: 0;
-    align-items: center;
+    align-items: flex-start;
     flex-wrap: wrap;
     gap: 8px;
 }
@@ -120,6 +120,7 @@
     flex: 1 1 auto;
     align-items: baseline;
     gap: 5px;
+    padding-top: 2px;
 }
 
 .pear-workbench-title-main,
@@ -132,7 +133,9 @@
 
 .pear-workbench-title-main {
     color: var(--color-text-sidebar-heading);
+    font-size: 12px;
     font-weight: var(--font-weight-sidebar-heading);
+    line-height: 15px;
     opacity: var(--opacity-sidebar-heading);
 }
 
@@ -141,6 +144,7 @@
     font-family: monospace;
     font-size: 10px;
     font-weight: 400;
+    line-height: 13px;
 }
 
 .pear-workbench-tabs {
@@ -151,6 +155,11 @@
     padding: 2px;
     border: 1px solid var(--color-border-sidebar-subheader);
     border-radius: 7px;
+    background: color-mix(
+        in srgb,
+        var(--color-background-hover-narrow-filter) 38%,
+        transparent
+    );
 }
 
 .pear-workbench-tab {
@@ -162,7 +171,7 @@
     font-size: 11px;
     font-weight: 600;
     line-height: 14px;
-    padding: 2px 7px;
+    padding: 2px 8px;
 }
 
 .pear-workbench-tab:hover {
@@ -196,13 +205,8 @@
 .pear-git-tree {
     display: flex;
     flex-direction: column;
+    gap: 6px;
     overflow: hidden;
-    border-block: 1px solid
-        color-mix(
-            in srgb,
-            var(--color-border-sidebar-subheader) 72%,
-            transparent
-        );
 }
 
 .pear-file-row,
@@ -211,18 +215,25 @@
     gap: 7px;
     min-width: 0;
     align-items: center;
-    padding: 4px 0;
+    border: 1px solid
+        color-mix(
+            in srgb,
+            var(--color-border-sidebar-subheader) 62%,
+            transparent
+        );
+    border-radius: 7px;
+    background: color-mix(
+        in srgb,
+        var(--color-background-hover-narrow-filter) 30%,
+        transparent
+    );
+    padding: 5px 7px;
     line-height: 14px;
 }
 
-.pear-file-row + .pear-file-row,
-.pear-commit-row + .pear-commit-row {
-    border-top: 1px solid
-        color-mix(
-            in srgb,
-            var(--color-border-sidebar-subheader) 54%,
-            transparent
-        );
+.pear-file-row:hover,
+.pear-commit-row:hover {
+    background: var(--color-background-hover-narrow-filter);
 }
 
 .pear-file-row {
@@ -236,7 +247,7 @@
 .pear-workbench-summary {
     display: flex;
     min-width: 0;
-    margin-bottom: 6px;
+    margin-bottom: 7px;
 }
 
 .pear-workbench-summary-chip {
@@ -284,8 +295,20 @@
 }
 
 .pear-git-tree {
-    gap: 8px;
-    padding-block: 5px;
+    gap: 9px;
+    border: 1px solid
+        color-mix(
+            in srgb,
+            var(--color-border-sidebar-subheader) 62%,
+            transparent
+        );
+    border-radius: 8px;
+    background: color-mix(
+        in srgb,
+        var(--color-background-hover-narrow-filter) 24%,
+        transparent
+    );
+    padding: 7px;
 }
 
 .pear-git-tree-block {
@@ -343,6 +366,17 @@
     color: var(--color-text-item);
     line-height: 16px;
     overflow-wrap: anywhere;
+}
+
+.pear-workbench-empty {
+    border: 1px dashed
+        color-mix(
+            in srgb,
+            var(--color-border-sidebar-subheader) 72%,
+            transparent
+        );
+    border-radius: 8px;
+    padding: 7px 8px;
 }
 
 .pear-panel-error {
@@ -417,11 +451,14 @@
 }
 
 .pear-side-body {
-    position: relative;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 24px;
+    gap: 6px;
     min-width: 0;
     border: 1px solid var(--color-border-legacy-input);
     border-radius: 8px;
     background: var(--color-background-input);
+    padding: 6px;
 }
 
 .pear-side-body:focus-within {
@@ -433,50 +470,69 @@
     min-height: 38px;
     resize: vertical;
     border: 0;
-    border-radius: 8px;
+    border-radius: 5px;
     background: transparent;
     color: var(--color-text-input);
-    padding: 6px 34px 6px 8px;
+    padding: 0;
     font: inherit;
     font-size: 11px;
     line-height: 16px;
 }
 
 .pear-side-start {
-    position: absolute;
-    top: 6px;
-    right: 6px;
     display: inline-flex;
     align-items: center;
+    align-self: start;
     justify-content: center;
     min-width: 0;
-    width: 22px;
-    height: 22px;
+    width: 24px;
+    height: 24px;
     border: 0;
     border-radius: 6px;
     background: color-mix(
         in srgb,
-        var(--color-background-hover-narrow-filter) 82%,
+        var(--color-text-success-text-action-button) 12%,
         transparent
     );
-    color: var(--color-text-sidebar-heading);
+    color: var(--color-text-success-text-action-button);
     cursor: pointer;
     font: inherit;
     font-size: 12px;
     line-height: 1;
-    opacity: var(--opacity-sidebar-heading);
 }
 
 .pear-side-start:hover,
 .pear-side-start:focus-visible {
-    background: var(--color-background-hover-narrow-filter);
+    background: color-mix(
+        in srgb,
+        var(--color-text-success-text-action-button) 18%,
+        transparent
+    );
     outline: none;
-    opacity: 1;
 }
 
 .pear-side-start:disabled {
     cursor: default;
     opacity: 0.5;
+}
+
+@media (width <= 900px) {
+    .pear-workbench-header {
+        align-items: stretch;
+    }
+
+    .pear-workbench-title {
+        flex-basis: 100%;
+    }
+
+    .pear-workbench-tabs {
+        width: 100%;
+        margin-left: 0;
+    }
+
+    .pear-workbench-tab {
+        flex: 1 1 0;
+    }
 }
 
 /* Pear canvas modal (dialog_widget body); see web/src/pear_canvas.ts. */

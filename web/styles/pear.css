@@ -16,9 +16,7 @@
 }
 
 .pear-panel-header,
-.pear-workspace-row,
-.pear-panel-actions,
-.pear-context-line {
+.pear-panel-actions {
     display: flex;
     align-items: center;
 }
@@ -41,9 +39,7 @@
     gap: 3px;
 }
 
-.pear-panel-title,
-.pear-context-section-title,
-.pear-context-label {
+.pear-panel-title {
     color: var(--color-text-sidebar-heading);
     font-weight: var(--font-weight-sidebar-heading);
     opacity: var(--opacity-sidebar-heading);
@@ -114,107 +110,6 @@
     display: flex;
     flex-direction: column;
     gap: 6px;
-}
-
-.pear-context-section-title {
-    font-size: 11px;
-    text-transform: uppercase;
-}
-
-.pear-context-line {
-    min-width: 0;
-    gap: 7px;
-    line-height: 15px;
-}
-
-.pear-context-label {
-    flex: none;
-    min-width: 32px;
-    font-size: 11px;
-}
-
-.pear-context-value {
-    min-width: 0;
-    overflow: hidden;
-    color: var(--color-text-sidebar-row);
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.pear-workspace-summary {
-    min-width: 0;
-    padding: 1px 0;
-}
-
-.pear-workspace-row {
-    min-width: 0;
-    gap: 6px;
-}
-
-.pear-workspace-ref {
-    overflow: hidden;
-    margin-left: 39px;
-    color: var(--color-text-item);
-    font-family: monospace;
-    font-size: 11px;
-    line-height: 14px;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.pear-git-marker {
-    color: light-dark(hsl(142deg 45% 30%), hsl(142deg 63% 76%));
-    font-size: 11px;
-    line-height: 14px;
-}
-
-.pear-git-dirty .pear-git-marker {
-    color: light-dark(hsl(31deg 46% 28%), hsl(37deg 88% 80%));
-}
-
-.pear-workspace-name {
-    min-width: 0;
-    overflow: hidden;
-    color: var(--color-text-sidebar-row);
-    font-weight: 600;
-    line-height: 16px;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.pear-git-ref,
-.pear-git-head,
-.pear-git-status {
-    flex: none;
-    font-size: 11px;
-    line-height: 14px;
-}
-
-.pear-git-ref {
-    min-width: 0;
-    overflow: hidden;
-    color: var(--color-text-item);
-    font-weight: 600;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.pear-git-head {
-    color: var(--color-text-item);
-    font-family: monospace;
-}
-
-.pear-git-status {
-    margin-left: auto;
-    font-weight: 600;
-}
-
-.pear-git-clean .pear-git-status {
-    color: light-dark(hsl(142deg 45% 30%), hsl(142deg 63% 76%));
-}
-
-.pear-git-dirty .pear-git-status {
-    color: light-dark(hsl(31deg 46% 28%), hsl(37deg 88% 80%));
 }
 
 .pear-workbench {

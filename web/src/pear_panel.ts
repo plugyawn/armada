@@ -464,21 +464,9 @@ function display_run(run: PearRun): PearRun & {
 
 function display_topic_context(topic_context: PearTopicContext | undefined | null):
     | (PearTopicContext & {
-          git_available: boolean;
-          git_status_class: string;
-          git_status_marker: string;
-          git_status_label: string;
           has_changed_files: boolean;
           has_recent_commits: boolean;
           changed_label: string;
-          has_pinned_repo: boolean;
-          workspace_primary_name: string;
-          workspace_primary_title: string;
-          workspace_kind_label: string;
-          workspace_ref_label: string;
-          worktree_name: string;
-          local_worktree_summary_label: string;
-          show_primary_git_status: boolean;
           has_workbench_diff: boolean;
           has_workbench_history: boolean;
           workbench_view: PearWorkbenchView;
@@ -506,11 +494,8 @@ function display_topic_context(topic_context: PearTopicContext | undefined | nul
             : $t({defaultMessage: "{changed_count} changed files"}, {changed_count});
     const github_repo = topic_context.github_repo.trim();
     const pinned_repo = topic_context.pinned_repo?.trim() ?? "";
-    const has_pinned_repo = pinned_repo.length > 0;
     const git_repo_label = git.repo_label?.trim() ?? "";
     const repo_label = first_nonempty_string([topic_context.repo_label?.trim(), git_repo_label]);
-    const has_workspace_repo =
-        repo_label.length > 0 || has_pinned_repo || (git.available && git_repo_label.length > 0);
     const workdir_parts = topic_context.workdir.split("/").filter((part) => part.trim().length > 0);
     const worktree_name = first_nonempty_string([
         topic_context.worktree_label?.trim(),
@@ -521,15 +506,6 @@ function display_topic_context(topic_context: PearTopicContext | undefined | nul
         repo_label,
         $t({defaultMessage: "No repo pinned"}),
     ]);
-    const workspace_ref_parts = [git.branch, git.head].filter(
-        (part): part is string => part !== undefined && part.trim().length > 0,
-    );
-    const git_status_label = git.dirty ? changed_label : $t({defaultMessage: "clean"});
-    const git_status_marker = git.dirty ? "✶" : "✓";
-    const local_worktree_ref_label = workspace_ref_parts.join(" / ");
-    const local_worktree_summary_label = [worktree_name, git_status_label, local_worktree_ref_label]
-        .filter((part) => part.trim().length > 0)
-        .join(" / ");
     const has_workbench_diff = git_has_diff(git);
     const has_workbench_history = git_has_history(git);
     const recent_commit_count = (git.recent_commits ?? []).length;
@@ -560,29 +536,16 @@ function display_topic_context(topic_context: PearTopicContext | undefined | nul
     const workspace_primary_title = first_nonempty_string([
         topic_context.repo_title?.trim(),
         pinned_repo,
-        has_workspace_repo
-            ? topic_context.workdir
-            : $t({defaultMessage: "Ask Pear to pin a Git repository for this topic."}),
+        topic_context.workdir,
+        $t({defaultMessage: "Ask Pear to pin a Git repository for this topic."}),
     ]);
     return {
         ...topic_context,
         github_repo,
         model_choices: topic_context.model_choices ?? [],
-        git_available: git.available,
-        git_status_class: git.dirty ? "dirty" : "clean",
-        git_status_marker,
-        git_status_label,
         has_changed_files: (git.changed_files ?? []).length > 0,
         has_recent_commits: (git.recent_commits ?? []).length > 0,
         changed_label,
-        has_pinned_repo,
-        workspace_primary_name,
-        workspace_primary_title,
-        workspace_kind_label: $t({defaultMessage: "Repo"}),
-        workspace_ref_label: "",
-        worktree_name,
-        local_worktree_summary_label,
-        show_primary_git_status: has_workspace_repo && git.available,
         has_workbench_diff,
         has_workbench_history,
         workbench_view,

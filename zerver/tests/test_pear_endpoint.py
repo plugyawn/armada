@@ -2096,7 +2096,9 @@ class PearSessionEndpointTest(ZulipTestCase):
             side_run.refresh_from_db()
 
             self.assertEqual(result.topic_name, "new topic")
-            self.assertIn("Pear workspace context moved", result.message)
+            self.assertEqual(result.message, "Pear workspace moved with this topic.")
+            self.assertNotIn("Worktree:", result.message)
+            self.assertNotIn(topic_root, result.message)
             self.assertEqual(context.topic_name, "new topic")
             self.assertNotEqual(context.workdir, old_workdir)
             self.assertTrue(context.workdir.startswith(topic_root))

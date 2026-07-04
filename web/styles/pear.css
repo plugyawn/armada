@@ -523,6 +523,30 @@
         padding: 5px 15px;
     }
 
+    .pear-runtime-git-row {
+        display: flex;
+        min-width: 0;
+        align-items: center;
+        gap: 6px;
+    }
+
+    .pear-runtime-git-marker {
+        width: 1.35em;
+        flex: none;
+        font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+        font-size: 0.9em;
+        line-height: 1;
+        text-align: center;
+    }
+
+    .pear-runtime-git-clean {
+        color: light-dark(hsl(142deg 45% 30%), hsl(142deg 63% 76%));
+    }
+
+    .pear-runtime-git-dirty {
+        color: light-dark(hsl(31deg 46% 28%), hsl(37deg 88% 80%));
+    }
+
     .pear-runtime-git-status-row {
         color: var(--color-text-item);
         font-size: 0.9em;

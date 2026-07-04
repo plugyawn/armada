@@ -94,24 +94,6 @@
                 </div>
 
                 {{#if topic_context.git_available}}
-                    {{#if topic_context.has_changed_files}}
-                        <div class="pear-file-list">
-                            {{#each topic_context.git.changed_files}}
-                                <div class="pear-file-row pear-file-{{kind}}">
-                                    <span class="pear-file-status">{{status}}</span>
-                                    <span class="pear-file-path">{{path}}</span>
-                                </div>
-                            {{/each}}
-                            {{#if topic_context.git.changed_files_truncated}}
-                                <div class="pear-file-more">{{t "More changed files not shown." }}</div>
-                            {{/if}}
-                        </div>
-                    {{/if}}
-
-                    {{#if topic_context.git.diff_shortstat}}
-                        <div class="pear-diff-shortstat">{{topic_context.git.diff_shortstat}}</div>
-                    {{/if}}
-
                     <details class="pear-worktree-details" {{#if topic_context.worktree_details_open}}open{{/if}}>
                         <summary>
                             <span>{{t "Worktree" }}</span>
@@ -119,6 +101,22 @@
                                 <span class="pear-worktree-summary-extra">{{topic_context.local_worktree_summary_label}}</span>
                             {{/if}}
                         </summary>
+                        {{#if topic_context.has_changed_files}}
+                            <div class="pear-file-list">
+                                {{#each topic_context.git.changed_files}}
+                                    <div class="pear-file-row pear-file-{{kind}}">
+                                        <span class="pear-file-status">{{status}}</span>
+                                        <span class="pear-file-path">{{path}}</span>
+                                    </div>
+                                {{/each}}
+                                {{#if topic_context.git.changed_files_truncated}}
+                                    <div class="pear-file-more">{{t "More changed files not shown." }}</div>
+                                {{/if}}
+                            </div>
+                        {{/if}}
+                        {{#if topic_context.git.diff_shortstat}}
+                            <div class="pear-diff-shortstat">{{topic_context.git.diff_shortstat}}</div>
+                        {{/if}}
                         <div class="pear-workdir" title="{{topic_context.workdir}}">{{topic_context.workdir}}</div>
                         {{#if topic_context.has_recent_commits}}
                             <div class="pear-commit-list">

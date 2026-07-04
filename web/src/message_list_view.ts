@@ -204,7 +204,7 @@ function pear_thinking_markers($scope: JQuery<HTMLElement | Document> = $(docume
         ? $scope.find(".pear-thinking-glyph")
         : $();
     const $descendant_markers = $scope.find(
-        ".message_row.pear-active-message .message_content > p:last-child > .pear-thinking-glyph, .message_row.pear-active-message .message_content > p:last-child > em:last-child",
+        ".message_row.pear-active-message .message_content > p:last-child > .pear-thinking-glyph, .message_row.pear-active-message .message_content > p:last-child > em:last-child, .message_row.pear-active-message .spoiler-header .pear-thinking-glyph, .message_row.pear-active-message .spoiler-content li > .pear-thinking-glyph",
     );
     if (!$scope.hasClass("pear-active-message")) {
         return $descendant_markers.add($liveness_markers).add($scoped_liveness_markers);
@@ -212,11 +212,23 @@ function pear_thinking_markers($scope: JQuery<HTMLElement | Document> = $(docume
     return $descendant_markers
         .add(
             $scope.find(
-                ".message_content > p:last-child > .pear-thinking-glyph, .message_content > p:last-child > em:last-child",
+                ".message_content > p:last-child > .pear-thinking-glyph, .message_content > p:last-child > em:last-child, .spoiler-header .pear-thinking-glyph, .spoiler-content li > .pear-thinking-glyph",
             ),
         )
         .add($liveness_markers)
         .add($scoped_liveness_markers);
+}
+
+function pear_thinking_glyph_containers($scope: JQuery<HTMLElement | Document>): JQuery {
+    let $containers = $scope.find(
+        ".message_row.pear-active-message .message_content > p:last-child, .message_row.pear-active-message .spoiler-header p, .message_row.pear-active-message .spoiler-content li",
+    );
+    if ($scope.hasClass("pear-active-message")) {
+        $containers = $containers.add(
+            $scope.find(".message_content > p:last-child, .spoiler-header p, .spoiler-content li"),
+        );
+    }
+    return $containers;
 }
 
 function wrap_bare_pear_thinking_glyphs($scope: JQuery<HTMLElement | Document>): void {
@@ -227,19 +239,13 @@ function wrap_bare_pear_thinking_glyphs($scope: JQuery<HTMLElement | Document>):
     ) {
         return;
     }
-    let $paragraphs = $scope.find(
-        ".message_row.pear-active-message .message_content > p:last-child",
-    );
-    if ($scope.hasClass("pear-active-message")) {
-        $paragraphs = $paragraphs.add($scope.find(".message_content > p:last-child"));
-    }
-
-    $paragraphs.each((_index, paragraph) => {
-        if (paragraph.querySelector(".pear-thinking-glyph") !== null) {
+    const $containers = pear_thinking_glyph_containers($scope);
+    $containers.each((_index, container) => {
+        if (container.querySelector(".pear-thinking-glyph") !== null) {
             return;
         }
 
-        const text_nodes = [...paragraph.childNodes].filter(
+        const text_nodes = [...container.childNodes].filter(
             (node) =>
                 node.nodeType === Node.TEXT_NODE && node.textContent?.includes(PEAR_ACTIVE_GLYPH),
         );

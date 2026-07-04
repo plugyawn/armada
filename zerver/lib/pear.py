@@ -870,6 +870,8 @@ def pear_transcript_tool_mark(status: str) -> str:
         return "✓"
     if status in {"failed", "error"}:
         return "!"
+    if status in {"running", "in_progress"}:
+        return "✦"
     return "…"
 
 
@@ -976,9 +978,9 @@ def pear_transcript_tool_group_title(
     if failed_count:
         return f"{failed_count} failed {pear_pluralize_tool(failed_count)}"
     if running_count and completed_count:
-        return f"Ran {completed_count}/{tool_count} {pear_pluralize_tool(tool_count)}"
+        return f"Ran {completed_count}/{tool_count} {pear_pluralize_tool(tool_count)} ✦"
     if running_count:
-        return f"Running {tool_count} {pear_pluralize_tool(tool_count)}"
+        return f"Running {tool_count} {pear_pluralize_tool(tool_count)} ✦"
     return f"Ran {tool_count} {pear_pluralize_tool(tool_count)}"
 
 

@@ -206,3 +206,36 @@ run_test("runtime_summary", () => {
         },
     );
 });
+
+run_test("build_runtime_usage_rows", () => {
+    assert.deepEqual(pear_runtime_menu.build_runtime_usage_rows(undefined), []);
+    assert.deepEqual(
+        pear_runtime_menu.build_runtime_usage_rows({
+            input_tokens: 1_000,
+            output_tokens: 250,
+            reasoning_output_tokens: 40,
+            total_tokens: 1_290,
+            cache_percent: 66.6,
+            duration_seconds: 2.5,
+        }),
+        [
+            {label: "translated: cache", value: "66.6%"},
+            {label: "translated: tokens", value: "1,290"},
+            {label: "translated: time", value: "2.5s"},
+            {label: "translated: speed", value: "100 tok/s"},
+            {label: "translated: reasoning", value: "40"},
+        ],
+    );
+
+    assert.deepEqual(
+        pear_runtime_menu.build_runtime_usage_rows({
+            total_tokens: 9,
+            duration_seconds: 2,
+        }),
+        [
+            {label: "translated: tokens", value: "9"},
+            {label: "translated: time", value: "2.0s"},
+            {label: "translated: speed", value: "4.5 tok/s"},
+        ],
+    );
+});

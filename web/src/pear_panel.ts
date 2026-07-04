@@ -193,6 +193,13 @@ function first_nonempty_string(values: (string | undefined)[]): string {
     return values.find((value) => value !== undefined && value.trim().length > 0) ?? "";
 }
 
+export function compact_meta_label_for_testing(values: (string | undefined)[]): string {
+    return values
+        .map((part) => part?.trim() ?? "")
+        .filter((part) => part !== "")
+        .join(" / ");
+}
+
 function effort_short_label(effort: string): string {
     switch (effort.toLowerCase()) {
         case "low":
@@ -720,13 +727,11 @@ function display_topic_context(topic_context: PearTopicContext | undefined | nul
         topic_context.workdir,
         $t({defaultMessage: "Ask Pear to pin a Git repository for this topic."}),
     ]);
-    const workbench_branch_meta_label = [
+    const workbench_branch_meta_label = compact_meta_label_for_testing([
         repo_label,
         git.branch?.trim(),
         git.head_short?.trim(),
-    ]
-        .filter((part) => part !== "")
-        .join(" / ");
+    ]);
     const workbench_head_label = git.dirty === true ? "HEAD+1" : "HEAD";
     const workbench_head_summary = first_nonempty_string([
         head_commit?.summary,

@@ -46,7 +46,7 @@
 }
 
 .pear-icon-button,
-.pear-run-action {
+.pear-run-actions-summary {
     width: 22px;
     height: 22px;
     padding: 3px;
@@ -336,10 +336,66 @@
     align-items: center;
     flex: none;
     gap: 3px;
+    position: relative;
 }
 
 .pear-panel-run-actions {
     margin-right: 2px;
+}
+
+.pear-run-actions-summary {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    list-style: none;
+}
+
+.pear-run-actions-summary::-webkit-details-marker {
+    display: none;
+}
+
+.pear-run-actions-menu {
+    position: absolute;
+    z-index: 4;
+    top: calc(100% + 4px);
+    right: 0;
+    display: grid;
+    min-width: 112px;
+    overflow: hidden;
+    border: 1px solid var(--color-border-popover-menu);
+    border-radius: 7px;
+    background: var(--color-background-popover-menu);
+    box-shadow: var(--box-shadow-popover-menu);
+}
+
+.pear-run-actions:not([open]) .pear-run-actions-menu {
+    display: none;
+}
+
+.pear-run-action-menu-item {
+    display: grid;
+    grid-template-columns: 18px minmax(0, 1fr);
+    gap: 6px;
+    align-items: center;
+    border: 0;
+    background: transparent;
+    color: var(--color-text-default);
+    cursor: pointer;
+    font: inherit;
+    font-size: 12px;
+    line-height: 16px;
+    padding: 6px 9px;
+    text-align: left;
+}
+
+.pear-run-action-menu-item:hover,
+.pear-run-action-menu-item:focus-visible {
+    background: var(--color-background-hover-popover-menu);
+    outline: none;
+}
+
+.pear-run-action-danger {
+    color: var(--color-text-danger-text-action-button);
 }
 
 .pear-side-body {

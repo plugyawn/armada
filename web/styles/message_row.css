@@ -217,6 +217,10 @@
                 }
 
                 li {
+                    display: grid;
+                    grid-template-columns: 2.2em minmax(0, 1fr);
+                    gap: 0.5em;
+                    align-items: center;
                     margin: 0;
                     padding: 4px 7px;
                     color: var(--color-text-item);
@@ -227,9 +231,30 @@
                         ui-monospace, SFMono-Regular, Consolas, monospace;
                 }
 
-                li::first-letter {
+                li > .pear-tool-row-glyph {
+                    display: inline-flex;
+                    min-width: 0;
+                    align-items: center;
+                    justify-content: center;
+                    border-radius: 4px;
+                    color: var(--color-text-item);
+                    font-size: 0.9em;
+                    font-style: normal;
+                    line-height: 1;
+                    text-align: center;
+                    white-space: nowrap;
+                }
+
+                li > .pear-tool-row-active {
                     color: var(--color-text-message-default);
-                    font-weight: 700;
+                }
+
+                li > .pear-tool-row-blocked {
+                    color: var(--color-text-danger-text-action-button);
+                }
+
+                li > .pear-tool-row-pending {
+                    color: var(--color-text-item);
                 }
 
                 li + li {

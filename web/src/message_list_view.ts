@@ -170,6 +170,23 @@ const PEAR_ACTIVE_GLYPH = "✦";
 let pear_thinking_glyph_index = 0;
 let pear_thinking_glyph_timer: ReturnType<typeof setInterval> | undefined;
 
+type PearToolRowMarker = {
+    regex: RegExp;
+    glyph: string;
+    class_name: string;
+    is_active?: boolean;
+};
+
+const pear_tool_row_markers: PearToolRowMarker[] = [
+    {regex: /^\s*✦\s*/, glyph: PEAR_ACTIVE_GLYPH, class_name: "pear-tool-row-active", is_active: true},
+    {regex: /^\s*✷\s*/, glyph: "✷", class_name: "pear-tool-row-blocked"},
+    {regex: /^\s*⋅\s*/, glyph: "⋅", class_name: "pear-tool-row-pending"},
+    {regex: /^\s*·\s*/, glyph: "·", class_name: "pear-tool-row-done"},
+    {regex: /^\s*\[x\]\s*/i, glyph: "[x]", class_name: "pear-tool-row-done"},
+    {regex: /^\s*\[\s\]\s*/, glyph: "[ ]", class_name: "pear-tool-row-pending"},
+    {regex: /^\s*\[~\]\s*/i, glyph: PEAR_ACTIVE_GLYPH, class_name: "pear-tool-row-active", is_active: true},
+];
+
 function message_has_pear_active_marker(message: Message): boolean {
     return message.content.includes(PEAR_ACTIVE_GLYPH);
 }
@@ -255,6 +272,60 @@ function replace_emphasized_pear_thinking_glyph(container: Element): boolean {
         return true;
     }
     return false;
+}
+
+function pear_tool_spoiler_blocks($row: JQuery): JQuery {
+    return $row.find(".spoiler-block").filter((_index, block) => {
+        const title = $(block).find(".spoiler-header-text").first().text().trim();
+        return /^(?:Ran|Running)\s+\d+(?:\/\d+)?\s+tools?(?:\s+✦)?$/.test(title)
+            || /^\d+\s+failed\s+tools?$/.test(title);
+    });
+}
+
+function extract_pear_tool_row_marker(row: HTMLElement): PearToolRowMarker {
+    for (const node of row.childNodes) {
+        if (node.nodeType !== Node.TEXT_NODE) {
+            continue;
+        }
+        const text = node.textContent;
+        if (text === null || text.trim() === "") {
+            continue;
+        }
+        for (const marker of pear_tool_row_markers) {
+            const match = marker.regex.exec(text);
+            if (match === null) {
+                continue;
+            }
+            node.textContent = text.slice(match[0].length);
+            return marker;
+        }
+        break;
+    }
+    return {regex: /^/, glyph: "·", class_name: "pear-tool-row-done"};
+}
+
+function enhance_pear_tool_rows($row: JQuery): void {
+    if (!$row.hasClass("pear-message")) {
+        return;
+    }
+    pear_tool_spoiler_blocks($row)
+        .find(".spoiler-content li")
+        .each((_index, row) => {
+            if (!(row instanceof HTMLElement)) {
+                return;
+            }
+            if (row.firstElementChild?.classList.contains("pear-tool-row-glyph") === true) {
+                return;
+            }
+            const marker = extract_pear_tool_row_marker(row);
+            const glyph = document.createElementNS("http://www.w3.org/1999/xhtml", "span");
+            glyph.classList.add("pear-tool-row-glyph", marker.class_name);
+            if (marker.is_active === true) {
+                glyph.classList.add("pear-thinking-glyph");
+            }
+            glyph.textContent = marker.glyph;
+            row.prepend(glyph);
+        });
 }
 
 function wrap_bare_pear_thinking_glyphs($scope: JQuery<HTMLElement | Document>): void {
@@ -1625,6 +1696,7 @@ export class MessageListView {
         const $content = $row.find(".message_content");
 
         rendered_markdown.update_elements($content);
+        enhance_pear_tool_rows($row);
         maybe_render_pear_thinking_glyph($row);
 
         const id = rows.id($row);

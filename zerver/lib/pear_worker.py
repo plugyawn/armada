@@ -1081,11 +1081,11 @@ def ensure_pear_topic_context(
         and parent_context.workdir.strip()
         else None
     )
-    parent_repository_url = (
-        parent_context.github_repo.strip()
-        if parent_context is not None and parent_context.github_repo.strip()
-        else None
-    )
+    parent_repository_url = None
+    if parent_context is not None and parent_context.github_repo.strip():
+        parent_repository_value = parent_context.github_repo.strip()
+        if not pear_repo_artifact_value_is_local_topic_path(parent_repository_value):
+            parent_repository_url = parent_repository_value
     ensure_pear_topic_workdir(
         context.workdir,
         base_workdir=parent_workdir,

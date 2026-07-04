@@ -268,7 +268,69 @@ run_test("work_panel_open_for_testing", () => {
         pear_panel.work_panel_open_for_testing({
             context_key_value: "devel\u0000pear",
             manually_open: false,
+            active_run_status: "queued",
+            has_error: false,
+        }),
+        true,
+    );
+    assert.equal(
+        pear_panel.work_panel_open_for_testing({
+            context_key_value: "devel\u0000pear",
+            manually_open: false,
+            active_run_status: "paused",
+            has_error: false,
+        }),
+        true,
+    );
+    assert.equal(
+        pear_panel.work_panel_open_for_testing({
+            context_key_value: "devel\u0000pear",
+            manually_open: false,
+            active_run_status: "failed",
+            has_error: false,
+        }),
+        false,
+    );
+    assert.equal(
+        pear_panel.work_panel_open_for_testing({
+            context_key_value: "devel\u0000pear",
+            manually_open: false,
             active_run_status: undefined,
+            has_error: true,
+        }),
+        true,
+    );
+});
+
+run_test("workbench_open_for_testing", () => {
+    assert.equal(
+        pear_panel.workbench_open_for_testing({
+            context_key_value: "",
+            manually_open: true,
+            has_error: true,
+        }),
+        false,
+    );
+    assert.equal(
+        pear_panel.workbench_open_for_testing({
+            context_key_value: "devel\u0000pear",
+            manually_open: false,
+            has_error: false,
+        }),
+        false,
+    );
+    assert.equal(
+        pear_panel.workbench_open_for_testing({
+            context_key_value: "devel\u0000pear",
+            manually_open: true,
+            has_error: false,
+        }),
+        true,
+    );
+    assert.equal(
+        pear_panel.workbench_open_for_testing({
+            context_key_value: "devel\u0000pear",
+            manually_open: false,
             has_error: true,
         }),
         true,

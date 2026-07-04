@@ -864,6 +864,15 @@ body.pear-workbench-split-open {
     vertical-align: -0.05em;
 }
 
+.pear-runtime-menu-trigger {
+    color: var(--color-vdots-visible);
+}
+
+.pear-runtime-menu-trigger:hover,
+.pear-runtime-menu-trigger:focus-visible {
+    color: var(--color-vdots-hover);
+}
+
 .pear-runtime-status-active {
     color: var(--color-text-success-text-action-button);
 }
@@ -884,7 +893,12 @@ body.pear-workbench-split-open {
     display: none;
 }
 
-#top_navbar > .column-right > #pear-runtime-menu {
+#top_navbar #pear-runtime-menu,
+#top_navbar #pear-work-cursor,
+#top_navbar #pear-context-meter,
+#top_navbar .pear-runtime-menu-trigger,
+#top_navbar .pear-work-cursor,
+#top_navbar .pear-context-meter {
     display: none !important;
 }
 

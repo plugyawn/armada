@@ -15,6 +15,11 @@
         display: none;
     }
 
+    #pear-work-cursor,
+    #pear-context-meter {
+        display: none !important;
+    }
+
     /* TODO: Remove the `.navbar_title` span from the `message_view_header.hbs`
        template. That span predates the use of flexbox, and makes it so that
        elements like the `.narrow_description` have different line-height and

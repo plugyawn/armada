@@ -705,8 +705,7 @@ export async function initialize_everything(state_data) {
     unread_ops.initialize();
     gear_menu.initialize();
     navbar_help_menu.initialize();
-    // Must run after initialize_navbar() has rendered the navbar, so
-    // that the #pear-runtime-menu button exists in the DOM.
+    // Must run after the right sidebar has rendered the Pear runtime button.
     pear_runtime_menu.initialize();
     pear_canvas.initialize();
     pear_files.initialize();

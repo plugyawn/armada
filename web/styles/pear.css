@@ -1060,29 +1060,6 @@ body.pear-workbench-split-open {
     white-space: nowrap;
 }
 
-#pear-runtime-menu,
-#pear-work-cursor,
-#pear-context-meter,
-.pear-work-cursor,
-.pear-context-meter,
-.pear-navbar-glyph,
-.pear-navbar-runtime-label,
-.pear-navbar-runtime-meter-label,
-#top_navbar #pear-runtime-menu,
-#top_navbar #pear-work-cursor,
-#top_navbar #pear-context-meter,
-#top_navbar .pear-runtime-menu-trigger,
-#top_navbar .pear-work-cursor,
-#top_navbar .pear-context-meter,
-#top_navbar [id^="pear-"],
-#top_navbar [class^="pear-"],
-#top_navbar [class*=" pear-"],
-#message_view_header [id^="pear-"],
-#message_view_header [class^="pear-"],
-#message_view_header [class*=" pear-"] {
-    display: none !important;
-}
-
 /* Pear runtime popover menu; mirrors the radio-list layout used by
    #buddy-list-actions-menu-popover in right_sidebar.css. */
 #pear-runtime-menu-popover {

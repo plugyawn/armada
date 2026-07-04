@@ -219,11 +219,11 @@ function status_marker(status: string): string {
     switch (status) {
         case "cancelled":
         case "failed":
-            return "!";
+            return "✷";
         case "done":
-            return "✓";
+            return "·";
         case "paused":
-            return "‖";
+            return "✧";
         case "queued":
         case "running":
             return "✦";
@@ -231,6 +231,8 @@ function status_marker(status: string): string {
             return "·";
     }
 }
+
+export const status_marker_for_testing = status_marker;
 
 function is_pear_runs_response(data: unknown): data is PearRunsResponse {
     return (

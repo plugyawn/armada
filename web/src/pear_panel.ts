@@ -532,6 +532,7 @@ function display_topic_context(topic_context: PearTopicContext | undefined | nul
           git_tree_error: string;
           has_git_tree_graph: boolean;
           has_git_tree_status: boolean;
+          history_commits: (PearGitCommit & {is_head: boolean; ref_label: string})[];
       })
     | undefined {
     if (topic_context === undefined || topic_context === null) {
@@ -559,7 +560,12 @@ function display_topic_context(topic_context: PearTopicContext | undefined | nul
     ]);
     const has_workbench_diff = git_has_diff(git);
     const has_workbench_history = git_has_history(git);
-    const recent_commit_count = (git.recent_commits ?? []).length;
+    const history_commits = (git.recent_commits ?? []).map((commit, index) => ({
+        ...commit,
+        is_head: index === 0,
+        ref_label: index === 0 ? $t({defaultMessage: "HEAD"}) : "",
+    }));
+    const recent_commit_count = history_commits.length;
     const topic_key = context_key(topic_context.stream, topic_context.topic);
     const git_tree = git_tree_by_context.get(topic_key);
     const git_tree_graph = git_tree?.graph.trim() ?? "";
@@ -636,6 +642,7 @@ function display_topic_context(topic_context: PearTopicContext | undefined | nul
         git_tree_error: git_tree_error_by_context.get(topic_key) ?? "",
         has_git_tree_graph: git_tree_graph !== "",
         has_git_tree_status: git_tree_status !== "",
+        history_commits,
     };
 }
 

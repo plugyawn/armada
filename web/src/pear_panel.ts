@@ -147,19 +147,6 @@ type PearTopicContext = {
     git: PearGitContext;
 };
 
-type PearWorkCursorState = {
-    visible: boolean;
-    status_class: string;
-    status_marker: string;
-    is_active: boolean;
-    repo_label: string;
-    branch_label: string;
-    head_label: string;
-    sync_label: string;
-    status_label: string;
-    title: string;
-};
-
 type PearWorkbenchView = "diff" | "history" | "side";
 
 let initialized = false;
@@ -374,32 +361,6 @@ function pear_git_shortstat_count(shortstat: string, label: "insertion" | "delet
 function pear_git_shortstat_file_count(shortstat: string): number {
     const match = /(\d+) files? changed/.exec(shortstat);
     return match === null ? 0 : Number.parseInt(match[1]!, 10);
-}
-
-function work_cursor_dirty_status_label(git: PearGitContext): string {
-    const shortstat = git.diff_shortstat?.trim() ?? "";
-    if (shortstat !== "") {
-        const insertions = pear_git_shortstat_count(shortstat, "insertion");
-        const deletions = pear_git_shortstat_count(shortstat, "deletion");
-        const parts = [];
-        if (insertions > 0) {
-            parts.push(`+${insertions}`);
-        }
-        if (deletions > 0) {
-            parts.push(`-${deletions}`);
-        }
-        if (parts.length > 0) {
-            return parts.join(" ");
-        }
-    }
-    const changed_count = git.changed_count ?? 0;
-    if (changed_count === 1) {
-        return $t({defaultMessage: "1 file"});
-    }
-    if (changed_count > 0) {
-        return $t({defaultMessage: "{changed_count} files"}, {changed_count});
-    }
-    return $t({defaultMessage: "changed"});
 }
 
 export function workbench_view_for_testing(options: {
@@ -757,171 +718,6 @@ function fetch_git_tree_for_context(topic_context: PearTopicContext): void {
     });
 }
 
-export function work_cursor_state_for_testing(
-    topic_context: PearTopicContext | undefined | null,
-    active_run_status?: string,
-): PearWorkCursorState {
-    if (topic_context === undefined || topic_context === null) {
-        return {
-            visible: false,
-            status_class: "",
-            status_marker: "",
-            is_active: false,
-            repo_label: "",
-            branch_label: "",
-            head_label: "",
-            sync_label: "",
-            status_label: "",
-            title: "",
-        };
-    }
-    const git = topic_context.git;
-    const is_active = active_run_status === "running" || active_run_status === "queued";
-    const repo_label = first_nonempty_string([
-        topic_context.github_repo.trim(),
-        topic_context.repo_label?.trim(),
-        git.repo_label?.trim(),
-        topic_context.pinned_repo?.trim(),
-    ]);
-    const branch_label = first_nonempty_string([
-        git.branch?.trim(),
-        git.worktree_name?.trim(),
-        topic_context.worktree_label?.trim(),
-        repo_label,
-    ]);
-    const base_head_label = first_nonempty_string([git.head_short?.trim(), git.head?.trim()]);
-    const head_label =
-        is_active && base_head_label !== "" ? `${base_head_label}+1` : base_head_label;
-    const ahead = git.ahead ?? 0;
-    const behind = git.behind ?? 0;
-    const sync_parts: string[] = [];
-    if (ahead > 0) {
-        sync_parts.push($t({defaultMessage: "+{ahead}"}, {ahead}));
-    }
-    if (behind > 0) {
-        sync_parts.push($t({defaultMessage: "-{behind}"}, {behind}));
-    }
-    const sync_label = sync_parts.join(" ");
-    const status_label = is_active
-        ? $t({defaultMessage: "forming"})
-        : git.detached
-          ? $t({defaultMessage: "detached"})
-          : git.dirty
-            ? work_cursor_dirty_status_label(git)
-            : $t({defaultMessage: "clean"});
-    const status_marker = is_active ? "✦" : git.dirty ? "✶" : "·";
-    const parts = [repo_label, branch_label, head_label, sync_label, status_label].filter(
-        (part) => part.length > 0,
-    );
-    return {
-        visible: git.available && parts.length > 0,
-        status_class: is_active ? "active" : git.dirty ? "dirty" : "clean",
-        status_marker,
-        is_active,
-        repo_label,
-        branch_label,
-        head_label,
-        sync_label,
-        status_label,
-        title: parts.join(" / "),
-    };
-}
-
-export function update_work_cursor(
-    topic_context: PearTopicContext | null | undefined = last_topic_context,
-    active_run_status?: string,
-): void {
-    const $cursor = $("#pear-work-cursor");
-    if ($cursor.length === 0) {
-        return;
-    }
-    const {stream, topic} = current_context();
-    if (
-        topic_context === undefined ||
-        topic_context === null ||
-        stream === undefined ||
-        topic === undefined ||
-        topic_context.stream !== stream ||
-        topic_context.topic !== topic
-    ) {
-        $cursor
-            .empty()
-            .addClass("hidden")
-            .removeClass(
-                "pear-work-cursor-clean pear-work-cursor-dirty pear-work-cursor-active pear-liveness-active",
-            )
-            .removeAttr("role tabindex aria-label title");
-        return;
-    }
-    const state = work_cursor_state_for_testing(topic_context, active_run_status);
-    if (!state.visible) {
-        $cursor
-            .empty()
-            .addClass("hidden")
-            .removeClass(
-                "pear-work-cursor-clean pear-work-cursor-dirty pear-work-cursor-active pear-liveness-active",
-            )
-            .removeAttr("role tabindex aria-label title");
-        return;
-    }
-    $cursor
-        .empty()
-        .removeClass(
-            "hidden pear-work-cursor-clean pear-work-cursor-dirty pear-work-cursor-active pear-liveness-active",
-        )
-        .addClass(`pear-work-cursor-${state.status_class}`)
-        .attr({
-            "aria-label": $t({defaultMessage: "Open Pear work details"}),
-            role: "button",
-            tabindex: "0",
-            title: state.title,
-        });
-    if (state.is_active) {
-        $cursor.addClass("pear-liveness-active");
-    }
-    $("<span>")
-        .addClass(
-            `pear-ui-glyph pear-work-cursor-marker${state.is_active ? " pear-thinking-glyph" : ""}`,
-        )
-        .attr("aria-hidden", "true")
-        .text(state.status_marker)
-        .appendTo($cursor);
-    if (state.repo_label !== "") {
-        $("<span>").addClass("pear-work-cursor-repo").text(state.repo_label).appendTo($cursor);
-    }
-    if (state.branch_label !== "") {
-        $("<span>")
-            .addClass("pear-work-cursor-ref pear-work-cursor-target")
-            .attr({
-                "data-pear-workbench-view": "history",
-                title: $t({defaultMessage: "Open Pear history"}),
-            })
-            .text(state.branch_label)
-            .appendTo($cursor);
-    }
-    if (state.head_label !== "") {
-        $("<span>")
-            .addClass("pear-work-cursor-head pear-work-cursor-target")
-            .attr({
-                "data-pear-workbench-view": "history",
-                title: $t({defaultMessage: "Open Pear history"}),
-            })
-            .text(state.head_label)
-            .appendTo($cursor);
-    }
-    if (state.sync_label !== "") {
-        $("<span>").addClass("pear-work-cursor-sync").text(state.sync_label).appendTo($cursor);
-    }
-    const $status = $("<span>").addClass("pear-work-cursor-status").text(state.status_label);
-    if (state.status_class === "dirty") {
-        $status.addClass("pear-work-cursor-target").attr({
-            "data-pear-workbench-view": "diff",
-            title: $t({defaultMessage: "Open Pear diff"}),
-        });
-    }
-    $status.appendTo($cursor);
-}
-
 function active_display_run(runs: PearRun[]): ReturnType<typeof display_run> | undefined {
     const active_run =
         runs.find(
@@ -1105,7 +901,6 @@ function render(
     $("#pear-panel").toggleClass("pear-panel-collapsed", !panel_open);
     $("#user-list").toggleClass("pear-workbench-open", panel_open);
     $("body").toggleClass("pear-workbench-split-open", panel_open);
-    update_work_cursor(topic_context, active_run?.status);
     if (display_context?.workbench_history_selected) {
         fetch_git_tree_for_context(display_context);
     }
@@ -1264,19 +1059,6 @@ export function initialize(): void {
     });
     $("body").on("click", "#pear-side-start", () => {
         start_side_session();
-    });
-    $("body").on("click", "#pear-work-cursor", (event) => {
-        const view = $(event.target)
-            .closest("[data-pear-workbench-view]")
-            .attr("data-pear-workbench-view");
-        open_work_details(view === "diff" || view === "history" ? view : undefined);
-    });
-    $("body").on("keydown", "#pear-work-cursor", (event) => {
-        if (event.key !== "Enter" && event.key !== " ") {
-            return;
-        }
-        event.preventDefault();
-        open_work_details();
     });
     refresh();
     refresh_timer = window.setInterval(refresh, FULL_REFRESH_INTERVAL_MS);

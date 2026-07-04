@@ -9,6 +9,19 @@
     display: none;
 }
 
+#user-list.pear-workbench-open {
+    #userlist-header,
+    #buddy_list_wrapper,
+    #buddy-list-loading-subscribers {
+        display: none;
+    }
+
+    #pear-panel {
+        border-top: 0;
+        padding-top: 6px;
+    }
+}
+
 .pear-panel-inner {
     position: relative;
     display: flex;

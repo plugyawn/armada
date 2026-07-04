@@ -1053,6 +1053,7 @@ function render(
         }
         $("#pear-panel").html(render_pear_panel(render_state));
         $("#pear-panel").toggleClass("pear-panel-collapsed", !panel_open);
+        $("#user-list").toggleClass("pear-workbench-open", panel_open);
         const stored_side_request = side_request_by_context.get(next_context_key);
         if (stored_side_request !== undefined) {
             $("#pear-side-request").val(stored_side_request);
@@ -1061,6 +1062,7 @@ function render(
         last_render_state_key = next_render_state_key;
     }
     $("#pear-panel").toggleClass("pear-panel-collapsed", !panel_open);
+    $("#user-list").toggleClass("pear-workbench-open", panel_open);
     update_work_cursor(topic_context, active_run?.status);
     if (display_context?.workbench_history_selected) {
         fetch_git_tree_for_context(display_context);

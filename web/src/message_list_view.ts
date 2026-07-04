@@ -324,7 +324,10 @@ function enhance_pear_tool_rows($row: JQuery): void {
                 glyph.classList.add("pear-thinking-glyph");
             }
             glyph.textContent = marker.glyph;
-            row.prepend(glyph);
+            const content = document.createElementNS("http://www.w3.org/1999/xhtml", "span");
+            content.classList.add("pear-tool-row-content");
+            content.append(...row.childNodes);
+            row.replaceChildren(glyph, content);
         });
 }
 

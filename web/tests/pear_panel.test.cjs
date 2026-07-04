@@ -214,7 +214,15 @@ run_test("workbench_view_for_testing", () => {
             has_diff: false,
             has_history: false,
         }),
-        "diff",
+        "side",
+    );
+    assert.equal(
+        pear_panel.workbench_view_for_testing({
+            requested: "side",
+            has_diff: true,
+            has_history: true,
+        }),
+        "side",
     );
 });
 

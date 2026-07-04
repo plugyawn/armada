@@ -140,7 +140,7 @@ type PearWorkCursorState = {
     title: string;
 };
 
-type PearWorkbenchView = "diff" | "history";
+type PearWorkbenchView = "diff" | "history" | "side";
 
 let initialized = false;
 let refresh_timer: number | undefined;
@@ -154,6 +154,7 @@ let last_context_refresh_key = "";
 let last_context_refresh_at = 0;
 const work_panel_open_by_context = new Map<string, boolean>();
 const workbench_view_by_context = new Map<string, PearWorkbenchView>();
+const side_request_by_context = new Map<string, string>();
 const LIVE_REFRESH_INTERVAL_MS = 125;
 const FULL_REFRESH_INTERVAL_MS = 5000;
 const CONTEXT_REFRESH_INTERVAL_MS = 60_000;
@@ -352,6 +353,9 @@ export function workbench_view_for_testing(options: {
     has_diff: boolean;
     has_history: boolean;
 }): PearWorkbenchView {
+    if (options.requested === "side") {
+        return "side";
+    }
     if (options.requested === "history" && options.has_history) {
         return "history";
     }
@@ -364,7 +368,7 @@ export function workbench_view_for_testing(options: {
     if (options.has_history) {
         return "history";
     }
-    return "diff";
+    return "side";
 }
 
 export function open_work_details(requested_view?: PearWorkbenchView): void {
@@ -480,10 +484,12 @@ function display_topic_context(topic_context: PearTopicContext | undefined | nul
           workbench_view: PearWorkbenchView;
           workbench_diff_selected: boolean;
           workbench_history_selected: boolean;
+          workbench_side_selected: boolean;
           workbench_diff_disabled: boolean;
           workbench_history_disabled: boolean;
           diff_tab_label: string;
           history_tab_label: string;
+          side_tab_label: string;
       })
     | undefined {
     if (topic_context === undefined || topic_context === null) {
@@ -560,6 +566,7 @@ function display_topic_context(topic_context: PearTopicContext | undefined | nul
         workbench_view,
         workbench_diff_selected: workbench_view === "diff",
         workbench_history_selected: workbench_view === "history",
+        workbench_side_selected: workbench_view === "side",
         workbench_diff_disabled: !has_workbench_diff && workbench_view !== "diff",
         workbench_history_disabled: !has_workbench_history && workbench_view !== "history",
         diff_tab_label:
@@ -567,6 +574,7 @@ function display_topic_context(topic_context: PearTopicContext | undefined | nul
                 ? $t({defaultMessage: "Diff ({changed_count})"}, {changed_count})
                 : $t({defaultMessage: "Diff"}),
         history_tab_label: $t({defaultMessage: "History"}),
+        side_tab_label: $t({defaultMessage: "Side"}),
     };
 }
 
@@ -835,13 +843,15 @@ function render(
     const next_render_state_key = render_state_key(render_state);
     if (last_render_state_key !== next_render_state_key) {
         const side_request = $("#pear-side-request").val();
-        const side_details_open = $("#pear-side-details").prop("open") === true;
+        if (typeof side_request === "string" && next_context_key !== "") {
+            side_request_by_context.set(next_context_key, side_request);
+        }
         $("#pear-panel").html(render_pear_panel(render_state));
         $("#pear-panel").toggleClass("pear-panel-collapsed", !panel_open);
-        if (typeof side_request === "string") {
-            $("#pear-side-request").val(side_request);
+        const stored_side_request = side_request_by_context.get(next_context_key);
+        if (stored_side_request !== undefined) {
+            $("#pear-side-request").val(stored_side_request);
         }
-        $("#pear-side-details").prop("open", side_details_open);
         $(document).trigger("pear_liveness_markers_changed");
         last_render_state_key = next_render_state_key;
     }
@@ -948,6 +958,7 @@ function start_side_session(): void {
         },
         success(raw_data) {
             $("#pear-side-request").val("");
+            side_request_by_context.delete(context_key(stream, topic));
             refresh({force_context: true});
             if (!is_pear_side_response(raw_data)) {
                 blueslip.warn("Pear side session returned an invalid response.");
@@ -980,7 +991,7 @@ export function initialize(): void {
     });
     $("body").on("click", ".pear-workbench-tab", function () {
         const view = $(this).attr("data-pear-workbench-view");
-        if (view !== "diff" && view !== "history") {
+        if (view !== "diff" && view !== "history" && view !== "side") {
             return;
         }
         const key = current_context_key();

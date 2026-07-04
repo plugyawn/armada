@@ -80,6 +80,44 @@ run_test("runtime_chip_labels_for_testing", () => {
     );
 });
 
+run_test("context_meter_for_testing", () => {
+    assert.deepEqual(pear_panel.context_meter_for_testing(undefined), {
+        has_meter: false,
+        percent: 0,
+        style: "--pear-context-meter-percent: 0%;",
+        label: "",
+        value_label: "",
+        is_hot: false,
+    });
+
+    assert.deepEqual(pear_panel.context_meter_for_testing({cache_percent: 38.4}), {
+        has_meter: true,
+        percent: 38.4,
+        style: "--pear-context-meter-percent: 38.4%;",
+        label: "translated: Cached context 38%",
+        value_label: "38%",
+        is_hot: false,
+    });
+
+    assert.deepEqual(pear_panel.context_meter_for_testing({cache_percent: 91.8}), {
+        has_meter: true,
+        percent: 91.8,
+        style: "--pear-context-meter-percent: 91.8%;",
+        label: "translated: Cached context 92%",
+        value_label: "92%",
+        is_hot: true,
+    });
+
+    assert.deepEqual(pear_panel.context_meter_for_testing({cache_percent: 150}), {
+        has_meter: true,
+        percent: 100,
+        style: "--pear-context-meter-percent: 100%;",
+        label: "translated: Cached context 100%",
+        value_label: "100%",
+        is_hot: true,
+    });
+});
+
 run_test("should_refresh_context_for_testing", () => {
     const base_options = {
         context_key_value: "devel\u0000general chat",

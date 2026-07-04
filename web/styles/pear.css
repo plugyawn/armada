@@ -1130,6 +1130,14 @@ body.pear-workbench-split-open {
     white-space: nowrap;
 }
 
+#pear-runtime-menu,
+#pear-work-cursor,
+#pear-context-meter,
+.pear-work-cursor,
+.pear-context-meter,
+.pear-navbar-glyph,
+.pear-navbar-runtime-label,
+.pear-navbar-runtime-meter-label,
 #top_navbar #pear-runtime-menu,
 #top_navbar #pear-work-cursor,
 #top_navbar #pear-context-meter,

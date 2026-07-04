@@ -1201,7 +1201,7 @@ export function initialize(): void {
     $("body").on("click", "#pear-panel-refresh", () => {
         refresh({force_context: true});
     });
-    $("body").on("click", "#pear-panel-close", () => {
+    $("body").on("click", ".pear-panel-close-action", () => {
         close_work_details();
     });
     $("body").on("click", ".pear-workbench-tab", function () {

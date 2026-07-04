@@ -212,6 +212,17 @@ body.pear-workbench-split-open {
     );
 }
 
+.pear-workbench-close {
+    flex: 0 0 auto;
+    color: var(--color-text-item);
+    opacity: 0.62;
+}
+
+.pear-workbench-close:hover,
+.pear-workbench-close:focus-visible {
+    opacity: 1;
+}
+
 .pear-workbench-tab {
     min-width: 0;
     flex: 0 1 auto;
@@ -554,10 +565,6 @@ body.pear-workbench-split-open {
     line-height: 16px;
     padding: 6px 9px;
     text-align: left;
-}
-
-#pear-panel-close {
-    border-top: 1px solid var(--color-border-popover-menu);
 }
 
 .pear-run-action-menu-item:hover,

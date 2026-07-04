@@ -55,6 +55,7 @@ from zerver.lib.pear_worker import (
     pear_reconcile_topic_branch,
     pear_topic_branch_name,
     pear_topic_isolation_username,
+    pear_topic_isolation_user_exists,
     pear_topic_process_isolation,
     pear_topic_workdir_root,
     pear_worker_model_for_topic,
@@ -929,6 +930,9 @@ class PearSessionEndpointTest(ZulipTestCase):
             PEAR_TOPIC_ISOLATION_BACKEND="os-user",
             PEAR_TOPIC_WORKDIR_ROOT=temp_dir,
         ), patch("zerver.lib.pear_worker.ensure_pear_topic_workdir"), patch(
+            "zerver.lib.pear_worker.pear_topic_isolation_user_exists",
+            return_value=True,
+        ), patch(
             "zerver.lib.pear_worker.pear_ensure_topic_canvas"
         ) as ensure_canvas:
             context = ensure_pear_topic_context(
@@ -1975,7 +1979,7 @@ class PearSessionEndpointTest(ZulipTestCase):
                 topic="general chat",
             )
 
-            with patch("zerver.views.pear.pwd.getpwnam", side_effect=KeyError):
+            with patch("zerver.lib.pear_worker.pwd.getpwnam", side_effect=KeyError):
                 self.assertIsNone(
                     pear_context_isolation_username(
                         context,
@@ -1986,7 +1990,7 @@ class PearSessionEndpointTest(ZulipTestCase):
                 )
 
             with patch(
-                "zerver.views.pear.pwd.getpwnam",
+                "zerver.lib.pear_worker.pwd.getpwnam",
                 return_value=SimpleNamespace(pw_name=expected_username),
             ):
                 self.assertEqual(
@@ -1998,6 +2002,27 @@ class PearSessionEndpointTest(ZulipTestCase):
                     ),
                     expected_username,
                 )
+
+    def test_topic_context_canvas_skips_missing_os_user(self) -> None:
+        owner = self.example_user("hamlet")
+
+        with tempfile.TemporaryDirectory() as temp_dir, self.settings(
+            PEAR_TOPIC_ISOLATION_BACKEND="os-user",
+            PEAR_TOPIC_WORKDIR_ROOT=temp_dir,
+        ), patch("zerver.lib.pear_worker.pwd.getpwnam", side_effect=KeyError), patch(
+            "zerver.lib.pear_worker.pear_ensure_topic_canvas"
+        ) as ensure_canvas:
+            context = ensure_pear_topic_context(
+                owner,
+                stream="devel",
+                topic="general chat",
+            )
+
+            ensure_canvas.assert_called_once()
+            self.assertEqual(ensure_canvas.call_args.args[0], context.workdir)
+            self.assertIsNone(ensure_canvas.call_args.kwargs["isolation_username"])
+
+        self.assertFalse(pear_topic_isolation_user_exists("pear-user-that-should-not-exist"))
 
     def test_topic_context_refactor_moves_full_topic_rename(self) -> None:
         owner = self.example_user("hamlet")

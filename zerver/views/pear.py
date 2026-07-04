@@ -1,6 +1,5 @@
 import json
 import os
-import pwd
 import subprocess
 import time
 from importlib.util import find_spec
@@ -63,6 +62,7 @@ from zerver.lib.pear_worker import (
     pear_sha256_text,
     pear_topic_branch_name,
     pear_topic_context_is_paused,
+    pear_topic_isolation_user_exists,
     pear_topic_context_response_policy,
     pear_topic_isolation_username_for_realm,
     pear_topic_os_user_isolation_enabled,
@@ -541,9 +541,7 @@ def pear_context_isolation_username(
             stream=stream_name,
             topic=topic_name,
         )
-        try:
-            pwd.getpwnam(username)
-        except KeyError:
+        if not pear_topic_isolation_user_exists(username):
             return None
         return username
     return None

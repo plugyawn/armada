@@ -34,7 +34,7 @@ body.pear-workbench-split-open {
         );
         overflow: auto;
         border-top: 0;
-        padding: 8px 10px 10px 11px;
+        padding: 9px 10px 11px;
     }
 }
 
@@ -143,17 +143,17 @@ body.pear-workbench-split-open {
 .pear-context-section {
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 8px;
 }
 
 .pear-workbench {
     display: flex;
     min-width: 0;
     flex-direction: column;
-    gap: 8px;
+    gap: 10px;
     color: var(--color-text-item);
-    font-size: 11px;
-    line-height: 14px;
+    font-size: 11.5px;
+    line-height: 15px;
 }
 
 .pear-workbench-header {
@@ -161,7 +161,14 @@ body.pear-workbench-split-open {
     min-width: 0;
     align-items: center;
     flex-wrap: nowrap;
-    gap: 7px;
+    gap: 8px;
+    border-bottom: 1px solid
+        color-mix(
+            in srgb,
+            var(--color-border-sidebar-subheader) 48%,
+            transparent
+        );
+    padding-bottom: 8px;
 }
 
 .pear-workbench-title {
@@ -181,17 +188,16 @@ body.pear-workbench-split-open {
 }
 
 .pear-workbench-title-main {
-    color: var(--color-text-sidebar-heading);
-    font-size: 12px;
-    font-weight: var(--font-weight-sidebar-heading);
-    line-height: 15px;
-    opacity: var(--opacity-sidebar-heading);
+    color: var(--color-text-default);
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 16px;
 }
 
 .pear-workbench-title-meta {
     color: var(--color-text-item);
     font-family: monospace;
-    font-size: 10px;
+    font-size: 10.5px;
     font-weight: 400;
     line-height: 13px;
 }
@@ -207,7 +213,7 @@ body.pear-workbench-split-open {
     border-radius: 7px;
     background: color-mix(
         in srgb,
-        var(--color-background-hover-narrow-filter) 38%,
+        var(--color-background-hover-narrow-filter) 30%,
         transparent
     );
 }
@@ -231,7 +237,7 @@ body.pear-workbench-split-open {
     background: transparent;
     color: var(--color-text-item);
     cursor: pointer;
-    font-size: 11px;
+    font-size: 11.5px;
     font-weight: 600;
     line-height: 14px;
     overflow: hidden;
@@ -247,7 +253,7 @@ body.pear-workbench-split-open {
 .pear-workbench-tab-selected {
     background: color-mix(
         in srgb,
-        var(--color-border-sidebar-subheader) 60%,
+        var(--color-border-sidebar-subheader) 52%,
         transparent
     );
     color: var(--color-text-default);
@@ -291,6 +297,12 @@ body.pear-workbench-split-open {
     );
 }
 
+.pear-file-list {
+    gap: 8px;
+    border: 0;
+    background: transparent;
+}
+
 .pear-file-row,
 .pear-commit-row {
     display: grid;
@@ -301,8 +313,20 @@ body.pear-workbench-split-open {
 }
 
 .pear-file-row {
-    grid-template-columns: 1.45em minmax(0, 1fr);
-    padding: 7px 9px;
+    grid-template-columns: minmax(0, 1fr) auto;
+    border: 1px solid
+        color-mix(
+            in srgb,
+            var(--color-border-sidebar-subheader) 56%,
+            transparent
+        );
+    border-radius: 8px;
+    background: color-mix(
+        in srgb,
+        var(--color-background-hover-narrow-filter) 20%,
+        transparent
+    );
+    padding: 8px 10px;
 }
 
 .pear-file-row + .pear-file-row,
@@ -312,6 +336,15 @@ body.pear-workbench-split-open {
         color-mix(
             in srgb,
             var(--color-border-sidebar-subheader) 42%,
+            transparent
+        );
+}
+
+.pear-file-row + .pear-file-row {
+    border-top: 1px solid
+        color-mix(
+            in srgb,
+            var(--color-border-sidebar-subheader) 56%,
             transparent
         );
 }
@@ -384,11 +417,12 @@ body.pear-workbench-split-open {
 
 .pear-file-status {
     display: inline-flex;
-    min-width: 1.55em;
+    min-width: 1.75em;
     height: 1.55em;
     align-items: center;
     justify-content: center;
-    justify-self: center;
+    justify-self: end;
+    order: 2;
     border-radius: 5px;
     background: color-mix(
         in srgb,
@@ -407,9 +441,10 @@ body.pear-workbench-split-open {
 }
 
 .pear-file-path {
+    order: 1;
     color: var(--color-text-default);
     font-family: monospace;
-    font-size: 10.5px;
+    font-size: 11px;
 }
 
 .pear-commit-hash {
@@ -525,6 +560,13 @@ body.pear-workbench-split-open {
 }
 
 .pear-file-more {
+    border: 1px dashed
+        color-mix(
+            in srgb,
+            var(--color-border-sidebar-subheader) 66%,
+            transparent
+        );
+    border-radius: 8px;
     padding: 7px 9px;
 }
 
@@ -540,11 +582,16 @@ body.pear-workbench-split-open {
     border: 1px dashed
         color-mix(
             in srgb,
-            var(--color-border-sidebar-subheader) 72%,
+            var(--color-border-sidebar-subheader) 62%,
             transparent
         );
     border-radius: 8px;
-    padding: 7px 8px;
+    background: color-mix(
+        in srgb,
+        var(--color-background-hover-narrow-filter) 18%,
+        transparent
+    );
+    padding: 8px 9px;
 }
 
 .pear-workbench-empty-glyph,

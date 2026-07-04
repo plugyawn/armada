@@ -111,6 +111,30 @@ run_test("workbench_title_for_testing prefers topic over internal worktree", () 
     );
 });
 
+run_test("workbench_context_meter_for_testing", () => {
+    assert.deepEqual(pear_panel.workbench_context_meter_for_testing(undefined), {
+        has_meter: false,
+        percent: 0,
+        value: "",
+        is_hot: false,
+        title: "",
+    });
+    assert.deepEqual(pear_panel.workbench_context_meter_for_testing({cache_percent: 72.3}), {
+        has_meter: true,
+        percent: 72.3,
+        value: "72.3%",
+        is_hot: true,
+        title: "translated: cached context 72.3%",
+    });
+    assert.deepEqual(pear_panel.workbench_context_meter_for_testing({cache_percent: -4}), {
+        has_meter: true,
+        percent: 0,
+        value: "0.0%",
+        is_hot: false,
+        title: "translated: cached context 0.0%",
+    });
+});
+
 run_test("template renders workbench without active run", () => {
     const html = render_pear_panel({
         panel_open: true,
@@ -161,6 +185,56 @@ run_test("template renders workbench without active run", () => {
     assert.match(html, /\+16/);
     assert.match(html, /-4/);
     assert.doesNotMatch(html, /pear-workbench-context-meter/);
+});
+
+run_test("template renders ambient workbench context meter", () => {
+    const html = render_pear_panel({
+        panel_open: true,
+        show_workbench: true,
+        has_topic: true,
+        show_panel_header: false,
+        panel_can_close: true,
+        workbench_context_meter: {
+            has_meter: true,
+            percent: 72,
+            value: "72.0%",
+            is_hot: true,
+            title: "cached context 72.0%",
+        },
+        active_run: {
+            show_status: false,
+            usage: {cache_percent: 72},
+        },
+        topic_context: {
+            workbench_title: "routing-fix",
+            workbench_title_attr: "/srv/pear-workspaces/devel-routing-fix",
+            workbench_branch_meta_label: "devel / a3f92c1",
+            workbench_head_label: "HEAD+1",
+            workbench_head_title: "HEAD+1 local edits a3f92c1",
+            workbench_head_summary: "local edits",
+            workbench_head_short: "a3f92c1",
+            workbench_diff_selected: true,
+            workbench_history_selected: false,
+            workbench_side_selected: false,
+            workbench_diff_disabled: false,
+            workbench_history_disabled: false,
+            diff_tab_label: "diff",
+            history_tab_label: "history",
+            side_tab_label: "whisper",
+            runtime_chip_title: "GPT-5.5 · Medium",
+            runtime_chip_label: "GPT-5.5 · m",
+            workbench_view: "diff",
+            has_workbench_diff: false,
+            has_workbench_diffstat: false,
+        },
+    });
+
+    assert.match(html, /pear-workbench-context-meter pear-workbench-context-meter-hot/);
+    assert.match(html, /pear-workbench-context-meter-fill/);
+    assert.match(html, /width: 72%;/);
+    assert.match(html, /cached context 72\.0%/);
+    assert.doesNotMatch(html, /cache_percent/);
+    assert.doesNotMatch(html, /<meter\b/);
 });
 
 run_test("template keeps runtime metadata out of workbench content rail", () => {

@@ -205,6 +205,7 @@ body.pear-workbench-split-open {
 }
 
 .pear-workbench-header {
+    position: relative;
     display: flex;
     min-width: 0;
     flex-direction: column;
@@ -216,6 +217,38 @@ body.pear-workbench-split-open {
             transparent
         );
     padding-bottom: 8px;
+}
+
+.pear-workbench-context-meter {
+    position: absolute;
+    right: 0;
+    bottom: -1px;
+    left: 0;
+    height: 2px;
+    overflow: hidden;
+    border-radius: 999px;
+    pointer-events: none;
+}
+
+.pear-workbench-context-meter-fill {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: color-mix(
+        in srgb,
+        var(--color-text-success-text-action-button) 45%,
+        transparent
+    );
+    opacity: 0.45;
+}
+
+.pear-workbench-context-meter-hot .pear-workbench-context-meter-fill {
+    background: color-mix(
+        in srgb,
+        var(--color-text-warning-text-action-button) 82%,
+        transparent
+    );
+    opacity: 0.82;
 }
 
 .pear-workbench-context-row,

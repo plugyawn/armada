@@ -31,6 +31,14 @@ type PearUsage = {
     summary?: string;
 };
 
+type PearWorkbenchContextMeter = {
+    has_meter: boolean;
+    percent: number;
+    value: string;
+    is_hot: boolean;
+    title: string;
+};
+
 type PearLiveRun = {
     status: string;
     content: string;
@@ -204,6 +212,29 @@ export function workbench_title_for_testing(values: {
         values.workspace_primary_name?.trim(),
         $t({defaultMessage: "Workbench"}),
     ]);
+}
+
+export function workbench_context_meter_for_testing(
+    usage: PearUsage | null | undefined,
+): PearWorkbenchContextMeter {
+    if (usage?.cache_percent === undefined) {
+        return {
+            has_meter: false,
+            percent: 0,
+            value: "",
+            is_hot: false,
+            title: "",
+        };
+    }
+    const percent = Math.min(100, Math.max(0, usage.cache_percent));
+    const value = `${percent.toFixed(1)}%`;
+    return {
+        has_meter: true,
+        percent,
+        value,
+        is_hot: percent >= 70,
+        title: $t({defaultMessage: "cached context {value}"}, {value}),
+    };
 }
 
 function effort_short_label(effort: string): string {
@@ -989,6 +1020,7 @@ function render(
     });
     const panel_status = active_run?.status ?? "idle";
     const display_context = display_topic_context(topic_context);
+    const workbench_context_meter = workbench_context_meter_for_testing(active_run?.usage);
     const panel_header_state = panel_header_state_for_testing(active_run);
     const render_state = {
         has_topic,
@@ -1000,6 +1032,7 @@ function render(
         has_panel_menu: panel_header_state.has_panel_menu,
         show_panel_header: panel_header_state.show_panel_header,
         topic_context: display_context,
+        workbench_context_meter,
         active_run,
         error: last_error,
         status_label: panel_status,

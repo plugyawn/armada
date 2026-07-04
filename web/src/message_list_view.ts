@@ -244,26 +244,19 @@ function message_is_pear_message(
 
 function pear_thinking_markers($scope: JQuery<HTMLElement | Document> = $(document)): JQuery {
     wrap_bare_pear_thinking_glyphs($scope);
-    const $liveness_markers = $scope.find(".pear-liveness-active .pear-thinking-glyph");
-    const $scoped_liveness_markers = (
-        $scope.hasClass("pear-liveness-active")
-            ? $scope.find(".pear-thinking-glyph")
-            : $scope.filter(() => false)
-    ) as JQuery<HTMLElement>;
-    const $descendant_markers = $scope.find(
+    const selectors = [
+        ".pear-liveness-active .pear-thinking-glyph",
         ".message_row.pear-active-message .message_content > p:last-child > .pear-thinking-glyph, .message_row.pear-active-message .spoiler-header .pear-thinking-glyph, .message_row.pear-active-message .spoiler-content li > .pear-thinking-glyph",
-    );
-    if (!$scope.hasClass("pear-active-message")) {
-        return $descendant_markers.add($liveness_markers).add($scoped_liveness_markers);
+    ];
+    if ($scope.hasClass("pear-active-message")) {
+        selectors.push(
+            ".message_content > p:last-child > .pear-thinking-glyph, .spoiler-header .pear-thinking-glyph, .spoiler-content li > .pear-thinking-glyph",
+        );
     }
-    return $descendant_markers
-        .add(
-            $scope.find(
-                ".message_content > p:last-child > .pear-thinking-glyph, .spoiler-header .pear-thinking-glyph, .spoiler-content li > .pear-thinking-glyph",
-            ),
-        )
-        .add($liveness_markers)
-        .add($scoped_liveness_markers);
+    if ($scope.hasClass("pear-liveness-active")) {
+        selectors.push(".pear-thinking-glyph");
+    }
+    return $scope.find(selectors.join(", "));
 }
 
 function pear_thinking_glyph_containers($scope: JQuery<HTMLElement | Document>): JQuery {

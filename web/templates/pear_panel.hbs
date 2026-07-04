@@ -79,9 +79,9 @@
                                 {{topic_context.side_tab_label}}
                             </button>
                         </div>
-                        <button type="button" class="pear-runtime-menu-trigger pear-workbench-runtime pear-icon-button icon-button icon-button-square icon-button-neutral tippy-zulip-delayed-tooltip" aria-label="{{t 'Pear runtime' }}" data-tippy-content="{{t 'Pear runtime' }}">
+                        <button type="button" class="pear-runtime-menu-trigger pear-workbench-runtime tippy-zulip-delayed-tooltip" aria-label="{{t 'Pear runtime' }}" data-tippy-content="{{topic_context.runtime_chip_title}}">
                             <span class="pear-ui-glyph pear-runtime-menu-glyph" aria-hidden="true">·</span>
-                            <span class="pear-runtime-menu-label">{{t "Pear runtime" }}</span>
+                            <span class="pear-runtime-menu-label">{{topic_context.runtime_chip_label}}</span>
                         </button>
                         {{#if panel_can_close}}
                             <button type="button" class="pear-panel-close-action pear-workbench-close pear-icon-button icon-button icon-button-square icon-button-neutral tippy-zulip-delayed-tooltip" aria-label="{{t 'Hide Pear work details' }}" data-tippy-content="{{t 'Hide Pear work details' }}">

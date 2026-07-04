@@ -174,3 +174,51 @@ run_test("work_cursor_state_for_testing", () => {
         "translated: +4",
     );
 });
+
+run_test("work_panel_open_for_testing", () => {
+    assert.equal(
+        pear_panel.work_panel_open_for_testing({
+            context_key_value: "",
+            manually_open: true,
+            active_run_status: "running",
+            has_error: true,
+        }),
+        false,
+    );
+    assert.equal(
+        pear_panel.work_panel_open_for_testing({
+            context_key_value: "devel\u0000pear",
+            manually_open: false,
+            active_run_status: "done",
+            has_error: false,
+        }),
+        false,
+    );
+    assert.equal(
+        pear_panel.work_panel_open_for_testing({
+            context_key_value: "devel\u0000pear",
+            manually_open: true,
+            active_run_status: "done",
+            has_error: false,
+        }),
+        true,
+    );
+    assert.equal(
+        pear_panel.work_panel_open_for_testing({
+            context_key_value: "devel\u0000pear",
+            manually_open: false,
+            active_run_status: "running",
+            has_error: false,
+        }),
+        true,
+    );
+    assert.equal(
+        pear_panel.work_panel_open_for_testing({
+            context_key_value: "devel\u0000pear",
+            manually_open: false,
+            active_run_status: undefined,
+            has_error: true,
+        }),
+        true,
+    );
+});

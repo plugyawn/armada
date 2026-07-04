@@ -1,3 +1,4 @@
+{{#if panel_open}}
 <div class="pear-panel-inner">
     <div class="pear-panel-header">
         <div class="pear-panel-title-row">
@@ -15,6 +16,11 @@
             {{/if}}
         </div>
         <div class="pear-panel-actions">
+            {{#if panel_can_close}}
+                <button type="button" id="pear-panel-close" class="pear-icon-button icon-button icon-button-square icon-button-neutral tippy-zulip-delayed-tooltip" aria-label="{{t 'Hide Pear work' }}" data-tippy-content="{{t 'Hide Pear work' }}">
+                    <i class="zulip-icon zulip-icon-close" aria-hidden="true"></i>
+                </button>
+            {{/if}}
             {{#if active_run.has_actions}}
                 <div class="pear-run-actions pear-panel-run-actions" data-run-id="{{active_run.id}}">
                     {{#if active_run.can_pause}}
@@ -128,3 +134,4 @@
         </div>
     </details>
 </div>
+{{/if}}

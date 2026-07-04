@@ -152,6 +152,7 @@ let last_render_state_key = "";
 let last_context_refresh_key = "";
 let last_context_refresh_at = 0;
 const worktree_details_open_by_context = new Map<string, boolean>();
+const work_panel_open_by_context = new Map<string, boolean>();
 const LIVE_REFRESH_INTERVAL_MS = 125;
 const FULL_REFRESH_INTERVAL_MS = 5000;
 const CONTEXT_REFRESH_INTERVAL_MS = 60_000;
@@ -314,6 +315,32 @@ function current_context_key(): string {
     return context_key(stream, topic);
 }
 
+function run_keeps_work_panel_open(run: {status: string} | undefined): boolean {
+    return run !== undefined && run.status !== "done";
+}
+
+export function work_panel_open_for_testing(options: {
+    context_key_value: string;
+    manually_open: boolean;
+    active_run_status: string | undefined;
+    has_error: boolean;
+}): boolean {
+    if (options.context_key_value === "") {
+        return false;
+    }
+    if (options.has_error) {
+        return true;
+    }
+    return (
+        options.manually_open ||
+        run_keeps_work_panel_open(
+            options.active_run_status === undefined
+                ? undefined
+                : {status: options.active_run_status},
+        )
+    );
+}
+
 function right_sidebar_is_visible(): boolean {
     const $right_sidebar_column = $(".app-main .column-right");
     return (
@@ -327,7 +354,9 @@ export function open_work_details(): void {
     const key = current_context_key();
     if (key !== "") {
         worktree_details_open_by_context.set(key, true);
+        work_panel_open_by_context.set(key, true);
     }
+    render();
     if (!right_sidebar_is_visible()) {
         $("#userlist-toggle-button").trigger("click");
     }
@@ -340,6 +369,14 @@ export function open_work_details(): void {
         return;
     }
     refresh({force_context: true});
+}
+
+function close_work_details(): void {
+    const key = current_context_key();
+    if (key !== "") {
+        work_panel_open_by_context.set(key, false);
+    }
+    render();
 }
 
 function display_run(run: PearRun): PearRun & {
@@ -704,6 +741,12 @@ function render(
     const has_topic = stream !== undefined && topic !== undefined;
     const next_context_key = context_key(stream, topic);
     const active_run = active_display_run(runs);
+    const panel_open = work_panel_open_for_testing({
+        context_key_value: next_context_key,
+        manually_open: work_panel_open_by_context.get(next_context_key) ?? false,
+        active_run_status: active_run?.status,
+        has_error: last_error !== "",
+    });
     pear_run_state.set_active_run_result_messages(runs, {
         force_reconcile: active_run === undefined,
     });
@@ -711,6 +754,8 @@ function render(
     const render_state = {
         has_topic,
         context_label: has_topic ? `${stream} > ${topic}` : "",
+        panel_open,
+        panel_can_close: panel_open && !run_keeps_work_panel_open(active_run),
         topic_context: display_topic_context(topic_context),
         active_run,
         error: last_error,
@@ -722,6 +767,7 @@ function render(
         const side_request = $("#pear-side-request").val();
         const side_details_open = $("#pear-side-details").prop("open") === true;
         $("#pear-panel").html(render_pear_panel(render_state));
+        $("#pear-panel").toggleClass("pear-panel-collapsed", !panel_open);
         if (typeof side_request === "string") {
             $("#pear-side-request").val(side_request);
         }
@@ -729,6 +775,7 @@ function render(
         $(document).trigger("pear_liveness_markers_changed");
         last_render_state_key = next_render_state_key;
     }
+    $("#pear-panel").toggleClass("pear-panel-collapsed", !panel_open);
     update_work_cursor(topic_context);
     rendered_context_key = next_context_key;
     schedule_live_refresh(active_run);
@@ -858,6 +905,9 @@ export function initialize(): void {
     initialized = true;
     $("body").on("click", "#pear-panel-refresh", () => {
         refresh({force_context: true});
+    });
+    $("body").on("click", "#pear-panel-close", () => {
+        close_work_details();
     });
     $("body").on("click", ".pear-run-action", function () {
         const $button = $(this);

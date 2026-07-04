@@ -686,7 +686,7 @@ test("pear_message_vars", () => {
     assert.equal(result.edited, false);
 });
 
-test("pear_tool_spoiler_title_detection", () => {
+run_test("pear_tool_spoiler_title_detection", () => {
     assert.equal(message_list_view.is_pear_tool_spoiler_title_for_testing("Ran 1 tool"), true);
     assert.equal(message_list_view.is_pear_tool_spoiler_title_for_testing("Ran 7 tools"), true);
     assert.equal(message_list_view.is_pear_tool_spoiler_title_for_testing("Running 2/4 tools ✦"), true);

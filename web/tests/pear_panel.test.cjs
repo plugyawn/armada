@@ -173,6 +173,22 @@ run_test("work_cursor_state_for_testing", () => {
         }).status_label,
         "translated: +4",
     );
+
+    assert.equal(
+        pear_panel.work_cursor_state_for_testing({
+            stream: "devel",
+            topic: "pear",
+            model: "gpt-5.5",
+            git: {
+                available: true,
+                dirty: false,
+                worktree_name: "routing-fix",
+            },
+            repo_label: "Megatron-LM",
+            github_repo: "",
+        }).branch_label,
+        "routing-fix",
+    );
 });
 
 run_test("workbench_view_for_testing", () => {

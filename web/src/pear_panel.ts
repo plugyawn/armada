@@ -587,7 +587,7 @@ function display_topic_context(topic_context: PearTopicContext | undefined | nul
                       {recent_commit_count},
                   );
     } else {
-        workbench_meta_label = $t({defaultMessage: "Private side request"});
+        workbench_meta_label = $t({defaultMessage: "Private whisper"});
     }
     const workspace_primary_title = first_nonempty_string([
         topic_context.repo_title?.trim(),
@@ -618,7 +618,7 @@ function display_topic_context(topic_context: PearTopicContext | undefined | nul
             recent_commit_count > 0
                 ? $t({defaultMessage: "history {recent_commit_count}"}, {recent_commit_count})
                 : $t({defaultMessage: "history"}),
-        side_tab_label: $t({defaultMessage: "side"}),
+        side_tab_label: $t({defaultMessage: "whisper"}),
         workbench_title: first_nonempty_string([
             git.branch?.trim(),
             worktree_name,

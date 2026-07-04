@@ -148,6 +148,7 @@ run_test("template renders workbench without active run", () => {
             workbench_title_attr: "/srv/pear-workspaces/devel-general-chat",
             workbench_meta_label: "",
             workbench_branch_meta_label: "devel / general-chat / abc1234",
+            workbench_head_glyph: "⋅",
             workbench_head_label: "HEAD+1",
             workbench_head_title: "HEAD+1 local edits abc1234",
             workbench_head_summary: "local edits",
@@ -178,6 +179,11 @@ run_test("template renders workbench without active run", () => {
     assert.match(html, /pear-workbench/);
     assert.match(html, /pear-workbench-context-row/);
     assert.match(html, /pear-workbench-head-row/);
+    assert.doesNotMatch(html, /pear-workbench-title-glyph/);
+    assert.match(html, /pear-workbench-head-avatar/);
+    assert.match(html, /pear-workbench-head-glyph/);
+    assert.match(html, /⋅/);
+    assert.doesNotMatch(html, /pear-workbench-head-glyph pear-thinking-glyph/);
     assert.match(html, /HEAD\+1/);
     assert.match(html, /local edits/);
     assert.match(html, /abc1234/);
@@ -203,12 +209,14 @@ run_test("template renders ambient workbench context meter", () => {
         },
         active_run: {
             show_status: false,
+            is_active: true,
             usage: {cache_percent: 72},
         },
         topic_context: {
             workbench_title: "routing-fix",
             workbench_title_attr: "/srv/pear-workspaces/devel-routing-fix",
             workbench_branch_meta_label: "devel / a3f92c1",
+            workbench_head_glyph: "⋅",
             workbench_head_label: "HEAD+1",
             workbench_head_title: "HEAD+1 local edits a3f92c1",
             workbench_head_summary: "local edits",
@@ -233,6 +241,8 @@ run_test("template renders ambient workbench context meter", () => {
     assert.match(html, /pear-workbench-context-meter-fill/);
     assert.match(html, /width: 72%;/);
     assert.match(html, /cached context 72\.0%/);
+    assert.match(html, /pear-workbench-head-row pear-liveness-active/);
+    assert.match(html, /pear-workbench-head-glyph pear-thinking-glyph/);
     assert.doesNotMatch(html, /cache_percent/);
     assert.doesNotMatch(html, /<meter\b/);
 });
@@ -252,6 +262,7 @@ run_test("template keeps runtime metadata out of workbench content rail", () => 
             workbench_title: "routing-fix",
             workbench_title_attr: "/srv/pear-workspaces/devel-routing-fix",
             workbench_branch_meta_label: "devel / routing-fix / a3f92c1",
+            workbench_head_glyph: "·",
             workbench_head_label: "HEAD",
             workbench_head_title: "HEAD a3f92c1",
             workbench_head_summary: "No committed work yet",
@@ -289,6 +300,7 @@ run_test("template renders diff rows without duplicate summary chips", () => {
             workbench_title_attr: "/srv/pear-workspaces/devel-routing-fix",
             workbench_meta_label: "",
             workbench_branch_meta_label: "devel / routing-fix / a3f92c1",
+            workbench_head_glyph: "⋅",
             workbench_head_label: "HEAD+1",
             workbench_head_title: "HEAD+1 local edits a3f92c1",
             workbench_head_summary: "local edits",

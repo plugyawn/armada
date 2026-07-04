@@ -461,11 +461,11 @@ function rerender_popover_if_open(): void {
     }
 }
 
-function update_navbar_button_label(): void {
+function update_runtime_button_label(): void {
     if (typeof document === "undefined") {
         return;
     }
-    const $button = $("#pear-runtime-menu .header-button");
+    const $button = $("#pear-runtime-menu");
     if ($button.length === 0) {
         return;
     }
@@ -503,14 +503,14 @@ function update_navbar_button_label(): void {
     }
     $button.attr("aria-label", label);
     $button.attr("data-tippy-content", label);
-    $button.find(".pear-navbar-runtime-label").text(compact_label);
+    $button.find(".pear-runtime-menu-label").text(compact_label);
     $button.toggleClass("pear-liveness-active", runtime_status.is_active);
     $button
-        .find(".pear-navbar-glyph")
+        .find(".pear-runtime-menu-glyph")
         .text(runtime_status.glyph)
         .attr(
             "class",
-            `pear-ui-glyph pear-navbar-glyph ${runtime_status.class_name}${
+            `pear-ui-glyph pear-runtime-menu-glyph ${runtime_status.class_name}${
                 runtime_status.is_active ? " pear-thinking-glyph" : ""
             }`,
         );
@@ -523,7 +523,7 @@ function fetch_topic_context(): void {
         topic_context = undefined;
         latest_runs = [];
         context_key = "";
-        update_navbar_button_label();
+        update_runtime_button_label();
         rerender_popover_if_open();
         return;
     }
@@ -542,7 +542,7 @@ function fetch_topic_context(): void {
             latest_runs = data.pear_runs ?? [];
             topic_context = data.pear_topic_context ?? undefined;
             context_key = narrow_context_key(stream, topic);
-            update_navbar_button_label();
+            update_runtime_button_label();
             rerender_popover_if_open();
         },
         error(xhr) {
@@ -579,7 +579,7 @@ function save_runtime(model: string, reasoning_effort: string): void {
                 topic_context = data.pear_topic_context;
                 context_key = narrow_context_key(stream, topic);
             }
-            update_navbar_button_label();
+            update_runtime_button_label();
             rerender_popover_if_open();
             // Keep the Pear panel in the right sidebar in sync.
             pear_panel.refresh();
@@ -654,12 +654,10 @@ export function initialize(): void {
     initialized = true;
 
     // register_popover_menu attaches a body-delegated click handler,
-    // so this works even if the navbar has not been rendered yet;
-    // ui_init.js additionally calls us after initialize_navbar().
+    // so this works even if the right sidebar has not been rendered yet.
     popover_menus.register_popover_menu("#pear-runtime-menu", {
         theme: "popover-menu",
-        placement: "bottom",
-        offset: popover_menus.NAVBAR_POPOVER_OFFSET,
+        placement: "right",
         // The strategy: "fixed"; and eventlisteners modifier option
         // ensure that the popover does not modify its position
         // or disappear when user zooms the page.
@@ -684,17 +682,17 @@ export function initialize(): void {
                 topic_context = undefined;
                 latest_runs = [];
                 context_key = "";
-                update_navbar_button_label();
+                update_runtime_button_label();
             }
             last_error = "";
             render_popover_content(instance);
             fetch_topic_context();
-            $("#pear-runtime-menu").addClass("active-navbar-menu");
+            $("#pear-runtime-menu").addClass("active-right-sidebar-menu");
         },
         onHidden(instance) {
             instance.destroy();
             popover_menus.popover_instances.pear_runtime_menu = null;
-            $("#pear-runtime-menu").removeClass("active-navbar-menu");
+            $("#pear-runtime-menu").removeClass("active-right-sidebar-menu");
         },
     });
 
@@ -738,9 +736,9 @@ export function initialize(): void {
         pear_panel.open_work_details();
     });
 
-    update_navbar_button_label();
+    update_runtime_button_label();
     fetch_topic_context();
-    $(document).on("pear_message_view_header_rendered", update_navbar_button_label);
+    $(document).on("pear_message_view_header_rendered", update_runtime_button_label);
     window.addEventListener("hashchange", fetch_topic_context);
     context_refresh_timer ??= window.setInterval(
         fetch_topic_context,

@@ -858,7 +858,7 @@ body.pear-workbench-split-open {
     overflow-wrap: anywhere;
 }
 
-.pear-navbar-glyph {
+.pear-runtime-menu-glyph {
     color: currentcolor;
     font-size: 16px;
     vertical-align: -0.05em;
@@ -880,7 +880,7 @@ body.pear-workbench-split-open {
     color: var(--color-text-item);
 }
 
-.pear-navbar-runtime-label {
+.pear-runtime-menu-label {
     display: none;
 }
 

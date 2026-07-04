@@ -14,6 +14,12 @@
         {{/if}}
         {{#if has_panel_menu}}
         <div class="pear-panel-actions">
+            {{#unless show_workbench}}
+            <button type="button" class="pear-runtime-menu-trigger pear-runtime-panel-trigger pear-icon-button icon-button icon-button-square icon-button-neutral tippy-zulip-delayed-tooltip" aria-label="{{t 'Pear runtime' }}" data-tippy-content="{{t 'Pear runtime' }}">
+                <span class="pear-ui-glyph pear-runtime-menu-glyph" aria-hidden="true">·</span>
+                <span class="pear-runtime-menu-label">{{t "Pear runtime" }}</span>
+            </button>
+            {{/unless}}
             <details class="pear-run-actions pear-panel-run-actions" data-run-id="{{active_run.id}}">
                 <summary class="pear-run-actions-summary pear-icon-button icon-button icon-button-square icon-button-neutral tippy-zulip-delayed-tooltip" aria-label="{{t 'Pear work menu' }}" data-tippy-content="{{t 'Pear work menu' }}">
                     <i class="zulip-icon zulip-icon-more-vertical" aria-hidden="true"></i>
@@ -73,6 +79,10 @@
                                 {{topic_context.side_tab_label}}
                             </button>
                         </div>
+                        <button type="button" class="pear-runtime-menu-trigger pear-workbench-runtime pear-icon-button icon-button icon-button-square icon-button-neutral tippy-zulip-delayed-tooltip" aria-label="{{t 'Pear runtime' }}" data-tippy-content="{{t 'Pear runtime' }}">
+                            <span class="pear-ui-glyph pear-runtime-menu-glyph" aria-hidden="true">·</span>
+                            <span class="pear-runtime-menu-label">{{t "Pear runtime" }}</span>
+                        </button>
                         {{#if panel_can_close}}
                             <button type="button" class="pear-panel-close-action pear-workbench-close pear-icon-button icon-button icon-button-square icon-button-neutral tippy-zulip-delayed-tooltip" aria-label="{{t 'Hide Pear work details' }}" data-tippy-content="{{t 'Hide Pear work details' }}">
                                 <i class="zulip-icon zulip-icon-close" aria-hidden="true"></i>

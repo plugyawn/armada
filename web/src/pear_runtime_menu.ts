@@ -112,11 +112,17 @@ let initialized = false;
 let context_refresh_timer: number | undefined;
 
 const RUNTIME_CONTEXT_REFRESH_INTERVAL_MS = 60_000;
-const runtime_menu_selector = "#userlist-header #pear-runtime-menu";
+const runtime_menu_selector = ".pear-runtime-menu-trigger";
 const retired_header_chrome_selector = [
+    "#message_view_header #pear-runtime-menu",
     "#message_view_header #pear-work-cursor",
     "#message_view_header #pear-context-meter",
-    "#top_navbar > .column-right > #pear-runtime-menu",
+    "#top_navbar #pear-runtime-menu",
+    "#top_navbar #pear-work-cursor",
+    "#top_navbar #pear-context-meter",
+    "#top_navbar .pear-runtime-menu-trigger",
+    "#top_navbar .pear-work-cursor",
+    "#top_navbar .pear-context-meter",
 ].join(", ");
 
 const fallback_efforts: PearReasoningEffort[] = [
@@ -527,6 +533,11 @@ function remove_retired_header_chrome(): void {
     $(retired_header_chrome_selector).remove();
 }
 
+function on_message_view_header_rendered(): void {
+    remove_retired_header_chrome();
+    update_runtime_button_label();
+}
+
 function fetch_topic_context(): void {
     const {stream, topic} = current_narrow();
     if (stream === undefined || topic === undefined) {
@@ -665,7 +676,7 @@ export function initialize(): void {
     initialized = true;
 
     // register_popover_menu attaches a body-delegated click handler,
-    // so this works even if the right sidebar has not been rendered yet.
+    // so this works across Pear panel rerenders.
     popover_menus.register_popover_menu(runtime_menu_selector, {
         theme: "popover-menu",
         placement: "left-start",
@@ -749,7 +760,7 @@ export function initialize(): void {
 
     update_runtime_button_label();
     fetch_topic_context();
-    $(document).on("pear_message_view_header_rendered", update_runtime_button_label);
+    $(document).on("pear_message_view_header_rendered", on_message_view_header_rendered);
     window.addEventListener("hashchange", fetch_topic_context);
     context_refresh_timer ??= window.setInterval(
         fetch_topic_context,

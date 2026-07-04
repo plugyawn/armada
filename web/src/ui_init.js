@@ -705,7 +705,7 @@ export async function initialize_everything(state_data) {
     unread_ops.initialize();
     gear_menu.initialize();
     navbar_help_menu.initialize();
-    // Must run after the right sidebar has rendered the Pear runtime button.
+    // Registers delegated handlers for Pear panel runtime controls.
     pear_runtime_menu.initialize();
     pear_canvas.initialize();
     pear_files.initialize();

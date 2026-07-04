@@ -102,8 +102,14 @@ type PearGitContext = {
     worktree_name?: string;
     branch?: string;
     head?: string;
+    head_short?: string;
+    upstream?: string;
+    ahead?: number;
+    behind?: number;
     dirty?: boolean;
     changed_count?: number;
+    detached?: boolean;
+    branch_matches_topic?: boolean;
     changed_files?: PearGitChangedFile[];
     changed_files_truncated?: boolean;
     diff_shortstat?: string;
@@ -136,6 +142,7 @@ type PearWorkCursorState = {
     repo_label: string;
     branch_label: string;
     head_label: string;
+    sync_label: string;
     status_label: string;
     title: string;
 };
@@ -558,6 +565,7 @@ export function work_cursor_state_for_testing(
             repo_label: "",
             branch_label: "",
             head_label: "",
+            sync_label: "",
             status_label: "",
             title: "",
         };
@@ -575,15 +583,27 @@ export function work_cursor_state_for_testing(
         topic_context.worktree_label?.trim(),
         repo_label,
     ]);
-    const head_label = git.head?.trim() ?? "";
+    const head_label = first_nonempty_string([git.head?.trim(), git.head_short?.trim()]);
+    const ahead = git.ahead ?? 0;
+    const behind = git.behind ?? 0;
+    const sync_parts: string[] = [];
+    if (ahead > 0) {
+        sync_parts.push($t({defaultMessage: "+{ahead}"}, {ahead}));
+    }
+    if (behind > 0) {
+        sync_parts.push($t({defaultMessage: "-{behind}"}, {behind}));
+    }
+    const sync_label = sync_parts.join(" ");
     const changed_count = git.changed_count ?? 0;
-    const status_label = git.dirty
-        ? changed_count > 0
-            ? $t({defaultMessage: "+{changed_count}"}, {changed_count})
-            : $t({defaultMessage: "changed"})
-        : $t({defaultMessage: "clean"});
-    const status_marker = git.dirty ? "✶" : "✓";
-    const parts = [repo_label, branch_label, head_label, status_label].filter(
+    const status_label = git.detached
+        ? $t({defaultMessage: "detached"})
+        : git.dirty
+          ? changed_count > 0
+              ? $t({defaultMessage: "+{changed_count}"}, {changed_count})
+              : $t({defaultMessage: "changed"})
+          : $t({defaultMessage: "clean"});
+    const status_marker = git.dirty ? "✶" : "·";
+    const parts = [repo_label, branch_label, head_label, sync_label, status_label].filter(
         (part) => part.length > 0,
     );
     return {
@@ -593,6 +613,7 @@ export function work_cursor_state_for_testing(
         repo_label,
         branch_label,
         head_label,
+        sync_label,
         status_label,
         title: parts.join(" / "),
     };
@@ -656,6 +677,9 @@ export function update_work_cursor(
             })
             .text(state.head_label)
             .appendTo($cursor);
+    }
+    if (state.sync_label !== "") {
+        $("<span>").addClass("pear-work-cursor-sync").text(state.sync_label).appendTo($cursor);
     }
     const $status = $("<span>").addClass("pear-work-cursor-status").text(state.status_label);
     if (state.status_class === "dirty") {

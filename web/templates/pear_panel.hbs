@@ -70,6 +70,17 @@
                                     <span class="pear-workbench-title-meta">{{topic_context.workbench_branch_meta_label}}</span>
                                 {{/if}}
                             </div>
+                            <div class="pear-workbench-tabs" aria-label="{{t 'Pear work views' }}">
+                                <button type="button" class="pear-workbench-tab {{#if topic_context.workbench_diff_selected}}pear-workbench-tab-selected{{/if}}" data-pear-workbench-view="diff" {{#if topic_context.workbench_diff_disabled}}disabled{{/if}}>
+                                    {{topic_context.diff_tab_label}}
+                                </button>
+                                <button type="button" class="pear-workbench-tab {{#if topic_context.workbench_history_selected}}pear-workbench-tab-selected{{/if}}" data-pear-workbench-view="history" {{#if topic_context.workbench_history_disabled}}disabled{{/if}}>
+                                    {{topic_context.history_tab_label}}
+                                </button>
+                                <button type="button" class="pear-workbench-tab {{#if topic_context.workbench_side_selected}}pear-workbench-tab-selected{{/if}}" data-pear-workbench-view="side">
+                                    {{topic_context.side_tab_label}}
+                                </button>
+                            </div>
                             <button type="button" class="pear-runtime-menu-trigger pear-workbench-runtime tippy-zulip-delayed-tooltip" aria-label="{{t 'Pear runtime' }}" data-tippy-content="{{topic_context.runtime_chip_title}}">
                                 <span class="pear-ui-glyph pear-runtime-menu-glyph" aria-hidden="true">·</span>
                                 <span class="pear-runtime-menu-label">{{topic_context.runtime_chip_label}}</span>
@@ -81,6 +92,7 @@
                             {{/if}}
                         </div>
                         <div class="pear-workbench-head-row" title="{{topic_context.workbench_head_title}}">
+                            <span class="pear-ui-glyph pear-workbench-head-glyph" aria-hidden="true">✦</span>
                             <span class="pear-workbench-head-label">{{topic_context.workbench_head_label}}</span>
                             <span class="pear-workbench-head-summary">{{topic_context.workbench_head_summary}}</span>
                             {{#if topic_context.workbench_head_short}}
@@ -100,17 +112,6 @@
                                 </button>
                             {{/if}}
                         </div>
-                        <div class="pear-workbench-tabs" aria-label="{{t 'Pear work views' }}">
-                            <button type="button" class="pear-workbench-tab {{#if topic_context.workbench_diff_selected}}pear-workbench-tab-selected{{/if}}" data-pear-workbench-view="diff" {{#if topic_context.workbench_diff_disabled}}disabled{{/if}}>
-                                {{topic_context.diff_tab_label}}
-                            </button>
-                            <button type="button" class="pear-workbench-tab {{#if topic_context.workbench_history_selected}}pear-workbench-tab-selected{{/if}}" data-pear-workbench-view="history" {{#if topic_context.workbench_history_disabled}}disabled{{/if}}>
-                                {{topic_context.history_tab_label}}
-                            </button>
-                            <button type="button" class="pear-workbench-tab {{#if topic_context.workbench_side_selected}}pear-workbench-tab-selected{{/if}}" data-pear-workbench-view="side">
-                                {{topic_context.side_tab_label}}
-                            </button>
-                        </div>
                     </div>
                     {{#if active_run}}
                         {{#if active_run.context_meter.has_meter}}
@@ -125,6 +126,7 @@
                     <div class="pear-workbench-body pear-workbench-view-{{topic_context.workbench_view}}">
                         {{#if topic_context.workbench_diff_selected}}
                             {{#if topic_context.has_workbench_diff}}
+                                {{#unless topic_context.has_changed_files}}
                                 {{#if topic_context.has_workbench_diff_summary}}
                                     <div class="pear-workbench-summary" aria-label="{{topic_context.workbench_diff_summary_label}}">
                                         {{#if topic_context.workbench_diff_file_label}}
@@ -138,6 +140,7 @@
                                         {{/if}}
                                     </div>
                                 {{/if}}
+                                {{/unless}}
                                 {{#if topic_context.has_changed_files}}
                                     <div class="pear-file-list">
                                         {{#each topic_context.git.changed_files}}

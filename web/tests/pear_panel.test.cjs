@@ -172,6 +172,68 @@ run_test("template renders workbench without active run", () => {
     assert.doesNotMatch(html, /pear-workbench-context-meter/);
 });
 
+run_test("template renders diff rows without duplicate summary chips", () => {
+    const html = render_pear_panel({
+        panel_open: true,
+        show_workbench: true,
+        has_topic: true,
+        show_panel_header: false,
+        panel_can_close: true,
+        active_run: undefined,
+        topic_context: {
+            workbench_title: "routing-fix",
+            workbench_title_attr: "/srv/pear-workspaces/devel-routing-fix",
+            workbench_meta_label: "",
+            workbench_branch_meta_label: "devel / routing-fix / a3f92c1",
+            workbench_head_label: "HEAD+1",
+            workbench_head_title: "HEAD+1 local edits a3f92c1",
+            workbench_head_summary: "local edits",
+            workbench_head_short: "a3f92c1",
+            workbench_diff_selected: true,
+            workbench_history_selected: false,
+            workbench_side_selected: false,
+            workbench_diff_disabled: false,
+            workbench_history_disabled: false,
+            diff_tab_label: "diff 2",
+            history_tab_label: "history",
+            side_tab_label: "whisper",
+            runtime_chip_title: "GPT-5.5 · Medium",
+            runtime_chip_label: "GPT-5.5 · m",
+            workbench_view: "diff",
+            has_workbench_diff: true,
+            has_changed_files: true,
+            has_workbench_diffstat: true,
+            has_workbench_diff_summary: true,
+            workbench_diff_summary_label: "2 files +16 -4",
+            workbench_diff_file_label: "2 files",
+            workbench_diff_insertions_label: "+16",
+            workbench_diff_deletions_label: "-4",
+            git: {
+                changed_files: [
+                    {
+                        status: "M",
+                        kind: "modified",
+                        path: "zerver/lib/pear_gate.py",
+                    },
+                    {
+                        status: "A",
+                        kind: "added",
+                        path: "zerver/tests/test_pear_gate.py",
+                    },
+                ],
+            },
+        },
+    });
+
+    assert.match(html, /pear-workbench-diffstat/);
+    assert.match(html, /pear-file-list/);
+    assert.match(html, /pear-file-row pear-file-modified/);
+    assert.match(html, /zerver\/lib\/pear_gate\.py/);
+    assert.match(html, /pear-file-row pear-file-added/);
+    assert.match(html, /zerver\/tests\/test_pear_gate\.py/);
+    assert.doesNotMatch(html, /pear-workbench-summary/);
+});
+
 run_test("should_refresh_context_for_testing", () => {
     const base_options = {
         context_key_value: "devel\u0000general chat",

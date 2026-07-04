@@ -9,6 +9,7 @@ import {$t} from "./i18n.ts";
 import * as inbox_util from "./inbox_util.ts";
 import * as narrow_state from "./narrow_state.ts";
 import {page_params} from "./page_params.ts";
+import * as pear_panel from "./pear_panel.ts";
 import * as peer_data from "./peer_data.ts";
 import * as recent_view_util from "./recent_view_util.ts";
 import * as rendered_markdown from "./rendered_markdown.ts";
@@ -143,6 +144,7 @@ export function colorize_message_view_header(): void {
 function append_and_display_title_area(context: MessageViewHeaderContext): void {
     const $message_view_header_elem = $("#message_view_header");
     $message_view_header_elem.html(render_message_view_header(context));
+    pear_panel.update_work_cursor();
     if (context.stream_settings_link) {
         colorize_message_view_header();
     }

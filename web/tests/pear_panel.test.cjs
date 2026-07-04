@@ -120,3 +120,57 @@ run_test("topic_context_after_refresh_for_testing", () => {
         null,
     );
 });
+
+run_test("work_cursor_state_for_testing", () => {
+    assert.deepEqual(pear_panel.work_cursor_state_for_testing(undefined), {
+        visible: false,
+        status_class: "",
+        status_marker: "",
+        repo_label: "",
+        branch_label: "",
+        head_label: "",
+        status_label: "",
+        title: "",
+    });
+
+    assert.deepEqual(
+        pear_panel.work_cursor_state_for_testing({
+            stream: "devel",
+            topic: "pear",
+            model: "gpt-5.5",
+            git: {
+                available: true,
+                branch: "main",
+                head: "abc1234",
+                dirty: false,
+            },
+            github_repo: "zulip/zulip",
+        }),
+        {
+            visible: true,
+            status_class: "clean",
+            status_marker: "✓",
+            repo_label: "zulip/zulip",
+            branch_label: "main",
+            head_label: "abc1234",
+            status_label: "translated: clean",
+            title: "zulip/zulip / main / abc1234 / translated: clean",
+        },
+    );
+
+    assert.equal(
+        pear_panel.work_cursor_state_for_testing({
+            stream: "devel",
+            topic: "pear",
+            model: "gpt-5.5",
+            git: {
+                available: true,
+                dirty: true,
+                changed_count: 4,
+            },
+            repo_label: "Megatron-LM",
+            github_repo: "",
+        }).status_label,
+        "translated: +4",
+    );
+});

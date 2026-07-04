@@ -129,6 +129,17 @@ type PearTopicContext = {
     git: PearGitContext;
 };
 
+type PearWorkCursorState = {
+    visible: boolean;
+    status_class: string;
+    status_marker: string;
+    repo_label: string;
+    branch_label: string;
+    head_label: string;
+    status_label: string;
+    title: string;
+};
+
 let initialized = false;
 let refresh_timer: number | undefined;
 let live_refresh_timer: number | undefined;
@@ -439,6 +450,96 @@ function display_topic_context(topic_context: PearTopicContext | undefined | nul
     };
 }
 
+export function work_cursor_state_for_testing(
+    topic_context: PearTopicContext | undefined | null,
+): PearWorkCursorState {
+    if (topic_context === undefined || topic_context === null) {
+        return {
+            visible: false,
+            status_class: "",
+            status_marker: "",
+            repo_label: "",
+            branch_label: "",
+            head_label: "",
+            status_label: "",
+            title: "",
+        };
+    }
+    const git = topic_context.git;
+    const repo_label = first_nonempty_string([
+        topic_context.github_repo.trim(),
+        topic_context.repo_label?.trim(),
+        git.repo_label?.trim(),
+        topic_context.pinned_repo?.trim(),
+    ]);
+    const branch_label = git.branch?.trim() ?? "";
+    const head_label = git.head?.trim() ?? "";
+    const changed_count = git.changed_count ?? 0;
+    const status_label = git.dirty
+        ? changed_count > 0
+            ? $t({defaultMessage: "+{changed_count}"}, {changed_count})
+            : $t({defaultMessage: "changed"})
+        : $t({defaultMessage: "clean"});
+    const status_marker = git.dirty ? "✶" : "✓";
+    const parts = [repo_label, branch_label, head_label, status_label].filter(
+        (part) => part.length > 0,
+    );
+    return {
+        visible: git.available && parts.length > 0,
+        status_class: git.dirty ? "dirty" : "clean",
+        status_marker,
+        repo_label,
+        branch_label,
+        head_label,
+        status_label,
+        title: parts.join(" / "),
+    };
+}
+
+export function update_work_cursor(
+    topic_context: PearTopicContext | null | undefined = last_topic_context,
+): void {
+    const $cursor = $("#pear-work-cursor");
+    if ($cursor.length === 0) {
+        return;
+    }
+    const {stream, topic} = current_context();
+    if (
+        topic_context === undefined ||
+        topic_context === null ||
+        stream === undefined ||
+        topic === undefined ||
+        topic_context.stream !== stream ||
+        topic_context.topic !== topic
+    ) {
+        $cursor.empty().addClass("hidden");
+        return;
+    }
+    const state = work_cursor_state_for_testing(topic_context);
+    if (!state.visible) {
+        $cursor.empty().addClass("hidden");
+        return;
+    }
+    $cursor
+        .empty()
+        .removeClass("hidden pear-work-cursor-clean pear-work-cursor-dirty")
+        .addClass(`pear-work-cursor-${state.status_class}`)
+        .attr("title", state.title);
+    $("<span>")
+        .addClass("pear-ui-glyph pear-work-cursor-marker")
+        .attr("aria-hidden", "true")
+        .text(state.status_marker)
+        .appendTo($cursor);
+    $("<span>").addClass("pear-work-cursor-repo").text(state.repo_label).appendTo($cursor);
+    if (state.branch_label !== "") {
+        $("<span>").addClass("pear-work-cursor-ref").text(state.branch_label).appendTo($cursor);
+    }
+    if (state.head_label !== "") {
+        $("<span>").addClass("pear-work-cursor-head").text(state.head_label).appendTo($cursor);
+    }
+    $("<span>").addClass("pear-work-cursor-status").text(state.status_label).appendTo($cursor);
+}
+
 function active_display_run(runs: PearRun[]): ReturnType<typeof display_run> | undefined {
     const active_run =
         runs.find(
@@ -590,6 +691,7 @@ function render(
         $(document).trigger("pear_liveness_markers_changed");
         last_render_state_key = next_render_state_key;
     }
+    update_work_cursor(topic_context);
     rendered_context_key = next_context_key;
     schedule_live_refresh(active_run);
 }

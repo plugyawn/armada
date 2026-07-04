@@ -47,108 +47,6 @@ run_test("status_marker_for_testing", () => {
     assert.equal(pear_panel.status_marker_for_testing("unknown"), "·");
 });
 
-run_test("runtime_chip_labels_for_testing", () => {
-    const topic_context = {
-        model: "gpt-5.5",
-        model_catalog: [
-            {
-                slug: "gpt-5.5",
-                display_name: "GPT-5.5",
-            },
-        ],
-        reasoning_effort: "medium",
-        reasoning_efforts: [
-            {
-                effort: "medium",
-                label: "Medium",
-            },
-        ],
-    };
-
-    assert.deepEqual(pear_panel.runtime_chip_labels_for_testing(topic_context), {
-        label: "GPT-5.5 · m",
-        title: "GPT-5.5 · Medium",
-    });
-    assert.deepEqual(
-        pear_panel.runtime_chip_labels_for_testing({
-            model: "custom-model",
-            reasoning_effort: "xhigh",
-            reasoning_efforts: [],
-        }),
-        {
-            label: "custom-model · xh",
-            title: "custom-model · xhigh",
-        },
-    );
-});
-
-run_test("compact_meta_label_for_testing", () => {
-    assert.equal(pear_panel.compact_meta_label_for_testing([" devel ", "", undefined]), "devel");
-    assert.equal(
-        pear_panel.compact_meta_label_for_testing(["devel", "routing-fix", "a3f92c1"]),
-        "devel / routing-fix / a3f92c1",
-    );
-});
-
-run_test("workbench_title_attr_for_testing keeps metadata hover-only", () => {
-    assert.equal(
-        pear_panel.workbench_title_attr_for_testing([
-            "general chat",
-            "devel / general-chat / abc1234",
-            "general chat",
-            "/srv/pear-workspaces/devel-general-chat",
-            "",
-            undefined,
-        ]),
-        "general chat · devel / general-chat / abc1234 · /srv/pear-workspaces/devel-general-chat",
-    );
-});
-
-run_test("workbench_title_for_testing prefers topic over internal worktree", () => {
-    assert.equal(
-        pear_panel.workbench_title_for_testing({
-            topic: "general chat",
-            branch: "master",
-            worktree_name: "devel-general-chat-81204a836e2d",
-            workspace_primary_name: "zulip/zulip",
-        }),
-        "general chat",
-    );
-    assert.equal(
-        pear_panel.workbench_title_for_testing({
-            topic: "",
-            branch: "routing-fix",
-            worktree_name: "devel-routing-fix-81204a836e2d",
-            workspace_primary_name: "zulip/zulip",
-        }),
-        "routing-fix",
-    );
-});
-
-run_test("workbench_context_meter_for_testing", () => {
-    assert.deepEqual(pear_panel.workbench_context_meter_for_testing(undefined), {
-        has_meter: false,
-        percent: 0,
-        value: "",
-        is_hot: false,
-        title: "",
-    });
-    assert.deepEqual(pear_panel.workbench_context_meter_for_testing({cache_percent: 72.3}), {
-        has_meter: true,
-        percent: 72.3,
-        value: "72.3%",
-        is_hot: true,
-        title: "translated: cached context 72.3%",
-    });
-    assert.deepEqual(pear_panel.workbench_context_meter_for_testing({cache_percent: -4}), {
-        has_meter: true,
-        percent: 0,
-        value: "0.0%",
-        is_hot: false,
-        title: "translated: cached context 0.0%",
-    });
-});
-
 run_test("template renders workbench without active run", () => {
     const html = render_pear_panel({
         panel_open: true,
@@ -158,15 +56,6 @@ run_test("template renders workbench without active run", () => {
         panel_can_close: true,
         active_run: undefined,
         topic_context: {
-            workbench_title: "general chat",
-            workbench_title_attr: "/srv/pear-workspaces/devel-general-chat",
-            workbench_meta_label: "",
-            workbench_branch_meta_label: "devel / general-chat / abc1234",
-            workbench_head_glyph: "⋅",
-            workbench_head_label: "HEAD+1",
-            workbench_head_title: "HEAD+1 local edits abc1234",
-            workbench_head_summary: "local edits",
-            workbench_head_short: "abc1234",
             workbench_diff_selected: false,
             workbench_history_selected: true,
             workbench_side_selected: false,
@@ -175,14 +64,11 @@ run_test("template renders workbench without active run", () => {
             diff_tab_label: "diff",
             history_tab_label: "history",
             side_tab_label: "whisper",
-            runtime_chip_title: "GPT-5.5 · XHigh",
-            runtime_chip_label: "GPT-5.5 · xh",
             workbench_view: "history",
             git_tree_loading: false,
             git_tree_error: "",
             has_git_tree_graph: false,
             has_recent_commits: false,
-            has_workbench_diffstat: true,
             workbench_diff_summary_label: "2 files +16 -4",
             workbench_diff_file_label: "2 files",
             workbench_diff_insertions_label: "+16",
@@ -192,24 +78,19 @@ run_test("template renders workbench without active run", () => {
 
     assert.match(html, /pear-workbench/);
     assert.match(html, /pear-workbench-context-row/);
-    assert.match(html, /pear-workbench-head-row/);
-    assert.doesNotMatch(html, /pear-workbench-title-glyph/);
-    assert.doesNotMatch(html, /pear-workbench-title-meta/);
-    assert.match(html, /title="\/srv\/pear-workspaces\/devel-general-chat"/);
-    assert.match(html, /pear-workbench-head-avatar/);
-    assert.match(html, /pear-workbench-head-glyph/);
-    assert.match(html, /⋅/);
-    assert.doesNotMatch(html, /pear-workbench-head-glyph pear-thinking-glyph/);
-    assert.match(html, /HEAD\+1/);
-    assert.match(html, /local edits/);
-    assert.match(html, /abc1234/);
-    assert.match(html, /pear-workbench-diffstat/);
-    assert.match(html, /\+16/);
-    assert.match(html, /-4/);
+    assert.match(html, /pear-workbench-tabs/);
+    assert.match(html, /pear-workbench-close/);
+    assert.match(html, /diff/);
+    assert.match(html, /history/);
+    assert.match(html, /whisper/);
+    assert.doesNotMatch(html, /pear-workbench-title/);
+    assert.doesNotMatch(html, /pear-workbench-runtime/);
+    assert.doesNotMatch(html, /pear-workbench-head-row/);
+    assert.doesNotMatch(html, /pear-workbench-diffstat/);
     assert.doesNotMatch(html, /pear-workbench-context-meter/);
 });
 
-run_test("template renders ambient workbench context meter", () => {
+run_test("template keeps volatile run metadata out of workbench chrome", () => {
     const html = render_pear_panel({
         panel_open: true,
         show_workbench: true,
@@ -217,27 +98,12 @@ run_test("template renders ambient workbench context meter", () => {
         show_panel_header: false,
         panel_can_close: true,
         active_run_is_active: true,
-        workbench_context_meter: {
-            has_meter: true,
-            percent: 72,
-            value: "72.0%",
-            is_hot: true,
-            title: "cached context 72.0%",
-        },
         active_run: {
             show_status: false,
             is_active: true,
             usage: {cache_percent: 72},
         },
         topic_context: {
-            workbench_title: "routing-fix",
-            workbench_title_attr: "/srv/pear-workspaces/devel-routing-fix",
-            workbench_branch_meta_label: "devel / a3f92c1",
-            workbench_head_glyph: "⋅",
-            workbench_head_label: "HEAD+1",
-            workbench_head_title: "HEAD+1 local edits a3f92c1",
-            workbench_head_summary: "local edits",
-            workbench_head_short: "a3f92c1",
             workbench_diff_selected: true,
             workbench_history_selected: false,
             workbench_side_selected: false,
@@ -246,22 +112,16 @@ run_test("template renders ambient workbench context meter", () => {
             diff_tab_label: "diff",
             history_tab_label: "history",
             side_tab_label: "whisper",
-            runtime_chip_title: "GPT-5.5 · Medium",
-            runtime_chip_label: "GPT-5.5 · m",
             workbench_view: "diff",
             has_workbench_diff: false,
-            has_workbench_diffstat: false,
         },
     });
 
-    assert.match(html, /pear-workbench-context-meter pear-workbench-context-meter-hot/);
-    assert.match(html, /pear-workbench-context-meter-fill/);
-    assert.match(html, /width: 72%;/);
-    assert.match(html, /cached context 72\.0%/);
-    assert.match(html, /pear-workbench-head-row pear-liveness-active/);
-    assert.match(html, /pear-workbench-head-glyph pear-thinking-glyph/);
+    assert.match(html, /pear-workbench-tabs/);
+    assert.doesNotMatch(html, /pear-workbench-context-meter/);
+    assert.doesNotMatch(html, /pear-workbench-head-row/);
+    assert.doesNotMatch(html, /pear-thinking-glyph/);
     assert.doesNotMatch(html, /cache_percent/);
-    assert.doesNotMatch(html, /<meter\b/);
 });
 
 run_test("template keeps runtime metadata out of workbench content rail", () => {
@@ -276,13 +136,6 @@ run_test("template keeps runtime metadata out of workbench content rail", () => 
             usage: {cache_percent: 91},
         },
         topic_context: {
-            workbench_title: "routing-fix",
-            workbench_title_attr: "/srv/pear-workspaces/devel-routing-fix",
-            workbench_branch_meta_label: "devel / routing-fix / a3f92c1",
-            workbench_head_glyph: "·",
-            workbench_head_label: "HEAD",
-            workbench_head_title: "HEAD a3f92c1",
-            workbench_head_summary: "No committed work yet",
             workbench_diff_selected: true,
             workbench_history_selected: false,
             workbench_side_selected: false,
@@ -291,17 +144,16 @@ run_test("template keeps runtime metadata out of workbench content rail", () => 
             diff_tab_label: "diff",
             history_tab_label: "history",
             side_tab_label: "whisper",
-            runtime_chip_title: "GPT-5.5 · High",
-            runtime_chip_label: "GPT-5.5 · h",
             workbench_view: "diff",
             has_workbench_diff: false,
-            has_workbench_diffstat: false,
         },
     });
 
     assert.doesNotMatch(html, /pear-workbench-context-meter/);
     assert.doesNotMatch(html, /cache_percent/);
-    assert.match(html, /pear-workbench-runtime/);
+    assert.doesNotMatch(html, /GPT-5\.5/);
+    assert.doesNotMatch(html, /pear-workbench-runtime/);
+    assert.doesNotMatch(html, /No committed work yet/);
 });
 
 run_test("template renders diff rows without duplicate summary chips", () => {
@@ -313,15 +165,6 @@ run_test("template renders diff rows without duplicate summary chips", () => {
         panel_can_close: true,
         active_run: undefined,
         topic_context: {
-            workbench_title: "routing-fix",
-            workbench_title_attr: "/srv/pear-workspaces/devel-routing-fix",
-            workbench_meta_label: "",
-            workbench_branch_meta_label: "devel / routing-fix / a3f92c1",
-            workbench_head_glyph: "⋅",
-            workbench_head_label: "HEAD+1",
-            workbench_head_title: "HEAD+1 local edits a3f92c1",
-            workbench_head_summary: "local edits",
-            workbench_head_short: "a3f92c1",
             workbench_diff_selected: true,
             workbench_history_selected: false,
             workbench_side_selected: false,
@@ -330,12 +173,9 @@ run_test("template renders diff rows without duplicate summary chips", () => {
             diff_tab_label: "diff 2",
             history_tab_label: "history",
             side_tab_label: "whisper",
-            runtime_chip_title: "GPT-5.5 · Medium",
-            runtime_chip_label: "GPT-5.5 · m",
             workbench_view: "diff",
             has_workbench_diff: true,
             has_changed_files: true,
-            has_workbench_diffstat: true,
             has_workbench_diff_summary: true,
             workbench_diff_summary_label: "2 files +16 -4",
             workbench_diff_file_label: "2 files",
@@ -358,7 +198,7 @@ run_test("template renders diff rows without duplicate summary chips", () => {
         },
     });
 
-    assert.match(html, /pear-workbench-diffstat/);
+    assert.doesNotMatch(html, /pear-workbench-diffstat/);
     assert.match(html, /pear-file-list/);
     assert.match(html, /pear-file-row pear-file-modified/);
     assert.match(html, /zerver\/lib\/pear_gate\.py/);

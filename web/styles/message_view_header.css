@@ -124,41 +124,50 @@
         display: flex;
         align-items: center;
         align-self: center;
-        gap: 3px;
+        gap: 2px;
         flex: none;
-        max-width: min(34vw, 340px);
+        max-width: min(42vw, 430px);
         margin-left: auto;
-        padding: 1px 3px;
-        border: 1px solid var(--color-border-sidebar-subheader);
-        border-radius: 8px;
-        background: color-mix(
-            in srgb,
-            var(--color-background-hover-narrow-filter) 55%,
-            transparent
-        );
+        padding: 0 2px;
+        border-radius: 4px;
+        background: transparent;
         color: var(--color-text-message-view-header);
         cursor: pointer;
-        font-size: 11px;
+        font-size: 12px;
         font-weight: 500;
-        line-height: 15px;
-        opacity: 0.86;
+        line-height: 18px;
+        opacity: 0.78;
     }
 
-    .pear-work-cursor:hover,
-    .pear-work-cursor:focus-visible {
-        border-color: var(--color-border-legacy-input-focus);
+    .pear-work-cursor:hover {
         opacity: 1;
+    }
+
+    .pear-work-cursor:focus-visible {
+        outline: 1px solid var(--color-border-legacy-input-focus);
+        outline-offset: 2px;
+        opacity: 1;
+    }
+
+    .pear-work-cursor:hover .pear-work-cursor-target,
+    .pear-work-cursor:focus-visible .pear-work-cursor-target {
+        background: var(--color-background-hover-narrow-filter);
+    }
+
+    .pear-work-cursor:focus:not(:focus-visible) {
         outline: none;
     }
 
     .pear-work-cursor-marker {
-        width: 16px;
+        width: 13px;
         color: var(--color-text-item);
-        font-size: 0.9em;
+        font-size: 0.82em;
+        text-align: center;
     }
 
     .pear-work-cursor-ref,
     .pear-work-cursor-head,
+    .pear-work-cursor-sync,
     .pear-work-cursor-status {
         overflow: hidden;
         text-overflow: ellipsis;
@@ -172,27 +181,32 @@
     }
 
     .pear-work-cursor-head,
+    .pear-work-cursor-sync,
     .pear-work-cursor-status {
         flex: none;
         border-radius: 5px;
-        background: color-mix(
-            in srgb,
-            var(--color-border-sidebar-subheader) 62%,
-            transparent
-        );
         font-family: monospace;
         font-size: 10.5px;
         line-height: 14px;
-        padding: 0 4px;
+        padding: 0 3px;
     }
 
     .pear-work-cursor-head {
+        background: color-mix(
+            in srgb,
+            var(--color-border-sidebar-subheader) 48%,
+            transparent
+        );
+        color: var(--color-text-item);
+    }
+
+    .pear-work-cursor-sync {
         color: var(--color-text-item);
     }
 
     .pear-work-cursor-target {
         margin: 0;
-        padding: 0 4px;
+        padding: 0 3px;
         border-radius: 4px;
     }
 

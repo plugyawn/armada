@@ -583,6 +583,22 @@
     vertical-align: -0.05em;
 }
 
+.pear-runtime-status-active {
+    color: var(--color-text-success-text-action-button);
+}
+
+.pear-runtime-status-paused {
+    color: var(--color-text-warning-text-action-button);
+}
+
+.pear-runtime-status-blocked {
+    color: var(--color-text-danger-text-action-button);
+}
+
+.pear-runtime-status-idle {
+    color: var(--color-text-item);
+}
+
 #pear-runtime-menu .header-button {
     width: auto;
     min-width: var(--header-height);
@@ -656,7 +672,6 @@
     }
 
     .pear-runtime-summary-glyph {
-        color: var(--color-text-item);
         font-size: 0.95em;
     }
 
@@ -670,6 +685,57 @@
     .pear-runtime-summary-sub {
         color: var(--color-text-item);
         font-size: 0.85em;
+    }
+
+    .pear-runtime-meter-block {
+        display: grid;
+        gap: 4px;
+        padding: 0 15px 7px 39px;
+        color: var(--color-text-item);
+        font-family: monospace;
+        font-size: 10px;
+        line-height: 13px;
+    }
+
+    .pear-runtime-meter-row {
+        display: flex;
+        min-width: 0;
+        justify-content: space-between;
+        gap: 8px;
+    }
+
+    .pear-runtime-meter-row span {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .pear-runtime-meter {
+        width: 100%;
+        height: 4px;
+        border: 0;
+        background: transparent;
+    }
+
+    .pear-runtime-meter::-webkit-meter-bar {
+        border: 0;
+        border-radius: 999px;
+        background: color-mix(
+            in srgb,
+            var(--color-border-sidebar-subheader) 58%,
+            transparent
+        );
+    }
+
+    .pear-runtime-meter::-webkit-meter-optimum-value {
+        border-radius: 999px;
+        background: var(--color-text-success-text-action-button);
+    }
+
+    .pear-runtime-meter::-moz-meter-bar {
+        border-radius: 999px;
+        background: var(--color-text-success-text-action-button);
     }
 
     .pear-runtime-usage {

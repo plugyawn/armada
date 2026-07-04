@@ -218,6 +218,39 @@ run_test("runtime_summary", () => {
     );
 });
 
+run_test("runtime_status_for_testing", () => {
+    assert.deepEqual(pear_runtime_menu.runtime_status_for_testing(undefined), {
+        glyph: "·",
+        label: "translated: Idle",
+        class_name: "pear-runtime-status-idle",
+    });
+    assert.deepEqual(pear_runtime_menu.runtime_status_for_testing({status: "running"}), {
+        glyph: "✦",
+        label: "translated: Running",
+        class_name: "pear-runtime-status-active",
+    });
+    assert.deepEqual(pear_runtime_menu.runtime_status_for_testing({status: "queued"}), {
+        glyph: "✦",
+        label: "translated: Queued",
+        class_name: "pear-runtime-status-active",
+    });
+    assert.deepEqual(pear_runtime_menu.runtime_status_for_testing({status: "paused"}), {
+        glyph: "✧",
+        label: "translated: Paused",
+        class_name: "pear-runtime-status-paused",
+    });
+    assert.deepEqual(pear_runtime_menu.runtime_status_for_testing({status: "failed"}), {
+        glyph: "✷",
+        label: "translated: Failed",
+        class_name: "pear-runtime-status-blocked",
+    });
+    assert.deepEqual(pear_runtime_menu.runtime_status_for_testing({status: "cancelled"}), {
+        glyph: "✷",
+        label: "translated: Cancelled",
+        class_name: "pear-runtime-status-blocked",
+    });
+});
+
 run_test("build_runtime_usage_rows", () => {
     assert.deepEqual(pear_runtime_menu.build_runtime_usage_rows(undefined), []);
     assert.deepEqual(
@@ -248,5 +281,47 @@ run_test("build_runtime_usage_rows", () => {
             {label: "translated: time", value: "2.0s"},
             {label: "translated: speed", value: "4.5 tok/s"},
         ],
+    );
+});
+
+run_test("runtime_usage_meter_for_testing", () => {
+    assert.deepEqual(pear_runtime_menu.runtime_usage_meter_for_testing(undefined), {
+        has_meter: false,
+        label: "",
+        value: "",
+        percent: 0,
+    });
+    assert.deepEqual(
+        pear_runtime_menu.runtime_usage_meter_for_testing({
+            cache_percent: 66.66,
+        }),
+        {
+            has_meter: true,
+            label: "translated: cached context",
+            value: "66.7%",
+            percent: 66.66,
+        },
+    );
+    assert.deepEqual(
+        pear_runtime_menu.runtime_usage_meter_for_testing({
+            cache_percent: 125,
+        }),
+        {
+            has_meter: true,
+            label: "translated: cached context",
+            value: "100.0%",
+            percent: 100,
+        },
+    );
+    assert.deepEqual(
+        pear_runtime_menu.runtime_usage_meter_for_testing({
+            cache_percent: -5,
+        }),
+        {
+            has_meter: true,
+            label: "translated: cached context",
+            value: "0.0%",
+            percent: 0,
+        },
     );
 });

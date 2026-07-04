@@ -2,12 +2,23 @@
     <ul role="menu" class="popover-menu-list">
         {{#if has_runtime}}
         <li role="none" class="link-item">
-            <div class="pear-runtime-summary" role="menuitem">
-                <span class="pear-ui-glyph pear-runtime-summary-glyph" aria-hidden="true">✦</span>
+            <div class="pear-runtime-summary" role="menuitem" aria-label="{{runtime_model_label}} {{runtime_effort_label}} {{runtime_status.label}}">
+                <span class="pear-ui-glyph pear-runtime-summary-glyph {{runtime_status.class_name}}" aria-hidden="true">{{runtime_status.glyph}}</span>
                 <span class="pear-runtime-summary-main">{{runtime_model_label}}</span>
                 <span class="pear-runtime-summary-sub">{{runtime_effort_label}}</span>
             </div>
         </li>
+        {{#if runtime_usage_meter.has_meter}}
+        <li role="none" class="link-item">
+            <div class="pear-runtime-meter-block" role="menuitem">
+                <div class="pear-runtime-meter-row">
+                    <span>{{runtime_usage_meter.label}}</span>
+                    <span>{{runtime_usage_meter.value}}</span>
+                </div>
+                <meter class="pear-runtime-meter" min="0" max="100" value="{{runtime_usage_meter.percent}}">{{runtime_usage_meter.value}}</meter>
+            </div>
+        </li>
+        {{/if}}
         {{#if has_runtime_usage}}
         <li role="none" class="link-item">
             <div class="pear-runtime-usage" role="menuitem" {{#if runtime_usage_title}}title="{{runtime_usage_title}}"{{/if}}>

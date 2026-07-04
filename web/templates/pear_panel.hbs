@@ -72,21 +72,23 @@
                     <div class="pear-workbench-body pear-workbench-view-{{topic_context.workbench_view}}">
                         {{#if topic_context.workbench_diff_selected}}
                             {{#if topic_context.has_workbench_diff}}
+                                {{#if topic_context.git.diff_shortstat}}
+                                    <div class="pear-workbench-summary">
+                                        <span class="pear-workbench-summary-chip">{{topic_context.git.diff_shortstat}}</span>
+                                    </div>
+                                {{/if}}
                                 {{#if topic_context.has_changed_files}}
                                     <div class="pear-file-list">
                                         {{#each topic_context.git.changed_files}}
                                             <div class="pear-file-row pear-file-{{kind}}">
                                                 <span class="pear-file-status">{{status}}</span>
-                                                <span class="pear-file-path">{{path}}</span>
+                                                <span class="pear-file-path" title="{{path}}">{{path}}</span>
                                             </div>
                                         {{/each}}
                                         {{#if topic_context.git.changed_files_truncated}}
                                             <div class="pear-file-more">{{t "More changed files not shown." }}</div>
                                         {{/if}}
                                     </div>
-                                {{/if}}
-                                {{#if topic_context.git.diff_shortstat}}
-                                    <div class="pear-diff-shortstat">{{topic_context.git.diff_shortstat}}</div>
                                 {{/if}}
                             {{else}}
                                 <div class="pear-workbench-empty">{{t "No local diff." }}</div>
@@ -97,8 +99,9 @@
                                 <div class="pear-commit-list">
                                     {{#each topic_context.git.recent_commits}}
                                         <div class="pear-commit-row">
+                                            <span class="pear-ui-glyph pear-commit-marker" aria-hidden="true">✦</span>
+                                            <span class="pear-commit-summary" title="{{summary}}">{{summary}}</span>
                                             <span class="pear-commit-hash">{{hash}}</span>
-                                            <span class="pear-commit-summary">{{summary}}</span>
                                         </div>
                                     {{/each}}
                                 </div>

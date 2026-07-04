@@ -186,7 +186,7 @@
     }
 
     .pear-work-cursor-target:hover {
-        background: var(--color-background-hover);
+        background: var(--color-background-hover-narrow-filter);
         color: var(--color-text-message-view-header);
     }
 

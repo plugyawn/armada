@@ -157,6 +157,8 @@ run_test("git_display", () => {
             has_repo_branch: true,
             repo_branch_label: "zulip/zulip · main",
             head: "abc1234",
+            status_class: "clean",
+            status_marker: "✓",
             status_label: "translated: clean",
         },
     );
@@ -174,6 +176,8 @@ run_test("git_display", () => {
             has_repo_branch: true,
             repo_branch_label: "pear · main",
             head: "",
+            status_class: "clean",
+            status_marker: "✓",
             status_label: "translated: clean",
         },
     );
@@ -189,6 +193,8 @@ run_test("git_display", () => {
             has_repo_branch: false,
             repo_branch_label: "",
             head: "",
+            status_class: "dirty",
+            status_marker: "✶",
             status_label: "translated: 3 changed",
         },
     );

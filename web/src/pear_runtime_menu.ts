@@ -68,6 +68,8 @@ export type PearGitDisplay = {
     has_repo_branch: boolean;
     repo_branch_label: string;
     head: string;
+    status_class: "clean" | "dirty";
+    status_marker: string;
     status_label: string;
 };
 
@@ -181,6 +183,8 @@ export function git_display(context: PearRuntimeContext | undefined): PearGitDis
         has_repo_branch: repo_branch_label.length > 0,
         repo_branch_label,
         head: git.head?.trim() ?? "",
+        status_class: git.dirty === true ? "dirty" : "clean",
+        status_marker: git.dirty === true ? "✶" : "✓",
         status_label,
     };
 }

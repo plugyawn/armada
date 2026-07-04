@@ -193,7 +193,7 @@ run_test("runtime_summary", () => {
         {
             model_label: "GPT-5.5",
             effort_label: "High",
-            compact_label: "GPT-5.5 · High",
+            compact_label: "gpt-5.5 · h",
         },
     );
 
@@ -202,7 +202,18 @@ run_test("runtime_summary", () => {
         {
             model_label: "custom",
             effort_label: "Low",
-            compact_label: "custom · Low",
+            compact_label: "custom · l",
+        },
+    );
+
+    assert.deepEqual(
+        pear_runtime_menu.runtime_summary(
+            make_context({model: "custom", reasoning_effort: "xhigh"}),
+        ),
+        {
+            model_label: "custom",
+            effort_label: "XHigh",
+            compact_label: "custom · xh",
         },
     );
 });

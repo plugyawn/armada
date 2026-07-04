@@ -7,11 +7,6 @@
                 <div class="pear-run-status-row pear-run-status-{{active_run.status_class}}{{#if active_run.is_active}} pear-liveness-active{{/if}}">
                     <span class="pear-ui-glyph pear-run-status-glyph {{#if active_run.is_active}}pear-thinking-glyph{{/if}}" aria-hidden="true">{{active_run.status_marker}}</span>
                     <span class="pear-run-status-text">{{active_run.status_label}}</span>
-                    {{#if active_run.has_usage}}
-                        <span class="pear-run-status-usage tippy-zulip-delayed-tooltip" data-tippy-content="{{active_run.usage_title}}">
-                            {{active_run.usage_label}}
-                        </span>
-                    {{/if}}
                 </div>
             {{/if}}
         </div>

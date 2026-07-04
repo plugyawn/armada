@@ -24,6 +24,22 @@ const pear_model_catalog_entry_schema = z.object({
     supported_reasoning_levels: z.optional(z.array(pear_reasoning_effort_schema)),
 });
 
+const pear_runtime_usage_schema = z.object({
+    input_tokens: z.optional(z.number()),
+    cached_input_tokens: z.optional(z.number()),
+    output_tokens: z.optional(z.number()),
+    reasoning_output_tokens: z.optional(z.number()),
+    total_tokens: z.optional(z.number()),
+    cache_percent: z.optional(z.number()),
+    duration_seconds: z.nullish(z.number()),
+    summary: z.optional(z.string()),
+});
+
+const pear_runtime_run_schema = z.object({
+    status: z.string(),
+    usage: z.nullish(pear_runtime_usage_schema),
+});
+
 // Subset of the `pear_topic_context` object returned by the
 // `GET /json/pear/runs` and `POST /json/pear/topic-context`
 // endpoints; see web/src/pear_panel.ts for the full shape.
@@ -38,6 +54,7 @@ const pear_runtime_context_schema = z.object({
 });
 
 const pear_runtime_response_schema = z.object({
+    pear_runs: z.optional(z.array(pear_runtime_run_schema)),
     pear_topic_context: z.nullish(pear_runtime_context_schema),
 });
 
@@ -57,6 +74,14 @@ export type PearRuntimeEffortSlider = {
     max: number;
 };
 
+export type PearRuntimeUsage = z.infer<typeof pear_runtime_usage_schema>;
+export type PearRuntimeRun = z.infer<typeof pear_runtime_run_schema>;
+
+export type PearRuntimeUsageRow = {
+    label: string;
+    value: string;
+};
+
 export type PearRuntimeSummary = {
     model_label: string;
     effort_label: string;
@@ -64,6 +89,7 @@ export type PearRuntimeSummary = {
 };
 
 let topic_context: PearRuntimeContext | undefined;
+let latest_runs: PearRuntimeRun[] = [];
 let context_key = "";
 let last_error = "";
 let request_in_flight = false;
@@ -190,10 +216,64 @@ export function runtime_summary(context: PearRuntimeContext | undefined): PearRu
     };
 }
 
+function format_count(value: number | undefined): string {
+    return value === undefined ? "0" : value.toLocaleString();
+}
+
+function active_runtime_run(runs: PearRuntimeRun[]): PearRuntimeRun | undefined {
+    return (
+        runs.find((run) => run.status === "running" || run.status === "queued") ??
+        runs.find((run) => run.status === "paused") ??
+        runs[0]
+    );
+}
+
+function build_runtime_usage_rows(
+    usage: PearRuntimeUsage | null | undefined,
+): PearRuntimeUsageRow[] {
+    if (usage === undefined || usage === null) {
+        return [];
+    }
+    const rows: PearRuntimeUsageRow[] = [];
+    if (usage.cache_percent !== undefined) {
+        rows.push({
+            label: $t({defaultMessage: "cache"}),
+            value: `${usage.cache_percent.toFixed(1)}%`,
+        });
+    }
+    if (usage.total_tokens !== undefined) {
+        rows.push({
+            label: $t({defaultMessage: "tokens"}),
+            value: format_count(usage.total_tokens),
+        });
+    } else if (usage.input_tokens !== undefined || usage.output_tokens !== undefined) {
+        rows.push({
+            label: $t({defaultMessage: "tokens"}),
+            value: `${format_count(usage.input_tokens)} in · ${format_count(usage.output_tokens)} out`,
+        });
+    }
+    if (typeof usage.duration_seconds === "number") {
+        rows.push({
+            label: $t({defaultMessage: "time"}),
+            value: `${usage.duration_seconds.toFixed(usage.duration_seconds < 10 ? 1 : 0)}s`,
+        });
+    }
+    if (usage.reasoning_output_tokens !== undefined && usage.reasoning_output_tokens > 0) {
+        rows.push({
+            label: $t({defaultMessage: "reasoning"}),
+            value: format_count(usage.reasoning_output_tokens),
+        });
+    }
+    return rows;
+}
+
 function popover_context(): {
     has_runtime: boolean;
     status_message: string;
     runtime_label: string;
+    has_runtime_usage: boolean;
+    runtime_usage_title: string;
+    runtime_usage_rows: PearRuntimeUsageRow[];
     model_choices: PearRuntimeMenuChoice[];
     effort_choices: PearRuntimeMenuChoice[];
     effort_slider: PearRuntimeEffortSlider;
@@ -212,16 +292,24 @@ function popover_context(): {
             has_runtime: false,
             status_message,
             runtime_label: "",
+            has_runtime_usage: false,
+            runtime_usage_title: "",
+            runtime_usage_rows: [],
             model_choices: [],
             effort_choices: [],
             effort_slider: effort_slider_for_testing([]),
         };
     }
     const choices = effort_choices(topic_context);
+    const usage = active_runtime_run(latest_runs)?.usage;
+    const runtime_usage_rows = build_runtime_usage_rows(usage);
     return {
         has_runtime: true,
         status_message: "",
         runtime_label: runtime_summary(topic_context).compact_label,
+        has_runtime_usage: runtime_usage_rows.length > 0,
+        runtime_usage_title: usage?.summary ?? "",
+        runtime_usage_rows,
         model_choices: model_choices(topic_context),
         effort_choices: choices,
         effort_slider: effort_slider_for_testing(choices),
@@ -266,6 +354,7 @@ function fetch_topic_context(): void {
     const {stream, topic} = current_narrow();
     if (stream === undefined || topic === undefined) {
         topic_context = undefined;
+        latest_runs = [];
         context_key = "";
         rerender_popover_if_open();
         return;
@@ -282,6 +371,7 @@ function fetch_topic_context(): void {
         success(raw_data) {
             const data = pear_runtime_response_schema.parse(raw_data);
             last_error = "";
+            latest_runs = data.pear_runs ?? [];
             topic_context = data.pear_topic_context ?? undefined;
             context_key = narrow_context_key(stream, topic);
             update_navbar_button_label();

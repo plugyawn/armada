@@ -8,6 +8,16 @@
                 <span class="pear-runtime-summary-sub">{{t "model" }}</span>
             </div>
         </li>
+        {{#if has_runtime_usage}}
+        <li role="none" class="link-item">
+            <div class="pear-runtime-usage" role="menuitem" {{#if runtime_usage_title}}title="{{runtime_usage_title}}"{{/if}}>
+                {{#each runtime_usage_rows}}
+                    <span class="pear-runtime-usage-label">{{label}}</span>
+                    <span class="pear-runtime-usage-value">{{value}}</span>
+                {{/each}}
+            </div>
+        </li>
+        {{/if}}
         <li role="separator" class="popover-menu-separator"></li>
         <li role="none" class="link-item">
             <a role="menuitem" class="pear-canvas-menu-link popover-menu-link" tabindex="0">

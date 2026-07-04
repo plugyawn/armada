@@ -225,32 +225,6 @@ function status_marker(status: string): string {
     }
 }
 
-function format_count(value: number | undefined): string {
-    return value === undefined ? "0" : value.toLocaleString();
-}
-
-function display_usage(usage: PearUsage | null | undefined): {
-    has_usage: boolean;
-    usage_label: string;
-    usage_title: string;
-} {
-    if (usage === undefined || usage === null) {
-        return {has_usage: false, usage_label: "", usage_title: ""};
-    }
-    const cache_percent = usage.cache_percent ?? 0;
-    const duration = usage.duration_seconds;
-    const duration_label =
-        typeof duration === "number" ? ` · ${duration.toFixed(duration < 10 ? 1 : 0)}s` : "";
-    const usage_label = `cache ${cache_percent.toFixed(1)}%${duration_label}`;
-    const cached = format_count(usage.cached_input_tokens);
-    const input = format_count(usage.input_tokens);
-    const output = format_count(usage.output_tokens);
-    const reasoning = format_count(usage.reasoning_output_tokens);
-    const usage_title =
-        usage.summary ?? `${cached}/${input} cached; ${output} output; ${reasoning} reasoning.`;
-    return {has_usage: true, usage_label, usage_title};
-}
-
 function is_pear_runs_response(data: unknown): data is PearRunsResponse {
     return (
         typeof data === "object" &&
@@ -423,13 +397,9 @@ function display_run(run: PearRun): PearRun & {
     can_cancel: boolean;
     has_actions: boolean;
     has_events: boolean;
-    has_usage: boolean;
-    usage_label: string;
-    usage_title: string;
     events: PearRunEvent[];
 } {
     const events = (run.events ?? []).map((event) => display_event(event));
-    const usage = display_usage(run.usage);
     const source_label =
         run.source_stream && run.source_topic ? `${run.source_stream} > ${run.source_topic}` : "";
     const can_pause = run.status === "running" || run.status === "queued";
@@ -457,7 +427,6 @@ function display_run(run: PearRun): PearRun & {
         can_cancel,
         has_actions: can_pause || can_resume || can_cancel,
         has_events: events.length > 0,
-        ...usage,
         events,
     };
 }

@@ -90,6 +90,27 @@ run_test("compact_meta_label_for_testing", () => {
     );
 });
 
+run_test("workbench_title_for_testing prefers topic over internal worktree", () => {
+    assert.equal(
+        pear_panel.workbench_title_for_testing({
+            topic: "general chat",
+            branch: "master",
+            worktree_name: "devel-general-chat-81204a836e2d",
+            workspace_primary_name: "zulip/zulip",
+        }),
+        "general chat",
+    );
+    assert.equal(
+        pear_panel.workbench_title_for_testing({
+            topic: "",
+            branch: "routing-fix",
+            worktree_name: "devel-routing-fix-81204a836e2d",
+            workspace_primary_name: "zulip/zulip",
+        }),
+        "routing-fix",
+    );
+});
+
 run_test("template renders workbench without active run", () => {
     const html = render_pear_panel({
         panel_open: true,

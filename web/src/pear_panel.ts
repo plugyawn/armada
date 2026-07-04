@@ -191,6 +191,21 @@ export function compact_meta_label_for_testing(values: (string | undefined)[]): 
         .join(" / ");
 }
 
+export function workbench_title_for_testing(values: {
+    topic: string | undefined;
+    branch: string | undefined;
+    worktree_name: string | undefined;
+    workspace_primary_name: string | undefined;
+}): string {
+    return first_nonempty_string([
+        values.topic?.trim(),
+        values.branch?.trim(),
+        values.worktree_name?.trim(),
+        values.workspace_primary_name?.trim(),
+        $t({defaultMessage: "Workbench"}),
+    ]);
+}
+
 function effort_short_label(effort: string): string {
     switch (effort.toLowerCase()) {
         case "low":
@@ -691,9 +706,11 @@ function display_topic_context(topic_context: PearTopicContext | undefined | nul
         topic_context.workdir,
         $t({defaultMessage: "Ask Pear to pin a Git repository for this topic."}),
     ]);
+    const topic_label = topic_context.topic.trim();
+    const branch_label = git.branch?.trim() ?? "";
     const workbench_branch_meta_label = compact_meta_label_for_testing([
         repo_label,
-        git.branch?.trim(),
+        branch_label !== "" && branch_label !== topic_label ? branch_label : undefined,
         git.head_short?.trim(),
     ]);
     const workbench_head_label = git.dirty === true ? "HEAD+1" : "HEAD";
@@ -741,12 +758,12 @@ function display_topic_context(topic_context: PearTopicContext | undefined | nul
                 ? $t({defaultMessage: "history {recent_commit_count}"}, {recent_commit_count})
                 : $t({defaultMessage: "history"}),
         side_tab_label: $t({defaultMessage: "whisper"}),
-        workbench_title: first_nonempty_string([
+        workbench_title: workbench_title_for_testing({
+            topic: topic_label,
+            branch: branch_label,
             worktree_name,
-            git.branch?.trim(),
             workspace_primary_name,
-            $t({defaultMessage: "Workbench"}),
-        ]),
+        }),
         workbench_title_attr: first_nonempty_string([
             topic_context.workdir,
             workspace_primary_title,

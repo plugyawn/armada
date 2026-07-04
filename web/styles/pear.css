@@ -217,16 +217,6 @@
     color: light-dark(hsl(31deg 46% 28%), hsl(37deg 88% 80%));
 }
 
-.pear-workdir {
-    overflow: hidden;
-    color: var(--color-text-item);
-    font-family: monospace;
-    font-size: 11px;
-    line-height: 15px;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
 .pear-workbench {
     display: flex;
     min-width: 0;
@@ -251,20 +241,27 @@
     flex: 1 1 auto;
     align-items: baseline;
     gap: 5px;
+}
+
+.pear-workbench-title-main,
+.pear-workbench-title-meta {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.pear-workbench-title-main {
     color: var(--color-text-sidebar-heading);
     font-weight: var(--font-weight-sidebar-heading);
     opacity: var(--opacity-sidebar-heading);
 }
 
-.pear-worktree-summary-extra {
-    min-width: 0;
-    overflow: hidden;
+.pear-workbench-title-meta {
     color: var(--color-text-item);
     font-family: monospace;
     font-size: 10px;
     font-weight: 400;
-    text-overflow: ellipsis;
-    white-space: nowrap;
 }
 
 .pear-workbench-tabs {

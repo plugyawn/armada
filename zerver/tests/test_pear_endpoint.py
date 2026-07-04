@@ -1926,6 +1926,34 @@ class PearSessionEndpointTest(ZulipTestCase):
             self.assertNotEqual(topic_context.workdir, channel_context.workdir)
             self.assertTrue(Path(topic_context.workdir).exists())
 
+    def test_topic_context_does_not_clone_local_parent_workspace_path(self) -> None:
+        owner = self.example_user("hamlet")
+
+        with tempfile.TemporaryDirectory() as temp_dir, self.settings(
+            PEAR_TOPIC_ISOLATION_BACKEND="os-user",
+            PEAR_TOPIC_WORKDIR_ROOT=temp_dir,
+        ), patch("zerver.lib.pear_worker.clone_or_update_pear_repository_workdir") as clone:
+            parent_path = Path(temp_dir) / "devel-base"
+            parent_path.mkdir()
+            PearTopicContext.objects.create(
+                realm=owner.realm,
+                stream_name="devel",
+                topic_name="",
+                github_repo=str(parent_path),
+                workdir=str(parent_path),
+            )
+
+            topic_context = ensure_pear_topic_context(
+                owner,
+                stream="devel",
+                topic="general chat",
+            )
+
+            clone.assert_not_called()
+            self.assertIsNotNone(topic_context.parent_context)
+            self.assertEqual(topic_context.parent_context.stream_name, "devel")
+            self.assertTrue(Path(topic_context.workdir).is_dir())
+
     def test_topic_context_refactor_moves_full_topic_rename(self) -> None:
         owner = self.example_user("hamlet")
         stream = self.subscribe(owner, PEAR_DEFAULT_STREAM)

@@ -391,7 +391,7 @@ export function workbench_view_for_testing(options: {
     if (options.has_history) {
         return "history";
     }
-    return "side";
+    return "history";
 }
 
 export function workbench_view_for_artifact_label(

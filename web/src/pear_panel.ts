@@ -938,6 +938,19 @@ function has_active_run(runs: {status: string}[]): boolean {
     return runs.some((run) => run.status === "running" || run.status === "queued");
 }
 
+export function panel_header_state_for_testing(active_run: {
+    show_status: boolean;
+    has_actions: boolean;
+} | undefined): {
+    show_panel_header: boolean;
+    has_panel_menu: boolean;
+} {
+    return {
+        show_panel_header: active_run?.show_status === true || active_run?.has_actions === true,
+        has_panel_menu: active_run?.has_actions === true,
+    };
+}
+
 export function should_refresh_context_for_testing(options: {
     context_key_value: string;
     force_context: boolean;
@@ -1058,20 +1071,14 @@ function render(
     });
     const panel_status = active_run?.status ?? "idle";
     const display_context = display_topic_context(topic_context);
+    const panel_header_state = panel_header_state_for_testing(active_run);
     const render_state = {
         has_topic,
         context_label: has_topic ? `${stream} > ${topic}` : "",
         panel_open,
         panel_can_close: panel_open && !run_keeps_work_panel_open(active_run),
-        has_panel_menu:
-            has_topic ||
-            active_run?.has_actions === true ||
-            (panel_open && !run_keeps_work_panel_open(active_run)),
-        show_panel_header:
-            active_run?.show_status === true ||
-            has_topic ||
-            active_run?.has_actions === true ||
-            (panel_open && !run_keeps_work_panel_open(active_run)),
+        has_panel_menu: panel_header_state.has_panel_menu,
+        show_panel_header: panel_header_state.show_panel_header,
         topic_context: display_context,
         active_run,
         error: last_error,

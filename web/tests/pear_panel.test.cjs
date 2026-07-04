@@ -131,6 +131,43 @@ run_test("topic_context_after_refresh_for_testing", () => {
     );
 });
 
+run_test("panel_header_state_for_testing", () => {
+    assert.deepEqual(pear_panel.panel_header_state_for_testing(undefined), {
+        show_panel_header: false,
+        has_panel_menu: false,
+    });
+    assert.deepEqual(
+        pear_panel.panel_header_state_for_testing({
+            show_status: false,
+            has_actions: false,
+        }),
+        {
+            show_panel_header: false,
+            has_panel_menu: false,
+        },
+    );
+    assert.deepEqual(
+        pear_panel.panel_header_state_for_testing({
+            show_status: true,
+            has_actions: false,
+        }),
+        {
+            show_panel_header: true,
+            has_panel_menu: false,
+        },
+    );
+    assert.deepEqual(
+        pear_panel.panel_header_state_for_testing({
+            show_status: true,
+            has_actions: true,
+        }),
+        {
+            show_panel_header: true,
+            has_panel_menu: true,
+        },
+    );
+});
+
 run_test("work_cursor_state_for_testing", () => {
     assert.deepEqual(pear_panel.work_cursor_state_for_testing(undefined), {
         visible: false,

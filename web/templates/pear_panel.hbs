@@ -46,30 +46,7 @@
                         {{/if}}
                     {{/if}}
                 </div>
-                <div class="pear-runtime-row">
-                    <label class="pear-field-label" for="pear-topic-model-select">{{t "Model" }}</label>
-                    <select id="pear-topic-model-select" class="pear-topic-model-select pear-topic-runtime-control">
-                        {{#each topic_context.display_model_choices}}
-                            <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
-                        {{/each}}
-                    </select>
-                </div>
-                <div class="pear-runtime-row pear-effort-row">
-                    <div class="pear-effort-header">
-                        <label class="pear-field-label" for="pear-reasoning-effort-slider">{{t "Thinking" }}</label>
-                        <span id="pear-reasoning-effort-value" class="pear-effort-value">{{topic_context.effort_label}}</span>
-                    </div>
-                    <input id="pear-reasoning-effort-slider" class="pear-reasoning-effort-slider pear-topic-runtime-control" type="range" min="0" max="{{topic_context.max_effort_index}}" step="1" value="{{topic_context.effort_index}}" aria-label="{{t 'Thinking effort' }}" />
-                    <div class="pear-effort-ticks">
-                        {{#each topic_context.display_reasoning_efforts}}
-                            <span class="{{#if selected}}selected{{/if}}">{{label}}</span>
-                        {{/each}}
-                    </div>
-                </div>
             </section>
-            {{#if model_error}}
-                <div class="pear-panel-error">{{model_error}}</div>
-            {{/if}}
 
             <section class="pear-context-section">
                 <div class="pear-context-section-title">{{t "Workspace" }}</div>

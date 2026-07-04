@@ -129,23 +129,11 @@ type PearTopicContext = {
     git: PearGitContext;
 };
 
-type PearModelChoice = {
-    value: string;
-    label: string;
-    selected: boolean;
-};
-
-type PearEffortChoice = PearReasoningEffort & {
-    index: number;
-    selected: boolean;
-};
-
 let initialized = false;
 let refresh_timer: number | undefined;
 let live_refresh_timer: number | undefined;
 let live_refresh_in_flight = false;
 let last_error = "";
-let last_model_error = "";
 let last_runs: PearRun[] = [];
 let last_topic_context: PearTopicContext | null | undefined;
 let rendered_context_key = "";
@@ -156,33 +144,6 @@ const worktree_details_open_by_context = new Map<string, boolean>();
 const LIVE_REFRESH_INTERVAL_MS = 125;
 const FULL_REFRESH_INTERVAL_MS = 5000;
 const CONTEXT_REFRESH_INTERVAL_MS = 60_000;
-
-const fallback_efforts: PearReasoningEffort[] = [
-    {effort: "low", label: "Low"},
-    {effort: "medium", label: "Medium"},
-    {effort: "high", label: "High"},
-    {effort: "xhigh", label: "XHigh"},
-];
-
-function model_reasoning_efforts(
-    topic_context: PearTopicContext | null | undefined,
-    model: string | undefined,
-): PearReasoningEffort[] {
-    const selected_model_entry = topic_context?.model_catalog?.find(
-        (entry) => entry.slug === model,
-    );
-    const model_efforts = selected_model_entry?.supported_reasoning_levels;
-    if (model_efforts !== undefined && model_efforts.length > 0) {
-        return model_efforts;
-    }
-    if (
-        topic_context?.reasoning_efforts !== undefined &&
-        topic_context.reasoning_efforts.length > 0
-    ) {
-        return topic_context.reasoning_efforts;
-    }
-    return fallback_efforts;
-}
 
 function compact_panel_text(text: string): string {
     return text
@@ -293,18 +254,6 @@ function is_pear_side_response(data: unknown): data is {dm_narrow_url?: string} 
     );
 }
 
-function is_pear_topic_context_response(
-    data: unknown,
-): data is {pear_topic_context?: PearTopicContext | null} {
-    return (
-        typeof data === "object" &&
-        data !== null &&
-        (!("pear_topic_context" in data) ||
-            data.pear_topic_context === null ||
-            typeof data.pear_topic_context === "object")
-    );
-}
-
 function display_event(event: PearRunEvent): PearRunEvent & {
     event_label: string;
     detail: string;
@@ -405,12 +354,6 @@ function display_run(run: PearRun): PearRun & {
 
 function display_topic_context(topic_context: PearTopicContext | undefined | null):
     | (PearTopicContext & {
-          has_model_choices: boolean;
-          display_model_choices: PearModelChoice[];
-          display_reasoning_efforts: PearEffortChoice[];
-          effort_index: number;
-          max_effort_index: number;
-          effort_label: string;
           git_available: boolean;
           git_status_class: string;
           git_status_marker: string;
@@ -438,41 +381,6 @@ function display_topic_context(topic_context: PearTopicContext | undefined | nul
         changed_count === 1
             ? $t({defaultMessage: "1 changed file"})
             : $t({defaultMessage: "{changed_count} changed files"}, {changed_count});
-    const model_catalog = topic_context.model_catalog ?? [];
-    const model_choices_from_catalog = model_catalog.map((entry) => ({
-        value: entry.slug,
-        label: entry.display_name || entry.slug,
-        selected: entry.slug === topic_context.model,
-    }));
-    const seen_models = new Set(model_choices_from_catalog.map((entry) => entry.value));
-    const display_model_choices = [...model_choices_from_catalog];
-    for (const model of topic_context.model_choices ?? []) {
-        if (!seen_models.has(model)) {
-            display_model_choices.push({
-                value: model,
-                label: model,
-                selected: model === topic_context.model,
-            });
-            seen_models.add(model);
-        }
-    }
-    if (topic_context.model && !seen_models.has(topic_context.model)) {
-        display_model_choices.unshift({
-            value: topic_context.model,
-            label: topic_context.model,
-            selected: true,
-        });
-    }
-    const reasoning_efforts = model_reasoning_efforts(topic_context, topic_context.model);
-    const selected_effort_index = Math.max(
-        0,
-        reasoning_efforts.findIndex((effort) => effort.effort === topic_context.reasoning_effort),
-    );
-    const display_reasoning_efforts = reasoning_efforts.map((effort, index) => ({
-        ...effort,
-        index,
-        selected: index === selected_effort_index,
-    }));
     const github_repo = topic_context.github_repo.trim();
     const pinned_repo = topic_context.pinned_repo?.trim() ?? "";
     const has_pinned_repo = pinned_repo.length > 0;
@@ -503,14 +411,6 @@ function display_topic_context(topic_context: PearTopicContext | undefined | nul
         ...topic_context,
         github_repo,
         model_choices: topic_context.model_choices ?? [],
-        has_model_choices: display_model_choices.length > 0,
-        display_model_choices,
-        display_reasoning_efforts,
-        effort_index: selected_effort_index,
-        max_effort_index: Math.max(0, display_reasoning_efforts.length - 1),
-        effort_label:
-            display_reasoning_efforts[selected_effort_index]?.label ??
-            topic_context.reasoning_effort,
         git_available: git.available,
         git_status_class: git.dirty ? "dirty" : "clean",
         git_status_marker,
@@ -675,7 +575,6 @@ function render(
         topic_context: display_topic_context(topic_context),
         active_run,
         error: last_error,
-        model_error: last_model_error,
         status_label: panel_status,
         status_class: status_class(panel_status),
     };
@@ -809,81 +708,6 @@ function start_side_session(): void {
     });
 }
 
-function current_reasoning_effort_from_slider(): string {
-    const slider_value = $("#pear-reasoning-effort-slider").val();
-    const selected_model_value = $("#pear-topic-model-select").val();
-    const selected_model =
-        typeof selected_model_value === "string" ? selected_model_value : undefined;
-    const efforts = model_reasoning_efforts(last_topic_context, selected_model);
-    const effort_count = efforts.length;
-    const index =
-        typeof slider_value === "string"
-            ? Math.min(Math.max(Number.parseInt(slider_value, 10) || 0, 0), effort_count - 1)
-            : 0;
-    return efforts[index]?.effort ?? last_topic_context?.reasoning_effort ?? "medium";
-}
-
-function update_reasoning_effort_label(): void {
-    const effort = current_reasoning_effort_from_slider();
-    const selected_model_value = $("#pear-topic-model-select").val();
-    const selected_model =
-        typeof selected_model_value === "string" ? selected_model_value : undefined;
-    const choices = model_reasoning_efforts(last_topic_context, selected_model);
-    const label = choices.find((choice) => choice.effort === effort)?.label ?? effort;
-    $("#pear-reasoning-effort-value").text(label);
-}
-
-function save_topic_context(): void {
-    const {stream, topic} = current_context();
-    const model = $("#pear-topic-model-select").val();
-    if (stream === undefined || topic === undefined || typeof model !== "string") {
-        return;
-    }
-    const clean_model = model.trim();
-    if (!clean_model) {
-        last_model_error = $t({defaultMessage: "Choose a model."});
-        render();
-        return;
-    }
-    const reasoning_effort = current_reasoning_effort_from_slider();
-    $(".pear-topic-runtime-control").prop("disabled", true);
-    void channel.post({
-        url: "/json/pear/topic-context",
-        data: {
-            stream,
-            topic,
-            model: clean_model,
-            reasoning_effort,
-        },
-        success(raw_data) {
-            if (!is_pear_topic_context_response(raw_data)) {
-                last_model_error = $t({
-                    defaultMessage: "Pear returned an invalid context payload.",
-                });
-                render();
-                return;
-            }
-            const data = raw_data;
-            last_model_error = "";
-            if (data.pear_topic_context !== undefined && data.pear_topic_context !== null) {
-                record_context_refresh(stream, topic);
-            }
-            render(last_runs, data.pear_topic_context);
-            refresh();
-        },
-        error(xhr) {
-            if (xhr.readyState !== 0) {
-                last_model_error = $t({defaultMessage: "Model change failed."});
-                blueslip.warn(`Failed to update Pear topic model: ${xhr.responseText}`);
-                render();
-            }
-        },
-        complete() {
-            $(".pear-topic-runtime-control").prop("disabled", false);
-        },
-    });
-}
-
 export function initialize(): void {
     if (initialized) {
         refresh();
@@ -904,15 +728,6 @@ export function initialize(): void {
     });
     $("body").on("click", "#pear-side-start", () => {
         start_side_session();
-    });
-    $("body").on("change", "#pear-topic-model-select", () => {
-        save_topic_context();
-    });
-    $("body").on("input", "#pear-reasoning-effort-slider", () => {
-        update_reasoning_effort_label();
-    });
-    $("body").on("change", "#pear-reasoning-effort-slider", () => {
-        save_topic_context();
     });
     refresh();
     refresh_timer = window.setInterval(refresh, FULL_REFRESH_INTERVAL_MS);

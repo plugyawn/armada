@@ -90,9 +90,9 @@
                                 </button>
                             {{/if}}
                         </div>
-                        <div class="pear-workbench-head-row {{#if active_run.is_active}}pear-liveness-active{{/if}}" title="{{topic_context.workbench_head_title}}">
+                        <div class="pear-workbench-head-row {{#if active_run_is_active}}pear-liveness-active{{/if}}" title="{{topic_context.workbench_head_title}}">
                             <span class="pear-workbench-head-avatar" aria-hidden="true">
-                                <span class="pear-ui-glyph pear-workbench-head-glyph {{#if active_run.is_active}}pear-thinking-glyph{{/if}}">{{#if active_run.is_active}}✦{{else}}{{topic_context.workbench_head_glyph}}{{/if}}</span>
+                                <span class="pear-ui-glyph pear-workbench-head-glyph {{#if active_run_is_active}}pear-thinking-glyph{{/if}}">{{#if active_run_is_active}}✦{{else}}{{topic_context.workbench_head_glyph}}{{/if}}</span>
                             </span>
                             <span class="pear-workbench-head-label">{{topic_context.workbench_head_label}}</span>
                             <span class="pear-workbench-head-summary">{{topic_context.workbench_head_summary}}</span>

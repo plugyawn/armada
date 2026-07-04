@@ -1034,6 +1034,7 @@ function render(
         panel_can_close: workbench_open,
         has_panel_menu: panel_header_state.has_panel_menu,
         show_panel_header: panel_header_state.show_panel_header,
+        active_run_is_active: active_run?.is_active === true,
         topic_context: display_context,
         workbench_context_meter,
         active_run,

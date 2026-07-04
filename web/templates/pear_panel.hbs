@@ -64,7 +64,6 @@
                     <div class="pear-workbench-header">
                         <div class="pear-workbench-context-row">
                             <div class="pear-workbench-title" title="{{topic_context.workbench_title_attr}}">
-                                <span class="pear-ui-glyph pear-workbench-title-glyph" aria-hidden="true">⑂</span>
                                 <span class="pear-workbench-title-main">{{topic_context.workbench_title}}</span>
                                 {{#if topic_context.workbench_branch_meta_label}}
                                     <span class="pear-workbench-title-meta">{{topic_context.workbench_branch_meta_label}}</span>
@@ -91,8 +90,10 @@
                                 </button>
                             {{/if}}
                         </div>
-                        <div class="pear-workbench-head-row" title="{{topic_context.workbench_head_title}}">
-                            <span class="pear-ui-glyph pear-workbench-head-glyph" aria-hidden="true">✦</span>
+                        <div class="pear-workbench-head-row {{#if active_run.is_active}}pear-liveness-active{{/if}}" title="{{topic_context.workbench_head_title}}">
+                            <span class="pear-workbench-head-avatar" aria-hidden="true">
+                                <span class="pear-ui-glyph pear-workbench-head-glyph {{#if active_run.is_active}}pear-thinking-glyph{{/if}}">{{#if active_run.is_active}}✦{{else}}{{topic_context.workbench_head_glyph}}{{/if}}</span>
+                            </span>
                             <span class="pear-workbench-head-label">{{topic_context.workbench_head_label}}</span>
                             <span class="pear-workbench-head-summary">{{topic_context.workbench_head_summary}}</span>
                             {{#if topic_context.workbench_head_short}}

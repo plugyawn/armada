@@ -629,6 +629,7 @@ function display_topic_context(topic_context: PearTopicContext | undefined | nul
           workbench_title_attr: string;
           workbench_meta_label: string;
           workbench_branch_meta_label: string;
+          workbench_head_glyph: string;
           workbench_head_label: string;
           workbench_head_title: string;
           workbench_head_summary: string;
@@ -745,6 +746,7 @@ function display_topic_context(topic_context: PearTopicContext | undefined | nul
         git.head_short?.trim(),
     ]);
     const workbench_head_label = git.dirty === true ? "HEAD+1" : "HEAD";
+    const workbench_head_glyph = git.dirty === true ? "⋅" : "·";
     const workbench_head_summary = first_nonempty_string([
         head_commit?.summary,
         git.dirty === true
@@ -802,6 +804,7 @@ function display_topic_context(topic_context: PearTopicContext | undefined | nul
         ]),
         workbench_meta_label,
         workbench_branch_meta_label,
+        workbench_head_glyph,
         workbench_head_label,
         workbench_head_title,
         workbench_head_summary,

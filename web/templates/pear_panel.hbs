@@ -49,23 +49,6 @@
     {{#if has_topic}}
         {{#if topic_context}}
             <section class="pear-context-section">
-                <div class="pear-context-section-title">{{t "Workspace" }}</div>
-                <div class="pear-workspace-summary pear-git-{{topic_context.git_status_class}}">
-                    <div class="pear-workspace-row">
-                        <span class="pear-context-label">{{topic_context.workspace_kind_label}}</span>
-                        {{#if topic_context.git_available}}
-                            <span class="pear-ui-glyph pear-git-marker" aria-hidden="true">{{topic_context.git_status_marker}}</span>
-                        {{/if}}
-                        <span class="pear-workspace-name" title="{{topic_context.workspace_primary_title}}">{{topic_context.workspace_primary_name}}</span>
-                        {{#if topic_context.show_primary_git_status}}
-                            <span class="pear-git-status">{{topic_context.git_status_label}}</span>
-                        {{/if}}
-                    </div>
-                    {{#if topic_context.workspace_ref_label}}
-                        <div class="pear-workspace-ref">{{topic_context.workspace_ref_label}}</div>
-                    {{/if}}
-                </div>
-
                 <div class="pear-workbench">
                     <div class="pear-workbench-header">
                         <div class="pear-workbench-title">

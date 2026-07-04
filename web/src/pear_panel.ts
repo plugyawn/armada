@@ -367,7 +367,7 @@ export function workbench_view_for_testing(options: {
     return "diff";
 }
 
-export function open_work_details(): void {
+export function open_work_details(requested_view?: PearWorkbenchView): void {
     const key = current_context_key();
     if (key !== "") {
         work_panel_open_by_context.set(key, true);
@@ -375,11 +375,13 @@ export function open_work_details(): void {
             workbench_view_by_context.set(
                 key,
                 workbench_view_for_testing({
-                    requested: workbench_view_by_context.get(key),
+                    requested: requested_view ?? workbench_view_by_context.get(key),
                     has_diff: git_has_diff(last_topic_context.git),
                     has_history: git_has_history(last_topic_context.git),
                 }),
             );
+        } else if (requested_view !== undefined) {
+            workbench_view_by_context.set(key, requested_view);
         }
     }
     render();
@@ -655,12 +657,33 @@ export function update_work_cursor(
         .appendTo($cursor);
     $("<span>").addClass("pear-work-cursor-repo").text(state.repo_label).appendTo($cursor);
     if (state.branch_label !== "") {
-        $("<span>").addClass("pear-work-cursor-ref").text(state.branch_label).appendTo($cursor);
+        $("<span>")
+            .addClass("pear-work-cursor-ref pear-work-cursor-target")
+            .attr({
+                "data-pear-workbench-view": "history",
+                title: $t({defaultMessage: "Open Pear history"}),
+            })
+            .text(state.branch_label)
+            .appendTo($cursor);
     }
     if (state.head_label !== "") {
-        $("<span>").addClass("pear-work-cursor-head").text(state.head_label).appendTo($cursor);
+        $("<span>")
+            .addClass("pear-work-cursor-head pear-work-cursor-target")
+            .attr({
+                "data-pear-workbench-view": "history",
+                title: $t({defaultMessage: "Open Pear history"}),
+            })
+            .text(state.head_label)
+            .appendTo($cursor);
     }
-    $("<span>").addClass("pear-work-cursor-status").text(state.status_label).appendTo($cursor);
+    const $status = $("<span>").addClass("pear-work-cursor-status").text(state.status_label);
+    if (state.status_class === "dirty") {
+        $status.addClass("pear-work-cursor-target").attr({
+            "data-pear-workbench-view": "diff",
+            title: $t({defaultMessage: "Open Pear diff"}),
+        });
+    }
+    $status.appendTo($cursor);
 }
 
 function active_display_run(runs: PearRun[]): ReturnType<typeof display_run> | undefined {
@@ -979,8 +1002,11 @@ export function initialize(): void {
     $("body").on("click", "#pear-side-start", () => {
         start_side_session();
     });
-    $("body").on("click", "#pear-work-cursor", () => {
-        open_work_details();
+    $("body").on("click", "#pear-work-cursor", (event) => {
+        const view = $(event.target)
+            .closest("[data-pear-workbench-view]")
+            .attr("data-pear-workbench-view");
+        open_work_details(view === "diff" || view === "history" ? view : undefined);
     });
     $("body").on("keydown", "#pear-work-cursor", (event) => {
         if (event.key !== "Enter" && event.key !== " ") {

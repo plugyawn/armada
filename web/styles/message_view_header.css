@@ -179,6 +179,17 @@
         color: var(--color-text-item);
     }
 
+    .pear-work-cursor-target {
+        margin: 0 -3px;
+        padding: 0 3px;
+        border-radius: 4px;
+    }
+
+    .pear-work-cursor-target:hover {
+        background: var(--color-background-hover);
+        color: var(--color-text-message-view-header);
+    }
+
     .pear-work-cursor-clean .pear-work-cursor-marker,
     .pear-work-cursor-clean .pear-work-cursor-status {
         color: light-dark(hsl(142deg 45% 30%), hsl(142deg 63% 76%));

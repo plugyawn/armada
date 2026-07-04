@@ -1102,6 +1102,15 @@ body.pear-workbench-split-open {
     display: none;
 }
 
+#top_navbar [id^="pear-"],
+#top_navbar [class^="pear-"],
+#top_navbar [class*=" pear-"],
+#message_view_header [id^="pear-"],
+#message_view_header [class^="pear-"],
+#message_view_header [class*=" pear-"] {
+    display: none !important;
+}
+
 /* Pear runtime popover menu; mirrors the radio-list layout used by
    #buddy-list-actions-menu-popover in right_sidebar.css. */
 #pear-runtime-menu-popover {

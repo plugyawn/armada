@@ -17,6 +17,11 @@
     }
 
     #pear-panel {
+        max-height: calc(
+            var(--full-height-dynamic-viewport) - var(--navbar-fixed-height) -
+                var(--header-padding-bottom)
+        );
+        overflow: auto;
         border-top: 0;
         padding-top: 6px;
     }

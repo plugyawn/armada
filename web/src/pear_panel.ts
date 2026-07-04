@@ -600,7 +600,12 @@ export function work_cursor_state_for_testing(
         git.repo_label?.trim(),
         topic_context.pinned_repo?.trim(),
     ]);
-    const branch_label = git.branch?.trim() ?? "";
+    const branch_label = first_nonempty_string([
+        git.branch?.trim(),
+        git.worktree_name?.trim(),
+        topic_context.worktree_label?.trim(),
+        repo_label,
+    ]);
     const head_label = git.head?.trim() ?? "";
     const changed_count = git.changed_count ?? 0;
     const status_label = git.dirty
@@ -663,7 +668,6 @@ export function update_work_cursor(
         .attr("aria-hidden", "true")
         .text(state.status_marker)
         .appendTo($cursor);
-    $("<span>").addClass("pear-work-cursor-repo").text(state.repo_label).appendTo($cursor);
     if (state.branch_label !== "") {
         $("<span>")
             .addClass("pear-work-cursor-ref pear-work-cursor-target")

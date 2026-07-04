@@ -884,8 +884,12 @@ body.pear-workbench-split-open {
     display: none;
 }
 
-/* Navbar Pear runtime popover menu; mirrors the radio-list layout
-   used by #buddy-list-actions-menu-popover in right_sidebar.css. */
+#top_navbar > .column-right > #pear-runtime-menu {
+    display: none !important;
+}
+
+/* Pear runtime popover menu; mirrors the radio-list layout used by
+   #buddy-list-actions-menu-popover in right_sidebar.css. */
 #pear-runtime-menu-popover {
     .pear-runtime-summary {
         display: grid;

@@ -112,6 +112,12 @@ let initialized = false;
 let context_refresh_timer: number | undefined;
 
 const RUNTIME_CONTEXT_REFRESH_INTERVAL_MS = 60_000;
+const runtime_menu_selector = "#userlist-header #pear-runtime-menu";
+const retired_header_chrome_selector = [
+    "#message_view_header #pear-work-cursor",
+    "#message_view_header #pear-context-meter",
+    "#top_navbar > .column-right > #pear-runtime-menu",
+].join(", ");
 
 const fallback_efforts: PearReasoningEffort[] = [
     {effort: "low", label: "Low"},
@@ -465,7 +471,7 @@ function update_runtime_button_label(): void {
     if (typeof document === "undefined") {
         return;
     }
-    const $button = $("#pear-runtime-menu");
+    const $button = $(runtime_menu_selector);
     if ($button.length === 0) {
         return;
     }
@@ -515,6 +521,10 @@ function update_runtime_button_label(): void {
             }`,
         );
     $(document).trigger("pear_liveness_markers_changed");
+}
+
+function remove_retired_header_chrome(): void {
+    $(retired_header_chrome_selector).remove();
 }
 
 function fetch_topic_context(): void {
@@ -647,6 +657,7 @@ export function initialize(): void {
         // only makes sense in a browser.
         return;
     }
+    remove_retired_header_chrome();
     if (initialized) {
         fetch_topic_context();
         return;
@@ -655,7 +666,7 @@ export function initialize(): void {
 
     // register_popover_menu attaches a body-delegated click handler,
     // so this works even if the right sidebar has not been rendered yet.
-    popover_menus.register_popover_menu("#pear-runtime-menu", {
+    popover_menus.register_popover_menu(runtime_menu_selector, {
         theme: "popover-menu",
         placement: "left-start",
         // The strategy: "fixed"; and eventlisteners modifier option
@@ -687,12 +698,12 @@ export function initialize(): void {
             last_error = "";
             render_popover_content(instance);
             fetch_topic_context();
-            $("#pear-runtime-menu").addClass("active-right-sidebar-menu");
+            $(runtime_menu_selector).addClass("active-right-sidebar-menu");
         },
         onHidden(instance) {
             instance.destroy();
             popover_menus.popover_instances.pear_runtime_menu = null;
-            $("#pear-runtime-menu").removeClass("active-right-sidebar-menu");
+            $(runtime_menu_selector).removeClass("active-right-sidebar-menu");
         },
     });
 

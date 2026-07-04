@@ -38,7 +38,7 @@
                     <div class="pear-context-section-title">{{t "Runtime" }}</div>
                     {{#if active_run}}
                         <div class="pear-run-status-row pear-run-status-{{active_run.status_class}}{{#if active_run.is_active}} pear-liveness-active{{/if}}">
-                            <span class="pear-run-status-glyph {{#if active_run.is_active}}pear-thinking-glyph{{/if}}" aria-hidden="true">{{active_run.status_marker}}</span>
+                            <span class="pear-ui-glyph pear-run-status-glyph {{#if active_run.is_active}}pear-thinking-glyph{{/if}}" aria-hidden="true">{{active_run.status_marker}}</span>
                             <span class="pear-run-status-text">{{active_run.status_label}}</span>
                             {{#if active_run.has_usage}}
                                 <span class="pear-run-status-usage tippy-zulip-delayed-tooltip" data-tippy-content="{{active_run.usage_title}}">
@@ -79,7 +79,7 @@
                     <div class="pear-workspace-row">
                         <span class="pear-context-label">{{topic_context.workspace_kind_label}}</span>
                         {{#if topic_context.git_available}}
-                            <span class="pear-git-marker" aria-hidden="true">{{topic_context.git_status_marker}}</span>
+                            <span class="pear-ui-glyph pear-git-marker" aria-hidden="true">{{topic_context.git_status_marker}}</span>
                         {{/if}}
                         <span class="pear-workspace-name" title="{{topic_context.workspace_primary_title}}">{{topic_context.workspace_primary_name}}</span>
                         {{#if topic_context.show_primary_git_status}}

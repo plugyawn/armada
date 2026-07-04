@@ -977,12 +977,12 @@ body.pear-workbench-split-open {
     vertical-align: -0.05em;
 }
 
-.pear-runtime-menu-trigger {
+#pear-panel .pear-runtime-menu-trigger {
     color: var(--color-vdots-visible);
 }
 
-.pear-runtime-menu-trigger:hover,
-.pear-runtime-menu-trigger:focus-visible {
+#pear-panel .pear-runtime-menu-trigger:hover,
+#pear-panel .pear-runtime-menu-trigger:focus-visible {
     color: var(--color-vdots-hover);
 }
 

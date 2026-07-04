@@ -112,7 +112,7 @@ let initialized = false;
 let context_refresh_timer: number | undefined;
 
 const RUNTIME_CONTEXT_REFRESH_INTERVAL_MS = 60_000;
-const runtime_menu_selector = ".pear-runtime-menu-trigger";
+const runtime_menu_selector = "#pear-panel .pear-runtime-menu-trigger";
 const retired_header_chrome_selectors = [
     "#pear-runtime-menu",
     "#pear-work-cursor",
@@ -141,6 +141,7 @@ const retired_header_chrome_selectors = [
 
 export const retired_header_chrome_selector_for_testing =
     retired_header_chrome_selectors.join(", ");
+export const runtime_menu_selector_for_testing = runtime_menu_selector;
 
 const fallback_efforts: PearReasoningEffort[] = [
     {effort: "low", label: "Low"},

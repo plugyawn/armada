@@ -184,6 +184,48 @@ function first_nonempty_string(values: (string | undefined)[]): string {
     return values.find((value) => value !== undefined && value.trim().length > 0) ?? "";
 }
 
+function effort_short_label(effort: string): string {
+    switch (effort.toLowerCase()) {
+        case "low":
+            return "l";
+        case "medium":
+            return "m";
+        case "high":
+            return "h";
+        case "xhigh":
+            return "xh";
+        default:
+            return effort;
+    }
+}
+
+function model_display_name(topic_context: PearTopicContext): string {
+    const catalog_entry = topic_context.model_catalog?.find(
+        (entry) => entry.slug === topic_context.model,
+    );
+    return first_nonempty_string([catalog_entry?.display_name, topic_context.model]);
+}
+
+function effort_display_name(topic_context: PearTopicContext): string {
+    const effort_entry = topic_context.reasoning_efforts.find(
+        (entry) => entry.effort === topic_context.reasoning_effort,
+    );
+    return first_nonempty_string([effort_entry?.label, topic_context.reasoning_effort]);
+}
+
+export function runtime_chip_labels_for_testing(topic_context: PearTopicContext): {
+    label: string;
+    title: string;
+} {
+    const model = model_display_name(topic_context);
+    const effort = effort_display_name(topic_context);
+    const short_effort = effort_short_label(topic_context.reasoning_effort);
+    return {
+        label: short_effort === "" ? model : `${model} · ${short_effort}`,
+        title: effort === "" ? model : `${model} · ${effort}`,
+    };
+}
+
 function model_label(runtime_label: string): string {
     const match = /\bmodel=([^\s]+)/.exec(runtime_label);
     return match?.[1] ?? compact_panel_text(runtime_label);
@@ -525,6 +567,8 @@ function display_topic_context(topic_context: PearTopicContext | undefined | nul
           workbench_side_selected: boolean;
           workbench_diff_disabled: boolean;
           workbench_history_disabled: boolean;
+          runtime_chip_label: string;
+          runtime_chip_title: string;
           diff_tab_label: string;
           history_tab_label: string;
           side_tab_label: string;
@@ -633,10 +677,13 @@ function display_topic_context(topic_context: PearTopicContext | undefined | nul
         topic_context.workdir,
         $t({defaultMessage: "Ask Pear to pin a Git repository for this topic."}),
     ]);
+    const runtime_chip = runtime_chip_labels_for_testing(topic_context);
     return {
         ...topic_context,
         github_repo,
         model_choices: topic_context.model_choices ?? [],
+        runtime_chip_label: runtime_chip.label,
+        runtime_chip_title: runtime_chip.title,
         has_changed_files: (git.changed_files ?? []).length > 0,
         has_recent_commits: (git.recent_commits ?? []).length > 0,
         changed_label,

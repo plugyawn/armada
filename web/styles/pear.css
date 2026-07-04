@@ -598,19 +598,27 @@ body.pear-workbench-split-open {
 }
 
 .pear-workbench-empty {
-    border: 1px dashed
+    padding: 2px 0;
+    color: var(--color-text-sidebar-heading);
+    font-size: 11px;
+    opacity: var(--opacity-sidebar-heading);
+}
+
+.pear-workbench-empty-blocked {
+    border: 1px solid
         color-mix(
             in srgb,
-            var(--color-border-sidebar-subheader) 62%,
+            var(--color-text-danger-text-action-button) 34%,
             transparent
         );
     border-radius: 8px;
     background: color-mix(
         in srgb,
-        var(--color-background-hover-narrow-filter) 18%,
+        var(--color-text-danger-text-action-button) 7%,
         transparent
     );
-    padding: 8px 9px;
+    padding: 7px 9px;
+    opacity: 1;
 }
 
 .pear-workbench-empty-glyph,
@@ -891,6 +899,58 @@ body.pear-workbench-split-open {
 
 .pear-runtime-menu-label {
     display: none;
+}
+
+.pear-workbench-runtime {
+    display: inline-flex;
+    min-width: 0;
+    max-width: 106px;
+    height: 22px;
+    flex: 0 1 auto;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    overflow: hidden;
+    border: 1px solid
+        color-mix(
+            in srgb,
+            var(--color-border-sidebar-subheader) 84%,
+            transparent
+        );
+    border-radius: 999px;
+    background: color-mix(
+        in srgb,
+        var(--color-background-hover-narrow-filter) 24%,
+        transparent
+    );
+    color: var(--color-text-item);
+    cursor: pointer;
+    font: inherit;
+    font-family: monospace;
+    font-size: 10.5px;
+    line-height: 1;
+    padding: 0 7px 0 5px;
+}
+
+.pear-workbench-runtime:hover,
+.pear-workbench-runtime:focus-visible {
+    background: var(--color-background-hover-narrow-filter);
+    color: var(--color-text-default);
+    outline: none;
+}
+
+.pear-workbench-runtime .pear-runtime-menu-glyph {
+    width: auto;
+    color: var(--color-text-success-text-action-button);
+    font-size: 10px;
+}
+
+.pear-workbench-runtime .pear-runtime-menu-label {
+    display: inline;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 #top_navbar #pear-runtime-menu,

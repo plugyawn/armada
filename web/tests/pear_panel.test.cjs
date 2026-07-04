@@ -45,6 +45,41 @@ run_test("status_marker_for_testing", () => {
     assert.equal(pear_panel.status_marker_for_testing("unknown"), "·");
 });
 
+run_test("runtime_chip_labels_for_testing", () => {
+    const topic_context = {
+        model: "gpt-5.5",
+        model_catalog: [
+            {
+                slug: "gpt-5.5",
+                display_name: "GPT-5.5",
+            },
+        ],
+        reasoning_effort: "medium",
+        reasoning_efforts: [
+            {
+                effort: "medium",
+                label: "Medium",
+            },
+        ],
+    };
+
+    assert.deepEqual(pear_panel.runtime_chip_labels_for_testing(topic_context), {
+        label: "GPT-5.5 · m",
+        title: "GPT-5.5 · Medium",
+    });
+    assert.deepEqual(
+        pear_panel.runtime_chip_labels_for_testing({
+            model: "custom-model",
+            reasoning_effort: "xhigh",
+            reasoning_efforts: [],
+        }),
+        {
+            label: "custom-model · xh",
+            title: "custom-model · xhigh",
+        },
+    );
+});
+
 run_test("should_refresh_context_for_testing", () => {
     const base_options = {
         context_key_value: "devel\u0000general chat",

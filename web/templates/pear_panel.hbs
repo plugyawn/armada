@@ -22,23 +22,31 @@
                 </button>
             {{/if}}
             {{#if active_run.has_actions}}
-                <div class="pear-run-actions pear-panel-run-actions" data-run-id="{{active_run.id}}">
+                <details class="pear-run-actions pear-panel-run-actions" data-run-id="{{active_run.id}}">
+                    <summary class="pear-run-actions-summary pear-icon-button icon-button icon-button-square icon-button-neutral tippy-zulip-delayed-tooltip" aria-label="{{t 'Pear run actions' }}" data-tippy-content="{{t 'Pear run actions' }}">
+                        <i class="zulip-icon zulip-icon-more-vertical" aria-hidden="true"></i>
+                    </summary>
+                    <div class="pear-run-actions-menu">
                     {{#if active_run.can_pause}}
-                        <button type="button" class="pear-run-action icon-button icon-button-square icon-button-neutral tippy-zulip-delayed-tooltip" data-action="pause" data-run-id="{{active_run.id}}" aria-label="{{t 'Pause' }}" data-tippy-content="{{t 'Pause' }}">
+                        <button type="button" class="pear-run-action pear-run-action-menu-item" data-action="pause" data-run-id="{{active_run.id}}">
                             <i class="zulip-icon zulip-icon-stop-circle" aria-hidden="true"></i>
+                            <span>{{t "Pause" }}</span>
                         </button>
                     {{/if}}
                     {{#if active_run.can_resume}}
-                        <button type="button" class="pear-run-action icon-button icon-button-square icon-button-neutral tippy-zulip-delayed-tooltip" data-action="resume" data-run-id="{{active_run.id}}" aria-label="{{t 'Resume' }}" data-tippy-content="{{t 'Resume' }}">
+                        <button type="button" class="pear-run-action pear-run-action-menu-item" data-action="resume" data-run-id="{{active_run.id}}">
                             <i class="zulip-icon zulip-icon-play-circle" aria-hidden="true"></i>
+                            <span>{{t "Resume" }}</span>
                         </button>
                     {{/if}}
                     {{#if active_run.can_cancel}}
-                        <button type="button" class="pear-run-action icon-button icon-button-square icon-button-danger tippy-zulip-delayed-tooltip" data-action="cancel" data-run-id="{{active_run.id}}" aria-label="{{t 'Cancel' }}" data-tippy-content="{{t 'Cancel' }}">
+                        <button type="button" class="pear-run-action pear-run-action-menu-item pear-run-action-danger" data-action="cancel" data-run-id="{{active_run.id}}">
                             <i class="zulip-icon zulip-icon-circle-x" aria-hidden="true"></i>
+                            <span>{{t "Cancel" }}</span>
                         </button>
                     {{/if}}
-                </div>
+                    </div>
+                </details>
             {{/if}}
             <button type="button" id="pear-panel-refresh" class="pear-icon-button icon-button icon-button-square icon-button-neutral tippy-zulip-delayed-tooltip" aria-label="{{t 'Refresh Pear context' }}" data-tippy-content="{{t 'Refresh Pear context' }}">
                 <i class="zulip-icon zulip-icon-reset" aria-hidden="true"></i>

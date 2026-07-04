@@ -539,6 +539,11 @@
         font-size: 0.9em;
     }
 
+    .pear-runtime-action-glyph {
+        color: var(--color-text-item);
+        font-size: 0.9em;
+    }
+
     .pear-runtime-git-clean {
         color: light-dark(hsl(142deg 45% 30%), hsl(142deg 63% 76%));
     }

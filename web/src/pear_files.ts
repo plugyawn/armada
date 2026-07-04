@@ -2,6 +2,7 @@ import $ from "jquery";
 
 import * as message_view from "./message_view.ts";
 import * as narrow_state from "./narrow_state.ts";
+import * as popover_menus from "./popover_menus.ts";
 
 export function show_topic_files(): void {
     const stream_id = narrow_state.stream_id();
@@ -30,18 +31,14 @@ export function initialize(): void {
         return;
     }
 
-    // Body-delegated handlers work even if the navbar has not been
-    // rendered yet when this module is initialized.
-    $("body").on("click", "#pear-files-button .header-button", (e) => {
+    // Body-delegated handlers work even though the menu is rendered
+    // lazily inside the Pear runtime popover.
+    $("body").on("click", "#pear-runtime-menu-popover .pear-files-menu-link", (e) => {
         e.preventDefault();
         e.stopPropagation();
+        popover_menus.hide_current_popover_if_visible(
+            popover_menus.popover_instances.pear_runtime_menu,
+        );
         show_topic_files();
-    });
-    $("body").on("keydown", "#pear-files-button .header-button", (e) => {
-        if (e.key === "Enter") {
-            e.preventDefault();
-            e.stopPropagation();
-            show_topic_files();
-        }
     });
 }

@@ -6,7 +6,6 @@ import render_pear_canvas_modal from "../templates/pear_canvas_modal.hbs";
 import * as channel from "./channel.ts";
 import * as dialog_widget from "./dialog_widget.ts";
 import {$t, $t_html} from "./i18n.ts";
-import * as loading from "./loading.ts";
 import {message_render_response_schema} from "./message_store.ts";
 import * as narrow_state from "./narrow_state.ts";
 import * as popover_menus from "./popover_menus.ts";
@@ -186,15 +185,30 @@ function apply_canvas(doc: PearCanvas): void {
 function stop_loading_indicator(): void {
     const $loading = $("#pear-canvas-modal .pear-canvas-loading");
     if ($loading.length > 0) {
-        loading.destroy_indicator($loading);
-        $loading.addClass("hide");
+        $loading
+            .empty()
+            .removeClass("pear-canvas-loading-active pear-liveness-active")
+            .addClass("hide");
+        $(document).trigger("pear_liveness_markers_changed");
     }
 }
 
 function load_canvas(stream: string, topic: string): void {
     const $loading = $("#pear-canvas-modal .pear-canvas-loading");
     if ($loading.length > 0) {
-        loading.make_indicator($loading, {text: $t({defaultMessage: "Loading…"})});
+        $loading
+            .empty()
+            .removeClass("hide")
+            .addClass("pear-canvas-loading-active pear-liveness-active");
+        $("<span>")
+            .addClass("pear-thinking-glyph")
+            .attr("aria-hidden", "true")
+            .text("✦")
+            .appendTo($loading);
+        $("<span>")
+            .text($t({defaultMessage: "Loading"}))
+            .appendTo($loading);
+        $(document).trigger("pear_liveness_markers_changed");
     }
     void channel.get({
         url: "/json/pear/canvas",

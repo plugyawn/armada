@@ -488,6 +488,25 @@
     gap: 8px;
 }
 
+.pear-canvas-loading-active {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    color: var(--color-text-item);
+    font-style: italic;
+    line-height: 16px;
+}
+
+.pear-canvas-loading-active .pear-thinking-glyph {
+    display: inline-block;
+    min-width: 1.35em;
+    color: var(--color-text-default);
+    font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+    font-style: normal;
+    line-height: 1;
+    text-align: center;
+}
+
 .pear-canvas-byte-info {
     color: var(--color-text-item);
     font-size: 12px;

@@ -42,6 +42,13 @@
     flex: none;
     justify-content: flex-end;
     gap: 3px;
+    opacity: 0.44;
+    transition: opacity 120ms ease;
+}
+
+#pear-panel:hover .pear-panel-actions,
+#pear-panel:focus-within .pear-panel-actions {
+    opacity: 1;
 }
 
 .pear-icon-button,
@@ -418,7 +425,7 @@
 }
 
 .pear-panel-run-actions {
-    margin-right: 2px;
+    margin-right: 0;
 }
 
 .pear-run-actions-summary {
@@ -438,7 +445,7 @@
     top: calc(100% + 4px);
     right: 0;
     display: grid;
-    min-width: 112px;
+    min-width: 128px;
     overflow: hidden;
     border: 1px solid var(--color-border-popover-menu);
     border-radius: 7px;
@@ -464,6 +471,10 @@
     line-height: 16px;
     padding: 6px 9px;
     text-align: left;
+}
+
+#pear-panel-close {
+    border-top: 1px solid var(--color-border-popover-menu);
 }
 
 .pear-run-action-menu-item:hover,

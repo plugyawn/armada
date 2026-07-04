@@ -321,6 +321,14 @@ run_test("workbench_view_for_testing", () => {
     );
 });
 
+run_test("workbench_view_for_artifact_label", () => {
+    assert.equal(pear_panel.workbench_view_for_artifact_label("Diff"), "diff");
+    assert.equal(pear_panel.workbench_view_for_artifact_label("Repository"), "history");
+    assert.equal(pear_panel.workbench_view_for_artifact_label("Branch"), "history");
+    assert.equal(pear_panel.workbench_view_for_artifact_label("Codex session"), "history");
+    assert.equal(pear_panel.workbench_view_for_artifact_label("Verification"), undefined);
+});
+
 run_test("work_panel_open_for_testing", () => {
     assert.equal(
         pear_panel.work_panel_open_for_testing({

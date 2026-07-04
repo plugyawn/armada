@@ -425,6 +425,32 @@ export function workbench_view_for_testing(options: {
     return "side";
 }
 
+export function workbench_view_for_artifact_label(
+    label: string,
+): Exclude<PearWorkbenchView, "side"> | undefined {
+    const normalized_label = label.trim().toLowerCase();
+    if (normalized_label === "diff") {
+        return "diff";
+    }
+    if (
+        [
+            "repo",
+            "repository",
+            "runtime",
+            "branch",
+            "pr",
+            "pull request",
+            "session",
+            "session record",
+            "pear session",
+            "codex session",
+        ].includes(normalized_label)
+    ) {
+        return "history";
+    }
+    return undefined;
+}
+
 export function open_work_details(requested_view?: PearWorkbenchView): void {
     const key = current_context_key();
     if (key !== "") {
@@ -452,6 +478,10 @@ export function open_work_details(requested_view?: PearWorkbenchView): void {
         return;
     }
     refresh({force_context: true});
+}
+
+export function open_work_details_for_artifact_label(label: string): void {
+    open_work_details(workbench_view_for_artifact_label(label));
 }
 
 function close_work_details(): void {

@@ -24,6 +24,25 @@ function make_context(overrides = {}) {
     };
 }
 
+run_test("retired_header_chrome_selector_for_testing", () => {
+    const selector = pear_runtime_menu.retired_header_chrome_selector_for_testing;
+
+    for (const expected of [
+        "#top_navbar #pear-work-cursor",
+        "#top_navbar [id^='pear-']",
+        "#top_navbar [class*=' pear-']",
+        "#message_view_header #pear-context-meter",
+        "#message_view_header [id^='pear-']",
+        "#message_view_header [class*=' pear-']",
+    ]) {
+        assert.ok(selector.includes(expected), expected);
+    }
+
+    // Pear status belongs in the Pear panel/workbench, never in Zulip's
+    // global channel/search header.
+    assert.ok(!selector.includes("#pear-panel [class*=' pear-']"));
+});
+
 run_test("model_reasoning_efforts", () => {
     const gpt_efforts = [
         {effort: "medium", label: "Medium"},

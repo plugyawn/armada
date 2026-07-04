@@ -933,7 +933,7 @@ def pear_read_text_path(path: Path, *, isolation_username: str | None = None) ->
     if isolation_username is None:
         try:
             return path.read_text(encoding="utf-8")
-        except FileNotFoundError:
+        except OSError:
             return ""
     command = [
         "sudo",

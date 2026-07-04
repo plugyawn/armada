@@ -35,6 +35,7 @@ import type {MessageViewportInfo} from "./message_viewport.ts";
 import * as muted_users from "./muted_users.ts";
 import * as narrow_state from "./narrow_state.ts";
 import {page_params} from "./page_params.ts";
+import * as pear_panel from "./pear_panel.ts";
 import * as pear_run_state from "./pear_run_state.ts";
 import * as people from "./people.ts";
 import * as popovers from "./popovers.ts";
@@ -441,8 +442,31 @@ function enhance_pear_artifact_references($row: JQuery): void {
 
             element.classList.add("pear-artifact-ref", artifact.reference.class_name);
             element.title = artifact.title;
+            element.setAttribute("role", "button");
+            element.setAttribute("tabindex", "0");
+            element.setAttribute(
+                "aria-label",
+                `${artifact.title}. ${$t({defaultMessage: "Open Pear work details."})}`,
+            );
+            element.dataset["pearArtifactLabel"] = artifact.label;
             element.replaceChildren(glyph, label, value);
         });
+}
+
+function should_ignore_pear_artifact_ref_click(target: EventTarget | null): boolean {
+    return (
+        target instanceof Element &&
+        target.closest("a, button, input, textarea, select, summary") !== null
+    );
+}
+
+function open_pear_artifact_ref(element: HTMLElement): void {
+    const label = element.dataset["pearArtifactLabel"];
+    if (label === undefined) {
+        pear_panel.open_work_details();
+        return;
+    }
+    pear_panel.open_work_details_for_artifact_label(label);
 }
 
 function wrap_bare_pear_thinking_glyphs($scope: JQuery<HTMLElement | Document>): void {
@@ -554,6 +578,19 @@ function maybe_render_pear_thinking_glyph($row: JQuery): void {
 if (typeof document !== "undefined") {
     $(document).on("pear_liveness_markers_changed", () => {
         refresh_pear_thinking_animation();
+    });
+    $("body").on("click", ".pear-artifact-ref", (event) => {
+        if (should_ignore_pear_artifact_ref_click(event.target)) {
+            return;
+        }
+        open_pear_artifact_ref(event.currentTarget);
+    });
+    $("body").on("keydown", ".pear-artifact-ref", (event) => {
+        if (event.key !== "Enter" && event.key !== " ") {
+            return;
+        }
+        event.preventDefault();
+        open_pear_artifact_ref(event.currentTarget);
     });
 }
 

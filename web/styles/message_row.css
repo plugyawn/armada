@@ -119,10 +119,29 @@
                     var(--color-text-message-default) 12%
                 );
                 color: var(--color-text-message-default);
+                cursor: pointer;
                 font-size: 0.82em;
                 line-height: 1.35;
+                outline: none;
+                transition:
+                    background-color 0.12s,
+                    border-color 0.12s;
                 vertical-align: baseline;
                 white-space: nowrap;
+            }
+
+            .pear-artifact-ref:hover,
+            .pear-artifact-ref:focus-visible {
+                border-color: color-mix(
+                    in srgb,
+                    var(--color-text-message-default) 34%,
+                    transparent
+                );
+                background: color-mix(
+                    in srgb,
+                    var(--color-background-pear-message-content) 80%,
+                    var(--color-text-message-default) 20%
+                );
             }
 
             li.pear-artifact-ref {

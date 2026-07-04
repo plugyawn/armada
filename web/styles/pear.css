@@ -236,6 +236,11 @@
     gap: 7px;
     min-width: 0;
     align-items: center;
+    line-height: 14px;
+}
+
+.pear-file-row {
+    grid-template-columns: 1.7em minmax(0, 1fr);
     border: 1px solid
         color-mix(
             in srgb,
@@ -249,20 +254,24 @@
         transparent
     );
     padding: 5px 7px;
-    line-height: 14px;
 }
 
-.pear-file-row:hover,
+.pear-file-row:hover {
+    background: var(--color-background-hover-narrow-filter);
+}
+
+.pear-commit-row {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    border-radius: 6px;
+    padding: 3px 4px;
+}
+
 .pear-commit-row:hover {
     background: var(--color-background-hover-narrow-filter);
 }
 
-.pear-file-row {
-    grid-template-columns: 1.7em minmax(0, 1fr);
-}
-
-.pear-commit-row {
-    grid-template-columns: 1.1em minmax(0, 1fr) auto;
+.pear-commit-row-head {
+    color: var(--color-text-default);
 }
 
 .pear-workbench-summary {
@@ -286,7 +295,8 @@
 }
 
 .pear-file-status,
-.pear-commit-hash {
+.pear-commit-hash,
+.pear-commit-ref {
     font-family: monospace;
     font-size: 10px;
 }
@@ -304,15 +314,26 @@
     white-space: nowrap;
 }
 
-.pear-commit-marker {
-    color: var(--color-text-success-text-action-button);
-    font-size: 9px;
-}
-
 .pear-commit-hash {
+    border: 1px solid var(--color-border-sidebar-subheader);
+    border-radius: 5px;
     color: var(--color-text-sidebar-heading);
     line-height: 13px;
     opacity: var(--opacity-sidebar-heading);
+    padding: 0 4px;
+}
+
+.pear-commit-ref {
+    border-radius: 5px;
+    background: color-mix(
+        in srgb,
+        var(--color-text-success-text-action-button) 12%,
+        transparent
+    );
+    color: var(--color-text-success-text-action-button);
+    font-weight: 600;
+    line-height: 13px;
+    padding: 0 4px;
 }
 
 .pear-git-tree {

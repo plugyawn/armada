@@ -128,11 +128,13 @@
                             {{else}}
                                 {{#if topic_context.has_recent_commits}}
                                     <div class="pear-commit-list">
-                                        {{#each topic_context.git.recent_commits}}
-                                            <div class="pear-commit-row">
-                                                <span class="pear-ui-glyph pear-commit-marker" aria-hidden="true">✦</span>
-                                                <span class="pear-commit-summary" title="{{summary}}">{{summary}}</span>
+                                        {{#each topic_context.history_commits}}
+                                            <div class="pear-commit-row {{#if is_head}}pear-commit-row-head{{/if}}">
                                                 <span class="pear-commit-hash">{{hash}}</span>
+                                                <span class="pear-commit-summary" title="{{summary}}">{{summary}}</span>
+                                                {{#if ref_label}}
+                                                    <span class="pear-commit-ref">{{ref_label}}</span>
+                                                {{/if}}
                                             </div>
                                         {{/each}}
                                     </div>

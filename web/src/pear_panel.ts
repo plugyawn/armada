@@ -413,6 +413,7 @@ function display_topic_context(topic_context: PearTopicContext | undefined | nul
           effort_label: string;
           git_available: boolean;
           git_status_class: string;
+          git_status_marker: string;
           git_status_label: string;
           has_changed_files: boolean;
           has_recent_commits: boolean;
@@ -493,6 +494,7 @@ function display_topic_context(topic_context: PearTopicContext | undefined | nul
         (part): part is string => part !== undefined && part.trim().length > 0,
     );
     const git_status_label = git.dirty ? changed_label : $t({defaultMessage: "clean"});
+    const git_status_marker = git.dirty ? "✶" : "✓";
     const local_worktree_ref_label = workspace_ref_parts.join(" / ");
     const local_worktree_summary_label = [worktree_name, git_status_label, local_worktree_ref_label]
         .filter((part) => part.trim().length > 0)
@@ -511,6 +513,7 @@ function display_topic_context(topic_context: PearTopicContext | undefined | nul
             topic_context.reasoning_effort,
         git_available: git.available,
         git_status_class: git.dirty ? "dirty" : "clean",
+        git_status_marker,
         git_status_label,
         has_changed_files: (git.changed_files ?? []).length > 0,
         has_recent_commits: (git.recent_commits ?? []).length > 0,

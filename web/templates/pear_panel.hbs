@@ -4,27 +4,6 @@
             <span class="pear-panel-title">{{t "Context" }}</span>
         </div>
         <div class="pear-panel-actions">
-            {{#if active_run}}
-                {{#if active_run.has_actions}}
-                    <div class="pear-run-actions" data-run-id="{{active_run.id}}">
-                        {{#if active_run.can_pause}}
-                            <button type="button" class="pear-run-action icon-button icon-button-square icon-button-neutral tippy-zulip-delayed-tooltip" data-action="pause" data-run-id="{{active_run.id}}" aria-label="{{t 'Pause' }}" data-tippy-content="{{t 'Pause' }}">
-                                <i class="zulip-icon zulip-icon-stop-circle" aria-hidden="true"></i>
-                            </button>
-                        {{/if}}
-                        {{#if active_run.can_resume}}
-                            <button type="button" class="pear-run-action icon-button icon-button-square icon-button-neutral tippy-zulip-delayed-tooltip" data-action="resume" data-run-id="{{active_run.id}}" aria-label="{{t 'Resume' }}" data-tippy-content="{{t 'Resume' }}">
-                                <i class="zulip-icon zulip-icon-play-circle" aria-hidden="true"></i>
-                            </button>
-                        {{/if}}
-                        {{#if active_run.can_cancel}}
-                            <button type="button" class="pear-run-action icon-button icon-button-square icon-button-danger tippy-zulip-delayed-tooltip" data-action="cancel" data-run-id="{{active_run.id}}" aria-label="{{t 'Cancel' }}" data-tippy-content="{{t 'Cancel' }}">
-                                <i class="zulip-icon zulip-icon-circle-x" aria-hidden="true"></i>
-                            </button>
-                        {{/if}}
-                    </div>
-                {{/if}}
-            {{/if}}
             <button type="button" id="pear-panel-refresh" class="pear-icon-button icon-button icon-button-square icon-button-neutral tippy-zulip-delayed-tooltip" aria-label="{{t 'Refresh Pear context' }}" data-tippy-content="{{t 'Refresh Pear context' }}">
                 <i class="zulip-icon zulip-icon-reset" aria-hidden="true"></i>
             </button>
@@ -46,6 +25,25 @@
                                 </span>
                             {{/if}}
                         </div>
+                        {{#if active_run.has_actions}}
+                            <div class="pear-run-actions pear-runtime-run-actions" data-run-id="{{active_run.id}}">
+                                {{#if active_run.can_pause}}
+                                    <button type="button" class="pear-run-action icon-button icon-button-square icon-button-neutral tippy-zulip-delayed-tooltip" data-action="pause" data-run-id="{{active_run.id}}" aria-label="{{t 'Pause' }}" data-tippy-content="{{t 'Pause' }}">
+                                        <i class="zulip-icon zulip-icon-stop-circle" aria-hidden="true"></i>
+                                    </button>
+                                {{/if}}
+                                {{#if active_run.can_resume}}
+                                    <button type="button" class="pear-run-action icon-button icon-button-square icon-button-neutral tippy-zulip-delayed-tooltip" data-action="resume" data-run-id="{{active_run.id}}" aria-label="{{t 'Resume' }}" data-tippy-content="{{t 'Resume' }}">
+                                        <i class="zulip-icon zulip-icon-play-circle" aria-hidden="true"></i>
+                                    </button>
+                                {{/if}}
+                                {{#if active_run.can_cancel}}
+                                    <button type="button" class="pear-run-action icon-button icon-button-square icon-button-danger tippy-zulip-delayed-tooltip" data-action="cancel" data-run-id="{{active_run.id}}" aria-label="{{t 'Cancel' }}" data-tippy-content="{{t 'Cancel' }}">
+                                        <i class="zulip-icon zulip-icon-circle-x" aria-hidden="true"></i>
+                                    </button>
+                                {{/if}}
+                            </div>
+                        {{/if}}
                     {{/if}}
                 </div>
                 <div class="pear-runtime-row">

@@ -371,6 +371,11 @@ function pear_git_shortstat_count(shortstat: string, label: "insertion" | "delet
     return match === null ? 0 : Number.parseInt(match[1]!, 10);
 }
 
+function pear_git_shortstat_file_count(shortstat: string): number {
+    const match = /(\d+) files? changed/.exec(shortstat);
+    return match === null ? 0 : Number.parseInt(match[1]!, 10);
+}
+
 function work_cursor_dirty_status_label(git: PearGitContext): string {
     const shortstat = git.diff_shortstat?.trim() ?? "";
     if (shortstat !== "") {
@@ -533,6 +538,11 @@ function display_topic_context(topic_context: PearTopicContext | undefined | nul
           has_git_tree_graph: boolean;
           has_git_tree_status: boolean;
           history_commits: (PearGitCommit & {is_head: boolean; ref_label: string})[];
+          has_workbench_diff_summary: boolean;
+          workbench_diff_summary_label: string;
+          workbench_diff_file_label: string;
+          workbench_diff_insertions_label: string;
+          workbench_diff_deletions_label: string;
       })
     | undefined {
     if (topic_context === undefined || topic_context === null) {
@@ -560,6 +570,27 @@ function display_topic_context(topic_context: PearTopicContext | undefined | nul
     ]);
     const has_workbench_diff = git_has_diff(git);
     const has_workbench_history = git_has_history(git);
+    const diff_shortstat = git.diff_shortstat?.trim() ?? "";
+    const diff_file_count = pear_git_shortstat_file_count(diff_shortstat) || changed_count;
+    const diff_insertions = pear_git_shortstat_count(diff_shortstat, "insertion");
+    const diff_deletions = pear_git_shortstat_count(diff_shortstat, "deletion");
+    const workbench_diff_file_label =
+        diff_file_count === 0
+            ? ""
+            : diff_file_count === 1
+              ? $t({defaultMessage: "1 file"})
+              : $t({defaultMessage: "{diff_file_count} files"}, {diff_file_count});
+    const workbench_diff_insertions_label =
+        diff_insertions > 0 ? $t({defaultMessage: "+{diff_insertions}"}, {diff_insertions}) : "";
+    const workbench_diff_deletions_label =
+        diff_deletions > 0 ? $t({defaultMessage: "-{diff_deletions}"}, {diff_deletions}) : "";
+    const workbench_diff_summary_label = [
+        workbench_diff_file_label,
+        workbench_diff_insertions_label,
+        workbench_diff_deletions_label,
+    ]
+        .filter((part) => part !== "")
+        .join(" ");
     const history_commits = (git.recent_commits ?? []).map((commit, index) => ({
         ...commit,
         is_head: index === 0,
@@ -578,7 +609,7 @@ function display_topic_context(topic_context: PearTopicContext | undefined | nul
     let workbench_meta_label = "";
     if (workbench_view === "diff") {
         workbench_meta_label = first_nonempty_string([
-            git.diff_shortstat?.trim(),
+            workbench_diff_summary_label,
             has_workbench_diff ? changed_label : $t({defaultMessage: "No local diff"}),
         ]);
     } else if (workbench_view === "history") {
@@ -643,6 +674,11 @@ function display_topic_context(topic_context: PearTopicContext | undefined | nul
         has_git_tree_graph: git_tree_graph !== "",
         has_git_tree_status: git_tree_status !== "",
         history_commits,
+        has_workbench_diff_summary: workbench_diff_summary_label !== "",
+        workbench_diff_summary_label,
+        workbench_diff_file_label,
+        workbench_diff_insertions_label,
+        workbench_diff_deletions_label,
     };
 }
 

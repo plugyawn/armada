@@ -82,6 +82,19 @@ export type PearRuntimeUsageRow = {
     value: string;
 };
 
+export type PearRuntimeUsageMeter = {
+    has_meter: boolean;
+    label: string;
+    value: string;
+    percent: number;
+};
+
+export type PearRuntimeStatus = {
+    glyph: string;
+    label: string;
+    class_name: string;
+};
+
 export type PearRuntimeSummary = {
     model_label: string;
     effort_label: string;
@@ -244,6 +257,50 @@ function active_runtime_run(runs: PearRuntimeRun[]): PearRuntimeRun | undefined 
     );
 }
 
+export function runtime_status_for_testing(run: PearRuntimeRun | undefined): PearRuntimeStatus {
+    switch (run?.status.toLowerCase()) {
+        case "running":
+            return {
+                glyph: "✦",
+                label: $t({defaultMessage: "Running"}),
+                class_name: "pear-runtime-status-active",
+            };
+        case "queued":
+            return {
+                glyph: "✦",
+                label: $t({defaultMessage: "Queued"}),
+                class_name: "pear-runtime-status-active",
+            };
+        case "paused":
+            return {
+                glyph: "✧",
+                label: $t({defaultMessage: "Paused"}),
+                class_name: "pear-runtime-status-paused",
+            };
+        case "failed":
+        case "error":
+        case "blocked":
+            return {
+                glyph: "✷",
+                label: $t({defaultMessage: "Failed"}),
+                class_name: "pear-runtime-status-blocked",
+            };
+        case "cancelled":
+        case "canceled":
+            return {
+                glyph: "✷",
+                label: $t({defaultMessage: "Cancelled"}),
+                class_name: "pear-runtime-status-blocked",
+            };
+        default:
+            return {
+                glyph: "·",
+                label: $t({defaultMessage: "Idle"}),
+                class_name: "pear-runtime-status-idle",
+            };
+    }
+}
+
 export function build_runtime_usage_rows(
     usage: PearRuntimeUsage | null | undefined,
 ): PearRuntimeUsageRow[] {
@@ -290,14 +347,36 @@ export function build_runtime_usage_rows(
     return rows;
 }
 
+export function runtime_usage_meter_for_testing(
+    usage: PearRuntimeUsage | null | undefined,
+): PearRuntimeUsageMeter {
+    if (usage?.cache_percent === undefined) {
+        return {
+            has_meter: false,
+            label: "",
+            value: "",
+            percent: 0,
+        };
+    }
+    const percent = Math.min(100, Math.max(0, usage.cache_percent));
+    return {
+        has_meter: true,
+        label: $t({defaultMessage: "cached context"}),
+        value: `${percent.toFixed(1)}%`,
+        percent,
+    };
+}
+
 function popover_context(): {
     has_runtime: boolean;
     status_message: string;
     runtime_model_label: string;
     runtime_effort_label: string;
+    runtime_status: PearRuntimeStatus;
     has_runtime_usage: boolean;
     runtime_usage_title: string;
     runtime_usage_rows: PearRuntimeUsageRow[];
+    runtime_usage_meter: PearRuntimeUsageMeter;
     model_choices: PearRuntimeMenuChoice[];
     effort_choices: PearRuntimeMenuChoice[];
     effort_slider: PearRuntimeEffortSlider;
@@ -317,16 +396,19 @@ function popover_context(): {
             status_message,
             runtime_model_label: "",
             runtime_effort_label: "",
+            runtime_status: runtime_status_for_testing(undefined),
             has_runtime_usage: false,
             runtime_usage_title: "",
             runtime_usage_rows: [],
+            runtime_usage_meter: runtime_usage_meter_for_testing(undefined),
             model_choices: [],
             effort_choices: [],
             effort_slider: effort_slider_for_testing([]),
         };
     }
     const choices = effort_choices(topic_context);
-    const usage = active_runtime_run(latest_runs)?.usage;
+    const active_run = active_runtime_run(latest_runs);
+    const usage = active_run?.usage;
     const runtime_usage_rows = build_runtime_usage_rows(usage);
     const summary = runtime_summary(topic_context);
     return {
@@ -334,9 +416,11 @@ function popover_context(): {
         status_message: "",
         runtime_model_label: summary.model_label,
         runtime_effort_label: summary.effort_label,
+        runtime_status: runtime_status_for_testing(active_run),
         has_runtime_usage: runtime_usage_rows.length > 0,
         runtime_usage_title: usage?.summary ?? "",
         runtime_usage_rows,
+        runtime_usage_meter: runtime_usage_meter_for_testing(usage),
         model_choices: model_choices(topic_context),
         effort_choices: choices,
         effort_slider: effort_slider_for_testing(choices),
@@ -364,17 +448,23 @@ function update_navbar_button_label(): void {
     }
     let label = $t({defaultMessage: "Pear runtime"});
     let compact_label = $t({defaultMessage: "Pear"});
+    let runtime_status = runtime_status_for_testing(active_runtime_run(latest_runs));
     if (topic_context !== undefined && context_key !== "") {
         const summary = runtime_summary(topic_context);
+        runtime_status = runtime_status_for_testing(active_runtime_run(latest_runs));
         compact_label = summary.compact_label;
         label = $t(
-            {defaultMessage: "Pear runtime: {model} ({effort})"},
-            {model: summary.model_label, effort: summary.effort_label},
+            {defaultMessage: "Pear runtime: {model} ({effort}), {status}"},
+            {model: summary.model_label, effort: summary.effort_label, status: runtime_status.label},
         );
     }
     $button.attr("aria-label", label);
     $button.attr("data-tippy-content", label);
     $button.find(".pear-navbar-runtime-label").text(compact_label);
+    $button
+        .find(".pear-navbar-glyph")
+        .text(runtime_status.glyph)
+        .attr("class", `pear-ui-glyph pear-navbar-glyph ${runtime_status.class_name}`);
 }
 
 function fetch_topic_context(): void {
@@ -591,10 +681,8 @@ export function initialize(): void {
     update_navbar_button_label();
     fetch_topic_context();
     window.addEventListener("hashchange", fetch_topic_context);
-    if (context_refresh_timer === undefined) {
-        context_refresh_timer = window.setInterval(
-            fetch_topic_context,
-            RUNTIME_CONTEXT_REFRESH_INTERVAL_MS,
-        );
-    }
+    context_refresh_timer ??= window.setInterval(
+        fetch_topic_context,
+        RUNTIME_CONTEXT_REFRESH_INTERVAL_MS,
+    );
 }

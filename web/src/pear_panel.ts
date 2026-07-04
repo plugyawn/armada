@@ -618,6 +618,8 @@ function display_topic_context(topic_context: PearTopicContext | undefined | nul
               ? $t({defaultMessage: "1 recent commit"})
               : git_tree_graph !== ""
                 ? $t({defaultMessage: "Git history"})
+                : recent_commit_count === 0
+                  ? $t({defaultMessage: "No Git history"})
                 : $t(
                       {defaultMessage: "{recent_commit_count} recent commits"},
                       {recent_commit_count},

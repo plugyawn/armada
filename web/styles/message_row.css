@@ -86,6 +86,9 @@
             }
 
             .spoiler-header {
+                display: flex;
+                align-items: center;
+                gap: 4px;
                 min-height: 0;
                 padding: 4px 8px;
                 border-bottom: 1px solid transparent;
@@ -95,10 +98,15 @@
             }
 
             .spoiler-header .spoiler-header-text {
+                min-width: 0;
                 margin: 0;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
             }
 
             .spoiler-button {
+                flex: none;
                 transform: scale(0.78);
                 transform-origin: center right;
             }
@@ -117,15 +125,25 @@
 
                 li {
                     margin: 0;
-                    padding: 5px 8px;
+                    padding: 4px 8px;
+                    color: var(--color-text-item);
                     overflow-wrap: anywhere;
                     font-family:
                         ui-monospace, SFMono-Regular, Consolas, monospace;
                 }
 
+                li::first-letter {
+                    color: var(--color-text-message-default);
+                    font-weight: 700;
+                }
+
                 li + li {
                     border-top: 1px solid
-                        var(--color-message-content-container-border);
+                        color-mix(
+                            in srgb,
+                            var(--color-message-content-container-border) 70%,
+                            transparent
+                        );
                 }
 
                 p {

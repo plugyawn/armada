@@ -26,6 +26,11 @@
     gap: 8px;
 }
 
+.pear-panel-header-quiet {
+    justify-content: flex-end;
+    margin-bottom: -3px;
+}
+
 .pear-panel-title-row {
     display: flex;
     min-width: 0;
@@ -37,12 +42,6 @@
     flex: none;
     justify-content: flex-end;
     gap: 3px;
-}
-
-.pear-panel-title {
-    color: var(--color-text-sidebar-heading);
-    font-weight: var(--font-weight-sidebar-heading);
-    opacity: var(--opacity-sidebar-heading);
 }
 
 .pear-icon-button,

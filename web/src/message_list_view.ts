@@ -185,6 +185,10 @@ type PearArtifactReference = {
 };
 
 const pear_tool_row_markers: PearToolRowMarker[] = [
+    {regex: /^\s*·✓\s*/, glyph: "✓", class_name: "pear-tool-row-done"},
+    {regex: /^\s*·!\s*/, glyph: "!", class_name: "pear-tool-row-blocked"},
+    {regex: /^\s*✓\s*/, glyph: "✓", class_name: "pear-tool-row-done"},
+    {regex: /^\s*!\s*/, glyph: "!", class_name: "pear-tool-row-blocked"},
     {regex: /^\s*✦\s*/, glyph: PEAR_ACTIVE_GLYPH, class_name: "pear-tool-row-active", is_active: true},
     {regex: /^\s*✷\s*/, glyph: "✷", class_name: "pear-tool-row-blocked"},
     {regex: /^\s*⋅\s*/, glyph: "⋅", class_name: "pear-tool-row-pending"},
@@ -193,6 +197,37 @@ const pear_tool_row_markers: PearToolRowMarker[] = [
     {regex: /^\s*\[\s\]\s*/, glyph: "[ ]", class_name: "pear-tool-row-pending"},
     {regex: /^\s*\[~\]\s*/i, glyph: PEAR_ACTIVE_GLYPH, class_name: "pear-tool-row-active", is_active: true},
 ];
+
+function extract_pear_tool_row_marker_from_text(text: string): {
+    marker: PearToolRowMarker;
+    remaining_text: string;
+} {
+    for (const marker of pear_tool_row_markers) {
+        const match = marker.regex.exec(text);
+        if (match !== null) {
+            return {marker, remaining_text: text.slice(match[0].length)};
+        }
+    }
+    return {
+        marker: {regex: /^/, glyph: "·", class_name: "pear-tool-row-done"},
+        remaining_text: text,
+    };
+}
+
+export function extract_pear_tool_row_marker_for_testing(text: string): {
+    glyph: string;
+    class_name: string;
+    is_active: boolean;
+    remaining_text: string;
+} {
+    const {marker, remaining_text} = extract_pear_tool_row_marker_from_text(text);
+    return {
+        glyph: marker.glyph,
+        class_name: marker.class_name,
+        is_active: marker.is_active === true,
+        remaining_text,
+    };
+}
 
 const pear_artifact_references: PearArtifactReference[] = [
     {regex: /^(?:Repo|Repository)$/i, glyph: "⌁", class_name: "pear-artifact-repo"},
@@ -324,15 +359,9 @@ function extract_pear_tool_row_marker(row: HTMLElement): PearToolRowMarker {
         if (text === null || text.trim() === "") {
             continue;
         }
-        for (const marker of pear_tool_row_markers) {
-            const match = marker.regex.exec(text);
-            if (match === null) {
-                continue;
-            }
-            node.textContent = text.slice(match[0].length);
-            return marker;
-        }
-        break;
+        const {marker, remaining_text} = extract_pear_tool_row_marker_from_text(text);
+        node.textContent = remaining_text;
+        return marker;
     }
     return {regex: /^/, glyph: "·", class_name: "pear-tool-row-done"};
 }

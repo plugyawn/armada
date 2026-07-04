@@ -695,6 +695,27 @@ run_test("pear_tool_spoiler_title_detection", () => {
     assert.equal(message_list_view.is_pear_tool_spoiler_title_for_testing("Ran tests"), false);
 });
 
+run_test("pear_tool_row_marker_detection", () => {
+    assert.deepEqual(message_list_view.extract_pear_tool_row_marker_for_testing("·✓ Ran: pwd"), {
+        glyph: "✓",
+        class_name: "pear-tool-row-done",
+        is_active: false,
+        remaining_text: "Ran: pwd",
+    });
+    assert.deepEqual(message_list_view.extract_pear_tool_row_marker_for_testing("·! Failed: pwd"), {
+        glyph: "!",
+        class_name: "pear-tool-row-blocked",
+        is_active: false,
+        remaining_text: "Failed: pwd",
+    });
+    assert.deepEqual(message_list_view.extract_pear_tool_row_marker_for_testing("[~] running"), {
+        glyph: "✦",
+        class_name: "pear-tool-row-active",
+        is_active: true,
+        remaining_text: "running",
+    });
+});
+
 test("pear_stale_thinking_row_refreshes_without_removed_active_id", () => {
     new MessageListView({id: 1}, true, true);
     const message_id = 1003;

@@ -200,6 +200,7 @@ run_test("template renders ambient workbench context meter", () => {
         has_topic: true,
         show_panel_header: false,
         panel_can_close: true,
+        active_run_is_active: true,
         workbench_context_meter: {
             has_meter: true,
             percent: 72,

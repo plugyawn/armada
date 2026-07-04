@@ -490,6 +490,9 @@ function display_topic_context(topic_context: PearTopicContext | undefined | nul
           diff_tab_label: string;
           history_tab_label: string;
           side_tab_label: string;
+          workbench_title: string;
+          workbench_title_attr: string;
+          workbench_meta_label: string;
       })
     | undefined {
     if (topic_context === undefined || topic_context === null) {
@@ -529,6 +532,7 @@ function display_topic_context(topic_context: PearTopicContext | undefined | nul
         .join(" / ");
     const has_workbench_diff = git_has_diff(git);
     const has_workbench_history = git_has_history(git);
+    const recent_commit_count = (git.recent_commits ?? []).length;
     const workbench_view = workbench_view_for_testing({
         requested: workbench_view_by_context.get(
             context_key(topic_context.stream, topic_context.topic),
@@ -536,6 +540,30 @@ function display_topic_context(topic_context: PearTopicContext | undefined | nul
         has_diff: has_workbench_diff,
         has_history: has_workbench_history,
     });
+    let workbench_meta_label = "";
+    if (workbench_view === "diff") {
+        workbench_meta_label = first_nonempty_string([
+            git.diff_shortstat?.trim(),
+            has_workbench_diff ? changed_label : $t({defaultMessage: "No local diff"}),
+        ]);
+    } else if (workbench_view === "history") {
+        workbench_meta_label =
+            recent_commit_count === 1
+                ? $t({defaultMessage: "1 recent commit"})
+                : $t(
+                      {defaultMessage: "{recent_commit_count} recent commits"},
+                      {recent_commit_count},
+                  );
+    } else {
+        workbench_meta_label = $t({defaultMessage: "Private side request"});
+    }
+    const workspace_primary_title = first_nonempty_string([
+        topic_context.repo_title?.trim(),
+        pinned_repo,
+        has_workspace_repo
+            ? topic_context.workdir
+            : $t({defaultMessage: "Ask Pear to pin a Git repository for this topic."}),
+    ]);
     return {
         ...topic_context,
         github_repo,
@@ -549,13 +577,7 @@ function display_topic_context(topic_context: PearTopicContext | undefined | nul
         changed_label,
         has_pinned_repo,
         workspace_primary_name,
-        workspace_primary_title: first_nonempty_string([
-            topic_context.repo_title?.trim(),
-            pinned_repo,
-            has_workspace_repo
-                ? topic_context.workdir
-                : $t({defaultMessage: "Ask Pear to pin a Git repository for this topic."}),
-        ]),
+        workspace_primary_title,
         workspace_kind_label: $t({defaultMessage: "Repo"}),
         workspace_ref_label: "",
         worktree_name,
@@ -573,8 +595,23 @@ function display_topic_context(topic_context: PearTopicContext | undefined | nul
             changed_count > 0
                 ? $t({defaultMessage: "Diff ({changed_count})"}, {changed_count})
                 : $t({defaultMessage: "Diff"}),
-        history_tab_label: $t({defaultMessage: "History"}),
+        history_tab_label:
+            recent_commit_count > 0
+                ? $t({defaultMessage: "History ({recent_commit_count})"}, {recent_commit_count})
+                : $t({defaultMessage: "History"}),
         side_tab_label: $t({defaultMessage: "Side"}),
+        workbench_title: first_nonempty_string([
+            git.branch?.trim(),
+            worktree_name,
+            workspace_primary_name,
+            $t({defaultMessage: "Workbench"}),
+        ]),
+        workbench_title_attr: first_nonempty_string([
+            topic_context.workdir,
+            workspace_primary_title,
+            worktree_name,
+        ]),
+        workbench_meta_label,
     };
 }
 

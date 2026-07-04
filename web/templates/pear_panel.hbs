@@ -69,9 +69,9 @@
                 <div class="pear-workbench">
                     <div class="pear-workbench-header">
                         <div class="pear-workbench-title">
-                            <span>{{t "Workbench" }}</span>
-                            {{#if topic_context.local_worktree_summary_label}}
-                                <span class="pear-worktree-summary-extra">{{topic_context.local_worktree_summary_label}}</span>
+                            <span class="pear-workbench-title-main" title="{{topic_context.workbench_title_attr}}">{{topic_context.workbench_title}}</span>
+                            {{#if topic_context.workbench_meta_label}}
+                                <span class="pear-workbench-title-meta">{{topic_context.workbench_meta_label}}</span>
                             {{/if}}
                         </div>
                         <div class="pear-workbench-tabs" aria-label="{{t 'Pear work views' }}">
@@ -132,9 +132,6 @@
                             </div>
                         {{/if}}
                     </div>
-                    {{#if topic_context.workdir}}
-                        <div class="pear-workdir" title="{{topic_context.workdir}}">{{topic_context.workdir}}</div>
-                    {{/if}}
                 </div>
             </section>
         {{else}}

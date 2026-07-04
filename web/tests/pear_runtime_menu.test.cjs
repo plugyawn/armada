@@ -48,6 +48,13 @@ run_test("retired_header_chrome_selector_for_testing", () => {
     assert.ok(!selector.includes("#pear-panel [class*=' pear-']"));
 });
 
+run_test("runtime_menu_selector_for_testing", () => {
+    assert.equal(
+        pear_runtime_menu.runtime_menu_selector_for_testing,
+        "#pear-panel .pear-runtime-menu-trigger",
+    );
+});
+
 run_test("model_reasoning_efforts", () => {
     const gpt_efforts = [
         {effort: "medium", label: "Medium"},

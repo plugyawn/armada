@@ -290,6 +290,7 @@ run_test("runtime_usage_meter_for_testing", () => {
         label: "",
         value: "",
         percent: 0,
+        is_hot: false,
     });
     assert.deepEqual(
         pear_runtime_menu.runtime_usage_meter_for_testing({
@@ -300,6 +301,19 @@ run_test("runtime_usage_meter_for_testing", () => {
             label: "translated: cached context",
             value: "66.7%",
             percent: 66.66,
+            is_hot: false,
+        },
+    );
+    assert.deepEqual(
+        pear_runtime_menu.runtime_usage_meter_for_testing({
+            cache_percent: 70,
+        }),
+        {
+            has_meter: true,
+            label: "translated: cached context",
+            value: "70.0%",
+            percent: 70,
+            is_hot: true,
         },
     );
     assert.deepEqual(
@@ -311,6 +325,7 @@ run_test("runtime_usage_meter_for_testing", () => {
             label: "translated: cached context",
             value: "100.0%",
             percent: 100,
+            is_hot: true,
         },
     );
     assert.deepEqual(
@@ -322,6 +337,7 @@ run_test("runtime_usage_meter_for_testing", () => {
             label: "translated: cached context",
             value: "0.0%",
             percent: 0,
+            is_hot: false,
         },
     );
 });

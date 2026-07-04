@@ -302,11 +302,21 @@ function replace_emphasized_pear_thinking_glyph(container: Element): boolean {
     return false;
 }
 
+function is_pear_tool_spoiler_title(title: string): boolean {
+    return (
+        /^(?:Ran|Running)\s+\d+(?:\/\d+)?\s+tools?(?:\s+✦)?$/.test(title) ||
+        /^\d+\s+failed\s+tools?$/.test(title)
+    );
+}
+
+export function is_pear_tool_spoiler_title_for_testing(title: string): boolean {
+    return is_pear_tool_spoiler_title(title);
+}
+
 function pear_tool_spoiler_blocks($row: JQuery): JQuery {
     return $row.find(".spoiler-block").filter((_index, block) => {
         const title = $(block).find(".spoiler-header-text").first().text().trim();
-        return /^(?:Ran|Running)\s+\d+(?:\/\d+)?\s+tools?(?:\s+✦)?$/.test(title)
-            || /^\d+\s+failed\s+tools?$/.test(title);
+        return is_pear_tool_spoiler_title(title);
     });
 }
 
@@ -336,7 +346,9 @@ function enhance_pear_tool_rows($row: JQuery): void {
     if (!$row.hasClass("pear-message")) {
         return;
     }
-    pear_tool_spoiler_blocks($row)
+    const $tool_blocks = pear_tool_spoiler_blocks($row);
+    $tool_blocks.addClass("pear-tool-spoiler-block");
+    $tool_blocks
         .find(".spoiler-content li")
         .each((_index, row) => {
             if (!(row instanceof HTMLElement)) {

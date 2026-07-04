@@ -29,7 +29,6 @@
 }
 
 .pear-panel-actions {
-    width: 104px;
     flex: none;
     justify-content: flex-end;
     gap: 3px;
@@ -162,6 +161,8 @@
 
 .pear-runtime-title-row .pear-run-status-row {
     margin-left: auto;
+    flex: 1 1 auto;
+    justify-content: flex-end;
 }
 
 .pear-run-status-glyph {
@@ -426,7 +427,12 @@
 .pear-run-actions {
     display: flex;
     align-items: center;
+    flex: none;
     gap: 3px;
+}
+
+.pear-runtime-run-actions {
+    margin-left: 2px;
 }
 
 .pear-side {

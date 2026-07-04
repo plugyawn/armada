@@ -24,17 +24,6 @@ const pear_model_catalog_entry_schema = z.object({
     supported_reasoning_levels: z.optional(z.array(pear_reasoning_effort_schema)),
 });
 
-// Subset of `topic_context.git`; see web/src/pear_panel.ts
-// (PearGitContext) for the full shape.
-const pear_git_context_schema = z.object({
-    available: z.boolean(),
-    branch: z.optional(z.string()),
-    head: z.optional(z.string()),
-    dirty: z.optional(z.boolean()),
-    changed_count: z.optional(z.number()),
-    diff_shortstat: z.optional(z.string()),
-});
-
 // Subset of the `pear_topic_context` object returned by the
 // `GET /json/pear/runs` and `POST /json/pear/topic-context`
 // endpoints; see web/src/pear_panel.ts for the full shape.
@@ -46,9 +35,6 @@ const pear_runtime_context_schema = z.object({
     model_catalog: z.optional(z.array(pear_model_catalog_entry_schema)),
     reasoning_effort: z.string(),
     reasoning_efforts: z.optional(z.array(pear_reasoning_effort_schema)),
-    github_repo: z.optional(z.string()),
-    repo_label: z.optional(z.string()),
-    git: z.optional(pear_git_context_schema),
 });
 
 const pear_runtime_response_schema = z.object({
@@ -62,15 +48,6 @@ export type PearRuntimeMenuChoice = {
     value: string;
     label: string;
     selected: boolean;
-};
-
-export type PearGitDisplay = {
-    has_repo_branch: boolean;
-    repo_branch_label: string;
-    head: string;
-    status_class: "clean" | "dirty";
-    status_marker: string;
-    status_label: string;
 };
 
 export type PearRuntimeSummary = {
@@ -185,44 +162,10 @@ export function runtime_summary(context: PearRuntimeContext | undefined): PearRu
     };
 }
 
-export function git_display(context: PearRuntimeContext | undefined): PearGitDisplay | undefined {
-    const git = context?.git;
-    if (git?.available !== true) {
-        // Read-only context block is hidden entirely when git is unavailable.
-        return undefined;
-    }
-    const repo = (context?.github_repo ?? "").trim() || (context?.repo_label ?? "").trim();
-    const branch = git.branch?.trim() ?? "";
-    const repo_branch_label = [repo, branch].filter((part) => part.length > 0).join(" · ");
-    let status_label: string;
-    if (git.dirty === true) {
-        const changed_count = git.changed_count ?? 0;
-        const shortstat = git.diff_shortstat?.trim() ?? "";
-        if (changed_count > 0) {
-            status_label = $t({defaultMessage: "{changed_count} changed"}, {changed_count});
-        } else if (shortstat.length > 0) {
-            status_label = shortstat;
-        } else {
-            status_label = $t({defaultMessage: "changed"});
-        }
-    } else {
-        status_label = $t({defaultMessage: "clean"});
-    }
-    return {
-        has_repo_branch: repo_branch_label.length > 0,
-        repo_branch_label,
-        head: git.head?.trim() ?? "",
-        status_class: git.dirty === true ? "dirty" : "clean",
-        status_marker: git.dirty === true ? "✶" : "✓",
-        status_label,
-    };
-}
-
 function popover_context(): {
     has_runtime: boolean;
     status_message: string;
     runtime_label: string;
-    git: PearGitDisplay | undefined;
     model_choices: PearRuntimeMenuChoice[];
     effort_choices: PearRuntimeMenuChoice[];
 } {
@@ -240,7 +183,6 @@ function popover_context(): {
             has_runtime: false,
             status_message,
             runtime_label: "",
-            git: undefined,
             model_choices: [],
             effort_choices: [],
         };
@@ -249,7 +191,6 @@ function popover_context(): {
         has_runtime: true,
         status_message: "",
         runtime_label: runtime_summary(topic_context).compact_label,
-        git: git_display(topic_context),
         model_choices: model_choices(topic_context),
         effort_choices: effort_choices(topic_context),
     };

@@ -407,25 +407,6 @@
     gap: 3px;
 }
 
-.pear-run-dot {
-    width: 7px;
-    height: 7px;
-    flex: none;
-    border-radius: 50%;
-}
-
-.pear-status-active {
-    background: light-dark(hsl(148deg 45% 36%), hsl(148deg 58% 76%));
-}
-
-.pear-status-blocked {
-    background: light-dark(hsl(6deg 54% 45%), hsl(7deg 100% 78%));
-}
-
-.pear-status-idle {
-    background: light-dark(hsl(229deg 9% 48%), hsl(229deg 10% 78%));
-}
-
 .pear-side {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;

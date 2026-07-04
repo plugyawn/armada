@@ -556,13 +556,13 @@ function display_topic_context(topic_context: PearTopicContext | undefined | nul
         workbench_history_disabled: !has_workbench_history && workbench_view !== "history",
         diff_tab_label:
             changed_count > 0
-                ? $t({defaultMessage: "Diff ({changed_count})"}, {changed_count})
-                : $t({defaultMessage: "Diff"}),
+                ? $t({defaultMessage: "diff {changed_count}"}, {changed_count})
+                : $t({defaultMessage: "diff"}),
         history_tab_label:
             recent_commit_count > 0
-                ? $t({defaultMessage: "History ({recent_commit_count})"}, {recent_commit_count})
-                : $t({defaultMessage: "History"}),
-        side_tab_label: $t({defaultMessage: "Side"}),
+                ? $t({defaultMessage: "history {recent_commit_count}"}, {recent_commit_count})
+                : $t({defaultMessage: "history"}),
+        side_tab_label: $t({defaultMessage: "side"}),
         workbench_title: first_nonempty_string([
             git.branch?.trim(),
             worktree_name,

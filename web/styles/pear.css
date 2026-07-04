@@ -176,12 +176,13 @@
     color: var(--color-text-item);
     cursor: pointer;
     font-size: 11px;
+    font-weight: 600;
     line-height: 14px;
     padding: 2px 7px;
 }
 
 .pear-workbench-tab:hover {
-    background: var(--color-background-hover);
+    background: var(--color-background-hover-narrow-filter);
 }
 
 .pear-workbench-tab-selected {
@@ -215,33 +216,71 @@
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    border-block: 1px solid var(--color-border-sidebar-subheader);
+    gap: 5px;
 }
 
 .pear-file-row,
 .pear-commit-row {
     display: grid;
-    grid-template-columns: 2.2em minmax(0, 1fr);
-    gap: 6px;
+    gap: 7px;
     min-width: 0;
-    padding: 2px 0;
+    align-items: center;
+    border: 1px solid var(--color-border-sidebar-subheader);
+    border-radius: 7px;
+    background: color-mix(
+        in srgb,
+        var(--color-background-hover-narrow-filter) 78%,
+        transparent
+    );
+    padding: 5px 7px;
     line-height: 15px;
 }
 
-.pear-file-row + .pear-file-row,
-.pear-commit-row + .pear-commit-row {
-    border-top: 1px solid
-        color-mix(
-            in srgb,
-            var(--color-border-sidebar-subheader) 55%,
-            transparent
-        );
+.pear-file-row {
+    grid-template-columns: 2.1em minmax(0, 1fr);
+}
+
+.pear-commit-row {
+    grid-template-columns: 1.35em minmax(0, 1fr) auto;
+}
+
+.pear-workbench-summary {
+    display: flex;
+    min-width: 0;
+    margin-bottom: 6px;
+}
+
+.pear-workbench-summary-chip {
+    min-width: 0;
+    overflow: hidden;
+    border: 1px solid var(--color-border-sidebar-subheader);
+    border-radius: 6px;
+    color: var(--color-text-item);
+    font-family: monospace;
+    font-size: 10px;
+    line-height: 14px;
+    padding: 1px 6px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .pear-file-status,
 .pear-commit-hash {
     font-family: monospace;
-    font-size: 11px;
+    font-size: 10px;
+}
+
+.pear-file-status {
+    justify-self: center;
+    border-radius: 5px;
+    background: color-mix(
+        in srgb,
+        var(--color-border-sidebar-subheader) 70%,
+        transparent
+    );
+    color: var(--color-text-item);
+    line-height: 14px;
+    padding: 0 4px;
 }
 
 .pear-file-path,
@@ -249,6 +288,23 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+.pear-commit-marker {
+    color: var(--color-text-success-text-action-button);
+    font-size: 10px;
+}
+
+.pear-commit-hash {
+    border-radius: 5px;
+    background: color-mix(
+        in srgb,
+        var(--color-border-sidebar-subheader) 65%,
+        transparent
+    );
+    color: var(--color-text-item);
+    line-height: 14px;
+    padding: 0 4px;
 }
 
 .pear-file-added .pear-file-status,
@@ -266,7 +322,6 @@
     color: light-dark(hsl(38deg 60% 34%), hsl(38deg 78% 76%));
 }
 
-.pear-diff-shortstat,
 .pear-file-more,
 .pear-empty-state,
 .pear-panel-error,

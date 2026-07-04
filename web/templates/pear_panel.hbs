@@ -140,8 +140,12 @@
                         {{/if}}
                         {{#if topic_context.workbench_side_selected}}
                             <div class="pear-side-body">
-                                <textarea id="pear-side-request" class="pear-side-request" rows="2" placeholder="{{t 'Private side request' }}"></textarea>
-                                <button type="button" id="pear-side-start" class="pear-side-start tippy-zulip-delayed-tooltip" aria-label="{{t 'Start private side request' }}" data-tippy-content="{{t 'Start private side request' }}" {{#unless has_topic}}disabled{{/unless}}>
+                                <div class="pear-side-header">
+                                    <span class="pear-ui-glyph pear-side-header-glyph" aria-hidden="true">✧</span>
+                                    <span>{{t "Private whisper" }}</span>
+                                </div>
+                                <textarea id="pear-side-request" class="pear-side-request" rows="2" placeholder="{{t 'Whisper to Pear' }}"></textarea>
+                                <button type="button" id="pear-side-start" class="pear-side-start tippy-zulip-delayed-tooltip" aria-label="{{t 'Start private whisper' }}" data-tippy-content="{{t 'Start private whisper' }}" {{#unless has_topic}}disabled{{/unless}}>
                                     <span class="pear-ui-glyph" aria-hidden="true">✧</span>
                                 </button>
                             </div>

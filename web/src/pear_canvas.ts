@@ -9,6 +9,7 @@ import {$t, $t_html} from "./i18n.ts";
 import * as loading from "./loading.ts";
 import {message_render_response_schema} from "./message_store.ts";
 import * as narrow_state from "./narrow_state.ts";
+import * as popover_menus from "./popover_menus.ts";
 import {postprocess_content} from "./postprocess_content.ts";
 import * as rendered_markdown from "./rendered_markdown.ts";
 import * as ui_report from "./ui_report.ts";
@@ -234,7 +235,11 @@ function toggle_edit_mode(): void {
 }
 
 function validate_before_save(): boolean {
-    if (open_context === undefined || base_version === undefined || canvas_max_bytes === undefined) {
+    if (
+        open_context === undefined ||
+        base_version === undefined ||
+        canvas_max_bytes === undefined
+    ) {
         // The document hasn't finished loading; there is nothing
         // safe to save yet.
         return false;
@@ -340,19 +345,15 @@ export function initialize(): void {
         return;
     }
 
-    // Body-delegated handlers work even if the navbar has not been
-    // rendered yet when this module is initialized.
-    $("body").on("click", "#pear-canvas-menu .header-button", (e) => {
+    // Body-delegated handlers work even though the menu is rendered
+    // lazily inside the Pear runtime popover.
+    $("body").on("click", "#pear-runtime-menu-popover .pear-canvas-menu-link", (e) => {
         e.preventDefault();
         e.stopPropagation();
+        popover_menus.hide_current_popover_if_visible(
+            popover_menus.popover_instances.pear_runtime_menu,
+        );
         open_canvas();
-    });
-    $("body").on("keydown", "#pear-canvas-menu .header-button", (e) => {
-        if (e.key === "Enter") {
-            e.preventDefault();
-            e.stopPropagation();
-            open_canvas();
-        }
     });
     $("body").on("click", "#pear-canvas-modal .pear-canvas-edit-toggle", (e) => {
         e.preventDefault();

@@ -365,8 +365,49 @@
 }
 
 .pear-side {
-    position: relative;
     min-width: 0;
+    color: var(--color-text-item);
+    font-size: 11px;
+    line-height: 15px;
+}
+
+.pear-side > summary {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    cursor: pointer;
+    list-style: none;
+    color: var(--color-text-sidebar-heading);
+    font-weight: var(--font-weight-sidebar-heading);
+    opacity: var(--opacity-sidebar-heading);
+}
+
+.pear-side > summary::-webkit-details-marker {
+    display: none;
+}
+
+.pear-side > summary::after {
+    margin-left: auto;
+    color: var(--color-text-item);
+    content: "›";
+    font-family: monospace;
+    font-size: 14px;
+    line-height: 1;
+    transition: transform 0.12s ease;
+}
+
+.pear-side[open] > summary::after {
+    transform: rotate(90deg);
+}
+
+.pear-side-glyph {
+    color: var(--color-text-item);
+    font-size: 0.95em;
+}
+
+.pear-side-body {
+    position: relative;
+    margin-top: 6px;
 }
 
 .pear-side-request {

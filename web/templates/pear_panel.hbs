@@ -121,10 +121,16 @@
         <div class="pear-panel-error">{{error}}</div>
     {{/if}}
 
-    <div class="pear-side">
-        <textarea id="pear-side-request" class="pear-side-request" rows="2" placeholder="{{t 'Private side request' }}"></textarea>
-        <button type="button" id="pear-side-start" class="pear-side-start action-button action-button-subtle-neutral" {{#unless has_topic}}disabled{{/unless}}>
-            <span class="action-button-label">{{t "Side" }}</span>
-        </button>
-    </div>
+    <details id="pear-side-details" class="pear-side">
+        <summary>
+            <span class="pear-ui-glyph pear-side-glyph" aria-hidden="true">✧</span>
+            <span>{{t "Side request" }}</span>
+        </summary>
+        <div class="pear-side-body">
+            <textarea id="pear-side-request" class="pear-side-request" rows="2" placeholder="{{t 'Private side request' }}"></textarea>
+            <button type="button" id="pear-side-start" class="pear-side-start action-button action-button-subtle-neutral" {{#unless has_topic}}disabled{{/unless}}>
+                <span class="action-button-label">{{t "Side" }}</span>
+            </button>
+        </div>
+    </details>
 </div>

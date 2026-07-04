@@ -90,44 +90,6 @@ run_test("compact_meta_label_for_testing", () => {
     );
 });
 
-run_test("context_meter_for_testing", () => {
-    assert.deepEqual(pear_panel.context_meter_for_testing(undefined), {
-        has_meter: false,
-        percent: 0,
-        style: "--pear-context-meter-percent: 0%;",
-        label: "",
-        value_label: "",
-        is_hot: false,
-    });
-
-    assert.deepEqual(pear_panel.context_meter_for_testing({cache_percent: 38.4}), {
-        has_meter: true,
-        percent: 38.4,
-        style: "--pear-context-meter-percent: 38.4%;",
-        label: "translated: Cached context 38%",
-        value_label: "38%",
-        is_hot: false,
-    });
-
-    assert.deepEqual(pear_panel.context_meter_for_testing({cache_percent: 91.8}), {
-        has_meter: true,
-        percent: 91.8,
-        style: "--pear-context-meter-percent: 91.8%;",
-        label: "translated: Cached context 92%",
-        value_label: "92%",
-        is_hot: true,
-    });
-
-    assert.deepEqual(pear_panel.context_meter_for_testing({cache_percent: 150}), {
-        has_meter: true,
-        percent: 100,
-        style: "--pear-context-meter-percent: 100%;",
-        label: "translated: Cached context 100%",
-        value_label: "100%",
-        is_hot: true,
-    });
-});
-
 run_test("template renders workbench without active run", () => {
     const html = render_pear_panel({
         panel_open: true,
@@ -178,6 +140,45 @@ run_test("template renders workbench without active run", () => {
     assert.match(html, /\+16/);
     assert.match(html, /-4/);
     assert.doesNotMatch(html, /pear-workbench-context-meter/);
+});
+
+run_test("template keeps runtime metadata out of workbench content rail", () => {
+    const html = render_pear_panel({
+        panel_open: true,
+        show_workbench: true,
+        has_topic: true,
+        show_panel_header: false,
+        panel_can_close: true,
+        active_run: {
+            show_status: true,
+            usage: {cache_percent: 91},
+        },
+        topic_context: {
+            workbench_title: "routing-fix",
+            workbench_title_attr: "/srv/pear-workspaces/devel-routing-fix",
+            workbench_branch_meta_label: "devel / routing-fix / a3f92c1",
+            workbench_head_label: "HEAD",
+            workbench_head_title: "HEAD a3f92c1",
+            workbench_head_summary: "No committed work yet",
+            workbench_diff_selected: true,
+            workbench_history_selected: false,
+            workbench_side_selected: false,
+            workbench_diff_disabled: false,
+            workbench_history_disabled: false,
+            diff_tab_label: "diff",
+            history_tab_label: "history",
+            side_tab_label: "whisper",
+            runtime_chip_title: "GPT-5.5 · High",
+            runtime_chip_label: "GPT-5.5 · h",
+            workbench_view: "diff",
+            has_workbench_diff: false,
+            has_workbench_diffstat: false,
+        },
+    });
+
+    assert.doesNotMatch(html, /pear-workbench-context-meter/);
+    assert.doesNotMatch(html, /cache_percent/);
+    assert.match(html, /pear-workbench-runtime/);
 });
 
 run_test("template renders diff rows without duplicate summary chips", () => {

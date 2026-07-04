@@ -5,6 +5,10 @@
     font-size: 12px;
 }
 
+#pear-panel.pear-panel-collapsed {
+    display: none;
+}
+
 .pear-panel-inner {
     display: flex;
     flex-direction: column;

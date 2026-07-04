@@ -856,6 +856,9 @@ export function update_work_cursor(
         .attr("aria-hidden", "true")
         .text(state.status_marker)
         .appendTo($cursor);
+    if (state.repo_label !== "") {
+        $("<span>").addClass("pear-work-cursor-repo").text(state.repo_label).appendTo($cursor);
+    }
     if (state.branch_label !== "") {
         $("<span>")
             .addClass("pear-work-cursor-ref pear-work-cursor-target")

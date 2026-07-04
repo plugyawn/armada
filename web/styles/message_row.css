@@ -257,6 +257,13 @@
                     color: var(--color-text-item);
                 }
 
+                li > .pear-tool-row-content {
+                    min-width: 0;
+                    overflow: hidden;
+                    text-overflow: ellipsis;
+                    white-space: nowrap;
+                }
+
                 li + li {
                     border-top: 1px solid
                         color-mix(

@@ -138,6 +138,39 @@ run_test("effort_choices", () => {
     ]);
 });
 
+run_test("runtime_summary", () => {
+    assert.deepEqual(pear_runtime_menu.runtime_summary(undefined), {
+        model_label: "translated: Pear",
+        effort_label: "",
+        compact_label: "translated: Pear",
+    });
+
+    assert.deepEqual(
+        pear_runtime_menu.runtime_summary(
+            make_context({
+                model: "gpt-5.5",
+                reasoning_effort: "high",
+                model_catalog: [{slug: "gpt-5.5", display_name: "GPT-5.5"}],
+                reasoning_efforts: [{effort: "high", label: "High"}],
+            }),
+        ),
+        {
+            model_label: "GPT-5.5",
+            effort_label: "High",
+            compact_label: "GPT-5.5 · High",
+        },
+    );
+
+    assert.deepEqual(
+        pear_runtime_menu.runtime_summary(make_context({model: "custom", reasoning_effort: "low"})),
+        {
+            model_label: "custom",
+            effort_label: "Low",
+            compact_label: "custom · Low",
+        },
+    );
+});
+
 run_test("git_display", () => {
     assert.equal(pear_runtime_menu.git_display(undefined), undefined);
     assert.equal(pear_runtime_menu.git_display(make_context()), undefined);

@@ -1,9 +1,39 @@
 <div class="pear-panel-inner">
     <div class="pear-panel-header">
         <div class="pear-panel-title-row">
-            <span class="pear-panel-title">{{t "Context" }}</span>
+            <span class="pear-panel-title">{{t "Work" }}</span>
+            {{#if active_run}}
+                <div class="pear-run-status-row pear-run-status-{{active_run.status_class}}{{#if active_run.is_active}} pear-liveness-active{{/if}}">
+                    <span class="pear-ui-glyph pear-run-status-glyph {{#if active_run.is_active}}pear-thinking-glyph{{/if}}" aria-hidden="true">{{active_run.status_marker}}</span>
+                    <span class="pear-run-status-text">{{active_run.status_label}}</span>
+                    {{#if active_run.has_usage}}
+                        <span class="pear-run-status-usage tippy-zulip-delayed-tooltip" data-tippy-content="{{active_run.usage_title}}">
+                            {{active_run.usage_label}}
+                        </span>
+                    {{/if}}
+                </div>
+            {{/if}}
         </div>
         <div class="pear-panel-actions">
+            {{#if active_run.has_actions}}
+                <div class="pear-run-actions pear-panel-run-actions" data-run-id="{{active_run.id}}">
+                    {{#if active_run.can_pause}}
+                        <button type="button" class="pear-run-action icon-button icon-button-square icon-button-neutral tippy-zulip-delayed-tooltip" data-action="pause" data-run-id="{{active_run.id}}" aria-label="{{t 'Pause' }}" data-tippy-content="{{t 'Pause' }}">
+                            <i class="zulip-icon zulip-icon-stop-circle" aria-hidden="true"></i>
+                        </button>
+                    {{/if}}
+                    {{#if active_run.can_resume}}
+                        <button type="button" class="pear-run-action icon-button icon-button-square icon-button-neutral tippy-zulip-delayed-tooltip" data-action="resume" data-run-id="{{active_run.id}}" aria-label="{{t 'Resume' }}" data-tippy-content="{{t 'Resume' }}">
+                            <i class="zulip-icon zulip-icon-play-circle" aria-hidden="true"></i>
+                        </button>
+                    {{/if}}
+                    {{#if active_run.can_cancel}}
+                        <button type="button" class="pear-run-action icon-button icon-button-square icon-button-danger tippy-zulip-delayed-tooltip" data-action="cancel" data-run-id="{{active_run.id}}" aria-label="{{t 'Cancel' }}" data-tippy-content="{{t 'Cancel' }}">
+                            <i class="zulip-icon zulip-icon-circle-x" aria-hidden="true"></i>
+                        </button>
+                    {{/if}}
+                </div>
+            {{/if}}
             <button type="button" id="pear-panel-refresh" class="pear-icon-button icon-button icon-button-square icon-button-neutral tippy-zulip-delayed-tooltip" aria-label="{{t 'Refresh Pear context' }}" data-tippy-content="{{t 'Refresh Pear context' }}">
                 <i class="zulip-icon zulip-icon-reset" aria-hidden="true"></i>
             </button>
@@ -12,42 +42,6 @@
 
     {{#if has_topic}}
         {{#if topic_context}}
-            <section class="pear-context-section pear-runtime-section">
-                <div class="pear-runtime-title-row">
-                    <div class="pear-context-section-title">{{t "Runtime" }}</div>
-                    {{#if active_run}}
-                        <div class="pear-run-status-row pear-run-status-{{active_run.status_class}}{{#if active_run.is_active}} pear-liveness-active{{/if}}">
-                            <span class="pear-ui-glyph pear-run-status-glyph {{#if active_run.is_active}}pear-thinking-glyph{{/if}}" aria-hidden="true">{{active_run.status_marker}}</span>
-                            <span class="pear-run-status-text">{{active_run.status_label}}</span>
-                            {{#if active_run.has_usage}}
-                                <span class="pear-run-status-usage tippy-zulip-delayed-tooltip" data-tippy-content="{{active_run.usage_title}}">
-                                    {{active_run.usage_label}}
-                                </span>
-                            {{/if}}
-                        </div>
-                        {{#if active_run.has_actions}}
-                            <div class="pear-run-actions pear-runtime-run-actions" data-run-id="{{active_run.id}}">
-                                {{#if active_run.can_pause}}
-                                    <button type="button" class="pear-run-action icon-button icon-button-square icon-button-neutral tippy-zulip-delayed-tooltip" data-action="pause" data-run-id="{{active_run.id}}" aria-label="{{t 'Pause' }}" data-tippy-content="{{t 'Pause' }}">
-                                        <i class="zulip-icon zulip-icon-stop-circle" aria-hidden="true"></i>
-                                    </button>
-                                {{/if}}
-                                {{#if active_run.can_resume}}
-                                    <button type="button" class="pear-run-action icon-button icon-button-square icon-button-neutral tippy-zulip-delayed-tooltip" data-action="resume" data-run-id="{{active_run.id}}" aria-label="{{t 'Resume' }}" data-tippy-content="{{t 'Resume' }}">
-                                        <i class="zulip-icon zulip-icon-play-circle" aria-hidden="true"></i>
-                                    </button>
-                                {{/if}}
-                                {{#if active_run.can_cancel}}
-                                    <button type="button" class="pear-run-action icon-button icon-button-square icon-button-danger tippy-zulip-delayed-tooltip" data-action="cancel" data-run-id="{{active_run.id}}" aria-label="{{t 'Cancel' }}" data-tippy-content="{{t 'Cancel' }}">
-                                        <i class="zulip-icon zulip-icon-circle-x" aria-hidden="true"></i>
-                                    </button>
-                                {{/if}}
-                            </div>
-                        {{/if}}
-                    {{/if}}
-                </div>
-            </section>
-
             <section class="pear-context-section">
                 <div class="pear-context-section-title">{{t "Workspace" }}</div>
                 <div class="pear-workspace-summary pear-git-{{topic_context.git_status_class}}">

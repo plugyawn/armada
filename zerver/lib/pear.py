@@ -867,12 +867,12 @@ def pear_transcript_checkbox(status: str) -> str:
 
 def pear_transcript_tool_mark(status: str) -> str:
     if status in {"done", "completed"}:
-        return "✓"
+        return "·"
     if status in {"failed", "error"}:
-        return "!"
+        return "✷"
     if status in {"running", "in_progress"}:
         return "✦"
-    return "…"
+    return "⋅"
 
 
 def pear_pluralize_tool(count: int) -> str:

@@ -454,6 +454,13 @@
     vertical-align: -0.05em;
 }
 
+#pear-runtime-menu .header-button {
+    width: auto;
+    min-width: var(--header-height);
+    gap: 4px;
+    padding: 0 8px;
+}
+
 .pear-navbar-runtime-label {
     overflow: hidden;
     max-width: min(15vw, 150px);
@@ -465,6 +472,13 @@
 }
 
 @media (width <= 1100px) {
+    #pear-runtime-menu .header-button {
+        width: var(--header-height);
+        min-width: 0;
+        gap: 0;
+        padding: 0;
+    }
+
     .pear-navbar-runtime-label {
         display: none;
     }

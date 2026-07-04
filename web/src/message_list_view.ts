@@ -177,6 +177,12 @@ type PearToolRowMarker = {
     is_active?: boolean;
 };
 
+type PearArtifactReference = {
+    regex: RegExp;
+    glyph: string;
+    class_name: string;
+};
+
 const pear_tool_row_markers: PearToolRowMarker[] = [
     {regex: /^\s*✦\s*/, glyph: PEAR_ACTIVE_GLYPH, class_name: "pear-tool-row-active", is_active: true},
     {regex: /^\s*✷\s*/, glyph: "✷", class_name: "pear-tool-row-blocked"},
@@ -186,6 +192,27 @@ const pear_tool_row_markers: PearToolRowMarker[] = [
     {regex: /^\s*\[\s\]\s*/, glyph: "[ ]", class_name: "pear-tool-row-pending"},
     {regex: /^\s*\[~\]\s*/i, glyph: PEAR_ACTIVE_GLYPH, class_name: "pear-tool-row-active", is_active: true},
 ];
+
+const pear_artifact_references: PearArtifactReference[] = [
+    {regex: /^(?:Repo|Repository)$/i, glyph: "⌁", class_name: "pear-artifact-repo"},
+    {regex: /^Runtime$/i, glyph: "∙", class_name: "pear-artifact-runtime"},
+    {regex: /^Branch$/i, glyph: "⑂", class_name: "pear-artifact-branch"},
+    {regex: /^(?:PR|Pull request)$/i, glyph: "↗", class_name: "pear-artifact-pr"},
+    {regex: /^Diff$/i, glyph: "±", class_name: "pear-artifact-diff"},
+    {regex: /^(?:Test|Tests|Verification)$/i, glyph: "✓", class_name: "pear-artifact-verification"},
+    {regex: /^Screenshot$/i, glyph: "□", class_name: "pear-artifact-screenshot"},
+    {
+        regex: /^(?:Session|Session record|Pear session|Codex session)$/i,
+        glyph: "§",
+        class_name: "pear-artifact-session",
+    },
+    {regex: /^Docs?$/i, glyph: "▤", class_name: "pear-artifact-doc"},
+    {regex: /^(?:Issue|Ticket)$/i, glyph: "#", class_name: "pear-artifact-ticket"},
+    {regex: /^Reviewers?$/i, glyph: "☷", class_name: "pear-artifact-reviewers"},
+];
+
+const pear_artifact_line_regex =
+    /^\s*(Repo|Repository|Runtime|Branch|PR|Pull request|Diff|Test|Tests|Verification|Screenshot|Session|Session record|Pear session|Codex session|Doc|Docs|Issue|Ticket|Reviewer|Reviewers):\s*/i;
 
 function message_has_pear_active_marker(message: Message): boolean {
     return message.content.includes(PEAR_ACTIVE_GLYPH);
@@ -328,6 +355,93 @@ function enhance_pear_tool_rows($row: JQuery): void {
             content.classList.add("pear-tool-row-content");
             content.append(...row.childNodes);
             row.replaceChildren(glyph, content);
+        });
+}
+
+function pear_artifact_reference_for_label(label: string): PearArtifactReference | undefined {
+    return pear_artifact_references.find((reference) => reference.regex.test(label));
+}
+
+function extract_pear_artifact_reference(element: HTMLElement): {
+    label: string;
+    reference: PearArtifactReference;
+    title: string;
+} | undefined {
+    const text = element.textContent ?? "";
+    const match = pear_artifact_line_regex.exec(text);
+    if (match === null) {
+        return undefined;
+    }
+
+    const value = text.slice(match[0].length).trim();
+    if (value === "") {
+        return undefined;
+    }
+
+    const label = match[1]!;
+    const reference = pear_artifact_reference_for_label(label);
+    if (reference === undefined) {
+        return undefined;
+    }
+
+    return {
+        label,
+        reference,
+        title: `${label}: ${value}`,
+    };
+}
+
+function remove_pear_artifact_label(element: HTMLElement): boolean {
+    for (const node of element.childNodes) {
+        if (node.nodeType !== Node.TEXT_NODE) {
+            continue;
+        }
+        const text = node.textContent;
+        if (text === null || text.trim() === "") {
+            continue;
+        }
+        const match = pear_artifact_line_regex.exec(text);
+        if (match === null) {
+            return false;
+        }
+        node.textContent = text.slice(match[0].length);
+        return true;
+    }
+    return false;
+}
+
+function enhance_pear_artifact_references($row: JQuery): void {
+    if (!$row.hasClass("pear-message") || typeof document.createElementNS !== "function") {
+        return;
+    }
+
+    $row.find(".message_content > p, .message_content li")
+        .not(".pear-artifact-ref")
+        .each((_index, element) => {
+            if (!(element instanceof HTMLElement) || element.closest(".spoiler-block") !== null) {
+                return;
+            }
+
+            const artifact = extract_pear_artifact_reference(element);
+            if (artifact === undefined || !remove_pear_artifact_label(element)) {
+                return;
+            }
+
+            const glyph = document.createElementNS("http://www.w3.org/1999/xhtml", "span");
+            glyph.classList.add("pear-artifact-ref-glyph");
+            glyph.textContent = artifact.reference.glyph;
+
+            const label = document.createElementNS("http://www.w3.org/1999/xhtml", "span");
+            label.classList.add("pear-artifact-ref-label");
+            label.textContent = artifact.label;
+
+            const value = document.createElementNS("http://www.w3.org/1999/xhtml", "span");
+            value.classList.add("pear-artifact-ref-value");
+            value.append(...element.childNodes);
+
+            element.classList.add("pear-artifact-ref", artifact.reference.class_name);
+            element.title = artifact.title;
+            element.replaceChildren(glyph, label, value);
         });
 }
 
@@ -1700,6 +1814,7 @@ export class MessageListView {
 
         rendered_markdown.update_elements($content);
         enhance_pear_tool_rows($row);
+        enhance_pear_artifact_references($row);
         maybe_render_pear_thinking_glyph($row);
 
         const id = rows.id($row);

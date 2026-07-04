@@ -97,6 +97,93 @@
                 font-size: 0.9em;
             }
 
+            .pear-artifact-ref {
+                display: inline-flex;
+                max-width: min(100%, 38rem);
+                min-height: 1.65em;
+                align-items: baseline;
+                gap: 0.45em;
+                margin-block: 0.06em 0.18em;
+                padding: 0.08em 0.45em;
+                overflow: hidden;
+                border: 1px solid
+                    color-mix(
+                        in srgb,
+                        var(--color-message-content-container-border) 76%,
+                        transparent
+                    );
+                border-radius: 5px;
+                background: color-mix(
+                    in srgb,
+                    var(--color-background-pear-message-content) 88%,
+                    var(--color-text-message-default) 12%
+                );
+                color: var(--color-text-message-default);
+                font-size: 0.82em;
+                line-height: 1.35;
+                vertical-align: baseline;
+                white-space: nowrap;
+            }
+
+            li.pear-artifact-ref {
+                margin-left: 0;
+            }
+
+            .pear-artifact-ref-glyph {
+                flex: none;
+                width: 1.2em;
+                color: var(--color-text-item);
+                font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+                font-size: 0.95em;
+                font-style: normal;
+                line-height: 1;
+                text-align: center;
+            }
+
+            .pear-artifact-ref-label {
+                flex: none;
+                color: var(--color-text-item);
+                font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+                font-size: 0.9em;
+                font-weight: 600;
+            }
+
+            .pear-artifact-ref-value {
+                display: block;
+                min-width: 0;
+                overflow: hidden;
+                color: var(--color-text-message-default);
+                text-overflow: ellipsis;
+                white-space: nowrap;
+
+                code {
+                    padding: 0;
+                    background: transparent;
+                    font-size: 1em;
+                }
+            }
+
+            .pear-artifact-diff,
+            .pear-artifact-pr,
+            .pear-artifact-doc {
+                .pear-artifact-ref-glyph {
+                    color: var(--color-text-success-text-action-button);
+                }
+            }
+
+            .pear-artifact-verification {
+                .pear-artifact-ref-glyph {
+                    color: var(--color-text-success-text-action-button);
+                }
+            }
+
+            .pear-artifact-ticket,
+            .pear-artifact-reviewers {
+                .pear-artifact-ref-glyph {
+                    color: var(--color-text-warning-text-action-button);
+                }
+            }
+
             .spoiler-block {
                 width: fit-content;
                 min-width: min(18rem, 100%);

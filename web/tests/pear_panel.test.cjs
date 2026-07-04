@@ -136,6 +136,7 @@ run_test("work_cursor_state_for_testing", () => {
         visible: false,
         status_class: "",
         status_marker: "",
+        is_active: false,
         repo_label: "",
         branch_label: "",
         head_label: "",
@@ -162,6 +163,7 @@ run_test("work_cursor_state_for_testing", () => {
             visible: true,
             status_class: "clean",
             status_marker: "·",
+            is_active: false,
             repo_label: "zulip/zulip",
             branch_label: "main",
             head_label: "abc1234",
@@ -234,6 +236,37 @@ run_test("work_cursor_state_for_testing", () => {
             github_repo: "",
         }).branch_label,
         "routing-fix",
+    );
+
+    assert.deepEqual(
+        pear_panel.work_cursor_state_for_testing(
+            {
+                stream: "devel",
+                topic: "pear",
+                model: "gpt-5.5",
+                git: {
+                    available: true,
+                    branch: "routing-fix",
+                    head_short: "abc1234",
+                    dirty: true,
+                },
+                repo_label: "Megatron-LM",
+                github_repo: "",
+            },
+            "running",
+        ),
+        {
+            visible: true,
+            status_class: "active",
+            status_marker: "✦",
+            is_active: true,
+            repo_label: "Megatron-LM",
+            branch_label: "routing-fix",
+            head_label: "abc1234+1",
+            sync_label: "",
+            status_label: "translated: forming",
+            title: "Megatron-LM / routing-fix / abc1234+1 / translated: forming",
+        },
     );
 });
 

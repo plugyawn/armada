@@ -532,7 +532,7 @@
 #userlist-header {
     cursor: pointer;
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr) auto auto;
     padding-left: var(--right-sidebar-heading-left-spacing);
     /* The scrollbar doesn't extend this high, but we want the three-dot
        menus to line up. */
@@ -540,7 +540,8 @@
     padding-bottom: var(--sidebar-filter-bottom-spacing);
     background-color: var(--color-background);
 
-    #buddy-list-menu-icon {
+    #buddy-list-menu-icon,
+    #pear-runtime-menu {
         color: var(--color-vdots-visible);
         width: var(--right-sidebar-vdots-width);
         /* Push back against default right-sidebar
@@ -552,6 +553,10 @@
             color: var(--color-vdots-hover);
             background-color: var(--color-background-sidebar-action-hover);
         }
+    }
+
+    #pear-runtime-menu {
+        font-size: 0.95em;
     }
 }
 

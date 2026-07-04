@@ -5,6 +5,10 @@
                 {{#> components/input_wrapper input_type="filter-input" id="userlist-header-search" icon="search" input_button_icon="close"}}
                     <input type="text" class="input-element user-list-filter" autocomplete="off" placeholder="{{t 'Filter users' }}" />
                 {{/components/input_wrapper}}
+                <span id="pear-runtime-menu" class="user-list-sidebar-menu-icon pear-runtime-sidebar-menu-icon hidden-for-spectators tippy-zulip-delayed-tooltip" tabindex="0" role="button" data-tippy-content="{{t 'Pear runtime' }}" aria-label="{{t 'Pear runtime' }}">
+                    <span class="pear-ui-glyph pear-runtime-menu-glyph" aria-hidden="true">·</span>
+                    <span class="pear-runtime-menu-label">{{t "Pear" }}</span>
+                </span>
                 <span id="buddy-list-menu-icon" class="user-list-sidebar-menu-icon" tabindex="0">
                     <i class="zulip-icon zulip-icon-more-vertical" aria-hidden="true"></i>
                 </span>

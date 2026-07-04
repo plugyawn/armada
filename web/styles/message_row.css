@@ -144,7 +144,6 @@
             }
 
             .message_content > p:last-child > .pear-thinking-glyph,
-            .message_content > p:last-child > em:last-child,
             .spoiler-header .pear-thinking-glyph,
             .spoiler-content li > .pear-thinking-glyph {
                 display: inline-block;

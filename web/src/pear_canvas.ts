@@ -206,7 +206,7 @@ function load_canvas(stream: string, topic: string): void {
             .text("✦")
             .appendTo($loading);
         $("<span>")
-            .text($t({defaultMessage: "Loading"}))
+            .text($t({defaultMessage: "Thinking"}))
             .appendTo($loading);
         $(document).trigger("pear_liveness_markers_changed");
     }

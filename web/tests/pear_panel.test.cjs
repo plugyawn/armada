@@ -90,6 +90,20 @@ run_test("compact_meta_label_for_testing", () => {
     );
 });
 
+run_test("workbench_title_attr_for_testing keeps metadata hover-only", () => {
+    assert.equal(
+        pear_panel.workbench_title_attr_for_testing([
+            "general chat",
+            "devel / general-chat / abc1234",
+            "general chat",
+            "/srv/pear-workspaces/devel-general-chat",
+            "",
+            undefined,
+        ]),
+        "general chat · devel / general-chat / abc1234 · /srv/pear-workspaces/devel-general-chat",
+    );
+});
+
 run_test("workbench_title_for_testing prefers topic over internal worktree", () => {
     assert.equal(
         pear_panel.workbench_title_for_testing({
@@ -180,6 +194,8 @@ run_test("template renders workbench without active run", () => {
     assert.match(html, /pear-workbench-context-row/);
     assert.match(html, /pear-workbench-head-row/);
     assert.doesNotMatch(html, /pear-workbench-title-glyph/);
+    assert.doesNotMatch(html, /pear-workbench-title-meta/);
+    assert.match(html, /title="\/srv\/pear-workspaces\/devel-general-chat"/);
     assert.match(html, /pear-workbench-head-avatar/);
     assert.match(html, /pear-workbench-head-glyph/);
     assert.match(html, /⋅/);

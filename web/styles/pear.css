@@ -293,7 +293,6 @@ body.pear-workbench-split-open {
 }
 
 .pear-workbench-title-main,
-.pear-workbench-title-meta,
 .pear-workbench-head-summary {
     min-width: 0;
     overflow: hidden;
@@ -306,15 +305,6 @@ body.pear-workbench-split-open {
     font-size: 12.5px;
     font-weight: 600;
     line-height: 16px;
-}
-
-.pear-workbench-title-meta {
-    flex: 0 1 auto;
-    color: var(--color-text-sidebar-heading);
-    font-family: monospace;
-    font-size: 10px;
-    line-height: 13px;
-    opacity: var(--opacity-sidebar-heading);
 }
 
 .pear-workbench-head-avatar {

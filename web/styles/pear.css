@@ -198,7 +198,7 @@ body.pear-workbench-split-open {
     display: flex;
     min-width: 0;
     flex-direction: column;
-    gap: 10px;
+    gap: 9px;
     color: var(--color-text-item);
     font-size: 11.5px;
     line-height: 15px;
@@ -208,7 +208,7 @@ body.pear-workbench-split-open {
     display: flex;
     min-width: 0;
     flex-direction: column;
-    gap: 6px;
+    gap: 7px;
     border-bottom: 1px solid
         color-mix(
             in srgb,
@@ -226,12 +226,14 @@ body.pear-workbench-split-open {
 }
 
 .pear-workbench-context-row {
-    gap: 5px;
+    flex-wrap: wrap;
+    gap: 7px;
 }
 
 .pear-workbench-head-row {
-    gap: 6px;
+    gap: 7px;
     min-height: 20px;
+    padding-top: 1px;
 }
 
 .pear-workbench-context-meter {
@@ -314,7 +316,7 @@ body.pear-workbench-split-open {
 
 .pear-workbench-title-main {
     color: var(--color-text-default);
-    font-size: 13px;
+    font-size: 12.5px;
     font-weight: 600;
     line-height: 16px;
 }
@@ -326,6 +328,12 @@ body.pear-workbench-split-open {
     font-size: 10px;
     line-height: 13px;
     opacity: var(--opacity-sidebar-heading);
+}
+
+.pear-workbench-head-glyph {
+    color: var(--color-text-success-text-action-button);
+    font-size: 11px;
+    opacity: 0.72;
 }
 
 .pear-workbench-head-label,
@@ -394,11 +402,11 @@ body.pear-workbench-split-open {
     background: transparent;
     color: var(--color-text-item);
     cursor: pointer;
-    font-size: 11.5px;
+    font-size: 11px;
     font-weight: 600;
     line-height: 14px;
     overflow: hidden;
-    padding: 2px 6px;
+    padding: 2px 7px;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
@@ -491,9 +499,19 @@ body.pear-workbench-split-open {
 }
 
 .pear-file-list {
-    gap: 8px;
-    border: 0;
-    background: transparent;
+    gap: 0;
+    border: 1px solid
+        color-mix(
+            in srgb,
+            var(--color-border-sidebar-subheader) 62%,
+            transparent
+        );
+    border-radius: 9px;
+    background: color-mix(
+        in srgb,
+        var(--color-background-hover-narrow-filter) 20%,
+        transparent
+    );
 }
 
 .pear-file-row,
@@ -506,20 +524,8 @@ body.pear-workbench-split-open {
 }
 
 .pear-file-row {
-    grid-template-columns: minmax(0, 1fr) auto;
-    border: 1px solid
-        color-mix(
-            in srgb,
-            var(--color-border-sidebar-subheader) 56%,
-            transparent
-        );
-    border-radius: 8px;
-    background: color-mix(
-        in srgb,
-        var(--color-background-hover-narrow-filter) 20%,
-        transparent
-    );
-    padding: 8px 10px;
+    grid-template-columns: auto minmax(0, 1fr);
+    padding: 7px 10px;
 }
 
 .pear-file-row + .pear-file-row,
@@ -529,15 +535,6 @@ body.pear-workbench-split-open {
         color-mix(
             in srgb,
             var(--color-border-sidebar-subheader) 42%,
-            transparent
-        );
-}
-
-.pear-file-row + .pear-file-row {
-    border-top: 1px solid
-        color-mix(
-            in srgb,
-            var(--color-border-sidebar-subheader) 56%,
             transparent
         );
 }
@@ -610,18 +607,14 @@ body.pear-workbench-split-open {
 
 .pear-file-status {
     display: inline-flex;
-    min-width: 1.75em;
-    height: 1.55em;
+    min-width: 1.7em;
+    height: auto;
     align-items: center;
     justify-content: center;
-    justify-self: end;
-    order: 2;
-    border-radius: 5px;
-    background: color-mix(
-        in srgb,
-        var(--color-border-sidebar-subheader) 28%,
-        transparent
-    );
+    justify-self: start;
+    order: 1;
+    border-radius: 0;
+    background: transparent;
     color: var(--color-text-item);
     line-height: 1;
 }
@@ -634,7 +627,7 @@ body.pear-workbench-split-open {
 }
 
 .pear-file-path {
-    order: 1;
+    order: 2;
     color: var(--color-text-default);
     font-family: monospace;
     font-size: 11px;
@@ -715,31 +708,16 @@ body.pear-workbench-split-open {
 
 .pear-file-added .pear-file-status,
 .pear-file-untracked .pear-file-status {
-    background: color-mix(
-        in srgb,
-        light-dark(hsl(142deg 50% 32%), hsl(142deg 58% 72%)) 14%,
-        transparent
-    );
     color: light-dark(hsl(142deg 50% 32%), hsl(142deg 58% 72%));
 }
 
 .pear-file-deleted .pear-file-status {
-    background: color-mix(
-        in srgb,
-        light-dark(hsl(3deg 58% 42%), hsl(3deg 75% 75%)) 14%,
-        transparent
-    );
     color: light-dark(hsl(3deg 58% 42%), hsl(3deg 75% 75%));
 }
 
 .pear-file-modified .pear-file-status,
 .pear-file-renamed .pear-file-status,
 .pear-file-changed .pear-file-status {
-    background: color-mix(
-        in srgb,
-        light-dark(hsl(38deg 60% 34%), hsl(38deg 78% 76%)) 14%,
-        transparent
-    );
     color: light-dark(hsl(38deg 60% 34%), hsl(38deg 78% 76%));
 }
 
@@ -889,17 +867,17 @@ body.pear-workbench-split-open {
     grid-template-columns: minmax(0, 1fr) 26px;
     gap: 5px 7px;
     min-width: 0;
-    border: 1px dashed
+    border: 1px solid
         color-mix(
             in srgb,
-            var(--color-text-success-text-action-button) 44%,
-            var(--color-border-legacy-input) 56%
+            var(--color-border-sidebar-subheader) 64%,
+            transparent
         );
-    border-radius: 8px;
+    border-radius: 9px;
     background: color-mix(
         in srgb,
-        var(--color-text-success-text-action-button) 5%,
-        var(--color-background-input) 95%
+        var(--color-background-hover-narrow-filter) 22%,
+        transparent
     );
     padding: 7px;
 }
@@ -994,6 +972,7 @@ body.pear-workbench-split-open {
 
     .pear-workbench-tabs {
         width: 100%;
+        flex: 1 1 100%;
     }
 
     .pear-workbench-tab {

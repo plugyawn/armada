@@ -2,8 +2,8 @@
     <ul role="menu" class="popover-menu-list">
         {{#if has_runtime}}
         <li role="none" class="link-item">
-            <div class="pear-runtime-summary" role="menuitem" aria-label="{{runtime_model_label}} {{runtime_effort_label}} {{runtime_status.label}}">
-                <span class="pear-ui-glyph pear-runtime-summary-glyph {{runtime_status.class_name}}" aria-hidden="true">{{runtime_status.glyph}}</span>
+            <div class="pear-runtime-summary {{#if runtime_status.is_active}}pear-liveness-active{{/if}}" role="menuitem" aria-label="{{runtime_model_label}} {{runtime_effort_label}} {{runtime_status.label}}">
+                <span class="pear-ui-glyph pear-runtime-summary-glyph {{runtime_status.class_name}} {{#if runtime_status.is_active}}pear-thinking-glyph{{/if}}" aria-hidden="true">{{runtime_status.glyph}}</span>
                 <span class="pear-runtime-summary-main">{{runtime_model_label}}</span>
                 <span class="pear-runtime-summary-sub">{{runtime_effort_label}}</span>
             </div>
@@ -75,7 +75,8 @@
         </li>
         {{else}}
         <li role="none" class="link-item">
-            <label class="pear-runtime-group-header popover-menu-link" role="menuitem">
+            <label class="pear-runtime-group-header pear-runtime-summary {{#if runtime_status.is_active}}pear-liveness-active{{/if}} popover-menu-link" role="menuitem">
+                <span class="pear-ui-glyph pear-runtime-summary-glyph {{runtime_status.class_name}} {{#if runtime_status.is_active}}pear-thinking-glyph{{/if}}" aria-hidden="true">{{runtime_status.glyph}}</span>
                 <span class="popover-menu-label">{{status_message}}</span>
             </label>
         </li>

@@ -94,6 +94,7 @@ export type PearRuntimeStatus = {
     glyph: string;
     label: string;
     class_name: string;
+    is_active: boolean;
 };
 
 export type PearRuntimeSummary = {
@@ -258,25 +259,37 @@ function active_runtime_run(runs: PearRuntimeRun[]): PearRuntimeRun | undefined 
     );
 }
 
-export function runtime_status_for_testing(run: PearRuntimeRun | undefined): PearRuntimeStatus {
+export function runtime_status_for_testing(
+    run: {status: string} | undefined,
+): PearRuntimeStatus {
     switch (run?.status.toLowerCase()) {
         case "running":
             return {
                 glyph: "✦",
                 label: $t({defaultMessage: "Running"}),
                 class_name: "pear-runtime-status-active",
+                is_active: true,
             };
         case "queued":
             return {
                 glyph: "✦",
                 label: $t({defaultMessage: "Queued"}),
                 class_name: "pear-runtime-status-active",
+                is_active: true,
+            };
+        case "loading":
+            return {
+                glyph: "✦",
+                label: $t({defaultMessage: "Loading"}),
+                class_name: "pear-runtime-status-active",
+                is_active: true,
             };
         case "paused":
             return {
                 glyph: "✧",
                 label: $t({defaultMessage: "Paused"}),
                 class_name: "pear-runtime-status-paused",
+                is_active: false,
             };
         case "failed":
         case "error":
@@ -285,6 +298,7 @@ export function runtime_status_for_testing(run: PearRuntimeRun | undefined): Pea
                 glyph: "✷",
                 label: $t({defaultMessage: "Failed"}),
                 class_name: "pear-runtime-status-blocked",
+                is_active: false,
             };
         case "cancelled":
         case "canceled":
@@ -292,12 +306,14 @@ export function runtime_status_for_testing(run: PearRuntimeRun | undefined): Pea
                 glyph: "✷",
                 label: $t({defaultMessage: "Cancelled"}),
                 class_name: "pear-runtime-status-blocked",
+                is_active: false,
             };
         default:
             return {
                 glyph: "·",
                 label: $t({defaultMessage: "Idle"}),
                 class_name: "pear-runtime-status-idle",
+                is_active: false,
             };
     }
 }
@@ -386,12 +402,15 @@ function popover_context(): {
 } {
     const {stream, topic} = current_narrow();
     let status_message = "";
+    let runtime_status = runtime_status_for_testing(undefined);
     if (stream === undefined || topic === undefined) {
         status_message = $t({defaultMessage: "Open a topic to configure the Pear runtime."});
     } else if (last_error !== "") {
         status_message = last_error;
+        runtime_status = runtime_status_for_testing({status: "failed"});
     } else if (topic_context === undefined) {
         status_message = $t({defaultMessage: "Pear runtime is loading."});
+        runtime_status = runtime_status_for_testing({status: "loading"});
     }
     if (status_message !== "") {
         return {
@@ -399,7 +418,7 @@ function popover_context(): {
             status_message,
             runtime_model_label: "",
             runtime_effort_label: "",
-            runtime_status: runtime_status_for_testing(undefined),
+            runtime_status,
             has_runtime_usage: false,
             runtime_usage_title: "",
             runtime_usage_rows: [],
@@ -432,6 +451,7 @@ function popover_context(): {
 
 function render_popover_content(instance: tippy.Instance): void {
     instance.setContent(parse_html(render_pear_runtime_menu_popover(popover_context())));
+    $(document).trigger("pear_liveness_markers_changed");
 }
 
 function rerender_popover_if_open(): void {
@@ -486,6 +506,7 @@ function update_navbar_button_label(): void {
     $button.find(".pear-navbar-runtime-label").text(compact_label);
     $button
         .removeClass("pear-runtime-meter-visible pear-runtime-meter-hot")
+        .toggleClass("pear-liveness-active", runtime_status.is_active)
         .css("--pear-runtime-meter-scale", runtime_meter.has_meter ? runtime_meter.percent / 100 : 0);
     $button.find(".pear-navbar-runtime-meter-label").text(runtime_meter.is_hot ? runtime_meter.value : "");
     if (runtime_meter.has_meter) {
@@ -497,7 +518,13 @@ function update_navbar_button_label(): void {
     $button
         .find(".pear-navbar-glyph")
         .text(runtime_status.glyph)
-        .attr("class", `pear-ui-glyph pear-navbar-glyph ${runtime_status.class_name}`);
+        .attr(
+            "class",
+            `pear-ui-glyph pear-navbar-glyph ${runtime_status.class_name}${
+                runtime_status.is_active ? " pear-thinking-glyph" : ""
+            }`,
+        );
+    $(document).trigger("pear_liveness_markers_changed");
 }
 
 function fetch_topic_context(): void {

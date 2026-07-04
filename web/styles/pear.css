@@ -228,19 +228,18 @@
     white-space: nowrap;
 }
 
-.pear-git-dot {
-    width: 6px;
-    height: 6px;
+.pear-git-marker {
     flex: none;
-    border-radius: 50%;
+    width: 1.35em;
+    color: light-dark(hsl(142deg 45% 30%), hsl(142deg 63% 76%));
+    font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+    font-size: 11px;
+    line-height: 14px;
+    text-align: center;
 }
 
-.pear-git-clean .pear-git-dot {
-    background: light-dark(hsl(142deg 45% 38%), hsl(142deg 60% 72%));
-}
-
-.pear-git-dirty .pear-git-dot {
-    background: light-dark(hsl(36deg 70% 42%), hsl(38deg 88% 72%));
+.pear-git-dirty .pear-git-marker {
+    color: light-dark(hsl(31deg 46% 28%), hsl(37deg 88% 80%));
 }
 
 .pear-workspace-name {

@@ -77,7 +77,7 @@
                     <div class="pear-workspace-row">
                         <span class="pear-context-label">{{topic_context.workspace_kind_label}}</span>
                         {{#if topic_context.git_available}}
-                            <span class="pear-git-dot"></span>
+                            <span class="pear-git-marker" aria-hidden="true">{{topic_context.git_status_marker}}</span>
                         {{/if}}
                         <span class="pear-workspace-name" title="{{topic_context.workspace_primary_title}}">{{topic_context.workspace_primary_name}}</span>
                         {{#if topic_context.show_primary_git_status}}

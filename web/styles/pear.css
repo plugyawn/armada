@@ -207,9 +207,9 @@ body.pear-workbench-split-open {
 .pear-workbench-header {
     display: flex;
     min-width: 0;
-    align-items: center;
-    flex-wrap: nowrap;
-    gap: 8px;
+    align-items: stretch;
+    flex-wrap: wrap;
+    gap: 6px;
     border-bottom: 1px solid
         color-mix(
             in srgb,
@@ -277,9 +277,10 @@ body.pear-workbench-split-open {
 .pear-workbench-title {
     display: flex;
     min-width: 0;
-    flex: 1 1 auto;
+    flex: 1 1 calc(100% - 92px);
     align-items: baseline;
     gap: 5px;
+    order: 1;
 }
 
 .pear-workbench-title-main,
@@ -298,17 +299,14 @@ body.pear-workbench-split-open {
 }
 
 .pear-workbench-title-meta {
-    color: var(--color-text-item);
-    font-family: monospace;
-    font-size: 10.5px;
-    font-weight: 400;
-    line-height: 13px;
+    display: none;
 }
 
 .pear-workbench-tabs {
     display: flex;
     min-width: 0;
-    flex: 0 0 auto;
+    width: 100%;
+    flex: 1 1 100%;
     gap: 2px;
     margin-left: 0;
     padding: 2px;
@@ -319,11 +317,13 @@ body.pear-workbench-split-open {
         var(--color-background-hover-narrow-filter) 30%,
         transparent
     );
+    order: 4;
 }
 
 .pear-workbench-close {
     flex: 0 0 auto;
     color: var(--color-text-item);
+    order: 3;
     opacity: 0.62;
 }
 
@@ -334,7 +334,7 @@ body.pear-workbench-split-open {
 
 .pear-workbench-tab {
     min-width: 0;
-    flex: 0 1 auto;
+    flex: 1 1 0;
     border: 0;
     border-radius: 5px;
     background: transparent;
@@ -1013,6 +1013,7 @@ body.pear-workbench-split-open {
     font-family: monospace;
     font-size: 10.5px;
     line-height: 1;
+    order: 2;
     padding: 0 7px 0 5px;
 }
 

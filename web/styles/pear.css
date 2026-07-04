@@ -277,6 +277,8 @@
 .pear-workbench-summary {
     display: flex;
     min-width: 0;
+    flex-wrap: wrap;
+    gap: 4px;
     margin-bottom: 7px;
 }
 
@@ -292,6 +294,24 @@
     padding: 1px 6px;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+.pear-workbench-summary-added {
+    border-color: color-mix(
+        in srgb,
+        var(--color-text-success-text-action-button) 52%,
+        transparent
+    );
+    color: var(--color-text-success-text-action-button);
+}
+
+.pear-workbench-summary-deleted {
+    border-color: color-mix(
+        in srgb,
+        var(--color-text-danger-text-action-button) 52%,
+        transparent
+    );
+    color: var(--color-text-danger-text-action-button);
 }
 
 .pear-file-status,

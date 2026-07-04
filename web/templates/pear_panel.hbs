@@ -79,9 +79,17 @@
                     <div class="pear-workbench-body pear-workbench-view-{{topic_context.workbench_view}}">
                         {{#if topic_context.workbench_diff_selected}}
                             {{#if topic_context.has_workbench_diff}}
-                                {{#if topic_context.git.diff_shortstat}}
-                                    <div class="pear-workbench-summary">
-                                        <span class="pear-workbench-summary-chip">{{topic_context.git.diff_shortstat}}</span>
+                                {{#if topic_context.has_workbench_diff_summary}}
+                                    <div class="pear-workbench-summary" aria-label="{{topic_context.workbench_diff_summary_label}}">
+                                        {{#if topic_context.workbench_diff_file_label}}
+                                            <span class="pear-workbench-summary-chip pear-workbench-summary-files">{{topic_context.workbench_diff_file_label}}</span>
+                                        {{/if}}
+                                        {{#if topic_context.workbench_diff_insertions_label}}
+                                            <span class="pear-workbench-summary-chip pear-workbench-summary-added">{{topic_context.workbench_diff_insertions_label}}</span>
+                                        {{/if}}
+                                        {{#if topic_context.workbench_diff_deletions_label}}
+                                            <span class="pear-workbench-summary-chip pear-workbench-summary-deleted">{{topic_context.workbench_diff_deletions_label}}</span>
+                                        {{/if}}
                                     </div>
                                 {{/if}}
                                 {{#if topic_context.has_changed_files}}

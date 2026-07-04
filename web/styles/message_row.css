@@ -260,53 +260,79 @@
             }
 
             .pear-tool-spoiler-block {
-                min-width: 0;
-                max-width: min(100%, 40rem);
+                width: min(100%, 34rem);
+                min-width: min(16rem, 100%);
+                max-width: min(100%, 34rem);
+                margin: 0.4em 0 0.65em;
+                border-color: color-mix(
+                    in srgb,
+                    var(--color-message-content-container-border) 70%,
+                    transparent
+                );
+                border-radius: 8px;
+                background: color-mix(
+                    in srgb,
+                    var(--color-background-pear-message-content) 92%,
+                    var(--color-text-message-default) 8%
+                );
+            }
+
+            .pear-tool-spoiler-block .spoiler-header {
+                min-height: 24px;
+                gap: 8px;
+                padding: 5px 9px;
+                border-bottom: 0;
+                background: transparent;
+                color: var(--color-text-item);
+                font-size: 12px;
+                line-height: 1.2;
+            }
+
+            .pear-tool-spoiler-block .spoiler-header::before {
+                content: "·";
+                flex: none;
+                width: 1.15em;
+                color: var(--color-text-item);
+                font-family:
+                    ui-monospace, SFMono-Regular, Consolas, monospace;
+                font-size: 11px;
+                font-weight: 600;
+                text-align: center;
+            }
+
+            .pear-tool-spoiler-block .spoiler-header:hover {
+                background: color-mix(
+                    in srgb,
+                    var(--color-background-pear-message-content) 84%,
+                    var(--color-text-message-default) 16%
+                );
+            }
+
+            .pear-tool-spoiler-block:has(.spoiler-content-open) .spoiler-header {
+                border-bottom: 1px solid
+                    color-mix(
+                        in srgb,
+                        var(--color-message-content-container-border) 70%,
+                        transparent
+                    );
             }
 
             .pear-tool-spoiler-block:not(:has(.spoiler-content-open)) {
-                display: inline-flex;
-                width: auto;
-                max-width: min(100%, 26rem);
-                margin: 0.18em 0.4em 0.35em 0;
-                vertical-align: middle;
-                border-radius: 999px;
-                background: transparent;
-            }
-
-            .pear-tool-spoiler-block:not(:has(.spoiler-content-open)) .spoiler-header {
-                min-height: 18px;
-                padding: 2px 5px 2px 7px;
-                border-bottom: 0;
-                border-radius: inherit;
-                background: color-mix(
-                    in srgb,
-                    var(--color-background-pear-message-content) 78%,
-                    var(--color-text-message-default) 22%
-                );
-                color: var(--color-text-item);
-            }
-
-            .pear-tool-spoiler-block:not(:has(.spoiler-content-open)) .spoiler-header::before {
-                content: "·";
-                flex: none;
-                color: var(--color-text-message-default);
-                font-family:
-                    ui-monospace, SFMono-Regular, Consolas, monospace;
-                font-weight: 700;
-            }
-
-            .pear-tool-spoiler-block:not(:has(.spoiler-content-open)) .spoiler-header:hover {
-                background: color-mix(
-                    in srgb,
-                    var(--color-background-pear-message-content) 70%,
-                    var(--color-text-message-default) 30%
-                );
+                display: block;
             }
 
             .pear-tool-spoiler-block:not(:has(.spoiler-content-open)) .spoiler-button {
-                width: 15px;
-                height: 15px;
+                width: 14px;
+                height: 14px;
+            }
+
+            .pear-tool-spoiler-block .spoiler-header-text {
+                color: var(--color-text-item);
+                font-weight: 600;
+            }
+
+            .pear-tool-spoiler-block .spoiler-content {
+                background: transparent;
             }
 
             .spoiler-button {
@@ -359,7 +385,6 @@
 
             .spoiler-content.spoiler-content-open {
                 padding: 0;
-                border-top-color: var(--color-message-content-container-border);
                 transition: none;
             }
 
@@ -373,28 +398,30 @@
                 }
 
                 li {
-                    display: grid;
-                    grid-template-columns: 2.2em minmax(0, 1fr);
-                    gap: 0.5em;
+                    display: flex;
+                    gap: 9px;
                     align-items: center;
                     margin: 0;
-                    padding: 4px 7px;
+                    padding: 7px 11px;
                     color: var(--color-text-item);
                     overflow: hidden;
                     text-overflow: ellipsis;
                     white-space: nowrap;
                     font-family:
                         ui-monospace, SFMono-Regular, Consolas, monospace;
+                    font-size: 12px;
+                    line-height: 1.2;
                 }
 
                 li > .pear-tool-row-glyph {
                     display: inline-flex;
-                    min-width: 0;
+                    width: 1.15em;
+                    flex: none;
                     align-items: center;
                     justify-content: center;
                     border-radius: 4px;
                     color: var(--color-text-item);
-                    font-size: 0.9em;
+                    font-size: 11px;
                     font-style: normal;
                     line-height: 1;
                     text-align: center;
@@ -402,7 +429,7 @@
                 }
 
                 li > .pear-tool-row-active {
-                    color: var(--color-text-message-default);
+                    color: var(--color-text-warning-text-action-button);
                 }
 
                 li > .pear-tool-row-blocked {
@@ -416,6 +443,7 @@
                 li > .pear-tool-row-content {
                     min-width: 0;
                     overflow: hidden;
+                    color: var(--color-text-message-default);
                     text-overflow: ellipsis;
                     white-space: nowrap;
                 }

@@ -114,6 +114,14 @@ let context_refresh_timer: number | undefined;
 const RUNTIME_CONTEXT_REFRESH_INTERVAL_MS = 60_000;
 const runtime_menu_selector = ".pear-runtime-menu-trigger";
 const retired_header_chrome_selectors = [
+    "#pear-runtime-menu",
+    "#pear-work-cursor",
+    "#pear-context-meter",
+    ".pear-work-cursor",
+    ".pear-context-meter",
+    ".pear-navbar-glyph",
+    ".pear-navbar-runtime-label",
+    ".pear-navbar-runtime-meter-label",
     "#message_view_header #pear-runtime-menu",
     "#message_view_header #pear-work-cursor",
     "#message_view_header #pear-context-meter",

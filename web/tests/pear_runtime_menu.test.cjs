@@ -30,6 +30,9 @@ run_test("retired_header_chrome_selector_for_testing", () => {
     const selector = pear_runtime_menu.retired_header_chrome_selector_for_testing;
 
     for (const expected of [
+        "#pear-work-cursor",
+        ".pear-work-cursor",
+        ".pear-navbar-runtime-label",
         "#top_navbar #pear-work-cursor",
         "#top_navbar [id^='pear-']",
         "#top_navbar [class*=' pear-']",

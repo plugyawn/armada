@@ -1626,9 +1626,9 @@ class PearSessionDefaultsTest(TestCase):
             "\n\n".join(
                 [
                     "I'll run the checks.",
-                    "```spoiler Ran 1/2 tools\n"
+                    "```spoiler Ran 1/2 tools ✦\n"
                     "- ✓ Ran: `/bin/bash -lc pwd`\n"
-                    "- … Running: `/bin/bash -lc pytest`\n"
+                    "- ✦ Running: `/bin/bash -lc pytest`\n"
                     "```",
                     "*✦*",
                 ]

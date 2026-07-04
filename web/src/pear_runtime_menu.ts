@@ -113,17 +113,26 @@ let context_refresh_timer: number | undefined;
 
 const RUNTIME_CONTEXT_REFRESH_INTERVAL_MS = 60_000;
 const runtime_menu_selector = ".pear-runtime-menu-trigger";
-const retired_header_chrome_selector = [
+const retired_header_chrome_selectors = [
     "#message_view_header #pear-runtime-menu",
     "#message_view_header #pear-work-cursor",
     "#message_view_header #pear-context-meter",
+    "#message_view_header [id^='pear-']",
+    "#message_view_header [class^='pear-']",
+    "#message_view_header [class*=' pear-']",
     "#top_navbar #pear-runtime-menu",
     "#top_navbar #pear-work-cursor",
     "#top_navbar #pear-context-meter",
     "#top_navbar .pear-runtime-menu-trigger",
     "#top_navbar .pear-work-cursor",
     "#top_navbar .pear-context-meter",
-].join(", ");
+    "#top_navbar [id^='pear-']",
+    "#top_navbar [class^='pear-']",
+    "#top_navbar [class*=' pear-']",
+];
+
+export const retired_header_chrome_selector_for_testing =
+    retired_header_chrome_selectors.join(", ");
 
 const fallback_efforts: PearReasoningEffort[] = [
     {effort: "low", label: "Low"},
@@ -530,7 +539,7 @@ function update_runtime_button_label(): void {
 }
 
 function remove_retired_header_chrome(): void {
-    $(retired_header_chrome_selector).remove();
+    $(retired_header_chrome_selector_for_testing).remove();
 }
 
 function on_message_view_header_rendered(): void {

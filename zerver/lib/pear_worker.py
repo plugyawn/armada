@@ -1485,10 +1485,7 @@ def maybe_refactor_pear_topic_context_on_move(
     return PearTopicRenameRefactorResult(
         stream_name=new_stream.name,
         topic_name=new_topic,
-        message=(
-            "Pear workspace context moved with this topic. "
-            f"Worktree: `{new_workdir}`"
-        ),
+        message="Pear workspace moved with this topic.",
     )
 
 

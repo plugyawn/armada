@@ -9,6 +9,17 @@
     display: none;
 }
 
+body.pear-workbench-split-open {
+    --pear-workbench-split-width: min(322px, 26vw);
+}
+
+@media (width >= 1200px) {
+    body.pear-workbench-split-open {
+        --right-sidebar-width: var(--pear-workbench-split-width);
+        --right-sidebar-max-width: var(--pear-workbench-split-width);
+    }
+}
+
 #user-list.pear-workbench-open {
     #userlist-header,
     #buddy_list_wrapper,
@@ -23,7 +34,7 @@
         );
         overflow: auto;
         border-top: 0;
-        padding-top: 6px;
+        padding: 8px 10px 10px 11px;
     }
 }
 

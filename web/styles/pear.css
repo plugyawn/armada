@@ -500,8 +500,7 @@
             );
         align-items: center;
 
-        .pear-runtime-model-choice,
-        .pear-runtime-effort-choice {
+        .pear-runtime-model-choice {
             grid-area: left-icon;
             justify-self: baseline;
         }
@@ -514,5 +513,51 @@
     .pear-runtime-action-glyph {
         color: var(--color-text-item);
         font-size: 0.9em;
+    }
+
+    .pear-runtime-effort-control {
+        display: grid;
+        gap: 6px;
+        padding: 5px 15px 8px;
+    }
+
+    .pear-runtime-effort-value {
+        color: var(--color-text-default);
+        font-size: 12px;
+        font-weight: 600;
+        line-height: 16px;
+    }
+
+    .pear-runtime-effort-range {
+        width: 100%;
+        accent-color: var(--color-text-success-text-action-button);
+        cursor: pointer;
+    }
+
+    .pear-runtime-effort-range:disabled {
+        cursor: default;
+        opacity: 0.5;
+    }
+
+    .pear-runtime-effort-ticks {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
+        gap: 4px;
+        color: var(--color-text-item);
+        font-size: 10px;
+        line-height: 13px;
+    }
+
+    .pear-runtime-effort-ticks span {
+        min-width: 0;
+        overflow: hidden;
+        text-align: center;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .pear-runtime-effort-tick-selected {
+        color: var(--color-text-default);
+        font-weight: 600;
     }
 }

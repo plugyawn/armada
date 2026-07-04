@@ -138,6 +138,42 @@ run_test("effort_choices", () => {
     ]);
 });
 
+run_test("effort_slider_for_testing", () => {
+    assert.deepEqual(pear_runtime_menu.effort_slider_for_testing([]), {
+        has_efforts: false,
+        selected_label: "",
+        value: 0,
+        max: 0,
+    });
+
+    assert.deepEqual(
+        pear_runtime_menu.effort_slider_for_testing([
+            {value: "low", label: "Low", selected: false},
+            {value: "medium", label: "Medium", selected: true},
+            {value: "high", label: "High", selected: false},
+        ]),
+        {
+            has_efforts: true,
+            selected_label: "Medium",
+            value: 1,
+            max: 2,
+        },
+    );
+
+    assert.deepEqual(
+        pear_runtime_menu.effort_slider_for_testing([
+            {value: "low", label: "Low", selected: false},
+            {value: "medium", label: "Medium", selected: false},
+        ]),
+        {
+            has_efforts: true,
+            selected_label: "Low",
+            value: 0,
+            max: 1,
+        },
+    );
+});
+
 run_test("runtime_summary", () => {
     assert.deepEqual(pear_runtime_menu.runtime_summary(undefined), {
         model_label: "translated: Pear",

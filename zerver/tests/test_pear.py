@@ -1585,7 +1585,7 @@ class PearSessionDefaultsTest(TestCase):
             "\n\n".join(
                 [
                     "I'll check the repo state.",
-                    "```spoiler Ran 1 tool\n- ✓ `/bin/bash -lc pwd`\n```",
+                    "```spoiler Ran 1 tool\n- · `/bin/bash -lc pwd`\n```",
                     "Status checked. *✦*",
                 ]
             ),
@@ -1627,7 +1627,7 @@ class PearSessionDefaultsTest(TestCase):
                 [
                     "I'll run the checks.",
                     "```spoiler Ran 1/2 tools ✦\n"
-                    "- ✓ `/bin/bash -lc pwd`\n"
+                    "- · `/bin/bash -lc pwd`\n"
                     "- ✦ `/bin/bash -lc pytest`\n"
                     "```",
                     "*✦*",
@@ -1885,7 +1885,7 @@ class PearSessionDefaultsTest(TestCase):
                 [
                     "I'll check the repo state.",
                     "```spoiler Ran 1 tool\n"
-                    "- ✓ `/bin/bash -lc 'pwd && git status --short --branch'`\n"
+                    "- · `/bin/bash -lc 'pwd && git status --short --branch'`\n"
                     "```",
                     "Status checked; ready for the next concrete task.",
                 ]

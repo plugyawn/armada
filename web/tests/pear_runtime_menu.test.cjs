@@ -5,6 +5,8 @@ const assert = require("node:assert/strict");
 const {zrequire} = require("./lib/namespace.cjs");
 const {run_test} = require("./lib/test.cjs");
 
+const render_pear_runtime_menu_popover = require("../templates/pear_runtime_menu_popover.hbs");
+
 const pear_runtime_menu = zrequire("pear_runtime_menu");
 
 const fallback_efforts = [
@@ -371,4 +373,40 @@ run_test("runtime_usage_meter_for_testing", () => {
             is_hot: false,
         },
     );
+});
+
+run_test("runtime popover renders pear context meter line", () => {
+    const html = render_pear_runtime_menu_popover({
+        has_runtime: true,
+        runtime_status: {
+            glyph: "·",
+            label: "Idle",
+            class_name: "pear-runtime-status-idle",
+            is_active: false,
+        },
+        runtime_model_label: "GPT-5.5",
+        runtime_effort_label: "XHigh",
+        runtime_usage_meter: {
+            has_meter: true,
+            label: "cached context",
+            value: "72.0%",
+            percent: 72,
+            is_hot: true,
+        },
+        has_runtime_usage: false,
+        model_choices: [],
+        effort_choices: [],
+        effort_slider: {
+            has_efforts: false,
+            selected_label: "",
+            value: 0,
+            max: 0,
+        },
+    });
+
+    assert.match(html, /pear-runtime-meter-block pear-runtime-meter-hot/);
+    assert.match(html, /pear-runtime-meter-line/);
+    assert.match(html, /pear-runtime-meter-fill/);
+    assert.match(html, /width: 72%;/);
+    assert.doesNotMatch(html, /<meter\b/);
 });

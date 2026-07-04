@@ -245,9 +245,11 @@ function message_is_pear_message(
 function pear_thinking_markers($scope: JQuery<HTMLElement | Document> = $(document)): JQuery {
     wrap_bare_pear_thinking_glyphs($scope);
     const $liveness_markers = $scope.find(".pear-liveness-active .pear-thinking-glyph");
-    const $scoped_liveness_markers = $scope.hasClass("pear-liveness-active")
-        ? $scope.find(".pear-thinking-glyph")
-        : $();
+    const $scoped_liveness_markers = (
+        $scope.hasClass("pear-liveness-active")
+            ? $scope.find(".pear-thinking-glyph")
+            : $scope.filter(() => false)
+    ) as JQuery<HTMLElement>;
     const $descendant_markers = $scope.find(
         ".message_row.pear-active-message .message_content > p:last-child > .pear-thinking-glyph, .message_row.pear-active-message .spoiler-header .pear-thinking-glyph, .message_row.pear-active-message .spoiler-content li > .pear-thinking-glyph",
     );

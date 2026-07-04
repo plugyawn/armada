@@ -1,5 +1,6 @@
 import hashlib
 import os
+import pwd
 import re
 import shutil
 import subprocess
@@ -404,6 +405,14 @@ def pear_topic_isolation_username(
         stream=stream,
         topic=topic,
     )
+
+
+def pear_topic_isolation_user_exists(username: str) -> bool:
+    try:
+        pwd.getpwnam(username)
+    except KeyError:
+        return False
+    return True
 
 
 def pear_topic_process_isolation(
@@ -1097,6 +1106,8 @@ def ensure_pear_topic_context(
         if pear_topic_os_user_isolation_enabled()
         else None
     )
+    if isolation_username is not None and not pear_topic_isolation_user_exists(isolation_username):
+        isolation_username = None
     pear_ensure_topic_canvas(
         context.workdir,
         stream=stream,

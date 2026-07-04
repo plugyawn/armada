@@ -270,7 +270,8 @@ function build_runtime_usage_rows(
 function popover_context(): {
     has_runtime: boolean;
     status_message: string;
-    runtime_label: string;
+    runtime_model_label: string;
+    runtime_effort_label: string;
     has_runtime_usage: boolean;
     runtime_usage_title: string;
     runtime_usage_rows: PearRuntimeUsageRow[];
@@ -291,7 +292,8 @@ function popover_context(): {
         return {
             has_runtime: false,
             status_message,
-            runtime_label: "",
+            runtime_model_label: "",
+            runtime_effort_label: "",
             has_runtime_usage: false,
             runtime_usage_title: "",
             runtime_usage_rows: [],
@@ -303,10 +305,12 @@ function popover_context(): {
     const choices = effort_choices(topic_context);
     const usage = active_runtime_run(latest_runs)?.usage;
     const runtime_usage_rows = build_runtime_usage_rows(usage);
+    const summary = runtime_summary(topic_context);
     return {
         has_runtime: true,
         status_message: "",
-        runtime_label: runtime_summary(topic_context).compact_label,
+        runtime_model_label: summary.model_label,
+        runtime_effort_label: summary.effort_label,
         has_runtime_usage: runtime_usage_rows.length > 0,
         runtime_usage_title: usage?.summary ?? "",
         runtime_usage_rows,

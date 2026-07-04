@@ -373,6 +373,7 @@ body.pear-workbench-split-open {
     flex: 1 1 100%;
     gap: 2px;
     margin-left: 0;
+    order: 3;
     padding: 2px;
     border: 1px solid var(--color-border-sidebar-subheader);
     border-radius: 7px;
@@ -386,6 +387,7 @@ body.pear-workbench-split-open {
 .pear-workbench-close {
     flex: 0 0 auto;
     color: var(--color-text-item);
+    order: 2;
     opacity: 0.62;
 }
 

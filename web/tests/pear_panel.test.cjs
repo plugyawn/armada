@@ -82,6 +82,14 @@ run_test("runtime_chip_labels_for_testing", () => {
     );
 });
 
+run_test("compact_meta_label_for_testing", () => {
+    assert.equal(pear_panel.compact_meta_label_for_testing([" devel ", "", undefined]), "devel");
+    assert.equal(
+        pear_panel.compact_meta_label_for_testing(["devel", "routing-fix", "a3f92c1"]),
+        "devel / routing-fix / a3f92c1",
+    );
+});
+
 run_test("context_meter_for_testing", () => {
     assert.deepEqual(pear_panel.context_meter_for_testing(undefined), {
         has_meter: false,

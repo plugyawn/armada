@@ -461,6 +461,29 @@ function rerender_popover_if_open(): void {
     }
 }
 
+function update_header_context_meter(runtime_meter: PearRuntimeUsageMeter): void {
+    const $meter = $("#pear-context-meter");
+    if ($meter.length === 0) {
+        return;
+    }
+    $meter
+        .removeClass("pear-context-meter-visible pear-context-meter-hot")
+        .css("--pear-context-meter-scale", runtime_meter.has_meter ? runtime_meter.percent / 100 : 0)
+        .attr(
+            "title",
+            runtime_meter.has_meter ? `${runtime_meter.label} ${runtime_meter.value}` : "",
+        );
+    $meter
+        .find(".pear-context-meter-label")
+        .text(runtime_meter.is_hot ? runtime_meter.value : "");
+    if (runtime_meter.has_meter) {
+        $meter.addClass("pear-context-meter-visible");
+    }
+    if (runtime_meter.is_hot) {
+        $meter.addClass("pear-context-meter-hot");
+    }
+}
+
 function update_navbar_button_label(): void {
     if (typeof document === "undefined") {
         return;
@@ -508,6 +531,7 @@ function update_navbar_button_label(): void {
         .removeClass("pear-runtime-meter-visible pear-runtime-meter-hot")
         .toggleClass("pear-liveness-active", runtime_status.is_active)
         .css("--pear-runtime-meter-scale", runtime_meter.has_meter ? runtime_meter.percent / 100 : 0);
+    update_header_context_meter(runtime_meter);
     $button.find(".pear-navbar-runtime-meter-label").text(runtime_meter.is_hot ? runtime_meter.value : "");
     if (runtime_meter.has_meter) {
         $button.addClass("pear-runtime-meter-visible");
@@ -741,6 +765,7 @@ export function initialize(): void {
 
     update_navbar_button_label();
     fetch_topic_context();
+    $(document).on("pear_message_view_header_rendered", update_navbar_button_label);
     window.addEventListener("hashchange", fetch_topic_context);
     context_refresh_timer ??= window.setInterval(
         fetch_topic_context,

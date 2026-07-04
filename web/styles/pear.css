@@ -10,6 +10,7 @@
 }
 
 .pear-panel-inner {
+    position: relative;
     display: flex;
     flex-direction: column;
     gap: 9px;
@@ -27,8 +28,21 @@
 }
 
 .pear-panel-header-quiet {
+    position: absolute;
+    z-index: 2;
+    top: -3px;
+    right: 0;
     justify-content: flex-end;
-    margin-bottom: -3px;
+    margin-bottom: 0;
+}
+
+.pear-panel-header-quiet + .pear-context-section .pear-workbench-header,
+.pear-panel-header-quiet + .pear-empty-state {
+    padding-right: 28px;
+}
+
+.pear-panel-header-quiet .pear-panel-actions {
+    opacity: 0.16;
 }
 
 .pear-panel-title-row {

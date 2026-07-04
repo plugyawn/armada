@@ -279,42 +279,42 @@
             }
 
             .pear-tool-spoiler-block {
-                width: min(100%, 34rem);
-                min-width: min(16rem, 100%);
+                width: fit-content;
+                min-width: min(11rem, 100%);
                 max-width: min(100%, 34rem);
-                margin: 0.4em 0 0.65em;
+                margin: 0.28em 0 0.5em;
                 border-color: color-mix(
                     in srgb,
-                    var(--color-message-content-container-border) 70%,
+                    var(--color-message-content-container-border) 54%,
                     transparent
                 );
                 border-radius: 8px;
                 background: color-mix(
                     in srgb,
-                    var(--color-background-pear-message-content) 92%,
-                    var(--color-text-message-default) 8%
+                    var(--color-background-pear-message-content) 96%,
+                    var(--color-text-message-default) 4%
                 );
             }
 
             .pear-tool-spoiler-block .spoiler-header {
-                min-height: 24px;
-                gap: 8px;
-                padding: 5px 9px;
+                min-height: 21px;
+                gap: 6px;
+                padding: 3px 7px;
                 border-bottom: 0;
                 background: transparent;
                 color: var(--color-text-item);
-                font-size: 12px;
+                font-size: 11.5px;
                 line-height: 1.2;
             }
 
             .pear-tool-spoiler-block .spoiler-header::before {
                 content: "·";
                 flex: none;
-                width: 1.15em;
+                width: 1em;
                 color: var(--color-text-item);
                 font-family:
                     ui-monospace, SFMono-Regular, Consolas, monospace;
-                font-size: 11px;
+                font-size: 10.5px;
                 font-weight: 600;
                 text-align: center;
             }
@@ -336,13 +336,22 @@
                     );
             }
 
+            .pear-tool-spoiler-block:has(.spoiler-content-open) {
+                width: min(100%, 34rem);
+                background: color-mix(
+                    in srgb,
+                    var(--color-background-pear-message-content) 92%,
+                    var(--color-text-message-default) 8%
+                );
+            }
+
             .pear-tool-spoiler-block:not(:has(.spoiler-content-open)) {
                 display: block;
             }
 
             .pear-tool-spoiler-block:not(:has(.spoiler-content-open)) .spoiler-button {
-                width: 14px;
-                height: 14px;
+                width: 12px;
+                height: 12px;
             }
 
             .pear-tool-spoiler-block .spoiler-header-text {

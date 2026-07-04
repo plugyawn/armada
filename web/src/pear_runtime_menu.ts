@@ -110,6 +110,7 @@ let last_error = "";
 let request_in_flight = false;
 let initialized = false;
 let context_refresh_timer: number | undefined;
+let retired_header_chrome_observer: MutationObserver | undefined;
 
 const RUNTIME_CONTEXT_REFRESH_INTERVAL_MS = 60_000;
 const runtime_menu_selector = "#pear-panel .pear-runtime-menu-trigger";
@@ -138,9 +139,12 @@ const retired_header_chrome_selectors = [
     "#top_navbar [class^='pear-']",
     "#top_navbar [class*=' pear-']",
 ];
+const retired_header_chrome_observer_root_selector = "#top_navbar, #message_view_header";
 
 export const retired_header_chrome_selector_for_testing =
     retired_header_chrome_selectors.join(", ");
+export const retired_header_chrome_observer_root_selector_for_testing =
+    retired_header_chrome_observer_root_selector;
 export const runtime_menu_selector_for_testing = runtime_menu_selector;
 
 const fallback_efforts: PearReasoningEffort[] = [
@@ -551,8 +555,45 @@ function remove_retired_header_chrome(): void {
     $(retired_header_chrome_selector_for_testing).remove();
 }
 
+function node_contains_retired_header_chrome(node: Node): boolean {
+    if (!(node instanceof Element)) {
+        return false;
+    }
+    return (
+        node.matches(retired_header_chrome_selector_for_testing) ||
+        node.querySelector(retired_header_chrome_selector_for_testing) !== null
+    );
+}
+
+function start_retired_header_chrome_observer(): void {
+    if (retired_header_chrome_observer !== undefined) {
+        return;
+    }
+    const roots = [
+        ...new Set(document.querySelectorAll(retired_header_chrome_observer_root_selector)),
+    ];
+    if (roots.length === 0) {
+        return;
+    }
+    retired_header_chrome_observer = new MutationObserver((mutations) => {
+        if (
+            mutations.some((mutation) =>
+                [...mutation.addedNodes].some((node) =>
+                    node_contains_retired_header_chrome(node),
+                ),
+            )
+        ) {
+            remove_retired_header_chrome();
+        }
+    });
+    for (const root of roots) {
+        retired_header_chrome_observer.observe(root, {childList: true, subtree: true});
+    }
+}
+
 function on_message_view_header_rendered(): void {
     remove_retired_header_chrome();
+    start_retired_header_chrome_observer();
     update_runtime_button_label();
 }
 
@@ -687,6 +728,7 @@ export function initialize(): void {
         return;
     }
     remove_retired_header_chrome();
+    start_retired_header_chrome_observer();
     if (initialized) {
         fetch_topic_context();
         return;

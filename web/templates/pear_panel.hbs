@@ -112,10 +112,12 @@
                                 </button>
                             {{/if}}
                         </div>
-                        {{#if workbench_context_meter.has_meter}}
-                            <span class="pear-workbench-context-meter {{#if workbench_context_meter.is_hot}}pear-workbench-context-meter-hot{{/if}}" title="{{workbench_context_meter.title}}" aria-label="{{workbench_context_meter.title}}">
-                                <span class="pear-workbench-context-meter-fill" style="width: {{workbench_context_meter.percent}}%;"></span>
-                            </span>
+                        {{#if workbench_context_meter}}
+                            {{#if workbench_context_meter.has_meter}}
+                                <span class="pear-workbench-context-meter {{#if workbench_context_meter.is_hot}}pear-workbench-context-meter-hot{{/if}}" title="{{workbench_context_meter.title}}" aria-label="{{workbench_context_meter.title}}">
+                                    <span class="pear-workbench-context-meter-fill" style="width: {{workbench_context_meter.percent}}%;"></span>
+                                </span>
+                            {{/if}}
                         {{/if}}
                     </div>
                     <div class="pear-workbench-body pear-workbench-view-{{topic_context.workbench_view}}">

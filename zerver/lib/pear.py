@@ -938,24 +938,11 @@ def pear_transcript_tool_detail_line(event: PearWorkerTranscriptEvent) -> str:
     subject = trim_pear_text(title or body, limit=220)
 
     if kind == "command":
-        label = "Ran" if status in {"done", "completed"} else "Running"
-        if status in {"failed", "error"}:
-            label = "Failed"
-        return f"- {mark} {label}: `{subject}`"
+        return f"- {mark} `{subject or 'command'}`"
     if kind == "file_change":
-        label = "File changed" if status in {"done", "completed"} else "Changing file"
-        if status in {"failed", "error"}:
-            label = "File change failed"
-        return f"- {mark} {label}: {subject or 'file change'}"
+        return f"- {mark} {subject or 'file change'}"
     if kind == "tool":
-        label = "Tool"
-        if status in {"running", "in_progress"}:
-            label = "Tool running"
-        elif status in {"done", "completed"}:
-            label = "Tool completed"
-        elif status in {"failed", "error"}:
-            label = "Tool failed"
-        return f"- {mark} {label}: {subject}"
+        return f"- {mark} {subject or 'tool'}"
     if kind == "error":
         return f"- {mark} Error: {subject or 'Pear worker failed.'}"
     return pear_transcript_event_summary(event)

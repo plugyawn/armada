@@ -71,26 +71,34 @@
             overflow-wrap: anywhere;
 
             .spoiler-block {
-                max-width: min(100%, 58rem);
-                margin: 0.25em 0 0.6em;
+                width: fit-content;
+                min-width: min(34rem, 100%);
+                max-width: min(100%, 50rem);
+                margin: 0.35em 0 0.65em;
                 padding: 0;
-                border-color: var(--color-message-content-container-border);
-                border-radius: 6px;
+                overflow: hidden;
+                border: 1px solid
+                    color-mix(
+                        in srgb,
+                        var(--color-message-content-container-border) 78%,
+                        transparent
+                    );
+                border-radius: 8px;
                 background: color-mix(
                     in srgb,
-                    var(--color-background-pear-message-content) 92%,
-                    var(--color-text-message-default) 8%
+                    var(--color-background-pear-message-content) 84%,
+                    var(--color-text-message-default) 16%
                 );
-                font-size: 0.82em;
-                line-height: 1.28;
+                font-size: 0.78em;
+                line-height: 1.25;
             }
 
             .spoiler-header {
                 display: flex;
                 align-items: center;
-                gap: 4px;
-                min-height: 0;
-                padding: 4px 8px;
+                gap: 6px;
+                min-height: 24px;
+                padding: 4px 9px;
                 border-bottom: 1px solid transparent;
                 color: var(--color-text-message-default);
                 font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
@@ -106,17 +114,62 @@
             }
 
             .spoiler-button {
+                display: flex;
                 flex: none;
-                transform: scale(0.78);
-                transform-origin: center right;
+                align-items: center;
+                justify-content: center;
+                width: 18px;
+                height: 18px;
+                margin-left: auto;
+                padding-right: 0;
+            }
+
+            .spoiler-button,
+            .spoiler-arrow,
+            .spoiler-arrow::before,
+            .spoiler-arrow::after {
+                transition: none;
+            }
+
+            .spoiler-arrow {
+                flex: none;
+                width: 8px;
+                color: var(--color-text-message-default);
+
+                &::before,
+                &::after {
+                    width: 8px;
+                    height: 2px;
+                    background-color: currentcolor;
+                }
+
+                &::after {
+                    top: -3px;
+                    left: 3px;
+                }
+
+                &.spoiler-button-open {
+                    transform: rotate(45deg) translate(-3px, -3px);
+
+                    &::before {
+                        transform: translate(6px, 0);
+                    }
+
+                    &::after {
+                        transform: rotate(90deg) translate(6px, 0);
+                    }
+                }
             }
 
             .spoiler-content.spoiler-content-open {
                 padding: 0;
                 border-top-color: var(--color-message-content-container-border);
+                transition: none;
             }
 
             .spoiler-content {
+                transition: none;
+
                 ul {
                     margin: 0;
                     padding: 0;
@@ -125,7 +178,7 @@
 
                 li {
                     margin: 0;
-                    padding: 4px 8px;
+                    padding: 5px 10px;
                     color: var(--color-text-item);
                     overflow-wrap: anywhere;
                     font-family:
@@ -151,7 +204,10 @@
                 }
 
                 code {
-                    font-size: 0.96em;
+                    padding: 0;
+                    background: transparent;
+                    color: var(--color-text-message-default);
+                    font-size: 1em;
                 }
             }
         }

@@ -116,6 +116,18 @@ type PearGitContext = {
     recent_commits?: PearGitCommit[];
 };
 
+type PearGitTree = {
+    available: boolean;
+    workdir: string;
+    graph: string;
+    status_short: string;
+    delta?: PearGitContext;
+};
+
+type PearGitTreeResponse = {
+    git_tree: PearGitTree;
+};
+
 type PearTopicContext = {
     stream: string;
     topic: string;
@@ -162,6 +174,9 @@ let last_context_refresh_at = 0;
 const work_panel_open_by_context = new Map<string, boolean>();
 const workbench_view_by_context = new Map<string, PearWorkbenchView>();
 const side_request_by_context = new Map<string, string>();
+const git_tree_by_context = new Map<string, PearGitTree>();
+const git_tree_error_by_context = new Map<string, string>();
+const git_tree_loading_contexts = new Set<string>();
 const LIVE_REFRESH_INTERVAL_MS = 125;
 const FULL_REFRESH_INTERVAL_MS = 5000;
 const CONTEXT_REFRESH_INTERVAL_MS = 60_000;
@@ -251,6 +266,25 @@ function is_pear_side_response(data: unknown): data is {dm_narrow_url?: string} 
     );
 }
 
+function is_pear_git_tree_response(data: unknown): data is PearGitTreeResponse {
+    if (typeof data !== "object" || data === null || !("git_tree" in data)) {
+        return false;
+    }
+    const git_tree = data.git_tree;
+    return (
+        typeof git_tree === "object" &&
+        git_tree !== null &&
+        "available" in git_tree &&
+        typeof git_tree.available === "boolean" &&
+        "workdir" in git_tree &&
+        typeof git_tree.workdir === "string" &&
+        "graph" in git_tree &&
+        typeof git_tree.graph === "string" &&
+        "status_short" in git_tree &&
+        typeof git_tree.status_short === "string"
+    );
+}
+
 function display_event(event: PearRunEvent): PearRunEvent & {
     event_label: string;
     detail: string;
@@ -328,7 +362,7 @@ function git_has_diff(git: PearGitContext): boolean {
 }
 
 function git_has_history(git: PearGitContext): boolean {
-    return (git.recent_commits ?? []).length > 0;
+    return git.available || (git.recent_commits ?? []).length > 0;
 }
 
 export function workbench_view_for_testing(options: {
@@ -461,6 +495,11 @@ function display_topic_context(topic_context: PearTopicContext | undefined | nul
           workbench_title: string;
           workbench_title_attr: string;
           workbench_meta_label: string;
+          git_tree: PearGitTree | undefined;
+          git_tree_loading: boolean;
+          git_tree_error: string;
+          has_git_tree_graph: boolean;
+          has_git_tree_status: boolean;
       })
     | undefined {
     if (topic_context === undefined || topic_context === null) {
@@ -489,10 +528,12 @@ function display_topic_context(topic_context: PearTopicContext | undefined | nul
     const has_workbench_diff = git_has_diff(git);
     const has_workbench_history = git_has_history(git);
     const recent_commit_count = (git.recent_commits ?? []).length;
+    const topic_key = context_key(topic_context.stream, topic_context.topic);
+    const git_tree = git_tree_by_context.get(topic_key);
+    const git_tree_graph = git_tree?.graph.trim() ?? "";
+    const git_tree_status = git_tree?.status_short.trim() ?? "";
     const workbench_view = workbench_view_for_testing({
-        requested: workbench_view_by_context.get(
-            context_key(topic_context.stream, topic_context.topic),
-        ),
+        requested: workbench_view_by_context.get(topic_key),
         has_diff: has_workbench_diff,
         has_history: has_workbench_history,
     });
@@ -503,9 +544,12 @@ function display_topic_context(topic_context: PearTopicContext | undefined | nul
             has_workbench_diff ? changed_label : $t({defaultMessage: "No local diff"}),
         ]);
     } else if (workbench_view === "history") {
-        workbench_meta_label =
-            recent_commit_count === 1
-                ? $t({defaultMessage: "1 recent commit"})
+        workbench_meta_label = git_tree_loading_contexts.has(topic_key)
+            ? $t({defaultMessage: "Loading history"})
+            : recent_commit_count === 1
+              ? $t({defaultMessage: "1 recent commit"})
+              : git_tree_graph !== ""
+                ? $t({defaultMessage: "Git history"})
                 : $t(
                       {defaultMessage: "{recent_commit_count} recent commits"},
                       {recent_commit_count},
@@ -555,7 +599,57 @@ function display_topic_context(topic_context: PearTopicContext | undefined | nul
             worktree_name,
         ]),
         workbench_meta_label,
+        git_tree,
+        git_tree_loading: git_tree_loading_contexts.has(topic_key),
+        git_tree_error: git_tree_error_by_context.get(topic_key) ?? "",
+        has_git_tree_graph: git_tree_graph !== "",
+        has_git_tree_status: git_tree_status !== "",
     };
+}
+
+function fetch_git_tree_for_context(topic_context: PearTopicContext): void {
+    const key = context_key(topic_context.stream, topic_context.topic);
+    if (
+        key === "" ||
+        git_tree_by_context.has(key) ||
+        git_tree_loading_contexts.has(key) ||
+        !topic_context.git.available
+    ) {
+        return;
+    }
+    git_tree_loading_contexts.add(key);
+    git_tree_error_by_context.delete(key);
+    render();
+    void channel.get({
+        url: "/json/pear/git-tree",
+        data: {
+            stream: topic_context.stream,
+            topic: topic_context.topic,
+        },
+        success(raw_data) {
+            if (!is_pear_git_tree_response(raw_data)) {
+                git_tree_error_by_context.set(
+                    key,
+                    $t({defaultMessage: "Pear returned an invalid Git history payload."}),
+                );
+                return;
+            }
+            git_tree_by_context.set(key, raw_data.git_tree);
+        },
+        error(xhr) {
+            if (xhr.readyState !== 0) {
+                git_tree_error_by_context.set(
+                    key,
+                    $t({defaultMessage: "Pear Git history is unavailable."}),
+                );
+                blueslip.warn(`Failed to fetch Pear Git history: ${xhr.responseText}`);
+            }
+        },
+        complete() {
+            git_tree_loading_contexts.delete(key);
+            render();
+        },
+    });
 }
 
 export function work_cursor_state_for_testing(
@@ -830,12 +924,13 @@ function render(
         force_reconcile: active_run === undefined,
     });
     const panel_status = active_run?.status ?? "idle";
+    const display_context = display_topic_context(topic_context);
     const render_state = {
         has_topic,
         context_label: has_topic ? `${stream} > ${topic}` : "",
         panel_open,
         panel_can_close: panel_open && !run_keeps_work_panel_open(active_run),
-        topic_context: display_topic_context(topic_context),
+        topic_context: display_context,
         active_run,
         error: last_error,
         status_label: panel_status,
@@ -858,6 +953,9 @@ function render(
     }
     $("#pear-panel").toggleClass("pear-panel-collapsed", !panel_open);
     update_work_cursor(topic_context);
+    if (display_context?.workbench_history_selected) {
+        fetch_git_tree_for_context(display_context);
+    }
     schedule_live_refresh(active_run);
 }
 

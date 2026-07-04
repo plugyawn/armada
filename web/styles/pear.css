@@ -70,17 +70,16 @@
 .pear-run-status-row {
     display: flex;
     align-items: center;
-    min-width: 0;
-    gap: 5px;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
     color: var(--color-text-item);
-    font-size: 10px;
-    font-weight: 600;
-    line-height: 12px;
+    line-height: 1;
 }
 
 .pear-run-status-glyph {
     color: var(--color-text-item);
-    font-size: 1em;
+    font-size: 12px;
 }
 
 .pear-run-status-active .pear-run-status-glyph {
@@ -89,10 +88,6 @@
 
 .pear-run-status-blocked .pear-run-status-glyph {
     color: var(--color-text-danger-text-action-button);
-}
-
-.pear-run-status-text {
-    flex: none;
 }
 
 .pear-context-section {

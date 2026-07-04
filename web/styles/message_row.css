@@ -259,6 +259,56 @@
                 white-space: nowrap;
             }
 
+            .pear-tool-spoiler-block {
+                min-width: 0;
+                max-width: min(100%, 40rem);
+            }
+
+            .pear-tool-spoiler-block:not(:has(.spoiler-content-open)) {
+                display: inline-flex;
+                width: auto;
+                max-width: min(100%, 26rem);
+                margin: 0.18em 0.4em 0.35em 0;
+                vertical-align: middle;
+                border-radius: 999px;
+                background: transparent;
+            }
+
+            .pear-tool-spoiler-block:not(:has(.spoiler-content-open)) .spoiler-header {
+                min-height: 18px;
+                padding: 2px 5px 2px 7px;
+                border-bottom: 0;
+                border-radius: inherit;
+                background: color-mix(
+                    in srgb,
+                    var(--color-background-pear-message-content) 78%,
+                    var(--color-text-message-default) 22%
+                );
+                color: var(--color-text-item);
+            }
+
+            .pear-tool-spoiler-block:not(:has(.spoiler-content-open)) .spoiler-header::before {
+                content: "·";
+                flex: none;
+                color: var(--color-text-message-default);
+                font-family:
+                    ui-monospace, SFMono-Regular, Consolas, monospace;
+                font-weight: 700;
+            }
+
+            .pear-tool-spoiler-block:not(:has(.spoiler-content-open)) .spoiler-header:hover {
+                background: color-mix(
+                    in srgb,
+                    var(--color-background-pear-message-content) 70%,
+                    var(--color-text-message-default) 30%
+                );
+            }
+
+            .pear-tool-spoiler-block:not(:has(.spoiler-content-open)) .spoiler-button {
+                width: 15px;
+                height: 15px;
+            }
+
             .spoiler-button {
                 display: flex;
                 flex: none;

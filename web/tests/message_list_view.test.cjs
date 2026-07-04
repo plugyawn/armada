@@ -40,7 +40,8 @@ mock_esm("../src/channel", {
 });
 
 const {Filter} = zrequire("../src/filter");
-const {MessageListView} = zrequire("../src/message_list_view");
+const message_list_view = zrequire("../src/message_list_view");
+const {MessageListView} = message_list_view;
 const message_list = zrequire("message_list");
 const {MessageListData} = zrequire("message_list_data");
 const message_store = zrequire("message_store");
@@ -58,6 +59,7 @@ function test(label, f) {
             ".message_row.pear-active-message .message_content > p:last-child > .pear-thinking-glyph, .message_row.pear-active-message .spoiler-header .pear-thinking-glyph, .message_row.pear-active-message .spoiler-content li > .pear-thinking-glyph",
             [],
         );
+        $("document-stub").set_find_results(".pear-liveness-active .pear-thinking-glyph", []);
         $("document-stub").set_find_results(
             ".message_row.pear-active-message .message_content > p:last-child, .message_row.pear-active-message .spoiler-header p, .message_row.pear-active-message .spoiler-content li",
             [],
@@ -678,6 +680,15 @@ test("pear_message_vars", () => {
     assert.equal(result.is_pear_active_message, true);
     assert.equal(result.include_sender, false);
     assert.equal(result.edited, false);
+});
+
+test("pear_tool_spoiler_title_detection", () => {
+    assert.equal(message_list_view.is_pear_tool_spoiler_title_for_testing("Ran 1 tool"), true);
+    assert.equal(message_list_view.is_pear_tool_spoiler_title_for_testing("Ran 7 tools"), true);
+    assert.equal(message_list_view.is_pear_tool_spoiler_title_for_testing("Running 2/4 tools ✦"), true);
+    assert.equal(message_list_view.is_pear_tool_spoiler_title_for_testing("3 failed tools"), true);
+    assert.equal(message_list_view.is_pear_tool_spoiler_title_for_testing("Implementation details"), false);
+    assert.equal(message_list_view.is_pear_tool_spoiler_title_for_testing("Ran tests"), false);
 });
 
 test("pear_stale_thinking_row_refreshes_without_removed_active_id", () => {

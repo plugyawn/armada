@@ -397,6 +397,7 @@ function display_run(run: PearRun): PearRun & {
     show_session_kind: boolean;
     source_label: string;
     model_label: string;
+    show_status: boolean;
     details_open: boolean;
     is_active: boolean;
     can_pause: boolean;
@@ -427,6 +428,7 @@ function display_run(run: PearRun): PearRun & {
         show_session_kind: run.session_kind === "side",
         source_label,
         model_label: model_label(run.runtime_label),
+        show_status: run.status !== "done",
         details_open: run.status === "running" || run.status === "queued",
         is_active: run.status === "running" || run.status === "queued",
         can_pause,

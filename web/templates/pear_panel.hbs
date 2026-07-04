@@ -3,7 +3,7 @@
     <div class="pear-panel-header">
         <div class="pear-panel-title-row">
             <span class="pear-panel-title">{{t "Work" }}</span>
-            {{#if active_run}}
+            {{#if active_run.show_status}}
                 <div class="pear-run-status-row pear-run-status-{{active_run.status_class}}{{#if active_run.is_active}} pear-liveness-active{{/if}}">
                     <span class="pear-ui-glyph pear-run-status-glyph {{#if active_run.is_active}}pear-thinking-glyph{{/if}}" aria-hidden="true">{{active_run.status_marker}}</span>
                     <span class="pear-run-status-text">{{active_run.status_label}}</span>

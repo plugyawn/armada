@@ -99,8 +99,8 @@
 
             .spoiler-block {
                 width: fit-content;
-                min-width: min(34rem, 100%);
-                max-width: min(100%, 50rem);
+                min-width: min(20rem, 100%);
+                max-width: min(100%, 42rem);
                 margin: 0.35em 0 0.65em;
                 padding: 0;
                 overflow: hidden;
@@ -113,10 +113,10 @@
                 border-radius: 8px;
                 background: color-mix(
                     in srgb,
-                    var(--color-background-pear-message-content) 84%,
-                    var(--color-text-message-default) 16%
+                    var(--color-background-pear-message-content) 90%,
+                    var(--color-text-message-default) 10%
                 );
-                font-size: 0.78em;
+                font-size: 0.74em;
                 line-height: 1.25;
             }
 
@@ -124,8 +124,8 @@
                 display: flex;
                 align-items: center;
                 gap: 6px;
-                min-height: 24px;
-                padding: 4px 9px;
+                min-height: 22px;
+                padding: 3px 8px;
                 border-bottom: 1px solid transparent;
                 color: var(--color-text-message-default);
                 font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
@@ -205,7 +205,7 @@
 
                 li {
                     margin: 0;
-                    padding: 5px 10px;
+                    padding: 4px 8px;
                     color: var(--color-text-item);
                     overflow-wrap: anywhere;
                     font-family:

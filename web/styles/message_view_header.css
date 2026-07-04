@@ -124,12 +124,13 @@
         display: flex;
         align-items: center;
         align-self: center;
-        gap: 2px;
+        gap: 4px;
         flex: none;
         max-width: min(42vw, 430px);
         margin-left: auto;
-        padding: 0 2px;
-        border-radius: 4px;
+        padding: 1px 3px;
+        border: 1px solid transparent;
+        border-radius: 6px;
         background: transparent;
         color: var(--color-text-message-view-header);
         cursor: pointer;
@@ -137,9 +138,23 @@
         font-weight: 500;
         line-height: 18px;
         opacity: 0.78;
+        transition:
+            border-color 100ms ease,
+            background-color 100ms ease,
+            opacity 100ms ease;
     }
 
     .pear-work-cursor:hover {
+        border-color: color-mix(
+            in srgb,
+            var(--color-border-sidebar-subheader) 58%,
+            transparent
+        );
+        background: color-mix(
+            in srgb,
+            var(--color-background-hover-narrow-filter) 55%,
+            transparent
+        );
         opacity: 1;
     }
 
@@ -188,7 +203,7 @@
         font-family: monospace;
         font-size: 10.5px;
         line-height: 14px;
-        padding: 0 3px;
+        padding: 0 4px;
     }
 
     .pear-work-cursor-head {
@@ -202,6 +217,27 @@
 
     .pear-work-cursor-sync {
         color: var(--color-text-item);
+    }
+
+    .pear-work-cursor-status {
+        border: 1px solid transparent;
+        background: color-mix(
+            in srgb,
+            var(--color-border-sidebar-subheader) 28%,
+            transparent
+        );
+        font-weight: 600;
+    }
+
+    .pear-work-cursor-clean .pear-work-cursor-status {
+        background: transparent;
+        font-weight: 500;
+        opacity: 0.8;
+    }
+
+    .pear-work-cursor-dirty .pear-work-cursor-status {
+        border-color: color-mix(in srgb, currentcolor 38%, transparent);
+        background: color-mix(in srgb, currentcolor 11%, transparent);
     }
 
     .pear-work-cursor-target {

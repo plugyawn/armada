@@ -410,10 +410,10 @@ export function workbench_view_for_testing(options: {
     if (options.requested === "side") {
         return "side";
     }
-    if (options.requested === "history" && options.has_history) {
+    if (options.requested === "history") {
         return "history";
     }
-    if (options.requested === "diff" && options.has_diff) {
+    if (options.requested === "diff") {
         return "diff";
     }
     if (options.has_diff) {
@@ -645,8 +645,8 @@ function display_topic_context(topic_context: PearTopicContext | undefined | nul
         workbench_diff_selected: workbench_view === "diff",
         workbench_history_selected: workbench_view === "history",
         workbench_side_selected: workbench_view === "side",
-        workbench_diff_disabled: !has_workbench_diff && workbench_view !== "diff",
-        workbench_history_disabled: !has_workbench_history && workbench_view !== "history",
+        workbench_diff_disabled: false,
+        workbench_history_disabled: false,
         diff_tab_label:
             changed_count > 0
                 ? $t({defaultMessage: "diff {changed_count}"}, {changed_count})

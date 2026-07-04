@@ -293,7 +293,7 @@ run_test("workbench_view_for_testing", () => {
             has_diff: true,
             has_history: false,
         }),
-        "diff",
+        "history",
     );
     assert.equal(
         pear_panel.workbench_view_for_testing({
@@ -301,7 +301,7 @@ run_test("workbench_view_for_testing", () => {
             has_diff: false,
             has_history: true,
         }),
-        "history",
+        "diff",
     );
     assert.equal(
         pear_panel.workbench_view_for_testing({

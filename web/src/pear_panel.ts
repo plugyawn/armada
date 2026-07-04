@@ -611,6 +611,11 @@ function display_topic_context(topic_context: PearTopicContext | undefined | nul
           workbench_title: string;
           workbench_title_attr: string;
           workbench_meta_label: string;
+          workbench_branch_meta_label: string;
+          workbench_head_label: string;
+          workbench_head_title: string;
+          workbench_head_summary: string;
+          workbench_head_short: string;
           git_tree: PearGitTree | undefined;
           git_tree_loading: boolean;
           git_tree_error: string;
@@ -618,6 +623,7 @@ function display_topic_context(topic_context: PearTopicContext | undefined | nul
           has_git_tree_status: boolean;
           history_commits: (PearGitCommit & {is_head: boolean; ref_label: string})[];
           has_workbench_diff_summary: boolean;
+          has_workbench_diffstat: boolean;
           workbench_diff_summary_label: string;
           workbench_diff_file_label: string;
           workbench_diff_insertions_label: string;
@@ -675,6 +681,7 @@ function display_topic_context(topic_context: PearTopicContext | undefined | nul
         is_head: index === 0,
         ref_label: index === 0 ? $t({defaultMessage: "HEAD"}) : "",
     }));
+    const head_commit = history_commits[0];
     const recent_commit_count = history_commits.length;
     const topic_key = context_key(topic_context.stream, topic_context.topic);
     const git_tree = git_tree_by_context.get(topic_key);
@@ -713,6 +720,31 @@ function display_topic_context(topic_context: PearTopicContext | undefined | nul
         topic_context.workdir,
         $t({defaultMessage: "Ask Pear to pin a Git repository for this topic."}),
     ]);
+    const workbench_branch_meta_label = [
+        repo_label,
+        git.branch?.trim(),
+        git.head_short?.trim(),
+    ]
+        .filter((part) => part !== "")
+        .join(" / ");
+    const workbench_head_label = git.dirty === true ? "HEAD+1" : "HEAD";
+    const workbench_head_summary = first_nonempty_string([
+        head_commit?.summary,
+        git.dirty === true
+            ? $t({defaultMessage: "Local changes forming"})
+            : $t({defaultMessage: "No committed work yet"}),
+    ]);
+    const workbench_head_short = first_nonempty_string([
+        head_commit?.hash,
+        git.head_short?.trim(),
+    ]);
+    const workbench_head_title = [
+        workbench_head_label,
+        workbench_head_summary,
+        workbench_head_short,
+    ]
+        .filter((part) => part !== "")
+        .join(" ");
     const runtime_chip = runtime_chip_labels_for_testing(topic_context);
     return {
         ...topic_context,
@@ -741,8 +773,8 @@ function display_topic_context(topic_context: PearTopicContext | undefined | nul
                 : $t({defaultMessage: "history"}),
         side_tab_label: $t({defaultMessage: "whisper"}),
         workbench_title: first_nonempty_string([
-            git.branch?.trim(),
             worktree_name,
+            git.branch?.trim(),
             workspace_primary_name,
             $t({defaultMessage: "Workbench"}),
         ]),
@@ -752,6 +784,11 @@ function display_topic_context(topic_context: PearTopicContext | undefined | nul
             worktree_name,
         ]),
         workbench_meta_label,
+        workbench_branch_meta_label,
+        workbench_head_label,
+        workbench_head_title,
+        workbench_head_summary,
+        workbench_head_short,
         git_tree,
         git_tree_loading: git_tree_loading_contexts.has(topic_key),
         git_tree_error: git_tree_error_by_context.get(topic_key) ?? "",
@@ -759,6 +796,7 @@ function display_topic_context(topic_context: PearTopicContext | undefined | nul
         has_git_tree_status: git_tree_status !== "",
         history_commits,
         has_workbench_diff_summary: workbench_diff_summary_label !== "",
+        has_workbench_diffstat: workbench_diff_summary_label !== "",
         workbench_diff_summary_label,
         workbench_diff_file_label,
         workbench_diff_insertions_label,

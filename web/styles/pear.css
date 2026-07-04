@@ -207,8 +207,7 @@ body.pear-workbench-split-open {
 .pear-workbench-header {
     display: flex;
     min-width: 0;
-    align-items: stretch;
-    flex-wrap: wrap;
+    flex-direction: column;
     gap: 6px;
     border-bottom: 1px solid
         color-mix(
@@ -217,6 +216,22 @@ body.pear-workbench-split-open {
             transparent
         );
     padding-bottom: 8px;
+}
+
+.pear-workbench-context-row,
+.pear-workbench-head-row {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+}
+
+.pear-workbench-context-row {
+    gap: 5px;
+}
+
+.pear-workbench-head-row {
+    gap: 6px;
+    min-height: 20px;
 }
 
 .pear-workbench-context-meter {
@@ -277,18 +292,24 @@ body.pear-workbench-split-open {
 .pear-workbench-title {
     display: flex;
     min-width: 0;
-    flex: 1 1 calc(100% - 92px);
-    align-items: baseline;
+    flex: 1 1 auto;
+    align-items: center;
     gap: 5px;
-    order: 1;
 }
 
 .pear-workbench-title-main,
-.pear-workbench-title-meta {
+.pear-workbench-title-meta,
+.pear-workbench-head-summary {
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+.pear-workbench-title-glyph {
+    color: var(--color-text-sidebar-heading);
+    font-size: 11px;
+    opacity: var(--opacity-sidebar-heading);
 }
 
 .pear-workbench-title-main {
@@ -299,7 +320,42 @@ body.pear-workbench-split-open {
 }
 
 .pear-workbench-title-meta {
-    display: none;
+    flex: 0 1 auto;
+    color: var(--color-text-sidebar-heading);
+    font-family: monospace;
+    font-size: 10px;
+    line-height: 13px;
+    opacity: var(--opacity-sidebar-heading);
+}
+
+.pear-workbench-head-label,
+.pear-workbench-head-sha,
+.pear-workbench-diffstat {
+    flex: none;
+    font-family: monospace;
+    font-size: 10px;
+    line-height: 14px;
+}
+
+.pear-workbench-head-label {
+    color: var(--color-text-sidebar-heading);
+    font-weight: 700;
+    opacity: var(--opacity-sidebar-heading);
+}
+
+.pear-workbench-head-summary {
+    flex: 1 1 auto;
+    color: var(--color-text-item);
+    font-size: 11px;
+    line-height: 15px;
+}
+
+.pear-workbench-head-sha {
+    border: 1px solid var(--color-border-sidebar-subheader);
+    border-radius: 5px;
+    color: var(--color-text-sidebar-heading);
+    opacity: var(--opacity-sidebar-heading);
+    padding: 0 4px;
 }
 
 .pear-workbench-tabs {
@@ -317,13 +373,11 @@ body.pear-workbench-split-open {
         var(--color-background-hover-narrow-filter) 30%,
         transparent
     );
-    order: 4;
 }
 
 .pear-workbench-close {
     flex: 0 0 auto;
     color: var(--color-text-item);
-    order: 3;
     opacity: 0.62;
 }
 
@@ -360,6 +414,42 @@ body.pear-workbench-split-open {
         transparent
     );
     color: var(--color-text-default);
+}
+
+.pear-workbench-diffstat {
+    display: inline-flex;
+    width: auto;
+    max-width: 42%;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 4px;
+    border: 1px solid var(--color-border-sidebar-subheader);
+    border-radius: 6px;
+    background: transparent;
+    cursor: pointer;
+    padding: 1px 6px;
+}
+
+.pear-workbench-diffstat:hover,
+.pear-workbench-diffstat:focus-visible {
+    background: var(--color-background-hover-narrow-filter);
+    outline: none;
+}
+
+.pear-workbench-diffstat-added {
+    color: var(--color-text-success-text-action-button);
+}
+
+.pear-workbench-diffstat-deleted {
+    color: var(--color-text-danger-text-action-button);
+}
+
+.pear-workbench-diffstat-files {
+    min-width: 0;
+    overflow: hidden;
+    color: var(--color-text-item);
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .pear-workbench-tab:disabled {
@@ -897,20 +987,22 @@ body.pear-workbench-split-open {
 }
 
 @media (width <= 900px) {
-    .pear-workbench-header {
-        align-items: stretch;
+    .pear-workbench-context-row,
+    .pear-workbench-head-row {
         flex-wrap: wrap;
-        gap: 5px;
     }
 
-    .pear-workbench-title,
     .pear-workbench-tabs {
-        flex: 1 1 100%;
         width: 100%;
     }
 
     .pear-workbench-tab {
         flex: 1 1 0;
+    }
+
+    .pear-workbench-diffstat {
+        max-width: 100%;
+        flex: 0 1 auto;
     }
 }
 

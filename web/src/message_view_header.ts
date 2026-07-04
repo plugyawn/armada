@@ -149,6 +149,7 @@ function append_and_display_title_area(context: MessageViewHeaderContext): void 
         colorize_message_view_header();
     }
     $message_view_header_elem.removeClass("notdisplayed");
+    $(document).trigger("pear_message_view_header_rendered");
     const $content = $message_view_header_elem.find("span.rendered_markdown");
     if ($content) {
         // Update syntax like stream names, emojis, mentions, timestamps.

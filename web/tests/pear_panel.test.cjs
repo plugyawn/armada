@@ -35,6 +35,16 @@ run_test("render_state_changed_for_testing", () => {
     );
 });
 
+run_test("status_marker_for_testing", () => {
+    assert.equal(pear_panel.status_marker_for_testing("running"), "✦");
+    assert.equal(pear_panel.status_marker_for_testing("queued"), "✦");
+    assert.equal(pear_panel.status_marker_for_testing("paused"), "✧");
+    assert.equal(pear_panel.status_marker_for_testing("failed"), "✷");
+    assert.equal(pear_panel.status_marker_for_testing("cancelled"), "✷");
+    assert.equal(pear_panel.status_marker_for_testing("done"), "·");
+    assert.equal(pear_panel.status_marker_for_testing("unknown"), "·");
+});
+
 run_test("should_refresh_context_for_testing", () => {
     const base_options = {
         context_key_value: "devel\u0000general chat",

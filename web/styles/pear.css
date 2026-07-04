@@ -25,7 +25,10 @@
 }
 
 .pear-panel-title-row {
+    display: flex;
     min-width: 0;
+    flex-direction: column;
+    gap: 2px;
 }
 
 .pear-panel-actions {
@@ -61,17 +64,6 @@
     white-space: nowrap;
 }
 
-.pear-runtime-section {
-    gap: 6px;
-}
-
-.pear-runtime-title-row {
-    display: flex;
-    min-width: 0;
-    align-items: center;
-    gap: 8px;
-}
-
 .pear-side-request:focus {
     border-color: var(--color-border-legacy-input-focus);
     outline: none;
@@ -86,12 +78,6 @@
     font-size: 10px;
     font-weight: 600;
     line-height: 12px;
-}
-
-.pear-runtime-title-row .pear-run-status-row {
-    margin-left: auto;
-    flex: 1 1 auto;
-    justify-content: flex-end;
 }
 
 .pear-run-status-glyph {
@@ -360,8 +346,8 @@
     gap: 3px;
 }
 
-.pear-runtime-run-actions {
-    margin-left: 2px;
+.pear-panel-run-actions {
+    margin-right: 2px;
 }
 
 .pear-side {
@@ -468,9 +454,50 @@
     vertical-align: -0.05em;
 }
 
+.pear-navbar-runtime-label {
+    overflow: hidden;
+    max-width: min(15vw, 150px);
+    color: currentcolor;
+    font-size: 12px;
+    font-weight: 600;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+@media (width <= 1100px) {
+    .pear-navbar-runtime-label {
+        display: none;
+    }
+}
+
 /* Navbar Pear runtime popover menu; mirrors the radio-list layout
    used by #buddy-list-actions-menu-popover in right_sidebar.css. */
 #pear-runtime-menu-popover {
+    .pear-runtime-summary {
+        display: grid;
+        grid-template-columns: 18px minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 15px;
+    }
+
+    .pear-runtime-summary-glyph {
+        color: var(--color-text-item);
+        font-size: 0.95em;
+    }
+
+    .pear-runtime-summary-main {
+        overflow: hidden;
+        font-weight: 600;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .pear-runtime-summary-sub {
+        color: var(--color-text-item);
+        font-size: 0.85em;
+    }
+
     /* No hover effect on the group header labels. */
     .pear-runtime-group-header:hover {
         background: inherit;

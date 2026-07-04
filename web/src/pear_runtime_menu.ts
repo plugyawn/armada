@@ -73,6 +73,12 @@ export type PearGitDisplay = {
     status_label: string;
 };
 
+export type PearRuntimeSummary = {
+    model_label: string;
+    effort_label: string;
+    compact_label: string;
+};
+
 let topic_context: PearRuntimeContext | undefined;
 let context_key = "";
 let last_error = "";
@@ -156,6 +162,29 @@ export function effort_choices(context: PearRuntimeContext | undefined): PearRun
     }));
 }
 
+export function runtime_summary(context: PearRuntimeContext | undefined): PearRuntimeSummary {
+    if (context === undefined) {
+        return {
+            model_label: $t({defaultMessage: "Pear"}),
+            effort_label: "",
+            compact_label: $t({defaultMessage: "Pear"}),
+        };
+    }
+    const catalog_entry = context.model_catalog?.find((entry) => entry.slug === context.model);
+    const display_name = catalog_entry?.display_name.trim();
+    const model_label =
+        display_name === undefined || display_name === "" ? context.model : display_name;
+    const effort_label =
+        model_reasoning_efforts(context, context.model).find(
+            (choice) => choice.effort === context.reasoning_effort,
+        )?.label ?? context.reasoning_effort;
+    return {
+        model_label,
+        effort_label,
+        compact_label: `${model_label} · ${effort_label}`,
+    };
+}
+
 export function git_display(context: PearRuntimeContext | undefined): PearGitDisplay | undefined {
     const git = context?.git;
     if (git?.available !== true) {
@@ -192,6 +221,7 @@ export function git_display(context: PearRuntimeContext | undefined): PearGitDis
 function popover_context(): {
     has_runtime: boolean;
     status_message: string;
+    runtime_label: string;
     git: PearGitDisplay | undefined;
     model_choices: PearRuntimeMenuChoice[];
     effort_choices: PearRuntimeMenuChoice[];
@@ -209,6 +239,7 @@ function popover_context(): {
         return {
             has_runtime: false,
             status_message,
+            runtime_label: "",
             git: undefined,
             model_choices: [],
             effort_choices: [],
@@ -217,6 +248,7 @@ function popover_context(): {
     return {
         has_runtime: true,
         status_message: "",
+        runtime_label: runtime_summary(topic_context).compact_label,
         git: git_display(topic_context),
         model_choices: model_choices(topic_context),
         effort_choices: effort_choices(topic_context),
@@ -243,22 +275,18 @@ function update_navbar_button_label(): void {
         return;
     }
     let label = $t({defaultMessage: "Pear runtime"});
+    let compact_label = $t({defaultMessage: "Pear"});
     if (topic_context !== undefined && context_key !== "") {
-        const catalog_entry = topic_context.model_catalog?.find(
-            (entry) => entry.slug === topic_context!.model,
-        );
-        const model_label = catalog_entry?.display_name ?? topic_context.model;
-        const effort_label =
-            model_reasoning_efforts(topic_context, topic_context.model).find(
-                (choice) => choice.effort === topic_context!.reasoning_effort,
-            )?.label ?? topic_context.reasoning_effort;
+        const summary = runtime_summary(topic_context);
+        compact_label = summary.compact_label;
         label = $t(
             {defaultMessage: "Pear runtime: {model} ({effort})"},
-            {model: model_label, effort: effort_label},
+            {model: summary.model_label, effort: summary.effort_label},
         );
     }
     $button.attr("aria-label", label);
     $button.attr("data-tippy-content", label);
+    $button.find(".pear-navbar-runtime-label").text(compact_label);
 }
 
 function fetch_topic_context(): void {

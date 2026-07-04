@@ -31,15 +31,6 @@ type PearUsage = {
     summary?: string;
 };
 
-type PearContextMeter = {
-    has_meter: boolean;
-    percent: number;
-    style: string;
-    label: string;
-    value_label: string;
-    is_hot: boolean;
-};
-
 type PearLiveRun = {
     status: string;
     content: string;
@@ -295,31 +286,6 @@ function status_marker(status: string): string {
 
 export const status_marker_for_testing = status_marker;
 
-export function context_meter_for_testing(
-    usage: PearUsage | null | undefined,
-): PearContextMeter {
-    if (usage?.cache_percent === undefined) {
-        return {
-            has_meter: false,
-            percent: 0,
-            style: "--pear-context-meter-percent: 0%;",
-            label: "",
-            value_label: "",
-            is_hot: false,
-        };
-    }
-    const percent = Math.min(100, Math.max(0, usage.cache_percent));
-    const value_label = `${percent.toFixed(0)}%`;
-    return {
-        has_meter: true,
-        percent,
-        style: `--pear-context-meter-percent: ${percent}%;`,
-        label: $t({defaultMessage: "Cached context {value_label}"}, {value_label}),
-        value_label,
-        is_hot: percent >= 70,
-    };
-}
-
 function is_pear_runs_response(data: unknown): data is PearRunsResponse {
     return (
         typeof data === "object" &&
@@ -560,7 +526,6 @@ function display_run(run: PearRun): PearRun & {
     can_cancel: boolean;
     has_actions: boolean;
     has_events: boolean;
-    context_meter: PearContextMeter;
     events: PearRunEvent[];
 } {
     const events = (run.events ?? []).map((event) => display_event(event));
@@ -592,7 +557,6 @@ function display_run(run: PearRun): PearRun & {
         can_cancel,
         has_actions: can_pause || can_resume || can_cancel,
         has_events: events.length > 0,
-        context_meter: context_meter_for_testing(run.usage),
         events,
     };
 }

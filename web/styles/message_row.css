@@ -99,9 +99,9 @@
 
             .spoiler-block {
                 width: fit-content;
-                min-width: min(20rem, 100%);
-                max-width: min(100%, 42rem);
-                margin: 0.35em 0 0.65em;
+                min-width: min(18rem, 100%);
+                max-width: min(100%, 40rem);
+                margin: 0.3em 0 0.55em;
                 padding: 0;
                 overflow: hidden;
                 border: 1px solid
@@ -110,13 +110,13 @@
                         var(--color-message-content-container-border) 78%,
                         transparent
                     );
-                border-radius: 8px;
+                border-radius: 7px;
                 background: color-mix(
                     in srgb,
-                    var(--color-background-pear-message-content) 90%,
-                    var(--color-text-message-default) 10%
+                    var(--color-background-pear-message-content) 94%,
+                    var(--color-text-message-default) 6%
                 );
-                font-size: 0.74em;
+                font-size: 0.72em;
                 line-height: 1.25;
             }
 
@@ -124,12 +124,25 @@
                 display: flex;
                 align-items: center;
                 gap: 6px;
-                min-height: 22px;
-                padding: 3px 8px;
+                min-height: 21px;
+                padding: 3px 7px;
                 border-bottom: 1px solid transparent;
+                background: color-mix(
+                    in srgb,
+                    var(--color-background-pear-message-content) 82%,
+                    var(--color-text-message-default) 18%
+                );
                 color: var(--color-text-message-default);
                 font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
                 font-weight: 600;
+            }
+
+            .spoiler-header:hover {
+                background: color-mix(
+                    in srgb,
+                    var(--color-background-pear-message-content) 76%,
+                    var(--color-text-message-default) 24%
+                );
             }
 
             .spoiler-header .spoiler-header-text {
@@ -205,9 +218,11 @@
 
                 li {
                     margin: 0;
-                    padding: 4px 8px;
+                    padding: 4px 7px;
                     color: var(--color-text-item);
-                    overflow-wrap: anywhere;
+                    overflow: hidden;
+                    text-overflow: ellipsis;
+                    white-space: nowrap;
                     font-family:
                         ui-monospace, SFMono-Regular, Consolas, monospace;
                 }

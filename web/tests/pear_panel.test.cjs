@@ -5,6 +5,8 @@ const assert = require("node:assert/strict");
 const {zrequire} = require("./lib/namespace.cjs");
 const {run_test} = require("./lib/test.cjs");
 
+const render_pear_panel = require("../templates/pear_panel.hbs");
+
 const pear_panel = zrequire("pear_panel");
 
 run_test("render_state_changed_for_testing", () => {
@@ -78,6 +80,78 @@ run_test("runtime_chip_labels_for_testing", () => {
             title: "custom-model · xhigh",
         },
     );
+});
+
+run_test("context_meter_for_testing", () => {
+    assert.deepEqual(pear_panel.context_meter_for_testing(undefined), {
+        has_meter: false,
+        percent: 0,
+        style: "--pear-context-meter-percent: 0%;",
+        label: "",
+        value_label: "",
+        is_hot: false,
+    });
+
+    assert.deepEqual(pear_panel.context_meter_for_testing({cache_percent: 38.4}), {
+        has_meter: true,
+        percent: 38.4,
+        style: "--pear-context-meter-percent: 38.4%;",
+        label: "translated: Cached context 38%",
+        value_label: "38%",
+        is_hot: false,
+    });
+
+    assert.deepEqual(pear_panel.context_meter_for_testing({cache_percent: 91.8}), {
+        has_meter: true,
+        percent: 91.8,
+        style: "--pear-context-meter-percent: 91.8%;",
+        label: "translated: Cached context 92%",
+        value_label: "92%",
+        is_hot: true,
+    });
+
+    assert.deepEqual(pear_panel.context_meter_for_testing({cache_percent: 150}), {
+        has_meter: true,
+        percent: 100,
+        style: "--pear-context-meter-percent: 100%;",
+        label: "translated: Cached context 100%",
+        value_label: "100%",
+        is_hot: true,
+    });
+});
+
+run_test("template renders workbench without active run", () => {
+    const html = render_pear_panel({
+        panel_open: true,
+        show_workbench: true,
+        has_topic: true,
+        show_panel_header: false,
+        panel_can_close: true,
+        active_run: undefined,
+        topic_context: {
+            workbench_title: "general chat",
+            workbench_title_attr: "/srv/pear-workspaces/devel-general-chat",
+            workbench_meta_label: "",
+            workbench_diff_selected: false,
+            workbench_history_selected: true,
+            workbench_side_selected: false,
+            workbench_diff_disabled: false,
+            workbench_history_disabled: false,
+            diff_tab_label: "diff",
+            history_tab_label: "history",
+            side_tab_label: "whisper",
+            runtime_chip_title: "GPT-5.5 · XHigh",
+            runtime_chip_label: "GPT-5.5 · xh",
+            workbench_view: "history",
+            git_tree_loading: false,
+            git_tree_error: "",
+            has_git_tree_graph: false,
+            has_recent_commits: false,
+        },
+    });
+
+    assert.match(html, /pear-workbench/);
+    assert.doesNotMatch(html, /pear-workbench-context-meter/);
 });
 
 run_test("should_refresh_context_for_testing", () => {

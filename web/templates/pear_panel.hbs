@@ -89,6 +89,16 @@
                             </button>
                         {{/if}}
                     </div>
+                    {{#if active_run}}
+                        {{#if active_run.context_meter.has_meter}}
+                            <div class="pear-workbench-context-meter {{#if active_run.context_meter.is_hot}}pear-workbench-context-meter-hot{{/if}}" aria-label="{{active_run.context_meter.label}}" title="{{active_run.context_meter.label}}">
+                                <span class="pear-workbench-context-meter-bar" style="{{active_run.context_meter.style}}"></span>
+                                {{#if active_run.context_meter.is_hot}}
+                                    <span class="pear-workbench-context-meter-value">{{active_run.context_meter.value_label}}</span>
+                                {{/if}}
+                            </div>
+                        {{/if}}
+                    {{/if}}
                     <div class="pear-workbench-body pear-workbench-view-{{topic_context.workbench_view}}">
                         {{#if topic_context.workbench_diff_selected}}
                             {{#if topic_context.has_workbench_diff}}

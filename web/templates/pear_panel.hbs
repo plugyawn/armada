@@ -34,7 +34,20 @@
     {{#if has_topic}}
         {{#if topic_context}}
             <section class="pear-context-section pear-runtime-section">
-                <div class="pear-context-section-title">{{t "Runtime" }}</div>
+                <div class="pear-runtime-title-row">
+                    <div class="pear-context-section-title">{{t "Runtime" }}</div>
+                    {{#if active_run}}
+                        <div class="pear-run-status-row pear-run-status-{{active_run.status_class}}{{#if active_run.is_active}} pear-liveness-active{{/if}}">
+                            <span class="pear-run-status-glyph {{#if active_run.is_active}}pear-thinking-glyph{{/if}}" aria-hidden="true">{{active_run.status_marker}}</span>
+                            <span class="pear-run-status-text">{{active_run.status_label}}</span>
+                            {{#if active_run.has_usage}}
+                                <span class="pear-run-status-usage tippy-zulip-delayed-tooltip" data-tippy-content="{{active_run.usage_title}}">
+                                    {{active_run.usage_label}}
+                                </span>
+                            {{/if}}
+                        </div>
+                    {{/if}}
+                </div>
                 <div class="pear-runtime-row">
                     <label class="pear-field-label" for="pear-topic-model-select">{{t "Model" }}</label>
                     <select id="pear-topic-model-select" class="pear-topic-model-select pear-topic-runtime-control">
@@ -55,17 +68,6 @@
                         {{/each}}
                     </div>
                 </div>
-                {{#if active_run}}
-                    <div class="pear-run-status-row pear-run-status-{{active_run.status_class}}{{#if active_run.is_active}} pear-liveness-active{{/if}}">
-                        <span class="pear-run-status-glyph {{#if active_run.is_active}}pear-thinking-glyph{{/if}}" aria-hidden="true">{{active_run.status_marker}}</span>
-                        <span class="pear-run-status-text">{{active_run.status_label}}</span>
-                        {{#if active_run.has_usage}}
-                            <span class="pear-run-status-usage tippy-zulip-delayed-tooltip" data-tippy-content="{{active_run.usage_title}}">
-                                {{active_run.usage_label}}
-                            </span>
-                        {{/if}}
-                    </div>
-                {{/if}}
             </section>
             {{#if model_error}}
                 <div class="pear-panel-error">{{model_error}}</div>

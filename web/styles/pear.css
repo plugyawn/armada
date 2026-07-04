@@ -21,6 +21,13 @@ body.pear-workbench-split-open {
 }
 
 #user-list.pear-workbench-open {
+    display: flex;
+    min-height: calc(
+        var(--full-height-dynamic-viewport) - var(--navbar-fixed-height) -
+            var(--header-padding-bottom)
+    );
+    flex-direction: column;
+
     #userlist-header,
     #buddy_list_wrapper,
     #buddy-list-loading-subscribers {
@@ -28,6 +35,9 @@ body.pear-workbench-split-open {
     }
 
     #pear-panel {
+        display: flex;
+        min-height: 0;
+        flex: 1 1 auto;
         max-height: calc(
             var(--full-height-dynamic-viewport) - var(--navbar-fixed-height) -
                 var(--header-padding-bottom)
@@ -35,6 +45,19 @@ body.pear-workbench-split-open {
         overflow: auto;
         border-top: 0;
         padding: 9px 10px 11px;
+    }
+
+    .pear-panel-inner,
+    .pear-context-section,
+    .pear-workbench {
+        min-height: 0;
+        flex: 1 1 auto;
+    }
+
+    .pear-workbench-body {
+        min-height: 0;
+        flex: 1 1 auto;
+        overflow: auto;
     }
 }
 

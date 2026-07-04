@@ -199,17 +199,24 @@ function message_is_pear_message(
 
 function pear_thinking_markers($scope: JQuery<HTMLElement | Document> = $(document)): JQuery {
     wrap_bare_pear_thinking_glyphs($scope);
+    const $liveness_markers = $scope.find(".pear-liveness-active .pear-thinking-glyph");
+    const $scoped_liveness_markers = $scope.hasClass("pear-liveness-active")
+        ? $scope.find(".pear-thinking-glyph")
+        : $();
     const $descendant_markers = $scope.find(
         ".message_row.pear-active-message .message_content > p:last-child > .pear-thinking-glyph, .message_row.pear-active-message .message_content > p:last-child > em:last-child",
     );
     if (!$scope.hasClass("pear-active-message")) {
-        return $descendant_markers;
+        return $descendant_markers.add($liveness_markers).add($scoped_liveness_markers);
     }
-    return $descendant_markers.add(
-        $scope.find(
-            ".message_content > p:last-child > .pear-thinking-glyph, .message_content > p:last-child > em:last-child",
-        ),
-    );
+    return $descendant_markers
+        .add(
+            $scope.find(
+                ".message_content > p:last-child > .pear-thinking-glyph, .message_content > p:last-child > em:last-child",
+            ),
+        )
+        .add($liveness_markers)
+        .add($scoped_liveness_markers);
 }
 
 function wrap_bare_pear_thinking_glyphs($scope: JQuery<HTMLElement | Document>): void {
@@ -296,6 +303,19 @@ function update_pear_thinking_glyphs(): void {
     render_pear_thinking_glyph($markers);
 }
 
+function refresh_pear_thinking_animation(): void {
+    if (pear_run_state.expire_stale_active_run_result_messages()) {
+        return;
+    }
+    const $markers = pear_thinking_markers();
+    if ($markers.length === 0) {
+        stop_pear_thinking_animation();
+        return;
+    }
+    render_pear_thinking_glyph($markers);
+    start_pear_thinking_animation();
+}
+
 function start_pear_thinking_animation(): void {
     if (pear_thinking_glyph_timer !== undefined) {
         return;
@@ -307,9 +327,13 @@ function maybe_render_pear_thinking_glyph($row: JQuery): void {
     if (!$row.hasClass("pear-active-message")) {
         return;
     }
-    const $markers = pear_thinking_markers($row);
-    render_pear_thinking_glyph($markers);
-    start_pear_thinking_animation();
+    refresh_pear_thinking_animation();
+}
+
+if (typeof document !== "undefined") {
+    $(document).on("pear_liveness_markers_changed", () => {
+        refresh_pear_thinking_animation();
+    });
 }
 
 function rendered_stale_pear_active_message_ids(): number[] {

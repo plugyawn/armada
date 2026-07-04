@@ -150,8 +150,25 @@
     background: var(--color-text-item);
 }
 
+.pear-run-status-glyph {
+    flex: none;
+    display: inline-block;
+    min-width: 1.35em;
+    color: var(--color-text-item);
+    font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+    font-size: 1em;
+    font-style: normal;
+    line-height: 1;
+    text-align: center;
+    white-space: nowrap;
+}
+
 .pear-run-status-active .pear-run-status-dot {
     background: hsl(142deg 55% 52%);
+}
+
+.pear-run-status-active .pear-run-status-glyph {
+    color: var(--color-text-success-text-action-button);
 }
 
 .pear-run-status-blocked .pear-run-status-dot {

@@ -9,22 +9,6 @@
             </div>
         </li>
         <li role="separator" class="popover-menu-separator"></li>
-        {{#if git}}
-        <li role="none" class="link-item">
-            <div class="pear-runtime-git-info" role="menuitem">
-                {{#if git.has_repo_branch}}
-                <div class="pear-runtime-git-row">
-                    <span class="popover-menu-label">{{git.repo_branch_label}}{{#if git.head}} · {{git.head}}{{/if}}</span>
-                </div>
-                {{/if}}
-                <div class="pear-runtime-git-row pear-runtime-git-status-row">
-                    <span class="pear-ui-glyph pear-runtime-git-marker pear-runtime-git-{{git.status_class}}" aria-hidden="true">{{git.status_marker}}</span>
-                    <span class="popover-menu-label">{{git.status_label}}</span>
-                </div>
-            </div>
-        </li>
-        <li role="separator" class="popover-menu-separator"></li>
-        {{/if}}
         <li role="none" class="link-item">
             <a role="menuitem" class="pear-canvas-menu-link popover-menu-link" tabindex="0">
                 <span class="pear-ui-glyph pear-runtime-action-glyph" aria-hidden="true">✧</span>

@@ -110,41 +110,10 @@ let last_error = "";
 let request_in_flight = false;
 let initialized = false;
 let context_refresh_timer: number | undefined;
-let retired_header_chrome_observer: MutationObserver | undefined;
 
 const RUNTIME_CONTEXT_REFRESH_INTERVAL_MS = 60_000;
 const runtime_menu_selector = "#pear-panel .pear-runtime-menu-trigger";
-const retired_header_chrome_selectors = [
-    "#pear-runtime-menu",
-    "#pear-work-cursor",
-    "#pear-context-meter",
-    ".pear-work-cursor",
-    ".pear-context-meter",
-    ".pear-navbar-glyph",
-    ".pear-navbar-runtime-label",
-    ".pear-navbar-runtime-meter-label",
-    "#message_view_header #pear-runtime-menu",
-    "#message_view_header #pear-work-cursor",
-    "#message_view_header #pear-context-meter",
-    "#message_view_header [id^='pear-']",
-    "#message_view_header [class^='pear-']",
-    "#message_view_header [class*=' pear-']",
-    "#top_navbar #pear-runtime-menu",
-    "#top_navbar #pear-work-cursor",
-    "#top_navbar #pear-context-meter",
-    "#top_navbar .pear-runtime-menu-trigger",
-    "#top_navbar .pear-work-cursor",
-    "#top_navbar .pear-context-meter",
-    "#top_navbar [id^='pear-']",
-    "#top_navbar [class^='pear-']",
-    "#top_navbar [class*=' pear-']",
-];
-const retired_header_chrome_observer_root_selector = "#top_navbar, #message_view_header";
 
-export const retired_header_chrome_selector_for_testing =
-    retired_header_chrome_selectors.join(", ");
-export const retired_header_chrome_observer_root_selector_for_testing =
-    retired_header_chrome_observer_root_selector;
 export const runtime_menu_selector_for_testing = runtime_menu_selector;
 
 const fallback_efforts: PearReasoningEffort[] = [
@@ -551,52 +520,6 @@ function update_runtime_button_label(): void {
     $(document).trigger("pear_liveness_markers_changed");
 }
 
-function remove_retired_header_chrome(): void {
-    $(retired_header_chrome_selector_for_testing).remove();
-}
-
-function node_contains_retired_header_chrome(node: Node): boolean {
-    if (!(node instanceof Element)) {
-        return false;
-    }
-    return (
-        node.matches(retired_header_chrome_selector_for_testing) ||
-        node.querySelector(retired_header_chrome_selector_for_testing) !== null
-    );
-}
-
-function start_retired_header_chrome_observer(): void {
-    if (retired_header_chrome_observer !== undefined) {
-        return;
-    }
-    const roots = [
-        ...new Set(document.querySelectorAll(retired_header_chrome_observer_root_selector)),
-    ];
-    if (roots.length === 0) {
-        return;
-    }
-    retired_header_chrome_observer = new MutationObserver((mutations) => {
-        if (
-            mutations.some((mutation) =>
-                [...mutation.addedNodes].some((node) =>
-                    node_contains_retired_header_chrome(node),
-                ),
-            )
-        ) {
-            remove_retired_header_chrome();
-        }
-    });
-    for (const root of roots) {
-        retired_header_chrome_observer.observe(root, {childList: true, subtree: true});
-    }
-}
-
-function on_message_view_header_rendered(): void {
-    remove_retired_header_chrome();
-    start_retired_header_chrome_observer();
-    update_runtime_button_label();
-}
-
 function fetch_topic_context(): void {
     const {stream, topic} = current_narrow();
     if (stream === undefined || topic === undefined) {
@@ -727,8 +650,6 @@ export function initialize(): void {
         // only makes sense in a browser.
         return;
     }
-    remove_retired_header_chrome();
-    start_retired_header_chrome_observer();
     if (initialized) {
         fetch_topic_context();
         return;
@@ -820,7 +741,6 @@ export function initialize(): void {
 
     update_runtime_button_label();
     fetch_topic_context();
-    $(document).on("pear_message_view_header_rendered", on_message_view_header_rendered);
     window.addEventListener("hashchange", fetch_topic_context);
     context_refresh_timer ??= window.setInterval(
         fetch_topic_context,

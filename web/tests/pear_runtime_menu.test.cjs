@@ -26,38 +26,15 @@ function make_context(overrides = {}) {
     };
 }
 
-run_test("retired_header_chrome_selector_for_testing", () => {
-    const selector = pear_runtime_menu.retired_header_chrome_selector_for_testing;
-
-    for (const expected of [
-        "#pear-work-cursor",
-        ".pear-work-cursor",
-        ".pear-navbar-runtime-label",
-        "#top_navbar #pear-work-cursor",
-        "#top_navbar [id^='pear-']",
-        "#top_navbar [class*=' pear-']",
-        "#message_view_header #pear-context-meter",
-        "#message_view_header [id^='pear-']",
-        "#message_view_header [class*=' pear-']",
-    ]) {
-        assert.ok(selector.includes(expected), expected);
-    }
-
-    // Pear status belongs in the Pear panel/workbench, never in Zulip's
-    // global channel/search header.
-    assert.ok(!selector.includes("#pear-panel [class*=' pear-']"));
-
-    assert.equal(
-        pear_runtime_menu.retired_header_chrome_observer_root_selector_for_testing,
-        "#top_navbar, #message_view_header",
-    );
-});
-
 run_test("runtime_menu_selector_for_testing", () => {
+    // Pear runtime controls belong in the Pear panel/workbench, never
+    // in Zulip's native channel/search header.
     assert.equal(
         pear_runtime_menu.runtime_menu_selector_for_testing,
         "#pear-panel .pear-runtime-menu-trigger",
     );
+    assert.ok(!pear_runtime_menu.runtime_menu_selector_for_testing.includes("#top_navbar"));
+    assert.ok(!pear_runtime_menu.runtime_menu_selector_for_testing.includes("#message_view_header"));
 });
 
 run_test("model_reasoning_efforts", () => {

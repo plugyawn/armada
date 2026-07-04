@@ -195,6 +195,10 @@ function compact_panel_text(text: string): string {
         .trim();
 }
 
+function first_nonempty_string(values: (string | undefined)[]): string {
+    return values.find((value) => value !== undefined && value.trim().length > 0) ?? "";
+}
+
 function model_label(runtime_label: string): string {
     const match = /\bmodel=([^\s]+)/.exec(runtime_label);
     return match?.[1] ?? compact_panel_text(runtime_label);
@@ -229,6 +233,23 @@ function status_label(status: string): string {
     }
 }
 
+function status_marker(status: string): string {
+    switch (status) {
+        case "cancelled":
+        case "failed":
+            return "!";
+        case "done":
+            return "✓";
+        case "paused":
+            return "‖";
+        case "queued":
+        case "running":
+            return "✦";
+        default:
+            return "·";
+    }
+}
+
 function format_count(value: number | undefined): string {
     return value === undefined ? "0" : value.toLocaleString();
 }
@@ -253,6 +274,35 @@ function display_usage(usage: PearUsage | null | undefined): {
     const usage_title =
         usage.summary ?? `${cached}/${input} cached; ${output} output; ${reasoning} reasoning.`;
     return {has_usage: true, usage_label, usage_title};
+}
+
+function is_pear_runs_response(data: unknown): data is PearRunsResponse {
+    return (
+        typeof data === "object" &&
+        data !== null &&
+        "pear_runs" in data &&
+        Array.isArray(data.pear_runs)
+    );
+}
+
+function is_pear_side_response(data: unknown): data is {dm_narrow_url?: string} {
+    return (
+        typeof data === "object" &&
+        data !== null &&
+        (!("dm_narrow_url" in data) || typeof data.dm_narrow_url === "string")
+    );
+}
+
+function is_pear_topic_context_response(
+    data: unknown,
+): data is {pear_topic_context?: PearTopicContext | null} {
+    return (
+        typeof data === "object" &&
+        data !== null &&
+        (!("pear_topic_context" in data) ||
+            data.pear_topic_context === null ||
+            typeof data.pear_topic_context === "object")
+    );
 }
 
 function display_event(event: PearRunEvent): PearRunEvent & {
@@ -302,6 +352,7 @@ function remember_worktree_details_state(): void {
 function display_run(run: PearRun): PearRun & {
     status_class: string;
     status_label: string;
+    status_marker: string;
     session_kind_label: string;
     show_session_kind: boolean;
     source_label: string;
@@ -332,6 +383,7 @@ function display_run(run: PearRun): PearRun & {
         current_activity: compact_panel_text(run.current_activity),
         status_class: status_class(run.status),
         status_label: status_label(run.status),
+        status_marker: status_marker(run.status),
         session_kind_label:
             run.session_kind === "side"
                 ? $t({defaultMessage: "side"})
@@ -424,16 +476,19 @@ function display_topic_context(topic_context: PearTopicContext | undefined | nul
     const pinned_repo = topic_context.pinned_repo?.trim() ?? "";
     const has_pinned_repo = pinned_repo.length > 0;
     const git_repo_label = git.repo_label?.trim() ?? "";
-    const repo_label = topic_context.repo_label?.trim() || git_repo_label;
+    const repo_label = first_nonempty_string([topic_context.repo_label?.trim(), git_repo_label]);
     const has_workspace_repo =
         repo_label.length > 0 || has_pinned_repo || (git.available && git_repo_label.length > 0);
     const workdir_parts = topic_context.workdir.split("/").filter((part) => part.trim().length > 0);
-    const worktree_name =
-        topic_context.worktree_label?.trim() ||
-        git.worktree_name ||
-        workdir_parts[workdir_parts.length - 1] ||
-        "";
-    const workspace_primary_name = repo_label || $t({defaultMessage: "No repo pinned"});
+    const worktree_name = first_nonempty_string([
+        topic_context.worktree_label?.trim(),
+        git.worktree_name,
+        workdir_parts.at(-1),
+    ]);
+    const workspace_primary_name = first_nonempty_string([
+        repo_label,
+        $t({defaultMessage: "No repo pinned"}),
+    ]);
     const workspace_ref_parts = [git.branch, git.head].filter(
         (part): part is string => part !== undefined && part.trim().length > 0,
     );
@@ -462,12 +517,13 @@ function display_topic_context(topic_context: PearTopicContext | undefined | nul
         changed_label,
         has_pinned_repo,
         workspace_primary_name,
-        workspace_primary_title:
-            topic_context.repo_title?.trim() ||
-            pinned_repo ||
-            (has_workspace_repo
+        workspace_primary_title: first_nonempty_string([
+            topic_context.repo_title?.trim(),
+            pinned_repo,
+            has_workspace_repo
                 ? topic_context.workdir
-                : $t({defaultMessage: "Ask Pear to pin a Git repository for this topic."})),
+                : $t({defaultMessage: "Ask Pear to pin a Git repository for this topic."}),
+        ]),
         workspace_kind_label: $t({defaultMessage: "Repo"}),
         workspace_ref_label: "",
         worktree_name,
@@ -659,7 +715,12 @@ export function refresh(options: {force_context?: boolean; live?: boolean} = {})
         url: "/json/pear/runs",
         data,
         success(raw_data) {
-            const data = raw_data as PearRunsResponse;
+            if (!is_pear_runs_response(raw_data)) {
+                last_error = $t({defaultMessage: "Pear returned an invalid runs payload."});
+                render();
+                return;
+            }
+            const data = raw_data;
             last_error = "";
             const had_active_run = has_active_run(last_runs);
             const has_active_run_after_refresh = has_active_run(data.pear_runs);
@@ -728,7 +789,11 @@ function start_side_session(): void {
         success(raw_data) {
             $("#pear-side-request").val("");
             refresh({force_context: true});
-            const data = raw_data as {dm_narrow_url?: string};
+            if (!is_pear_side_response(raw_data)) {
+                blueslip.warn("Pear side session returned an invalid response.");
+                return;
+            }
+            const data = raw_data;
             if (data.dm_narrow_url !== undefined) {
                 window.location.hash = data.dm_narrow_url.slice(1);
             }
@@ -788,7 +853,14 @@ function save_topic_context(): void {
             reasoning_effort,
         },
         success(raw_data) {
-            const data = raw_data as {pear_topic_context?: PearTopicContext};
+            if (!is_pear_topic_context_response(raw_data)) {
+                last_model_error = $t({
+                    defaultMessage: "Pear returned an invalid context payload.",
+                });
+                render();
+                return;
+            }
+            const data = raw_data;
             last_model_error = "";
             if (data.pear_topic_context !== undefined && data.pear_topic_context !== null) {
                 record_context_refresh(stream, topic);

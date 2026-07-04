@@ -142,14 +142,6 @@
     line-height: 12px;
 }
 
-.pear-run-status-dot {
-    flex: none;
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: var(--color-text-item);
-}
-
 .pear-run-status-glyph {
     flex: none;
     display: inline-block;
@@ -163,16 +155,12 @@
     white-space: nowrap;
 }
 
-.pear-run-status-active .pear-run-status-dot {
-    background: hsl(142deg 55% 52%);
-}
-
 .pear-run-status-active .pear-run-status-glyph {
     color: var(--color-text-success-text-action-button);
 }
 
-.pear-run-status-blocked .pear-run-status-dot {
-    background: hsl(5deg 65% 55%);
+.pear-run-status-blocked .pear-run-status-glyph {
+    color: var(--color-text-danger-text-action-button);
 }
 
 .pear-run-status-text {

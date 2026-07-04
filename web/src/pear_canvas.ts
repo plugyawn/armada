@@ -201,7 +201,7 @@ function load_canvas(stream: string, topic: string): void {
             .removeClass("hide")
             .addClass("pear-canvas-loading-active pear-liveness-active");
         $("<span>")
-            .addClass("pear-thinking-glyph")
+            .addClass("pear-ui-glyph pear-thinking-glyph")
             .attr("aria-hidden", "true")
             .text("✦")
             .appendTo($loading);
@@ -339,7 +339,6 @@ function open_canvas(): void {
         modal_content_html: render_pear_canvas_modal(),
         modal_submit_button_text: $t({defaultMessage: "Save changes"}),
         id: "pear-canvas-modal",
-        loading_spinner: true,
         update_submit_disabled_state_on_change: true,
         validate_input: validate_before_save,
         on_click: save_canvas,

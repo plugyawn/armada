@@ -52,6 +52,17 @@
     font-size: 14px;
 }
 
+.pear-ui-glyph {
+    display: inline-block;
+    width: 1.35em;
+    flex: none;
+    font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+    font-style: normal;
+    line-height: 1;
+    text-align: center;
+    white-space: nowrap;
+}
+
 .pear-runtime-section {
     gap: 6px;
 }
@@ -154,16 +165,8 @@
 }
 
 .pear-run-status-glyph {
-    flex: none;
-    display: inline-block;
-    min-width: 1.35em;
     color: var(--color-text-item);
-    font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
     font-size: 1em;
-    font-style: normal;
-    line-height: 1;
-    text-align: center;
-    white-space: nowrap;
 }
 
 .pear-run-status-active .pear-run-status-glyph {
@@ -240,13 +243,9 @@
 }
 
 .pear-git-marker {
-    flex: none;
-    width: 1.35em;
     color: light-dark(hsl(142deg 45% 30%), hsl(142deg 63% 76%));
-    font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
     font-size: 11px;
     line-height: 14px;
-    text-align: center;
 }
 
 .pear-git-dirty .pear-git-marker {
@@ -488,16 +487,9 @@
 }
 
 .pear-navbar-glyph {
-    display: inline-block;
-    min-width: 1.35em;
     color: currentcolor;
-    font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
     font-size: 16px;
-    font-style: normal;
-    line-height: 1;
-    text-align: center;
     vertical-align: -0.05em;
-    white-space: nowrap;
 }
 
 /* Navbar Pear runtime popover menu; mirrors the radio-list layout
@@ -544,12 +536,7 @@
     }
 
     .pear-runtime-git-marker {
-        width: 1.35em;
-        flex: none;
-        font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
         font-size: 0.9em;
-        line-height: 1;
-        text-align: center;
     }
 
     .pear-runtime-git-clean {

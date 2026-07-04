@@ -46,6 +46,11 @@ run_test("retired_header_chrome_selector_for_testing", () => {
     // Pear status belongs in the Pear panel/workbench, never in Zulip's
     // global channel/search header.
     assert.ok(!selector.includes("#pear-panel [class*=' pear-']"));
+
+    assert.equal(
+        pear_runtime_menu.retired_header_chrome_observer_root_selector_for_testing,
+        "#top_navbar, #message_view_header",
+    );
 });
 
 run_test("runtime_menu_selector_for_testing", () => {

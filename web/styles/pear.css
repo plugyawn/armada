@@ -587,15 +587,36 @@
     width: auto;
     min-width: var(--header-height);
     gap: 4px;
-    padding: 0 8px;
+    height: calc(var(--header-height) - 8px);
+    margin-block: 4px;
+    border: 1px solid
+        color-mix(
+            in srgb,
+            var(--color-border-sidebar-subheader) 70%,
+            transparent
+        );
+    border-radius: 999px;
+    background: color-mix(
+        in srgb,
+        var(--color-background-hover-narrow-filter) 42%,
+        transparent
+    );
+    padding: 0 9px;
+}
+
+#pear-runtime-menu.active-navbar-menu .header-button,
+#pear-runtime-menu .header-button:hover {
+    background: var(--color-background-hover-narrow-filter);
 }
 
 .pear-navbar-runtime-label {
     overflow: hidden;
-    max-width: min(15vw, 150px);
+    max-width: min(18vw, 150px);
     color: currentcolor;
-    font-size: 12px;
+    font-family: monospace;
+    font-size: 11px;
     font-weight: 600;
+    line-height: 1;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
@@ -603,9 +624,19 @@
 @media (width <= 1100px) {
     #pear-runtime-menu .header-button {
         width: var(--header-height);
+        height: var(--header-height);
+        margin-block: 0;
+        border: 0;
+        border-radius: 0;
+        background: transparent;
         min-width: 0;
         gap: 0;
         padding: 0;
+    }
+
+    #pear-runtime-menu.active-navbar-menu .header-button,
+    #pear-runtime-menu .header-button:hover {
+        background: var(--color-header-button-hover);
     }
 
     .pear-navbar-runtime-label {

@@ -93,6 +93,10 @@ let latest_runs: PearRuntimeRun[] = [];
 let context_key = "";
 let last_error = "";
 let request_in_flight = false;
+let initialized = false;
+let context_refresh_timer: number | undefined;
+
+const RUNTIME_CONTEXT_REFRESH_INTERVAL_MS = 60_000;
 
 const fallback_efforts: PearReasoningEffort[] = [
     {effort: "low", label: "Low"},
@@ -209,10 +213,16 @@ export function runtime_summary(context: PearRuntimeContext | undefined): PearRu
         model_reasoning_efforts(context, context.model).find(
             (choice) => choice.effort === context.reasoning_effort,
         )?.label ?? context.reasoning_effort;
+    const compact_effort =
+        context.reasoning_effort === "xhigh"
+            ? "xh"
+            : (context.reasoning_effort.at(0)?.toLowerCase() ??
+              effort_label.at(0)?.toLowerCase() ??
+              "");
     return {
         model_label,
         effort_label,
-        compact_label: `${model_label} · ${effort_label}`,
+        compact_label: `${context.model} · ${compact_effort}`,
     };
 }
 
@@ -373,6 +383,7 @@ function fetch_topic_context(): void {
         topic_context = undefined;
         latest_runs = [];
         context_key = "";
+        update_navbar_button_label();
         rerender_popover_if_open();
         return;
     }
@@ -496,6 +507,11 @@ export function initialize(): void {
         // only makes sense in a browser.
         return;
     }
+    if (initialized) {
+        fetch_topic_context();
+        return;
+    }
+    initialized = true;
 
     // register_popover_menu attaches a body-delegated click handler,
     // so this works even if the navbar has not been rendered yet;
@@ -571,4 +587,14 @@ export function initialize(): void {
             }
         },
     );
+
+    update_navbar_button_label();
+    fetch_topic_context();
+    window.addEventListener("hashchange", fetch_topic_context);
+    if (context_refresh_timer === undefined) {
+        context_refresh_timer = window.setInterval(
+            fetch_topic_context,
+            RUNTIME_CONTEXT_REFRESH_INTERVAL_MS,
+        );
+    }
 }

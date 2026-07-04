@@ -581,10 +581,12 @@ function render(
     const next_render_state_key = render_state_key(render_state);
     if (last_render_state_key !== next_render_state_key) {
         const side_request = $("#pear-side-request").val();
+        const side_details_open = $("#pear-side-details").prop("open") === true;
         $("#pear-panel").html(render_pear_panel(render_state));
         if (typeof side_request === "string") {
             $("#pear-side-request").val(side_request);
         }
+        $("#pear-side-details").prop("open", side_details_open);
         $(document).trigger("pear_liveness_markers_changed");
         last_render_state_key = next_render_state_key;
     }

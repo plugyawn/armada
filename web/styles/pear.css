@@ -277,7 +277,7 @@
 }
 
 .pear-commit-row {
-    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr) auto auto;
     border-radius: 6px;
     padding: 3px 4px;
 }
@@ -354,6 +354,7 @@
     border: 1px solid var(--color-border-sidebar-subheader);
     border-radius: 5px;
     color: var(--color-text-sidebar-heading);
+    cursor: default;
     line-height: 13px;
     opacity: var(--opacity-sidebar-heading);
     padding: 0 4px;

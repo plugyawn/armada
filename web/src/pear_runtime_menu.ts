@@ -87,6 +87,7 @@ export type PearRuntimeUsageMeter = {
     label: string;
     value: string;
     percent: number;
+    is_hot: boolean;
 };
 
 export type PearRuntimeStatus = {
@@ -356,6 +357,7 @@ export function runtime_usage_meter_for_testing(
             label: "",
             value: "",
             percent: 0,
+            is_hot: false,
         };
     }
     const percent = Math.min(100, Math.max(0, usage.cache_percent));
@@ -364,6 +366,7 @@ export function runtime_usage_meter_for_testing(
         label: $t({defaultMessage: "cached context"}),
         value: `${percent.toFixed(1)}%`,
         percent,
+        is_hot: percent >= 70,
     };
 }
 
@@ -448,19 +451,49 @@ function update_navbar_button_label(): void {
     }
     let label = $t({defaultMessage: "Pear runtime"});
     let compact_label = $t({defaultMessage: "Pear"});
-    let runtime_status = runtime_status_for_testing(active_runtime_run(latest_runs));
+    const active_run = active_runtime_run(latest_runs);
+    let runtime_status = runtime_status_for_testing(active_run);
+    const runtime_meter = runtime_usage_meter_for_testing(active_run?.usage);
     if (topic_context !== undefined && context_key !== "") {
         const summary = runtime_summary(topic_context);
-        runtime_status = runtime_status_for_testing(active_runtime_run(latest_runs));
+        runtime_status = runtime_status_for_testing(active_run);
         compact_label = summary.compact_label;
-        label = $t(
-            {defaultMessage: "Pear runtime: {model} ({effort}), {status}"},
-            {model: summary.model_label, effort: summary.effort_label, status: runtime_status.label},
-        );
+        label = runtime_meter.has_meter
+            ? $t(
+                  {
+                      defaultMessage:
+                          "Pear runtime: {model} ({effort}), {status}, {meter_label} {meter_value}",
+                  },
+                  {
+                      model: summary.model_label,
+                      effort: summary.effort_label,
+                      status: runtime_status.label,
+                      meter_label: runtime_meter.label,
+                      meter_value: runtime_meter.value,
+                  },
+              )
+            : $t(
+                  {defaultMessage: "Pear runtime: {model} ({effort}), {status}"},
+                  {
+                      model: summary.model_label,
+                      effort: summary.effort_label,
+                      status: runtime_status.label,
+                  },
+              );
     }
     $button.attr("aria-label", label);
     $button.attr("data-tippy-content", label);
     $button.find(".pear-navbar-runtime-label").text(compact_label);
+    $button
+        .removeClass("pear-runtime-meter-visible pear-runtime-meter-hot")
+        .css("--pear-runtime-meter-scale", runtime_meter.has_meter ? runtime_meter.percent / 100 : 0);
+    $button.find(".pear-navbar-runtime-meter-label").text(runtime_meter.is_hot ? runtime_meter.value : "");
+    if (runtime_meter.has_meter) {
+        $button.addClass("pear-runtime-meter-visible");
+    }
+    if (runtime_meter.is_hot) {
+        $button.addClass("pear-runtime-meter-hot");
+    }
     $button
         .find(".pear-navbar-glyph")
         .text(runtime_status.glyph)
@@ -632,6 +665,7 @@ export function initialize(): void {
             if (narrow_context_key(stream, topic) !== context_key) {
                 // The cached runtime belongs to a different narrow.
                 topic_context = undefined;
+                latest_runs = [];
                 context_key = "";
                 update_navbar_button_label();
             }

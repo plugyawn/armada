@@ -626,6 +626,7 @@
 }
 
 #pear-runtime-menu .header-button {
+    position: relative;
     width: auto;
     min-width: var(--header-height);
     gap: 4px;
@@ -644,6 +645,35 @@
         transparent
     );
     padding: 0 9px;
+    overflow: hidden;
+
+    --pear-runtime-meter-scale: 0;
+}
+
+#pear-runtime-menu .header-button::after {
+    content: "";
+    position: absolute;
+    right: 9px;
+    bottom: 2px;
+    left: 9px;
+    height: 2px;
+    border-radius: 999px;
+    background: var(--color-text-success-text-action-button);
+    opacity: 0;
+    transform: scaleX(var(--pear-runtime-meter-scale));
+    transform-origin: left center;
+    transition:
+        opacity 100ms ease,
+        transform 160ms ease;
+}
+
+#pear-runtime-menu .header-button.pear-runtime-meter-visible::after {
+    opacity: 0.45;
+}
+
+#pear-runtime-menu .header-button.pear-runtime-meter-hot::after {
+    background: var(--color-text-warning-text-action-button);
+    opacity: 0.7;
 }
 
 #pear-runtime-menu.active-navbar-menu .header-button,
@@ -663,6 +693,27 @@
     white-space: nowrap;
 }
 
+.pear-navbar-runtime-meter-label {
+    display: none;
+    flex: none;
+    border-radius: 4px;
+    background: color-mix(
+        in srgb,
+        var(--color-text-warning-text-action-button) 13%,
+        transparent
+    );
+    color: var(--color-text-warning-text-action-button);
+    font-family: monospace;
+    font-size: 10px;
+    font-weight: 600;
+    line-height: 13px;
+    padding: 0 4px;
+}
+
+#pear-runtime-menu .header-button.pear-runtime-meter-hot .pear-navbar-runtime-meter-label {
+    display: inline-block;
+}
+
 @media (width <= 1100px) {
     #pear-runtime-menu .header-button {
         width: var(--header-height);
@@ -674,6 +725,7 @@
         min-width: 0;
         gap: 0;
         padding: 0;
+        overflow: hidden;
     }
 
     #pear-runtime-menu.active-navbar-menu .header-button,
@@ -682,6 +734,14 @@
     }
 
     .pear-navbar-runtime-label {
+        display: none;
+    }
+
+    .pear-navbar-runtime-meter-label {
+        display: none;
+    }
+
+    #pear-runtime-menu .header-button.pear-runtime-meter-hot .pear-navbar-runtime-meter-label {
         display: none;
     }
 }

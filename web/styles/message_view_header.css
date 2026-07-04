@@ -125,13 +125,13 @@
         min-width: 0;
         align-items: center;
         align-self: center;
-        gap: 4px;
+        gap: 5px;
         flex: 0 1 auto;
-        max-width: min(42vw, 430px);
+        max-width: min(48vw, 520px);
         margin-left: auto;
-        padding: 1px 3px;
+        padding: 2px 5px;
         border: 1px solid transparent;
-        border-radius: 6px;
+        border-radius: 7px;
         background: transparent;
         color: var(--color-text-message-view-header);
         cursor: pointer;
@@ -175,12 +175,24 @@
     }
 
     .pear-work-cursor-marker {
-        width: 13px;
+        display: inline-flex;
+        width: 15px;
+        height: 15px;
+        align-items: center;
+        justify-content: center;
+        flex: none;
+        border-radius: 4px;
+        background: color-mix(
+            in srgb,
+            var(--color-border-sidebar-subheader) 30%,
+            transparent
+        );
         color: var(--color-text-item);
         font-size: 0.82em;
         text-align: center;
     }
 
+    .pear-work-cursor-repo,
     .pear-work-cursor-ref,
     .pear-work-cursor-head,
     .pear-work-cursor-sync,
@@ -190,12 +202,19 @@
         white-space: nowrap;
     }
 
+    .pear-work-cursor-repo {
+        flex: 0 1 auto;
+        max-width: 115px;
+        color: var(--color-text-message-view-header);
+        font-weight: 600;
+    }
+
     .pear-work-cursor-ref {
         min-width: 0;
         flex: 1 1 auto;
-        max-width: 150px;
-        color: var(--color-text-message-view-header);
-        font-weight: 600;
+        max-width: 180px;
+        color: var(--color-text-item);
+        font-weight: 500;
     }
 
     .pear-work-cursor-head,
@@ -252,7 +271,7 @@
 
     .pear-work-cursor-target {
         margin: 0;
-        padding: 0 3px;
+        padding: 0 2px;
         border-radius: 4px;
     }
 
@@ -306,6 +325,11 @@
 @media only screen and (width <= 900px) {
     #message_view_header .pear-work-cursor {
         max-width: 190px;
+    }
+
+    #message_view_header .pear-work-cursor-repo,
+    #message_view_header .pear-work-cursor-sync {
+        display: none;
     }
 
     #message_view_header .pear-work-cursor-ref {

@@ -132,6 +132,11 @@ run_test("template renders workbench without active run", () => {
             workbench_title: "general chat",
             workbench_title_attr: "/srv/pear-workspaces/devel-general-chat",
             workbench_meta_label: "",
+            workbench_branch_meta_label: "devel / general-chat / abc1234",
+            workbench_head_label: "HEAD+1",
+            workbench_head_title: "HEAD+1 local edits abc1234",
+            workbench_head_summary: "local edits",
+            workbench_head_short: "abc1234",
             workbench_diff_selected: false,
             workbench_history_selected: true,
             workbench_side_selected: false,
@@ -147,10 +152,23 @@ run_test("template renders workbench without active run", () => {
             git_tree_error: "",
             has_git_tree_graph: false,
             has_recent_commits: false,
+            has_workbench_diffstat: true,
+            workbench_diff_summary_label: "2 files +16 -4",
+            workbench_diff_file_label: "2 files",
+            workbench_diff_insertions_label: "+16",
+            workbench_diff_deletions_label: "-4",
         },
     });
 
     assert.match(html, /pear-workbench/);
+    assert.match(html, /pear-workbench-context-row/);
+    assert.match(html, /pear-workbench-head-row/);
+    assert.match(html, /HEAD\+1/);
+    assert.match(html, /local edits/);
+    assert.match(html, /abc1234/);
+    assert.match(html, /pear-workbench-diffstat/);
+    assert.match(html, /\+16/);
+    assert.match(html, /-4/);
     assert.doesNotMatch(html, /pear-workbench-context-meter/);
 });
 

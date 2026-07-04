@@ -207,10 +207,6 @@
     min-width: 0;
 }
 
-.pear-worktree-unavailable {
-    margin-left: 0;
-}
-
 .pear-file-list,
 .pear-commit-list {
     display: flex;

@@ -987,6 +987,15 @@ function render(
         context_label: has_topic ? `${stream} > ${topic}` : "",
         panel_open,
         panel_can_close: panel_open && !run_keeps_work_panel_open(active_run),
+        has_panel_menu:
+            has_topic ||
+            active_run?.has_actions === true ||
+            (panel_open && !run_keeps_work_panel_open(active_run)),
+        show_panel_header:
+            active_run?.show_status === true ||
+            has_topic ||
+            active_run?.has_actions === true ||
+            (panel_open && !run_keeps_work_panel_open(active_run)),
         topic_context: display_context,
         active_run,
         error: last_error,

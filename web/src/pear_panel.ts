@@ -310,8 +310,19 @@ function current_context_key(): string {
     return context_key(stream, topic);
 }
 
-function run_keeps_work_panel_open(run: {status: string} | undefined): boolean {
-    return run !== undefined && run.status !== "done";
+function run_shows_compact_panel_status(run: {status: string} | undefined): boolean {
+    return run?.status === "running" || run?.status === "queued" || run?.status === "paused";
+}
+
+export function workbench_open_for_testing(options: {
+    context_key_value: string;
+    manually_open: boolean;
+    has_error: boolean;
+}): boolean {
+    if (options.context_key_value === "") {
+        return false;
+    }
+    return options.manually_open || options.has_error;
 }
 
 export function work_panel_open_for_testing(options: {
@@ -323,12 +334,9 @@ export function work_panel_open_for_testing(options: {
     if (options.context_key_value === "") {
         return false;
     }
-    if (options.has_error) {
-        return true;
-    }
     return (
-        options.manually_open ||
-        run_keeps_work_panel_open(
+        workbench_open_for_testing(options) ||
+        run_shows_compact_panel_status(
             options.active_run_status === undefined
                 ? undefined
                 : {status: options.active_run_status},
@@ -856,6 +864,11 @@ function render(
     const has_topic = stream !== undefined && topic !== undefined;
     const next_context_key = context_key(stream, topic);
     const active_run = active_display_run(runs);
+    const workbench_open = workbench_open_for_testing({
+        context_key_value: next_context_key,
+        manually_open: work_panel_open_by_context.get(next_context_key) ?? false,
+        has_error: last_error !== "",
+    });
     const panel_open = work_panel_open_for_testing({
         context_key_value: next_context_key,
         manually_open: work_panel_open_by_context.get(next_context_key) ?? false,
@@ -872,7 +885,9 @@ function render(
         has_topic,
         context_label: has_topic ? `${stream} > ${topic}` : "",
         panel_open,
-        panel_can_close: panel_open && !run_keeps_work_panel_open(active_run),
+        show_workbench: workbench_open,
+        show_compact_status_label: panel_open && !workbench_open && active_run !== undefined,
+        panel_can_close: workbench_open,
         has_panel_menu: panel_header_state.has_panel_menu,
         show_panel_header: panel_header_state.show_panel_header,
         topic_context: display_context,
@@ -889,8 +904,8 @@ function render(
         }
         $("#pear-panel").html(render_pear_panel(render_state));
         $("#pear-panel").toggleClass("pear-panel-collapsed", !panel_open);
-        $("#user-list").toggleClass("pear-workbench-open", panel_open);
-        $("body").toggleClass("pear-workbench-split-open", panel_open);
+        $("#user-list").toggleClass("pear-workbench-open", workbench_open);
+        $("body").toggleClass("pear-workbench-split-open", workbench_open);
         const stored_side_request = side_request_by_context.get(next_context_key);
         if (stored_side_request !== undefined) {
             $("#pear-side-request").val(stored_side_request);
@@ -899,9 +914,9 @@ function render(
         last_render_state_key = next_render_state_key;
     }
     $("#pear-panel").toggleClass("pear-panel-collapsed", !panel_open);
-    $("#user-list").toggleClass("pear-workbench-open", panel_open);
-    $("body").toggleClass("pear-workbench-split-open", panel_open);
-    if (display_context?.workbench_history_selected) {
+    $("#user-list").toggleClass("pear-workbench-open", workbench_open);
+    $("body").toggleClass("pear-workbench-split-open", workbench_open);
+    if (workbench_open && display_context?.workbench_history_selected) {
         fetch_git_tree_for_context(display_context);
     }
     schedule_live_refresh(active_run);

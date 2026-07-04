@@ -175,6 +175,49 @@ run_test("work_cursor_state_for_testing", () => {
     );
 });
 
+run_test("workbench_view_for_testing", () => {
+    assert.equal(
+        pear_panel.workbench_view_for_testing({
+            requested: undefined,
+            has_diff: true,
+            has_history: true,
+        }),
+        "diff",
+    );
+    assert.equal(
+        pear_panel.workbench_view_for_testing({
+            requested: "history",
+            has_diff: true,
+            has_history: true,
+        }),
+        "history",
+    );
+    assert.equal(
+        pear_panel.workbench_view_for_testing({
+            requested: "history",
+            has_diff: true,
+            has_history: false,
+        }),
+        "diff",
+    );
+    assert.equal(
+        pear_panel.workbench_view_for_testing({
+            requested: "diff",
+            has_diff: false,
+            has_history: true,
+        }),
+        "history",
+    );
+    assert.equal(
+        pear_panel.workbench_view_for_testing({
+            requested: undefined,
+            has_diff: false,
+            has_history: false,
+        }),
+        "diff",
+    );
+});
+
 run_test("work_panel_open_for_testing", () => {
     assert.equal(
         pear_panel.work_panel_open_for_testing({

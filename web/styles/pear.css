@@ -227,29 +227,33 @@
     white-space: nowrap;
 }
 
-.pear-worktree-details {
+.pear-workbench {
+    display: flex;
     min-width: 0;
+    flex-direction: column;
+    gap: 6px;
     color: var(--color-text-item);
     font-size: 11px;
     line-height: 15px;
 }
 
-.pear-worktree-details > summary {
+.pear-workbench-header {
     display: flex;
     min-width: 0;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.pear-workbench-title {
+    display: flex;
+    min-width: 0;
+    flex: 1 1 auto;
     align-items: baseline;
     gap: 5px;
-    cursor: pointer;
-    list-style-position: outside;
-    margin-left: 0;
-    padding: 2px 0;
     color: var(--color-text-sidebar-heading);
     font-weight: var(--font-weight-sidebar-heading);
     opacity: var(--opacity-sidebar-heading);
-}
-
-.pear-worktree-details > summary::marker {
-    color: var(--color-text-item);
 }
 
 .pear-worktree-summary-extra {
@@ -263,11 +267,51 @@
     white-space: nowrap;
 }
 
-.pear-worktree-details > .pear-file-list,
-.pear-worktree-details > .pear-diff-shortstat,
-.pear-worktree-details > .pear-workdir,
-.pear-worktree-details > .pear-commit-list {
-    margin-top: 4px;
+.pear-workbench-tabs {
+    display: flex;
+    flex: none;
+    gap: 2px;
+    margin-left: auto;
+    padding: 2px;
+    border: 1px solid var(--color-border-sidebar-subheader);
+    border-radius: 7px;
+}
+
+.pear-workbench-tab {
+    border: 0;
+    border-radius: 5px;
+    background: transparent;
+    color: var(--color-text-item);
+    cursor: pointer;
+    font-size: 11px;
+    line-height: 14px;
+    padding: 2px 7px;
+}
+
+.pear-workbench-tab:hover {
+    background: var(--color-background-hover);
+}
+
+.pear-workbench-tab-selected {
+    background: color-mix(
+        in srgb,
+        var(--color-border-sidebar-subheader) 60%,
+        transparent
+    );
+    color: var(--color-text-default);
+}
+
+.pear-workbench-tab:disabled {
+    cursor: default;
+    opacity: 0.45;
+}
+
+.pear-workbench-tab:disabled:hover {
+    background: transparent;
+}
+
+.pear-workbench-body {
+    min-width: 0;
 }
 
 .pear-worktree-unavailable {
@@ -333,7 +377,8 @@
 .pear-diff-shortstat,
 .pear-file-more,
 .pear-empty-state,
-.pear-panel-error {
+.pear-panel-error,
+.pear-workbench-empty {
     color: var(--color-text-item);
     line-height: 16px;
     overflow-wrap: anywhere;

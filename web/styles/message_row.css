@@ -58,6 +58,11 @@
     &.pear-message {
         background-color: var(--color-background-pear-message-content);
 
+        .message_edit_notice,
+        .edit-notifications {
+            display: none;
+        }
+
         .message_embed .data-container::after {
             background: linear-gradient(
                 0deg,

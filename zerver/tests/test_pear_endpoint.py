@@ -72,6 +72,7 @@ from zerver.models.streams import get_stream
 from zerver.views.pear import (
     build_pear_git_context,
     extract_pear_codex_model_catalog,
+    pear_context_isolation_username,
     serialize_pear_topic_context,
     serialize_pear_worker_run,
 )
@@ -1953,6 +1954,50 @@ class PearSessionEndpointTest(ZulipTestCase):
             self.assertIsNotNone(topic_context.parent_context)
             self.assertEqual(topic_context.parent_context.stream_name, "devel")
             self.assertTrue(Path(topic_context.workdir).is_dir())
+
+    def test_context_isolation_username_waits_for_existing_os_user(self) -> None:
+        owner = self.example_user("hamlet")
+
+        with tempfile.TemporaryDirectory() as temp_dir, self.settings(
+            PEAR_TOPIC_ISOLATION_BACKEND="os-user",
+            PEAR_TOPIC_WORKDIR_ROOT=temp_dir,
+        ):
+            workdir = Path(temp_dir) / "devel-general-chat"
+            context = PearTopicContext.objects.create(
+                realm=owner.realm,
+                stream_name="devel",
+                topic_name="general chat",
+                workdir=str(workdir),
+            )
+            expected_username = pear_topic_isolation_username(
+                owner,
+                stream="devel",
+                topic="general chat",
+            )
+
+            with patch("zerver.views.pear.pwd.getpwnam", side_effect=KeyError):
+                self.assertIsNone(
+                    pear_context_isolation_username(
+                        context,
+                        stream_name="devel",
+                        topic_name="general chat",
+                        workdir=str(workdir),
+                    )
+                )
+
+            with patch(
+                "zerver.views.pear.pwd.getpwnam",
+                return_value=SimpleNamespace(pw_name=expected_username),
+            ):
+                self.assertEqual(
+                    pear_context_isolation_username(
+                        context,
+                        stream_name="devel",
+                        topic_name="general chat",
+                        workdir=str(workdir),
+                    ),
+                    expected_username,
+                )
 
     def test_topic_context_refactor_moves_full_topic_rename(self) -> None:
         owner = self.example_user("hamlet")

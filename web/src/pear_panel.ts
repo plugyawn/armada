@@ -140,6 +140,8 @@ type PearWorkCursorState = {
     title: string;
 };
 
+type PearWorkbenchView = "diff" | "history";
+
 let initialized = false;
 let refresh_timer: number | undefined;
 let live_refresh_timer: number | undefined;
@@ -147,12 +149,11 @@ let live_refresh_in_flight = false;
 let last_error = "";
 let last_runs: PearRun[] = [];
 let last_topic_context: PearTopicContext | null | undefined;
-let rendered_context_key = "";
 let last_render_state_key = "";
 let last_context_refresh_key = "";
 let last_context_refresh_at = 0;
-const worktree_details_open_by_context = new Map<string, boolean>();
 const work_panel_open_by_context = new Map<string, boolean>();
+const workbench_view_by_context = new Map<string, PearWorkbenchView>();
 const LIVE_REFRESH_INTERVAL_MS = 125;
 const FULL_REFRESH_INTERVAL_MS = 5000;
 const CONTEXT_REFRESH_INTERVAL_MS = 60_000;
@@ -298,18 +299,6 @@ function context_key(stream: string | undefined, topic: string | undefined): str
     return `${stream}\n${topic}`;
 }
 
-function remember_worktree_details_state(): void {
-    if (rendered_context_key === "") {
-        return;
-    }
-    const details = document.querySelector<HTMLDetailsElement>(
-        "#pear-panel details.pear-worktree-details",
-    );
-    if (details !== null) {
-        worktree_details_open_by_context.set(rendered_context_key, details.open);
-    }
-}
-
 function current_context_key(): string {
     const {stream, topic} = current_context();
     return context_key(stream, topic);
@@ -350,22 +339,56 @@ function right_sidebar_is_visible(): boolean {
     );
 }
 
+function git_has_diff(git: PearGitContext): boolean {
+    return (git.changed_files ?? []).length > 0 || (git.diff_shortstat?.trim() ?? "") !== "";
+}
+
+function git_has_history(git: PearGitContext): boolean {
+    return (git.recent_commits ?? []).length > 0;
+}
+
+export function workbench_view_for_testing(options: {
+    requested: string | undefined;
+    has_diff: boolean;
+    has_history: boolean;
+}): PearWorkbenchView {
+    if (options.requested === "history" && options.has_history) {
+        return "history";
+    }
+    if (options.requested === "diff" && options.has_diff) {
+        return "diff";
+    }
+    if (options.has_diff) {
+        return "diff";
+    }
+    if (options.has_history) {
+        return "history";
+    }
+    return "diff";
+}
+
 export function open_work_details(): void {
     const key = current_context_key();
     if (key !== "") {
-        worktree_details_open_by_context.set(key, true);
         work_panel_open_by_context.set(key, true);
+        if (last_topic_context !== undefined && last_topic_context !== null) {
+            workbench_view_by_context.set(
+                key,
+                workbench_view_for_testing({
+                    requested: workbench_view_by_context.get(key),
+                    has_diff: git_has_diff(last_topic_context.git),
+                    has_history: git_has_history(last_topic_context.git),
+                }),
+            );
+        }
     }
     render();
     if (!right_sidebar_is_visible()) {
         $("#userlist-toggle-button").trigger("click");
     }
-    const details = document.querySelector<HTMLDetailsElement>(
-        "#pear-panel details.pear-worktree-details",
-    );
-    if (details !== null) {
-        details.open = true;
-        details.scrollIntoView({block: "nearest"});
+    const workbench = document.querySelector<HTMLElement>("#pear-panel .pear-workbench");
+    if (workbench !== null) {
+        workbench.scrollIntoView({block: "nearest"});
         return;
     }
     refresh({force_context: true});
@@ -448,9 +471,17 @@ function display_topic_context(topic_context: PearTopicContext | undefined | nul
           workspace_kind_label: string;
           workspace_ref_label: string;
           worktree_name: string;
-          worktree_details_open: boolean;
           local_worktree_summary_label: string;
           show_primary_git_status: boolean;
+          has_workbench_diff: boolean;
+          has_workbench_history: boolean;
+          workbench_view: PearWorkbenchView;
+          workbench_diff_selected: boolean;
+          workbench_history_selected: boolean;
+          workbench_diff_disabled: boolean;
+          workbench_history_disabled: boolean;
+          diff_tab_label: string;
+          history_tab_label: string;
       })
     | undefined {
     if (topic_context === undefined || topic_context === null) {
@@ -488,6 +519,15 @@ function display_topic_context(topic_context: PearTopicContext | undefined | nul
     const local_worktree_summary_label = [worktree_name, git_status_label, local_worktree_ref_label]
         .filter((part) => part.trim().length > 0)
         .join(" / ");
+    const has_workbench_diff = git_has_diff(git);
+    const has_workbench_history = git_has_history(git);
+    const workbench_view = workbench_view_for_testing({
+        requested: workbench_view_by_context.get(
+            context_key(topic_context.stream, topic_context.topic),
+        ),
+        has_diff: has_workbench_diff,
+        has_history: has_workbench_history,
+    });
     return {
         ...topic_context,
         github_repo,
@@ -511,12 +551,20 @@ function display_topic_context(topic_context: PearTopicContext | undefined | nul
         workspace_kind_label: $t({defaultMessage: "Repo"}),
         workspace_ref_label: "",
         worktree_name,
-        worktree_details_open:
-            worktree_details_open_by_context.get(
-                context_key(topic_context.stream, topic_context.topic),
-            ) ?? false,
         local_worktree_summary_label,
         show_primary_git_status: has_workspace_repo && git.available,
+        has_workbench_diff,
+        has_workbench_history,
+        workbench_view,
+        workbench_diff_selected: workbench_view === "diff",
+        workbench_history_selected: workbench_view === "history",
+        workbench_diff_disabled: !has_workbench_diff && workbench_view !== "diff",
+        workbench_history_disabled: !has_workbench_history && workbench_view !== "history",
+        diff_tab_label:
+            changed_count > 0
+                ? $t({defaultMessage: "Diff ({changed_count})"}, {changed_count})
+                : $t({defaultMessage: "Diff"}),
+        history_tab_label: $t({defaultMessage: "History"}),
     };
 }
 
@@ -736,7 +784,6 @@ function render(
 ): void {
     last_runs = runs;
     last_topic_context = topic_context;
-    remember_worktree_details_state();
     const {stream, topic} = current_context();
     const has_topic = stream !== undefined && topic !== undefined;
     const next_context_key = context_key(stream, topic);
@@ -777,7 +824,6 @@ function render(
     }
     $("#pear-panel").toggleClass("pear-panel-collapsed", !panel_open);
     update_work_cursor(topic_context);
-    rendered_context_key = next_context_key;
     schedule_live_refresh(active_run);
 }
 
@@ -908,6 +954,18 @@ export function initialize(): void {
     });
     $("body").on("click", "#pear-panel-close", () => {
         close_work_details();
+    });
+    $("body").on("click", ".pear-workbench-tab", function () {
+        const view = $(this).attr("data-pear-workbench-view");
+        if (view !== "diff" && view !== "history") {
+            return;
+        }
+        const key = current_context_key();
+        if (key !== "") {
+            workbench_view_by_context.set(key, view);
+            work_panel_open_by_context.set(key, true);
+        }
+        render();
     });
     $("body").on("click", ".pear-run-action", function () {
         const $button = $(this);

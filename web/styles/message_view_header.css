@@ -235,6 +235,12 @@
         opacity: 0.8;
     }
 
+    .pear-work-cursor-active .pear-work-cursor-head,
+    .pear-work-cursor-active .pear-work-cursor-status {
+        border-color: color-mix(in srgb, currentcolor 34%, transparent);
+        background: color-mix(in srgb, currentcolor 10%, transparent);
+    }
+
     .pear-work-cursor-dirty .pear-work-cursor-status {
         border-color: color-mix(in srgb, currentcolor 38%, transparent);
         background: color-mix(in srgb, currentcolor 11%, transparent);
@@ -254,6 +260,12 @@
     .pear-work-cursor-clean .pear-work-cursor-marker,
     .pear-work-cursor-clean .pear-work-cursor-status {
         color: light-dark(hsl(142deg 45% 30%), hsl(142deg 63% 76%));
+    }
+
+    .pear-work-cursor-active .pear-work-cursor-marker,
+    .pear-work-cursor-active .pear-work-cursor-head,
+    .pear-work-cursor-active .pear-work-cursor-status {
+        color: var(--color-text-success-text-action-button);
     }
 
     .pear-work-cursor-dirty .pear-work-cursor-marker,

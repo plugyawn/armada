@@ -151,6 +151,7 @@ type PearWorkCursorState = {
     visible: boolean;
     status_class: string;
     status_marker: string;
+    is_active: boolean;
     repo_label: string;
     branch_label: string;
     head_label: string;
@@ -685,12 +686,14 @@ function fetch_git_tree_for_context(topic_context: PearTopicContext): void {
 
 export function work_cursor_state_for_testing(
     topic_context: PearTopicContext | undefined | null,
+    active_run_status?: string,
 ): PearWorkCursorState {
     if (topic_context === undefined || topic_context === null) {
         return {
             visible: false,
             status_class: "",
             status_marker: "",
+            is_active: false,
             repo_label: "",
             branch_label: "",
             head_label: "",
@@ -700,6 +703,7 @@ export function work_cursor_state_for_testing(
         };
     }
     const git = topic_context.git;
+    const is_active = active_run_status === "running" || active_run_status === "queued";
     const repo_label = first_nonempty_string([
         topic_context.github_repo.trim(),
         topic_context.repo_label?.trim(),
@@ -712,7 +716,9 @@ export function work_cursor_state_for_testing(
         topic_context.worktree_label?.trim(),
         repo_label,
     ]);
-    const head_label = first_nonempty_string([git.head?.trim(), git.head_short?.trim()]);
+    const base_head_label = first_nonempty_string([git.head_short?.trim(), git.head?.trim()]);
+    const head_label =
+        is_active && base_head_label !== "" ? `${base_head_label}+1` : base_head_label;
     const ahead = git.ahead ?? 0;
     const behind = git.behind ?? 0;
     const sync_parts: string[] = [];
@@ -723,19 +729,22 @@ export function work_cursor_state_for_testing(
         sync_parts.push($t({defaultMessage: "-{behind}"}, {behind}));
     }
     const sync_label = sync_parts.join(" ");
-    const status_label = git.detached
-        ? $t({defaultMessage: "detached"})
-        : git.dirty
-          ? work_cursor_dirty_status_label(git)
-          : $t({defaultMessage: "clean"});
-    const status_marker = git.dirty ? "✶" : "·";
+    const status_label = is_active
+        ? $t({defaultMessage: "forming"})
+        : git.detached
+          ? $t({defaultMessage: "detached"})
+          : git.dirty
+            ? work_cursor_dirty_status_label(git)
+            : $t({defaultMessage: "clean"});
+    const status_marker = is_active ? "✦" : git.dirty ? "✶" : "·";
     const parts = [repo_label, branch_label, head_label, sync_label, status_label].filter(
         (part) => part.length > 0,
     );
     return {
         visible: git.available && parts.length > 0,
-        status_class: git.dirty ? "dirty" : "clean",
+        status_class: is_active ? "active" : git.dirty ? "dirty" : "clean",
         status_marker,
+        is_active,
         repo_label,
         branch_label,
         head_label,
@@ -747,6 +756,7 @@ export function work_cursor_state_for_testing(
 
 export function update_work_cursor(
     topic_context: PearTopicContext | null | undefined = last_topic_context,
+    active_run_status?: string,
 ): void {
     const $cursor = $("#pear-work-cursor");
     if ($cursor.length === 0) {
@@ -761,17 +771,31 @@ export function update_work_cursor(
         topic_context.stream !== stream ||
         topic_context.topic !== topic
     ) {
-        $cursor.empty().addClass("hidden").removeAttr("role tabindex aria-label title");
+        $cursor
+            .empty()
+            .addClass("hidden")
+            .removeClass(
+                "pear-work-cursor-clean pear-work-cursor-dirty pear-work-cursor-active pear-liveness-active",
+            )
+            .removeAttr("role tabindex aria-label title");
         return;
     }
-    const state = work_cursor_state_for_testing(topic_context);
+    const state = work_cursor_state_for_testing(topic_context, active_run_status);
     if (!state.visible) {
-        $cursor.empty().addClass("hidden").removeAttr("role tabindex aria-label title");
+        $cursor
+            .empty()
+            .addClass("hidden")
+            .removeClass(
+                "pear-work-cursor-clean pear-work-cursor-dirty pear-work-cursor-active pear-liveness-active",
+            )
+            .removeAttr("role tabindex aria-label title");
         return;
     }
     $cursor
         .empty()
-        .removeClass("hidden pear-work-cursor-clean pear-work-cursor-dirty")
+        .removeClass(
+            "hidden pear-work-cursor-clean pear-work-cursor-dirty pear-work-cursor-active pear-liveness-active",
+        )
         .addClass(`pear-work-cursor-${state.status_class}`)
         .attr({
             "aria-label": $t({defaultMessage: "Open Pear work details"}),
@@ -779,8 +803,13 @@ export function update_work_cursor(
             tabindex: "0",
             title: state.title,
         });
+    if (state.is_active) {
+        $cursor.addClass("pear-liveness-active");
+    }
     $("<span>")
-        .addClass("pear-ui-glyph pear-work-cursor-marker")
+        .addClass(
+            `pear-ui-glyph pear-work-cursor-marker${state.is_active ? " pear-thinking-glyph" : ""}`,
+        )
         .attr("aria-hidden", "true")
         .text(state.status_marker)
         .appendTo($cursor);
@@ -980,7 +1009,7 @@ function render(
         last_render_state_key = next_render_state_key;
     }
     $("#pear-panel").toggleClass("pear-panel-collapsed", !panel_open);
-    update_work_cursor(topic_context);
+    update_work_cursor(topic_context, active_run?.status);
     if (display_context?.workbench_history_selected) {
         fetch_git_tree_for_context(display_context);
     }

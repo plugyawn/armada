@@ -504,17 +504,7 @@ function update_navbar_button_label(): void {
     $button.attr("aria-label", label);
     $button.attr("data-tippy-content", label);
     $button.find(".pear-navbar-runtime-label").text(compact_label);
-    $button
-        .removeClass("pear-runtime-meter-visible pear-runtime-meter-hot")
-        .toggleClass("pear-liveness-active", runtime_status.is_active)
-        .css("--pear-runtime-meter-scale", runtime_meter.has_meter ? runtime_meter.percent / 100 : 0);
-    $button.find(".pear-navbar-runtime-meter-label").text(runtime_meter.is_hot ? runtime_meter.value : "");
-    if (runtime_meter.has_meter) {
-        $button.addClass("pear-runtime-meter-visible");
-    }
-    if (runtime_meter.is_hot) {
-        $button.addClass("pear-runtime-meter-hot");
-    }
+    $button.toggleClass("pear-liveness-active", runtime_status.is_active);
     $button
         .find(".pear-navbar-glyph")
         .text(runtime_status.glyph)

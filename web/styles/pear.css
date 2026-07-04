@@ -51,11 +51,15 @@ body.pear-workbench-split-open {
     .pear-context-section,
     .pear-workbench {
         min-height: 0;
+        min-width: 0;
+        width: 100%;
         flex: 1 1 auto;
+        max-width: 100%;
     }
 
     .pear-workbench-body {
         min-height: 0;
+        max-width: 100%;
         flex: 1 1 auto;
         overflow: auto;
     }
@@ -64,6 +68,7 @@ body.pear-workbench-split-open {
 .pear-panel-inner {
     position: relative;
     display: flex;
+    min-width: 0;
     flex-direction: column;
     gap: 9px;
 }
@@ -184,6 +189,7 @@ body.pear-workbench-split-open {
 
 .pear-context-section {
     display: flex;
+    min-width: 0;
     flex-direction: column;
     gap: 8px;
 }

@@ -309,6 +309,39 @@ function remember_worktree_details_state(): void {
     }
 }
 
+function current_context_key(): string {
+    const {stream, topic} = current_context();
+    return context_key(stream, topic);
+}
+
+function right_sidebar_is_visible(): boolean {
+    const $right_sidebar_column = $(".app-main .column-right");
+    return (
+        ($right_sidebar_column.css("display") !== "none" &&
+            !$("body").hasClass("hide-right-sidebar")) ||
+        $right_sidebar_column.hasClass("expanded")
+    );
+}
+
+export function open_work_details(): void {
+    const key = current_context_key();
+    if (key !== "") {
+        worktree_details_open_by_context.set(key, true);
+    }
+    if (!right_sidebar_is_visible()) {
+        $("#userlist-toggle-button").trigger("click");
+    }
+    const details = document.querySelector<HTMLDetailsElement>(
+        "#pear-panel details.pear-worktree-details",
+    );
+    if (details !== null) {
+        details.open = true;
+        details.scrollIntoView({block: "nearest"});
+        return;
+    }
+    refresh({force_context: true});
+}
+
 function display_run(run: PearRun): PearRun & {
     status_class: string;
     status_label: string;
@@ -512,19 +545,24 @@ export function update_work_cursor(
         topic_context.stream !== stream ||
         topic_context.topic !== topic
     ) {
-        $cursor.empty().addClass("hidden");
+        $cursor.empty().addClass("hidden").removeAttr("role tabindex aria-label title");
         return;
     }
     const state = work_cursor_state_for_testing(topic_context);
     if (!state.visible) {
-        $cursor.empty().addClass("hidden");
+        $cursor.empty().addClass("hidden").removeAttr("role tabindex aria-label title");
         return;
     }
     $cursor
         .empty()
         .removeClass("hidden pear-work-cursor-clean pear-work-cursor-dirty")
         .addClass(`pear-work-cursor-${state.status_class}`)
-        .attr("title", state.title);
+        .attr({
+            "aria-label": $t({defaultMessage: "Open Pear work details"}),
+            role: "button",
+            tabindex: "0",
+            title: state.title,
+        });
     $("<span>")
         .addClass("pear-ui-glyph pear-work-cursor-marker")
         .attr("aria-hidden", "true")
@@ -832,6 +870,16 @@ export function initialize(): void {
     });
     $("body").on("click", "#pear-side-start", () => {
         start_side_session();
+    });
+    $("body").on("click", "#pear-work-cursor", () => {
+        open_work_details();
+    });
+    $("body").on("keydown", "#pear-work-cursor", (event) => {
+        if (event.key !== "Enter" && event.key !== " ") {
+            return;
+        }
+        event.preventDefault();
+        open_work_details();
     });
     refresh();
     refresh_timer = window.setInterval(refresh, FULL_REFRESH_INTERVAL_MS);

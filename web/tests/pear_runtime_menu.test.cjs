@@ -223,31 +223,43 @@ run_test("runtime_status_for_testing", () => {
         glyph: "·",
         label: "translated: Idle",
         class_name: "pear-runtime-status-idle",
+        is_active: false,
     });
     assert.deepEqual(pear_runtime_menu.runtime_status_for_testing({status: "running"}), {
         glyph: "✦",
         label: "translated: Running",
         class_name: "pear-runtime-status-active",
+        is_active: true,
     });
     assert.deepEqual(pear_runtime_menu.runtime_status_for_testing({status: "queued"}), {
         glyph: "✦",
         label: "translated: Queued",
         class_name: "pear-runtime-status-active",
+        is_active: true,
+    });
+    assert.deepEqual(pear_runtime_menu.runtime_status_for_testing({status: "loading"}), {
+        glyph: "✦",
+        label: "translated: Loading",
+        class_name: "pear-runtime-status-active",
+        is_active: true,
     });
     assert.deepEqual(pear_runtime_menu.runtime_status_for_testing({status: "paused"}), {
         glyph: "✧",
         label: "translated: Paused",
         class_name: "pear-runtime-status-paused",
+        is_active: false,
     });
     assert.deepEqual(pear_runtime_menu.runtime_status_for_testing({status: "failed"}), {
         glyph: "✷",
         label: "translated: Failed",
         class_name: "pear-runtime-status-blocked",
+        is_active: false,
     });
     assert.deepEqual(pear_runtime_menu.runtime_status_for_testing({status: "cancelled"}), {
         glyph: "✷",
         label: "translated: Cancelled",
         class_name: "pear-runtime-status-blocked",
+        is_active: false,
     });
 });
 

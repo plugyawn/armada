@@ -63,9 +63,6 @@
                 <div class="pear-workbench">
                     <div class="pear-workbench-header">
                         <div class="pear-workbench-context-row">
-                            <div class="pear-workbench-title" title="{{topic_context.workbench_title_attr}}">
-                                <span class="pear-workbench-title-main">{{topic_context.workbench_title}}</span>
-                            </div>
                             <div class="pear-workbench-tabs" aria-label="{{t 'Pear work views' }}">
                                 <button type="button" class="pear-workbench-tab {{#if topic_context.workbench_diff_selected}}pear-workbench-tab-selected{{/if}}" data-pear-workbench-view="diff" {{#if topic_context.workbench_diff_disabled}}disabled{{/if}}>
                                     {{topic_context.diff_tab_label}}
@@ -77,46 +74,12 @@
                                     {{topic_context.side_tab_label}}
                                 </button>
                             </div>
-                            <button type="button" class="pear-runtime-menu-trigger pear-workbench-runtime tippy-zulip-delayed-tooltip" aria-label="{{t 'Pear runtime' }}" data-tippy-content="{{topic_context.runtime_chip_title}}">
-                                <span class="pear-ui-glyph pear-runtime-menu-glyph" aria-hidden="true">·</span>
-                                <span class="pear-runtime-menu-label">{{topic_context.runtime_chip_label}}</span>
-                            </button>
                             {{#if panel_can_close}}
                                 <button type="button" class="pear-panel-close-action pear-workbench-close pear-icon-button icon-button icon-button-square icon-button-neutral tippy-zulip-delayed-tooltip" aria-label="{{t 'Hide Pear work details' }}" data-tippy-content="{{t 'Hide Pear work details' }}">
                                     <i class="zulip-icon zulip-icon-close" aria-hidden="true"></i>
                                 </button>
                             {{/if}}
                         </div>
-                        <div class="pear-workbench-head-row {{#if active_run_is_active}}pear-liveness-active{{/if}}" title="{{topic_context.workbench_head_title}}">
-                            <span class="pear-workbench-head-avatar" aria-hidden="true">
-                                <span class="pear-ui-glyph pear-workbench-head-glyph {{#if active_run_is_active}}pear-thinking-glyph{{/if}}">{{#if active_run_is_active}}✦{{else}}{{topic_context.workbench_head_glyph}}{{/if}}</span>
-                            </span>
-                            <span class="pear-workbench-head-label">{{topic_context.workbench_head_label}}</span>
-                            <span class="pear-workbench-head-summary">{{topic_context.workbench_head_summary}}</span>
-                            {{#if topic_context.workbench_head_short}}
-                                <span class="pear-workbench-head-sha">{{topic_context.workbench_head_short}}</span>
-                            {{/if}}
-                            {{#if topic_context.has_workbench_diffstat}}
-                                <button type="button" class="pear-workbench-diffstat pear-workbench-tab {{#if topic_context.workbench_diff_selected}}pear-workbench-tab-selected{{/if}}" data-pear-workbench-view="diff" aria-label="{{topic_context.workbench_diff_summary_label}}">
-                                    {{#if topic_context.workbench_diff_insertions_label}}
-                                        <span class="pear-workbench-diffstat-added">{{topic_context.workbench_diff_insertions_label}}</span>
-                                    {{/if}}
-                                    {{#if topic_context.workbench_diff_deletions_label}}
-                                        <span class="pear-workbench-diffstat-deleted">{{topic_context.workbench_diff_deletions_label}}</span>
-                                    {{/if}}
-                                    {{#if topic_context.workbench_diff_file_label}}
-                                        <span class="pear-workbench-diffstat-files">{{topic_context.workbench_diff_file_label}}</span>
-                                    {{/if}}
-                                </button>
-                            {{/if}}
-                        </div>
-                        {{#if workbench_context_meter}}
-                            {{#if workbench_context_meter.has_meter}}
-                                <span class="pear-workbench-context-meter {{#if workbench_context_meter.is_hot}}pear-workbench-context-meter-hot{{/if}}" title="{{workbench_context_meter.title}}" aria-label="{{workbench_context_meter.title}}">
-                                    <span class="pear-workbench-context-meter-fill" style="width: {{workbench_context_meter.percent}}%;"></span>
-                                </span>
-                            {{/if}}
-                        {{/if}}
                     </div>
                     <div class="pear-workbench-body pear-workbench-view-{{topic_context.workbench_view}}">
                         {{#if topic_context.workbench_diff_selected}}

@@ -205,150 +205,24 @@ body.pear-workbench-split-open {
 }
 
 .pear-workbench-header {
-    position: relative;
     display: flex;
     min-width: 0;
     flex-direction: column;
-    gap: 7px;
     border-bottom: 1px solid
         color-mix(
             in srgb,
             var(--color-border-sidebar-subheader) 48%,
             transparent
         );
-    padding-bottom: 8px;
-}
-
-.pear-workbench-context-meter {
-    position: absolute;
-    right: 0;
-    bottom: -1px;
-    left: 0;
-    height: 2px;
-    overflow: hidden;
-    border-radius: 999px;
-    pointer-events: none;
-}
-
-.pear-workbench-context-meter-fill {
-    display: block;
-    height: 100%;
-    border-radius: inherit;
-    background: color-mix(
-        in srgb,
-        var(--color-text-success-text-action-button) 45%,
-        transparent
-    );
-    opacity: 0.45;
-}
-
-.pear-workbench-context-meter-hot .pear-workbench-context-meter-fill {
-    background: color-mix(
-        in srgb,
-        var(--color-text-warning-text-action-button) 82%,
-        transparent
-    );
-    opacity: 0.82;
-}
-
-.pear-workbench-context-row,
-.pear-workbench-head-row {
-    display: flex;
-    min-width: 0;
-    align-items: center;
+    padding-bottom: 6px;
 }
 
 .pear-workbench-context-row {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto auto auto;
-    gap: 5px;
-}
-
-.pear-workbench-head-row {
-    gap: 6px;
-    min-height: 22px;
-    padding: 1px 0 2px;
-}
-
-.pear-workbench-title {
     display: flex;
     min-width: 0;
-    flex: 1 1 auto;
-    grid-column: 1;
-    grid-row: 1;
     align-items: center;
-    gap: 5px;
-}
-
-.pear-workbench-title-main,
-.pear-workbench-head-summary {
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.pear-workbench-title-main {
-    color: var(--color-text-default);
-    font-size: 12.5px;
-    font-weight: 600;
-    line-height: 16px;
-}
-
-.pear-workbench-head-avatar {
-    display: inline-flex;
-    width: 18px;
-    height: 18px;
-    flex: none;
-    align-items: center;
-    justify-content: center;
-    color: var(--color-text-success-text-action-button);
-}
-
-.pear-workbench-head-row.pear-liveness-active .pear-workbench-head-avatar {
-    color: var(--color-text-success-text-action-button);
-}
-
-.pear-workbench-head-glyph {
-    width: 1em;
-    font-size: 10px;
-    opacity: 0.9;
-}
-
-.pear-workbench-head-label,
-.pear-workbench-head-sha,
-.pear-workbench-diffstat {
-    flex: none;
-    font-family: monospace;
-    font-size: 10px;
-    line-height: 14px;
-}
-
-.pear-workbench-head-label {
-    color: var(--color-text-sidebar-heading);
-    font-weight: 600;
-    opacity: var(--opacity-sidebar-heading);
-}
-
-.pear-workbench-head-summary {
-    flex: 1 1 auto;
-    color: var(--color-text-sidebar-heading);
-    font-size: 11px;
-    line-height: 15px;
-    opacity: var(--opacity-sidebar-heading);
-}
-
-.pear-workbench-head-sha {
-    border: 1px solid
-        color-mix(
-            in srgb,
-            var(--color-border-sidebar-subheader) 70%,
-            transparent
-        );
-    border-radius: 5px;
-    color: var(--color-text-sidebar-heading);
-    opacity: var(--opacity-sidebar-heading);
-    padding: 0 4px;
+    justify-content: space-between;
+    gap: 9px;
 }
 
 .pear-workbench-tabs {
@@ -357,18 +231,12 @@ body.pear-workbench-split-open {
     width: auto;
     max-width: 100%;
     flex: none;
-    grid-column: 2;
-    grid-row: 1;
-    justify-self: end;
     gap: 7px;
-    margin-left: 6px;
     padding: 0;
 }
 
 .pear-workbench-close {
     flex: 0 0 auto;
-    grid-column: 4;
-    grid-row: 1;
     color: var(--color-text-item);
     opacity: 0.32;
 }
@@ -407,44 +275,6 @@ body.pear-workbench-split-open {
     background: transparent;
     color: var(--color-text-default);
     opacity: 1;
-}
-
-.pear-workbench-diffstat {
-    display: inline-flex;
-    width: auto;
-    max-width: 42%;
-    flex: 0 0 auto;
-    align-items: center;
-    gap: 4px;
-    margin-left: auto;
-    border: 1px solid var(--color-border-sidebar-subheader);
-    border-radius: 6px;
-    background: transparent;
-    cursor: pointer;
-    opacity: 1;
-    padding: 1px 6px;
-}
-
-.pear-workbench-diffstat:hover,
-.pear-workbench-diffstat:focus-visible {
-    background: var(--color-background-hover-narrow-filter);
-    outline: none;
-}
-
-.pear-workbench-diffstat-added {
-    color: var(--color-text-success-text-action-button);
-}
-
-.pear-workbench-diffstat-deleted {
-    color: var(--color-text-danger-text-action-button);
-}
-
-.pear-workbench-diffstat-files {
-    min-width: 0;
-    overflow: hidden;
-    color: var(--color-text-item);
-    text-overflow: ellipsis;
-    white-space: nowrap;
 }
 
 .pear-workbench-tab:disabled {
@@ -954,38 +784,13 @@ body.pear-workbench-split-open {
 }
 
 @media (width <= 900px) {
-    .pear-workbench-context-row {
-        grid-template-columns: minmax(0, 1fr) auto auto;
-    }
-
-    .pear-workbench-head-row {
-        flex-wrap: wrap;
-    }
-
     .pear-workbench-tabs {
         min-width: 0;
-        width: 100%;
-        grid-column: 1 / -1;
-        grid-row: 2;
-        justify-self: stretch;
-        margin-left: 0;
+        flex: 1 1 auto;
     }
 
     .pear-workbench-tab {
         flex: 1 1 0;
-    }
-
-    .pear-workbench-runtime {
-        grid-column: 2;
-    }
-
-    .pear-workbench-close {
-        grid-column: 3;
-    }
-
-    .pear-workbench-diffstat {
-        max-width: 100%;
-        flex: 0 1 auto;
     }
 }
 
@@ -1057,48 +862,6 @@ body.pear-workbench-split-open {
 }
 
 .pear-runtime-menu-label {
-    display: none;
-}
-
-.pear-workbench-runtime {
-    display: inline-flex;
-    min-width: 0;
-    max-width: 22px;
-    height: 22px;
-    flex: 0 0 22px;
-    grid-column: 3;
-    grid-row: 1;
-    align-items: center;
-    justify-content: center;
-    overflow: hidden;
-    border: 0;
-    border-radius: 4px;
-    background: transparent;
-    color: var(--color-vdots-visible);
-    cursor: pointer;
-    font: inherit;
-    font-family: monospace;
-    font-size: 12px;
-    line-height: 1;
-    opacity: 0.5;
-    padding: 0;
-}
-
-.pear-workbench-runtime:hover,
-.pear-workbench-runtime:focus-visible {
-    background: var(--color-background-hover-narrow-filter);
-    color: var(--color-vdots-hover);
-    opacity: 1;
-    outline: none;
-}
-
-.pear-workbench-runtime .pear-runtime-menu-glyph {
-    width: auto;
-    color: currentcolor;
-    font-size: 16px;
-}
-
-.pear-workbench-runtime .pear-runtime-menu-label {
     display: none;
 }
 

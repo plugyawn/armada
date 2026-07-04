@@ -318,23 +318,36 @@
 }
 
 .pear-worktree-details > summary {
+    display: flex;
+    min-width: 0;
+    align-items: baseline;
+    gap: 5px;
     cursor: pointer;
     list-style-position: outside;
-    margin-left: 12px;
-    padding: 1px 0;
+    margin-left: 0;
+    padding: 2px 0;
     color: var(--color-text-sidebar-heading);
     font-weight: var(--font-weight-sidebar-heading);
     opacity: var(--opacity-sidebar-heading);
 }
 
+.pear-worktree-details > summary::marker {
+    color: var(--color-text-item);
+}
+
 .pear-worktree-summary-extra {
+    min-width: 0;
+    overflow: hidden;
     color: var(--color-text-item);
     font-family: monospace;
     font-size: 10px;
     font-weight: 400;
-    margin-left: 5px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
+.pear-worktree-details > .pear-file-list,
+.pear-worktree-details > .pear-diff-shortstat,
 .pear-worktree-details > .pear-workdir,
 .pear-worktree-details > .pear-commit-list {
     margin-top: 4px;
@@ -348,16 +361,28 @@
 .pear-commit-list {
     display: flex;
     flex-direction: column;
-    gap: 3px;
+    overflow: hidden;
+    border-block: 1px solid var(--color-border-sidebar-subheader);
 }
 
 .pear-file-row,
 .pear-commit-row {
     display: grid;
-    grid-template-columns: max-content minmax(0, 1fr);
+    grid-template-columns: 2.2em minmax(0, 1fr);
     gap: 6px;
     min-width: 0;
+    padding: 2px 0;
     line-height: 15px;
+}
+
+.pear-file-row + .pear-file-row,
+.pear-commit-row + .pear-commit-row {
+    border-top: 1px solid
+        color-mix(
+            in srgb,
+            var(--color-border-sidebar-subheader) 55%,
+            transparent
+        );
 }
 
 .pear-file-status,

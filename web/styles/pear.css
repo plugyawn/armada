@@ -266,20 +266,8 @@ body.pear-workbench-split-open {
 
 .pear-workbench-head-row {
     gap: 6px;
-    min-height: 26px;
-    border: 1px solid
-        color-mix(
-            in srgb,
-            var(--color-border-sidebar-subheader) 54%,
-            transparent
-        );
-    border-radius: 8px;
-    background: color-mix(
-        in srgb,
-        var(--color-background-hover-narrow-filter) 18%,
-        transparent
-    );
-    padding: 3px 6px 3px 4px;
+    min-height: 22px;
+    padding: 1px 0 2px;
 }
 
 .pear-workbench-title {
@@ -314,32 +302,11 @@ body.pear-workbench-split-open {
     flex: none;
     align-items: center;
     justify-content: center;
-    border: 1px solid
-        color-mix(
-            in srgb,
-            var(--color-text-success-text-action-button) 28%,
-            transparent
-        );
-    border-radius: 6px;
-    background: color-mix(
-        in srgb,
-        var(--color-text-success-text-action-button) 8%,
-        transparent
-    );
     color: var(--color-text-success-text-action-button);
 }
 
 .pear-workbench-head-row.pear-liveness-active .pear-workbench-head-avatar {
-    border-color: color-mix(
-        in srgb,
-        var(--color-text-success-text-action-button) 58%,
-        transparent
-    );
-    background: color-mix(
-        in srgb,
-        var(--color-text-success-text-action-button) 14%,
-        transparent
-    );
+    color: var(--color-text-success-text-action-button);
 }
 
 .pear-workbench-head-glyph {
@@ -358,24 +325,17 @@ body.pear-workbench-split-open {
 }
 
 .pear-workbench-head-label {
-    border: 1px solid
-        color-mix(
-            in srgb,
-            var(--color-border-sidebar-subheader) 70%,
-            transparent
-        );
-    border-radius: 5px;
     color: var(--color-text-sidebar-heading);
     font-weight: 600;
     opacity: var(--opacity-sidebar-heading);
-    padding: 0 4px;
 }
 
 .pear-workbench-head-summary {
     flex: 1 1 auto;
-    color: var(--color-text-default);
+    color: var(--color-text-sidebar-heading);
     font-size: 11px;
     line-height: 15px;
+    opacity: var(--opacity-sidebar-heading);
 }
 
 .pear-workbench-head-sha {
@@ -462,6 +422,7 @@ body.pear-workbench-split-open {
     flex: 0 0 auto;
     align-items: center;
     gap: 4px;
+    margin-left: auto;
     border: 1px solid var(--color-border-sidebar-subheader);
     border-radius: 6px;
     background: transparent;

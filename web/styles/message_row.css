@@ -67,8 +67,30 @@
         }
 
         .message_content {
+            max-width: min(100%, calc(var(--base-font-size-px) * 48));
             padding-right: 0.35em;
             overflow-wrap: anywhere;
+            line-height: 1.5;
+
+            > p {
+                margin-block: 0.2em 0.72em;
+            }
+
+            > p:last-child {
+                margin-bottom: 0.2em;
+            }
+
+            > p > code,
+            li > code {
+                padding: 0.05em 0.28em;
+                border-radius: 4px;
+                background: color-mix(
+                    in srgb,
+                    var(--color-background-pear-message-content) 76%,
+                    var(--color-text-message-default) 24%
+                );
+                font-size: 0.9em;
+            }
 
             .spoiler-block {
                 width: fit-content;

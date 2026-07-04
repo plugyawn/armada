@@ -65,9 +65,6 @@
                         <div class="pear-workbench-context-row">
                             <div class="pear-workbench-title" title="{{topic_context.workbench_title_attr}}">
                                 <span class="pear-workbench-title-main">{{topic_context.workbench_title}}</span>
-                                {{#if topic_context.workbench_branch_meta_label}}
-                                    <span class="pear-workbench-title-meta">{{topic_context.workbench_branch_meta_label}}</span>
-                                {{/if}}
                             </div>
                             <div class="pear-workbench-tabs" aria-label="{{t 'Pear work views' }}">
                                 <button type="button" class="pear-workbench-tab {{#if topic_context.workbench_diff_selected}}pear-workbench-tab-selected{{/if}}" data-pear-workbench-view="diff" {{#if topic_context.workbench_diff_disabled}}disabled{{/if}}>

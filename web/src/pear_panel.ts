@@ -199,6 +199,20 @@ export function compact_meta_label_for_testing(values: (string | undefined)[]): 
         .join(" / ");
 }
 
+export function workbench_title_attr_for_testing(values: (string | undefined)[]): string {
+    const seen = new Set<string>();
+    const parts: string[] = [];
+    for (const value of values) {
+        const part = value?.trim() ?? "";
+        if (part === "" || seen.has(part)) {
+            continue;
+        }
+        seen.add(part);
+        parts.push(part);
+    }
+    return parts.join(" · ");
+}
+
 export function workbench_title_for_testing(values: {
     topic: string | undefined;
     branch: string | undefined;
@@ -764,6 +778,12 @@ function display_topic_context(topic_context: PearTopicContext | undefined | nul
     ]
         .filter((part) => part !== "")
         .join(" ");
+    const workbench_title = workbench_title_for_testing({
+        topic: topic_label,
+        branch: branch_label,
+        worktree_name,
+        workspace_primary_name,
+    });
     const runtime_chip = runtime_chip_labels_for_testing(topic_context);
     return {
         ...topic_context,
@@ -791,15 +811,12 @@ function display_topic_context(topic_context: PearTopicContext | undefined | nul
                 ? $t({defaultMessage: "history {recent_commit_count}"}, {recent_commit_count})
                 : $t({defaultMessage: "history"}),
         side_tab_label: $t({defaultMessage: "whisper"}),
-        workbench_title: workbench_title_for_testing({
-            topic: topic_label,
-            branch: branch_label,
-            worktree_name,
-            workspace_primary_name,
-        }),
-        workbench_title_attr: first_nonempty_string([
-            topic_context.workdir,
+        workbench_title,
+        workbench_title_attr: workbench_title_attr_for_testing([
+            workbench_title,
+            workbench_branch_meta_label,
             workspace_primary_title,
+            topic_context.workdir,
             worktree_name,
         ]),
         workbench_meta_label,

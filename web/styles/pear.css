@@ -197,7 +197,8 @@
 }
 
 .pear-file-list,
-.pear-commit-list {
+.pear-commit-list,
+.pear-git-tree {
     display: flex;
     flex-direction: column;
     overflow: hidden;
@@ -285,6 +286,44 @@
     color: var(--color-text-sidebar-heading);
     line-height: 13px;
     opacity: var(--opacity-sidebar-heading);
+}
+
+.pear-git-tree {
+    gap: 8px;
+    padding-block: 5px;
+}
+
+.pear-git-tree-block {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.pear-git-tree-label {
+    color: var(--color-text-sidebar-heading);
+    font-size: 10px;
+    font-weight: var(--font-weight-sidebar-heading);
+    letter-spacing: 0;
+    line-height: 13px;
+    opacity: var(--opacity-sidebar-heading);
+    text-transform: uppercase;
+}
+
+.pear-git-tree-graph,
+.pear-git-tree-status {
+    max-height: 180px;
+    margin: 0;
+    overflow: auto;
+    color: var(--color-text-item);
+    font-family: monospace;
+    font-size: 10px;
+    line-height: 14px;
+    white-space: pre-wrap;
+}
+
+.pear-git-tree-status {
+    max-height: 120px;
 }
 
 .pear-file-added .pear-file-status,

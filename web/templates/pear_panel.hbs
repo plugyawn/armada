@@ -97,18 +97,34 @@
                             {{/if}}
                         {{/if}}
                         {{#if topic_context.workbench_history_selected}}
-                            {{#if topic_context.has_recent_commits}}
-                                <div class="pear-commit-list">
-                                    {{#each topic_context.git.recent_commits}}
-                                        <div class="pear-commit-row">
-                                            <span class="pear-ui-glyph pear-commit-marker" aria-hidden="true">✦</span>
-                                            <span class="pear-commit-summary" title="{{summary}}">{{summary}}</span>
-                                            <span class="pear-commit-hash">{{hash}}</span>
+                            {{#if topic_context.git_tree_loading}}
+                                <div class="pear-workbench-empty">{{t "Loading Git history." }}</div>
+                            {{else if topic_context.git_tree_error}}
+                                <div class="pear-workbench-empty">{{topic_context.git_tree_error}}</div>
+                            {{else if topic_context.has_git_tree_graph}}
+                                <div class="pear-git-tree">
+                                    <pre class="pear-git-tree-graph">{{topic_context.git_tree.graph}}</pre>
+                                    {{#if topic_context.has_git_tree_status}}
+                                        <div class="pear-git-tree-block">
+                                            <div class="pear-git-tree-label">{{t "Status" }}</div>
+                                            <pre class="pear-git-tree-status">{{topic_context.git_tree.status_short}}</pre>
                                         </div>
-                                    {{/each}}
+                                    {{/if}}
                                 </div>
                             {{else}}
-                                <div class="pear-workbench-empty">{{t "No recent commits." }}</div>
+                                {{#if topic_context.has_recent_commits}}
+                                    <div class="pear-commit-list">
+                                        {{#each topic_context.git.recent_commits}}
+                                            <div class="pear-commit-row">
+                                                <span class="pear-ui-glyph pear-commit-marker" aria-hidden="true">✦</span>
+                                                <span class="pear-commit-summary" title="{{summary}}">{{summary}}</span>
+                                                <span class="pear-commit-hash">{{hash}}</span>
+                                            </div>
+                                        {{/each}}
+                                    </div>
+                                {{else}}
+                                    <div class="pear-workbench-empty">{{t "No Git history." }}</div>
+                                {{/if}}
                             {{/if}}
                         {{/if}}
                         {{#if topic_context.workbench_side_selected}}

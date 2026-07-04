@@ -66,71 +66,76 @@
                     {{/if}}
                 </div>
 
-                {{#if topic_context.git_available}}
-                    <div class="pear-workbench">
-                        <div class="pear-workbench-header">
-                            <div class="pear-workbench-title">
-                                <span>{{t "Worktree" }}</span>
-                                {{#if topic_context.local_worktree_summary_label}}
-                                    <span class="pear-worktree-summary-extra">{{topic_context.local_worktree_summary_label}}</span>
-                                {{/if}}
-                            </div>
-                            <div class="pear-workbench-tabs" aria-label="{{t 'Pear work views' }}">
-                                <button type="button" class="pear-workbench-tab {{#if topic_context.workbench_diff_selected}}pear-workbench-tab-selected{{/if}}" data-pear-workbench-view="diff" {{#if topic_context.workbench_diff_disabled}}disabled{{/if}}>
-                                    {{topic_context.diff_tab_label}}
-                                </button>
-                                <button type="button" class="pear-workbench-tab {{#if topic_context.workbench_history_selected}}pear-workbench-tab-selected{{/if}}" data-pear-workbench-view="history" {{#if topic_context.workbench_history_disabled}}disabled{{/if}}>
-                                    {{topic_context.history_tab_label}}
-                                </button>
-                            </div>
-                        </div>
-                        <div class="pear-workbench-body pear-workbench-view-{{topic_context.workbench_view}}">
-                            {{#if topic_context.workbench_diff_selected}}
-                                {{#if topic_context.has_workbench_diff}}
-                                    {{#if topic_context.has_changed_files}}
-                                        <div class="pear-file-list">
-                                            {{#each topic_context.git.changed_files}}
-                                                <div class="pear-file-row pear-file-{{kind}}">
-                                                    <span class="pear-file-status">{{status}}</span>
-                                                    <span class="pear-file-path">{{path}}</span>
-                                                </div>
-                                            {{/each}}
-                                            {{#if topic_context.git.changed_files_truncated}}
-                                                <div class="pear-file-more">{{t "More changed files not shown." }}</div>
-                                            {{/if}}
-                                        </div>
-                                    {{/if}}
-                                    {{#if topic_context.git.diff_shortstat}}
-                                        <div class="pear-diff-shortstat">{{topic_context.git.diff_shortstat}}</div>
-                                    {{/if}}
-                                {{else}}
-                                    <div class="pear-workbench-empty">{{t "No local diff." }}</div>
-                                {{/if}}
+                <div class="pear-workbench">
+                    <div class="pear-workbench-header">
+                        <div class="pear-workbench-title">
+                            <span>{{t "Workbench" }}</span>
+                            {{#if topic_context.local_worktree_summary_label}}
+                                <span class="pear-worktree-summary-extra">{{topic_context.local_worktree_summary_label}}</span>
                             {{/if}}
-                            {{#if topic_context.workbench_history_selected}}
-                                {{#if topic_context.has_recent_commits}}
-                                    <div class="pear-commit-list">
-                                        {{#each topic_context.git.recent_commits}}
-                                            <div class="pear-commit-row">
-                                                <span class="pear-commit-hash">{{hash}}</span>
-                                                <span class="pear-commit-summary">{{summary}}</span>
+                        </div>
+                        <div class="pear-workbench-tabs" aria-label="{{t 'Pear work views' }}">
+                            <button type="button" class="pear-workbench-tab {{#if topic_context.workbench_diff_selected}}pear-workbench-tab-selected{{/if}}" data-pear-workbench-view="diff" {{#if topic_context.workbench_diff_disabled}}disabled{{/if}}>
+                                {{topic_context.diff_tab_label}}
+                            </button>
+                            <button type="button" class="pear-workbench-tab {{#if topic_context.workbench_history_selected}}pear-workbench-tab-selected{{/if}}" data-pear-workbench-view="history" {{#if topic_context.workbench_history_disabled}}disabled{{/if}}>
+                                {{topic_context.history_tab_label}}
+                            </button>
+                            <button type="button" class="pear-workbench-tab {{#if topic_context.workbench_side_selected}}pear-workbench-tab-selected{{/if}}" data-pear-workbench-view="side">
+                                {{topic_context.side_tab_label}}
+                            </button>
+                        </div>
+                    </div>
+                    <div class="pear-workbench-body pear-workbench-view-{{topic_context.workbench_view}}">
+                        {{#if topic_context.workbench_diff_selected}}
+                            {{#if topic_context.has_workbench_diff}}
+                                {{#if topic_context.has_changed_files}}
+                                    <div class="pear-file-list">
+                                        {{#each topic_context.git.changed_files}}
+                                            <div class="pear-file-row pear-file-{{kind}}">
+                                                <span class="pear-file-status">{{status}}</span>
+                                                <span class="pear-file-path">{{path}}</span>
                                             </div>
                                         {{/each}}
+                                        {{#if topic_context.git.changed_files_truncated}}
+                                            <div class="pear-file-more">{{t "More changed files not shown." }}</div>
+                                        {{/if}}
                                     </div>
-                                {{else}}
-                                    <div class="pear-workbench-empty">{{t "No recent commits." }}</div>
                                 {{/if}}
+                                {{#if topic_context.git.diff_shortstat}}
+                                    <div class="pear-diff-shortstat">{{topic_context.git.diff_shortstat}}</div>
+                                {{/if}}
+                            {{else}}
+                                <div class="pear-workbench-empty">{{t "No local diff." }}</div>
                             {{/if}}
-                        </div>
-                        <div class="pear-workdir" title="{{topic_context.workdir}}">{{topic_context.workdir}}</div>
+                        {{/if}}
+                        {{#if topic_context.workbench_history_selected}}
+                            {{#if topic_context.has_recent_commits}}
+                                <div class="pear-commit-list">
+                                    {{#each topic_context.git.recent_commits}}
+                                        <div class="pear-commit-row">
+                                            <span class="pear-commit-hash">{{hash}}</span>
+                                            <span class="pear-commit-summary">{{summary}}</span>
+                                        </div>
+                                    {{/each}}
+                                </div>
+                            {{else}}
+                                <div class="pear-workbench-empty">{{t "No recent commits." }}</div>
+                            {{/if}}
+                        {{/if}}
+                        {{#if topic_context.workbench_side_selected}}
+                            <div class="pear-side-body">
+                                <textarea id="pear-side-request" class="pear-side-request" rows="2" placeholder="{{t 'Private side request' }}"></textarea>
+                                <button type="button" id="pear-side-start" class="pear-side-start action-button action-button-subtle-neutral" {{#unless has_topic}}disabled{{/unless}}>
+                                    <span class="action-button-label">{{t "Side" }}</span>
+                                </button>
+                            </div>
+                        {{/if}}
                     </div>
-                {{else}}
                     {{#if topic_context.workdir}}
-                        <div class="pear-workbench pear-worktree-unavailable">
-                            <div class="pear-workdir" title="{{topic_context.workdir}}">{{topic_context.workdir}}</div>
-                        </div>
+                        <div class="pear-workdir" title="{{topic_context.workdir}}">{{topic_context.workdir}}</div>
                     {{/if}}
-                {{/if}}
+                </div>
             </section>
         {{else}}
             <div class="pear-empty-state">{{t "Pear context is loading." }}</div>
@@ -143,17 +148,5 @@
         <div class="pear-panel-error">{{error}}</div>
     {{/if}}
 
-    <details id="pear-side-details" class="pear-side">
-        <summary>
-            <span class="pear-ui-glyph pear-side-glyph" aria-hidden="true">✧</span>
-            <span>{{t "Side request" }}</span>
-        </summary>
-        <div class="pear-side-body">
-            <textarea id="pear-side-request" class="pear-side-request" rows="2" placeholder="{{t 'Private side request' }}"></textarea>
-            <button type="button" id="pear-side-start" class="pear-side-start action-button action-button-subtle-neutral" {{#unless has_topic}}disabled{{/unless}}>
-                <span class="action-button-label">{{t "Side" }}</span>
-            </button>
-        </div>
-    </details>
 </div>
 {{/if}}

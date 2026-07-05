@@ -1084,6 +1084,7 @@ function render(
         has_panel_menu: panel_header_state.has_panel_menu,
         show_runtime_trigger: panel_header_state.show_runtime_trigger,
         show_panel_header: panel_header_state.show_panel_header,
+        panel_header_quiet: active_run !== undefined && active_run.show_status !== true,
         active_run_is_active: active_run?.is_active === true,
         panel_has_active_status: panel_has_active_status_for_testing(active_run?.status),
         topic_context: display_context,

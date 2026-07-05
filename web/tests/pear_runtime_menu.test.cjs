@@ -27,11 +27,12 @@ function make_context(overrides = {}) {
 }
 
 run_test("runtime_menu_selector_for_testing", () => {
-    // Pear runtime controls belong in the Pear panel/workbench, never
-    // in Zulip's native channel/search header.
+    // Pear runtime controls live either in the explicit Pear workbench
+    // or in the current stream/topic header, never in Zulip's global
+    // channel/search chrome.
     assert.equal(
         pear_runtime_menu.runtime_menu_selector_for_testing,
-        "#pear-panel .pear-runtime-menu-trigger",
+        "#pear-panel .pear-runtime-menu-trigger, .message_header_stream .pear-runtime-menu-trigger",
     );
     for (const selector of pear_runtime_menu.forbidden_header_mount_selectors_for_testing) {
         assert.ok(!pear_runtime_menu.runtime_menu_selector_for_testing.includes(selector));
@@ -39,8 +40,8 @@ run_test("runtime_menu_selector_for_testing", () => {
 });
 
 run_test("forbidden_header_mount_selectors_for_testing", () => {
-    // Workspace/repo/runtime chrome must stay out of Zulip's native
-    // navbar semantics. The stream/topic title and search box own this area.
+    // Workspace/repo/runtime chrome must stay out of Zulip's global
+    // navbar semantics. Stream/topic headers own topic-level controls.
     assert.deepEqual(pear_runtime_menu.forbidden_header_mount_selectors_for_testing, [
         "#top_navbar",
         "#navbar-middle",

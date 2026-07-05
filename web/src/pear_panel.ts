@@ -11,6 +11,7 @@ import * as pear_canvas from "./pear_canvas.ts";
 import * as pear_run_state from "./pear_run_state.ts";
 import {postprocess_content} from "./postprocess_content.ts";
 import * as rendered_markdown from "./rendered_markdown.ts";
+import * as stream_data from "./stream_data.ts";
 
 type PearRunEvent = {
     id: number;
@@ -166,6 +167,7 @@ type PearTopicContext = {
 };
 
 type PearWorkbenchView = "diff" | "history" | "canvas" | "side";
+type PearDisplayTopicContext = NonNullable<ReturnType<typeof display_topic_context>>;
 
 let initialized = false;
 let refresh_timer: number | undefined;
@@ -407,7 +409,7 @@ export function work_panel_open_for_testing(options: {
     if (options.context_key_value === "") {
         return false;
     }
-    return true;
+    return options.manually_open || options.has_error;
 }
 
 function panel_has_active_status_for_testing(status: string | undefined): boolean {
@@ -815,6 +817,112 @@ function display_topic_context(topic_context: PearTopicContext | undefined | nul
     };
 }
 
+const pear_topic_header_control_selector = ".pear-topic-header-control";
+
+function topic_header_work_label(display_context: PearDisplayTopicContext): string {
+    if (display_context.panel_git_status_class !== "clean") {
+        return display_context.panel_git_status_label;
+    }
+    return $t({defaultMessage: "work"});
+}
+
+function topic_header_work_title(display_context: PearDisplayTopicContext): string {
+    return [
+        display_context.panel_repo_label,
+        display_context.panel_worktree_label,
+        display_context.panel_git_ref_label,
+        display_context.workdir,
+    ]
+        .filter((part) => part.trim() !== "")
+        .join(" · ");
+}
+
+function render_topic_header_controls(options: {
+    stream: string | undefined;
+    topic: string | undefined;
+    topic_context: PearDisplayTopicContext | undefined;
+    active_run_status: string | undefined;
+}): void {
+    $(pear_topic_header_control_selector).remove();
+    const {stream, topic, topic_context} = options;
+    if (stream === undefined || topic === undefined || topic_context === undefined) {
+        return;
+    }
+    const stream_id = stream_data.get_stream_id(stream);
+    if (stream_id === undefined) {
+        return;
+    }
+    const runtime_label = topic_context.panel_runtime_label || $t({defaultMessage: "Pear"});
+    const runtime_status = options.active_run_status ?? "done";
+    const runtime_active = runtime_status === "running" || runtime_status === "queued";
+    const runtime_title = $t(
+        {defaultMessage: "Pear runtime: {runtime_label}"},
+        {runtime_label},
+    );
+    const work_label = topic_header_work_label(topic_context);
+    const work_title = topic_header_work_title(topic_context);
+    const $headers = $(".message_header_stream").filter((_index, header) => {
+        const $header = $(header);
+        return (
+            Number.parseInt($header.attr("data-stream-id") ?? "", 10) === stream_id &&
+            $header.attr("data-topic-name") === topic
+        );
+    });
+
+    $headers.each((_index, header) => {
+        const $controls = $(header).find(".recipient_bar_controls").first();
+        if ($controls.length === 0) {
+            return;
+        }
+        const $runtime_control = $("<button>", {
+            type: "button",
+            class: `pear-topic-header-control pear-topic-header-runtime-control pear-runtime-menu-trigger recipient-bar-control tippy-zulip-delayed-tooltip${
+                runtime_active ? " pear-liveness-active" : ""
+            }`,
+            "aria-label": runtime_title,
+            "data-tippy-content": runtime_title,
+        }).append(
+            $("<span>", {
+                class: `pear-ui-glyph pear-runtime-menu-glyph pear-runtime-status-${status_class(
+                    runtime_status,
+                )}${runtime_active ? " pear-thinking-glyph" : ""}`,
+                "aria-hidden": "true",
+                text: status_marker(runtime_status),
+            }),
+            $("<span>", {
+                class: "pear-runtime-menu-label",
+                text: runtime_label,
+            }),
+        );
+        const $work_control = $("<button>", {
+            type: "button",
+            class: `pear-topic-header-control pear-topic-header-work-control pear-panel-open-action recipient-bar-control pear-topic-header-work-${topic_context.panel_git_status_class} tippy-zulip-delayed-tooltip`,
+            "aria-label": $t(
+                {defaultMessage: "Open Pear work details: {work_label}"},
+                {work_label},
+            ),
+            "data-tippy-content": work_title || work_label,
+        }).append(
+            $("<span>", {
+                class: "pear-ui-glyph pear-topic-header-work-glyph",
+                "aria-hidden": "true",
+                text: topic_context.panel_git_status_class === "clean" ? "·" : "✷",
+            }),
+            $("<span>", {
+                class: "pear-topic-header-work-label",
+                text: work_label,
+            }),
+        );
+        const $topic_menu = $controls.find(".recipient-row-topic-menu").first();
+        if ($topic_menu.length > 0) {
+            $topic_menu.before($runtime_control, $work_control);
+        } else {
+            $controls.append($runtime_control, $work_control);
+        }
+    });
+    $(document).trigger("pear_liveness_markers_changed");
+}
+
 function fetch_git_tree_for_context(topic_context: PearTopicContext): void {
     const key = context_key(topic_context.stream, topic_context.topic);
     if (
@@ -1168,6 +1276,12 @@ function render(
         has_topic && topic_context?.stream === stream && topic_context.topic === topic
             ? display_topic_context(topic_context)
             : undefined;
+    render_topic_header_controls({
+        stream,
+        topic,
+        topic_context: display_context,
+        active_run_status: active_run?.status,
+    });
     const panel_header_state = panel_header_state_for_testing(active_run, {
         has_topic,
         show_workbench: workbench_open,

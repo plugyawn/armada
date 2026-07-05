@@ -1142,8 +1142,10 @@ function render(
     last_runs = runs;
     last_topic_context = topic_context;
     const {stream, topic} = current_context();
-    const has_topic = stream !== undefined && topic !== undefined;
+    const has_stream = stream !== undefined;
+    const has_topic = has_stream && topic !== undefined;
     const next_context_key = context_key(stream, topic);
+    const panel_context_key = next_context_key || stream || "";
     const active_run = active_display_run(runs);
     const manual_workbench_open = work_panel_open_by_context.get(next_context_key) ?? false;
     const viewport_allows_workbench = current_viewport_allows_workbench();
@@ -1153,7 +1155,7 @@ function render(
         has_error: viewport_allows_workbench && last_error !== "",
     });
     const panel_open = work_panel_open_for_testing({
-        context_key_value: next_context_key,
+        context_key_value: panel_context_key,
         manually_open: viewport_allows_workbench && manual_workbench_open,
         active_run_status: active_run?.status,
         has_error: viewport_allows_workbench && last_error !== "",
@@ -1162,19 +1164,22 @@ function render(
         force_reconcile: active_run === undefined,
     });
     const panel_status = active_run?.status ?? "idle";
-    const display_context = display_topic_context(topic_context);
+    const display_context =
+        has_topic && topic_context?.stream === stream && topic_context.topic === topic
+            ? display_topic_context(topic_context)
+            : undefined;
     const panel_header_state = panel_header_state_for_testing(active_run, {
         has_topic,
         show_workbench: workbench_open,
     });
     const render_state = {
         has_topic,
-        context_label: has_topic ? `${stream} > ${topic}` : "",
+        context_label: has_topic ? `${stream} > ${topic}` : (stream ?? ""),
         panel_open,
         show_workbench: workbench_open,
         panel_can_close: workbench_open,
         has_panel_menu: panel_header_state.has_panel_menu,
-        show_topic_control: has_topic,
+        show_topic_control: has_stream,
         show_runtime_trigger: panel_header_state.show_runtime_trigger,
         show_panel_header: panel_header_state.show_panel_header,
         panel_header_quiet:

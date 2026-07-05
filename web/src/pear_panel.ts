@@ -463,6 +463,8 @@ export function workbench_view_for_artifact_label(
             "repository",
             "runtime",
             "branch",
+            "commit",
+            "sha",
             "pr",
             "pull request",
             "session",

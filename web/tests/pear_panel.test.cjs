@@ -448,6 +448,8 @@ run_test("workbench_view_for_artifact_label", () => {
     assert.equal(pear_panel.workbench_view_for_artifact_label("Doc"), "canvas");
     assert.equal(pear_panel.workbench_view_for_artifact_label("Repository"), "history");
     assert.equal(pear_panel.workbench_view_for_artifact_label("Branch"), "history");
+    assert.equal(pear_panel.workbench_view_for_artifact_label("Commit"), "history");
+    assert.equal(pear_panel.workbench_view_for_artifact_label("SHA"), "history");
     assert.equal(pear_panel.workbench_view_for_artifact_label("Codex session"), "history");
     assert.equal(pear_panel.workbench_view_for_artifact_label("Verification"), undefined);
 });

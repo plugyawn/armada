@@ -385,13 +385,16 @@ export function work_panel_open_for_testing(options: {
     if (options.context_key_value === "") {
         return false;
     }
-    return (
-        workbench_open_for_testing(options) ||
-        run_shows_compact_panel_status(
-            options.active_run_status === undefined
-                ? undefined
-                : {status: options.active_run_status},
-        )
+    return true;
+}
+
+function panel_has_active_status_for_testing(status: string | undefined): boolean {
+    return run_shows_compact_panel_status(
+        status === undefined
+            ? undefined
+            : {
+                  status,
+              },
     );
 }
 
@@ -914,15 +917,29 @@ function has_active_run(runs: {status: string}[]): boolean {
     return runs.some((run) => run.status === "running" || run.status === "queued");
 }
 
-export function panel_header_state_for_testing(active_run: {
-    show_status: boolean;
-    has_actions: boolean;
-} | undefined): {
+export function panel_header_state_for_testing(
+    active_run:
+        | {
+              show_status: boolean;
+              has_actions: boolean;
+          }
+        | undefined,
+    options: {
+        has_topic?: boolean;
+        show_workbench?: boolean;
+    } = {},
+): {
     show_panel_header: boolean;
+    show_runtime_trigger: boolean;
     has_panel_menu: boolean;
 } {
+    const show_runtime_trigger = options.has_topic === true && options.show_workbench !== true;
     return {
-        show_panel_header: active_run?.show_status === true || active_run?.has_actions === true,
+        show_panel_header:
+            show_runtime_trigger ||
+            active_run?.show_status === true ||
+            active_run?.has_actions === true,
+        show_runtime_trigger,
         has_panel_menu: active_run?.has_actions === true,
     };
 }
@@ -1054,7 +1071,10 @@ function render(
     });
     const panel_status = active_run?.status ?? "idle";
     const display_context = display_topic_context(topic_context);
-    const panel_header_state = panel_header_state_for_testing(active_run);
+    const panel_header_state = panel_header_state_for_testing(active_run, {
+        has_topic,
+        show_workbench: workbench_open,
+    });
     const render_state = {
         has_topic,
         context_label: has_topic ? `${stream} > ${topic}` : "",
@@ -1062,8 +1082,10 @@ function render(
         show_workbench: workbench_open,
         panel_can_close: workbench_open,
         has_panel_menu: panel_header_state.has_panel_menu,
+        show_runtime_trigger: panel_header_state.show_runtime_trigger,
         show_panel_header: panel_header_state.show_panel_header,
         active_run_is_active: active_run?.is_active === true,
+        panel_has_active_status: panel_has_active_status_for_testing(active_run?.status),
         topic_context: display_context,
         active_run,
         error: last_error,

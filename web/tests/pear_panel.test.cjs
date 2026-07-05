@@ -60,6 +60,7 @@ run_test("template renders active status as visible text glyph phrase", () => {
     const html = render_pear_panel({
         panel_open: true,
         show_panel_header: true,
+        show_runtime_trigger: false,
         show_workbench: false,
         has_topic: true,
         has_panel_menu: false,
@@ -82,12 +83,33 @@ run_test("template renders active status as visible text glyph phrase", () => {
     assert.doesNotMatch(html, /pear-run-status-compact/);
 });
 
+run_test("template renders idle topic shell as compact runtime entry point", () => {
+    const html = render_pear_panel({
+        panel_open: true,
+        show_panel_header: true,
+        show_runtime_trigger: true,
+        show_workbench: false,
+        has_topic: true,
+        has_panel_menu: false,
+        panel_can_close: false,
+        active_run: undefined,
+        topic_context: undefined,
+    });
+
+    assert.match(html, /pear-panel-inner/);
+    assert.match(html, /pear-runtime-menu-trigger/);
+    assert.match(html, /Pear runtime/);
+    assert.doesNotMatch(html, /pear-run-actions/);
+    assert.doesNotMatch(html, /pear-workbench/);
+});
+
 run_test("template renders workbench without active run", () => {
     const html = render_pear_panel({
         panel_open: true,
         show_workbench: true,
         has_topic: true,
         show_panel_header: false,
+        show_runtime_trigger: false,
         panel_can_close: true,
         active_run: undefined,
         topic_context: {
@@ -134,6 +156,7 @@ run_test("template keeps volatile run metadata out of workbench chrome", () => {
         show_workbench: true,
         has_topic: true,
         show_panel_header: false,
+        show_runtime_trigger: false,
         panel_can_close: true,
         active_run_is_active: true,
         active_run: {
@@ -170,6 +193,7 @@ run_test("template keeps runtime metadata out of workbench content rail", () => 
         show_workbench: true,
         has_topic: true,
         show_panel_header: false,
+        show_runtime_trigger: false,
         panel_can_close: true,
         active_run: {
             show_status: true,
@@ -204,6 +228,7 @@ run_test("template renders canvas as a workbench pane", () => {
         show_workbench: true,
         has_topic: true,
         show_panel_header: false,
+        show_runtime_trigger: false,
         panel_can_close: true,
         active_run: undefined,
         topic_context: {
@@ -248,6 +273,7 @@ run_test("template renders diff rows without duplicate summary chips", () => {
         show_workbench: true,
         has_topic: true,
         show_panel_header: false,
+        show_runtime_trigger: false,
         panel_can_close: true,
         active_run: undefined,
         topic_context: {
@@ -384,6 +410,7 @@ run_test("topic_context_after_refresh_for_testing", () => {
 run_test("panel_header_state_for_testing", () => {
     assert.deepEqual(pear_panel.panel_header_state_for_testing(undefined), {
         show_panel_header: false,
+        show_runtime_trigger: false,
         has_panel_menu: false,
     });
     assert.deepEqual(
@@ -393,6 +420,23 @@ run_test("panel_header_state_for_testing", () => {
         }),
         {
             show_panel_header: false,
+            show_runtime_trigger: false,
+            has_panel_menu: false,
+        },
+    );
+    assert.deepEqual(pear_panel.panel_header_state_for_testing(undefined, {has_topic: true}), {
+        show_panel_header: true,
+        show_runtime_trigger: true,
+        has_panel_menu: false,
+    });
+    assert.deepEqual(
+        pear_panel.panel_header_state_for_testing(undefined, {
+            has_topic: true,
+            show_workbench: true,
+        }),
+        {
+            show_panel_header: false,
+            show_runtime_trigger: false,
             has_panel_menu: false,
         },
     );
@@ -403,6 +447,7 @@ run_test("panel_header_state_for_testing", () => {
         }),
         {
             show_panel_header: true,
+            show_runtime_trigger: false,
             has_panel_menu: false,
         },
     );
@@ -413,6 +458,7 @@ run_test("panel_header_state_for_testing", () => {
         }),
         {
             show_panel_header: true,
+            show_runtime_trigger: false,
             has_panel_menu: true,
         },
     );
@@ -514,7 +560,7 @@ run_test("work_panel_open_for_testing", () => {
             active_run_status: "done",
             has_error: false,
         }),
-        false,
+        true,
     );
     assert.equal(
         pear_panel.work_panel_open_for_testing({
@@ -559,7 +605,7 @@ run_test("work_panel_open_for_testing", () => {
             active_run_status: "failed",
             has_error: false,
         }),
-        false,
+        true,
     );
     assert.equal(
         pear_panel.work_panel_open_for_testing({

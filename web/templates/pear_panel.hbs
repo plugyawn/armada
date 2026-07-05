@@ -10,14 +10,16 @@
             </div>
         </div>
         {{/if}}
-        {{#if has_panel_menu}}
         <div class="pear-panel-actions">
+            {{#if show_runtime_trigger}}
             {{#unless show_workbench}}
             <button type="button" class="pear-runtime-menu-trigger pear-runtime-panel-trigger pear-icon-button icon-button icon-button-square icon-button-neutral tippy-zulip-delayed-tooltip" aria-label="{{t 'Pear runtime' }}" data-tippy-content="{{t 'Pear runtime' }}">
                 <span class="pear-ui-glyph pear-runtime-menu-glyph" aria-hidden="true">·</span>
                 <span class="pear-runtime-menu-label">{{t "Pear runtime" }}</span>
             </button>
             {{/unless}}
+            {{/if}}
+            {{#if has_panel_menu}}
             <details class="pear-run-actions pear-panel-run-actions" data-run-id="{{active_run.id}}">
                 <summary class="pear-run-actions-summary pear-icon-button icon-button icon-button-square icon-button-neutral tippy-zulip-delayed-tooltip" aria-label="{{t 'Pear work menu' }}" data-tippy-content="{{t 'Pear work menu' }}">
                     <i class="zulip-icon zulip-icon-more-vertical" aria-hidden="true"></i>
@@ -49,8 +51,8 @@
                     {{/if}}
                 </div>
             </details>
+            {{/if}}
         </div>
-        {{/if}}
     </div>
     {{/if}}
 

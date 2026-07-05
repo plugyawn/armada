@@ -276,6 +276,7 @@ body.pear-workbench-split-open {
 
 .pear-topic-context-status {
     align-self: center;
+    border: 1px solid transparent;
     border-radius: 4px;
     font-family: inherit;
     font-size: 0.82em;
@@ -285,29 +286,31 @@ body.pear-workbench-split-open {
 }
 
 .pear-topic-context-status-clean {
-    background: color-mix(
-        in srgb,
-        var(--color-text-success-text-action-button) 12%,
-        transparent
-    );
+    background: transparent;
     color: var(--color-text-success-text-action-button);
 }
 
 .pear-topic-context-status-dirty {
-    background: color-mix(
+    border-color: color-mix(
         in srgb,
-        var(--color-text-warning-text-action-button) 14%,
+        var(--color-text-warning-text-action-button) 38%,
         transparent
     );
-    color: var(--color-text-warning-text-action-button);
+    background: transparent;
+    color: color-mix(
+        in srgb,
+        var(--color-text-sidebar-row) 82%,
+        var(--color-text-warning-text-action-button) 18%
+    );
 }
 
 .pear-topic-context-status-unavailable {
-    background: color-mix(
+    border-color: color-mix(
         in srgb,
         var(--color-border-sidebar-subheader) 36%,
         transparent
     );
+    background: transparent;
     color: var(--color-text-sidebar-heading);
     opacity: var(--opacity-sidebar-heading);
 }
@@ -413,7 +416,7 @@ body.pear-workbench-split-open {
 
 .pear-workbench-title-glyph {
     color: var(--color-text-success-text-action-button);
-    font-size: 11px;
+    font-size: 13px;
 }
 
 .pear-workbench-title {

@@ -1493,7 +1493,7 @@ class PearSessionDefaultsTest(TestCase):
             tool_results=[],
         )
 
-        self.assertEqual(progress_message, "Partial answer *✦*")
+        self.assertEqual(progress_message, "Partial answer")
         self.assertNotIn("Thinking", progress_message)
         self.assertNotIn("Status:", progress_message)
 
@@ -1527,7 +1527,7 @@ class PearSessionDefaultsTest(TestCase):
 
         self.assertEqual(
             progress_message,
-            "I'll check the repo first.\n\nThe answer is almost ready. *✦*",
+            "I'll check the repo first.\n\nThe answer is almost ready.",
         )
         self.assertNotIn("private chain of thought", progress_message)
         self.assertNotIn("Status:", progress_message)
@@ -1586,7 +1586,7 @@ class PearSessionDefaultsTest(TestCase):
                 [
                     "I'll check the repo state.",
                     "```spoiler Ran 1 tool\n- · `/bin/bash -lc pwd`\n```",
-                    "Status checked. *✦*",
+                    "Status checked.",
                 ]
             ),
         )
@@ -1626,11 +1626,10 @@ class PearSessionDefaultsTest(TestCase):
             "\n\n".join(
                 [
                     "I'll run the checks.",
-                    "```spoiler Ran 1/2 tools ✦\n"
+                    "```spoiler Ran 1/2 tools\n"
                     "- · `/bin/bash -lc pwd`\n"
-                    "- ✦ `/bin/bash -lc pytest`\n"
+                    "- ⋅ `/bin/bash -lc pytest`\n"
                     "```",
-                    "*✦*",
                 ]
             ),
         )
@@ -1657,7 +1656,7 @@ class PearSessionDefaultsTest(TestCase):
             tool_results=[],
         )
 
-        self.assertEqual(progress_message, "Partial answer *✦*")
+        self.assertEqual(progress_message, "Partial answer")
 
     def test_build_worker_message_normalizes_markdown_image_syntax(self) -> None:
         progress_message = build_pear_worker_progress_message(
@@ -1697,7 +1696,7 @@ class PearSessionDefaultsTest(TestCase):
                 [
                     "[Pikachu](https://img.pokemondb.net/artwork/large/pikachu.jpg)",
                     "",
-                    "[Bulbasaur](https://img.pokemondb.net/artwork/large/bulbasaur.jpg) *✦*",
+                    "[Bulbasaur](https://img.pokemondb.net/artwork/large/bulbasaur.jpg)",
                 ]
             ),
         )
@@ -4377,7 +4376,7 @@ class PearSessionDefaultsTest(TestCase):
                 self.active_checks.append((stream, topic))
                 return {
                     "message_id": 401,
-                    "content": "I’m checking the failing test. *✦*",
+                    "content": "I’m checking the failing test.",
                 }
 
             def start(
@@ -4462,7 +4461,7 @@ class PearSessionDefaultsTest(TestCase):
                     "message_id": 401,
                     "content": (
                         "I’m checking the failing test.\n\n"
-                        f"{PEAR_STEERING_QUEUED_MARKDOWN} *✦*"
+                        + PEAR_STEERING_QUEUED_MARKDOWN
                     ),
                 }
             ],
@@ -6124,7 +6123,7 @@ class PearSessionDefaultsTest(TestCase):
 
         self.assertEqual(
             [message["content"] for message in updated_messages],
-            [PEAR_ACTIVE_THINKING_MARKDOWN, f"A {PEAR_ACTIVE_MARKDOWN_PREFIX}", "AB"],
+            [PEAR_ACTIVE_THINKING_MARKDOWN, "A", "AB"],
         )
         self.assertFalse(
             any(
@@ -6229,13 +6228,10 @@ class PearSessionDefaultsTest(TestCase):
         )
 
         updated_contents = [str(message["content"]) for message in updated_messages]
-        self.assertTrue(
-            any(
-                content.rstrip().endswith(PEAR_ACTIVE_MARKDOWN_PREFIX)
-                for content in updated_contents
-            )
+        self.assertTrue(updated_contents)
+        self.assertFalse(
+            any(PEAR_ACTIVE_MARKDOWN_PREFIX in content for content in updated_contents)
         )
-        self.assertFalse(updated_contents[-1].rstrip().endswith(PEAR_ACTIVE_MARKDOWN_PREFIX))
 
     def test_run_worker_turn_cancels_runtime_when_cancel_requested(self) -> None:
         updated_messages: list[dict[str, object]] = []

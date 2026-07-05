@@ -173,6 +173,7 @@ let initialized = false;
 let refresh_timer: number | undefined;
 let live_refresh_timer: number | undefined;
 let live_refresh_in_flight = false;
+let live_refresh_backoff_until = 0;
 let last_error = "";
 let last_runs: PearRun[] = [];
 let last_topic_context: PearTopicContext | null | undefined;
@@ -191,7 +192,8 @@ const canvas_loading_contexts = new Set<string>();
 const canvas_fetch_sequence_by_context = new Map<string, number>();
 const canvas_rendering_contexts = new Set<string>();
 const canvas_render_sequence_by_context = new Map<string, number>();
-const LIVE_REFRESH_INTERVAL_MS = 125;
+const LIVE_REFRESH_INTERVAL_MS = 500;
+const LIVE_REFRESH_RATE_LIMIT_BACKOFF_MS = 1500;
 const FULL_REFRESH_INTERVAL_MS = 5000;
 const CONTEXT_REFRESH_INTERVAL_MS = 60_000;
 const WORKBENCH_MIN_VIEWPORT_WIDTH_PX = 320;
@@ -1293,10 +1295,11 @@ function schedule_live_refresh(active_run: {status: string} | undefined): void {
     if (live_refresh_timer !== undefined || live_refresh_in_flight) {
         return;
     }
+    const delay = Math.max(LIVE_REFRESH_INTERVAL_MS, live_refresh_backoff_until - Date.now());
     live_refresh_timer = window.setTimeout(() => {
         live_refresh_timer = undefined;
         refresh({live: true});
-    }, LIVE_REFRESH_INTERVAL_MS);
+    }, delay);
 }
 
 function render_state_key(render_state: object): string {
@@ -1320,6 +1323,14 @@ export function render_state_changed_for_testing(
     render_state: object,
 ): boolean {
     return previous_key !== render_state_key(render_state);
+}
+
+function pear_rate_limit_backoff_ms(xhr: JQuery.jqXHR): number {
+    const retry_after = Number(xhr.getResponseHeader("retry-after"));
+    if (Number.isFinite(retry_after) && retry_after > 0) {
+        return Math.max(LIVE_REFRESH_RATE_LIMIT_BACKOFF_MS, Math.ceil(retry_after * 1000));
+    }
+    return LIVE_REFRESH_RATE_LIMIT_BACKOFF_MS;
 }
 
 function render(
@@ -1451,6 +1462,9 @@ export function refresh(options: {force_context?: boolean; live?: boolean} = {})
         url: "/json/pear/runs",
         data,
         success(raw_data) {
+            if (live) {
+                live_refresh_backoff_until = 0;
+            }
             if (!is_pear_runs_response(raw_data)) {
                 last_error = $t({defaultMessage: "Pear returned an invalid runs payload."});
                 render();
@@ -1476,6 +1490,10 @@ export function refresh(options: {force_context?: boolean; live?: boolean} = {})
         },
         error(xhr) {
             if (xhr.readyState === 0) {
+                return;
+            }
+            if (live && xhr.status === 429) {
+                live_refresh_backoff_until = Date.now() + pear_rate_limit_backoff_ms(xhr);
                 return;
             }
             last_error = $t({defaultMessage: "Pear status is unavailable."});

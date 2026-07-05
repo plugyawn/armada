@@ -820,6 +820,31 @@ function display_topic_context(topic_context: PearTopicContext | undefined | nul
 
 const pear_topic_header_control_selector = ".pear-topic-header-control";
 
+function topic_header_controls_are_current(
+    $headers: JQuery,
+    control_key: string,
+    show_work_control: boolean,
+): boolean {
+    if ($headers.length === 0) {
+        return false;
+    }
+    return $headers.toArray().every((header) => {
+        const $header = $(header);
+        const has_runtime_control =
+            $header
+                .find(".pear-topic-header-runtime-control")
+                .filter((_index, element) => $(element).attr("data-pear-header-key") === control_key)
+                .length > 0;
+        const has_work_control =
+            !show_work_control ||
+            $header
+                .find(".pear-topic-header-work-control")
+                .filter((_index, element) => $(element).attr("data-pear-header-key") === control_key)
+                .length > 0;
+        return has_runtime_control && has_work_control;
+    });
+}
+
 function topic_header_work_label(display_context: PearDisplayTopicContext): string {
     if (display_context.panel_git_status_class !== "clean") {
         const changed_count = display_context.git.changed_count ?? 0;
@@ -876,6 +901,16 @@ function render_topic_header_controls(options: {
     const work_label = topic_header_work_label(topic_context);
     const show_work_control = true;
     const work_title = topic_header_work_title(topic_context);
+    const control_key = JSON.stringify({
+        stream_id,
+        topic,
+        runtime_label,
+        runtime_active,
+        reasoning_effort: topic_context.reasoning_effort,
+        work_label,
+        work_title,
+        git_status_class: topic_context.panel_git_status_class,
+    });
     const $headers = $(".message_header_stream").filter((_index, header) => {
         const $header = $(header);
         return (
@@ -883,6 +918,11 @@ function render_topic_header_controls(options: {
             $header.attr("data-topic-name") === topic
         );
     });
+    if (topic_header_controls_are_current($headers, control_key, show_work_control)) {
+        return;
+    }
+
+    $(pear_topic_header_control_selector).remove();
 
     $headers.each((_index, header) => {
         const $controls = $(header).find(".recipient_bar_controls").first();
@@ -896,6 +936,7 @@ function render_topic_header_controls(options: {
             }`,
             "aria-label": runtime_title,
             "data-tippy-content": runtime_title,
+            "data-pear-header-key": control_key,
         }).append(
             $("<span>", {
                 class: "pear-runtime-menu-label",
@@ -919,6 +960,7 @@ function render_topic_header_controls(options: {
                     {work_label},
                 ),
                 title: work_title || work_label,
+                "data-pear-header-key": control_key,
             }).append(
                 $("<span>", {
                     class: "pear-topic-header-work-label",
@@ -1439,6 +1481,9 @@ function render(
 
 export function refresh(options: {force_context?: boolean; live?: boolean} = {}): void {
     const live = options.live === true;
+    if (!live && has_active_run(last_runs) && live_refresh_backoff_until > Date.now()) {
+        return;
+    }
     if (live && live_refresh_in_flight) {
         return;
     }
@@ -1492,7 +1537,7 @@ export function refresh(options: {force_context?: boolean; live?: boolean} = {})
             if (xhr.readyState === 0) {
                 return;
             }
-            if (live && xhr.status === 429) {
+            if ((live || has_active_run(last_runs)) && xhr.status === 429) {
                 live_refresh_backoff_until = Date.now() + pear_rate_limit_backoff_ms(xhr);
                 return;
             }

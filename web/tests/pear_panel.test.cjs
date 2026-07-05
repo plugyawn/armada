@@ -389,6 +389,14 @@ run_test("workbench_view_for_artifact_label", () => {
     assert.equal(pear_panel.workbench_view_for_artifact_label("Verification"), undefined);
 });
 
+run_test("workbench_viewport_allows_split_for_testing", () => {
+    assert.equal(pear_panel.workbench_viewport_allows_split_for_testing(390), false);
+    assert.equal(pear_panel.workbench_viewport_allows_split_for_testing(900), false);
+    assert.equal(pear_panel.workbench_viewport_allows_split_for_testing(1199), false);
+    assert.equal(pear_panel.workbench_viewport_allows_split_for_testing(1200), true);
+    assert.equal(pear_panel.workbench_viewport_allows_split_for_testing(1440), true);
+});
+
 run_test("work_panel_open_for_testing", () => {
     assert.equal(
         pear_panel.work_panel_open_for_testing({

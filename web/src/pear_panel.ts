@@ -168,6 +168,7 @@ const git_tree_loading_contexts = new Set<string>();
 const LIVE_REFRESH_INTERVAL_MS = 125;
 const FULL_REFRESH_INTERVAL_MS = 5000;
 const CONTEXT_REFRESH_INTERVAL_MS = 60_000;
+const WORKBENCH_MIN_VIEWPORT_WIDTH_PX = 1200;
 
 function compact_panel_text(text: string): string {
     return text
@@ -310,6 +311,14 @@ function run_shows_compact_panel_status(run: {status: string} | undefined): bool
     return run?.status === "running" || run?.status === "queued" || run?.status === "paused";
 }
 
+export function workbench_viewport_allows_split_for_testing(width: number): boolean {
+    return width >= WORKBENCH_MIN_VIEWPORT_WIDTH_PX;
+}
+
+function current_viewport_allows_workbench(): boolean {
+    return workbench_viewport_allows_split_for_testing(window.innerWidth);
+}
+
 export function workbench_open_for_testing(options: {
     context_key_value: string;
     manually_open: boolean;
@@ -418,7 +427,8 @@ export function workbench_view_for_artifact_label(
 
 export function open_work_details(requested_view?: PearWorkbenchView): void {
     const key = current_context_key();
-    if (key !== "") {
+    const viewport_allows_workbench = current_viewport_allows_workbench();
+    if (key !== "" && viewport_allows_workbench) {
         work_panel_open_by_context.set(key, true);
         if (last_topic_context !== undefined && last_topic_context !== null) {
             workbench_view_by_context.set(
@@ -432,8 +442,13 @@ export function open_work_details(requested_view?: PearWorkbenchView): void {
         } else if (requested_view !== undefined) {
             workbench_view_by_context.set(key, requested_view);
         }
+    } else if (key !== "") {
+        work_panel_open_by_context.set(key, false);
     }
     render();
+    if (!viewport_allows_workbench) {
+        return;
+    }
     if (!right_sidebar_is_visible()) {
         $("#userlist-toggle-button").trigger("click");
     }
@@ -806,16 +821,18 @@ function render(
     const has_topic = stream !== undefined && topic !== undefined;
     const next_context_key = context_key(stream, topic);
     const active_run = active_display_run(runs);
+    const manual_workbench_open = work_panel_open_by_context.get(next_context_key) ?? false;
+    const viewport_allows_workbench = current_viewport_allows_workbench();
     const workbench_open = workbench_open_for_testing({
         context_key_value: next_context_key,
-        manually_open: work_panel_open_by_context.get(next_context_key) ?? false,
-        has_error: last_error !== "",
+        manually_open: viewport_allows_workbench && manual_workbench_open,
+        has_error: viewport_allows_workbench && last_error !== "",
     });
     const panel_open = work_panel_open_for_testing({
         context_key_value: next_context_key,
-        manually_open: work_panel_open_by_context.get(next_context_key) ?? false,
+        manually_open: viewport_allows_workbench && manual_workbench_open,
         active_run_status: active_run?.status,
-        has_error: last_error !== "",
+        has_error: viewport_allows_workbench && last_error !== "",
     });
     pear_run_state.set_active_run_result_messages(runs, {
         force_reconcile: active_run === undefined,
@@ -1018,6 +1035,9 @@ export function initialize(): void {
     $("body").on("click", "#pear-side-start", () => {
         start_side_session();
     });
+    $(window).on("resize.pear_panel", () => {
+        render();
+    });
     refresh();
     refresh_timer = window.setInterval(refresh, FULL_REFRESH_INTERVAL_MS);
 }
@@ -1027,6 +1047,7 @@ export function stop(): void {
         window.clearInterval(refresh_timer);
         refresh_timer = undefined;
     }
+    $(window).off("resize.pear_panel");
     clear_live_refresh();
     live_refresh_in_flight = false;
 }

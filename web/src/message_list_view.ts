@@ -310,7 +310,7 @@ function pear_thinking_glyph_containers($scope: JQuery<HTMLElement | Document>):
 function build_pear_thinking_glyph(): Element {
     const glyph = document.createElementNS("http://www.w3.org/1999/xhtml", "span");
     glyph.classList.add("pear-thinking-glyph");
-    glyph.textContent = PEAR_ACTIVE_GLYPH;
+    glyph.textContent = pear_thinking_glyphs[0];
     return glyph;
 }
 

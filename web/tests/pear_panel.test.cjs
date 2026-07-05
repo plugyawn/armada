@@ -677,7 +677,7 @@ run_test("work_panel_open_for_testing", () => {
             active_run_status: "done",
             has_error: false,
         }),
-        true,
+        false,
     );
     assert.equal(
         pear_panel.work_panel_open_for_testing({
@@ -695,7 +695,7 @@ run_test("work_panel_open_for_testing", () => {
             active_run_status: "running",
             has_error: false,
         }),
-        true,
+        false,
     );
     assert.equal(
         pear_panel.work_panel_open_for_testing({
@@ -704,7 +704,7 @@ run_test("work_panel_open_for_testing", () => {
             active_run_status: "queued",
             has_error: false,
         }),
-        true,
+        false,
     );
     assert.equal(
         pear_panel.work_panel_open_for_testing({
@@ -713,7 +713,7 @@ run_test("work_panel_open_for_testing", () => {
             active_run_status: "paused",
             has_error: false,
         }),
-        true,
+        false,
     );
     assert.equal(
         pear_panel.work_panel_open_for_testing({
@@ -722,7 +722,7 @@ run_test("work_panel_open_for_testing", () => {
             active_run_status: "failed",
             has_error: false,
         }),
-        true,
+        false,
     );
     assert.equal(
         pear_panel.work_panel_open_for_testing({

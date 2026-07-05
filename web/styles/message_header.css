@@ -287,6 +287,65 @@
     }
 }
 
+.pear-topic-header-control {
+    appearance: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    min-width: 0;
+    max-width: min(13em, 30vw);
+    height: 22px;
+    margin: 0 1px;
+    padding: 0 5px;
+    border: 0;
+    border-radius: 4px;
+    background: transparent;
+    color: var(--color-message-header-icon-interactive);
+    cursor: pointer;
+    font: inherit;
+    font-size: calc(12em / 15);
+    line-height: 1;
+    white-space: nowrap;
+
+    &:hover,
+    &:focus-visible {
+        background-color: hsl(0deg 0% 100% / 16%);
+        color: var(--color-text-message-header);
+        outline: none;
+    }
+
+    &.active-right-sidebar-menu {
+        background-color: hsl(0deg 0% 100% / 20%);
+        color: var(--color-text-message-header);
+    }
+
+    .pear-ui-glyph {
+        flex: 0 0 auto;
+        font-family: "Source Code Pro", monospace;
+        font-size: 1em;
+        line-height: 1;
+    }
+
+    .pear-runtime-menu-label,
+    .pear-topic-header-work-label {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        font-family: "Source Code Pro", monospace;
+        font-weight: 700;
+        letter-spacing: 0;
+    }
+}
+
+.pear-topic-header-work-clean {
+    color: var(--color-message-header-icon-non-interactive);
+}
+
+.pear-topic-header-work-dirty {
+    color: var(--color-text-warning-text-action-button);
+}
+
 .on_hover_topic_read {
     opacity: 0.7;
 

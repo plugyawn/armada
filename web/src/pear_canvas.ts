@@ -204,7 +204,7 @@ function load_canvas(stream: string, topic: string): void {
         $("<span>")
             .addClass("pear-ui-glyph pear-thinking-glyph")
             .attr("aria-hidden", "true")
-            .text("✦")
+            .text("·")
             .appendTo($loading);
         $("<span>")
             .text($t({defaultMessage: "Thinking"}))

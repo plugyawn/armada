@@ -252,7 +252,7 @@ function status_marker(status: string): string {
             return "✧";
         case "queued":
         case "running":
-            return "✦";
+            return "·";
         default:
             return "·";
     }
@@ -280,7 +280,7 @@ export function panel_runtime_label_for_testing(options: {
         return "";
     }
     const effort = compact_reasoning_effort(options.reasoning_effort);
-    return effort === "" ? model : `${model} · ${effort}`;
+    return effort === "" ? model : `${model} / ${effort}`;
 }
 
 function is_pear_runs_response(data: unknown): data is PearRunsResponse {
@@ -711,7 +711,7 @@ function display_topic_context(topic_context: PearTopicContext | undefined | nul
         git.repo_name?.trim() ||
         $t({defaultMessage: "No repo pinned"});
     const panel_worktree_label =
-        git.worktree_name?.trim() || topic_context.worktree_label?.trim() || topic_context.topic;
+        topic_context.worktree_label?.trim() || topic_context.topic || git.worktree_name?.trim() || "";
     const workbench_meta = [
         workbench_repo_label,
         git.branch?.trim() ?? "",
@@ -823,7 +823,7 @@ function topic_header_work_label(display_context: PearDisplayTopicContext): stri
     if (display_context.panel_git_status_class !== "clean") {
         return display_context.panel_git_status_label;
     }
-    return $t({defaultMessage: "work"});
+    return $t({defaultMessage: "clean"});
 }
 
 function topic_header_work_title(display_context: PearDisplayTopicContext): string {
@@ -860,6 +860,7 @@ function render_topic_header_controls(options: {
         {runtime_label},
     );
     const work_label = topic_header_work_label(topic_context);
+    const show_work_control = topic_context.panel_git_status_class !== "clean";
     const work_title = topic_header_work_title(topic_context);
     const $headers = $(".message_header_stream").filter((_index, header) => {
         const $header = $(header);
@@ -894,30 +895,40 @@ function render_topic_header_controls(options: {
                 text: runtime_label,
             }),
         );
-        const $work_control = $("<button>", {
-            type: "button",
-            class: `pear-topic-header-control pear-topic-header-work-control pear-panel-open-action recipient-bar-control pear-topic-header-work-${topic_context.panel_git_status_class} tippy-zulip-delayed-tooltip`,
-            "aria-label": $t(
-                {defaultMessage: "Open Pear work details: {work_label}"},
-                {work_label},
-            ),
-            "data-tippy-content": work_title || work_label,
-        }).append(
-            $("<span>", {
-                class: "pear-ui-glyph pear-topic-header-work-glyph",
-                "aria-hidden": "true",
-                text: topic_context.panel_git_status_class === "clean" ? "·" : "✷",
-            }),
-            $("<span>", {
-                class: "pear-topic-header-work-label",
-                text: work_label,
-            }),
-        );
+        let $work_control: JQuery | undefined;
+        if (show_work_control) {
+            $runtime_control.addClass("pear-topic-header-runtime-before-work");
+            $work_control = $("<button>", {
+                type: "button",
+                class: `pear-topic-header-control pear-topic-header-work-control pear-panel-open-action recipient-bar-control pear-topic-header-work-${topic_context.panel_git_status_class} tippy-zulip-delayed-tooltip`,
+                "aria-label": $t(
+                    {defaultMessage: "Open Pear work details: {work_label}"},
+                    {work_label},
+                ),
+                "data-tippy-content": work_title || work_label,
+            }).append(
+                $("<span>", {
+                    class: "pear-ui-glyph pear-topic-header-work-glyph",
+                    "aria-hidden": "true",
+                    text: "±",
+                }),
+                $("<span>", {
+                    class: "pear-topic-header-work-label",
+                    text: work_label,
+                }),
+            );
+        }
         const $topic_menu = $controls.find(".recipient-row-topic-menu").first();
         if ($topic_menu.length > 0) {
-            $topic_menu.before($runtime_control, $work_control);
+            $topic_menu.before($runtime_control);
+            if ($work_control !== undefined) {
+                $topic_menu.before($work_control);
+            }
         } else {
-            $controls.append($runtime_control, $work_control);
+            $controls.append($runtime_control);
+            if ($work_control !== undefined) {
+                $controls.append($work_control);
+            }
         }
     });
     $(document).trigger("pear_liveness_markers_changed");

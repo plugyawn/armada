@@ -38,8 +38,8 @@ run_test("render_state_changed_for_testing", () => {
 });
 
 run_test("status_marker_for_testing", () => {
-    assert.equal(pear_panel.status_marker_for_testing("running"), "✦");
-    assert.equal(pear_panel.status_marker_for_testing("queued"), "✦");
+    assert.equal(pear_panel.status_marker_for_testing("running"), "·");
+    assert.equal(pear_panel.status_marker_for_testing("queued"), "·");
     assert.equal(pear_panel.status_marker_for_testing("paused"), "✧");
     assert.equal(pear_panel.status_marker_for_testing("failed"), "✷");
     assert.equal(pear_panel.status_marker_for_testing("cancelled"), "✷");
@@ -60,11 +60,11 @@ run_test("panel_runtime_label_for_testing", () => {
     assert.equal(pear_panel.panel_runtime_label_for_testing({}), "");
     assert.equal(
         pear_panel.panel_runtime_label_for_testing({model: "gpt-5.5", reasoning_effort: "high"}),
-        "gpt-5.5 · h",
+        "gpt-5.5 / h",
     );
     assert.equal(
         pear_panel.panel_runtime_label_for_testing({model: "gpt-5.5", reasoning_effort: "xhigh"}),
-        "gpt-5.5 · xh",
+        "gpt-5.5 / xh",
     );
     assert.equal(
         pear_panel.panel_runtime_label_for_testing({model: "codex-spark"}),
@@ -86,18 +86,18 @@ run_test("template renders active status as visible text glyph phrase", () => {
             show_status: true,
             status_class: "active",
             status_label: "working",
-            status_marker: "✦",
+            status_marker: "·",
             is_active: true,
         },
         topic_context: undefined,
     });
 
     assert.match(html, /pear-run-status-row pear-run-status-active pear-liveness-active/);
-    assert.match(html, /aria-label="working ✦"/);
+    assert.match(html, /aria-label="working ·"/);
     assert.match(html, /<span class="pear-panel-status-label">working<\/span>/);
     assert.match(
         html,
-        /<span class="pear-ui-glyph pear-run-status-glyph pear-thinking-glyph">✦<\/span>/,
+        /<span class="pear-ui-glyph pear-run-status-glyph pear-thinking-glyph">·<\/span>/,
     );
     assert.doesNotMatch(html, /aria-hidden="true">✦<\/span>/);
     assert.doesNotMatch(html, /pear-run-status-compact/);
@@ -121,7 +121,7 @@ run_test("template renders idle topic shell as compact runtime entry point", () 
             panel_git_status_label: "clean",
             panel_git_status_class: "clean",
             panel_git_ref_label: "main / a3f92c1",
-            panel_runtime_label: "gpt-5.5 · xh",
+            panel_runtime_label: "gpt-5.5 / xh",
         },
     });
 
@@ -133,7 +133,7 @@ run_test("template renders idle topic shell as compact runtime entry point", () 
     assert.match(html, /pear-runtime-menu-trigger/);
     assert.match(html, /pear-topic-runtime-name/);
     assert.match(html, /<span class="pear-topic-runtime-name">translated: Model<\/span>/);
-    assert.match(html, /<span class="pear-runtime-menu-label">gpt-5.5 · xh<\/span>/);
+    assert.match(html, /<span class="pear-runtime-menu-label">gpt-5.5 \/ xh<\/span>/);
     assert.doesNotMatch(html, /<span class="pear-runtime-menu-label">translated: Pear<\/span>/);
     assert.match(html, /pear-topic-context-label">translated: Repo<\/span>/);
     assert.match(html, /pear-topic-context-main" title="zulip\/zulip">zulip\/zulip<\/span>/);
@@ -214,7 +214,7 @@ run_test("template renders workbench without active run", () => {
             panel_git_status_label: "2 files",
             panel_git_status_class: "dirty",
             panel_git_ref_label: "main / a3f92c1",
-            panel_runtime_label: "gpt-5.5 · h",
+            panel_runtime_label: "gpt-5.5 / h",
             workbench_title: "routing-fix",
             workbench_meta: "devel / routing-fix / a3f92c1",
             workbench_diff_selected: false,

@@ -113,8 +113,16 @@ let context_refresh_timer: number | undefined;
 
 const RUNTIME_CONTEXT_REFRESH_INTERVAL_MS = 60_000;
 const runtime_menu_selector = "#pear-panel .pear-runtime-menu-trigger";
+const forbidden_header_mount_selectors = [
+    "#top_navbar",
+    "#navbar-middle",
+    "#message_view_header",
+    ".top-navbar-container",
+    ".message-header-navbar-title",
+];
 
 export const runtime_menu_selector_for_testing = runtime_menu_selector;
+export const forbidden_header_mount_selectors_for_testing = forbidden_header_mount_selectors;
 
 const fallback_efforts: PearReasoningEffort[] = [
     {effort: "low", label: "Low"},

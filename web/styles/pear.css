@@ -309,7 +309,7 @@ body.pear-workbench-split-open {
             var(--color-border-sidebar-subheader) 62%,
             transparent
         );
-    border-radius: 9px;
+    border-radius: 8px;
     background: color-mix(
         in srgb,
         var(--color-background-hover-narrow-filter) 22%,
@@ -523,6 +523,93 @@ body.pear-workbench-split-open {
 
 .pear-git-tree-status {
     max-height: 120px;
+}
+
+.pear-workbench-canvas {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 7px;
+    border: 1px solid
+        color-mix(
+            in srgb,
+            var(--color-border-sidebar-subheader) 62%,
+            transparent
+        );
+    border-radius: 9px;
+    background: color-mix(
+        in srgb,
+        var(--color-background-hover-narrow-filter) 22%,
+        transparent
+    );
+    padding: 7px;
+}
+
+.pear-workbench-canvas-toolbar {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.pear-workbench-canvas-path {
+    min-width: 0;
+    overflow: hidden;
+    color: var(--color-text-sidebar-heading);
+    font-family: monospace;
+    font-size: 10px;
+    line-height: 13px;
+    opacity: var(--opacity-sidebar-heading);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.pear-workbench-canvas-open {
+    flex: 0 0 auto;
+    border: 0;
+    border-bottom: 1px solid transparent;
+    background: transparent;
+    color: var(--color-text-sidebar-heading);
+    cursor: pointer;
+    font: inherit;
+    font-size: 10px;
+    font-weight: 600;
+    line-height: 13px;
+    opacity: var(--opacity-sidebar-heading);
+    padding: 0 1px 1px;
+}
+
+.pear-workbench-canvas-open:hover,
+.pear-workbench-canvas-open:focus-visible {
+    border-bottom-color: currentcolor;
+    color: var(--color-text-default);
+    opacity: 1;
+    outline: none;
+}
+
+.pear-workbench-canvas-rendered,
+.pear-workbench-canvas-source {
+    max-height: 240px;
+    overflow: auto;
+    color: var(--color-text-default);
+    font-size: 11px;
+    line-height: 16px;
+    overflow-wrap: anywhere;
+}
+
+.pear-workbench-canvas-rendered > :first-child {
+    margin-top: 0;
+}
+
+.pear-workbench-canvas-rendered > :last-child {
+    margin-bottom: 0;
+}
+
+.pear-workbench-canvas-source {
+    margin: 0;
+    font-family: monospace;
+    white-space: pre-wrap;
 }
 
 .pear-file-added .pear-file-status,

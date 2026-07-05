@@ -58,11 +58,13 @@ run_test("template renders workbench without active run", () => {
         topic_context: {
             workbench_diff_selected: false,
             workbench_history_selected: true,
+            workbench_canvas_selected: false,
             workbench_side_selected: false,
             workbench_diff_disabled: false,
             workbench_history_disabled: false,
             diff_tab_label: "diff",
             history_tab_label: "history",
+            canvas_tab_label: "canvas",
             side_tab_label: "whisper",
             workbench_view: "history",
             git_tree_loading: false,
@@ -82,6 +84,7 @@ run_test("template renders workbench without active run", () => {
     assert.match(html, /pear-workbench-close/);
     assert.match(html, /diff/);
     assert.match(html, /history/);
+    assert.match(html, /canvas/);
     assert.match(html, /whisper/);
     assert.doesNotMatch(html, /pear-workbench-title/);
     assert.doesNotMatch(html, /pear-workbench-runtime/);
@@ -106,11 +109,13 @@ run_test("template keeps volatile run metadata out of workbench chrome", () => {
         topic_context: {
             workbench_diff_selected: true,
             workbench_history_selected: false,
+            workbench_canvas_selected: false,
             workbench_side_selected: false,
             workbench_diff_disabled: false,
             workbench_history_disabled: false,
             diff_tab_label: "diff",
             history_tab_label: "history",
+            canvas_tab_label: "canvas",
             side_tab_label: "whisper",
             workbench_view: "diff",
             has_workbench_diff: false,
@@ -138,11 +143,13 @@ run_test("template keeps runtime metadata out of workbench content rail", () => 
         topic_context: {
             workbench_diff_selected: true,
             workbench_history_selected: false,
+            workbench_canvas_selected: false,
             workbench_side_selected: false,
             workbench_diff_disabled: false,
             workbench_history_disabled: false,
             diff_tab_label: "diff",
             history_tab_label: "history",
+            canvas_tab_label: "canvas",
             side_tab_label: "whisper",
             workbench_view: "diff",
             has_workbench_diff: false,
@@ -156,6 +163,50 @@ run_test("template keeps runtime metadata out of workbench content rail", () => 
     assert.doesNotMatch(html, /No committed work yet/);
 });
 
+run_test("template renders canvas as a workbench pane", () => {
+    const html = render_pear_panel({
+        panel_open: true,
+        show_workbench: true,
+        has_topic: true,
+        show_panel_header: false,
+        panel_can_close: true,
+        active_run: undefined,
+        topic_context: {
+            workbench_diff_selected: false,
+            workbench_history_selected: false,
+            workbench_canvas_selected: true,
+            workbench_side_selected: false,
+            workbench_diff_disabled: false,
+            workbench_history_disabled: false,
+            diff_tab_label: "diff",
+            history_tab_label: "history",
+            canvas_tab_label: "canvas",
+            side_tab_label: "whisper",
+            workbench_view: "canvas",
+            canvas_loading: false,
+            canvas_error: "",
+            canvas_rendering: false,
+            canvas_title: ".pear/CANVAS.md",
+            canvas_has_content: true,
+            canvas_has_rendered_html: true,
+            canvas_rendered_html: "<p>Project note</p>",
+            canvas_render_failed: false,
+            canvas: {
+                content: "Project note",
+            },
+        },
+    });
+
+    assert.match(html, /data-pear-workbench-view="canvas"/);
+    assert.match(html, /pear-workbench-canvas/);
+    assert.match(html, /pear-workbench-canvas-rendered rendered_markdown/);
+    assert.match(html, /<p>Project note<\/p>/);
+    assert.match(html, /pear-workbench-canvas-open/);
+    assert.match(html, /\.pear\/CANVAS\.md/);
+    assert.doesNotMatch(html, /pear-workbench-title/);
+    assert.doesNotMatch(html, /pear-workbench-runtime/);
+});
+
 run_test("template renders diff rows without duplicate summary chips", () => {
     const html = render_pear_panel({
         panel_open: true,
@@ -167,11 +218,13 @@ run_test("template renders diff rows without duplicate summary chips", () => {
         topic_context: {
             workbench_diff_selected: true,
             workbench_history_selected: false,
+            workbench_canvas_selected: false,
             workbench_side_selected: false,
             workbench_diff_disabled: false,
             workbench_history_disabled: false,
             diff_tab_label: "diff 2",
             history_tab_label: "history",
+            canvas_tab_label: "canvas",
             side_tab_label: "whisper",
             workbench_view: "diff",
             has_workbench_diff: true,
@@ -379,10 +432,20 @@ run_test("workbench_view_for_testing", () => {
         }),
         "side",
     );
+    assert.equal(
+        pear_panel.workbench_view_for_testing({
+            requested: "canvas",
+            has_diff: true,
+            has_history: true,
+        }),
+        "canvas",
+    );
 });
 
 run_test("workbench_view_for_artifact_label", () => {
     assert.equal(pear_panel.workbench_view_for_artifact_label("Diff"), "diff");
+    assert.equal(pear_panel.workbench_view_for_artifact_label("Canvas"), "canvas");
+    assert.equal(pear_panel.workbench_view_for_artifact_label("Doc"), "canvas");
     assert.equal(pear_panel.workbench_view_for_artifact_label("Repository"), "history");
     assert.equal(pear_panel.workbench_view_for_artifact_label("Branch"), "history");
     assert.equal(pear_panel.workbench_view_for_artifact_label("Codex session"), "history");

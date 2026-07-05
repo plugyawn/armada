@@ -898,12 +898,12 @@ function render_topic_header_controls(options: {
             $runtime_control.addClass("pear-topic-header-runtime-before-work");
             $work_control = $("<button>", {
                 type: "button",
-                class: `pear-topic-header-control pear-topic-header-work-control pear-panel-open-action recipient-bar-control pear-topic-header-work-${topic_context.panel_git_status_class} tippy-zulip-delayed-tooltip`,
+                class: `pear-topic-header-control pear-topic-header-work-control pear-panel-open-action recipient-bar-control pear-topic-header-work-${topic_context.panel_git_status_class}`,
                 "aria-label": $t(
                     {defaultMessage: "Open Pear work details: {work_label}"},
                     {work_label},
                 ),
-                "data-tippy-content": work_title || work_label,
+                title: work_title || work_label,
             }).append(
                 $("<span>", {
                     class: "pear-ui-glyph pear-topic-header-work-glyph",

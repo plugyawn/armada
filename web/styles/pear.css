@@ -330,12 +330,26 @@
 }
 
 #pear-panel.pear-workbench-popover-open .pear-topic-runtime-trigger {
-    grid-template-columns: 18px minmax(0, 1fr);
+    grid-template-columns: auto minmax(0, 1fr);
     line-height: 18px;
 }
 
 #pear-panel.pear-workbench-popover-open .pear-topic-runtime-name {
+    display: inline;
+    color: var(--color-text-sidebar-heading);
+    font-size: 11px;
+    font-weight: var(--font-weight-sidebar-heading);
+    opacity: var(--opacity-sidebar-heading);
+}
+
+#pear-panel.pear-workbench-popover-open .pear-topic-runtime-trigger .pear-runtime-menu-glyph {
     display: none;
+}
+
+#pear-panel.pear-workbench-popover-open .pear-runtime-panel-trigger .pear-runtime-menu-label {
+    justify-self: end;
+    color: var(--color-text-default);
+    font-size: 12px;
 }
 
 #pear-panel.pear-workbench-popover-open .pear-topic-context-row {

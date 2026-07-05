@@ -151,29 +151,19 @@ body.pear-workbench-split-open {
 }
 
 .pear-topic-control-title {
-    display: grid;
+    display: block;
     min-width: 0;
-    align-items: center;
-    grid-template-columns: var(--right-sidebar-header-icon-toggle-width) minmax(0, 1fr);
+    padding-left: calc(var(--right-sidebar-header-icon-toggle-width) + 6px);
     color: var(--color-text-sidebar-heading);
-}
-
-.pear-topic-control-title .buddy-list-section-toggle {
-    width: var(--right-sidebar-header-icon-toggle-width);
-    color: var(--color-text-sidebar-heading);
-    opacity: var(--opacity-sidebar-heading-icon);
-    text-align: center;
 }
 
 .pear-topic-control-title-text {
-    overflow: hidden;
     margin: 0;
     padding: 5px 5px 5px 0;
     font-size: inherit;
     font-weight: var(--font-weight-sidebar-heading);
     letter-spacing: var(--letter-spacing-sidebar-heading);
     opacity: var(--opacity-sidebar-heading);
-    text-overflow: ellipsis;
     text-transform: uppercase;
     white-space: nowrap;
 }

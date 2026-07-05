@@ -230,22 +230,22 @@ export function extract_pear_tool_row_marker_for_testing(text: string): {
 }
 
 const pear_artifact_references: PearArtifactReference[] = [
-    {regex: /^(?:Repo|Repository)$/i, glyph: "⌁", class_name: "pear-artifact-repo"},
-    {regex: /^Runtime$/i, glyph: "∙", class_name: "pear-artifact-runtime"},
-    {regex: /^Branch$/i, glyph: "⑂", class_name: "pear-artifact-branch"},
-    {regex: /^(?:Commit|SHA)$/i, glyph: "⑂", class_name: "pear-artifact-commit"},
-    {regex: /^(?:PR|Pull request)$/i, glyph: "↗", class_name: "pear-artifact-pr"},
-    {regex: /^Diff$/i, glyph: "±", class_name: "pear-artifact-diff"},
-    {regex: /^(?:Test|Tests|Verification)$/i, glyph: "✓", class_name: "pear-artifact-verification"},
-    {regex: /^Screenshot$/i, glyph: "□", class_name: "pear-artifact-screenshot"},
+    {regex: /^(?:Repo|Repository)$/i, glyph: "∙", class_name: "pear-artifact-repo"},
+    {regex: /^Runtime$/i, glyph: "·", class_name: "pear-artifact-runtime"},
+    {regex: /^Branch$/i, glyph: "✶", class_name: "pear-artifact-branch"},
+    {regex: /^(?:Commit|SHA)$/i, glyph: "✶", class_name: "pear-artifact-commit"},
+    {regex: /^(?:PR|Pull request)$/i, glyph: "✧", class_name: "pear-artifact-pr"},
+    {regex: /^Diff$/i, glyph: "✦", class_name: "pear-artifact-diff"},
+    {regex: /^(?:Test|Tests|Verification)$/i, glyph: "✺", class_name: "pear-artifact-verification"},
+    {regex: /^Screenshot$/i, glyph: "✷", class_name: "pear-artifact-screenshot"},
     {
         regex: /^(?:Session|Session record|Pear session|Codex session)$/i,
-        glyph: "§",
+        glyph: "✩",
         class_name: "pear-artifact-session",
     },
-    {regex: /^(?:Canvas|Docs?)$/i, glyph: "▤", class_name: "pear-artifact-doc"},
-    {regex: /^(?:Issue|Ticket)$/i, glyph: "#", class_name: "pear-artifact-ticket"},
-    {regex: /^Reviewers?$/i, glyph: "☷", class_name: "pear-artifact-reviewers"},
+    {regex: /^(?:Canvas|Docs?)$/i, glyph: "✧", class_name: "pear-artifact-doc"},
+    {regex: /^(?:Issue|Ticket)$/i, glyph: "✷", class_name: "pear-artifact-ticket"},
+    {regex: /^Reviewers?$/i, glyph: "✷", class_name: "pear-artifact-reviewers"},
 ];
 
 const pear_artifact_line_regex =

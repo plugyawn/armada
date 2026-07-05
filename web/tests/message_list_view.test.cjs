@@ -697,16 +697,28 @@ run_test("pear_tool_spoiler_title_detection", () => {
 
 run_test("pear_tool_row_marker_detection", () => {
     assert.deepEqual(message_list_view.extract_pear_tool_row_marker_for_testing("·✓ Ran: pwd"), {
-        glyph: "✓",
+        glyph: "·",
         class_name: "pear-tool-row-done",
         is_active: false,
         remaining_text: "Ran: pwd",
     });
     assert.deepEqual(message_list_view.extract_pear_tool_row_marker_for_testing("·! Failed: pwd"), {
-        glyph: "!",
+        glyph: "✷",
         class_name: "pear-tool-row-blocked",
         is_active: false,
         remaining_text: "Failed: pwd",
+    });
+    assert.deepEqual(message_list_view.extract_pear_tool_row_marker_for_testing("[x] Ran: pwd"), {
+        glyph: "·",
+        class_name: "pear-tool-row-done",
+        is_active: false,
+        remaining_text: "Ran: pwd",
+    });
+    assert.deepEqual(message_list_view.extract_pear_tool_row_marker_for_testing("[ ] Queued: tests"), {
+        glyph: "⋅",
+        class_name: "pear-tool-row-pending",
+        is_active: false,
+        remaining_text: "Queued: tests",
     });
     assert.deepEqual(message_list_view.extract_pear_tool_row_marker_for_testing("[~] running"), {
         glyph: "✦",

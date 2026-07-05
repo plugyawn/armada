@@ -185,16 +185,16 @@ type PearArtifactReference = {
 };
 
 const pear_tool_row_markers: PearToolRowMarker[] = [
-    {regex: /^\s*·✓\s*/, glyph: "✓", class_name: "pear-tool-row-done"},
-    {regex: /^\s*·!\s*/, glyph: "!", class_name: "pear-tool-row-blocked"},
-    {regex: /^\s*✓\s*/, glyph: "✓", class_name: "pear-tool-row-done"},
-    {regex: /^\s*!\s*/, glyph: "!", class_name: "pear-tool-row-blocked"},
+    {regex: /^\s*·✓\s*/, glyph: "·", class_name: "pear-tool-row-done"},
+    {regex: /^\s*·!\s*/, glyph: "✷", class_name: "pear-tool-row-blocked"},
+    {regex: /^\s*✓\s*/, glyph: "·", class_name: "pear-tool-row-done"},
+    {regex: /^\s*!\s*/, glyph: "✷", class_name: "pear-tool-row-blocked"},
     {regex: /^\s*✦\s*/, glyph: PEAR_ACTIVE_GLYPH, class_name: "pear-tool-row-active", is_active: true},
     {regex: /^\s*✷\s*/, glyph: "✷", class_name: "pear-tool-row-blocked"},
     {regex: /^\s*⋅\s*/, glyph: "⋅", class_name: "pear-tool-row-pending"},
     {regex: /^\s*·\s*/, glyph: "·", class_name: "pear-tool-row-done"},
-    {regex: /^\s*\[x\]\s*/i, glyph: "[x]", class_name: "pear-tool-row-done"},
-    {regex: /^\s*\[\s\]\s*/, glyph: "[ ]", class_name: "pear-tool-row-pending"},
+    {regex: /^\s*\[x\]\s*/i, glyph: "·", class_name: "pear-tool-row-done"},
+    {regex: /^\s*\[\s\]\s*/, glyph: "⋅", class_name: "pear-tool-row-pending"},
     {regex: /^\s*\[~\]\s*/i, glyph: PEAR_ACTIVE_GLYPH, class_name: "pear-tool-row-active", is_active: true},
 ];
 

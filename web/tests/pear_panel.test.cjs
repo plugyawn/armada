@@ -148,6 +148,27 @@ run_test("template renders idle topic shell as compact runtime entry point", () 
     assert.doesNotMatch(html, /pear-workbench/);
 });
 
+run_test("template renders topic shell while runtime context is loading", () => {
+    const html = render_pear_panel({
+        panel_open: true,
+        show_panel_header: false,
+        show_topic_control: true,
+        show_runtime_trigger: true,
+        show_workbench: false,
+        has_topic: true,
+        has_panel_menu: false,
+        panel_can_close: false,
+        active_run: undefined,
+        context_label: "devel > general chat",
+        topic_context: undefined,
+    });
+
+    assert.match(html, /pear-topic-control/);
+    assert.match(html, /pear-runtime-menu-trigger/);
+    assert.match(html, /<span class="pear-topic-runtime-name">translated: Pear<\/span>/);
+    assert.match(html, /<span class="pear-runtime-menu-label"><\/span>/);
+});
+
 run_test("template renders workbench without active run", () => {
     const html = render_pear_panel({
         panel_open: true,

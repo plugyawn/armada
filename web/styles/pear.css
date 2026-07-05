@@ -293,14 +293,14 @@ body.pear-workbench-split-open {
 .pear-topic-context-status-dirty {
     border-color: color-mix(
         in srgb,
-        var(--color-text-warning-text-action-button) 38%,
+        var(--color-border-sidebar-subheader) 72%,
         transparent
     );
     background: transparent;
     color: color-mix(
         in srgb,
-        var(--color-text-sidebar-row) 82%,
-        var(--color-text-warning-text-action-button) 18%
+        var(--color-text-sidebar-row) 78%,
+        var(--color-text-sidebar-heading) 22%
     );
 }
 

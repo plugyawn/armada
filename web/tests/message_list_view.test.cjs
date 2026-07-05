@@ -719,7 +719,7 @@ run_test("pear_tool_row_marker_detection", () => {
 run_test("pear_artifact_reference_detection", () => {
     assert.deepEqual(message_list_view.extract_pear_artifact_reference_for_testing("Diff: 2 files"), {
         label: "Diff",
-        glyph: "±",
+        glyph: "✦",
         class_name: "pear-artifact-diff",
         title: "Diff: 2 files",
     });
@@ -727,7 +727,7 @@ run_test("pear_artifact_reference_detection", () => {
         message_list_view.extract_pear_artifact_reference_for_testing("Canvas: CANVAS.md"),
         {
             label: "Canvas",
-            glyph: "▤",
+            glyph: "✧",
             class_name: "pear-artifact-doc",
             title: "Canvas: CANVAS.md",
         },
@@ -736,7 +736,7 @@ run_test("pear_artifact_reference_detection", () => {
         message_list_view.extract_pear_artifact_reference_for_testing("Commit: a3f92c1"),
         {
             label: "Commit",
-            glyph: "⑂",
+            glyph: "✶",
             class_name: "pear-artifact-commit",
             title: "Commit: a3f92c1",
         },
@@ -745,7 +745,7 @@ run_test("pear_artifact_reference_detection", () => {
         message_list_view.extract_pear_artifact_reference_for_testing("SHA: a3f92c1"),
         {
             label: "SHA",
-            glyph: "⑂",
+            glyph: "✶",
             class_name: "pear-artifact-commit",
             title: "SHA: a3f92c1",
         },

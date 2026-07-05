@@ -100,27 +100,18 @@
             .pear-artifact-ref {
                 display: inline-flex;
                 max-width: min(100%, 42rem);
-                min-height: 1.85em;
+                min-height: 1.55em;
                 align-items: center;
                 gap: 0.42em;
-                margin-block: 0.08em 0.22em;
-                padding: 0.14em 0.5em;
+                margin-block: 0.03em 0.16em;
+                padding: 0.04em 0.28em;
                 overflow: hidden;
-                border: 1px solid
-                    color-mix(
-                        in srgb,
-                        var(--color-message-content-container-border) 66%,
-                        transparent
-                    );
-                border-radius: 8px;
-                background: color-mix(
-                    in srgb,
-                    var(--color-background-pear-message-content) 92%,
-                    var(--color-text-message-default) 8%
-                );
+                border: 1px solid transparent;
+                border-radius: 4px;
+                background: transparent;
                 color: var(--color-text-message-default);
                 cursor: pointer;
-                font-size: 0.8em;
+                font-size: 0.78em;
                 line-height: 1.35;
                 outline: none;
                 transition:
@@ -145,13 +136,13 @@
             .pear-artifact-ref:focus-visible {
                 border-color: color-mix(
                     in srgb,
-                    var(--color-text-message-default) 38%,
+                    var(--color-message-content-container-border) 70%,
                     transparent
                 );
                 background: color-mix(
                     in srgb,
-                    var(--color-background-pear-message-content) 82%,
-                    var(--color-text-message-default) 18%
+                    var(--color-background-pear-message-content) 88%,
+                    var(--color-text-message-default) 12%
                 );
             }
 
@@ -179,9 +170,9 @@
                 flex: none;
                 color: var(--color-text-item);
                 font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
-                font-size: 0.78em;
+                font-size: 0.76em;
                 font-weight: 600;
-                letter-spacing: 0.02em;
+                letter-spacing: 0;
                 text-transform: lowercase;
             }
 

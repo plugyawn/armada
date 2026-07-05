@@ -370,8 +370,8 @@
     max-width: min(12em, 24vw);
     color: color-mix(
         in srgb,
-        var(--color-text-message-header) 82%,
-        var(--color-text-warning-text-action-button) 18%
+        var(--color-text-message-header) 90%,
+        var(--color-text-warning-text-action-button) 10%
     );
 }
 

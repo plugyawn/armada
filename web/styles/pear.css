@@ -502,20 +502,7 @@ body.pear-workbench-split-open {
 }
 
 .pear-git-tree {
-    gap: 9px;
-    border: 1px solid
-        color-mix(
-            in srgb,
-            var(--color-border-sidebar-subheader) 62%,
-            transparent
-        );
-    border-radius: 8px;
-    background: color-mix(
-        in srgb,
-        var(--color-background-hover-narrow-filter) 24%,
-        transparent
-    );
-    padding: 7px;
+    gap: 7px;
 }
 
 .pear-git-tree-block {
@@ -540,10 +527,18 @@ body.pear-workbench-split-open {
     max-height: 180px;
     margin: 0;
     overflow: auto;
+    border: 1px solid
+        color-mix(
+            in srgb,
+            var(--color-border-sidebar-subheader) 54%,
+            transparent
+        );
+    border-radius: 4px;
     color: var(--color-text-item);
     font-family: monospace;
     font-size: 10px;
     line-height: 14px;
+    padding: 5px 6px;
     white-space: pre-wrap;
 }
 
@@ -555,20 +550,7 @@ body.pear-workbench-split-open {
     display: flex;
     min-width: 0;
     flex-direction: column;
-    gap: 7px;
-    border: 1px solid
-        color-mix(
-            in srgb,
-            var(--color-border-sidebar-subheader) 62%,
-            transparent
-        );
-    border-radius: 9px;
-    background: color-mix(
-        in srgb,
-        var(--color-background-hover-narrow-filter) 22%,
-        transparent
-    );
-    padding: 7px;
+    gap: 6px;
 }
 
 .pear-workbench-canvas-toolbar {
@@ -577,6 +559,13 @@ body.pear-workbench-split-open {
     align-items: center;
     justify-content: space-between;
     gap: 8px;
+    border-bottom: 1px solid
+        color-mix(
+            in srgb,
+            var(--color-border-sidebar-subheader) 44%,
+            transparent
+        );
+    padding-bottom: 5px;
 }
 
 .pear-workbench-canvas-path {
@@ -663,14 +652,7 @@ body.pear-workbench-split-open {
 }
 
 .pear-file-more {
-    border: 1px dashed
-        color-mix(
-            in srgb,
-            var(--color-border-sidebar-subheader) 66%,
-            transparent
-        );
-    border-radius: 8px;
-    padding: 7px 9px;
+    padding: 6px 8px;
 }
 
 .pear-empty-state,
@@ -805,13 +787,9 @@ body.pear-workbench-split-open {
             var(--color-border-sidebar-subheader) 64%,
             transparent
         );
-    border-radius: 9px;
-    background: color-mix(
-        in srgb,
-        var(--color-background-hover-narrow-filter) 22%,
-        transparent
-    );
-    padding: 7px;
+    border-radius: 4px;
+    background: transparent;
+    padding: 6px;
 }
 
 .pear-side-header {

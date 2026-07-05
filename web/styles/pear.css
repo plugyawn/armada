@@ -71,7 +71,7 @@ body.pear-workbench-split-open {
     display: flex;
     min-width: 0;
     flex-direction: column;
-    gap: 7px;
+    gap: 5px;
 }
 
 .pear-panel-header,
@@ -138,7 +138,7 @@ body.pear-workbench-split-open {
     display: flex;
     min-width: 0;
     flex-direction: column;
-    gap: 1px;
+    gap: 0;
     margin-right: var(--width-simplebar-scroll-hover);
 }
 
@@ -160,8 +160,8 @@ body.pear-workbench-split-open {
 
 .pear-topic-control-title-text {
     margin: 0;
-    padding: 4px 5px 4px 0;
-    font-size: inherit;
+    padding: 3px 5px 2px 0;
+    font-size: 0.92em;
     font-weight: var(--font-weight-sidebar-heading);
     letter-spacing: var(--letter-spacing-sidebar-heading);
     opacity: var(--opacity-sidebar-heading);
@@ -212,19 +212,15 @@ body.pear-workbench-split-open {
     display: grid;
     min-height: var(--line-height-sidebar-row);
     align-items: center;
-    gap: 6px;
-    grid-template-columns: var(--right-sidebar-header-icon-toggle-width) minmax(52px, auto) minmax(0, 1fr);
+    gap: 5px;
+    grid-template-columns: var(--right-sidebar-header-icon-toggle-width) minmax(0, 1fr);
     line-height: var(--line-height-sidebar-row);
-    margin-bottom: 2px;
+    margin-bottom: 1px;
     padding: 0 6px 0 0;
 }
 
 .pear-topic-runtime-name {
-    overflow: hidden;
-    color: var(--color-text-sidebar-row);
-    font-weight: var(--font-weight-sidebar-row);
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    display: none;
 }
 
 .pear-topic-open-action {
@@ -239,8 +235,8 @@ body.pear-workbench-split-open {
     display: grid;
     min-height: var(--line-height-sidebar-row);
     align-items: baseline;
-    gap: 7px;
-    grid-template-columns: var(--right-sidebar-header-icon-toggle-width) minmax(52px, auto) minmax(0, 1fr) auto;
+    gap: 5px;
+    grid-template-columns: var(--right-sidebar-header-icon-toggle-width) minmax(42px, auto) minmax(0, 1fr) auto;
     line-height: var(--line-height-sidebar-row);
     padding: 0 6px 0 0;
 }
@@ -252,6 +248,7 @@ body.pear-workbench-split-open {
 .pear-topic-context-label {
     grid-column: 2;
     color: var(--color-text-sidebar-heading);
+    font-size: 0.92em;
     font-weight: var(--font-weight-sidebar-heading);
     opacity: var(--opacity-sidebar-heading);
 }
@@ -278,19 +275,39 @@ body.pear-workbench-split-open {
 }
 
 .pear-topic-context-status {
-    font-size: 0.92em;
+    align-self: center;
+    border-radius: 4px;
+    font-family: monospace;
+    font-size: 0.82em;
     font-weight: var(--font-weight-sidebar-row);
+    line-height: 15px;
+    padding: 0 5px;
 }
 
 .pear-topic-context-status-clean {
+    background: color-mix(
+        in srgb,
+        var(--color-text-success-text-action-button) 12%,
+        transparent
+    );
     color: var(--color-text-success-text-action-button);
 }
 
 .pear-topic-context-status-dirty {
+    background: color-mix(
+        in srgb,
+        var(--color-text-warning-text-action-button) 14%,
+        transparent
+    );
     color: var(--color-text-warning-text-action-button);
 }
 
 .pear-topic-context-status-unavailable {
+    background: color-mix(
+        in srgb,
+        var(--color-border-sidebar-subheader) 36%,
+        transparent
+    );
     color: var(--color-text-sidebar-heading);
     opacity: var(--opacity-sidebar-heading);
 }
@@ -1089,10 +1106,10 @@ body.pear-workbench-split-open {
     min-width: 0;
     max-width: 100%;
     min-height: var(--line-height-sidebar-row);
-    grid-template-columns: auto auto minmax(0, 1fr);
+    grid-template-columns: var(--right-sidebar-header-icon-toggle-width) minmax(0, 1fr);
     align-items: center;
     justify-content: start;
-    gap: 6px;
+    gap: 5px;
     border: 0;
     border-radius: 4px;
     background: transparent;
@@ -1100,7 +1117,7 @@ body.pear-workbench-split-open {
     cursor: pointer;
     font-size: 11px;
     line-height: var(--line-height-sidebar-row);
-    padding: 0 6px;
+    padding: 0 6px 0 0;
     text-align: left;
 }
 
@@ -1135,11 +1152,10 @@ body.pear-workbench-split-open {
     display: inline;
     min-width: 0;
     overflow: hidden;
-    color: var(--color-text-sidebar-heading);
+    color: var(--color-text-sidebar-row);
     font-family: monospace;
     font-size: 0.92em;
-    font-weight: 400;
-    opacity: var(--opacity-sidebar-heading);
+    font-weight: 600;
     text-overflow: ellipsis;
     white-space: nowrap;
 }

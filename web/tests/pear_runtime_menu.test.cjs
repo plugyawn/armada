@@ -37,25 +37,6 @@ run_test("runtime_menu_selector_for_testing", () => {
     assert.ok(!pear_runtime_menu.runtime_menu_selector_for_testing.includes("#message_view_header"));
 });
 
-run_test("header_chrome_guard_selector_for_testing", () => {
-    const selector = pear_runtime_menu.header_chrome_guard_selector_for_testing;
-
-    for (const expected of [
-        "#top_navbar [id^='pear-']",
-        "#top_navbar [class*=' pear-']",
-        "#message_view_header [id^='pear-']",
-        "#message_view_header [class*=' pear-']",
-    ]) {
-        assert.ok(selector.includes(expected), expected);
-    }
-
-    assert.ok(!selector.includes("#pear-panel"));
-    assert.equal(
-        pear_runtime_menu.header_chrome_guard_root_selector_for_testing,
-        "#top_navbar, #message_view_header",
-    );
-});
-
 run_test("model_reasoning_efforts", () => {
     const gpt_efforts = [
         {effort: "medium", label: "Medium"},

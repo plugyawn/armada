@@ -363,20 +363,24 @@
 }
 
 .pear-topic-header-work-dirty {
-    color: light-dark(hsl(35deg 48% 26%), hsl(39deg 52% 72%));
+    color: color-mix(
+        in srgb,
+        var(--color-text-message-header) 72%,
+        var(--color-message-header-icon-non-interactive) 28%
+    );
 }
 
 .pear-topic-header-work-control {
     max-width: min(12em, 24vw);
     color: color-mix(
         in srgb,
-        var(--color-text-message-header) 90%,
-        var(--color-text-warning-text-action-button) 10%
+        var(--color-text-message-header) 76%,
+        var(--color-message-header-icon-non-interactive) 24%
     );
 }
 
 .pear-topic-header-work-control .pear-topic-header-work-label {
-    font-weight: 650;
+    font-weight: 600;
 }
 
 .on_hover_topic_read {

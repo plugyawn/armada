@@ -363,11 +363,7 @@
 }
 
 .pear-topic-header-work-dirty {
-    color: color-mix(
-        in srgb,
-        var(--color-text-message-header) 72%,
-        var(--color-message-header-icon-non-interactive) 28%
-    );
+    color: var(--color-text-message-header);
 }
 
 .pear-topic-header-work-control {
@@ -380,7 +376,7 @@
 }
 
 .pear-topic-header-work-control .pear-topic-header-work-label {
-    font-weight: 600;
+    font-weight: 500;
 }
 
 .on_hover_topic_read {

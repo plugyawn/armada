@@ -277,28 +277,28 @@ export function runtime_status_for_testing(
         case "running":
             return {
                 glyph: "✦",
-                label: $t({defaultMessage: "Running"}),
+                label: $t({defaultMessage: "working"}),
                 class_name: "pear-runtime-status-active",
                 is_active: true,
             };
         case "queued":
             return {
                 glyph: "✦",
-                label: $t({defaultMessage: "Queued"}),
+                label: $t({defaultMessage: "queued"}),
                 class_name: "pear-runtime-status-active",
                 is_active: true,
             };
         case "loading":
             return {
                 glyph: "✦",
-                label: $t({defaultMessage: "Loading"}),
+                label: $t({defaultMessage: "loading"}),
                 class_name: "pear-runtime-status-active",
                 is_active: true,
             };
         case "paused":
             return {
                 glyph: "✧",
-                label: $t({defaultMessage: "Paused"}),
+                label: $t({defaultMessage: "paused"}),
                 class_name: "pear-runtime-status-paused",
                 is_active: false,
             };
@@ -307,7 +307,7 @@ export function runtime_status_for_testing(
         case "blocked":
             return {
                 glyph: "✷",
-                label: $t({defaultMessage: "Failed"}),
+                label: $t({defaultMessage: "failed"}),
                 class_name: "pear-runtime-status-blocked",
                 is_active: false,
             };
@@ -315,14 +315,14 @@ export function runtime_status_for_testing(
         case "canceled":
             return {
                 glyph: "✷",
-                label: $t({defaultMessage: "Cancelled"}),
+                label: $t({defaultMessage: "cancelled"}),
                 class_name: "pear-runtime-status-blocked",
                 is_active: false,
             };
         default:
             return {
                 glyph: "·",
-                label: $t({defaultMessage: "Idle"}),
+                label: $t({defaultMessage: "idle"}),
                 class_name: "pear-runtime-status-idle",
                 is_active: false,
             };

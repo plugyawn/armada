@@ -148,21 +148,15 @@ body.pear-workbench-split-open {
 .pear-run-status-row {
     display: flex;
     align-items: center;
-    justify-content: center;
-    width: 22px;
-    height: 22px;
-    color: var(--color-text-item);
-    line-height: 1;
-}
-
-.pear-run-status-compact {
+    justify-content: flex-start;
     width: auto;
     min-width: 0;
-    justify-content: flex-start;
+    min-height: 22px;
     gap: 5px;
-    color: var(--color-text-sidebar-row);
+    color: var(--color-text-item);
     font-size: 11.5px;
-    line-height: var(--line-height-sidebar-row);
+    line-height: 1;
+    white-space: nowrap;
 }
 
 .pear-panel-status-label {
@@ -177,6 +171,7 @@ body.pear-workbench-split-open {
 .pear-run-status-glyph {
     color: var(--color-text-item);
     font-size: 12px;
+    text-align: left;
 }
 
 .pear-run-status-active .pear-run-status-glyph {

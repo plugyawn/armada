@@ -47,6 +47,41 @@ run_test("status_marker_for_testing", () => {
     assert.equal(pear_panel.status_marker_for_testing("unknown"), "·");
 });
 
+run_test("status_label_for_testing", () => {
+    assert.equal(pear_panel.status_label_for_testing("running"), "translated: working");
+    assert.equal(pear_panel.status_label_for_testing("queued"), "translated: queued");
+    assert.equal(pear_panel.status_label_for_testing("paused"), "translated: paused");
+    assert.equal(pear_panel.status_label_for_testing("failed"), "translated: failed");
+    assert.equal(pear_panel.status_label_for_testing("cancelled"), "translated: cancelled");
+    assert.equal(pear_panel.status_label_for_testing("done"), "translated: done");
+});
+
+run_test("template renders active status as visible text glyph phrase", () => {
+    const html = render_pear_panel({
+        panel_open: true,
+        show_panel_header: true,
+        show_workbench: false,
+        has_topic: true,
+        has_panel_menu: false,
+        panel_can_close: false,
+        active_run: {
+            show_status: true,
+            status_class: "active",
+            status_label: "working",
+            status_marker: "✦",
+            is_active: true,
+        },
+        topic_context: undefined,
+    });
+
+    assert.match(html, /pear-run-status-row pear-run-status-active pear-liveness-active/);
+    assert.match(html, /aria-label="working ✦"/);
+    assert.match(html, /<span class="pear-panel-status-label">working<\/span>/);
+    assert.match(html, /<span class="pear-ui-glyph pear-run-status-glyph pear-thinking-glyph">✦<\/span>/);
+    assert.doesNotMatch(html, /aria-hidden="true">✦<\/span>/);
+    assert.doesNotMatch(html, /pear-run-status-compact/);
+});
+
 run_test("template renders workbench without active run", () => {
     const html = render_pear_panel({
         panel_open: true,

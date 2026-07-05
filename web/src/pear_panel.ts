@@ -223,17 +223,17 @@ function status_class(status: string): string {
 function status_label(status: string): string {
     switch (status) {
         case "cancelled":
-            return $t({defaultMessage: "Cancelled"});
+            return $t({defaultMessage: "cancelled"});
         case "done":
-            return $t({defaultMessage: "Done"});
+            return $t({defaultMessage: "done"});
         case "failed":
-            return $t({defaultMessage: "Failed"});
+            return $t({defaultMessage: "failed"});
         case "paused":
-            return $t({defaultMessage: "Paused"});
+            return $t({defaultMessage: "paused"});
         case "queued":
-            return $t({defaultMessage: "Queued"});
+            return $t({defaultMessage: "queued"});
         case "running":
-            return $t({defaultMessage: "Running"});
+            return $t({defaultMessage: "working"});
         default:
             return compact_panel_text(status);
     }
@@ -257,6 +257,7 @@ function status_marker(status: string): string {
 }
 
 export const status_marker_for_testing = status_marker;
+export const status_label_for_testing = status_label;
 
 function is_pear_runs_response(data: unknown): data is PearRunsResponse {
     return (
@@ -1059,7 +1060,6 @@ function render(
         context_label: has_topic ? `${stream} > ${topic}` : "",
         panel_open,
         show_workbench: workbench_open,
-        show_compact_status_label: panel_open && !workbench_open && active_run !== undefined,
         panel_can_close: workbench_open,
         has_panel_menu: panel_header_state.has_panel_menu,
         show_panel_header: panel_header_state.show_panel_header,

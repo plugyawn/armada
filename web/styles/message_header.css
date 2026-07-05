@@ -329,6 +329,7 @@
 
     .pear-runtime-menu-label,
     .pear-topic-header-work-label {
+        display: block;
         min-width: 0;
         overflow: hidden;
         text-overflow: ellipsis;

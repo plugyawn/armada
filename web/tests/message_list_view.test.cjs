@@ -728,6 +728,53 @@ run_test("pear_tool_row_marker_detection", () => {
     });
 });
 
+run_test("pear_tool_block_marker_detection", () => {
+    assert.deepEqual(
+        message_list_view.pear_tool_block_marker_for_testing({
+            title: "Ran 3 tools",
+            row_texts: ["·✓ Ran: pwd", "·✓ Ran: git status"],
+        }),
+        {
+            glyph: "·",
+            class_name: "pear-tool-row-done",
+            is_active: false,
+        },
+    );
+    assert.deepEqual(
+        message_list_view.pear_tool_block_marker_for_testing({
+            title: "Running 2/4 tools ✦",
+            row_texts: ["[x] Ran: pwd", "[~] Running: tests"],
+        }),
+        {
+            glyph: "✦",
+            class_name: "pear-tool-row-active",
+            is_active: true,
+        },
+    );
+    assert.deepEqual(
+        message_list_view.pear_tool_block_marker_for_testing({
+            title: "3 failed tools",
+            row_texts: ["·! Failed: test"],
+        }),
+        {
+            glyph: "✷",
+            class_name: "pear-tool-row-blocked",
+            is_active: false,
+        },
+    );
+    assert.deepEqual(
+        message_list_view.pear_tool_block_marker_for_testing({
+            title: "Ran 2 tools",
+            row_texts: ["[ ] Queued: tests", "Ran: git status"],
+        }),
+        {
+            glyph: "⋅",
+            class_name: "pear-tool-row-pending",
+            is_active: false,
+        },
+    );
+});
+
 run_test("pear_artifact_reference_detection", () => {
     assert.deepEqual(message_list_view.extract_pear_artifact_reference_for_testing("Diff: 2 files"), {
         label: "Diff",

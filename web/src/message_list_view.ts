@@ -367,6 +367,108 @@ function extract_pear_tool_row_marker(row: HTMLElement): PearToolRowMarker {
     return {regex: /^/, glyph: "·", class_name: "pear-tool-row-done"};
 }
 
+function pear_tool_block_marker_from_state(options: {
+    title: string;
+    row_texts: string[];
+    has_active_row: boolean;
+    has_blocked_row: boolean;
+    has_pending_row: boolean;
+}): PearToolRowMarker {
+    if (options.has_active_row || /✦$/.test(options.title)) {
+        return {
+            regex: /^/,
+            glyph: PEAR_ACTIVE_GLYPH,
+            class_name: "pear-tool-row-active",
+            is_active: true,
+        };
+    }
+    if (options.has_blocked_row || /^\d+\s+failed\s+tools?$/.test(options.title)) {
+        return {regex: /^/, glyph: "✷", class_name: "pear-tool-row-blocked"};
+    }
+    if (options.has_pending_row) {
+        return {regex: /^/, glyph: "⋅", class_name: "pear-tool-row-pending"};
+    }
+
+    let fallback: PearToolRowMarker = {regex: /^/, glyph: "·", class_name: "pear-tool-row-done"};
+    for (const row_text of options.row_texts) {
+        const marker = extract_pear_tool_row_marker_from_text(row_text).marker;
+        if (marker.is_active === true) {
+            return marker;
+        }
+        if (marker.class_name === "pear-tool-row-blocked") {
+            fallback = marker;
+        } else if (
+            marker.class_name === "pear-tool-row-pending" &&
+            fallback.class_name !== "pear-tool-row-blocked"
+        ) {
+            fallback = marker;
+        }
+    }
+    return fallback;
+}
+
+export function pear_tool_block_marker_for_testing(options: {title: string; row_texts: string[]}): {
+    glyph: string;
+    class_name: string;
+    is_active: boolean;
+} {
+    const marker = pear_tool_block_marker_from_state({
+        ...options,
+        has_active_row: false,
+        has_blocked_row: false,
+        has_pending_row: false,
+    });
+    return {
+        glyph: marker.glyph,
+        class_name: marker.class_name,
+        is_active: marker.is_active === true,
+    };
+}
+
+function pear_tool_block_marker(block: HTMLElement): PearToolRowMarker {
+    return pear_tool_block_marker_from_state({
+        title: $(block).find(".spoiler-header-text").first().text().trim(),
+        row_texts: [...block.querySelectorAll(".spoiler-content li")].map(
+            (row) => row.textContent ?? "",
+        ),
+        has_active_row: block.querySelector(".pear-tool-row-active") !== null,
+        has_blocked_row: block.querySelector(".pear-tool-row-blocked") !== null,
+        has_pending_row: block.querySelector(".pear-tool-row-pending") !== null,
+    });
+}
+
+function render_pear_tool_block_header(block: HTMLElement): void {
+    const header = block.querySelector(".spoiler-header");
+    if (!(header instanceof HTMLElement)) {
+        return;
+    }
+    const marker = pear_tool_block_marker(block);
+    let glyph = header.querySelector(".pear-tool-header-glyph");
+    if (!(glyph instanceof HTMLElement)) {
+        glyph = document.createElementNS("http://www.w3.org/1999/xhtml", "span");
+        glyph.classList.add("pear-tool-header-glyph");
+        glyph.setAttribute("aria-hidden", "true");
+        const title = header.querySelector(".spoiler-header-text");
+        if (title === null) {
+            header.prepend(glyph);
+        } else {
+            title.before(glyph);
+        }
+    }
+    glyph.classList.remove(
+        "pear-tool-row-active",
+        "pear-tool-row-blocked",
+        "pear-tool-row-done",
+        "pear-tool-row-pending",
+        "pear-thinking-glyph",
+    );
+    glyph.classList.add(marker.class_name);
+    if (marker.is_active === true) {
+        glyph.classList.add("pear-thinking-glyph");
+    }
+    glyph.textContent = marker.glyph;
+}
+
 function enhance_pear_tool_rows($row: JQuery): void {
     if (!$row.hasClass("pear-message")) {
         return;
@@ -394,6 +496,11 @@ function enhance_pear_tool_rows($row: JQuery): void {
             content.append(...row.childNodes);
             row.replaceChildren(glyph, content);
         });
+    $tool_blocks.each((_index, block) => {
+        if (block instanceof HTMLElement) {
+            render_pear_tool_block_header(block);
+        }
+    });
 }
 
 function pear_artifact_reference_for_label(label: string): PearArtifactReference | undefined {

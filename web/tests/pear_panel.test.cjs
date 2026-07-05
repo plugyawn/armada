@@ -98,8 +98,10 @@ run_test("template renders idle topic shell as compact runtime entry point", () 
     });
 
     assert.match(html, /pear-panel-inner/);
+    assert.match(html, /pear-panel-header-idle/);
     assert.match(html, /pear-runtime-menu-trigger/);
-    assert.match(html, /Pear runtime/);
+    assert.match(html, /<span class="pear-runtime-menu-label">translated: Pear<\/span>/);
+    assert.doesNotMatch(html, /<span class="pear-runtime-menu-label">translated: Pear runtime<\/span>/);
     assert.doesNotMatch(html, /pear-run-actions/);
     assert.doesNotMatch(html, /pear-workbench/);
 });

@@ -174,6 +174,30 @@ run_test("template renders topic shell while runtime context is loading", () => 
     assert.match(html, /<span class="pear-runtime-menu-label"><\/span>/);
 });
 
+run_test("template renders channel shell when no topic is selected", () => {
+    const html = render_pear_panel({
+        panel_open: true,
+        show_panel_header: false,
+        show_topic_control: true,
+        show_runtime_trigger: false,
+        show_workbench: false,
+        has_topic: false,
+        has_panel_menu: false,
+        panel_can_close: false,
+        active_run: undefined,
+        context_label: "devel",
+        topic_context: undefined,
+    });
+
+    assert.match(html, /pear-topic-control/);
+    assert.match(html, /pear-topic-control-title-text">translated: Pear<\/span>/);
+    assert.doesNotMatch(html, /pear-runtime-menu-trigger/);
+    assert.match(html, /pear-topic-context-label">translated: Channel<\/span>/);
+    assert.match(html, /pear-topic-context-main" title="devel">devel<\/span>/);
+    assert.match(html, /pear-topic-context-label">translated: Worktree<\/span>/);
+    assert.match(html, /pear-topic-context-main">translated: Select a topic<\/span>/);
+});
+
 run_test("template renders workbench without active run", () => {
     const html = render_pear_panel({
         panel_open: true,

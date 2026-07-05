@@ -84,11 +84,20 @@
                     <span class="pear-topic-context-ref" title="{{topic_context.panel_git_ref_label}}">{{topic_context.panel_git_ref_label}}</span>
                 {{/if}}
             </button>
-        {{else}}
+        {{else if has_topic}}
             <button type="button" class="pear-panel-open-action pear-topic-context-row pear-topic-context-row-secondary" aria-label="{{t 'Open Pear work details' }}">
                 <span class="pear-topic-context-label">{{t "Topic" }}</span>
                 <span class="pear-topic-context-main" title="{{context_label}}">{{context_label}}</span>
             </button>
+        {{else}}
+            <div class="pear-topic-context-row pear-topic-context-row-secondary" aria-label="{{t 'Pear channel context' }}">
+                <span class="pear-topic-context-label">{{t "Channel" }}</span>
+                <span class="pear-topic-context-main" title="{{context_label}}">{{context_label}}</span>
+            </div>
+            <div class="pear-topic-context-row pear-topic-context-row-secondary" aria-label="{{t 'Pear topic context' }}">
+                <span class="pear-topic-context-label">{{t "Worktree" }}</span>
+                <span class="pear-topic-context-main">{{t "Select a topic" }}</span>
+            </div>
         {{/if}}
     </section>
     {{/if}}

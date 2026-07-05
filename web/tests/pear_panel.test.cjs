@@ -128,8 +128,11 @@ run_test("template renders idle topic shell as compact runtime entry point", () 
     assert.match(html, /pear-panel-inner/);
     assert.doesNotMatch(html, /pear-panel-header-idle/);
     assert.match(html, /pear-topic-control/);
+    assert.match(html, /pear-topic-control-heading/);
+    assert.match(html, /pear-topic-control-title-text">translated: Pear<\/span>/);
     assert.match(html, /pear-runtime-menu-trigger/);
     assert.match(html, /pear-topic-runtime-name/);
+    assert.match(html, /<span class="pear-topic-runtime-name">translated: Runtime<\/span>/);
     assert.match(html, /<span class="pear-runtime-menu-label">gpt-5.5 · xh<\/span>/);
     assert.doesNotMatch(html, /<span class="pear-runtime-menu-label">translated: Pear<\/span>/);
     assert.match(html, /pear-topic-context-label">translated: Repo<\/span>/);
@@ -164,8 +167,10 @@ run_test("template renders topic shell while runtime context is loading", () => 
     });
 
     assert.match(html, /pear-topic-control/);
+    assert.match(html, /pear-topic-control-heading/);
     assert.match(html, /pear-runtime-menu-trigger/);
-    assert.match(html, /<span class="pear-topic-runtime-name">translated: Pear<\/span>/);
+    assert.match(html, /pear-topic-control-title-text">translated: Pear<\/span>/);
+    assert.match(html, /<span class="pear-topic-runtime-name">translated: Runtime<\/span>/);
     assert.match(html, /<span class="pear-runtime-menu-label"><\/span>/);
 });
 

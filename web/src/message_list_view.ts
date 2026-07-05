@@ -318,6 +318,14 @@ function pear_thinking_glyph_containers($scope: JQuery<HTMLElement | Document>):
     return $containers;
 }
 
+function pear_active_progress_glyph_containers($scope: JQuery<HTMLElement | Document>): JQuery {
+    let $containers = $scope.find(".message_row.pear-active-message .message_content > p:last-child");
+    if ($scope.hasClass("pear-active-message")) {
+        $containers = $containers.add($scope.find(".message_content > p:last-child"));
+    }
+    return $containers;
+}
+
 function build_pear_thinking_glyph(): Element {
     const glyph = document.createElementNS("http://www.w3.org/1999/xhtml", "span");
     glyph.classList.add("pear-thinking-glyph");
@@ -342,6 +350,22 @@ function replace_emphasized_pear_thinking_glyph(container: Element): boolean {
         return true;
     }
     return false;
+}
+
+function append_pear_thinking_glyph(container: Element): void {
+    if (container.querySelector(".pear-thinking-glyph") !== null) {
+        return;
+    }
+    container.append(document.createTextNode(" "), build_pear_thinking_glyph());
+}
+
+function synthesize_plain_pear_active_progress_glyphs($scope: JQuery<HTMLElement | Document>): void {
+    pear_active_progress_glyph_containers($scope).each((_index, container) => {
+        if (!(container instanceof Element) || container.textContent?.trim() === "") {
+            return;
+        }
+        append_pear_thinking_glyph(container);
+    });
 }
 
 function is_pear_tool_spoiler_title(title: string): boolean {
@@ -702,6 +726,7 @@ function wrap_bare_pear_thinking_glyphs($scope: JQuery<HTMLElement | Document>):
         }
         marker_node.replaceWith(...replacements);
     });
+    synthesize_plain_pear_active_progress_glyphs($scope);
 }
 
 function render_pear_thinking_glyph($markers: JQuery): void {

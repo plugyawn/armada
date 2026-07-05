@@ -284,6 +284,13 @@ export function panel_runtime_label_for_testing(options: {
     return effort === "" ? model : `${model} / ${effort}`;
 }
 
+function reasoning_effort_meter_class(effort: string | undefined): string {
+    if (effort === "low" || effort === "medium" || effort === "high" || effort === "xhigh") {
+        return effort;
+    }
+    return "medium";
+}
+
 function is_pear_runs_response(data: unknown): data is PearRunsResponse {
     return (
         typeof data === "object" &&
@@ -813,6 +820,13 @@ const pear_topic_header_control_selector = ".pear-topic-header-control";
 
 function topic_header_work_label(display_context: PearDisplayTopicContext): string {
     if (display_context.panel_git_status_class !== "clean") {
+        const changed_count = display_context.git.changed_count ?? 0;
+        if (changed_count === 1) {
+            return $t({defaultMessage: "1 file"});
+        }
+        if (changed_count > 1) {
+            return $t({defaultMessage: "{changed_count} files"}, {changed_count});
+        }
         return display_context.panel_git_status_label;
     }
     const branch_label = display_context.panel_git_ref_label.split(" / ")[0]?.trim();
@@ -882,15 +896,14 @@ function render_topic_header_controls(options: {
             "data-tippy-content": runtime_title,
         }).append(
             $("<span>", {
-                class: `pear-ui-glyph pear-runtime-menu-glyph pear-runtime-status-${status_class(
-                    runtime_status,
-                )}${runtime_active ? " pear-thinking-glyph" : ""}`,
-                "aria-hidden": "true",
-                text: status_marker(runtime_status),
-            }),
-            $("<span>", {
                 class: "pear-runtime-menu-label",
                 text: runtime_label,
+            }),
+            $("<span>", {
+                class: `pear-topic-header-effort-meter pear-topic-header-effort-${reasoning_effort_meter_class(
+                    topic_context.reasoning_effort,
+                )}`,
+                "aria-hidden": "true",
             }),
         );
         let $work_control: JQuery | undefined;
@@ -905,11 +918,6 @@ function render_topic_header_controls(options: {
                 ),
                 title: work_title || work_label,
             }).append(
-                $("<span>", {
-                    class: "pear-ui-glyph pear-topic-header-work-glyph",
-                    "aria-hidden": "true",
-                    text: "±",
-                }),
                 $("<span>", {
                     class: "pear-topic-header-work-label",
                     text: work_label,
@@ -946,28 +954,23 @@ function position_workbench_popover(): void {
         return;
     }
     const anchor = visible_header_anchor();
+    if (anchor === undefined) {
+        return;
+    }
     const margin = WORKBENCH_POPOVER_MARGIN_PX;
     const viewport_width = window.innerWidth;
     const viewport_height = window.innerHeight;
     const compact_viewport = viewport_width < 760;
     const width = compact_viewport
         ? Math.max(280, viewport_width - margin * 2)
-        : Math.min(680, Math.max(420, viewport_width - margin * 2));
-    const anchor_rect = anchor?.getBoundingClientRect();
-    let left = compact_viewport ? margin : Math.round((viewport_width - width) / 2);
-    let top = 58;
-    let arrow_left = width / 2;
-    if (anchor_rect !== undefined) {
-        const anchor_center = anchor_rect.left + anchor_rect.width / 2;
-        left = compact_viewport
-            ? margin
-            : Math.min(
-                  Math.max(anchor_center - width / 2, margin),
-                  viewport_width - width - margin,
-              );
-        top = Math.min(anchor_rect.bottom + 9, viewport_height - margin);
-        arrow_left = Math.min(Math.max(anchor_center - left, 18), width - 18);
-    }
+        : Math.min(460, Math.max(340, viewport_width - margin * 2));
+    const anchor_rect = anchor.getBoundingClientRect();
+    const anchor_center = anchor_rect.left + anchor_rect.width / 2;
+    const left = compact_viewport
+        ? margin
+        : Math.min(Math.max(anchor_rect.right - width, margin), viewport_width - width - margin);
+    const top = Math.min(anchor_rect.bottom + 8, viewport_height - margin);
+    const arrow_left = Math.min(Math.max(anchor_center - left, 18), width - 18);
     panel.style.setProperty("--pear-workbench-popover-left", `${Math.round(left)}px`);
     panel.style.setProperty("--pear-workbench-popover-top", `${Math.round(top)}px`);
     panel.style.setProperty("--pear-workbench-popover-width", `${Math.round(width)}px`);
@@ -1356,6 +1359,22 @@ function render(
         has_topic,
         show_workbench: workbench_open,
     });
+    const active_run_for_template =
+        active_run === undefined
+            ? undefined
+            : {
+                  id: active_run.id,
+                  status: active_run.status,
+                  status_class: active_run.status_class,
+                  status_label: active_run.status_label,
+                  status_marker: active_run.status_marker,
+                  show_status: active_run.show_status,
+                  is_active: active_run.is_active,
+                  can_pause: active_run.can_pause,
+                  can_resume: active_run.can_resume,
+                  can_cancel: active_run.can_cancel,
+                  has_actions: active_run.has_actions,
+              };
     const render_state = {
         has_topic,
         context_label: has_topic ? `${stream} > ${topic}` : (stream ?? ""),
@@ -1374,7 +1393,7 @@ function render(
         active_run_is_active: active_run?.is_active === true,
         panel_has_active_status: panel_has_active_status_for_testing(active_run?.status),
         topic_context: display_context,
-        active_run,
+        active_run: active_run_for_template,
         error: last_error,
         status_label: panel_status,
         status_class: status_class(panel_status),

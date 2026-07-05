@@ -630,6 +630,18 @@ test("pear_message_vars", () => {
     assert.equal(result.is_pear_active_message, true);
     assert.equal(result.include_sender, false);
 
+    pear_run_state.set_active_run_result_messages([{status: "running", result_message_id: 1005}]);
+    result = calculate_variables(
+        build_message_context({
+            id: 1005,
+            content: "<p><em>Thinking</em></p>",
+            is_pear_message: true,
+        }),
+    );
+    assert.equal(result.is_pear_message, true);
+    assert.equal(result.is_pear_active_message, true);
+    assert.equal(result.include_sender, false);
+
     result = calculate_variables(
         build_message_context({
             content: "<p>Done.</p>",

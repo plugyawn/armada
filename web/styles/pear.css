@@ -203,6 +203,7 @@ body.pear-workbench-split-open {
     display: flex;
     min-width: 0;
     flex-direction: column;
+    gap: 6px;
     border-bottom: 1px solid
         color-mix(
             in srgb,
@@ -212,11 +213,45 @@ body.pear-workbench-split-open {
     padding-bottom: 6px;
 }
 
+.pear-workbench-title-row {
+    display: grid;
+    min-width: 0;
+    align-items: center;
+    gap: 6px;
+    grid-template-columns: auto minmax(0, auto) minmax(0, 1fr) auto;
+}
+
+.pear-workbench-title-glyph {
+    color: var(--color-text-success-text-action-button);
+    font-size: 11px;
+}
+
+.pear-workbench-title {
+    overflow: hidden;
+    color: var(--color-text-default);
+    font-size: 12px;
+    font-weight: var(--font-weight-sidebar-row);
+    line-height: 16px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.pear-workbench-meta {
+    overflow: hidden;
+    color: var(--color-text-sidebar-heading);
+    font-family: monospace;
+    font-size: 10px;
+    line-height: 14px;
+    opacity: var(--opacity-sidebar-heading);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 .pear-workbench-context-row {
     display: flex;
     min-width: 0;
     align-items: center;
-    justify-content: space-between;
+    justify-content: flex-start;
     gap: 9px;
 }
 
@@ -231,6 +266,7 @@ body.pear-workbench-split-open {
 }
 
 .pear-workbench-close {
+    justify-self: end;
     flex: 0 0 auto;
     color: var(--color-text-item);
     opacity: 0.32;
@@ -304,28 +340,12 @@ body.pear-workbench-split-open {
             var(--color-border-sidebar-subheader) 62%,
             transparent
         );
-    border-radius: 8px;
-    background: color-mix(
-        in srgb,
-        var(--color-background-hover-narrow-filter) 22%,
-        transparent
-    );
+    border-radius: 4px;
+    background: transparent;
 }
 
 .pear-file-list {
     gap: 0;
-    border: 1px solid
-        color-mix(
-            in srgb,
-            var(--color-border-sidebar-subheader) 62%,
-            transparent
-        );
-    border-radius: 9px;
-    background: color-mix(
-        in srgb,
-        var(--color-background-hover-narrow-filter) 20%,
-        transparent
-    );
 }
 
 .pear-file-row,
@@ -339,7 +359,7 @@ body.pear-workbench-split-open {
 
 .pear-file-row {
     grid-template-columns: auto minmax(0, 1fr);
-    padding: 7px 10px;
+    padding: 6px 8px;
 }
 
 .pear-file-row + .pear-file-row,
@@ -360,7 +380,7 @@ body.pear-workbench-split-open {
 
 .pear-commit-row {
     grid-template-columns: minmax(0, 1fr) auto auto;
-    padding: 7px 9px;
+    padding: 6px 8px;
 }
 
 .pear-commit-row-head {
@@ -384,7 +404,7 @@ body.pear-workbench-split-open {
     min-width: 0;
     overflow: hidden;
     border: 1px solid var(--color-border-sidebar-subheader);
-    border-radius: 6px;
+    border-radius: 4px;
     color: var(--color-text-item);
     font-family: monospace;
     font-size: 10px;

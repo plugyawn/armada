@@ -62,6 +62,18 @@
             <section class="pear-context-section">
                 <div class="pear-workbench">
                     <div class="pear-workbench-header">
+                        <div class="pear-workbench-title-row">
+                            <span class="pear-ui-glyph pear-workbench-title-glyph" aria-hidden="true">✶</span>
+                            <span class="pear-workbench-title" title="{{topic_context.workbench_title}}">{{topic_context.workbench_title}}</span>
+                            {{#if topic_context.workbench_meta}}
+                                <span class="pear-workbench-meta" title="{{topic_context.workbench_meta}}">{{topic_context.workbench_meta}}</span>
+                            {{/if}}
+                            {{#if panel_can_close}}
+                                <button type="button" class="pear-panel-close-action pear-workbench-close pear-icon-button icon-button icon-button-square icon-button-neutral tippy-zulip-delayed-tooltip" aria-label="{{t 'Hide Pear work details' }}" data-tippy-content="{{t 'Hide Pear work details' }}">
+                                    <i class="zulip-icon zulip-icon-close" aria-hidden="true"></i>
+                                </button>
+                            {{/if}}
+                        </div>
                         <div class="pear-workbench-context-row">
                             <div class="pear-workbench-tabs" aria-label="{{t 'Pear work views' }}">
                                 <button type="button" class="pear-workbench-tab {{#if topic_context.workbench_diff_selected}}pear-workbench-tab-selected{{/if}}" data-pear-workbench-view="diff" {{#if topic_context.workbench_diff_disabled}}disabled{{/if}}>
@@ -77,11 +89,6 @@
                                     {{topic_context.side_tab_label}}
                                 </button>
                             </div>
-                            {{#if panel_can_close}}
-                                <button type="button" class="pear-panel-close-action pear-workbench-close pear-icon-button icon-button icon-button-square icon-button-neutral tippy-zulip-delayed-tooltip" aria-label="{{t 'Hide Pear work details' }}" data-tippy-content="{{t 'Hide Pear work details' }}">
-                                    <i class="zulip-icon zulip-icon-close" aria-hidden="true"></i>
-                                </button>
-                            {{/if}}
                         </div>
                     </div>
                     <div class="pear-workbench-body pear-workbench-view-{{topic_context.workbench_view}}">

@@ -114,6 +114,8 @@ run_test("template renders workbench without active run", () => {
         panel_can_close: true,
         active_run: undefined,
         topic_context: {
+            workbench_title: "routing-fix",
+            workbench_meta: "devel / routing-fix / a3f92c1",
             workbench_diff_selected: false,
             workbench_history_selected: true,
             workbench_canvas_selected: false,
@@ -137,6 +139,9 @@ run_test("template renders workbench without active run", () => {
     });
 
     assert.match(html, /pear-workbench/);
+    assert.match(html, /pear-workbench-title-row/);
+    assert.match(html, /routing-fix/);
+    assert.match(html, /devel \/ routing-fix \/ a3f92c1/);
     assert.match(html, /pear-workbench-context-row/);
     assert.match(html, /pear-workbench-tabs/);
     assert.match(html, /pear-workbench-close/);
@@ -144,7 +149,6 @@ run_test("template renders workbench without active run", () => {
     assert.match(html, /history/);
     assert.match(html, /canvas/);
     assert.match(html, /whisper/);
-    assert.doesNotMatch(html, /pear-workbench-title/);
     assert.doesNotMatch(html, /pear-workbench-runtime/);
     assert.doesNotMatch(html, /pear-workbench-head-row/);
     assert.doesNotMatch(html, /pear-workbench-diffstat/);
@@ -166,6 +170,8 @@ run_test("template keeps volatile run metadata out of workbench chrome", () => {
             usage: {cache_percent: 72},
         },
         topic_context: {
+            workbench_title: "routing-fix",
+            workbench_meta: "devel / routing-fix / a3f92c1",
             workbench_diff_selected: true,
             workbench_history_selected: false,
             workbench_canvas_selected: false,
@@ -182,6 +188,7 @@ run_test("template keeps volatile run metadata out of workbench chrome", () => {
     });
 
     assert.match(html, /pear-workbench-tabs/);
+    assert.match(html, /pear-workbench-title-row/);
     assert.doesNotMatch(html, /pear-workbench-context-meter/);
     assert.doesNotMatch(html, /pear-workbench-head-row/);
     assert.doesNotMatch(html, /pear-thinking-glyph/);
@@ -201,6 +208,8 @@ run_test("template keeps runtime metadata out of workbench content rail", () => 
             usage: {cache_percent: 91},
         },
         topic_context: {
+            workbench_title: "routing-fix",
+            workbench_meta: "devel / routing-fix / a3f92c1",
             workbench_diff_selected: true,
             workbench_history_selected: false,
             workbench_canvas_selected: false,
@@ -233,6 +242,8 @@ run_test("template renders canvas as a workbench pane", () => {
         panel_can_close: true,
         active_run: undefined,
         topic_context: {
+            workbench_title: "routing-fix",
+            workbench_meta: "devel / routing-fix / a3f92c1",
             workbench_diff_selected: false,
             workbench_history_selected: false,
             workbench_canvas_selected: true,
@@ -264,7 +275,6 @@ run_test("template renders canvas as a workbench pane", () => {
     assert.match(html, /<p>Project note<\/p>/);
     assert.match(html, /pear-workbench-canvas-open/);
     assert.match(html, /\.pear\/CANVAS\.md/);
-    assert.doesNotMatch(html, /pear-workbench-title/);
     assert.doesNotMatch(html, /pear-workbench-runtime/);
 });
 
@@ -278,6 +288,8 @@ run_test("template renders diff rows without duplicate summary chips", () => {
         panel_can_close: true,
         active_run: undefined,
         topic_context: {
+            workbench_title: "routing-fix",
+            workbench_meta: "devel / routing-fix / a3f92c1",
             workbench_diff_selected: true,
             workbench_history_selected: false,
             workbench_canvas_selected: false,

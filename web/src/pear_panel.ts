@@ -613,6 +613,8 @@ function display_topic_context(topic_context: PearTopicContext | undefined | nul
           canvas_rendered_html: string;
           canvas_render_failed: boolean;
           history_commits: (PearGitCommit & {is_head: boolean; ref_label: string})[];
+          workbench_title: string;
+          workbench_meta: string;
           has_workbench_diff_summary: boolean;
           workbench_diff_summary_label: string;
           workbench_diff_file_label: string;
@@ -633,6 +635,16 @@ function display_topic_context(topic_context: PearTopicContext | undefined | nul
     const has_workbench_diff = git_has_diff(git);
     const has_workbench_history = git_has_history(git);
     const diff_shortstat = git.diff_shortstat?.trim() ?? "";
+    const workbench_title = topic_context.worktree_label?.trim() || topic_context.topic;
+    const workbench_repo_label =
+        topic_context.repo_label?.trim() || topic_context.repo_title?.trim() || github_repo;
+    const workbench_meta = [
+        workbench_repo_label,
+        git.branch?.trim() ?? "",
+        git.head_short?.trim() ?? "",
+    ]
+        .filter((part) => part !== "")
+        .join(" / ");
     const diff_file_count = pear_git_shortstat_file_count(diff_shortstat) || changed_count;
     const diff_insertions = pear_git_shortstat_count(diff_shortstat, "insertion");
     const diff_deletions = pear_git_shortstat_count(diff_shortstat, "deletion");
@@ -712,6 +724,8 @@ function display_topic_context(topic_context: PearTopicContext | undefined | nul
         canvas_rendered_html,
         canvas_render_failed: canvas?.render_failed === true,
         history_commits,
+        workbench_title,
+        workbench_meta,
         has_workbench_diff_summary: workbench_diff_summary_label !== "",
         workbench_diff_summary_label,
         workbench_diff_file_label,

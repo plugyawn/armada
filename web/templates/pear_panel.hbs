@@ -2,7 +2,7 @@
 <div class="pear-panel-inner">
     {{#if show_panel_header}}
     <div class="pear-panel-header {{#if panel_header_quiet}}pear-panel-header-quiet{{/if}}">
-        {{#if active_run.show_status}}
+        {{#if active_run_show_status}}
         <div class="pear-panel-title-row">
             <div class="pear-run-status-row pear-run-status-{{active_run.status_class}}{{#if active_run.is_active}} pear-liveness-active{{/if}}" aria-label="{{active_run.status_label}} {{active_run.status_marker}}" title="{{active_run.status_label}} {{active_run.status_marker}}">
                 <span class="pear-panel-status-label">{{active_run.status_label}}</span>

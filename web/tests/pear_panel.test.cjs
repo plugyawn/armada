@@ -64,6 +64,7 @@ run_test("template renders active status as visible text glyph phrase", () => {
         show_workbench: false,
         has_topic: true,
         has_panel_menu: false,
+        active_run_show_status: true,
         panel_can_close: false,
         active_run: {
             show_status: true,

@@ -269,7 +269,7 @@ body.pear-workbench-split-open {
 
 .pear-topic-context-ref {
     color: var(--color-text-sidebar-heading);
-    font-family: monospace;
+    font-family: inherit;
     font-size: 0.92em;
     opacity: var(--opacity-sidebar-heading);
 }
@@ -277,7 +277,7 @@ body.pear-workbench-split-open {
 .pear-topic-context-status {
     align-self: center;
     border-radius: 4px;
-    font-family: monospace;
+    font-family: inherit;
     font-size: 0.82em;
     font-weight: var(--font-weight-sidebar-row);
     line-height: 15px;
@@ -429,7 +429,7 @@ body.pear-workbench-split-open {
 .pear-workbench-meta {
     overflow: hidden;
     color: var(--color-text-sidebar-heading);
-    font-family: monospace;
+    font-family: inherit;
     font-size: 10px;
     line-height: 14px;
     opacity: var(--opacity-sidebar-heading);
@@ -596,7 +596,7 @@ body.pear-workbench-split-open {
     border: 1px solid var(--color-border-sidebar-subheader);
     border-radius: 4px;
     color: var(--color-text-item);
-    font-family: monospace;
+    font-family: inherit;
     font-size: 10px;
     line-height: 14px;
     padding: 1px 6px;
@@ -1153,8 +1153,8 @@ body.pear-workbench-split-open {
     min-width: 0;
     overflow: hidden;
     color: var(--color-text-sidebar-row);
-    font-family: monospace;
-    font-size: 0.92em;
+    font-family: inherit;
+    font-size: 0.95em;
     font-weight: 600;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -1164,6 +1164,13 @@ body.pear-workbench-split-open {
     color: currentcolor;
     font-size: 13px;
     vertical-align: -0.05em;
+}
+
+#pear-panel .pear-thinking-glyph,
+#pear-runtime-menu-popover .pear-thinking-glyph {
+    display: inline-block;
+    min-width: 1.25em;
+    text-align: center;
 }
 
 /* Pear runtime popover menu; mirrors the radio-list layout used by
@@ -1198,7 +1205,6 @@ body.pear-workbench-split-open {
         gap: 4px;
         padding: 0 15px 7px 39px;
         color: var(--color-text-item);
-        font-family: monospace;
         font-size: 10px;
         line-height: 13px;
     }
@@ -1255,7 +1261,6 @@ body.pear-workbench-split-open {
         gap: 3px 8px;
         padding: 0 15px 7px 39px;
         color: var(--color-text-item);
-        font-family: monospace;
         font-size: 10px;
         line-height: 13px;
     }
@@ -1316,9 +1321,53 @@ body.pear-workbench-split-open {
     }
 
     .pear-runtime-effort-range {
+        appearance: none;
         width: 100%;
-        accent-color: var(--color-text-success-text-action-button);
+        height: 14px;
+        background: transparent;
         cursor: pointer;
+    }
+
+    .pear-runtime-effort-range::-webkit-slider-runnable-track {
+        height: 3px;
+        border-radius: 999px;
+        background: color-mix(
+            in srgb,
+            var(--color-border-sidebar-subheader) 74%,
+            transparent
+        );
+    }
+
+    .pear-runtime-effort-range::-moz-range-track {
+        height: 3px;
+        border-radius: 999px;
+        background: color-mix(
+            in srgb,
+            var(--color-border-sidebar-subheader) 74%,
+            transparent
+        );
+    }
+
+    .pear-runtime-effort-range::-webkit-slider-thumb {
+        appearance: none;
+        width: 0;
+        height: 0;
+        margin-top: -5px;
+        border-right: 6px solid transparent;
+        border-bottom: 10px solid var(--color-text-success-text-action-button);
+        border-left: 6px solid transparent;
+        background: transparent;
+    }
+
+    .pear-runtime-effort-range::-moz-range-thumb {
+        width: 0;
+        height: 0;
+        border: 0;
+        border-right: 6px solid transparent;
+        border-bottom: 10px solid var(--color-text-success-text-action-button);
+        border-left: 6px solid transparent;
+        border-radius: 0;
+        background: transparent;
     }
 
     .pear-runtime-effort-range:disabled {

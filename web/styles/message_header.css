@@ -292,12 +292,12 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 4px;
+    gap: 5px;
     min-width: 0;
-    max-width: min(13em, 30vw);
+    max-width: min(13em, 28vw);
     height: 22px;
-    margin: 0 1px;
-    padding: 0 5px;
+    margin: 0 2px;
+    padding: 0 6px;
     border: 0;
     border-radius: 4px;
     background: transparent;
@@ -310,21 +310,28 @@
 
     &:hover,
     &:focus-visible {
-        background-color: hsl(0deg 0% 100% / 16%);
+        background-color: color-mix(in srgb, currentcolor 13%, transparent);
         color: var(--color-text-message-header);
         outline: none;
     }
 
     &.active-right-sidebar-menu {
-        background-color: hsl(0deg 0% 100% / 20%);
+        background-color: color-mix(in srgb, currentcolor 17%, transparent);
         color: var(--color-text-message-header);
     }
 
     .pear-ui-glyph {
         flex: 0 0 auto;
-        font-family: "Source Code Pro", monospace;
-        font-size: 1em;
+        font-family: inherit;
+        font-size: 0.85em;
+        font-weight: 700;
         line-height: 1;
+    }
+
+    .pear-thinking-glyph {
+        display: inline-block;
+        min-width: 1.25em;
+        text-align: center;
     }
 
     .pear-runtime-menu-label,
@@ -333,10 +340,22 @@
         min-width: 0;
         overflow: hidden;
         text-overflow: ellipsis;
-        font-family: "Source Code Pro", monospace;
-        font-weight: 700;
+        font-family: inherit;
+        font-weight: 600;
         letter-spacing: 0;
     }
+}
+
+.pear-topic-header-runtime-before-work::after {
+    width: 1px;
+    height: 13px;
+    margin-left: 3px;
+    background: color-mix(
+        in srgb,
+        var(--color-text-message-header) 34%,
+        transparent
+    );
+    content: "";
 }
 
 .pear-topic-header-work-clean {
@@ -344,7 +363,20 @@
 }
 
 .pear-topic-header-work-dirty {
-    color: var(--color-text-warning-text-action-button);
+    color: light-dark(hsl(35deg 48% 26%), hsl(39deg 52% 72%));
+}
+
+.pear-topic-header-work-control {
+    max-width: min(12em, 24vw);
+    color: color-mix(
+        in srgb,
+        var(--color-text-message-header) 82%,
+        var(--color-text-warning-text-action-button) 18%
+    );
+}
+
+.pear-topic-header-work-control .pear-topic-header-work-label {
+    font-weight: 650;
 }
 
 .on_hover_topic_read {

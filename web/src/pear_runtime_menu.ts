@@ -249,7 +249,7 @@ export function runtime_summary(context: PearRuntimeContext | undefined): PearRu
     return {
         model_label,
         effort_label,
-        compact_label: `${context.model} · ${compact_effort}`,
+        compact_label: `${context.model} / ${compact_effort}`,
     };
 }
 
@@ -277,21 +277,21 @@ export function runtime_status_for_testing(
     switch (run?.status.toLowerCase()) {
         case "running":
             return {
-                glyph: "✦",
+                glyph: "·",
                 label: $t({defaultMessage: "working"}),
                 class_name: "pear-runtime-status-active",
                 is_active: true,
             };
         case "queued":
             return {
-                glyph: "✦",
+                glyph: "·",
                 label: $t({defaultMessage: "queued"}),
                 class_name: "pear-runtime-status-active",
                 is_active: true,
             };
         case "loading":
             return {
-                glyph: "✦",
+                glyph: "·",
                 label: $t({defaultMessage: "loading"}),
                 class_name: "pear-runtime-status-active",
                 is_active: true,

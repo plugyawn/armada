@@ -220,7 +220,7 @@ run_test("runtime_summary", () => {
         {
             model_label: "GPT-5.5",
             effort_label: "High",
-            compact_label: "gpt-5.5 · h",
+            compact_label: "gpt-5.5 / h",
         },
     );
 
@@ -229,7 +229,7 @@ run_test("runtime_summary", () => {
         {
             model_label: "custom",
             effort_label: "Low",
-            compact_label: "custom · l",
+            compact_label: "custom / l",
         },
     );
 
@@ -240,7 +240,7 @@ run_test("runtime_summary", () => {
         {
             model_label: "custom",
             effort_label: "XHigh",
-            compact_label: "custom · xh",
+            compact_label: "custom / xh",
         },
     );
 });
@@ -253,19 +253,19 @@ run_test("runtime_status_for_testing", () => {
         is_active: false,
     });
     assert.deepEqual(pear_runtime_menu.runtime_status_for_testing({status: "running"}), {
-        glyph: "✦",
+        glyph: "·",
         label: "translated: working",
         class_name: "pear-runtime-status-active",
         is_active: true,
     });
     assert.deepEqual(pear_runtime_menu.runtime_status_for_testing({status: "queued"}), {
-        glyph: "✦",
+        glyph: "·",
         label: "translated: queued",
         class_name: "pear-runtime-status-active",
         is_active: true,
     });
     assert.deepEqual(pear_runtime_menu.runtime_status_for_testing({status: "loading"}), {
-        glyph: "✦",
+        glyph: "·",
         label: "translated: loading",
         class_name: "pear-runtime-status-active",
         is_active: true,

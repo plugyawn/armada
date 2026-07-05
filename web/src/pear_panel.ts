@@ -194,7 +194,8 @@ const canvas_render_sequence_by_context = new Map<string, number>();
 const LIVE_REFRESH_INTERVAL_MS = 125;
 const FULL_REFRESH_INTERVAL_MS = 5000;
 const CONTEXT_REFRESH_INTERVAL_MS = 60_000;
-const WORKBENCH_MIN_VIEWPORT_WIDTH_PX = 1200;
+const WORKBENCH_MIN_VIEWPORT_WIDTH_PX = 320;
+const WORKBENCH_POPOVER_MARGIN_PX = 8;
 
 function compact_panel_text(text: string): string {
     return text
@@ -381,12 +382,15 @@ function run_shows_compact_panel_status(run: {status: string} | undefined): bool
     return run?.status === "running" || run?.status === "queued" || run?.status === "paused";
 }
 
-export function workbench_viewport_allows_split_for_testing(width: number): boolean {
+export function workbench_viewport_allows_popover_for_testing(width: number): boolean {
     return width >= WORKBENCH_MIN_VIEWPORT_WIDTH_PX;
 }
 
+export const workbench_viewport_allows_split_for_testing =
+    workbench_viewport_allows_popover_for_testing;
+
 function current_viewport_allows_workbench(): boolean {
-    return workbench_viewport_allows_split_for_testing(window.innerWidth);
+    return workbench_viewport_allows_popover_for_testing(window.innerWidth);
 }
 
 export function workbench_open_for_testing(options: {
@@ -457,15 +461,6 @@ function git_status_class(git: PearGitContext): string {
 function git_ref_label(git: PearGitContext): string {
     const branch = git.detached === true ? $t({defaultMessage: "detached"}) : (git.branch ?? "");
     return [branch.trim(), (git.head_short ?? "").trim()].filter((part) => part !== "").join(" / ");
-}
-
-function right_sidebar_is_visible(): boolean {
-    const $right_sidebar_column = $(".app-main .column-right");
-    return (
-        ($right_sidebar_column.css("display") !== "none" &&
-            !$("body").hasClass("hide-right-sidebar")) ||
-        $right_sidebar_column.hasClass("expanded")
-    );
 }
 
 function git_has_diff(git: PearGitContext): boolean {
@@ -567,12 +562,9 @@ export function open_work_details(requested_view?: PearWorkbenchView): void {
     if (!viewport_allows_workbench) {
         return;
     }
-    if (!right_sidebar_is_visible()) {
-        $("#userlist-toggle-button").trigger("click");
-    }
     const workbench = document.querySelector<HTMLElement>("#pear-panel .pear-workbench");
     if (workbench !== null) {
-        workbench.scrollIntoView({block: "nearest"});
+        position_workbench_popover();
         return;
     }
     refresh({force_context: true});
@@ -823,7 +815,13 @@ function topic_header_work_label(display_context: PearDisplayTopicContext): stri
     if (display_context.panel_git_status_class !== "clean") {
         return display_context.panel_git_status_label;
     }
-    return $t({defaultMessage: "clean"});
+    const branch_label = display_context.panel_git_ref_label.split(" / ")[0]?.trim();
+    return (
+        branch_label ||
+        display_context.panel_worktree_label ||
+        display_context.panel_repo_label ||
+        $t({defaultMessage: "work"})
+    );
 }
 
 function topic_header_work_title(display_context: PearDisplayTopicContext): string {
@@ -860,7 +858,7 @@ function render_topic_header_controls(options: {
         {runtime_label},
     );
     const work_label = topic_header_work_label(topic_context);
-    const show_work_control = topic_context.panel_git_status_class !== "clean";
+    const show_work_control = true;
     const work_title = topic_header_work_title(topic_context);
     const $headers = $(".message_header_stream").filter((_index, header) => {
         const $header = $(header);
@@ -932,6 +930,73 @@ function render_topic_header_controls(options: {
         }
     });
     $(document).trigger("pear_liveness_markers_changed");
+}
+
+function visible_header_anchor(): HTMLElement | undefined {
+    return [
+        ...document.querySelectorAll<HTMLElement>(
+            ".message_header_stream .pear-topic-header-work-control, .message_header_stream .pear-topic-header-runtime-control",
+        ),
+    ].find((element) => element.getClientRects().length > 0);
+}
+
+function position_workbench_popover(): void {
+    const panel = document.querySelector<HTMLElement>("#pear-panel");
+    if (panel === null || !panel.classList.contains("pear-workbench-popover-open")) {
+        return;
+    }
+    const anchor = visible_header_anchor();
+    const margin = WORKBENCH_POPOVER_MARGIN_PX;
+    const viewport_width = window.innerWidth;
+    const viewport_height = window.innerHeight;
+    const compact_viewport = viewport_width < 760;
+    const width = compact_viewport
+        ? Math.max(280, viewport_width - margin * 2)
+        : Math.min(680, Math.max(420, viewport_width - margin * 2));
+    const anchor_rect = anchor?.getBoundingClientRect();
+    let left = compact_viewport ? margin : Math.round((viewport_width - width) / 2);
+    let top = 58;
+    let arrow_left = width / 2;
+    if (anchor_rect !== undefined) {
+        const anchor_center = anchor_rect.left + anchor_rect.width / 2;
+        left = compact_viewport
+            ? margin
+            : Math.min(
+                  Math.max(anchor_center - width / 2, margin),
+                  viewport_width - width - margin,
+              );
+        top = Math.min(anchor_rect.bottom + 9, viewport_height - margin);
+        arrow_left = Math.min(Math.max(anchor_center - left, 18), width - 18);
+    }
+    panel.style.setProperty("--pear-workbench-popover-left", `${Math.round(left)}px`);
+    panel.style.setProperty("--pear-workbench-popover-top", `${Math.round(top)}px`);
+    panel.style.setProperty("--pear-workbench-popover-width", `${Math.round(width)}px`);
+    panel.style.setProperty(
+        "--pear-workbench-popover-max-height",
+        `${Math.max(260, Math.round(viewport_height - top - margin))}px`,
+    );
+    panel.style.setProperty(
+        "--pear-workbench-popover-arrow-left",
+        `${Math.round(arrow_left)}px`,
+    );
+}
+
+function set_workbench_popover_open(workbench_open: boolean): void {
+    const $panel = $("#pear-panel");
+    $panel.toggleClass("pear-workbench-popover-open", workbench_open);
+    if (workbench_open) {
+        position_workbench_popover();
+        return;
+    }
+    const panel = $panel.get(0);
+    if (panel === undefined) {
+        return;
+    }
+    panel.style.removeProperty("--pear-workbench-popover-left");
+    panel.style.removeProperty("--pear-workbench-popover-top");
+    panel.style.removeProperty("--pear-workbench-popover-width");
+    panel.style.removeProperty("--pear-workbench-popover-max-height");
+    panel.style.removeProperty("--pear-workbench-popover-arrow-left");
 }
 
 function fetch_git_tree_for_context(topic_context: PearTopicContext): void {
@@ -1264,7 +1329,6 @@ function render(
     const has_stream = stream !== undefined;
     const has_topic = has_stream && topic !== undefined;
     const next_context_key = context_key(stream, topic);
-    const panel_context_key = next_context_key || stream || "";
     const active_run = active_display_run(runs);
     const manual_workbench_open = work_panel_open_by_context.get(next_context_key) ?? false;
     const viewport_allows_workbench = current_viewport_allows_workbench();
@@ -1273,12 +1337,7 @@ function render(
         manually_open: viewport_allows_workbench && manual_workbench_open,
         has_error: viewport_allows_workbench && last_error !== "",
     });
-    const panel_open = work_panel_open_for_testing({
-        context_key_value: panel_context_key,
-        manually_open: viewport_allows_workbench && manual_workbench_open,
-        active_run_status: active_run?.status,
-        has_error: viewport_allows_workbench && last_error !== "",
-    });
+    const panel_open = workbench_open;
     pear_run_state.set_active_run_result_messages(runs, {
         force_reconcile: active_run === undefined,
     });
@@ -1328,8 +1387,7 @@ function render(
         }
         $("#pear-panel").html(render_pear_panel(render_state));
         $("#pear-panel").toggleClass("pear-panel-collapsed", !panel_open);
-        $("#user-list").toggleClass("pear-workbench-open", workbench_open);
-        $("body").toggleClass("pear-workbench-split-open", workbench_open);
+        set_workbench_popover_open(workbench_open);
         const stored_side_request = side_request_by_context.get(next_context_key);
         if (stored_side_request !== undefined) {
             $("#pear-side-request").val(stored_side_request);
@@ -1339,8 +1397,7 @@ function render(
         last_render_state_key = next_render_state_key;
     }
     $("#pear-panel").toggleClass("pear-panel-collapsed", !panel_open);
-    $("#user-list").toggleClass("pear-workbench-open", workbench_open);
-    $("body").toggleClass("pear-workbench-split-open", workbench_open);
+    set_workbench_popover_open(workbench_open);
     if (workbench_open && display_context?.workbench_history_selected) {
         fetch_git_tree_for_context(display_context);
     }
@@ -1479,8 +1536,16 @@ export function initialize(): void {
     $("body").on("click", ".pear-panel-close-action", () => {
         close_work_details();
     });
-    $("body").on("click", ".pear-panel-open-action", () => {
+    $("body").on("click", ".pear-panel-open-action", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
         open_work_details();
+    });
+    $("body").on("click", "#pear-panel", (e) => {
+        e.stopPropagation();
+    });
+    $(document).on("click.pear_panel", () => {
+        close_work_details();
     });
     $("body").on("click", ".pear-workbench-tab", function () {
         const view = $(this).attr("data-pear-workbench-view");
@@ -1516,6 +1581,9 @@ export function initialize(): void {
     $(window).on("resize.pear_panel", () => {
         render();
     });
+    $(window).on("scroll.pear_panel", () => {
+        position_workbench_popover();
+    });
     refresh();
     refresh_timer = window.setInterval(refresh, FULL_REFRESH_INTERVAL_MS);
 }
@@ -1526,6 +1594,8 @@ export function stop(): void {
         refresh_timer = undefined;
     }
     $(window).off("resize.pear_panel");
+    $(window).off("scroll.pear_panel");
+    $(document).off("click.pear_panel");
     clear_live_refresh();
     live_refresh_in_flight = false;
 }

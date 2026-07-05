@@ -50,19 +50,25 @@
 
     {{#if show_topic_control}}
     <section class="pear-topic-control" aria-label="{{t 'Pear context' }}">
-        <div class="pear-topic-control-row">
-            {{#if show_runtime_trigger}}
-            <button type="button" class="pear-runtime-menu-trigger pear-runtime-panel-trigger pear-topic-runtime-trigger tippy-zulip-delayed-tooltip" aria-label="{{t 'Pear runtime' }}" data-tippy-content="{{t 'Pear runtime' }}">
-                <span class="pear-ui-glyph pear-runtime-menu-glyph" aria-hidden="true">·</span>
-                <span class="pear-topic-runtime-name">{{t "Pear" }}</span>
-                <span class="pear-runtime-menu-label">{{#if topic_context}}{{topic_context.panel_runtime_label}}{{/if}}</span>
-            </button>
-            {{/if}}
+        <div class="pear-topic-control-heading">
+            <div class="pear-topic-control-title">
+                <span class="buddy-list-section-toggle zulip-icon zulip-icon-heading-triangle-down" aria-hidden="true"></span>
+                <span class="pear-topic-control-title-text">{{t "Pear" }}</span>
+            </div>
             {{#unless show_workbench}}
             <button type="button" class="pear-panel-open-action pear-topic-open-action pear-icon-button icon-button icon-button-square icon-button-neutral tippy-zulip-delayed-tooltip" aria-label="{{t 'Open Pear work details' }}" data-tippy-content="{{t 'Open Pear work details' }}">
                 <span class="pear-ui-glyph" aria-hidden="true">✶</span>
             </button>
             {{/unless}}
+        </div>
+        <div class="pear-topic-control-row">
+            {{#if show_runtime_trigger}}
+            <button type="button" class="pear-runtime-menu-trigger pear-runtime-panel-trigger pear-topic-runtime-trigger tippy-zulip-delayed-tooltip" aria-label="{{t 'Pear runtime' }}" data-tippy-content="{{t 'Pear runtime' }}">
+                <span class="pear-ui-glyph pear-runtime-menu-glyph" aria-hidden="true">·</span>
+                <span class="pear-topic-runtime-name">{{t "Runtime" }}</span>
+                <span class="pear-runtime-menu-label">{{#if topic_context}}{{topic_context.panel_runtime_label}}{{/if}}</span>
+            </button>
+            {{/if}}
         </div>
         {{#if topic_context}}
             <button type="button" class="pear-panel-open-action pear-topic-context-row" aria-label="{{t 'Open Pear workspace details' }}">

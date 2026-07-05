@@ -1,6 +1,7 @@
 #pear-panel {
     border-top: 1px solid var(--color-border-sidebar-subheader);
-    padding: 8px var(--right-sidebar-padding-left) 9px;
+    border-bottom: 1px solid var(--color-border-sidebar-subheader);
+    padding: 6px var(--right-sidebar-padding-left) 8px;
     color: var(--color-text-sidebar-row);
     font-size: inherit;
 }
@@ -137,7 +138,7 @@ body.pear-workbench-split-open {
     display: flex;
     min-width: 0;
     flex-direction: column;
-    gap: 2px;
+    gap: 1px;
     margin-right: var(--width-simplebar-scroll-hover);
 }
 
@@ -159,7 +160,7 @@ body.pear-workbench-split-open {
 
 .pear-topic-control-title-text {
     margin: 0;
-    padding: 5px 5px 5px 0;
+    padding: 4px 5px 4px 0;
     font-size: inherit;
     font-weight: var(--font-weight-sidebar-heading);
     letter-spacing: var(--letter-spacing-sidebar-heading);
@@ -214,6 +215,7 @@ body.pear-workbench-split-open {
     gap: 6px;
     grid-template-columns: var(--right-sidebar-header-icon-toggle-width) minmax(52px, auto) minmax(0, 1fr);
     line-height: var(--line-height-sidebar-row);
+    margin-bottom: 2px;
     padding: 0 6px 0 0;
 }
 

@@ -11,14 +11,6 @@
         </div>
         {{/if}}
         <div class="pear-panel-actions">
-            {{#if show_runtime_trigger}}
-            {{#unless show_workbench}}
-            <button type="button" class="pear-runtime-menu-trigger pear-runtime-panel-trigger {{#if active_run_show_status}}pear-runtime-panel-trigger-compact{{/if}} pear-icon-button icon-button icon-button-square icon-button-neutral tippy-zulip-delayed-tooltip" aria-label="{{t 'Pear runtime' }}" data-tippy-content="{{t 'Pear runtime' }}">
-                <span class="pear-ui-glyph pear-runtime-menu-glyph" aria-hidden="true">·</span>
-                <span class="pear-runtime-menu-label">{{t "Pear" }}</span>
-            </button>
-            {{/unless}}
-            {{/if}}
             {{#if has_panel_menu}}
             <details class="pear-run-actions pear-panel-run-actions" data-run-id="{{active_run.id}}">
                 <summary class="pear-run-actions-summary pear-icon-button icon-button icon-button-square icon-button-neutral tippy-zulip-delayed-tooltip" aria-label="{{t 'Pear work menu' }}" data-tippy-content="{{t 'Pear work menu' }}">
@@ -54,6 +46,46 @@
             {{/if}}
         </div>
     </div>
+    {{/if}}
+
+    {{#if show_topic_control}}
+    <section class="pear-topic-control" aria-label="{{t 'Pear context' }}">
+        <div class="pear-topic-control-row">
+            {{#if show_runtime_trigger}}
+            <button type="button" class="pear-runtime-menu-trigger pear-runtime-panel-trigger pear-topic-runtime-trigger tippy-zulip-delayed-tooltip" aria-label="{{t 'Pear runtime' }}" data-tippy-content="{{t 'Pear runtime' }}">
+                <span class="pear-ui-glyph pear-runtime-menu-glyph" aria-hidden="true">·</span>
+                <span class="pear-topic-runtime-name">{{t "Pear" }}</span>
+                <span class="pear-runtime-menu-label">{{t "Pear" }}</span>
+            </button>
+            {{/if}}
+            {{#unless show_workbench}}
+            <button type="button" class="pear-panel-open-action pear-topic-open-action pear-icon-button icon-button icon-button-square icon-button-neutral tippy-zulip-delayed-tooltip" aria-label="{{t 'Open Pear work details' }}" data-tippy-content="{{t 'Open Pear work details' }}">
+                <span class="pear-ui-glyph" aria-hidden="true">✶</span>
+            </button>
+            {{/unless}}
+        </div>
+        {{#if topic_context}}
+            <button type="button" class="pear-panel-open-action pear-topic-context-row" aria-label="{{t 'Open Pear workspace details' }}">
+                <span class="pear-topic-context-label">{{t "Repo" }}</span>
+                <span class="pear-topic-context-main" title="{{topic_context.panel_repo_label}}">{{topic_context.panel_repo_label}}</span>
+                {{#if topic_context.panel_git_status_label}}
+                    <span class="pear-topic-context-status pear-topic-context-status-{{topic_context.panel_git_status_class}}">{{topic_context.panel_git_status_label}}</span>
+                {{/if}}
+            </button>
+            <button type="button" class="pear-panel-open-action pear-topic-context-row pear-topic-context-row-secondary" aria-label="{{t 'Open Pear worktree details' }}">
+                <span class="pear-topic-context-label">{{t "Worktree" }}</span>
+                <span class="pear-topic-context-main" title="{{topic_context.panel_worktree_label}}">{{topic_context.panel_worktree_label}}</span>
+                {{#if topic_context.panel_git_ref_label}}
+                    <span class="pear-topic-context-ref" title="{{topic_context.panel_git_ref_label}}">{{topic_context.panel_git_ref_label}}</span>
+                {{/if}}
+            </button>
+        {{else}}
+            <button type="button" class="pear-panel-open-action pear-topic-context-row pear-topic-context-row-secondary" aria-label="{{t 'Open Pear work details' }}">
+                <span class="pear-topic-context-label">{{t "Topic" }}</span>
+                <span class="pear-topic-context-main" title="{{context_label}}">{{context_label}}</span>
+            </button>
+        {{/if}}
+    </section>
     {{/if}}
 
     {{#if show_workbench}}

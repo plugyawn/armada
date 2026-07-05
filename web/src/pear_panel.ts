@@ -398,6 +398,43 @@ function panel_has_active_status_for_testing(status: string | undefined): boolea
     );
 }
 
+function git_status_label(git: PearGitContext, changed_label: string): string {
+    if (!git.available) {
+        return "";
+    }
+    if (git.dirty) {
+        return changed_label;
+    }
+    if ((git.ahead ?? 0) > 0 && (git.behind ?? 0) > 0) {
+        return $t(
+            {defaultMessage: "+{ahead} -{behind}"},
+            {ahead: git.ahead ?? 0, behind: git.behind ?? 0},
+        );
+    }
+    if ((git.ahead ?? 0) > 0) {
+        return $t({defaultMessage: "+{ahead}"}, {ahead: git.ahead ?? 0});
+    }
+    if ((git.behind ?? 0) > 0) {
+        return $t({defaultMessage: "-{behind}"}, {behind: git.behind ?? 0});
+    }
+    return $t({defaultMessage: "clean"});
+}
+
+function git_status_class(git: PearGitContext): string {
+    if (!git.available) {
+        return "unavailable";
+    }
+    if (git.dirty || (git.ahead ?? 0) > 0 || (git.behind ?? 0) > 0 || git.detached === true) {
+        return "dirty";
+    }
+    return "clean";
+}
+
+function git_ref_label(git: PearGitContext): string {
+    const branch = git.detached === true ? $t({defaultMessage: "detached"}) : (git.branch ?? "");
+    return [branch.trim(), (git.head_short ?? "").trim()].filter((part) => part !== "").join(" / ");
+}
+
 function right_sidebar_is_visible(): boolean {
     const $right_sidebar_column = $(".app-main .column-right");
     return (
@@ -615,6 +652,11 @@ function display_topic_context(topic_context: PearTopicContext | undefined | nul
           history_commits: (PearGitCommit & {is_head: boolean; ref_label: string})[];
           workbench_title: string;
           workbench_meta: string;
+          panel_repo_label: string;
+          panel_worktree_label: string;
+          panel_git_status_label: string;
+          panel_git_status_class: string;
+          panel_git_ref_label: string;
           has_workbench_diff_summary: boolean;
           workbench_diff_summary_label: string;
           workbench_diff_file_label: string;
@@ -638,6 +680,13 @@ function display_topic_context(topic_context: PearTopicContext | undefined | nul
     const workbench_title = topic_context.worktree_label?.trim() || topic_context.topic;
     const workbench_repo_label =
         topic_context.repo_label?.trim() || topic_context.repo_title?.trim() || github_repo;
+    const panel_repo_label =
+        workbench_repo_label ||
+        git.repo_label?.trim() ||
+        git.repo_name?.trim() ||
+        $t({defaultMessage: "No repo pinned"});
+    const panel_worktree_label =
+        git.worktree_name?.trim() || topic_context.worktree_label?.trim() || topic_context.topic;
     const workbench_meta = [
         workbench_repo_label,
         git.branch?.trim() ?? "",
@@ -726,6 +775,11 @@ function display_topic_context(topic_context: PearTopicContext | undefined | nul
         history_commits,
         workbench_title,
         workbench_meta,
+        panel_repo_label,
+        panel_worktree_label,
+        panel_git_status_label: git_status_label(git, changed_label),
+        panel_git_status_class: git_status_class(git),
+        panel_git_ref_label: git_ref_label(git),
         has_workbench_diff_summary: workbench_diff_summary_label !== "",
         workbench_diff_summary_label,
         workbench_diff_file_label,
@@ -947,12 +1001,9 @@ export function panel_header_state_for_testing(
     show_runtime_trigger: boolean;
     has_panel_menu: boolean;
 } {
-    const show_runtime_trigger = options.has_topic === true && options.show_workbench !== true;
+    const show_runtime_trigger = options.has_topic === true;
     return {
-        show_panel_header:
-            show_runtime_trigger ||
-            active_run?.show_status === true ||
-            active_run?.has_actions === true,
+        show_panel_header: active_run?.show_status === true || active_run?.has_actions === true,
         show_runtime_trigger,
         has_panel_menu: active_run?.has_actions === true,
     };
@@ -1096,6 +1147,7 @@ function render(
         show_workbench: workbench_open,
         panel_can_close: workbench_open,
         has_panel_menu: panel_header_state.has_panel_menu,
+        show_topic_control: has_topic,
         show_runtime_trigger: panel_header_state.show_runtime_trigger,
         show_panel_header: panel_header_state.show_panel_header,
         panel_header_quiet:
@@ -1269,6 +1321,9 @@ export function initialize(): void {
     });
     $("body").on("click", ".pear-panel-close-action", () => {
         close_work_details();
+    });
+    $("body").on("click", ".pear-panel-open-action", () => {
+        open_work_details();
     });
     $("body").on("click", ".pear-workbench-tab", function () {
         const view = $(this).attr("data-pear-workbench-view");

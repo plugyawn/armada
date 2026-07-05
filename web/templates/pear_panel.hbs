@@ -55,7 +55,7 @@
             <button type="button" class="pear-runtime-menu-trigger pear-runtime-panel-trigger pear-topic-runtime-trigger tippy-zulip-delayed-tooltip" aria-label="{{t 'Pear runtime' }}" data-tippy-content="{{t 'Pear runtime' }}">
                 <span class="pear-ui-glyph pear-runtime-menu-glyph" aria-hidden="true">·</span>
                 <span class="pear-topic-runtime-name">{{t "Pear" }}</span>
-                <span class="pear-runtime-menu-label">{{t "Pear" }}</span>
+                <span class="pear-runtime-menu-label">{{topic_context.panel_runtime_label}}</span>
             </button>
             {{/if}}
             {{#unless show_workbench}}

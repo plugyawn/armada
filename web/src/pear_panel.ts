@@ -259,6 +259,28 @@ function status_marker(status: string): string {
 export const status_marker_for_testing = status_marker;
 export const status_label_for_testing = status_label;
 
+function compact_reasoning_effort(effort: string | undefined): string {
+    if (effort === undefined || effort === "") {
+        return "";
+    }
+    if (effort === "xhigh") {
+        return "xh";
+    }
+    return effort.at(0)?.toLowerCase() ?? "";
+}
+
+export function panel_runtime_label_for_testing(options: {
+    model?: string;
+    reasoning_effort?: string;
+}): string {
+    const model = options.model?.trim() ?? "";
+    if (model === "") {
+        return "";
+    }
+    const effort = compact_reasoning_effort(options.reasoning_effort);
+    return effort === "" ? model : `${model} · ${effort}`;
+}
+
 function is_pear_runs_response(data: unknown): data is PearRunsResponse {
     return (
         typeof data === "object" &&
@@ -657,6 +679,7 @@ function display_topic_context(topic_context: PearTopicContext | undefined | nul
           panel_git_status_label: string;
           panel_git_status_class: string;
           panel_git_ref_label: string;
+          panel_runtime_label: string;
           has_workbench_diff_summary: boolean;
           workbench_diff_summary_label: string;
           workbench_diff_file_label: string;
@@ -780,6 +803,10 @@ function display_topic_context(topic_context: PearTopicContext | undefined | nul
         panel_git_status_label: git_status_label(git, changed_label),
         panel_git_status_class: git_status_class(git),
         panel_git_ref_label: git_ref_label(git),
+        panel_runtime_label: panel_runtime_label_for_testing({
+            model: topic_context.model,
+            reasoning_effort: topic_context.reasoning_effort,
+        }),
         has_workbench_diff_summary: workbench_diff_summary_label !== "",
         workbench_diff_summary_label,
         workbench_diff_file_label,

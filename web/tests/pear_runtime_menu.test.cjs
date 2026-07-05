@@ -33,8 +33,21 @@ run_test("runtime_menu_selector_for_testing", () => {
         pear_runtime_menu.runtime_menu_selector_for_testing,
         "#pear-panel .pear-runtime-menu-trigger",
     );
-    assert.ok(!pear_runtime_menu.runtime_menu_selector_for_testing.includes("#top_navbar"));
-    assert.ok(!pear_runtime_menu.runtime_menu_selector_for_testing.includes("#message_view_header"));
+    for (const selector of pear_runtime_menu.forbidden_header_mount_selectors_for_testing) {
+        assert.ok(!pear_runtime_menu.runtime_menu_selector_for_testing.includes(selector));
+    }
+});
+
+run_test("forbidden_header_mount_selectors_for_testing", () => {
+    // Workspace/repo/runtime chrome must stay out of Zulip's native
+    // navbar semantics. The stream/topic title and search box own this area.
+    assert.deepEqual(pear_runtime_menu.forbidden_header_mount_selectors_for_testing, [
+        "#top_navbar",
+        "#navbar-middle",
+        "#message_view_header",
+        ".top-navbar-container",
+        ".message-header-navbar-title",
+    ]);
 });
 
 run_test("model_reasoning_efforts", () => {

@@ -84,6 +84,10 @@ body.pear-workbench-split-open {
     gap: 8px;
 }
 
+.pear-panel-header-idle {
+    justify-content: flex-start;
+}
+
 .pear-panel-header-quiet {
     position: absolute;
     z-index: 2;
@@ -115,6 +119,13 @@ body.pear-workbench-split-open {
     gap: 3px;
     opacity: 0.44;
     transition: opacity 120ms ease;
+}
+
+.pear-panel-header-idle .pear-panel-actions {
+    min-width: 0;
+    flex: 1 1 auto;
+    justify-content: flex-start;
+    opacity: 0.58;
 }
 
 #pear-panel:hover .pear-panel-actions,
@@ -932,14 +943,22 @@ body.pear-workbench-split-open {
     overflow-wrap: anywhere;
 }
 
-.pear-runtime-menu-glyph {
-    color: currentcolor;
-    font-size: 16px;
-    vertical-align: -0.05em;
-}
-
 #pear-panel .pear-runtime-menu-trigger {
+    display: inline-grid;
+    width: auto;
+    min-width: 0;
+    max-width: 100%;
+    height: 22px;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    justify-content: start;
+    gap: 5px;
+    border-radius: 4px;
     color: var(--color-vdots-visible);
+    font-size: 11px;
+    line-height: 15px;
+    padding: 2px 4px;
+    text-align: left;
 }
 
 #pear-panel .pear-runtime-menu-trigger:hover,
@@ -965,6 +984,32 @@ body.pear-workbench-split-open {
 
 .pear-runtime-menu-label {
     display: none;
+}
+
+#pear-panel .pear-runtime-panel-trigger .pear-runtime-menu-label {
+    display: inline;
+    min-width: 0;
+    overflow: hidden;
+    color: var(--color-text-sidebar-row);
+    font-weight: var(--font-weight-sidebar-row);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+#pear-panel .pear-runtime-panel-trigger-compact {
+    width: 22px;
+    grid-template-columns: auto;
+    justify-content: center;
+}
+
+#pear-panel .pear-runtime-panel-trigger-compact .pear-runtime-menu-label {
+    display: none;
+}
+
+.pear-runtime-menu-glyph {
+    color: currentcolor;
+    font-size: 13px;
+    vertical-align: -0.05em;
 }
 
 /* Pear runtime popover menu; mirrors the radio-list layout used by

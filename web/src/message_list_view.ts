@@ -168,6 +168,7 @@ const pear_thinking_glyphs = [
     "∙",
 ] as const;
 const PEAR_ACTIVE_GLYPH = "✦";
+const PEAR_ACTIVE_VISIBLE_GLYPH = pear_thinking_glyphs[0]!;
 let pear_thinking_glyph_index = 0;
 let pear_thinking_glyph_timer: ReturnType<typeof setInterval> | undefined;
 
@@ -189,13 +190,23 @@ const pear_tool_row_markers: PearToolRowMarker[] = [
     {regex: /^\s*·!\s*/, glyph: "✷", class_name: "pear-tool-row-blocked"},
     {regex: /^\s*✓\s*/, glyph: "·", class_name: "pear-tool-row-done"},
     {regex: /^\s*!\s*/, glyph: "✷", class_name: "pear-tool-row-blocked"},
-    {regex: /^\s*✦\s*/, glyph: PEAR_ACTIVE_GLYPH, class_name: "pear-tool-row-active", is_active: true},
+    {
+        regex: /^\s*✦\s*/,
+        glyph: PEAR_ACTIVE_VISIBLE_GLYPH,
+        class_name: "pear-tool-row-active",
+        is_active: true,
+    },
     {regex: /^\s*✷\s*/, glyph: "✷", class_name: "pear-tool-row-blocked"},
     {regex: /^\s*⋅\s*/, glyph: "⋅", class_name: "pear-tool-row-pending"},
     {regex: /^\s*·\s*/, glyph: "·", class_name: "pear-tool-row-done"},
     {regex: /^\s*\[x\]\s*/i, glyph: "·", class_name: "pear-tool-row-done"},
     {regex: /^\s*\[\s\]\s*/, glyph: "⋅", class_name: "pear-tool-row-pending"},
-    {regex: /^\s*\[~\]\s*/i, glyph: PEAR_ACTIVE_GLYPH, class_name: "pear-tool-row-active", is_active: true},
+    {
+        regex: /^\s*\[~\]\s*/i,
+        glyph: PEAR_ACTIVE_VISIBLE_GLYPH,
+        class_name: "pear-tool-row-active",
+        is_active: true,
+    },
 ];
 
 function extract_pear_tool_row_marker_from_text(text: string): {
@@ -310,7 +321,7 @@ function pear_thinking_glyph_containers($scope: JQuery<HTMLElement | Document>):
 function build_pear_thinking_glyph(): Element {
     const glyph = document.createElementNS("http://www.w3.org/1999/xhtml", "span");
     glyph.classList.add("pear-thinking-glyph");
-    glyph.textContent = pear_thinking_glyphs[0];
+    glyph.textContent = PEAR_ACTIVE_VISIBLE_GLYPH;
     return glyph;
 }
 
@@ -377,7 +388,7 @@ function pear_tool_block_marker_from_state(options: {
     if (options.has_active_row || /✦$/.test(options.title)) {
         return {
             regex: /^/,
-            glyph: PEAR_ACTIVE_GLYPH,
+            glyph: PEAR_ACTIVE_VISIBLE_GLYPH,
             class_name: "pear-tool-row-active",
             is_active: true,
         };
@@ -703,10 +714,12 @@ function render_pear_thinking_glyph($markers: JQuery): void {
 
 function stop_pear_thinking_animation(): void {
     if (pear_thinking_glyph_timer === undefined) {
+        pear_thinking_glyph_index = 0;
         return;
     }
     clearInterval(pear_thinking_glyph_timer);
     pear_thinking_glyph_timer = undefined;
+    pear_thinking_glyph_index = 0;
 }
 
 function update_pear_thinking_glyphs(): void {
@@ -729,6 +742,9 @@ function refresh_pear_thinking_animation(): void {
     if ($markers.length === 0) {
         stop_pear_thinking_animation();
         return;
+    }
+    if (pear_thinking_glyph_timer === undefined) {
+        pear_thinking_glyph_index = 0;
     }
     render_pear_thinking_glyph($markers);
     start_pear_thinking_animation();

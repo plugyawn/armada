@@ -721,7 +721,13 @@ run_test("pear_tool_row_marker_detection", () => {
         remaining_text: "Queued: tests",
     });
     assert.deepEqual(message_list_view.extract_pear_tool_row_marker_for_testing("[~] running"), {
-        glyph: "✦",
+        glyph: "·",
+        class_name: "pear-tool-row-active",
+        is_active: true,
+        remaining_text: "running",
+    });
+    assert.deepEqual(message_list_view.extract_pear_tool_row_marker_for_testing("✦ running"), {
+        glyph: "·",
         class_name: "pear-tool-row-active",
         is_active: true,
         remaining_text: "running",
@@ -746,7 +752,7 @@ run_test("pear_tool_block_marker_detection", () => {
             row_texts: ["[x] Ran: pwd", "[~] Running: tests"],
         }),
         {
-            glyph: "✦",
+            glyph: "·",
             class_name: "pear-tool-row-active",
             is_active: true,
         },

@@ -79,7 +79,10 @@ run_test("template renders active status as visible text glyph phrase", () => {
     assert.match(html, /pear-run-status-row pear-run-status-active pear-liveness-active/);
     assert.match(html, /aria-label="working ✦"/);
     assert.match(html, /<span class="pear-panel-status-label">working<\/span>/);
-    assert.match(html, /<span class="pear-ui-glyph pear-run-status-glyph pear-thinking-glyph">✦<\/span>/);
+    assert.match(
+        html,
+        /<span class="pear-ui-glyph pear-run-status-glyph pear-thinking-glyph">✦<\/span>/,
+    );
     assert.doesNotMatch(html, /aria-hidden="true">✦<\/span>/);
     assert.doesNotMatch(html, /pear-run-status-compact/);
 });
@@ -87,21 +90,42 @@ run_test("template renders active status as visible text glyph phrase", () => {
 run_test("template renders idle topic shell as compact runtime entry point", () => {
     const html = render_pear_panel({
         panel_open: true,
-        show_panel_header: true,
+        show_panel_header: false,
+        show_topic_control: true,
         show_runtime_trigger: true,
         show_workbench: false,
         has_topic: true,
         has_panel_menu: false,
         panel_can_close: false,
         active_run: undefined,
-        topic_context: undefined,
+        context_label: "devel > general chat",
+        topic_context: {
+            panel_repo_label: "zulip/zulip",
+            panel_worktree_label: "devel-general-chat",
+            panel_git_status_label: "clean",
+            panel_git_status_class: "clean",
+            panel_git_ref_label: "main / a3f92c1",
+        },
     });
 
     assert.match(html, /pear-panel-inner/);
-    assert.match(html, /pear-panel-header-idle/);
+    assert.doesNotMatch(html, /pear-panel-header-idle/);
+    assert.match(html, /pear-topic-control/);
     assert.match(html, /pear-runtime-menu-trigger/);
+    assert.match(html, /pear-topic-runtime-name/);
     assert.match(html, /<span class="pear-runtime-menu-label">translated: Pear<\/span>/);
-    assert.doesNotMatch(html, /<span class="pear-runtime-menu-label">translated: Pear runtime<\/span>/);
+    assert.match(html, /pear-topic-context-label">translated: Repo<\/span>/);
+    assert.match(html, /pear-topic-context-main" title="zulip\/zulip">zulip\/zulip<\/span>/);
+    assert.match(html, /pear-topic-context-status-clean">clean<\/span>/);
+    assert.match(
+        html,
+        /pear-topic-context-main" title="devel-general-chat">devel-general-chat<\/span>/,
+    );
+    assert.match(html, /pear-topic-context-ref" title="main \/ a3f92c1">main \/ a3f92c1<\/span>/);
+    assert.doesNotMatch(
+        html,
+        /<span class="pear-runtime-menu-label">translated: Pear runtime<\/span>/,
+    );
     assert.doesNotMatch(html, /pear-run-actions/);
     assert.doesNotMatch(html, /pear-workbench/);
 });
@@ -112,10 +136,16 @@ run_test("template renders workbench without active run", () => {
         show_workbench: true,
         has_topic: true,
         show_panel_header: false,
-        show_runtime_trigger: false,
+        show_topic_control: true,
+        show_runtime_trigger: true,
         panel_can_close: true,
         active_run: undefined,
         topic_context: {
+            panel_repo_label: "zulip/zulip",
+            panel_worktree_label: "routing-fix",
+            panel_git_status_label: "2 files",
+            panel_git_status_class: "dirty",
+            panel_git_ref_label: "main / a3f92c1",
             workbench_title: "routing-fix",
             workbench_meta: "devel / routing-fix / a3f92c1",
             workbench_diff_selected: false,
@@ -141,6 +171,9 @@ run_test("template renders workbench without active run", () => {
     });
 
     assert.match(html, /pear-workbench/);
+    assert.match(html, /pear-topic-control/);
+    assert.match(html, /pear-runtime-menu-trigger/);
+    assert.doesNotMatch(html, /pear-topic-open-action/);
     assert.match(html, /pear-workbench-title-row/);
     assert.match(html, /routing-fix/);
     assert.match(html, /devel \/ routing-fix \/ a3f92c1/);
@@ -440,7 +473,7 @@ run_test("panel_header_state_for_testing", () => {
         },
     );
     assert.deepEqual(pear_panel.panel_header_state_for_testing(undefined, {has_topic: true}), {
-        show_panel_header: true,
+        show_panel_header: false,
         show_runtime_trigger: true,
         has_panel_menu: false,
     });
@@ -451,7 +484,7 @@ run_test("panel_header_state_for_testing", () => {
         }),
         {
             show_panel_header: false,
-            show_runtime_trigger: false,
+            show_runtime_trigger: true,
             has_panel_menu: false,
         },
     );

@@ -51,6 +51,7 @@ type CanvasConflictResolution = {
 let open_context: {stream: string; topic: string} | undefined;
 let base_version: string | undefined;
 let canvas_max_bytes: number | undefined;
+let on_saved_callback: (() => void) | undefined;
 // Used to drop stale async responses after the modal is closed or
 // the read view has been re-rendered.
 let render_sequence = 0;
@@ -309,6 +310,9 @@ function save_canvas(): void {
         },
         {
             failure_msg_html: $t_html({defaultMessage: "Failed to save the Pear canvas"}),
+            success_continuation() {
+                on_saved_callback?.();
+            },
             error_continuation(xhr) {
                 if (xhr.status === 409) {
                     handle_save_conflict(xhr);
@@ -322,10 +326,11 @@ function reset_state(): void {
     open_context = undefined;
     base_version = undefined;
     canvas_max_bytes = undefined;
+    on_saved_callback = undefined;
     render_sequence += 1;
 }
 
-function open_canvas(): void {
+export function open_canvas(options: {on_saved?: () => void} = {}): void {
     const stream = narrow_state.stream_name();
     const topic = narrow_state.topic();
     if (stream === undefined || topic === undefined) {
@@ -334,6 +339,7 @@ function open_canvas(): void {
         return;
     }
     open_context = {stream, topic};
+    on_saved_callback = options.on_saved;
     dialog_widget.launch({
         modal_title_text: $t({defaultMessage: "Pear canvas"}),
         modal_content_html: render_pear_canvas_modal(),

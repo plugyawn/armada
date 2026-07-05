@@ -5,8 +5,12 @@ import render_pear_panel from "../templates/pear_panel.hbs";
 import * as blueslip from "./blueslip.ts";
 import * as channel from "./channel.ts";
 import {$t} from "./i18n.ts";
+import {message_render_response_schema} from "./message_store.ts";
 import * as narrow_state from "./narrow_state.ts";
+import * as pear_canvas from "./pear_canvas.ts";
 import * as pear_run_state from "./pear_run_state.ts";
+import {postprocess_content} from "./postprocess_content.ts";
+import * as rendered_markdown from "./rendered_markdown.ts";
 
 type PearRunEvent = {
     id: number;
@@ -128,6 +132,20 @@ type PearGitTreeResponse = {
     git_tree: PearGitTree;
 };
 
+type PearCanvas = {
+    content: string;
+    version: string;
+    relative_path: string;
+    exists: boolean;
+    max_bytes: number;
+    rendered_html?: string;
+    render_failed?: boolean;
+};
+
+type PearCanvasResponse = {
+    pear_canvas: PearCanvas;
+};
+
 type PearTopicContext = {
     stream: string;
     topic: string;
@@ -147,7 +165,7 @@ type PearTopicContext = {
     git: PearGitContext;
 };
 
-type PearWorkbenchView = "diff" | "history" | "side";
+type PearWorkbenchView = "diff" | "history" | "canvas" | "side";
 
 let initialized = false;
 let refresh_timer: number | undefined;
@@ -165,6 +183,12 @@ const side_request_by_context = new Map<string, string>();
 const git_tree_by_context = new Map<string, PearGitTree>();
 const git_tree_error_by_context = new Map<string, string>();
 const git_tree_loading_contexts = new Set<string>();
+const canvas_by_context = new Map<string, PearCanvas>();
+const canvas_error_by_context = new Map<string, string>();
+const canvas_loading_contexts = new Set<string>();
+const canvas_fetch_sequence_by_context = new Map<string, number>();
+const canvas_rendering_contexts = new Set<string>();
+const canvas_render_sequence_by_context = new Map<string, number>();
 const LIVE_REFRESH_INTERVAL_MS = 125;
 const FULL_REFRESH_INTERVAL_MS = 5000;
 const CONTEXT_REFRESH_INTERVAL_MS = 60_000;
@@ -267,6 +291,27 @@ function is_pear_git_tree_response(data: unknown): data is PearGitTreeResponse {
         typeof git_tree.graph === "string" &&
         "status_short" in git_tree &&
         typeof git_tree.status_short === "string"
+    );
+}
+
+function is_pear_canvas_response(data: unknown): data is PearCanvasResponse {
+    if (typeof data !== "object" || data === null || !("pear_canvas" in data)) {
+        return false;
+    }
+    const canvas = data.pear_canvas;
+    return (
+        typeof canvas === "object" &&
+        canvas !== null &&
+        "content" in canvas &&
+        typeof canvas.content === "string" &&
+        "version" in canvas &&
+        typeof canvas.version === "string" &&
+        "relative_path" in canvas &&
+        typeof canvas.relative_path === "string" &&
+        "exists" in canvas &&
+        typeof canvas.exists === "boolean" &&
+        "max_bytes" in canvas &&
+        typeof canvas.max_bytes === "number"
     );
 }
 
@@ -384,6 +429,9 @@ export function workbench_view_for_testing(options: {
     if (options.requested === "side") {
         return "side";
     }
+    if (options.requested === "canvas") {
+        return "canvas";
+    }
     if (options.requested === "history") {
         return "history";
     }
@@ -405,6 +453,9 @@ export function workbench_view_for_artifact_label(
     const normalized_label = label.trim().toLowerCase();
     if (normalized_label === "diff") {
         return "diff";
+    }
+    if (["canvas", "doc", "document"].includes(normalized_label)) {
+        return "canvas";
     }
     if (
         [
@@ -533,17 +584,28 @@ function display_topic_context(topic_context: PearTopicContext | undefined | nul
           workbench_view: PearWorkbenchView;
           workbench_diff_selected: boolean;
           workbench_history_selected: boolean;
+          workbench_canvas_selected: boolean;
           workbench_side_selected: boolean;
           workbench_diff_disabled: boolean;
           workbench_history_disabled: boolean;
           diff_tab_label: string;
           history_tab_label: string;
+          canvas_tab_label: string;
           side_tab_label: string;
           git_tree: PearGitTree | undefined;
           git_tree_loading: boolean;
           git_tree_error: string;
           has_git_tree_graph: boolean;
           has_git_tree_status: boolean;
+          canvas: PearCanvas | undefined;
+          canvas_loading: boolean;
+          canvas_rendering: boolean;
+          canvas_error: string;
+          canvas_title: string;
+          canvas_has_content: boolean;
+          canvas_has_rendered_html: boolean;
+          canvas_rendered_html: string;
+          canvas_render_failed: boolean;
           history_commits: (PearGitCommit & {is_head: boolean; ref_label: string})[];
           has_workbench_diff_summary: boolean;
           workbench_diff_summary_label: string;
@@ -595,6 +657,9 @@ function display_topic_context(topic_context: PearTopicContext | undefined | nul
     const git_tree = git_tree_by_context.get(topic_key);
     const git_tree_graph = git_tree?.graph.trim() ?? "";
     const git_tree_status = git_tree?.status_short.trim() ?? "";
+    const canvas = canvas_by_context.get(topic_key);
+    const canvas_content = canvas?.content ?? "";
+    const canvas_rendered_html = canvas?.rendered_html ?? "";
     const workbench_view = workbench_view_for_testing({
         requested: workbench_view_by_context.get(topic_key),
         has_diff: has_workbench_diff,
@@ -612,6 +677,7 @@ function display_topic_context(topic_context: PearTopicContext | undefined | nul
         workbench_view,
         workbench_diff_selected: workbench_view === "diff",
         workbench_history_selected: workbench_view === "history",
+        workbench_canvas_selected: workbench_view === "canvas",
         workbench_side_selected: workbench_view === "side",
         workbench_diff_disabled: false,
         workbench_history_disabled: false,
@@ -623,12 +689,22 @@ function display_topic_context(topic_context: PearTopicContext | undefined | nul
             recent_commit_count > 0
                 ? $t({defaultMessage: "history {recent_commit_count}"}, {recent_commit_count})
                 : $t({defaultMessage: "history"}),
+        canvas_tab_label: $t({defaultMessage: "canvas"}),
         side_tab_label: $t({defaultMessage: "whisper"}),
         git_tree,
         git_tree_loading: git_tree_loading_contexts.has(topic_key),
         git_tree_error: git_tree_error_by_context.get(topic_key) ?? "",
         has_git_tree_graph: git_tree_graph !== "",
         has_git_tree_status: git_tree_status !== "",
+        canvas,
+        canvas_loading: canvas_loading_contexts.has(topic_key),
+        canvas_rendering: canvas_rendering_contexts.has(topic_key),
+        canvas_error: canvas_error_by_context.get(topic_key) ?? "",
+        canvas_title: canvas?.relative_path ?? "CANVAS.md",
+        canvas_has_content: canvas_content.trim() !== "",
+        canvas_has_rendered_html: canvas_rendered_html !== "",
+        canvas_rendered_html,
+        canvas_render_failed: canvas?.render_failed === true,
         history_commits,
         has_workbench_diff_summary: workbench_diff_summary_label !== "",
         workbench_diff_summary_label,
@@ -681,6 +757,142 @@ function fetch_git_tree_for_context(topic_context: PearTopicContext): void {
             render();
         },
     });
+}
+
+function next_canvas_render_sequence(key: string): number {
+    const sequence = (canvas_render_sequence_by_context.get(key) ?? 0) + 1;
+    canvas_render_sequence_by_context.set(key, sequence);
+    return sequence;
+}
+
+function next_canvas_fetch_sequence(key: string): number {
+    const sequence = (canvas_fetch_sequence_by_context.get(key) ?? 0) + 1;
+    canvas_fetch_sequence_by_context.set(key, sequence);
+    return sequence;
+}
+
+function render_canvas_for_context(key: string, canvas: PearCanvas): void {
+    if (
+        canvas.content.trim() === "" ||
+        canvas.rendered_html !== undefined ||
+        canvas.render_failed === true ||
+        canvas_rendering_contexts.has(key)
+    ) {
+        return;
+    }
+    const sequence = next_canvas_render_sequence(key);
+    canvas_rendering_contexts.add(key);
+    render();
+    void channel.post({
+        url: "/json/messages/render",
+        data: {content: canvas.content},
+        success(raw_data) {
+            if (canvas_render_sequence_by_context.get(key) !== sequence) {
+                return;
+            }
+            const data = message_render_response_schema.parse(raw_data);
+            const current_canvas = canvas_by_context.get(key);
+            if (current_canvas === undefined || current_canvas.version !== canvas.version) {
+                return;
+            }
+            canvas_by_context.set(key, {
+                ...current_canvas,
+                rendered_html: postprocess_content(data.rendered),
+                render_failed: false,
+            });
+        },
+        error(xhr) {
+            if (canvas_render_sequence_by_context.get(key) !== sequence) {
+                return;
+            }
+            if (xhr.readyState !== 0) {
+                const current_canvas = canvas_by_context.get(key);
+                if (current_canvas !== undefined && current_canvas.version === canvas.version) {
+                    canvas_by_context.set(key, {...current_canvas, render_failed: true});
+                }
+                blueslip.warn(`Failed to render Pear canvas: ${xhr.responseText}`);
+            }
+        },
+        complete() {
+            if (canvas_render_sequence_by_context.get(key) !== sequence) {
+                return;
+            }
+            canvas_rendering_contexts.delete(key);
+            render();
+        },
+    });
+}
+
+function fetch_canvas_for_context(topic_context: PearTopicContext): void {
+    const key = context_key(topic_context.stream, topic_context.topic);
+    const cached_canvas = canvas_by_context.get(key);
+    if (cached_canvas !== undefined) {
+        render_canvas_for_context(key, cached_canvas);
+        return;
+    }
+    if (key === "" || canvas_loading_contexts.has(key)) {
+        return;
+    }
+    canvas_loading_contexts.add(key);
+    canvas_error_by_context.delete(key);
+    const sequence = next_canvas_fetch_sequence(key);
+    render();
+    void channel.get({
+        url: "/json/pear/canvas",
+        data: {
+            stream: topic_context.stream,
+            topic: topic_context.topic,
+        },
+        success(raw_data) {
+            if (canvas_fetch_sequence_by_context.get(key) !== sequence) {
+                return;
+            }
+            if (!is_pear_canvas_response(raw_data)) {
+                canvas_error_by_context.set(
+                    key,
+                    $t({defaultMessage: "Pear returned an invalid canvas payload."}),
+                );
+                return;
+            }
+            canvas_by_context.set(key, raw_data.pear_canvas);
+            render_canvas_for_context(key, raw_data.pear_canvas);
+        },
+        error(xhr) {
+            if (canvas_fetch_sequence_by_context.get(key) !== sequence) {
+                return;
+            }
+            if (xhr.readyState !== 0) {
+                canvas_error_by_context.set(
+                    key,
+                    $t({defaultMessage: "Pear canvas is unavailable."}),
+                );
+                blueslip.warn(`Failed to fetch Pear canvas: ${xhr.responseText}`);
+            }
+        },
+        complete() {
+            if (canvas_fetch_sequence_by_context.get(key) !== sequence) {
+                return;
+            }
+            canvas_loading_contexts.delete(key);
+            render();
+        },
+    });
+}
+
+function refresh_canvas_for_context(topic_context: PearTopicContext | null | undefined): void {
+    if (topic_context === undefined || topic_context === null) {
+        return;
+    }
+    const key = context_key(topic_context.stream, topic_context.topic);
+    if (key === "") {
+        return;
+    }
+    canvas_by_context.delete(key);
+    canvas_error_by_context.delete(key);
+    canvas_loading_contexts.delete(key);
+    canvas_rendering_contexts.delete(key);
+    next_canvas_render_sequence(key);
+    fetch_canvas_for_context(topic_context);
 }
 
 function active_display_run(runs: PearRun[]): ReturnType<typeof display_run> | undefined {
@@ -870,6 +1082,7 @@ function render(
         if (stored_side_request !== undefined) {
             $("#pear-side-request").val(stored_side_request);
         }
+        rendered_markdown.update_elements($("#pear-panel .pear-workbench-canvas-rendered"));
         $(document).trigger("pear_liveness_markers_changed");
         last_render_state_key = next_render_state_key;
     }
@@ -878,6 +1091,9 @@ function render(
     $("body").toggleClass("pear-workbench-split-open", workbench_open);
     if (workbench_open && display_context?.workbench_history_selected) {
         fetch_git_tree_for_context(display_context);
+    }
+    if (workbench_open && display_context?.workbench_canvas_selected) {
+        fetch_canvas_for_context(display_context);
     }
     schedule_live_refresh(active_run);
 }
@@ -1013,7 +1229,7 @@ export function initialize(): void {
     });
     $("body").on("click", ".pear-workbench-tab", function () {
         const view = $(this).attr("data-pear-workbench-view");
-        if (view !== "diff" && view !== "history" && view !== "side") {
+        if (view !== "diff" && view !== "history" && view !== "canvas" && view !== "side") {
             return;
         }
         const key = current_context_key();
@@ -1034,6 +1250,13 @@ export function initialize(): void {
     });
     $("body").on("click", "#pear-side-start", () => {
         start_side_session();
+    });
+    $("body").on("click", ".pear-workbench-canvas-open", () => {
+        pear_canvas.open_canvas({
+            on_saved() {
+                refresh_canvas_for_context(last_topic_context);
+            },
+        });
     });
     $(window).on("resize.pear_panel", () => {
         render();

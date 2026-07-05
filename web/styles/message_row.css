@@ -202,6 +202,7 @@
             }
 
             .pear-artifact-diff,
+            .pear-artifact-commit,
             .pear-artifact-pr,
             .pear-artifact-doc {
                 .pear-artifact-ref-glyph {

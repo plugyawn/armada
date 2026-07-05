@@ -233,6 +233,7 @@ const pear_artifact_references: PearArtifactReference[] = [
     {regex: /^(?:Repo|Repository)$/i, glyph: "⌁", class_name: "pear-artifact-repo"},
     {regex: /^Runtime$/i, glyph: "∙", class_name: "pear-artifact-runtime"},
     {regex: /^Branch$/i, glyph: "⑂", class_name: "pear-artifact-branch"},
+    {regex: /^(?:Commit|SHA)$/i, glyph: "⑂", class_name: "pear-artifact-commit"},
     {regex: /^(?:PR|Pull request)$/i, glyph: "↗", class_name: "pear-artifact-pr"},
     {regex: /^Diff$/i, glyph: "±", class_name: "pear-artifact-diff"},
     {regex: /^(?:Test|Tests|Verification)$/i, glyph: "✓", class_name: "pear-artifact-verification"},
@@ -242,13 +243,13 @@ const pear_artifact_references: PearArtifactReference[] = [
         glyph: "§",
         class_name: "pear-artifact-session",
     },
-    {regex: /^Docs?$/i, glyph: "▤", class_name: "pear-artifact-doc"},
+    {regex: /^(?:Canvas|Docs?)$/i, glyph: "▤", class_name: "pear-artifact-doc"},
     {regex: /^(?:Issue|Ticket)$/i, glyph: "#", class_name: "pear-artifact-ticket"},
     {regex: /^Reviewers?$/i, glyph: "☷", class_name: "pear-artifact-reviewers"},
 ];
 
 const pear_artifact_line_regex =
-    /^\s*(Repo|Repository|Runtime|Branch|PR|Pull request|Diff|Test|Tests|Verification|Screenshot|Session|Session record|Pear session|Codex session|Doc|Docs|Issue|Ticket|Reviewer|Reviewers):\s*/i;
+    /^\s*(Repo|Repository|Runtime|Branch|Commit|SHA|PR|Pull request|Diff|Test|Tests|Verification|Screenshot|Session|Session record|Pear session|Codex session|Canvas|Doc|Docs|Issue|Ticket|Reviewer|Reviewers):\s*/i;
 
 function message_has_pear_active_marker(message: Message): boolean {
     return message.content.includes(PEAR_ACTIVE_GLYPH);
@@ -397,6 +398,35 @@ function enhance_pear_tool_rows($row: JQuery): void {
 
 function pear_artifact_reference_for_label(label: string): PearArtifactReference | undefined {
     return pear_artifact_references.find((reference) => reference.regex.test(label));
+}
+
+export function extract_pear_artifact_reference_for_testing(text: string):
+    | {
+          label: string;
+          glyph: string;
+          class_name: string;
+          title: string;
+      }
+    | undefined {
+    const match = pear_artifact_line_regex.exec(text);
+    if (match === null) {
+        return undefined;
+    }
+    const value = text.slice(match[0].length).trim();
+    if (value === "") {
+        return undefined;
+    }
+    const label = match[1]!;
+    const reference = pear_artifact_reference_for_label(label);
+    if (reference === undefined) {
+        return undefined;
+    }
+    return {
+        label,
+        glyph: reference.glyph,
+        class_name: reference.class_name,
+        title: `${label}: ${value}`,
+    };
 }
 
 function extract_pear_artifact_reference(element: HTMLElement): {

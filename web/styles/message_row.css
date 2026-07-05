@@ -275,9 +275,9 @@
 
             .pear-tool-spoiler-block {
                 width: fit-content;
-                min-width: min(11rem, 100%);
-                max-width: min(100%, 34rem);
-                margin: 0.28em 0 0.5em;
+                min-width: min(12rem, 100%);
+                max-width: min(100%, 38rem);
+                margin: 0.34em 0 0.56em;
                 border: 0;
                 border-radius: 0;
                 background: transparent;
@@ -286,17 +286,21 @@
             .pear-tool-spoiler-block .spoiler-header {
                 width: fit-content;
                 max-width: 100%;
-                min-height: 21px;
+                min-height: 23px;
                 gap: 6px;
-                padding: 2px 7px;
+                padding: 3px 8px;
                 border: 1px solid
                     color-mix(
                         in srgb,
                         var(--color-message-content-container-border) 52%,
                         transparent
                     );
-                border-radius: 4px;
-                background: transparent;
+                border-radius: 7px;
+                background: color-mix(
+                    in srgb,
+                    var(--color-background-pear-message-content) 92%,
+                    var(--color-text-message-default) 8%
+                );
                 color: var(--color-text-item);
                 font-size: 11.5px;
                 line-height: 1.2;
@@ -327,36 +331,50 @@
             .pear-tool-spoiler-block .spoiler-header:hover {
                 background: color-mix(
                     in srgb,
-                    var(--color-background-pear-message-content) 88%,
-                    var(--color-text-message-default) 12%
+                    var(--color-background-pear-message-content) 86%,
+                    var(--color-text-message-default) 14%
                 );
             }
 
             .pear-tool-spoiler-block:has(.spoiler-content-open) .spoiler-header {
                 width: auto;
                 border: 0;
-                border-bottom: 1px solid var(--color-message-content-container-border);
-                border-radius: 0;
-                padding: 3px 7px;
+                border-bottom: 1px solid
+                    color-mix(
+                        in srgb,
+                        var(--color-message-content-container-border) 66%,
+                        transparent
+                    );
+                border-radius: 7px 7px 0 0;
+                padding: 5px 10px;
+                background: color-mix(
+                    in srgb,
+                    var(--color-background-pear-message-content) 90%,
+                    var(--color-text-message-default) 10%
+                );
             }
 
             .pear-tool-spoiler-block:has(.spoiler-content-open) {
-                width: min(100%, 34rem);
+                width: min(100%, 38rem);
                 border: 1px solid
                     color-mix(
                         in srgb,
                         var(--color-message-content-container-border) 54%,
                         transparent
                     );
-                border-radius: 4px;
-                background: transparent;
+                border-radius: 7px;
+                background: color-mix(
+                    in srgb,
+                    var(--color-background-pear-message-content) 94%,
+                    var(--color-text-message-default) 6%
+                );
             }
 
             .pear-tool-spoiler-block:has(.spoiler-content-open) .spoiler-header:hover {
                 background: color-mix(
                     in srgb,
-                    var(--color-background-pear-message-content) 88%,
-                    var(--color-text-message-default) 12%
+                    var(--color-background-pear-message-content) 86%,
+                    var(--color-text-message-default) 14%
                 );
             }
 
@@ -442,18 +460,18 @@
 
                 li {
                     display: flex;
-                    gap: 9px;
+                    gap: 8px;
                     align-items: center;
                     margin: 0;
-                    padding: 7px 11px;
+                    padding: 6px 10px;
                     color: var(--color-text-item);
                     overflow: hidden;
                     text-overflow: ellipsis;
                     white-space: nowrap;
                     font-family:
                         ui-monospace, SFMono-Regular, Consolas, monospace;
-                    font-size: 12px;
-                    line-height: 1.2;
+                    font-size: 11.5px;
+                    line-height: 1.25;
                 }
 
                 li > .pear-tool-row-glyph {
@@ -495,7 +513,7 @@
                     border-top: 1px solid
                         color-mix(
                             in srgb,
-                            var(--color-message-content-container-border) 70%,
+                            var(--color-message-content-container-border) 60%,
                             transparent
                         );
                 }

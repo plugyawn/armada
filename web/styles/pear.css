@@ -30,7 +30,10 @@
 #pear-panel.pear-workbench-popover-open::before {
     position: fixed;
     top: calc(var(--pear-workbench-popover-top) - 6px);
-    left: calc(var(--pear-workbench-popover-left) + var(--pear-workbench-popover-arrow-left) - 6px);
+    left: calc(
+        var(--pear-workbench-popover-left) +
+            var(--pear-workbench-popover-arrow-left) - 6px
+    );
     width: 10px;
     height: 10px;
     border-top: 1px solid var(--color-border-popover-menu);
@@ -199,7 +202,10 @@
     min-height: var(--line-height-sidebar-row);
     align-items: center;
     gap: 5px;
-    grid-template-columns: var(--right-sidebar-header-icon-toggle-width) minmax(0, 1fr);
+    grid-template-columns: var(--right-sidebar-header-icon-toggle-width) minmax(
+            0,
+            1fr
+        );
     line-height: var(--line-height-sidebar-row);
     margin-bottom: 1px;
     padding: 0 6px 0 0;
@@ -222,7 +228,9 @@
     min-height: var(--line-height-sidebar-row);
     align-items: baseline;
     gap: 5px;
-    grid-template-columns: var(--right-sidebar-header-icon-toggle-width) minmax(42px, auto) minmax(0, 1fr) auto;
+    grid-template-columns:
+        var(--right-sidebar-header-icon-toggle-width) minmax(42px, auto)
+        minmax(0, 1fr) auto;
     line-height: var(--line-height-sidebar-row);
     padding: 0 6px 0 0;
 }
@@ -384,8 +392,8 @@
 
 #pear-panel.pear-workbench-popover-open .pear-workbench {
     gap: 0;
-    font-size: 12px;
-    line-height: 16px;
+    font-size: 13px;
+    line-height: 17px;
 }
 
 .pear-workbench-header {
@@ -446,7 +454,10 @@
 }
 
 #pear-panel.pear-workbench-popover-open .pear-workbench-body {
-    max-height: min(300px, calc(var(--pear-workbench-popover-max-height) - 220px));
+    max-height: min(
+        300px,
+        calc(var(--pear-workbench-popover-max-height) - 220px)
+    );
     overflow: auto;
     padding: 9px 14px 10px;
 }
@@ -493,7 +504,7 @@
 .pear-workbench-control-row {
     display: grid;
     min-width: 0;
-    min-height: 31px;
+    min-height: 34px;
     align-items: center;
     column-gap: 8px;
     grid-template-columns: minmax(68px, auto) minmax(0, 1fr) auto;
@@ -515,9 +526,9 @@
 
 .pear-workbench-control-label {
     color: var(--color-text-sidebar-heading);
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 600;
-    line-height: 15px;
+    line-height: 16px;
     opacity: var(--opacity-sidebar-heading);
 }
 
@@ -533,9 +544,9 @@
 .pear-workbench-control-value {
     justify-self: end;
     color: var(--color-text-default);
-    font-size: 11.5px;
+    font-size: 13px;
     font-weight: var(--font-weight-sidebar-row);
-    line-height: 16px;
+    line-height: 17px;
 }
 
 .pear-workbench-status-clean {
@@ -544,16 +555,24 @@
 
 .pear-workbench-status-dirty {
     border: 1px solid
-        color-mix(in srgb, var(--color-text-warning-text-action-button) 22%, transparent);
+        color-mix(
+            in srgb,
+            var(--color-text-warning-text-action-button) 22%,
+            transparent
+        );
     border-radius: 4px;
     background: color-mix(
         in srgb,
         var(--color-text-warning-text-action-button) 8%,
         transparent
     );
-    color: color-mix(in srgb, var(--color-text-warning-text-action-button) 56%, var(--color-text-default));
-    font-size: 10.5px;
-    line-height: 15px;
+    color: color-mix(
+        in srgb,
+        var(--color-text-warning-text-action-button) 56%,
+        var(--color-text-default)
+    );
+    font-size: 12px;
+    line-height: 16px;
     padding: 0 4px;
 }
 
@@ -568,12 +587,16 @@
     border: 1px solid
         color-mix(in srgb, var(--color-border-popover-menu) 70%, transparent);
     border-radius: 4px;
-    background: color-mix(in srgb, var(--color-background-popover-menu) 84%, var(--color-background) 16%);
+    background: color-mix(
+        in srgb,
+        var(--color-background-popover-menu) 84%,
+        var(--color-background) 16%
+    );
     color: var(--color-text-default);
     font: inherit;
-    font-size: 11.5px;
+    font-size: 13px;
     font-weight: var(--font-weight-sidebar-row);
-    line-height: 16px;
+    line-height: 17px;
     outline: none;
     padding: 2px 7px;
 }
@@ -603,16 +626,20 @@
     display: flex;
     justify-content: space-between;
     color: var(--color-text-sidebar-heading);
-    font-size: 9px;
-    line-height: 11px;
+    font-size: 10px;
+    line-height: 12px;
     opacity: 0.72;
     pointer-events: none;
 }
 
 .pear-workbench-thinking-low ~ .pear-workbench-effort-ticks span:nth-child(1),
-.pear-workbench-thinking-medium ~ .pear-workbench-effort-ticks span:nth-child(2),
+.pear-workbench-thinking-medium
+    ~ .pear-workbench-effort-ticks
+    span:nth-child(2),
 .pear-workbench-thinking-high ~ .pear-workbench-effort-ticks span:nth-child(3),
-.pear-workbench-thinking-xhigh ~ .pear-workbench-effort-ticks span:nth-child(4) {
+.pear-workbench-thinking-xhigh
+    ~ .pear-workbench-effort-ticks
+    span:nth-child(4) {
     color: var(--color-text-success-text-action-button);
     opacity: 1;
 }
@@ -714,9 +741,9 @@
     background: transparent;
     color: var(--color-text-sidebar-heading);
     cursor: pointer;
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 600;
-    line-height: 14px;
+    line-height: 15px;
     opacity: var(--opacity-sidebar-heading);
     overflow: hidden;
     padding: 0 1px 2px;
@@ -1228,7 +1255,11 @@
 #pear-panel.pear-workbench-popover-open .pear-workbench-side-footer {
     margin: 0 14px 12px;
     border-color: var(--color-border-popover-menu);
-    background: color-mix(in srgb, var(--color-background-popover-menu) 78%, transparent);
+    background: color-mix(
+        in srgb,
+        var(--color-background-popover-menu) 78%,
+        transparent
+    );
 }
 
 .pear-side-header {
@@ -1381,7 +1412,10 @@
     min-width: 0;
     max-width: 100%;
     min-height: var(--line-height-sidebar-row);
-    grid-template-columns: var(--right-sidebar-header-icon-toggle-width) minmax(0, 1fr);
+    grid-template-columns: var(--right-sidebar-header-icon-toggle-width) minmax(
+            0,
+            1fr
+        );
     align-items: center;
     justify-content: start;
     gap: 5px;

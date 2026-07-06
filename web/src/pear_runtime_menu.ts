@@ -112,8 +112,7 @@ let initialized = false;
 let context_refresh_timer: number | undefined;
 
 const RUNTIME_CONTEXT_REFRESH_INTERVAL_MS = 60_000;
-const runtime_menu_selector =
-    "#pear-panel .pear-runtime-menu-trigger, .message_header_stream .pear-runtime-menu-trigger";
+const runtime_menu_selector = "#pear-panel .pear-runtime-menu-trigger";
 const forbidden_header_mount_selectors = [
     "#top_navbar",
     "#navbar-middle",
@@ -271,9 +270,7 @@ function active_runtime_run(runs: PearRuntimeRun[]): PearRuntimeRun | undefined 
     );
 }
 
-export function runtime_status_for_testing(
-    run: {status: string} | undefined,
-): PearRuntimeStatus {
+export function runtime_status_for_testing(run: {status: string} | undefined): PearRuntimeStatus {
     switch (run?.status.toLowerCase()) {
         case "running":
             return {

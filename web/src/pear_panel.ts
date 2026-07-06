@@ -713,11 +713,7 @@ function display_topic_context(topic_context: PearTopicContext | undefined | nul
         $t({defaultMessage: "No repo pinned"});
     const panel_worktree_label =
         topic_context.worktree_label?.trim() || topic_context.topic || git.worktree_name?.trim() || "";
-    const workbench_meta = [
-        workbench_repo_label,
-        git.branch?.trim() ?? "",
-        git.head_short?.trim() ?? "",
-    ]
+    const workbench_meta = [workbench_repo_label, git.branch?.trim() ?? ""]
         .filter((part) => part !== "")
         .join(" / ");
     const diff_file_count = pear_git_shortstat_file_count(diff_shortstat) || changed_count;
@@ -818,30 +814,25 @@ function display_topic_context(topic_context: PearTopicContext | undefined | nul
     };
 }
 
-const pear_topic_header_control_selector = ".pear-topic-header-control";
+const pear_topic_header_status_selector = ".pear-topic-header-status";
+const pear_topic_header_control_selector =
+    ".pear-topic-header-status, .pear-topic-header-control";
 
 function topic_header_controls_are_current(
     $headers: JQuery,
     control_key: string,
-    show_work_control: boolean,
 ): boolean {
     if ($headers.length === 0) {
         return false;
     }
     return $headers.toArray().every((header) => {
         const $header = $(header);
-        const has_runtime_control =
+        return (
             $header
-                .find(".pear-topic-header-runtime-control")
+                .find(pear_topic_header_status_selector)
                 .filter((_index, element) => $(element).attr("data-pear-header-key") === control_key)
-                .length > 0;
-        const has_work_control =
-            !show_work_control ||
-            $header
-                .find(".pear-topic-header-work-control")
-                .filter((_index, element) => $(element).attr("data-pear-header-key") === control_key)
-                .length > 0;
-        return has_runtime_control && has_work_control;
+                .length > 0
+        );
     });
 }
 
@@ -882,7 +873,6 @@ function render_topic_header_controls(options: {
     topic_context: PearDisplayTopicContext | undefined;
     active_run_status: string | undefined;
 }): void {
-    $(pear_topic_header_control_selector).remove();
     const {stream, topic, topic_context} = options;
     if (stream === undefined || topic === undefined || topic_context === undefined) {
         return;
@@ -899,7 +889,6 @@ function render_topic_header_controls(options: {
         {runtime_label},
     );
     const work_label = topic_header_work_label(topic_context);
-    const show_work_control = true;
     const work_title = topic_header_work_title(topic_context);
     const control_key = JSON.stringify({
         stream_id,
@@ -918,26 +907,41 @@ function render_topic_header_controls(options: {
             $header.attr("data-topic-name") === topic
         );
     });
-    if (topic_header_controls_are_current($headers, control_key, show_work_control)) {
+    if (topic_header_controls_are_current($headers, control_key)) {
         return;
     }
 
-    $(pear_topic_header_control_selector).remove();
+    $(pear_topic_header_control_selector)
+        .filter((_index, element) => !$headers.toArray().some((header) => header.contains(element)))
+        .remove();
 
     $headers.each((_index, header) => {
         const $controls = $(header).find(".recipient_bar_controls").first();
         if ($controls.length === 0) {
             return;
         }
+        $(header).find(pear_topic_header_control_selector).remove();
+        const $status_cluster = $("<span>", {
+            class: `pear-topic-header-status no-select${runtime_active ? " pear-liveness-active" : ""}`,
+            "data-pear-header-key": control_key,
+        });
         const $runtime_control = $("<button>", {
             type: "button",
-            class: `pear-topic-header-control pear-topic-header-runtime-control pear-runtime-menu-trigger recipient-bar-control tippy-zulip-delayed-tooltip${
+            class: `pear-topic-header-control pear-topic-header-runtime-control pear-runtime-menu-trigger tippy-zulip-delayed-tooltip${
                 runtime_active ? " pear-liveness-active" : ""
             }`,
             "aria-label": runtime_title,
             "data-tippy-content": runtime_title,
             "data-pear-header-key": control_key,
-        }).append(
+        });
+        $runtime_control.append(
+            $("<span>", {
+                class: runtime_active
+                    ? "pear-ui-glyph pear-topic-header-active-glyph pear-thinking-glyph"
+                    : "pear-topic-header-idle-dot",
+                "aria-hidden": "true",
+                text: runtime_active ? "·" : "•",
+            }),
             $("<span>", {
                 class: "pear-runtime-menu-label",
                 text: runtime_label,
@@ -949,37 +953,23 @@ function render_topic_header_controls(options: {
                 "aria-hidden": "true",
             }),
         );
-        let $work_control: JQuery | undefined;
-        if (show_work_control) {
-            $runtime_control.addClass("pear-topic-header-runtime-before-work");
-            $work_control = $("<button>", {
-                type: "button",
-                class: `pear-topic-header-control pear-topic-header-work-control pear-panel-open-action recipient-bar-control pear-topic-header-work-${topic_context.panel_git_status_class}`,
-                "aria-label": $t(
-                    {defaultMessage: "Open Pear work details: {work_label}"},
-                    {work_label},
-                ),
-                title: work_title || work_label,
-                "data-pear-header-key": control_key,
-            }).append(
-                $("<span>", {
-                    class: "pear-topic-header-work-label",
-                    text: work_label,
-                }),
-            );
-        }
-        const $topic_menu = $controls.find(".recipient-row-topic-menu").first();
-        if ($topic_menu.length > 0) {
-            $topic_menu.before($runtime_control);
-            if ($work_control !== undefined) {
-                $topic_menu.before($work_control);
-            }
-        } else {
-            $controls.append($runtime_control);
-            if ($work_control !== undefined) {
-                $controls.append($work_control);
-            }
-        }
+        const $work_control = $("<button>", {
+            type: "button",
+            class: `pear-topic-header-control pear-topic-header-work-control pear-panel-open-action pear-topic-header-work-${topic_context.panel_git_status_class}`,
+            "aria-label": $t(
+                {defaultMessage: "Open Pear work details: {work_label}"},
+                {work_label},
+            ),
+            title: work_title || work_label,
+            "data-pear-header-key": control_key,
+        }).append(
+            $("<span>", {
+                class: "pear-topic-header-work-label",
+                text: work_label,
+            }),
+        );
+        $status_cluster.append($runtime_control, $work_control);
+        $controls.before($status_cluster);
     });
     $(document).trigger("pear_liveness_markers_changed");
 }
@@ -1007,7 +997,7 @@ function position_workbench_popover(): void {
     const compact_viewport = viewport_width < 760;
     const width = compact_viewport
         ? Math.max(280, viewport_width - margin * 2)
-        : Math.min(460, Math.max(340, viewport_width - margin * 2));
+        : Math.min(360, Math.max(300, viewport_width - margin * 2));
     const anchor_rect = anchor.getBoundingClientRect();
     const anchor_center = anchor_rect.left + anchor_rect.width / 2;
     const left = compact_viewport
@@ -1435,7 +1425,7 @@ function render(
         show_workbench: workbench_open,
         panel_can_close: workbench_open,
         has_panel_menu: panel_header_state.has_panel_menu,
-        show_topic_control: has_stream,
+        show_topic_control: has_stream && !workbench_open,
         show_runtime_trigger: panel_header_state.show_runtime_trigger,
         show_panel_header: panel_header_state.show_panel_header,
         panel_header_quiet:

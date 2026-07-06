@@ -49,6 +49,7 @@
     {{/if}}
 
     {{#if show_topic_control}}
+    {{#unless show_workbench}}
     <section class="pear-topic-control" aria-label="{{t 'Pear context' }}">
         <div class="pear-topic-control-heading">
             <div class="pear-topic-control-title">
@@ -100,6 +101,7 @@
             </div>
         {{/if}}
     </section>
+    {{/unless}}
     {{/if}}
 
     {{#if show_workbench}}

@@ -20,7 +20,7 @@
     max-height: var(--pear-workbench-popover-max-height);
     overflow: hidden;
     border: 1px solid var(--color-border-popover-menu);
-    border-radius: 6px;
+    border-radius: 4px;
     background: var(--color-background-popover-menu);
     box-shadow: var(--box-shadow-popover-menu);
     color: var(--color-text-default);
@@ -384,8 +384,8 @@
 
 #pear-panel.pear-workbench-popover-open .pear-workbench {
     gap: 0;
-    font-size: 12px;
-    line-height: 16px;
+    font-size: 0.9286em;
+    line-height: 1.35;
 }
 
 .pear-workbench-header {
@@ -407,8 +407,8 @@
 }
 
 #pear-panel.pear-workbench-popover-open .pear-workbench-header {
-    gap: 8px;
-    padding: 10px 12px 0;
+    gap: 4px;
+    padding: 8px 10px 0;
 }
 
 #pear-panel.pear-workbench-popover-open .pear-workbench-title-row {
@@ -425,26 +425,26 @@
 }
 
 #pear-panel.pear-workbench-popover-open .pear-workbench-context-row {
-    margin: 0 -12px;
-    padding: 0 12px;
+    margin: 0 -10px;
+    padding: 0 10px;
     border-top: 1px solid
         color-mix(in srgb, var(--color-border-popover-menu) 52%, transparent);
 }
 
 #pear-panel.pear-workbench-popover-open .pear-workbench-tabs {
-    gap: 16px;
+    gap: 12px;
 }
 
 #pear-panel.pear-workbench-popover-open .pear-workbench-tab {
-    font-size: 11.5px;
-    line-height: 17px;
-    padding: 6px 0 7px;
+    font-size: 0.9286em;
+    line-height: 1.4;
+    padding: 5px 0 6px;
 }
 
 #pear-panel.pear-workbench-popover-open .pear-workbench-body {
-    max-height: min(390px, calc(var(--pear-workbench-popover-max-height) - 86px));
+    max-height: min(320px, calc(var(--pear-workbench-popover-max-height) - 72px));
     overflow: auto;
-    padding: 10px 12px 12px;
+    padding: 8px 10px 10px;
 }
 
 .pear-workbench-title-row {

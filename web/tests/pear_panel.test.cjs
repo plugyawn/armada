@@ -240,8 +240,8 @@ run_test("template renders workbench without active run", () => {
     });
 
     assert.match(html, /pear-workbench/);
-    assert.match(html, /pear-topic-control/);
-    assert.match(html, /pear-runtime-menu-trigger/);
+    assert.doesNotMatch(html, /pear-topic-control/);
+    assert.doesNotMatch(html, /pear-runtime-menu-trigger/);
     assert.doesNotMatch(html, /pear-topic-open-action/);
     assert.match(html, /pear-workbench-title-row/);
     assert.match(html, /routing-fix/);

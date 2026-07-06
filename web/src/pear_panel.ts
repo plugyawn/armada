@@ -192,6 +192,8 @@ const canvas_loading_contexts = new Set<string>();
 const canvas_fetch_sequence_by_context = new Map<string, number>();
 const canvas_rendering_contexts = new Set<string>();
 const canvas_render_sequence_by_context = new Map<string, number>();
+let workbench_anchor_element: HTMLElement | undefined;
+let workbench_anchor_context_key = "";
 const LIVE_REFRESH_INTERVAL_MS = 500;
 const LIVE_REFRESH_RATE_LIMIT_BACKOFF_MS = 1500;
 const FULL_REFRESH_INTERVAL_MS = 5000;
@@ -547,10 +549,17 @@ export function workbench_view_for_artifact_label(
     return undefined;
 }
 
-export function open_work_details(requested_view?: PearWorkbenchView): void {
+export function open_work_details(
+    requested_view?: PearWorkbenchView,
+    anchor_element?: HTMLElement,
+): void {
     const key = current_context_key();
     const viewport_allows_workbench = current_viewport_allows_workbench();
     if (key !== "" && viewport_allows_workbench) {
+        if (anchor_element !== undefined) {
+            workbench_anchor_element = anchor_element;
+            workbench_anchor_context_key = key;
+        }
         work_panel_open_by_context.set(key, true);
         if (last_topic_context !== undefined && last_topic_context !== null) {
             workbench_view_by_context.set(
@@ -588,6 +597,8 @@ function close_work_details(): void {
     if (key !== "") {
         work_panel_open_by_context.set(key, false);
     }
+    workbench_anchor_element = undefined;
+    workbench_anchor_context_key = "";
     render();
 }
 
@@ -683,6 +694,8 @@ function display_topic_context(topic_context: PearTopicContext | undefined | nul
           panel_git_status_class: string;
           panel_git_ref_label: string;
           panel_runtime_label: string;
+          panel_reasoning_effort_label: string;
+          panel_reasoning_effort_meter_class: string;
           has_workbench_diff_summary: boolean;
           workbench_diff_summary_label: string;
           workbench_diff_file_label: string;
@@ -749,6 +762,12 @@ function display_topic_context(topic_context: PearTopicContext | undefined | nul
     const canvas = canvas_by_context.get(topic_key);
     const canvas_content = canvas?.content ?? "";
     const canvas_rendered_html = canvas?.rendered_html ?? "";
+    const reasoning_effort_label =
+        topic_context.reasoning_efforts.find(
+            (effort) => effort.effort === topic_context.reasoning_effort,
+        )?.label ||
+        topic_context.reasoning_effort ||
+        $t({defaultMessage: "Medium"});
     const workbench_view = workbench_view_for_testing({
         requested: workbench_view_by_context.get(topic_key),
         has_diff: has_workbench_diff,
@@ -806,6 +825,10 @@ function display_topic_context(topic_context: PearTopicContext | undefined | nul
             model: topic_context.model,
             reasoning_effort: topic_context.reasoning_effort,
         }),
+        panel_reasoning_effort_label: reasoning_effort_label,
+        panel_reasoning_effort_meter_class: reasoning_effort_meter_class(
+            topic_context.reasoning_effort,
+        ),
         has_workbench_diff_summary: workbench_diff_summary_label !== "",
         workbench_diff_summary_label,
         workbench_diff_file_label,
@@ -840,10 +863,13 @@ function topic_header_work_label(display_context: PearDisplayTopicContext): stri
     if (display_context.panel_git_status_class !== "clean") {
         const changed_count = display_context.git.changed_count ?? 0;
         if (changed_count === 1) {
-            return $t({defaultMessage: "1 file"});
+            return $t({defaultMessage: "1 file changed"});
         }
         if (changed_count > 1) {
-            return $t({defaultMessage: "{changed_count} files"}, {changed_count});
+            return $t(
+                {defaultMessage: "{changed_count} files changed"},
+                {changed_count},
+            );
         }
         return display_context.panel_git_status_label;
     }
@@ -907,6 +933,9 @@ function render_topic_header_controls(options: {
             $header.attr("data-topic-name") === topic
         );
     });
+    if ($headers.length === 0) {
+        return;
+    }
     if (topic_header_controls_are_current($headers, control_key)) {
         return;
     }
@@ -975,6 +1004,13 @@ function render_topic_header_controls(options: {
 }
 
 function visible_header_anchor(): HTMLElement | undefined {
+    if (
+        workbench_anchor_context_key === current_context_key() &&
+        workbench_anchor_element?.isConnected === true &&
+        workbench_anchor_element.getClientRects().length > 0
+    ) {
+        return workbench_anchor_element;
+    }
     return [
         ...document.querySelectorAll<HTMLElement>(
             ".message_header_stream .pear-topic-header-work-control, .message_header_stream .pear-topic-header-runtime-control",
@@ -988,22 +1024,26 @@ function position_workbench_popover(): void {
         return;
     }
     const anchor = visible_header_anchor();
-    if (anchor === undefined) {
-        return;
-    }
     const margin = WORKBENCH_POPOVER_MARGIN_PX;
     const viewport_width = window.innerWidth;
     const viewport_height = window.innerHeight;
     const compact_viewport = viewport_width < 760;
     const width = compact_viewport
         ? Math.max(280, viewport_width - margin * 2)
-        : Math.min(360, Math.max(300, viewport_width - margin * 2));
-    const anchor_rect = anchor.getBoundingClientRect();
-    const anchor_center = anchor_rect.left + anchor_rect.width / 2;
+        : Math.min(560, Math.max(420, viewport_width - margin * 2));
+    const anchor_rect = anchor?.getBoundingClientRect();
+    const anchor_center =
+        anchor_rect === undefined ? viewport_width / 2 : anchor_rect.left + anchor_rect.width / 2;
     const left = compact_viewport
         ? margin
-        : Math.min(Math.max(anchor_rect.right - width, margin), viewport_width - width - margin);
-    const top = Math.min(anchor_rect.bottom + 8, viewport_height - margin);
+        : Math.min(
+              Math.max((anchor_rect?.right ?? anchor_center + width / 2) - width, margin),
+              viewport_width - width - margin,
+          );
+    const top = Math.min(
+        anchor_rect === undefined ? 76 : anchor_rect.bottom + 8,
+        viewport_height - margin,
+    );
     const arrow_left = Math.min(Math.max(anchor_center - left, 18), width - 18);
     panel.style.setProperty("--pear-workbench-popover-left", `${Math.round(left)}px`);
     panel.style.setProperty("--pear-workbench-popover-top", `${Math.round(top)}px`);
@@ -1611,7 +1651,7 @@ export function initialize(): void {
     $("body").on("click", ".pear-panel-open-action", (e) => {
         e.preventDefault();
         e.stopPropagation();
-        open_work_details();
+        open_work_details(undefined, e.currentTarget);
     });
     $("body").on("click", "#pear-panel", (e) => {
         e.stopPropagation();

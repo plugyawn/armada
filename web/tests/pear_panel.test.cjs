@@ -215,6 +215,8 @@ run_test("template renders workbench without active run", () => {
             panel_git_status_class: "dirty",
             panel_git_ref_label: "main / a3f92c1",
             panel_runtime_label: "gpt-5.5 / h",
+            panel_reasoning_effort_label: "High",
+            panel_reasoning_effort_meter_class: "high",
             workbench_title: "routing-fix",
             workbench_meta: "devel / routing-fix / a3f92c1",
             workbench_diff_selected: false,
@@ -241,11 +243,21 @@ run_test("template renders workbench without active run", () => {
 
     assert.match(html, /pear-workbench/);
     assert.doesNotMatch(html, /pear-topic-control/);
-    assert.doesNotMatch(html, /pear-runtime-menu-trigger/);
+    assert.match(html, /pear-workbench-control-grid/);
+    assert.match(html, /pear-runtime-menu-trigger/);
+    assert.match(html, /pear-workbench-runtime-trigger/);
     assert.doesNotMatch(html, /pear-topic-open-action/);
     assert.match(html, /pear-workbench-title-row/);
     assert.match(html, /routing-fix/);
     assert.match(html, /devel \/ routing-fix \/ a3f92c1/);
+    assert.match(html, /pear-workbench-thinking-row/);
+    assert.match(html, /pear-workbench-thinking-high/);
+    assert.match(html, /gpt-5\.5 \/ h/);
+    assert.match(html, /High/);
+    assert.match(html, /Repo/);
+    assert.match(html, /Worktree/);
+    assert.match(html, /2 files/);
+    assert.match(html, /main \/ a3f92c1/);
     assert.match(html, /pear-workbench-context-row/);
     assert.match(html, /pear-workbench-tabs/);
     assert.match(html, /pear-workbench-close/);
@@ -253,7 +265,6 @@ run_test("template renders workbench without active run", () => {
     assert.match(html, /history/);
     assert.match(html, /canvas/);
     assert.match(html, /whisper/);
-    assert.doesNotMatch(html, /pear-workbench-runtime/);
     assert.doesNotMatch(html, /pear-workbench-head-row/);
     assert.doesNotMatch(html, /pear-workbench-diffstat/);
     assert.doesNotMatch(html, /pear-workbench-context-meter/);
@@ -276,6 +287,14 @@ run_test("template keeps volatile run metadata out of workbench chrome", () => {
         topic_context: {
             workbench_title: "routing-fix",
             workbench_meta: "devel / routing-fix / a3f92c1",
+            panel_repo_label: "devel",
+            panel_worktree_label: "routing-fix",
+            panel_git_status_label: "clean",
+            panel_git_status_class: "clean",
+            panel_git_ref_label: "main / a3f92c1",
+            panel_runtime_label: "gpt-5.5 / xh",
+            panel_reasoning_effort_label: "XHigh",
+            panel_reasoning_effort_meter_class: "xhigh",
             workbench_diff_selected: true,
             workbench_history_selected: false,
             workbench_canvas_selected: false,
@@ -293,13 +312,15 @@ run_test("template keeps volatile run metadata out of workbench chrome", () => {
 
     assert.match(html, /pear-workbench-tabs/);
     assert.match(html, /pear-workbench-title-row/);
+    assert.match(html, /pear-workbench-control-grid/);
+    assert.match(html, /gpt-5\.5 \/ xh/);
     assert.doesNotMatch(html, /pear-workbench-context-meter/);
     assert.doesNotMatch(html, /pear-workbench-head-row/);
     assert.doesNotMatch(html, /pear-thinking-glyph/);
     assert.doesNotMatch(html, /cache_percent/);
 });
 
-run_test("template keeps runtime metadata out of workbench content rail", () => {
+run_test("template keeps runtime controls in workbench chrome", () => {
     const html = render_pear_panel({
         panel_open: true,
         show_workbench: true,
@@ -314,6 +335,14 @@ run_test("template keeps runtime metadata out of workbench content rail", () => 
         topic_context: {
             workbench_title: "routing-fix",
             workbench_meta: "devel / routing-fix / a3f92c1",
+            panel_repo_label: "devel",
+            panel_worktree_label: "routing-fix",
+            panel_git_status_label: "clean",
+            panel_git_status_class: "clean",
+            panel_git_ref_label: "main / a3f92c1",
+            panel_runtime_label: "gpt-5.5 / h",
+            panel_reasoning_effort_label: "High",
+            panel_reasoning_effort_meter_class: "high",
             workbench_diff_selected: true,
             workbench_history_selected: false,
             workbench_canvas_selected: false,
@@ -331,8 +360,8 @@ run_test("template keeps runtime metadata out of workbench content rail", () => 
 
     assert.doesNotMatch(html, /pear-workbench-context-meter/);
     assert.doesNotMatch(html, /cache_percent/);
-    assert.doesNotMatch(html, /GPT-5\.5/);
-    assert.doesNotMatch(html, /pear-workbench-runtime/);
+    assert.match(html, /gpt-5\.5 \/ h/);
+    assert.match(html, /pear-workbench-runtime-trigger/);
     assert.doesNotMatch(html, /No committed work yet/);
 });
 
@@ -348,6 +377,14 @@ run_test("template renders canvas as a workbench pane", () => {
         topic_context: {
             workbench_title: "routing-fix",
             workbench_meta: "devel / routing-fix / a3f92c1",
+            panel_repo_label: "devel",
+            panel_worktree_label: "routing-fix",
+            panel_git_status_label: "clean",
+            panel_git_status_class: "clean",
+            panel_git_ref_label: "main / a3f92c1",
+            panel_runtime_label: "gpt-5.5 / h",
+            panel_reasoning_effort_label: "High",
+            panel_reasoning_effort_meter_class: "high",
             workbench_diff_selected: false,
             workbench_history_selected: false,
             workbench_canvas_selected: true,
@@ -379,7 +416,7 @@ run_test("template renders canvas as a workbench pane", () => {
     assert.match(html, /<p>Project note<\/p>/);
     assert.match(html, /pear-workbench-canvas-open/);
     assert.match(html, /\.pear\/CANVAS\.md/);
-    assert.doesNotMatch(html, /pear-workbench-runtime/);
+    assert.match(html, /pear-workbench-runtime-trigger/);
 });
 
 run_test("template renders diff rows without duplicate summary chips", () => {
@@ -394,6 +431,14 @@ run_test("template renders diff rows without duplicate summary chips", () => {
         topic_context: {
             workbench_title: "routing-fix",
             workbench_meta: "devel / routing-fix / a3f92c1",
+            panel_repo_label: "devel",
+            panel_worktree_label: "routing-fix",
+            panel_git_status_label: "2 files",
+            panel_git_status_class: "dirty",
+            panel_git_ref_label: "main / a3f92c1",
+            panel_runtime_label: "gpt-5.5 / h",
+            panel_reasoning_effort_label: "High",
+            panel_reasoning_effort_meter_class: "high",
             workbench_diff_selected: true,
             workbench_history_selected: false,
             workbench_canvas_selected: false,

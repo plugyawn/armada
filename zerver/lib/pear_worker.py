@@ -774,6 +774,23 @@ def pear_path_is_git_worktree(path: Path) -> bool:
     return completed.returncode == 0
 
 
+def pear_git_current_branch_name(path: Path) -> str:
+    try:
+        completed = subprocess.run(
+            ["git", "-C", str(path), "branch", "--show-current"],
+            check=False,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            timeout=10,
+        )
+    except (FileNotFoundError, OSError, subprocess.TimeoutExpired):
+        return ""
+    if completed.returncode != 0:
+        return ""
+    return pear_topic_branch_name(completed.stdout.strip())
+
+
 def pear_try_add_worktree(
     base_path: Path,
     path: Path,
@@ -1205,8 +1222,11 @@ def ensure_pear_topic_context(
         workspace_node.workdir = context.workdir
         workspace_node.date_updated = timezone_now()
         workspace_node.save(update_fields=["workdir", "date_updated"])
-    if effective_branch and workspace_node.branch_name != effective_branch:
-        workspace_node.branch_name = effective_branch
+    effective_branch_name = (
+        pear_topic_branch_name(effective_branch) if isinstance(effective_branch, str) else ""
+    )
+    if effective_branch_name and workspace_node.branch_name != effective_branch_name:
+        workspace_node.branch_name = effective_branch_name
         workspace_node.date_updated = timezone_now()
         workspace_node.save(update_fields=["branch_name", "date_updated"])
     return context
@@ -1246,7 +1266,9 @@ def ensure_pear_topic_workdir(
     branch_name = pear_topic_branch_name(branch_name or "main")
     if pear_topic_os_user_isolation_enabled():
         if path.exists():
-            if not pear_path_is_git_worktree(path):
+            if pear_path_is_git_worktree(path):
+                return pear_git_current_branch_name(path) or branch_name
+            else:
                 try:
                     subprocess.run(
                         ["git", "-C", str(path), "init", "--quiet"],
@@ -1258,11 +1280,11 @@ def ensure_pear_topic_workdir(
                 except (FileNotFoundError, OSError, subprocess.TimeoutExpired):
                     pass
                 pear_switch_workdir_to_branch(path, branch_name)
-            return branch_name
+            return pear_git_current_branch_name(path) or branch_name
         if repository_url:
             clone_or_update_pear_repository_workdir(repository_url, path)
             pear_switch_workdir_to_branch(path, branch_name)
-            return branch_name
+            return pear_git_current_branch_name(path) or branch_name
         path.mkdir(parents=True, exist_ok=True)
         try:
             subprocess.run(
@@ -1275,7 +1297,7 @@ def ensure_pear_topic_workdir(
         except (FileNotFoundError, OSError, subprocess.TimeoutExpired):
             pass
         pear_switch_workdir_to_branch(path, branch_name)
-        return branch_name
+        return pear_git_current_branch_name(path) or branch_name
     base_path = Path(base_workdir) if base_workdir is not None else Path(pear_default_worker_workdir())
     base_is_git_worktree = pear_path_is_git_worktree(base_path)
     path_was_empty = not ((path / ".git").exists() or path.exists() and any(path.iterdir()))
@@ -1297,12 +1319,14 @@ def ensure_pear_topic_workdir(
                 )
         except (FileNotFoundError, OSError, subprocess.TimeoutExpired):
             pass
+    if not path_was_empty and pear_path_is_git_worktree(path):
+        return pear_git_current_branch_name(path) or branch_name
     if base_is_git_worktree and not ((path / ".git").exists() or worktree_added_branch):
         return worktree_added_branch or branch_name
     path.mkdir(parents=True, exist_ok=True)
     if path_was_empty and worktree_added_branch is None and pear_path_is_git_worktree(path):
         pear_switch_workdir_to_branch(path, branch_name)
-    return worktree_added_branch or branch_name
+    return pear_git_current_branch_name(path) or worktree_added_branch or branch_name
 
 
 def clean_pear_repository_url(repository_url: str) -> str:

@@ -863,7 +863,10 @@ class PearSessionEndpointTest(ZulipTestCase):
         with tempfile.TemporaryDirectory() as temp_dir, self.settings(
             PEAR_TOPIC_ISOLATION_BACKEND="os-user",
             PEAR_TOPIC_WORKDIR_ROOT=temp_dir,
-        ), patch("zerver.lib.pear_worker.ensure_pear_topic_workdir"), patch(
+        ), patch(
+            "zerver.lib.pear_worker.ensure_pear_topic_workdir",
+            return_value="main",
+        ), patch(
             "zerver.lib.pear_worker.pear_topic_isolation_user_exists",
             return_value=True,
         ), patch(
@@ -1366,6 +1369,7 @@ class PearSessionEndpointTest(ZulipTestCase):
 
     def test_os_user_topic_context_uses_independent_repository_clone(self) -> None:
         owner = self.example_user("hamlet")
+        self.subscribe(owner, "megatron-lm")
         repository_url = "https://github.com/NVIDIA/Megatron-LM.git"
         cloned_paths: list[Path] = []
 
@@ -1825,6 +1829,12 @@ class PearSessionEndpointTest(ZulipTestCase):
                 stream="megatron-lm",
                 repository_url=repository_url,
             )
+            project = PearProject.objects.get(
+                realm=owner.realm,
+                stream=get_stream("megatron-lm", owner.realm),
+            )
+            project.default_base_ref = "dev"
+            project.save(update_fields=["default_base_ref", "date_updated"])
             topic_context = ensure_pear_topic_context(
                 owner,
                 stream="megatron-lm",

@@ -27,12 +27,11 @@ function make_context(overrides = {}) {
 }
 
 run_test("runtime_menu_selector_for_testing", () => {
-    // Pear runtime controls live either in the explicit Pear workbench
-    // or in the current stream/topic header, never in Zulip's global
-    // channel/search chrome.
+    // The legacy runtime menu only owns explicit Pear panel controls. The
+    // current stream/topic header opens the unified workbench instead.
     assert.equal(
         pear_runtime_menu.runtime_menu_selector_for_testing,
-        "#pear-panel .pear-runtime-menu-trigger, .message_header_stream .pear-runtime-menu-trigger",
+        "#pear-panel .pear-runtime-menu-trigger",
     );
     for (const selector of pear_runtime_menu.forbidden_header_mount_selectors_for_testing) {
         assert.ok(!pear_runtime_menu.runtime_menu_selector_for_testing.includes(selector));

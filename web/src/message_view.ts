@@ -46,6 +46,7 @@ import * as narrow_state from "./narrow_state.ts";
 import * as narrow_title from "./narrow_title.ts";
 import {page_params} from "./page_params.ts";
 import * as people from "./people.ts";
+import * as pear_panel from "./pear_panel.ts";
 import * as pm_list from "./pm_list.ts";
 import * as popup_banners from "./popup_banners.ts";
 import * as recent_view_ui from "./recent_view_ui.ts";
@@ -1625,6 +1626,7 @@ function handle_post_view_change(
     }
 
     message_view_header.render_title_area();
+    pear_panel.handle_narrow_activated();
 
     narrow_title.update_narrow_title(filter);
     left_sidebar_navigation_area.handle_narrow_activated(filter);

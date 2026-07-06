@@ -202,8 +202,12 @@ const canvas_loading_contexts = new Set<string>();
 const canvas_fetch_sequence_by_context = new Map<string, number>();
 const canvas_rendering_contexts = new Set<string>();
 const canvas_render_sequence_by_context = new Map<string, number>();
+const topic_context_by_context = new Map<string, PearTopicContext>();
 let workbench_anchor_element: HTMLElement | undefined;
 let workbench_anchor_context_key = "";
+type WorkbenchAnchorKind = "runtime" | "work";
+let workbench_anchor_kind: WorkbenchAnchorKind | undefined;
+let last_observed_context_key = "";
 let topic_context_update_in_flight = false;
 const LIVE_REFRESH_INTERVAL_MS = 500;
 const LIVE_REFRESH_RATE_LIMIT_BACKOFF_MS = 1500;
@@ -666,6 +670,7 @@ export function open_work_details(
         if (anchor_element !== undefined) {
             workbench_anchor_element = anchor_element;
             workbench_anchor_context_key = key;
+            workbench_anchor_kind = anchor_kind_for_element(anchor_element);
         }
         work_panel_open_by_context.set(key, true);
         if (last_topic_context !== undefined && last_topic_context !== null) {
@@ -706,6 +711,7 @@ function close_work_details(): void {
     }
     workbench_anchor_element = undefined;
     workbench_anchor_context_key = "";
+    workbench_anchor_kind = undefined;
     render();
 }
 
@@ -838,7 +844,10 @@ function display_topic_context(topic_context: PearTopicContext | undefined | nul
         git.repo_name?.trim() ||
         $t({defaultMessage: "No repo pinned"});
     const panel_worktree_label =
-        topic_context.worktree_label?.trim() || topic_context.topic || git.worktree_name?.trim() || "";
+        topic_context.worktree_label?.trim() ||
+        topic_context.topic ||
+        git.worktree_name?.trim() ||
+        "";
     const workbench_meta = [workbench_repo_label, git.branch?.trim() ?? ""]
         .filter((part) => part !== "")
         .join(" / ");
@@ -960,8 +969,7 @@ function display_topic_context(topic_context: PearTopicContext | undefined | nul
 }
 
 const pear_topic_header_status_selector = ".pear-topic-header-status";
-const pear_topic_header_control_selector =
-    ".pear-topic-header-status, .pear-topic-header-control";
+const pear_topic_header_control_selector = ".pear-topic-header-status, .pear-topic-header-control";
 
 function ensure_pear_panel_host(): HTMLElement | undefined {
     let panel = document.querySelector<HTMLElement>("body > #pear-panel");
@@ -976,10 +984,7 @@ function ensure_pear_panel_host(): HTMLElement | undefined {
     return panel;
 }
 
-function topic_header_controls_are_current(
-    $headers: JQuery,
-    control_key: string,
-): boolean {
+function topic_header_controls_are_current($headers: JQuery, control_key: string): boolean {
     if ($headers.length === 0) {
         return false;
     }
@@ -988,8 +993,9 @@ function topic_header_controls_are_current(
         return (
             $header
                 .find(pear_topic_header_status_selector)
-                .filter((_index, element) => $(element).attr("data-pear-header-key") === control_key)
-                .length > 0
+                .filter(
+                    (_index, element) => $(element).attr("data-pear-header-key") === control_key,
+                ).length > 0
         );
     });
 }
@@ -1001,10 +1007,7 @@ function topic_header_work_label(display_context: PearDisplayTopicContext): stri
             return $t({defaultMessage: "1 file changed"});
         }
         if (changed_count > 1) {
-            return $t(
-                {defaultMessage: "{changed_count} files changed"},
-                {changed_count},
-            );
+            return $t({defaultMessage: "{changed_count} files changed"}, {changed_count});
         }
         return display_context.panel_git_status_label;
     }
@@ -1045,10 +1048,7 @@ function render_topic_header_controls(options: {
     const runtime_label = topic_context.panel_runtime_label || $t({defaultMessage: "Pear"});
     const runtime_status = options.active_run_status ?? "done";
     const runtime_active = runtime_status === "running" || runtime_status === "queued";
-    const runtime_title = $t(
-        {defaultMessage: "Pear runtime: {runtime_label}"},
-        {runtime_label},
-    );
+    const runtime_title = $t({defaultMessage: "Pear runtime: {runtime_label}"}, {runtime_label});
     const work_label = topic_header_work_label(topic_context);
     const work_title = topic_header_work_title(topic_context);
     const control_key = JSON.stringify({
@@ -1091,7 +1091,7 @@ function render_topic_header_controls(options: {
         });
         const $runtime_control = $("<button>", {
             type: "button",
-            class: `pear-topic-header-control pear-topic-header-runtime-control pear-runtime-menu-trigger tippy-zulip-delayed-tooltip${
+            class: `pear-topic-header-control pear-topic-header-runtime-control tippy-zulip-delayed-tooltip${
                 runtime_active ? " pear-liveness-active" : ""
             }`,
             "aria-label": runtime_title,
@@ -1132,6 +1132,20 @@ function render_topic_header_controls(options: {
     $(document).trigger("pear_liveness_markers_changed");
 }
 
+function anchor_kind_for_element(element: HTMLElement): WorkbenchAnchorKind {
+    return element.classList.contains("pear-topic-header-runtime-control") ? "runtime" : "work";
+}
+
+function visible_header_anchor_for_kind(kind: WorkbenchAnchorKind): HTMLElement | undefined {
+    const selector =
+        kind === "runtime"
+            ? ".message_header_stream .pear-topic-header-runtime-control"
+            : ".message_header_stream .pear-topic-header-work-control";
+    return [...document.querySelectorAll<HTMLElement>(selector)].find(
+        (element) => element.getClientRects().length > 0,
+    );
+}
+
 function visible_header_anchor(): HTMLElement | undefined {
     if (
         workbench_anchor_context_key === current_context_key() &&
@@ -1140,11 +1154,16 @@ function visible_header_anchor(): HTMLElement | undefined {
     ) {
         return workbench_anchor_element;
     }
-    return [
-        ...document.querySelectorAll<HTMLElement>(
-            ".message_header_stream .pear-topic-header-work-control, .message_header_stream .pear-topic-header-runtime-control",
-        ),
-    ].find((element) => element.getClientRects().length > 0);
+    if (
+        workbench_anchor_context_key === current_context_key() &&
+        workbench_anchor_kind !== undefined
+    ) {
+        return (
+            visible_header_anchor_for_kind(workbench_anchor_kind) ??
+            visible_header_anchor_for_kind(workbench_anchor_kind === "work" ? "runtime" : "work")
+        );
+    }
+    return visible_header_anchor_for_kind("work") ?? visible_header_anchor_for_kind("runtime");
 }
 
 function position_workbench_popover(): void {
@@ -1169,10 +1188,7 @@ function position_workbench_popover(): void {
     const min_left = compact_viewport ? margin : Math.max(margin, header_rect?.left ?? margin);
     const left = compact_viewport
         ? margin
-        : Math.min(
-              Math.max(anchor_center - width / 2, min_left),
-              viewport_width - width - margin,
-          );
+        : Math.min(Math.max(anchor_center - width / 2, min_left), viewport_width - width - margin);
     const top = Math.min(
         anchor_rect === undefined ? 76 : anchor_rect.bottom + 8,
         viewport_height - margin,
@@ -1185,10 +1201,7 @@ function position_workbench_popover(): void {
         "--pear-workbench-popover-max-height",
         `${Math.max(260, Math.round(viewport_height - top - margin))}px`,
     );
-    panel.style.setProperty(
-        "--pear-workbench-popover-arrow-left",
-        `${Math.round(arrow_left)}px`,
-    );
+    panel.style.setProperty("--pear-workbench-popover-arrow-left", `${Math.round(arrow_left)}px`);
 }
 
 function set_workbench_popover_open(workbench_open: boolean): void {
@@ -1485,6 +1498,28 @@ function record_context_refresh(stream: string | undefined, topic: string | unde
     last_context_refresh_at = Date.now();
 }
 
+function remember_topic_context(topic_context: PearTopicContext | null | undefined): void {
+    if (topic_context === undefined || topic_context === null) {
+        return;
+    }
+    topic_context_by_context.set(
+        context_key(topic_context.stream, topic_context.topic),
+        topic_context,
+    );
+}
+
+export function handle_narrow_activated(): void {
+    const key = current_context_key();
+    if (key === last_observed_context_key) {
+        render();
+        return;
+    }
+    last_observed_context_key = key;
+    const cached_context = topic_context_by_context.get(key);
+    render(last_runs, cached_context);
+    refresh({force_context: true});
+}
+
 function clear_live_refresh(): void {
     if (live_refresh_timer !== undefined) {
         window.clearTimeout(live_refresh_timer);
@@ -1693,6 +1728,7 @@ export function refresh(options: {force_context?: boolean; live?: boolean} = {})
                 response_topic_context: data.pear_topic_context,
                 last_topic_context,
             });
+            remember_topic_context(topic_context);
             if (data.pear_topic_context !== undefined && data.pear_topic_context !== null) {
                 record_context_refresh(stream, topic);
             }
@@ -1767,6 +1803,7 @@ function save_topic_context(options: {model?: string; reasoning_effort?: string}
             }
             const data = raw_data;
             if (data.pear_topic_context !== undefined && data.pear_topic_context !== null) {
+                remember_topic_context(data.pear_topic_context);
                 last_topic_context = data.pear_topic_context;
                 record_context_refresh(stream, topic);
                 render(last_runs, data.pear_topic_context);
@@ -1862,6 +1899,11 @@ export function initialize(): void {
         close_work_details();
     });
     $("body").on("click", ".pear-panel-open-action", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        open_work_details(undefined, e.currentTarget);
+    });
+    $("body").on("click", ".message_header_stream .pear-topic-header-runtime-control", (e) => {
         e.preventDefault();
         e.stopPropagation();
         open_work_details(undefined, e.currentTarget);

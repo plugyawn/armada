@@ -69,7 +69,12 @@ from zerver.lib.pear_worker import (
 )
 from zerver.lib.test_classes import ZulipTestCase
 from zerver.models import Message, Subscription, UserProfile
-from zerver.models.bots import PearTopicContext, PearWorkerRun, PearWorkerRunEvent
+from zerver.models.bots import (
+    PearProject,
+    PearTopicContext,
+    PearWorkerRun,
+    PearWorkerRunEvent,
+)
 from zerver.models.streams import get_stream
 from zerver.views.pear import (
     build_pear_git_context,
@@ -1253,6 +1258,11 @@ class PearSessionEndpointTest(ZulipTestCase):
                 timeout=10,
             )
             self.assertEqual(completed.stdout.strip(), topic)
+            assert context.workspace_node is not None
+            self.assertEqual(context.workspace_node.stream_name, PEAR_DEFAULT_STREAM)
+            self.assertEqual(context.workspace_node.topic_name, topic)
+            self.assertEqual(context.workspace_node.workdir, context.workdir)
+            self.assertEqual(context.workspace_node.branch_name, topic)
             self.assertEqual(
                 subprocess.run(
                     ["git", "-C", context.workdir, "rev-parse", "--is-inside-work-tree"],
@@ -1263,6 +1273,63 @@ class PearSessionEndpointTest(ZulipTestCase):
                 ).stdout.strip(),
                 "true",
             )
+
+    def test_topic_context_payload_exposes_managed_workspace_identity(self) -> None:
+        owner = self.example_user("hamlet")
+        self.subscribe(owner, PEAR_DEFAULT_STREAM)
+
+        with tempfile.TemporaryDirectory() as temp_dir, self.settings(
+            PEAR_TOPIC_WORKDIR_ROOT=temp_dir,
+        ):
+            context = ensure_pear_topic_context(
+                owner,
+                stream=PEAR_DEFAULT_STREAM,
+                topic=PEAR_DEFAULT_TOPIC,
+            )
+            payload = serialize_pear_topic_context(
+                context,
+                stream_name=PEAR_DEFAULT_STREAM,
+                topic_name=PEAR_DEFAULT_TOPIC,
+            )
+
+        assert context.workspace_node is not None
+        self.assertEqual(payload["workspace_id"], context.workspace_node_id)
+        self.assertEqual(payload["workspace_uuid"], str(context.workspace_node.uuid))
+        self.assertEqual(payload["branch"], context.workspace_node.branch_name)
+        self.assertEqual(payload["base_ref"], "")
+        self.assertEqual(payload["head"], "")
+
+    def test_worker_run_store_links_runs_to_workspace_node(self) -> None:
+        owner = self.example_user("hamlet")
+        pear_bot = self.create_test_bot(
+            "pear",
+            owner,
+            full_name="Pear",
+            bot_type=UserProfile.EMBEDDED_BOT,
+            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+        )
+        self.subscribe(owner, PEAR_DEFAULT_STREAM)
+        self.subscribe(pear_bot, PEAR_DEFAULT_STREAM)
+        store = PearDatabaseWorkerRunStore()
+
+        with tempfile.TemporaryDirectory() as temp_dir, self.settings(
+            PEAR_TOPIC_WORKDIR_ROOT=temp_dir,
+        ):
+            started = store.start(
+                SimpleNamespace(user_profile=pear_bot),
+                9876,
+                stream=PEAR_DEFAULT_STREAM,
+                topic=PEAR_DEFAULT_TOPIC,
+            )
+            run = PearWorkerRun.objects.get(trigger_message_id=9876)
+            context = PearTopicContext.objects.get(
+                realm=owner.realm,
+                stream_name=PEAR_DEFAULT_STREAM,
+                topic_name=PEAR_DEFAULT_TOPIC,
+            )
+
+        self.assertTrue(started)
+        self.assertEqual(run.workspace_node_id, context.workspace_node_id)
 
     def test_topic_worker_sandbox_downgrades_full_access_to_workspace_write(self) -> None:
         owner = self.example_user("hamlet")
@@ -1907,11 +1974,18 @@ class PearSessionEndpointTest(ZulipTestCase):
 
             self.assertEqual(context.github_repo, repository_url)
             self.assertTrue(context.workdir.startswith(temp_dir))
+            project = PearProject.objects.get(
+                realm=owner.realm,
+                stream=get_stream("megatron-lm", owner.realm),
+            )
+            self.assertEqual(project.repository_url, repository_url)
+            self.assertEqual(project.repo_cache_path, context.workdir)
             self.assertNotIn("pear_repository_error", result_dict)
             clone_mock.assert_called_once_with(repository_url, Path(context.workdir))
 
     def test_topic_context_inherits_channel_repository_checkout(self) -> None:
         owner = self.example_user("hamlet")
+        self.subscribe(owner, "megatron-lm")
         repository_url = "https://github.com/NVIDIA/Megatron-LM.git"
 
         def fake_clone(_repository_url: str, workdir: Path) -> None:
@@ -1938,6 +2012,9 @@ class PearSessionEndpointTest(ZulipTestCase):
             self.assertEqual(channel_context.github_repo, repository_url)
             self.assertNotEqual(topic_context.workdir, channel_context.workdir)
             self.assertTrue(Path(topic_context.workdir).exists())
+            assert topic_context.workspace_node is not None
+            assert topic_context.workspace_node.project is not None
+            self.assertEqual(topic_context.workspace_node.project.repository_url, repository_url)
 
     def test_topic_context_does_not_clone_local_parent_workspace_path(self) -> None:
         owner = self.example_user("hamlet")
@@ -2058,6 +2135,14 @@ class PearSessionEndpointTest(ZulipTestCase):
                     topic="old topic",
                 )
                 old_workdir = context.workdir
+                old_workspace_node_id = context.workspace_node_id
+                old_branch = subprocess.run(
+                    ["git", "-C", context.workdir, "branch", "--show-current"],
+                    check=True,
+                    stdout=subprocess.PIPE,
+                    text=True,
+                    timeout=10,
+                ).stdout.strip()
                 run = PearWorkerRun.objects.create(
                     realm=owner.realm,
                     bot_profile=pear_bot,
@@ -2065,6 +2150,7 @@ class PearSessionEndpointTest(ZulipTestCase):
                     trigger_message_id=3001,
                     stream_name=PEAR_DEFAULT_STREAM,
                     topic_name="old topic",
+                    workspace_node=context.workspace_node,
                     status=PearWorkerRun.DONE,
                     codex_thread_id="thread-1",
                 )
@@ -2096,11 +2182,12 @@ class PearSessionEndpointTest(ZulipTestCase):
             side_run.refresh_from_db()
 
             self.assertEqual(result.topic_name, "new topic")
-            self.assertEqual(result.message, "Pear workspace moved with this topic.")
+            self.assertEqual(result.message, "Pear workspace label moved with this topic.")
             self.assertNotIn("Worktree:", result.message)
             self.assertNotIn(topic_root, result.message)
             self.assertEqual(context.topic_name, "new topic")
-            self.assertNotEqual(context.workdir, old_workdir)
+            self.assertEqual(context.workdir, old_workdir)
+            self.assertEqual(context.workspace_node_id, old_workspace_node_id)
             self.assertTrue(context.workdir.startswith(topic_root))
             self.assertTrue(Path(context.workdir).exists())
             branch = subprocess.run(
@@ -2110,9 +2197,16 @@ class PearSessionEndpointTest(ZulipTestCase):
                 text=True,
                 timeout=10,
             ).stdout.strip()
-            self.assertEqual(branch, pear_topic_branch_name("new topic"))
-            self.assertEqual(run.topic_name, "new topic")
-            self.assertEqual(side_run.source_topic_name, "new topic")
+            self.assertEqual(branch, old_branch)
+            assert context.workspace_node is not None
+            self.assertEqual(context.workspace_node.topic_name, "new topic")
+            self.assertEqual(
+                context.workspace_node.branch_name,
+                pear_topic_branch_name("old topic"),
+            )
+            self.assertEqual(run.topic_name, "old topic")
+            self.assertEqual(run.workspace_node_id, context.workspace_node_id)
+            self.assertEqual(side_run.source_topic_name, "old topic")
             self.assertFalse(
                 PearTopicContext.objects.filter(
                     realm=owner.realm,
@@ -2219,8 +2313,8 @@ class PearSessionEndpointTest(ZulipTestCase):
         )
         run.refresh_from_db()
         side_run.refresh_from_db()
-        self.assertEqual(run.stream_name, "new-repo")
-        self.assertEqual(side_run.source_stream_name, "new-repo")
+        self.assertEqual(run.stream_name, "old-repo")
+        self.assertEqual(side_run.source_stream_name, "old-repo")
 
     def test_clone_or_update_pear_repository_workdir_clones_repository(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

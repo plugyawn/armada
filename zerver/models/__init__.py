@@ -2,7 +2,9 @@ from zerver.models import lookups as lookups
 from zerver.models.alert_words import AlertWord as AlertWord
 from zerver.models.bots import BotConfigData as BotConfigData
 from zerver.models.bots import BotStorageData as BotStorageData
+from zerver.models.bots import PearProject as PearProject
 from zerver.models.bots import PearTopicContext as PearTopicContext
+from zerver.models.bots import PearWorkspaceNode as PearWorkspaceNode
 from zerver.models.bots import PearWorkerRun as PearWorkerRun
 from zerver.models.bots import PearWorkerRunEvent as PearWorkerRunEvent
 from zerver.models.bots import Service as Service

@@ -85,7 +85,13 @@ from zerver.lib.typed_endpoint import (
     typed_endpoint_without_parameters,
 )
 from zerver.lib.url_encoding import topic_narrow_url
-from zerver.models.bots import PearTopicContext, PearWorkerRun, PearWorkerRunEvent, Service
+from zerver.models.bots import (
+    PearTopicContext,
+    PearWorkerRun,
+    PearWorkerRunEvent,
+    PearWorkspaceNode,
+    Service,
+)
 from zerver.models.users import UserProfile
 from zerver.views.users import add_bot_backend
 
@@ -554,7 +560,7 @@ def pear_topic_context_for_request(
     topic_name: str,
 ) -> PearTopicContext | None:
     return (
-        PearTopicContext.objects.select_related("parent_context")
+        PearTopicContext.objects.select_related("parent_context", "workspace_node__project")
         .filter(
             realm=user_profile.realm,
             stream_name=stream_name,
@@ -631,6 +637,21 @@ def serialize_pear_topic_context(
         topic=topic_name,
         fallback=Path(workdir).name,
     )
+    workspace_node = (
+        context.workspace_node
+        if context is not None and context.workspace_node_id is not None
+        else None
+    )
+    project = (
+        workspace_node.project
+        if workspace_node is not None and workspace_node.project_id is not None
+        else None
+    )
+    expected_branch = (
+        workspace_node.branch_name.strip()
+        if workspace_node is not None and workspace_node.branch_name.strip()
+        else pear_topic_branch_name(topic_name)
+    )
     isolation_username = pear_context_isolation_username(
         context,
         stream_name=stream_name,
@@ -648,6 +669,14 @@ def serialize_pear_topic_context(
         "default_reasoning_effort": default_reasoning_effort,
         "reasoning_efforts": runtime_config["reasoning_efforts"],
         "response_policy": selected_response_policy,
+        "workspace_id": workspace_node.id if workspace_node is not None else None,
+        "workspace_uuid": str(workspace_node.uuid) if workspace_node is not None else "",
+        "project_id": project.id if project is not None else None,
+        "repository_url": project.repository_url if project is not None else pinned_repo,
+        "base_ref": workspace_node.base_ref if workspace_node is not None else "",
+        "base_commit": workspace_node.base_commit if workspace_node is not None else "",
+        "branch": expected_branch,
+        "head": workspace_node.head_commit if workspace_node is not None else "",
         "github_repo": github_repo,
         "pinned_repo": pinned_repo,
         "repo_label": repo_label,
@@ -658,7 +687,7 @@ def serialize_pear_topic_context(
         "parent_context_id": context.parent_context_id if context is not None else None,
         "git": build_pear_git_context(
             workdir,
-            topic=pear_topic_branch_name(topic_name),
+            topic=expected_branch,
             isolation_username=isolation_username,
         ),
     }
@@ -822,6 +851,7 @@ def serialize_pear_worker_run(
         "result_message_id": run.result_message_id,
         "stream": run.stream_name,
         "topic": run.topic_name,
+        "workspace_id": run.workspace_node_id,
         "session_kind": run.session_kind,
         "source_stream": run.source_stream_name,
         "source_topic": run.source_topic_name,
@@ -867,7 +897,12 @@ def check_can_access_pear_worker_run(
         if run.requesting_user_id != user_profile.id:
             raise JsonableError(_("Pear run not found."))
         return
-    access_stream_by_name(user_profile, run.stream_name)
+    stream_name = (
+        run.workspace_node.stream_name
+        if run.workspace_node_id is not None and run.workspace_node.stream_name
+        else run.stream_name
+    )
+    access_stream_by_name(user_profile, stream_name)
 
 
 def get_visible_pear_worker_run(
@@ -875,10 +910,11 @@ def get_visible_pear_worker_run(
     run_id: int,
 ) -> PearWorkerRun:
     try:
-        run = PearWorkerRun.objects.select_related("bot_profile", "requesting_user").get(
-            id=run_id,
-            realm=user_profile.realm,
-        )
+        run = PearWorkerRun.objects.select_related(
+            "bot_profile",
+            "requesting_user",
+            "workspace_node",
+        ).get(id=run_id, realm=user_profile.realm)
     except PearWorkerRun.DoesNotExist as error:
         raise JsonableError(_("Pear run not found.")) from error
     check_can_access_pear_worker_run(user_profile, run)
@@ -896,10 +932,11 @@ def get_visible_pear_worker_runs_by_id(
         raise JsonableError(_("Pear run not found."))
 
     runs = list(
-        PearWorkerRun.objects.select_related("bot_profile", "requesting_user").filter(
-            id__in=normalized_run_ids,
-            realm=user_profile.realm,
-        )
+        PearWorkerRun.objects.select_related(
+            "bot_profile",
+            "requesting_user",
+            "workspace_node",
+        ).filter(id__in=normalized_run_ids, realm=user_profile.realm)
     )
     runs_by_id = {run.id: run for run in runs}
     if len(runs_by_id) != len(normalized_run_ids):
@@ -1163,9 +1200,16 @@ def get_pear_git_tree_backend(
         topic_name=topic_name,
         workdir=workdir,
     )
+    expected_branch = (
+        context.workspace_node.branch_name.strip()
+        if context is not None
+        and context.workspace_node_id is not None
+        and context.workspace_node.branch_name.strip()
+        else pear_topic_branch_name(topic_name)
+    )
     delta = build_pear_git_context(
         workdir,
-        topic=pear_topic_branch_name(topic_name),
+        topic=expected_branch,
         isolation_username=isolation_username,
     )
     graph = ""
@@ -1415,16 +1459,28 @@ def post_pear_topic_context_backend(
         context.model = clean_model
         context.date_updated = timezone_now()
         context.save(update_fields=["model", "date_updated"])
+        if context.workspace_node_id is not None:
+            context.workspace_node.model = clean_model
+            context.workspace_node.date_updated = context.date_updated
+            context.workspace_node.save(update_fields=["model", "date_updated"])
     elif clean_model is not None and not context.model:
         context.model = clean_model
         context.date_updated = timezone_now()
         context.save(update_fields=["model", "date_updated"])
+        if context.workspace_node_id is not None:
+            context.workspace_node.model = clean_model
+            context.workspace_node.date_updated = context.date_updated
+            context.workspace_node.save(update_fields=["model", "date_updated"])
 
     if clean_reasoning_effort is not None:
         if reasoning_effort_changed or not context.reasoning_effort:
             context.reasoning_effort = clean_reasoning_effort
             context.date_updated = timezone_now()
             context.save(update_fields=["reasoning_effort", "date_updated"])
+            if context.workspace_node_id is not None:
+                context.workspace_node.reasoning_effort = clean_reasoning_effort
+                context.workspace_node.date_updated = context.date_updated
+                context.workspace_node.save(update_fields=["reasoning_effort", "date_updated"])
 
     if clean_response_policy is not None:
         set_pear_topic_context_response_policy(
@@ -1556,22 +1612,59 @@ def get_pear_runs_backend(
         Json[list[int]] | None,
         ApiParamConfig("run_ids", documentation_status=INTENTIONALLY_UNDOCUMENTED),
     ] = None,
+    workspace_id: Annotated[
+        int | None,
+        ApiParamConfig("workspace_id", documentation_status=INTENTIONALLY_UNDOCUMENTED),
+    ] = None,
 ) -> HttpResponse:
     requested_runs = (
         get_visible_pear_worker_runs_by_id(user_profile, run_ids) if run_ids is not None else []
     )
     topic_runs: list[PearWorkerRun]
-    if stream_name is not None and topic_name is not None:
-        access_stream_by_name(user_profile, stream_name)
+    workspace_node: PearWorkspaceNode | None = None
+    topic_context_record: PearTopicContext | None = None
+    if workspace_id is not None:
+        workspace_node = PearWorkspaceNode.objects.filter(
+            realm=user_profile.realm,
+            id=workspace_id,
+        ).first()
+        if workspace_node is None:
+            raise JsonableError(_("Pear workspace not found."))
+        if workspace_node.stream_name:
+            access_stream_by_name(user_profile, workspace_node.stream_name)
         topic_runs = list(
-            PearWorkerRun.objects.select_related("bot_profile", "requesting_user")
+            PearWorkerRun.objects.select_related("bot_profile", "requesting_user", "workspace_node")
+            .filter(realm=user_profile.realm, workspace_node=workspace_node)
+            .order_by("-date_created", "-id")[:PEAR_RUN_LIST_LIMIT]
+        )
+    elif stream_name is not None and topic_name is not None:
+        access_stream_by_name(user_profile, stream_name)
+        topic_context_record = pear_topic_context_for_request(
+            user_profile,
+            stream_name=stream_name,
+            topic_name=topic_name,
+        )
+        workspace_node = (
+            topic_context_record.workspace_node
+            if topic_context_record is not None
+            and topic_context_record.workspace_node_id is not None
+            else None
+        )
+        shared_run_filter = Q(
+            session_kind=PearWorkerRun.SHARED,
+            stream_name=stream_name,
+            topic_name=topic_name,
+        )
+        if workspace_node is not None:
+            shared_run_filter |= Q(
+                session_kind=PearWorkerRun.SHARED,
+                workspace_node=workspace_node,
+            )
+        topic_runs = list(
+            PearWorkerRun.objects.select_related("bot_profile", "requesting_user", "workspace_node")
             .filter(realm=user_profile.realm)
             .filter(
-                Q(
-                    session_kind=PearWorkerRun.SHARED,
-                    stream_name=stream_name,
-                    topic_name=topic_name,
-                )
+                shared_run_filter
                 | Q(
                     session_kind=PearWorkerRun.SIDE,
                     requesting_user=user_profile,
@@ -1585,7 +1678,7 @@ def get_pear_runs_backend(
         topic_runs = []
     else:
         topic_runs = list(
-            PearWorkerRun.objects.select_related("bot_profile", "requesting_user")
+            PearWorkerRun.objects.select_related("bot_profile", "requesting_user", "workspace_node")
             .filter(
                 realm=user_profile.realm,
                 session_kind=PearWorkerRun.SIDE,
@@ -1599,7 +1692,13 @@ def get_pear_runs_backend(
     topic_context = None
     if bool(include_context) and stream_name is not None and topic_name is not None:
         topic_context = serialize_pear_topic_context(
-            ensure_pear_topic_context(user_profile, stream=stream_name, topic=topic_name),
+            topic_context_record
+            if topic_context_record is not None
+            else pear_topic_context_for_request(
+                user_profile,
+                stream_name=stream_name,
+                topic_name=topic_name,
+            ),
             stream_name=stream_name,
             topic_name=topic_name,
         )
@@ -1773,7 +1872,7 @@ def post_pear_side_backend(
 
     side_context_stream = "direct messages"
     side_context_topic = f"side/{dm_message_id}"
-    ensure_pear_child_topic_context(
+    side_context = ensure_pear_child_topic_context(
         pear_bot.user_profile,
         stream=side_context_stream,
         topic=side_context_topic,
@@ -1788,6 +1887,7 @@ def post_pear_side_backend(
         trigger_message_id=dm_message_id,
         stream_name=side_context_stream,
         topic_name=side_context_topic,
+        workspace_node=side_context.workspace_node,
         session_kind=PearWorkerRun.SIDE,
         source_stream_name=stream_name or "",
         source_topic_name=topic_name or "",

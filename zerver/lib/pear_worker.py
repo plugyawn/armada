@@ -54,7 +54,13 @@ from zerver.lib.queue import queue_json_publish_rollback_unsafe
 from zerver.lib.streams import access_stream_by_name
 from zerver.lib.topic import messages_for_topic
 from zerver.models import Message, Stream
-from zerver.models.bots import PearTopicContext, PearWorkerRun, PearWorkerRunEvent
+from zerver.models.bots import (
+    PearProject,
+    PearTopicContext,
+    PearWorkerRun,
+    PearWorkerRunEvent,
+    PearWorkspaceNode,
+)
 from zerver.models.users import UserProfile
 
 PEAR_WORKER_QUEUE_NAME = "pear_worker"
@@ -155,6 +161,11 @@ def set_pear_topic_context_paused(
     context.is_paused = is_paused
     context.date_updated = timezone_now()
     context.save(update_fields=["is_paused", "date_updated"])
+    if context.workspace_node_id is not None:
+        workspace_node = context.workspace_node
+        workspace_node.is_paused = is_paused
+        workspace_node.date_updated = context.date_updated
+        workspace_node.save(update_fields=["is_paused", "date_updated"])
 
 
 def pear_topic_context_response_policy(
@@ -191,6 +202,11 @@ def set_pear_topic_context_response_policy(
     context.response_policy = clean_response_policy
     context.date_updated = timezone_now()
     context.save(update_fields=["response_policy", "date_updated"])
+    if context.workspace_node_id is not None:
+        workspace_node = context.workspace_node
+        workspace_node.response_policy = clean_response_policy
+        workspace_node.date_updated = context.date_updated
+        workspace_node.save(update_fields=["response_policy", "date_updated"])
 
 
 def reap_stale_pear_worker_runs(
@@ -370,6 +386,156 @@ def pear_topic_branch_name(topic: str) -> str:
 
     digest = hashlib.sha256(raw_topic.encode()).hexdigest()[:12]
     return f"topic-{digest}"
+
+
+def pear_project_cache_slug(
+    user_profile: UserProfile,
+    *,
+    stream: str,
+) -> str:
+    human_slug = re.sub(r"[^a-zA-Z0-9._-]+", "-", stream).strip("-").lower()
+    if not human_slug:
+        human_slug = "project"
+    digest = hashlib.sha256(f"{user_profile.realm_id}\0{stream}".encode()).hexdigest()[:12]
+    return f"{human_slug[:48]}-{digest}"
+
+
+def pear_expected_project_cache_path(
+    user_profile: UserProfile,
+    *,
+    stream: str,
+) -> Path:
+    return pear_topic_workdir_root() / "projects" / pear_project_cache_slug(
+        user_profile,
+        stream=stream,
+    )
+
+
+def pear_project_for_stream(
+    user_profile: UserProfile,
+    *,
+    stream: str,
+    repository_url: str = "",
+    repo_cache_path: str = "",
+) -> PearProject | None:
+    if not stream:
+        return None
+    try:
+        stream_obj, _sub = access_stream_by_name(user_profile, stream)
+    except JsonableError:
+        return None
+
+    defaults = {
+        "repository_url": repository_url,
+        "repo_cache_path": repo_cache_path,
+        "clone_status": PearProject.READY if repository_url else PearProject.UNCONFIGURED,
+    }
+    project, _created = PearProject.objects.get_or_create(
+        realm=user_profile.realm,
+        stream=stream_obj,
+        defaults=defaults,
+    )
+    update_fields = []
+    if repository_url and project.repository_url != repository_url:
+        project.repository_url = repository_url
+        update_fields.append("repository_url")
+    if repo_cache_path and project.repo_cache_path != repo_cache_path:
+        project.repo_cache_path = repo_cache_path
+        update_fields.append("repo_cache_path")
+    if repository_url and project.clone_status == PearProject.UNCONFIGURED:
+        project.clone_status = PearProject.READY
+        update_fields.append("clone_status")
+    if update_fields:
+        project.date_updated = timezone_now()
+        project.save(update_fields=[*update_fields, "date_updated"])
+    return project
+
+
+def pear_workspace_node_default_branch(topic: str) -> str:
+    return pear_topic_branch_name(topic)
+
+
+def pear_workspace_node_for_context(
+    user_profile: UserProfile,
+    context: PearTopicContext,
+    *,
+    stream: str,
+    topic: str,
+    parent_context: PearTopicContext | None = None,
+) -> PearWorkspaceNode:
+    workspace_node = (
+        context.workspace_node
+        if context.workspace_node_id is not None
+        else None
+    )
+    parent_node = (
+        parent_context.workspace_node
+        if parent_context is not None and parent_context.workspace_node_id is not None
+        else None
+    )
+    project = (
+        parent_node.project
+        if parent_node is not None and parent_node.project_id is not None
+        else pear_project_for_stream(user_profile, stream=stream)
+    )
+    if workspace_node is None:
+        workspace_node = PearWorkspaceNode.objects.create(
+            realm=user_profile.realm,
+            project=project,
+            stream_name=stream,
+            topic_name=topic,
+            parent_node=parent_node,
+            workdir=context.workdir,
+            branch_name=pear_workspace_node_default_branch(topic),
+            model=context.model,
+            reasoning_effort=context.reasoning_effort,
+            response_policy=context.response_policy,
+            is_paused=context.is_paused,
+            isolation_username=(
+                pear_topic_isolation_username(user_profile, stream=stream, topic=topic)
+                if pear_topic_os_user_isolation_enabled()
+                else ""
+            ),
+        )
+        context.workspace_node = workspace_node
+        context.save(update_fields=["workspace_node"])
+        return workspace_node
+
+    update_fields = []
+    if project is not None and workspace_node.project_id != project.id:
+        workspace_node.project = project
+        update_fields.append("project")
+    if workspace_node.stream_name != stream:
+        workspace_node.stream_name = stream
+        update_fields.append("stream_name")
+    if workspace_node.topic_name != topic:
+        workspace_node.topic_name = topic
+        update_fields.append("topic_name")
+    if parent_node is not None and workspace_node.parent_node_id != parent_node.id:
+        workspace_node.parent_node = parent_node
+        update_fields.append("parent_node")
+    if context.workdir and workspace_node.workdir != context.workdir:
+        workspace_node.workdir = context.workdir
+        update_fields.append("workdir")
+    if not workspace_node.branch_name:
+        workspace_node.branch_name = pear_workspace_node_default_branch(topic)
+        update_fields.append("branch_name")
+    if context.model and workspace_node.model != context.model:
+        workspace_node.model = context.model
+        update_fields.append("model")
+    if context.reasoning_effort and workspace_node.reasoning_effort != context.reasoning_effort:
+        workspace_node.reasoning_effort = context.reasoning_effort
+        update_fields.append("reasoning_effort")
+    if context.response_policy and workspace_node.response_policy != context.response_policy:
+        workspace_node.response_policy = context.response_policy
+        update_fields.append("response_policy")
+    if workspace_node.is_paused != context.is_paused:
+        workspace_node.is_paused = context.is_paused
+        update_fields.append("is_paused")
+    if update_fields:
+        workspace_node.date_updated = timezone_now()
+        workspace_node.save(update_fields=[*update_fields, "date_updated"])
+    return workspace_node
 
 
 def pear_expected_topic_workdir(
@@ -1096,11 +1262,18 @@ def ensure_pear_topic_context(
         parent_repository_value = parent_context.github_repo.strip()
         if not pear_repo_artifact_value_is_local_topic_path(parent_repository_value):
             parent_repository_url = parent_repository_value
+    workspace_node = pear_workspace_node_for_context(
+        user_profile,
+        context,
+        stream=stream,
+        topic=topic,
+        parent_context=parent_context,
+    )
     ensure_pear_topic_workdir(
         context.workdir,
         base_workdir=parent_workdir,
         repository_url=parent_repository_url,
-        branch_name=pear_topic_branch_name(topic),
+        branch_name=workspace_node.branch_name,
     )
     isolation_username = (
         pear_topic_isolation_username(user_profile, stream=stream, topic=topic)
@@ -1115,6 +1288,10 @@ def ensure_pear_topic_context(
         topic=topic,
         isolation_username=isolation_username,
     )
+    if workspace_node.workdir != context.workdir:
+        workspace_node.workdir = context.workdir
+        workspace_node.date_updated = timezone_now()
+        workspace_node.save(update_fields=["workdir", "date_updated"])
     return context
 
 
@@ -1296,10 +1473,17 @@ def configure_pear_channel_repository_context(
     update_fields = []
     if not context.workdir.strip():
         context.workdir = str(
-            pear_topic_workdir_root() / pear_topic_workdir_slug(user_profile, stream=stream, topic="")
+            pear_topic_workdir_root()
+            / pear_topic_workdir_slug(user_profile, stream=stream, topic="")
         )
         update_fields.append("workdir")
     clone_or_update_pear_repository_workdir(clean_url, Path(context.workdir))
+    pear_project_for_stream(
+        user_profile,
+        stream=stream,
+        repository_url=clean_url,
+        repo_cache_path=context.workdir,
+    )
     if context.github_repo != clean_url:
         context.github_repo = clean_url
         update_fields.append("github_repo")
@@ -1449,44 +1633,21 @@ def maybe_refactor_pear_topic_context_on_move(
             ),
         )
 
-    workdir_moved, new_workdir = pear_move_workdir_for_topic_rename(
-        user_profile,
-        context,
-        stream=new_stream.name,
-        topic=new_topic,
-        old_topic=old_topic,
-    )
-    if not workdir_moved:
-        return PearTopicRenameRefactorResult(
-            stream_name=new_stream.name,
-            topic_name=new_topic,
-            message=(
-                "Pear workspace warning: I did not rename the Pear workspace context "
-                "because its worktree could not be moved safely. The old context is unchanged."
-            ),
-        )
-
     context.stream_name = new_stream.name
     context.topic_name = new_topic
-    context.workdir = new_workdir
     context.date_updated = timezone_now()
-    context.save(update_fields=["stream_name", "topic_name", "workdir", "date_updated"])
-    PearWorkerRun.objects.filter(
-        realm=user_profile.realm,
-        stream_name=old_stream.name,
-        topic_name=old_topic,
-        session_kind=PearWorkerRun.SHARED,
-    ).update(stream_name=new_stream.name, topic_name=new_topic, date_updated=timezone_now())
-    PearWorkerRun.objects.filter(
-        realm=user_profile.realm,
-        source_stream_name=old_stream.name,
-        source_topic_name=old_topic,
-    ).update(source_stream_name=new_stream.name, source_topic_name=new_topic)
+    context.save(update_fields=["stream_name", "topic_name", "date_updated"])
+    if context.workspace_node_id is not None:
+        workspace_node = context.workspace_node
+        workspace_node.stream_name = new_stream.name
+        workspace_node.topic_name = new_topic
+        workspace_node.date_updated = timezone_now()
+        workspace_node.save(update_fields=["stream_name", "topic_name", "date_updated"])
 
     return PearTopicRenameRefactorResult(
         stream_name=new_stream.name,
         topic_name=new_topic,
-        message="Pear workspace moved with this topic.",
+        message="Pear workspace label moved with this topic.",
     )
 
 
@@ -1518,14 +1679,10 @@ def maybe_refactor_pear_stream_contexts_on_rename(
 
     timestamp = timezone_now()
     context_count = contexts.update(stream_name=new_stream_name, date_updated=timestamp)
-    PearWorkerRun.objects.filter(
+    PearWorkspaceNode.objects.filter(
         realm=user_profile.realm,
         stream_name=old_stream_name,
     ).update(stream_name=new_stream_name, date_updated=timestamp)
-    PearWorkerRun.objects.filter(
-        realm=user_profile.realm,
-        source_stream_name=old_stream_name,
-    ).update(source_stream_name=new_stream_name)
 
     return (
         f"Pear channel context renamed from `{old_stream_name}` to `{new_stream_name}` "
@@ -2210,6 +2367,11 @@ class PearDatabaseWorkerRunStore:
 
         user_profile = bot_handler.user_profile
         assert isinstance(user_profile, UserProfile)
+        workspace_node = self._workspace_node_for_topic(
+            user_profile,
+            stream=stream,
+            topic=topic,
+        )
 
         try:
             with transaction.atomic():
@@ -2225,6 +2387,7 @@ class PearDatabaseWorkerRunStore:
                         trigger_message_id=message_id,
                         stream_name=stream,
                         topic_name=topic,
+                        workspace_node=workspace_node,
                         status=PearWorkerRun.QUEUED,
                         runtime_label=self._runtime_label(),
                         model=self._model_label(user_profile, stream=stream, topic=topic),
@@ -2278,6 +2441,11 @@ class PearDatabaseWorkerRunStore:
 
         user_profile = bot_handler.user_profile
         assert isinstance(user_profile, UserProfile)
+        workspace_node = self._workspace_node_for_topic(
+            user_profile,
+            stream=stream,
+            topic=topic,
+        )
 
         current_time = timezone_now()
         try:
@@ -2301,6 +2469,7 @@ class PearDatabaseWorkerRunStore:
                         trigger_message_id=message_id,
                         stream_name=stream,
                         topic_name=topic,
+                        workspace_node=workspace_node,
                         status=PearWorkerRun.RUNNING,
                         attempts=1,
                         heartbeat_at=current_time,
@@ -2415,6 +2584,11 @@ class PearDatabaseWorkerRunStore:
 
         user_profile = bot_handler.user_profile
         assert isinstance(user_profile, UserProfile)
+        workspace_node = self._workspace_node_for_topic(
+            user_profile,
+            stream=stream,
+            topic=topic,
+        )
 
         with transaction.atomic():
             run, created = PearWorkerRun.objects.select_for_update().get_or_create(
@@ -2424,6 +2598,7 @@ class PearDatabaseWorkerRunStore:
                     "realm": user_profile.realm,
                     "stream_name": stream,
                     "topic_name": topic,
+                    "workspace_node": workspace_node,
                     "status": status,
                     "result_message_id": result_message_id,
                     "error": error,
@@ -2925,6 +3100,18 @@ class PearDatabaseWorkerRunStore:
         topic: str,
     ) -> str:
         return pear_worker_workdir_for_topic(user_profile, stream=stream, topic=topic)
+
+    def _workspace_node_for_topic(
+        self,
+        user_profile: UserProfile,
+        *,
+        stream: str,
+        topic: str,
+    ) -> PearWorkspaceNode | None:
+        if not stream:
+            return None
+        context = ensure_pear_topic_context(user_profile, stream=stream, topic=topic)
+        return context.workspace_node
 
 
 class PearQueueWorkerDispatcher:

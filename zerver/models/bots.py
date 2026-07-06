@@ -1,3 +1,5 @@
+import uuid
+
 from django.db import models
 from django.db.models import CASCADE, SET_NULL
 from django.utils.timezone import now as timezone_now
@@ -130,6 +132,12 @@ class PearWorkerRun(models.Model):
     sandbox = models.CharField(max_length=64, blank=True)
     approval_policy = models.CharField(max_length=64, blank=True)
     workdir = models.TextField(blank=True)
+    workspace_node = models.ForeignKey(
+        "zerver.PearWorkspaceNode",
+        null=True,
+        on_delete=SET_NULL,
+        related_name="worker_runs",
+    )
     codex_thread_id = models.TextField(blank=True)
     result_message_id = models.IntegerField(null=True)
     error = models.TextField(null=True)
@@ -174,6 +182,119 @@ class PearWorkerRunEvent(models.Model):
         ]
 
 
+class PearProject(models.Model):
+    UNCONFIGURED = "unconfigured"
+    READY = "ready"
+    FAILED = "failed"
+
+    CLONE_STATUS_CHOICES = [
+        (UNCONFIGURED, "unconfigured"),
+        (READY, "ready"),
+        (FAILED, "failed"),
+    ]
+
+    realm = models.ForeignKey("zerver.Realm", on_delete=CASCADE)
+    stream = models.ForeignKey("zerver.Stream", on_delete=CASCADE)
+    repository_url = models.TextField(blank=True)
+    default_base_ref = models.TextField(blank=True)
+    default_base_commit = models.CharField(max_length=64, blank=True)
+    repo_cache_path = models.TextField(blank=True)
+    clone_status = models.CharField(
+        max_length=16,
+        choices=CLONE_STATUS_CHOICES,
+        default=UNCONFIGURED,
+        db_index=True,
+    )
+    clone_error = models.TextField(blank=True)
+    date_created = models.DateTimeField(default=timezone_now, db_index=True)
+    date_updated = models.DateTimeField(default=timezone_now)
+
+    class Meta:
+        unique_together = ("realm", "stream")
+        indexes = [
+            models.Index(
+                fields=["realm", "stream"],
+                name="zerver_pear_project_stream",
+            ),
+            models.Index(
+                fields=["realm", "date_updated"],
+                name="zerver_pear_project_updated",
+            ),
+        ]
+
+
+class PearWorkspaceNode(models.Model):
+    ACTIVE = "active"
+    ARCHIVED = "archived"
+    BLOCKED = "blocked"
+
+    LIFECYCLE_STATUS_CHOICES = [
+        (ACTIVE, "active"),
+        (ARCHIVED, "archived"),
+        (BLOCKED, "blocked"),
+    ]
+
+    realm = models.ForeignKey("zerver.Realm", on_delete=CASCADE)
+    project = models.ForeignKey(
+        PearProject,
+        null=True,
+        on_delete=SET_NULL,
+        related_name="workspace_nodes",
+    )
+    uuid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    stream_name = models.CharField(max_length=60)
+    topic_name = models.CharField(max_length=MAX_TOPIC_NAME_LENGTH)
+    parent_node = models.ForeignKey(
+        "self",
+        null=True,
+        on_delete=SET_NULL,
+        related_name="child_nodes",
+    )
+    source_node = models.ForeignKey(
+        "self",
+        null=True,
+        on_delete=SET_NULL,
+        related_name="side_nodes",
+    )
+    workdir = models.TextField(blank=True)
+    branch_name = models.TextField(blank=True)
+    base_ref = models.TextField(blank=True)
+    base_commit = models.CharField(max_length=64, blank=True)
+    head_commit = models.CharField(max_length=64, blank=True)
+    upstream_ref = models.TextField(blank=True)
+    dirty = models.BooleanField(default=False)
+    changed_count = models.PositiveIntegerField(default=0)
+    lifecycle_status = models.CharField(
+        max_length=16,
+        choices=LIFECYCLE_STATUS_CHOICES,
+        default=ACTIVE,
+        db_index=True,
+    )
+    isolation_username = models.TextField(blank=True)
+    model = models.TextField(blank=True)
+    reasoning_effort = models.CharField(max_length=16, blank=True)
+    response_policy = models.CharField(max_length=16, default="ambient")
+    is_paused = models.BooleanField(default=False)
+    date_created = models.DateTimeField(default=timezone_now, db_index=True)
+    date_updated = models.DateTimeField(default=timezone_now)
+
+    class Meta:
+        indexes = [
+            models.Index(
+                fields=["realm", "stream_name", "topic_name"],
+                name="zerver_pear_ws_location",
+            ),
+            models.Index(
+                fields=["project", "date_updated"],
+                name="zerver_pear_ws_project_upd",
+            ),
+            models.Index(
+                fields=["realm", "lifecycle_status"],
+                name="zerver_pear_ws_lifecycle",
+            ),
+        ]
+
+
 class PearTopicContext(models.Model):
     realm = models.ForeignKey("zerver.Realm", on_delete=CASCADE)
     stream_name = models.CharField(max_length=60)
@@ -189,6 +310,12 @@ class PearTopicContext(models.Model):
     response_policy = models.CharField(max_length=16, default="ambient")
     github_repo = models.TextField(blank=True)
     workdir = models.TextField(blank=True)
+    workspace_node = models.ForeignKey(
+        PearWorkspaceNode,
+        null=True,
+        on_delete=SET_NULL,
+        related_name="legacy_topic_contexts",
+    )
     is_paused = models.BooleanField(default=False)
     date_created = models.DateTimeField(default=timezone_now, db_index=True)
     date_updated = models.DateTimeField(default=timezone_now)

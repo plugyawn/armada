@@ -214,6 +214,7 @@ run_test("template renders workbench without active run", () => {
             panel_runtime_label: "gpt-5.5 / h",
             panel_reasoning_effort_label: "High",
             panel_reasoning_effort_meter_class: "high",
+            workbench_scope_note: "Changes and commits are scoped to this topic worktree.",
             workbench_title: "routing-fix",
             workbench_meta: "devel / routing-fix / a3f92c1",
             workbench_diff_selected: false,
@@ -245,6 +246,8 @@ run_test("template renders workbench without active run", () => {
     assert.match(html, /pear-workbench-effort-range/);
     assert.doesNotMatch(html, /pear-topic-open-action/);
     assert.match(html, /pear-workbench-title-row/);
+    assert.match(html, /pear-workbench-scope-note/);
+    assert.match(html, /Changes and commits are scoped to this topic worktree\./);
     assert.match(html, /routing-fix/);
     assert.match(html, /devel \/ routing-fix \/ a3f92c1/);
     assert.match(html, /pear-workbench-thinking-row/);
@@ -291,6 +294,7 @@ run_test("template keeps volatile run metadata out of workbench chrome", () => {
             panel_runtime_label: "gpt-5.5 / xh",
             panel_reasoning_effort_label: "XHigh",
             panel_reasoning_effort_meter_class: "xhigh",
+            workbench_scope_note: "Changes and commits are scoped to this topic worktree.",
             workbench_diff_selected: true,
             workbench_history_selected: false,
             workbench_canvas_selected: false,
@@ -340,6 +344,7 @@ run_test("template keeps runtime controls in workbench chrome", () => {
             panel_runtime_label: "gpt-5.5 / h",
             panel_reasoning_effort_label: "High",
             panel_reasoning_effort_meter_class: "high",
+            workbench_scope_note: "Changes and commits are scoped to this topic worktree.",
             workbench_diff_selected: true,
             workbench_history_selected: false,
             workbench_canvas_selected: false,
@@ -383,6 +388,7 @@ run_test("template renders canvas as a workbench pane", () => {
             panel_runtime_label: "gpt-5.5 / h",
             panel_reasoning_effort_label: "High",
             panel_reasoning_effort_meter_class: "high",
+            workbench_scope_note: "Changes and commits are scoped to this topic worktree.",
             workbench_diff_selected: false,
             workbench_history_selected: false,
             workbench_canvas_selected: true,
@@ -438,6 +444,7 @@ run_test("template renders diff rows without duplicate summary chips", () => {
             panel_runtime_label: "gpt-5.5 / h",
             panel_reasoning_effort_label: "High",
             panel_reasoning_effort_meter_class: "high",
+            workbench_scope_note: "Changes and commits are scoped to this topic worktree.",
             workbench_diff_selected: true,
             workbench_history_selected: false,
             workbench_canvas_selected: false,

@@ -804,6 +804,7 @@ function display_topic_context(topic_context: PearTopicContext | undefined | nul
           panel_reasoning_effort_label: string;
           panel_reasoning_effort_meter_class: string;
           workbench_model_choices: PearRuntimeChoice[];
+          workbench_has_model_choices: boolean;
           workbench_effort_choices: PearRuntimeChoice[];
           workbench_effort_slider_value: number;
           workbench_effort_slider_max: number;
@@ -945,6 +946,7 @@ function display_topic_context(topic_context: PearTopicContext | undefined | nul
             topic_context.reasoning_effort,
         ),
         workbench_model_choices,
+        workbench_has_model_choices: workbench_model_choices.length > 0,
         workbench_effort_choices,
         workbench_effort_slider_value,
         workbench_effort_slider_max: Math.max(0, workbench_effort_choices.length - 1),

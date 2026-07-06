@@ -114,7 +114,7 @@
                             <label class="pear-workbench-control-row pear-workbench-model-row">
                                 <span class="pear-workbench-control-label">{{t "Model" }}</span>
                                 <select class="pear-workbench-select pear-workbench-model-select" aria-label="{{t 'Pear model' }}">
-                                    {{#if topic_context.workbench_model_choices}}
+                                    {{#if topic_context.workbench_has_model_choices}}
                                         {{#each topic_context.workbench_model_choices}}
                                             <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
                                         {{/each}}

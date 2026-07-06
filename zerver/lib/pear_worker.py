@@ -28,6 +28,7 @@ from zerver.lib.pear import (
     PearWorkerRuntime,
     PEAR_CANVAS_FILE_NAME,
     PEAR_CANVAS_TEMPLATE,
+    PEAR_DEFAULT_RESPONSE_POLICY,
     PEAR_REASONING_EFFORTS,
     build_pear_active_session_summary,
     build_pear_active_session_summary_from_messages,
@@ -163,14 +164,14 @@ def pear_topic_context_response_policy(
     topic: str,
 ) -> str:
     if not stream:
-        return "mentions_only"
+        return PEAR_DEFAULT_RESPONSE_POLICY
     context = PearTopicContext.objects.filter(
         realm=user_profile.realm,
         stream_name=stream,
         topic_name=topic,
     ).first()
     if context is None:
-        return "mentions_only"
+        return PEAR_DEFAULT_RESPONSE_POLICY
     return normalize_pear_response_policy(context.response_policy)
 
 

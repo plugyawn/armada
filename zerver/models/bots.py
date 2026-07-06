@@ -186,7 +186,7 @@ class PearTopicContext(models.Model):
     )
     model = models.TextField(blank=True)
     reasoning_effort = models.CharField(max_length=16, blank=True)
-    response_policy = models.CharField(max_length=16, default="mentions_only")
+    response_policy = models.CharField(max_length=16, default="ambient")
     github_repo = models.TextField(blank=True)
     workdir = models.TextField(blank=True)
     is_paused = models.BooleanField(default=False)

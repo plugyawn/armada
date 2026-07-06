@@ -228,6 +228,112 @@ class TestServiceBotBasics(ZulipTestCase):
             },
         )
 
+        event_dict = get_service_bot_events(
+            sender=sender,
+            service_bot_tuples=[],
+            active_user_ids=set(),
+            mentioned_user_ids=set(),
+            recipient_type=Recipient.STREAM,
+            recipient_id=stream.recipient_id,
+            stream_name=stream.name,
+            topic_name="fresh topic",
+            content="agent, can you check the failing parser test?",
+        )
+        self.assertEqual(
+            event_dict,
+            {
+                "embedded_bots": [
+                    {
+                        "trigger": PEAR_FOLLOWUP_TRIGGER,
+                        "user_profile_id": pear_bot.id,
+                    },
+                ],
+            },
+        )
+
+    @override_settings(
+        EMBEDDED_BOTS_ENABLED=True,
+        PEAR_ADDRESSING_ROUTER_RUNTIME="disabled",
+    )
+    def test_service_events_for_plain_pear_alias_routes_without_markdown_mention(self) -> None:
+        sender = self.example_user("hamlet")
+        owner = self.example_user("cordelia")
+        pear_bot = self.create_test_bot(
+            "pear",
+            owner,
+            full_name="Pear",
+            bot_type=UserProfile.EMBEDDED_BOT,
+            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+        )
+        stream = get_stream("Denmark", sender.realm)
+
+        event_dict = get_service_bot_events(
+            sender=sender,
+            service_bot_tuples=[],
+            active_user_ids=set(),
+            mentioned_user_ids=set(),
+            recipient_type=Recipient.STREAM,
+            recipient_id=stream.recipient_id,
+            stream_name=stream.name,
+            topic_name="plain alias",
+            content="Hi @Pear",
+        )
+        self.assertEqual(
+            event_dict,
+            {
+                "embedded_bots": [
+                    {
+                        "trigger": PEAR_FOLLOWUP_TRIGGER,
+                        "user_profile_id": pear_bot.id,
+                    },
+                ],
+            },
+        )
+
+        event_dict = get_service_bot_events(
+            sender=sender,
+            service_bot_tuples=[],
+            active_user_ids=set(),
+            mentioned_user_ids={pear_bot.id},
+            recipient_type=Recipient.STREAM,
+            recipient_id=stream.recipient_id,
+            stream_name=stream.name,
+            topic_name="plain alias",
+            content="@**Pear** hi",
+        )
+        self.assertEqual(event_dict["embedded_bots"], [])
+
+    @override_settings(
+        EMBEDDED_BOTS_ENABLED=True,
+        PEAR_ADDRESSING_ROUTER_RUNTIME="disabled",
+    )
+    def test_service_events_for_pear_followup_skips_untagged_when_router_disabled(
+        self,
+    ) -> None:
+        sender = self.example_user("hamlet")
+        owner = self.example_user("cordelia")
+        self.create_test_bot(
+            "pear",
+            owner,
+            full_name="Pear",
+            bot_type=UserProfile.EMBEDDED_BOT,
+            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+        )
+        stream = get_stream("Denmark", sender.realm)
+
+        event_dict = get_service_bot_events(
+            sender=sender,
+            service_bot_tuples=[],
+            active_user_ids=set(),
+            mentioned_user_ids=set(),
+            recipient_type=Recipient.STREAM,
+            recipient_id=stream.recipient_id,
+            stream_name=stream.name,
+            topic_name="followup",
+            content="agent, can you check the failing parser test?",
+        )
+        self.assertEqual(event_dict["embedded_bots"], [])
+
     @override_settings(
         EMBEDDED_BOTS_ENABLED=True,
         PEAR_ADDRESSING_ROUTER_RUNTIME="codex-exec",
@@ -277,7 +383,7 @@ class TestServiceBotBasics(ZulipTestCase):
 
     @override_settings(
         EMBEDDED_BOTS_ENABLED=True,
-        PEAR_ADDRESSING_ROUTER_RUNTIME="disabled",
+        PEAR_ADDRESSING_ROUTER_RUNTIME="codex-exec",
     )
     def test_service_events_for_pear_followup_uses_topic_response_policy(self) -> None:
         sender = self.example_user("hamlet")
@@ -361,7 +467,7 @@ class TestServiceBotBasics(ZulipTestCase):
 
     @override_settings(
         EMBEDDED_BOTS_ENABLED=True,
-        PEAR_ADDRESSING_ROUTER_RUNTIME="disabled",
+        PEAR_ADDRESSING_ROUTER_RUNTIME="codex-exec",
     )
     def test_service_events_for_pear_followup_does_not_parse_topic_history(self) -> None:
         sender = self.example_user("hamlet")

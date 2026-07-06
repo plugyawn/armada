@@ -87,6 +87,7 @@ from zerver.lib.pear import (
     build_pear_verify_changes_message,
     build_pear_worker_completed_message,
     build_pear_worker_completed_message_chunks,
+    clean_pear_task_text,
     build_pear_worker_progress_message,
     get_pear_live_run_state,
     get_pear_session_defaults,
@@ -973,7 +974,15 @@ class PearSessionDefaultsTest(TestCase):
     def test_is_pear_request_message(self) -> None:
         self.assertTrue(is_pear_request_message("@**Pear** fix the checkout test"))
         self.assertTrue(is_pear_request_message("@Pear fix the checkout test"))
+        self.assertTrue(is_pear_request_message("Hi @Pear"))
+        self.assertTrue(is_pear_request_message("@pear, are you there?"))
         self.assertFalse(is_pear_request_message("@**Other** fix the checkout test"))
+        self.assertFalse(is_pear_request_message("@Pearl fix the checkout test"))
+
+    def test_clean_pear_task_text_removes_mentions_anywhere(self) -> None:
+        self.assertEqual(clean_pear_task_text("@Pear fix the checkout test"), "fix the checkout test")
+        self.assertEqual(clean_pear_task_text("Hi @Pear"), "Hi")
+        self.assertEqual(clean_pear_task_text("Hi @**Pear**"), "Hi")
 
     def test_is_pear_thread_request_message(self) -> None:
         self.assertTrue(is_pear_thread_request_message("@Pear debug the flaky parser test"))
@@ -1031,7 +1040,7 @@ class PearSessionDefaultsTest(TestCase):
         self.assertIsNone(summary["latest_session_record_kind"])
         self.assertIsNone(summary["latest_session_record_url"])
         self.assertIsNone(summary["latest_codex_thread_id"])
-        self.assertEqual(summary["response_policy"], "mentions_only")
+        self.assertEqual(summary["response_policy"], "ambient")
         self.assertEqual(summary["artifacts"], [])
         self.assertEqual(summary["steering_count"], 0)
         self.assertIsNone(summary["latest_steering_message_id"])
@@ -1313,6 +1322,7 @@ class PearSessionDefaultsTest(TestCase):
             pear_worker_should_start("@Pear debug the flaky parser test", active_session)
         )
         self.assertTrue(pear_worker_should_start("@Pear Hi", active_session))
+        self.assertTrue(pear_worker_should_start("Hi @Pear", active_session))
         self.assertTrue(pear_worker_should_start("@Pear What's up!", active_session))
         self.assertTrue(
             pear_worker_should_start(

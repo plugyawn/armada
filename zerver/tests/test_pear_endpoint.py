@@ -2960,7 +2960,7 @@ class PearSessionEndpointTest(ZulipTestCase):
                 {
                     "stream": PEAR_DEFAULT_STREAM,
                     "topic": PEAR_DEFAULT_TOPIC,
-                    "response_policy": "ambient",
+                    "response_policy": "mentions_only",
                 },
                 intentionally_undocumented=True,
             )
@@ -2982,9 +2982,9 @@ class PearSessionEndpointTest(ZulipTestCase):
             )
 
         self.assertTrue(result_dict["changed"])
-        self.assertEqual(result_dict["pear_topic_context"]["response_policy"], "ambient")
-        self.assertEqual(context.response_policy, "ambient")
-        self.assertEqual(active_session_dict["active_session"]["response_policy"], "ambient")
+        self.assertEqual(result_dict["pear_topic_context"]["response_policy"], "mentions_only")
+        self.assertEqual(context.response_policy, "mentions_only")
+        self.assertEqual(active_session_dict["active_session"]["response_policy"], "mentions_only")
 
     def test_side_session_uses_child_context_workdir_and_parent_model(self) -> None:
         owner = self.example_user("hamlet")

@@ -841,6 +841,19 @@ const pear_topic_header_status_selector = ".pear-topic-header-status";
 const pear_topic_header_control_selector =
     ".pear-topic-header-status, .pear-topic-header-control";
 
+function ensure_pear_panel_host(): HTMLElement | undefined {
+    let panel = document.querySelector<HTMLElement>("body > #pear-panel");
+    if (panel === null) {
+        panel = document.querySelector<HTMLElement>("#pear-panel");
+        if (panel === null) {
+            return undefined;
+        }
+        document.body.append(panel);
+    }
+    $("#pear-panel").not(panel).remove();
+    return panel;
+}
+
 function topic_header_controls_are_current(
     $headers: JQuery,
     control_key: string,
@@ -1013,8 +1026,8 @@ function visible_header_anchor(): HTMLElement | undefined {
 }
 
 function position_workbench_popover(): void {
-    const panel = document.querySelector<HTMLElement>("#pear-panel");
-    if (panel === null || !panel.classList.contains("pear-workbench-popover-open")) {
+    const panel = ensure_pear_panel_host();
+    if (panel === undefined || !panel.classList.contains("pear-workbench-popover-open")) {
         return;
     }
     const anchor = visible_header_anchor();
@@ -1057,14 +1070,14 @@ function position_workbench_popover(): void {
 }
 
 function set_workbench_popover_open(workbench_open: boolean): void {
-    const $panel = $("#pear-panel");
+    const panel = ensure_pear_panel_host();
+    if (panel === undefined) {
+        return;
+    }
+    const $panel = $(panel);
     $panel.toggleClass("pear-workbench-popover-open", workbench_open);
     if (workbench_open) {
         position_workbench_popover();
-        return;
-    }
-    const panel = $panel.get(0);
-    if (panel === undefined) {
         return;
     }
     panel.style.removeProperty("--pear-workbench-popover-left");
@@ -1480,23 +1493,28 @@ function render(
         status_class: status_class(panel_status),
     };
     const next_render_state_key = render_state_key(render_state);
+    const panel = ensure_pear_panel_host();
+    if (panel === undefined) {
+        return;
+    }
+    const $panel = $(panel);
     if (last_render_state_key !== next_render_state_key) {
-        const side_request = $("#pear-side-request").val();
+        const side_request = $panel.find("#pear-side-request").val();
         if (typeof side_request === "string" && next_context_key !== "") {
             side_request_by_context.set(next_context_key, side_request);
         }
-        $("#pear-panel").html(render_pear_panel(render_state));
-        $("#pear-panel").toggleClass("pear-panel-collapsed", !panel_open);
+        $panel.html(render_pear_panel(render_state));
+        $panel.toggleClass("pear-panel-collapsed", !panel_open);
         set_workbench_popover_open(workbench_open);
         const stored_side_request = side_request_by_context.get(next_context_key);
         if (stored_side_request !== undefined) {
-            $("#pear-side-request").val(stored_side_request);
+            $panel.find("#pear-side-request").val(stored_side_request);
         }
-        rendered_markdown.update_elements($("#pear-panel .pear-workbench-canvas-rendered"));
+        rendered_markdown.update_elements($panel.find(".pear-workbench-canvas-rendered"));
         $(document).trigger("pear_liveness_markers_changed");
         last_render_state_key = next_render_state_key;
     }
-    $("#pear-panel").toggleClass("pear-panel-collapsed", !panel_open);
+    $panel.toggleClass("pear-panel-collapsed", !panel_open);
     set_workbench_popover_open(workbench_open);
     if (workbench_open && display_context?.workbench_history_selected) {
         fetch_git_tree_for_context(display_context);

@@ -208,11 +208,22 @@ let workbench_anchor_context_key = "";
 type WorkbenchAnchorKind = "runtime" | "work";
 let workbench_anchor_kind: WorkbenchAnchorKind | undefined;
 let last_observed_context_key = "";
-let topic_context_update_in_flight = false;
+let topic_context_save_timer: number | undefined;
+let topic_context_save_request: JQuery.jqXHR | undefined;
+let topic_context_save_sequence = 0;
+type PendingTopicContextSave = {
+    stream: string;
+    topic: string;
+    model: string;
+    reasoning_effort: string;
+    sequence: number;
+};
+let pending_topic_context_save: PendingTopicContextSave | undefined;
 const LIVE_REFRESH_INTERVAL_MS = 500;
 const LIVE_REFRESH_RATE_LIMIT_BACKOFF_MS = 1500;
 const FULL_REFRESH_INTERVAL_MS = 5000;
 const CONTEXT_REFRESH_INTERVAL_MS = 60_000;
+const TOPIC_CONTEXT_SAVE_DEBOUNCE_MS = 150;
 const WORKBENCH_MIN_VIEWPORT_WIDTH_PX = 320;
 const WORKBENCH_POPOVER_MARGIN_PX = 8;
 
@@ -500,6 +511,51 @@ function current_context_key(): string {
     return context_key(stream, topic);
 }
 
+function topic_context_matches(
+    topic_context: PearTopicContext | null | undefined,
+    stream: string | undefined,
+    topic: string | undefined,
+): topic_context is PearTopicContext {
+    return (
+        stream !== undefined &&
+        topic !== undefined &&
+        topic_context?.stream === stream &&
+        topic_context.topic === topic
+    );
+}
+
+function cached_topic_context(
+    stream: string | undefined,
+    topic: string | undefined,
+): PearTopicContext | undefined {
+    return topic_context_by_context.get(context_key(stream, topic));
+}
+
+export function topic_context_for_display_for_testing(options: {
+    stream: string | undefined;
+    topic: string | undefined;
+    render_topic_context: PearTopicContext | null | undefined;
+    cached_topic_context: PearTopicContext | undefined;
+}): PearTopicContext | undefined {
+    if (topic_context_matches(options.render_topic_context, options.stream, options.topic)) {
+        return options.render_topic_context;
+    }
+    return options.cached_topic_context;
+}
+
+function display_source_topic_context(
+    stream: string | undefined,
+    topic: string | undefined,
+    topic_context: PearTopicContext | null | undefined = last_topic_context,
+): PearTopicContext | undefined {
+    return topic_context_for_display_for_testing({
+        stream,
+        topic,
+        render_topic_context: topic_context,
+        cached_topic_context: cached_topic_context(stream, topic),
+    });
+}
+
 function run_shows_compact_panel_status(run: {status: string} | undefined): boolean {
     return run?.status === "running" || run?.status === "queued" || run?.status === "paused";
 }
@@ -673,13 +729,15 @@ export function open_work_details(
             workbench_anchor_kind = anchor_kind_for_element(anchor_element);
         }
         work_panel_open_by_context.set(key, true);
-        if (last_topic_context !== undefined && last_topic_context !== null) {
+        const {stream, topic} = current_context();
+        const topic_context = display_source_topic_context(stream, topic);
+        if (topic_context !== undefined) {
             workbench_view_by_context.set(
                 key,
                 workbench_view_for_testing({
                     requested: requested_view ?? workbench_view_by_context.get(key),
-                    has_diff: git_has_diff(last_topic_context.git),
-                    has_history: git_has_history(last_topic_context.git),
+                    has_diff: git_has_diff(topic_context.git),
+                    has_history: git_has_history(topic_context.git),
                 }),
             );
         } else if (requested_view !== undefined) {
@@ -1486,7 +1544,7 @@ function should_refresh_context(
         now: Date.now(),
         last_refresh_key: last_context_refresh_key,
         last_refresh_at: last_context_refresh_at,
-        has_context: last_topic_context !== undefined && last_topic_context !== null,
+        has_context: display_source_topic_context(stream, topic) !== undefined,
     });
 }
 
@@ -1551,11 +1609,15 @@ export function topic_context_after_refresh_for_testing(options: {
     live: boolean;
     response_topic_context: PearTopicContext | null | undefined;
     last_topic_context: PearTopicContext | null | undefined;
+    cached_topic_context?: PearTopicContext | null | undefined;
 }): PearTopicContext | null | undefined {
-    if (options.live || !options.include_context) {
-        return options.response_topic_context ?? options.last_topic_context;
+    if (options.response_topic_context !== undefined && options.response_topic_context !== null) {
+        return options.response_topic_context;
     }
-    return options.response_topic_context ?? null;
+    if (options.live || !options.include_context) {
+        return options.last_topic_context ?? options.cached_topic_context;
+    }
+    return options.last_topic_context ?? options.cached_topic_context ?? null;
 }
 
 export function render_state_changed_for_testing(
@@ -1578,11 +1640,14 @@ function render(
     topic_context: PearTopicContext | null | undefined = last_topic_context,
 ): void {
     last_runs = runs;
-    last_topic_context = topic_context;
     const {stream, topic} = current_context();
     const has_stream = stream !== undefined;
     const has_topic = has_stream && topic !== undefined;
     const next_context_key = context_key(stream, topic);
+    const source_topic_context = has_topic
+        ? display_source_topic_context(stream, topic, topic_context)
+        : undefined;
+    last_topic_context = source_topic_context ?? topic_context;
     const active_run = active_display_run(runs);
     const manual_workbench_open = work_panel_open_by_context.get(next_context_key) ?? false;
     const viewport_allows_workbench = current_viewport_allows_workbench();
@@ -1596,10 +1661,7 @@ function render(
         force_reconcile: active_run === undefined,
     });
     const panel_status = active_run?.status ?? "idle";
-    const display_context =
-        has_topic && topic_context?.stream === stream && topic_context.topic === topic
-            ? display_topic_context(topic_context)
-            : undefined;
+    const display_context = has_topic ? display_topic_context(source_topic_context) : undefined;
     render_topic_header_controls({
         stream,
         topic,
@@ -1722,11 +1784,13 @@ export function refresh(options: {force_context?: boolean; live?: boolean} = {})
             last_error = "";
             const had_active_run = has_active_run(last_runs);
             const has_active_run_after_refresh = has_active_run(data.pear_runs);
+            const previous_topic_context = display_source_topic_context(stream, topic);
             const topic_context = topic_context_after_refresh_for_testing({
                 include_context,
                 live,
                 response_topic_context: data.pear_topic_context,
-                last_topic_context,
+                last_topic_context: previous_topic_context,
+                cached_topic_context: cached_topic_context(stream, topic),
             });
             remember_topic_context(topic_context);
             if (data.pear_topic_context !== undefined && data.pear_topic_context !== null) {
@@ -1772,30 +1836,63 @@ function post_run_action(run_id: string, action: string): void {
     });
 }
 
-function save_topic_context(options: {model?: string; reasoning_effort?: string}): void {
-    const {stream, topic} = current_context();
-    if (stream === undefined || topic === undefined || topic_context_update_in_flight) {
+export function optimistic_topic_context_for_testing(
+    topic_context: PearTopicContext,
+    options: {model?: string; reasoning_effort?: string},
+): PearTopicContext {
+    const model = options.model ?? topic_context.model;
+    const reasoning_effort =
+        options.reasoning_effort ??
+        (model === topic_context.model
+            ? topic_context.reasoning_effort
+            : next_effort_for_model(topic_context, model));
+    return {
+        ...topic_context,
+        model,
+        reasoning_effort,
+    };
+}
+
+function apply_topic_context_locally(options: {
+    stream: string;
+    topic: string;
+    model?: string;
+    reasoning_effort?: string;
+}): PearTopicContext | undefined {
+    const topic_context = display_source_topic_context(options.stream, options.topic);
+    if (topic_context === undefined) {
+        return undefined;
+    }
+    const next_topic_context = optimistic_topic_context_for_testing(topic_context, options);
+    remember_topic_context(next_topic_context);
+    last_topic_context = next_topic_context;
+    render(last_runs, next_topic_context);
+    return next_topic_context;
+}
+
+function flush_topic_context_save(): void {
+    if (topic_context_save_timer !== undefined) {
+        window.clearTimeout(topic_context_save_timer);
+        topic_context_save_timer = undefined;
+    }
+    const save = pending_topic_context_save;
+    if (save === undefined) {
         return;
     }
-    const model = options.model ?? last_topic_context?.model;
-    const reasoning_effort = options.reasoning_effort ?? last_topic_context?.reasoning_effort;
-    if (model === undefined || reasoning_effort === undefined) {
-        return;
-    }
-    topic_context_update_in_flight = true;
-    const $controls = $(
-        "#pear-panel .pear-workbench-model-select, #pear-panel .pear-workbench-effort-range",
-    );
-    $controls.prop("disabled", true);
-    void channel.post({
+    pending_topic_context_save = undefined;
+    topic_context_save_request?.abort();
+    const request = channel.post({
         url: "/json/pear/topic-context",
         data: {
-            stream,
-            topic,
-            model,
-            reasoning_effort,
+            stream: save.stream,
+            topic: save.topic,
+            model: save.model,
+            reasoning_effort: save.reasoning_effort,
         },
         success(raw_data) {
+            if (save.sequence !== topic_context_save_sequence) {
+                return;
+            }
             if (!is_pear_topic_context_response(raw_data)) {
                 blueslip.warn("Pear topic context returned an invalid response.");
                 refresh({force_context: true});
@@ -1805,41 +1902,79 @@ function save_topic_context(options: {model?: string; reasoning_effort?: string}
             if (data.pear_topic_context !== undefined && data.pear_topic_context !== null) {
                 remember_topic_context(data.pear_topic_context);
                 last_topic_context = data.pear_topic_context;
-                record_context_refresh(stream, topic);
+                record_context_refresh(save.stream, save.topic);
                 render(last_runs, data.pear_topic_context);
                 return;
             }
             refresh({force_context: true});
         },
         error(xhr) {
-            if (xhr.readyState !== 0) {
+            if (xhr.readyState !== 0 && save.sequence === topic_context_save_sequence) {
                 blueslip.warn(`Failed to update Pear topic context: ${xhr.responseText}`);
+                refresh({force_context: true});
             }
         },
         complete() {
-            topic_context_update_in_flight = false;
-            $controls.prop("disabled", false);
+            if (topic_context_save_request === request) {
+                topic_context_save_request = undefined;
+            }
         },
+    });
+    topic_context_save_request = request;
+}
+
+function schedule_topic_context_save(save: PendingTopicContextSave): void {
+    pending_topic_context_save = save;
+    if (topic_context_save_timer !== undefined) {
+        window.clearTimeout(topic_context_save_timer);
+    }
+    topic_context_save_timer = window.setTimeout(
+        flush_topic_context_save,
+        TOPIC_CONTEXT_SAVE_DEBOUNCE_MS,
+    );
+}
+
+function save_topic_context(options: {model?: string; reasoning_effort?: string}): void {
+    const {stream, topic} = current_context();
+    if (stream === undefined || topic === undefined) {
+        return;
+    }
+    const sequence = topic_context_save_sequence + 1;
+    const next_topic_context = apply_topic_context_locally({stream, topic, ...options});
+    if (next_topic_context === undefined) {
+        return;
+    }
+    topic_context_save_sequence = sequence;
+    schedule_topic_context_save({
+        stream,
+        topic,
+        model: next_topic_context.model,
+        reasoning_effort: next_topic_context.reasoning_effort,
+        sequence,
     });
 }
 
 function on_workbench_model_change(model: string): void {
-    if (last_topic_context === undefined || last_topic_context === null) {
+    const {stream, topic} = current_context();
+    const topic_context = display_source_topic_context(stream, topic);
+    if (topic_context === undefined) {
         return;
     }
     save_topic_context({
         model,
-        reasoning_effort: next_effort_for_model(last_topic_context, model),
+        reasoning_effort: next_effort_for_model(topic_context, model),
     });
 }
 
 function on_workbench_effort_index_change(index: number): void {
-    if (last_topic_context === undefined || last_topic_context === null) {
+    const {stream, topic} = current_context();
+    const topic_context = display_source_topic_context(stream, topic);
+    if (topic_context === undefined) {
         return;
     }
     const effort = workbench_effort_for_index_for_testing(
-        last_topic_context,
-        last_topic_context.model,
+        topic_context,
+        topic_context.model,
         index,
     );
     if (effort === undefined) {
@@ -1943,19 +2078,17 @@ export function initialize(): void {
     });
     $("body").on("input", ".pear-workbench-effort-range", function (this: HTMLElement) {
         const index = Number($(this).val());
-        if (
-            !Number.isInteger(index) ||
-            last_topic_context === undefined ||
-            last_topic_context === null
-        ) {
+        const {stream, topic} = current_context();
+        const topic_context = display_source_topic_context(stream, topic);
+        if (!Number.isInteger(index) || topic_context === undefined) {
             return;
         }
         const effort = workbench_effort_for_index_for_testing(
-            last_topic_context,
-            last_topic_context.model,
+            topic_context,
+            topic_context.model,
             index,
         );
-        const label = model_reasoning_efforts(last_topic_context, last_topic_context.model).find(
+        const label = model_reasoning_efforts(topic_context, topic_context.model).find(
             (choice) => choice.effort === effort,
         )?.label;
         if (label !== undefined) {

@@ -122,6 +122,34 @@
                                 </button>
                             {{/if}}
                         </div>
+                        <div class="pear-workbench-control-grid">
+                            <button type="button" class="pear-runtime-menu-trigger pear-runtime-panel-trigger pear-workbench-runtime-trigger tippy-zulip-delayed-tooltip" aria-label="{{t 'Pear runtime' }}" data-tippy-content="{{t 'Pear runtime' }}">
+                                <span class="pear-workbench-control-label">{{t "Model" }}</span>
+                                <span class="pear-runtime-menu-label">{{topic_context.panel_runtime_label}}</span>
+                                <span class="pear-ui-glyph pear-runtime-menu-glyph" aria-hidden="true">·</span>
+                            </button>
+                            <div class="pear-workbench-control-row pear-workbench-thinking-row">
+                                <span class="pear-workbench-control-label">{{t "Thinking" }}</span>
+                                <span class="pear-workbench-thinking-meter pear-workbench-thinking-{{topic_context.panel_reasoning_effort_meter_class}}" aria-hidden="true">
+                                    <span></span>
+                                </span>
+                                <span class="pear-workbench-control-value">{{topic_context.panel_reasoning_effort_label}}</span>
+                            </div>
+                            <div class="pear-workbench-control-row">
+                                <span class="pear-workbench-control-label">{{t "Repo" }}</span>
+                                <span class="pear-workbench-control-value" title="{{topic_context.panel_repo_label}}">{{topic_context.panel_repo_label}}</span>
+                                {{#if topic_context.panel_git_status_label}}
+                                    <span class="pear-workbench-status pear-workbench-status-{{topic_context.panel_git_status_class}}">{{topic_context.panel_git_status_label}}</span>
+                                {{/if}}
+                            </div>
+                            <div class="pear-workbench-control-row">
+                                <span class="pear-workbench-control-label">{{t "Worktree" }}</span>
+                                <span class="pear-workbench-control-value" title="{{topic_context.panel_worktree_label}}">{{topic_context.panel_worktree_label}}</span>
+                                {{#if topic_context.panel_git_ref_label}}
+                                    <span class="pear-workbench-ref" title="{{topic_context.panel_git_ref_label}}">{{topic_context.panel_git_ref_label}}</span>
+                                {{/if}}
+                            </div>
+                        </div>
                         <div class="pear-workbench-context-row">
                             <div class="pear-workbench-tabs" aria-label="{{t 'Pear work views' }}">
                                 <button type="button" class="pear-workbench-tab {{#if topic_context.workbench_diff_selected}}pear-workbench-tab-selected{{/if}}" data-pear-workbench-view="diff" {{#if topic_context.workbench_diff_disabled}}disabled{{/if}}>
@@ -262,17 +290,17 @@
                             {{/if}}
                         {{/if}}
                         {{#if topic_context.workbench_side_selected}}
-                            <div class="pear-side-body">
-                                <div class="pear-side-header">
-                                    <span class="pear-ui-glyph pear-side-header-glyph" aria-hidden="true">✧</span>
-                                    <span>{{t "Private whisper" }}</span>
-                                </div>
-                                <textarea id="pear-side-request" class="pear-side-request" rows="2" placeholder="{{t 'Whisper to Pear' }}"></textarea>
-                                <button type="button" id="pear-side-start" class="pear-side-start tippy-zulip-delayed-tooltip" aria-label="{{t 'Start private whisper' }}" data-tippy-content="{{t 'Start private whisper' }}" {{#unless has_topic}}disabled{{/unless}}>
-                                    <span class="pear-ui-glyph" aria-hidden="true">✧</span>
-                                </button>
+                            <div class="pear-workbench-empty">
+                                <span class="pear-ui-glyph pear-workbench-empty-glyph" aria-hidden="true">·</span>
+                                <span>{{t "Write a private side request below." }}</span>
                             </div>
                         {{/if}}
+                    </div>
+                    <div class="pear-side-body pear-workbench-side-footer">
+                        <textarea id="pear-side-request" class="pear-side-request" rows="1" placeholder="{{t 'Private side request' }}"></textarea>
+                        <button type="button" id="pear-side-start" class="pear-side-start tippy-zulip-delayed-tooltip" aria-label="{{t 'Start private side request' }}" data-tippy-content="{{t 'Start private side request' }}" {{#unless has_topic}}disabled{{/unless}}>
+                            <span class="pear-ui-glyph" aria-hidden="true">›</span>
+                        </button>
                     </div>
                 </div>
             </section>

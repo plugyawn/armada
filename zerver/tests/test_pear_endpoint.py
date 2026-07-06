@@ -51,6 +51,7 @@ from zerver.lib.pear_worker import (
     maybe_refactor_pear_stream_contexts_on_rename,
     maybe_refactor_pear_topic_context_on_move,
     pear_expected_topic_workdir,
+    pear_git_current_branch_name,
     pear_git_status_delta,
     pear_read_text_path,
     pear_topic_branch_name,
@@ -1715,6 +1716,7 @@ class PearSessionEndpointTest(ZulipTestCase):
                 topic_name=PEAR_DEFAULT_TOPIC,
                 workdir=str(workdir),
             )
+            expected_branch = pear_git_current_branch_name(workdir)
 
             workspace_context = build_pear_workspace_context(
                 owner,
@@ -1725,7 +1727,7 @@ class PearSessionEndpointTest(ZulipTestCase):
             self.assertEqual(workspace_context["repository"], PEAR_DEFAULT_STREAM)
             self.assertEqual(workspace_context["remote_url"], "")
             self.assertEqual(workspace_context["worktree"], PEAR_DEFAULT_TOPIC)
-            self.assertEqual(workspace_context["branch"], PEAR_DEFAULT_TOPIC)
+            self.assertEqual(workspace_context["branch"], expected_branch)
             self.assertEqual(workspace_context["head"], "")
             topic_payload = serialize_pear_topic_context(
                 context,

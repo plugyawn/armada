@@ -205,7 +205,7 @@ const canvas_render_sequence_by_context = new Map<string, number>();
 const topic_context_by_context = new Map<string, PearTopicContext>();
 let workbench_anchor_element: HTMLElement | undefined;
 let workbench_anchor_context_key = "";
-type WorkbenchAnchorKind = "runtime" | "work";
+type WorkbenchAnchorKind = "context" | "git";
 let workbench_anchor_kind: WorkbenchAnchorKind | undefined;
 let last_observed_context_key = "";
 let topic_context_save_timer: number | undefined;
@@ -404,6 +404,24 @@ export function panel_runtime_label_for_testing(options: {
     }
     const effort = compact_reasoning_effort(options.reasoning_effort);
     return effort === "" ? model : `${model} / ${effort}`;
+}
+
+function full_reasoning_effort_label(
+    topic_context: PearTopicContext,
+    effort = topic_context.reasoning_effort,
+): string {
+    return (
+        topic_context.reasoning_efforts.find((choice) => choice.effort === effort)?.label ||
+        effort ||
+        $t({defaultMessage: "Medium"})
+    );
+}
+
+function display_model_label(topic_context: PearTopicContext): string {
+    const catalog_entry = topic_context.model_catalog?.find(
+        (entry) => entry.slug === topic_context.model,
+    );
+    return catalog_entry?.display_name || topic_context.model || topic_context.default_model;
 }
 
 function reasoning_effort_meter_class(effort: string | undefined): string {
@@ -859,14 +877,21 @@ function display_topic_context(topic_context: PearTopicContext | undefined | nul
           history_commits: (PearGitCommit & {is_head: boolean; ref_label: string})[];
           workbench_title: string;
           workbench_meta: string;
+          workbench_scope_note: string;
           panel_repo_label: string;
           panel_worktree_label: string;
           panel_git_status_label: string;
           panel_git_status_class: string;
           panel_git_ref_label: string;
           panel_runtime_label: string;
+          panel_model_label: string;
           panel_reasoning_effort_label: string;
           panel_reasoning_effort_meter_class: string;
+          panel_header_runtime_label: string;
+          panel_header_branch_label: string;
+          panel_header_git_label: string;
+          panel_header_commit_label: string;
+          panel_header_git_title: string;
           workbench_model_choices: PearRuntimeChoice[];
           workbench_has_model_choices: boolean;
           workbench_effort_choices: PearRuntimeChoice[];
@@ -909,6 +934,9 @@ function display_topic_context(topic_context: PearTopicContext | undefined | nul
     const workbench_meta = [workbench_repo_label, git.branch?.trim() ?? ""]
         .filter((part) => part !== "")
         .join(" / ");
+    const topic_branch_label =
+        (git.detached === true ? $t({defaultMessage: "detached"}) : git.branch?.trim()) ||
+        topic_context.topic;
     const diff_file_count = pear_git_shortstat_file_count(diff_shortstat) || changed_count;
     const diff_insertions = pear_git_shortstat_count(diff_shortstat, "insertion");
     const diff_deletions = pear_git_shortstat_count(diff_shortstat, "deletion");
@@ -934,6 +962,13 @@ function display_topic_context(topic_context: PearTopicContext | undefined | nul
         is_head: index === 0,
         ref_label: index === 0 ? $t({defaultMessage: "HEAD"}) : "",
     }));
+    const head_commit = history_commits[0];
+    const head_commit_label =
+        head_commit === undefined
+            ? (git.head_short ?? "")
+            : [head_commit.hash, head_commit.summary]
+                  .filter((part) => part.trim() !== "")
+                  .join(" ");
     const recent_commit_count = history_commits.length;
     const topic_key = context_key(topic_context.stream, topic_context.topic);
     const git_tree = git_tree_by_context.get(topic_key);
@@ -942,12 +977,8 @@ function display_topic_context(topic_context: PearTopicContext | undefined | nul
     const canvas = canvas_by_context.get(topic_key);
     const canvas_content = canvas?.content ?? "";
     const canvas_rendered_html = canvas?.rendered_html ?? "";
-    const reasoning_effort_label =
-        topic_context.reasoning_efforts.find(
-            (effort) => effort.effort === topic_context.reasoning_effort,
-        )?.label ||
-        topic_context.reasoning_effort ||
-        $t({defaultMessage: "Medium"});
+    const reasoning_effort_label = full_reasoning_effort_label(topic_context);
+    const model_label = display_model_label(topic_context);
     const workbench_model_choices = model_choices(topic_context);
     const workbench_effort_choices = effort_choices(topic_context);
     const workbench_effort_slider_value = effort_slider_value(workbench_effort_choices);
@@ -999,6 +1030,9 @@ function display_topic_context(topic_context: PearTopicContext | undefined | nul
         history_commits,
         workbench_title,
         workbench_meta,
+        workbench_scope_note: $t({
+            defaultMessage: "Changes and commits are scoped to this topic worktree.",
+        }),
         panel_repo_label,
         panel_worktree_label,
         panel_git_status_label: git_status_label(git, changed_label),
@@ -1008,10 +1042,22 @@ function display_topic_context(topic_context: PearTopicContext | undefined | nul
             model: topic_context.model,
             reasoning_effort: topic_context.reasoning_effort,
         }),
+        panel_model_label: model_label,
         panel_reasoning_effort_label: reasoning_effort_label,
         panel_reasoning_effort_meter_class: reasoning_effort_meter_class(
             topic_context.reasoning_effort,
         ),
+        panel_header_runtime_label: `${model_label} · ${reasoning_effort_label}`,
+        panel_header_branch_label: topic_branch_label,
+        panel_header_git_label: topic_header_git_label(git, changed_count),
+        panel_header_commit_label: head_commit_label,
+        panel_header_git_title: topic_header_git_title({
+            repo: panel_repo_label,
+            worktree: panel_worktree_label,
+            branch: topic_branch_label,
+            commit: head_commit_label,
+            workdir: topic_context.workdir,
+        }),
         workbench_model_choices,
         workbench_has_model_choices: workbench_model_choices.length > 0,
         workbench_effort_choices,
@@ -1059,31 +1105,50 @@ function topic_header_controls_are_current($headers: JQuery, control_key: string
 }
 
 function topic_header_work_label(display_context: PearDisplayTopicContext): string {
-    if (display_context.panel_git_status_class !== "clean") {
-        const changed_count = display_context.git.changed_count ?? 0;
-        if (changed_count === 1) {
-            return $t({defaultMessage: "1 file changed"});
-        }
-        if (changed_count > 1) {
-            return $t({defaultMessage: "{changed_count} files changed"}, {changed_count});
-        }
-        return display_context.panel_git_status_label;
-    }
-    const branch_label = display_context.panel_git_ref_label.split(" / ")[0]?.trim();
-    return (
-        branch_label ||
-        display_context.panel_worktree_label ||
-        display_context.panel_repo_label ||
-        $t({defaultMessage: "work"})
-    );
+    return display_context.panel_header_git_label;
 }
 
-function topic_header_work_title(display_context: PearDisplayTopicContext): string {
+function topic_header_git_label(git: PearGitContext, changed_count: number): string {
+    if (!git.available) {
+        return $t({defaultMessage: "no repo"});
+    }
+    if (git.dirty) {
+        if (changed_count === 1) {
+            return $t({defaultMessage: "1 file"});
+        }
+        if (changed_count > 1) {
+            return $t({defaultMessage: "{changed_count} files"}, {changed_count});
+        }
+        return $t({defaultMessage: "dirty"});
+    }
+    if ((git.ahead ?? 0) > 0 && (git.behind ?? 0) > 0) {
+        return $t(
+            {defaultMessage: "+{ahead} -{behind}"},
+            {ahead: git.ahead ?? 0, behind: git.behind ?? 0},
+        );
+    }
+    if ((git.ahead ?? 0) > 0) {
+        return $t({defaultMessage: "+{ahead}"}, {ahead: git.ahead ?? 0});
+    }
+    if ((git.behind ?? 0) > 0) {
+        return $t({defaultMessage: "-{behind}"}, {behind: git.behind ?? 0});
+    }
+    return git.head_short ?? $t({defaultMessage: "clean"});
+}
+
+function topic_header_git_title(options: {
+    repo: string;
+    worktree: string;
+    branch: string;
+    commit: string;
+    workdir: string;
+}): string {
     return [
-        display_context.panel_repo_label,
-        display_context.panel_worktree_label,
-        display_context.panel_git_ref_label,
-        display_context.workdir,
+        options.repo,
+        options.worktree,
+        options.branch,
+        options.commit,
+        options.workdir,
     ]
         .filter((part) => part.trim() !== "")
         .join(" · ");
@@ -1106,13 +1171,21 @@ function render_topic_header_controls(options: {
     const runtime_label = topic_context.panel_runtime_label || $t({defaultMessage: "Pear"});
     const runtime_status = options.active_run_status ?? "done";
     const runtime_active = runtime_status === "running" || runtime_status === "queued";
-    const runtime_title = $t({defaultMessage: "Pear runtime: {runtime_label}"}, {runtime_label});
+    const runtime_title = $t(
+        {defaultMessage: "Pear runtime: {runtime_label}"},
+        {runtime_label: topic_context.panel_header_runtime_label || runtime_label},
+    );
+    const branch_title = $t(
+        {defaultMessage: "Pear topic branch: {branch_label}"},
+        {branch_label: topic_context.panel_header_branch_label},
+    );
     const work_label = topic_header_work_label(topic_context);
-    const work_title = topic_header_work_title(topic_context);
+    const work_title = topic_context.panel_header_git_title || work_label;
     const control_key = JSON.stringify({
         stream_id,
         topic,
-        runtime_label,
+        runtime_label: topic_context.panel_header_runtime_label,
+        branch_label: topic_context.panel_header_branch_label,
         runtime_active,
         reasoning_effort: topic_context.reasoning_effort,
         work_label,
@@ -1149,11 +1222,12 @@ function render_topic_header_controls(options: {
         });
         const $runtime_control = $("<button>", {
             type: "button",
-            class: `pear-topic-header-control pear-topic-header-runtime-control tippy-zulip-delayed-tooltip${
+            class: `pear-topic-header-control pear-topic-header-runtime-control pear-panel-open-action tippy-zulip-delayed-tooltip${
                 runtime_active ? " pear-liveness-active" : ""
             }`,
             "aria-label": runtime_title,
             "data-tippy-content": runtime_title,
+            "data-pear-workbench-view": "history",
             "data-pear-header-key": control_key,
         });
         $runtime_control.append(
@@ -1166,17 +1240,36 @@ function render_topic_header_controls(options: {
             }),
             $("<span>", {
                 class: "pear-runtime-menu-label",
-                text: runtime_label,
+                text: topic_context.panel_header_runtime_label || runtime_label,
+            }),
+        );
+        const $branch_control = $("<button>", {
+            type: "button",
+            class: "pear-topic-header-control pear-topic-header-branch-control pear-panel-open-action tippy-zulip-delayed-tooltip",
+            "aria-label": branch_title,
+            "data-tippy-content": branch_title,
+            "data-pear-workbench-view": "history",
+            "data-pear-header-key": control_key,
+        }).append(
+            $("<span>", {
+                class: "pear-topic-header-branch-prefix",
+                "aria-hidden": "true",
+                text: $t({defaultMessage: "branch"}),
+            }),
+            $("<span>", {
+                class: "pear-topic-header-branch-label",
+                text: topic_context.panel_header_branch_label,
             }),
         );
         const $work_control = $("<button>", {
             type: "button",
-            class: `pear-topic-header-control pear-topic-header-work-control pear-panel-open-action pear-topic-header-work-${topic_context.panel_git_status_class}`,
+            class: `pear-topic-header-control pear-topic-header-git-control pear-panel-open-action pear-topic-header-work-${topic_context.panel_git_status_class}`,
             "aria-label": $t(
-                {defaultMessage: "Open Pear work details: {work_label}"},
+                {defaultMessage: "Open Pear Git details: {work_label}"},
                 {work_label},
             ),
             title: work_title || work_label,
+            "data-pear-workbench-view": topic_context.has_workbench_diff ? "diff" : "history",
             "data-pear-header-key": control_key,
         }).append(
             $("<span>", {
@@ -1184,21 +1277,24 @@ function render_topic_header_controls(options: {
                 text: work_label,
             }),
         );
-        $status_cluster.append($runtime_control, $work_control);
+        $status_cluster.append($runtime_control, $branch_control, $work_control);
         $controls.before($status_cluster);
     });
     $(document).trigger("pear_liveness_markers_changed");
 }
 
 function anchor_kind_for_element(element: HTMLElement): WorkbenchAnchorKind {
-    return element.classList.contains("pear-topic-header-runtime-control") ? "runtime" : "work";
+    return element.classList.contains("pear-topic-header-git-control") ||
+        element.classList.contains("pear-topic-header-branch-control")
+        ? "git"
+        : "context";
 }
 
 function visible_header_anchor_for_kind(kind: WorkbenchAnchorKind): HTMLElement | undefined {
     const selector =
-        kind === "runtime"
+        kind === "context"
             ? ".message_header_stream .pear-topic-header-runtime-control"
-            : ".message_header_stream .pear-topic-header-work-control";
+            : ".message_header_stream .pear-topic-header-git-control";
     return [...document.querySelectorAll<HTMLElement>(selector)].find(
         (element) => element.getClientRects().length > 0,
     );
@@ -1218,10 +1314,10 @@ function visible_header_anchor(): HTMLElement | undefined {
     ) {
         return (
             visible_header_anchor_for_kind(workbench_anchor_kind) ??
-            visible_header_anchor_for_kind(workbench_anchor_kind === "work" ? "runtime" : "work")
+            visible_header_anchor_for_kind(workbench_anchor_kind === "git" ? "context" : "git")
         );
     }
-    return visible_header_anchor_for_kind("work") ?? visible_header_anchor_for_kind("runtime");
+    return visible_header_anchor_for_kind("context") ?? visible_header_anchor_for_kind("git");
 }
 
 function position_workbench_popover(): void {
@@ -1236,7 +1332,7 @@ function position_workbench_popover(): void {
     const compact_viewport = viewport_width < 760;
     const width = compact_viewport
         ? Math.max(280, viewport_width - margin * 2)
-        : Math.min(460, Math.max(400, viewport_width - margin * 2));
+        : Math.min(420, Math.max(360, viewport_width - margin * 2));
     const anchor_rect = anchor?.getBoundingClientRect();
     const anchor_center =
         anchor_rect === undefined ? viewport_width / 2 : anchor_rect.left + anchor_rect.width / 2;
@@ -2036,12 +2132,16 @@ export function initialize(): void {
     $("body").on("click", ".pear-panel-open-action", (e) => {
         e.preventDefault();
         e.stopPropagation();
-        open_work_details(undefined, e.currentTarget);
-    });
-    $("body").on("click", ".message_header_stream .pear-topic-header-runtime-control", (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        open_work_details(undefined, e.currentTarget);
+        const requested_view = $(e.currentTarget).attr("data-pear-workbench-view");
+        open_work_details(
+            requested_view === "diff" ||
+                requested_view === "history" ||
+                requested_view === "canvas" ||
+                requested_view === "side"
+                ? requested_view
+                : undefined,
+            e.currentTarget,
+        );
     });
     $("body").on("click", "#pear-panel", (e) => {
         e.stopPropagation();

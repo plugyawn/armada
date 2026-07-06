@@ -59,12 +59,12 @@ from zerver.lib.pear_worker import (
     pear_read_text_path,
     pear_repo_artifact_value_is_durable,
     pear_sha256_text,
-    pear_topic_branch_name,
     pear_topic_context_is_paused,
     pear_topic_isolation_user_exists,
     pear_topic_context_response_policy,
     pear_topic_isolation_username_for_realm,
     pear_topic_os_user_isolation_enabled,
+    pear_workspace_node_default_branch,
     pear_worker_model_for_topic,
     pear_worker_reasoning_effort_for_topic,
     pear_worker_sandbox_for_topic,
@@ -550,7 +550,7 @@ def serialize_pear_topic_context(
     expected_branch = (
         workspace_node.branch_name.strip()
         if workspace_node is not None and workspace_node.branch_name.strip()
-        else pear_topic_branch_name(topic_name)
+        else pear_workspace_node_default_branch()
     )
     isolation_username = pear_context_isolation_username(
         context,
@@ -1105,7 +1105,7 @@ def get_pear_git_tree_backend(
         if context is not None
         and context.workspace_node_id is not None
         and context.workspace_node.branch_name.strip()
-        else pear_topic_branch_name(topic_name)
+        else pear_workspace_node_default_branch()
     )
     delta = build_pear_git_context(
         workdir,

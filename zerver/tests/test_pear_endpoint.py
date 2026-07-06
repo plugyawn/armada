@@ -53,7 +53,6 @@ from zerver.lib.pear_worker import (
     pear_expected_topic_workdir,
     pear_git_status_delta,
     pear_read_text_path,
-    pear_reconcile_topic_branch,
     pear_topic_branch_name,
     pear_topic_isolation_username,
     pear_topic_isolation_user_exists,
@@ -1160,7 +1159,7 @@ class PearSessionEndpointTest(ZulipTestCase):
         self.assertEqual(pear_topic_branch_name("Feature/Some Work!"), "Feature-Some-Work")
         self.assertEqual(pear_topic_branch_name(""), "topic")
 
-    def test_topic_workdir_is_topic_branch_when_created(self) -> None:
+    def test_topic_workdir_uses_workspace_default_branch_when_created(self) -> None:
         owner = self.example_user("hamlet")
         topic = "pear-efficient-smoke"
 
@@ -1186,12 +1185,15 @@ class PearSessionEndpointTest(ZulipTestCase):
                 text=True,
                 timeout=10,
             )
-            self.assertEqual(completed.stdout.strip(), topic)
+            actual_branch = completed.stdout.strip()
+            self.assertTrue(actual_branch)
+            self.assertNotEqual(actual_branch, topic)
             assert context.workspace_node is not None
+            context.workspace_node.refresh_from_db()
             self.assertEqual(context.workspace_node.stream_name, PEAR_DEFAULT_STREAM)
             self.assertEqual(context.workspace_node.topic_name, topic)
             self.assertEqual(context.workspace_node.workdir, context.workdir)
-            self.assertEqual(context.workspace_node.branch_name, topic)
+            self.assertEqual(context.workspace_node.branch_name, actual_branch)
             self.assertEqual(
                 subprocess.run(
                     ["git", "-C", context.workdir, "rev-parse", "--is-inside-work-tree"],
@@ -1384,6 +1386,12 @@ class PearSessionEndpointTest(ZulipTestCase):
                 stream="megatron-lm",
                 repository_url=repository_url,
             )
+            project = PearProject.objects.get(
+                realm=owner.realm,
+                stream=get_stream("megatron-lm", owner.realm),
+            )
+            project.default_base_ref = "dev"
+            project.save(update_fields=["default_base_ref", "date_updated"])
             topic_context = ensure_pear_topic_context(
                 owner,
                 stream="megatron-lm",
@@ -1582,92 +1590,6 @@ class PearSessionEndpointTest(ZulipTestCase):
             self.assertEqual(git_context["changed_count"], 0)
             self.assertTrue(git_context["detached"])
             self.assertFalse(git_context["branch_matches_topic"])
-
-    def test_reconcile_topic_branch_repairs_clean_detached_worktree(self) -> None:
-        owner = self.example_user("hamlet")
-        topic = "pear-efficient-smoke"
-
-        with tempfile.TemporaryDirectory() as temp_dir:
-            base_workdir = Path(temp_dir) / "base"
-            topic_root = str(Path(temp_dir) / "topics")
-            self.create_git_repository(base_workdir)
-
-            with self.settings(
-                PEAR_WORKER_WORKDIR=str(base_workdir),
-                PEAR_TOPIC_WORKDIR_ROOT=topic_root,
-            ):
-                context = ensure_pear_topic_context(
-                    owner,
-                    stream=PEAR_DEFAULT_STREAM,
-                    topic=topic,
-                )
-                subprocess.run(
-                    ["git", "-C", context.workdir, "checkout", "--detach"],
-                    check=True,
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                    timeout=10,
-                )
-
-                self.assertTrue(
-                    pear_reconcile_topic_branch(
-                        owner,
-                        stream=PEAR_DEFAULT_STREAM,
-                        topic=topic,
-                    )
-                )
-
-            branch = subprocess.run(
-                ["git", "-C", context.workdir, "branch", "--show-current"],
-                check=True,
-                stdout=subprocess.PIPE,
-                text=True,
-                timeout=10,
-            ).stdout.strip()
-            self.assertEqual(branch, topic)
-
-    def test_reconcile_topic_branch_leaves_dirty_mismatch_visible(self) -> None:
-        owner = self.example_user("hamlet")
-        topic = "pear-efficient-smoke"
-
-        with tempfile.TemporaryDirectory() as temp_dir:
-            base_workdir = Path(temp_dir) / "base"
-            topic_root = str(Path(temp_dir) / "topics")
-            self.create_git_repository(base_workdir)
-
-            with self.settings(
-                PEAR_WORKER_WORKDIR=str(base_workdir),
-                PEAR_TOPIC_WORKDIR_ROOT=topic_root,
-            ):
-                context = ensure_pear_topic_context(
-                    owner,
-                    stream=PEAR_DEFAULT_STREAM,
-                    topic=topic,
-                )
-                subprocess.run(
-                    ["git", "-C", context.workdir, "switch", "-c", "manual-branch"],
-                    check=True,
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                    timeout=10,
-                )
-                (Path(context.workdir) / "notes.txt").write_text("dirty\n", encoding="utf-8")
-
-                self.assertFalse(
-                    pear_reconcile_topic_branch(
-                        owner,
-                        stream=PEAR_DEFAULT_STREAM,
-                        topic=topic,
-                    )
-                )
-                git_context = build_pear_git_context(
-                    context.workdir,
-                    topic=pear_topic_branch_name(topic),
-                )
-
-            self.assertEqual(git_context["branch"], "manual-branch")
-            self.assertFalse(git_context["branch_matches_topic"])
-            self.assertTrue(git_context["dirty"])
 
     def test_pear_git_status_delta_uses_cache_until_invalidated(self) -> None:
         invalidate_pear_git_status_delta()
@@ -1916,6 +1838,7 @@ class PearSessionEndpointTest(ZulipTestCase):
             assert topic_context.workspace_node is not None
             assert topic_context.workspace_node.project is not None
             self.assertEqual(topic_context.workspace_node.project.repository_url, repository_url)
+            self.assertEqual(topic_context.workspace_node.branch_name, "dev")
 
     def test_topic_context_does_not_clone_local_parent_workspace_path(self) -> None:
         owner = self.example_user("hamlet")
@@ -2101,10 +2024,7 @@ class PearSessionEndpointTest(ZulipTestCase):
             self.assertEqual(branch, old_branch)
             assert context.workspace_node is not None
             self.assertEqual(context.workspace_node.topic_name, "new topic")
-            self.assertEqual(
-                context.workspace_node.branch_name,
-                pear_topic_branch_name("old topic"),
-            )
+            self.assertEqual(context.workspace_node.branch_name, old_branch)
             self.assertEqual(run.topic_name, "old topic")
             self.assertEqual(run.workspace_node_id, context.workspace_node_id)
             self.assertEqual(side_run.source_topic_name, "old topic")

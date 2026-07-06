@@ -111,18 +111,27 @@
                 <div class="pear-workbench">
                     <div class="pear-workbench-header">
                         <div class="pear-workbench-control-grid">
-                            <button type="button" class="pear-runtime-menu-trigger pear-runtime-panel-trigger pear-workbench-runtime-trigger tippy-zulip-delayed-tooltip" aria-label="{{t 'Pear runtime' }}" data-tippy-content="{{t 'Pear runtime' }}">
+                            <label class="pear-workbench-control-row pear-workbench-model-row">
                                 <span class="pear-workbench-control-label">{{t "Model" }}</span>
-                                <span class="pear-runtime-menu-label">{{topic_context.panel_runtime_label}}</span>
-                                <span class="pear-ui-glyph pear-runtime-menu-glyph" aria-hidden="true">·</span>
-                            </button>
-                            <div class="pear-workbench-control-row pear-workbench-thinking-row">
+                                <select class="pear-workbench-select pear-workbench-model-select" aria-label="{{t 'Pear model' }}">
+                                    {{#if topic_context.workbench_model_choices}}
+                                        {{#each topic_context.workbench_model_choices}}
+                                            <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+                                        {{/each}}
+                                    {{else}}
+                                        <option value="{{topic_context.panel_runtime_label}}" selected>{{topic_context.panel_runtime_label}}</option>
+                                    {{/if}}
+                                </select>
+                            </label>
+                            <label class="pear-workbench-control-row pear-workbench-thinking-row">
                                 <span class="pear-workbench-control-label">{{t "Thinking" }}</span>
-                                <span class="pear-workbench-thinking-meter pear-workbench-thinking-{{topic_context.panel_reasoning_effort_meter_class}}" aria-hidden="true">
-                                    <span></span>
-                                </span>
+                                {{#if topic_context.workbench_has_efforts}}
+                                    <input type="range" class="pear-workbench-effort-range pear-workbench-thinking-{{topic_context.panel_reasoning_effort_meter_class}}" min="0" max="{{topic_context.workbench_effort_slider_max}}" step="1" value="{{topic_context.workbench_effort_slider_value}}" aria-label="{{t 'Thinking' }}"/>
+                                {{else}}
+                                    <input type="range" class="pear-workbench-effort-range pear-workbench-thinking-{{topic_context.panel_reasoning_effort_meter_class}}" min="0" max="0" step="1" value="0" aria-label="{{t 'Thinking' }}" disabled/>
+                                {{/if}}
                                 <span class="pear-workbench-control-value">{{topic_context.panel_reasoning_effort_label}}</span>
-                            </div>
+                            </label>
                             <div class="pear-workbench-control-row">
                                 <span class="pear-workbench-control-label">{{t "Repo" }}</span>
                                 <span class="pear-workbench-control-value" title="{{topic_context.panel_repo_label}}">{{topic_context.panel_repo_label}}</span>

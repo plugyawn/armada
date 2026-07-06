@@ -244,15 +244,14 @@ run_test("template renders workbench without active run", () => {
     assert.match(html, /pear-workbench/);
     assert.doesNotMatch(html, /pear-topic-control/);
     assert.match(html, /pear-workbench-control-grid/);
-    assert.match(html, /pear-runtime-menu-trigger/);
-    assert.match(html, /pear-workbench-runtime-trigger/);
+    assert.match(html, /pear-workbench-model-select/);
+    assert.match(html, /pear-workbench-effort-range/);
     assert.doesNotMatch(html, /pear-topic-open-action/);
     assert.match(html, /pear-workbench-title-row/);
     assert.match(html, /routing-fix/);
     assert.match(html, /devel \/ routing-fix \/ a3f92c1/);
     assert.match(html, /pear-workbench-thinking-row/);
     assert.match(html, /pear-workbench-thinking-high/);
-    assert.match(html, /gpt-5\.5 \/ h/);
     assert.match(html, /High/);
     assert.match(html, /Repo/);
     assert.match(html, /Worktree/);
@@ -313,7 +312,8 @@ run_test("template keeps volatile run metadata out of workbench chrome", () => {
     assert.match(html, /pear-workbench-tabs/);
     assert.match(html, /pear-workbench-title-row/);
     assert.match(html, /pear-workbench-control-grid/);
-    assert.match(html, /gpt-5\.5 \/ xh/);
+    assert.match(html, /pear-workbench-model-select/);
+    assert.match(html, /pear-workbench-effort-range/);
     assert.doesNotMatch(html, /pear-workbench-context-meter/);
     assert.doesNotMatch(html, /pear-workbench-head-row/);
     assert.doesNotMatch(html, /pear-thinking-glyph/);
@@ -360,8 +360,9 @@ run_test("template keeps runtime controls in workbench chrome", () => {
 
     assert.doesNotMatch(html, /pear-workbench-context-meter/);
     assert.doesNotMatch(html, /cache_percent/);
-    assert.match(html, /gpt-5\.5 \/ h/);
-    assert.match(html, /pear-workbench-runtime-trigger/);
+    assert.match(html, /pear-workbench-model-select/);
+    assert.match(html, /pear-workbench-effort-range/);
+    assert.doesNotMatch(html, /pear-workbench-runtime-trigger/);
     assert.doesNotMatch(html, /No committed work yet/);
 });
 
@@ -416,7 +417,8 @@ run_test("template renders canvas as a workbench pane", () => {
     assert.match(html, /<p>Project note<\/p>/);
     assert.match(html, /pear-workbench-canvas-open/);
     assert.match(html, /\.pear\/CANVAS\.md/);
-    assert.match(html, /pear-workbench-runtime-trigger/);
+    assert.match(html, /pear-workbench-model-select/);
+    assert.match(html, /pear-workbench-effort-range/);
 });
 
 run_test("template renders diff rows without duplicate summary chips", () => {

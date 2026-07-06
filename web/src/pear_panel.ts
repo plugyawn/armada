@@ -74,6 +74,10 @@ type PearRunsResponse = {
     };
 };
 
+type PearTopicContextResponse = {
+    pear_topic_context?: PearTopicContext | null;
+};
+
 type PearReasoningEffort = {
     effort: string;
     label: string;
@@ -85,6 +89,12 @@ type PearModelCatalogEntry = {
     display_name: string;
     default_reasoning_level?: string;
     supported_reasoning_levels?: PearReasoningEffort[];
+};
+
+type PearRuntimeChoice = {
+    value: string;
+    label: string;
+    selected: boolean;
 };
 
 type PearGitChangedFile = {
@@ -194,6 +204,7 @@ const canvas_rendering_contexts = new Set<string>();
 const canvas_render_sequence_by_context = new Map<string, number>();
 let workbench_anchor_element: HTMLElement | undefined;
 let workbench_anchor_context_key = "";
+let topic_context_update_in_flight = false;
 const LIVE_REFRESH_INTERVAL_MS = 500;
 const LIVE_REFRESH_RATE_LIMIT_BACKOFF_MS = 1500;
 const FULL_REFRESH_INTERVAL_MS = 5000;
@@ -276,6 +287,98 @@ function compact_reasoning_effort(effort: string | undefined): string {
     return effort.at(0)?.toLowerCase() ?? "";
 }
 
+const fallback_reasoning_efforts: PearReasoningEffort[] = [
+    {effort: "low", label: "Low"},
+    {effort: "medium", label: "Medium"},
+    {effort: "high", label: "High"},
+    {effort: "xhigh", label: "XHigh"},
+];
+
+function model_reasoning_efforts(
+    topic_context: PearTopicContext | undefined | null,
+    model: string | undefined,
+): PearReasoningEffort[] {
+    const catalog_entry = topic_context?.model_catalog?.find((entry) => entry.slug === model);
+    const model_efforts = catalog_entry?.supported_reasoning_levels;
+    if (model_efforts !== undefined && model_efforts.length > 0) {
+        return model_efforts;
+    }
+    if (
+        topic_context?.reasoning_efforts !== undefined &&
+        topic_context.reasoning_efforts.length > 0
+    ) {
+        return topic_context.reasoning_efforts;
+    }
+    return fallback_reasoning_efforts;
+}
+
+function model_choices(topic_context: PearTopicContext): PearRuntimeChoice[] {
+    const catalog = topic_context.model_catalog ?? [];
+    const choices = catalog.map((entry) => ({
+        value: entry.slug,
+        label: entry.display_name || entry.slug,
+        selected: entry.slug === topic_context.model,
+    }));
+    const seen_models = new Set(choices.map((choice) => choice.value));
+    for (const model of topic_context.model_choices ?? []) {
+        if (!seen_models.has(model)) {
+            choices.push({
+                value: model,
+                label: model,
+                selected: model === topic_context.model,
+            });
+            seen_models.add(model);
+        }
+    }
+    if (topic_context.model && !seen_models.has(topic_context.model)) {
+        choices.unshift({
+            value: topic_context.model,
+            label: topic_context.model,
+            selected: true,
+        });
+    }
+    return choices;
+}
+
+function effort_choices(
+    topic_context: PearTopicContext,
+    model = topic_context.model,
+): PearRuntimeChoice[] {
+    return model_reasoning_efforts(topic_context, model).map((choice) => ({
+        value: choice.effort,
+        label: choice.label,
+        selected: choice.effort === topic_context.reasoning_effort,
+    }));
+}
+
+function effort_slider_value(choices: PearRuntimeChoice[]): number {
+    return Math.max(
+        0,
+        choices.findIndex((choice) => choice.selected),
+    );
+}
+
+export function workbench_effort_for_index_for_testing(
+    topic_context: PearTopicContext | undefined | null,
+    model: string | undefined,
+    index: number,
+): string | undefined {
+    return model_reasoning_efforts(topic_context, model)[index]?.effort;
+}
+
+function next_effort_for_model(topic_context: PearTopicContext, model: string): string {
+    const efforts = model_reasoning_efforts(topic_context, model);
+    if (efforts.some((choice) => choice.effort === topic_context.reasoning_effort)) {
+        return topic_context.reasoning_effort;
+    }
+    const catalog_entry = topic_context.model_catalog?.find((entry) => entry.slug === model);
+    return (
+        catalog_entry?.default_reasoning_level ??
+        efforts[0]?.effort ??
+        topic_context.reasoning_effort
+    );
+}
+
 export function panel_runtime_label_for_testing(options: {
     model?: string;
     reasoning_effort?: string;
@@ -302,6 +405,10 @@ function is_pear_runs_response(data: unknown): data is PearRunsResponse {
         "pear_runs" in data &&
         Array.isArray(data.pear_runs)
     );
+}
+
+function is_pear_topic_context_response(data: unknown): data is PearTopicContextResponse {
+    return typeof data === "object" && data !== null && "pear_topic_context" in data;
 }
 
 function is_pear_side_response(data: unknown): data is {dm_narrow_url?: string} {
@@ -696,6 +803,11 @@ function display_topic_context(topic_context: PearTopicContext | undefined | nul
           panel_runtime_label: string;
           panel_reasoning_effort_label: string;
           panel_reasoning_effort_meter_class: string;
+          workbench_model_choices: PearRuntimeChoice[];
+          workbench_effort_choices: PearRuntimeChoice[];
+          workbench_effort_slider_value: number;
+          workbench_effort_slider_max: number;
+          workbench_has_efforts: boolean;
           has_workbench_diff_summary: boolean;
           workbench_diff_summary_label: string;
           workbench_diff_file_label: string;
@@ -768,6 +880,9 @@ function display_topic_context(topic_context: PearTopicContext | undefined | nul
         )?.label ||
         topic_context.reasoning_effort ||
         $t({defaultMessage: "Medium"});
+    const workbench_model_choices = model_choices(topic_context);
+    const workbench_effort_choices = effort_choices(topic_context);
+    const workbench_effort_slider_value = effort_slider_value(workbench_effort_choices);
     const workbench_view = workbench_view_for_testing({
         requested: workbench_view_by_context.get(topic_key),
         has_diff: has_workbench_diff,
@@ -829,6 +944,11 @@ function display_topic_context(topic_context: PearTopicContext | undefined | nul
         panel_reasoning_effort_meter_class: reasoning_effort_meter_class(
             topic_context.reasoning_effort,
         ),
+        workbench_model_choices,
+        workbench_effort_choices,
+        workbench_effort_slider_value,
+        workbench_effort_slider_max: Math.max(0, workbench_effort_choices.length - 1),
+        workbench_has_efforts: workbench_effort_choices.length > 0,
         has_workbench_diff_summary: workbench_diff_summary_label !== "",
         workbench_diff_summary_label,
         workbench_diff_file_label,
@@ -1614,6 +1734,81 @@ function post_run_action(run_id: string, action: string): void {
     });
 }
 
+function save_topic_context(options: {model?: string; reasoning_effort?: string}): void {
+    const {stream, topic} = current_context();
+    if (stream === undefined || topic === undefined || topic_context_update_in_flight) {
+        return;
+    }
+    const model = options.model ?? last_topic_context?.model;
+    const reasoning_effort = options.reasoning_effort ?? last_topic_context?.reasoning_effort;
+    if (model === undefined || reasoning_effort === undefined) {
+        return;
+    }
+    topic_context_update_in_flight = true;
+    const $controls = $(
+        "#pear-panel .pear-workbench-model-select, #pear-panel .pear-workbench-effort-range",
+    );
+    $controls.prop("disabled", true);
+    void channel.post({
+        url: "/json/pear/topic-context",
+        data: {
+            stream,
+            topic,
+            model,
+            reasoning_effort,
+        },
+        success(raw_data) {
+            if (!is_pear_topic_context_response(raw_data)) {
+                blueslip.warn("Pear topic context returned an invalid response.");
+                refresh({force_context: true});
+                return;
+            }
+            const data = raw_data;
+            if (data.pear_topic_context !== undefined && data.pear_topic_context !== null) {
+                last_topic_context = data.pear_topic_context;
+                record_context_refresh(stream, topic);
+                render(last_runs, data.pear_topic_context);
+                return;
+            }
+            refresh({force_context: true});
+        },
+        error(xhr) {
+            if (xhr.readyState !== 0) {
+                blueslip.warn(`Failed to update Pear topic context: ${xhr.responseText}`);
+            }
+        },
+        complete() {
+            topic_context_update_in_flight = false;
+            $controls.prop("disabled", false);
+        },
+    });
+}
+
+function on_workbench_model_change(model: string): void {
+    if (last_topic_context === undefined || last_topic_context === null) {
+        return;
+    }
+    save_topic_context({
+        model,
+        reasoning_effort: next_effort_for_model(last_topic_context, model),
+    });
+}
+
+function on_workbench_effort_index_change(index: number): void {
+    if (last_topic_context === undefined || last_topic_context === null) {
+        return;
+    }
+    const effort = workbench_effort_for_index_for_testing(
+        last_topic_context,
+        last_topic_context.model,
+        index,
+    );
+    if (effort === undefined) {
+        return;
+    }
+    save_topic_context({reasoning_effort: effort});
+}
+
 function start_side_session(): void {
     const {stream, topic} = current_context();
     const side_request = $("#pear-side-request").val();
@@ -1695,6 +1890,42 @@ export function initialize(): void {
             return;
         }
         post_run_action(run_id, action);
+    });
+    $("body").on("change", ".pear-workbench-model-select", function (this: HTMLElement) {
+        const model = $(this).val();
+        if (typeof model === "string") {
+            on_workbench_model_change(model);
+        }
+    });
+    $("body").on("input", ".pear-workbench-effort-range", function (this: HTMLElement) {
+        const index = Number($(this).val());
+        if (
+            !Number.isInteger(index) ||
+            last_topic_context === undefined ||
+            last_topic_context === null
+        ) {
+            return;
+        }
+        const effort = workbench_effort_for_index_for_testing(
+            last_topic_context,
+            last_topic_context.model,
+            index,
+        );
+        const label = model_reasoning_efforts(last_topic_context, last_topic_context.model).find(
+            (choice) => choice.effort === effort,
+        )?.label;
+        if (label !== undefined) {
+            $(this)
+                .closest(".pear-workbench-control-row")
+                .find(".pear-workbench-control-value")
+                .text(label);
+        }
+    });
+    $("body").on("change", ".pear-workbench-effort-range", function (this: HTMLElement) {
+        const index = Number($(this).val());
+        if (Number.isInteger(index)) {
+            on_workbench_effort_index_change(index);
+        }
     });
     $("body").on("click", "#pear-side-start", () => {
         start_side_session();

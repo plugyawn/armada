@@ -203,23 +203,22 @@ class PearSessionEndpointTest(ZulipTestCase):
         owner = self.example_user("hamlet")
         with self.settings(
             EMBEDDED_BOTS_ENABLED=True,
-            PEAR_WORKER_AGENT_RUNTIME="codex-agents-mcp",
+            PEAR_WORKER_AGENT_RUNTIME="codex-app-server",
         ), patch(
             "zerver.views.pear.pear_worker_runtime_dependency_status",
             return_value=(
                 True,
-                "codex mcp-server via /usr/local/bin/codex; openai-agents installed.",
+                "codex app-server via /usr/local/bin/codex.",
             ),
         ), patch(
             "zerver.views.pear.pear_worker_runtime_auth_status",
             return_value=(
                 True,
-                "OpenAI Agents SDK credentials present; Codex CLI is logged in.",
-                "codex-cli-and-openai-api-key",
+                "Codex CLI is logged in.",
+                "codex-cli",
                 "codex login",
                 "worker-environment",
-                "Run Codex CLI login inside the worker environment and provide "
-                "OPENAI_API_KEY or OPENAI_ADMIN_KEY for the OpenAI Agents SDK.",
+                "Run Codex CLI login inside the worker environment used by Pear.",
             ),
         ):
             pear_bot = self.create_test_bot(
@@ -246,22 +245,20 @@ class PearSessionEndpointTest(ZulipTestCase):
         self.assertEqual(pear_config["selected_bot_user_id"], pear_bot.id)
         self.assertEqual(pear_config["selected_bot_full_name"], "Pear")
         self.assertEqual(pear_config["bot_full_name"], "Pear")
-        self.assertEqual(pear_config["worker_agent_runtime"], "codex-agents-mcp")
+        self.assertEqual(pear_config["worker_agent_runtime"], "codex-app-server")
         self.assertTrue(pear_config["worker_runtime_ready"])
         self.assertTrue(pear_config["worker_runtime_auth_ready"])
-        self.assertEqual(
-            pear_config["worker_runtime_login_method"], "codex-cli-and-openai-api-key"
-        )
+        self.assertEqual(pear_config["worker_runtime_login_method"], "codex-cli")
         self.assertEqual(pear_config["worker_runtime_login_command"], "codex login")
         self.assertEqual(pear_config["worker_runtime_login_target"], "worker-environment")
-        self.assertIn("OPENAI_API_KEY", pear_config["worker_runtime_login_instructions"])
+        self.assertIn("worker environment", pear_config["worker_runtime_login_instructions"])
         self.assertEqual(
             pear_config["setup_steps"][2]["detail"],
-            "codex mcp-server via /usr/local/bin/codex; openai-agents installed.",
+            "codex app-server via /usr/local/bin/codex.",
         )
         self.assertEqual(
             pear_config["setup_steps"][3]["detail"],
-            "OpenAI Agents SDK credentials present; Codex CLI is logged in.",
+            "Codex CLI is logged in.",
         )
         self.assertEqual(
             pear_config["bot_identities"],
@@ -279,10 +276,10 @@ class PearSessionEndpointTest(ZulipTestCase):
         owner = self.example_user("hamlet")
         with self.settings(
             EMBEDDED_BOTS_ENABLED=True,
-            PEAR_WORKER_AGENT_RUNTIME="codex-agents-mcp",
+            PEAR_WORKER_AGENT_RUNTIME="codex-app-server",
         ), patch(
             "zerver.views.pear.pear_worker_runtime_dependency_status",
-            return_value=(False, "Missing openai-agents package."),
+            return_value=(False, "Missing codex executable."),
         ), patch(
             "zerver.views.pear.pear_worker_runtime_auth_status",
             return_value=(
@@ -311,7 +308,7 @@ class PearSessionEndpointTest(ZulipTestCase):
         result_dict = self.assert_json_success(result)
         pear_config = result_dict["pear_config"]
         self.assertEqual(pear_config["selected_bot_user_id"], pear_bot.id)
-        self.assertEqual(pear_config["worker_agent_runtime"], "codex-agents-mcp")
+        self.assertEqual(pear_config["worker_agent_runtime"], "codex-app-server")
         self.assertFalse(pear_config["worker_runtime_ready"])
         self.assertEqual(
             pear_config["setup_steps"][2],
@@ -319,7 +316,7 @@ class PearSessionEndpointTest(ZulipTestCase):
                 "key": "worker_runtime",
                 "label": "Worker runtime dependencies",
                 "complete": False,
-                "detail": "Missing openai-agents package.",
+                "detail": "Missing codex executable.",
             },
         )
         self.assertEqual(
@@ -346,32 +343,9 @@ class PearSessionEndpointTest(ZulipTestCase):
             self.assertFalse(available)
             self.assertIn("codex executable", detail)
 
-        with patch("zerver.views.pear.which", return_value="/usr/local/bin/codex"), patch(
-            "zerver.views.pear.pear_python_module_available",
-            side_effect=lambda module_name: module_name in {"agents", "agents.mcp"},
-        ):
-            self.assertEqual(
-                pear_worker_runtime_dependency_status("codex-agents-mcp"),
-                (
-                    True,
-                    "codex mcp-server via /usr/local/bin/codex; openai-agents installed.",
-                ),
-            )
-
-        with patch("zerver.views.pear.which", return_value=None), patch(
-            "zerver.views.pear.pear_python_module_available",
-            return_value=False,
-        ):
-            available, detail = pear_worker_runtime_dependency_status("codex-agents-mcp")
-            self.assertFalse(available)
-            self.assertIn("codex executable", detail)
-            self.assertIn("openai-agents package", detail)
-
-        with patch("zerver.views.pear.pear_python_module_available", return_value=True):
-            self.assertEqual(
-                pear_worker_runtime_dependency_status("codex-sdk"),
-                (True, "openai-codex package installed."),
-            )
+        available, detail = pear_worker_runtime_dependency_status("codex-agents-mcp")
+        self.assertFalse(available)
+        self.assertEqual(detail, "Set PEAR_WORKER_AGENT_RUNTIME to codex-app-server.")
 
     def test_worker_runtime_auth_status_reports_login_paths(self) -> None:
         from zerver.views.pear import pear_worker_runtime_auth_status
@@ -379,28 +353,7 @@ class PearSessionEndpointTest(ZulipTestCase):
         with patch(
             "zerver.views.pear.pear_codex_login_available",
             return_value=True,
-        ), patch(
-            "zerver.views.pear.pear_codex_auth_file_available",
-            return_value=True,
-        ), patch(
-            "zerver.views.pear.pear_openai_agents_auth_available",
-            return_value=False,
         ):
-            (
-                available,
-                detail,
-                login_method,
-                login_command,
-                login_target,
-                login_instructions,
-            ) = pear_worker_runtime_auth_status("codex-exec")
-            self.assertTrue(available)
-            self.assertEqual(detail, "Codex CLI is logged in.")
-            self.assertEqual(login_method, "codex-cli")
-            self.assertEqual(login_command, "codex login")
-            self.assertEqual(login_target, "worker-environment")
-            self.assertIn("worker environment", login_instructions)
-
             (
                 available,
                 detail,
@@ -425,34 +378,11 @@ class PearSessionEndpointTest(ZulipTestCase):
                 login_instructions,
             ) = pear_worker_runtime_auth_status("codex-agents-mcp")
             self.assertFalse(available)
-            self.assertIn("OpenAI Agents SDK credentials", detail)
-            self.assertEqual(login_method, "codex-cli-and-openai-api-key")
-            self.assertEqual(login_command, "codex login")
-            self.assertEqual(login_target, "worker-environment")
-            self.assertIn("OPENAI_API_KEY", login_instructions)
-
-        with patch(
-            "zerver.views.pear.pear_codex_login_available",
-            return_value=True,
-        ), patch(
-            "zerver.views.pear.pear_codex_auth_file_available",
-            return_value=True,
-        ), patch(
-            "zerver.views.pear.pear_openai_agents_auth_available",
-            return_value=True,
-        ):
-            self.assertEqual(
-                pear_worker_runtime_auth_status("codex-agents-mcp"),
-                (
-                    True,
-                    "OpenAI Agents SDK credentials present; Codex CLI is logged in.",
-                    "codex-cli-and-openai-api-key",
-                    "codex login",
-                    "worker-environment",
-                    "Run Codex CLI login inside the worker environment and provide "
-                    "OPENAI_API_KEY or OPENAI_ADMIN_KEY for the OpenAI Agents SDK.",
-                ),
-            )
+            self.assertEqual(detail, "Select a supported worker runtime before logging in.")
+            self.assertIsNone(login_method)
+            self.assertIsNone(login_command)
+            self.assertIsNone(login_target)
+            self.assertIsNone(login_instructions)
 
     def test_serialize_pear_worker_run_includes_usage_summary(self) -> None:
         user = self.example_user("hamlet")
@@ -1339,7 +1269,7 @@ class PearSessionEndpointTest(ZulipTestCase):
             self.create_git_repository(base_workdir)
 
             with self.settings(
-                PEAR_WORKER_AGENT_RUNTIME="codex-exec",
+                PEAR_WORKER_AGENT_RUNTIME="codex-app-server",
                 PEAR_WORKER_WORKDIR=str(base_workdir),
                 PEAR_TOPIC_WORKDIR_ROOT=topic_root,
                 PEAR_TOPIC_ISOLATION_BACKEND="codex-sandbox",
@@ -1376,7 +1306,7 @@ class PearSessionEndpointTest(ZulipTestCase):
             self.create_git_repository(base_workdir)
 
             with self.settings(
-                PEAR_WORKER_AGENT_RUNTIME="codex-exec",
+                PEAR_WORKER_AGENT_RUNTIME="codex-app-server",
                 PEAR_WORKER_WORKDIR=str(base_workdir),
                 PEAR_TOPIC_WORKDIR_ROOT=topic_root,
                 PEAR_TOPIC_ISOLATION_BACKEND="os-user",
@@ -1416,7 +1346,7 @@ class PearSessionEndpointTest(ZulipTestCase):
             )
 
             with self.settings(
-                PEAR_WORKER_AGENT_RUNTIME="codex-exec",
+                PEAR_WORKER_AGENT_RUNTIME="codex-app-server",
                 PEAR_WORKER_WORKDIR=str(base_workdir),
                 PEAR_TOPIC_WORKDIR_ROOT=topic_root,
                 PEAR_WORKER_SANDBOX="danger-full-access",

@@ -772,15 +772,11 @@ TOPIC_SUMMARIZATION_MODEL: str | None = None
 TOPIC_SUMMARIZATION_API_BASE: str | None = None
 TOPIC_SUMMARIZATION_PARAMETERS: dict[str, Any] = {}
 
-# Pear pair-programming worker runtime. Prefer "codex-app-server" for direct
-# Codex app-server control with persistent threads, streaming events, and
-# same-turn steering. "codex-agents-mcp" uses the OpenAI Agents SDK with Codex
-# exposed as an MCP server. "codex-sdk" uses the official `openai-codex`
-# Python SDK when it is installed in the worker environment. "codex-exec" is a
-# non-interactive Codex CLI fallback that consumes the JSONL event stream.
-PEAR_WORKER_AGENT_RUNTIME: Literal[
-    "disabled", "codex-app-server", "codex-agents-mcp", "codex-exec", "codex-sdk"
-] = "disabled"
+# Pear pair-programming worker runtime. Use "codex-app-server" for direct Codex
+# app-server control with persistent threads, streaming events, and same-turn
+# steering. Ambient addressing is configured separately with
+# PEAR_ADDRESSING_ROUTER_RUNTIME.
+PEAR_WORKER_AGENT_RUNTIME: Literal["disabled", "codex-app-server"] = "disabled"
 PEAR_WORKER_CODEX_BIN = "codex"
 PEAR_WORKER_WORKDIR: str | None = None
 PEAR_TOPIC_WORKDIR_ROOT: str | None = None

@@ -2649,19 +2649,14 @@ def build_pear_config_payload(
         selected_bot_email = bot_email
     configured = bot_user_id is not None
     bot_selected = selected_bot_user_id is not None
-    supported_worker_runtime = worker_agent_runtime in {
-        "codex-app-server",
-        "codex-agents-mcp",
-        "codex-sdk",
-        "codex-exec",
-    }
+    supported_worker_runtime = worker_agent_runtime == "codex-app-server"
     if worker_runtime_available is None:
         worker_runtime_available = supported_worker_runtime
     if worker_runtime_detail is None:
         worker_runtime_detail = (
             worker_agent_runtime
             if supported_worker_runtime
-            else "Set PEAR_WORKER_AGENT_RUNTIME to codex-app-server, codex-agents-mcp, codex-sdk, or codex-exec."
+            else "Set PEAR_WORKER_AGENT_RUNTIME to codex-app-server."
         )
     if worker_runtime_auth_available is None:
         worker_runtime_auth_available = supported_worker_runtime
@@ -2672,19 +2667,11 @@ def build_pear_config_payload(
             else "Select a supported worker runtime before logging in."
         )
     if worker_runtime_login_method is None and supported_worker_runtime:
-        if worker_agent_runtime == "codex-agents-mcp":
-            worker_runtime_login_method = "codex-cli-and-openai-api-key"
-        else:
-            worker_runtime_login_method = "codex-cli"
+        worker_runtime_login_method = "codex-cli"
     if worker_runtime_login_target is None and supported_worker_runtime:
         worker_runtime_login_target = "worker-environment"
     if worker_runtime_login_instructions is None:
-        if worker_agent_runtime == "codex-agents-mcp":
-            worker_runtime_login_instructions = (
-                "Run Codex CLI login inside the worker environment and provide "
-                "OPENAI_API_KEY or OPENAI_ADMIN_KEY for the OpenAI Agents SDK."
-            )
-        elif worker_agent_runtime in {"codex-app-server", "codex-exec", "codex-sdk"}:
+        if worker_agent_runtime == "codex-app-server":
             worker_runtime_login_instructions = (
                 "Run Codex CLI login inside the worker environment used by Pear."
             )

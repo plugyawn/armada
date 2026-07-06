@@ -2066,7 +2066,7 @@ class PearCodexAgentsMcpToolRunner:
         except ImportError as error:
             raise PearAgentRuntimeError(
                 "The openai-agents package is not installed; install openai-agents "
-                "or use PEAR_WORKER_AGENT_RUNTIME='codex-sdk' or 'codex-exec'."
+                "or configure PEAR_WORKER_AGENT_RUNTIME='codex-app-server'."
             ) from error
 
         existing_thread_id = pear_codex_thread_id_from_active_session(active_session)
@@ -2262,8 +2262,8 @@ class PearCodexSdkToolRunner:
             else:
                 raise PearAgentRuntimeError(
                     "The installed openai-codex package cannot resume a Codex "
-                    "thread. Update openai-codex or use "
-                    "PEAR_WORKER_AGENT_RUNTIME='codex-agents-mcp' or 'codex-exec'."
+                    "thread. Update openai-codex or configure "
+                    "PEAR_WORKER_AGENT_RUNTIME='codex-app-server'."
                 )
             result = thread.run(prompt)
         else:
@@ -2286,7 +2286,7 @@ class PearCodexSdkToolRunner:
         except ImportError as error:
             raise PearAgentRuntimeError(
                 "The openai-codex package is not installed; install it or use "
-                "PEAR_WORKER_AGENT_RUNTIME='codex-agents-mcp' or 'codex-exec'."
+                "PEAR_WORKER_AGENT_RUNTIME='codex-app-server'."
             ) from error
         Codex = getattr(openai_codex, "Codex")
         Sandbox = getattr(openai_codex, "Sandbox")

@@ -2,7 +2,6 @@ import json
 import os
 import subprocess
 import time
-from importlib.util import find_spec
 from pathlib import Path
 from shutil import which
 from types import SimpleNamespace
@@ -107,62 +106,21 @@ PEAR_CANVAS_MAX_BYTES = 64 * 1024
 pear_model_catalog_cache: tuple[float, list[dict[str, object]]] | None = None
 
 
-def pear_python_module_available(module_name: str) -> bool:
-    try:
-        return find_spec(module_name) is not None
-    except (ImportError, ValueError):
-        return False
-
-
 def pear_worker_runtime_dependency_status(worker_agent_runtime: str) -> tuple[bool, str]:
     codex_bin = settings.PEAR_WORKER_CODEX_BIN
     codex_path = which(codex_bin)
-    if worker_agent_runtime == "codex-agents-mcp":
-        missing = []
-        if codex_path is None:
-            missing.append(f"{codex_bin} executable")
-        if not pear_python_module_available("agents") or not pear_python_module_available(
-            "agents.mcp"
-        ):
-            missing.append("openai-agents package")
-        if missing:
-            return (
-                False,
-                "Missing "
-                + " and ".join(missing)
-                + "; install openai-agents and make `codex mcp-server` available.",
-            )
-        return True, f"codex mcp-server via {codex_path}; openai-agents installed."
-    if worker_agent_runtime == "codex-sdk":
-        if not pear_python_module_available("openai_codex"):
-            return False, "Missing openai-codex package."
-        return True, "openai-codex package installed."
     if worker_agent_runtime == "codex-app-server":
         if codex_path is None:
             return False, f"Missing {codex_bin} executable."
         return True, f"codex app-server via {codex_path}."
-    if worker_agent_runtime == "codex-exec":
-        if codex_path is None:
-            return False, f"Missing {codex_bin} executable."
-        return True, f"codex exec via {codex_path}."
     return (
         False,
-        "Set PEAR_WORKER_AGENT_RUNTIME to codex-app-server, codex-agents-mcp, codex-sdk, or codex-exec.",
+        "Set PEAR_WORKER_AGENT_RUNTIME to codex-app-server.",
     )
 
 
 def pear_codex_login_command() -> str:
     return f"{settings.PEAR_WORKER_CODEX_BIN} login"
-
-
-def pear_codex_auth_file_available() -> bool:
-    codex_home = os.environ.get("CODEX_HOME")
-    auth_paths = (
-        [Path(codex_home) / "auth.json"]
-        if codex_home is not None
-        else [Path.home() / ".codex" / "auth.json"]
-    )
-    return any(path.exists() for path in auth_paths)
 
 
 def pear_codex_login_available(codex_bin: str) -> bool:
@@ -181,77 +139,19 @@ def pear_codex_login_available(codex_bin: str) -> bool:
     return completed.returncode == 0 and "Logged in" in output
 
 
-def pear_openai_agents_auth_available() -> bool:
-    return any(
-        os.environ.get(name)
-        for name in ("OPENAI_API_KEY", "OPENAI_ADMIN_KEY", "OPENAI_WORKLOAD_IDENTITY")
-    )
-
-
 def pear_worker_runtime_auth_status(
     worker_agent_runtime: str,
 ) -> tuple[bool, str, str | None, str | None, str | None, str | None]:
     codex_bin = settings.PEAR_WORKER_CODEX_BIN
     login_command = pear_codex_login_command()
     codex_logged_in = pear_codex_login_available(codex_bin)
-    codex_auth_file_available = pear_codex_auth_file_available()
     codex_login_instructions = "Run Codex CLI login inside the worker environment used by Pear."
-    agents_login_instructions = (
-        "Run Codex CLI login inside the worker environment and provide "
-        "OPENAI_API_KEY or OPENAI_ADMIN_KEY for the OpenAI Agents SDK."
-    )
 
-    if worker_agent_runtime == "codex-agents-mcp":
-        missing = []
-        if not pear_openai_agents_auth_available():
-            missing.append(
-                "OpenAI Agents SDK credentials; set OPENAI_API_KEY or OPENAI_ADMIN_KEY "
-                "in the worker environment"
-            )
-        if not codex_logged_in:
-            missing.append(f"Codex CLI login; run `{login_command}` inside the worker environment")
-        if missing:
-            return (
-                False,
-                "Missing " + " and ".join(missing) + ".",
-                "codex-cli-and-openai-api-key",
-                login_command,
-                "worker-environment",
-                agents_login_instructions,
-            )
-        return (
-            True,
-            "OpenAI Agents SDK credentials present; Codex CLI is logged in.",
-            "codex-cli-and-openai-api-key",
-            login_command,
-            "worker-environment",
-            agents_login_instructions,
-        )
-
-    if worker_agent_runtime in {"codex-app-server", "codex-exec"}:
+    if worker_agent_runtime == "codex-app-server":
         if codex_logged_in:
             return (
                 True,
                 "Codex CLI is logged in.",
-                "codex-cli",
-                login_command,
-                "worker-environment",
-                codex_login_instructions,
-            )
-        return (
-            False,
-            f"Run `{login_command}` inside the worker environment.",
-            "codex-cli",
-            login_command,
-            "worker-environment",
-            codex_login_instructions,
-        )
-
-    if worker_agent_runtime == "codex-sdk":
-        if codex_auth_file_available or codex_logged_in:
-            return (
-                True,
-                "Codex login auth is available to the worker.",
                 "codex-cli",
                 login_command,
                 "worker-environment",

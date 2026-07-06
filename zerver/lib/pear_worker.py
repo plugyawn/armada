@@ -40,12 +40,8 @@ from zerver.lib.pear import (
     parse_pear_artifacts,
 )
 from zerver.lib.pear_agent import (
-    PearAgentRuntime,
-    PearCodexAgentsMcpToolRunner,
     PearCodexAppServerToolRunner,
     PearCodexExecAddressingIntentClassifier,
-    PearCodexExecToolRunner,
-    PearCodexSdkToolRunner,
     PearDisabledAgentRunner,
     PearGeminiInteractionsAddressingIntentClassifier,
     PearProcessIsolation,
@@ -1997,13 +1993,6 @@ def build_pear_worker_runtime_from_settings(
             return PearWorkerRuntime(
                 PearDisabledAgentRunner(f"Pear Codex skills provisioning failed: {error}")
             )
-    if runtime == "codex-sdk" and process_isolation_override is not None:
-        return PearWorkerRuntime(
-            PearDisabledAgentRunner(
-                "Pear per-topic OS-user isolation cannot use the in-process Codex SDK "
-                "runtime. Use codex-app-server, codex-exec, or codex-agents-mcp."
-            )
-        )
     if runtime == "codex-app-server":
         return PearWorkerRuntime(
             PearCodexAppServerToolRunner(
@@ -2021,67 +2010,18 @@ def build_pear_worker_runtime_from_settings(
                 process_isolation=process_isolation_override,
             )
         )
-    if runtime == "codex-agents-mcp":
-        return PearWorkerRuntime(
-            PearCodexAgentsMcpToolRunner(
-                codex_bin=settings.PEAR_WORKER_CODEX_BIN,
-                workdir=workdir,
-                model=model,
-                sandbox=sandbox,
-                approval_policy=settings.PEAR_WORKER_APPROVAL_POLICY,
-                timeout_seconds=settings.PEAR_WORKER_TIMEOUT_SECONDS,
-                output_limit=settings.PEAR_WORKER_OUTPUT_LIMIT,
-                reasoning_effort=reasoning_effort,
-                process_isolation=process_isolation_override,
-            )
-        )
-    if runtime == "codex-exec":
-        return PearWorkerRuntime(
-            PearCodexExecToolRunner(
-                codex_bin=settings.PEAR_WORKER_CODEX_BIN,
-                workdir=workdir,
-                model=model,
-                sandbox=sandbox,
-                approval_policy=settings.PEAR_WORKER_APPROVAL_POLICY,
-                timeout_seconds=settings.PEAR_WORKER_TIMEOUT_SECONDS,
-                output_limit=settings.PEAR_WORKER_OUTPUT_LIMIT,
-                service_tier=settings.PEAR_WORKER_SERVICE_TIER,
-                fast_mode_enabled=settings.PEAR_WORKER_FAST_MODE,
-                reasoning_effort=reasoning_effort,
-                ephemeral=settings.PEAR_WORKER_CODEX_EPHEMERAL,
-                extra_args=settings.PEAR_WORKER_CODEX_EXTRA_ARGS,
-                process_isolation=process_isolation_override,
-            )
-        )
-    if runtime == "codex-sdk":
-        return PearWorkerRuntime(
-            PearCodexSdkToolRunner(
-                codex_bin=settings.PEAR_WORKER_CODEX_BIN,
-                workdir=workdir,
-                model=model,
-                sandbox=sandbox,
-                approval_policy=settings.PEAR_WORKER_APPROVAL_POLICY,
-                service_tier=settings.PEAR_WORKER_SERVICE_TIER,
-                fast_mode_enabled=settings.PEAR_WORKER_FAST_MODE,
-                reasoning_effort=reasoning_effort,
-                output_limit=settings.PEAR_WORKER_OUTPUT_LIMIT,
-                process_isolation=process_isolation_override,
-            )
-        )
     if runtime != "disabled":
-        invalid_runtime: PearAgentRuntime | str = runtime
         return PearWorkerRuntime(
             PearDisabledAgentRunner(
-                f"Pear worker agent runtime is unsupported: {invalid_runtime!r}."
+                f"Pear worker agent runtime is unsupported: {runtime!r}. "
+                "Use codex-app-server for worker turns; configure ambient "
+                "message routing with PEAR_ADDRESSING_ROUTER_RUNTIME."
             )
         )
     return PearWorkerRuntime(
         PearDisabledAgentRunner(
             "Pear worker agent runtime is disabled. Set PEAR_WORKER_AGENT_RUNTIME "
-            "to 'codex-app-server' for direct Codex app-server control, "
-            "'codex-agents-mcp' for the OpenAI Agents SDK + Codex MCP tool runtime, "
-            "'codex-sdk' for direct official Codex SDK control, or 'codex-exec' "
-            "for the non-interactive CLI fallback."
+            "to 'codex-app-server' for direct Codex app-server control."
         )
     )
 

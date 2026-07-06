@@ -648,26 +648,24 @@ class PearSessionDefaultsTest(TestCase):
                     "selected": True,
                 }
             ],
-            worker_agent_runtime="codex-agents-mcp",
+            worker_agent_runtime="codex-app-server",
             worker_runtime_available=True,
-            worker_runtime_detail="codex mcp-server via /usr/local/bin/codex; openai-agents installed.",
+            worker_runtime_detail="codex app-server via /usr/local/bin/codex.",
             worker_runtime_auth_available=True,
-            worker_runtime_auth_detail="OpenAI Agents SDK credentials present; Codex CLI is logged in.",
+            worker_runtime_auth_detail="Codex CLI is logged in.",
             worker_runtime_login_command="codex login",
         )
 
         self.assertTrue(config["configured"])
         self.assertTrue(config["enabled"])
-        self.assertEqual(config["worker_agent_runtime"], "codex-agents-mcp")
+        self.assertEqual(config["worker_agent_runtime"], "codex-app-server")
         self.assertTrue(config["worker_runtime_ready"])
         self.assertTrue(config["worker_runtime_auth_ready"])
-        self.assertEqual(
-            config["worker_runtime_login_method"], "codex-cli-and-openai-api-key"
-        )
+        self.assertEqual(config["worker_runtime_login_method"], "codex-cli")
         self.assertEqual(config["worker_runtime_login_command"], "codex login")
         self.assertEqual(config["worker_runtime_login_target"], "worker-environment")
         self.assertIn(
-            "OPENAI_API_KEY",
+            "worker environment",
             config["worker_runtime_login_instructions"],
         )
         self.assertEqual(config["bot_user_id"], 7)
@@ -689,11 +687,11 @@ class PearSessionDefaultsTest(TestCase):
         )
         self.assertEqual(
             config["setup_steps"][2]["detail"],
-            "codex mcp-server via /usr/local/bin/codex; openai-agents installed.",
+            "codex app-server via /usr/local/bin/codex.",
         )
         self.assertEqual(
             config["setup_steps"][3]["detail"],
-            "OpenAI Agents SDK credentials present; Codex CLI is logged in.",
+            "Codex CLI is logged in.",
         )
         self.assertTrue(all(step["complete"] for step in config["setup_steps"]))
 
@@ -704,9 +702,9 @@ class PearSessionDefaultsTest(TestCase):
             bot_user_id=7,
             bot_full_name="Pear",
             bot_email="pear-bot@example.com",
-            worker_agent_runtime="codex-agents-mcp",
+            worker_agent_runtime="codex-app-server",
             worker_runtime_available=False,
-            worker_runtime_detail="Missing openai-agents package.",
+            worker_runtime_detail="Missing codex executable.",
         )
 
         self.assertFalse(config["worker_runtime_ready"])
@@ -715,7 +713,7 @@ class PearSessionDefaultsTest(TestCase):
         self.assertFalse(config["setup_steps"][2]["complete"])
         self.assertEqual(
             config["setup_steps"][2]["detail"],
-            "Missing openai-agents package.",
+            "Missing codex executable.",
         )
         self.assertEqual(config["setup_steps"][3]["label"], "Worker runtime login")
         self.assertTrue(config["setup_steps"][3]["complete"])

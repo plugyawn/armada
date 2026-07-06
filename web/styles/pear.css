@@ -384,8 +384,8 @@
 
 #pear-panel.pear-workbench-popover-open .pear-workbench {
     gap: 0;
-    font-size: 13px;
-    line-height: 18px;
+    font-size: 12px;
+    line-height: 16px;
 }
 
 .pear-workbench-header {
@@ -493,9 +493,9 @@
 .pear-workbench-control-row {
     display: grid;
     min-width: 0;
-    min-height: 34px;
+    min-height: 31px;
     align-items: center;
-    column-gap: 10px;
+    column-gap: 8px;
     grid-template-columns: minmax(68px, auto) minmax(0, 1fr) auto;
     border: 0;
     border-bottom: 1px solid
@@ -515,9 +515,9 @@
 
 .pear-workbench-control-label {
     color: var(--color-text-sidebar-heading);
-    font-size: 11.5px;
+    font-size: 11px;
     font-weight: 600;
-    line-height: 16px;
+    line-height: 15px;
     opacity: var(--opacity-sidebar-heading);
 }
 
@@ -533,7 +533,7 @@
 .pear-workbench-control-value {
     justify-self: end;
     color: var(--color-text-default);
-    font-size: 12px;
+    font-size: 11.5px;
     font-weight: var(--font-weight-sidebar-row);
     line-height: 16px;
 }
@@ -544,17 +544,17 @@
 
 .pear-workbench-status-dirty {
     border: 1px solid
-        color-mix(in srgb, var(--color-text-warning-text-action-button) 28%, transparent);
+        color-mix(in srgb, var(--color-text-warning-text-action-button) 22%, transparent);
     border-radius: 4px;
     background: color-mix(
         in srgb,
-        var(--color-text-warning-text-action-button) 12%,
+        var(--color-text-warning-text-action-button) 8%,
         transparent
     );
-    color: color-mix(in srgb, var(--color-text-warning-text-action-button) 72%, var(--color-text-default));
-    font-size: 11px;
-    line-height: 16px;
-    padding: 0 5px;
+    color: color-mix(in srgb, var(--color-text-warning-text-action-button) 56%, var(--color-text-default));
+    font-size: 10.5px;
+    line-height: 15px;
+    padding: 0 4px;
 }
 
 .pear-workbench-ref {
@@ -571,11 +571,11 @@
     background: color-mix(in srgb, var(--color-background-popover-menu) 84%, var(--color-background) 16%);
     color: var(--color-text-default);
     font: inherit;
-    font-size: 12px;
+    font-size: 11.5px;
     font-weight: var(--font-weight-sidebar-row);
     line-height: 16px;
     outline: none;
-    padding: 3px 7px;
+    padding: 2px 7px;
 }
 
 .pear-workbench-select:focus-visible,
@@ -603,7 +603,7 @@
     display: flex;
     justify-content: space-between;
     color: var(--color-text-sidebar-heading);
-    font-size: 9.5px;
+    font-size: 9px;
     line-height: 11px;
     opacity: 0.72;
     pointer-events: none;

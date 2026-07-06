@@ -669,7 +669,7 @@ export function initialize(): void {
     // so this works across Pear panel rerenders.
     popover_menus.register_popover_menu(runtime_menu_selector, {
         theme: "popover-menu",
-        placement: "left-start",
+        placement: "bottom-start",
         // The strategy: "fixed"; and eventlisteners modifier option
         // ensure that the popover does not modify its position
         // or disappear when user zooms the page.

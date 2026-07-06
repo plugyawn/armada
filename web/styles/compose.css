@@ -72,6 +72,7 @@
         }
 
         #left_bar_compose_reply_button_big,
+        #closed_compose_pear_button,
         #new_conversation_button {
             /* Keep the new message button sized to match
                adjacent buttons. */
@@ -116,6 +117,25 @@
             color: var(--color-compose-embedded-button-text-color);
 
             &:hover {
+                background-color: var(
+                    --color-compose-embedded-button-background-hover
+                );
+                color: var(--color-compose-embedded-button-text-color-hover);
+            }
+        }
+
+        #closed_compose_pear_button {
+            padding: 0 10px;
+            margin: 1px;
+            flex-shrink: 0;
+            align-self: stretch;
+            font-weight: 600;
+            color: var(--color-compose-embedded-button-text-color);
+            border-left: 1px solid
+                var(--color-compose-collapsed-reply-button-area-border);
+
+            &:hover,
+            &.active {
                 background-color: var(
                     --color-compose-embedded-button-background-hover
                 );
@@ -1676,6 +1696,25 @@ textarea.new_message_textarea {
         }
     }
 
+    .compose_pear_toolbar_button {
+        width: auto;
+        min-width: 3.25em;
+        padding: 0 0.55em;
+        border: 0;
+        border-radius: 4px;
+        font-size: 0.9em;
+        font-family: inherit;
+        font-weight: 650;
+        background: none;
+
+        &.active {
+            opacity: 1;
+            background-color: var(
+                --color-compose-control-button-background-hover
+            );
+        }
+    }
+
     .compose_control_button_container.disabled-on-hover:hover {
         opacity: 0.3;
 
@@ -1706,6 +1745,10 @@ textarea.new_message_textarea {
             display: none;
         }
     }
+}
+
+#compose.pear-compose-active #message-content-container {
+    border-color: var(--color-message-content-container-border-focus);
 }
 
 .message-send-controls {

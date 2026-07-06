@@ -6,6 +6,10 @@
     <div class="compose_control_button_container compose_button_tooltip" data-tooltip-template-id="exit-preview-tooltip" data-tippy-maxWidth="none">
         <a role="button" class="undo_markdown_preview compose_control_button zulip-icon zulip-icon-compose-edit" aria-label="{{t 'Exit preview mode' }}" tabindex=0 style="display:none;"></a>
     </div>
+    <div class="compose_control_button_container preview_mode_disabled disable-on-invalid-recipient compose_button_tooltip" data-tippy-content="{{t 'Ask Pear in this topic' }}">
+        <button type="button" class="compose_control_button compose_pear_toolbar_button compose-pear-button" aria-label="{{t 'Ask Pear in this topic' }}" aria-pressed="false" tabindex=0>{{t 'Pear' }}</button>
+    </div>
+    <div class="divider"></div>
     {{#if file_upload_enabled }}
     <div class="compose_control_button_container preview_mode_disabled disable-on-invalid-recipient compose_button_tooltip" data-tippy-content="{{t 'Upload files' }}">
         <a role="button" class="compose_control_button compose_upload_file zulip-icon zulip-icon-attachment" aria-label="{{t 'Upload files' }}" tabindex=0></a>

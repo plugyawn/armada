@@ -100,6 +100,7 @@ def get_pear_followup_service_bot_event(
     topic_name: str | None,
     content: str,
     mentioned_user_ids: set[int],
+    pear_followup: bool = False,
 ) -> dict[str, Any] | None:
     if (
         not settings.EMBEDDED_BOTS_ENABLED
@@ -119,6 +120,18 @@ def get_pear_followup_service_bot_event(
         parse_pear_checklist,
     )
 
+    selected_pear_bot_user_id = get_selected_pear_bot_user_id_for_realm(realm_id)
+    if selected_pear_bot_user_id is None:
+        return None
+    if selected_pear_bot_user_id in mentioned_user_ids:
+        return None
+
+    if pear_followup:
+        return {
+            "trigger": PEAR_FOLLOWUP_TRIGGER,
+            "user_profile_id": selected_pear_bot_user_id,
+        }
+
     has_plain_pear_alias = is_pear_plain_mention_alias_message(content)
     if (
         (is_pear_request_message(content) and not has_plain_pear_alias)
@@ -126,12 +139,6 @@ def get_pear_followup_service_bot_event(
         or parse_pear_checklist(content)
         or parse_pear_artifacts(content, message_id=0)
     ):
-        return None
-
-    selected_pear_bot_user_id = get_selected_pear_bot_user_id_for_realm(realm_id)
-    if selected_pear_bot_user_id is None:
-        return None
-    if selected_pear_bot_user_id in mentioned_user_ids:
         return None
 
     if has_plain_pear_alias:

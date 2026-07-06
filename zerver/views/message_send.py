@@ -113,6 +113,7 @@ def send_message_backend(
     local_id: str | None = None,
     message_content: Annotated[str, ApiParamConfig("content")],
     queue_id: str | None = None,
+    pear_followup: Json[bool] | None = None,
     read_by_sender: Json[bool] | None = None,
     req_sender: Annotated[
         str | None, ApiParamConfig("sender", documentation_status=DOCUMENTATION_PENDING)
@@ -235,6 +236,7 @@ def send_message_backend(
         sender_queue_id=queue_id,
         widget_content=widget_content,
         read_by_sender=read_by_sender,
+        pear_followup=bool(pear_followup),
     )
     data["id"] = sent_message_result.message_id
     if sent_message_result.automatic_new_visibility_policy:

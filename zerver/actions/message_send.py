@@ -589,6 +589,7 @@ def get_service_bot_events(
     stream_name: str | None = None,
     topic_name: str | None = None,
     content: str = "",
+    pear_followup: bool = False,
 ) -> dict[str, list[dict[str, Any]]]:
     event_dict: dict[str, list[dict[str, Any]]] = defaultdict(list)
 
@@ -655,6 +656,7 @@ def get_service_bot_events(
         topic_name=topic_name,
         content=content,
         mentioned_user_ids=mentioned_user_ids,
+        pear_followup=pear_followup,
     )
     if pear_followup_event is not None:
         event_dict["embedded_bots"].append(pear_followup_event)
@@ -675,6 +677,7 @@ def build_message_send_dict(
     recipients_for_user_creation_events: dict[UserProfile, set[int]] | None = None,
     acting_user: UserProfile | None = None,
     no_previews: bool = False,
+    pear_followup: bool = False,
 ) -> SendMessageRequest:
     """Returns a dictionary that can be passed into do_send_messages.  In
     production, this is always called by check_message, but some
@@ -807,6 +810,7 @@ def build_message_send_dict(
         disable_external_notifications=disable_external_notifications,
         topic_participant_user_ids=topic_participant_user_ids,
         recipients_for_user_creation_events=recipients_for_user_creation_events,
+        pear_followup=pear_followup,
     )
 
     return message_send_dict
@@ -1042,6 +1046,7 @@ def do_send_messages(
             if send_request.message.is_channel_message
             else None,
             content=send_request.message.content,
+            pear_followup=send_request.pear_followup,
         )
 
     bulk_insert_ums(ums)
@@ -1503,6 +1508,7 @@ def check_send_message(
     *,
     skip_stream_access_check: bool = False,
     read_by_sender: bool = False,
+    pear_followup: bool = False,
 ) -> SentMessageResult:
     addressee = Addressee.legacy_build(sender, recipient_type_name, message_to, topic_name)
     message_request = check_message(
@@ -1518,6 +1524,7 @@ def check_send_message(
         sender_queue_id,
         widget_content,
         skip_stream_access_check=skip_stream_access_check,
+        pear_followup=pear_followup,
     )
     return do_send_messages(
         [message_request],
@@ -1782,6 +1789,7 @@ def check_message(
     archived_channel_notice: bool = False,
     no_previews: bool = False,
     acting_user: UserProfile | None = None,
+    pear_followup: bool = False,
 ) -> SendMessageRequest:
     """See
     https://zulip.readthedocs.io/en/latest/subsystems/sending-messages.html
@@ -1942,6 +1950,7 @@ def check_message(
         recipients_for_user_creation_events=recipients_for_user_creation_events,
         acting_user=acting_user,
         no_previews=no_previews,
+        pear_followup=pear_followup,
     )
 
     if (

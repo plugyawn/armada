@@ -14,6 +14,7 @@ import {compose_call_session_manager} from "./compose_call_session.ts";
 import * as compose_call_ui from "./compose_call_ui.ts";
 import * as compose_fade from "./compose_fade.ts";
 import * as compose_notifications from "./compose_notifications.ts";
+import * as compose_pear from "./compose_pear.ts";
 import * as compose_recipient from "./compose_recipient.ts";
 import * as compose_send_menu_popover from "./compose_send_menu_popover.ts";
 import * as compose_state from "./compose_state.ts";
@@ -56,8 +57,10 @@ function setup_compose_actions_hooks(): void {
     compose_actions.register_compose_box_clear_hook(compose.clear_invites);
     compose_actions.register_compose_box_clear_hook(compose.clear_private_stream_alert);
     compose_actions.register_compose_box_clear_hook(compose.clear_preview_area);
+    compose_actions.register_compose_box_clear_hook(compose_pear.clear);
 
     compose_actions.register_compose_cancel_hook(abort_xhr);
+    compose_actions.register_compose_cancel_hook(compose_pear.clear);
     compose_actions.register_compose_cancel_hook(() => {
         compose_call_session_manager.abandon_session("");
     });
@@ -455,6 +458,12 @@ export function initialize(): void {
         }
 
         compose_call_ui.generate_and_insert_audio_or_video_call_link($(this), true);
+    });
+
+    $("body").on("click", ".compose-pear-button", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        compose_pear.toggle();
     });
 
     $("body").on("click", ".time_pick", function (this: HTMLElement, e) {

@@ -65,7 +65,6 @@ from zerver.lib.pear_worker import (
     pear_worker_runtime_isolation_error,
     pear_worker_sandbox_for_topic,
     pear_worker_workdir_for_topic,
-    sync_pear_topic_workdir_overlay,
 )
 from zerver.lib.test_classes import ZulipTestCase
 from zerver.models import Message, Subscription, UserProfile
@@ -1915,34 +1914,6 @@ class PearSessionEndpointTest(ZulipTestCase):
                 )
 
             self.assertFalse((Path(context.workdir) / "zerver/lib/pear_worker.py").exists())
-
-    def test_topic_workdir_overlay_copies_only_pear_owned_files(self) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
-            base_workdir = Path(temp_dir) / "base"
-            topic_workdir = Path(temp_dir) / "topic"
-            base_workdir.mkdir()
-            topic_workdir.mkdir()
-            subprocess.run(["git", "init", "--quiet", str(base_workdir)], check=True, timeout=10)
-
-            pear_file = base_workdir / "zerver/lib/pear.py"
-            pear_file.parent.mkdir(parents=True)
-            pear_file.write_text("pear source\n", encoding="utf-8")
-            base_worker_file = base_workdir / "zerver/lib/pear_worker.py"
-            base_worker_file.write_text("base worker\n", encoding="utf-8")
-            (base_workdir / "pyproject.toml").write_text("megatron-core\n", encoding="utf-8")
-
-            topic_worker_file = topic_workdir / "zerver/lib/pear_worker.py"
-            topic_worker_file.parent.mkdir(parents=True)
-            topic_worker_file.write_text("topic worker\n", encoding="utf-8")
-
-            sync_pear_topic_workdir_overlay(base_workdir, topic_workdir)
-
-            self.assertEqual(
-                (topic_workdir / "zerver/lib/pear.py").read_text(encoding="utf-8"),
-                "pear source\n",
-            )
-            self.assertEqual(topic_worker_file.read_text(encoding="utf-8"), "topic worker\n")
-            self.assertFalse((topic_workdir / "pyproject.toml").exists())
 
     def test_channel_creation_can_pin_pear_repository(self) -> None:
         owner = self.example_user("hamlet")

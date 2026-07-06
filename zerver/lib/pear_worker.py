@@ -87,30 +87,6 @@ PEAR_RUN_LEGAL_TRANSITIONS: dict[PearWorkerRunStatus, frozenset[PearWorkerRunSta
 }
 PEAR_REPOSITORY_CLONE_TIMEOUT_SECONDS = 180
 PEAR_GIT_STATUS_DELTA_TTL_SECONDS = 3
-PEAR_TOPIC_WORKDIR_OVERLAY_PATHS = frozenset(
-    (
-        "tools/pear_deploy/README.md",
-        "tools/pear_deploy/bootstrap_remote.sh",
-        "tools/pear_deploy/pear_do.py",
-        "tools/pear_deploy/reset_remote_dev_data.sh",
-        "tools/pear_deploy/verify_remote.sh",
-        "web/src/pear_panel.ts",
-        "web/styles/pear.css",
-        "web/templates/pear_panel.hbs",
-        "web/templates/settings/pear_config_admin.hbs",
-        "zerver/lib/pear.py",
-        "zerver/lib/pear_agent.py",
-        "zerver/lib/pear_worker.py",
-        "zerver/migrations/0805_pearworkerrun.py",
-        "zerver/migrations/0806_pear_worker_run_event_state.py",
-        "zerver/migrations/0807_peartopiccontext.py",
-        "zerver/migrations/0808_peartopiccontext_reasoning_effort.py",
-        "zerver/tests/test_pear.py",
-        "zerver/tests/test_pear_endpoint.py",
-        "zerver/views/pear.py",
-        "zerver/worker/pear_worker.py",
-    )
-)
 pear_git_status_delta_cache: dict[
     tuple[str, str, str],
     tuple[float, dict[str, object]],
@@ -1689,57 +1665,6 @@ def maybe_refactor_pear_stream_contexts_on_rename(
         f"for {context_count} context layer(s). Existing worktree paths were kept unchanged; "
         "check the sidebar before starting Codex work."
     )
-
-
-def pear_worktree_overlay_path_allowed(relative_path: str) -> bool:
-    path = Path(relative_path)
-    if path.is_absolute() or ".." in path.parts:
-        return False
-    return relative_path in PEAR_TOPIC_WORKDIR_OVERLAY_PATHS
-
-
-def pear_base_dirty_paths(base_workdir: Path) -> list[str]:
-    try:
-        completed = subprocess.run(
-            ["git", "-C", str(base_workdir), "status", "--porcelain=v1", "-z", "--untracked-files=all"],
-            check=False,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
-            text=True,
-            timeout=10,
-        )
-    except (FileNotFoundError, OSError, subprocess.TimeoutExpired):
-        return []
-    if completed.returncode != 0:
-        return []
-
-    paths: list[str] = []
-    records = completed.stdout.split("\0")
-    index = 0
-    while index < len(records):
-        record = records[index]
-        index += 1
-        if not record or len(record) < 4:
-            continue
-        status = record[:2]
-        relative_path = record[3:]
-        if "R" in status or "C" in status:
-            index += 1
-            continue
-        paths.append(relative_path)
-    return paths
-
-
-def sync_pear_topic_workdir_overlay(base_workdir: Path, topic_workdir: Path) -> None:
-    for relative_path in pear_base_dirty_paths(base_workdir):
-        if not pear_worktree_overlay_path_allowed(relative_path):
-            continue
-        source = base_workdir / relative_path
-        destination = topic_workdir / relative_path
-        if not source.is_file() or destination.exists():
-            continue
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(source, destination)
 
 
 def pear_git_output(

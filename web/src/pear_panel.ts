@@ -975,12 +975,6 @@ function render_topic_header_controls(options: {
                 class: "pear-runtime-menu-label",
                 text: runtime_label,
             }),
-            $("<span>", {
-                class: `pear-topic-header-effort-meter pear-topic-header-effort-${reasoning_effort_meter_class(
-                    topic_context.reasoning_effort,
-                )}`,
-                "aria-hidden": "true",
-            }),
         );
         const $work_control = $("<button>", {
             type: "button",

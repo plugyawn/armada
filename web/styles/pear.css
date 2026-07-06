@@ -407,12 +407,16 @@
 }
 
 #pear-panel.pear-workbench-popover-open .pear-workbench-header {
-    gap: 10px;
+    gap: 9px;
     padding: 12px 14px 0;
 }
 
 #pear-panel.pear-workbench-popover-open .pear-workbench-title-row {
     grid-template-columns: auto minmax(0, auto) minmax(0, 1fr) auto;
+    margin: 0 -14px;
+    padding: 9px 14px 8px;
+    border-top: 1px solid
+        color-mix(in srgb, var(--color-border-popover-menu) 46%, transparent);
 }
 
 #pear-panel.pear-workbench-popover-open .pear-workbench-meta {
@@ -428,7 +432,7 @@
     margin: 0 -14px;
     padding: 0 14px;
     border-top: 1px solid
-        color-mix(in srgb, var(--color-border-popover-menu) 52%, transparent);
+        color-mix(in srgb, var(--color-border-popover-menu) 46%, transparent);
 }
 
 #pear-panel.pear-workbench-popover-open .pear-workbench-tabs {
@@ -484,9 +488,14 @@
     grid-template-columns: minmax(70px, auto) minmax(0, 1fr) auto;
     gap: 10px;
     align-items: center;
-    border: 1px solid var(--color-border-popover-menu);
+    border: 1px solid
+        color-mix(in srgb, var(--color-border-popover-menu) 72%, transparent);
     border-radius: 5px;
-    background: color-mix(in srgb, var(--color-background-popover-menu) 76%, transparent);
+    background: color-mix(
+        in srgb,
+        var(--color-background-popover-menu) 84%,
+        var(--color-background) 16%
+    );
     color: var(--color-text-default);
     font-size: 1em;
     line-height: 1.25;
@@ -525,9 +534,14 @@
     align-items: center;
     gap: 9px;
     grid-template-columns: minmax(70px, auto) minmax(0, 1fr) auto;
-    border: 1px solid var(--color-border-popover-menu);
+    border: 1px solid
+        color-mix(in srgb, var(--color-border-popover-menu) 72%, transparent);
     border-radius: 5px;
-    background: color-mix(in srgb, var(--color-background-popover-menu) 76%, transparent);
+    background: color-mix(
+        in srgb,
+        var(--color-background-popover-menu) 84%,
+        var(--color-background) 16%
+    );
     padding: 0 10px;
 }
 
@@ -671,7 +685,7 @@
     justify-self: end;
     flex: 0 0 auto;
     color: var(--color-text-item);
-    opacity: 0.32;
+    opacity: 0.45;
 }
 
 .pear-workbench-close:hover,

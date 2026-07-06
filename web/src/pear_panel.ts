@@ -1159,7 +1159,7 @@ function position_workbench_popover(): void {
     const compact_viewport = viewport_width < 760;
     const width = compact_viewport
         ? Math.max(280, viewport_width - margin * 2)
-        : Math.min(560, Math.max(420, viewport_width - margin * 2));
+        : Math.min(500, Math.max(420, viewport_width - margin * 2));
     const anchor_rect = anchor?.getBoundingClientRect();
     const anchor_center =
         anchor_rect === undefined ? viewport_width / 2 : anchor_rect.left + anchor_rect.width / 2;

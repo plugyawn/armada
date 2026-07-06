@@ -355,7 +355,15 @@ class TestServiceBotBasics(ZulipTestCase):
             content="@**Pear** can you check the current UI state?",
             pear_followup=True,
         )
-        self.assertEqual(event_dict["embedded_bots"], [])
+        self.assertEqual(
+            event_dict["embedded_bots"],
+            [
+                {
+                    "trigger": "mention",
+                    "user_profile_id": pear_bot.id,
+                },
+            ],
+        )
 
     @override_settings(
         EMBEDDED_BOTS_ENABLED=True,

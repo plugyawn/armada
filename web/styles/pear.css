@@ -384,8 +384,8 @@
 
 #pear-panel.pear-workbench-popover-open .pear-workbench {
     gap: 0;
-    font-size: 0.9286em;
-    line-height: 1.35;
+    font-size: 13px;
+    line-height: 18px;
 }
 
 .pear-workbench-header {
@@ -477,82 +477,38 @@
 .pear-workbench-control-grid {
     display: grid;
     min-width: 0;
-    gap: 8px;
+    gap: 6px;
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
 }
 
-#pear-panel .pear-runtime-menu-trigger.pear-workbench-runtime-trigger {
-    display: grid;
-    min-height: 34px;
+.pear-workbench-model-row,
+.pear-workbench-thinking-row {
     grid-column: 1 / -1;
-    grid-template-columns: minmax(70px, auto) minmax(0, 1fr) auto;
-    gap: 10px;
-    align-items: center;
-    border: 1px solid
-        color-mix(in srgb, var(--color-border-popover-menu) 72%, transparent);
-    border-radius: 5px;
-    background: color-mix(
-        in srgb,
-        var(--color-background-popover-menu) 84%,
-        var(--color-background) 16%
-    );
-    color: var(--color-text-default);
-    font-size: 1em;
-    line-height: 1.25;
-    padding: 0 10px;
-}
-
-#pear-panel .pear-runtime-menu-trigger.pear-workbench-runtime-trigger:hover,
-#pear-panel .pear-runtime-menu-trigger.pear-workbench-runtime-trigger:focus-visible {
-    background: var(--color-background-hover-popover-menu);
-    box-shadow: inset 0 0 0 1px var(--color-outline-focus);
-    color: var(--color-text-default);
-    outline: none;
-}
-
-#pear-panel .pear-runtime-panel-trigger.pear-workbench-runtime-trigger .pear-runtime-menu-label {
-    display: block;
-    min-width: 0;
-    overflow: hidden;
-    justify-self: end;
-    color: var(--color-text-default);
-    font-size: 1.08em;
-    font-weight: 600;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-#pear-panel .pear-runtime-panel-trigger.pear-workbench-runtime-trigger .pear-runtime-menu-glyph {
-    color: var(--color-text-item);
-    transform: rotate(90deg);
 }
 
 .pear-workbench-control-row {
     display: grid;
     min-width: 0;
-    min-height: 34px;
+    min-height: 30px;
     align-items: center;
-    gap: 9px;
-    grid-template-columns: minmax(70px, auto) minmax(0, 1fr) auto;
+    gap: 8px;
+    grid-template-columns: minmax(68px, auto) minmax(0, 1fr) auto;
     border: 1px solid
-        color-mix(in srgb, var(--color-border-popover-menu) 72%, transparent);
-    border-radius: 5px;
+        color-mix(in srgb, var(--color-border-popover-menu) 58%, transparent);
+    border-radius: 4px;
     background: color-mix(
         in srgb,
-        var(--color-background-popover-menu) 84%,
-        var(--color-background) 16%
+        var(--color-background-popover-menu) 92%,
+        var(--color-background) 8%
     );
-    padding: 0 10px;
-}
-
-.pear-workbench-thinking-row {
-    grid-column: 1 / -1;
+    padding: 0 8px;
 }
 
 .pear-workbench-control-label {
     color: var(--color-text-sidebar-heading);
-    font-size: 0.9em;
+    font-size: 12px;
     font-weight: 600;
+    line-height: 16px;
     opacity: var(--opacity-sidebar-heading);
 }
 
@@ -568,7 +524,9 @@
 .pear-workbench-control-value {
     justify-self: end;
     color: var(--color-text-default);
-    font-weight: 600;
+    font-size: 12px;
+    font-weight: var(--font-weight-sidebar-row);
+    line-height: 16px;
 }
 
 .pear-workbench-status-clean {
@@ -584,72 +542,79 @@
     opacity: var(--opacity-sidebar-heading);
 }
 
-.pear-workbench-thinking-meter {
-    --pear-workbench-thinking-fill: 50%;
+.pear-workbench-select {
+    min-width: 0;
+    width: 100%;
+    border: 0;
+    background: transparent;
+    color: var(--color-text-default);
+    font: inherit;
+    font-size: 12px;
+    font-weight: var(--font-weight-sidebar-row);
+    line-height: 16px;
+    outline: none;
+}
 
-    position: relative;
-    display: block;
+.pear-workbench-select:focus-visible,
+.pear-workbench-effort-range:focus-visible {
+    outline: 1px solid var(--color-outline-focus);
+    outline-offset: 2px;
+}
+
+.pear-workbench-effort-range {
+    appearance: none;
+    width: 100%;
     min-width: 90px;
     height: 16px;
+    background: transparent;
+    cursor: pointer;
 }
 
-.pear-workbench-thinking-meter::before {
-    position: absolute;
-    top: 7px;
-    right: 0;
-    left: 0;
+.pear-workbench-effort-range::-webkit-slider-runnable-track {
     height: 3px;
     border-radius: 999px;
     background: color-mix(
         in srgb,
-        var(--color-border-sidebar-subheader) 70%,
+        var(--color-border-sidebar-subheader) 72%,
         transparent
     );
-    content: "";
 }
 
-.pear-workbench-thinking-meter::after {
-    position: absolute;
-    top: 7px;
-    left: 0;
-    width: var(--pear-workbench-thinking-fill);
+.pear-workbench-effort-range::-moz-range-track {
     height: 3px;
     border-radius: 999px;
     background: color-mix(
         in srgb,
-        var(--color-text-success-text-action-button) 65%,
+        var(--color-border-sidebar-subheader) 72%,
         transparent
     );
-    content: "";
 }
 
-.pear-workbench-thinking-meter span {
-    position: absolute;
-    z-index: 1;
-    top: 3px;
-    left: var(--pear-workbench-thinking-fill);
+.pear-workbench-effort-range::-webkit-slider-thumb {
+    appearance: none;
     width: 0;
     height: 0;
-    border-right: 5px solid transparent;
-    border-bottom: 9px solid var(--color-text-default);
-    border-left: 5px solid transparent;
-    transform: translateX(-5px);
+    margin-top: -5px;
+    border-right: 6px solid transparent;
+    border-bottom: 10px solid var(--color-text-default);
+    border-left: 6px solid transparent;
+    background: transparent;
 }
 
-.pear-workbench-thinking-low {
-    --pear-workbench-thinking-fill: 10%;
+.pear-workbench-effort-range::-moz-range-thumb {
+    width: 0;
+    height: 0;
+    border: 0;
+    border-right: 6px solid transparent;
+    border-bottom: 10px solid var(--color-text-default);
+    border-left: 6px solid transparent;
+    border-radius: 0;
+    background: transparent;
 }
 
-.pear-workbench-thinking-medium {
-    --pear-workbench-thinking-fill: 42%;
-}
-
-.pear-workbench-thinking-high {
-    --pear-workbench-thinking-fill: 72%;
-}
-
-.pear-workbench-thinking-xhigh {
-    --pear-workbench-thinking-fill: 100%;
+.pear-workbench-effort-range:disabled {
+    cursor: default;
+    opacity: 0.5;
 }
 
 .pear-workbench-meta {

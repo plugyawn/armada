@@ -66,10 +66,7 @@ run_test("panel_runtime_label_for_testing", () => {
         pear_panel.panel_runtime_label_for_testing({model: "gpt-5.5", reasoning_effort: "xhigh"}),
         "gpt-5.5 / xh",
     );
-    assert.equal(
-        pear_panel.panel_runtime_label_for_testing({model: "codex-spark"}),
-        "codex-spark",
-    );
+    assert.equal(pear_panel.panel_runtime_label_for_testing({model: "codex-spark"}), "codex-spark");
 });
 
 run_test("template renders active status as visible text glyph phrase", () => {
@@ -567,7 +564,106 @@ run_test("topic_context_after_refresh_for_testing", () => {
             response_topic_context: null,
             last_topic_context: cached_context,
         }),
+        cached_context,
+    );
+    assert.equal(
+        pear_panel.topic_context_after_refresh_for_testing({
+            include_context: true,
+            live: false,
+            response_topic_context: null,
+            last_topic_context: null,
+            cached_topic_context: cached_context,
+        }),
+        cached_context,
+    );
+    assert.equal(
+        pear_panel.topic_context_after_refresh_for_testing({
+            include_context: true,
+            live: false,
+            response_topic_context: null,
+            last_topic_context: null,
+        }),
         null,
+    );
+});
+
+run_test("topic_context_for_display_for_testing", () => {
+    const current_context = {stream: "devel", topic: "pear", model: "gpt-5.5"};
+    const cached_context = {stream: "devel", topic: "pear", model: "gpt-5.5-mini"};
+    const other_context = {stream: "devel", topic: "other", model: "gpt-5.5"};
+
+    assert.equal(
+        pear_panel.topic_context_for_display_for_testing({
+            stream: "devel",
+            topic: "pear",
+            render_topic_context: current_context,
+            cached_topic_context: cached_context,
+        }),
+        current_context,
+    );
+    assert.equal(
+        pear_panel.topic_context_for_display_for_testing({
+            stream: "devel",
+            topic: "pear",
+            render_topic_context: other_context,
+            cached_topic_context: cached_context,
+        }),
+        cached_context,
+    );
+    assert.equal(
+        pear_panel.topic_context_for_display_for_testing({
+            stream: "devel",
+            topic: "pear",
+            render_topic_context: null,
+            cached_topic_context: undefined,
+        }),
+        undefined,
+    );
+});
+
+run_test("optimistic_topic_context_for_testing", () => {
+    const topic_context = {
+        stream: "devel",
+        topic: "pear",
+        model: "gpt-5.5",
+        reasoning_effort: "xhigh",
+        model_catalog: [
+            {
+                slug: "gpt-5.3-codex-spark",
+                display_name: "GPT-5.3 Codex Spark",
+                default_reasoning_level: "medium",
+                supported_reasoning_levels: [
+                    {effort: "low", label: "Low"},
+                    {effort: "medium", label: "Medium"},
+                ],
+            },
+        ],
+        reasoning_efforts: [
+            {effort: "low", label: "Low"},
+            {effort: "medium", label: "Medium"},
+            {effort: "high", label: "High"},
+            {effort: "xhigh", label: "XHigh"},
+        ],
+    };
+
+    assert.deepEqual(
+        pear_panel.optimistic_topic_context_for_testing(topic_context, {
+            model: "gpt-5.3-codex-spark",
+        }),
+        {
+            ...topic_context,
+            model: "gpt-5.3-codex-spark",
+            reasoning_effort: "medium",
+        },
+    );
+    assert.deepEqual(
+        pear_panel.optimistic_topic_context_for_testing(topic_context, {
+            reasoning_effort: "low",
+        }),
+        {
+            ...topic_context,
+            reasoning_effort: "low",
+        },
     );
 });
 

@@ -1034,10 +1034,14 @@ function position_workbench_popover(): void {
     const anchor_rect = anchor?.getBoundingClientRect();
     const anchor_center =
         anchor_rect === undefined ? viewport_width / 2 : anchor_rect.left + anchor_rect.width / 2;
+    const header_rect = anchor
+        ?.closest<HTMLElement>(".message_header_stream")
+        ?.getBoundingClientRect();
+    const min_left = compact_viewport ? margin : Math.max(margin, header_rect?.left ?? margin);
     const left = compact_viewport
         ? margin
         : Math.min(
-              Math.max((anchor_rect?.right ?? anchor_center + width / 2) - width, margin),
+              Math.max(anchor_center - width / 2, min_left),
               viewport_width - width - margin,
           );
     const top = Math.min(

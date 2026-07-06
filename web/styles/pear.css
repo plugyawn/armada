@@ -407,14 +407,14 @@
 }
 
 #pear-panel.pear-workbench-popover-open .pear-workbench-header {
-    gap: 9px;
-    padding: 12px 14px 0;
+    gap: 0;
+    padding: 10px 14px 0;
 }
 
 #pear-panel.pear-workbench-popover-open .pear-workbench-title-row {
     grid-template-columns: auto minmax(0, auto) minmax(0, 1fr) auto;
     margin: 0 -14px;
-    padding: 9px 14px 8px;
+    padding: 8px 14px;
     border-top: 1px solid
         color-mix(in srgb, var(--color-border-popover-menu) 46%, transparent);
 }
@@ -442,13 +442,13 @@
 #pear-panel.pear-workbench-popover-open .pear-workbench-tab {
     font-size: 0.95em;
     line-height: 1.4;
-    padding: 8px 0 9px;
+    padding: 7px 0 8px;
 }
 
 #pear-panel.pear-workbench-popover-open .pear-workbench-body {
-    max-height: min(320px, calc(var(--pear-workbench-popover-max-height) - 228px));
+    max-height: min(300px, calc(var(--pear-workbench-popover-max-height) - 220px));
     overflow: auto;
-    padding: 10px 14px 12px;
+    padding: 9px 14px 10px;
 }
 
 .pear-workbench-title-row {
@@ -477,8 +477,12 @@
 .pear-workbench-control-grid {
     display: grid;
     min-width: 0;
-    gap: 6px;
+    gap: 0;
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    border: 1px solid
+        color-mix(in srgb, var(--color-border-popover-menu) 60%, transparent);
+    border-radius: 5px;
+    overflow: hidden;
 }
 
 .pear-workbench-model-row,
@@ -489,24 +493,29 @@
 .pear-workbench-control-row {
     display: grid;
     min-width: 0;
-    min-height: 30px;
+    min-height: 34px;
     align-items: center;
-    gap: 8px;
+    column-gap: 10px;
     grid-template-columns: minmax(68px, auto) minmax(0, 1fr) auto;
-    border: 1px solid
-        color-mix(in srgb, var(--color-border-popover-menu) 58%, transparent);
-    border-radius: 4px;
-    background: color-mix(
-        in srgb,
-        var(--color-background-popover-menu) 92%,
-        var(--color-background) 8%
-    );
-    padding: 0 8px;
+    border: 0;
+    border-bottom: 1px solid
+        color-mix(in srgb, var(--color-border-popover-menu) 52%, transparent);
+    background: transparent;
+    padding: 0 9px;
+}
+
+.pear-workbench-control-row:nth-last-child(-n + 2) {
+    border-bottom: 0;
+}
+
+.pear-workbench-control-row:nth-child(3) {
+    border-right: 1px solid
+        color-mix(in srgb, var(--color-border-popover-menu) 52%, transparent);
 }
 
 .pear-workbench-control-label {
     color: var(--color-text-sidebar-heading);
-    font-size: 12px;
+    font-size: 11.5px;
     font-weight: 600;
     line-height: 16px;
     opacity: var(--opacity-sidebar-heading);
@@ -534,7 +543,18 @@
 }
 
 .pear-workbench-status-dirty {
-    color: var(--color-text-warning-text-action-button);
+    border: 1px solid
+        color-mix(in srgb, var(--color-text-warning-text-action-button) 28%, transparent);
+    border-radius: 4px;
+    background: color-mix(
+        in srgb,
+        var(--color-text-warning-text-action-button) 12%,
+        transparent
+    );
+    color: color-mix(in srgb, var(--color-text-warning-text-action-button) 72%, var(--color-text-default));
+    font-size: 11px;
+    line-height: 16px;
+    padding: 0 5px;
 }
 
 .pear-workbench-ref {
@@ -545,14 +565,17 @@
 .pear-workbench-select {
     min-width: 0;
     width: 100%;
-    border: 0;
-    background: transparent;
+    border: 1px solid
+        color-mix(in srgb, var(--color-border-popover-menu) 70%, transparent);
+    border-radius: 4px;
+    background: color-mix(in srgb, var(--color-background-popover-menu) 84%, var(--color-background) 16%);
     color: var(--color-text-default);
     font: inherit;
     font-size: 12px;
     font-weight: var(--font-weight-sidebar-row);
     line-height: 16px;
     outline: none;
+    padding: 3px 7px;
 }
 
 .pear-workbench-select:focus-visible,
@@ -565,9 +588,33 @@
     appearance: none;
     width: 100%;
     min-width: 90px;
-    height: 16px;
+    height: 14px;
     background: transparent;
     cursor: pointer;
+}
+
+.pear-workbench-effort-control {
+    display: grid;
+    min-width: 0;
+    gap: 2px;
+}
+
+.pear-workbench-effort-ticks {
+    display: flex;
+    justify-content: space-between;
+    color: var(--color-text-sidebar-heading);
+    font-size: 9.5px;
+    line-height: 11px;
+    opacity: 0.72;
+    pointer-events: none;
+}
+
+.pear-workbench-thinking-low ~ .pear-workbench-effort-ticks span:nth-child(1),
+.pear-workbench-thinking-medium ~ .pear-workbench-effort-ticks span:nth-child(2),
+.pear-workbench-thinking-high ~ .pear-workbench-effort-ticks span:nth-child(3),
+.pear-workbench-thinking-xhigh ~ .pear-workbench-effort-ticks span:nth-child(4) {
+    color: var(--color-text-success-text-action-button);
+    opacity: 1;
 }
 
 .pear-workbench-effort-range::-webkit-slider-runnable-track {

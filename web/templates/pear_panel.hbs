@@ -125,11 +125,19 @@
                             </label>
                             <label class="pear-workbench-control-row pear-workbench-thinking-row">
                                 <span class="pear-workbench-control-label">{{t "Thinking" }}</span>
-                                {{#if topic_context.workbench_has_efforts}}
-                                    <input type="range" class="pear-workbench-effort-range pear-workbench-thinking-{{topic_context.panel_reasoning_effort_meter_class}}" min="0" max="{{topic_context.workbench_effort_slider_max}}" step="1" value="{{topic_context.workbench_effort_slider_value}}" aria-label="{{t 'Thinking' }}"/>
-                                {{else}}
-                                    <input type="range" class="pear-workbench-effort-range pear-workbench-thinking-{{topic_context.panel_reasoning_effort_meter_class}}" min="0" max="0" step="1" value="0" aria-label="{{t 'Thinking' }}" disabled/>
-                                {{/if}}
+                                <span class="pear-workbench-effort-control">
+                                    {{#if topic_context.workbench_has_efforts}}
+                                        <input type="range" class="pear-workbench-effort-range pear-workbench-thinking-{{topic_context.panel_reasoning_effort_meter_class}}" min="0" max="{{topic_context.workbench_effort_slider_max}}" step="1" value="{{topic_context.workbench_effort_slider_value}}" aria-label="{{t 'Thinking' }}"/>
+                                    {{else}}
+                                        <input type="range" class="pear-workbench-effort-range pear-workbench-thinking-{{topic_context.panel_reasoning_effort_meter_class}}" min="0" max="0" step="1" value="0" aria-label="{{t 'Thinking' }}" disabled/>
+                                    {{/if}}
+                                    <span class="pear-workbench-effort-ticks" aria-hidden="true">
+                                        <span>{{t "Low" }}</span>
+                                        <span>{{t "Medium" }}</span>
+                                        <span>{{t "High" }}</span>
+                                        <span>{{t "XHigh" }}</span>
+                                    </span>
+                                </span>
                                 <span class="pear-workbench-control-value">{{topic_context.panel_reasoning_effort_label}}</span>
                             </label>
                             <div class="pear-workbench-control-row">

@@ -11,6 +11,7 @@ import render_wildcard_mention_not_allowed_error from "../templates/compose_bann
 import * as channel from "./channel.ts";
 import * as compose_banner from "./compose_banner.ts";
 import * as compose_notifications from "./compose_notifications.ts";
+import * as compose_pear from "./compose_pear.ts";
 import * as compose_state from "./compose_state.ts";
 import * as compose_ui from "./compose_ui.ts";
 import * as compose_validate from "./compose_validate.ts";
@@ -45,6 +46,7 @@ export type SendMessageData = {
     content: string;
     resend?: boolean;
     locally_echoed?: boolean;
+    pear_followup?: string;
     draft_id: string;
 } & (
     | {
@@ -122,6 +124,7 @@ export function clear_compose_box(): void {
     compose_ui.hide_compose_spinner();
     scheduled_messages.reset_selected_schedule_timestamp();
     $(".needs-empty-compose").removeClass("disabled-on-hover");
+    compose_pear.clear();
 }
 
 export type SentMessageData = SendMessageData & {
@@ -274,6 +277,9 @@ export let send_message = (): void => {
             to: JSON.stringify([stream_id]),
             draft_id,
         };
+        if (compose_pear.is_followup_enabled()) {
+            message_data.pear_followup = JSON.stringify(true);
+        }
     }
 
     let local_id: string;

@@ -307,6 +307,60 @@ class TestServiceBotBasics(ZulipTestCase):
         EMBEDDED_BOTS_ENABLED=True,
         PEAR_ADDRESSING_ROUTER_RUNTIME="disabled",
     )
+    def test_service_events_for_explicit_pear_followup_flag(self) -> None:
+        sender = self.example_user("hamlet")
+        owner = self.example_user("cordelia")
+        pear_bot = self.create_test_bot(
+            "pear",
+            owner,
+            full_name="Pear",
+            bot_type=UserProfile.EMBEDDED_BOT,
+            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+        )
+        stream = get_stream("Denmark", sender.realm)
+
+        event_dict = get_service_bot_events(
+            sender=sender,
+            service_bot_tuples=[],
+            active_user_ids=set(),
+            mentioned_user_ids=set(),
+            recipient_type=Recipient.STREAM,
+            recipient_id=stream.recipient_id,
+            stream_name=stream.name,
+            topic_name="compose pear",
+            content="can you check the current UI state?",
+            pear_followup=True,
+        )
+        self.assertEqual(
+            event_dict,
+            {
+                "embedded_bots": [
+                    {
+                        "trigger": PEAR_FOLLOWUP_TRIGGER,
+                        "user_profile_id": pear_bot.id,
+                    },
+                ],
+            },
+        )
+
+        event_dict = get_service_bot_events(
+            sender=sender,
+            service_bot_tuples=[(pear_bot.id, UserProfile.EMBEDDED_BOT)],
+            active_user_ids=set(),
+            mentioned_user_ids={pear_bot.id},
+            recipient_type=Recipient.STREAM,
+            recipient_id=stream.recipient_id,
+            stream_name=stream.name,
+            topic_name="compose pear",
+            content="@**Pear** can you check the current UI state?",
+            pear_followup=True,
+        )
+        self.assertEqual(event_dict["embedded_bots"], [])
+
+    @override_settings(
+        EMBEDDED_BOTS_ENABLED=True,
+        PEAR_ADDRESSING_ROUTER_RUNTIME="disabled",
+    )
     def test_service_events_for_pear_followup_skips_untagged_when_router_disabled(
         self,
     ) -> None:

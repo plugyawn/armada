@@ -913,7 +913,7 @@ class PearSessionEndpointTest(ZulipTestCase):
             self.assertIn("gpt-5.5-mini", context_payload["model_choices"])
             self.assertEqual(context_payload["reasoning_effort"], "medium")
             self.assertEqual(context_payload["default_reasoning_effort"], "medium")
-            self.assertEqual(context_payload["response_policy"], "mentions_only")
+            self.assertEqual(context_payload["response_policy"], "ambient")
             self.assertEqual(context_payload["workdir"], "/workspace/base")
             self.assertFalse(
                 PearTopicContext.objects.filter(
@@ -2933,7 +2933,7 @@ class PearSessionEndpointTest(ZulipTestCase):
             self.assertEqual(result_dict["pear_topic_context"]["reasoning_effort"], "high")
             self.assertEqual(
                 result_dict["pear_topic_context"]["response_policy"],
-                "mentions_only",
+                "ambient",
             )
             self.assertEqual(model, "gpt-5.5-mini")
             self.assertEqual(reasoning_effort, "high")

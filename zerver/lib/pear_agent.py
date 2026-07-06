@@ -94,7 +94,7 @@ def build_pear_addressing_router_prompt(
         session_lines = [
             "- active_session: none",
             "- worker_state: unknown",
-            "- response_policy: mentions_only",
+            "- response_policy: ambient",
         ]
     else:
         session_lines = [

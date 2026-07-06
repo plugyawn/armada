@@ -84,7 +84,9 @@ def pear_followup_topic_context_allows_candidate(
         .values("is_paused", "response_policy")
         .first()
     )
-    if context is None or context["is_paused"]:
+    if context is None:
+        return True
+    if context["is_paused"]:
         return False
     return normalize_pear_response_policy(str(context["response_policy"])) == "ambient"
 
@@ -111,13 +113,15 @@ def get_pear_followup_service_bot_event(
     from zerver.lib.pear import (
         PEAR_FOLLOWUP_TRIGGER,
         is_pear_control_template_message,
+        is_pear_plain_mention_alias_message,
         is_pear_request_message,
         parse_pear_artifacts,
         parse_pear_checklist,
     )
 
+    has_plain_pear_alias = is_pear_plain_mention_alias_message(content)
     if (
-        is_pear_request_message(content)
+        (is_pear_request_message(content) and not has_plain_pear_alias)
         or is_pear_control_template_message(content)
         or parse_pear_checklist(content)
         or parse_pear_artifacts(content, message_id=0)
@@ -128,6 +132,15 @@ def get_pear_followup_service_bot_event(
     if selected_pear_bot_user_id is None:
         return None
     if selected_pear_bot_user_id in mentioned_user_ids:
+        return None
+
+    if has_plain_pear_alias:
+        return {
+            "trigger": PEAR_FOLLOWUP_TRIGGER,
+            "user_profile_id": selected_pear_bot_user_id,
+        }
+
+    if settings.PEAR_ADDRESSING_ROUTER_RUNTIME == "disabled":
         return None
 
     if not pear_followup_topic_context_allows_candidate(

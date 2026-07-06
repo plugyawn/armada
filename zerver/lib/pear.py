@@ -3,7 +3,7 @@ import logging
 import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from re import IGNORECASE, MULTILINE, finditer, search, sub
+from re import IGNORECASE, MULTILINE, compile, finditer, search, sub
 from typing import Any, Final, Literal, Protocol, TypedDict
 
 from django.core.cache import cache
@@ -15,6 +15,7 @@ PEAR_EXPLICIT_MENTION_MESSAGE_KEY: Final = "pear_explicit_mention"
 PEAR_TRIGGER_MESSAGE_KEY: Final = "pear_trigger"
 PEAR_FOLLOWUP_TRIGGER: Final = "pear_followup"
 PEAR_AGENT_MENTION: Final = "@**Pear**"
+PEAR_PLAIN_AGENT_MENTION_RE: Final = compile(r"(?<![\w@])@Pear(?![\w-])", IGNORECASE)
 PEAR_DEFAULT_STREAM: Final = "pair-programming"
 PEAR_TOPIC_PREFIX: Final = "pear/"
 PEAR_DEFAULT_TOPIC: Final = "pear/session"
@@ -146,7 +147,7 @@ PearChecklistStatus = Literal["pending", "in_progress", "done"]
 PearActiveSessionSource = Literal["server", "cache"]
 PearActiveSessionState = Literal["not_started", "requested", "active", "paused"]
 PearResponsePolicy = Literal["ambient", "mentions_only"]
-PEAR_DEFAULT_RESPONSE_POLICY: Final[PearResponsePolicy] = "mentions_only"
+PEAR_DEFAULT_RESPONSE_POLICY: Final[PearResponsePolicy] = "ambient"
 logger = logging.getLogger(__name__)
 PearWorkerState = Literal["ready", "blocked_missing_stream", "blocked_paused"]
 PearWorkerRunStatus = Literal["queued", "running", "done", "failed", "cancelled"]
@@ -1576,11 +1577,9 @@ def normalize_pear_response_policy(value: str | None) -> PearResponsePolicy:
 
 def clean_pear_task_text(content: str = "") -> str:
     task = content.strip()
-    for mention in (PEAR_AGENT_MENTION, "@Pear"):
-        if task.startswith(mention):
-            task = task[len(mention) :].strip()
-            break
-    return task
+    task = task.replace(PEAR_AGENT_MENTION, " ")
+    task = PEAR_PLAIN_AGENT_MENTION_RE.sub(" ", task)
+    return " ".join(task.split())
 
 
 def normalize_pear_explicit_request_content(
@@ -2353,7 +2352,11 @@ def parse_pear_steering_event(
 
 
 def is_pear_request_message(content: str) -> bool:
-    return PEAR_AGENT_MENTION in content or "@Pear" in content
+    return PEAR_AGENT_MENTION in content or is_pear_plain_mention_alias_message(content)
+
+
+def is_pear_plain_mention_alias_message(content: str) -> bool:
+    return PEAR_PLAIN_AGENT_MENTION_RE.search(content) is not None
 
 
 PearMessage = (

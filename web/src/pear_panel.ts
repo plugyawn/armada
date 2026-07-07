@@ -1287,6 +1287,26 @@ function visible_header_anchor(): HTMLElement | undefined {
     return visible_header_anchor_for_kind("context") ?? visible_header_anchor_for_kind("git");
 }
 
+// Minimum popover body height we try to preserve by pushing the popover up
+// when the anchor sits near the bottom of the viewport.
+const WORKBENCH_POPOVER_MIN_BODY_PX = 260;
+
+// Clamp the popover's top so it stays fully on-screen: never above the top
+// margin (a scrolled-away anchor yields a negative desired top), and never so
+// low that the minimum body height would spill past the bottom edge.
+export function workbench_popover_top_for_testing(options: {
+    desired_top: number;
+    viewport_height: number;
+    margin: number;
+    min_body_height: number;
+}): number {
+    const max_top = Math.max(
+        options.margin,
+        options.viewport_height - options.min_body_height - options.margin,
+    );
+    return Math.min(Math.max(options.desired_top, options.margin), max_top);
+}
+
 function position_workbench_popover(): void {
     const panel = ensure_pear_panel_host();
     if (panel === undefined || !panel.classList.contains("pear-workbench-popover-open")) {
@@ -1310,17 +1330,21 @@ function position_workbench_popover(): void {
     const left = compact_viewport
         ? margin
         : Math.min(Math.max(anchor_center - width / 2, min_left), viewport_width - width - margin);
-    const top = Math.min(
-        anchor_rect === undefined ? 76 : anchor_rect.bottom + 8,
-        viewport_height - margin,
-    );
+    const top = workbench_popover_top_for_testing({
+        desired_top: anchor_rect === undefined ? 76 : anchor_rect.bottom + 8,
+        viewport_height,
+        margin,
+        min_body_height: WORKBENCH_POPOVER_MIN_BODY_PX,
+    });
     const arrow_left = Math.min(Math.max(anchor_center - left, 18), width - 18);
     panel.style.setProperty("--pear-workbench-popover-left", `${Math.round(left)}px`);
     panel.style.setProperty("--pear-workbench-popover-top", `${Math.round(top)}px`);
     panel.style.setProperty("--pear-workbench-popover-width", `${Math.round(width)}px`);
+    // Available space below the (clamped) top; the body scrolls internally if
+    // its content is taller, so it can never extend past the viewport bottom.
     panel.style.setProperty(
         "--pear-workbench-popover-max-height",
-        `${Math.max(260, Math.round(viewport_height - top - margin))}px`,
+        `${Math.max(margin, Math.round(viewport_height - top - margin))}px`,
     );
     panel.style.setProperty("--pear-workbench-popover-arrow-left", `${Math.round(arrow_left)}px`);
 }

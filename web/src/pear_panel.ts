@@ -709,10 +709,20 @@ function close_work_details(): void {
     // A close gesture must also dismiss an error-forced open, otherwise the
     // next poll re-opens the popover and the user can never close it.
     error_dismissed = true;
+    const anchor_element = workbench_anchor_element;
     workbench_anchor_element = undefined;
     workbench_anchor_context_key = "";
     workbench_anchor_kind = undefined;
     render();
+    // Closing removes the popover from the DOM; if focus fell back to the
+    // body, return it to the control that opened the workbench.
+    if (
+        anchor_element !== undefined &&
+        document.activeElement === document.body &&
+        document.contains(anchor_element)
+    ) {
+        anchor_element.focus();
+    }
 }
 
 function display_run(run: PearRun): PearRun & {
@@ -2090,6 +2100,18 @@ export function initialize(): void {
                 : undefined,
             e.currentTarget,
         );
+    });
+    $(document).on("keydown.pear_panel", (e) => {
+        // Give keyboard users inside the workbench an exit; clicks outside
+        // already close it. Scoped to the panel so global Escape handling
+        // (compose, overlays) is unaffected.
+        if (e.key !== "Escape") {
+            return;
+        }
+        if ($(e.target).closest("#pear-panel").length === 0) {
+            return;
+        }
+        close_work_details();
     });
     $(document).on("click.pear_panel", (e) => {
         // Ignore clicks inside the workbench itself.  Using a target check here

@@ -108,7 +108,7 @@
     {{#if has_topic}}
         {{#if topic_context}}
             <section class="pear-context-section">
-                <div class="pear-workbench">
+                <div class="pear-workbench" role="dialog" aria-label="{{t 'Pear work details' }}">
                     <div class="pear-workbench-header">
                         <div class="pear-workbench-context-strip">
                             <div class="pear-workbench-context-item pear-workbench-context-repo">
@@ -139,17 +139,17 @@
                         </div>
                         <div class="pear-workbench-scope-note">{{topic_context.workbench_scope_note}}</div>
                         <div class="pear-workbench-context-row">
-                            <div class="pear-workbench-tabs" aria-label="{{t 'Pear work views' }}">
-                                <button type="button" class="pear-workbench-tab {{#if topic_context.workbench_diff_selected}}pear-workbench-tab-selected{{/if}}" data-pear-workbench-view="diff" {{#if topic_context.workbench_diff_disabled}}disabled{{/if}}>
+                            <div class="pear-workbench-tabs" role="tablist" aria-label="{{t 'Pear work views' }}">
+                                <button type="button" role="tab" aria-selected="{{#if topic_context.workbench_diff_selected}}true{{else}}false{{/if}}" class="pear-workbench-tab {{#if topic_context.workbench_diff_selected}}pear-workbench-tab-selected{{/if}}" data-pear-workbench-view="diff" {{#if topic_context.workbench_diff_disabled}}disabled{{/if}}>
                                     {{topic_context.diff_tab_label}}
                                 </button>
-                                <button type="button" class="pear-workbench-tab {{#if topic_context.workbench_history_selected}}pear-workbench-tab-selected{{/if}}" data-pear-workbench-view="history" {{#if topic_context.workbench_history_disabled}}disabled{{/if}}>
+                                <button type="button" role="tab" aria-selected="{{#if topic_context.workbench_history_selected}}true{{else}}false{{/if}}" class="pear-workbench-tab {{#if topic_context.workbench_history_selected}}pear-workbench-tab-selected{{/if}}" data-pear-workbench-view="history" {{#if topic_context.workbench_history_disabled}}disabled{{/if}}>
                                     {{topic_context.history_tab_label}}
                                 </button>
-                                <button type="button" class="pear-workbench-tab {{#if topic_context.workbench_canvas_selected}}pear-workbench-tab-selected{{/if}}" data-pear-workbench-view="canvas">
+                                <button type="button" role="tab" aria-selected="{{#if topic_context.workbench_canvas_selected}}true{{else}}false{{/if}}" class="pear-workbench-tab {{#if topic_context.workbench_canvas_selected}}pear-workbench-tab-selected{{/if}}" data-pear-workbench-view="canvas">
                                     {{topic_context.canvas_tab_label}}
                                 </button>
-                                <button type="button" class="pear-workbench-tab {{#if topic_context.workbench_side_selected}}pear-workbench-tab-selected{{/if}}" data-pear-workbench-view="side">
+                                <button type="button" role="tab" aria-selected="{{#if topic_context.workbench_side_selected}}true{{else}}false{{/if}}" class="pear-workbench-tab {{#if topic_context.workbench_side_selected}}pear-workbench-tab-selected{{/if}}" data-pear-workbench-view="side">
                                     {{topic_context.side_tab_label}}
                                 </button>
                             </div>

@@ -1,5 +1,4 @@
 import json
-import os
 import subprocess
 import time
 from pathlib import Path
@@ -23,6 +22,7 @@ from zerver.lib.exceptions import JsonableError
 from zerver.lib.pear import (
     PEAR_AGENT_NAME,
     PEAR_BOT_SHORT_NAME,
+    PEAR_CANVAS_FILE_NAME,
     PEAR_EMBEDDED_BOT_SERVICE,
     PEAR_FIRST_RUN_STARTER_MESSAGE,
     PEAR_FIRST_RUN_STREAM,
@@ -48,9 +48,8 @@ from zerver.lib.pear_worker import (
     PearQueueWorkerDispatcher,
     ensure_pear_child_topic_context,
     ensure_pear_topic_context,
-    pear_backfill_canvas_from_topic_history,
     pear_default_worker_reasoning_effort,
-    pear_ensure_topic_canvas,
+    pear_exclude_canvas_from_git_delta,
     pear_git_output,
     pear_git_status_delta,
     pear_logical_repository_label,
@@ -59,16 +58,17 @@ from zerver.lib.pear_worker import (
     pear_read_text_path,
     pear_repo_artifact_value_is_durable,
     pear_sha256_text,
+    pear_topic_canvas_path,
     pear_topic_context_is_paused,
-    pear_topic_isolation_user_exists,
     pear_topic_context_response_policy,
+    pear_topic_isolation_user_exists,
     pear_topic_isolation_username_for_realm,
     pear_topic_os_user_isolation_enabled,
-    pear_workspace_node_default_branch,
     pear_worker_model_for_topic,
     pear_worker_reasoning_effort_for_topic,
     pear_worker_sandbox_for_topic,
     pear_worker_workdir_for_topic,
+    pear_workspace_node_default_branch,
     pear_write_text_path,
     set_pear_topic_context_paused,
     set_pear_topic_context_response_policy,
@@ -299,7 +299,9 @@ def pear_model_catalog_entry(model: dict[str, object]) -> dict[str, object] | No
             model.get("supported_reasoning_levels")
         ),
         "supported_in_api": bool(model.get("supported_in_api", False)),
-        "service_tiers": model.get("service_tiers") if isinstance(model.get("service_tiers"), list) else [],
+        "service_tiers": model.get("service_tiers")
+        if isinstance(model.get("service_tiers"), list)
+        else [],
         "additional_speed_tiers": model.get("additional_speed_tiers")
         if isinstance(model.get("additional_speed_tiers"), list)
         else [],
@@ -316,6 +318,7 @@ def extract_pear_codex_model_catalog(data: object) -> list[dict[str, object]]:
         for entry in [pear_model_catalog_entry(model)]
         if entry is not None
     ]
+
     def priority_key(entry: dict[str, object]) -> tuple[int, str]:
         priority = entry.get("priority")
         return priority if isinstance(priority, int) else 1000, str(entry["slug"])
@@ -481,9 +484,7 @@ def serialize_pear_topic_context(
     default_model = str(runtime_config.get("model") or "")
     default_reasoning_effort = str(runtime_config.get("reasoning_effort") or "medium")
     selected_model = (
-        context.model.strip()
-        if context is not None and context.model.strip()
-        else default_model
+        context.model.strip() if context is not None and context.model.strip() else default_model
     )
     parent_context = (
         context.parent_context
@@ -502,11 +503,7 @@ def serialize_pear_topic_context(
     selected_response_policy = normalize_pear_response_policy(
         context.response_policy if context is not None else None
     )
-    workdir = (
-        context.workdir.strip()
-        if context is not None and context.workdir.strip()
-        else str(settings.PEAR_WORKER_WORKDIR or os.getcwd())
-    )
+    workdir = context.workdir.strip() if context is not None and context.workdir.strip() else ""
     context_github_repo = context.github_repo.strip() if context is not None else ""
     parent_github_repo = parent_context.github_repo.strip() if parent_context is not None else ""
     github_repo = next(
@@ -648,15 +645,11 @@ def build_pear_config_for_user(user_profile: UserProfile) -> PearConfigPayload:
     return build_pear_config_payload(
         embedded_bots_enabled=settings.EMBEDDED_BOTS_ENABLED,
         bot_count=bot_count,
-        bot_user_id=selected_pear_bot.user_profile_id
-        if selected_pear_bot is not None
-        else None,
+        bot_user_id=selected_pear_bot.user_profile_id if selected_pear_bot is not None else None,
         bot_full_name=selected_pear_bot.user_profile.full_name
         if selected_pear_bot is not None
         else None,
-        bot_email=selected_pear_bot.user_profile.email
-        if selected_pear_bot is not None
-        else None,
+        bot_email=selected_pear_bot.user_profile.email if selected_pear_bot is not None else None,
         selected_bot_user_id=selected_pear_bot.user_profile_id
         if selected_pear_bot is not None
         else None,
@@ -878,9 +871,7 @@ def set_selected_pear_bot(user_profile: UserProfile, selected_bot_user_id: int |
             if bot.user_profile_id == selected_bot_user_id
             else "false"
         )
-        previous_value = bot_configs.get(bot.user_profile_id, {}).get(
-            PEAR_SELECTED_BOT_CONFIG_KEY
-        )
+        previous_value = bot_configs.get(bot.user_profile_id, {}).get(PEAR_SELECTED_BOT_CONFIG_KEY)
         if previous_value != selected_value:
             changed = True
         set_bot_config(bot.user_profile, PEAR_SELECTED_BOT_CONFIG_KEY, selected_value)
@@ -1097,11 +1088,7 @@ def get_pear_git_tree_backend(
         stream_name=stream_name,
         topic_name=topic_name,
     )
-    workdir = (
-        context.workdir.strip()
-        if context is not None and context.workdir.strip()
-        else str(settings.PEAR_WORKER_WORKDIR or os.getcwd())
-    )
+    workdir = context.workdir.strip() if context is not None and context.workdir.strip() else ""
     isolation_username = pear_context_isolation_username(
         context,
         stream_name=stream_name,
@@ -1160,16 +1147,21 @@ def pear_canvas_exists(canvas_path: Path, content: str) -> bool:
 def pear_canvas_payload(
     *,
     workdir: str,
-    canvas_path: Path,
+    canvas_path: Path | None,
     content: str,
 ) -> dict[str, object]:
+    relative_path = ""
+    if canvas_path is not None and workdir:
+        relative_path = str(canvas_path.relative_to(workdir))
+    elif workdir:
+        relative_path = PEAR_CANVAS_FILE_NAME
     return {
         "content": content,
         "version": pear_sha256_text(content),
         "workdir_path": workdir,
-        "path": str(canvas_path),
-        "relative_path": str(canvas_path.relative_to(workdir)),
-        "exists": pear_canvas_exists(canvas_path, content),
+        "path": str(canvas_path) if canvas_path is not None else "",
+        "relative_path": relative_path,
+        "exists": pear_canvas_exists(canvas_path, content) if canvas_path is not None else False,
         "max_bytes": PEAR_CANVAS_MAX_BYTES,
     }
 
@@ -1188,19 +1180,23 @@ def get_pear_canvas_backend(
         ApiParamConfig("topic", documentation_status=INTENTIONALLY_UNDOCUMENTED),
     ],
 ) -> HttpResponse:
-    stream, _sub = access_stream_by_name(user_profile, stream_name)
-    context = ensure_pear_topic_context(user_profile, stream=stream_name, topic=topic_name)
-    assert stream.recipient_id is not None
-    message_rows = list(
-        messages_for_topic(
-            user_profile.realm_id,
-            stream.recipient_id,
-            topic_name,
-        )
-        .order_by("-id")
-        .values_list("id", "content", "sender__is_bot", "sender__full_name")[:50]
+    access_stream_by_name(user_profile, stream_name)
+    context = pear_topic_context_for_request(
+        user_profile,
+        stream_name=stream_name,
+        topic_name=topic_name,
     )
-    backfill_content = pear_backfill_canvas_from_topic_history(list(reversed(message_rows)))
+    if context is None or not context.workdir.strip():
+        return json_success(
+            request,
+            data={
+                "pear_canvas": pear_canvas_payload(
+                    workdir="",
+                    canvas_path=None,
+                    content="",
+                ),
+            },
+        )
     workdir = context.workdir.strip()
     isolation_username = pear_context_isolation_username(
         context,
@@ -1208,13 +1204,7 @@ def get_pear_canvas_backend(
         topic_name=topic_name,
         workdir=workdir,
     )
-    canvas_path = pear_ensure_topic_canvas(
-        workdir,
-        stream=stream_name,
-        topic=topic_name,
-        backfill_content=backfill_content,
-        isolation_username=isolation_username,
-    )
+    canvas_path = pear_topic_canvas_path(workdir)
     content = pear_read_text_path(canvas_path, isolation_username=isolation_username)
     return json_success(
         request,
@@ -1253,7 +1243,12 @@ def put_pear_canvas_backend(
     access_stream_by_name(user_profile, stream_name)
     if len(content.encode("utf-8")) > PEAR_CANVAS_MAX_BYTES:
         raise JsonableError(_("Pear canvas is too large."))
-    context = ensure_pear_topic_context(user_profile, stream=stream_name, topic=topic_name)
+    context = ensure_pear_topic_context(
+        user_profile,
+        stream=stream_name,
+        topic=topic_name,
+        ensure_canvas=False,
+    )
     workdir = context.workdir.strip()
     isolation_username = pear_context_isolation_username(
         context,
@@ -1261,12 +1256,8 @@ def put_pear_canvas_backend(
         topic_name=topic_name,
         workdir=workdir,
     )
-    canvas_path = pear_ensure_topic_canvas(
-        workdir,
-        stream=stream_name,
-        topic=topic_name,
-        isolation_username=isolation_username,
-    )
+    pear_exclude_canvas_from_git_delta(workdir)
+    canvas_path = pear_topic_canvas_path(workdir)
     current_content = pear_read_text_path(canvas_path, isolation_username=isolation_username)
     current_version = pear_sha256_text(current_content)
     if base_version != current_version:
@@ -1333,20 +1324,14 @@ def post_pear_topic_context_backend(
     stream, _sub = access_stream_by_name(user_profile, stream_name)
     clean_model = clean_pear_model_slug(model) if model is not None else None
     clean_reasoning_effort = (
-        clean_pear_reasoning_effort(reasoning_effort)
-        if reasoning_effort is not None
-        else None
+        clean_pear_reasoning_effort(reasoning_effort) if reasoning_effort is not None else None
     )
     clean_response_policy = (
-        normalize_pear_response_policy(response_policy)
-        if response_policy is not None
-        else None
+        normalize_pear_response_policy(response_policy) if response_policy is not None else None
     )
     context = ensure_pear_topic_context(user_profile, stream=stream_name, topic=topic_name)
     previous_model = (
-        context.model.strip()
-        if context.model.strip()
-        else str(settings.PEAR_WORKER_MODEL or "")
+        context.model.strip() if context.model.strip() else str(settings.PEAR_WORKER_MODEL or "")
     )
     previous_reasoning_effort = pear_worker_reasoning_effort_for_topic(
         user_profile,
@@ -1360,12 +1345,10 @@ def post_pear_topic_context_backend(
     )
     model_changed = clean_model is not None and previous_model != clean_model
     reasoning_effort_changed = (
-        clean_reasoning_effort is not None
-        and previous_reasoning_effort != clean_reasoning_effort
+        clean_reasoning_effort is not None and previous_reasoning_effort != clean_reasoning_effort
     )
     response_policy_changed = (
-        clean_response_policy is not None
-        and previous_response_policy != clean_response_policy
+        clean_response_policy is not None and previous_response_policy != clean_response_policy
     )
     if model_changed and clean_model is not None:
         context.model = clean_model
@@ -1624,8 +1607,7 @@ def get_pear_runs_backend(
         request,
         data={
             "pear_runs": [
-                serialize_pear_worker_run(run, include_events=bool(include_events))
-                for run in runs
+                serialize_pear_worker_run(run, include_events=bool(include_events)) for run in runs
             ],
             "runtime_config": build_pear_runtime_config_payload(),
             "pear_topic_context": topic_context,

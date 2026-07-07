@@ -55,8 +55,8 @@ from zerver.lib.pear_worker import (
     pear_git_status_delta,
     pear_read_text_path,
     pear_topic_branch_name,
-    pear_topic_isolation_username,
     pear_topic_isolation_user_exists,
+    pear_topic_isolation_username,
     pear_topic_process_isolation,
     pear_topic_workdir_root,
     pear_worker_model_for_topic,
@@ -68,12 +68,7 @@ from zerver.lib.pear_worker import (
 )
 from zerver.lib.test_classes import ZulipTestCase
 from zerver.models import Message, Subscription, UserProfile
-from zerver.models.bots import (
-    PearProject,
-    PearTopicContext,
-    PearWorkerRun,
-    PearWorkerRunEvent,
-)
+from zerver.models.bots import PearProject, PearTopicContext, PearWorkerRun, PearWorkerRunEvent
 from zerver.models.streams import get_stream
 from zerver.views.pear import (
     build_pear_git_context,
@@ -201,24 +196,28 @@ class PearSessionEndpointTest(ZulipTestCase):
 
     def test_get_pear_config_with_bot(self) -> None:
         owner = self.example_user("hamlet")
-        with self.settings(
-            EMBEDDED_BOTS_ENABLED=True,
-            PEAR_WORKER_AGENT_RUNTIME="codex-app-server",
-        ), patch(
-            "zerver.views.pear.pear_worker_runtime_dependency_status",
-            return_value=(
-                True,
-                "codex app-server via /usr/local/bin/codex.",
+        with (
+            self.settings(
+                EMBEDDED_BOTS_ENABLED=True,
+                PEAR_WORKER_AGENT_RUNTIME="codex-app-server",
             ),
-        ), patch(
-            "zerver.views.pear.pear_worker_runtime_auth_status",
-            return_value=(
-                True,
-                "Codex CLI is logged in.",
-                "codex-cli",
-                "codex login",
-                "worker-environment",
-                "Run Codex CLI login inside the worker environment used by Pear.",
+            patch(
+                "zerver.views.pear.pear_worker_runtime_dependency_status",
+                return_value=(
+                    True,
+                    "codex app-server via /usr/local/bin/codex.",
+                ),
+            ),
+            patch(
+                "zerver.views.pear.pear_worker_runtime_auth_status",
+                return_value=(
+                    True,
+                    "Codex CLI is logged in.",
+                    "codex-cli",
+                    "codex login",
+                    "worker-environment",
+                    "Run Codex CLI login inside the worker environment used by Pear.",
+                ),
             ),
         ):
             pear_bot = self.create_test_bot(
@@ -274,21 +273,25 @@ class PearSessionEndpointTest(ZulipTestCase):
 
     def test_get_pear_config_reports_missing_runtime_dependency(self) -> None:
         owner = self.example_user("hamlet")
-        with self.settings(
-            EMBEDDED_BOTS_ENABLED=True,
-            PEAR_WORKER_AGENT_RUNTIME="codex-app-server",
-        ), patch(
-            "zerver.views.pear.pear_worker_runtime_dependency_status",
-            return_value=(False, "Missing codex executable."),
-        ), patch(
-            "zerver.views.pear.pear_worker_runtime_auth_status",
-            return_value=(
-                True,
-                "Codex CLI is logged in.",
-                "codex-cli",
-                "codex login",
-                "worker-environment",
-                "Run Codex CLI login inside the worker environment used by Pear.",
+        with (
+            self.settings(
+                EMBEDDED_BOTS_ENABLED=True,
+                PEAR_WORKER_AGENT_RUNTIME="codex-app-server",
+            ),
+            patch(
+                "zerver.views.pear.pear_worker_runtime_dependency_status",
+                return_value=(False, "Missing codex executable."),
+            ),
+            patch(
+                "zerver.views.pear.pear_worker_runtime_auth_status",
+                return_value=(
+                    True,
+                    "Codex CLI is logged in.",
+                    "codex-cli",
+                    "codex login",
+                    "worker-environment",
+                    "Run Codex CLI login inside the worker environment used by Pear.",
+                ),
             ),
         ):
             pear_bot = self.create_test_bot(
@@ -824,11 +827,14 @@ class PearSessionEndpointTest(ZulipTestCase):
         self.subscribe(owner, PEAR_DEFAULT_STREAM)
         self.login_user(owner)
 
-        with tempfile.TemporaryDirectory() as temp_dir, self.settings(
-            PEAR_WORKER_MODEL="gpt-5.5",
-            PEAR_WORKER_MODEL_CHOICES=["gpt-5.5", "gpt-5.5-mini"],
-            PEAR_WORKER_WORKDIR="/workspace/base",
-            PEAR_TOPIC_WORKDIR_ROOT=temp_dir,
+        with (
+            tempfile.TemporaryDirectory() as temp_dir,
+            self.settings(
+                PEAR_WORKER_MODEL="gpt-5.5",
+                PEAR_WORKER_MODEL_CHOICES=["gpt-5.5", "gpt-5.5-mini"],
+                PEAR_WORKER_WORKDIR="/workspace/base",
+                PEAR_TOPIC_WORKDIR_ROOT=temp_dir,
+            ),
         ):
             result = self.client_get(
                 f"/json{PEAR_TOPIC_CONTEXT_ENDPOINT}",
@@ -848,7 +854,8 @@ class PearSessionEndpointTest(ZulipTestCase):
             self.assertEqual(context_payload["reasoning_effort"], "medium")
             self.assertEqual(context_payload["default_reasoning_effort"], "medium")
             self.assertEqual(context_payload["response_policy"], "ambient")
-            self.assertEqual(context_payload["workdir"], "/workspace/base")
+            self.assertEqual(context_payload["workdir"], "")
+            self.assertFalse(context_payload["git"]["available"])
             self.assertFalse(
                 PearTopicContext.objects.filter(
                     realm=owner.realm,
@@ -862,9 +869,10 @@ class PearSessionEndpointTest(ZulipTestCase):
         self.subscribe(owner, PEAR_DEFAULT_STREAM)
         self.login_user(owner)
 
-        with self.settings(PEAR_WORKER_WORKDIR="/workspace/base"), patch(
-            "zerver.views.pear.build_pear_git_context"
-        ) as build_git_context:
+        with (
+            self.settings(PEAR_WORKER_WORKDIR="/workspace/base"),
+            patch("zerver.views.pear.build_pear_git_context") as build_git_context,
+        ):
             topic_result = self.client_get(
                 f"/json{PEAR_TOPIC_CONTEXT_ENDPOINT}",
                 {
@@ -897,18 +905,22 @@ class PearSessionEndpointTest(ZulipTestCase):
         owner = self.example_user("hamlet")
         topic_name = "isolated topic"
 
-        with tempfile.TemporaryDirectory() as temp_dir, self.settings(
-            PEAR_TOPIC_ISOLATION_BACKEND="os-user",
-            PEAR_TOPIC_WORKDIR_ROOT=temp_dir,
-        ), patch(
-            "zerver.lib.pear_worker.ensure_pear_topic_workdir",
-            return_value="main",
-        ), patch(
-            "zerver.lib.pear_worker.pear_topic_isolation_user_exists",
-            return_value=True,
-        ), patch(
-            "zerver.lib.pear_worker.pear_ensure_topic_canvas"
-        ) as ensure_canvas:
+        with (
+            tempfile.TemporaryDirectory() as temp_dir,
+            self.settings(
+                PEAR_TOPIC_ISOLATION_BACKEND="os-user",
+                PEAR_TOPIC_WORKDIR_ROOT=temp_dir,
+            ),
+            patch(
+                "zerver.lib.pear_worker.ensure_pear_topic_workdir",
+                return_value="main",
+            ),
+            patch(
+                "zerver.lib.pear_worker.pear_topic_isolation_user_exists",
+                return_value=True,
+            ),
+            patch("zerver.lib.pear_worker.pear_ensure_topic_canvas") as ensure_canvas,
+        ):
             context = ensure_pear_topic_context(
                 owner,
                 stream=PEAR_DEFAULT_STREAM,
@@ -926,14 +938,46 @@ class PearSessionEndpointTest(ZulipTestCase):
             ),
         )
 
-    def test_pear_read_text_path_treats_unreadable_file_as_missing(self) -> None:
+    def test_pear_read_text_path_distinguishes_missing_from_unreadable(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            self.assertEqual(pear_read_text_path(Path(temp_dir) / "missing.md"), "")
+
         with patch(
             "zerver.lib.pear_worker.Path.read_text",
             side_effect=PermissionError,
         ):
-            self.assertEqual(pear_read_text_path(Path("/unreadable/CANVAS.md")), "")
+            with self.assertRaises(OSError):
+                pear_read_text_path(Path("/unreadable/CANVAS.md"))
 
-    def test_get_pear_canvas_creates_backfilled_git_excluded_canvas(self) -> None:
+    def test_get_pear_canvas_is_read_only_without_existing_context(self) -> None:
+        owner = self.example_user("hamlet")
+        self.subscribe(owner, PEAR_DEFAULT_STREAM)
+        self.login_user(owner)
+
+        result = self.client_get(
+            f"/json{PEAR_CANVAS_ENDPOINT}",
+            {
+                "stream": PEAR_DEFAULT_STREAM,
+                "topic": PEAR_DEFAULT_TOPIC,
+            },
+            intentionally_undocumented=True,
+        )
+
+        canvas = self.assert_json_success(result)["pear_canvas"]
+        self.assertEqual(canvas["content"], "")
+        self.assertEqual(canvas["workdir_path"], "")
+        self.assertEqual(canvas["path"], "")
+        self.assertEqual(canvas["relative_path"], "")
+        self.assertFalse(canvas["exists"])
+        self.assertFalse(
+            PearTopicContext.objects.filter(
+                realm=owner.realm,
+                stream_name=PEAR_DEFAULT_STREAM,
+                topic_name=PEAR_DEFAULT_TOPIC,
+            ).exists()
+        )
+
+    def test_put_pear_canvas_creates_git_excluded_canvas(self) -> None:
         owner = self.example_user("hamlet")
         self.subscribe(owner, PEAR_DEFAULT_STREAM)
         self.login_user(owner)
@@ -942,34 +986,29 @@ class PearSessionEndpointTest(ZulipTestCase):
             base_workdir = Path(temp_dir) / "base"
             topic_root = str(Path(temp_dir) / "topics")
             self.create_git_repository(base_workdir)
-            self.send_stream_message(
-                owner,
-                PEAR_DEFAULT_STREAM,
-                content="Memory: Prefer narrow backend tests",
-                topic_name=PEAR_DEFAULT_TOPIC,
-            )
-            self.send_stream_message(
-                owner,
-                PEAR_DEFAULT_STREAM,
-                content="Done: canvas round-trip verified",
-                topic_name=PEAR_DEFAULT_TOPIC,
-            )
-            self.send_stream_message(
-                owner,
-                PEAR_DEFAULT_STREAM,
-                content="Routine: Check CI every weekday",
-                topic_name=PEAR_DEFAULT_TOPIC,
-            )
-
             with self.settings(
                 PEAR_WORKER_WORKDIR=str(base_workdir),
                 PEAR_TOPIC_WORKDIR_ROOT=topic_root,
             ):
-                result = self.client_get(
+                initial_result = self.client_get(
                     f"/json{PEAR_CANVAS_ENDPOINT}",
                     {
                         "stream": PEAR_DEFAULT_STREAM,
                         "topic": PEAR_DEFAULT_TOPIC,
+                    },
+                    intentionally_undocumented=True,
+                )
+                initial_canvas = self.assert_json_success(initial_result)["pear_canvas"]
+                content = (
+                    f"# {PEAR_DEFAULT_STREAM} > {PEAR_DEFAULT_TOPIC}\n\n## Notes\n\nCreated.\n"
+                )
+                result = self.client_put(
+                    f"/json{PEAR_CANVAS_ENDPOINT}",
+                    {
+                        "stream": PEAR_DEFAULT_STREAM,
+                        "topic": PEAR_DEFAULT_TOPIC,
+                        "content": content,
+                        "base_version": initial_canvas["version"],
                     },
                     intentionally_undocumented=True,
                 )
@@ -998,15 +1037,9 @@ class PearSessionEndpointTest(ZulipTestCase):
                 exclude_path = Path(context.workdir) / exclude_path
 
             self.assertEqual(canvas["relative_path"], "CANVAS.md")
+            self.assertEqual(canvas["content"], content)
             self.assertTrue(canvas["exists"])
             self.assertTrue(canvas_path.exists())
-            self.assertIn(f"# {PEAR_DEFAULT_STREAM} > {PEAR_DEFAULT_TOPIC}", canvas["content"])
-            self.assertIn("Backfilled pinned context", canvas["content"])
-            self.assertIn("Prefer narrow backend tests", canvas["content"])
-            self.assertIn("Backfilled definition of done", canvas["content"])
-            self.assertIn("canvas round-trip verified", canvas["content"])
-            self.assertIn("Backfilled routines", canvas["content"])
-            self.assertIn("Check CI every weekday", canvas["content"])
             self.assertIn("/CANVAS.md", exclude_path.read_text(encoding="utf-8"))
             self.assertFalse(delta["dirty"])
             self.assertEqual(delta["changed_count"], 0)
@@ -1137,11 +1170,23 @@ class PearSessionEndpointTest(ZulipTestCase):
                 PEAR_WORKER_WORKDIR=str(base_workdir),
                 PEAR_TOPIC_WORKDIR_ROOT=topic_root,
             ):
-                result = self.client_get(
+                initial_result = self.client_get(
                     f"/json{PEAR_CANVAS_ENDPOINT}",
                     {
                         "stream": PEAR_DEFAULT_STREAM,
                         "topic": PEAR_DEFAULT_TOPIC,
+                    },
+                    intentionally_undocumented=True,
+                )
+                initial_canvas = self.assert_json_success(initial_result)["pear_canvas"]
+                content = "# pair-programming > pear/session\n\n## Notes\n\nFallback.\n"
+                result = self.client_put(
+                    f"/json{PEAR_CANVAS_ENDPOINT}",
+                    {
+                        "stream": PEAR_DEFAULT_STREAM,
+                        "topic": PEAR_DEFAULT_TOPIC,
+                        "content": content,
+                        "base_version": initial_canvas["version"],
                     },
                     intentionally_undocumented=True,
                 )
@@ -1158,6 +1203,7 @@ class PearSessionEndpointTest(ZulipTestCase):
             canvas = self.assert_json_success(result)["pear_canvas"]
 
             self.assertEqual(canvas["relative_path"], ".pear/CANVAS.md")
+            self.assertEqual(canvas["content"], content)
             self.assertEqual(
                 (Path(context.workdir) / "CANVAS.md").read_text(),
                 "repo-owned canvas\n",
@@ -1249,8 +1295,11 @@ class PearSessionEndpointTest(ZulipTestCase):
         owner = self.example_user("hamlet")
         self.subscribe(owner, PEAR_DEFAULT_STREAM)
 
-        with tempfile.TemporaryDirectory() as temp_dir, self.settings(
-            PEAR_TOPIC_WORKDIR_ROOT=temp_dir,
+        with (
+            tempfile.TemporaryDirectory() as temp_dir,
+            self.settings(
+                PEAR_TOPIC_WORKDIR_ROOT=temp_dir,
+            ),
         ):
             context = ensure_pear_topic_context(
                 owner,
@@ -1283,8 +1332,11 @@ class PearSessionEndpointTest(ZulipTestCase):
         self.subscribe(pear_bot, PEAR_DEFAULT_STREAM)
         store = PearDatabaseWorkerRunStore()
 
-        with tempfile.TemporaryDirectory() as temp_dir, self.settings(
-            PEAR_TOPIC_WORKDIR_ROOT=temp_dir,
+        with (
+            tempfile.TemporaryDirectory() as temp_dir,
+            self.settings(
+                PEAR_TOPIC_WORKDIR_ROOT=temp_dir,
+            ),
         ):
             started = store.start(
                 SimpleNamespace(user_profile=pear_bot),
@@ -1415,12 +1467,16 @@ class PearSessionEndpointTest(ZulipTestCase):
             workdir.mkdir(parents=True)
             (workdir / ".git").mkdir()
 
-        with tempfile.TemporaryDirectory() as temp_dir, self.settings(
-            PEAR_TOPIC_WORKDIR_ROOT=temp_dir,
-            PEAR_TOPIC_ISOLATION_BACKEND="os-user",
-        ), patch(
-            "zerver.lib.pear_worker.clone_or_update_pear_repository_workdir",
-            side_effect=fake_clone,
+        with (
+            tempfile.TemporaryDirectory() as temp_dir,
+            self.settings(
+                PEAR_TOPIC_WORKDIR_ROOT=temp_dir,
+                PEAR_TOPIC_ISOLATION_BACKEND="os-user",
+            ),
+            patch(
+                "zerver.lib.pear_worker.clone_or_update_pear_repository_workdir",
+                side_effect=fake_clone,
+            ),
         ):
             channel_context = configure_pear_channel_repository_context(
                 owner,
@@ -1449,11 +1505,14 @@ class PearSessionEndpointTest(ZulipTestCase):
     def test_os_user_process_isolation_invokes_topic_helper(self) -> None:
         owner = self.example_user("hamlet")
 
-        with tempfile.TemporaryDirectory() as temp_dir, self.settings(
-            PEAR_TOPIC_WORKDIR_ROOT=temp_dir,
-            PEAR_TOPIC_ISOLATION_BACKEND="os-user",
-            PEAR_TOPIC_ISOLATION_HELPER="/usr/local/sbin/pear-topic-isolate",
-            PEAR_CODEX_SKILLS_DIR=str(Path(temp_dir) / "missing-skills"),
+        with (
+            tempfile.TemporaryDirectory() as temp_dir,
+            self.settings(
+                PEAR_TOPIC_WORKDIR_ROOT=temp_dir,
+                PEAR_TOPIC_ISOLATION_BACKEND="os-user",
+                PEAR_TOPIC_ISOLATION_HELPER="/usr/local/sbin/pear-topic-isolate",
+                PEAR_CODEX_SKILLS_DIR=str(Path(temp_dir) / "missing-skills"),
+            ),
         ):
             workdir = str(Path(temp_dir) / "topic")
             Path(workdir).mkdir()
@@ -1476,18 +1535,31 @@ class PearSessionEndpointTest(ZulipTestCase):
 
         assert process_isolation is not None
         self.assertIsNone(error)
-        self.assertEqual(calls[0][0][:6], ["sudo", "-n", "/usr/local/sbin/pear-topic-isolate", "--user", process_isolation.username, "--workdir"])
+        self.assertEqual(
+            calls[0][0][:6],
+            [
+                "sudo",
+                "-n",
+                "/usr/local/sbin/pear-topic-isolate",
+                "--user",
+                process_isolation.username,
+                "--workdir",
+            ],
+        )
         self.assertIn("--topic-root", calls[0][0])
         self.assertIn(temp_dir, calls[0][0])
 
     def test_os_user_process_isolation_tolerates_private_prepared_workdir(self) -> None:
         owner = self.example_user("hamlet")
 
-        with tempfile.TemporaryDirectory() as temp_dir, self.settings(
-            PEAR_TOPIC_WORKDIR_ROOT=temp_dir,
-            PEAR_TOPIC_ISOLATION_BACKEND="os-user",
-            PEAR_TOPIC_ISOLATION_HELPER="/usr/local/sbin/pear-topic-isolate",
-            PEAR_CODEX_SKILLS_DIR=str(Path(temp_dir) / "missing-skills"),
+        with (
+            tempfile.TemporaryDirectory() as temp_dir,
+            self.settings(
+                PEAR_TOPIC_WORKDIR_ROOT=temp_dir,
+                PEAR_TOPIC_ISOLATION_BACKEND="os-user",
+                PEAR_TOPIC_ISOLATION_HELPER="/usr/local/sbin/pear-topic-isolate",
+                PEAR_CODEX_SKILLS_DIR=str(Path(temp_dir) / "missing-skills"),
+            ),
         ):
             workdir = Path(temp_dir) / "private-topic"
             workdir.mkdir()
@@ -1496,13 +1568,16 @@ class PearSessionEndpointTest(ZulipTestCase):
                 stream=PEAR_DEFAULT_STREAM,
                 topic="private topic",
             )
-            with patch(
-                "zerver.lib.pear_worker.Path.is_file",
-                side_effect=PermissionError,
-            ), patch(
-                "zerver.lib.pear_worker.subprocess.run",
-                return_value=subprocess.CompletedProcess([], 0, stdout="", stderr=""),
-            ) as run_mock:
+            with (
+                patch(
+                    "zerver.lib.pear_worker.Path.is_file",
+                    side_effect=PermissionError,
+                ),
+                patch(
+                    "zerver.lib.pear_worker.subprocess.run",
+                    return_value=subprocess.CompletedProcess([], 0, stdout="", stderr=""),
+                ) as run_mock,
+            ):
                 error = pear_worker_process_isolation_error(
                     process_isolation,
                     workdir=str(workdir),
@@ -1514,9 +1589,12 @@ class PearSessionEndpointTest(ZulipTestCase):
     def test_os_user_process_isolation_refuses_shared_git_worktree(self) -> None:
         owner = self.example_user("hamlet")
 
-        with tempfile.TemporaryDirectory() as temp_dir, self.settings(
-            PEAR_TOPIC_WORKDIR_ROOT=temp_dir,
-            PEAR_TOPIC_ISOLATION_BACKEND="os-user",
+        with (
+            tempfile.TemporaryDirectory() as temp_dir,
+            self.settings(
+                PEAR_TOPIC_WORKDIR_ROOT=temp_dir,
+                PEAR_TOPIC_ISOLATION_BACKEND="os-user",
+            ),
         ):
             workdir = Path(temp_dir) / "legacy-worktree"
             workdir.mkdir()
@@ -1567,17 +1645,23 @@ class PearSessionEndpointTest(ZulipTestCase):
             base_workdir = service_home / "zulip"
             unsafe_topic_root = service_home / "pear-workspaces"
 
-            with self.settings(
-                PEAR_WORKER_WORKDIR=str(base_workdir),
-                PEAR_TOPIC_WORKDIR_ROOT=str(unsafe_topic_root),
-                PEAR_TOPIC_ISOLATION_BACKEND="os-user",
-            ), patch("zerver.lib.pear_worker.Path.home", return_value=service_home):
+            with (
+                self.settings(
+                    PEAR_WORKER_WORKDIR=str(base_workdir),
+                    PEAR_TOPIC_WORKDIR_ROOT=str(unsafe_topic_root),
+                    PEAR_TOPIC_ISOLATION_BACKEND="os-user",
+                ),
+                patch("zerver.lib.pear_worker.Path.home", return_value=service_home),
+            ):
                 self.assertEqual(pear_topic_workdir_root(), Path("/srv/pear-workspaces"))
 
     def test_os_user_topic_workdir_initializes_independent_git_repository(self) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir, self.settings(
-            PEAR_TOPIC_WORKDIR_ROOT=temp_dir,
-            PEAR_TOPIC_ISOLATION_BACKEND="os-user",
+        with (
+            tempfile.TemporaryDirectory() as temp_dir,
+            self.settings(
+                PEAR_TOPIC_WORKDIR_ROOT=temp_dir,
+                PEAR_TOPIC_ISOLATION_BACKEND="os-user",
+            ),
         ):
             workdir = Path(temp_dir) / "topic"
             ensure_pear_topic_workdir(str(workdir))
@@ -1723,9 +1807,12 @@ class PearSessionEndpointTest(ZulipTestCase):
         owner = self.example_user("hamlet")
         self.subscribe(owner, PEAR_DEFAULT_STREAM)
 
-        with tempfile.TemporaryDirectory() as temp_dir, self.settings(
-            PEAR_WORKER_WORKDIR=str(Path(temp_dir) / "base"),
-            PEAR_TOPIC_WORKDIR_ROOT=temp_dir,
+        with (
+            tempfile.TemporaryDirectory() as temp_dir,
+            self.settings(
+                PEAR_WORKER_WORKDIR=str(Path(temp_dir) / "base"),
+                PEAR_TOPIC_WORKDIR_ROOT=temp_dir,
+            ),
         ):
             workdir = pear_expected_topic_workdir(
                 owner,
@@ -1814,11 +1901,13 @@ class PearSessionEndpointTest(ZulipTestCase):
         self.login_user(owner)
         repository_url = "https://github.com/NVIDIA/Megatron-LM.git"
 
-        with tempfile.TemporaryDirectory() as temp_dir, self.settings(
-            PEAR_TOPIC_WORKDIR_ROOT=temp_dir,
-        ), patch(
-            "zerver.lib.pear_worker.clone_or_update_pear_repository_workdir"
-        ) as clone_mock:
+        with (
+            tempfile.TemporaryDirectory() as temp_dir,
+            self.settings(
+                PEAR_TOPIC_WORKDIR_ROOT=temp_dir,
+            ),
+            patch("zerver.lib.pear_worker.clone_or_update_pear_repository_workdir") as clone_mock,
+        ):
             result = self.client_post(
                 "/json/users/me/subscriptions",
                 {
@@ -1856,11 +1945,15 @@ class PearSessionEndpointTest(ZulipTestCase):
         def fake_clone(_repository_url: str, workdir: Path) -> None:
             workdir.mkdir(parents=True)
 
-        with tempfile.TemporaryDirectory() as temp_dir, self.settings(
-            PEAR_TOPIC_WORKDIR_ROOT=temp_dir,
-        ), patch(
-            "zerver.lib.pear_worker.clone_or_update_pear_repository_workdir",
-            side_effect=fake_clone,
+        with (
+            tempfile.TemporaryDirectory() as temp_dir,
+            self.settings(
+                PEAR_TOPIC_WORKDIR_ROOT=temp_dir,
+            ),
+            patch(
+                "zerver.lib.pear_worker.clone_or_update_pear_repository_workdir",
+                side_effect=fake_clone,
+            ),
         ):
             channel_context = configure_pear_channel_repository_context(
                 owner,
@@ -1891,10 +1984,14 @@ class PearSessionEndpointTest(ZulipTestCase):
     def test_topic_context_does_not_clone_local_parent_workspace_path(self) -> None:
         owner = self.example_user("hamlet")
 
-        with tempfile.TemporaryDirectory() as temp_dir, self.settings(
-            PEAR_TOPIC_ISOLATION_BACKEND="os-user",
-            PEAR_TOPIC_WORKDIR_ROOT=temp_dir,
-        ), patch("zerver.lib.pear_worker.clone_or_update_pear_repository_workdir") as clone:
+        with (
+            tempfile.TemporaryDirectory() as temp_dir,
+            self.settings(
+                PEAR_TOPIC_ISOLATION_BACKEND="os-user",
+                PEAR_TOPIC_WORKDIR_ROOT=temp_dir,
+            ),
+            patch("zerver.lib.pear_worker.clone_or_update_pear_repository_workdir") as clone,
+        ):
             parent_path = Path(temp_dir) / "devel-base"
             parent_path.mkdir()
             PearTopicContext.objects.create(
@@ -1919,9 +2016,12 @@ class PearSessionEndpointTest(ZulipTestCase):
     def test_context_isolation_username_waits_for_existing_os_user(self) -> None:
         owner = self.example_user("hamlet")
 
-        with tempfile.TemporaryDirectory() as temp_dir, self.settings(
-            PEAR_TOPIC_ISOLATION_BACKEND="os-user",
-            PEAR_TOPIC_WORKDIR_ROOT=temp_dir,
+        with (
+            tempfile.TemporaryDirectory() as temp_dir,
+            self.settings(
+                PEAR_TOPIC_ISOLATION_BACKEND="os-user",
+                PEAR_TOPIC_WORKDIR_ROOT=temp_dir,
+            ),
         ):
             workdir = Path(temp_dir) / "devel-general-chat"
             context = PearTopicContext.objects.create(
@@ -1963,12 +2063,15 @@ class PearSessionEndpointTest(ZulipTestCase):
     def test_topic_context_canvas_skips_missing_os_user(self) -> None:
         owner = self.example_user("hamlet")
 
-        with tempfile.TemporaryDirectory() as temp_dir, self.settings(
-            PEAR_TOPIC_ISOLATION_BACKEND="os-user",
-            PEAR_TOPIC_WORKDIR_ROOT=temp_dir,
-        ), patch("zerver.lib.pear_worker.pwd.getpwnam", side_effect=KeyError), patch(
-            "zerver.lib.pear_worker.pear_ensure_topic_canvas"
-        ) as ensure_canvas:
+        with (
+            tempfile.TemporaryDirectory() as temp_dir,
+            self.settings(
+                PEAR_TOPIC_ISOLATION_BACKEND="os-user",
+                PEAR_TOPIC_WORKDIR_ROOT=temp_dir,
+            ),
+            patch("zerver.lib.pear_worker.pwd.getpwnam", side_effect=KeyError),
+            patch("zerver.lib.pear_worker.pear_ensure_topic_canvas") as ensure_canvas,
+        ):
             context = ensure_pear_topic_context(
                 owner,
                 stream="devel",
@@ -2088,8 +2191,11 @@ class PearSessionEndpointTest(ZulipTestCase):
         owner = self.example_user("hamlet")
         stream = self.subscribe(owner, PEAR_DEFAULT_STREAM)
 
-        with tempfile.TemporaryDirectory() as temp_dir, self.settings(
-            PEAR_TOPIC_WORKDIR_ROOT=str(Path(temp_dir) / "topics"),
+        with (
+            tempfile.TemporaryDirectory() as temp_dir,
+            self.settings(
+                PEAR_TOPIC_WORKDIR_ROOT=str(Path(temp_dir) / "topics"),
+            ),
         ):
             context = ensure_pear_topic_context(
                 owner,
@@ -2783,8 +2889,11 @@ class PearSessionEndpointTest(ZulipTestCase):
         )
         self.subscribe(owner, PEAR_DEFAULT_STREAM)
 
-        with tempfile.TemporaryDirectory() as temp_dir, self.settings(
-            PEAR_TOPIC_WORKDIR_ROOT=temp_dir,
+        with (
+            tempfile.TemporaryDirectory() as temp_dir,
+            self.settings(
+                PEAR_TOPIC_WORKDIR_ROOT=temp_dir,
+            ),
         ):
             store = PearDatabaseWorkerRunStore()
             bot_handler = SimpleNamespace(user_profile=pear_bot)
@@ -2860,9 +2969,12 @@ class PearSessionEndpointTest(ZulipTestCase):
         self.subscribe(pear_bot, PEAR_DEFAULT_STREAM)
         self.login_user(owner)
 
-        with tempfile.TemporaryDirectory() as temp_dir, self.settings(
-            PEAR_WORKER_MODEL="gpt-5.5",
-            PEAR_TOPIC_WORKDIR_ROOT=temp_dir,
+        with (
+            tempfile.TemporaryDirectory() as temp_dir,
+            self.settings(
+                PEAR_WORKER_MODEL="gpt-5.5",
+                PEAR_TOPIC_WORKDIR_ROOT=temp_dir,
+            ),
         ):
             result = self.client_post(
                 f"/json{PEAR_TOPIC_CONTEXT_ENDPOINT}",
@@ -2914,9 +3026,12 @@ class PearSessionEndpointTest(ZulipTestCase):
         self.subscribe(owner, PEAR_DEFAULT_STREAM)
         self.login_user(owner)
 
-        with tempfile.TemporaryDirectory() as temp_dir, self.settings(
-            PEAR_WORKER_MODEL="gpt-5.5",
-            PEAR_TOPIC_WORKDIR_ROOT=temp_dir,
+        with (
+            tempfile.TemporaryDirectory() as temp_dir,
+            self.settings(
+                PEAR_WORKER_MODEL="gpt-5.5",
+                PEAR_TOPIC_WORKDIR_ROOT=temp_dir,
+            ),
         ):
             result = self.client_post(
                 f"/json{PEAR_TOPIC_CONTEXT_ENDPOINT}",
@@ -2962,9 +3077,12 @@ class PearSessionEndpointTest(ZulipTestCase):
         self.subscribe(pear_bot, PEAR_DEFAULT_STREAM)
         self.login_user(owner)
 
-        with tempfile.TemporaryDirectory() as temp_dir, self.settings(
-            PEAR_WORKER_MODEL="gpt-5.5",
-            PEAR_TOPIC_WORKDIR_ROOT=temp_dir,
+        with (
+            tempfile.TemporaryDirectory() as temp_dir,
+            self.settings(
+                PEAR_WORKER_MODEL="gpt-5.5",
+                PEAR_TOPIC_WORKDIR_ROOT=temp_dir,
+            ),
         ):
             model_result = self.client_post(
                 f"/json{PEAR_TOPIC_CONTEXT_ENDPOINT}",
@@ -3180,9 +3298,12 @@ class PearSessionEndpointTest(ZulipTestCase):
             ],
         )
 
-        with tempfile.TemporaryDirectory() as temp_dir, self.settings(
-            PEAR_WORKER_MODEL="gpt-5.5",
-            PEAR_TOPIC_WORKDIR_ROOT=temp_dir,
+        with (
+            tempfile.TemporaryDirectory() as temp_dir,
+            self.settings(
+                PEAR_WORKER_MODEL="gpt-5.5",
+                PEAR_TOPIC_WORKDIR_ROOT=temp_dir,
+            ),
         ):
             self.assertEqual(
                 pear_worker_model_for_topic(

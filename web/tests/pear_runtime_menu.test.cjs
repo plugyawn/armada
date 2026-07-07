@@ -222,7 +222,7 @@ run_test("runtime_summary", () => {
         {
             model_label: "GPT-5.5",
             effort_label: "High",
-            compact_label: "gpt-5.5 / h",
+            compact_label: "GPT-5.5 · High",
         },
     );
 
@@ -231,7 +231,7 @@ run_test("runtime_summary", () => {
         {
             model_label: "custom",
             effort_label: "Low",
-            compact_label: "custom / l",
+            compact_label: "custom · Low",
         },
     );
 
@@ -242,7 +242,7 @@ run_test("runtime_summary", () => {
         {
             model_label: "custom",
             effort_label: "XHigh",
-            compact_label: "custom / xh",
+            compact_label: "custom · XHigh",
         },
     );
 });

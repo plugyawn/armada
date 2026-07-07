@@ -229,6 +229,33 @@ class PearSessionDefaultsTest(TestCase):
         self.assertIn("message 123", "\n".join(logs.output))
         self.assertIn("edit window is closed", "\n".join(logs.output))
 
+    def test_update_pear_worker_status_message_can_request_rendering_only(self) -> None:
+        updated_messages: list[dict[str, object]] = []
+
+        class FakeBotHandler:
+            def update_message(self, payload: dict[str, object]) -> None:
+                updated_messages.append(payload)
+
+        self.assertTrue(
+            update_pear_worker_status_message(
+                FakeBotHandler(),
+                progress_message_id=123,
+                content="working",
+                rendering_only=True,
+            )
+        )
+
+        self.assertEqual(
+            updated_messages,
+            [
+                {
+                    "message_id": 123,
+                    "content": "working",
+                    "rendering_only": True,
+                }
+            ],
+        )
+
     def test_update_pear_worker_status_message_logs_unexpected_update_failure(self) -> None:
         class FakeBotHandler:
             def update_message(self, payload: dict[str, object]) -> None:
@@ -5835,7 +5862,7 @@ class PearSessionDefaultsTest(TestCase):
         self.assertEqual(sent_replies, [])
         self.assertEqual(len(updated_messages), 2)
         self.assertEqual(updated_messages[0]["message_id"], 501)
-        self.assertNotIn("rendering_only", updated_messages[0])
+        self.assertIs(updated_messages[0]["rendering_only"], True)
         self.assertEqual(updated_messages[0]["content"], PEAR_ACTIVE_THINKING_MARKDOWN)
         self.assertEqual(tool_seen_statuses, [updated_messages[0]["content"]])
         self.assertEqual(updated_messages[1]["message_id"], 501)
@@ -5959,10 +5986,12 @@ class PearSessionDefaultsTest(TestCase):
         )
 
         self.assertEqual(updated_messages[0]["content"], PEAR_ACTIVE_THINKING_MARKDOWN)
+        self.assertIs(updated_messages[0]["rendering_only"], True)
         self.assertEqual(
             updated_messages[-1]["content"],
             "Pear worker completed without a visible response.",
         )
+        self.assertNotIn("rendering_only", updated_messages[-1])
         self.assertIn(("result_updated", "Settled worker progress message."), recorded_events)
         live_state = get_pear_live_run_state(trigger_message_id)
         self.assertIsNotNone(live_state)
@@ -6266,6 +6295,10 @@ class PearSessionDefaultsTest(TestCase):
         self.assertEqual(
             [message["content"] for message in updated_messages],
             [PEAR_ACTIVE_THINKING_MARKDOWN, "A", "AB"],
+        )
+        self.assertEqual(
+            [message.get("rendering_only") for message in updated_messages],
+            [True, True, None],
         )
         self.assertFalse(
             any(

@@ -181,6 +181,7 @@ let last_error = "";
 let error_dismissed = false;
 let last_runs: PearRun[] = [];
 let last_topic_context: PearTopicContext | null | undefined;
+let resize_render_frame_id: number | undefined;
 let last_render_state_key = "";
 let last_context_refresh_key = "";
 let last_context_refresh_at = 0;
@@ -714,6 +715,14 @@ export function open_work_details_for_artifact_label(label: string): void {
 
 function close_work_details(): void {
     const key = current_context_key();
+    // Mirror the workbench-open predicate: when nothing could be visible,
+    // skip the close-and-render so the document-level outside-click handler
+    // doesn't re-render the panel on every stray click in the app.
+    const manually_open = key !== "" && (work_panel_open_by_context.get(key) ?? false);
+    const error_forced_open = last_error !== "" && !error_dismissed;
+    if (!manually_open && !error_forced_open && workbench_anchor_element === undefined) {
+        return;
+    }
     if (key !== "") {
         work_panel_open_by_context.set(key, false);
     }
@@ -2144,7 +2153,14 @@ export function initialize(): void {
         });
     });
     $(window).on("resize.pear_panel", () => {
-        render();
+        // Coalesce the resize-event burst into one render per frame.
+        if (resize_render_frame_id !== undefined) {
+            return;
+        }
+        resize_render_frame_id = requestAnimationFrame(() => {
+            resize_render_frame_id = undefined;
+            render();
+        });
     });
     $(window).on("scroll.pear_panel", () => {
         position_workbench_popover();

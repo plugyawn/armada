@@ -943,6 +943,24 @@ run_test("workbench_open_for_testing", () => {
     );
 });
 
+run_test("polling_paused_for_testing", () => {
+    // Hidden tab pauses background polls...
+    assert.equal(
+        pear_panel.polling_paused_for_testing({hidden: true, force_context: false}),
+        true,
+    );
+    // ...but an explicit forced refresh still runs even while hidden.
+    assert.equal(
+        pear_panel.polling_paused_for_testing({hidden: true, force_context: true}),
+        false,
+    );
+    // Visible tab never pauses.
+    assert.equal(
+        pear_panel.polling_paused_for_testing({hidden: false, force_context: false}),
+        false,
+    );
+});
+
 run_test("canvas_cache_is_stale_for_testing", () => {
     // Fresh cache (well within the 30s window) is not stale.
     assert.equal(

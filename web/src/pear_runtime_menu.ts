@@ -9,6 +9,7 @@ import * as channel from "./channel.ts";
 import {$t} from "./i18n.ts";
 import * as narrow_state from "./narrow_state.ts";
 import * as popover_menus from "./popover_menus.ts";
+import {context_key as narrow_context_key, model_reasoning_efforts} from "./pear_runtime_shared.ts";
 import {parse_html} from "./ui_util.ts";
 
 const pear_reasoning_effort_schema = z.object({
@@ -58,6 +59,8 @@ const pear_runtime_response_schema = z.object({
 });
 
 export type PearReasoningEffort = z.infer<typeof pear_reasoning_effort_schema>;
+
+export {model_reasoning_efforts} from "./pear_runtime_shared.ts";
 export type PearRuntimeContext = z.infer<typeof pear_runtime_context_schema>;
 
 export type PearRuntimeMenuChoice = {
@@ -140,40 +143,11 @@ export function should_accept_runtime_fetch_for_testing(options: {
     );
 }
 
-const fallback_efforts: PearReasoningEffort[] = [
-    {effort: "low", label: "Low"},
-    {effort: "medium", label: "Medium"},
-    {effort: "high", label: "High"},
-    {effort: "xhigh", label: "XHigh"},
-];
-
 function current_narrow(): {stream: string | undefined; topic: string | undefined} {
     return {
         stream: narrow_state.stream_name(),
         topic: narrow_state.topic(),
     };
-}
-
-function narrow_context_key(stream: string | undefined, topic: string | undefined): string {
-    if (stream === undefined || topic === undefined) {
-        return "";
-    }
-    return `${stream}\n${topic}`;
-}
-
-export function model_reasoning_efforts(
-    context: PearRuntimeContext | undefined,
-    model: string | undefined,
-): PearReasoningEffort[] {
-    const catalog_entry = context?.model_catalog?.find((entry) => entry.slug === model);
-    const model_efforts = catalog_entry?.supported_reasoning_levels;
-    if (model_efforts !== undefined && model_efforts.length > 0) {
-        return model_efforts;
-    }
-    if (context?.reasoning_efforts !== undefined && context.reasoning_efforts.length > 0) {
-        return context.reasoning_efforts;
-    }
-    return fallback_efforts;
 }
 
 export function model_choices(context: PearRuntimeContext | undefined): PearRuntimeMenuChoice[] {

@@ -1712,7 +1712,10 @@ export function handle_narrow_activated(): void {
     }
     last_observed_context_key = key;
     const cached_context = topic_context_by_context.get(key);
-    render(last_runs, cached_context);
+    // Render the new topic with a clean run slate; last_runs still holds the
+    // previous topic's runs, so reusing it would flash that topic's run state
+    // (and active-run chrome) in the new header until the fetch below returns.
+    render([], cached_context);
     refresh({force_context: true});
 }
 

@@ -4675,6 +4675,66 @@ class PearSessionDefaultsTest(TestCase):
             ],
         )
 
+    def test_run_worker_turn_emits_topic_typing_signal(self) -> None:
+        typing_signals: list[str] = []
+
+        class FakeRunStore:
+            def record(self, bot_handler, message_id, status, **kwargs) -> None:
+                pass
+
+            def record_event(self, bot_handler, message_id, event_type, **kwargs) -> None:
+                pass
+
+            def update_metadata(self, bot_handler, message_id, **metadata) -> None:
+                pass
+
+        class FakeBotHandler:
+            def send_reply(self, message, response) -> dict[str, int]:
+                return {"id": 4242}
+
+            def update_message(self, message) -> None:
+                pass
+
+        def tool_runner(active_session, task: str, *, event_callback=None) -> list[dict[str, str]]:
+            return [{"label": "Verification", "value": "typing test"}]
+
+        message = {
+            "id": 9311,
+            "type": "stream",
+            "display_recipient": PEAR_DEFAULT_STREAM,
+            "subject": PEAR_DEFAULT_TOPIC,
+            "sender_id": 21,
+            "sender_full_name": "plugyawn",
+            "content": "@**Pear** run the typing check",
+        }
+        handler = PearEmbeddedBotHandler(
+            worker_runtime=PearWorkerRuntime(tool_runner),
+            worker_run_store=FakeRunStore(),
+        )
+
+        with patch(
+            "zerver.lib.pear.send_pear_worker_typing_notification",
+            side_effect=lambda bot_handler, *, stream, topic, operator: (
+                typing_signals.append(operator) or True
+            ),
+        ):
+            handler.run_worker_turn(
+                message,
+                FakeBotHandler(),
+                content=str(message["content"]),
+                active_session=None,
+                message_id=9311,
+                stream=PEAR_DEFAULT_STREAM,
+                topic=PEAR_DEFAULT_TOPIC,
+                post_started_progress=True,
+            )
+
+        # The run brackets the topic-level "Pear is working" dots: one
+        # start when the runtime begins, one stop when the turn settles.
+        self.assertEqual(typing_signals[0], "start")
+        self.assertEqual(typing_signals[-1], "stop")
+        self.assertEqual(typing_signals.count("stop"), 1)
+
     def test_run_worker_turn_settles_progress_for_non_posting_result(self) -> None:
         updated_messages: list[dict[str, object]] = []
         recorded_events: list[tuple[str, str]] = []

@@ -53,6 +53,33 @@ run_test("forbidden_header_mount_selectors_for_testing", () => {
     ]);
 });
 
+run_test("should_accept_runtime_fetch_for_testing", () => {
+    assert.equal(
+        pear_runtime_menu.should_accept_runtime_fetch_for_testing({
+            fetch_generation: 3,
+            runtime_save_generation: 3,
+            fetch_started_during_save: false,
+        }),
+        true,
+    );
+    assert.equal(
+        pear_runtime_menu.should_accept_runtime_fetch_for_testing({
+            fetch_generation: 2,
+            runtime_save_generation: 3,
+            fetch_started_during_save: false,
+        }),
+        false,
+    );
+    assert.equal(
+        pear_runtime_menu.should_accept_runtime_fetch_for_testing({
+            fetch_generation: 3,
+            runtime_save_generation: 3,
+            fetch_started_during_save: true,
+        }),
+        false,
+    );
+});
+
 run_test("model_reasoning_efforts", () => {
     const gpt_efforts = [
         {effort: "medium", label: "Medium"},

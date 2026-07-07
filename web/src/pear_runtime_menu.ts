@@ -253,7 +253,7 @@ export function runtime_summary(context: PearRuntimeContext | undefined): PearRu
     return {
         model_label,
         effort_label,
-        compact_label: `${context.model} / ${compact_effort}`,
+        compact_label: `${model_label} · ${effort_label || compact_effort}`,
     };
 }
 

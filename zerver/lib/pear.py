@@ -116,6 +116,7 @@ PEAR_ACTIVE_THINKING_MARKDOWN: Final = "*Thinking*"
 PEAR_VOLATILE_ASSISTANT_FLUSH_INTERVAL_SECONDS: Final = 0.033
 PEAR_PERSISTENT_ASSISTANT_FLUSH_INTERVAL_SECONDS: Final = 0.2
 PEAR_BACKGROUND_TRANSCRIPT_FLUSH_INTERVAL_SECONDS: Final = 0.5
+PEAR_TYPING_REFRESH_INTERVAL_SECONDS: Final = 10.0
 PEAR_LIVE_RUN_CACHE_KEY_PREFIX: Final = "pear:live-run:"
 PEAR_LIVE_RUN_CACHE_TTL_SECONDS: Final = 3600
 PEAR_MARKDOWN_IMAGE_PATTERN: Final = (
@@ -1920,6 +1921,36 @@ def update_pear_worker_status_message(
     return True
 
 
+
+def send_pear_worker_typing_notification(
+    bot_handler: Any,
+    *,
+    stream: str,
+    topic: str,
+    operator: str,
+) -> bool:
+    """Best-effort topic-level "Pear is working" signal (design R1).
+
+    Emits a stream-typing start/stop from the Pear bot so every client
+    shows Zulip's native typing dots for the topic while a run is live.
+    Typing is decoration: failures are logged and never affect the run.
+    """
+    try:
+        user_profile = getattr(bot_handler, "user_profile", None)
+        if user_profile is None:
+            return False
+        # Imported lazily: this module is loaded by the embedded-bot
+        # runtime and must not import action modules at import time.
+        from zerver.actions.typing import do_send_stream_typing_notification
+        from zerver.models.streams import get_stream
+
+        stream_object = get_stream(stream, user_profile.realm)
+        do_send_stream_typing_notification(user_profile, operator, stream_object, topic)
+        return True
+    except Exception:
+        logger.warning("Pear typing notification failed.", exc_info=True)
+        return False
+
 def pear_worker_summary_from_tool_results(
     tool_results: Sequence[PearWorkerToolResult],
 ) -> str:
@@ -3344,6 +3375,30 @@ class PearWorkerTurn:
         self.worker_result: dict[str, Any] = {}
         self.codex_thread_id: str | None = None
         self.result_summary = ""
+        self.typing_started = False
+        self.last_typing_signal_at = 0.0
+
+    def signal_typing(self, operator: str, *, force: bool = True) -> None:
+        """Topic-level "Pear is working" dots (design R1), throttled below
+        the server's typing-start expiry so long runs keep the signal
+        alive without spamming events."""
+        if operator == "stop" and not self.typing_started:
+            return
+        if operator == "start" and not force:
+            current_time = time.monotonic()
+            if current_time - self.last_typing_signal_at < PEAR_TYPING_REFRESH_INTERVAL_SECONDS:
+                return
+        sent = send_pear_worker_typing_notification(
+            self.bot_handler,
+            stream=self.stream,
+            topic=self.topic,
+            operator=operator,
+        )
+        if sent and operator == "start":
+            self.typing_started = True
+            self.last_typing_signal_at = time.monotonic()
+        if operator == "stop":
+            self.typing_started = False
 
     def raise_if_cancel_requested(self) -> None:
         if not self.handler.worker_run_cancel_requested(self.bot_handler, self.message_id):
@@ -3453,6 +3508,7 @@ class PearWorkerTurn:
 
     def handle_transcript_event(self, event: PearWorkerTranscriptEvent) -> None:
         self.raise_if_cancel_requested()
+        self.signal_typing("start", force=False)
         self.transcript_events.append(event)
         title = event.get("title", "").strip()
         body = event.get("body", "").strip()
@@ -3616,6 +3672,7 @@ class PearWorkerTurn:
                     "session_kind": self.session_kind,
                 },
             )
+            self.signal_typing("start")
             if self.active_session["worker_can_run"]:
                 initial_tool_results: list[PearWorkerToolResult] = [
                     {
@@ -3924,6 +3981,8 @@ class PearWorkerTurn:
                 content=failure_message,
             ):
                 self.bot_handler.send_reply(self.message, failure_message)
+        finally:
+            self.signal_typing("stop")
 
 
 def clean_pear_session_target(

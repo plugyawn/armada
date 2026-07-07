@@ -1,5 +1,8 @@
 {{! Typing notifications }}
 <ul id="typing_notification_list">
+    {{#if pear_working}}
+        <li class="typing_notification pear-typing-notification">{{t "Pear is working…" }}</li>
+    {{/if}}
     {{#if several_users}}
         <li class="typing_notification">{{t "Several people are typing…" }}</li>
     {{else}}

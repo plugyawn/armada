@@ -1,4 +1,5 @@
 import $ from "jquery";
+import * as z from "zod/mini";
 
 import render_pear_panel from "../templates/pear_panel.hbs";
 
@@ -13,158 +14,178 @@ import {postprocess_content} from "./postprocess_content.ts";
 import * as rendered_markdown from "./rendered_markdown.ts";
 import * as stream_data from "./stream_data.ts";
 
-type PearRunEvent = {
-    id: number;
-    event_type: string;
-    summary: string;
-    payload?: {
-        kind?: string;
-        status?: string;
-        title?: string;
-        body?: string;
-    };
-};
+const pear_run_event_schema = z.object({
+    id: z.number(),
+    event_type: z.string(),
+    summary: z.string(),
+    payload: z.optional(
+        z.object({
+            kind: z.optional(z.string()),
+            status: z.optional(z.string()),
+            title: z.optional(z.string()),
+            body: z.optional(z.string()),
+        }),
+    ),
+});
 
-type PearUsage = {
-    input_tokens?: number;
-    cached_input_tokens?: number;
-    output_tokens?: number;
-    reasoning_output_tokens?: number;
-    total_tokens?: number;
-    cache_percent?: number;
-    duration_seconds?: number | null;
-    summary?: string;
-};
+const pear_usage_schema = z.object({
+    input_tokens: z.optional(z.number()),
+    cached_input_tokens: z.optional(z.number()),
+    output_tokens: z.optional(z.number()),
+    reasoning_output_tokens: z.optional(z.number()),
+    total_tokens: z.optional(z.number()),
+    cache_percent: z.optional(z.number()),
+    duration_seconds: z.nullish(z.number()),
+    summary: z.optional(z.string()),
+});
 
-type PearLiveRun = {
-    status: string;
-    content: string;
-    updated_at: number;
-};
+const pear_live_run_schema = z.object({
+    status: z.string(),
+    content: z.string(),
+    updated_at: z.number(),
+});
 
-type PearRun = {
-    id: number;
-    trigger_message_id: number;
-    result_message_id?: number | null;
-    status: string;
-    session_kind: string;
-    source_stream: string;
-    source_topic: string;
-    summary: string;
-    current_activity: string;
-    runtime_label: string;
-    sandbox: string;
-    approval_policy: string;
-    workdir: string;
-    codex_thread_id: string;
-    usage?: PearUsage | null;
-    live?: PearLiveRun | null;
-    events?: PearRunEvent[];
-};
+const pear_run_schema = z.object({
+    id: z.number(),
+    trigger_message_id: z.number(),
+    result_message_id: z.nullish(z.number()),
+    status: z.string(),
+    session_kind: z.string(),
+    source_stream: z.string(),
+    source_topic: z.string(),
+    summary: z.string(),
+    current_activity: z.string(),
+    runtime_label: z.string(),
+    sandbox: z.string(),
+    approval_policy: z.string(),
+    workdir: z.string(),
+    codex_thread_id: z.string(),
+    usage: z.nullish(pear_usage_schema),
+    live: z.nullish(pear_live_run_schema),
+    events: z.optional(z.array(pear_run_event_schema)),
+});
 
-type PearRunsResponse = {
-    pear_runs: PearRun[];
-    pear_topic_context?: PearTopicContext | null;
-    runtime_config?: {
-        model?: string | null;
-        model_choices?: string[];
-        model_catalog?: PearModelCatalogEntry[];
-        reasoning_effort?: string | null;
-        reasoning_efforts?: PearReasoningEffort[];
-    };
-};
+const pear_reasoning_effort_schema = z.object({
+    effort: z.string(),
+    label: z.string(),
+    description: z.optional(z.string()),
+});
 
-type PearReasoningEffort = {
-    effort: string;
-    label: string;
-    description?: string;
-};
+const pear_model_catalog_entry_schema = z.object({
+    slug: z.string(),
+    display_name: z.string(),
+    default_reasoning_level: z.optional(z.string()),
+    supported_reasoning_levels: z.optional(z.array(pear_reasoning_effort_schema)),
+});
 
-type PearModelCatalogEntry = {
-    slug: string;
-    display_name: string;
-    default_reasoning_level?: string;
-    supported_reasoning_levels?: PearReasoningEffort[];
-};
+const pear_git_changed_file_schema = z.object({
+    status: z.string(),
+    kind: z.string(),
+    path: z.string(),
+});
 
-type PearGitChangedFile = {
-    status: string;
-    kind: string;
-    path: string;
-};
+const pear_git_commit_schema = z.object({
+    hash: z.string(),
+    summary: z.string(),
+});
 
-type PearGitCommit = {
-    hash: string;
-    summary: string;
-};
+const pear_git_context_schema = z.object({
+    available: z.boolean(),
+    workdir: z.optional(z.string()),
+    repo_name: z.optional(z.string()),
+    repo_label: z.optional(z.string()),
+    remote_url: z.optional(z.string()),
+    worktree_name: z.optional(z.string()),
+    branch: z.optional(z.string()),
+    head: z.optional(z.string()),
+    head_short: z.optional(z.string()),
+    upstream: z.optional(z.string()),
+    ahead: z.optional(z.number()),
+    behind: z.optional(z.number()),
+    dirty: z.optional(z.boolean()),
+    changed_count: z.optional(z.number()),
+    detached: z.optional(z.boolean()),
+    branch_matches_topic: z.optional(z.boolean()),
+    changed_files: z.optional(z.array(pear_git_changed_file_schema)),
+    changed_files_truncated: z.optional(z.boolean()),
+    diff_shortstat: z.optional(z.string()),
+    recent_commits: z.optional(z.array(pear_git_commit_schema)),
+});
 
-type PearGitContext = {
-    available: boolean;
-    workdir?: string;
-    repo_name?: string;
-    repo_label?: string;
-    remote_url?: string;
-    worktree_name?: string;
-    branch?: string;
-    head?: string;
-    head_short?: string;
-    upstream?: string;
-    ahead?: number;
-    behind?: number;
-    dirty?: boolean;
-    changed_count?: number;
-    detached?: boolean;
-    branch_matches_topic?: boolean;
-    changed_files?: PearGitChangedFile[];
-    changed_files_truncated?: boolean;
-    diff_shortstat?: string;
-    recent_commits?: PearGitCommit[];
-};
+const pear_git_tree_schema = z.object({
+    available: z.boolean(),
+    workdir: z.string(),
+    graph: z.string(),
+    status_short: z.string(),
+    delta: z.optional(pear_git_context_schema),
+});
 
-type PearGitTree = {
-    available: boolean;
-    workdir: string;
-    graph: string;
-    status_short: string;
-    delta?: PearGitContext;
-};
+const pear_git_tree_response_schema = z.object({
+    git_tree: pear_git_tree_schema,
+});
 
-type PearGitTreeResponse = {
-    git_tree: PearGitTree;
-};
+const pear_canvas_schema = z.object({
+    content: z.string(),
+    version: z.string(),
+    relative_path: z.string(),
+    exists: z.boolean(),
+    max_bytes: z.number(),
+    rendered_html: z.optional(z.string()),
+    render_failed: z.optional(z.boolean()),
+});
 
-type PearCanvas = {
-    content: string;
-    version: string;
-    relative_path: string;
-    exists: boolean;
-    max_bytes: number;
-    rendered_html?: string;
-    render_failed?: boolean;
-};
+const pear_canvas_response_schema = z.object({
+    pear_canvas: pear_canvas_schema,
+});
 
-type PearCanvasResponse = {
-    pear_canvas: PearCanvas;
-};
+const pear_topic_context_schema = z.object({
+    stream: z.string(),
+    topic: z.string(),
+    model: z.string(),
+    default_model: z.string(),
+    model_choices: z.array(z.string()),
+    model_catalog: z.optional(z.array(pear_model_catalog_entry_schema)),
+    reasoning_effort: z.string(),
+    default_reasoning_effort: z.string(),
+    reasoning_efforts: z.array(pear_reasoning_effort_schema),
+    github_repo: z.string(),
+    pinned_repo: z.optional(z.string()),
+    repo_label: z.optional(z.string()),
+    repo_title: z.optional(z.string()),
+    worktree_label: z.optional(z.string()),
+    workdir: z.string(),
+    git: pear_git_context_schema,
+});
 
-type PearTopicContext = {
-    stream: string;
-    topic: string;
-    model: string;
-    default_model: string;
-    model_choices: string[];
-    model_catalog?: PearModelCatalogEntry[];
-    reasoning_effort: string;
-    default_reasoning_effort: string;
-    reasoning_efforts: PearReasoningEffort[];
-    github_repo: string;
-    pinned_repo?: string;
-    repo_label?: string;
-    repo_title?: string;
-    worktree_label?: string;
-    workdir: string;
-    git: PearGitContext;
-};
+const pear_runs_response_schema = z.object({
+    pear_runs: z.array(pear_run_schema),
+    pear_topic_context: z.nullish(pear_topic_context_schema),
+    runtime_config: z.optional(
+        z.object({
+            model: z.nullish(z.string()),
+            model_choices: z.optional(z.array(z.string())),
+            model_catalog: z.optional(z.array(pear_model_catalog_entry_schema)),
+            reasoning_effort: z.nullish(z.string()),
+            reasoning_efforts: z.optional(z.array(pear_reasoning_effort_schema)),
+        }),
+    ),
+});
+
+const pear_side_response_schema = z.object({
+    dm_narrow_url: z.optional(z.string()),
+});
+
+type PearRunEvent = z.infer<typeof pear_run_event_schema>;
+type PearRun = z.infer<typeof pear_run_schema>;
+type PearRunsResponse = z.infer<typeof pear_runs_response_schema>;
+type PearReasoningEffort = z.infer<typeof pear_reasoning_effort_schema>;
+type PearGitContext = z.infer<typeof pear_git_context_schema>;
+type PearGitTreeResponse = z.infer<typeof pear_git_tree_response_schema>;
+type PearCanvas = z.infer<typeof pear_canvas_schema>;
+type PearCanvasResponse = z.infer<typeof pear_canvas_response_schema>;
+type PearTopicContext = z.infer<typeof pear_topic_context_schema>;
+type PearGitTree = z.infer<typeof pear_git_tree_schema>;
+type PearGitCommit = z.infer<typeof pear_git_commit_schema>;
 
 type PearWorkbenchView = "diff" | "history" | "canvas" | "side";
 type PearDisplayTopicContext = NonNullable<ReturnType<typeof display_topic_context>>;
@@ -365,60 +386,19 @@ function reasoning_effort_meter_class(effort: string | undefined): string {
 }
 
 function is_pear_runs_response(data: unknown): data is PearRunsResponse {
-    return (
-        typeof data === "object" &&
-        data !== null &&
-        "pear_runs" in data &&
-        Array.isArray(data.pear_runs)
-    );
+    return pear_runs_response_schema.safeParse(data).success;
 }
 
 function is_pear_side_response(data: unknown): data is {dm_narrow_url?: string} {
-    return (
-        typeof data === "object" &&
-        data !== null &&
-        (!("dm_narrow_url" in data) || typeof data.dm_narrow_url === "string")
-    );
+    return pear_side_response_schema.safeParse(data).success;
 }
 
 function is_pear_git_tree_response(data: unknown): data is PearGitTreeResponse {
-    if (typeof data !== "object" || data === null || !("git_tree" in data)) {
-        return false;
-    }
-    const git_tree = data.git_tree;
-    return (
-        typeof git_tree === "object" &&
-        git_tree !== null &&
-        "available" in git_tree &&
-        typeof git_tree.available === "boolean" &&
-        "workdir" in git_tree &&
-        typeof git_tree.workdir === "string" &&
-        "graph" in git_tree &&
-        typeof git_tree.graph === "string" &&
-        "status_short" in git_tree &&
-        typeof git_tree.status_short === "string"
-    );
+    return pear_git_tree_response_schema.safeParse(data).success;
 }
 
 function is_pear_canvas_response(data: unknown): data is PearCanvasResponse {
-    if (typeof data !== "object" || data === null || !("pear_canvas" in data)) {
-        return false;
-    }
-    const canvas = data.pear_canvas;
-    return (
-        typeof canvas === "object" &&
-        canvas !== null &&
-        "content" in canvas &&
-        typeof canvas.content === "string" &&
-        "version" in canvas &&
-        typeof canvas.version === "string" &&
-        "relative_path" in canvas &&
-        typeof canvas.relative_path === "string" &&
-        "exists" in canvas &&
-        typeof canvas.exists === "boolean" &&
-        "max_bytes" in canvas &&
-        typeof canvas.max_bytes === "number"
-    );
+    return pear_canvas_response_schema.safeParse(data).success;
 }
 
 function display_event(event: PearRunEvent): PearRunEvent & {

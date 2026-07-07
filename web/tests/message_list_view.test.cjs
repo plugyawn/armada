@@ -693,29 +693,37 @@ test("pear_message_vars", () => {
     assert.equal(result.edited, false);
     assert.equal(result.last_edit_timestamp, undefined);
 
+    // A bot that is neither flagged by the server nor in the Pear bot-id
+    // set is NOT Pear, even when its content carries the ✦ glyph — content
+    // sniffing used to suppress sender chrome for any bot echoing ✦.
     result = calculate_real_variables(
         build_message_context({
             id: 1004,
-            sender_email: "unhydrated-pear@example.com",
-            sender_full_name: "Pear",
+            sender_email: "third-party-bot@example.com",
+            sender_full_name: "CI Bot",
             sender_id: 26,
             content: "<p><em>Thinking</em> ✦</p>",
             is_pear_message: undefined,
             last_edit_timestamp: 456,
         }),
     );
-    assert.equal(result.is_pear_message, true);
-    assert.equal(result.is_pear_active_message, true);
-    assert.equal(result.include_sender, false);
-    assert.equal(result.edited, false);
+    assert.equal(result.is_pear_message, false);
+    assert.equal(result.is_pear_active_message, false);
+    assert.equal(result.include_sender, true);
 });
 
 run_test("pear_tool_spoiler_title_detection", () => {
     assert.equal(message_list_view.is_pear_tool_spoiler_title_for_testing("Ran 1 tool"), true);
     assert.equal(message_list_view.is_pear_tool_spoiler_title_for_testing("Ran 7 tools"), true);
-    assert.equal(message_list_view.is_pear_tool_spoiler_title_for_testing("Running 2/4 tools ✦"), true);
+    assert.equal(
+        message_list_view.is_pear_tool_spoiler_title_for_testing("Running 2/4 tools ✦"),
+        true,
+    );
     assert.equal(message_list_view.is_pear_tool_spoiler_title_for_testing("3 failed tools"), true);
-    assert.equal(message_list_view.is_pear_tool_spoiler_title_for_testing("Implementation details"), false);
+    assert.equal(
+        message_list_view.is_pear_tool_spoiler_title_for_testing("Implementation details"),
+        false,
+    );
     assert.equal(message_list_view.is_pear_tool_spoiler_title_for_testing("Ran tests"), false);
 });
 
@@ -738,12 +746,15 @@ run_test("pear_tool_row_marker_detection", () => {
         is_active: false,
         remaining_text: "Ran: pwd",
     });
-    assert.deepEqual(message_list_view.extract_pear_tool_row_marker_for_testing("[ ] Queued: tests"), {
-        glyph: "⋅",
-        class_name: "pear-tool-row-pending",
-        is_active: false,
-        remaining_text: "Queued: tests",
-    });
+    assert.deepEqual(
+        message_list_view.extract_pear_tool_row_marker_for_testing("[ ] Queued: tests"),
+        {
+            glyph: "⋅",
+            class_name: "pear-tool-row-pending",
+            is_active: false,
+            remaining_text: "Queued: tests",
+        },
+    );
     assert.deepEqual(message_list_view.extract_pear_tool_row_marker_for_testing("[~] running"), {
         glyph: "·",
         class_name: "pear-tool-row-active",
@@ -806,12 +817,15 @@ run_test("pear_tool_block_marker_detection", () => {
 });
 
 run_test("pear_artifact_reference_detection", () => {
-    assert.deepEqual(message_list_view.extract_pear_artifact_reference_for_testing("Diff: 2 files"), {
-        label: "Diff",
-        glyph: "✦",
-        class_name: "pear-artifact-diff",
-        title: "Diff: 2 files",
-    });
+    assert.deepEqual(
+        message_list_view.extract_pear_artifact_reference_for_testing("Diff: 2 files"),
+        {
+            label: "Diff",
+            glyph: "✦",
+            class_name: "pear-artifact-diff",
+            title: "Diff: 2 files",
+        },
+    );
     assert.deepEqual(
         message_list_view.extract_pear_artifact_reference_for_testing("Canvas: CANVAS.md"),
         {

@@ -243,27 +243,44 @@ export function extract_pear_tool_row_marker_for_testing(text: string): {
     };
 }
 
-const pear_artifact_references: PearArtifactReference[] = [
-    {regex: /^(?:Repo|Repository)$/i, glyph: "∙", class_name: "pear-artifact-repo"},
-    {regex: /^Runtime$/i, glyph: "·", class_name: "pear-artifact-runtime"},
-    {regex: /^Branch$/i, glyph: "✶", class_name: "pear-artifact-branch"},
-    {regex: /^(?:Commit|SHA)$/i, glyph: "✶", class_name: "pear-artifact-commit"},
-    {regex: /^(?:PR|Pull request)$/i, glyph: "✧", class_name: "pear-artifact-pr"},
-    {regex: /^Diff$/i, glyph: "✦", class_name: "pear-artifact-diff"},
-    {regex: /^(?:Test|Tests|Verification)$/i, glyph: "✺", class_name: "pear-artifact-verification"},
-    {regex: /^Screenshot$/i, glyph: "✷", class_name: "pear-artifact-screenshot"},
+// Single source for the artifact label vocabulary; the per-label reference
+// table and the artifact-line regex below are both derived from it so the two
+// cannot drift apart.
+const pear_artifact_types: {labels: string[]; glyph: string; class_name: string}[] = [
+    {labels: ["Repo", "Repository"], glyph: "∙", class_name: "pear-artifact-repo"},
+    {labels: ["Runtime"], glyph: "·", class_name: "pear-artifact-runtime"},
+    {labels: ["Branch"], glyph: "✶", class_name: "pear-artifact-branch"},
+    {labels: ["Commit", "SHA"], glyph: "✶", class_name: "pear-artifact-commit"},
+    {labels: ["PR", "Pull request"], glyph: "✧", class_name: "pear-artifact-pr"},
+    {labels: ["Diff"], glyph: "✦", class_name: "pear-artifact-diff"},
     {
-        regex: /^(?:Session|Session record|Pear session|Codex session)$/i,
+        labels: ["Test", "Tests", "Verification"],
+        glyph: "✺",
+        class_name: "pear-artifact-verification",
+    },
+    {labels: ["Screenshot"], glyph: "✷", class_name: "pear-artifact-screenshot"},
+    {
+        labels: ["Session", "Session record", "Pear session", "Codex session"],
         glyph: "✩",
         class_name: "pear-artifact-session",
     },
-    {regex: /^(?:Canvas|Docs?)$/i, glyph: "✧", class_name: "pear-artifact-doc"},
-    {regex: /^(?:Issue|Ticket)$/i, glyph: "✷", class_name: "pear-artifact-ticket"},
-    {regex: /^Reviewers?$/i, glyph: "✷", class_name: "pear-artifact-reviewers"},
+    {labels: ["Canvas", "Doc", "Docs"], glyph: "✧", class_name: "pear-artifact-doc"},
+    {labels: ["Issue", "Ticket"], glyph: "✷", class_name: "pear-artifact-ticket"},
+    {labels: ["Reviewer", "Reviewers"], glyph: "✷", class_name: "pear-artifact-reviewers"},
 ];
 
-const pear_artifact_line_regex =
-    /^\s*(Repo|Repository|Runtime|Branch|Commit|SHA|PR|Pull request|Diff|Test|Tests|Verification|Screenshot|Session|Session record|Pear session|Codex session|Canvas|Doc|Docs|Issue|Ticket|Reviewer|Reviewers):\s*/i;
+const pear_artifact_references: PearArtifactReference[] = pear_artifact_types.map(
+    (type) => ({
+        regex: new RegExp(`^(?:${type.labels.join("|")})$`, "i"),
+        glyph: type.glyph,
+        class_name: type.class_name,
+    }),
+);
+
+const pear_artifact_line_regex = new RegExp(
+    `^\\s*(${pear_artifact_types.flatMap((type) => type.labels).join("|")}):\\s*`,
+    "i",
+);
 
 function message_has_pear_active_marker(message: Message): boolean {
     return (

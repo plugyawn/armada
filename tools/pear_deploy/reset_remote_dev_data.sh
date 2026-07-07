@@ -58,6 +58,12 @@ if [[ ! -f "$STATE_PATH" ]]; then
     exit 1
 fi
 
+# The demo-user roster (real names/emails) is deployment data, not source:
+# it lives in an untracked file so the repository carries no personal
+# identities. Copy pear_roster.example.py and fill in your deployment's
+# accounts.
+ROSTER_PATH="${PEAR_DEPLOY_ROSTER:-$SCRIPT_DIR/pear_roster.local.py}"
+
 eval "$(
     python3 - "$STATE_PATH" <<'PY'
 import json
@@ -79,17 +85,30 @@ ssh_root() {
 }
 
 if [[ "$YES" != true ]]; then
+    if [[ -f "$ROSTER_PATH" ]]; then
+        ROSTER_STATUS="$ROSTER_PATH"
+    else
+        ROSTER_STATUS="$ROSTER_PATH (MISSING — copy pear_roster.example.py before --yes)"
+    fi
     cat <<EOF
 Dry run complete. No services were stopped and no database was reset.
 
 Target: https://$FQDN
 State:  $STATE_PATH
+Roster: $ROSTER_STATUS
 
 This command will delete hosted dev conversation history, Pear worker runs,
 topic contexts, sessions, drafts, scheduled messages, and extra generated users.
 Re-run with --yes to reset the remote dev data.
 EOF
     exit 0
+fi
+
+if [[ ! -f "$ROSTER_PATH" ]]; then
+    echo "Missing demo-user roster: $ROSTER_PATH" >&2
+    echo "Copy tools/pear_deploy/pear_roster.example.py to pear_roster.local.py" >&2
+    echo "and fill in this deployment's account names and emails." >&2
+    exit 1
 fi
 
 # Rewrite the Caddyfile, preserving HTTP basic auth when configured instead of
@@ -124,9 +143,14 @@ echo "Stopping Pear/Zulip services..."
 ssh_root 'systemctl stop pear-zulip-dev pear-embedded-bots pear-worker || true'
 
 echo "Resetting the Zulip dev database and creating quiet demo data..."
-ssh -F "$SSH_CONFIG" pear-staging-root \
-    "sudo -Hu zulipdev bash -lc 'cd /home/zulipdev/zulip && set -a && . /home/zulipdev/pear.env && set +a && bash -s'" <<'REMOTE'
+{
+    printf 'PEAR_ROSTER_B64=%q\n' "$(base64 <"$ROSTER_PATH" | tr -d '\n')"
+    cat <<'REMOTE'
 set -euo pipefail
+PEAR_ROSTER_PATH=$(mktemp /tmp/pear-roster.XXXXXX.py)
+printf '%s' "$PEAR_ROSTER_B64" | base64 -d >"$PEAR_ROSTER_PATH"
+export PEAR_ROSTER_PATH
+trap 'rm -f "$PEAR_ROSTER_PATH"' EXIT
 MANAGE=(/home/zulipdev/zulip/.venv/bin/python3 /home/zulipdev/zulip/manage.py)
 
 PGHOST=localhost PGUSER=zulip ./scripts/setup/terminate-psql-sessions zulip zulip_base
@@ -182,14 +206,12 @@ Stream.objects.filter(realm=realm).update(first_message_id=None)
 realm.first_visible_message_id = 0
 realm.save(update_fields=["first_visible_message_id"])
 
-users = [
-    ("desdemona@zulip.com", "plugyawn", "plugyawn@pear.backpropaganda.net", UserProfile.ROLE_REALM_OWNER, False),
-    ("iago@zulip.com", "sidbing", "sidbing@pear.backpropaganda.net", UserProfile.ROLE_REALM_ADMINISTRATOR, True),
-    ("shiva@zulip.com", "jayesh", "jayesh@pear.backpropaganda.net", UserProfile.ROLE_MEMBER, False),
-    ("ZOE@zulip.com", "berry", "berry@pear.backpropaganda.net", UserProfile.ROLE_MEMBER, False),
-    ("AARON@zulip.com", "glitchfix", "glitchfix@pear.backpropaganda.net", UserProfile.ROLE_MEMBER, False),
-    ("hamlet@zulip.com", "ritvi", "ritvi@pear.backpropaganda.net", UserProfile.ROLE_MEMBER, False),
-]
+import os
+
+roster_namespace = {"UserProfile": UserProfile}
+with open(os.environ["PEAR_ROSTER_PATH"]) as roster_file:
+    exec(roster_file.read(), roster_namespace)
+users = roster_namespace["users"]
 
 kept_user_ids = set()
 for old_email, full_name, new_email, role, is_staff in users:
@@ -210,7 +232,10 @@ for user in UserProfile.objects.filter(realm=realm, is_bot=False, is_active=True
 for user in UserProfile.objects.filter(is_bot=False, is_active=True).exclude(realm=realm):
     do_deactivate_user(user, acting_user=None)
 
-owner = UserProfile.objects.get(realm=realm, delivery_email="plugyawn@pear.backpropaganda.net")
+owner_email = next(
+    new_email for _, _, new_email, role, _ in users if role == UserProfile.ROLE_REALM_OWNER
+)
+owner = UserProfile.objects.get(realm=realm, delivery_email=owner_email)
 request = RequestFactory().post("/json/pear/config")
 request.user = owner
 response = post_pear_config_backend(request, owner)
@@ -248,6 +273,8 @@ print(
 )
 PY
 REMOTE
+} | ssh -F "$SSH_CONFIG" pear-staging-root \
+    "sudo -Hu zulipdev bash -lc 'cd /home/zulipdev/zulip && set -a && . /home/zulipdev/pear.env && set +a && bash -s'"
 
 echo "Starting services..."
 ssh_root 'systemctl daemon-reload && systemctl restart caddy pear-zulip-dev pear-embedded-bots pear-worker'

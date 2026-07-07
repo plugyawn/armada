@@ -16,7 +16,12 @@ from zerver.actions.realm_settings import (
 )
 from zerver.actions.streams import do_change_stream_permission
 from zerver.actions.user_groups import check_add_user_group
-from zerver.actions.users import do_change_can_create_users, do_change_user_role, do_deactivate_user
+from zerver.actions.users import (
+    do_change_can_create_users,
+    do_change_user_role,
+    do_deactivate_user,
+    get_service_dicts_for_bot,
+)
 from zerver.lib.bot_config import ConfigError, get_bot_config
 from zerver.lib.bot_lib import get_bot_handler
 from zerver.lib.integrations import EMBEDDED_BOTS, IncomingWebhookIntegration
@@ -2038,6 +2043,32 @@ class BotTest(ZulipTestCase, UploadSerializeMixin):
         self.assert_json_success(result)
         config_data = orjson.loads(result.content)["config_data"]
         self.assertEqual(config_data, orjson.loads(bot_info["config_data"]))
+
+    def test_embedded_bot_service_payload_keeps_service_name_without_config(self) -> None:
+        bot = self.create_test_bot(
+            "test",
+            self.example_user("hamlet"),
+            full_name="Bot with missing config data",
+            bot_type=UserProfile.EMBEDDED_BOT,
+            service_name="followup",
+            config_data=orjson.dumps({"key": "value"}).decode(),
+        )
+
+        with patch(
+            "zerver.actions.users.get_bot_config",
+            side_effect=ConfigError("missing config"),
+        ):
+            services = get_service_dicts_for_bot(bot.id)
+
+        self.assertEqual(
+            services,
+            [
+                {
+                    "config_data": {},
+                    "service_name": "followup",
+                }
+            ],
+        )
 
     def test_outgoing_webhook_invalid_interface(self) -> None:
         self.login("hamlet")

@@ -1103,72 +1103,91 @@ function render_topic_header_controls(options: {
             .filter((_inner_index, element) => $(element).attr("data-pear-header-key") !== control_key)
             .remove();
         if ($status_cluster.length === 0) {
-            $status_cluster = $("<span>", {
-                class: "pear-topic-header-status no-select",
-                "data-pear-header-key": control_key,
-            });
-            const $runtime_control = $("<button>", {
-                type: "button",
-                class: "pear-topic-header-control pear-topic-header-runtime-control pear-runtime-menu-trigger",
-                "data-pear-header-key": control_key,
-            }).append(
-                $("<span>", {
-                    class: "pear-topic-header-status-dot",
-                    "aria-hidden": "true",
-                    text: "·",
-                }),
-                $("<span>", {
-                    class: "pear-runtime-menu-label",
-                }),
-            );
-            const $subtitle = $("<span>", {
-                class: "pear-topic-header-subtitle",
-            });
-            const $branch_control = $("<span>", {
-                class: "pear-topic-header-control pear-topic-header-branch-control tippy-zulip-delayed-tooltip",
-                "data-pear-header-key": control_key,
-            }).append(
-                $("<span>", {
-                    class: "pear-topic-header-branch-label",
-                }),
-            );
-            const $work_control = $("<button>", {
-                type: "button",
-                class: "pear-topic-header-control pear-topic-header-git-control pear-panel-open-action",
-                "data-pear-header-key": control_key,
-            }).append(
-                $("<span>", {
-                    class: "pear-topic-header-work-label",
-                }),
-            );
-            $subtitle.append($branch_control, $work_control);
-            $status_cluster.append($runtime_control, $subtitle);
+            const $status_dot = $("<span>")
+                .addClass("pear-topic-header-status-dot")
+                .attr("aria-hidden", "true");
+            const $model_control = $("<button>")
+                .addClass(
+                    "pear-topic-header-control pear-topic-header-runtime-control pear-topic-header-model-control pear-runtime-menu-trigger",
+                )
+                .attr({
+                    type: "button",
+                    "data-pear-header-key": control_key,
+                })
+                .append(
+                    $("<span>").addClass("pear-runtime-menu-model-label"),
+                    $("<i>")
+                        .addClass(
+                            "zulip-icon zulip-icon-chevron-down pear-topic-header-control-chevron",
+                        )
+                        .attr("aria-hidden", "true"),
+                );
+            const $effort_control = $("<button>")
+                .addClass(
+                    "pear-topic-header-control pear-topic-header-runtime-control pear-topic-header-effort-control pear-runtime-menu-trigger",
+                )
+                .attr({
+                    type: "button",
+                    "data-pear-header-key": control_key,
+                })
+                .append(
+                    $("<span>").addClass("pear-runtime-menu-effort-label"),
+                    $("<i>")
+                        .addClass(
+                            "zulip-icon zulip-icon-chevron-down pear-topic-header-control-chevron",
+                        )
+                        .attr("aria-hidden", "true"),
+                );
+            $status_cluster = $("<span>")
+                .addClass("pear-topic-header-status no-select")
+                .attr("data-pear-header-key", control_key);
+            const $runtime_group = $("<span>")
+                .addClass("pear-topic-header-runtime-group")
+                .append($status_dot, $model_control, $effort_control);
+            const $subtitle = $("<span>").addClass("pear-topic-header-subtitle");
+            const $branch_control = $("<span>")
+                .addClass(
+                    "pear-topic-header-control pear-topic-header-branch-control tippy-zulip-delayed-tooltip",
+                )
+                .attr("data-pear-header-key", control_key)
+                .append($("<span>").addClass("pear-topic-header-branch-label"));
+            const $work_control = $("<button>")
+                .addClass("pear-topic-header-control pear-topic-header-git-control pear-panel-open-action")
+                .attr({
+                    type: "button",
+                    "data-pear-header-key": control_key,
+                })
+                .append($("<span>").addClass("pear-topic-header-work-label"));
+            const $meta_separator = $("<span>")
+                .addClass("pear-topic-header-meta-separator")
+                .attr("aria-hidden", "true")
+                .text("·");
+            $subtitle.append($branch_control, $meta_separator, $work_control);
+            $status_cluster.append($runtime_group, $subtitle);
             $controls.before($status_cluster);
         }
         $status_cluster.toggleClass("pear-topic-header-running", runtime_active);
 
-        const $runtime_control = $status_cluster.find(".pear-topic-header-runtime-control");
-        $runtime_control.removeClass("tippy-zulip-delayed-tooltip").each((_index, element) => {
-            (
-                element as HTMLElement & {
-                    _tippy?: {
-                        destroy: () => void;
-                    };
-                }
-            )._tippy?.destroy();
+        const $runtime_controls = $status_cluster.find(".pear-topic-header-runtime-control");
+        $runtime_controls.removeClass("tippy-zulip-delayed-tooltip").each((_index, element) => {
+            const tippy_element: HTMLElement & {_tippy?: {destroy: () => void}} = element;
+            tippy_element._tippy?.destroy();
         });
-        $runtime_control.attr({
+        $runtime_controls.attr({
             "aria-label": runtime_title,
             "data-tippy-content": runtime_title,
         });
-        $runtime_control.toggleClass("pear-topic-header-running", runtime_active);
-        $runtime_control.find(".pear-topic-header-status-dot").toggleClass(
+        $runtime_controls.toggleClass("pear-topic-header-running", runtime_active);
+        $status_cluster.find(".pear-topic-header-status-dot").toggleClass(
             "pear-topic-header-status-dot-active",
             runtime_active,
         );
-        $runtime_control
-            .find(".pear-runtime-menu-label")
-            .text(topic_context.panel_header_runtime_label || runtime_label);
+        $status_cluster
+            .find(".pear-runtime-menu-model-label")
+            .text(topic_context.panel_model_label ?? runtime_label);
+        $status_cluster
+            .find(".pear-runtime-menu-effort-label")
+            .text(topic_context.panel_reasoning_effort_label ?? "");
 
         const $branch_control = $status_cluster.find(".pear-topic-header-branch-control");
         $branch_control.attr({

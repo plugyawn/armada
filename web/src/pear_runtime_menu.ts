@@ -451,7 +451,14 @@ function popover_context(): {
 }
 
 function render_popover_content(instance: tippy.Instance): void {
-    instance.setContent(parse_html(render_pear_runtime_menu_popover(popover_context())));
+    const context = popover_context();
+    instance.setContent(parse_html(render_pear_runtime_menu_popover(context)));
+    // The meter width is set here rather than through a style attribute in
+    // the template, which the repo's template lint forbids.
+    const meter_fill = instance.popper.querySelector<HTMLElement>(".pear-runtime-meter-fill");
+    if (meter_fill !== null) {
+        meter_fill.style.width = `${context.runtime_usage_meter.percent}%`;
+    }
     $(document).trigger("pear_liveness_markers_changed");
 }
 

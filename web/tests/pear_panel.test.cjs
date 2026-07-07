@@ -945,15 +945,9 @@ run_test("workbench_open_for_testing", () => {
 
 run_test("polling_paused_for_testing", () => {
     // Hidden tab pauses background polls...
-    assert.equal(
-        pear_panel.polling_paused_for_testing({hidden: true, force_context: false}),
-        true,
-    );
+    assert.equal(pear_panel.polling_paused_for_testing({hidden: true, force_context: false}), true);
     // ...but an explicit forced refresh still runs even while hidden.
-    assert.equal(
-        pear_panel.polling_paused_for_testing({hidden: true, force_context: true}),
-        false,
-    );
+    assert.equal(pear_panel.polling_paused_for_testing({hidden: true, force_context: true}), false);
     // Visible tab never pauses.
     assert.equal(
         pear_panel.polling_paused_for_testing({hidden: false, force_context: false}),
@@ -978,20 +972,11 @@ run_test("canvas_cache_is_stale_for_testing", () => {
 run_test("workbench_popover_top_for_testing", () => {
     const base = {viewport_height: 900, margin: 12, min_body_height: 260};
     // Normal anchor: top is used as-is.
-    assert.equal(
-        pear_panel.workbench_popover_top_for_testing({...base, desired_top: 200}),
-        200,
-    );
+    assert.equal(pear_panel.workbench_popover_top_for_testing({...base, desired_top: 200}), 200);
     // Anchor scrolled above the viewport: negative desired top is clamped to
     // the margin instead of sliding off the top edge.
-    assert.equal(
-        pear_panel.workbench_popover_top_for_testing({...base, desired_top: -400}),
-        12,
-    );
+    assert.equal(pear_panel.workbench_popover_top_for_testing({...base, desired_top: -400}), 12);
     // Anchor near the bottom: top is pushed up so the min body height still
     // fits above the bottom margin (900 - 260 - 12 = 628).
-    assert.equal(
-        pear_panel.workbench_popover_top_for_testing({...base, desired_top: 880}),
-        628,
-    );
+    assert.equal(pear_panel.workbench_popover_top_for_testing({...base, desired_top: 880}), 628);
 });

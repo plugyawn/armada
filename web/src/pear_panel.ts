@@ -1047,13 +1047,7 @@ function topic_header_git_title(options: {
     commit: string;
     workdir: string;
 }): string {
-    return [
-        options.repo,
-        options.worktree,
-        options.branch,
-        options.commit,
-        options.workdir,
-    ]
+    return [options.repo, options.worktree, options.branch, options.commit, options.workdir]
         .filter((part) => part.trim() !== "")
         .join(" · ");
 }
@@ -1111,11 +1105,15 @@ function render_topic_header_controls(options: {
         }
         let $status_cluster = $(header)
             .find(pear_topic_header_status_selector)
-            .filter((_inner_index, element) => $(element).attr("data-pear-header-key") === control_key)
+            .filter(
+                (_inner_index, element) => $(element).attr("data-pear-header-key") === control_key,
+            )
             .first();
         $(header)
             .find(pear_topic_header_status_selector)
-            .filter((_inner_index, element) => $(element).attr("data-pear-header-key") !== control_key)
+            .filter(
+                (_inner_index, element) => $(element).attr("data-pear-header-key") !== control_key,
+            )
             .remove();
         if ($status_cluster.length === 0) {
             const $status_dot = $("<span>")
@@ -1167,7 +1165,9 @@ function render_topic_header_controls(options: {
                 .attr("data-pear-header-key", control_key)
                 .append($("<span>").addClass("pear-topic-header-branch-label"));
             const $work_control = $("<button>")
-                .addClass("pear-topic-header-control pear-topic-header-git-control pear-panel-open-action")
+                .addClass(
+                    "pear-topic-header-control pear-topic-header-git-control pear-panel-open-action",
+                )
                 .attr({
                     type: "button",
                     "data-pear-header-key": control_key,
@@ -1213,10 +1213,9 @@ function render_topic_header_controls(options: {
             "data-tippy-content": runtime_title,
         });
         $runtime_controls.toggleClass("pear-topic-header-running", runtime_active);
-        $status_cluster.find(".pear-topic-header-status-dot").toggleClass(
-            "pear-topic-header-status-dot-active",
-            runtime_active,
-        );
+        $status_cluster
+            .find(".pear-topic-header-status-dot")
+            .toggleClass("pear-topic-header-status-dot-active", runtime_active);
         $status_cluster
             .find(".pear-runtime-menu-model-label")
             .text(topic_context.panel_model_label ?? runtime_label);
@@ -1229,9 +1228,9 @@ function render_topic_header_controls(options: {
             "aria-label": branch_title,
             "data-tippy-content": branch_title,
         });
-        $branch_control.find(".pear-topic-header-branch-label").text(
-            topic_context.panel_header_branch_label,
-        );
+        $branch_control
+            .find(".pear-topic-header-branch-label")
+            .text(topic_context.panel_header_branch_label);
 
         const $work_control = $status_cluster.find(".pear-topic-header-git-control");
         $work_control
@@ -1240,10 +1239,7 @@ function render_topic_header_controls(options: {
             )
             .addClass(`pear-topic-header-work-${topic_context.panel_git_status_class}`);
         $work_control.attr({
-            "aria-label": $t(
-                {defaultMessage: "Open Pear Git details: {work_label}"},
-                {work_label},
-            ),
+            "aria-label": $t({defaultMessage: "Open Pear Git details: {work_label}"}, {work_label}),
             title: work_title || work_label,
             "data-pear-workbench-view": topic_context.has_workbench_diff ? "diff" : "history",
         });

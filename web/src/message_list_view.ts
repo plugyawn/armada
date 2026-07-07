@@ -269,13 +269,11 @@ const pear_artifact_types: {labels: string[]; glyph: string; class_name: string}
     {labels: ["Reviewer", "Reviewers"], glyph: "✷", class_name: "pear-artifact-reviewers"},
 ];
 
-const pear_artifact_references: PearArtifactReference[] = pear_artifact_types.map(
-    (type) => ({
-        regex: new RegExp(`^(?:${type.labels.join("|")})$`, "i"),
-        glyph: type.glyph,
-        class_name: type.class_name,
-    }),
-);
+const pear_artifact_references: PearArtifactReference[] = pear_artifact_types.map((type) => ({
+    regex: new RegExp(`^(?:${type.labels.join("|")})$`, "i"),
+    glyph: type.glyph,
+    class_name: type.class_name,
+}));
 
 const pear_artifact_line_regex = new RegExp(
     `^\\s*(${pear_artifact_types.flatMap((type) => type.labels).join("|")}):\\s*`,
@@ -346,7 +344,9 @@ function pear_thinking_glyph_containers($scope: JQuery<HTMLElement | Document>):
 }
 
 function pear_active_progress_glyph_containers($scope: JQuery<HTMLElement | Document>): JQuery {
-    let $containers = $scope.find(".message_row.pear-active-message .message_content > p:last-child");
+    let $containers = $scope.find(
+        ".message_row.pear-active-message .message_content > p:last-child",
+    );
     if ($scope.hasClass("pear-active-message")) {
         $containers = $containers.add($scope.find(".message_content > p:last-child"));
     }
@@ -396,7 +396,9 @@ function append_pear_thinking_glyph(container: Element): void {
     container.append(document.createTextNode(" "), build_pear_thinking_glyph());
 }
 
-function synthesize_plain_pear_active_progress_glyphs($scope: JQuery<HTMLElement | Document>): void {
+function synthesize_plain_pear_active_progress_glyphs(
+    $scope: JQuery<HTMLElement | Document>,
+): void {
     pear_active_progress_glyph_containers($scope).each((_index, container) => {
         if (!(container instanceof Element) || container.textContent?.trim() === "") {
             return;
@@ -547,27 +549,25 @@ function enhance_pear_tool_rows($row: JQuery): void {
     }
     const $tool_blocks = pear_tool_spoiler_blocks($row);
     $tool_blocks.addClass("pear-tool-spoiler-block");
-    $tool_blocks
-        .find(".spoiler-content li")
-        .each((_index, row) => {
-            if (!(row instanceof HTMLElement)) {
-                return;
-            }
-            if (row.firstElementChild?.classList.contains("pear-tool-row-glyph") === true) {
-                return;
-            }
-            const marker = extract_pear_tool_row_marker(row);
-            const glyph = document.createElementNS("http://www.w3.org/1999/xhtml", "span");
-            glyph.classList.add("pear-tool-row-glyph", marker.class_name);
-            if (marker.is_active === true) {
-                glyph.classList.add("pear-thinking-glyph");
-            }
-            glyph.textContent = marker.glyph;
-            const content = document.createElementNS("http://www.w3.org/1999/xhtml", "span");
-            content.classList.add("pear-tool-row-content");
-            content.append(...row.childNodes);
-            row.replaceChildren(glyph, content);
-        });
+    $tool_blocks.find(".spoiler-content li").each((_index, row) => {
+        if (!(row instanceof HTMLElement)) {
+            return;
+        }
+        if (row.firstElementChild?.classList.contains("pear-tool-row-glyph") === true) {
+            return;
+        }
+        const marker = extract_pear_tool_row_marker(row);
+        const glyph = document.createElementNS("http://www.w3.org/1999/xhtml", "span");
+        glyph.classList.add("pear-tool-row-glyph", marker.class_name);
+        if (marker.is_active === true) {
+            glyph.classList.add("pear-thinking-glyph");
+        }
+        glyph.textContent = marker.glyph;
+        const content = document.createElementNS("http://www.w3.org/1999/xhtml", "span");
+        content.classList.add("pear-tool-row-content");
+        content.append(...row.childNodes);
+        row.replaceChildren(glyph, content);
+    });
     $tool_blocks.each((_index, block) => {
         if (block instanceof HTMLElement) {
             render_pear_tool_block_header(block);
@@ -608,11 +608,13 @@ export function extract_pear_artifact_reference_for_testing(text: string):
     };
 }
 
-function extract_pear_artifact_reference(element: HTMLElement): {
-    label: string;
-    reference: PearArtifactReference;
-    title: string;
-} | undefined {
+function extract_pear_artifact_reference(element: HTMLElement):
+    | {
+          label: string;
+          reference: PearArtifactReference;
+          title: string;
+      }
+    | undefined {
     const text = element.textContent ?? "";
     const match = pear_artifact_line_regex.exec(text);
     if (match === null) {
@@ -924,8 +926,7 @@ function refresh_settled_pear_result_messages(message_ids: number[]): void {
                 if (message === undefined) {
                     message_helper.process_new_server_message(raw_message);
                 } else if (
-                    (raw_message.last_edit_timestamp ?? 0) >=
-                    (message.last_edit_timestamp ?? 0)
+                    (raw_message.last_edit_timestamp ?? 0) >= (message.last_edit_timestamp ?? 0)
                 ) {
                     // Only apply the fetched content when it is at least as new
                     // as what the store already holds.  An update_message event

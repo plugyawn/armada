@@ -1367,8 +1367,7 @@ def build_pear_live_transcript_message(
         if visible_response:
             return pear_append_active_marker(visible_response)
         return PEAR_ACTIVE_THINKING_MARKDOWN
-    else:
-        lines = [visible_response]
+    lines = [visible_response]
     return "\n".join(line for line in lines if line)
 
 

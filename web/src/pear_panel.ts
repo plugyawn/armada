@@ -2,6 +2,7 @@ import $ from "jquery";
 import * as z from "zod/mini";
 
 import render_pear_panel from "../templates/pear_panel.hbs";
+import render_pear_topic_header_controls from "../templates/pear_topic_header_controls.hbs";
 
 import * as blueslip from "./blueslip.ts";
 import * as browser_history from "./browser_history.ts";
@@ -1088,69 +1089,10 @@ function render_topic_header_controls(options: {
             )
             .remove();
         if ($status_cluster.length === 0) {
-            const $status_dot = $("<span>")
-                .addClass("pear-topic-header-status-dot")
-                .attr("aria-hidden", "true");
-            const $model_control = $("<button>")
-                .addClass(
-                    "pear-topic-header-control pear-topic-header-runtime-control pear-topic-header-model-control pear-runtime-menu-trigger",
-                )
-                .attr({
-                    type: "button",
-                    "data-pear-header-key": control_key,
-                })
-                .append(
-                    $("<span>").addClass("pear-runtime-menu-model-label"),
-                    $("<i>")
-                        .addClass(
-                            "zulip-icon zulip-icon-chevron-down pear-topic-header-control-chevron",
-                        )
-                        .attr("aria-hidden", "true"),
-                );
-            const $effort_control = $("<button>")
-                .addClass(
-                    "pear-topic-header-control pear-topic-header-runtime-control pear-topic-header-effort-control pear-runtime-menu-trigger",
-                )
-                .attr({
-                    type: "button",
-                    "data-pear-header-key": control_key,
-                })
-                .append(
-                    $("<span>").addClass("pear-runtime-menu-effort-label"),
-                    $("<i>")
-                        .addClass(
-                            "zulip-icon zulip-icon-chevron-down pear-topic-header-control-chevron",
-                        )
-                        .attr("aria-hidden", "true"),
-                );
-            $status_cluster = $("<span>")
-                .addClass("pear-topic-header-status no-select")
-                .attr("data-pear-header-key", control_key);
-            const $runtime_group = $("<span>")
-                .addClass("pear-topic-header-runtime-group")
-                .append($status_dot, $model_control, $effort_control);
-            const $subtitle = $("<span>").addClass("pear-topic-header-subtitle");
-            const $branch_control = $("<span>")
-                .addClass(
-                    "pear-topic-header-control pear-topic-header-branch-control tippy-zulip-delayed-tooltip",
-                )
-                .attr("data-pear-header-key", control_key)
-                .append($("<span>").addClass("pear-topic-header-branch-label"));
-            const $work_control = $("<button>")
-                .addClass(
-                    "pear-topic-header-control pear-topic-header-git-control pear-panel-open-action",
-                )
-                .attr({
-                    type: "button",
-                    "data-pear-header-key": control_key,
-                })
-                .append($("<span>").addClass("pear-topic-header-work-label"));
-            const $meta_separator = $("<span>")
-                .addClass("pear-topic-header-meta-separator")
-                .attr("aria-hidden", "true")
-                .text("·");
-            $subtitle.append($branch_control, $meta_separator, $work_control);
-            $status_cluster.append($runtime_group, $subtitle);
+            // The static skeleton comes from the template; the label and
+            // tooltip updates below fill it in place so tippy instances
+            // survive re-renders.
+            $status_cluster = $(render_pear_topic_header_controls({control_key}));
             $controls.before($status_cluster);
         }
         // Skip the label/tooltip updates below when nothing this cluster

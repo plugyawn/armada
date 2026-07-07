@@ -339,6 +339,21 @@ class PearSessionDefaultsTest(TestCase):
         )
         self.assertFalse(parse_pear_artifacts(fix_message, message_id=1))
 
+    def test_parse_pear_artifacts_recognizes_commit_and_canvas_labels(self) -> None:
+        artifacts = parse_pear_artifacts(
+            "Commit: abc1234\nSHA: deadbeef\nCanvas: CANVAS.md refreshed",
+            message_id=21,
+        )
+
+        self.assertEqual(
+            [(artifact["kind"], artifact["value"]) for artifact in artifacts],
+            [
+                ("commit", "abc1234"),
+                ("commit", "deadbeef"),
+                ("document", "CANVAS.md refreshed"),
+            ],
+        )
+
     def test_build_status_check_message(self) -> None:
         status_message = build_pear_status_check_message("checkout flow")
 

@@ -3170,7 +3170,6 @@ class PearEmbeddedBotHandler:
                 response = build_pear_worker_start_blocked_message(blocked_reason)
                 should_start_worker = False
 
-        result = None
         if should_steer_active_run and active_run_message_id is not None:
             assert steering_event is not None
             self.record_worker_event(
@@ -3190,13 +3189,12 @@ class PearEmbeddedBotHandler:
                 active_run_message_id,
                 latest_steering=trim_pear_text(steering_event["instruction"], limit=500),
             )
-            if self.update_active_worker_steering_status(
+            self.update_active_worker_steering_status(
                 bot_handler,
                 stream=stream,
                 topic=topic,
                 status_markdown=PEAR_STEERING_QUEUED_MARKDOWN,
-            ):
-                return
+            )
             return
         result = bot_handler.send_reply(message, response)
         progress_message_id = None

@@ -1109,7 +1109,7 @@ function render_topic_header_controls(options: {
             });
             const $runtime_control = $("<button>", {
                 type: "button",
-                class: "pear-topic-header-control pear-topic-header-runtime-control pear-runtime-menu-trigger tippy-zulip-delayed-tooltip",
+                class: "pear-topic-header-control pear-topic-header-runtime-control pear-runtime-menu-trigger",
                 "data-pear-header-key": control_key,
             }).append(
                 $("<span>", {
@@ -1153,6 +1153,15 @@ function render_topic_header_controls(options: {
         $status_cluster.toggleClass("pear-topic-header-running", runtime_active);
 
         const $runtime_control = $status_cluster.find(".pear-topic-header-runtime-control");
+        $runtime_control.removeClass("tippy-zulip-delayed-tooltip").each((_index, element) => {
+            (
+                element as HTMLElement & {
+                    _tippy?: {
+                        destroy: () => void;
+                    };
+                }
+            )._tippy?.destroy();
+        });
         $runtime_control.attr({
             "aria-label": runtime_title,
             "data-tippy-content": runtime_title,

@@ -452,6 +452,49 @@ run_test("runtime popover does not expose workbench actions", () => {
     assert.doesNotMatch(html, /pear-canvas-menu-link/);
     assert.doesNotMatch(html, /pear-files-menu-link/);
     assert.doesNotMatch(html, />translated: Workbench</);
-    assert.match(html, /pear-runtime-model-choice/);
+    assert.match(html, /pear-runtime-model-select/);
+    assert.doesNotMatch(html, /pear-runtime-model-choice/);
     assert.match(html, /pear-runtime-effort-range/);
+});
+
+run_test("runtime popover uses compact setting rows", () => {
+    const html = render_pear_runtime_menu_popover({
+        has_runtime: true,
+        runtime_status: {
+            glyph: "·",
+            label: "Idle",
+            class_name: "pear-runtime-status-idle",
+            is_active: false,
+        },
+        runtime_model_label: "GPT-5.5",
+        runtime_effort_label: "High",
+        runtime_usage_meter: {
+            has_meter: false,
+            label: "",
+            value: "",
+            percent: 0,
+            is_hot: false,
+        },
+        has_runtime_usage: false,
+        model_choices: [
+            {value: "gpt-5.5", label: "GPT-5.5", selected: true},
+            {value: "gpt-5.4-mini", label: "GPT-5.4-Mini", selected: false},
+        ],
+        effort_choices: [
+            {value: "low", label: "Low", selected: false},
+            {value: "high", label: "High", selected: true},
+        ],
+        effort_slider: {
+            has_efforts: true,
+            selected_label: "High",
+            value: 1,
+            max: 1,
+        },
+    });
+
+    assert.match(html, /pear-runtime-setting-row/);
+    assert.match(html, /<select class="pear-runtime-model-select"/);
+    assert.match(html, /<option value="gpt-5.5" selected>GPT-5.5<\/option>/);
+    assert.match(html, /pear-runtime-setting-row-slider/);
+    assert.doesNotMatch(html, /role="menuitemradio"/);
 });

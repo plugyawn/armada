@@ -8,7 +8,6 @@ import * as blueslip from "./blueslip.ts";
 import * as channel from "./channel.ts";
 import {$t} from "./i18n.ts";
 import * as narrow_state from "./narrow_state.ts";
-import * as pear_panel from "./pear_panel.ts";
 import * as popover_menus from "./popover_menus.ts";
 import {parse_html} from "./ui_util.ts";
 
@@ -103,11 +102,19 @@ export type PearRuntimeSummary = {
     compact_label: string;
 };
 
+type RuntimeSave = {
+    stream: string;
+    topic: string;
+    model: string;
+    reasoning_effort: string;
+};
+
 let topic_context: PearRuntimeContext | undefined;
 let latest_runs: PearRuntimeRun[] = [];
 let context_key = "";
 let last_error = "";
 let request_in_flight = false;
+let pending_runtime_save: RuntimeSave | undefined;
 let initialized = false;
 let context_refresh_timer: number | undefined;
 
@@ -116,8 +123,7 @@ const runtime_menu_selectors = [
     "#pear-panel .pear-runtime-menu-trigger",
     ".message_header_stream .pear-topic-header-runtime-control.pear-runtime-menu-trigger",
 ];
-const runtime_menu_selector =
-    runtime_menu_selectors.join(", ");
+const runtime_menu_selector = runtime_menu_selectors.join(", ");
 const forbidden_header_mount_selectors = [
     "#top_navbar",
     "#navbar-middle",
@@ -570,49 +576,104 @@ function fetch_topic_context(): void {
     });
 }
 
-function save_runtime(model: string, reasoning_effort: string): void {
-    const {stream, topic} = current_narrow();
-    if (stream === undefined || topic === undefined || request_in_flight) {
+function apply_runtime_locally(model: string, reasoning_effort: string): void {
+    if (topic_context === undefined) {
         return;
     }
+    topic_context = {
+        ...topic_context,
+        model,
+        reasoning_effort,
+    };
+    update_runtime_button_label();
+    rerender_popover_if_open();
+}
+
+function same_runtime_save(a: RuntimeSave, b: RuntimeSave): boolean {
+    return (
+        a.stream === b.stream &&
+        a.topic === b.topic &&
+        a.model === b.model &&
+        a.reasoning_effort === b.reasoning_effort
+    );
+}
+
+function post_runtime_save(
+    save: RuntimeSave,
+    previous_context: PearRuntimeContext | undefined,
+): void {
     request_in_flight = true;
-    $("#pear-runtime-menu-popover input").prop("disabled", true);
+    $("#pear-runtime-menu-popover").addClass("pear-runtime-saving");
     // Same endpoint and payload shape as pear_panel.save_topic_context.
     void channel.post({
         url: "/json/pear/topic-context",
         data: {
-            stream,
-            topic,
-            model,
-            reasoning_effort,
+            stream: save.stream,
+            topic: save.topic,
+            model: save.model,
+            reasoning_effort: save.reasoning_effort,
         },
         success(raw_data) {
             const data = pear_runtime_response_schema.parse(raw_data);
             last_error = "";
             if (data.pear_topic_context !== undefined && data.pear_topic_context !== null) {
-                topic_context = data.pear_topic_context;
-                context_key = narrow_context_key(stream, topic);
+                topic_context =
+                    pending_runtime_save === undefined
+                        ? data.pear_topic_context
+                        : {
+                              ...data.pear_topic_context,
+                              model: pending_runtime_save.model,
+                              reasoning_effort: pending_runtime_save.reasoning_effort,
+                          };
+                context_key = narrow_context_key(save.stream, save.topic);
             }
+            latest_runs = data.pear_runs ?? latest_runs;
             update_runtime_button_label();
             rerender_popover_if_open();
-            // Keep the Pear panel in the right sidebar in sync.
-            pear_panel.refresh();
         },
         error(xhr) {
             if (xhr.readyState !== 0) {
                 last_error = $t({defaultMessage: "Failed to update the Pear runtime."});
                 blueslip.warn(`Failed to update Pear runtime: ${xhr.responseText}`);
+                if (pending_runtime_save === undefined) {
+                    topic_context = previous_context;
+                    update_runtime_button_label();
+                }
                 rerender_popover_if_open();
             }
         },
         complete() {
             request_in_flight = false;
-            $("#pear-runtime-menu-popover input").prop("disabled", false);
+            $("#pear-runtime-menu-popover").removeClass("pear-runtime-saving");
+            const pending_save = pending_runtime_save;
+            pending_runtime_save = undefined;
+            if (pending_save !== undefined && !same_runtime_save(pending_save, save)) {
+                post_runtime_save(pending_save, topic_context);
+            }
         },
     });
 }
 
-function checked_choice(name: string): string | undefined {
+function save_runtime(model: string, reasoning_effort: string): void {
+    const {stream, topic} = current_narrow();
+    if (stream === undefined || topic === undefined) {
+        return;
+    }
+    const save = {stream, topic, model, reasoning_effort};
+    const previous_context = topic_context;
+    apply_runtime_locally(model, reasoning_effort);
+    if (request_in_flight) {
+        pending_runtime_save = save;
+        return;
+    }
+    post_runtime_save(save, previous_context);
+}
+
+function selected_choice(name: string): string | undefined {
+    const select_value = $(`#pear-runtime-menu-popover select[name='${name}']`).val();
+    if (typeof select_value === "string") {
+        return select_value;
+    }
     const value = $(`#pear-runtime-menu-popover input[name='${name}']:checked`).val();
     return typeof value === "string" ? value : undefined;
 }
@@ -628,7 +689,7 @@ function on_model_change(model: string): void {
 }
 
 function on_effort_index_change(index: number): void {
-    const model = checked_choice("pear-runtime-model") ?? topic_context?.model;
+    const model = selected_choice("pear-runtime-model") ?? topic_context?.model;
     if (model === undefined) {
         return;
     }
@@ -717,7 +778,7 @@ export function initialize(): void {
 
     $("body").on(
         "change",
-        "#pear-runtime-menu-popover input[name='pear-runtime-model']",
+        "#pear-runtime-menu-popover select[name='pear-runtime-model']",
         function (this: HTMLElement) {
             const model = $(this).val();
             if (typeof model === "string") {

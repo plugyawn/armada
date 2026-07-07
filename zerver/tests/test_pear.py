@@ -7,6 +7,7 @@ from types import ModuleType, SimpleNamespace
 from unittest import TestCase
 from unittest.mock import patch
 
+from zerver.lib.exceptions import JsonableError
 from zerver.lib.pear import (
     PEAR_ACCESS_PROMPT,
     PEAR_ACTIVE_MARKDOWN_PREFIX,
@@ -110,6 +111,7 @@ from zerver.lib.pear import (
     pear_worker_task_for_message,
     record_pear_worker_run,
     split_pear_persistent_message,
+    update_pear_worker_status_message,
 )
 from zerver.lib.pear_agent import (
     PearAgentRuntimeError,
@@ -209,6 +211,41 @@ class PearSessionDefaultsTest(TestCase):
         self.assertEqual(PEAR_EMBEDDED_BOT_SERVICE, "pear")
         self.assertEqual(PEAR_STEER_PROMPT, "Steering update:")
         self.assertEqual(PEAR_FIX_BUG_PROMPT, "Fix bug:")
+
+    def test_update_pear_worker_status_message_logs_rejected_update(self) -> None:
+        class FakeBotHandler:
+            def update_message(self, payload: dict[str, object]) -> None:
+                raise JsonableError("edit window is closed")
+
+        with self.assertLogs("zerver.lib.pear", level="WARNING") as logs:
+            self.assertFalse(
+                update_pear_worker_status_message(
+                    FakeBotHandler(),
+                    progress_message_id=123,
+                    content="working",
+                )
+            )
+
+        self.assertIn("message 123", "\n".join(logs.output))
+        self.assertIn("edit window is closed", "\n".join(logs.output))
+
+    def test_update_pear_worker_status_message_logs_unexpected_update_failure(self) -> None:
+        class FakeBotHandler:
+            def update_message(self, payload: dict[str, object]) -> None:
+                raise RuntimeError("database connection dropped")
+
+        with self.assertLogs("zerver.lib.pear", level="ERROR") as logs:
+            self.assertFalse(
+                update_pear_worker_status_message(
+                    FakeBotHandler(),
+                    progress_message_id=456,
+                    content="working",
+                )
+            )
+
+        log_output = "\n".join(logs.output)
+        self.assertIn("message 456", log_output)
+        self.assertIn("database connection dropped", log_output)
 
     def test_session_record_helpers_classify_openable_sessions(self) -> None:
         self.assertEqual(

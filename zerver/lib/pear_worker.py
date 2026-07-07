@@ -1,4 +1,5 @@
 import hashlib
+import logging
 import os
 import pwd
 import re
@@ -84,6 +85,7 @@ pear_git_status_delta_cache: dict[
     tuple[str, str, str],
     tuple[float, dict[str, object]],
 ] = {}
+logger = logging.getLogger(__name__)
 
 PEAR_CANVAS_FALLBACK_PATH = ".pear/CANVAS.md"
 
@@ -1586,13 +1588,41 @@ def pear_git_output(
             command,
             check=False,
             stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
             text=True,
             timeout=2,
         )
-    except (FileNotFoundError, OSError, subprocess.TimeoutExpired):
+    except subprocess.TimeoutExpired as error:
+        stderr = error.stderr
+        stderr_text = (
+            stderr.decode(errors="replace").strip()
+            if isinstance(stderr, bytes)
+            else (stderr or "").strip()
+        )
+        logger.warning(
+            "Pear git command timed out in %s with args %s: %s",
+            workdir,
+            args,
+            stderr_text,
+            exc_info=True,
+        )
+        return ""
+    except (FileNotFoundError, OSError):
+        logger.warning(
+            "Pear git command failed to start in %s with args %s.",
+            workdir,
+            args,
+            exc_info=True,
+        )
         return ""
     if completed.returncode != 0:
+        logger.warning(
+            "Pear git command exited with status %s in %s with args %s: %s",
+            completed.returncode,
+            workdir,
+            args,
+            (completed.stderr or "").strip(),
+        )
         return ""
     return completed.stdout.strip()
 

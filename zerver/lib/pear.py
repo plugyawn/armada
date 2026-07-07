@@ -8,6 +8,8 @@ from typing import Any, Final, Literal, Protocol, TypedDict
 
 from django.core.cache import cache
 
+from zerver.lib.exceptions import JsonableError
+
 PEAR_AGENT_NAME: Final = "Pear"
 PEAR_BOT_SHORT_NAME: Final = "pear"
 PEAR_EMBEDDED_BOT_SERVICE: Final = "pear"
@@ -1858,7 +1860,18 @@ def update_pear_worker_status_message(
                 "content": content,
             }
         )
+    except JsonableError as error:
+        logger.warning(
+            "Pear progress message update was rejected for message %s: %s",
+            progress_message_id,
+            error.msg,
+        )
+        return False
     except Exception:
+        logger.exception(
+            "Pear progress message update failed for message %s.",
+            progress_message_id,
+        )
         return False
     return True
 

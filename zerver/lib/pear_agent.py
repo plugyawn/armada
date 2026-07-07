@@ -12,7 +12,6 @@ from dataclasses import dataclass
 from typing import Any, Literal
 
 from zerver.lib.pear import (
-    PEAR_ADDRESSING_ROUTER_STORAGE_KEY,
     PEAR_CANVAS_FILE_NAME,
     PearActiveSessionSummary,
     PearWorkerToolResult,
@@ -225,7 +224,6 @@ class PearCodexExecAddressingIntentClassifier:
         self.output_limit = output_limit
         self.extra_args = list(extra_args)
         self.run_command = run_command or subprocess.run
-        self.thread_id: str | None = None
 
     def __call__(
         self,
@@ -237,8 +235,7 @@ class PearCodexExecAddressingIntentClassifier:
     ) -> bool:
         stream = str(message.get("display_recipient") or "")
         topic = str(message.get("topic") or message.get("subject") or "")
-        existing_thread_id = self.load_thread_id(bot_handler)
-        command = self.build_command(existing_thread_id)
+        command = self.build_command()
         prompt = build_pear_addressing_router_prompt(
             content=content,
             active_session=active_session,
@@ -269,35 +266,21 @@ class PearCodexExecAddressingIntentClassifier:
                 f"{completed.returncode}: "
                 f"{trim_pear_agent_text(output, limit=self.output_limit)}"
             )
-        addressed, new_thread_id = parse_pear_addressing_router_output(completed.stdout)
-        self.save_thread_id(bot_handler, new_thread_id or existing_thread_id)
+        addressed, _thread_id = parse_pear_addressing_router_output(completed.stdout)
         return addressed
 
-    def build_command(self, thread_id: str | None) -> list[str]:
-        if thread_id is not None:
-            command = [
-                self.codex_bin,
-                "exec",
-                "resume",
-                thread_id,
-                "--json",
-                "--config",
-                f'approval_policy="{self.approval_policy}"',
-                "--config",
-                f'sandbox_mode="{self.sandbox}"',
-            ]
-        else:
-            command = [
-                self.codex_bin,
-                "exec",
-                "--json",
-                "--sandbox",
-                self.sandbox,
-                "--config",
-                f'approval_policy="{self.approval_policy}"',
-            ]
-            if self.workdir is not None:
-                command.extend(["--cd", self.workdir])
+    def build_command(self) -> list[str]:
+        command = [
+            self.codex_bin,
+            "exec",
+            "--json",
+            "--sandbox",
+            self.sandbox,
+            "--config",
+            f'approval_policy="{self.approval_policy}"',
+        ]
+        if self.workdir is not None:
+            command.extend(["--cd", self.workdir])
         if self.model:
             command.extend(["--model", self.model])
         if self.reasoning_effort:
@@ -307,29 +290,6 @@ class PearCodexExecAddressingIntentClassifier:
         command.extend(self.extra_args)
         command.append("-")
         return command
-
-    def load_thread_id(self, bot_handler: Any) -> str | None:
-        storage = getattr(bot_handler, "storage", None)
-        contains = getattr(storage, "contains", None)
-        get = getattr(storage, "get", None)
-        if callable(contains) and callable(get) and contains(PEAR_ADDRESSING_ROUTER_STORAGE_KEY):
-            stored_state = get(PEAR_ADDRESSING_ROUTER_STORAGE_KEY)
-            if isinstance(stored_state, dict):
-                stored_thread_id = stored_state.get("thread_id")
-                if isinstance(stored_thread_id, str) and stored_thread_id.strip():
-                    self.thread_id = stored_thread_id.strip()
-            elif isinstance(stored_state, str) and stored_state.strip():
-                self.thread_id = stored_state.strip()
-        return self.thread_id
-
-    def save_thread_id(self, bot_handler: Any, thread_id: str | None) -> None:
-        if thread_id is None or not thread_id.strip():
-            return
-        self.thread_id = thread_id.strip()
-        storage = getattr(bot_handler, "storage", None)
-        put = getattr(storage, "put", None)
-        if callable(put):
-            put(PEAR_ADDRESSING_ROUTER_STORAGE_KEY, {"thread_id": self.thread_id})
 
 
 class PearGeminiInteractionsAddressingIntentClassifier:

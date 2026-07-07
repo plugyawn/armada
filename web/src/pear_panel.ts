@@ -2106,10 +2106,14 @@ export function initialize(): void {
             e.currentTarget,
         );
     });
-    $("body").on("click", "#pear-panel", (e) => {
-        e.stopPropagation();
-    });
-    $(document).on("click.pear_panel", () => {
+    $(document).on("click.pear_panel", (e) => {
+        // Ignore clicks inside the workbench itself.  Using a target check here
+        // instead of stopPropagation on #pear-panel means other delegated
+        // document handlers (e.g. Zulip's own popovers closing on outside
+        // click) still see clicks that land inside the Pear panel.
+        if ($(e.target).closest("#pear-panel").length > 0) {
+            return;
+        }
         close_work_details();
     });
     $("body").on("click", ".pear-workbench-tab", function () {

@@ -23,7 +23,6 @@ from zerver.lib.pear import (
     PearAddressingIntentClassifier,
     PearEmbeddedBotHandler,
     PearPendingSteeringEvent,
-    PearWorkerToolResult,
     PearWorkerRunStatus,
     PearWorkerRuntime,
     PEAR_CANVAS_FILE_NAME,
@@ -1268,18 +1267,17 @@ def ensure_pear_topic_workdir(
         if path.exists():
             if pear_path_is_git_worktree(path):
                 return pear_git_current_branch_name(path) or branch_name
-            else:
-                try:
-                    subprocess.run(
-                        ["git", "-C", str(path), "init", "--quiet"],
-                        check=False,
-                        stdout=subprocess.DEVNULL,
-                        stderr=subprocess.DEVNULL,
-                        timeout=10,
-                    )
-                except (FileNotFoundError, OSError, subprocess.TimeoutExpired):
-                    pass
-                pear_switch_workdir_to_branch(path, branch_name)
+            try:
+                subprocess.run(
+                    ["git", "-C", str(path), "init", "--quiet"],
+                    check=False,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    timeout=10,
+                )
+            except (FileNotFoundError, OSError, subprocess.TimeoutExpired):
+                pass
+            pear_switch_workdir_to_branch(path, branch_name)
             return pear_git_current_branch_name(path) or branch_name
         if repository_url:
             clone_or_update_pear_repository_workdir(repository_url, path)

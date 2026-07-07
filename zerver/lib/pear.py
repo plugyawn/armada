@@ -124,9 +124,9 @@ PEAR_MARKDOWN_IMAGE_PATTERN: Final = (
 PEAR_CHECKLIST_PATTERN: Final = r"^\s*[-*]\s+\[([ xX~])\]\s+(.+?)\s*$"
 PEAR_ARTIFACT_PATTERN: Final = (
     r"^\s*(?:[-*]\s*)?"
-    r"(Repo|Repository|Runtime|Branch|PR|Pull request|Diff|Test|Tests|Verification|Screenshot|"
-    r"Session|Session record|Pear session|Codex session|"
-    r"Doc|Docs|Issue|Ticket|Reviewer|Reviewers):"
+    r"(Repo|Repository|Runtime|Branch|Commit|SHA|PR|Pull request|Diff|Test|Tests|Verification|"
+    r"Screenshot|Session|Session record|Pear session|Codex session|"
+    r"Canvas|Doc|Docs|Issue|Ticket|Reviewer|Reviewers):"
     r"[ \t]*([^\r\n]*?)[ \t]*$"
 )
 PEAR_RETIRED_VISIBLE_ARTIFACT_PATTERN: Final = (
@@ -180,6 +180,7 @@ PearArtifactKind = Literal[
     "repository",
     "runtime",
     "branch",
+    "commit",
     "pull_request",
     "diff",
     "verification",
@@ -195,6 +196,8 @@ PEAR_ARTIFACT_KIND_BY_LABEL: Final[dict[str, PearArtifactKind]] = {
     "repository": "repository",
     "runtime": "runtime",
     "branch": "branch",
+    "commit": "commit",
+    "sha": "commit",
     "pr": "pull_request",
     "pull request": "pull_request",
     "diff": "diff",
@@ -206,6 +209,7 @@ PEAR_ARTIFACT_KIND_BY_LABEL: Final[dict[str, PearArtifactKind]] = {
     "session record": "session_record",
     "pear session": "session_record",
     "codex session": "session_record",
+    "canvas": "document",
     "doc": "document",
     "docs": "document",
     "issue": "ticket",

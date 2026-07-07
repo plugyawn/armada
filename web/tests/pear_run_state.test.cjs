@@ -43,7 +43,10 @@ test("done run clears active result message immediately", () => {
 
         pear_run_state.set_active_run_result_messages([{status: "done", result_message_id: 4}]);
         assert.ok(!pear_run_state.is_active_run_result_message(4));
-        assert.deepEqual(changes.map((change) => change.removed_message_ids), [[], [4]]);
+        assert.deepEqual(
+            changes.map((change) => change.removed_message_ids),
+            [[], [4]],
+        );
     } finally {
         unsubscribe();
     }
@@ -62,7 +65,10 @@ test("active result message self-expires without another panel refresh", () => {
 
         clock.tick(1);
         assert.ok(!pear_run_state.is_active_run_result_message(5));
-        assert.deepEqual(changes.map((change) => change.removed_message_ids), [[], [5]]);
+        assert.deepEqual(
+            changes.map((change) => change.removed_message_ids),
+            [[], [5]],
+        );
     } finally {
         unsubscribe();
     }
@@ -75,4 +81,19 @@ test("active result message refresh prevents stale expiry", () => {
 
     clock.tick(5_000);
     assert.ok(pear_run_state.is_active_run_result_message(6));
+});
+
+test("expiry fires exactly TTL after the last refresh", () => {
+    pear_run_state.set_active_run_result_messages([{status: "running", result_message_id: 7}]);
+    clock.tick(10_000);
+    pear_run_state.set_active_run_result_messages([{status: "running", result_message_id: 7}]);
+
+    // The timer armed at t=0 fires at t=15s, sees fresh data, and must
+    // re-arm for the remaining 10s — not another full TTL, which would
+    // drift expiry to t=30s.
+    clock.tick(14_999);
+    assert.ok(pear_run_state.is_active_run_result_message(7));
+    clock.tick(1);
+    assert.ok(!pear_run_state.is_active_run_result_message(7));
+    assert.equal(pear_run_state.active_result_message_expiry_delay_for_testing(Date.now()), 0);
 });

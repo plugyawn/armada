@@ -6,7 +6,7 @@
         </li>
         {{#each model_choices}}
         <li role="none" class="link-item">
-            <label class="pear-runtime-menu-choice popover-menu-link {{#if selected}}pear-runtime-menu-choice-selected{{/if}}" role="menuitemradio" aria-checked="{{#if selected}}true{{else}}false{{/if}}" tabindex="0">
+            <label class="pear-runtime-menu-choice pear-runtime-model-menu-choice popover-menu-link {{#if selected}}pear-runtime-menu-choice-selected{{/if}}" role="menuitemradio" aria-checked="{{#if selected}}true{{else}}false{{/if}}" data-model="{{value}}" tabindex="0">
                 <input type="radio" class="pear-runtime-model-choice" name="pear-runtime-model" value="{{value}}" {{#if selected}}checked{{/if}}/>
                 <i class="pear-runtime-choice-check zulip-icon zulip-icon-check" aria-hidden="true"></i>
                 <span class="popover-menu-label">{{label}}</span>
@@ -19,7 +19,7 @@
         </li>
         {{#each effort_choices}}
         <li role="none" class="link-item">
-            <label class="pear-runtime-menu-choice popover-menu-link {{#if selected}}pear-runtime-menu-choice-selected{{/if}}" role="menuitemradio" aria-checked="{{#if selected}}true{{else}}false{{/if}}" tabindex="0">
+            <label class="pear-runtime-menu-choice pear-runtime-effort-menu-choice popover-menu-link {{#if selected}}pear-runtime-menu-choice-selected{{/if}}" role="menuitemradio" aria-checked="{{#if selected}}true{{else}}false{{/if}}" data-effort="{{value}}" tabindex="0">
                 <input type="radio" class="pear-runtime-effort-choice" name="pear-runtime-effort" value="{{value}}" {{#if selected}}checked{{/if}}/>
                 <i class="pear-runtime-choice-check zulip-icon zulip-icon-check" aria-hidden="true"></i>
                 <span class="popover-menu-label">{{label}}</span>

@@ -475,6 +475,7 @@ def serialize_pear_topic_context(
     *,
     stream_name: str,
     topic_name: str,
+    include_git: bool = True,
 ) -> dict[str, object]:
     runtime_config = build_pear_runtime_config_payload()
     default_model = str(runtime_config.get("model") or "")
@@ -558,7 +559,7 @@ def serialize_pear_topic_context(
         topic_name=topic_name,
         workdir=workdir,
     )
-    return {
+    payload: dict[str, object] = {
         "stream": stream_name,
         "topic": topic_name,
         "model": selected_model,
@@ -585,12 +586,14 @@ def serialize_pear_topic_context(
         "workdir": workdir,
         "is_paused": bool(context is not None and context.is_paused),
         "parent_context_id": context.parent_context_id if context is not None else None,
-        "git": build_pear_git_context(
+    }
+    if include_git:
+        payload["git"] = build_pear_git_context(
             workdir,
             topic=expected_branch,
             isolation_username=isolation_username,
-        ),
-    }
+        )
+    return payload
 
 
 def build_pear_runtime_config_payload() -> dict[str, object]:
@@ -1050,6 +1053,10 @@ def get_pear_topic_context_backend(
         str,
         ApiParamConfig("topic", documentation_status=INTENTIONALLY_UNDOCUMENTED),
     ],
+    include_git: Annotated[
+        Json[bool] | None,
+        ApiParamConfig("include_git", documentation_status=INTENTIONALLY_UNDOCUMENTED),
+    ] = True,
 ) -> HttpResponse:
     access_stream_by_name(user_profile, stream_name)
     context = pear_topic_context_for_request(
@@ -1064,6 +1071,7 @@ def get_pear_topic_context_backend(
                 context,
                 stream_name=stream_name,
                 topic_name=topic_name,
+                include_git=bool(include_git),
             ),
         },
     )
@@ -1317,6 +1325,10 @@ def post_pear_topic_context_backend(
         str | None,
         ApiParamConfig("response_policy", documentation_status=INTENTIONALLY_UNDOCUMENTED),
     ] = None,
+    include_git: Annotated[
+        Json[bool] | None,
+        ApiParamConfig("include_git", documentation_status=INTENTIONALLY_UNDOCUMENTED),
+    ] = True,
 ) -> HttpResponse:
     stream, _sub = access_stream_by_name(user_profile, stream_name)
     clean_model = clean_pear_model_slug(model) if model is not None else None
@@ -1413,6 +1425,7 @@ def post_pear_topic_context_backend(
                 context,
                 stream_name=stream_name,
                 topic_name=topic_name,
+                include_git=bool(include_git),
             ),
         },
     )
@@ -1508,6 +1521,10 @@ def get_pear_runs_backend(
         Json[bool] | None,
         ApiParamConfig("include_context", documentation_status=INTENTIONALLY_UNDOCUMENTED),
     ] = False,
+    include_git: Annotated[
+        Json[bool] | None,
+        ApiParamConfig("include_git", documentation_status=INTENTIONALLY_UNDOCUMENTED),
+    ] = True,
     run_ids: Annotated[
         Json[list[int]] | None,
         ApiParamConfig("run_ids", documentation_status=INTENTIONALLY_UNDOCUMENTED),
@@ -1601,6 +1618,7 @@ def get_pear_runs_backend(
             ),
             stream_name=stream_name,
             topic_name=topic_name,
+            include_git=bool(include_git),
         )
     return json_success(
         request,

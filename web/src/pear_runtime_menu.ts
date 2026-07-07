@@ -544,6 +544,7 @@ function fetch_topic_context(): void {
         data: {
             include_events: false,
             include_context: true,
+            include_git: false,
             stream,
             topic,
         },
@@ -622,6 +623,7 @@ function post_runtime_save(
             topic: save.topic,
             model: save.model,
             reasoning_effort: save.reasoning_effort,
+            include_git: false,
         },
         success(raw_data) {
             const data = pear_runtime_response_schema.parse(raw_data);
@@ -770,22 +772,38 @@ export function initialize(): void {
     }
 
     $("body").on(
-        "change",
-        "#pear-runtime-menu-popover input[name='pear-runtime-model']",
-        function (this: HTMLElement) {
-            const model = $(this).val();
-            if (typeof model === "string") {
+        "click keydown",
+        "#pear-runtime-menu-popover .pear-runtime-model-menu-choice",
+        function (this: HTMLElement, e) {
+            if (
+                e.type === "keydown" &&
+                (e.key !== "Enter" && e.key !== " ")
+            ) {
+                return;
+            }
+            e.preventDefault();
+            e.stopPropagation();
+            const model = this.dataset["model"];
+            if (model !== undefined && model !== topic_context?.model) {
                 on_model_change(model);
             }
         },
     );
 
     $("body").on(
-        "change",
-        "#pear-runtime-menu-popover input[name='pear-runtime-effort']",
-        function (this: HTMLElement) {
-            const effort = $(this).val();
-            if (typeof effort === "string") {
+        "click keydown",
+        "#pear-runtime-menu-popover .pear-runtime-effort-menu-choice",
+        function (this: HTMLElement, e) {
+            if (
+                e.type === "keydown" &&
+                (e.key !== "Enter" && e.key !== " ")
+            ) {
+                return;
+            }
+            e.preventDefault();
+            e.stopPropagation();
+            const effort = this.dataset["effort"];
+            if (effort !== undefined && effort !== topic_context?.reasoning_effort) {
                 on_effort_change(effort);
             }
         },

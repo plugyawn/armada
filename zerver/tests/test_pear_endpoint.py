@@ -857,6 +857,42 @@ class PearSessionEndpointTest(ZulipTestCase):
                 ).exists()
             )
 
+    def test_topic_context_can_skip_git_status_for_runtime_picker(self) -> None:
+        owner = self.example_user("hamlet")
+        self.subscribe(owner, PEAR_DEFAULT_STREAM)
+        self.login_user(owner)
+
+        with self.settings(PEAR_WORKER_WORKDIR="/workspace/base"), patch(
+            "zerver.views.pear.build_pear_git_context"
+        ) as build_git_context:
+            topic_result = self.client_get(
+                f"/json{PEAR_TOPIC_CONTEXT_ENDPOINT}",
+                {
+                    "stream": PEAR_DEFAULT_STREAM,
+                    "topic": PEAR_DEFAULT_TOPIC,
+                    "include_git": orjson.dumps(False).decode(),
+                },
+                intentionally_undocumented=True,
+            )
+            runs_result = self.client_get(
+                f"/json{PEAR_RUNS_ENDPOINT}",
+                {
+                    "stream": PEAR_DEFAULT_STREAM,
+                    "topic": PEAR_DEFAULT_TOPIC,
+                    "include_context": orjson.dumps(True).decode(),
+                    "include_git": orjson.dumps(False).decode(),
+                },
+                intentionally_undocumented=True,
+            )
+
+        topic_payload = self.assert_json_success(topic_result)["pear_topic_context"]
+        runs_payload = self.assert_json_success(runs_result)["pear_topic_context"]
+        self.assertNotIn("git", topic_payload)
+        self.assertNotIn("git", runs_payload)
+        self.assertEqual(topic_payload["model"], "gpt-5.5")
+        self.assertEqual(runs_payload["reasoning_effort"], "medium")
+        build_git_context.assert_not_called()
+
     def test_ensure_pear_topic_context_uses_isolation_for_canvas(self) -> None:
         owner = self.example_user("hamlet")
         topic_name = "isolated topic"

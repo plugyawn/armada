@@ -2,17 +2,34 @@
     <ul role="menu" class="popover-menu-list">
         {{#if has_runtime}}
         <li role="none" class="link-item">
-            <div class="pear-runtime-summary {{#if runtime_status.is_active}}pear-liveness-active{{else}}pear-runtime-summary-idle{{/if}}" role="menuitem" aria-label="{{runtime_model_label}} {{runtime_effort_label}} {{runtime_status.label}}">
-                {{#if runtime_status.is_active}}
-                <span class="pear-ui-glyph pear-runtime-summary-glyph {{runtime_status.class_name}} {{#if runtime_status.is_active}}pear-thinking-glyph{{/if}}" aria-hidden="true">{{runtime_status.glyph}}</span>
-                {{/if}}
-                <span class="pear-runtime-summary-main">{{runtime_model_label}}</span>
-                <span class="pear-runtime-summary-sub">{{runtime_effort_label}}</span>
-            </div>
+            <div class="pear-runtime-menu-section text-item" role="none">{{t 'Model' }}</div>
         </li>
-        {{#if runtime_usage_meter.has_meter}}
+        {{#each model_choices}}
         <li role="none" class="link-item">
-            <div class="pear-runtime-meter-block {{#if runtime_usage_meter.is_hot}}pear-runtime-meter-hot{{/if}}" role="menuitem">
+            <label class="pear-runtime-menu-choice popover-menu-link {{#if selected}}pear-runtime-menu-choice-selected{{/if}}" role="menuitemradio" aria-checked="{{#if selected}}true{{else}}false{{/if}}" tabindex="0">
+                <input type="radio" class="pear-runtime-model-choice" name="pear-runtime-model" value="{{value}}" {{#if selected}}checked{{/if}}/>
+                <i class="pear-runtime-choice-check zulip-icon zulip-icon-check" aria-hidden="true"></i>
+                <span class="popover-menu-label">{{label}}</span>
+            </label>
+        </li>
+        {{/each}}
+        <li role="separator" class="popover-menu-separator"></li>
+        <li role="none" class="link-item">
+            <div class="pear-runtime-menu-section text-item" role="none">{{t 'Thinking' }}</div>
+        </li>
+        {{#each effort_choices}}
+        <li role="none" class="link-item">
+            <label class="pear-runtime-menu-choice popover-menu-link {{#if selected}}pear-runtime-menu-choice-selected{{/if}}" role="menuitemradio" aria-checked="{{#if selected}}true{{else}}false{{/if}}" tabindex="0">
+                <input type="radio" class="pear-runtime-effort-choice" name="pear-runtime-effort" value="{{value}}" {{#if selected}}checked{{/if}}/>
+                <i class="pear-runtime-choice-check zulip-icon zulip-icon-check" aria-hidden="true"></i>
+                <span class="popover-menu-label">{{label}}</span>
+            </label>
+        </li>
+        {{/each}}
+        {{#if runtime_usage_meter.has_meter}}
+        <li role="separator" class="popover-menu-separator"></li>
+        <li role="none" class="link-item">
+            <div class="pear-runtime-meter-block {{#if runtime_usage_meter.is_hot}}pear-runtime-meter-hot{{/if}}" role="none">
                 <div class="pear-runtime-meter-row">
                     <span>{{runtime_usage_meter.label}}</span>
                     <span>{{runtime_usage_meter.value}}</span>
@@ -25,7 +42,7 @@
         {{/if}}
         {{#if has_runtime_usage}}
         <li role="none" class="link-item">
-            <div class="pear-runtime-usage" role="menuitem" {{#if runtime_usage_title}}title="{{runtime_usage_title}}"{{/if}}>
+            <div class="pear-runtime-usage" role="none" {{#if runtime_usage_title}}title="{{runtime_usage_title}}"{{/if}}>
                 {{#each runtime_usage_rows}}
                     <span class="pear-runtime-usage-label">{{label}}</span>
                     <span class="pear-runtime-usage-value">{{value}}</span>
@@ -33,31 +50,6 @@
             </div>
         </li>
         {{/if}}
-        <li role="separator" class="popover-menu-separator"></li>
-        <li role="none" class="link-item">
-            <label class="pear-runtime-setting-row" role="menuitem">
-                <span class="pear-runtime-setting-label">{{t 'Model' }}</span>
-                <select class="pear-runtime-model-select" name="pear-runtime-model" aria-label="{{t 'Model' }}">
-                    {{#each model_choices}}
-                    <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
-                    {{/each}}
-                </select>
-            </label>
-        </li>
-        <li role="none" class="link-item">
-            <div class="pear-runtime-setting-row pear-runtime-setting-row-slider" role="menuitem">
-                <span class="pear-runtime-setting-label">{{t 'Thinking' }}</span>
-                <div class="pear-runtime-effort-control">
-                <div class="pear-runtime-effort-value">{{effort_slider.selected_label}}</div>
-                <input type="range" class="pear-runtime-effort-range" min="0" max="{{effort_slider.max}}" step="1" value="{{effort_slider.value}}" aria-label="{{t 'Thinking' }}" {{#unless effort_slider.has_efforts}}disabled{{/unless}}/>
-                <div class="pear-runtime-effort-ticks" aria-hidden="true">
-                    {{#each effort_choices}}
-                    <span class="{{#if selected}}pear-runtime-effort-tick-selected{{/if}}">{{label}}</span>
-                    {{/each}}
-                </div>
-                </div>
-            </div>
-        </li>
         {{else}}
         <li role="none" class="link-item">
             <label class="pear-runtime-group-header pear-runtime-summary {{#if runtime_status.is_active}}pear-liveness-active{{/if}} popover-menu-link" role="menuitem">

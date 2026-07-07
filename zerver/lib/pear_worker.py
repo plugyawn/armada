@@ -1337,13 +1337,12 @@ def clean_pear_repository_url(repository_url: str) -> str:
         return clean_url
 
     parsed_url = urlparse(clean_url)
-    allowed_schemes = {"file", "git", "http", "https", "ssh"}
+    # file:// is intentionally excluded: with per-topic os-user isolation it
+    # would let a topic clone arbitrary local paths (other topics' workdirs or
+    # host files).  Only remote transports are accepted.
+    allowed_schemes = {"git", "http", "https", "ssh"}
     if parsed_url.scheme not in allowed_schemes:
         raise JsonableError(_("Enter a valid Git repository URL."))
-    if parsed_url.scheme == "file":
-        if not parsed_url.path:
-            raise JsonableError(_("Enter a valid Git repository URL."))
-        return clean_url
     if not parsed_url.netloc or not parsed_url.path.strip("/"):
         raise JsonableError(_("Enter a valid Git repository URL."))
     return clean_url

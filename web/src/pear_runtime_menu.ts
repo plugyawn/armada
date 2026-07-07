@@ -737,15 +737,6 @@ export function initialize(): void {
         },
     );
 
-    $("body").on("click", "#pear-runtime-menu-popover .pear-workbench-menu-link", (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        popover_menus.hide_current_popover_if_visible(
-            popover_menus.popover_instances.pear_runtime_menu,
-        );
-        pear_panel.open_work_details();
-    });
-
     update_runtime_button_label();
     fetch_topic_context();
     window.addEventListener("hashchange", fetch_topic_context);

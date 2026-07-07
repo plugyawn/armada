@@ -287,22 +287,52 @@
     }
 }
 
+.message_header_stream:has(.pear-topic-header-status) {
+    overflow: visible;
+    white-space: normal;
+
+    .message-header-contents {
+        height: auto;
+        min-height: 1.8666em; /* 28px at 15px em */
+        align-items: center;
+        gap: 4px;
+    }
+
+    .stream_label,
+    .stream_topic_separator,
+    .stream_topic,
+    .recipient_row_date {
+        flex: 0 0 auto;
+        white-space: nowrap;
+    }
+
+    .stream_topic {
+        min-width: 0;
+        flex: 0 1 auto;
+    }
+}
+
 .pear-topic-header-status {
-    display: inline-flex;
+    position: relative;
+    display: grid;
     min-width: 0;
-    max-width: min(34em, 44vw);
-    flex: 0 1 min(34em, 44vw);
-    align-items: center;
-    gap: 4px;
-    margin-inline: 6px 4px;
+    max-width: min(28em, 42vw);
+    flex: 0 1 min(28em, 42vw);
+    align-items: start;
+    row-gap: 1px;
+    margin-inline: 6px 3px;
+    padding-inline-start: 8px;
+    line-height: 1.05;
 }
 
 .pear-topic-header-status::before {
+    position: absolute;
+    top: 4px;
+    left: 0;
     display: block;
     width: 1px;
-    height: 14px;
+    height: calc(100% - 8px);
     flex: 0 0 auto;
-    margin-right: 2px;
     background: color-mix(
         in srgb,
         var(--color-text-message-header) 30%,
@@ -361,6 +391,23 @@
     }
 }
 
+.pear-topic-header-subtitle {
+    display: inline-flex;
+    min-width: 0;
+    max-width: 100%;
+    align-items: center;
+    gap: 5px;
+    color: color-mix(
+        in srgb,
+        var(--color-text-message-header) 66%,
+        var(--color-message-header-icon-non-interactive) 34%
+    );
+    font-size: calc(10em / 15);
+    font-weight: 600;
+    letter-spacing: 0;
+    line-height: 1;
+}
+
 .pear-topic-header-status-dot {
     flex: 0 0 auto;
     color: var(--color-message-header-icon-non-interactive);
@@ -374,43 +421,44 @@
 }
 
 .pear-topic-header-runtime-control {
-    flex: 0 1 14ch;
-    width: 14ch;
+    flex: 0 1 auto;
+    width: auto;
     justify-content: flex-start;
+    padding-inline: 0;
+    font-weight: 700;
 }
 
 .pear-topic-header-branch-control {
-    flex: 0 1 9ch;
-    width: 9ch;
+    flex: 0 1 auto;
+    width: auto;
+    height: 14px;
     justify-content: flex-start;
+    padding-inline: 0;
     color: color-mix(
         in srgb,
-        var(--color-text-message-header) 78%,
-        var(--color-message-header-icon-non-interactive) 22%
+        var(--color-text-message-header) 66%,
+        var(--color-message-header-icon-non-interactive) 34%
     );
+    cursor: default;
 }
 
-.pear-topic-header-branch-control::before,
 .pear-topic-header-git-control::before {
     flex: 0 0 auto;
-    width: 1px;
-    height: 14px;
-    margin-inline: 1px 3px;
-    background: color-mix(
+    width: auto;
+    height: auto;
+    margin-inline: 0 1px;
+    background: transparent;
+    color: color-mix(
         in srgb,
-        var(--color-text-message-header) 24%,
-        transparent
+        var(--color-text-message-header) 42%,
+        var(--color-message-header-icon-non-interactive) 58%
     );
-    content: "";
+    content: "·";
     line-height: 1;
 }
 
 .pear-topic-header-branch-prefix {
-    flex: 0 0 auto;
-    color: var(--color-message-header-icon-non-interactive);
-    font-size: 0.86em;
-    font-weight: 600;
-    line-height: 1;
+    display: none;
 }
 
 .pear-topic-header-work-clean {
@@ -426,13 +474,15 @@
 }
 
 .pear-topic-header-git-control {
-    flex: 0 1 10ch;
-    width: 10ch;
+    flex: 0 1 auto;
+    width: auto;
+    height: 14px;
     justify-content: flex-start;
+    padding-inline: 0;
     color: color-mix(
         in srgb,
-        var(--color-text-message-header) 74%,
-        var(--color-message-header-icon-non-interactive) 26%
+        var(--color-text-message-header) 70%,
+        var(--color-message-header-icon-non-interactive) 30%
     );
 }
 
@@ -441,26 +491,20 @@
 }
 
 @media (width <= 900px) {
-    .pear-topic-header-runtime-control {
-        width: clamp(7em, 18vw, 11em);
-    }
-
-    .pear-topic-header-branch-control {
-        width: clamp(4.5em, 12vw, 7em);
-    }
-
-    .pear-topic-header-git-control {
-        width: clamp(4em, 10vw, 6.5em);
+    .pear-topic-header-status {
+        max-width: min(24em, 38vw);
+        flex-basis: min(24em, 38vw);
     }
 }
 
 @media (width <= 680px) {
-    .pear-topic-header-branch-control {
-        display: none;
+    .pear-topic-header-status {
+        max-width: min(20em, 42vw);
+        flex-basis: min(20em, 42vw);
     }
 
-    .pear-topic-header-status {
-        max-width: min(26em, 44vw);
+    .pear-topic-header-subtitle {
+        display: none;
     }
 }
 

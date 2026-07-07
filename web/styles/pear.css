@@ -403,24 +403,18 @@
 
 #pear-panel.pear-workbench-popover-open .pear-workbench-header {
     gap: 0;
-    padding: 3px 12px 0;
+    padding: 0 12px;
 }
 
 #pear-panel.pear-workbench-popover-open .pear-workbench-title-row {
     grid-template-columns: auto minmax(0, auto) minmax(0, 1fr) auto;
     margin: 0 -12px;
-    padding: 7px 12px 4px;
-    border-top: 1px solid
-        color-mix(in srgb, var(--color-border-popover-menu) 46%, transparent);
+    padding: 8px 12px 7px;
 }
 
+#pear-panel.pear-workbench-popover-open .pear-workbench-context-strip,
 #pear-panel.pear-workbench-popover-open .pear-workbench-scope-note {
-    margin: 0 -12px;
-    padding: 0 12px 7px 28px;
-    color: var(--color-text-sidebar-heading);
-    font-size: 11px;
-    line-height: 15px;
-    opacity: 0.82;
+    display: none;
 }
 
 #pear-panel.pear-workbench-popover-open .pear-workbench-meta {
@@ -452,7 +446,7 @@
 #pear-panel.pear-workbench-popover-open .pear-workbench-body {
     max-height: min(
         300px,
-        calc(var(--pear-workbench-popover-max-height) - 205px)
+        calc(var(--pear-workbench-popover-max-height) - 145px)
     );
     overflow: auto;
     padding: 8px 12px 10px;

@@ -173,6 +173,7 @@ const PEAR_ACTIVE_THINKING_MARKUP_REGEX = /<em>\s*Thinking\s*<\/em>/i;
 const PEAR_ACTIVE_VISIBLE_GLYPH = pear_thinking_glyphs[0]!;
 let pear_thinking_glyph_index = 0;
 let pear_thinking_glyph_timer: ReturnType<typeof setInterval> | undefined;
+const pear_result_refresh_in_flight_message_ids = new Set<number>();
 
 type PearToolRowMarker = {
     regex: RegExp;
@@ -877,7 +878,13 @@ function rerender_pear_result_messages(message_ids: number[]): void {
 }
 
 function refresh_settled_pear_result_messages(message_ids: number[]): void {
-    const unique_message_ids = [...new Set(message_ids)];
+    const unique_message_ids = [...new Set(message_ids)].filter((message_id) => {
+        if (pear_result_refresh_in_flight_message_ids.has(message_id)) {
+            return false;
+        }
+        pear_result_refresh_in_flight_message_ids.add(message_id);
+        return true;
+    });
     if (unique_message_ids.length === 0) {
         return;
     }
@@ -910,6 +917,11 @@ function refresh_settled_pear_result_messages(message_ids: number[]): void {
         error(xhr) {
             if (xhr.readyState !== 0) {
                 blueslip.warn(`Failed to refresh settled Pear message: ${xhr.responseText}`);
+            }
+        },
+        complete() {
+            for (const message_id of unique_message_ids) {
+                pear_result_refresh_in_flight_message_ids.delete(message_id);
             }
         },
     });

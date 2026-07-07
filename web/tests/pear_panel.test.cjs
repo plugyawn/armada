@@ -980,3 +980,35 @@ run_test("workbench_popover_top_for_testing", () => {
     // fits above the bottom margin (900 - 260 - 12 = 628).
     assert.equal(pear_panel.workbench_popover_top_for_testing({...base, desired_top: 880}), 628);
 });
+
+run_test("topic header controls template matches the retired jQuery skeleton", () => {
+    const render_pear_topic_header_controls = require("../templates/pear_topic_header_controls.hbs");
+    const html = render_pear_topic_header_controls({control_key: '{"stream_id":7,"topic":"t"}'});
+
+    // Structure previously hand-assembled in render_topic_header_controls:
+    // status cluster > runtime group (dot, model button, effort button) +
+    // subtitle (branch control, separator, git control).
+    assert.match(
+        html,
+        /^<span class="pear-topic-header-status no-select" data-pear-header-key="\{&quot;stream_id&quot;:7,&quot;topic&quot;:&quot;t&quot;\}">/,
+    );
+    for (const marker of [
+        'class="pear-topic-header-status-dot" aria-hidden="true"',
+        "pear-topic-header-model-control pear-runtime-menu-trigger",
+        "pear-topic-header-effort-control pear-runtime-menu-trigger",
+        'class="pear-runtime-menu-model-label"',
+        'class="pear-runtime-menu-effort-label"',
+        "zulip-icon zulip-icon-chevron-down pear-topic-header-control-chevron",
+        'class="pear-topic-header-subtitle"',
+        "pear-topic-header-branch-control tippy-zulip-delayed-tooltip",
+        'class="pear-topic-header-branch-label"',
+        'class="pear-topic-header-meta-separator" aria-hidden="true">·<',
+        "pear-topic-header-git-control pear-panel-open-action",
+        'class="pear-topic-header-work-label"',
+    ]) {
+        assert.ok(html.includes(marker), `missing: ${marker}`);
+    }
+    // Both buttons and the branch/work controls carry the header key.
+    assert.equal(html.split("data-pear-header-key").length - 1, 5);
+    assert.equal(html.split('<button type="button"').length - 1, 3);
+});

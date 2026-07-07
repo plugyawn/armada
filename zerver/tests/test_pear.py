@@ -2600,7 +2600,7 @@ class PearSessionDefaultsTest(TestCase):
         self.assertNotIn("developerInstructions", resumed_params)
         self.assertNotIn("ephemeral", resumed_params)
 
-    def test_codex_exec_addressing_router_uses_persisted_thread(self) -> None:
+    def test_codex_exec_addressing_router_is_stateless_per_message(self) -> None:
         payload = get_pear_session_payload()
         active_session = build_pear_active_session_summary_from_messages(
             pear_session=payload,
@@ -2665,10 +2665,7 @@ class PearSessionDefaultsTest(TestCase):
                 bot_handler=FakeBotHandler(),
             )
         )
-        self.assertEqual(
-            FakeBotHandler.storage.values,
-            {"pear_addressing_router": {"thread_id": "router-thread"}},
-        )
+        self.assertEqual(FakeBotHandler.storage.values, {})
         self.assertFalse(
             classifier(
                 content="I pushed the branch",
@@ -2680,46 +2677,25 @@ class PearSessionDefaultsTest(TestCase):
                 bot_handler=FakeBotHandler(),
             )
         )
-        self.assertEqual(
-            calls[0][0],
-            [
-                "codex",
-                "exec",
-                "--json",
-                "--sandbox",
-                "read-only",
-                "--config",
-                'approval_policy="never"',
-                "--cd",
-                "/workspace",
-                "--model",
-                "gpt-router",
-                "--config",
-                'model_reasoning_effort="low"',
-                "--ignore-rules",
-                "-",
-            ],
-        )
-        self.assertEqual(
-            calls[1][0],
-            [
-                "codex",
-                "exec",
-                "resume",
-                "router-thread",
-                "--json",
-                "--config",
-                'approval_policy="never"',
-                "--config",
-                'sandbox_mode="read-only"',
-                "--model",
-                "gpt-router",
-                "--config",
-                'model_reasoning_effort="low"',
-                "--ignore-rules",
-                "-",
-            ],
-        )
+        expected_command = [
+            "codex",
+            "exec",
+            "--json",
+            "--sandbox",
+            "read-only",
+            "--config",
+            'approval_policy="never"',
+            "--cd",
+            "/workspace",
+            "--model",
+            "gpt-router",
+            "--config",
+            'model_reasoning_effort="low"',
+            "--ignore-rules",
+            "-",
+        ]
+        self.assertEqual(calls[0][0], expected_command)
+        self.assertEqual(calls[1][0], expected_command)
         self.assertIn("Do not run commands or use tools.", calls[0][1]["input"])
 
     def test_gemini_interactions_addressing_router_uses_stateless_json(self) -> None:

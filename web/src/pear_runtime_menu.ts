@@ -540,8 +540,10 @@ function update_runtime_button_label(): void {
     $button.attr("aria-label", label);
     $button.attr("data-tippy-content", label);
     $button.find(".pear-runtime-menu-label").text(compact_label);
-    $button.find(".pear-runtime-menu-model-label").text(model_label || compact_label);
-    $button.find(".pear-runtime-menu-effort-label").text(effort_label);
+    if (model_label !== "" || effort_label !== "") {
+        $button.find(".pear-runtime-menu-model-label").text(model_label || compact_label);
+        $button.find(".pear-runtime-menu-effort-label").text(effort_label);
+    }
     $button.toggleClass("pear-liveness-active", runtime_status.is_active);
     $button
         .find(".pear-runtime-menu-glyph")

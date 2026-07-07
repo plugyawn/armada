@@ -1181,6 +1181,26 @@ function render_topic_header_controls(options: {
             $status_cluster.append($runtime_group, $subtitle);
             $controls.before($status_cluster);
         }
+        // Skip the label/tooltip updates below when nothing this cluster
+        // displays has changed.  render() runs up to twice a second during an
+        // active run, and the block below tears down and rebuilds the runtime
+        // tippy tooltips every time; without this guard they flicker constantly.
+        const header_signature = JSON.stringify({
+            runtime_active,
+            runtime_title,
+            model_label: topic_context.panel_model_label ?? runtime_label,
+            effort_label: topic_context.panel_reasoning_effort_label ?? "",
+            branch_title,
+            branch_label: topic_context.panel_header_branch_label,
+            work_label,
+            work_title,
+            git_status_class: topic_context.panel_git_status_class,
+            has_workbench_diff: topic_context.has_workbench_diff,
+        });
+        if ($status_cluster.attr("data-pear-header-signature") === header_signature) {
+            return;
+        }
+        $status_cluster.attr("data-pear-header-signature", header_signature);
         $status_cluster.toggleClass("pear-topic-header-running", runtime_active);
 
         const $runtime_controls = $status_cluster.find(".pear-topic-header-runtime-control");

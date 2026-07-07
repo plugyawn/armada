@@ -1984,6 +1984,13 @@ class PearWorkerRuntime:
             return False
         return bool(interrupt())
 
+    def close(self) -> None:
+        if self.tool_runner is None:
+            return
+        close = getattr(self.tool_runner, "close", None)
+        if callable(close):
+            close()
+
     def runtime_value(self) -> str:
         if self.tool_runner is None:
             return "built-in"

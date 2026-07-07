@@ -1,4 +1,6 @@
 # Documented in https://zulip.readthedocs.io/en/latest/subsystems/queuing.html
+import logging
+from collections import OrderedDict
 from typing import Any
 
 from typing_extensions import override
@@ -27,7 +29,37 @@ from zerver.lib.pear_worker import (
 from zerver.models.users import get_user_profile_by_id
 from zerver.worker.base import QueueProcessingWorker, assign_queue
 
-pear_worker_runtimes: dict[tuple[str, str, str, str, str], PearWorkerRuntime] = {}
+logger = logging.getLogger(__name__)
+
+PEAR_WORKER_RUNTIME_CACHE_LIMIT = 8
+PearWorkerRuntimeKey = tuple[str, str, str, str, str]
+pear_worker_runtimes: OrderedDict[PearWorkerRuntimeKey, PearWorkerRuntime] = OrderedDict()
+
+
+def close_pear_worker_runtime(runtime: PearWorkerRuntime) -> None:
+    try:
+        runtime.close()
+    except Exception:
+        logger.exception("Failed to close Pear worker runtime.")
+
+
+def close_pear_worker_runtimes() -> None:
+    runtimes = list(pear_worker_runtimes.values())
+    pear_worker_runtimes.clear()
+    for runtime in runtimes:
+        close_pear_worker_runtime(runtime)
+
+
+def cache_pear_worker_runtime(
+    runtime_key: PearWorkerRuntimeKey, runtime: PearWorkerRuntime
+) -> None:
+    existing_runtime = pear_worker_runtimes.pop(runtime_key, None)
+    if existing_runtime is not None and existing_runtime is not runtime:
+        close_pear_worker_runtime(existing_runtime)
+    pear_worker_runtimes[runtime_key] = runtime
+    while len(pear_worker_runtimes) > PEAR_WORKER_RUNTIME_CACHE_LIMIT:
+        _evicted_key, evicted_runtime = pear_worker_runtimes.popitem(last=False)
+        close_pear_worker_runtime(evicted_runtime)
 
 
 def get_pear_worker_runtime(
@@ -40,18 +72,21 @@ def get_pear_worker_runtime(
     sandbox = pear_worker_sandbox_for_workdir(workdir)
     isolation_label = process_isolation.label() if process_isolation is not None else ""
     runtime_key = (model, workdir, reasoning_effort, sandbox, isolation_label)
-    runtime = pear_worker_runtimes.get(runtime_key)
-    if runtime is None or isolation_error is not None:
-        runtime = build_pear_worker_runtime_from_settings(
-            model_override=model,
-            workdir_override=workdir,
-            reasoning_effort_override=reasoning_effort,
-            sandbox_override=sandbox,
-            process_isolation_override=process_isolation,
-            process_isolation_error=isolation_error,
-        )
-        if isolation_error is None:
-            pear_worker_runtimes[runtime_key] = runtime
+    if isolation_error is None:
+        runtime = pear_worker_runtimes.get(runtime_key)
+        if runtime is not None:
+            pear_worker_runtimes.move_to_end(runtime_key)
+            return runtime
+    runtime = build_pear_worker_runtime_from_settings(
+        model_override=model,
+        workdir_override=workdir,
+        reasoning_effort_override=reasoning_effort,
+        sandbox_override=sandbox,
+        process_isolation_override=process_isolation,
+        process_isolation_error=isolation_error,
+    )
+    if isolation_error is None:
+        cache_pear_worker_runtime(runtime_key, runtime)
     return runtime
 
 
@@ -65,6 +100,13 @@ class PearWorker(QueueProcessingWorker):
     def setup(self) -> None:
         super().setup()
         reap_stale_pear_worker_runs()
+
+    @override
+    def stop(self) -> None:  # nocoverage
+        try:
+            close_pear_worker_runtimes()
+        finally:
+            super().stop()
 
     @override
     def consume(self, event: dict[str, Any]) -> None:

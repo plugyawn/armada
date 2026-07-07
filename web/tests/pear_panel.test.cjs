@@ -940,3 +940,24 @@ run_test("workbench_open_for_testing", () => {
         false,
     );
 });
+
+run_test("workbench_popover_top_for_testing", () => {
+    const base = {viewport_height: 900, margin: 12, min_body_height: 260};
+    // Normal anchor: top is used as-is.
+    assert.equal(
+        pear_panel.workbench_popover_top_for_testing({...base, desired_top: 200}),
+        200,
+    );
+    // Anchor scrolled above the viewport: negative desired top is clamped to
+    // the margin instead of sliding off the top edge.
+    assert.equal(
+        pear_panel.workbench_popover_top_for_testing({...base, desired_top: -400}),
+        12,
+    );
+    // Anchor near the bottom: top is pushed up so the min body height still
+    // fits above the bottom margin (900 - 260 - 12 = 628).
+    assert.equal(
+        pear_panel.workbench_popover_top_for_testing({...base, desired_top: 880}),
+        628,
+    );
+});

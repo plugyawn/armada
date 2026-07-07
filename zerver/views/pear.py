@@ -5,7 +5,6 @@ from pathlib import Path
 from shutil import which
 from types import SimpleNamespace
 from typing import Annotated, Any
-from urllib.parse import urlparse
 
 from django.conf import settings
 from django.db.models import Q
@@ -379,45 +378,6 @@ def build_pear_codex_model_catalog(model_choices: list[str]) -> list[dict[str, o
         if str(entry["slug"]) not in slugs:
             catalog.append(entry)
     return catalog
-
-
-def pear_git_command(
-    workdir: str,
-    args: list[str],
-    *,
-    isolation_username: str | None = None,
-) -> str:
-    command = ["git", "-C", workdir, *args]
-    if isolation_username is not None:
-        command = ["sudo", "-n", "-u", isolation_username, "/usr/bin/env", *command]
-    try:
-        completed = subprocess.run(
-            command,
-            check=False,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
-            text=True,
-            timeout=2,
-        )
-    except (FileNotFoundError, OSError, subprocess.TimeoutExpired):
-        return ""
-    if completed.returncode != 0:
-        return ""
-    return completed.stdout.strip()
-
-
-def pear_git_remote_label(remote_url: str, repo_root: str) -> str:
-    clean_url = remote_url.strip()
-    if clean_url:
-        if clean_url.startswith("git@") and ":" in clean_url:
-            path = clean_url.split(":", 1)[1]
-            return path.removesuffix(".git").strip("/") or clean_url
-        parsed = urlparse(clean_url)
-        if parsed.scheme and parsed.netloc:
-            path = parsed.path.removesuffix(".git").strip("/")
-            return path or parsed.netloc
-        return Path(clean_url.removesuffix(".git")).name or clean_url
-    return Path(repo_root).name
 
 
 def build_pear_git_context(

@@ -292,10 +292,6 @@ function message_has_pear_active_marker(message: Message): boolean {
     );
 }
 
-function message_has_identity_free_pear_active_marker(message: Message): boolean {
-    return message.content.includes(PEAR_ACTIVE_GLYPH);
-}
-
 function is_active_pear_message(message: Message, is_pear_message: boolean): boolean {
     return (
         is_pear_message &&
@@ -304,19 +300,16 @@ function is_active_pear_message(message: Message, is_pear_message: boolean): boo
     );
 }
 
-function message_is_pear_message(
-    message: Message,
-    is_hidden: boolean,
-    sender_is_bot: boolean,
-): boolean {
+function message_is_pear_message(message: Message, is_hidden: boolean): boolean {
     if (is_hidden) {
         return false;
     }
-    return (
-        message.is_pear_message ||
-        is_pear_bot_user_id(message.sender_id) ||
-        (sender_is_bot && message_has_identity_free_pear_active_marker(message))
-    );
+    // Pear identity is structured: the server stamps is_pear_message on
+    // every serialized message and the client tracks the Pear bot ids.
+    // Content sniffing for the \u2726 glyph is deliberately NOT a fallback
+    // here — any third-party bot posting the glyph would have its sender
+    // chrome suppressed and Pear styling applied.
+    return message.is_pear_message || is_pear_bot_user_id(message.sender_id);
 }
 
 function pear_thinking_markers($scope: JQuery<HTMLElement | Document> = $(document)): JQuery {
@@ -1536,7 +1529,7 @@ export class MessageListView {
         }
 
         const sender_is_bot = people.sender_is_bot(message);
-        const is_pear_message = message_is_pear_message(message, is_hidden, sender_is_bot);
+        const is_pear_message = message_is_pear_message(message, is_hidden);
         if (is_pear_message) {
             include_sender = false;
         }

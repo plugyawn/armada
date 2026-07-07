@@ -14,29 +14,29 @@ from urllib.parse import urlparse
 from django.conf import settings
 from django.db import IntegrityError, transaction
 from django.db.models import Q
-from django.utils.translation import gettext as _
 from django.utils.timezone import now as timezone_now
+from django.utils.translation import gettext as _
 
 from zerver.lib.exceptions import JsonableError
 from zerver.lib.pear import (
+    PEAR_CANVAS_FILE_NAME,
+    PEAR_CANVAS_TEMPLATE,
+    PEAR_DEFAULT_RESPONSE_POLICY,
+    PEAR_REASONING_EFFORTS,
     PearActiveSessionSummary,
     PearAddressingIntentClassifier,
     PearEmbeddedBotHandler,
     PearPendingSteeringEvent,
     PearWorkerRunStatus,
     PearWorkerRuntime,
-    PEAR_CANVAS_FILE_NAME,
-    PEAR_CANVAS_TEMPLATE,
-    PEAR_DEFAULT_RESPONSE_POLICY,
-    PEAR_REASONING_EFFORTS,
     build_pear_active_session_summary,
     build_pear_active_session_summary_from_messages,
     get_pear_session_payload,
     normalize_pear_response_policy,
+    parse_pear_artifacts,
     pear_message_id,
     pear_message_stream,
     pear_message_topic,
-    parse_pear_artifacts,
 )
 from zerver.lib.pear_agent import (
     PearCodexAppServerToolRunner,
@@ -64,9 +64,7 @@ PEAR_WORKER_RUN_ACTIVE_STATUSES = frozenset(
     (PearWorkerRun.QUEUED, PearWorkerRun.RUNNING, PearWorkerRun.DONE)
 )
 PEAR_WORKER_RUN_BUSY_STATUSES = frozenset((PearWorkerRun.QUEUED, PearWorkerRun.RUNNING))
-PEAR_WORKER_RUN_TERMINAL_STATUSES = frozenset(
-    (PearWorkerRun.DONE, PearWorkerRun.CANCELLED)
-)
+PEAR_WORKER_RUN_TERMINAL_STATUSES = frozenset((PearWorkerRun.DONE, PearWorkerRun.CANCELLED))
 PEAR_WORKER_MAX_CLAIM_ATTEMPTS = 2
 PEAR_WORKER_HEARTBEAT_INTERVAL_SECONDS = 15
 PEAR_RUN_LEGAL_TRANSITIONS: dict[PearWorkerRunStatus, frozenset[PearWorkerRunStatus]] = {
@@ -319,9 +317,7 @@ def pear_topic_workdir_slug(
     human_slug = re.sub(r"[^a-zA-Z0-9._-]+", "-", f"{stream}-{topic}").strip("-").lower()
     if not human_slug:
         human_slug = "topic"
-    digest = hashlib.sha256(
-        f"{user_profile.realm_id}\0{stream}\0{topic}".encode()
-    ).hexdigest()[:12]
+    digest = hashlib.sha256(f"{user_profile.realm_id}\0{stream}\0{topic}".encode()).hexdigest()[:12]
     return f"{human_slug[:48]}-{digest}"
 
 
@@ -376,9 +372,13 @@ def pear_expected_project_cache_path(
     *,
     stream: str,
 ) -> Path:
-    return pear_topic_workdir_root() / "projects" / pear_project_cache_slug(
-        user_profile,
-        stream=stream,
+    return (
+        pear_topic_workdir_root()
+        / "projects"
+        / pear_project_cache_slug(
+            user_profile,
+            stream=stream,
+        )
     )
 
 
@@ -447,11 +447,7 @@ def pear_workspace_node_for_context(
     topic: str,
     parent_context: PearTopicContext | None = None,
 ) -> PearWorkspaceNode:
-    workspace_node = (
-        context.workspace_node
-        if context.workspace_node_id is not None
-        else None
-    )
+    workspace_node = context.workspace_node if context.workspace_node_id is not None else None
     parent_node = (
         parent_context.workspace_node
         if parent_context is not None and parent_context.workspace_node_id is not None
@@ -966,7 +962,7 @@ def pear_legacy_canvas_backfill_items(content: str) -> list[tuple[str, str, str]
 
 
 def pear_backfill_canvas_from_topic_history(
-    messages: list[tuple[int, str, bool | None, str | None]]
+    messages: list[tuple[int, str, bool | None, str | None]],
 ) -> str:
     done_items: list[str] = []
     pinned_items: list[str] = []
@@ -1002,22 +998,18 @@ def pear_backfill_canvas_from_topic_history(
     sections: list[str] = []
     if done_items:
         sections.append(
-            "### Backfilled definition of done\n"
-            + "\n".join(f"- {item}" for item in done_items)
+            "### Backfilled definition of done\n" + "\n".join(f"- {item}" for item in done_items)
         )
     if pinned_items:
         sections.append(
-            "### Backfilled pinned context\n"
-            + "\n".join(f"- {item}" for item in pinned_items)
+            "### Backfilled pinned context\n" + "\n".join(f"- {item}" for item in pinned_items)
         )
     if routine_items:
         sections.append(
             "### Backfilled routines\n" + "\n".join(f"- {item}" for item in routine_items)
         )
     if notes:
-        sections.append(
-            "### Backfilled notes\n" + "\n".join(f"- {item}" for item in notes)
-        )
+        sections.append("### Backfilled notes\n" + "\n".join(f"- {item}" for item in notes))
     return "\n\n".join(sections)
 
 
@@ -1029,8 +1021,10 @@ def pear_read_text_path(path: Path, *, isolation_username: str | None = None) ->
     if isolation_username is None:
         try:
             return path.read_text(encoding="utf-8")
-        except OSError:
+        except FileNotFoundError:
             return ""
+        except OSError as error:
+            raise OSError(f"Could not read {path}: {error}") from error
     command = [
         "sudo",
         "-n",
@@ -1051,14 +1045,17 @@ def pear_read_text_path(path: Path, *, isolation_username: str | None = None) ->
             command,
             check=False,
             stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
             text=True,
             timeout=10,
         )
-    except (FileNotFoundError, OSError, subprocess.TimeoutExpired):
-        return ""
+    except (FileNotFoundError, OSError, subprocess.TimeoutExpired) as error:
+        raise OSError(f"Could not read {path}: {error}") from error
     if completed.returncode != 0:
-        return ""
+        error_text = completed.stderr.strip()
+        if error_text:
+            raise OSError(f"Could not read {path}: {error_text}")
+        raise OSError(f"Could not read {path}: sudo exited {completed.returncode}")
     return completed.stdout
 
 
@@ -1148,6 +1145,7 @@ def ensure_pear_topic_context(
     stream: str,
     topic: str,
     parent_context: PearTopicContext | None = None,
+    ensure_canvas: bool = True,
 ) -> PearTopicContext:
     context, _created = PearTopicContext.objects.get_or_create(
         realm=user_profile.realm,
@@ -1211,12 +1209,13 @@ def ensure_pear_topic_context(
     )
     if isolation_username is not None and not pear_topic_isolation_user_exists(isolation_username):
         isolation_username = None
-    pear_ensure_topic_canvas(
-        context.workdir,
-        stream=stream,
-        topic=topic,
-        isolation_username=isolation_username,
-    )
+    if ensure_canvas:
+        pear_ensure_topic_canvas(
+            context.workdir,
+            stream=stream,
+            topic=topic,
+            isolation_username=isolation_username,
+        )
     if workspace_node.workdir != context.workdir:
         workspace_node.workdir = context.workdir
         workspace_node.date_updated = timezone_now()
@@ -1296,7 +1295,9 @@ def ensure_pear_topic_workdir(
             pass
         pear_switch_workdir_to_branch(path, branch_name)
         return pear_git_current_branch_name(path) or branch_name
-    base_path = Path(base_workdir) if base_workdir is not None else Path(pear_default_worker_workdir())
+    base_path = (
+        Path(base_workdir) if base_workdir is not None else Path(pear_default_worker_workdir())
+    )
     base_is_git_worktree = pear_path_is_git_worktree(base_path)
     path_was_empty = not ((path / ".git").exists() or path.exists() and any(path.iterdir()))
     worktree_added_branch: str | None = None
@@ -1715,11 +1716,7 @@ def build_pear_workspace_context(
     topic: str,
 ) -> dict[str, str]:
     context = ensure_pear_topic_context(user_profile, stream=stream, topic=topic)
-    parent_context = (
-        context.parent_context
-        if context.parent_context_id is not None
-        else None
-    )
+    parent_context = context.parent_context if context.parent_context_id is not None else None
     workdir = context.workdir.strip() or pear_default_worker_workdir()
     context_repo = context.github_repo.strip()
     parent_repo = parent_context.github_repo.strip() if parent_context is not None else ""
@@ -1741,8 +1738,7 @@ def build_pear_workspace_context(
         "workdir": workdir,
         "branch": (
             context.workspace_node.branch_name.strip()
-            if context.workspace_node_id is not None
-            and context.workspace_node.branch_name.strip()
+            if context.workspace_node_id is not None and context.workspace_node.branch_name.strip()
             else pear_workspace_node_default_branch()
         ),
         "head": "",
@@ -1762,10 +1758,7 @@ def pear_repo_artifact_value_is_durable(repo_value: str) -> bool:
         parsed_url.netloc or parsed_url.path
     ):
         return True
-    return (
-        re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+(?:\s+<[^>\n]+>)?", value)
-        is not None
-    )
+    return re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+(?:\s+<[^>\n]+>)?", value) is not None
 
 
 def pear_repo_artifact_value_is_local_topic_path(repo_value: str) -> bool:
@@ -2106,7 +2099,11 @@ class PearDatabaseWorkerRunStore:
             return "Pear could not identify the requesting user."
 
         trusted_user_ids = set(settings.PEAR_WORKER_TRUSTED_USER_IDS)
-        if trusted_user_ids and not requesting_user.is_realm_admin and requesting_user.id not in trusted_user_ids:
+        if (
+            trusted_user_ids
+            and not requesting_user.is_realm_admin
+            and requesting_user.id not in trusted_user_ids
+        ):
             return "This user is not allowed to start Pear worker runs."
         if pear_topic_context_is_paused(user_profile, stream=stream, topic=topic):
             return "Pear session is paused until a resume control is posted."
@@ -2608,10 +2605,14 @@ class PearDatabaseWorkerRunStore:
 
         user_profile = bot_handler.user_profile
         assert isinstance(user_profile, UserProfile)
-        return PearWorkerRun.objects.filter(
-            bot_profile=user_profile,
-            trigger_message_id=message_id,
-        ).filter(Q(cancel_requested_at__isnull=False) | Q(status=PearWorkerRun.CANCELLED)).exists()
+        return (
+            PearWorkerRun.objects.filter(
+                bot_profile=user_profile,
+                trigger_message_id=message_id,
+            )
+            .filter(Q(cancel_requested_at__isnull=False) | Q(status=PearWorkerRun.CANCELLED))
+            .exists()
+        )
 
     def set_topic_paused(
         self,
@@ -2747,9 +2748,7 @@ class PearDatabaseWorkerRunStore:
         same_status = old_status == status
         legal_statuses = PEAR_RUN_LEGAL_TRANSITIONS.get(old_status, frozenset())
         is_explicit_requeue = (
-            old_status == PearWorkerRun.FAILED
-            and status == PearWorkerRun.QUEUED
-            and allow_requeue
+            old_status == PearWorkerRun.FAILED and status == PearWorkerRun.QUEUED and allow_requeue
         )
         if not same_status and status not in legal_statuses:
             self._record_transition_rejected(
@@ -2977,9 +2976,7 @@ def load_pear_active_session_from_zulip(
     )
     if trigger_message_id not in {row[0] for row in message_rows}:
         trigger_sender_name = str(
-            message.get("sender_full_name")
-            or message.get("sender_email")
-            or "User"
+            message.get("sender_full_name") or message.get("sender_email") or "User"
         )
         message_rows.append(
             (trigger_message_id, str(message.get("content", "")), False, trigger_sender_name)

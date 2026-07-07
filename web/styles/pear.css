@@ -1338,6 +1338,12 @@
     --pear-runtime-menu-width: 250px;
 
     min-width: var(--pear-runtime-menu-width);
+    overflow: hidden;
+    border: 1px solid var(--color-border-popover-menu);
+    border-radius: 4px;
+    background: var(--color-background-popover-menu);
+    box-shadow: var(--box-shadow-popover-menu);
+    color: var(--color-text-popover-menu);
 
     .simplebar-content,
     .popover-menu-list {

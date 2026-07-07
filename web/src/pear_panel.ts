@@ -1806,6 +1806,20 @@ function render(
     }
     const $panel = $(panel);
     if (last_render_state_key !== next_render_state_key) {
+        // The html() swap below replaces every node in the panel, which drops
+        // focus and the caret.  A live re-render fires up to twice a second
+        // during an active run, so without this a user typing in the whisper
+        // textarea would silently lose their cursor mid-word.  Capture the
+        // focused element and caret, then restore them after the swap.  (We are
+        // past ensure_pear_panel_host(), so the DOM globals are available.)
+        const focused = document.activeElement;
+        const focused_id =
+            focused instanceof HTMLElement && panel.contains(focused) ? focused.id : "";
+        const caret =
+            focused instanceof HTMLTextAreaElement || focused instanceof HTMLInputElement
+                ? {start: focused.selectionStart, end: focused.selectionEnd}
+                : undefined;
+
         const side_request = $panel.find("#pear-side-request").val();
         if (typeof side_request === "string" && next_context_key !== "") {
             side_request_by_context.set(next_context_key, side_request);
@@ -1816,6 +1830,19 @@ function render(
         const stored_side_request = side_request_by_context.get(next_context_key);
         if (stored_side_request !== undefined) {
             $panel.find("#pear-side-request").val(stored_side_request);
+        }
+        if (focused_id !== "") {
+            const refocused = panel.querySelector(`#${focused_id}`);
+            if (refocused instanceof HTMLElement) {
+                refocused.focus();
+                if (
+                    caret !== undefined &&
+                    (refocused instanceof HTMLTextAreaElement ||
+                        refocused instanceof HTMLInputElement)
+                ) {
+                    refocused.setSelectionRange(caret.start, caret.end);
+                }
+            }
         }
         rendered_markdown.update_elements($panel.find(".pear-workbench-canvas-rendered"));
         $(document).trigger("pear_liveness_markers_changed");

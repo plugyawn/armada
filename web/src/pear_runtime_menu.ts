@@ -784,10 +784,7 @@ export function initialize(): void {
         "click keydown",
         "#pear-runtime-menu-popover .pear-runtime-model-menu-choice",
         function (this: HTMLElement, e) {
-            if (
-                e.type === "keydown" &&
-                (e.key !== "Enter" && e.key !== " ")
-            ) {
+            if (e.type === "keydown" && e.key !== "Enter" && e.key !== " ") {
                 return;
             }
             e.preventDefault();
@@ -803,10 +800,7 @@ export function initialize(): void {
         "click keydown",
         "#pear-runtime-menu-popover .pear-runtime-effort-menu-choice",
         function (this: HTMLElement, e) {
-            if (
-                e.type === "keydown" &&
-                (e.key !== "Enter" && e.key !== " ")
-            ) {
+            if (e.type === "keydown" && e.key !== "Enter" && e.key !== " ") {
                 return;
             }
             e.preventDefault();

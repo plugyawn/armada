@@ -1817,7 +1817,7 @@ class PearCodexAppServerToolRunner:
         event_callback: PearWorkerTranscriptCallback | None,
     ) -> str:
         existing_thread_id = pear_codex_thread_id_from_active_session(active_session)
-        thread_id = existing_thread_id or self.loaded_thread_id
+        thread_id = existing_thread_id
         if thread_id is not None and thread_id == self.loaded_thread_id:
             return thread_id
         if thread_id is not None:

@@ -3215,6 +3215,127 @@ class PearSessionDefaultsTest(TestCase):
             results,
         )
 
+    def test_codex_app_server_tool_runner_starts_new_thread_without_session_id(
+        self,
+    ) -> None:
+        payload = get_pear_session_payload()
+        first_session = build_pear_active_session_summary_from_messages(
+            pear_session=payload,
+            source="server",
+            stream_exists=True,
+            messages=[(10, "@Pear fix the first topic", False)],
+        )
+        second_session = build_pear_active_session_summary_from_messages(
+            pear_session={
+                **payload,
+                "stream": "engineering",
+                "topic": "second topic",
+            },
+            source="server",
+            stream_exists=True,
+            messages=[(20, "@Pear fix the second topic", False)],
+        )
+        calls = []
+        processes = []
+
+        class FakeStdin:
+            def __init__(self) -> None:
+                self.lines: list[dict[str, object]] = []
+
+            def write(self, value: str) -> int:
+                self.lines.append(json.loads(value))
+                return len(value)
+
+            def flush(self) -> None:
+                pass
+
+        class FakeStream:
+            def __init__(self, lines: list[str]) -> None:
+                self.lines = lines
+
+            def __iter__(self):
+                return iter(self.lines)
+
+        class FakeProcess:
+            def __init__(self) -> None:
+                self.stdin = FakeStdin()
+                self.stdout = FakeStream(
+                    [
+                        '{"id":1,"result":{}}\n',
+                        '{"id":2,"result":{"thread":{"id":"thread-first"}}}\n',
+                        '{"id":3,"result":{"turn":{"id":"turn-first"}}}\n',
+                        (
+                            '{"method":"item/completed","params":{"threadId":"thread-first",'
+                            '"turnId":"turn-first","item":{"id":"msg-first",'
+                            '"type":"agentMessage","text":"Verification: first ok"}}}\n'
+                        ),
+                        (
+                            '{"method":"turn/completed","params":{"threadId":"thread-first",'
+                            '"turn":{"id":"turn-first"}}}\n'
+                        ),
+                        '{"id":4,"result":{"thread":{"id":"thread-second"}}}\n',
+                        '{"id":5,"result":{"turn":{"id":"turn-second"}}}\n',
+                        (
+                            '{"method":"item/completed","params":{"threadId":"thread-second",'
+                            '"turnId":"turn-second","item":{"id":"msg-second",'
+                            '"type":"agentMessage","text":"Verification: second ok"}}}\n'
+                        ),
+                        (
+                            '{"method":"turn/completed","params":{"threadId":"thread-second",'
+                            '"turn":{"id":"turn-second"}}}\n'
+                        ),
+                    ]
+                )
+                self.stderr = FakeStream([])
+
+            def poll(self) -> None:
+                return None
+
+            def terminate(self) -> None:
+                pass
+
+        def fake_popen(command, **kwargs):
+            calls.append((command, kwargs))
+            process = FakeProcess()
+            processes.append(process)
+            return process
+
+        runner = PearCodexAppServerToolRunner(
+            codex_bin="codex",
+            workdir="/workspace",
+            model="gpt-5.5",
+            sandbox="danger-full-access",
+            approval_policy="never",
+            timeout_seconds=900,
+            output_limit=200,
+            popen_command=fake_popen,
+        )
+
+        first_results = list(runner(first_session, "fix the first topic"))
+        second_results = list(runner(second_session, "fix the second topic"))
+
+        self.assertEqual(len(calls), 1)
+        sent_methods = [line["method"] for line in processes[0].stdin.lines]
+        self.assertEqual(
+            sent_methods,
+            [
+                "initialize",
+                "initialized",
+                "thread/start",
+                "turn/start",
+                "thread/start",
+                "turn/start",
+            ],
+        )
+        self.assertIn(
+            {"label": "Session", "value": "Codex thread thread-first"},
+            first_results,
+        )
+        self.assertIn(
+            {"label": "Session", "value": "Codex thread thread-second"},
+            second_results,
+        )
+
     def test_codex_exec_tool_runner_raises_for_failed_runtime(self) -> None:
         payload = get_pear_session_payload()
         active_session = build_pear_active_session_summary_from_messages(

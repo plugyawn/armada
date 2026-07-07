@@ -12,7 +12,9 @@
 
 #pear-panel.pear-workbench-popover-open {
     position: fixed;
-    z-index: 1040;
+    /* Sit just below Zulip's modal/overlay layer (z-index 105) so dialogs and
+       overlays render on top of the workbench instead of underneath it. */
+    z-index: 104;
     top: var(--pear-workbench-popover-top);
     left: var(--pear-workbench-popover-left);
     display: flex;

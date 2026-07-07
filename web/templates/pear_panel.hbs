@@ -4,9 +4,9 @@
     <div class="pear-panel-header {{#unless active_run_show_status}}pear-panel-header-idle{{/unless}} {{#if panel_header_quiet}}pear-panel-header-quiet{{/if}}">
         {{#if active_run_show_status}}
         <div class="pear-panel-title-row">
-            <div class="pear-run-status-row pear-run-status-{{active_run.status_class}}{{#if active_run.is_active}} pear-liveness-active{{/if}}" aria-label="{{active_run.status_label}} {{active_run.status_marker}}" title="{{active_run.status_label}} {{active_run.status_marker}}">
+            <div class="pear-run-status-row pear-run-status-{{active_run.status_class}}{{#if active_run.is_active}} pear-liveness-active{{/if}}" aria-label="{{active_run.status_label}}" title="{{active_run.status_label}}">
                 <span class="pear-panel-status-label">{{active_run.status_label}}</span>
-                <span class="pear-ui-glyph pear-run-status-glyph {{#if active_run.is_active}}pear-thinking-glyph{{/if}}">{{active_run.status_marker}}</span>
+                <span class="pear-ui-glyph pear-run-status-glyph {{#if active_run.is_active}}pear-thinking-glyph{{/if}}" aria-hidden="true">{{active_run.status_marker}}</span>
             </div>
         </div>
         {{/if}}

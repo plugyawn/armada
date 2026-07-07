@@ -168,11 +168,13 @@ const pear_thinking_glyphs = [
     "∙",
 ] as const;
 const PEAR_ACTIVE_GLYPH = "✦";
+
+export function pear_thinking_glyph_frames_for_testing(): readonly string[] {
+    return pear_thinking_glyphs;
+}
 const PEAR_ACTIVE_THINKING_TEXT = "Thinking";
 const PEAR_ACTIVE_THINKING_MARKUP_REGEX = /<em>\s*Thinking\s*<\/em>/i;
 const PEAR_ACTIVE_VISIBLE_GLYPH = pear_thinking_glyphs[0]!;
-let pear_thinking_glyph_index = 0;
-let pear_thinking_glyph_timer: ReturnType<typeof setInterval> | undefined;
 const pear_result_refresh_in_flight_message_ids = new Set<number>();
 // Settled messages we already refreshed whose content still carries the
 // \u2726 active marker: their glyph is legitimate content, not stale run
@@ -766,69 +768,42 @@ function wrap_bare_pear_thinking_glyphs($scope: JQuery<HTMLElement | Document>):
     synthesize_plain_pear_active_progress_glyphs($scope);
 }
 
-function render_pear_thinking_glyph($markers: JQuery): void {
-    if ($markers.length === 0) {
-        return;
-    }
-    $markers.text(pear_thinking_glyphs[pear_thinking_glyph_index]!);
-    pear_thinking_glyph_index = (pear_thinking_glyph_index + 1) % pear_thinking_glyphs.length;
-}
-
-function stop_pear_thinking_animation(): void {
-    if (pear_thinking_glyph_timer === undefined) {
-        pear_thinking_glyph_index = 0;
-        return;
-    }
-    clearInterval(pear_thinking_glyph_timer);
-    pear_thinking_glyph_timer = undefined;
-    pear_thinking_glyph_index = 0;
-}
-
 function update_pear_thinking_glyphs(): void {
-    if (pear_run_state.expire_stale_active_run_result_messages()) {
-        return;
-    }
-    const $markers = pear_thinking_markers();
-    if ($markers.length === 0) {
-        stop_pear_thinking_animation();
-        return;
-    }
-    render_pear_thinking_glyph($markers);
-}
-
-function refresh_pear_thinking_animation(): void {
-    if (pear_run_state.expire_stale_active_run_result_messages()) {
-        return;
-    }
-    const $markers = pear_thinking_markers();
-    if ($markers.length === 0) {
-        stop_pear_thinking_animation();
-        return;
-    }
-    if (pear_thinking_glyph_timer === undefined) {
-        pear_thinking_glyph_index = 0;
-    }
-    render_pear_thinking_glyph($markers);
-    start_pear_thinking_animation();
-}
-
-function start_pear_thinking_animation(): void {
-    if (pear_thinking_glyph_timer !== undefined) {
-        return;
-    }
-    pear_thinking_glyph_timer = setInterval(update_pear_thinking_glyphs, 100);
+    // The frame cycle itself runs in CSS (pear-thinking-frames in
+    // pear.css, mirroring pear_thinking_glyphs): JS marks each active
+    // marker once, clearing its text so the animated ::before frames are
+    // not doubled next to a static glyph. No scripted tick remains —
+    // active-state expiry is owned solely by pear_run_state's TTL timer.
+    const active_markers = new Set<Element>();
+    pear_thinking_markers().each((_index, marker) => {
+        active_markers.add(marker);
+        if (!marker.classList.contains("pear-thinking-glyph-animated")) {
+            marker.textContent = "";
+            marker.classList.add("pear-thinking-glyph-animated");
+        }
+    });
+    // Markers that stopped matching (their row or container is no longer
+    // active) return to the resting glyph instead of a frozen mid-cycle
+    // frame.
+    $(".pear-thinking-glyph-animated").each((_index, marker) => {
+        if (active_markers.has(marker)) {
+            return;
+        }
+        marker.classList.remove("pear-thinking-glyph-animated");
+        marker.textContent = PEAR_ACTIVE_VISIBLE_GLYPH;
+    });
 }
 
 function maybe_render_pear_thinking_glyph($row: JQuery): void {
     if (!$row.hasClass("pear-active-message")) {
         return;
     }
-    refresh_pear_thinking_animation();
+    update_pear_thinking_glyphs();
 }
 
 if (typeof document !== "undefined") {
     $(document).on("pear_liveness_markers_changed", () => {
-        refresh_pear_thinking_animation();
+        update_pear_thinking_glyphs();
     });
     $("body").on("click", ".pear-artifact-ref", (event) => {
         if (should_ignore_pear_artifact_ref_click(event.target)) {
@@ -868,7 +843,7 @@ function rendered_stale_pear_active_message_ids(): number[] {
 function update_rendered_pear_active_messages(): void {
     const $pear_messages = $(".message_row.pear-message");
     if ($pear_messages.length === 0) {
-        stop_pear_thinking_animation();
+        update_pear_thinking_glyphs();
         return;
     }
     $pear_messages.each((_index, row) => {

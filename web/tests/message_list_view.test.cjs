@@ -1789,3 +1789,24 @@ test("render_windows", ({mock_template}) => {
         no_move_start: 0,
     });
 });
+
+run_test("pear thinking frames stay in lockstep with the CSS engine", () => {
+    // The frame cycle executes as CSS keyframes (pear-thinking-frames in
+    // pear.css); the JS array remains the canonical sequence. If either
+    // side changes without the other, the ✦ Thinking animation would
+    // silently change character.
+    const fs = require("node:fs");
+    const path = require("node:path");
+    const css = fs.readFileSync(
+        path.resolve(__dirname, "../styles/pear.css"),
+        "utf8",
+    );
+    const keyframes_block = /@keyframes pear-thinking-frames \{([^]*?)\n\}/.exec(css);
+    assert.ok(keyframes_block, "pear-thinking-frames keyframes must exist in pear.css");
+    const css_frames = [...keyframes_block[1].matchAll(/content: "(.+?)";/g)].map(
+        (m) => m[1],
+    );
+    const js_frames = [...message_list_view.pear_thinking_glyph_frames_for_testing()];
+    // The 100% keyframe repeats frame 0 to close the loop.
+    assert.deepEqual(css_frames, [...js_frames, js_frames[0]]);
+});

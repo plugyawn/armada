@@ -1329,6 +1329,115 @@
     text-align: center;
 }
 
+/* The ✦ Thinking cycle. The frame sequence and cadence (20 frames x
+   100ms = one 2s loop) mirror pear_thinking_glyphs in
+   message_list_view.ts; a node test keeps the two in lockstep. JS marks
+   a glyph element as animated once and the compositor runs the cycle —
+   no 100ms scripting tick. */
+/* stylelint-disable plugin/no-low-performance-animation-properties --
+   The Thinking cycle is a discrete 10fps character swap (step-end), not a
+   continuous animation: one small layout per 100ms, the same cost as the
+   JS text-swap engine it replaces, minus that engine's 100ms document
+   scan. A transform/opacity equivalent would need 20 stacked elements. */
+@keyframes pear-thinking-frames {
+    0% {
+        content: "·";
+    }
+
+    5% {
+        content: "∙";
+    }
+
+    10% {
+        content: "⋅";
+    }
+
+    15% {
+        content: "✦";
+    }
+
+    20% {
+        content: "✧";
+    }
+
+    25% {
+        content: "✩";
+    }
+
+    30% {
+        content: "✶";
+    }
+
+    35% {
+        content: "✷";
+    }
+
+    40% {
+        content: "✸";
+    }
+
+    45% {
+        content: "✹";
+    }
+
+    50% {
+        content: "✺";
+    }
+
+    55% {
+        content: "✹";
+    }
+
+    60% {
+        content: "✸";
+    }
+
+    65% {
+        content: "✷";
+    }
+
+    70% {
+        content: "✶";
+    }
+
+    75% {
+        content: "✩";
+    }
+
+    80% {
+        content: "✧";
+    }
+
+    85% {
+        content: "✦";
+    }
+
+    90% {
+        content: "⋅";
+    }
+
+    95% {
+        content: "∙";
+    }
+
+    100% {
+        content: "·";
+    }
+}
+
+.pear-thinking-glyph-animated::before {
+    content: "·";
+    animation: pear-thinking-frames 2s step-end infinite;
+}
+/* stylelint-enable plugin/no-low-performance-animation-properties */
+
+@media (prefers-reduced-motion: reduce) {
+    .pear-thinking-glyph-animated::before {
+        content: "✦";
+        animation: none;
+    }
+}
+
 /* Pear runtime popover menu; mirrors the radio-list layout used by
    #buddy-list-actions-menu-popover in right_sidebar.css. */
 #pear-runtime-menu-popover {

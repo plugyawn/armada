@@ -108,7 +108,6 @@ const pear_git_context_schema = z.object({
     branch_matches_topic: z.optional(z.boolean()),
     changed_files: z.optional(z.array(pear_git_changed_file_schema)),
     changed_files_truncated: z.optional(z.boolean()),
-    diff_shortstat: z.optional(z.string()),
     recent_commits: z.optional(z.array(pear_git_commit_schema)),
 });
 
@@ -573,21 +572,11 @@ function git_ref_label(git: PearGitContext): string {
 }
 
 function git_has_diff(git: PearGitContext): boolean {
-    return (git.changed_files ?? []).length > 0 || (git.diff_shortstat?.trim() ?? "") !== "";
+    return (git.changed_files ?? []).length > 0;
 }
 
 function git_has_history(git: PearGitContext): boolean {
     return git.available || (git.recent_commits ?? []).length > 0;
-}
-
-function pear_git_shortstat_count(shortstat: string, label: "insertion" | "deletion"): number {
-    const match = new RegExp(`(\\d+) ${label}s?\\(`).exec(shortstat);
-    return match === null ? 0 : Number.parseInt(match[1]!, 10);
-}
-
-function pear_git_shortstat_file_count(shortstat: string): number {
-    const match = /(\d+) files? changed/.exec(shortstat);
-    return match === null ? 0 : Number.parseInt(match[1]!, 10);
 }
 
 export function workbench_view_for_testing(options: {
@@ -829,8 +818,6 @@ function display_topic_context(topic_context: PearTopicContext | undefined | nul
           has_workbench_diff_summary: boolean;
           workbench_diff_summary_label: string;
           workbench_diff_file_label: string;
-          workbench_diff_insertions_label: string;
-          workbench_diff_deletions_label: string;
       })
     | undefined {
     if (topic_context === undefined || topic_context === null) {
@@ -845,7 +832,6 @@ function display_topic_context(topic_context: PearTopicContext | undefined | nul
     const github_repo = topic_context.github_repo.trim();
     const has_workbench_diff = git_has_diff(git);
     const has_workbench_history = git_has_history(git);
-    const diff_shortstat = git.diff_shortstat?.trim() ?? "";
     const workbench_title = topic_context.worktree_label?.trim() || topic_context.topic;
     const workbench_repo_label =
         topic_context.repo_label?.trim() || topic_context.repo_title?.trim() || github_repo;
@@ -865,26 +851,14 @@ function display_topic_context(topic_context: PearTopicContext | undefined | nul
     const topic_branch_label =
         (git.detached === true ? $t({defaultMessage: "detached"}) : git.branch?.trim()) ||
         topic_context.topic;
-    const diff_file_count = pear_git_shortstat_file_count(diff_shortstat) || changed_count;
-    const diff_insertions = pear_git_shortstat_count(diff_shortstat, "insertion");
-    const diff_deletions = pear_git_shortstat_count(diff_shortstat, "deletion");
+    const diff_file_count = (git.changed_files ?? []).length || changed_count;
     const workbench_diff_file_label =
         diff_file_count === 0
             ? ""
             : diff_file_count === 1
               ? $t({defaultMessage: "1 file"})
               : $t({defaultMessage: "{diff_file_count} files"}, {diff_file_count});
-    const workbench_diff_insertions_label =
-        diff_insertions > 0 ? $t({defaultMessage: "+{diff_insertions}"}, {diff_insertions}) : "";
-    const workbench_diff_deletions_label =
-        diff_deletions > 0 ? $t({defaultMessage: "-{diff_deletions}"}, {diff_deletions}) : "";
-    const workbench_diff_summary_label = [
-        workbench_diff_file_label,
-        workbench_diff_insertions_label,
-        workbench_diff_deletions_label,
-    ]
-        .filter((part) => part !== "")
-        .join(" ");
+    const workbench_diff_summary_label = workbench_diff_file_label;
     const history_commits = (git.recent_commits ?? []).map((commit, index) => ({
         ...commit,
         is_head: index === 0,
@@ -986,8 +960,6 @@ function display_topic_context(topic_context: PearTopicContext | undefined | nul
         has_workbench_diff_summary: workbench_diff_summary_label !== "",
         workbench_diff_summary_label,
         workbench_diff_file_label,
-        workbench_diff_insertions_label,
-        workbench_diff_deletions_label,
     };
 }
 

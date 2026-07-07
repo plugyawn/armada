@@ -1798,6 +1798,41 @@ class PearSessionEndpointTest(ZulipTestCase):
         self.assertTrue(dirty_delta["dirty"])
         self.assertEqual(dirty_delta["changed_count"], 1)
 
+    def test_pear_git_status_delta_reports_structured_changed_files(self) -> None:
+        invalidate_pear_git_status_delta()
+        status_output = "\n".join(
+            [
+                "# branch.oid 1234567890abcdef",
+                "# branch.head topic-a",
+                "1 .M N... 100644 100644 100644 a b modified.txt",
+                "1 A. N... 000000 100644 100644 a b added.txt",
+                "1 D. N... 100644 000000 000000 a b deleted.txt",
+                "2 R. N... 100644 100644 100644 a b R100 renamed.txt\told-name.txt",
+                "u UU N... 100644 100644 100644 100644 a b c conflicted.txt",
+                "? untracked.txt",
+            ]
+        )
+
+        with patch(
+            "zerver.lib.pear_worker.pear_git_output",
+            return_value=status_output,
+        ):
+            delta = pear_git_status_delta("/repo", topic="topic-a")
+
+        self.assertEqual(delta["changed_count"], 6)
+        self.assertFalse(delta["changed_files_truncated"])
+        self.assertEqual(
+            delta["changed_files"],
+            [
+                {"status": "M", "kind": "modified", "path": "modified.txt"},
+                {"status": "A", "kind": "added", "path": "added.txt"},
+                {"status": "D", "kind": "deleted", "path": "deleted.txt"},
+                {"status": "R", "kind": "renamed", "path": "renamed.txt"},
+                {"status": "U", "kind": "changed", "path": "conflicted.txt"},
+                {"status": "??", "kind": "untracked", "path": "untracked.txt"},
+            ],
+        )
+
     def test_pear_git_status_delta_runs_one_porcelain_command(self) -> None:
         invalidate_pear_git_status_delta()
         status_output = "\n".join(

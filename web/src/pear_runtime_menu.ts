@@ -550,13 +550,19 @@ function fetch_topic_context(): void {
         },
         success(raw_data) {
             const data = pear_runtime_response_schema.parse(raw_data);
+            const now = current_narrow();
+            const narrow_changed = now.stream !== stream || now.topic !== topic;
             if (
+                narrow_changed ||
                 !should_accept_runtime_fetch_for_testing({
                     fetch_generation,
                     runtime_save_generation,
                     fetch_started_during_save,
                 })
             ) {
+                // Discard responses for a save we superseded or a topic the
+                // user has since navigated away from, so the header never shows
+                // the previous topic's model/effort.
                 rerender_popover_if_open();
                 return;
             }
@@ -571,7 +577,10 @@ function fetch_topic_context(): void {
             if (xhr.readyState === 0) {
                 return;
             }
+            const now = current_narrow();
+            const narrow_changed = now.stream !== stream || now.topic !== topic;
             if (
+                narrow_changed ||
                 !should_accept_runtime_fetch_for_testing({
                     fetch_generation,
                     runtime_save_generation,

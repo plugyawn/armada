@@ -1791,7 +1791,7 @@ class PearSessionDefaultsTest(TestCase):
         seen_worker_states: list[str] = []
         seen_tasks: list[str] = []
 
-        def tool_runner(active_session, task: str) -> list[dict[str, str]]:
+        def tool_runner(active_session, task: str, *, event_callback=None) -> list[dict[str, str]]:
             seen_worker_states.append(active_session["worker_state"])
             seen_tasks.append(task)
             return [
@@ -1822,6 +1822,15 @@ class PearSessionDefaultsTest(TestCase):
         class CloseableToolRunner:
             def __init__(self) -> None:
                 self.closed = False
+
+            def __call__(
+                self,
+                active_session: PearActiveSessionSummary,
+                task: str,
+                *,
+                event_callback: PearWorkerTranscriptCallback | None = None,
+            ) -> list[dict[str, str]]:
+                return []
 
             def close(self) -> None:
                 self.closed = True
@@ -2145,7 +2154,7 @@ class PearSessionDefaultsTest(TestCase):
         )
         tool_was_called = False
 
-        def tool_runner(active_session, task: str) -> list[dict[str, str]]:
+        def tool_runner(active_session, task: str, *, event_callback=None) -> list[dict[str, str]]:
             nonlocal tool_was_called
             tool_was_called = True
             return []
@@ -4467,7 +4476,7 @@ class PearSessionDefaultsTest(TestCase):
             classifier_calls.append(content)
             return True
 
-        def tool_runner(active_session, task):
+        def tool_runner(active_session, task, *, event_callback=None):
             seen_tasks.append(task)
             return [
                 {
@@ -4845,7 +4854,7 @@ class PearSessionDefaultsTest(TestCase):
         def active_session_loader(message, bot_handler):
             return loaded_session
 
-        def tool_runner(active_session, task):
+        def tool_runner(active_session, task, *, event_callback=None):
             seen_tasks.append(task)
             return [
                 {
@@ -4935,7 +4944,7 @@ class PearSessionDefaultsTest(TestCase):
         def active_session_loader(message, bot_handler):
             return loaded_session
 
-        def tool_runner(active_session, task):
+        def tool_runner(active_session, task, *, event_callback=None):
             seen_tasks.append(task)
             return [
                 {
@@ -5024,7 +5033,7 @@ class PearSessionDefaultsTest(TestCase):
         def active_session_loader(message, bot_handler):
             return loaded_session
 
-        def tool_runner(active_session, task):
+        def tool_runner(active_session, task, *, event_callback=None):
             seen_tasks.append(task)
             return [
                 {
@@ -5107,7 +5116,7 @@ class PearSessionDefaultsTest(TestCase):
         def active_session_loader(message, bot_handler):
             return loaded_session
 
-        def tool_runner(active_session, task):
+        def tool_runner(active_session, task, *, event_callback=None):
             seen_tasks.append(task)
             return [
                 {
@@ -5190,7 +5199,7 @@ class PearSessionDefaultsTest(TestCase):
         def active_session_loader(message, bot_handler):
             return loaded_session
 
-        def tool_runner(active_session, task):
+        def tool_runner(active_session, task, *, event_callback=None):
             seen_tasks.append(task)
             return [{"label": "Verification", "value": "Router accepted"}]
 
@@ -5913,7 +5922,7 @@ class PearSessionDefaultsTest(TestCase):
                 visible_status_by_id[message_id] = content
                 updated_messages.append(message)
 
-        def tool_runner(active_session, task: str) -> list[dict[str, str]]:
+        def tool_runner(active_session, task: str, *, event_callback=None) -> list[dict[str, str]]:
             tool_seen_statuses.append(visible_status_by_id[501])
             return [
                 {
@@ -6240,7 +6249,7 @@ class PearSessionDefaultsTest(TestCase):
             def update_message(self, message: dict[str, object]) -> None:
                 updated_messages.append(message)
 
-        def tool_runner(active_session, task: str) -> list[dict[str, str]]:
+        def tool_runner(active_session, task: str, *, event_callback=None) -> list[dict[str, str]]:
             return [{"label": "Result", "value": long_result}]
 
         payload = get_pear_session_payload()
@@ -6332,7 +6341,13 @@ class PearSessionDefaultsTest(TestCase):
             def update_message(self, message: dict[str, object]) -> None:
                 updated_messages.append(message)
 
-        def tool_runner(active_session, task: str, *, event_callback) -> list[dict[str, str]]:
+        def tool_runner(
+            active_session,
+            task: str,
+            *,
+            event_callback: PearWorkerTranscriptCallback | None = None,
+        ) -> list[dict[str, str]]:
+            assert event_callback is not None
             event_callback(
                 {
                     "kind": "assistant",
@@ -6455,7 +6470,13 @@ class PearSessionDefaultsTest(TestCase):
             def update_message(self, message: dict[str, object]) -> None:
                 updated_messages.append(message)
 
-        def tool_runner(active_session, task: str, *, event_callback) -> list[dict[str, str]]:
+        def tool_runner(
+            active_session,
+            task: str,
+            *,
+            event_callback: PearWorkerTranscriptCallback | None = None,
+        ) -> list[dict[str, str]]:
+            assert event_callback is not None
             event_callback(
                 {
                     "kind": "tool",
@@ -6563,7 +6584,14 @@ class PearSessionDefaultsTest(TestCase):
             def __init__(self) -> None:
                 self.interrupted = False
 
-            def __call__(self, active_session, task: str, *, event_callback):
+            def __call__(
+                self,
+                active_session,
+                task: str,
+                *,
+                event_callback: PearWorkerTranscriptCallback | None = None,
+            ) -> list[dict[str, str]]:
+                assert event_callback is not None
                 event_callback(
                     {
                         "kind": "tool",
@@ -6678,7 +6706,7 @@ class PearSessionDefaultsTest(TestCase):
         def active_session_loader(message, bot_handler):
             raise RuntimeError("database unavailable")
 
-        def tool_runner(active_session, task: str) -> list[dict[str, str]]:
+        def tool_runner(active_session, task: str, *, event_callback=None) -> list[dict[str, str]]:
             raise AssertionError("runtime must not run after a loader failure")
 
         message = {
@@ -6792,7 +6820,7 @@ class PearSessionDefaultsTest(TestCase):
             loaded_message_ids.append(message["id"])
             return refreshed_session
 
-        def tool_runner(active_session, task: str) -> list[dict[str, str]]:
+        def tool_runner(active_session, task: str, *, event_callback=None) -> list[dict[str, str]]:
             prompt = build_pear_codex_prompt(active_session, task)
             tool_seen_prompts.append(prompt)
             return [
@@ -6905,7 +6933,7 @@ class PearSessionDefaultsTest(TestCase):
             def update_message(self, message: dict[str, object]) -> None:
                 updated_messages.append(message)
 
-        def tool_runner(active_session, task: str) -> list[dict[str, str]]:
+        def tool_runner(active_session, task: str, *, event_callback=None) -> list[dict[str, str]]:
             tool_seen_tasks.append(task)
             tool_seen_threads.append(active_session["latest_codex_thread_id"])
             if len(tool_seen_tasks) == 1:
@@ -7050,7 +7078,7 @@ class PearSessionDefaultsTest(TestCase):
             def send_reply(self, message: dict[str, object], response: str) -> None:
                 sent_replies.append(response)
 
-        def tool_runner(active_session, task: str):
+        def tool_runner(active_session, task: str, *, event_callback=None):
             raise RuntimeError("codex adapter failed")
 
         bot_handler = FakeBotHandler()

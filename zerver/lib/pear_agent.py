@@ -1236,6 +1236,8 @@ class PearDisabledAgentRunner:
         self,
         active_session: PearActiveSessionSummary,
         task: str,
+        *,
+        event_callback: PearWorkerTranscriptCallback | None = None,
     ) -> Sequence[PearWorkerToolResult]:
         return [
             {
@@ -2005,6 +2007,8 @@ class PearCodexAgentsMcpToolRunner:
         self,
         active_session: PearActiveSessionSummary,
         task: str,
+        *,
+        event_callback: PearWorkerTranscriptCallback | None = None,
     ) -> Sequence[PearWorkerToolResult]:
         try:
             return asyncio.run(self.run(active_session, task))
@@ -2191,6 +2195,8 @@ class PearCodexSdkToolRunner:
         self,
         active_session: PearActiveSessionSummary,
         task: str,
+        *,
+        event_callback: PearWorkerTranscriptCallback | None = None,
     ) -> Sequence[PearWorkerToolResult]:
         if self.process_isolation is not None:
             raise PearAgentRuntimeError(

@@ -115,6 +115,7 @@ let context_key = "";
 let last_error = "";
 let request_in_flight = false;
 let pending_runtime_save: RuntimeSave | undefined;
+let runtime_save_generation = 0;
 let initialized = false;
 let context_refresh_timer: number | undefined;
 
@@ -547,6 +548,7 @@ function fetch_topic_context(): void {
         rerender_popover_if_open();
         return;
     }
+    const fetch_generation = runtime_save_generation;
     // Same endpoint and payload shape as pear_panel.refresh.
     void channel.get({
         url: "/json/pear/runs",
@@ -560,6 +562,10 @@ function fetch_topic_context(): void {
             const data = pear_runtime_response_schema.parse(raw_data);
             last_error = "";
             latest_runs = data.pear_runs ?? [];
+            if (fetch_generation !== runtime_save_generation) {
+                rerender_popover_if_open();
+                return;
+            }
             topic_context = data.pear_topic_context ?? undefined;
             context_key = narrow_context_key(stream, topic);
             update_runtime_button_label();
@@ -659,6 +665,7 @@ function save_runtime(model: string, reasoning_effort: string): void {
     if (stream === undefined || topic === undefined) {
         return;
     }
+    runtime_save_generation += 1;
     const save = {stream, topic, model, reasoning_effort};
     const previous_context = topic_context;
     apply_runtime_locally(model, reasoning_effort);

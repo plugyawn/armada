@@ -277,7 +277,11 @@ export const default_popover_props: Partial<tippy.Props> = {
                         return;
                     }
 
-                    const $reference = $(state.elements.reference);
+                    const reference = state.elements.reference;
+                    if (!(reference instanceof Node)) {
+                        return;
+                    }
+                    const $reference = $(reference);
                     // Hide popover if the reference element is below another element.
                     //
                     // We only care about the reference element if it is inside the message feed since
@@ -316,20 +320,25 @@ export const default_popover_props: Partial<tippy.Props> = {
 
                     // These are elements covering the reference element (intersection of elements at top
                     // top left and bottom right)
-                    const elements_at_reference_position = document
-                        .elementsFromPoint(reference_rect.left, reference_rect.top)
-                        .filter((element) =>
-                            document
-                                .elementsFromPoint(reference_rect.right, reference_rect.bottom)
-                                .includes(element),
-                        );
+                    const elements_at_top_left = document.elementsFromPoint(
+                        reference_rect.left + 1,
+                        reference_rect.top + 1,
+                    );
+                    const elements_at_bottom_right = document.elementsFromPoint(
+                        reference_rect.right - 1,
+                        reference_rect.bottom - 1,
+                    );
+                    const elements_at_reference_position = elements_at_top_left.filter((element) =>
+                        elements_at_bottom_right.includes(element),
+                    );
 
                     if (
                         elements_at_reference_position.some(
                             (element) =>
                                 element.id === "navbar-fixed-container" ||
                                 element.id === "compose-content" ||
-                                element.classList.contains("sticky_header"),
+                                (element.classList.contains("sticky_header") &&
+                                    !element.contains(reference)),
                         )
                     ) {
                         hide_current_popover_if_visible(instance);

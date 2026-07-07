@@ -807,7 +807,9 @@ export function initialize(): void {
         },
     };
     for (const selector of runtime_menu_selectors) {
-        popover_menus.register_popover_menu(selector, runtime_menu_popover_props);
+        popover_menus.register_popover_menu(selector, runtime_menu_popover_props, {
+            show_as_overlay_on_mobile: true,
+        });
     }
 
     $("body").on(

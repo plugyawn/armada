@@ -558,6 +558,10 @@ export type RegisterOptions = {
     // navigation.
     also_trigger_on_enter?: boolean;
     get_focus_return_element?: GetFocusReturnElement;
+    show_as_overlay_on_mobile?: boolean;
+    show_as_overlay_always?: boolean;
+    // Only works for elements which are in message feed.
+    message_feed_overlay_detection?: boolean;
 };
 
 // Main function to define a popover menu, opened via clicking on the

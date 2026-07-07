@@ -66,13 +66,6 @@ export type PearRuntimeMenuChoice = {
     selected: boolean;
 };
 
-export type PearRuntimeEffortSlider = {
-    has_efforts: boolean;
-    selected_label: string;
-    value: number;
-    max: number;
-};
-
 export type PearRuntimeUsage = z.infer<typeof pear_runtime_usage_schema>;
 export type PearRuntimeRun = z.infer<typeof pear_runtime_run_schema>;
 
@@ -223,27 +216,6 @@ export function effort_choices(context: PearRuntimeContext | undefined): PearRun
         label: choice.label,
         selected: choice.effort === context.reasoning_effort,
     }));
-}
-
-export function effort_slider_for_testing(
-    choices: PearRuntimeMenuChoice[],
-): PearRuntimeEffortSlider {
-    if (choices.length === 0) {
-        return {
-            has_efforts: false,
-            selected_label: "",
-            value: 0,
-            max: 0,
-        };
-    }
-    const selected_index = choices.findIndex((choice) => choice.selected);
-    const value = Math.max(0, selected_index);
-    return {
-        has_efforts: true,
-        selected_label: choices[value]!.label,
-        value,
-        max: choices.length - 1,
-    };
 }
 
 export function runtime_summary(context: PearRuntimeContext | undefined): PearRuntimeSummary {
@@ -430,7 +402,6 @@ function popover_context(): {
     runtime_usage_meter: PearRuntimeUsageMeter;
     model_choices: PearRuntimeMenuChoice[];
     effort_choices: PearRuntimeMenuChoice[];
-    effort_slider: PearRuntimeEffortSlider;
 } {
     const {stream, topic} = current_narrow();
     let status_message = "";
@@ -457,7 +428,6 @@ function popover_context(): {
             runtime_usage_meter: runtime_usage_meter_for_testing(undefined),
             model_choices: [],
             effort_choices: [],
-            effort_slider: effort_slider_for_testing([]),
         };
     }
     const choices = effort_choices(topic_context);
@@ -477,7 +447,6 @@ function popover_context(): {
         runtime_usage_meter: runtime_usage_meter_for_testing(usage),
         model_choices: model_choices(topic_context),
         effort_choices: choices,
-        effort_slider: effort_slider_for_testing(choices),
     };
 }
 
@@ -730,32 +699,12 @@ function on_model_change(model: string): void {
     save_runtime(model, effort);
 }
 
-function on_effort_index_change(index: number): void {
+function on_effort_change(effort: string): void {
     const model = selected_choice("pear-runtime-model") ?? topic_context?.model;
     if (model === undefined) {
         return;
     }
-    const effort = model_reasoning_efforts(topic_context, model)[index]?.effort;
-    if (effort === undefined) {
-        return;
-    }
     save_runtime(model, effort);
-}
-
-function update_effort_slider_display($range: JQuery): void {
-    const index = Number($range.val());
-    if (!Number.isInteger(index)) {
-        return;
-    }
-    const $control = $range.closest(".pear-runtime-effort-control");
-    const $ticks = $control.find(".pear-runtime-effort-ticks span");
-    const $selected_tick = $ticks.eq(index);
-    if ($selected_tick.length === 0) {
-        return;
-    }
-    $ticks.removeClass("pear-runtime-effort-tick-selected");
-    $selected_tick.addClass("pear-runtime-effort-tick-selected");
-    $control.find(".pear-runtime-effort-value").text($selected_tick.text());
 }
 
 export function initialize(): void {
@@ -822,7 +771,7 @@ export function initialize(): void {
 
     $("body").on(
         "change",
-        "#pear-runtime-menu-popover select[name='pear-runtime-model']",
+        "#pear-runtime-menu-popover input[name='pear-runtime-model']",
         function (this: HTMLElement) {
             const model = $(this).val();
             if (typeof model === "string") {
@@ -832,21 +781,12 @@ export function initialize(): void {
     );
 
     $("body").on(
-        "input",
-        "#pear-runtime-menu-popover .pear-runtime-effort-range",
-        function (this: HTMLElement) {
-            update_effort_slider_display($(this));
-        },
-    );
-
-    $("body").on(
         "change",
-        "#pear-runtime-menu-popover .pear-runtime-effort-range",
+        "#pear-runtime-menu-popover input[name='pear-runtime-effort']",
         function (this: HTMLElement) {
-            update_effort_slider_display($(this));
-            const index = Number($(this).val());
-            if (Number.isInteger(index)) {
-                on_effort_index_change(index);
+            const effort = $(this).val();
+            if (typeof effort === "string") {
+                on_effort_change(effort);
             }
         },
     );

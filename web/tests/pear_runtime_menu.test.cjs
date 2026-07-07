@@ -194,42 +194,6 @@ run_test("effort_choices", () => {
     ]);
 });
 
-run_test("effort_slider_for_testing", () => {
-    assert.deepEqual(pear_runtime_menu.effort_slider_for_testing([]), {
-        has_efforts: false,
-        selected_label: "",
-        value: 0,
-        max: 0,
-    });
-
-    assert.deepEqual(
-        pear_runtime_menu.effort_slider_for_testing([
-            {value: "low", label: "Low", selected: false},
-            {value: "medium", label: "Medium", selected: true},
-            {value: "high", label: "High", selected: false},
-        ]),
-        {
-            has_efforts: true,
-            selected_label: "Medium",
-            value: 1,
-            max: 2,
-        },
-    );
-
-    assert.deepEqual(
-        pear_runtime_menu.effort_slider_for_testing([
-            {value: "low", label: "Low", selected: false},
-            {value: "medium", label: "Medium", selected: false},
-        ]),
-        {
-            has_efforts: true,
-            selected_label: "Low",
-            value: 0,
-            max: 1,
-        },
-    );
-});
-
 run_test("runtime_summary", () => {
     assert.deepEqual(pear_runtime_menu.runtime_summary(undefined), {
         model_label: "translated: Pear",
@@ -431,12 +395,6 @@ run_test("runtime popover renders pear context meter line", () => {
         has_runtime_usage: false,
         model_choices: [],
         effort_choices: [],
-        effort_slider: {
-            has_efforts: false,
-            selected_label: "",
-            value: 0,
-            max: 0,
-        },
     });
 
     assert.match(html, /pear-runtime-meter-block pear-runtime-meter-hot/);
@@ -467,24 +425,19 @@ run_test("runtime popover does not expose workbench actions", () => {
         has_runtime_usage: false,
         model_choices: [{value: "gpt-5.5", label: "GPT-5.5", selected: true}],
         effort_choices: [{value: "high", label: "High", selected: true}],
-        effort_slider: {
-            has_efforts: true,
-            selected_label: "High",
-            value: 0,
-            max: 0,
-        },
     });
 
     assert.doesNotMatch(html, /pear-workbench-menu-link/);
     assert.doesNotMatch(html, /pear-canvas-menu-link/);
     assert.doesNotMatch(html, /pear-files-menu-link/);
     assert.doesNotMatch(html, />translated: Workbench</);
-    assert.match(html, /pear-runtime-model-select/);
-    assert.doesNotMatch(html, /pear-runtime-model-choice/);
-    assert.match(html, /pear-runtime-effort-range/);
+    assert.doesNotMatch(html, /pear-runtime-model-select/);
+    assert.match(html, /pear-runtime-model-choice/);
+    assert.doesNotMatch(html, /pear-runtime-effort-range/);
+    assert.match(html, /pear-runtime-effort-choice/);
 });
 
-run_test("runtime popover uses compact setting rows", () => {
+run_test("runtime popover uses compact radio menu rows", () => {
     const html = render_pear_runtime_menu_popover({
         has_runtime: true,
         runtime_status: {
@@ -511,17 +464,14 @@ run_test("runtime popover uses compact setting rows", () => {
             {value: "low", label: "Low", selected: false},
             {value: "high", label: "High", selected: true},
         ],
-        effort_slider: {
-            has_efforts: true,
-            selected_label: "High",
-            value: 1,
-            max: 1,
-        },
     });
 
-    assert.match(html, /pear-runtime-setting-row/);
-    assert.match(html, /<select class="pear-runtime-model-select"/);
-    assert.match(html, /<option value="gpt-5.5" selected>GPT-5.5<\/option>/);
-    assert.match(html, /pear-runtime-setting-row-slider/);
-    assert.doesNotMatch(html, /role="menuitemradio"/);
+    assert.match(html, /pear-runtime-menu-section[^>]*>translated: Model<\/div>/);
+    assert.match(html, /pear-runtime-menu-section[^>]*>translated: Thinking<\/div>/);
+    assert.match(html, /class="pear-runtime-model-choice" name="pear-runtime-model" value="gpt-5.5" checked/);
+    assert.match(html, /class="pear-runtime-effort-choice" name="pear-runtime-effort" value="high" checked/);
+    assert.match(html, /role="menuitemradio" aria-checked="true"/);
+    assert.doesNotMatch(html, /pear-runtime-setting-row/);
+    assert.doesNotMatch(html, /pear-runtime-effort-range/);
+    assert.doesNotMatch(html, /<select\b/);
 });

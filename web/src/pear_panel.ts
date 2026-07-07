@@ -4,6 +4,7 @@ import * as z from "zod/mini";
 import render_pear_panel from "../templates/pear_panel.hbs";
 
 import * as blueslip from "./blueslip.ts";
+import * as browser_history from "./browser_history.ts";
 import * as channel from "./channel.ts";
 import {$t} from "./i18n.ts";
 import {message_render_response_schema} from "./message_store.ts";
@@ -2036,7 +2037,7 @@ function start_side_session(): void {
             }
             const data = raw_data;
             if (data.dm_narrow_url !== undefined) {
-                window.location.hash = data.dm_narrow_url.slice(1);
+                browser_history.go_to_location(data.dm_narrow_url);
             }
         },
         error(xhr) {

@@ -831,6 +831,9 @@
         hsl(0deg 0% 94%),
         hsl(0deg 0% 18%)
     );
+    /* Shared by every monospace surface in Pear message rows. */
+    --pear-monospace-font-family: ui-monospace, "SFMono-Regular", consolas,
+        monospace;
     --color-selected-message-outline: light-dark(
         hsl(217deg 64% 59% / 60%),
         hsl(217deg 64% 59% / 70%)

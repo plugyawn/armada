@@ -12,6 +12,11 @@ import {message_render_response_schema} from "./message_store.ts";
 import * as narrow_state from "./narrow_state.ts";
 import * as pear_canvas from "./pear_canvas.ts";
 import * as pear_run_state from "./pear_run_state.ts";
+import {
+    compact_reasoning_effort,
+    context_key,
+    model_reasoning_efforts,
+} from "./pear_runtime_shared.ts";
 import {postprocess_content} from "./postprocess_content.ts";
 import * as rendered_markdown from "./rendered_markdown.ts";
 import * as stream_data from "./stream_data.ts";
@@ -179,7 +184,6 @@ const pear_side_response_schema = z.object({
 type PearRunEvent = z.infer<typeof pear_run_event_schema>;
 type PearRun = z.infer<typeof pear_run_schema>;
 type PearRunsResponse = z.infer<typeof pear_runs_response_schema>;
-type PearReasoningEffort = z.infer<typeof pear_reasoning_effort_schema>;
 type PearGitContext = z.infer<typeof pear_git_context_schema>;
 type PearGitTreeResponse = z.infer<typeof pear_git_tree_response_schema>;
 type PearCanvas = z.infer<typeof pear_canvas_schema>;
@@ -301,41 +305,6 @@ function status_marker(status: string): string {
 export const status_marker_for_testing = status_marker;
 export const status_label_for_testing = status_label;
 
-function compact_reasoning_effort(effort: string | undefined): string {
-    if (effort === undefined || effort === "") {
-        return "";
-    }
-    if (effort === "xhigh") {
-        return "xh";
-    }
-    return effort.at(0)?.toLowerCase() ?? "";
-}
-
-const fallback_reasoning_efforts: PearReasoningEffort[] = [
-    {effort: "low", label: "Low"},
-    {effort: "medium", label: "Medium"},
-    {effort: "high", label: "High"},
-    {effort: "xhigh", label: "XHigh"},
-];
-
-function model_reasoning_efforts(
-    topic_context: PearTopicContext | undefined | null,
-    model: string | undefined,
-): PearReasoningEffort[] {
-    const catalog_entry = topic_context?.model_catalog?.find((entry) => entry.slug === model);
-    const model_efforts = catalog_entry?.supported_reasoning_levels;
-    if (model_efforts !== undefined && model_efforts.length > 0) {
-        return model_efforts;
-    }
-    if (
-        topic_context?.reasoning_efforts !== undefined &&
-        topic_context.reasoning_efforts.length > 0
-    ) {
-        return topic_context.reasoning_efforts;
-    }
-    return fallback_reasoning_efforts;
-}
-
 function next_effort_for_model(topic_context: PearTopicContext, model: string): string {
     const efforts = model_reasoning_efforts(topic_context, model);
     if (efforts.some((choice) => choice.effort === topic_context.reasoning_effort)) {
@@ -425,13 +394,6 @@ function current_context(): {stream: string | undefined; topic: string | undefin
         stream: narrow_state.stream_name(),
         topic: narrow_state.topic(),
     };
-}
-
-function context_key(stream: string | undefined, topic: string | undefined): string {
-    if (stream === undefined || topic === undefined) {
-        return "";
-    }
-    return `${stream}\n${topic}`;
 }
 
 function current_context_key(): string {

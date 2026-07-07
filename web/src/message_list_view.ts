@@ -174,6 +174,11 @@ const PEAR_ACTIVE_VISIBLE_GLYPH = pear_thinking_glyphs[0]!;
 let pear_thinking_glyph_index = 0;
 let pear_thinking_glyph_timer: ReturnType<typeof setInterval> | undefined;
 const pear_result_refresh_in_flight_message_ids = new Set<number>();
+// Settled messages we already refreshed whose content still carries the
+// \u2726 active marker: their glyph is legitimate content, not stale run
+// chrome, so refetching them again would loop forever on the idle
+// reconcile tick. A fresh active->settled transition clears the entry.
+const pear_result_refresh_exhausted_message_ids = new Set<number>();
 
 type PearToolRowMarker = {
     regex: RegExp;
@@ -858,7 +863,8 @@ function rendered_stale_pear_active_message_ids(): number[] {
         if (
             message !== undefined &&
             message_has_pear_active_marker(message) &&
-            !pear_run_state.is_active_run_result_message(message.id)
+            !pear_run_state.is_active_run_result_message(message.id) &&
+            !pear_result_refresh_exhausted_message_ids.has(message.id)
         ) {
             message_ids.push(message.id);
         }
@@ -939,6 +945,14 @@ function refresh_settled_pear_result_messages(message_ids: number[]): void {
                     message.last_moved_timestamp = raw_message.last_moved_timestamp;
                 }
                 refreshed_message_ids.push(raw_message.id);
+                const refreshed_message = message_store.get(raw_message.id);
+                if (
+                    refreshed_message !== undefined &&
+                    message_has_pear_active_marker(refreshed_message) &&
+                    !pear_run_state.is_active_run_result_message(refreshed_message.id)
+                ) {
+                    pear_result_refresh_exhausted_message_ids.add(refreshed_message.id);
+                }
             }
             rerender_pear_result_messages(refreshed_message_ids);
         },
@@ -956,6 +970,9 @@ function refresh_settled_pear_result_messages(message_ids: number[]): void {
 }
 
 pear_run_state.on_active_run_result_messages_changed((change) => {
+    for (const message_id of change.removed_message_ids) {
+        pear_result_refresh_exhausted_message_ids.delete(message_id);
+    }
     const stale_message_ids = rendered_stale_pear_active_message_ids();
     update_rendered_pear_active_messages();
     refresh_settled_pear_result_messages([...change.removed_message_ids, ...stale_message_ids]);

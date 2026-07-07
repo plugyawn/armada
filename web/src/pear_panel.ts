@@ -175,6 +175,10 @@ let live_refresh_timer: number | undefined;
 let live_refresh_in_flight = false;
 let live_refresh_backoff_until = 0;
 let last_error = "";
+// When an error auto-opens the workbench, closing it sets this so the 5s
+// poll's still-present error can't re-force the popover open on the next
+// render. Reset whenever a successful fetch clears last_error.
+let error_dismissed = false;
 let last_runs: PearRun[] = [];
 let last_topic_context: PearTopicContext | null | undefined;
 let last_render_state_key = "";
@@ -513,11 +517,14 @@ export function workbench_open_for_testing(options: {
     context_key_value: string;
     manually_open: boolean;
     has_error: boolean;
+    error_dismissed: boolean;
 }): boolean {
     if (options.context_key_value === "") {
         return false;
     }
-    return options.manually_open || options.has_error;
+    // An error only auto-opens the workbench until the user closes it; after
+    // that a still-present error must not re-force it open on the next poll.
+    return options.manually_open || (options.has_error && !options.error_dismissed);
 }
 
 export function work_panel_open_for_testing(options: {
@@ -525,11 +532,12 @@ export function work_panel_open_for_testing(options: {
     manually_open: boolean;
     active_run_status: string | undefined;
     has_error: boolean;
+    error_dismissed: boolean;
 }): boolean {
     if (options.context_key_value === "") {
         return false;
     }
-    return options.manually_open || options.has_error;
+    return options.manually_open || (options.has_error && !options.error_dismissed);
 }
 
 function panel_has_active_status_for_testing(status: string | undefined): boolean {
@@ -705,6 +713,9 @@ function close_work_details(): void {
     if (key !== "") {
         work_panel_open_by_context.set(key, false);
     }
+    // A close gesture must also dismiss an error-forced open, otherwise the
+    // next poll re-opens the popover and the user can never close it.
+    error_dismissed = true;
     workbench_anchor_element = undefined;
     workbench_anchor_context_key = "";
     workbench_anchor_kind = undefined;
@@ -1707,6 +1718,7 @@ function render(
         context_key_value: next_context_key,
         manually_open: viewport_allows_workbench && manual_workbench_open,
         has_error: viewport_allows_workbench && last_error !== "",
+        error_dismissed,
     });
     const panel_open = workbench_open;
     pear_run_state.set_active_run_result_messages(runs, {
@@ -1834,6 +1846,7 @@ export function refresh(options: {force_context?: boolean; live?: boolean} = {})
             }
             const data = raw_data;
             last_error = "";
+            error_dismissed = false;
             const had_active_run = has_active_run(last_runs);
             const has_active_run_after_refresh = has_active_run(data.pear_runs);
             const previous_topic_context = display_source_topic_context(stream, topic);

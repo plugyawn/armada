@@ -85,7 +85,7 @@ def pear_followup_topic_context_allows_candidate(
         .first()
     )
     if context is None:
-        return True
+        return False
     if context["is_paused"]:
         return False
     return normalize_pear_response_policy(str(context["response_policy"])) == "ambient"

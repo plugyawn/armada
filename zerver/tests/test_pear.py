@@ -142,6 +142,7 @@ from zerver.lib.pear_worker import (
     PearQueueWorkerDispatcher,
     pear_provision_codex_skills,
 )
+from zerver.worker import pear_worker as pear_worker_module
 from zproject import computed_settings as pear_computed_settings
 
 
@@ -1816,6 +1817,99 @@ class PearSessionDefaultsTest(TestCase):
         self.assertEqual(seen_tasks, ["fix the checkout test"])
         self.assertIsNotNone(result["content"])
         self.assertEqual(result["content"], PEAR_ACTIVE_THINKING_MARKDOWN)
+
+    def test_worker_runtime_close_delegates_to_tool_runner(self) -> None:
+        class CloseableToolRunner:
+            def __init__(self) -> None:
+                self.closed = False
+
+            def close(self) -> None:
+                self.closed = True
+
+        tool_runner = CloseableToolRunner()
+        PearWorkerRuntime(tool_runner).close()
+
+        self.assertTrue(tool_runner.closed)
+
+    def test_pear_worker_runtime_cache_eviction_closes_lru_runtime(self) -> None:
+        class FakeRuntime(PearWorkerRuntime):
+            def __init__(self, label: str) -> None:
+                super().__init__()
+                self.label = label
+                self.closed = False
+
+            def close(self) -> None:
+                self.closed = True
+
+        created_runtimes: list[FakeRuntime] = []
+
+        def build_runtime(**kwargs: object) -> FakeRuntime:
+            runtime = FakeRuntime(str(kwargs["workdir_override"]))
+            created_runtimes.append(runtime)
+            return runtime
+
+        pear_worker_module.close_pear_worker_runtimes()
+        try:
+            with (
+                patch.object(
+                    pear_worker_module,
+                    "PEAR_WORKER_RUNTIME_CACHE_LIMIT",
+                    2,
+                ),
+                patch.object(
+                    pear_worker_module,
+                    "build_pear_worker_runtime_from_settings",
+                    side_effect=build_runtime,
+                ),
+            ):
+                first_runtime = pear_worker_module.get_pear_worker_runtime(
+                    "model-a",
+                    "/tmp/pear-a",
+                    "medium",
+                    None,
+                    None,
+                )
+                second_runtime = pear_worker_module.get_pear_worker_runtime(
+                    "model-a",
+                    "/tmp/pear-b",
+                    "medium",
+                    None,
+                    None,
+                )
+                self.assertIs(
+                    pear_worker_module.get_pear_worker_runtime(
+                        "model-a",
+                        "/tmp/pear-a",
+                        "medium",
+                        None,
+                        None,
+                    ),
+                    first_runtime,
+                )
+                third_runtime = pear_worker_module.get_pear_worker_runtime(
+                    "model-a",
+                    "/tmp/pear-c",
+                    "medium",
+                    None,
+                    None,
+                )
+
+                self.assertEqual(created_runtimes, [first_runtime, second_runtime, third_runtime])
+                self.assertFalse(first_runtime.closed)
+                self.assertTrue(second_runtime.closed)
+                self.assertFalse(third_runtime.closed)
+                self.assertEqual(
+                    list(pear_worker_module.pear_worker_runtimes.values()),
+                    [first_runtime, third_runtime],
+                )
+
+                pear_worker_module.close_pear_worker_runtimes()
+
+                self.assertTrue(first_runtime.closed)
+                self.assertTrue(third_runtime.closed)
+                self.assertEqual(pear_worker_module.pear_worker_runtimes, {})
+        finally:
+            pear_worker_module.close_pear_worker_runtimes()
 
     def test_worker_completed_message_uses_distinct_status_line(self) -> None:
         completed_message = build_pear_worker_completed_message(

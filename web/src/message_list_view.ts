@@ -339,6 +339,9 @@ function pear_active_progress_glyph_containers($scope: JQuery<HTMLElement | Docu
 function build_pear_thinking_glyph(): Element {
     const glyph = document.createElementNS("http://www.w3.org/1999/xhtml", "span");
     glyph.classList.add("pear-thinking-glyph");
+    // Decorative animated glyph: hide from assistive tech so screen readers do
+    // not announce a symbol whose text mutates several times a second.
+    glyph.setAttribute("aria-hidden", "true");
     glyph.textContent = PEAR_ACTIVE_VISIBLE_GLYPH;
     return glyph;
 }

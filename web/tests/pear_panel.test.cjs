@@ -90,11 +90,13 @@ run_test("template renders active status as visible text glyph phrase", () => {
     });
 
     assert.match(html, /pear-run-status-row pear-run-status-active pear-liveness-active/);
-    assert.match(html, /aria-label="working ·"/);
+    // The decorative status glyph is not part of the accessible name; the
+    // human label is announced, and the glyph is marked aria-hidden.
+    assert.match(html, /aria-label="working"/);
     assert.match(html, /<span class="pear-panel-status-label">working<\/span>/);
     assert.match(
         html,
-        /<span class="pear-ui-glyph pear-run-status-glyph pear-thinking-glyph">·<\/span>/,
+        /<span class="pear-ui-glyph pear-run-status-glyph pear-thinking-glyph" aria-hidden="true">·<\/span>/,
     );
     assert.doesNotMatch(html, /aria-hidden="true">✦<\/span>/);
     assert.doesNotMatch(html, /pear-run-status-compact/);

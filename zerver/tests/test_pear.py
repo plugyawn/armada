@@ -1255,6 +1255,24 @@ class PearSessionDefaultsTest(TestCase):
             ],
         )
 
+    def test_fresh_topic_waits_for_request_but_can_run(self) -> None:
+        payload = get_pear_session_payload()
+        summary = build_pear_active_session_summary_from_messages(
+            pear_session=payload,
+            source="server",
+            stream_exists=True,
+            messages=[],
+        )
+
+        self.assertEqual(summary["state"], "not_started")
+        self.assertEqual(summary["worker_state"], "waiting_for_request")
+        self.assertEqual(
+            summary["worker_blocked_reason"],
+            "No Pear request has been posted in this topic.",
+        )
+        # A fresh topic is not blocked: the worker runs on the first request.
+        self.assertTrue(summary["worker_can_run"])
+
     def test_build_active_session_summary_from_paused_messages(self) -> None:
         payload = get_pear_session_payload()
 
@@ -1315,7 +1333,7 @@ class PearSessionDefaultsTest(TestCase):
         self.assertEqual(summary["request_count"], 0)
         self.assertIsNone(summary["latest_request_message_id"])
         self.assertEqual(summary["steering_count"], 0)
-        self.assertEqual(summary["worker_state"], "ready")
+        self.assertEqual(summary["worker_state"], "waiting_for_request")
         self.assertTrue(summary["worker_can_run"])
 
     def test_generic_chat_request_starts_active_session(self) -> None:

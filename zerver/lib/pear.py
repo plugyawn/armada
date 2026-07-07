@@ -168,7 +168,9 @@ PearActiveSessionState = Literal["not_started", "requested", "active", "paused"]
 PearResponsePolicy = Literal["ambient", "mentions_only"]
 PEAR_DEFAULT_RESPONSE_POLICY: Final[PearResponsePolicy] = "ambient"
 logger = logging.getLogger(__name__)
-PearWorkerState = Literal["ready", "blocked_missing_stream", "blocked_paused"]
+PearWorkerState = Literal[
+    "ready", "blocked_missing_stream", "blocked_paused", "waiting_for_request"
+]
 PearWorkerRunStatus = Literal["queued", "running", "done", "failed", "cancelled"]
 
 
@@ -2490,10 +2492,16 @@ def build_pear_active_session_summary(
     elif state == "paused":
         worker_state = "blocked_paused"
         worker_blocked_reason = "Pear session is paused until a resume control is posted."
+    elif state == "not_started":
+        # A fresh topic is not blocked — the worker runs as soon as the
+        # first request arrives — but showing "ready" for a topic with no
+        # request yet contradicted the terminal's cache-path summary.
+        worker_state = "waiting_for_request"
+        worker_blocked_reason = "No Pear request has been posted in this topic."
     else:
         worker_state = "ready"
         worker_blocked_reason = None
-    worker_can_run = worker_state == "ready"
+    worker_can_run = worker_state in ("ready", "waiting_for_request")
 
     if latest_verification is None:
         latest_verification = next(

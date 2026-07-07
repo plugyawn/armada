@@ -316,8 +316,8 @@
     position: relative;
     display: grid;
     min-width: 0;
-    max-width: min(28em, 42vw);
-    flex: 0 1 min(28em, 42vw);
+    max-width: min(22em, 34vw);
+    flex: 0 1 min(22em, 34vw);
     align-items: start;
     row-gap: 1px;
     margin-inline: 6px 3px;
@@ -344,6 +344,7 @@
 .pear-topic-header-control {
     appearance: none;
     display: inline-flex;
+    justify-self: start;
     align-items: center;
     justify-content: center;
     gap: 5px;
@@ -492,15 +493,15 @@
 
 @media (width <= 900px) {
     .pear-topic-header-status {
-        max-width: min(24em, 38vw);
-        flex-basis: min(24em, 38vw);
+        max-width: min(18em, 32vw);
+        flex-basis: min(18em, 32vw);
     }
 }
 
 @media (width <= 680px) {
     .pear-topic-header-status {
-        max-width: min(20em, 42vw);
-        flex-basis: min(20em, 42vw);
+        max-width: min(16em, 38vw);
+        flex-basis: min(16em, 38vw);
     }
 
     .pear-topic-header-subtitle {

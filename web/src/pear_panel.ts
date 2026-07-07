@@ -1129,11 +1129,6 @@ function render_topic_header_controls(options: {
                 "data-pear-header-key": control_key,
             }).append(
                 $("<span>", {
-                    class: "pear-topic-header-branch-prefix",
-                    "aria-hidden": "true",
-                    text: $t({defaultMessage: "branch"}),
-                }),
-                $("<span>", {
                     class: "pear-topic-header-branch-label",
                 }),
             );

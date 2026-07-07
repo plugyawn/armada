@@ -293,9 +293,12 @@
 
     .message-header-contents {
         height: auto;
-        min-height: 1.8666em; /* 28px at 15px em */
+        min-height: 2.6em; /* 39px at 15px em */
+        flex-wrap: wrap;
         align-items: center;
+        align-content: center;
         gap: 4px;
+        padding-block: 2px;
     }
 
     .stream_label,
@@ -314,32 +317,20 @@
 
 .pear-topic-header-status {
     position: relative;
-    display: grid;
+    order: 2;
+    display: inline-flex;
     min-width: 0;
-    width: fit-content;
-    max-width: min(26em, 38vw);
-    flex: 0 1 auto;
-    align-items: start;
-    row-gap: 1px;
-    margin-inline: 6px 3px;
-    padding-inline-start: 8px;
-    line-height: 1.05;
+    width: auto;
+    max-width: 100%;
+    flex: 1 0 100%;
+    align-items: center;
+    gap: 5px;
+    margin: -1px 42px 0 26px;
+    line-height: 1;
 }
 
 .pear-topic-header-status::before {
-    position: absolute;
-    top: 4px;
-    left: 0;
-    display: block;
-    width: 1px;
-    height: calc(100% - 8px);
-    flex: 0 0 auto;
-    background: color-mix(
-        in srgb,
-        var(--color-text-message-header) 30%,
-        transparent
-    );
-    content: "";
+    display: none;
 }
 
 .pear-topic-header-control {
@@ -364,7 +355,7 @@
     );
     cursor: pointer;
     font: inherit;
-    font-size: calc(13em / 15);
+    font-size: calc(12em / 15);
     line-height: 1;
     white-space: nowrap;
 
@@ -404,7 +395,7 @@
         var(--color-text-message-header) 66%,
         var(--color-message-header-icon-non-interactive) 34%
     );
-    font-size: calc(11em / 15);
+    font-size: calc(12em / 15);
     font-weight: 600;
     letter-spacing: 0;
     line-height: 1;
@@ -413,7 +404,7 @@
 .pear-topic-header-status-dot {
     flex: 0 0 auto;
     color: var(--color-message-header-icon-non-interactive);
-    font-size: 0.85em;
+    font-size: 0.9em;
     font-weight: 700;
     line-height: 1;
 }
@@ -433,7 +424,7 @@
 .pear-topic-header-branch-control {
     flex: 0 1 auto;
     width: auto;
-    height: 14px;
+    height: 16px;
     justify-content: flex-start;
     padding-inline: 0;
     color: color-mix(
@@ -457,10 +448,6 @@
     );
     content: "·";
     line-height: 1;
-}
-
-.pear-topic-header-branch-prefix {
-    display: none;
 }
 
 .pear-topic-header-work-clean {
@@ -495,17 +482,13 @@
 
 @media (width <= 900px) {
     .pear-topic-header-status {
-        max-width: min(18em, 32vw);
+        margin-inline: 24px 36px;
     }
 }
 
 @media (width <= 680px) {
     .pear-topic-header-status {
-        max-width: min(16em, 38vw);
-    }
-
-    .pear-topic-header-subtitle {
-        display: none;
+        margin-inline: 22px 32px;
     }
 }
 

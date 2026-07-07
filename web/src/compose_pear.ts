@@ -33,6 +33,9 @@ function update_controls(): void {
 
 function focus_compose_box(): void {
     $("textarea#compose-textarea").trigger("focus");
+    // Apply the Pear labels now for the current frame, and once more after
+    // compose_actions.start()'s own recipient-row updates land (they run
+    // between this call and the next paint and reset the placeholder).
     update_controls();
     requestAnimationFrame(update_controls);
 }

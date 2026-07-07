@@ -185,10 +185,35 @@ else
 fi
 
 echo "Writing Caddy and systemd config..."
-ssh -F "$SSH_CONFIG" pear-staging-root bash -s -- "$FQDN" <<'REMOTE'
+# Optional HTTP basic auth in front of the box.  The box runs Zulip's dev
+# server (passwordless dev-login + dev API-key endpoints), so with no auth it is
+# world-open.  Set PEAR_CADDY_BASICAUTH_USER and a `caddy hash-password` bcrypt
+# hash in PEAR_CADDY_BASICAUTH_HASH to require a login; unset keeps the current
+# open behavior (backward compatible) but prints a warning.
+CADDY_BASICAUTH_USER="${PEAR_CADDY_BASICAUTH_USER:-pear}"
+CADDY_BASICAUTH_HASH="${PEAR_CADDY_BASICAUTH_HASH:-}"
+if [[ -z "$CADDY_BASICAUTH_HASH" ]]; then
+    echo "WARNING: PEAR_CADDY_BASICAUTH_HASH is unset — https://${FQDN} will front Zulip's dev server with NO HTTP auth (passwordless dev-login is internet-reachable). Set PEAR_CADDY_BASICAUTH_USER + a 'caddy hash-password' bcrypt hash in PEAR_CADDY_BASICAUTH_HASH to require a login." >&2
+fi
+ssh -F "$SSH_CONFIG" pear-staging-root bash -s -- "$FQDN" "$CADDY_BASICAUTH_USER" "$CADDY_BASICAUTH_HASH" <<'REMOTE'
 set -euo pipefail
 FQDN="$1"
+CADDY_BASICAUTH_USER="${2:-pear}"
+CADDY_BASICAUTH_HASH="${3:-}"
 
+if [[ -n "$CADDY_BASICAUTH_HASH" ]]; then
+cat >/etc/caddy/Caddyfile <<EOF
+${FQDN} {
+    encode zstd gzip
+
+    basic_auth {
+        ${CADDY_BASICAUTH_USER} ${CADDY_BASICAUTH_HASH}
+    }
+
+    reverse_proxy 127.0.0.1:9991
+}
+EOF
+else
 cat >/etc/caddy/Caddyfile <<EOF
 ${FQDN} {
     encode zstd gzip
@@ -196,6 +221,7 @@ ${FQDN} {
     reverse_proxy 127.0.0.1:9991
 }
 EOF
+fi
 
 cat >/home/zulipdev/pear.env <<EOF
 EXTERNAL_HOST=${FQDN}
@@ -214,6 +240,11 @@ PEAR_WORKER_FAST_MODE=true
 PEAR_WORKER_REASONING_EFFORT=medium
 PEAR_WORKER_SANDBOX=danger-full-access
 PEAR_WORKER_APPROVAL_POLICY=never
+# Restrict who can drive the agent.  With this unset, ANY realm user (and, via
+# passwordless dev-login, any visitor) can start full-access runs.  Set it to a
+# comma-separated list of trusted UserProfile ids to gate run starts to them
+# plus realm admins, e.g. PEAR_WORKER_TRUSTED_USER_IDS=5,6
+# PEAR_WORKER_TRUSTED_USER_IDS=
 PEAR_WORKER_MAX_ACTIVE_RUNS_PER_TOPIC=1
 PEAR_WORKER_MAX_ACTIVE_RUNS_PER_REALM=6
 PEAR_ADDRESSING_ROUTER_RUNTIME=gemini-interactions

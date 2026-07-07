@@ -92,14 +92,33 @@ EOF
     exit 0
 fi
 
-echo "Removing HTTP basic auth from Caddy..."
-ssh_root "cat >/etc/caddy/Caddyfile" <<EOF
+# Rewrite the Caddyfile, preserving HTTP basic auth when configured instead of
+# unconditionally stripping it (a reset must not silently reopen the box).
+CADDY_BASICAUTH_USER="${PEAR_CADDY_BASICAUTH_USER:-pear}"
+CADDY_BASICAUTH_HASH="${PEAR_CADDY_BASICAUTH_HASH:-}"
+if [[ -n "$CADDY_BASICAUTH_HASH" ]]; then
+    echo "Writing Caddy config with HTTP basic auth..."
+    ssh_root "cat >/etc/caddy/Caddyfile" <<EOF
+${FQDN} {
+    encode zstd gzip
+
+    basic_auth {
+        ${CADDY_BASICAUTH_USER} ${CADDY_BASICAUTH_HASH}
+    }
+
+    reverse_proxy 127.0.0.1:9991
+}
+EOF
+else
+    echo "WARNING: PEAR_CADDY_BASICAUTH_HASH is unset — writing Caddy config with NO HTTP auth (passwordless dev-login stays internet-reachable)." >&2
+    ssh_root "cat >/etc/caddy/Caddyfile" <<EOF
 ${FQDN} {
     encode zstd gzip
 
     reverse_proxy 127.0.0.1:9991
 }
 EOF
+fi
 
 echo "Stopping Pear/Zulip services..."
 ssh_root 'systemctl stop pear-zulip-dev pear-embedded-bots pear-worker || true'

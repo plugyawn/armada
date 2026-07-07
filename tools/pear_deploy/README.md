@@ -28,6 +28,22 @@ The scripts load exported environment variables and also load
 
 Do not commit `env.local`, `output/pear-staging/`, or `.codex/auth.json`.
 
+## Access hardening (optional)
+
+The box runs Zulip's development server, so `/devlogin` and the dev
+API-key endpoints are reachable by anyone who can hit the site. To put an
+HTTP basic-auth wall in front of it, export before bootstrapping (or a
+data reset):
+
+- `PEAR_CADDY_BASICAUTH_USER` — login name (defaults to `pear`)
+- `PEAR_CADDY_BASICAUTH_HASH` — a bcrypt hash from `caddy hash-password`
+
+When `PEAR_CADDY_BASICAUTH_HASH` is unset the Caddyfile stays open (current
+friends-demo behavior) and the scripts print a warning. To also limit who
+can drive the agent, set `PEAR_WORKER_TRUSTED_USER_IDS` in `pear.env` to a
+comma-separated list of trusted user ids (see the commented line in
+`bootstrap_remote.sh`).
+
 ## Create or refresh the droplet and DNS
 
 From the Zulip checkout:

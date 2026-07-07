@@ -112,7 +112,8 @@ let initialized = false;
 let context_refresh_timer: number | undefined;
 
 const RUNTIME_CONTEXT_REFRESH_INTERVAL_MS = 60_000;
-const runtime_menu_selector = "#pear-panel .pear-runtime-menu-trigger";
+const runtime_menu_selector =
+    "#pear-panel .pear-runtime-menu-trigger, .message_header_stream .pear-topic-header-runtime-control.pear-runtime-menu-trigger";
 const forbidden_header_mount_selectors = [
     "#top_navbar",
     "#navbar-middle",
@@ -696,12 +697,12 @@ export function initialize(): void {
             last_error = "";
             render_popover_content(instance);
             fetch_topic_context();
-            $(runtime_menu_selector).addClass("active-right-sidebar-menu");
+            $(instance.reference).addClass("active-right-sidebar-menu");
         },
         onHidden(instance) {
             instance.destroy();
             popover_menus.popover_instances.pear_runtime_menu = null;
-            $(runtime_menu_selector).removeClass("active-right-sidebar-menu");
+            $(instance.reference).removeClass("active-right-sidebar-menu");
         },
     });
 

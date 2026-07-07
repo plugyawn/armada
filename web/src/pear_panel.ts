@@ -74,10 +74,6 @@ type PearRunsResponse = {
     };
 };
 
-type PearTopicContextResponse = {
-    pear_topic_context?: PearTopicContext | null;
-};
-
 type PearReasoningEffort = {
     effort: string;
     label: string;
@@ -89,12 +85,6 @@ type PearModelCatalogEntry = {
     display_name: string;
     default_reasoning_level?: string;
     supported_reasoning_levels?: PearReasoningEffort[];
-};
-
-type PearRuntimeChoice = {
-    value: string;
-    label: string;
-    selected: boolean;
 };
 
 type PearGitChangedFile = {
@@ -208,22 +198,10 @@ let workbench_anchor_context_key = "";
 type WorkbenchAnchorKind = "context" | "git";
 let workbench_anchor_kind: WorkbenchAnchorKind | undefined;
 let last_observed_context_key = "";
-let topic_context_save_timer: number | undefined;
-let topic_context_save_request: JQuery.jqXHR | undefined;
-let topic_context_save_sequence = 0;
-type PendingTopicContextSave = {
-    stream: string;
-    topic: string;
-    model: string;
-    reasoning_effort: string;
-    sequence: number;
-};
-let pending_topic_context_save: PendingTopicContextSave | undefined;
 const LIVE_REFRESH_INTERVAL_MS = 500;
 const LIVE_REFRESH_RATE_LIMIT_BACKOFF_MS = 1500;
 const FULL_REFRESH_INTERVAL_MS = 5000;
 const CONTEXT_REFRESH_INTERVAL_MS = 60_000;
-const TOPIC_CONTEXT_SAVE_DEBOUNCE_MS = 150;
 const WORKBENCH_MIN_VIEWPORT_WIDTH_PX = 320;
 const WORKBENCH_POPOVER_MARGIN_PX = 8;
 
@@ -327,60 +305,6 @@ function model_reasoning_efforts(
     return fallback_reasoning_efforts;
 }
 
-function model_choices(topic_context: PearTopicContext): PearRuntimeChoice[] {
-    const catalog = topic_context.model_catalog ?? [];
-    const choices = catalog.map((entry) => ({
-        value: entry.slug,
-        label: entry.display_name || entry.slug,
-        selected: entry.slug === topic_context.model,
-    }));
-    const seen_models = new Set(choices.map((choice) => choice.value));
-    for (const model of topic_context.model_choices ?? []) {
-        if (!seen_models.has(model)) {
-            choices.push({
-                value: model,
-                label: model,
-                selected: model === topic_context.model,
-            });
-            seen_models.add(model);
-        }
-    }
-    if (topic_context.model && !seen_models.has(topic_context.model)) {
-        choices.unshift({
-            value: topic_context.model,
-            label: topic_context.model,
-            selected: true,
-        });
-    }
-    return choices;
-}
-
-function effort_choices(
-    topic_context: PearTopicContext,
-    model = topic_context.model,
-): PearRuntimeChoice[] {
-    return model_reasoning_efforts(topic_context, model).map((choice) => ({
-        value: choice.effort,
-        label: choice.label,
-        selected: choice.effort === topic_context.reasoning_effort,
-    }));
-}
-
-function effort_slider_value(choices: PearRuntimeChoice[]): number {
-    return Math.max(
-        0,
-        choices.findIndex((choice) => choice.selected),
-    );
-}
-
-export function workbench_effort_for_index_for_testing(
-    topic_context: PearTopicContext | undefined | null,
-    model: string | undefined,
-    index: number,
-): string | undefined {
-    return model_reasoning_efforts(topic_context, model)[index]?.effort;
-}
-
 function next_effort_for_model(topic_context: PearTopicContext, model: string): string {
     const efforts = model_reasoning_efforts(topic_context, model);
     if (efforts.some((choice) => choice.effort === topic_context.reasoning_effort)) {
@@ -438,10 +362,6 @@ function is_pear_runs_response(data: unknown): data is PearRunsResponse {
         "pear_runs" in data &&
         Array.isArray(data.pear_runs)
     );
-}
-
-function is_pear_topic_context_response(data: unknown): data is PearTopicContextResponse {
-    return typeof data === "object" && data !== null && "pear_topic_context" in data;
 }
 
 function is_pear_side_response(data: unknown): data is {dm_narrow_url?: string} {
@@ -892,12 +812,6 @@ function display_topic_context(topic_context: PearTopicContext | undefined | nul
           panel_header_git_label: string;
           panel_header_commit_label: string;
           panel_header_git_title: string;
-          workbench_model_choices: PearRuntimeChoice[];
-          workbench_has_model_choices: boolean;
-          workbench_effort_choices: PearRuntimeChoice[];
-          workbench_effort_slider_value: number;
-          workbench_effort_slider_max: number;
-          workbench_has_efforts: boolean;
           has_workbench_diff_summary: boolean;
           workbench_diff_summary_label: string;
           workbench_diff_file_label: string;
@@ -979,9 +893,6 @@ function display_topic_context(topic_context: PearTopicContext | undefined | nul
     const canvas_rendered_html = canvas?.rendered_html ?? "";
     const reasoning_effort_label = full_reasoning_effort_label(topic_context);
     const model_label = display_model_label(topic_context);
-    const workbench_model_choices = model_choices(topic_context);
-    const workbench_effort_choices = effort_choices(topic_context);
-    const workbench_effort_slider_value = effort_slider_value(workbench_effort_choices);
     const workbench_view = workbench_view_for_testing({
         requested: workbench_view_by_context.get(topic_key),
         has_diff: has_workbench_diff,
@@ -1058,12 +969,6 @@ function display_topic_context(topic_context: PearTopicContext | undefined | nul
             commit: head_commit_label,
             workdir: topic_context.workdir,
         }),
-        workbench_model_choices,
-        workbench_has_model_choices: workbench_model_choices.length > 0,
-        workbench_effort_choices,
-        workbench_effort_slider_value,
-        workbench_effort_slider_max: Math.max(0, workbench_effort_choices.length - 1),
-        workbench_has_efforts: workbench_effort_choices.length > 0,
         has_workbench_diff_summary: workbench_diff_summary_label !== "",
         workbench_diff_summary_label,
         workbench_diff_file_label,
@@ -1086,22 +991,6 @@ function ensure_pear_panel_host(): HTMLElement | undefined {
     }
     $("#pear-panel").not(panel).remove();
     return panel;
-}
-
-function topic_header_controls_are_current($headers: JQuery, control_key: string): boolean {
-    if ($headers.length === 0) {
-        return false;
-    }
-    return $headers.toArray().every((header) => {
-        const $header = $(header);
-        return (
-            $header
-                .find(pear_topic_header_status_selector)
-                .filter(
-                    (_index, element) => $(element).attr("data-pear-header-key") === control_key,
-                ).length > 0
-        );
-    });
 }
 
 function topic_header_work_label(display_context: PearDisplayTopicContext): string {
@@ -1184,13 +1073,6 @@ function render_topic_header_controls(options: {
     const control_key = JSON.stringify({
         stream_id,
         topic,
-        runtime_label: topic_context.panel_header_runtime_label,
-        branch_label: topic_context.panel_header_branch_label,
-        runtime_active,
-        reasoning_effort: topic_context.reasoning_effort,
-        work_label,
-        work_title,
-        git_status_class: topic_context.panel_git_status_class,
     });
     const $headers = $(".message_header_stream").filter((_index, header) => {
         const $header = $(header);
@@ -1200,9 +1082,6 @@ function render_topic_header_controls(options: {
         );
     });
     if ($headers.length === 0) {
-        return;
-    }
-    if (topic_header_controls_are_current($headers, control_key)) {
         return;
     }
 
@@ -1215,72 +1094,101 @@ function render_topic_header_controls(options: {
         if ($controls.length === 0) {
             return;
         }
-        $(header).find(pear_topic_header_control_selector).remove();
-        const $status_cluster = $("<span>", {
-            class: `pear-topic-header-status no-select${runtime_active ? " pear-liveness-active" : ""}`,
-            "data-pear-header-key": control_key,
-        });
-        const $runtime_control = $("<button>", {
-            type: "button",
-            class: `pear-topic-header-control pear-topic-header-runtime-control pear-panel-open-action tippy-zulip-delayed-tooltip${
-                runtime_active ? " pear-liveness-active" : ""
-            }`,
+        let $status_cluster = $(header)
+            .find(pear_topic_header_status_selector)
+            .filter((_inner_index, element) => $(element).attr("data-pear-header-key") === control_key)
+            .first();
+        $(header)
+            .find(pear_topic_header_status_selector)
+            .filter((_inner_index, element) => $(element).attr("data-pear-header-key") !== control_key)
+            .remove();
+        if ($status_cluster.length === 0) {
+            $status_cluster = $("<span>", {
+                class: "pear-topic-header-status no-select",
+                "data-pear-header-key": control_key,
+            });
+            const $runtime_control = $("<button>", {
+                type: "button",
+                class: "pear-topic-header-control pear-topic-header-runtime-control pear-runtime-menu-trigger tippy-zulip-delayed-tooltip",
+                "data-pear-header-key": control_key,
+            }).append(
+                $("<span>", {
+                    class: "pear-topic-header-status-dot",
+                    "aria-hidden": "true",
+                    text: "·",
+                }),
+                $("<span>", {
+                    class: "pear-runtime-menu-label",
+                }),
+            );
+            const $branch_control = $("<button>", {
+                type: "button",
+                class: "pear-topic-header-control pear-topic-header-branch-control pear-panel-open-action tippy-zulip-delayed-tooltip",
+                "data-pear-workbench-view": "history",
+                "data-pear-header-key": control_key,
+            }).append(
+                $("<span>", {
+                    class: "pear-topic-header-branch-prefix",
+                    "aria-hidden": "true",
+                    text: $t({defaultMessage: "branch"}),
+                }),
+                $("<span>", {
+                    class: "pear-topic-header-branch-label",
+                }),
+            );
+            const $work_control = $("<button>", {
+                type: "button",
+                class: "pear-topic-header-control pear-topic-header-git-control pear-panel-open-action",
+                "data-pear-header-key": control_key,
+            }).append(
+                $("<span>", {
+                    class: "pear-topic-header-work-label",
+                }),
+            );
+            $status_cluster.append($runtime_control, $branch_control, $work_control);
+            $controls.before($status_cluster);
+        }
+        $status_cluster.toggleClass("pear-topic-header-running", runtime_active);
+
+        const $runtime_control = $status_cluster.find(".pear-topic-header-runtime-control");
+        $runtime_control.attr({
             "aria-label": runtime_title,
             "data-tippy-content": runtime_title,
-            "data-pear-workbench-view": "history",
-            "data-pear-header-key": control_key,
         });
-        $runtime_control.append(
-            $("<span>", {
-                class: runtime_active
-                    ? "pear-ui-glyph pear-topic-header-active-glyph pear-thinking-glyph"
-                    : "pear-topic-header-idle-dot",
-                "aria-hidden": "true",
-                text: runtime_active ? "·" : "•",
-            }),
-            $("<span>", {
-                class: "pear-runtime-menu-label",
-                text: topic_context.panel_header_runtime_label || runtime_label,
-            }),
+        $runtime_control.toggleClass("pear-topic-header-running", runtime_active);
+        $runtime_control.find(".pear-topic-header-status-dot").toggleClass(
+            "pear-topic-header-status-dot-active",
+            runtime_active,
         );
-        const $branch_control = $("<button>", {
-            type: "button",
-            class: "pear-topic-header-control pear-topic-header-branch-control pear-panel-open-action tippy-zulip-delayed-tooltip",
+        $runtime_control
+            .find(".pear-runtime-menu-label")
+            .text(topic_context.panel_header_runtime_label || runtime_label);
+
+        const $branch_control = $status_cluster.find(".pear-topic-header-branch-control");
+        $branch_control.attr({
             "aria-label": branch_title,
             "data-tippy-content": branch_title,
-            "data-pear-workbench-view": "history",
-            "data-pear-header-key": control_key,
-        }).append(
-            $("<span>", {
-                class: "pear-topic-header-branch-prefix",
-                "aria-hidden": "true",
-                text: $t({defaultMessage: "branch"}),
-            }),
-            $("<span>", {
-                class: "pear-topic-header-branch-label",
-                text: topic_context.panel_header_branch_label,
-            }),
+        });
+        $branch_control.find(".pear-topic-header-branch-label").text(
+            topic_context.panel_header_branch_label,
         );
-        const $work_control = $("<button>", {
-            type: "button",
-            class: `pear-topic-header-control pear-topic-header-git-control pear-panel-open-action pear-topic-header-work-${topic_context.panel_git_status_class}`,
+
+        const $work_control = $status_cluster.find(".pear-topic-header-git-control");
+        $work_control
+            .removeClass(
+                "pear-topic-header-work-clean pear-topic-header-work-dirty pear-topic-header-work-unknown",
+            )
+            .addClass(`pear-topic-header-work-${topic_context.panel_git_status_class}`);
+        $work_control.attr({
             "aria-label": $t(
                 {defaultMessage: "Open Pear Git details: {work_label}"},
                 {work_label},
             ),
             title: work_title || work_label,
             "data-pear-workbench-view": topic_context.has_workbench_diff ? "diff" : "history",
-            "data-pear-header-key": control_key,
-        }).append(
-            $("<span>", {
-                class: "pear-topic-header-work-label",
-                text: work_label,
-            }),
-        );
-        $status_cluster.append($runtime_control, $branch_control, $work_control);
-        $controls.before($status_cluster);
+        });
+        $work_control.find(".pear-topic-header-work-label").text(work_label);
     });
-    $(document).trigger("pear_liveness_markers_changed");
 }
 
 function anchor_kind_for_element(element: HTMLElement): WorkbenchAnchorKind {
@@ -1291,13 +1199,24 @@ function anchor_kind_for_element(element: HTMLElement): WorkbenchAnchorKind {
 }
 
 function visible_header_anchor_for_kind(kind: WorkbenchAnchorKind): HTMLElement | undefined {
+    const {stream, topic} = current_context();
+    const stream_id = stream === undefined ? undefined : stream_data.get_stream_id(stream);
+    if (stream_id === undefined || topic === undefined) {
+        return undefined;
+    }
     const selector =
         kind === "context"
             ? ".message_header_stream .pear-topic-header-runtime-control"
             : ".message_header_stream .pear-topic-header-git-control";
-    return [...document.querySelectorAll<HTMLElement>(selector)].find(
-        (element) => element.getClientRects().length > 0,
-    );
+    return [...document.querySelectorAll<HTMLElement>(selector)].find((element) => {
+        const header = element.closest<HTMLElement>(".message_header_stream");
+        return (
+            header !== null &&
+            Number.parseInt(header.getAttribute("data-stream-id") ?? "", 10) === stream_id &&
+            header.getAttribute("data-topic-name") === topic &&
+            element.getClientRects().length > 0
+        );
+    });
 }
 
 function visible_header_anchor(): HTMLElement | undefined {
@@ -1949,136 +1868,6 @@ export function optimistic_topic_context_for_testing(
     };
 }
 
-function apply_topic_context_locally(options: {
-    stream: string;
-    topic: string;
-    model?: string;
-    reasoning_effort?: string;
-}): PearTopicContext | undefined {
-    const topic_context = display_source_topic_context(options.stream, options.topic);
-    if (topic_context === undefined) {
-        return undefined;
-    }
-    const next_topic_context = optimistic_topic_context_for_testing(topic_context, options);
-    remember_topic_context(next_topic_context);
-    last_topic_context = next_topic_context;
-    render(last_runs, next_topic_context);
-    return next_topic_context;
-}
-
-function flush_topic_context_save(): void {
-    if (topic_context_save_timer !== undefined) {
-        window.clearTimeout(topic_context_save_timer);
-        topic_context_save_timer = undefined;
-    }
-    const save = pending_topic_context_save;
-    if (save === undefined) {
-        return;
-    }
-    pending_topic_context_save = undefined;
-    topic_context_save_request?.abort();
-    const request = channel.post({
-        url: "/json/pear/topic-context",
-        data: {
-            stream: save.stream,
-            topic: save.topic,
-            model: save.model,
-            reasoning_effort: save.reasoning_effort,
-        },
-        success(raw_data) {
-            if (save.sequence !== topic_context_save_sequence) {
-                return;
-            }
-            if (!is_pear_topic_context_response(raw_data)) {
-                blueslip.warn("Pear topic context returned an invalid response.");
-                refresh({force_context: true});
-                return;
-            }
-            const data = raw_data;
-            if (data.pear_topic_context !== undefined && data.pear_topic_context !== null) {
-                remember_topic_context(data.pear_topic_context);
-                last_topic_context = data.pear_topic_context;
-                record_context_refresh(save.stream, save.topic);
-                render(last_runs, data.pear_topic_context);
-                return;
-            }
-            refresh({force_context: true});
-        },
-        error(xhr) {
-            if (xhr.readyState !== 0 && save.sequence === topic_context_save_sequence) {
-                blueslip.warn(`Failed to update Pear topic context: ${xhr.responseText}`);
-                refresh({force_context: true});
-            }
-        },
-        complete() {
-            if (topic_context_save_request === request) {
-                topic_context_save_request = undefined;
-            }
-        },
-    });
-    topic_context_save_request = request;
-}
-
-function schedule_topic_context_save(save: PendingTopicContextSave): void {
-    pending_topic_context_save = save;
-    if (topic_context_save_timer !== undefined) {
-        window.clearTimeout(topic_context_save_timer);
-    }
-    topic_context_save_timer = window.setTimeout(
-        flush_topic_context_save,
-        TOPIC_CONTEXT_SAVE_DEBOUNCE_MS,
-    );
-}
-
-function save_topic_context(options: {model?: string; reasoning_effort?: string}): void {
-    const {stream, topic} = current_context();
-    if (stream === undefined || topic === undefined) {
-        return;
-    }
-    const sequence = topic_context_save_sequence + 1;
-    const next_topic_context = apply_topic_context_locally({stream, topic, ...options});
-    if (next_topic_context === undefined) {
-        return;
-    }
-    topic_context_save_sequence = sequence;
-    schedule_topic_context_save({
-        stream,
-        topic,
-        model: next_topic_context.model,
-        reasoning_effort: next_topic_context.reasoning_effort,
-        sequence,
-    });
-}
-
-function on_workbench_model_change(model: string): void {
-    const {stream, topic} = current_context();
-    const topic_context = display_source_topic_context(stream, topic);
-    if (topic_context === undefined) {
-        return;
-    }
-    save_topic_context({
-        model,
-        reasoning_effort: next_effort_for_model(topic_context, model),
-    });
-}
-
-function on_workbench_effort_index_change(index: number): void {
-    const {stream, topic} = current_context();
-    const topic_context = display_source_topic_context(stream, topic);
-    if (topic_context === undefined) {
-        return;
-    }
-    const effort = workbench_effort_for_index_for_testing(
-        topic_context,
-        topic_context.model,
-        index,
-    );
-    if (effort === undefined) {
-        return;
-    }
-    save_topic_context({reasoning_effort: effort});
-}
-
 function start_side_session(): void {
     const {stream, topic} = current_context();
     const side_request = $("#pear-side-request").val();
@@ -2169,40 +1958,6 @@ export function initialize(): void {
             return;
         }
         post_run_action(run_id, action);
-    });
-    $("body").on("change", ".pear-workbench-model-select", function (this: HTMLElement) {
-        const model = $(this).val();
-        if (typeof model === "string") {
-            on_workbench_model_change(model);
-        }
-    });
-    $("body").on("input", ".pear-workbench-effort-range", function (this: HTMLElement) {
-        const index = Number($(this).val());
-        const {stream, topic} = current_context();
-        const topic_context = display_source_topic_context(stream, topic);
-        if (!Number.isInteger(index) || topic_context === undefined) {
-            return;
-        }
-        const effort = workbench_effort_for_index_for_testing(
-            topic_context,
-            topic_context.model,
-            index,
-        );
-        const label = model_reasoning_efforts(topic_context, topic_context.model).find(
-            (choice) => choice.effort === effort,
-        )?.label;
-        if (label !== undefined) {
-            $(this)
-                .closest(".pear-workbench-control-row")
-                .find(".pear-workbench-control-value")
-                .text(label);
-        }
-    });
-    $("body").on("change", ".pear-workbench-effort-range", function (this: HTMLElement) {
-        const index = Number($(this).val());
-        if (Number.isInteger(index)) {
-            on_workbench_effort_index_change(index);
-        }
     });
     $("body").on("click", "#pear-side-start", () => {
         start_side_session();

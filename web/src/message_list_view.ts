@@ -168,6 +168,8 @@ const pear_thinking_glyphs = [
     "∙",
 ] as const;
 const PEAR_ACTIVE_GLYPH = "✦";
+const PEAR_ACTIVE_THINKING_TEXT = "Thinking";
+const PEAR_ACTIVE_THINKING_MARKUP_REGEX = /<em>\s*Thinking\s*<\/em>/i;
 const PEAR_ACTIVE_VISIBLE_GLYPH = pear_thinking_glyphs[0]!;
 let pear_thinking_glyph_index = 0;
 let pear_thinking_glyph_timer: ReturnType<typeof setInterval> | undefined;
@@ -263,6 +265,13 @@ const pear_artifact_line_regex =
     /^\s*(Repo|Repository|Runtime|Branch|Commit|SHA|PR|Pull request|Diff|Test|Tests|Verification|Screenshot|Session|Session record|Pear session|Codex session|Canvas|Doc|Docs|Issue|Ticket|Reviewer|Reviewers):\s*/i;
 
 function message_has_pear_active_marker(message: Message): boolean {
+    return (
+        message.content.includes(PEAR_ACTIVE_GLYPH) ||
+        PEAR_ACTIVE_THINKING_MARKUP_REGEX.test(message.content)
+    );
+}
+
+function message_has_identity_free_pear_active_marker(message: Message): boolean {
     return message.content.includes(PEAR_ACTIVE_GLYPH);
 }
 
@@ -285,7 +294,7 @@ function message_is_pear_message(
     return (
         message.is_pear_message ||
         is_pear_bot_user_id(message.sender_id) ||
-        (sender_is_bot && message_has_pear_active_marker(message))
+        (sender_is_bot && message_has_identity_free_pear_active_marker(message))
     );
 }
 
@@ -343,10 +352,17 @@ function replace_emphasized_pear_thinking_glyph(container: Element): boolean {
         if (!(node instanceof Element)) {
             return false;
         }
-        if (node.tagName !== "EM" || node.textContent?.trim() !== PEAR_ACTIVE_GLYPH) {
+        if (
+            node.tagName !== "EM" ||
+            ![PEAR_ACTIVE_GLYPH, PEAR_ACTIVE_THINKING_TEXT].includes(node.textContent?.trim() ?? "")
+        ) {
             return false;
         }
-        node.replaceWith(build_pear_thinking_glyph());
+        if (node.textContent?.trim() === PEAR_ACTIVE_THINKING_TEXT) {
+            node.after(document.createTextNode(" "), build_pear_thinking_glyph());
+        } else {
+            node.replaceWith(build_pear_thinking_glyph());
+        }
         return true;
     }
     return false;

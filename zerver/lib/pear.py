@@ -1847,6 +1847,7 @@ def update_pear_worker_status_message(
     *,
     progress_message_id: int | None,
     content: str,
+    rendering_only: bool = False,
 ) -> bool:
     if progress_message_id is None:
         return False
@@ -1854,12 +1855,13 @@ def update_pear_worker_status_message(
     if not callable(update_message):
         return False
     try:
-        update_message(
-            {
-                "message_id": progress_message_id,
-                "content": content,
-            }
-        )
+        update_payload: dict[str, object] = {
+            "message_id": progress_message_id,
+            "content": content,
+        }
+        if rendering_only:
+            update_payload["rendering_only"] = True
+        update_message(update_payload)
     except JsonableError as error:
         logger.warning(
             "Pear progress message update was rejected for message %s: %s",
@@ -3266,6 +3268,7 @@ class PearEmbeddedBotHandler:
                 bot_handler,
                 progress_message_id=target_message_id,
                 content=content_to_update,
+                rendering_only=True,
             )
             if updated:
                 result_message_id = target_message_id

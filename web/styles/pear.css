@@ -1126,11 +1126,6 @@
     line-height: 13px;
 }
 
-.pear-side-header-glyph {
-    color: var(--color-text-success-text-action-button);
-    font-size: 10px;
-}
-
 .pear-side-body:focus-within {
     border-color: color-mix(
         in srgb,
@@ -1364,24 +1359,8 @@
         padding: 7px 12px 6px;
     }
 
-    .pear-runtime-summary-idle {
-        grid-template-columns: minmax(0, 1fr) auto;
-    }
-
     .pear-runtime-summary-glyph {
         font-size: 0.95em;
-    }
-
-    .pear-runtime-summary-main {
-        overflow: hidden;
-        font-weight: 600;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-    }
-
-    .pear-runtime-summary-sub {
-        color: var(--color-text-item);
-        font-size: 0.85em;
     }
 
     .pear-runtime-menu-section {

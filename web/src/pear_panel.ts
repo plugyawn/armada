@@ -1121,10 +1121,11 @@ function render_topic_header_controls(options: {
                     class: "pear-runtime-menu-label",
                 }),
             );
-            const $branch_control = $("<button>", {
-                type: "button",
-                class: "pear-topic-header-control pear-topic-header-branch-control pear-panel-open-action tippy-zulip-delayed-tooltip",
-                "data-pear-workbench-view": "history",
+            const $subtitle = $("<span>", {
+                class: "pear-topic-header-subtitle",
+            });
+            const $branch_control = $("<span>", {
+                class: "pear-topic-header-control pear-topic-header-branch-control tippy-zulip-delayed-tooltip",
                 "data-pear-header-key": control_key,
             }).append(
                 $("<span>", {
@@ -1145,7 +1146,8 @@ function render_topic_header_controls(options: {
                     class: "pear-topic-header-work-label",
                 }),
             );
-            $status_cluster.append($runtime_control, $branch_control, $work_control);
+            $subtitle.append($branch_control, $work_control);
+            $status_cluster.append($runtime_control, $subtitle);
             $controls.before($status_cluster);
         }
         $status_cluster.toggleClass("pear-topic-header-running", runtime_active);
@@ -1192,10 +1194,7 @@ function render_topic_header_controls(options: {
 }
 
 function anchor_kind_for_element(element: HTMLElement): WorkbenchAnchorKind {
-    return element.classList.contains("pear-topic-header-git-control") ||
-        element.classList.contains("pear-topic-header-branch-control")
-        ? "git"
-        : "context";
+    return element.classList.contains("pear-topic-header-git-control") ? "git" : "context";
 }
 
 function visible_header_anchor_for_kind(kind: WorkbenchAnchorKind): HTMLElement | undefined {

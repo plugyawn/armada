@@ -865,13 +865,17 @@ test("pear_stale_thinking_row_refreshes_without_removed_active_id", () => {
     $.reset_selector(".message_row.pear-message");
     $.set_results(".message_row.pear-message", [$row[0]]);
 
+    let channel_get_calls = 0;
     let channel_get_opts;
     channel_get_handler = (opts) => {
+        channel_get_calls += 1;
         channel_get_opts = opts;
     };
 
     pear_run_state.set_active_run_result_messages([], {force_reconcile: true});
+    pear_run_state.set_active_run_result_messages([], {force_reconcile: true});
 
+    assert.equal(channel_get_calls, 1);
     assert.equal(channel_get_opts.url, "/json/messages");
     assert.deepEqual(channel_get_opts.data, {
         message_ids: JSON.stringify([message_id]),

@@ -503,6 +503,8 @@ function update_runtime_button_label(): void {
     }
     let label = $t({defaultMessage: "Pear runtime"});
     let compact_label = $t({defaultMessage: "Pear"});
+    let model_label = "";
+    let effort_label = "";
     const active_run = active_runtime_run(latest_runs);
     let runtime_status = runtime_status_for_testing(active_run);
     const runtime_meter = runtime_usage_meter_for_testing(active_run?.usage);
@@ -510,6 +512,8 @@ function update_runtime_button_label(): void {
         const summary = runtime_summary(topic_context);
         runtime_status = runtime_status_for_testing(active_run);
         compact_label = summary.compact_label;
+        model_label = summary.model_label;
+        effort_label = summary.effort_label;
         label = runtime_meter.has_meter
             ? $t(
                   {
@@ -536,6 +540,8 @@ function update_runtime_button_label(): void {
     $button.attr("aria-label", label);
     $button.attr("data-tippy-content", label);
     $button.find(".pear-runtime-menu-label").text(compact_label);
+    $button.find(".pear-runtime-menu-model-label").text(model_label || compact_label);
+    $button.find(".pear-runtime-menu-effort-label").text(effort_label);
     $button.toggleClass("pear-liveness-active", runtime_status.is_active);
     $button
         .find(".pear-runtime-menu-glyph")

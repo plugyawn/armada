@@ -400,7 +400,9 @@ run_test("runtime popover renders pear context meter line", () => {
     assert.match(html, /pear-runtime-meter-block pear-runtime-meter-hot/);
     assert.match(html, /pear-runtime-meter-line/);
     assert.match(html, /pear-runtime-meter-fill/);
-    assert.match(html, /width: 72%;/);
+    // The fill width is applied from render_popover_content after the
+    // template renders; an inline style attribute would trip template lint.
+    assert.doesNotMatch(html, /style=/);
     assert.doesNotMatch(html, /<meter\b/);
 });
 
@@ -470,8 +472,14 @@ run_test("runtime popover uses compact radio menu rows", () => {
     assert.match(html, /pear-runtime-menu-section[^>]*>translated: Thinking<\/div>/);
     assert.match(html, /pear-runtime-model-menu-choice[^>]+data-model="gpt-5.5"/);
     assert.match(html, /pear-runtime-effort-menu-choice[^>]+data-effort="high"/);
-    assert.match(html, /class="pear-runtime-model-choice" name="pear-runtime-model" value="gpt-5.5" checked/);
-    assert.match(html, /class="pear-runtime-effort-choice" name="pear-runtime-effort" value="high" checked/);
+    assert.match(
+        html,
+        /class="pear-runtime-model-choice" name="pear-runtime-model" value="gpt-5.5" checked/,
+    );
+    assert.match(
+        html,
+        /class="pear-runtime-effort-choice" name="pear-runtime-effort" value="high" checked/,
+    );
     assert.match(html, /role="menuitemradio" aria-checked="true"/);
     assert.doesNotMatch(html, /pear-runtime-setting-row/);
     assert.doesNotMatch(html, /pear-runtime-effort-range/);

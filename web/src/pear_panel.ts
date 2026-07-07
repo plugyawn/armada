@@ -1890,8 +1890,27 @@ function render(
     schedule_live_refresh(active_run);
 }
 
+export function polling_paused_for_testing(options: {
+    hidden: boolean;
+    force_context: boolean;
+}): boolean {
+    // Skip timer-driven polls on a hidden tab (they otherwise keep spending the
+    // 500ms/5s /json/pear/runs rate budget in the background); explicit forced
+    // refreshes still run, and a visibilitychange listener catches up on return.
+    return options.hidden && !options.force_context;
+}
+
 export function refresh(options: {force_context?: boolean; live?: boolean} = {}): void {
     const live = options.live === true;
+    if (
+        typeof document !== "undefined" &&
+        polling_paused_for_testing({
+            hidden: document.hidden === true,
+            force_context: options.force_context === true,
+        })
+    ) {
+        return;
+    }
     if (!live && has_active_run(last_runs) && live_refresh_backoff_until > Date.now()) {
         return;
     }
@@ -2107,6 +2126,11 @@ export function initialize(): void {
     $(window).on("scroll.pear_panel", () => {
         position_workbench_popover();
     });
+    $(document).on("visibilitychange.pear_panel", () => {
+        if (!document.hidden) {
+            refresh({force_context: true});
+        }
+    });
     refresh();
     refresh_timer = window.setInterval(refresh, FULL_REFRESH_INTERVAL_MS);
 }
@@ -2119,6 +2143,7 @@ export function stop(): void {
     $(window).off("resize.pear_panel");
     $(window).off("scroll.pear_panel");
     $(document).off("click.pear_panel");
+    $(document).off("visibilitychange.pear_panel");
     clear_live_refresh();
     live_refresh_in_flight = false;
 }

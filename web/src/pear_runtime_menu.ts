@@ -112,8 +112,12 @@ let initialized = false;
 let context_refresh_timer: number | undefined;
 
 const RUNTIME_CONTEXT_REFRESH_INTERVAL_MS = 60_000;
+const runtime_menu_selectors = [
+    "#pear-panel .pear-runtime-menu-trigger",
+    ".message_header_stream .pear-topic-header-runtime-control.pear-runtime-menu-trigger",
+];
 const runtime_menu_selector =
-    "#pear-panel .pear-runtime-menu-trigger, .message_header_stream .pear-topic-header-runtime-control.pear-runtime-menu-trigger";
+    runtime_menu_selectors.join(", ");
 const forbidden_header_mount_selectors = [
     "#top_navbar",
     "#navbar-middle",
@@ -663,9 +667,11 @@ export function initialize(): void {
     }
     initialized = true;
 
-    // register_popover_menu attaches a body-delegated click handler,
-    // so this works across Pear panel rerenders.
-    popover_menus.register_popover_menu(runtime_menu_selector, {
+    // register_popover_menu attaches body-delegated click handlers,
+    // so this works across Pear panel/header rerenders. Register each
+    // selector separately; comma selectors have proved fragile for
+    // dynamically injected message-header controls.
+    const runtime_menu_popover_props: Partial<tippy.Props> = {
         theme: "popover-menu",
         placement: "bottom-start",
         // The strategy: "fixed"; and eventlisteners modifier option
@@ -704,7 +710,10 @@ export function initialize(): void {
             popover_menus.popover_instances.pear_runtime_menu = null;
             $(instance.reference).removeClass("active-right-sidebar-menu");
         },
-    });
+    };
+    for (const selector of runtime_menu_selectors) {
+        popover_menus.register_popover_menu(selector, runtime_menu_popover_props);
+    }
 
     $("body").on(
         "change",

@@ -1362,6 +1362,10 @@
         padding: 7px 12px 6px;
     }
 
+    .pear-runtime-summary-idle {
+        grid-template-columns: minmax(0, 1fr) auto;
+    }
+
     .pear-runtime-summary-glyph {
         font-size: 0.95em;
     }

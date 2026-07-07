@@ -143,6 +143,25 @@ PEAR_VISIBLE_ARTIFACT_FALLBACK_PATTERN: Final = (
 PEAR_TRANSCRIPT_TOOL_DETAIL_KINDS: Final = frozenset(
     {"command", "file_change", "tool"}
 )
+PEAR_TRIVIAL_ACKNOWLEDGMENT_MESSAGES: Final = frozenset(
+    {
+        "ack",
+        "acknowledged",
+        "awesome",
+        "cool",
+        "got it",
+        "great",
+        "nice",
+        "ok",
+        "okay",
+        "perfect",
+        "sounds good",
+        "thank you",
+        "thanks",
+        "thx",
+        "ty",
+    }
+)
 PearChecklistStatus = Literal["pending", "in_progress", "done"]
 PearActiveSessionSource = Literal["server", "cache"]
 PearActiveSessionState = Literal["not_started", "requested", "active", "paused"]
@@ -1612,6 +1631,8 @@ def is_pear_thread_request_message(content: str) -> bool:
         or is_pear_access_request_message(content)
     ):
         return False
+    if is_pear_trivial_acknowledgment_message(content):
+        return False
     return True
 
 
@@ -1619,6 +1640,12 @@ def is_pear_task_request_message(content: str) -> bool:
     return is_pear_thread_request_message(content) and not is_pear_interruption_template_message(
         content
     )
+
+
+def is_pear_trivial_acknowledgment_message(content: str) -> bool:
+    normalized = sub(r"[^a-z0-9]+", " ", clean_pear_task_text(content).lower()).strip()
+    normalized = " ".join(normalized.split())
+    return normalized in PEAR_TRIVIAL_ACKNOWLEDGMENT_MESSAGES
 
 
 def pear_session_record_url(value: str | None) -> str | None:

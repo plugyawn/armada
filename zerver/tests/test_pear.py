@@ -1062,6 +1062,8 @@ class PearSessionDefaultsTest(TestCase):
         self.assertTrue(is_pear_thread_request_message("@Pear hey tell me something"))
         self.assertTrue(is_pear_thread_request_message("@Pear tell me a story"))
         self.assertTrue(is_pear_thread_request_message("@Pear find answer to question"))
+        self.assertFalse(is_pear_thread_request_message("@Pear thanks!"))
+        self.assertFalse(is_pear_thread_request_message("@Pear thank you."))
         self.assertFalse(is_pear_thread_request_message("@Pear What can you access?"))
         self.assertFalse(is_pear_thread_request_message("debug the flaky parser test"))
 
@@ -1387,6 +1389,8 @@ class PearSessionDefaultsTest(TestCase):
         self.assertTrue(pear_worker_should_start("@Pear Hi", active_session))
         self.assertTrue(pear_worker_should_start("Hi @Pear", active_session))
         self.assertTrue(pear_worker_should_start("@Pear What's up!", active_session))
+        self.assertFalse(pear_worker_should_start("@Pear thanks!", active_session))
+        self.assertFalse(pear_worker_should_start("thank you @Pear", active_session))
         self.assertTrue(
             pear_worker_should_start(
                 "Hi, agent, how are you?",

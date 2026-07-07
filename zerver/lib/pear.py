@@ -1,4 +1,3 @@
-import inspect
 import logging
 import time
 from collections.abc import Callable, Sequence
@@ -410,8 +409,18 @@ class PearWorkerTranscriptEvent(TypedDict, total=False):
 
 
 PearWorkerTranscriptCallback = Callable[[PearWorkerTranscriptEvent], None]
-PearWorkerToolRunner = Callable[..., Sequence[PearWorkerToolResult]]
 PearWorkerActiveSessionLoader = Callable[[dict[str, Any], Any], PearActiveSessionSummary]
+
+
+class PearWorkerToolRunner(Protocol):
+    def __call__(
+        self,
+        active_session: PearActiveSessionSummary,
+        task: str,
+        *,
+        event_callback: PearWorkerTranscriptCallback | None = None,
+    ) -> Sequence[PearWorkerToolResult]:
+        ...
 
 
 class PearWorkerRunResult(TypedDict):
@@ -1943,24 +1952,11 @@ class PearWorkerRuntime:
         event_callback: PearWorkerTranscriptCallback | None = None,
     ) -> Sequence[PearWorkerToolResult]:
         if self.tool_runner is not None:
-            if event_callback is not None:
-                try:
-                    signature = inspect.signature(self.tool_runner)
-                    parameters = signature.parameters.values()
-                    accepts_event_callback = any(
-                        parameter.kind == inspect.Parameter.VAR_KEYWORD
-                        or parameter.name == "event_callback"
-                        for parameter in parameters
-                    )
-                except (TypeError, ValueError):
-                    accepts_event_callback = False
-                if accepts_event_callback:
-                    return self.tool_runner(
-                        active_session,
-                        task,
-                        event_callback=event_callback,
-                    )
-            return self.tool_runner(active_session, task)
+            return self.tool_runner(
+                active_session,
+                task,
+                event_callback=event_callback,
+            )
         return [
             {
                 "label": "Verification",

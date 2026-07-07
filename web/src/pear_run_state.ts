@@ -62,12 +62,20 @@ function schedule_active_result_message_expiry(): void {
     if (active_result_message_expiry_timer !== undefined) {
         return;
     }
+    // Arm for the time remaining until refreshed_at + TTL, not a full TTL:
+    // a timer armed before the latest refresh would otherwise fire early,
+    // see fresh data, and re-arm for another full TTL — drifting expiry to
+    // anywhere in (TTL, 2*TTL] after the last refresh.
     active_result_message_expiry_timer = setTimeout(() => {
         active_result_message_expiry_timer = undefined;
         if (!expire_stale_active_run_result_messages()) {
             schedule_active_result_message_expiry();
         }
-    }, ACTIVE_RESULT_MESSAGE_TTL_MS);
+    }, active_result_message_expiry_delay_for_testing(Date.now()));
+}
+
+export function active_result_message_expiry_delay_for_testing(now: number): number {
+    return Math.max(active_result_message_ids_refreshed_at + ACTIVE_RESULT_MESSAGE_TTL_MS - now, 0);
 }
 
 export function set_active_run_result_messages(

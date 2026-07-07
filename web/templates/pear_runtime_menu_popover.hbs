@@ -2,8 +2,10 @@
     <ul role="menu" class="popover-menu-list">
         {{#if has_runtime}}
         <li role="none" class="link-item">
-            <div class="pear-runtime-summary {{#if runtime_status.is_active}}pear-liveness-active{{/if}}" role="menuitem" aria-label="{{runtime_model_label}} {{runtime_effort_label}} {{runtime_status.label}}">
+            <div class="pear-runtime-summary {{#if runtime_status.is_active}}pear-liveness-active{{else}}pear-runtime-summary-idle{{/if}}" role="menuitem" aria-label="{{runtime_model_label}} {{runtime_effort_label}} {{runtime_status.label}}">
+                {{#if runtime_status.is_active}}
                 <span class="pear-ui-glyph pear-runtime-summary-glyph {{runtime_status.class_name}} {{#if runtime_status.is_active}}pear-thinking-glyph{{/if}}" aria-hidden="true">{{runtime_status.glyph}}</span>
+                {{/if}}
                 <span class="pear-runtime-summary-main">{{runtime_model_label}}</span>
                 <span class="pear-runtime-summary-sub">{{runtime_effort_label}}</span>
             </div>

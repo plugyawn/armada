@@ -1202,6 +1202,21 @@ function render_topic_header_controls(options: {
     });
 }
 
+export function refresh_topic_header_controls(): void {
+    const {stream, topic} = current_context();
+    const source_topic_context =
+        stream !== undefined && topic !== undefined
+            ? display_source_topic_context(stream, topic)
+            : undefined;
+    const display_context = display_topic_context(source_topic_context);
+    render_topic_header_controls({
+        stream,
+        topic,
+        topic_context: display_context,
+        active_run_status: active_display_run(last_runs)?.status,
+    });
+}
+
 function anchor_kind_for_element(element: HTMLElement): WorkbenchAnchorKind {
     return element.classList.contains("pear-topic-header-git-control") ? "git" : "context";
 }

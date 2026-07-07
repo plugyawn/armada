@@ -2332,6 +2332,9 @@ export class MessageListView {
         restore_scroll_position();
 
         list.update_trailing_bookend();
+        if (list === message_lists.current) {
+            pear_panel.refresh_topic_header_controls();
+        }
 
         if (list === message_lists.current) {
             // Update the fade.

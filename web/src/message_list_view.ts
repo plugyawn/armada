@@ -923,7 +923,14 @@ function refresh_settled_pear_result_messages(message_ids: number[]): void {
                 const message = message_store.get(raw_message.id);
                 if (message === undefined) {
                     message_helper.process_new_server_message(raw_message);
-                } else {
+                } else if (
+                    (raw_message.last_edit_timestamp ?? 0) >=
+                    (message.last_edit_timestamp ?? 0)
+                ) {
+                    // Only apply the fetched content when it is at least as new
+                    // as what the store already holds.  An update_message event
+                    // can deliver newer content while this fetch is in flight;
+                    // clobbering it with a stale fetch would regress the row.
                     message_store.update_message_content(message, raw_message.content);
                     message_store.update_booleans(message, raw_message.flags);
                     message.is_me_message = raw_message.is_me_message;

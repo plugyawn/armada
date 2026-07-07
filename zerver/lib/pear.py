@@ -3266,265 +3266,357 @@ class PearEmbeddedBotHandler:
         source_message_id: int | None = None,
         progress_message_id: int | None = None,
     ) -> None:
-        started_progress_posted = False
-        result_message_id = progress_message_id
-        transcript_events: list[PearWorkerTranscriptEvent] = []
-        task = pear_worker_task_line(content)
-        last_transcript_flush_at = 0.0
-        last_volatile_transcript_flush_at = 0.0
-        assistant_persistent_flush_seen = False
-        assistant_volatile_flush_seen = False
-        steering_events_after = None
-        last_steering_event_id = 0
-        steering_segment_count = 0
+        PearWorkerTurn(
+            self,
+            message,
+            bot_handler,
+            content=content,
+            active_session=active_session,
+            message_id=message_id,
+            stream=stream,
+            topic=topic,
+            post_started_progress=post_started_progress,
+            requesting_user_id=requesting_user_id,
+            session_kind=session_kind,
+            source_stream=source_stream,
+            source_topic=source_topic,
+            source_message_id=source_message_id,
+            progress_message_id=progress_message_id,
+        ).run()
 
-        def raise_if_cancel_requested() -> None:
-            if not self.worker_run_cancel_requested(bot_handler, message_id):
-                return
-            self.worker_runtime.interrupt()
-            raise PearRunCancelled("Cancelled by user.")
 
-        def update_live_transcript(
-            status: PearWorkerRunStatus,
-            *,
-            tool_results: Sequence[PearWorkerToolResult] = (),
-            force: bool = False,
-            flush_interval: float = PEAR_BACKGROUND_TRANSCRIPT_FLUSH_INTERVAL_SECONDS,
-        ) -> bool:
-            nonlocal last_transcript_flush_at, result_message_id
-            target_message_id = result_message_id or progress_message_id
-            if target_message_id is None:
-                return False
-            current_time = time.monotonic()
-            if not force and current_time - last_transcript_flush_at < flush_interval:
-                return False
-            content_to_update = build_pear_live_transcript_message(
-                task=task,
-                status=status,
-                transcript_events=transcript_events,
-                tool_results=tool_results,
-            )
-            updated = update_pear_worker_status_message(
-                bot_handler,
-                progress_message_id=target_message_id,
-                content=content_to_update,
-                rendering_only=True,
-            )
-            if updated:
-                result_message_id = target_message_id
-                last_transcript_flush_at = current_time
-            return updated
+class PearWorkerTurn:
+    """A single Pear worker run: transcript streaming, same-turn steering
+    segments, and settlement for one request.
 
-        def update_volatile_transcript(
-            status: PearWorkerRunStatus,
-            *,
-            tool_results: Sequence[PearWorkerToolResult] = (),
-            force: bool = False,
-            flush_interval: float = PEAR_VOLATILE_ASSISTANT_FLUSH_INTERVAL_SECONDS,
-        ) -> bool:
-            nonlocal last_volatile_transcript_flush_at
-            current_time = time.monotonic()
-            if not force and current_time - last_volatile_transcript_flush_at < flush_interval:
-                return False
-            content_to_update = build_pear_live_transcript_message(
-                task=task,
-                status=status,
-                transcript_events=transcript_events,
-                tool_results=tool_results,
-            )
-            write_pear_live_run_state(
-                message_id,
-                status=status,
-                content=content_to_update,
-            )
-            last_volatile_transcript_flush_at = current_time
-            return True
+    Extracted from the former 600-line run_worker_turn closure nest; the
+    shared mutable state the closures threaded through ``nonlocal`` lives
+    on the instance, and ``handler`` is the embedded-bot handler whose
+    stores and runtime the turn drives.
+    """
 
-        def maybe_apply_same_turn_steering() -> None:
-            nonlocal last_steering_event_id, steering_segment_count
-            if (
-                active_session is None
-                or not callable(steering_events_after)
-                or steering_segment_count >= PEAR_MAX_STEERING_SEGMENTS
-            ):
-                return
-            pending_steering_events = steering_events_after(
-                bot_handler,
-                message_id,
-                after_event_id=last_steering_event_id,
-            )
-            if not pending_steering_events:
-                return
-            latest_steering = "; ".join(
-                event["instruction"] for event in pending_steering_events
-            )
-            if not self.worker_runtime.steer(latest_steering):
-                return
-            last_steering_event_id = pending_steering_events[-1]["event_id"]
-            steering_segment_count += 1
-            active_session["latest_steering_instruction"] = latest_steering
-            self.record_worker_event(
-                bot_handler,
-                message_id,
-                "steering_applied",
-                summary=trim_pear_text(latest_steering, limit=500),
-                payload={
-                    "segment_index": steering_segment_count,
-                    "steering_events": pending_steering_events,
-                    "same_turn": True,
-                },
-            )
-            transcript_events.append(
-                {
-                    "kind": "steering",
-                    "status": "done",
-                    "title": "Steering applied",
-                    "body": latest_steering,
-                }
-            )
-            update_volatile_transcript("running", force=True)
-            update_live_transcript("running", force=True)
+    def __init__(
+        self,
+        handler: Any,
+        message: dict[str, Any],
+        bot_handler: Any,
+        *,
+        content: str,
+        active_session: PearActiveSessionSummary | None,
+        message_id: int,
+        stream: str,
+        topic: str,
+        post_started_progress: bool,
+        requesting_user_id: int | None = None,
+        session_kind: str = "shared",
+        source_stream: str = "",
+        source_topic: str = "",
+        source_message_id: int | None = None,
+        progress_message_id: int | None = None,
+    ) -> None:
+        self.handler = handler
+        self.message = message
+        self.bot_handler = bot_handler
+        self.content = content
+        self.active_session = active_session
+        self.message_id = message_id
+        self.stream = stream
+        self.topic = topic
+        self.post_started_progress = post_started_progress
+        self.requesting_user_id = requesting_user_id
+        self.session_kind = session_kind
+        self.source_stream = source_stream
+        self.source_topic = source_topic
+        self.source_message_id = source_message_id
+        self.progress_message_id = progress_message_id
 
-        def handle_transcript_event(event: PearWorkerTranscriptEvent) -> None:
-            nonlocal assistant_persistent_flush_seen, assistant_volatile_flush_seen
-            raise_if_cancel_requested()
-            transcript_events.append(event)
-            title = event.get("title", "").strip()
-            body = event.get("body", "").strip()
-            summary = title or body or "Codex event."
-            event_kind = event.get("kind")
-            metadata = event.get("metadata")
-            streaming_assistant = (
-                event_kind == "assistant"
-                and event.get("status") == "running"
-                and isinstance(metadata, dict)
-                and metadata.get("streaming") is True
-            )
-            if not streaming_assistant:
-                self.record_worker_event(
-                    bot_handler,
-                    message_id,
-                    "transcript",
-                    summary=trim_pear_text(summary, limit=500),
-                    payload=dict(event),
-                )
-            usage = (
-                pear_normalize_token_usage(metadata.get("usage"))
-                if isinstance(metadata, dict)
-                else None
-            )
-            if usage is not None:
-                self.record_worker_event(
-                    bot_handler,
-                    message_id,
-                    "usage",
-                    summary=pear_token_usage_summary(usage),
-                    payload={"usage": usage},
-                )
-            if summary and event_kind != "usage" and not streaming_assistant:
-                self.update_worker_metadata(
-                    bot_handler,
-                    message_id,
-                    current_activity=trim_pear_text(summary, limit=500),
-                )
-            sparse_event = event_kind in {
-                "command",
-                "error",
-                "file_change",
-                "plan",
-                "session",
-                "status",
-                "tool",
+        self.started_progress_posted = False
+        self.result_message_id = progress_message_id
+        self.transcript_events: list[PearWorkerTranscriptEvent] = []
+        self.task = pear_worker_task_line(content)
+        self.last_transcript_flush_at = 0.0
+        self.last_volatile_transcript_flush_at = 0.0
+        self.assistant_persistent_flush_seen = False
+        self.assistant_volatile_flush_seen = False
+        self.steering_events_after: Any = None
+        self.last_steering_event_id = 0
+        self.steering_segment_count = 0
+        self.worker_result: dict[str, Any] = {}
+        self.codex_thread_id: str | None = None
+        self.result_summary = ""
+
+    def raise_if_cancel_requested(self) -> None:
+        if not self.handler.worker_run_cancel_requested(self.bot_handler, self.message_id):
+            return
+        self.handler.worker_runtime.interrupt()
+        raise PearRunCancelled("Cancelled by user.")
+
+    def update_live_transcript(
+        self,
+        status: PearWorkerRunStatus,
+        *,
+        tool_results: Sequence[PearWorkerToolResult] = (),
+        force: bool = False,
+        flush_interval: float = PEAR_BACKGROUND_TRANSCRIPT_FLUSH_INTERVAL_SECONDS,
+    ) -> bool:
+        target_message_id = self.result_message_id or self.progress_message_id
+        if target_message_id is None:
+            return False
+        current_time = time.monotonic()
+        if not force and current_time - self.last_transcript_flush_at < flush_interval:
+            return False
+        content_to_update = build_pear_live_transcript_message(
+            task=self.task,
+            status=status,
+            transcript_events=self.transcript_events,
+            tool_results=tool_results,
+        )
+        updated = update_pear_worker_status_message(
+            self.bot_handler,
+            progress_message_id=target_message_id,
+            content=content_to_update,
+            rendering_only=True,
+        )
+        if updated:
+            self.result_message_id = target_message_id
+            self.last_transcript_flush_at = current_time
+        return updated
+
+    def update_volatile_transcript(
+        self,
+        status: PearWorkerRunStatus,
+        *,
+        tool_results: Sequence[PearWorkerToolResult] = (),
+        force: bool = False,
+        flush_interval: float = PEAR_VOLATILE_ASSISTANT_FLUSH_INTERVAL_SECONDS,
+    ) -> bool:
+        current_time = time.monotonic()
+        if not force and current_time - self.last_volatile_transcript_flush_at < flush_interval:
+            return False
+        content_to_update = build_pear_live_transcript_message(
+            task=self.task,
+            status=status,
+            transcript_events=self.transcript_events,
+            tool_results=tool_results,
+        )
+        write_pear_live_run_state(
+            self.message_id,
+            status=status,
+            content=content_to_update,
+        )
+        self.last_volatile_transcript_flush_at = current_time
+        return True
+
+    def maybe_apply_same_turn_steering(self) -> None:
+        if (
+            self.active_session is None
+            or not callable(self.steering_events_after)
+            or self.steering_segment_count >= PEAR_MAX_STEERING_SEGMENTS
+        ):
+            return
+        pending_steering_events = self.steering_events_after(
+            self.bot_handler,
+            self.message_id,
+            after_event_id=self.last_steering_event_id,
+        )
+        if not pending_steering_events:
+            return
+        latest_steering = "; ".join(
+            event["instruction"] for event in pending_steering_events
+        )
+        if not self.handler.worker_runtime.steer(latest_steering):
+            return
+        self.last_steering_event_id = pending_steering_events[-1]["event_id"]
+        self.steering_segment_count += 1
+        self.active_session["latest_steering_instruction"] = latest_steering
+        self.handler.record_worker_event(
+            self.bot_handler,
+            self.message_id,
+            "steering_applied",
+            summary=trim_pear_text(latest_steering, limit=500),
+            payload={
+                "segment_index": self.steering_segment_count,
+                "steering_events": pending_steering_events,
+                "same_turn": True,
+            },
+        )
+        self.transcript_events.append(
+            {
+                "kind": "steering",
+                "status": "done",
+                "title": "Steering applied",
+                "body": latest_steering,
             }
-            if event_kind == "assistant":
-                if update_volatile_transcript(
-                    "running",
-                    force=not assistant_volatile_flush_seen,
-                    flush_interval=PEAR_VOLATILE_ASSISTANT_FLUSH_INTERVAL_SECONDS,
-                ):
-                    assistant_volatile_flush_seen = True
-                if update_live_transcript(
-                    "running",
-                    force=not assistant_persistent_flush_seen,
-                    flush_interval=PEAR_PERSISTENT_ASSISTANT_FLUSH_INTERVAL_SECONDS,
-                ):
-                    assistant_persistent_flush_seen = True
-            else:
-                update_volatile_transcript("running", force=sparse_event)
-                update_live_transcript("running", force=sparse_event)
-            if event_kind in {"assistant", "command", "file_change", "plan", "tool"}:
-                maybe_apply_same_turn_steering()
+        )
+        self.update_volatile_transcript("running", force=True)
+        self.update_live_transcript("running", force=True)
 
+    def handle_transcript_event(self, event: PearWorkerTranscriptEvent) -> None:
+        self.raise_if_cancel_requested()
+        self.transcript_events.append(event)
+        title = event.get("title", "").strip()
+        body = event.get("body", "").strip()
+        summary = title or body or "Codex event."
+        event_kind = event.get("kind")
+        metadata = event.get("metadata")
+        streaming_assistant = (
+            event_kind == "assistant"
+            and event.get("status") == "running"
+            and isinstance(metadata, dict)
+            and metadata.get("streaming") is True
+        )
+        if not streaming_assistant:
+            self.handler.record_worker_event(
+                self.bot_handler,
+                self.message_id,
+                "transcript",
+                summary=trim_pear_text(summary, limit=500),
+                payload=dict(event),
+            )
+        usage = (
+            pear_normalize_token_usage(metadata.get("usage"))
+            if isinstance(metadata, dict)
+            else None
+        )
+        if usage is not None:
+            self.handler.record_worker_event(
+                self.bot_handler,
+                self.message_id,
+                "usage",
+                summary=pear_token_usage_summary(usage),
+                payload={"usage": usage},
+            )
+        if summary and event_kind != "usage" and not streaming_assistant:
+            self.handler.update_worker_metadata(
+                self.bot_handler,
+                self.message_id,
+                current_activity=trim_pear_text(summary, limit=500),
+            )
+        sparse_event = event_kind in {
+            "command",
+            "error",
+            "file_change",
+            "plan",
+            "session",
+            "status",
+            "tool",
+        }
+        if event_kind == "assistant":
+            if self.update_volatile_transcript(
+                "running",
+                force=not self.assistant_volatile_flush_seen,
+                flush_interval=PEAR_VOLATILE_ASSISTANT_FLUSH_INTERVAL_SECONDS,
+            ):
+                self.assistant_volatile_flush_seen = True
+            if self.update_live_transcript(
+                "running",
+                force=not self.assistant_persistent_flush_seen,
+                flush_interval=PEAR_PERSISTENT_ASSISTANT_FLUSH_INTERVAL_SECONDS,
+            ):
+                self.assistant_persistent_flush_seen = True
+        else:
+            self.update_volatile_transcript("running", force=sparse_event)
+            self.update_live_transcript("running", force=sparse_event)
+        if event_kind in {"assistant", "command", "file_change", "plan", "tool"}:
+            self.maybe_apply_same_turn_steering()
+
+
+    def run_runtime_segment(self, segment_task: str, *, segment_index: int) -> dict[str, Any]:
+        self.raise_if_cancel_requested()
+        segment_result = self.handler.worker_runtime.run(
+            active_session=self.active_session,
+            task=segment_task,
+            event_callback=self.handle_transcript_event,
+        )
+        self.raise_if_cancel_requested()
+        segment_summary = pear_worker_summary_from_tool_results(
+            segment_result["tool_results"]
+        )
+        self.handler.record_worker_event(
+            self.bot_handler,
+            self.message_id,
+            "tool_results",
+            summary=segment_summary or "Pear worker returned results.",
+            payload={
+                "segment_index": segment_index,
+                "tool_count": segment_result["tool_count"],
+                "tool_results": segment_result["tool_results"],
+                "worker_can_run": segment_result["worker_can_run"],
+            },
+        )
+        return segment_result
+
+    def run(self) -> None:
         try:
-            if active_session is None and session_kind == "side":
-                active_session = build_pear_active_session_summary(
+            if self.active_session is None and self.session_kind == "side":
+                self.active_session = build_pear_active_session_summary(
                     pear_session=get_pear_session_payload(
-                        stream=source_stream or stream,
-                        topic=source_topic or topic,
+                        stream=self.source_stream or self.stream,
+                        topic=self.source_topic or self.topic,
                     ),
                     source="server",
                     stream_exists=True,
                     topic_message_count=1,
                     request_count=1,
-                    latest_request_message_id=message_id,
+                    latest_request_message_id=self.message_id,
                     latest_message_id=None,
                     checklist=[],
                     artifacts=[],
                 )
             else:
                 loaded_active_session = None
-                if session_kind == "shared" and self.active_session_loader is not None:
+                if self.session_kind == "shared" and self.handler.active_session_loader is not None:
                     try:
-                        loaded_active_session = self.active_session_loader(
-                            message,
-                            bot_handler,
+                        loaded_active_session = self.handler.active_session_loader(
+                            self.message,
+                            self.bot_handler,
                         )
                     except Exception as error:
                         raise RuntimeError("Pear active session loader failed.") from error
-                active_session = (
+                self.active_session = (
                     loaded_active_session
-                    or active_session
+                    or self.active_session
                     or build_trigger_pear_active_session(
-                        message,
-                        content,
+                        self.message,
+                        self.content,
                     )
             )
-            task = pear_worker_task_for_message(content, active_session)
-            runtime_label = self.worker_runtime.runtime_value()
-            if not callable(getattr(self.worker_run_store, "claim_for_run", None)):
-                self.worker_run_store.record(
-                    bot_handler,
-                    message_id,
+            self.task = pear_worker_task_for_message(self.content, self.active_session)
+            runtime_label = self.handler.worker_runtime.runtime_value()
+            if not callable(getattr(self.handler.worker_run_store, "claim_for_run", None)):
+                self.handler.worker_run_store.record(
+                    self.bot_handler,
+                    self.message_id,
                     "running",
-                    stream=stream,
-                    topic=topic,
+                    stream=self.stream,
+                    topic=self.topic,
                 )
-            self.update_worker_metadata(
-                bot_handler,
-                message_id,
-                requesting_user_id=requesting_user_id,
-                session_kind=session_kind,
-                source_stream=source_stream,
-                source_topic=source_topic,
-                source_message_id=source_message_id,
+            self.handler.update_worker_metadata(
+                self.bot_handler,
+                self.message_id,
+                requesting_user_id=self.requesting_user_id,
+                session_kind=self.session_kind,
+                source_stream=self.source_stream,
+                source_topic=self.source_topic,
+                source_message_id=self.source_message_id,
                 summary="Running Pear worker.",
-                current_activity=task,
+                current_activity=self.task,
                 runtime_label=runtime_label,
             )
-            self.record_worker_event(
-                bot_handler,
-                message_id,
+            self.handler.record_worker_event(
+                self.bot_handler,
+                self.message_id,
                 "running",
                 summary="Started Pear worker runtime.",
                 payload={
-                    "task": task,
+                    "task": self.task,
                     "runtime": runtime_label,
-                    "stream": stream,
-                    "topic": topic,
-                    "session_kind": session_kind,
+                    "stream": self.stream,
+                    "topic": self.topic,
+                    "session_kind": self.session_kind,
                 },
             )
-            if active_session["worker_can_run"]:
+            if self.active_session["worker_can_run"]:
                 initial_tool_results: list[PearWorkerToolResult] = [
                     {
                         "label": "Runtime",
@@ -3536,123 +3628,98 @@ class PearEmbeddedBotHandler:
                     },
                 ]
                 progress_content = build_pear_worker_progress_message(
-                    task=task,
+                    task=self.task,
                     tool_results=initial_tool_results,
-                    transcript_events=transcript_events,
+                    transcript_events=self.transcript_events,
                 )
-                update_volatile_transcript(
+                self.update_volatile_transcript(
                     "running",
                     tool_results=initial_tool_results,
                     force=True,
                 )
-                progress_updated = update_live_transcript(
+                progress_updated = self.update_live_transcript(
                     "running",
                     tool_results=initial_tool_results,
                     force=True,
                 )
                 result = None
                 if progress_updated:
-                    result_message_id = result_message_id or progress_message_id
-                elif post_started_progress:
-                    result = bot_handler.send_reply(message, progress_content)
-                started_progress_posted = progress_updated or result is not None
+                    self.result_message_id = self.result_message_id or self.progress_message_id
+                elif self.post_started_progress:
+                    result = self.bot_handler.send_reply(self.message, progress_content)
+                self.started_progress_posted = progress_updated or result is not None
                 if isinstance(result, dict) and isinstance(result.get("id"), int):
-                    result_message_id = result["id"]
-                if result_message_id is not None:
-                    self.worker_run_store.record(
-                        bot_handler,
-                        message_id,
+                    self.result_message_id = result["id"]
+                if self.result_message_id is not None:
+                    self.handler.worker_run_store.record(
+                        self.bot_handler,
+                        self.message_id,
                         "running",
-                        stream=stream,
-                        topic=topic,
-                        result_message_id=result_message_id,
+                        stream=self.stream,
+                        topic=self.topic,
+                        result_message_id=self.result_message_id,
                     )
-                    self.record_worker_event(
-                        bot_handler,
-                        message_id,
+                    self.handler.record_worker_event(
+                        self.bot_handler,
+                        self.message_id,
                         "progress_posted",
                         summary=(
                             "Updated started-progress message."
                             if progress_updated
                             else "Posted started-progress message."
                         ),
-                        payload={"result_message_id": result_message_id},
+                        payload={"result_message_id": self.result_message_id},
                     )
-            steering_events_after = getattr(
-                self.worker_run_store,
+            self.steering_events_after = getattr(
+                self.handler.worker_run_store,
                 "steering_events_after",
                 None,
             )
 
-            def run_runtime_segment(segment_task: str, *, segment_index: int) -> dict[str, Any]:
-                raise_if_cancel_requested()
-                segment_result = self.worker_runtime.run(
-                    active_session=active_session,
-                    task=segment_task,
-                    event_callback=handle_transcript_event,
-                )
-                raise_if_cancel_requested()
-                segment_summary = pear_worker_summary_from_tool_results(
-                    segment_result["tool_results"]
-                )
-                self.record_worker_event(
-                    bot_handler,
-                    message_id,
-                    "tool_results",
-                    summary=segment_summary or "Pear worker returned results.",
-                    payload={
-                        "segment_index": segment_index,
-                        "tool_count": segment_result["tool_count"],
-                        "tool_results": segment_result["tool_results"],
-                        "worker_can_run": segment_result["worker_can_run"],
-                    },
-                )
-                return segment_result
-
-            worker_result = run_runtime_segment(task, segment_index=0)
-            codex_thread_id = pear_codex_thread_id_from_tool_results(
-                worker_result["tool_results"]
+            self.worker_result = self.run_runtime_segment(self.task, segment_index=0)
+            self.codex_thread_id = pear_codex_thread_id_from_tool_results(
+                self.worker_result["tool_results"]
             )
             while (
-                worker_result["worker_can_run"]
-                and callable(steering_events_after)
-                and steering_segment_count < PEAR_MAX_STEERING_SEGMENTS
+                self.worker_result["worker_can_run"]
+                and callable(self.steering_events_after)
+                and self.steering_segment_count < PEAR_MAX_STEERING_SEGMENTS
             ):
-                pending_steering_events = steering_events_after(
-                    bot_handler,
-                    message_id,
-                    after_event_id=last_steering_event_id,
+                pending_steering_events = self.steering_events_after(
+                    self.bot_handler,
+                    self.message_id,
+                    after_event_id=self.last_steering_event_id,
                 )
                 if not pending_steering_events:
                     break
-                last_steering_event_id = pending_steering_events[-1]["event_id"]
-                steering_segment_count += 1
+                self.last_steering_event_id = pending_steering_events[-1]["event_id"]
+                self.steering_segment_count += 1
                 steering_task = build_pear_steering_task(pending_steering_events)
                 latest_steering = "; ".join(
                     event["instruction"] for event in pending_steering_events
                 )
-                active_session["latest_steering_instruction"] = latest_steering
-                if codex_thread_id:
-                    active_session["latest_codex_thread_id"] = codex_thread_id
-                self.update_worker_metadata(
-                    bot_handler,
-                    message_id,
+                self.active_session["latest_steering_instruction"] = latest_steering
+                if self.codex_thread_id:
+                    self.active_session["latest_codex_thread_id"] = self.codex_thread_id
+                self.handler.update_worker_metadata(
+                    self.bot_handler,
+                    self.message_id,
                     current_activity=trim_pear_text(
                         f"Applying steering: {latest_steering}",
                         limit=500,
                     ),
                 )
-                self.record_worker_event(
-                    bot_handler,
-                    message_id,
+                self.handler.record_worker_event(
+                    self.bot_handler,
+                    self.message_id,
                     "steering_applied",
                     summary=trim_pear_text(latest_steering, limit=500),
                     payload={
-                        "segment_index": steering_segment_count,
+                        "segment_index": self.steering_segment_count,
                         "steering_events": pending_steering_events,
                     },
                 )
-                transcript_events.append(
+                self.transcript_events.append(
                     {
                         "kind": "steering",
                         "status": "done",
@@ -3660,134 +3727,134 @@ class PearEmbeddedBotHandler:
                         "body": latest_steering,
                     }
                 )
-                update_volatile_transcript("running", force=True)
-                update_live_transcript("running", force=True)
-                worker_result = run_runtime_segment(
+                self.update_volatile_transcript("running", force=True)
+                self.update_live_transcript("running", force=True)
+                self.worker_result = self.run_runtime_segment(
                     steering_task,
-                    segment_index=steering_segment_count,
+                    segment_index=self.steering_segment_count,
                 )
-                codex_thread_id = pear_codex_thread_id_from_tool_results(
-                    worker_result["tool_results"]
-                ) or codex_thread_id
+                self.codex_thread_id = pear_codex_thread_id_from_tool_results(
+                    self.worker_result["tool_results"]
+                ) or self.codex_thread_id
 
-            result_summary = pear_worker_summary_from_tool_results(
-                worker_result["tool_results"]
+            self.result_summary = pear_worker_summary_from_tool_results(
+                self.worker_result["tool_results"]
             )
-            if worker_result["should_post"] and worker_result["content"] is not None:
-                content_to_post = worker_result["content"]
+            if self.worker_result["should_post"] and self.worker_result["content"] is not None:
+                content_to_post = self.worker_result["content"]
                 content_chunks = split_pear_persistent_message(content_to_post)
-                if started_progress_posted or transcript_events:
+                if self.started_progress_posted or self.transcript_events:
                     content_chunks = build_pear_worker_completed_message_chunks(
-                        task=task,
-                        tool_results=worker_result["tool_results"],
-                        transcript_events=transcript_events,
+                        task=self.task,
+                        tool_results=self.worker_result["tool_results"],
+                        transcript_events=self.transcript_events,
                     )
                     content_to_post = content_chunks[0] if content_chunks else ""
                 result_updated = update_pear_worker_status_message(
-                    bot_handler,
-                    progress_message_id=result_message_id or progress_message_id,
+                    self.bot_handler,
+                    progress_message_id=self.result_message_id or self.progress_message_id,
                     content=content_to_post,
                 )
                 result = None
                 if not result_updated:
-                    result = bot_handler.send_reply(message, content_to_post)
+                    result = self.bot_handler.send_reply(self.message, content_to_post)
                 for continuation_content in content_chunks[1:]:
-                    bot_handler.send_reply(message, continuation_content)
+                    self.bot_handler.send_reply(self.message, continuation_content)
                 write_pear_live_run_state(
-                    message_id,
+                    self.message_id,
                     status="done",
                     content=content_to_post,
                 )
                 if isinstance(result, dict) and isinstance(result.get("id"), int):
-                    result_message_id = result["id"]
-                if result_message_id is not None:
-                    self.record_worker_event(
-                        bot_handler,
-                        message_id,
+                    self.result_message_id = result["id"]
+                if self.result_message_id is not None:
+                    self.handler.record_worker_event(
+                        self.bot_handler,
+                        self.message_id,
                         "result_updated" if result_updated else "result_posted",
                         summary=(
                             "Updated worker result message."
                             if result_updated
                             else "Posted worker result message."
                         ),
-                        payload={"result_message_id": result_message_id},
+                        payload={"result_message_id": self.result_message_id},
                     )
-            elif result_message_id is not None or progress_message_id is not None:
+            elif self.result_message_id is not None or self.progress_message_id is not None:
                 content_chunks = build_pear_worker_completed_message_chunks(
-                    task=task,
-                    tool_results=worker_result["tool_results"],
-                    transcript_events=transcript_events,
+                    task=self.task,
+                    tool_results=self.worker_result["tool_results"],
+                    transcript_events=self.transcript_events,
                 )
                 content_to_post = content_chunks[0] if content_chunks else ""
-                target_message_id = result_message_id or progress_message_id
+                target_message_id = self.result_message_id or self.progress_message_id
                 result_updated = update_pear_worker_status_message(
-                    bot_handler,
+                    self.bot_handler,
                     progress_message_id=target_message_id,
                     content=content_to_post,
                 )
                 if result_updated:
                     for continuation_content in content_chunks[1:]:
-                        bot_handler.send_reply(message, continuation_content)
+                        self.bot_handler.send_reply(self.message, continuation_content)
                 write_pear_live_run_state(
-                    message_id,
+                    self.message_id,
                     status="done",
                     content=content_to_post,
                 )
                 if result_updated:
-                    result_message_id = target_message_id
-                    self.record_worker_event(
-                        bot_handler,
-                        message_id,
+                    self.result_message_id = target_message_id
+                    self.handler.record_worker_event(
+                        self.bot_handler,
+                        self.message_id,
                         "result_updated",
                         summary="Settled worker progress message.",
-                        payload={"result_message_id": result_message_id},
+                        payload={"result_message_id": self.result_message_id},
                     )
-            self.worker_run_store.record(
-                bot_handler,
-                message_id,
+            self.handler.worker_run_store.record(
+                self.bot_handler,
+                self.message_id,
                 "done",
-                stream=stream,
-                topic=topic,
-                result_message_id=result_message_id,
+                stream=self.stream,
+                topic=self.topic,
+                result_message_id=self.result_message_id,
             )
-            self.update_worker_metadata(
-                bot_handler,
-                message_id,
-                summary=result_summary or "Completed.",
+            self.handler.update_worker_metadata(
+                self.bot_handler,
+                self.message_id,
+                summary=self.result_summary or "Completed.",
                 current_activity="Completed.",
-                codex_thread_id=codex_thread_id,
+                codex_thread_id=self.codex_thread_id,
             )
-            self.record_worker_event(
-                bot_handler,
-                message_id,
+            self.handler.record_worker_event(
+                self.bot_handler,
+                self.message_id,
                 "done",
-                summary=result_summary or "Completed.",
-                payload={"result_message_id": result_message_id},
+                summary=self.result_summary or "Completed.",
+                payload={"result_message_id": self.result_message_id},
             )
         except PearRunCancelled as error:
-            self.worker_run_store.record(
-                bot_handler,
-                message_id,
+            self.handler.worker_run_store.record(
+                self.bot_handler,
+                self.message_id,
                 "cancelled",
-                stream=stream,
-                topic=topic,
-                result_message_id=result_message_id,
+                stream=self.stream,
+                topic=self.topic,
+                result_message_id=self.result_message_id,
                 error=str(error),
             )
-            self.update_worker_metadata(
-                bot_handler,
-                message_id,
+            self.handler.update_worker_metadata(
+                self.bot_handler,
+                self.message_id,
                 summary=str(error),
                 current_activity="Cancelled.",
             )
-            self.record_worker_event(
-                bot_handler,
-                message_id,
+            self.handler.record_worker_event(
+                self.bot_handler,
+                self.message_id,
                 "cancelled",
                 summary=str(error),
-                payload={"result_message_id": result_message_id},
+                payload={"result_message_id": self.result_message_id},
             )
-            transcript_events.append(
+            self.transcript_events.append(
                 {
                     "kind": "status",
                     "status": "cancelled",
@@ -3796,44 +3863,44 @@ class PearEmbeddedBotHandler:
                 }
             )
             cancelled_message = build_pear_live_transcript_message(
-                task=task,
+                task=self.task,
                 status="cancelled",
-                transcript_events=transcript_events,
+                transcript_events=self.transcript_events,
             )
             write_pear_live_run_state(
-                message_id,
+                self.message_id,
                 status="cancelled",
                 content=cancelled_message,
             )
             update_pear_worker_status_message(
-                bot_handler,
-                progress_message_id=result_message_id or progress_message_id,
+                self.bot_handler,
+                progress_message_id=self.result_message_id or self.progress_message_id,
                 content=cancelled_message,
             )
         except Exception as error:
-            self.worker_run_store.record(
-                bot_handler,
-                message_id,
+            self.handler.worker_run_store.record(
+                self.bot_handler,
+                self.message_id,
                 "failed",
-                stream=stream,
-                topic=topic,
-                result_message_id=result_message_id,
+                stream=self.stream,
+                topic=self.topic,
+                result_message_id=self.result_message_id,
                 error=str(error),
             )
-            self.update_worker_metadata(
-                bot_handler,
-                message_id,
+            self.handler.update_worker_metadata(
+                self.bot_handler,
+                self.message_id,
                 summary=str(error),
                 current_activity="Failed.",
             )
-            self.record_worker_event(
-                bot_handler,
-                message_id,
+            self.handler.record_worker_event(
+                self.bot_handler,
+                self.message_id,
                 "failed",
                 summary=str(error),
-                payload={"result_message_id": result_message_id},
+                payload={"result_message_id": self.result_message_id},
             )
-            transcript_events.append(
+            self.transcript_events.append(
                 {
                     "kind": "error",
                     "status": "failed",
@@ -3842,21 +3909,21 @@ class PearEmbeddedBotHandler:
                 }
             )
             failure_message = build_pear_live_transcript_message(
-                task=task,
+                task=self.task,
                 status="failed",
-                transcript_events=transcript_events,
+                transcript_events=self.transcript_events,
             )
             write_pear_live_run_state(
-                message_id,
+                self.message_id,
                 status="failed",
                 content=failure_message,
             )
             if not update_pear_worker_status_message(
-                bot_handler,
-                progress_message_id=result_message_id or progress_message_id,
+                self.bot_handler,
+                progress_message_id=self.result_message_id or self.progress_message_id,
                 content=failure_message,
             ):
-                bot_handler.send_reply(message, failure_message)
+                self.bot_handler.send_reply(self.message, failure_message)
 
 
 def clean_pear_session_target(

@@ -125,7 +125,7 @@
                 content: "✶";
                 flex: none;
                 color: var(--color-text-item);
-                font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+                font-family: var(--pear-monospace-font-family);
                 font-size: 0.92em;
                 font-weight: 600;
                 line-height: 1;
@@ -162,7 +162,7 @@
                 flex: none;
                 width: 1.15em;
                 color: var(--color-text-item);
-                font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+                font-family: var(--pear-monospace-font-family);
                 font-size: 0.95em;
                 font-style: normal;
                 line-height: 1;
@@ -172,7 +172,7 @@
             .pear-artifact-ref-label {
                 flex: none;
                 color: var(--color-text-item);
-                font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+                font-family: var(--pear-monospace-font-family);
                 font-size: 0.76em;
                 font-weight: 600;
                 letter-spacing: 0;
@@ -253,7 +253,7 @@
                     var(--color-text-message-default) 18%
                 );
                 color: var(--color-text-message-default);
-                font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+                font-family: var(--pear-monospace-font-family);
                 font-weight: 600;
             }
 
@@ -302,7 +302,8 @@
                     var(--color-text-message-default) 8%
                 );
                 color: var(--color-text-item);
-                font-size: 11.5px;
+                /* 11.5px at the default 14px base font size. */
+                font-size: calc(11.5 / 14 * var(--base-font-size-px));
                 line-height: 1.2;
             }
 
@@ -313,8 +314,9 @@
                 align-items: center;
                 justify-content: center;
                 color: var(--color-text-item);
-                font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
-                font-size: 10.5px;
+                font-family: var(--pear-monospace-font-family);
+                /* 10.5px at the default 14px base font size. */
+                font-size: calc(10.5 / 14 * var(--base-font-size-px));
                 font-weight: 600;
                 text-align: center;
             }
@@ -470,9 +472,9 @@
                     overflow: hidden;
                     text-overflow: ellipsis;
                     white-space: nowrap;
-                    font-family:
-                        ui-monospace, SFMono-Regular, Consolas, monospace;
-                    font-size: 11.5px;
+                    font-family: var(--pear-monospace-font-family);
+                    /* 11.5px at the default 14px base font size. */
+                    font-size: calc(11.5 / 14 * var(--base-font-size-px));
                     line-height: 1.25;
                 }
 
@@ -484,7 +486,8 @@
                     justify-content: center;
                     border-radius: 4px;
                     color: var(--color-text-item);
-                    font-size: 11px;
+                    /* 11px at the default 14px base font size. */
+                    font-size: calc(11 / 14 * var(--base-font-size-px));
                     font-style: normal;
                     line-height: 1;
                     text-align: center;
@@ -551,7 +554,7 @@
                 text-align: center;
                 vertical-align: -0.02em;
                 white-space: nowrap;
-                font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+                font-family: var(--pear-monospace-font-family);
             }
         }
     }

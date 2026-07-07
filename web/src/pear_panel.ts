@@ -232,7 +232,11 @@ let workbench_anchor_kind: WorkbenchAnchorKind | undefined;
 let last_observed_context_key = "";
 const LIVE_REFRESH_INTERVAL_MS = 500;
 const LIVE_REFRESH_RATE_LIMIT_BACKOFF_MS = 1500;
-const FULL_REFRESH_INTERVAL_MS = 5000;
+// Idle keepalive only: message/update_message events drive refreshes the
+// moment anything happens in the topic (notify_topic_message_activity),
+// so the blind poll just covers dropped events.
+const FULL_REFRESH_INTERVAL_MS = 30_000;
+const EVENT_REFRESH_DEBOUNCE_MS = 250;
 const CONTEXT_REFRESH_INTERVAL_MS = 60_000;
 // The agent edits CANVAS.md server-side during a run, so a canvas tab left
 // open must re-fetch periodically instead of showing a permanently cached copy.
@@ -1596,6 +1600,40 @@ function clear_live_refresh(): void {
         window.clearTimeout(live_refresh_timer);
         live_refresh_timer = undefined;
     }
+}
+
+let event_refresh_timer: number | undefined;
+
+export function should_event_refresh_for_testing(options: {
+    initialized: boolean;
+    same_context: boolean;
+    hidden: boolean;
+    timer_pending: boolean;
+}): boolean {
+    return options.initialized && options.same_context && !options.hidden && !options.timer_pending;
+}
+
+export function notify_topic_message_activity(stream_name: string, topic_name: string): void {
+    // A message arrived or changed in some topic; when it is the panel's
+    // topic, fold the event burst from streaming edits into one refresh.
+    if (!initialized) {
+        return;
+    }
+    const {stream, topic} = current_context();
+    if (
+        !should_event_refresh_for_testing({
+            initialized,
+            same_context: stream === stream_name && topic === topic_name,
+            hidden: typeof document !== "undefined" && document.hidden,
+            timer_pending: event_refresh_timer !== undefined,
+        })
+    ) {
+        return;
+    }
+    event_refresh_timer = window.setTimeout(() => {
+        event_refresh_timer = undefined;
+        refresh({live: true});
+    }, EVENT_REFRESH_DEBOUNCE_MS);
 }
 
 function schedule_live_refresh(active_run: {status: string} | undefined): void {

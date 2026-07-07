@@ -136,6 +136,17 @@ const forbidden_header_mount_selectors = [
 export const runtime_menu_selector_for_testing = runtime_menu_selector;
 export const forbidden_header_mount_selectors_for_testing = forbidden_header_mount_selectors;
 
+export function should_accept_runtime_fetch_for_testing(options: {
+    fetch_generation: number;
+    runtime_save_generation: number;
+    fetch_started_during_save: boolean;
+}): boolean {
+    return (
+        options.fetch_generation === options.runtime_save_generation &&
+        !options.fetch_started_during_save
+    );
+}
+
 const fallback_efforts: PearReasoningEffort[] = [
     {effort: "low", label: "Low"},
     {effort: "medium", label: "Medium"},
@@ -549,6 +560,7 @@ function fetch_topic_context(): void {
         return;
     }
     const fetch_generation = runtime_save_generation;
+    const fetch_started_during_save = request_in_flight || pending_runtime_save !== undefined;
     // Same endpoint and payload shape as pear_panel.refresh.
     void channel.get({
         url: "/json/pear/runs",
@@ -560,12 +572,18 @@ function fetch_topic_context(): void {
         },
         success(raw_data) {
             const data = pear_runtime_response_schema.parse(raw_data);
-            last_error = "";
-            latest_runs = data.pear_runs ?? [];
-            if (fetch_generation !== runtime_save_generation) {
+            if (
+                !should_accept_runtime_fetch_for_testing({
+                    fetch_generation,
+                    runtime_save_generation,
+                    fetch_started_during_save,
+                })
+            ) {
                 rerender_popover_if_open();
                 return;
             }
+            last_error = "";
+            latest_runs = data.pear_runs ?? [];
             topic_context = data.pear_topic_context ?? undefined;
             context_key = narrow_context_key(stream, topic);
             update_runtime_button_label();
@@ -573,6 +591,15 @@ function fetch_topic_context(): void {
         },
         error(xhr) {
             if (xhr.readyState === 0) {
+                return;
+            }
+            if (
+                !should_accept_runtime_fetch_for_testing({
+                    fetch_generation,
+                    runtime_save_generation,
+                    fetch_started_during_save,
+                })
+            ) {
                 return;
             }
             last_error = $t({defaultMessage: "Pear runtime is unavailable."});

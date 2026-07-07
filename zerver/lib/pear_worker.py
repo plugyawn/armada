@@ -1627,6 +1627,44 @@ def pear_git_output(
     return completed.stdout.strip()
 
 
+PEAR_GIT_CHANGED_FILES_LIMIT = 50
+
+
+def pear_git_changed_file_from_status_line(line: str) -> dict[str, str] | None:
+    record_type, _, rest = line.partition(" ")
+    if record_type == "?":
+        return {"status": "??", "kind": "untracked", "path": rest}
+    if record_type == "!":
+        return None
+    if record_type == "u":
+        fields = rest.split(" ", 9)
+        if len(fields) < 10:
+            return None
+        return {"status": "U", "kind": "changed", "path": fields[9]}
+    if record_type == "1":
+        fields = rest.split(" ", 7)
+        if len(fields) < 8:
+            return None
+        xy, path = fields[0], fields[7]
+    elif record_type == "2":
+        fields = rest.split(" ", 8)
+        if len(fields) < 9:
+            return None
+        xy, path = fields[0], fields[8].split("\t", 1)[0]
+    else:
+        return None
+    status = xy.replace(".", "")
+    if "R" in xy or "C" in xy:
+        kind = "renamed"
+    elif "A" in xy:
+        kind = "added"
+    elif "D" in xy:
+        kind = "deleted"
+    else:
+        kind = "modified"
+    return {"status": status, "kind": kind, "path": path}
+
+
 def parse_pear_git_status_delta(
     status_output: str,
     *,
@@ -1640,12 +1678,16 @@ def parse_pear_git_status_delta(
     behind = 0
     detached = False
     changed_count = 0
+    changed_files: list[dict[str, str]] = []
 
     for line in status_output.splitlines():
         if not line.strip():
             continue
         if not line.startswith("# "):
             changed_count += 1
+            changed_file = pear_git_changed_file_from_status_line(line)
+            if changed_file is not None and len(changed_files) <= PEAR_GIT_CHANGED_FILES_LIMIT:
+                changed_files.append(changed_file)
             continue
         if line.startswith("# branch.oid "):
             oid = line.removeprefix("# branch.oid ").strip()
@@ -1683,6 +1725,8 @@ def parse_pear_git_status_delta(
         "behind": behind,
         "dirty": changed_count > 0,
         "changed_count": changed_count,
+        "changed_files": changed_files[:PEAR_GIT_CHANGED_FILES_LIMIT],
+        "changed_files_truncated": len(changed_files) > PEAR_GIT_CHANGED_FILES_LIMIT,
         "detached": detached,
         "branch_matches_topic": bool(topic and not detached and branch == topic),
     }

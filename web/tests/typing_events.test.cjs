@@ -108,12 +108,17 @@ run_test("render_notifications_for_narrow", ({override, mock_template}) => {
     assert.ok(!$typing_notifications.visible());
 });
 
-run_test("display_notification ignores Pear bot typists", ({override}) => {
+run_test("display_notification shows Pear typists as the working line", ({override, mock_template}) => {
     override(current_user, "user_id", anna.user_id);
     const group = [anna.user_id, vronsky.user_id];
     message_lists.set_current(make_message_list([{operator: "dm", operand: group}]));
 
     const $typing_notifications = $("#typing_notifications");
+    let rendered_context;
+    mock_template("typing_notifications.hbs", false, (context) => {
+        rendered_context = context;
+        return "<ul>pear</ul>";
+    });
 
     set_pear_bot_user_ids([vronsky.user_id]);
     typing_events.display_notification({
@@ -131,25 +136,38 @@ run_test("display_notification ignores Pear bot typists", ({override}) => {
         ],
     });
 
-    assert.ok(!$typing_notifications.visible());
+    // Pear typing renders as the topic-level "Pear is working…" line
+    // (design R1) instead of a per-person "is typing" row.
+    assert.ok($typing_notifications.visible());
+    assert.equal(rendered_context.pear_working, true);
+    assert.deepEqual(rendered_context.users, []);
     set_pear_bot_user_ids([]);
+    typing_data.clear_for_testing();
 });
 
 run_test(
-    "render_notifications_for_narrow filters already-recorded Pear bot typists",
-    ({override}) => {
+    "render_notifications_for_narrow keeps Pear out of the people list",
+    ({override, mock_template}) => {
         override(current_user, "user_id", anna.user_id);
         const group = [anna.user_id, vronsky.user_id];
         const conversation_key = typing_data.get_direct_message_conversation_key(group);
         message_lists.set_current(make_message_list([{operator: "dm", operand: group}]));
 
         const $typing_notifications = $("#typing_notifications");
+        let rendered_context;
+        mock_template("typing_notifications.hbs", false, (context) => {
+            rendered_context = context;
+            return "<ul>pear</ul>";
+        });
 
         set_pear_bot_user_ids([vronsky.user_id]);
         typing_data.add_typist(conversation_key, vronsky.user_id);
         typing_events.render_notifications_for_narrow();
 
-        assert.ok(!$typing_notifications.visible());
+        assert.ok($typing_notifications.visible());
+        assert.equal(rendered_context.pear_working, true);
+        assert.deepEqual(rendered_context.users, []);
         set_pear_bot_user_ids([]);
+        typing_data.clear_for_testing();
     },
 );

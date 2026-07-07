@@ -35,6 +35,7 @@ from zerver.lib.pear import (
     write_pear_live_run_state,
 )
 from zerver.lib.pear_gate import (
+    get_pear_followup_service_bot_event,
     get_selected_pear_bot_user_id_for_realm,
     pear_selected_bot_cache_key,
 )
@@ -68,7 +69,7 @@ from zerver.lib.pear_worker import (
     pear_worker_workdir_for_topic,
 )
 from zerver.lib.test_classes import ZulipTestCase
-from zerver.models import Message, Subscription, UserProfile
+from zerver.models import Message, Recipient, Subscription, UserProfile
 from zerver.models.bots import PearProject, PearTopicContext, PearWorkerRun, PearWorkerRunEvent
 from zerver.models.streams import get_stream
 from zerver.views.pear import (
@@ -650,6 +651,55 @@ class PearSessionEndpointTest(ZulipTestCase):
         self.assertEqual(
             second_result_dict["pear_config"]["selected_bot_user_id"],
             pear_config["selected_bot_user_id"],
+        )
+
+    def test_pear_followup_gate_requires_existing_ambient_topic_context(self) -> None:
+        owner = self.example_user("iago")
+        pear_bot = self.create_test_bot(
+            "pear",
+            owner,
+            full_name="Pear",
+            bot_type=UserProfile.EMBEDDED_BOT,
+            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+        )
+        cache.delete(pear_selected_bot_cache_key(owner.realm_id))
+
+        with self.settings(
+            EMBEDDED_BOTS_ENABLED=True,
+            PEAR_ADDRESSING_ROUTER_RUNTIME="codex-exec",
+        ):
+            missing_context_event = get_pear_followup_service_bot_event(
+                realm_id=owner.realm_id,
+                recipient_id=123,
+                recipient_type=Recipient.STREAM,
+                stream_name=PEAR_DEFAULT_STREAM,
+                topic_name="missing-context",
+                content="can someone check the failing test?",
+                mentioned_user_ids=set(),
+            )
+            PearTopicContext.objects.create(
+                realm=owner.realm,
+                stream_name=PEAR_DEFAULT_STREAM,
+                topic_name="ambient-context",
+                response_policy="ambient",
+            )
+            ambient_context_event = get_pear_followup_service_bot_event(
+                realm_id=owner.realm_id,
+                recipient_id=123,
+                recipient_type=Recipient.STREAM,
+                stream_name=PEAR_DEFAULT_STREAM,
+                topic_name="ambient-context",
+                content="can someone check the failing test?",
+                mentioned_user_ids=set(),
+            )
+
+        self.assertIsNone(missing_context_event)
+        self.assertEqual(
+            ambient_context_event,
+            {
+                "trigger": "pear_followup",
+                "user_profile_id": pear_bot.id,
+            },
         )
 
     def test_post_pear_first_run_creates_sandbox_once(self) -> None:

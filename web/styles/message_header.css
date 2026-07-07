@@ -316,8 +316,8 @@
     position: relative;
     display: grid;
     min-width: 0;
-    max-width: min(22em, 34vw);
-    flex: 0 1 min(22em, 34vw);
+    max-width: min(26em, 38vw);
+    flex: 0 1 min(26em, 38vw);
     align-items: start;
     row-gap: 1px;
     margin-inline: 6px 3px;
@@ -363,7 +363,7 @@
     );
     cursor: pointer;
     font: inherit;
-    font-size: calc(12em / 15);
+    font-size: calc(13em / 15);
     line-height: 1;
     white-space: nowrap;
 
@@ -403,7 +403,7 @@
         var(--color-text-message-header) 66%,
         var(--color-message-header-icon-non-interactive) 34%
     );
-    font-size: calc(10em / 15);
+    font-size: calc(11em / 15);
     font-weight: 600;
     letter-spacing: 0;
     line-height: 1;
@@ -477,9 +477,10 @@
 .pear-topic-header-git-control {
     flex: 0 1 auto;
     width: auto;
-    height: 14px;
+    min-width: 42px;
+    height: 16px;
     justify-content: flex-start;
-    padding-inline: 0;
+    padding-inline: 2px 3px;
     color: color-mix(
         in srgb,
         var(--color-text-message-header) 70%,

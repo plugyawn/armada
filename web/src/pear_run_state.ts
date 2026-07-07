@@ -1,6 +1,6 @@
 type PearRunForActiveMessage = {
     status: string;
-    result_message_id?: number | null;
+    result_message_id?: number | null | undefined;
 };
 
 type PearActiveResultMessageChange = {

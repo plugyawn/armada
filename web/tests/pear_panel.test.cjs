@@ -878,8 +878,21 @@ run_test("work_panel_open_for_testing", () => {
             manually_open: false,
             active_run_status: undefined,
             has_error: true,
+            error_dismissed: false,
         }),
         true,
+    );
+    // A dismissed error must not force the panel open (the "undismissable on
+    // error" regression: the 5s poll's still-present error kept re-opening it).
+    assert.equal(
+        pear_panel.work_panel_open_for_testing({
+            context_key_value: "devel pear",
+            manually_open: false,
+            active_run_status: undefined,
+            has_error: true,
+            error_dismissed: true,
+        }),
+        false,
     );
 });
 
@@ -913,7 +926,17 @@ run_test("workbench_open_for_testing", () => {
             context_key_value: "devel\u0000pear",
             manually_open: false,
             has_error: true,
+            error_dismissed: false,
         }),
         true,
+    );
+    assert.equal(
+        pear_panel.workbench_open_for_testing({
+            context_key_value: "devel pear",
+            manually_open: false,
+            has_error: true,
+            error_dismissed: true,
+        }),
+        false,
     );
 });

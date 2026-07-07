@@ -191,6 +191,7 @@ const git_tree_by_context = new Map<string, PearGitTree>();
 const git_tree_error_by_context = new Map<string, string>();
 const git_tree_loading_contexts = new Set<string>();
 const canvas_by_context = new Map<string, PearCanvas>();
+const canvas_fetched_at_by_context = new Map<string, number>();
 const canvas_error_by_context = new Map<string, string>();
 const canvas_loading_contexts = new Set<string>();
 const canvas_fetch_sequence_by_context = new Map<string, number>();
@@ -206,6 +207,9 @@ const LIVE_REFRESH_INTERVAL_MS = 500;
 const LIVE_REFRESH_RATE_LIMIT_BACKOFF_MS = 1500;
 const FULL_REFRESH_INTERVAL_MS = 5000;
 const CONTEXT_REFRESH_INTERVAL_MS = 60_000;
+// The agent edits CANVAS.md server-side during a run, so a canvas tab left
+// open must re-fetch periodically instead of showing a permanently cached copy.
+const CANVAS_REFRESH_INTERVAL_MS = 30_000;
 const WORKBENCH_MIN_VIEWPORT_WIDTH_PX = 320;
 const WORKBENCH_POPOVER_MARGIN_PX = 8;
 
@@ -1476,20 +1480,43 @@ function render_canvas_for_context(key: string, canvas: PearCanvas): void {
     });
 }
 
+export function canvas_cache_is_stale_for_testing(options: {
+    fetched_at: number;
+    now: number;
+}): boolean {
+    return options.now - options.fetched_at >= CANVAS_REFRESH_INTERVAL_MS;
+}
+
 function fetch_canvas_for_context(topic_context: PearTopicContext): void {
     const key = context_key(topic_context.stream, topic_context.topic);
     const cached_canvas = canvas_by_context.get(key);
+    const had_cache = cached_canvas !== undefined;
     if (cached_canvas !== undefined) {
         render_canvas_for_context(key, cached_canvas);
-        return;
+        const fresh = !canvas_cache_is_stale_for_testing({
+            fetched_at: canvas_fetched_at_by_context.get(key) ?? 0,
+            now: Date.now(),
+        });
+        if (fresh) {
+            return;
+        }
+        // Stale cache: fall through to a background refresh that keeps the
+        // cached canvas on screen (no loading flicker) until the new copy lands.
     }
     if (key === "" || canvas_loading_contexts.has(key)) {
         return;
     }
+    // canvas_loading_contexts also guards against re-entrant fetches for the
+    // silent refresh, but we only surface the loading state when nothing is
+    // currently shown.
     canvas_loading_contexts.add(key);
-    canvas_error_by_context.delete(key);
+    if (!had_cache) {
+        canvas_error_by_context.delete(key);
+    }
     const sequence = next_canvas_fetch_sequence(key);
-    render();
+    if (!had_cache) {
+        render();
+    }
     void channel.get({
         url: "/json/pear/canvas",
         data: {
@@ -1508,13 +1535,14 @@ function fetch_canvas_for_context(topic_context: PearTopicContext): void {
                 return;
             }
             canvas_by_context.set(key, raw_data.pear_canvas);
+            canvas_fetched_at_by_context.set(key, Date.now());
             render_canvas_for_context(key, raw_data.pear_canvas);
         },
         error(xhr) {
             if (canvas_fetch_sequence_by_context.get(key) !== sequence) {
                 return;
             }
-            if (xhr.readyState !== 0) {
+            if (xhr.readyState !== 0 && !had_cache) {
                 canvas_error_by_context.set(
                     key,
                     $t({defaultMessage: "Pear canvas is unavailable."}),
@@ -1527,7 +1555,9 @@ function fetch_canvas_for_context(topic_context: PearTopicContext): void {
                 return;
             }
             canvas_loading_contexts.delete(key);
-            render();
+            if (!had_cache) {
+                render();
+            }
         },
     });
 }
@@ -1541,6 +1571,7 @@ function refresh_canvas_for_context(topic_context: PearTopicContext | null | und
         return;
     }
     canvas_by_context.delete(key);
+    canvas_fetched_at_by_context.delete(key);
     canvas_error_by_context.delete(key);
     canvas_loading_contexts.delete(key);
     canvas_rendering_contexts.delete(key);

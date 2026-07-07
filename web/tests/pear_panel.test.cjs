@@ -943,6 +943,20 @@ run_test("workbench_open_for_testing", () => {
     );
 });
 
+run_test("canvas_cache_is_stale_for_testing", () => {
+    // Fresh cache (well within the 30s window) is not stale.
+    assert.equal(
+        pear_panel.canvas_cache_is_stale_for_testing({fetched_at: 1000, now: 5000}),
+        false,
+    );
+    // Past the 30s refresh window: stale, so an open canvas tab re-fetches to
+    // pick up the agent's server-side CANVAS.md edits.
+    assert.equal(
+        pear_panel.canvas_cache_is_stale_for_testing({fetched_at: 1000, now: 1000 + 30_000}),
+        true,
+    );
+});
+
 run_test("workbench_popover_top_for_testing", () => {
     const base = {viewport_height: 900, margin: 12, min_body_height: 260};
     // Normal anchor: top is used as-is.

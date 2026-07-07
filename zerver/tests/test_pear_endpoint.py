@@ -52,6 +52,7 @@ from zerver.lib.pear_worker import (
     maybe_refactor_pear_topic_context_on_move,
     pear_expected_topic_workdir,
     pear_git_current_branch_name,
+    pear_git_output,
     pear_git_status_delta,
     pear_read_text_path,
     pear_topic_branch_name,
@@ -1770,6 +1771,22 @@ class PearSessionEndpointTest(ZulipTestCase):
         self.assertTrue(delta["dirty"])
         self.assertEqual(delta["changed_count"], 1)
         self.assertFalse(delta["branch_matches_topic"])
+
+    def test_pear_git_output_logs_stderr_on_failure(self) -> None:
+        completed = subprocess.CompletedProcess(
+            ["git"],
+            128,
+            stdout="",
+            stderr="fatal: not a git repository",
+        )
+
+        with patch("zerver.lib.pear_worker.subprocess.run", return_value=completed):
+            with self.assertLogs("zerver.lib.pear_worker", level="WARNING") as logs:
+                self.assertEqual(pear_git_output("/repo", ["status"]), "")
+
+        log_output = "\n".join(logs.output)
+        self.assertIn("status 128", log_output)
+        self.assertIn("fatal: not a git repository", log_output)
 
     def test_get_pear_git_tree_returns_on_demand_graph(self) -> None:
         owner = self.example_user("hamlet")

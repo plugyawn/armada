@@ -1891,28 +1891,31 @@ def pear_git_status_delta(
     delta = parse_pear_git_status_delta(status_output, workdir=workdir, topic=topic)
     # The topic header's commit sentence (design §8.2): latest commit
     # identity plus the total count, fetched with the same isolation and
-    # cached under the same TTL as the rest of the delta. Best-effort —
-    # pear_git_output returns "" on any failure.
-    log_output = pear_git_output(
-        workdir,
-        ["log", "-1", "--format=%h%x1f%s%x1f%an%x1f%ct"],
-        isolation_username=isolation_username,
-    )
-    log_parts = log_output.strip().split("\x1f")
-    if len(log_parts) == 4 and log_parts[0]:
-        delta["last_commit"] = {
-            "sha": log_parts[0],
-            "subject": trim_pear_text(log_parts[1], limit=200),
-            "author": trim_pear_text(log_parts[2], limit=80),
-            "timestamp": int(log_parts[3]) if log_parts[3].isdigit() else None,
-        }
-    count_output = pear_git_output(
-        workdir,
-        ["rev-list", "--count", "HEAD"],
-        isolation_username=isolation_username,
-    ).strip()
-    if count_output.isdigit():
-        delta["commit_count"] = int(count_output)
+    # cached under the same TTL as the rest of the delta. An unborn HEAD
+    # (branch.oid "(initial)" clears head_short) has no commits to
+    # describe, so skip the reads instead of letting git fail them
+    # noisily on every refresh of a freshly initialized workspace.
+    if delta["head_short"]:
+        log_output = pear_git_output(
+            workdir,
+            ["log", "-1", "--format=%h%x1f%s%x1f%an%x1f%ct"],
+            isolation_username=isolation_username,
+        )
+        log_parts = log_output.strip().split("\x1f")
+        if len(log_parts) == 4 and log_parts[0]:
+            delta["last_commit"] = {
+                "sha": log_parts[0],
+                "subject": trim_pear_text(log_parts[1], limit=200),
+                "author": trim_pear_text(log_parts[2], limit=80),
+                "timestamp": int(log_parts[3]) if log_parts[3].isdigit() else None,
+            }
+        count_output = pear_git_output(
+            workdir,
+            ["rev-list", "--count", "HEAD"],
+            isolation_username=isolation_username,
+        ).strip()
+        if count_output.isdigit():
+            delta["commit_count"] = int(count_output)
     pear_git_status_delta_cache[cache_key] = (current_time, dict(delta))
     return delta
 

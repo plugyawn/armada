@@ -58,6 +58,27 @@
     &.pear-message {
         background-color: var(--color-background-pear-message-content);
 
+        /* The agent is ambient — part of the branch, not a chat
+           participant: no portrait, no bot badge, and it speaks in
+           the pixel voice. Code samples keep Geist Mono via the
+           rendered_markdown code rules. */
+        .message-avatar {
+            visibility: hidden;
+        }
+
+        .zulip-icon-bot {
+            display: none;
+        }
+
+        .sender_name_text {
+            font-family: var(--pear-font-pixel);
+            /* stylelint-disable-next-line declaration-property-unit-disallowed-list */
+            font-size: 12px;
+            /* The pixel face has a single weight; synthesized bold
+               smears its grid. */
+            font-weight: normal;
+        }
+
         .message_edit_notice,
         .edit-notifications {
             display: none;
@@ -75,7 +96,12 @@
             max-width: min(100%, calc(var(--base-font-size-px) * 48));
             padding-right: 0.35em;
             overflow-wrap: anywhere;
-            line-height: 1.5;
+            font-family: var(--pear-font-pixel);
+            /* stylelint-disable-next-line declaration-property-unit-disallowed-list */
+            font-size: 12px;
+            /* Pixel glyphs sit on a hard grid; they need more air
+               between lines than the outline faces do. */
+            line-height: 1.8;
 
             > p {
                 margin-block: 0.2em 0.72em;

@@ -2247,6 +2247,11 @@ class PearSessionDefaultsTest(TestCase):
             "- contract: the Zulip stream maps to the repository, and the Zulip topic/subthread maps to the Git branch.",
             prompt,
         )
+        self.assertIn(
+            "- privacy: refer to the workspace by branch or worktree name in replies; "
+            "never print the absolute workdir path in the topic.",
+            prompt,
+        )
         self.assertNotIn("Durable topic context lives in CANVAS.md", prompt)
         self.assertNotIn("Use Codex-native skills from CODEX_HOME/skills", prompt)
         self.assertNotIn(

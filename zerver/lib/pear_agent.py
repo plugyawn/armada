@@ -443,6 +443,7 @@ def build_pear_codex_turn_prompt(active_session: PearActiveSessionSummary, task:
         f"- branch: {workspace_context.get('branch') or 'unknown'}",
         f"- head: {workspace_context.get('head') or 'unknown'}",
         "- contract: the Zulip stream maps to the repository, and the Zulip topic/subthread maps to the Git branch.",
+        "- privacy: refer to the workspace by branch or worktree name in replies; never print the absolute workdir path in the topic.",
     ]
     artifacts = active_session["artifacts"][:5]
     artifact_lines = [

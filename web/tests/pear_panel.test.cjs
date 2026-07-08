@@ -985,16 +985,18 @@ run_test("topic header controls template matches the retired jQuery skeleton", (
     const render_pear_topic_header_controls = require("../templates/pear_topic_header_controls.hbs");
     const html = render_pear_topic_header_controls({control_key: '{"stream_id":7,"topic":"t"}'});
 
-    // Structure: status cluster > runtime group (dot, single merged
-    // model·effort button) + subtitle (branch control, separator, git
-    // control).
+    // Structure: status cluster > runtime group (single merged
+    // model·effort button with an in-pill status glyph) + subtitle
+    // (branch control, separator, git control). No status dot: the glyph
+    // occupies a fixed slot so going active never shifts the header.
     assert.match(
         html,
         /^<span class="pear-topic-header-status no-select" data-pear-header-key="\{&quot;stream_id&quot;:7,&quot;topic&quot;:&quot;t&quot;\}">/,
     );
+    assert.ok(!html.includes("pear-topic-header-status-dot"));
     for (const marker of [
-        'class="pear-topic-header-status-dot" aria-hidden="true"',
         "pear-topic-header-runtime-control pear-runtime-menu-trigger",
+        'class="pear-ui-glyph pear-runtime-menu-glyph" aria-hidden="true">·<',
         'class="pear-runtime-menu-model-label"',
         'class="pear-topic-header-runtime-separator" aria-hidden="true">·<',
         'class="pear-runtime-menu-effort-label"',

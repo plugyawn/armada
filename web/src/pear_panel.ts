@@ -1101,9 +1101,6 @@ function render_topic_header_controls(options: {
         });
         $runtime_controls.toggleClass("pear-topic-header-running", runtime_active);
         $status_cluster
-            .find(".pear-topic-header-status-dot")
-            .toggleClass("pear-topic-header-status-dot-active", runtime_active);
-        $status_cluster
             .find(".pear-runtime-menu-model-label")
             .text(topic_context.panel_model_label ?? runtime_label);
         $status_cluster

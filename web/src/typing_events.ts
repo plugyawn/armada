@@ -107,22 +107,23 @@ function get_users_typing_for_narrow(): number[] {
 }
 
 export function render_notifications_for_narrow(): void {
-    const user_ids = get_users_typing_for_narrow();
-    const pear_working = user_ids.some((user_id) => is_pear_bot_user_id(user_id));
-    const users_typing = user_ids
+    // Pear's stream-typing signal is tracked but deliberately not rendered
+    // here: while Pear works, the streaming transcript already shows the
+    // animated "Thinking ✦" line and the topic header shows the active
+    // state, so a "Pear is working…" row would just say it a third time.
+    const users_typing = get_users_typing_for_narrow()
         .filter((user_id) => !is_pear_bot_user_id(user_id))
         .map((user_id) => people.get_user_by_id_assert_valid(user_id))
         .filter((person) => !person.is_inaccessible_user);
     const num_of_users_typing = users_typing.length;
 
-    if (num_of_users_typing === 0 && !pear_working) {
+    if (num_of_users_typing === 0) {
         $("#typing_notifications").hide();
     } else {
         $("#typing_notifications").html(
             render_typing_notifications({
                 users: users_typing,
                 several_users: num_of_users_typing > MAX_USERS_TO_DISPLAY_NAME,
-                pear_working,
             }),
         );
         $("#typing_notifications").show();

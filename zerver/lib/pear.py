@@ -110,9 +110,8 @@ PEAR_SESSION_CHECKLIST: Final = (
     "Keep progress visible in this topic.",
     "Post verification evidence before calling the work done.",
 )
-PEAR_LEGACY_ACTIVE_MARKDOWN_PREFIX: Final = "*✦*"
-PEAR_ACTIVE_MARKDOWN_PREFIX: Final = PEAR_LEGACY_ACTIVE_MARKDOWN_PREFIX
-PEAR_ACTIVE_THINKING_MARKDOWN: Final = "*Thinking*"
+PEAR_ACTIVE_MARKDOWN_PREFIX: Final = "*✦*"
+PEAR_ACTIVE_THINKING_MARKDOWN: Final = f"*Thinking* {PEAR_ACTIVE_MARKDOWN_PREFIX}"
 PEAR_VOLATILE_ASSISTANT_FLUSH_INTERVAL_SECONDS: Final = 0.033
 PEAR_PERSISTENT_ASSISTANT_FLUSH_INTERVAL_SECONDS: Final = 0.2
 PEAR_BACKGROUND_TRANSCRIPT_FLUSH_INTERVAL_SECONDS: Final = 0.5
@@ -909,7 +908,7 @@ def pear_transcript_tool_mark(status: str) -> str:
     if status in {"failed", "error"}:
         return "✷"
     if status in {"running", "in_progress"}:
-        return "⋅"
+        return "✦"
     return "⋅"
 
 
@@ -1003,9 +1002,9 @@ def pear_transcript_tool_group_title(
     if failed_count:
         return f"{failed_count} failed {pear_pluralize_tool(failed_count)}"
     if running_count and completed_count:
-        return f"Ran {completed_count}/{tool_count} {pear_pluralize_tool(tool_count)}"
+        return f"Ran {completed_count}/{tool_count} {pear_pluralize_tool(tool_count)} ✦"
     if running_count:
-        return f"Running {tool_count} {pear_pluralize_tool(tool_count)}"
+        return f"Running {tool_count} {pear_pluralize_tool(tool_count)} ✦"
     return f"Ran {tool_count} {pear_pluralize_tool(tool_count)}"
 
 
@@ -1210,7 +1209,11 @@ def pear_append_active_marker(text: str) -> str:
     text = text.rstrip()
     if not text:
         return PEAR_ACTIVE_THINKING_MARKDOWN
-    return text
+    if text.endswith(PEAR_ACTIVE_MARKDOWN_PREFIX):
+        return text
+    if text.endswith("```"):
+        return f"{text}\n\n{PEAR_ACTIVE_MARKDOWN_PREFIX}"
+    return f"{text} {PEAR_ACTIVE_MARKDOWN_PREFIX}"
 
 
 PEAR_STEERING_QUEUED_MARKDOWN: Final = "*Steering queued.*"
@@ -1229,8 +1232,8 @@ PEAR_STEERING_STATUS_MARKDOWN: Final = frozenset(
 
 def pear_without_active_marker(text: str) -> str:
     text = text.rstrip()
-    if text.endswith(PEAR_LEGACY_ACTIVE_MARKDOWN_PREFIX):
-        return text[: -len(PEAR_LEGACY_ACTIVE_MARKDOWN_PREFIX)].rstrip()
+    if text.endswith(PEAR_ACTIVE_MARKDOWN_PREFIX):
+        return text[: -len(PEAR_ACTIVE_MARKDOWN_PREFIX)].rstrip()
     return text
 
 
@@ -1247,8 +1250,8 @@ def pear_without_steering_status(text: str) -> str:
 def pear_with_steering_status(content: str, status_markdown: str) -> str:
     base_content = pear_without_active_marker(pear_without_steering_status(content))
     if base_content:
-        return f"{base_content}\n\n{status_markdown}"
-    return status_markdown
+        return pear_append_active_marker(f"{base_content}\n\n{status_markdown}")
+    return pear_append_active_marker(status_markdown)
 
 
 def pear_result_tool_text(

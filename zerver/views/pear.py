@@ -57,7 +57,6 @@ from zerver.lib.pear_worker import (
     pear_read_text_path,
     pear_repo_artifact_value_is_durable,
     pear_sha256_text,
-    pear_topic_branch_name,
     pear_topic_canvas_path,
     pear_topic_context_is_paused,
     pear_topic_context_response_policy,
@@ -535,11 +534,23 @@ def serialize_pear_topic_context(
         "base_ref": workspace_node.base_ref if workspace_node is not None else "",
         "base_commit": workspace_node.base_commit if workspace_node is not None else "",
         "branch": expected_branch,
-        # The workspace branch is derived from the topic at creation; when
-        # they still agree, clients can hide the branch chip entirely —
-        # only a surprising branch (legacy default, custom, detached) is
-        # worth header space next to the topic name.
-        "branch_is_topic_default": expected_branch == pear_topic_branch_name(topic_name),
+        # The workspace branch is derived at creation; when it still equals
+        # what creation would derive today, clients can hide the branch
+        # chip entirely — only a surprising branch (legacy default, custom,
+        # detached) is worth header space next to the topic name. Compare
+        # against the same derivation used at creation so the empty topic
+        # ("general chat"), whose default is the trunk branch, is also
+        # recognized as default.
+        "branch_is_topic_default": expected_branch
+        == pear_workspace_node_default_branch(
+            project=project,
+            parent_node=(
+                workspace_node.parent_node
+                if workspace_node is not None and workspace_node.parent_node_id is not None
+                else None
+            ),
+            topic=topic_name,
+        ),
         "head": workspace_node.head_commit if workspace_node is not None else "",
         "github_repo": github_repo,
         "pinned_repo": pinned_repo,

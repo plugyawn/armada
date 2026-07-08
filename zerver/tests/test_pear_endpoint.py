@@ -1409,6 +1409,23 @@ class PearSessionEndpointTest(ZulipTestCase):
         self.assertEqual(legacy_payload["branch"], "master")
         self.assertFalse(legacy_payload["branch_is_topic_default"])
 
+        # The empty topic ("general chat") derives the trunk default, so
+        # its branch is also recognized as default rather than surprising.
+        context.workspace_node.branch_name = "main"
+        context.workspace_node.topic_name = ""
+        context.workspace_node.save(update_fields=["branch_name", "topic_name"])
+        with (
+            tempfile.TemporaryDirectory() as temp_dir,
+            self.settings(PEAR_TOPIC_WORKDIR_ROOT=temp_dir),
+        ):
+            trunk_payload = serialize_pear_topic_context(
+                context,
+                stream_name=PEAR_DEFAULT_STREAM,
+                topic_name="",
+            )
+        self.assertEqual(trunk_payload["branch"], "main")
+        self.assertTrue(trunk_payload["branch_is_topic_default"])
+
     def test_worker_run_store_links_runs_to_workspace_node(self) -> None:
         owner = self.example_user("hamlet")
         pear_bot = self.create_test_bot(

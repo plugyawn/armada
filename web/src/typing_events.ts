@@ -186,9 +186,9 @@ export function hide_message_edit_notification(event: TypingMessageEditEvent): v
 
 export function display_notification(event: TypingEvent): void {
     const sender_id = event.sender.user_id;
-    // Pear's stream-typing is tracked like anyone's; the renderer shows
-    // it as the topic-level "Pear is working…" line (design R1) instead
-    // of a per-person "is typing" row.
+    // Pear's stream-typing is tracked like anyone's; the renderer filters
+    // Pear out of the display entirely (the transcript's "Thinking ✦" and
+    // the topic header carry the live state).
     const key = get_key(event);
     typing_data.add_typist(key, sender_id);
 

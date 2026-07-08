@@ -827,13 +827,15 @@
         hsl(0deg 0% 100%),
         hsl(0deg 0% 13.5%)
     );
+    /* A neutral with a faint bias toward the Pear accent hue — pure grey
+       read as unfinished next to the deliberately warm DM background. */
     --color-background-pear-message-content: light-dark(
-        hsl(0deg 0% 94%),
-        hsl(0deg 0% 18%)
+        hsl(140deg 7% 94.5%),
+        hsl(146deg 4% 17.5%)
     );
     /* Shared by every monospace surface in Pear message rows. */
-    --pear-monospace-font-family: ui-monospace, "SFMono-Regular", consolas,
-        monospace;
+    --pear-monospace-font-family:
+        ui-monospace, "SFMono-Regular", consolas, monospace;
     /* Pear design tokens: every Pear surface derives its corners, motion,
        and accent from these so the feature reads as one designed system
        rather than per-component improvisation. */

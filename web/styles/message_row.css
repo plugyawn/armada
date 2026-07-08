@@ -88,7 +88,7 @@
             > p > code,
             li > code {
                 padding: 0.05em 0.28em;
-                border-radius: 4px;
+                border-radius: var(--pear-radius-small);
                 background: color-mix(
                     in srgb,
                     var(--color-background-pear-message-content) 76%,
@@ -107,7 +107,7 @@
                 padding: 0.04em 0.28em;
                 overflow: hidden;
                 border: 1px solid transparent;
-                border-radius: 4px;
+                border-radius: var(--pear-radius-small);
                 background: transparent;
                 color: var(--color-text-message-default);
                 cursor: pointer;
@@ -230,7 +230,7 @@
                         var(--color-message-content-container-border) 78%,
                         transparent
                     );
-                border-radius: 7px;
+                border-radius: var(--pear-radius);
                 background: color-mix(
                     in srgb,
                     var(--color-background-pear-message-content) 94%,
@@ -295,16 +295,24 @@
                         var(--color-message-content-container-border) 52%,
                         transparent
                     );
-                border-radius: 7px;
+                border-radius: var(--pear-radius);
                 background: color-mix(
                     in srgb,
                     var(--color-background-pear-message-content) 92%,
                     var(--color-text-message-default) 8%
                 );
-                color: var(--color-text-item);
+                /* Flat --color-text-item rendered as pure mid-grey; blend
+                   in body-text color so the chip label stays legible. */
+                color: color-mix(
+                    in srgb,
+                    var(--color-text-message-default) 55%,
+                    var(--color-text-item) 45%
+                );
                 /* 11.5px at the default 14px base font size. */
                 font-size: calc(11.5 / 14 * var(--base-font-size-px));
                 line-height: 1.2;
+                transition: background-color var(--pear-transition-duration)
+                    ease;
             }
 
             .pear-tool-header-glyph {
@@ -347,7 +355,7 @@
                         var(--color-message-content-container-border) 66%,
                         transparent
                     );
-                border-radius: 7px 7px 0 0;
+                border-radius: var(--pear-radius) var(--pear-radius) 0 0;
                 padding: 5px 10px;
                 background: color-mix(
                     in srgb,
@@ -364,7 +372,7 @@
                         var(--color-message-content-container-border) 54%,
                         transparent
                     );
-                border-radius: 7px;
+                border-radius: var(--pear-radius);
                 background: color-mix(
                     in srgb,
                     var(--color-background-pear-message-content) 94%,
@@ -484,7 +492,7 @@
                     flex: none;
                     align-items: center;
                     justify-content: center;
-                    border-radius: 4px;
+                    border-radius: var(--pear-radius-small);
                     color: var(--color-text-item);
                     /* 11px at the default 14px base font size. */
                     font-size: calc(11 / 14 * var(--base-font-size-px));

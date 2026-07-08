@@ -1382,8 +1382,27 @@ class PearSessionEndpointTest(ZulipTestCase):
         self.assertEqual(payload["workspace_id"], context.workspace_node_id)
         self.assertEqual(payload["workspace_uuid"], str(context.workspace_node.uuid))
         self.assertEqual(payload["branch"], context.workspace_node.branch_name)
+        # Fresh workspaces work on the topic-derived branch, so clients can
+        # collapse the redundant branch chip in the topic header.
+        self.assertEqual(payload["branch"], pear_topic_branch_name(PEAR_DEFAULT_TOPIC))
+        self.assertTrue(payload["branch_is_topic_default"])
         self.assertEqual(payload["base_ref"], "")
         self.assertEqual(payload["head"], "")
+
+        # A legacy or custom branch is surprising and must stay visible.
+        context.workspace_node.branch_name = "master"
+        context.workspace_node.save(update_fields=["branch_name"])
+        with (
+            tempfile.TemporaryDirectory() as temp_dir,
+            self.settings(PEAR_TOPIC_WORKDIR_ROOT=temp_dir),
+        ):
+            legacy_payload = serialize_pear_topic_context(
+                context,
+                stream_name=PEAR_DEFAULT_STREAM,
+                topic_name=PEAR_DEFAULT_TOPIC,
+            )
+        self.assertEqual(legacy_payload["branch"], "master")
+        self.assertFalse(legacy_payload["branch_is_topic_default"])
 
     def test_worker_run_store_links_runs_to_workspace_node(self) -> None:
         owner = self.example_user("hamlet")

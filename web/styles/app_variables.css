@@ -834,6 +834,17 @@
     /* Shared by every monospace surface in Pear message rows. */
     --pear-monospace-font-family: ui-monospace, "SFMono-Regular", consolas,
         monospace;
+    /* Pear design tokens: every Pear surface derives its corners, motion,
+       and accent from these so the feature reads as one designed system
+       rather than per-component improvisation. */
+    --pear-radius: 6px;
+    --pear-radius-small: 4px;
+    --pear-transition-duration: 120ms;
+    --pear-accent: light-dark(hsl(140deg 45% 32%), hsl(140deg 38% 62%));
+    --pear-accent-subtle: light-dark(
+        hsl(140deg 45% 32% / 12%),
+        hsl(140deg 38% 62% / 16%)
+    );
     --color-selected-message-outline: light-dark(
         hsl(217deg 64% 59% / 60%),
         hsl(217deg 64% 59% / 70%)

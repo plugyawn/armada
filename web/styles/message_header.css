@@ -416,20 +416,6 @@
     gap: 4px;
 }
 
-.pear-topic-header-status-dot {
-    display: none;
-    flex: 0 0 auto;
-    width: 5px;
-    height: 5px;
-    border-radius: 50%;
-    background: currentcolor;
-    color: var(--pear-accent);
-}
-
-.pear-topic-header-status-dot-active {
-    display: inline-block;
-}
-
 .pear-topic-header-runtime-control {
     flex: 0 1 auto;
     width: auto;
@@ -480,6 +466,14 @@
     background: var(--pear-accent-subtle);
 }
 
+.pear-topic-header-runtime-control .pear-runtime-menu-glyph {
+    /* Always occupies its slot — the resting "·" swaps to the animated ✦
+       while a run is live, so nothing in the header shifts. */
+    flex: 0 0 auto;
+    width: 1em;
+    text-align: center;
+}
+
 .pear-topic-header-runtime-separator {
     flex: 0 0 auto;
     opacity: 0.55;
@@ -522,6 +516,15 @@
         var(--color-message-header-icon-non-interactive) 34%
     );
     cursor: default;
+}
+
+.pear-topic-header-control .pear-topic-header-branch-label,
+.pear-topic-header-control .pear-topic-header-work-label {
+    /* Branch names and commit shas are code identifiers; setting them in
+       the shared mono stack matches how the transcript renders them. */
+    font-family: var(--pear-monospace-font-family);
+    font-size: calc(11 / 12 * 1em);
+    font-weight: 500;
 }
 
 .pear-topic-header-branch-control:hover,

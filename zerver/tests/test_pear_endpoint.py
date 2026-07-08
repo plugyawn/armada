@@ -2018,6 +2018,33 @@ class PearSessionEndpointTest(ZulipTestCase):
         self.assertEqual(delta["changed_count"], 1)
         self.assertFalse(delta["branch_matches_topic"])
 
+    def test_pear_git_status_delta_skips_commit_reads_on_unborn_head(self) -> None:
+        invalidate_pear_git_status_delta()
+        status_output = "\n".join(
+            [
+                "# branch.oid (initial)",
+                "# branch.head topic-a",
+                "? new.txt",
+            ]
+        )
+        completed = subprocess.CompletedProcess(
+            ["git"],
+            0,
+            stdout=status_output,
+            stderr="",
+        )
+        with patch("zerver.lib.pear_worker.subprocess.run", return_value=completed) as run_mock:
+            delta = pear_git_status_delta("/repo", topic="topic-a")
+
+        # A freshly initialized workspace has no HEAD yet; running the
+        # commit-info commands would make git fail (and warn) on every
+        # refresh, so only the status command may run.
+        self.assertEqual(run_mock.call_count, 1)
+        self.assertEqual(run_mock.call_args_list[0].args[0][3], "status")
+        self.assertNotIn("last_commit", delta)
+        self.assertNotIn("commit_count", delta)
+        self.assertEqual(delta["head_short"], "")
+
     def test_pear_git_output_logs_stderr_on_failure(self) -> None:
         completed = subprocess.CompletedProcess(
             ["git"],

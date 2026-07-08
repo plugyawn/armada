@@ -20,6 +20,7 @@ import {
 import {postprocess_content} from "./postprocess_content.ts";
 import * as rendered_markdown from "./rendered_markdown.ts";
 import * as stream_data from "./stream_data.ts";
+import * as typing_events from "./typing_events.ts";
 
 const pear_run_event_schema = z.object({
     id: z.number(),
@@ -1716,6 +1717,16 @@ function render(
         : undefined;
     last_topic_context = source_topic_context ?? topic_context;
     const active_run = active_display_run(runs);
+    if (has_topic && runs.length > 0 && active_run === undefined) {
+        // The run is over; make sure the "Pear is working…" typing line
+        // dies with it even if the worker's typing-stop event was lost.
+        // The worker records its run before it first signals typing, so
+        // runs data showing no active run is authoritative here.
+        const typing_stream_id = stream_data.get_stream_id(stream);
+        if (typing_stream_id !== undefined) {
+            typing_events.clear_pear_typists_for_topic(typing_stream_id, topic);
+        }
+    }
     const manual_workbench_open = work_panel_open_by_context.get(next_context_key) ?? false;
     const viewport_allows_workbench = current_viewport_allows_workbench();
     const workbench_open = workbench_open_for_testing({

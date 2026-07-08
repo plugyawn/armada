@@ -768,20 +768,25 @@ function wrap_bare_pear_thinking_glyphs($scope: JQuery<HTMLElement | Document>):
     synthesize_plain_pear_active_progress_glyphs($scope);
 }
 
-function update_pear_thinking_glyphs(): void {
-    // The frame cycle itself runs in CSS (pear-thinking-frames in
-    // pear.css, mirroring pear_thinking_glyphs): JS marks each active
-    // marker once, clearing its text so the animated ::before frames are
-    // not doubled next to a static glyph. No scripted tick remains —
-    // active-state expiry is owned solely by pear_run_state's TTL timer.
+function mark_pear_thinking_markers($scope: JQuery<HTMLElement | Document>): Set<Element> {
     const active_markers = new Set<Element>();
-    pear_thinking_markers().each((_index, marker) => {
+    pear_thinking_markers($scope).each((_index, marker) => {
         active_markers.add(marker);
         if (!marker.classList.contains("pear-thinking-glyph-animated")) {
             marker.textContent = "";
             marker.classList.add("pear-thinking-glyph-animated");
         }
     });
+    return active_markers;
+}
+
+function update_pear_thinking_glyphs(): void {
+    // The frame cycle itself runs in CSS (pear-thinking-frames in
+    // pear.css, mirroring pear_thinking_glyphs): JS marks each active
+    // marker once, clearing its text so the animated ::before frames are
+    // not doubled next to a static glyph. No scripted tick remains —
+    // active-state expiry is owned solely by pear_run_state's TTL timer.
+    const active_markers = mark_pear_thinking_markers($(document));
     // Markers that stopped matching (their row or container is no longer
     // active) return to the resting glyph instead of a frozen mid-cycle
     // frame.
@@ -798,7 +803,12 @@ function maybe_render_pear_thinking_glyph($row: JQuery): void {
     if (!$row.hasClass("pear-active-message")) {
         return;
     }
-    update_pear_thinking_glyphs();
+    // _rerender_message post-processes the freshly built row while it is
+    // still detached from the document, so a document-scoped pass would
+    // miss it and every streaming edit would land a static ✦. Wrap and
+    // mark within the row itself; the document-wide sweep still owns
+    // deactivation.
+    mark_pear_thinking_markers($row);
 }
 
 if (typeof document !== "undefined") {

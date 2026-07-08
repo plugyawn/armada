@@ -219,6 +219,23 @@ export function display_message_edit_notification(event: TypingMessageEditEvent)
     );
 }
 
+export function clear_pear_typists_for_topic(stream_id: number, topic: string): void {
+    // The Pear worker signals a typing stop when its run ends, but the
+    // "Pear is working…" line must not outlive the run if that event is
+    // lost — the client-side expiry is 45s of false status. The panel
+    // calls this whenever the topic has no active run.
+    const key = typing_data.get_topic_key(stream_id, topic);
+    let removed = false;
+    for (const user_id of typing_data.get_topic_typists(stream_id, topic)) {
+        if (is_pear_bot_user_id(user_id)) {
+            removed = typing_data.remove_typist(key, user_id) || removed;
+        }
+    }
+    if (removed) {
+        render_notifications_for_narrow();
+    }
+}
+
 export function disable_typing_notification(): void {
     typing_data.clear_typing_data();
     render_notifications_for_narrow();

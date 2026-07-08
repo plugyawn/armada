@@ -425,6 +425,19 @@ function popover_context(): {
 }
 
 function render_popover_content(instance: tippy.Instance): void {
+    // setContent replaces the focused choice's DOM node, dropping keyboard
+    // focus to the document root mid-interaction; remember which choice held
+    // focus so the rebuilt menu can pick it back up.
+    const focused = document.activeElement;
+    let refocus_selector: string | undefined;
+    if (focused instanceof HTMLElement && instance.popper.contains(focused)) {
+        const choice = focused.closest<HTMLElement>("[data-model], [data-effort]");
+        if (choice?.dataset["model"] !== undefined) {
+            refocus_selector = `.pear-runtime-model-menu-choice[data-model='${CSS.escape(choice.dataset["model"])}']`;
+        } else if (choice?.dataset["effort"] !== undefined) {
+            refocus_selector = `.pear-runtime-effort-menu-choice[data-effort='${CSS.escape(choice.dataset["effort"])}']`;
+        }
+    }
     const context = popover_context();
     instance.setContent(parse_html(render_pear_runtime_menu_popover(context)));
     // The meter width is set here rather than through a style attribute in
@@ -432,6 +445,11 @@ function render_popover_content(instance: tippy.Instance): void {
     const meter_fill = instance.popper.querySelector<HTMLElement>(".pear-runtime-meter-fill");
     if (meter_fill !== null) {
         meter_fill.style.width = `${context.runtime_usage_meter.percent}%`;
+    }
+    if (refocus_selector !== undefined) {
+        instance.popper
+            .querySelector<HTMLElement>(refocus_selector)
+            ?.focus({preventScroll: true});
     }
     $(document).trigger("pear_liveness_markers_changed");
 }
@@ -734,6 +752,12 @@ export function initialize(): void {
         },
         onMount(instance) {
             popover_menus.popover_instances.pear_runtime_menu = instance;
+            // Start keyboard focus on the selected choice so Tab and the
+            // arrow keys operate inside the menu instead of walking the
+            // header controls behind it.
+            instance.popper
+                .querySelector<HTMLElement>(".pear-runtime-menu-choice-selected")
+                ?.focus({preventScroll: true});
         },
         onShow(instance) {
             const {stream, topic} = current_narrow();
@@ -750,9 +774,24 @@ export function initialize(): void {
             $(instance.reference).addClass("active-right-sidebar-menu");
         },
         onHidden(instance) {
+            const reference = instance.reference;
             instance.destroy();
             popover_menus.popover_instances.pear_runtime_menu = null;
-            $(instance.reference).removeClass("active-right-sidebar-menu");
+            $(reference).removeClass("active-right-sidebar-menu");
+            // Escape (or selecting with the keyboard) tears down the popper
+            // that held focus; hand focus back to the trigger rather than
+            // letting it fall to the document root. A focus target the user
+            // chose deliberately (e.g. clicking another control) is kept.
+            const active = document.activeElement;
+            if (
+                (active === null ||
+                    active === document.body ||
+                    active === document.documentElement) &&
+                reference instanceof HTMLElement &&
+                document.contains(reference)
+            ) {
+                reference.focus({preventScroll: true});
+            }
         },
     };
     for (const selector of runtime_menu_selectors) {

@@ -1281,7 +1281,7 @@ def post_pear_topic_context_backend(
         ApiParamConfig("include_git", documentation_status=INTENTIONALLY_UNDOCUMENTED),
     ] = True,
 ) -> HttpResponse:
-    stream, _sub = access_stream_by_name(user_profile, stream_name)
+    access_stream_by_name(user_profile, stream_name)
     clean_model = clean_pear_model_slug(model) if model is not None else None
     clean_reasoning_effort = (
         clean_pear_reasoning_effort(reasoning_effort) if reasoning_effort is not None else None
@@ -1347,18 +1347,10 @@ def post_pear_topic_context_backend(
         context.refresh_from_db(fields=["response_policy", "date_updated"])
 
     changed = model_changed or reasoning_effort_changed or response_policy_changed
-    if model_changed and clean_model is not None:
-        pear_bot = get_selected_pear_bot(user_profile)
-        if pear_bot is None:
-            raise JsonableError(_("Pear bot is not configured."))
-        internal_send_stream_message(
-            pear_bot.user_profile,
-            stream,
-            topic_name,
-            f"{user_profile.full_name} changed current model to `{clean_model}`.",
-            mark_as_read_for_acting_user=True,
-            acting_user=user_profile,
-        )
+    # Runtime changes deliberately post no message: the topic header shows
+    # the current model/effort to every viewer, and effort changes were
+    # already silent — announcing only model flips just filled topics with
+    # settings chatter and unread counts.
 
     return json_success(
         request,

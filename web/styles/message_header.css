@@ -292,13 +292,16 @@
     white-space: normal;
 
     .message-header-contents {
+        /* Single row by default — the Pear cluster sits inline, right-
+           aligned before the date — wrapping to a second row only when
+           the topic name leaves no room. */
         height: auto;
-        min-height: 2.6em; /* 39px at 15px em */
+        min-height: 1.8666em; /* 28px at 15px em, the standard bar height */
         flex-wrap: wrap;
         align-items: center;
         align-content: center;
         gap: 4px;
-        padding-block: 3px 5px;
+        padding-block: 2px;
     }
 
     .stream_label,
@@ -317,15 +320,14 @@
 
 .pear-topic-header-status {
     position: relative;
-    order: 2;
     display: inline-flex;
     min-width: 0;
     width: auto;
     max-width: 100%;
-    flex: 1 0 100%;
+    flex: 0 1 auto;
     align-items: center;
     gap: 8px;
-    margin: 1px 42px 1px 26px;
+    margin-inline: auto 6px;
     line-height: 1;
 }
 
@@ -505,11 +507,20 @@
     max-width: 5em;
 }
 
+.pear-topic-header-git-icon {
+    flex: 0 0 auto;
+    font-size: 0.95em;
+    opacity: 0.7;
+}
+
 .pear-topic-header-branch-control {
     flex: 0 1 auto;
     width: auto;
     justify-content: flex-start;
-    padding-inline: 0;
+    gap: 0.3em;
+    padding: 0.2em 0.5em;
+    border-radius: var(--pear-radius-small);
+    background: color-mix(in srgb, var(--color-text-message-header) 6%, transparent);
     color: color-mix(
         in srgb,
         var(--color-text-message-header) 66%,
@@ -544,16 +555,6 @@
     display: none;
 }
 
-.pear-topic-header-meta-separator {
-    flex: 0 0 auto;
-    color: color-mix(
-        in srgb,
-        var(--color-text-message-header) 42%,
-        var(--color-message-header-icon-non-interactive) 58%
-    );
-    line-height: 1;
-}
-
 .pear-topic-header-work-clean {
     color: var(--color-message-header-icon-non-interactive);
 }
@@ -570,7 +571,10 @@
     flex: 0 1 auto;
     width: auto;
     justify-content: flex-start;
-    padding-inline: 0.2em 0.3em;
+    gap: 0.3em;
+    padding: 0.2em 0.5em;
+    border-radius: var(--pear-radius-small);
+    background: color-mix(in srgb, var(--color-text-message-header) 6%, transparent);
     color: color-mix(
         in srgb,
         var(--color-text-message-header) 70%,
@@ -580,18 +584,6 @@
 
 .pear-topic-header-git-control .pear-topic-header-work-label {
     font-weight: inherit;
-}
-
-@media (width <= 900px) {
-    .pear-topic-header-status {
-        margin-inline: 24px 36px;
-    }
-}
-
-@media (width <= 680px) {
-    .pear-topic-header-status {
-        margin-inline: 22px 32px;
-    }
 }
 
 .on_hover_topic_read {

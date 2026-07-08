@@ -274,13 +274,13 @@
                         {{#if topic_context.workbench_side_selected}}
                             <div class="pear-workbench-empty">
                                 <span class="pear-ui-glyph pear-workbench-empty-glyph" aria-hidden="true">·</span>
-                                <span>{{t "Write a private side request below." }}</span>
+                                <span>{{t "Whispers go only to Pear — nothing is posted in the topic." }}</span>
                             </div>
                         {{/if}}
                     </div>
                     <div class="pear-side-body pear-workbench-side-footer">
-                        <textarea id="pear-side-request" class="pear-side-request" rows="1" placeholder="{{t 'Private side request' }}"></textarea>
-                        <button type="button" id="pear-side-start" class="pear-side-start tippy-zulip-delayed-tooltip" aria-label="{{t 'Start private side request' }}" data-tippy-content="{{t 'Start private side request' }}" {{#unless has_topic}}disabled{{/unless}}>
+                        <textarea id="pear-side-request" class="pear-side-request" rows="1" placeholder="{{t 'Whisper to Pear' }}"></textarea>
+                        <button type="button" id="pear-side-start" class="pear-side-start tippy-zulip-delayed-tooltip" aria-label="{{t 'Send whisper' }}" data-tippy-content="{{t 'Send whisper' }}" {{#unless has_topic}}disabled{{/unless}}>
                             <span class="pear-ui-glyph" aria-hidden="true">›</span>
                         </button>
                     </div>

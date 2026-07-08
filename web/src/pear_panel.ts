@@ -1116,17 +1116,11 @@ function render_topic_header_controls(options: {
             .find(".pear-topic-header-branch-label")
             .text(topic_context.panel_header_branch_label);
 
-        // With no repo yet there is nothing behind the git control; an
-        // empty-but-clickable pill next to a dangling "·" separator reads
-        // as a rendering bug, so hide both until there is a label.
+        // With no repo yet there is nothing behind these chips; an
+        // empty-but-clickable chip reads as a rendering bug, so hide
+        // each until it has a label.
         const branch_label_present = topic_context.panel_header_branch_label !== "";
         $branch_control.toggleClass("pear-topic-header-control-hidden", !branch_label_present);
-        $status_cluster
-            .find(".pear-topic-header-meta-separator")
-            .toggleClass(
-                "pear-topic-header-control-hidden",
-                work_label === "" || !branch_label_present,
-            );
 
         const $work_control = $status_cluster.find(".pear-topic-header-git-control");
         $work_control.toggleClass("pear-topic-header-control-hidden", work_label === "");

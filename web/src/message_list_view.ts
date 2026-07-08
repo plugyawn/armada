@@ -2848,6 +2848,12 @@ export class MessageListView {
             }
             this._rerender_header(group);
         }
+        if (this.list === message_lists.current && rerendered_group_ids.size > 0) {
+            // Rebuilding a recipient bar discards the injected Pear status
+            // cluster; re-inject it in the same pass so the header does
+            // not flicker for every streaming transcript edit.
+            pear_panel.refresh_topic_header_controls();
+        }
 
         if (message_lists.current === this.list && narrow_state.is_message_feed_visible()) {
             this.update_sticky_recipient_headers();

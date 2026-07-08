@@ -1361,22 +1361,27 @@ class PearSessionEndpointTest(ZulipTestCase):
         owner = self.example_user("hamlet")
         self.subscribe(owner, PEAR_DEFAULT_STREAM)
 
-        with (
-            tempfile.TemporaryDirectory() as temp_dir,
-            self.settings(
-                PEAR_TOPIC_WORKDIR_ROOT=temp_dir,
-            ),
-        ):
-            context = ensure_pear_topic_context(
-                owner,
-                stream=PEAR_DEFAULT_STREAM,
-                topic=PEAR_DEFAULT_TOPIC,
-            )
-            payload = serialize_pear_topic_context(
-                context,
-                stream_name=PEAR_DEFAULT_STREAM,
-                topic_name=PEAR_DEFAULT_TOPIC,
-            )
+        with tempfile.TemporaryDirectory() as temp_dir:
+            # A dedicated base repository keeps worktree/branch creation
+            # hermetic: against a shared checkout, the topic branch can
+            # already be held by a stale worktree and fall into the
+            # digest-suffix retry, making branch assertions flaky.
+            base_workdir = Path(temp_dir) / "base"
+            self.create_git_repository(base_workdir)
+            with self.settings(
+                PEAR_WORKER_WORKDIR=str(base_workdir),
+                PEAR_TOPIC_WORKDIR_ROOT=str(Path(temp_dir) / "topics"),
+            ):
+                context = ensure_pear_topic_context(
+                    owner,
+                    stream=PEAR_DEFAULT_STREAM,
+                    topic=PEAR_DEFAULT_TOPIC,
+                )
+                payload = serialize_pear_topic_context(
+                    context,
+                    stream_name=PEAR_DEFAULT_STREAM,
+                    topic_name=PEAR_DEFAULT_TOPIC,
+                )
 
         assert context.workspace_node is not None
         self.assertEqual(payload["workspace_id"], context.workspace_node_id)

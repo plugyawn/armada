@@ -606,7 +606,7 @@ test("pear_message_vars", () => {
     );
     assert.equal(result.is_pear_message, true);
     assert.equal(result.is_pear_active_message, true);
-    assert.equal(result.include_sender, false);
+    assert.equal(result.include_sender, true);
 
     result = calculate_variables(
         build_message_context({
@@ -617,7 +617,7 @@ test("pear_message_vars", () => {
     );
     assert.equal(result.is_pear_message, true);
     assert.equal(result.is_pear_active_message, true);
-    assert.equal(result.include_sender, false);
+    assert.equal(result.include_sender, true);
 
     result = calculate_variables(
         build_message_context({
@@ -628,7 +628,7 @@ test("pear_message_vars", () => {
     );
     assert.equal(result.is_pear_message, true);
     assert.equal(result.is_pear_active_message, true);
-    assert.equal(result.include_sender, false);
+    assert.equal(result.include_sender, true);
 
     pear_run_state.set_active_run_result_messages([{status: "running", result_message_id: 1005}]);
     result = calculate_variables(
@@ -640,7 +640,7 @@ test("pear_message_vars", () => {
     );
     assert.equal(result.is_pear_message, true);
     assert.equal(result.is_pear_active_message, true);
-    assert.equal(result.include_sender, false);
+    assert.equal(result.include_sender, true);
 
     pear_run_state.set_active_run_result_messages([]);
     result = calculate_variables(
@@ -652,7 +652,7 @@ test("pear_message_vars", () => {
     );
     assert.equal(result.is_pear_message, true);
     assert.equal(result.is_pear_active_message, true);
-    assert.equal(result.include_sender, false);
+    assert.equal(result.include_sender, true);
 
     result = calculate_variables(
         build_message_context({
@@ -662,7 +662,7 @@ test("pear_message_vars", () => {
     );
     assert.equal(result.is_pear_message, true);
     assert.equal(result.is_pear_active_message, false);
-    assert.equal(result.include_sender, false);
+    assert.equal(result.include_sender, true);
 
     result = calculate_variables(
         build_message_context({
@@ -689,7 +689,7 @@ test("pear_message_vars", () => {
     );
     assert.equal(result.is_pear_message, true);
     assert.equal(result.is_pear_active_message, true);
-    assert.equal(result.include_sender, false);
+    assert.equal(result.include_sender, true);
     assert.equal(result.edited, false);
     assert.equal(result.last_edit_timestamp, undefined);
 

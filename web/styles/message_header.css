@@ -411,30 +411,26 @@
     min-width: 0;
     justify-content: flex-start;
     gap: var(--pear-space-1);
-    /* The machine speaks in pixels: Geist Pixel at a pinned px size (the
-       face goes mushy at arbitrary scales), terminal-window corners. */
+    /* No box: the runtime phrase sits in the bar at the header's own
+       text size, in the pixel voice; the chevron plus a whisper of
+       shading are the whole affordance. */
     padding: var(--pear-space-1) var(--pear-space-2);
-    border: 1px solid var(--pear-hairline);
-    border-radius: var(--pear-radius-px);
-    background: var(--pear-surface-2);
+    border-radius: var(--pear-radius-chip);
+    background: color-mix(in srgb, currentcolor 6%, transparent);
     color: var(--pear-ink-2);
     font-family: var(--pear-font-pixel);
-    /* Pinned px by design; see the pixel-type rule in the design spec. */
-    /* stylelint-disable-next-line declaration-property-unit-disallowed-list */
-    font-size: 12px;
+    font-size: 1em;
     font-weight: 400;
 
     &:hover,
     &:focus-visible,
     &.active-right-sidebar-menu {
-        background: var(--pear-surface-3);
-        border-color: color-mix(in srgb, var(--pear-ink-3) 50%, transparent);
+        background: color-mix(in srgb, currentcolor 12%, transparent);
         color: var(--pear-ink-1);
     }
 }
 
 .pear-topic-header-running .pear-topic-header-runtime-control {
-    border-color: color-mix(in srgb, var(--pear-accent) 55%, transparent);
     background: var(--pear-accent-subtle);
 }
 

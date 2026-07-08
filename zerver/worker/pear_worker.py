@@ -99,7 +99,10 @@ class PearWorker(QueueProcessingWorker):
     @override
     def setup(self) -> None:
         super().setup()
-        reap_stale_pear_worker_runs()
+        # The pear queue is single-consumer: at boot, any RUNNING run was
+        # orphaned by a restart mid-turn. Reap unconditionally so zombies
+        # never block the deploy health gate for the staleness window.
+        reap_stale_pear_worker_runs(assume_orphaned=True)
 
     @override
     def stop(self) -> None:  # nocoverage

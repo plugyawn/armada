@@ -63,11 +63,14 @@ export function get_stream_privacy_icon_color(
 }
 
 export function get_recipient_bar_color(color: string): string {
-    // Mixes 50% of color to 40% of white (light theme) / black (dark theme).
+    // Recipient bars sit nearly flat on the moss surface (Pear design
+    // §3: no tinted banners): the user-chosen stream color survives
+    // only as a whisper, laundered into the theme's panel tone so no
+    // pick can break the composition.
     const using_dark_theme = settings_data.using_dark_theme();
     color = get_corrected_color(color).toHex();
-    return colord(using_dark_theme ? "#000000" : "#f9f9f9")
-        .mix(color, using_dark_theme ? 0.38 : 0.22)
+    return colord(using_dark_theme ? "#131615" : "#f1f4ee")
+        .mix(color, using_dark_theme ? 0.12 : 0.08)
         .toHex();
 }
 

@@ -8,6 +8,10 @@ from typing import Any, Final, Literal, Protocol, TypedDict
 from django.core.cache import cache
 
 from zerver.lib.exceptions import JsonableError
+from zerver.lib.pear_constants import (
+    PEAR_ARTIFACT_PATTERN,
+    PEAR_SERVER_CONTRACT_VERSION,
+)
 
 PEAR_AGENT_NAME: Final = "Pear"
 PEAR_BOT_SHORT_NAME: Final = "pear"
@@ -80,7 +84,6 @@ PEAR_TOPIC_STATE_TOOL_NAMES: Final = (
 )
 
 PEAR_REASONING_EFFORTS: Final[tuple[str, ...]] = ("low", "medium", "high", "xhigh")
-PEAR_SERVER_CONTRACT_VERSION: Final = 39
 PEAR_URL_RE: Final = r"https?://[^\s<>]+"
 PEAR_STEER_PROMPT: Final = "Steering update:"
 PEAR_FIX_BUG_PROMPT: Final = "Fix bug:"
@@ -122,13 +125,8 @@ PEAR_MARKDOWN_IMAGE_PATTERN: Final = (
     r"!\[([^\]\n]*)\]\((\S+?)(?:\s+\"[^\"]*\")?\)"
 )
 PEAR_CHECKLIST_PATTERN: Final = r"^\s*[-*]\s+\[([ xX~])\]\s+(.+?)\s*$"
-PEAR_ARTIFACT_PATTERN: Final = (
-    r"^\s*(?:[-*]\s*)?"
-    r"(Repo|Repository|Runtime|Branch|Commit|SHA|PR|Pull request|Diff|Test|Tests|Verification|"
-    r"Screenshot|Session|Session record|Pear session|Codex session|"
-    r"Canvas|Doc|Docs|Issue|Ticket|Reviewer|Reviewers):"
-    r"[ \t]*([^\r\n]*?)[ \t]*$"
-)
+# PEAR_ARTIFACT_PATTERN is imported from zerver.lib.pear_constants (vendored
+# from pear/registry.py) so the artifact vocabulary cannot drift per fork.
 PEAR_RETIRED_VISIBLE_ARTIFACT_PATTERN: Final = (
     r"^\s*(?:[-*]\s*)?"
     r"(Routine disabled|Disabled routine|Routine off|Routine|Routines|"

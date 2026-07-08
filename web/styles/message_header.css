@@ -347,6 +347,9 @@
     gap: var(--pear-space-2);
     margin: 1px 42px 3px 26px;
     line-height: 1;
+    /* Lay out after the bar's controls and date so they keep riding
+       row one; the commit sentence takes the wrapped second row. */
+    order: 10;
 }
 
 .pear-topic-header-control {

@@ -516,6 +516,13 @@
     );
 }
 
+.pear-topic-header-control-hidden {
+    /* Applied by pear_panel's header updater when a control has no
+       label yet (fresh topic, no repo); an empty pill and a dangling
+       separator otherwise render as chrome debris. */
+    display: none;
+}
+
 .pear-topic-header-meta-separator {
     flex: 0 0 auto;
     color: color-mix(

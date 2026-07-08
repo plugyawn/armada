@@ -813,8 +813,11 @@ function display_topic_context(topic_context: PearTopicContext | undefined | nul
         topic_context.topic ||
         git.worktree_name?.trim() ||
         "";
+    // Drop meta parts that just repeat the title: with topic-named
+    // branches the branch and the worktree label are usually the same
+    // string, and printing it twice (both truncated) reads as a glitch.
     const workbench_meta = [workbench_repo_label, git.branch?.trim() ?? ""]
-        .filter((part) => part !== "")
+        .filter((part) => part !== "" && part !== workbench_title)
         .join(" / ");
     const topic_branch_label =
         (git.detached === true ? $t({defaultMessage: "detached"}) : git.branch?.trim()) ||
@@ -872,14 +875,14 @@ function display_topic_context(topic_context: PearTopicContext | undefined | nul
         workbench_history_disabled: false,
         diff_tab_label:
             changed_count > 0
-                ? $t({defaultMessage: "diff {changed_count}"}, {changed_count})
-                : $t({defaultMessage: "diff"}),
+                ? $t({defaultMessage: "Diff {changed_count}"}, {changed_count})
+                : $t({defaultMessage: "Diff"}),
         history_tab_label:
             recent_commit_count > 0
-                ? $t({defaultMessage: "history {recent_commit_count}"}, {recent_commit_count})
-                : $t({defaultMessage: "history"}),
-        canvas_tab_label: $t({defaultMessage: "canvas"}),
-        side_tab_label: $t({defaultMessage: "whisper"}),
+                ? $t({defaultMessage: "History {recent_commit_count}"}, {recent_commit_count})
+                : $t({defaultMessage: "History"}),
+        canvas_tab_label: $t({defaultMessage: "Canvas"}),
+        side_tab_label: $t({defaultMessage: "Whisper"}),
         git_tree,
         git_tree_loading: git_tree_loading_contexts.has(topic_key),
         git_tree_error: git_tree_error_by_context.get(topic_key) ?? "",
@@ -1112,7 +1115,20 @@ function render_topic_header_controls(options: {
             .find(".pear-topic-header-branch-label")
             .text(topic_context.panel_header_branch_label);
 
+        // With no repo yet there is nothing behind the git control; an
+        // empty-but-clickable pill next to a dangling "·" separator reads
+        // as a rendering bug, so hide both until there is a label.
+        const branch_label_present = topic_context.panel_header_branch_label !== "";
+        $branch_control.toggleClass("pear-topic-header-control-hidden", !branch_label_present);
+        $status_cluster
+            .find(".pear-topic-header-meta-separator")
+            .toggleClass(
+                "pear-topic-header-control-hidden",
+                work_label === "" || !branch_label_present,
+            );
+
         const $work_control = $status_cluster.find(".pear-topic-header-git-control");
+        $work_control.toggleClass("pear-topic-header-control-hidden", work_label === "");
         $work_control
             .removeClass(
                 "pear-topic-header-work-clean pear-topic-header-work-dirty pear-topic-header-work-unknown",

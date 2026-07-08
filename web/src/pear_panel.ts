@@ -213,6 +213,9 @@ let last_render_state_key = "";
 let last_context_refresh_key = "";
 let last_context_refresh_at = 0;
 const work_panel_open_by_context = new Map<string, boolean>();
+// Contexts whose last runs payload included an active run; used to detect
+// the active→idle transition that retires the Pear typing line.
+const contexts_with_active_run = new Set<string>();
 const workbench_view_by_context = new Map<string, PearWorkbenchView>();
 const side_request_by_context = new Map<string, string>();
 const git_tree_by_context = new Map<string, PearGitTree>();
@@ -1717,15 +1720,26 @@ function render(
         : undefined;
     last_topic_context = source_topic_context ?? topic_context;
     const active_run = active_display_run(runs);
-    if (has_topic && runs.length > 0 && active_run === undefined) {
-        // The run is over; make sure the "Pear is working…" typing line
-        // dies with it even if the worker's typing-stop event was lost.
-        // The worker records its run before it first signals typing, so
-        // runs data showing no active run is authoritative here.
+    if (
+        has_topic &&
+        active_run === undefined &&
+        contexts_with_active_run.has(next_context_key)
+    ) {
+        // The run just ended; make sure the "Pear is working…" typing
+        // line dies with it even if the worker's typing-stop event was
+        // lost — the client-side expiry would otherwise show 45s of
+        // false status. Clearing only on the active→idle transition
+        // avoids fighting legitimate typing signals from turns whose
+        // run rows are not (yet) visible in the runs payload.
         const typing_stream_id = stream_data.get_stream_id(stream);
         if (typing_stream_id !== undefined) {
             typing_events.clear_pear_typists_for_topic(typing_stream_id, topic);
         }
+    }
+    if (active_run === undefined) {
+        contexts_with_active_run.delete(next_context_key);
+    } else {
+        contexts_with_active_run.add(next_context_key);
     }
     const manual_workbench_open = work_panel_open_by_context.get(next_context_key) ?? false;
     const viewport_allows_workbench = current_viewport_allows_workbench();

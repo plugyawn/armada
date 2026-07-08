@@ -3128,7 +3128,7 @@ class PearSessionEndpointTest(ZulipTestCase):
             [{"effort": "high", "label": "High", "description": ""}],
         )
 
-    def test_post_pear_topic_context_changes_model_and_posts_note(self) -> None:
+    def test_post_pear_topic_context_changes_model_without_posting(self) -> None:
         owner = self.example_user("hamlet")
         pear_bot = self.create_test_bot(
             "pear",
@@ -3140,6 +3140,7 @@ class PearSessionEndpointTest(ZulipTestCase):
         self.subscribe(owner, PEAR_DEFAULT_STREAM)
         self.subscribe(pear_bot, PEAR_DEFAULT_STREAM)
         self.login_user(owner)
+        last_message_id_before_change = Message.objects.latest("id").id
 
         with (
             tempfile.TemporaryDirectory() as temp_dir,
@@ -3186,12 +3187,9 @@ class PearSessionEndpointTest(ZulipTestCase):
             self.assertEqual(reasoning_effort, "high")
             self.assertTrue(workdir.startswith(temp_dir))
 
-        note = Message.objects.latest("id")
-        self.assertEqual(note.sender_id, pear_bot.id)
-        self.assertEqual(
-            note.content,
-            "King Hamlet changed current model to `gpt-5.5-mini`.",
-        )
+        # Changing the runtime is a settings action, not a conversation:
+        # no message may land in the topic.
+        self.assertEqual(Message.objects.latest("id").id, last_message_id_before_change)
 
     def test_post_pear_topic_context_changes_response_policy_without_model(self) -> None:
         owner = self.example_user("hamlet")

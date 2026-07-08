@@ -428,16 +428,24 @@ def pear_workspace_node_default_branch(
     *,
     project: PearProject | None = None,
     parent_node: PearWorkspaceNode | None = None,
+    topic: str = "",
 ) -> str:
+    # pear_topic_branch_name never returns an empty string (it falls back
+    # to the literal "topic"), so blank candidates must be skipped here or
+    # an unset project base ref would name every workspace branch "topic".
+    # The topic outranks the parent branch: worktrees sharing one base
+    # repository need per-topic branch names, or every sibling topic
+    # collides and falls into the digest-suffix retry.
     candidates = (
         project.default_base_ref if project is not None else "",
+        topic,
         parent_node.branch_name if parent_node is not None else "",
         "main",
     )
     for candidate in candidates:
-        branch = pear_topic_branch_name(candidate)
-        if branch:
-            return branch
+        if not candidate.strip():
+            continue
+        return pear_topic_branch_name(candidate)
     return "main"
 
 
@@ -471,6 +479,7 @@ def pear_workspace_node_for_context(
             branch_name=pear_workspace_node_default_branch(
                 project=project,
                 parent_node=parent_node,
+                topic=topic,
             ),
             model=context.model,
             reasoning_effort=context.reasoning_effort,
@@ -506,6 +515,7 @@ def pear_workspace_node_for_context(
         workspace_node.branch_name = pear_workspace_node_default_branch(
             project=project,
             parent_node=parent_node,
+            topic=topic,
         )
         update_fields.append("branch_name")
     if context.model and workspace_node.model != context.model:
@@ -1255,7 +1265,66 @@ def ensure_pear_child_topic_context(
     )
 
 
+def pear_ensure_workdir_git_identity(path: Path) -> None:
+    # Fresh scratch repos and isolated clones have no author identity, so
+    # the agent's very first commit fails and every session burns a
+    # failed-tool round on `git config`.  Provision a local identity up
+    # front, but never override one the repository already has.
+    try:
+        existing = subprocess.run(
+            ["git", "-C", str(path), "config", "user.email"],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if existing.returncode == 0 and existing.stdout.strip():
+            return
+        subprocess.run(
+            ["git", "-C", str(path), "config", "user.name", "Pear"],
+            check=False,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=10,
+        )
+        subprocess.run(
+            [
+                "git",
+                "-C",
+                str(path),
+                "config",
+                "user.email",
+                f"pear-worker@{settings.EXTERNAL_HOST.split(':')[0]}",
+            ],
+            check=False,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=10,
+        )
+    except (FileNotFoundError, OSError, subprocess.TimeoutExpired):
+        pass
+
+
 def ensure_pear_topic_workdir(
+    workdir: str,
+    *,
+    base_workdir: str | Path | None = None,
+    repository_url: str | None = None,
+    branch_name: str | None = None,
+) -> str:
+    branch = pear_provision_topic_workdir(
+        workdir,
+        base_workdir=base_workdir,
+        repository_url=repository_url,
+        branch_name=branch_name,
+    )
+    path = Path(workdir)
+    if pear_path_is_git_worktree(path):
+        pear_ensure_workdir_git_identity(path)
+    return branch
+
+
+def pear_provision_topic_workdir(
     workdir: str,
     *,
     base_workdir: str | Path | None = None,

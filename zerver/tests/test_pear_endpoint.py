@@ -67,6 +67,7 @@ from zerver.lib.pear_worker import (
     pear_worker_runtime_isolation_error,
     pear_worker_sandbox_for_topic,
     pear_worker_workdir_for_topic,
+    pear_workspace_node_default_branch,
 )
 from zerver.lib.test_classes import ZulipTestCase
 from zerver.models import Message, Recipient, Subscription, UserProfile
@@ -1296,6 +1297,19 @@ class PearSessionEndpointTest(ZulipTestCase):
         self.assertEqual(pear_topic_branch_name("Feature/Some Work!"), "Feature-Some-Work")
         self.assertEqual(pear_topic_branch_name(""), "topic")
 
+    def test_workspace_default_branch_skips_blank_candidates(self) -> None:
+        # An unset project base ref must not surface pear_topic_branch_name's
+        # literal "topic" fallback as the branch for every workspace.
+        self.assertEqual(pear_workspace_node_default_branch(), "main")
+        self.assertEqual(
+            pear_workspace_node_default_branch(topic="fable-ui-tour"),
+            "fable-ui-tour",
+        )
+        self.assertEqual(
+            pear_workspace_node_default_branch(topic="Feature/Some Work!"),
+            "Feature-Some-Work",
+        )
+
     def test_topic_workdir_uses_workspace_default_branch_when_created(self) -> None:
         owner = self.example_user("hamlet")
         topic = "pear-efficient-smoke"
@@ -1323,8 +1337,9 @@ class PearSessionEndpointTest(ZulipTestCase):
                 timeout=10,
             )
             actual_branch = completed.stdout.strip()
-            self.assertTrue(actual_branch)
-            self.assertNotEqual(actual_branch, topic)
+            # A fresh topic workspace works on a branch named for its
+            # topic, so sibling topics never fight over the base branch.
+            self.assertEqual(actual_branch, topic)
             assert context.workspace_node is not None
             context.workspace_node.refresh_from_db()
             self.assertEqual(context.workspace_node.stream_name, PEAR_DEFAULT_STREAM)
@@ -1718,6 +1733,61 @@ class PearSessionEndpointTest(ZulipTestCase):
             ensure_pear_topic_workdir(str(workdir))
 
             self.assertTrue((workdir / ".git").is_dir())
+
+    def test_topic_workdir_provisions_git_author_identity(self) -> None:
+        with (
+            tempfile.TemporaryDirectory() as temp_dir,
+            self.settings(
+                PEAR_TOPIC_WORKDIR_ROOT=temp_dir,
+                PEAR_TOPIC_ISOLATION_BACKEND="os-user",
+            ),
+        ):
+            workdir = Path(temp_dir) / "fable-ui-tour"
+            ensure_pear_topic_workdir(str(workdir))
+
+            email = subprocess.run(
+                ["git", "-C", str(workdir), "config", "user.email"],
+                check=True,
+                capture_output=True,
+                text=True,
+                timeout=10,
+            ).stdout.strip()
+            name = subprocess.run(
+                ["git", "-C", str(workdir), "config", "user.name"],
+                check=True,
+                capture_output=True,
+                text=True,
+                timeout=10,
+            ).stdout.strip()
+            self.assertEqual(name, "Pear")
+            self.assertTrue(email.startswith("pear-worker@"))
+
+    def test_topic_workdir_keeps_existing_git_author_identity(self) -> None:
+        with (
+            tempfile.TemporaryDirectory() as temp_dir,
+            self.settings(
+                PEAR_TOPIC_WORKDIR_ROOT=temp_dir,
+                PEAR_TOPIC_ISOLATION_BACKEND="os-user",
+            ),
+        ):
+            workdir = Path(temp_dir) / "fable-ui-tour"
+            ensure_pear_topic_workdir(str(workdir))
+            subprocess.run(
+                ["git", "-C", str(workdir), "config", "user.email", "human@example.com"],
+                check=True,
+                timeout=10,
+            )
+
+            ensure_pear_topic_workdir(str(workdir))
+
+            email = subprocess.run(
+                ["git", "-C", str(workdir), "config", "user.email"],
+                check=True,
+                capture_output=True,
+                text=True,
+                timeout=10,
+            ).stdout.strip()
+            self.assertEqual(email, "human@example.com")
 
     def test_git_context_reports_status_delta_for_worktree(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

@@ -1,0 +1,38 @@
+/* Pear host retheme — "Terminal Romantic" (pear/PEAR_DESIGN_LANGUAGE.md
+   §4.3). This layer redefines the small set of Zulip variables the app's
+   shared surfaces sit on, entirely from Pear semantic tokens (which are
+   light-dark() aware, so one block serves both themes). Structural and
+   IA changes to each surface land in their own batch; this file owns
+   only the color world and the body voice. */
+
+:root,
+:root.dark-theme {
+    /* Page & panels onto the moss ramp. */
+    --color-background: var(--pear-surface-0);
+    --color-background-navbar: var(--pear-surface-1);
+    --color-background-stream-message-content: var(--pear-surface-0);
+    --color-background-hover-narrow-filter: var(--pear-surface-3);
+    --color-background-active-narrow-filter: var(--pear-surface-2);
+
+    /* Ink. */
+    --color-text-default: var(--pear-ink-1);
+
+    /* Popovers: raised tone, hairline, the one soft shadow. */
+    --color-background-popover-menu: var(--pear-surface-2);
+    --color-border-popover-menu: var(--pear-hairline);
+    --box-shadow-popover-menu: var(--pear-shadow-pop);
+}
+
+/* The room is set in Hanken. Form controls inherit so inputs match. */
+body,
+input,
+button,
+select,
+textarea {
+    font-family: var(--pear-font-ui);
+}
+
+/* Digits line up wherever they count. */
+body {
+    font-variant-numeric: tabular-nums;
+}

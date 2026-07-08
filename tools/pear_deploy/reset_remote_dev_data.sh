@@ -98,7 +98,9 @@ State:  $STATE_PATH
 Roster: $ROSTER_STATUS
 
 This command will delete hosted dev conversation history, Pear worker runs,
-topic contexts, sessions, drafts, scheduled messages, and extra generated users.
+topic contexts, sessions, drafts, scheduled messages, extra generated users,
+all topic worktrees and project caches under /srv/pear-workspaces, and the
+per-topic isolation OS users.
 Re-run with --yes to reset the remote dev data.
 EOF
     exit 0
@@ -141,6 +143,16 @@ fi
 
 echo "Stopping Pear/Zulip services..."
 ssh_root 'systemctl stop pear-zulip-dev pear-embedded-bots pear-worker || true'
+
+# Topic worktrees must not survive the database reset: workdir slugs are
+# deterministic per (realm, stream, topic), so a recreated same-name topic
+# would silently reuse a stale worktree — and keep its old branch, because
+# provisioning short-circuits on an existing worktree. Project clone caches
+# live under the same root. The per-topic isolation OS users are recreated
+# on demand by the isolation helper, so they go too.
+echo "Removing Pear topic worktrees, project caches, and isolation users..."
+ssh_root 'rm -rf /srv/pear-workspaces/* || true'
+ssh_root "getent passwd | awk -F: '/^pear-[0-9a-f]{24}:/ {print \$1}' | xargs -r -n1 userdel || true"
 
 echo "Resetting the Zulip dev database and creating quiet demo data..."
 {

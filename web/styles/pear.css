@@ -22,7 +22,7 @@
     max-height: var(--pear-workbench-popover-max-height);
     overflow: hidden;
     border: 1px solid var(--color-border-popover-menu);
-    border-radius: 4px;
+    border-radius: var(--pear-radius);
     background: var(--color-background-popover-menu);
     box-shadow: var(--box-shadow-popover-menu);
     color: var(--color-text-default);
@@ -139,7 +139,7 @@
     align-items: center;
     gap: 2px;
     grid-template-columns: minmax(0, 1fr) auto;
-    border-radius: 4px;
+    border-radius: var(--pear-radius-small);
 }
 
 .pear-topic-control-title {
@@ -172,7 +172,7 @@
     width: 100%;
     min-width: 0;
     border: 0;
-    border-radius: 4px;
+    border-radius: var(--pear-radius-small);
     background: transparent;
     color: var(--color-text-sidebar-row);
     cursor: pointer;
@@ -657,7 +657,7 @@
             var(--color-border-sidebar-subheader) 62%,
             transparent
         );
-    border-radius: 4px;
+    border-radius: var(--pear-radius-small);
     background: transparent;
 }
 
@@ -732,7 +732,7 @@
     min-width: 0;
     overflow: hidden;
     border: 1px solid var(--color-border-sidebar-subheader);
-    border-radius: 4px;
+    border-radius: var(--pear-radius-small);
     color: var(--color-text-item);
     font-family: inherit;
     /* 10px at the default 14px base font size. */
@@ -769,7 +769,7 @@
 .pear-file-status,
 .pear-commit-hash,
 .pear-commit-ref {
-    font-family: monospace;
+    font-family: var(--pear-monospace-font-family);
     /* 10px at the default 14px base font size. */
     font-size: calc(10 / 14 * var(--base-font-size-px));
 }
@@ -798,14 +798,14 @@
 .pear-file-path {
     order: 2;
     color: var(--color-text-default);
-    font-family: monospace;
+    font-family: var(--pear-monospace-font-family);
     /* 11px at the default 14px base font size. */
     font-size: calc(11 / 14 * var(--base-font-size-px));
 }
 
 .pear-commit-hash {
     border: 1px solid var(--color-border-sidebar-subheader);
-    border-radius: 5px;
+    border-radius: var(--pear-radius);
     color: var(--color-text-sidebar-heading);
     cursor: default;
     line-height: 13px;
@@ -814,7 +814,7 @@
 }
 
 .pear-commit-ref {
-    border-radius: 5px;
+    border-radius: var(--pear-radius);
     background: color-mix(
         in srgb,
         var(--color-text-success-text-action-button) 12%,
@@ -859,9 +859,9 @@
             var(--color-border-sidebar-subheader) 54%,
             transparent
         );
-    border-radius: 4px;
+    border-radius: var(--pear-radius-small);
     color: var(--color-text-item);
-    font-family: monospace;
+    font-family: var(--pear-monospace-font-family);
     /* 10px at the default 14px base font size. */
     font-size: calc(10 / 14 * var(--base-font-size-px));
     line-height: 14px;
@@ -899,7 +899,7 @@
     min-width: 0;
     overflow: hidden;
     color: var(--color-text-sidebar-heading);
-    font-family: monospace;
+    font-family: var(--pear-monospace-font-family);
     /* 10px at the default 14px base font size. */
     font-size: calc(10 / 14 * var(--base-font-size-px));
     line-height: 13px;
@@ -953,7 +953,7 @@
 
 .pear-workbench-canvas-source {
     margin: 0;
-    font-family: monospace;
+    font-family: var(--pear-monospace-font-family);
     white-space: pre-wrap;
 }
 
@@ -1008,7 +1008,7 @@
             var(--color-text-danger-text-action-button) 34%,
             transparent
         );
-    border-radius: 8px;
+    border-radius: var(--pear-radius);
     background: color-mix(
         in srgb,
         var(--color-text-danger-text-action-button) 7%,
@@ -1072,7 +1072,7 @@
     min-width: 128px;
     overflow: hidden;
     border: 1px solid var(--color-border-popover-menu);
-    border-radius: 7px;
+    border-radius: var(--pear-radius);
     background: var(--color-background-popover-menu);
     box-shadow: var(--box-shadow-popover-menu);
 }
@@ -1119,7 +1119,7 @@
             var(--color-border-sidebar-subheader) 64%,
             transparent
         );
-    border-radius: 4px;
+    border-radius: var(--pear-radius-small);
     background: transparent;
     padding: 6px;
 }
@@ -1161,7 +1161,7 @@
     max-height: 8rem;
     resize: none;
     border: 0;
-    border-radius: 5px;
+    border-radius: var(--pear-radius);
     background: transparent;
     color: var(--color-text-input);
     padding: 0;
@@ -1191,7 +1191,7 @@
             var(--color-text-success-text-action-button) 28%,
             transparent
         );
-    border-radius: 6px;
+    border-radius: var(--pear-radius);
     background: color-mix(
         in srgb,
         var(--color-text-success-text-action-button) 9%,
@@ -1292,7 +1292,7 @@
     justify-content: start;
     gap: 5px;
     border: 0;
-    border-radius: 4px;
+    border-radius: var(--pear-radius-small);
     background: transparent;
     color: var(--color-text-sidebar-row);
     cursor: pointer;
@@ -1472,7 +1472,7 @@
     min-width: var(--pear-runtime-menu-width);
     overflow: hidden;
     border: 1px solid var(--color-border-popover-menu);
-    border-radius: 4px;
+    border-radius: var(--pear-radius-small);
     background: var(--color-background-popover-menu);
     box-shadow: var(--box-shadow-popover-menu);
     color: var(--color-text-popover-menu);
@@ -1638,4 +1638,26 @@
     &.pear-runtime-saving .pear-runtime-menu-choice {
         opacity: 0.82;
     }
+}
+
+/* Every interactive Pear control eases its surface changes together so
+   hovers and state flips read as engineered motion, not an abrupt swap.
+   Sub-150ms color transitions are gentle enough to keep under
+   prefers-reduced-motion. */
+.pear-topic-runtime-trigger,
+.pear-topic-context-row,
+.pear-topic-open-action,
+.pear-icon-button,
+.pear-workbench-close,
+.pear-workbench-tab,
+.pear-workbench-canvas-open,
+.pear-file-row,
+.pear-commit-row,
+.pear-run-action-menu-item,
+.pear-side-start,
+.pear-runtime-menu-choice {
+    transition:
+        background-color var(--pear-transition-duration) ease,
+        border-color var(--pear-transition-duration) ease,
+        color var(--pear-transition-duration) ease;
 }

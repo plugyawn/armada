@@ -1600,6 +1600,46 @@ function remember_topic_context(topic_context: PearTopicContext | null | undefin
     );
 }
 
+// The panel owns the single topic-context/runs store; the runtime menu
+// (and any future consumer) reads from it and subscribes to changes
+// instead of running its own polling loop against the same endpoint.
+const topic_context_listeners = new Set<() => void>();
+
+export function on_topic_context_changed(listener: () => void): void {
+    topic_context_listeners.add(listener);
+}
+
+function notify_topic_context_listeners(): void {
+    for (const listener of topic_context_listeners) {
+        listener();
+    }
+}
+
+export function shared_topic_context(
+    stream: string | undefined,
+    topic: string | undefined,
+): PearTopicContext | undefined {
+    return cached_topic_context(stream, topic);
+}
+
+export function shared_runs(): PearRun[] {
+    return last_runs;
+}
+
+export function remember_saved_topic_context(raw_topic_context: unknown): void {
+    // Called by the runtime menu when a model/effort save succeeds, so
+    // the header pill and panel reflect the change immediately instead
+    // of waiting out the next context refresh. The menu parses the save
+    // response with its own (narrower) schema, so re-validate here.
+    const parsed = pear_topic_context_schema.safeParse(raw_topic_context);
+    if (!parsed.success) {
+        return;
+    }
+    remember_topic_context(parsed.data);
+    record_context_refresh(parsed.data.stream, parsed.data.topic);
+    render();
+}
+
 export function handle_narrow_activated(): void {
     const key = current_context_key();
     if (key === last_observed_context_key) {
@@ -1862,6 +1902,7 @@ function render(
         fetch_canvas_for_context(display_context);
     }
     schedule_live_refresh(active_run);
+    notify_topic_context_listeners();
 }
 
 export function polling_paused_for_testing(options: {

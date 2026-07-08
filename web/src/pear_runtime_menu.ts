@@ -8,6 +8,7 @@ import * as blueslip from "./blueslip.ts";
 import * as channel from "./channel.ts";
 import {$t} from "./i18n.ts";
 import * as narrow_state from "./narrow_state.ts";
+import * as pear_panel from "./pear_panel.ts";
 import * as popover_menus from "./popover_menus.ts";
 import {context_key as narrow_context_key, model_reasoning_efforts} from "./pear_runtime_shared.ts";
 import {parse_html} from "./ui_util.ts";
@@ -113,9 +114,7 @@ let request_in_flight = false;
 let pending_runtime_save: RuntimeSave | undefined;
 let runtime_save_generation = 0;
 let initialized = false;
-let context_refresh_timer: number | undefined;
 
-const RUNTIME_CONTEXT_REFRESH_INTERVAL_MS = 60_000;
 const runtime_menu_selectors = [
     "#pear-panel .pear-runtime-menu-trigger",
     ".message_header_stream .pear-topic-header-runtime-control.pear-runtime-menu-trigger",
@@ -525,7 +524,10 @@ function update_runtime_button_label(): void {
     $(document).trigger("pear_liveness_markers_changed");
 }
 
-function fetch_topic_context(): void {
+function apply_shared_topic_context(): boolean {
+    // The panel owns the topic-context/runs store (#36): read from it
+    // rather than running a second polling loop against the same
+    // endpoint. Returns whether a cached context was applied.
     const {stream, topic} = current_narrow();
     if (stream === undefined || topic === undefined) {
         topic_context = undefined;
@@ -533,66 +535,33 @@ function fetch_topic_context(): void {
         context_key = "";
         update_runtime_button_label();
         rerender_popover_if_open();
-        return;
+        return true;
     }
-    const fetch_generation = runtime_save_generation;
-    const fetch_started_during_save = request_in_flight || pending_runtime_save !== undefined;
-    // Same endpoint and payload shape as pear_panel.refresh.
-    void channel.get({
-        url: "/json/pear/runs",
-        data: {
-            include_events: false,
-            include_context: true,
-            include_git: false,
-            stream,
-            topic,
-        },
-        success(raw_data) {
-            const data = pear_runtime_response_schema.parse(raw_data);
-            const now = current_narrow();
-            const narrow_changed = now.stream !== stream || now.topic !== topic;
-            if (
-                narrow_changed ||
-                !should_accept_runtime_fetch_for_testing({
-                    fetch_generation,
-                    runtime_save_generation,
-                    fetch_started_during_save,
-                })
-            ) {
-                // Discard responses for a save we superseded or a topic the
-                // user has since navigated away from, so the header never shows
-                // the previous topic's model/effort.
-                rerender_popover_if_open();
-                return;
-            }
-            last_error = "";
-            latest_runs = data.pear_runs ?? [];
-            topic_context = data.pear_topic_context ?? undefined;
-            context_key = narrow_context_key(stream, topic);
-            update_runtime_button_label();
-            rerender_popover_if_open();
-        },
-        error(xhr) {
-            if (xhr.readyState === 0) {
-                return;
-            }
-            const now = current_narrow();
-            const narrow_changed = now.stream !== stream || now.topic !== topic;
-            if (
-                narrow_changed ||
-                !should_accept_runtime_fetch_for_testing({
-                    fetch_generation,
-                    runtime_save_generation,
-                    fetch_started_during_save,
-                })
-            ) {
-                return;
-            }
-            last_error = $t({defaultMessage: "Pear runtime is unavailable."});
-            blueslip.warn(`Failed to fetch Pear runtime: ${xhr.responseText}`);
-            rerender_popover_if_open();
-        },
-    });
+    if (request_in_flight || pending_runtime_save !== undefined) {
+        // A save is in flight; its completion handler owns local state.
+        return true;
+    }
+    const cached = pear_panel.shared_topic_context(stream, topic);
+    if (cached === undefined) {
+        return false;
+    }
+    last_error = "";
+    topic_context = cached;
+    latest_runs = pear_panel.shared_runs();
+    context_key = narrow_context_key(stream, topic);
+    update_runtime_button_label();
+    rerender_popover_if_open();
+    return true;
+}
+
+function fetch_topic_context(): void {
+    if (!apply_shared_topic_context()) {
+        // Nothing cached yet: ask the panel to fetch; the store listener
+        // applies the result when it lands. This path is only reachable
+        // from user-initiated entry points (open, init, hashchange), so
+        // it cannot recurse through the listener.
+        pear_panel.refresh({force_context: true});
+    }
 }
 
 function apply_runtime_locally(model: string, reasoning_effort: string): void {
@@ -646,6 +615,10 @@ function post_runtime_save(
                               reasoning_effort: pending_runtime_save.reasoning_effort,
                           };
                 context_key = narrow_context_key(save.stream, save.topic);
+                // Push the saved context into the shared store so the
+                // header pill and panel update immediately rather than on
+                // their next context refresh.
+                pear_panel.remember_saved_topic_context(topic_context);
             }
             latest_runs = data.pear_runs ?? latest_runs;
             update_runtime_button_label();
@@ -835,8 +808,11 @@ export function initialize(): void {
     update_runtime_button_label();
     fetch_topic_context();
     window.addEventListener("hashchange", fetch_topic_context);
-    context_refresh_timer ??= window.setInterval(
-        fetch_topic_context,
-        RUNTIME_CONTEXT_REFRESH_INTERVAL_MS,
-    );
+    // The panel's store is the single fetch/poll authority; re-read it
+    // whenever it changes instead of running a second interval against
+    // the same endpoint. Read-only: a fetch here could recurse through
+    // the store notification.
+    pear_panel.on_topic_context_changed(() => {
+        apply_shared_topic_context();
+    });
 }

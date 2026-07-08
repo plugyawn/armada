@@ -161,6 +161,8 @@ const pear_topic_context_schema = z.object({
     repo_title: z.optional(z.string()),
     worktree_label: z.optional(z.string()),
     workdir: z.string(),
+    branch: z.optional(z.string()),
+    branch_is_topic_default: z.optional(z.boolean()),
     git: pear_git_context_schema,
 });
 
@@ -784,6 +786,7 @@ function display_topic_context(topic_context: PearTopicContext | undefined | nul
           panel_reasoning_effort_meter_class: string;
           panel_header_runtime_label: string;
           panel_header_branch_label: string;
+          panel_branch_is_topic_default: boolean;
           panel_header_git_label: string;
           panel_header_commit_label: string;
           panel_header_git_title: string;
@@ -826,6 +829,15 @@ function display_topic_context(topic_context: PearTopicContext | undefined | nul
     const topic_branch_label =
         (git.detached === true ? $t({defaultMessage: "detached"}) : git.branch?.trim()) ||
         topic_context.topic;
+    // The workspace branch is derived from the topic; when the server says
+    // they still agree and the live checkout matches, the header chip
+    // would just repeat the topic name beside itself. A surprising branch
+    // (legacy default, custom, detached, drifted checkout) still shows.
+    const live_branch = git.branch?.trim() ?? "";
+    const branch_is_topic_default =
+        topic_context.branch_is_topic_default === true &&
+        git.detached !== true &&
+        (live_branch === "" || live_branch === topic_context.branch?.trim());
     const diff_file_count = (git.changed_files ?? []).length || changed_count;
     const workbench_diff_file_label =
         diff_file_count === 0
@@ -923,6 +935,7 @@ function display_topic_context(topic_context: PearTopicContext | undefined | nul
         ),
         panel_header_runtime_label: `${model_label} · ${reasoning_effort_label}`,
         panel_header_branch_label: topic_branch_label,
+        panel_branch_is_topic_default: branch_is_topic_default,
         panel_header_git_label: topic_header_git_label(git, changed_count),
         panel_header_commit_label: head_commit_label,
         panel_header_git_title: topic_header_git_title({
@@ -1079,6 +1092,7 @@ function render_topic_header_controls(options: {
             effort_label: topic_context.panel_reasoning_effort_label ?? "",
             branch_title,
             branch_label: topic_context.panel_header_branch_label,
+            branch_is_topic_default: topic_context.panel_branch_is_topic_default,
             work_label,
             work_title,
             git_status_class: topic_context.panel_git_status_class,
@@ -1116,10 +1130,12 @@ function render_topic_header_controls(options: {
             .find(".pear-topic-header-branch-label")
             .text(topic_context.panel_header_branch_label);
 
-        // With no repo yet there is nothing behind these chips; an
-        // empty-but-clickable chip reads as a rendering bug, so hide
-        // each until it has a label.
-        const branch_label_present = topic_context.panel_header_branch_label !== "";
+        // Hide the branch chip when it has no label, or when the branch
+        // is just the topic-derived default — repeating the topic name
+        // beside itself says nothing. Only surprising branches show.
+        const branch_label_present =
+            topic_context.panel_header_branch_label !== "" &&
+            !topic_context.panel_branch_is_topic_default;
         $branch_control.toggleClass("pear-topic-header-control-hidden", !branch_label_present);
 
         const $work_control = $status_cluster.find(".pear-topic-header-git-control");

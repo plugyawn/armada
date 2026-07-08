@@ -319,20 +319,34 @@
 }
 
 .pear-topic-header-status {
-    position: relative;
-    display: inline-flex;
-    min-width: 0;
-    width: auto;
-    max-width: 100%;
-    flex: 0 1 auto;
-    align-items: center;
-    gap: 8px;
-    margin-inline: auto 6px;
-    line-height: 1;
+    /* The cluster's children participate directly in the recipient bar's
+       flex: the runtime pill rides row 1 right-aligned; the commit line
+       takes a full row of its own only when it has something to say. */
+    display: contents;
 }
 
 .pear-topic-header-status::before {
     display: none;
+}
+
+.pear-topic-header-runtime-group {
+    display: inline-flex;
+    min-width: 0;
+    flex: 0 1 auto;
+    align-items: center;
+    margin-inline: auto 6px;
+    line-height: 1;
+}
+
+.pear-topic-header-commitline {
+    display: inline-flex;
+    min-width: 0;
+    max-width: 100%;
+    flex: 1 0 100%;
+    align-items: center;
+    gap: var(--pear-space-2);
+    margin: 1px 42px 3px 26px;
+    line-height: 1;
 }
 
 .pear-topic-header-control {
@@ -391,75 +405,31 @@
     }
 }
 
-.pear-topic-header-subtitle {
-    display: inline-flex;
-    min-width: 0;
-    max-width: 100%;
-    align-items: center;
-    gap: 0.35em;
-    color: color-mix(
-        in srgb,
-        var(--color-text-message-header) 66%,
-        var(--color-message-header-icon-non-interactive) 34%
-    );
-    /* Quieter than the topic title above it: the branch and git status
-       are secondary metadata, not a second heading. */
-    font-size: calc(12em / 15);
-    font-weight: 500;
-    letter-spacing: 0;
-    line-height: 1;
-}
-
-.pear-topic-header-runtime-group {
-    display: inline-flex;
-    flex: 0 1 auto;
-    min-width: 0;
-    align-items: center;
-    gap: 4px;
-}
-
 .pear-topic-header-runtime-control {
     flex: 0 1 auto;
     width: auto;
     min-width: 0;
     justify-content: flex-start;
-    gap: 0.3em;
-    /* Content-sized: a fixed px height crushed the label against the
-       capsule at any base font size above the default. */
-    padding: 0.3em 0.55em 0.3em 0.75em;
-    border: 1px solid
-        color-mix(
-            in srgb,
-            var(--color-text-message-header) 18%,
-            var(--color-message-header-icon-non-interactive) 82%
-        );
-    border-radius: 999px;
-    background: color-mix(
-        in srgb,
-        var(--color-text-message-header) 7%,
-        transparent
-    );
-    color: color-mix(
-        in srgb,
-        var(--color-text-message-header) 86%,
-        var(--color-message-header-icon-non-interactive) 14%
-    );
-    font-size: calc(13em / 15);
-    font-weight: 600;
+    gap: var(--pear-space-1);
+    /* The machine speaks in pixels: Geist Pixel at a pinned px size (the
+       face goes mushy at arbitrary scales), terminal-window corners. */
+    padding: var(--pear-space-1) var(--pear-space-2);
+    border: 1px solid var(--pear-hairline);
+    border-radius: var(--pear-radius-px);
+    background: var(--pear-surface-2);
+    color: var(--pear-ink-2);
+    font-family: var(--pear-font-pixel);
+    /* Pinned px by design; see the pixel-type rule in the design spec. */
+    /* stylelint-disable-next-line declaration-property-unit-disallowed-list */
+    font-size: 12px;
+    font-weight: 400;
 
     &:hover,
     &:focus-visible,
     &.active-right-sidebar-menu {
-        background: color-mix(
-            in srgb,
-            var(--color-text-message-header) 13%,
-            transparent
-        );
-        border-color: color-mix(
-            in srgb,
-            var(--color-text-message-header) 35%,
-            var(--color-message-header-icon-non-interactive) 65%
-        );
+        background: var(--pear-surface-3);
+        border-color: color-mix(in srgb, var(--pear-ink-3) 50%, transparent);
+        color: var(--pear-ink-1);
     }
 }
 
@@ -517,25 +487,56 @@
     flex: 0 1 auto;
     width: auto;
     justify-content: flex-start;
-    gap: 0.3em;
-    padding: 0.2em 0.5em;
-    border-radius: var(--pear-radius-small);
-    background: color-mix(in srgb, var(--color-text-message-header) 6%, transparent);
-    color: color-mix(
-        in srgb,
-        var(--color-text-message-header) 66%,
-        var(--color-message-header-icon-non-interactive) 34%
-    );
+    gap: var(--pear-space-1);
+    padding: 2px var(--pear-space-1);
+    border-radius: var(--pear-radius-px);
+    background: var(--pear-surface-2);
+    color: var(--pear-ink-2);
+    font-family: var(--pear-font-pixel);
+    /* Pinned px by design; see the pixel-type rule in the design spec. */
+    /* stylelint-disable-next-line declaration-property-unit-disallowed-list */
+    font-size: 11px;
     cursor: default;
 }
 
-.pear-topic-header-control .pear-topic-header-branch-label,
-.pear-topic-header-control .pear-topic-header-work-label {
-    /* Branch names and commit shas are code identifiers; setting them in
-       the shared mono stack matches how the transcript renders them. */
-    font-family: var(--pear-monospace-font-family);
-    font-size: calc(11 / 12 * 1em);
-    font-weight: 500;
+/* The commit sentence: sha and meta in the pixel voice, the subject in
+   the room's voice — one line that says what GitHub's header says. */
+.pear-topic-header-git-control {
+    flex: 0 1 auto;
+    width: auto;
+    min-width: 0;
+    justify-content: flex-start;
+    gap: var(--pear-space-1);
+    padding: 2px var(--pear-space-1);
+    border-radius: var(--pear-radius-px);
+    background: transparent;
+    font-family: var(--pear-font-pixel);
+    /* stylelint-disable-next-line declaration-property-unit-disallowed-list */
+    font-size: 11px;
+}
+
+.pear-commitline-sha {
+    flex: 0 0 auto;
+    color: var(--pear-ink-2);
+}
+
+.pear-commitline-subject {
+    min-width: 0;
+    overflow: hidden;
+    color: var(--pear-ink-2);
+    font-family: var(--pear-font-ui);
+    /* stylelint-disable-next-line declaration-property-unit-disallowed-list */
+    font-size: 12px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.pear-commitline-meta {
+    flex: 0 0 auto;
+    overflow: hidden;
+    color: var(--pear-ink-3);
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .pear-topic-header-branch-control:hover,
@@ -555,35 +556,10 @@
     display: none;
 }
 
-.pear-topic-header-work-clean {
-    color: var(--color-message-header-icon-non-interactive);
-}
-
-.pear-topic-header-work-dirty {
-    color: color-mix(
-        in srgb,
-        var(--color-text-warning-text-action-button) 72%,
-        var(--color-text-message-header) 28%
-    );
-}
-
-.pear-topic-header-git-control {
-    flex: 0 1 auto;
-    width: auto;
-    justify-content: flex-start;
-    gap: 0.3em;
-    padding: 0.2em 0.5em;
-    border-radius: var(--pear-radius-small);
-    background: color-mix(in srgb, var(--color-text-message-header) 6%, transparent);
-    color: color-mix(
-        in srgb,
-        var(--color-text-message-header) 70%,
-        var(--color-message-header-icon-non-interactive) 30%
-    );
-}
-
-.pear-topic-header-git-control .pear-topic-header-work-label {
-    font-weight: inherit;
+.pear-topic-header-work-dirty .pear-commitline-sha::after {
+    /* A dirty worktree earns one honest character. */
+    content: "*";
+    color: var(--pear-warn);
 }
 
 .on_hover_topic_read {

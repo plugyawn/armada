@@ -38,6 +38,7 @@ from zerver.lib.pear import (
     pear_message_id,
     pear_message_stream,
     pear_message_topic,
+    trim_pear_text,
 )
 from zerver.lib.pear_agent import (
     PearCodexAppServerToolRunner,
@@ -180,19 +181,54 @@ def set_pear_topic_context_response_policy(
         workspace_node.save(update_fields=["response_policy", "date_updated"])
 
 
+def settle_orphaned_pear_run_message(run: PearWorkerRun) -> None:
+    """Best-effort: rewrite an interrupted run's progress message so it
+    stops carrying the live ✦ marker (which reads as an active run to
+    clients and to the deploy health gate)."""
+    message_id = run.result_message_id
+    if message_id is None:
+        return
+    try:
+        # Imported lazily: pear.py imports from this module.
+        from zerver.lib.bot_lib import EmbeddedBotHandler
+        from zerver.lib.pear import update_pear_worker_status_message
+
+        bot_handler = EmbeddedBotHandler(run.bot_profile)
+        update_pear_worker_status_message(
+            bot_handler,
+            progress_message_id=message_id,
+            content="Run interrupted by a service restart.",
+        )
+    except Exception:
+        logging.getLogger(__name__).warning(
+            "Failed to settle orphaned Pear run message %s.", message_id, exc_info=True
+        )
+
+
 def reap_stale_pear_worker_runs(
     *,
     realm: Any | None = None,
     bot_profile: UserProfile | None = None,
     stream: str | None = None,
     topic: str | None = None,
+    assume_orphaned: bool = False,
 ) -> int:
+    """Fail RUNNING runs that no longer have a live worker behind them.
+
+    With assume_orphaned=True (worker startup), age is ignored: the pear
+    queue is single-consumer, so at boot no run can legitimately be
+    RUNNING — a restart mid-turn otherwise leaves a zombie record and a
+    marker-bearing message that block the deploy health gate for the
+    full staleness window.
+    """
     current_time = timezone_now()
     cutoff = current_time - timedelta(seconds=pear_worker_stale_after_seconds())
-    stale_runs = PearWorkerRun.objects.filter(status=PearWorkerRun.RUNNING).filter(
-        Q(heartbeat_at__isnull=False, heartbeat_at__lte=cutoff)
-        | Q(heartbeat_at__isnull=True, date_updated__lte=cutoff)
-    )
+    stale_runs = PearWorkerRun.objects.filter(status=PearWorkerRun.RUNNING)
+    if not assume_orphaned:
+        stale_runs = stale_runs.filter(
+            Q(heartbeat_at__isnull=False, heartbeat_at__lte=cutoff)
+            | Q(heartbeat_at__isnull=True, date_updated__lte=cutoff)
+        )
     if realm is not None:
         stale_runs = stale_runs.filter(realm=realm)
     if bot_profile is not None:
@@ -204,6 +240,7 @@ def reap_stale_pear_worker_runs(
 
     stale_run_ids = list(stale_runs.values_list("id", flat=True)[:100])
     reaped_count = 0
+    settled_runs: list[PearWorkerRun] = []
     store = PearDatabaseWorkerRunStore()
     for run_id in stale_run_ids:
         with transaction.atomic():
@@ -212,7 +249,11 @@ def reap_stale_pear_worker_runs(
                 .filter(id=run_id, status=PearWorkerRun.RUNNING)
                 .first()
             )
-            if run is None or not pear_worker_run_is_stale(run, current_time=current_time):
+            if run is None:
+                continue
+            if not assume_orphaned and not pear_worker_run_is_stale(
+                run, current_time=current_time
+            ):
                 continue
             if not store._transition(
                 run,
@@ -220,14 +261,22 @@ def reap_stale_pear_worker_runs(
                 stream=run.stream_name,
                 topic=run.topic_name,
                 result_message_id=run.result_message_id,
-                error="Pear worker run became stale and was recovered.",
+                error=(
+                    "Pear worker run was orphaned by a worker restart."
+                    if assume_orphaned
+                    else "Pear worker run became stale and was recovered."
+                ),
                 allow_requeue=False,
             ):
                 continue
             store._record_event(
                 run,
-                "stale_reaped",
-                summary="Recovered stale Pear worker run.",
+                "orphan_reaped" if assume_orphaned else "stale_reaped",
+                summary=(
+                    "Recovered Pear worker run orphaned by restart."
+                    if assume_orphaned
+                    else "Recovered stale Pear worker run."
+                ),
                 payload={
                     "stale_after_seconds": pear_worker_stale_after_seconds(),
                     "heartbeat_at": run.heartbeat_at.isoformat()
@@ -235,7 +284,11 @@ def reap_stale_pear_worker_runs(
                     else None,
                 },
             )
+            settled_runs.append(run)
             reaped_count += 1
+    # Message edits happen outside the row locks.
+    for run in settled_runs:
+        settle_orphaned_pear_run_message(run)
     return reaped_count
 
 
@@ -1836,6 +1889,30 @@ def pear_git_status_delta(
         return {"available": False, "workdir": workdir}
 
     delta = parse_pear_git_status_delta(status_output, workdir=workdir, topic=topic)
+    # The topic header's commit sentence (design §8.2): latest commit
+    # identity plus the total count, fetched with the same isolation and
+    # cached under the same TTL as the rest of the delta. Best-effort —
+    # pear_git_output returns "" on any failure.
+    log_output = pear_git_output(
+        workdir,
+        ["log", "-1", "--format=%h%x1f%s%x1f%an%x1f%ct"],
+        isolation_username=isolation_username,
+    )
+    log_parts = log_output.strip().split("\x1f")
+    if len(log_parts) == 4 and log_parts[0]:
+        delta["last_commit"] = {
+            "sha": log_parts[0],
+            "subject": trim_pear_text(log_parts[1], limit=200),
+            "author": trim_pear_text(log_parts[2], limit=80),
+            "timestamp": int(log_parts[3]) if log_parts[3].isdigit() else None,
+        }
+    count_output = pear_git_output(
+        workdir,
+        ["rev-list", "--count", "HEAD"],
+        isolation_username=isolation_username,
+    ).strip()
+    if count_output.isdigit():
+        delta["commit_count"] = int(count_output)
     pear_git_status_delta_cache[cache_key] = (current_time, dict(delta))
     return delta
 

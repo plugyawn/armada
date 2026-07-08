@@ -68,6 +68,7 @@ from zerver.lib.pear_worker import (
     pear_worker_sandbox_for_topic,
     pear_worker_workdir_for_topic,
     pear_workspace_node_default_branch,
+    reap_stale_pear_worker_runs,
 )
 from zerver.lib.test_classes import ZulipTestCase
 from zerver.models import Message, Recipient, Subscription, UserProfile
@@ -1426,6 +1427,38 @@ class PearSessionEndpointTest(ZulipTestCase):
         self.assertEqual(trunk_payload["branch"], "main")
         self.assertTrue(trunk_payload["branch_is_topic_default"])
 
+    def test_startup_reap_fails_orphaned_running_runs_regardless_of_age(self) -> None:
+        user = self.example_user("hamlet")
+        pear_bot = self.create_test_bot(
+            "pear",
+            user,
+            full_name="Pear",
+            bot_type=UserProfile.EMBEDDED_BOT,
+            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+        )
+        run = PearWorkerRun.objects.create(
+            realm=user.realm,
+            bot_profile=pear_bot,
+            trigger_message_id=4242,
+            requesting_user=user,
+            status=PearWorkerRun.RUNNING,
+            stream_name=PEAR_DEFAULT_STREAM,
+            topic_name=PEAR_DEFAULT_TOPIC,
+            heartbeat_at=timezone_now(),
+        )
+
+        # A fresh heartbeat protects the run from the age-gated reap.
+        self.assertEqual(reap_stale_pear_worker_runs(), 0)
+        run.refresh_from_db()
+        self.assertEqual(run.status, PearWorkerRun.RUNNING)
+
+        # The queue is single-consumer: at worker boot, a RUNNING run is
+        # by definition orphaned, however young its heartbeat.
+        self.assertEqual(reap_stale_pear_worker_runs(assume_orphaned=True), 1)
+        run.refresh_from_db()
+        self.assertEqual(run.status, PearWorkerRun.FAILED)
+        self.assertIn("orphaned", run.error)
+
     def test_worker_run_store_links_runs_to_workspace_node(self) -> None:
         owner = self.example_user("hamlet")
         pear_bot = self.create_test_bot(
@@ -1877,6 +1910,15 @@ class PearSessionEndpointTest(ZulipTestCase):
             self.assertEqual(git_context["changed_count"], 0)
             self.assertTrue(git_context["detached"])
             self.assertFalse(git_context["branch_matches_topic"])
+            # The header commit sentence: latest commit identity + total
+            # count ride the same cached delta.
+            last_commit = git_context["last_commit"]
+            assert isinstance(last_commit, dict)
+            self.assertGreaterEqual(len(str(last_commit["sha"])), 7)
+            self.assertTrue(str(last_commit["subject"]))
+            self.assertTrue(str(last_commit["author"]))
+            self.assertIsInstance(last_commit["timestamp"], int)
+            self.assertGreaterEqual(int(str(git_context["commit_count"])), 1)
 
     def test_pear_git_status_delta_uses_cache_until_invalidated(self) -> None:
         invalidate_pear_git_status_delta()
@@ -1890,16 +1932,18 @@ class PearSessionEndpointTest(ZulipTestCase):
         )
         dirty_status = "\n".join([clean_status, "1 .M N... 100644 100644 100644 a b file.txt"])
 
+        # Each refresh issues three git commands (status, log -1,
+        # rev-list --count); the commit-info calls return "" here.
         with patch(
             "zerver.lib.pear_worker.pear_git_output",
-            side_effect=[clean_status, dirty_status],
+            side_effect=[clean_status, "", "", dirty_status, "", ""],
         ) as git_output:
             clean_delta = pear_git_status_delta("/repo", topic="topic-a")
             cached_delta = pear_git_status_delta("/repo", topic="topic-a")
             invalidate_pear_git_status_delta("/repo")
             dirty_delta = pear_git_status_delta("/repo", topic="topic-a")
 
-        self.assertEqual(git_output.call_count, 2)
+        self.assertEqual(git_output.call_count, 6)
         self.assertEqual(clean_delta["head"], "1234567")
         self.assertEqual(clean_delta["ahead"], 2)
         self.assertEqual(clean_delta["behind"], 1)
@@ -1944,7 +1988,7 @@ class PearSessionEndpointTest(ZulipTestCase):
             ],
         )
 
-    def test_pear_git_status_delta_runs_one_porcelain_command(self) -> None:
+    def test_pear_git_status_delta_runs_bounded_git_commands(self) -> None:
         invalidate_pear_git_status_delta()
         status_output = "\n".join(
             [
@@ -1963,7 +2007,13 @@ class PearSessionEndpointTest(ZulipTestCase):
         with patch("zerver.lib.pear_worker.subprocess.run", return_value=completed) as run_mock:
             delta = pear_git_status_delta("/repo", topic="topic-b")
 
-        run_mock.assert_called_once()
+        # Exactly one porcelain status plus the two commit-info commands
+        # per (cached) refresh — never N+1 per file or per commit.
+        self.assertEqual(run_mock.call_count, 3)
+        self.assertEqual(
+            [call.args[0][3] for call in run_mock.call_args_list],
+            ["status", "log", "rev-list"],
+        )
         self.assertTrue(delta["dirty"])
         self.assertEqual(delta["changed_count"], 1)
         self.assertFalse(delta["branch_matches_topic"])

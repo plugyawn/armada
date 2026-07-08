@@ -20,6 +20,7 @@ import {
 import {postprocess_content} from "./postprocess_content.ts";
 import * as rendered_markdown from "./rendered_markdown.ts";
 import * as stream_data from "./stream_data.ts";
+import * as timerender from "./timerender.ts";
 import * as typing_events from "./typing_events.ts";
 
 const pear_run_event_schema = z.object({
@@ -117,6 +118,15 @@ const pear_git_context_schema = z.object({
     changed_files: z.optional(z.array(pear_git_changed_file_schema)),
     changed_files_truncated: z.optional(z.boolean()),
     recent_commits: z.optional(z.array(pear_git_commit_schema)),
+    last_commit: z.optional(
+        z.object({
+            sha: z.string(),
+            subject: z.string(),
+            author: z.string(),
+            timestamp: z.nullable(z.number()),
+        }),
+    ),
+    commit_count: z.optional(z.number()),
 });
 
 const pear_git_tree_schema = z.object({
@@ -787,6 +797,10 @@ function display_topic_context(topic_context: PearTopicContext | undefined | nul
           panel_header_runtime_label: string;
           panel_header_branch_label: string;
           panel_branch_is_topic_default: boolean;
+          panel_has_commitline: boolean;
+          panel_commit_sha: string;
+          panel_commit_subject: string;
+          panel_commit_meta: string;
           panel_header_git_label: string;
           panel_header_commit_label: string;
           panel_header_git_title: string;
@@ -936,6 +950,10 @@ function display_topic_context(topic_context: PearTopicContext | undefined | nul
         panel_header_runtime_label: `${model_label} · ${reasoning_effort_label}`,
         panel_header_branch_label: topic_branch_label,
         panel_branch_is_topic_default: branch_is_topic_default,
+        panel_has_commitline: git.last_commit !== undefined,
+        panel_commit_sha: git.last_commit?.sha ?? "",
+        panel_commit_subject: git.last_commit?.subject ?? "",
+        panel_commit_meta: commit_meta_sentence(git),
         panel_header_git_label: topic_header_git_label(git, changed_count),
         panel_header_commit_label: head_commit_label,
         panel_header_git_title: topic_header_git_title({
@@ -969,6 +987,32 @@ function ensure_pear_panel_host(): HTMLElement | undefined {
 
 function topic_header_work_label(display_context: PearDisplayTopicContext): string {
     return display_context.panel_header_git_label;
+}
+
+function commit_meta_sentence(git: PearGitContext): string {
+    // The GitHub-grammar tail of the header commit sentence:
+    // "— author · 2m ago · 12 commits". Parts degrade independently.
+    const last_commit = git.last_commit;
+    if (last_commit === undefined) {
+        return "";
+    }
+    const parts: string[] = [];
+    if (last_commit.author !== "") {
+        parts.push(`— ${last_commit.author}`);
+    }
+    if (last_commit.timestamp !== null) {
+        parts.push(
+            timerender.relative_time_string_from_date(new Date(last_commit.timestamp * 1000), true),
+        );
+    }
+    const commit_count = git.commit_count ?? 0;
+    if (commit_count === 1) {
+        parts.push($t({defaultMessage: "1 commit"}));
+    } else if (commit_count > 1) {
+        parts.push($t({defaultMessage: "{commit_count} commits"}, {commit_count}));
+    }
+    // The separator is spaced padding, not chip furniture.
+    return parts.join(" · ");
 }
 
 function topic_header_git_label(git: PearGitContext, changed_count: number): string {
@@ -1095,6 +1139,9 @@ function render_topic_header_controls(options: {
             branch_is_topic_default: topic_context.panel_branch_is_topic_default,
             work_label,
             work_title,
+            commit_sha: topic_context.panel_commit_sha,
+            commit_subject: topic_context.panel_commit_subject,
+            commit_meta: topic_context.panel_commit_meta,
             git_status_class: topic_context.panel_git_status_class,
             has_workbench_diff: topic_context.has_workbench_diff,
         });
@@ -1138,8 +1185,13 @@ function render_topic_header_controls(options: {
             !topic_context.panel_branch_is_topic_default;
         $branch_control.toggleClass("pear-topic-header-control-hidden", !branch_label_present);
 
+        // The commit line (design §8.2): silence is the empty state — no
+        // commits, no line, no "no repo" furniture.
+        $status_cluster
+            .find(".pear-topic-header-commitline")
+            .toggleClass("pear-topic-header-control-hidden", !topic_context.panel_has_commitline);
+
         const $work_control = $status_cluster.find(".pear-topic-header-git-control");
-        $work_control.toggleClass("pear-topic-header-control-hidden", work_label === "");
         $work_control
             .removeClass(
                 "pear-topic-header-work-clean pear-topic-header-work-dirty pear-topic-header-work-unknown",
@@ -1150,7 +1202,9 @@ function render_topic_header_controls(options: {
             title: work_title || work_label,
             "data-pear-workbench-view": topic_context.has_workbench_diff ? "diff" : "history",
         });
-        $work_control.find(".pear-topic-header-work-label").text(work_label);
+        $work_control.find(".pear-commitline-sha").text(topic_context.panel_commit_sha);
+        $work_control.find(".pear-commitline-subject").text(topic_context.panel_commit_subject);
+        $work_control.find(".pear-commitline-meta").text(topic_context.panel_commit_meta);
     });
 }
 
@@ -1767,11 +1821,7 @@ function render(
         : undefined;
     last_topic_context = source_topic_context ?? topic_context;
     const active_run = active_display_run(runs);
-    if (
-        has_topic &&
-        active_run === undefined &&
-        contexts_with_active_run.has(next_context_key)
-    ) {
+    if (has_topic && active_run === undefined && contexts_with_active_run.has(next_context_key)) {
         // The run just ended; make sure the "Pear is working…" typing
         // line dies with it even if the worker's typing-stop event was
         // lost — the client-side expiry would otherwise show 45s of

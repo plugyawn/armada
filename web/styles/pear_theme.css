@@ -21,6 +21,12 @@
     --color-background-popover-menu: var(--pear-surface-2);
     --color-border-popover-menu: var(--pear-hairline);
     --box-shadow-popover-menu: var(--pear-shadow-pop);
+
+    /* Focus is accent territory (spend rule, design §4): one ring color
+       across views, buttons, and compose instead of three blues. */
+    --color-outline-focus: var(--pear-accent-ink);
+    --color-outline-button-focus: var(--pear-accent-ink);
+    --color-compose-focus-ring: var(--pear-accent-ink);
 }
 
 /* The room is set in Hanken. Form controls inherit so inputs match. */

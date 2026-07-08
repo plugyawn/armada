@@ -14,14 +14,12 @@ import * as util from "./util.ts";
 // Source Sans Prof VF reports an em size of 1000, which is
 // necessary to know to calculate proper em units.
 const BODY_FONT_EM_SIZE = 1000;
-// The Typo Ascent Value is reported as 1024, but both Chrome
-// and Firefox act as though it is 1025, so that value is used
-// here. It represents the portion of the content box above the
-// baseline.
-const BODY_FONT_ASCENT = 1025;
-// The Typo Descent Value is reported as 400. It is the portion
-// of the content box below the baseline.
-const BODY_FONT_DESCENT = 400;
+// Pear sets the body in Hanken Grotesk VF (design spec §1); these are
+// its font metrics, not Source Sans 3's. The Typo Ascender: the portion
+// of the content box above the baseline.
+const BODY_FONT_ASCENT = 1000;
+// The Typo Descender (absolute value): the portion below the baseline.
+const BODY_FONT_DESCENT = 303;
 // The BODY_FONT_CONTENT_BOX size is calculated by adding the
 // Typo Ascent and Typo Descent values. The content box for
 // Source Sans Pro VF exceeds the size of its em box, meaning

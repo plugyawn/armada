@@ -985,28 +985,31 @@ run_test("topic header controls template matches the retired jQuery skeleton", (
     const render_pear_topic_header_controls = require("../templates/pear_topic_header_controls.hbs");
     const html = render_pear_topic_header_controls({control_key: '{"stream_id":7,"topic":"t"}'});
 
-    // Structure: status cluster > runtime group (single merged
-    // model·effort button with an in-pill status glyph) + subtitle
-    // (branch control, separator, git control). No status dot: the glyph
-    // occupies a fixed slot so going active never shifts the header.
+    // Structure: status cluster > git chips (branch with branch icon,
+    // commit/work button with commit icon) + a single merged model·effort
+    // pill with an in-pill status glyph. No status dot and no bare "·"
+    // separator: icons name each chip and the glyph occupies a fixed
+    // slot, so going active never shifts the header.
     assert.match(
         html,
         /^<span class="pear-topic-header-status no-select" data-pear-header-key="\{&quot;stream_id&quot;:7,&quot;topic&quot;:&quot;t&quot;\}">/,
     );
     assert.ok(!html.includes("pear-topic-header-status-dot"));
+    assert.ok(!html.includes("pear-topic-header-meta-separator"));
     for (const marker of [
+        'class="pear-topic-header-subtitle"',
+        "pear-topic-header-branch-control tippy-zulip-delayed-tooltip",
+        "zulip-icon zulip-icon-git-branch pear-topic-header-git-icon",
+        'class="pear-topic-header-branch-label"',
+        "pear-topic-header-git-control pear-panel-open-action",
+        "zulip-icon zulip-icon-git-commit pear-topic-header-git-icon",
+        'class="pear-topic-header-work-label"',
         "pear-topic-header-runtime-control pear-runtime-menu-trigger",
         'class="pear-ui-glyph pear-runtime-menu-glyph" aria-hidden="true">·<',
         'class="pear-runtime-menu-model-label"',
         'class="pear-topic-header-runtime-separator" aria-hidden="true">·<',
         'class="pear-runtime-menu-effort-label"',
         "zulip-icon zulip-icon-chevron-down pear-topic-header-control-chevron",
-        'class="pear-topic-header-subtitle"',
-        "pear-topic-header-branch-control tippy-zulip-delayed-tooltip",
-        'class="pear-topic-header-branch-label"',
-        'class="pear-topic-header-meta-separator" aria-hidden="true">·<',
-        "pear-topic-header-git-control pear-panel-open-action",
-        'class="pear-topic-header-work-label"',
     ]) {
         assert.ok(html.includes(marker), `missing: ${marker}`);
     }

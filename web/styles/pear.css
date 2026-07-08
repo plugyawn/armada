@@ -444,7 +444,8 @@
 }
 
 #pear-panel.pear-workbench-popover-open .pear-workbench-tab {
-    font-size: 0.95em;
+    font-size: 1em;
+    font-weight: 500;
     line-height: 1.4;
     padding: 7px 0 8px;
 }
@@ -619,7 +620,8 @@
 }
 
 .pear-workbench-tab-selected {
-    border-bottom-color: var(--color-text-success-text-action-button);
+    border-bottom-width: 2px;
+    border-bottom-color: var(--pear-accent);
     background: transparent;
     color: var(--color-text-default);
     opacity: 1;
@@ -712,11 +714,7 @@
 }
 
 .pear-commit-row-head {
-    background: color-mix(
-        in srgb,
-        var(--color-text-success-text-action-button) 7%,
-        transparent
-    );
+    background: var(--pear-accent-subtle);
     color: var(--color-text-default);
 }
 
@@ -735,9 +733,9 @@
     border-radius: var(--pear-radius-small);
     color: var(--color-text-item);
     font-family: inherit;
-    /* 10px at the default 14px base font size. */
-    font-size: calc(10 / 14 * var(--base-font-size-px));
-    line-height: 14px;
+    /* 11px at the default 14px base font size. */
+    font-size: calc(11 / 14 * var(--base-font-size-px));
+    line-height: 15px;
     padding: 1px 6px;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -804,6 +802,7 @@
 }
 
 .pear-commit-hash {
+    font-family: var(--pear-monospace-font-family);
     border: 1px solid var(--color-border-sidebar-subheader);
     border-radius: var(--pear-radius);
     color: var(--color-text-sidebar-heading);
@@ -1141,18 +1140,14 @@
     align-items: center;
     gap: 4px;
     color: var(--color-text-item);
-    /* 10px at the default 14px base font size. */
-    font-size: calc(10 / 14 * var(--base-font-size-px));
+    /* 11px at the default 14px base font size. */
+    font-size: calc(11 / 14 * var(--base-font-size-px));
     font-weight: 600;
-    line-height: 13px;
+    line-height: 14px;
 }
 
 .pear-side-body:focus-within {
-    border-color: color-mix(
-        in srgb,
-        var(--color-text-success-text-action-button) 70%,
-        var(--color-border-legacy-input-focus) 30%
-    );
+    border-color: color-mix(in srgb, var(--pear-accent) 70%, var(--color-border-legacy-input-focus) 30%);
 }
 
 .pear-side-request {
@@ -1185,18 +1180,9 @@
     min-width: 0;
     width: 26px;
     height: 26px;
-    border: 1px solid
-        color-mix(
-            in srgb,
-            var(--color-text-success-text-action-button) 28%,
-            transparent
-        );
+    border: 1px solid color-mix(in srgb, var(--pear-accent) 34%, transparent);
     border-radius: var(--pear-radius);
-    background: color-mix(
-        in srgb,
-        var(--color-text-success-text-action-button) 9%,
-        transparent
-    );
+    background: var(--pear-accent-subtle);
     color: var(--color-text-success-text-action-button);
     cursor: pointer;
     font: inherit;

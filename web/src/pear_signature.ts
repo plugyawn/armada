@@ -1,0 +1,24 @@
+// The Pear console signature — flavor register item, printed once at
+// boot (pear/PEAR_DESIGN_LANGUAGE.md §11). Decoration only; must never
+// throw or block.
+export function print_pear_signature(): void {
+    try {
+        console.log(
+            "%c" +
+                String.raw`      _` +
+                "\n" +
+                String.raw`     //` +
+                "\n" +
+                String.raw`   .--.` +
+                "\n" +
+                String.raw`  (    )` +
+                "\n" +
+                String.raw` (      )` +
+                "\n" +
+                String.raw`  '-..-'   pear — the machine speaks in pixels`,
+            "color: #3aa469; font-family: ui-monospace, monospace;",
+        );
+    } catch {
+        // Consoles that dislike %c formatting get silence, not errors.
+    }
+}

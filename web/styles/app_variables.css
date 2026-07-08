@@ -827,25 +827,100 @@
         hsl(0deg 0% 100%),
         hsl(0deg 0% 13.5%)
     );
-    /* A neutral with a faint bias toward the Pear accent hue — pure grey
-       read as unfinished next to the deliberately warm DM background. */
-    --color-background-pear-message-content: light-dark(
-        hsl(140deg 7% 94.5%),
-        hsl(146deg 4% 17.5%)
+    /* ============================================================
+       Pear design language — "Terminal Romantic"
+       (pear/PEAR_DESIGN_LANGUAGE.md). Primitives → semantics; every
+       Pear surface and the pear_theme.css host retheme consume ONLY
+       these. Both themes derive from the same scales via light-dark().
+       ============================================================ */
+
+    /* Moss neutrals: green-cast ramp; saturation falls as lightness
+       rises so light theme reads as warm paper, not mint. */
+    --pear-surface-0: light-dark(hsl(100deg 20% 97.5%), hsl(160deg 10% 5.5%));
+    --pear-surface-1: light-dark(hsl(100deg 15% 94.5%), hsl(158deg 9% 8%));
+    --pear-surface-2: light-dark(hsl(100deg 12% 91%), hsl(156deg 8% 11.5%));
+    --pear-surface-3: light-dark(hsl(100deg 12% 87.5%), hsl(154deg 7% 15%));
+    --pear-ink-1: light-dark(hsl(160deg 18% 12%), hsl(150deg 12% 92%));
+    --pear-ink-2: light-dark(hsl(158deg 10% 34%), hsl(150deg 8% 68%));
+    --pear-ink-3: light-dark(hsl(156deg 8% 52%), hsl(150deg 6% 46%));
+    --pear-hairline: light-dark(
+        hsl(160deg 18% 12% / 9%),
+        hsl(0deg 0% 100% / 9%)
     );
-    /* Shared by every monospace surface in Pear message rows. */
-    --pear-monospace-font-family:
-        ui-monospace, "SFMono-Regular", consolas, monospace;
-    /* Pear design tokens: every Pear surface derives its corners, motion,
-       and accent from these so the feature reads as one designed system
-       rather than per-component improvisation. */
+
+    /* Anjou accent scale — states derive from the scale, never from
+       ad-hoc mixes. Spend rule: live/active state, focus, selection,
+       and the ✦ cycle. Nothing else. */
+    --pear-a300: hsl(140deg 42% 68%);
+    --pear-a400: hsl(140deg 44% 56%);
+    --pear-a500: hsl(141deg 48% 42%);
+    --pear-a600: hsl(142deg 52% 30%);
+    --pear-accent: var(--pear-a500);
+    --pear-accent-ink: light-dark(var(--pear-a600), var(--pear-a300));
+    --pear-accent-fill: hsl(141deg 48% 42% / 12%);
+    --pear-accent-fill-strong: hsl(141deg 48% 42% / 20%);
+    /* Back-compat alias for Phase B consumers (retired in B5). */
+    --pear-accent-subtle: var(--pear-accent-fill);
+
+    /* Semantic states — muted; never compete with the accent. */
+    --pear-danger: light-dark(hsl(6deg 62% 38%), hsl(6deg 62% 68%));
+    --pear-danger-fill: light-dark(
+        hsl(6deg 62% 38% / 10%),
+        hsl(6deg 62% 68% / 12%)
+    );
+    --pear-warn: light-dark(hsl(36deg 74% 34%), hsl(38deg 66% 66%));
+    --pear-warn-fill: light-dark(
+        hsl(36deg 74% 34% / 10%),
+        hsl(38deg 66% 66% / 12%)
+    );
+    --pear-diff-add: var(--pear-a400);
+    --pear-diff-add-fill: hsl(140deg 44% 56% / 10%);
+    --pear-diff-del: var(--pear-danger);
+    --pear-diff-del-fill: var(--pear-danger-fill);
+
+    /* Type system: the machine speaks in pixels; the room is set in
+       Hanken; code content is Geist Mono. Pixel sizes are pinned px by
+       design — pixel faces go mushy at arbitrary scales. */
+    --pear-font-ui: "Hanken Grotesk VF", "Source Sans 3 VF", sans-serif;
+    --pear-font-pixel:
+        "Geist Pixel", "Geist Mono VF", ui-monospace, monospace;
+    --pear-font-mono:
+        "Geist Mono VF", ui-monospace, "SFMono-Regular", monospace;
+    /* Back-compat alias for Phase B consumers (retired in B5). */
+    --pear-monospace-font-family: var(--pear-font-mono);
+
+    /* Spacing — 4px grid, the only spacing vocabulary on Pear surfaces. */
+    --pear-space-1: 4px;
+    --pear-space-2: 8px;
+    --pear-space-3: 12px;
+    --pear-space-4: 16px;
+    --pear-space-5: 24px;
+    --pear-space-6: 32px;
+
+    /* Shape & elevation. */
+    --pear-radius-px: 2px;
+    --pear-radius-chip: 4px;
+    --pear-radius-card: 8px;
+    /* Back-compat aliases for Phase B consumers (retired per batch). */
     --pear-radius: 6px;
-    --pear-radius-small: 4px;
+    --pear-radius-small: var(--pear-radius-chip);
+    --pear-shadow-pop: light-dark(
+        0 8px 24px hsl(160deg 20% 20% / 14%),
+        0 8px 24px hsl(0deg 0% 0% / 32%)
+    );
+
+    /* Motion — macOS fluid, GPU-cheap. */
+    --pear-ease: cubic-bezier(0.22, 1, 0.36, 1);
+    --pear-dur-1: 150ms;
+    --pear-dur-2: 220ms;
+    --pear-dur-3: 350ms;
+    /* Back-compat alias for Phase B consumers (retired in B5). */
     --pear-transition-duration: 120ms;
-    --pear-accent: light-dark(hsl(140deg 45% 32%), hsl(140deg 38% 62%));
-    --pear-accent-subtle: light-dark(
-        hsl(140deg 45% 32% / 12%),
-        hsl(140deg 38% 62% / 16%)
+
+    /* Pear message rows sit one tone below the page surface. */
+    --color-background-pear-message-content: light-dark(
+        hsl(100deg 15% 95%),
+        hsl(158deg 8% 9%)
     );
     --color-selected-message-outline: light-dark(
         hsl(217deg 64% 59% / 60%),

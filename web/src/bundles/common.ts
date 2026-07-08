@@ -7,6 +7,7 @@ import "font-awesome/css/font-awesome.css";
 import "../../icons/zulip-icons.font.cjs";
 import "source-sans/source-sans-3VF.css";
 import "source-code-pro/source-code-pro.css";
+import "../../styles/pear_fonts.css";
 import "@fontsource-variable/open-sans";
 import "../../styles/alerts.css";
 import "../../styles/blueslip.css";

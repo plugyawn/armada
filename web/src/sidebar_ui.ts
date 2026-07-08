@@ -20,6 +20,7 @@ import * as message_reminder from "./message_reminder.ts";
 import * as message_viewport from "./message_viewport.ts";
 import {page_params} from "./page_params.ts";
 import * as pear_panel from "./pear_panel.ts";
+import {print_pear_signature} from "./pear_signature.ts";
 import * as pm_list from "./pm_list.ts";
 import * as popover_menus from "./popover_menus.ts";
 import * as popovers from "./popovers.ts";
@@ -401,6 +402,7 @@ export function initialize_right_sidebar(): void {
 
     buddy_list.initialize_tooltips();
     pear_panel.initialize();
+    print_pear_signature();
 
     update_invite_user_option();
 

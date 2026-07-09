@@ -444,8 +444,10 @@
 }
 
 #pear-panel.pear-workbench-popover-open .pear-workbench-tab {
-    font-size: 1em;
-    font-weight: 500;
+    /* Pinned px by design; see the pixel-type rule in the design spec. */
+    /* stylelint-disable-next-line declaration-property-unit-disallowed-list */
+    font-size: 12px;
+    font-weight: 400;
     line-height: 1.4;
     padding: 7px 0 8px;
 }

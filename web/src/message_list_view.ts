@@ -1515,10 +1515,13 @@ export class MessageListView {
 
         const sender_is_bot = people.sender_is_bot(message);
         const is_pear_message = message_is_pear_message(message, is_hidden);
-        // Pear messages keep the normal sender treatment: suppressing it
-        // entirely made the bot's work read as anonymous grey rows (or as
-        // a continuation of the requester's message). Zulip's grouping
-        // already collapses the sender row for consecutive Pear messages.
+        // The agent is ambient: its rows carry no sender chrome at all —
+        // the tinted block and the pixel voice are the identity — so
+        // every Pear row renders as a continuation row, prose starting
+        // beside the timestamp instead of under an empty sender band.
+        if (is_pear_message) {
+            include_sender = false;
+        }
         const is_pear_active_message = is_active_pear_message(message, is_pear_message);
         const is_typing = typing_data.is_message_editing(message.id);
         if (is_typing && !is_pear_message) {

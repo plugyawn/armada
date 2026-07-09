@@ -606,7 +606,8 @@ test("pear_message_vars", () => {
     );
     assert.equal(result.is_pear_message, true);
     assert.equal(result.is_pear_active_message, true);
-    assert.equal(result.include_sender, true);
+    // Ambient voice: Pear rows never include sender chrome.
+    assert.equal(result.include_sender, false);
 
     result = calculate_variables(
         build_message_context({
@@ -617,7 +618,8 @@ test("pear_message_vars", () => {
     );
     assert.equal(result.is_pear_message, true);
     assert.equal(result.is_pear_active_message, true);
-    assert.equal(result.include_sender, true);
+    // Ambient voice: Pear rows never include sender chrome.
+    assert.equal(result.include_sender, false);
 
     result = calculate_variables(
         build_message_context({
@@ -628,7 +630,8 @@ test("pear_message_vars", () => {
     );
     assert.equal(result.is_pear_message, true);
     assert.equal(result.is_pear_active_message, true);
-    assert.equal(result.include_sender, true);
+    // Ambient voice: Pear rows never include sender chrome.
+    assert.equal(result.include_sender, false);
 
     pear_run_state.set_active_run_result_messages([{status: "running", result_message_id: 1005}]);
     result = calculate_variables(
@@ -640,7 +643,8 @@ test("pear_message_vars", () => {
     );
     assert.equal(result.is_pear_message, true);
     assert.equal(result.is_pear_active_message, true);
-    assert.equal(result.include_sender, true);
+    // Ambient voice: Pear rows never include sender chrome.
+    assert.equal(result.include_sender, false);
 
     pear_run_state.set_active_run_result_messages([]);
     result = calculate_variables(
@@ -652,7 +656,8 @@ test("pear_message_vars", () => {
     );
     assert.equal(result.is_pear_message, true);
     assert.equal(result.is_pear_active_message, true);
-    assert.equal(result.include_sender, true);
+    // Ambient voice: Pear rows never include sender chrome.
+    assert.equal(result.include_sender, false);
 
     result = calculate_variables(
         build_message_context({
@@ -662,7 +667,8 @@ test("pear_message_vars", () => {
     );
     assert.equal(result.is_pear_message, true);
     assert.equal(result.is_pear_active_message, false);
-    assert.equal(result.include_sender, true);
+    // Ambient voice: Pear rows never include sender chrome.
+    assert.equal(result.include_sender, false);
 
     result = calculate_variables(
         build_message_context({
@@ -689,7 +695,8 @@ test("pear_message_vars", () => {
     );
     assert.equal(result.is_pear_message, true);
     assert.equal(result.is_pear_active_message, true);
-    assert.equal(result.include_sender, true);
+    // Ambient voice: Pear rows never include sender chrome.
+    assert.equal(result.include_sender, false);
     assert.equal(result.edited, false);
     assert.equal(result.last_edit_timestamp, undefined);
 
@@ -1797,15 +1804,10 @@ run_test("pear thinking frames stay in lockstep with the CSS engine", () => {
     // silently change character.
     const fs = require("node:fs");
     const path = require("node:path");
-    const css = fs.readFileSync(
-        path.resolve(__dirname, "../styles/pear.css"),
-        "utf8",
-    );
+    const css = fs.readFileSync(path.resolve(__dirname, "../styles/pear.css"), "utf8");
     const keyframes_block = /@keyframes pear-thinking-frames \{([^]*?)\n\}/.exec(css);
     assert.ok(keyframes_block, "pear-thinking-frames keyframes must exist in pear.css");
-    const css_frames = [...keyframes_block[1].matchAll(/content: "(.+?)";/g)].map(
-        (m) => m[1],
-    );
+    const css_frames = [...keyframes_block[1].matchAll(/content: "(.+?)";/g)].map((m) => m[1]);
     const js_frames = [...message_list_view.pear_thinking_glyph_frames_for_testing()];
     // The 100% keyframe repeats frame 0 to close the loop.
     assert.deepEqual(css_frames, [...js_frames, js_frames[0]]);

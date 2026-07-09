@@ -992,7 +992,8 @@ run_test("topic header controls template matches the retired jQuery skeleton", (
     // status dot, no bare "·" separator, no "no repo" furniture.
     assert.match(
         html,
-        /^<span class="pear-topic-header-status no-select" data-pear-header-key="\{&quot;stream_id&quot;:7,&quot;topic&quot;:&quot;t&quot;\}">/,
+        // Whitespace-tolerant: prettier splits the attributes over lines.
+        /^<span\s+class="pear-topic-header-status no-select"\s+data-pear-header-key="\{&quot;stream_id&quot;:7,&quot;topic&quot;:&quot;t&quot;\}"\s*>/,
     );
     assert.ok(!html.includes("pear-topic-header-status-dot"));
     assert.ok(!html.includes("pear-topic-header-meta-separator"));
@@ -1008,17 +1009,18 @@ run_test("topic header controls template matches the retired jQuery skeleton", (
         'class="pear-commitline-subject"',
         'class="pear-commitline-meta"',
         "pear-topic-header-runtime-control pear-runtime-menu-trigger",
-        'class="pear-ui-glyph pear-runtime-menu-glyph" aria-hidden="true">·<',
         'class="pear-runtime-menu-model-label"',
-        'class="pear-topic-header-runtime-separator" aria-hidden="true">·<',
         'class="pear-runtime-menu-effort-label"',
         "zulip-icon zulip-icon-chevron-down pear-topic-header-control-chevron",
     ]) {
         assert.ok(html.includes(marker), `missing: ${marker}`);
     }
+    // The glyph and separator spans wrap across lines under prettier.
+    assert.match(html, /class="pear-ui-glyph pear-runtime-menu-glyph"\s+aria-hidden="true"\s*>·</);
+    assert.match(html, /class="pear-topic-header-runtime-separator"\s+aria-hidden="true"\s*>·</);
     // The runtime button and the branch/work controls carry the header key.
     assert.equal(html.split("data-pear-header-key").length - 1, 4);
-    assert.equal(html.split('<button type="button"').length - 1, 2);
+    assert.equal((html.match(/<button\s+type="button"/g) ?? []).length, 2);
     // Exactly one runtime trigger remains: the merged model·effort pill.
     assert.equal(html.split("pear-runtime-menu-trigger").length - 1, 1);
 });

@@ -3950,7 +3950,11 @@ class PearMathNormalizationTest(ZulipTestCase):
             "and `\\\\(inline code\\\\)` stays.\n"
         )
         normalized = normalize_pear_math_delimiters(content)
-        self.assertIn("```math\ng_i = (u_i, v_i)\n```", normalized)
+        # Single-line display math renders as $$...$$ so it survives
+        # list nesting; only multi-line bodies become fences.
+        self.assertIn("$$g_i = (u_i, v_i)$$", normalized)
+        multiline = normalize_pear_math_delimiters("\\[\nx = 1\\\\\ny = 2\n\\]")
+        self.assertIn("```math", multiline)
         self.assertIn("$$u_i$$", normalized)
         # Fenced code and inline code spans stay untouched.
         self.assertIn('x = "\\\\[not math\\\\]"', normalized)

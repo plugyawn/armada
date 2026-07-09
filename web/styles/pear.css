@@ -1910,9 +1910,12 @@
 #pear-workspace-pane {
     display: flex;
     overflow: hidden;
-    height: calc(100% - var(--navbar-fixed-height));
+    box-sizing: border-box;
+    height: 100%;
     flex-direction: column;
-    margin-top: var(--navbar-fixed-height);
+    /* padding, not margin: a top margin collapses into the block
+       parent and the pane lands back under the navbar. */
+    padding-top: var(--navbar-fixed-height);
     background: var(--pear-surface-0);
 
     /* display: flex would silently defeat the hidden attribute the

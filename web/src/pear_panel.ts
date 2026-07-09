@@ -72,6 +72,7 @@ const pear_run_schema = z.object({
     workdir: z.string(),
     codex_thread_id: z.string(),
     usage: z.nullish(pear_usage_schema),
+    tool_count: z.optional(z.number()),
     live: z.nullish(pear_live_run_schema),
     events: z.optional(z.array(pear_run_event_schema)),
 });

@@ -455,6 +455,30 @@ class PearSessionEndpointTest(ZulipTestCase):
         self.assertEqual(live["status"], "running")
         self.assertEqual(live["content"], "Streaming answer")
         self.assertIsInstance(live["updated_at"], float)
+        # No tool_results events yet.
+        self.assertEqual(serialized_run["tool_count"], 0)
+
+        # The run footer sums tool_count across the per-segment
+        # tool_results events; malformed payloads are skipped.
+        PearWorkerRunEvent.objects.create(
+            run=run,
+            event_type="tool_results",
+            summary="Ran 2 tools",
+            payload={"tool_count": 2, "tool_results": []},
+        )
+        PearWorkerRunEvent.objects.create(
+            run=run,
+            event_type="tool_results",
+            summary="Ran 3 tools",
+            payload={"tool_count": 3, "tool_results": []},
+        )
+        PearWorkerRunEvent.objects.create(
+            run=run,
+            event_type="tool_results",
+            summary="Malformed",
+            payload={"tool_count": "nope"},
+        )
+        self.assertEqual(serialize_pear_worker_run(run)["tool_count"], 5)
 
     def test_serialize_pear_worker_run_hides_stale_active_live_state(self) -> None:
         user = self.example_user("hamlet")

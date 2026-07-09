@@ -416,6 +416,10 @@ export function stop_auto_scrolling(): void {
     }
 }
 
+// Matches --pear-dur-2: jQuery's default 400ms reads as lag on a
+// keyboard-driven feed.
+const ANIMATED_SCROLL_DURATION_MS = 220;
+
 export function system_initiated_animate_scroll(
     scroll_amount: number,
     update_selection_on_scroll = false,
@@ -423,12 +427,17 @@ export function system_initiated_animate_scroll(
     message_scroll_state.set_update_selection_on_next_scroll(update_selection_on_scroll);
     const viewport_offset = scrollTop();
     in_stoppable_autoscroll = true;
-    $scroll_container.animate({
-        scrollTop: viewport_offset + scroll_amount,
-        always() {
-            in_stoppable_autoscroll = false;
+    $scroll_container.animate(
+        {
+            scrollTop: viewport_offset + scroll_amount,
         },
-    });
+        {
+            duration: ANIMATED_SCROLL_DURATION_MS,
+            always() {
+                in_stoppable_autoscroll = false;
+            },
+        },
+    );
 }
 
 export function user_initiated_animate_scroll(scroll_amount: number): void {
@@ -437,9 +446,12 @@ export function user_initiated_animate_scroll(scroll_amount: number): void {
 
     const viewport_offset = scrollTop();
 
-    $scroll_container.animate({
-        scrollTop: viewport_offset + scroll_amount,
-    });
+    $scroll_container.animate(
+        {
+            scrollTop: viewport_offset + scroll_amount,
+        },
+        ANIMATED_SCROLL_DURATION_MS,
+    );
 }
 
 export function recenter_view(

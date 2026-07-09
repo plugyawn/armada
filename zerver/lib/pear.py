@@ -1210,6 +1210,12 @@ def pear_append_active_marker(text: str) -> str:
         return PEAR_ACTIVE_THINKING_MARKDOWN
     if text.endswith(PEAR_ACTIVE_MARKDOWN_PREFIX):
         return text
+    # A streaming snapshot can end inside an unclosed code fence;
+    # appending the marker there would glue a ✦ into the code (or
+    # math) source. Skip the marker for that tick - the tool chips
+    # still carry liveness.
+    if len(re.findall(r"^\s{0,3}(?:```|~~~)", text, MULTILINE)) % 2 == 1:
+        return text
     if text.endswith("```"):
         return f"{text}\n\n{PEAR_ACTIVE_MARKDOWN_PREFIX}"
     return f"{text} {PEAR_ACTIVE_MARKDOWN_PREFIX}"
@@ -1909,9 +1915,15 @@ def normalize_pear_math_delimiters(content: str) -> str:
     for index, part in enumerate(parts):
         if index % 2 == 1:
             continue
-        part = PEAR_MATH_DISPLAY_PATTERN.sub(
-            lambda match: "\n```math\n" + match.group(1) + "\n```\n", part
-        )
+        def replace_display(match: re.Match[str]) -> str:
+            body = match.group(1).strip()
+            # Inside list items an indented ```math fence misses
+            # Zulip's math path entirely; $$...$$ renders anywhere.
+            if "\n" not in body and len(body) <= 200:
+                return "$$" + body + "$$"
+            return "\n```math\n" + body + "\n```\n"
+
+        part = PEAR_MATH_DISPLAY_PATTERN.sub(replace_display, part)
         part = PEAR_MATH_INLINE_PATTERN.sub(
             lambda match: "$$" + match.group(1).strip() + "$$", part
         )

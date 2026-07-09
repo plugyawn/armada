@@ -1950,12 +1950,25 @@
     }
 }
 
+/* Inline mode: with the bar active, the pane joins the page flow —
+   canvas and files scroll on the page exactly like chat, and the bar
+   pins against the same scroll. No nested scrollbox. */
 .pear-topic-bar-active #pear-workspace-pane {
-    height: calc(
-        100% - var(--navbar-fixed-height) - var(--header-padding-bottom) -
-            var(--pear-topic-bar-height, 0px)
-    );
+    overflow: visible;
+    height: auto;
     padding-top: 0;
+}
+
+.pear-topic-bar-active #pear-workspace-pane .pear-workspace-pane-body {
+    overflow: visible;
+}
+
+/* In page flow the pane's foot scrolls away; the status pins to the
+   viewport instead. */
+.pear-topic-bar-active #pear-workspace-pane .pear-canvas-status {
+    position: fixed;
+    right: calc(var(--right-sidebar-width) + var(--pear-space-4));
+    bottom: var(--pear-space-3);
 }
 
 .pear-workspace-pane-inner {

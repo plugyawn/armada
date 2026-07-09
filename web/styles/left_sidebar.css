@@ -2211,23 +2211,22 @@ li.active-sub-filter {
 
 /* Workspace marks (design §8.3): a repo-bound channel wears a quiet
    pixel ◉ after its name; a worktree-backed topic wears the branch
-   glyph. Both speak in ink-3 — legible, never loud. */
+   glyph before its name. Both live inline inside the name spans (the
+   rows are strict named-area grids — loose children auto-place into
+   phantom cells) and speak in ink-3: legible, never loud. */
 .pear-repo-mark {
-    flex: 0 0 auto;
-    margin-right: 4px;
+    margin-left: 5px;
     color: var(--pear-ink-3);
     font-family: var(--pear-font-pixel);
     /* Pinned px by design; see the pixel-type rule in the design spec. */
     /* stylelint-disable-next-line declaration-property-unit-disallowed-list */
     font-size: 11px;
-    line-height: 1;
 }
 
 .pear-worktree-mark {
-    flex: 0 0 auto;
-    align-self: center;
-    margin-right: 3px;
+    margin-right: 4px;
     color: var(--pear-ink-3);
+    vertical-align: -0.1em;
     /* 12px at 14px em */
     font-size: 0.8571em;
 }

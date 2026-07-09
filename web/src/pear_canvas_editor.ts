@@ -5,9 +5,8 @@
 // spans shimmer in place, resolved [label](#aside-N) links become
 // popover chips (design: pear/PEAR_CANVAS_TABS_DESIGN.md, T2).
 
-import "@milkdown/crepe/theme/common/style.css";
-import "@milkdown/crepe/theme/frame.css";
-import "katex/dist/katex.min.css";
+// The Crepe theme CSS ships from bundles/app.ts alongside Zulip's
+// other third-party styles; katex.css is already imported there.
 
 import {Crepe} from "@milkdown/crepe";
 import {editorViewCtx, prosePluginsCtx} from "@milkdown/kit/core";
@@ -97,6 +96,9 @@ export async function mount(root: HTMLElement, options: CanvasEditorOptions): Pr
             [Crepe.Feature.ImageBlock]: false,
             [Crepe.Feature.TopBar]: false,
             [Crepe.Feature.AI]: false,
+            // Link clicks belong to the aside-chip popover; Crepe's
+            // link edit/preview UI fights it and lingers on screen.
+            [Crepe.Feature.LinkTooltip]: false,
         },
         featureConfigs: {
             [Crepe.Feature.Placeholder]: {

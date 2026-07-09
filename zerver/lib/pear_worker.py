@@ -1117,10 +1117,63 @@ def pear_workspace_file_listing(
             status_by_path[entry["path"]] = (
                 "untracked" if entry["kind"] == "untracked" else "changed"
             )
-    files = [
-        {"path": path, "status": status_by_path.get(path, "clean")}
-        for path in paths[:PEAR_WORKSPACE_FILE_LISTING_LIMIT]
-    ]
+    # Blob sizes for tracked files: one ls-files pass.
+    size_by_path: dict[str, int] = {}
+    try:
+        size_output = pear_git_output(
+            workdir,
+            ["ls-files", "-z", "--cached", "--format=%(objectsize)%x1f%(path)"],
+            isolation_username=isolation_username,
+        )
+        for record in size_output.split("\0"):
+            if "\x1f" not in record:
+                continue
+            raw_size, _, size_path = record.partition("\x1f")
+            if raw_size.isdigit():
+                size_by_path[size_path] = int(raw_size)
+    except Exception:  # nocoverage
+        # Older git without ls-files --format; sizes just stay blank.
+        pass
+
+    # Last commit touching each path (GitHub-style tree annotations):
+    # one bounded log walk, newest first, first hit wins.
+    commit_by_path: dict[str, tuple[int, str]] = {}
+    log_output = pear_git_output(
+        workdir,
+        [
+            "-c",
+            "core.quotepath=off",
+            "log",
+            "-n",
+            "200",
+            "--format=C\x1f%ct\x1f%s",
+            "--name-only",
+        ],
+        isolation_username=isolation_username,
+    )
+    current_commit: tuple[int, str] | None = None
+    for line in log_output.splitlines():
+        if line.startswith("C\x1f"):
+            parts = line.split("\x1f", 2)
+            if len(parts) == 3 and parts[1].isdigit():
+                current_commit = (int(parts[1]), trim_pear_text(parts[2], limit=120))
+            else:  # nocoverage
+                current_commit = None
+        elif line.strip() and current_commit is not None and line not in commit_by_path:
+            commit_by_path[line] = current_commit
+
+    files: list[dict[str, object]] = []
+    for path in paths[:PEAR_WORKSPACE_FILE_LISTING_LIMIT]:
+        entry: dict[str, object] = {
+            "path": path,
+            "status": status_by_path.get(path, "clean"),
+            "size": size_by_path.get(path),
+        }
+        commit = commit_by_path.get(path)
+        if commit is not None:
+            entry["commit_time"] = commit[0]
+            entry["commit_subject"] = commit[1]
+        files.append(entry)
     return {
         "files": files,
         "truncated": len(paths) > PEAR_WORKSPACE_FILE_LISTING_LIMIT,

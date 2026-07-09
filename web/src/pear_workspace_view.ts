@@ -25,7 +25,15 @@ export type PearWorkspaceTab = "chat" | "canvas" | "files";
 
 const workspace_files_schema = z.object({
     pear_workspace_files: z.object({
-        files: z.array(z.object({path: z.string(), status: z.string()})),
+        files: z.array(
+            z.object({
+                path: z.string(),
+                status: z.string(),
+                size: z.nullish(z.number()),
+                commit_subject: z.optional(z.string()),
+                commit_time: z.nullish(z.number()),
+            }),
+        ),
         truncated: z.boolean(),
         canvas_path: z.nullish(z.string()),
     }),
@@ -336,7 +344,37 @@ export function sync(opts: {
 
 // ---------------- Files ----------------
 
-type FileEntry = {path: string; status: string};
+type FileEntry = {
+    path: string;
+    status: string;
+    size?: number | null | undefined;
+    commit_subject?: string | undefined;
+    commit_time?: number | null | undefined;
+};
+
+function short_relative_time(unix_seconds: number): string {
+    const seconds = Math.max(0, Date.now() / 1000 - unix_seconds);
+    if (seconds < 3600) {
+        return `${Math.max(1, Math.floor(seconds / 60))}m`;
+    }
+    if (seconds < 86_400) {
+        return `${Math.floor(seconds / 3600)}h`;
+    }
+    if (seconds < 86_400 * 30) {
+        return `${Math.floor(seconds / 86_400)}d`;
+    }
+    return `${Math.floor(seconds / (86_400 * 30))}mo`;
+}
+
+function format_file_size(size: number): string {
+    if (size < 1024) {
+        return `${size} B`;
+    }
+    if (size < 1024 * 1024) {
+        return `${(size / 1024).toFixed(1)} KB`;
+    }
+    return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+}
 
 let files_collapsed_dirs = new Set<string>();
 let last_files_payload:
@@ -477,6 +515,18 @@ function render_files_tree(
         if ($chip !== undefined) {
             $row.append($chip);
         }
+        if (file.commit_subject !== undefined && file.commit_subject !== "") {
+            $row.append(
+                $("<span>").addClass("pear-files-commit").text(file.commit_subject),
+            );
+        }
+        if (typeof file.commit_time === "number") {
+            $row.append(
+                $("<span>")
+                    .addClass("pear-files-when")
+                    .text(short_relative_time(file.commit_time)),
+            );
+        }
         const $actions = $("<span>").addClass("pear-files-actions");
         $actions.append(
             $("<button>")
@@ -506,6 +556,47 @@ function render_files_tree(
         );
     }
     $body.empty().append($sheet);
+    const readme = ordered.find((file) => /^readme\.(?:md|markdown)$/i.test(file.path));
+    if (readme !== undefined) {
+        render_files_readme(readme.path, $sheet);
+    }
+}
+
+function render_files_readme(path: string, $sheet: JQuery): void {
+    if (current_stream === undefined || current_topic === undefined) {
+        return;
+    }
+    void channel.get({
+        url: "/json/pear/workspace-file",
+        data: {stream: current_stream, topic: current_topic, path},
+        success(raw_data) {
+            const parsed = workspace_file_schema.safeParse(raw_data);
+            if (!parsed.success || current_tab !== "files") {
+                return;
+            }
+            void channel.post({
+                url: "/json/messages/render",
+                data: {content: parsed.data.pear_workspace_file.content},
+                success(raw_rendered) {
+                    if (current_tab !== "files" || $sheet.closest("body").length === 0) {
+                        return;
+                    }
+                    const rendered = message_render_response_schema.parse(raw_rendered);
+                    const $readme = $("<div>").addClass("pear-files-readme");
+                    $readme.append(
+                        $("<div>").addClass("pear-files-readme-title").text(path),
+                    );
+                    const $content = $("<div>").addClass(
+                        "pear-files-readme-content rendered_markdown",
+                    );
+                    $content.html(postprocess_content(rendered.rendered));
+                    rendered_markdown.update_elements($content);
+                    $readme.append($content);
+                    $sheet.append($readme);
+                },
+            });
+        },
+    });
 }
 
 function show_file_preview(path: string): void {
@@ -549,10 +640,15 @@ function show_file_preview(path: string): void {
                         $("<span>")
                             .addClass("pear-files-preview-meta")
                             .text(
-                                $t(
-                                    {defaultMessage: "{lines} lines"},
-                                    {lines: content.split("\n").length},
-                                ),
+                                [
+                                    $t(
+                                        {defaultMessage: "{lines} lines"},
+                                        {lines: content.split("\n").length},
+                                    ),
+                                    format_file_size(
+                                        new Blob([content]).size,
+                                    ),
+                                ].join(" · "),
                             ),
                         $("<button>")
                             .attr("type", "button")

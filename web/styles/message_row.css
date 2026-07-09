@@ -102,8 +102,11 @@
             padding-right: 0.35em;
             overflow-wrap: anywhere;
             font-family: var(--pear-font-pixel);
-            /* stylelint-disable-next-line declaration-property-unit-disallowed-list */
-            font-size: 13px;
+            /* 15px at the 16px base: the pixel face's tall x-height
+               makes it read level with the room's prose one step
+               down, and tracking the base keeps that parity at any
+               font-size setting. */
+            font-size: calc(var(--base-font-size-px) * 0.9375);
 
             /* Pixel glyphs sit on a hard grid; they need more air
                between lines than the outline faces do. The :not()

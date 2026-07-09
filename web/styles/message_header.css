@@ -424,7 +424,7 @@
     background: color-mix(in srgb, currentcolor 6%, transparent);
     color: var(--pear-ink-2);
     font-family: var(--pear-font-pixel);
-    font-size: 0.875em;
+    font-size: 0.75em;
     font-weight: 400;
 
     &:hover,

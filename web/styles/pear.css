@@ -1904,12 +1904,15 @@
     color: var(--pear-ink-1);
 }
 
-/* The pane replaces the feed inside the middle column. */
+/* The pane replaces the feed inside the middle column. The fixed
+   navbar overlays the column top, so the pane starts below it or its
+   header vanishes underneath (live report). */
 #pear-workspace-pane {
     display: flex;
     overflow: hidden;
-    height: 100%;
+    height: calc(100% - var(--navbar-fixed-height));
     flex-direction: column;
+    margin-top: var(--navbar-fixed-height);
     background: var(--pear-surface-0);
 
     /* display: flex would silently defeat the hidden attribute the

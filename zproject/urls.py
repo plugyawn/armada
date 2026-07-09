@@ -105,6 +105,7 @@ from zerver.views.pear import (
     get_pear_session_backend,
     get_pear_topic_context_backend,
     get_pear_workspace_topics_backend,
+    post_pear_canvas_ask_backend,
     get_pear_workspace_files_backend,
     get_pear_workspace_file_backend,
     post_pear_config_backend,
@@ -446,6 +447,10 @@ v1_api_and_json_patterns = [
     rest_path(
         "pear/workspace-file",
         GET=(get_pear_workspace_file_backend, {"intentionally_undocumented"}),
+    ),
+    rest_path(
+        "pear/canvas-ask",
+        POST=(post_pear_canvas_ask_backend, {"intentionally_undocumented"}),
     ),
     rest_path(
         "pear/canvas",

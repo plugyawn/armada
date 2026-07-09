@@ -5,6 +5,7 @@
 // them without leaving the narrow.
 
 import $ from "jquery";
+import * as tippy from "tippy.js";
 import * as z from "zod/mini";
 
 import render_pear_workspace_pane from "../templates/pear_workspace_pane.hbs";
@@ -62,7 +63,7 @@ function ensure_pane(): JQuery {
     if ($feed.length === 0) {
         return $existing;
     }
-    $feed.after('<div id="pear-workspace-pane" hidden></div>');
+    $feed.after($("<div>").attr("id", "pear-workspace-pane").prop("hidden", true));
     $existing = $pane();
     return $existing;
 }
@@ -102,9 +103,9 @@ function show_pane(): void {
     $("#message_feed_container").hide();
     $pane().removeAttr("hidden");
     if (current_tab === "canvas") {
-        void load_canvas();
+        load_canvas();
     } else if (current_tab === "files") {
-        void load_files();
+        load_files();
     }
 }
 
@@ -209,7 +210,7 @@ function render_files_tree(
     }
     const $list = $("<ul>").addClass("pear-files-list");
     const seen_dirs = new Set<string>();
-    const ordered = [...files].sort((a, b) => {
+    const ordered = files.toSorted((a, b) => {
         const canvas_first = Number(b.path === canvas_path) - Number(a.path === canvas_path);
         if (canvas_first !== 0) {
             return canvas_first;
@@ -271,7 +272,7 @@ function render_files_tree(
     }
 }
 
-async function load_files(): Promise<void> {
+function load_files(): void {
     if (current_stream === undefined || current_topic === undefined) {
         return;
     }
@@ -338,6 +339,300 @@ let canvas_loaded = false;
 const rendered_block_cache = new Map<string, string>();
 let canvas_render_generation = 0;
 
+// ---------------- Asks ----------------
+// A bracketed span in a committed block is a request to the agent:
+// "[request](label)" resolves into a popover aside; bare "[request]"
+// resolves in place. Real links, checkboxes, footnotes, and images
+// keep their markdown meaning (PEAR_CANVAS_TABS_DESIGN.md §B).
+
+type CanvasAsk = {request: string; label: string};
+
+const PEAR_ASK_PENDING_TTL_MS = 10 * 60 * 1000;
+// Keyed by `${context}|${request}|${label}` → dispatch timestamp.
+const pending_asks = new Map<string, number>();
+let ask_dispatch_queue: CanvasAsk[] = [];
+const aside_sections = new Map<string, string>();
+const rendered_aside_cache = new Map<string, string>();
+
+function ask_key(ask: CanvasAsk): string {
+    return `${current_context_key}|${ask.request}|${ask.label}`;
+}
+
+function ask_span_text(ask: CanvasAsk): string {
+    return ask.label === "" ? `[${ask.request}]` : `[${ask.request}](${ask.label})`;
+}
+
+function target_is_real_link(target: string): boolean {
+    return /^(?:[a-z][a-z0-9+.-]*:|\/|#|\.\.?\/)/i.test(target.trim());
+}
+
+function parse_asks_from_source(source: string): CanvasAsk[] {
+    if (/^\s{0,3}(?:```|~~~)/.test(source)) {
+        // Fenced blocks are code, never asks.
+        return [];
+    }
+    const asks: CanvasAsk[] = [];
+    const span_re = /\[([^[\]\n]+)\](?:\(([^()\n]+)\))?/g;
+    for (const match of source.matchAll(span_re)) {
+        const request = match[1] ?? "";
+        const label = (match[2] ?? "").trim();
+        const before = source.slice(0, match.index);
+        const after = source.slice(match.index + match[0].length);
+        if (/^[x ]$/i.test(request) || request.startsWith("^")) {
+            // Checkbox or footnote.
+            continue;
+        }
+        if (before.endsWith("!") || before.endsWith("]")) {
+            // Image, or the reference half of [text][ref].
+            continue;
+        }
+        if (label === "" && after.startsWith("[")) {
+            // The text half of a reference-style link.
+            continue;
+        }
+        const line_start = before.lastIndexOf("\n") + 1;
+        const backticks = before.slice(line_start).split("`").length - 1;
+        if (backticks % 2 === 1) {
+            // Inside an inline code span.
+            continue;
+        }
+        if (label !== "" && target_is_real_link(label)) {
+            // A real markdown link (including resolved #aside-N ones).
+            continue;
+        }
+        asks.push({request: request.trim(), label});
+    }
+    return asks;
+}
+
+function queue_new_asks(previous_source: string, committed_source: string): void {
+    const previous = new Set(
+        parse_asks_from_source(previous_source).map((ask) => ask_span_text(ask)),
+    );
+    for (const ask of parse_asks_from_source(committed_source)) {
+        if (previous.has(ask_span_text(ask)) || pending_asks.has(ask_key(ask))) {
+            continue;
+        }
+        ask_dispatch_queue.push(ask);
+    }
+}
+
+function dispatch_queued_asks(): void {
+    if (current_stream === undefined || current_topic === undefined) {
+        ask_dispatch_queue = [];
+        return;
+    }
+    const queue = ask_dispatch_queue;
+    ask_dispatch_queue = [];
+    for (const ask of queue) {
+        const block_source =
+            canvas_blocks.find((block) => block.source.includes(ask_span_text(ask)))?.source ?? "";
+        pending_asks.set(ask_key(ask), Date.now());
+        void channel.post({
+            url: "/json/pear/canvas-ask",
+            data: {
+                stream: current_stream,
+                topic: current_topic,
+                request: ask.request,
+                label: ask.label,
+                block: block_source,
+            },
+            success() {
+                set_canvas_status($t({defaultMessage: "pear is on it"}));
+                redecorate_pending_asks();
+            },
+            error(xhr) {
+                pending_asks.delete(ask_key(ask));
+                redecorate_pending_asks();
+                if (xhr.readyState !== 0) {
+                    set_canvas_status($t({defaultMessage: "ask failed"}), true);
+                }
+            },
+        });
+    }
+}
+
+function prune_pending_asks(): void {
+    const document_text = join_canvas_blocks(canvas_blocks);
+    const now = Date.now();
+    for (const [key, started_at] of pending_asks) {
+        if (!key.startsWith(`${current_context_key}|`)) {
+            continue;
+        }
+        const [, request = "", label = ""] = key.split("|");
+        const span = ask_span_text({request, label});
+        if (!document_text.includes(span) || now - started_at > PEAR_ASK_PENDING_TTL_MS) {
+            pending_asks.delete(key);
+        }
+    }
+}
+
+function wrap_pending_ask_text_nodes(root: HTMLElement, span_text: string): void {
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    const matches: Text[] = [];
+    let node = walker.nextNode();
+    while (node !== null) {
+        if (
+            node instanceof Text &&
+            node.textContent !== null &&
+            node.textContent.includes(span_text) &&
+            !(node.parentElement?.closest(".pear-ask-pending, code, a") instanceof HTMLElement)
+        ) {
+            matches.push(node);
+        }
+        node = walker.nextNode();
+    }
+    for (const text_node of matches) {
+        const text = text_node.textContent ?? "";
+        const start = text.indexOf(span_text);
+        const target = text_node.splitText(start);
+        target.splitText(span_text.length);
+        const $wrapped = $("<span>")
+            .addClass("pear-ask-pending")
+            .attr("title", $t({defaultMessage: "Pear is working on this ask"}))
+            .text(span_text);
+        $(target).replaceWith($wrapped);
+    }
+}
+
+function decorate_block_asks($target: JQuery, source: string): void {
+    // Resolved asides first: rewrite #aside-N links into popover chips.
+    $target.find("a").each(function (this: HTMLElement) {
+        const href = $(this).attr("href") ?? "";
+        const aside_match = /#(aside-\d+)$/.exec(href);
+        if (aside_match?.[1] !== undefined && aside_sections.has(aside_match[1])) {
+            $(this)
+                .addClass("pear-aside-chip")
+                .attr("data-pear-aside", aside_match[1])
+                .removeAttr("target")
+                .removeAttr("rel");
+        }
+    });
+    // Then pending asks: shimmer across the bracket interior.
+    const root = $target[0];
+    if (!(root instanceof HTMLElement)) {
+        return;
+    }
+    for (const ask of parse_asks_from_source(source)) {
+        if (!pending_asks.has(ask_key(ask))) {
+            continue;
+        }
+        const span_text = ask_span_text(ask);
+        wrap_pending_ask_text_nodes(root, span_text);
+        // Labeled asks may render as an anchor when markdown treats
+        // the label as a relative href; mark that shape too.
+        $target.find("a").each(function (this: HTMLElement) {
+            if (($(this).attr("href") ?? "") === ask.label && $(this).text() === ask.request) {
+                $(this).addClass("pear-ask-pending");
+            }
+        });
+    }
+}
+
+function redecorate_pending_asks(): void {
+    for (const [index, block] of canvas_blocks.entries()) {
+        const $block = $pane().find(`.pear-canvas-block[data-block-index="${index}"]`);
+        const $target = $block.find(".pear-canvas-block-rendered");
+        if ($target.length > 0) {
+            $target.find(".pear-ask-pending").each(function (this: HTMLElement) {
+                this.replaceWith(document.createTextNode($(this).text()));
+            });
+            decorate_block_asks($target, block.source);
+        }
+    }
+}
+
+// ---------------- Asides ----------------
+// The agent persists popover answers under a trailing "## Asides"
+// section ("#### aside-N" per answer). Those blocks stay in the
+// document but never render in the block list; their content
+// surfaces through the chips.
+
+function show_aside_popover(chip: HTMLElement): void {
+    if (chip.getAttribute("data-pear-aside-open") === "true") {
+        return;
+    }
+    const aside_id = chip.getAttribute("data-pear-aside") ?? "";
+    const source = aside_sections.get(aside_id);
+    if (source === undefined) {
+        return;
+    }
+    const open = (html: string): void => {
+        const $content = $("<div>").addClass("pear-aside-popover rendered_markdown").html(html);
+        rendered_markdown.update_elements($content);
+        chip.setAttribute("data-pear-aside-open", "true");
+        const instance = tippy.default(chip, {
+            content: $content[0]!,
+            trigger: "manual",
+            interactive: true,
+            appendTo: () => document.body,
+            placement: "bottom-start",
+            maxWidth: 460,
+            theme: "pear-aside",
+            onHidden(inst) {
+                chip.removeAttribute("data-pear-aside-open");
+                inst.destroy();
+            },
+        });
+        instance.show();
+    };
+    const cache_key = `${aside_id}:${block_cache_key(source)}`;
+    const cached = rendered_aside_cache.get(cache_key);
+    if (cached !== undefined) {
+        open(cached);
+        return;
+    }
+    void channel.post({
+        url: "/json/messages/render",
+        data: {content: source},
+        success(raw_data) {
+            const data = message_render_response_schema.parse(raw_data);
+            const html = postprocess_content(data.rendered);
+            rendered_aside_cache.set(cache_key, html);
+            open(html);
+        },
+    });
+}
+
+function is_asides_heading(source: string): boolean {
+    return /^##\s+asides\s*$/i.test(source.trim());
+}
+
+function asides_start_index(): number {
+    return canvas_blocks.findIndex((block) => is_asides_heading(block.source));
+}
+
+function rebuild_aside_sections(): void {
+    aside_sections.clear();
+    const start = asides_start_index();
+    if (start === -1) {
+        return;
+    }
+    let current_id: string | undefined;
+    let current_lines: string[] = [];
+    const flush = (): void => {
+        if (current_id !== undefined && current_lines.length > 0) {
+            aside_sections.set(current_id, current_lines.join("\n\n"));
+        }
+        current_lines = [];
+    };
+    for (const block of canvas_blocks.slice(start + 1)) {
+        const [first_line = "", ...rest] = block.source.split("\n");
+        const heading = /^####\s+(aside-\d+)\s*$/.exec(first_line.trim());
+        if (heading?.[1] !== undefined) {
+            flush();
+            current_id = heading[1];
+            const body = rest.join("\n").trim();
+            if (body !== "") {
+                current_lines.push(body);
+            }
+        } else if (current_id !== undefined) {
+            current_lines.push(block.source);
+        }
+    }
+    flush();
+}
+
 function split_canvas_blocks(text: string): CanvasBlock[] {
     const lines = text.replaceAll("\r\n", "\n").split("\n");
     const groups: string[][] = [];
@@ -373,8 +668,8 @@ function join_canvas_blocks(blocks: CanvasBlock[]): string {
 
 function block_cache_key(source: string): string {
     let hash = 5381;
-    for (let i = 0; i < source.length; i += 1) {
-        hash = ((hash << 5) + hash + source.charCodeAt(i)) | 0;
+    for (const char of source) {
+        hash = (hash * 33 + (char.codePointAt(0) ?? 0)) % 4_294_967_296;
     }
     return `${hash}:${source.length}`;
 }
@@ -400,6 +695,7 @@ function render_block_markdown(index: number, source: string): void {
         }
         $target.html(html);
         rendered_markdown.update_elements($target);
+        decorate_block_asks($target, source);
     };
     if (cached !== undefined) {
         apply(cached);
@@ -427,8 +723,14 @@ function build_canvas_dom(): void {
         return;
     }
     canvas_render_generation += 1;
+    rebuild_aside_sections();
+    const asides_start = asides_start_index();
     const $list = $("<div>").addClass("pear-canvas-blocks");
     for (const index of canvas_blocks.keys()) {
+        if (asides_start !== -1 && index >= asides_start) {
+            // Agent-managed aside storage; surfaces through chips.
+            continue;
+        }
         $list.append(
             $("<button>")
                 .attr("type", "button")
@@ -456,6 +758,9 @@ function build_canvas_dom(): void {
     $list.append($ghost);
     $body.empty().append($list);
     for (const [index, block] of canvas_blocks.entries()) {
+        if (asides_start !== -1 && index >= asides_start) {
+            continue;
+        }
         render_block_markdown(index, block.source);
     }
 }
@@ -472,6 +777,10 @@ function open_block_editor(index: number, initial_source?: string): void {
     const $area = $("<textarea>")
         .addClass("pear-canvas-block-source")
         .attr("spellcheck", "true")
+        .attr(
+            "placeholder",
+            $t({defaultMessage: "Write markdown — [ask Pear anything] hands that span to the agent"}),
+        )
         .val(source);
     $block.find(".pear-canvas-block-rendered, .pear-canvas-ghost-prompt").remove();
     $block.append($area);
@@ -507,10 +816,15 @@ function commit_open_block(options: {cancel?: boolean} = {}): void {
     if (Number.isNaN(index)) {
         return;
     }
+    const previous_source = index < canvas_blocks.length ? (canvas_blocks[index]?.source ?? "") : "";
     const next_blocks = [...canvas_blocks];
+    let committed_index = index;
     if (index >= next_blocks.length) {
         if (source !== "") {
-            next_blocks.push({source});
+            // New prose lands before the agent-managed asides tail.
+            const asides_start = asides_start_index();
+            committed_index = asides_start === -1 ? next_blocks.length : asides_start;
+            next_blocks.splice(committed_index, 0, {source});
         }
     } else if (source === "") {
         next_blocks.splice(index, 1);
@@ -519,9 +833,12 @@ function commit_open_block(options: {cancel?: boolean} = {}): void {
     }
     const changed = join_canvas_blocks(next_blocks) !== join_canvas_blocks(canvas_blocks);
     canvas_blocks = next_blocks;
+    if (changed && source !== "") {
+        queue_new_asks(previous_source, source);
+    }
     build_canvas_dom();
     if (changed) {
-        const $committed = $pane().find(`.pear-canvas-block[data-block-index="${index}"]`);
+        const $committed = $pane().find(`.pear-canvas-block[data-block-index="${committed_index}"]`);
         $committed.addClass("pear-canvas-block-settle");
         save_canvas_document();
     }
@@ -534,7 +851,7 @@ function insert_block_at(index: number): void {
     open_block_editor(index, "");
 }
 
-async function load_canvas(): Promise<void> {
+function load_canvas(): void {
     if (current_stream === undefined || current_topic === undefined) {
         return;
     }
@@ -551,6 +868,7 @@ async function load_canvas(): Promise<void> {
             canvas_version = parsed.data.pear_canvas.version;
             canvas_blocks = split_canvas_blocks(parsed.data.pear_canvas.content);
             canvas_loaded = true;
+            prune_pending_asks();
             set_canvas_status("");
             build_canvas_dom();
             $pane().find(".pear-workspace-pane-body").trigger("focus");
@@ -587,6 +905,9 @@ function save_canvas_document(retrying = false): void {
                 canvas_version = parsed.data.pear_canvas.version;
             }
             set_canvas_status($t({defaultMessage: "saved"}));
+            // Asks dispatch only once their span is durably in the
+            // file, so the agent always finds what it must replace.
+            dispatch_queued_asks();
         },
         error(xhr) {
             if (xhr.status === 409 && !retrying) {
@@ -648,7 +969,7 @@ export function refresh_canvas_if_open_on_settle(run_active: boolean): void {
         current_tab === "canvas" &&
         $pane().find(".pear-canvas-block-editing").length === 0
     ) {
-        void load_canvas();
+        load_canvas();
     }
 }
 
@@ -680,6 +1001,12 @@ export function initialize(): void {
         }
         event.preventDefault();
         set_tab("canvas");
+    });
+    $("body").on("click", ".pear-aside-chip", function (this: HTMLElement, event) {
+        // The aside answer opens as a popover, not a navigation.
+        event.preventDefault();
+        event.stopPropagation();
+        show_aside_popover(this);
     });
     $("body").on("click", ".pear-canvas-block-rendered", function (this: HTMLElement, event) {
         // Links and interactive markdown inside a block still work.
@@ -726,10 +1053,8 @@ export function initialize(): void {
         // Clicking away commits too — autosave spirit; Esc is the
         // explicit cancel.
         setTimeout(() => {
-            if (
-                document.activeElement === null ||
-                document.activeElement.closest?.(".pear-canvas-block-editing") === null
-            ) {
+            const editing = document.activeElement?.closest(".pear-canvas-block-editing");
+            if (!editing) {
                 commit_open_block();
             }
         }, 0);

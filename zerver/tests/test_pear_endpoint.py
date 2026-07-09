@@ -12,6 +12,7 @@ from django.utils.timezone import now as timezone_now
 from zerver.lib.pear import (
     PEAR_ACTIVE_SESSION_ENDPOINT,
     PEAR_AGENT_RUNTIME_PACKAGES,
+    PEAR_CANVAS_ASK_ENDPOINT,
     PEAR_CANVAS_ENDPOINT,
     PEAR_CODEX_MCP_TOOLS,
     PEAR_CONFIG_ENDPOINT,
@@ -3506,6 +3507,101 @@ class PearSessionEndpointTest(ZulipTestCase):
             self.assertNotEqual(run.workdir, parent_context.workdir)
             self.assertTrue(run.workdir.startswith(temp_dir))
             self.assertEqual(dispatch_mock.call_args.kwargs["topic"], run.topic_name)
+
+    def test_canvas_ask_queues_topic_workspace_run_without_topic_message(self) -> None:
+        owner = self.example_user("hamlet")
+        pear_bot = self.create_test_bot(
+            "pear",
+            owner,
+            full_name="Pear",
+            bot_type=UserProfile.EMBEDDED_BOT,
+            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+        )
+        self.subscribe(owner, PEAR_DEFAULT_STREAM)
+        self.subscribe(pear_bot, PEAR_DEFAULT_STREAM)
+        self.login_user(owner)
+
+        with (
+            tempfile.TemporaryDirectory() as temp_dir,
+            self.settings(
+                PEAR_WORKER_MODEL="gpt-5.5",
+                PEAR_TOPIC_WORKDIR_ROOT=temp_dir,
+            ),
+        ):
+            topic_message_count_before = Message.objects.filter(
+                recipient__type_id=get_stream(PEAR_DEFAULT_STREAM, owner.realm).id,
+            ).count()
+            with patch("zerver.views.pear.PearQueueWorkerDispatcher.dispatch") as dispatch_mock:
+                result = self.client_post(
+                    f"/json{PEAR_CANVAS_ASK_ENDPOINT}",
+                    {
+                        "stream": PEAR_DEFAULT_STREAM,
+                        "topic": PEAR_DEFAULT_TOPIC,
+                        "request": "write the proof of this lemma",
+                        "label": "proof",
+                        "block": "If we recall [write the proof of this lemma](proof).",
+                    },
+                    intentionally_undocumented=True,
+                )
+
+            result_dict = self.assert_json_success(result)
+            run = PearWorkerRun.objects.get(id=result_dict["pear_run"]["id"])
+            context = PearTopicContext.objects.get(
+                realm=owner.realm,
+                stream_name=PEAR_DEFAULT_STREAM,
+                topic_name=PEAR_DEFAULT_TOPIC,
+            )
+
+            # The ask executes in the topic's own workspace, so the
+            # answer lands in that topic's CANVAS.md.
+            self.assertEqual(run.session_kind, PearWorkerRun.CANVAS_ASK)
+            self.assertEqual(run.stream_name, PEAR_DEFAULT_STREAM)
+            self.assertEqual(run.topic_name, PEAR_DEFAULT_TOPIC)
+            self.assertEqual(run.workdir, context.workdir)
+            self.assertTrue(run.workdir.startswith(temp_dir))
+            self.assertEqual(run.trigger_message_id, result_dict["dm_message_id"])
+
+            # The transcript anchors to a DM; the topic stays clean.
+            dm_message = Message.objects.get(id=result_dict["dm_message_id"])
+            self.assertEqual(dm_message.recipient.type, Recipient.DIRECT_MESSAGE_GROUP)
+            self.assertEqual(
+                Message.objects.filter(
+                    recipient__type_id=get_stream(PEAR_DEFAULT_STREAM, owner.realm).id,
+                ).count(),
+                topic_message_count_before,
+            )
+
+            kwargs = dispatch_mock.call_args.kwargs
+            self.assertEqual(kwargs["stream"], PEAR_DEFAULT_STREAM)
+            self.assertEqual(kwargs["topic"], PEAR_DEFAULT_TOPIC)
+            self.assertEqual(kwargs["session_kind"], PearWorkerRun.CANVAS_ASK)
+            self.assertEqual(kwargs["message_id"], result_dict["dm_message_id"])
+            self.assertIn("write the proof of this lemma", kwargs["content"])
+            self.assertIn("CANVAS.md", kwargs["content"])
+            self.assertIn("#aside-<n>", kwargs["content"])
+
+    def test_canvas_ask_rejects_empty_request(self) -> None:
+        owner = self.example_user("hamlet")
+        self.create_test_bot(
+            "pear",
+            owner,
+            full_name="Pear",
+            bot_type=UserProfile.EMBEDDED_BOT,
+            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+        )
+        self.subscribe(owner, PEAR_DEFAULT_STREAM)
+        self.login_user(owner)
+
+        result = self.client_post(
+            f"/json{PEAR_CANVAS_ASK_ENDPOINT}",
+            {
+                "stream": PEAR_DEFAULT_STREAM,
+                "topic": PEAR_DEFAULT_TOPIC,
+                "request": "   ",
+            },
+            intentionally_undocumented=True,
+        )
+        self.assert_json_error(result, "Canvas ask cannot be empty.")
 
     def test_get_pear_active_session_without_stream(self) -> None:
         self.login("hamlet")

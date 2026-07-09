@@ -2100,10 +2100,90 @@
     }
 }
 
+/* Asks: a bracketed span handed to the agent shimmers until the
+   answer lands in the file (PEAR_CANVAS_TABS_DESIGN.md §B). */
+.pear-ask-pending {
+    padding: 0 0.15em;
+    border-radius: var(--pear-radius-chip);
+    background: linear-gradient(
+        100deg,
+        var(--pear-accent-fill) 20%,
+        var(--pear-accent-fill-strong) 45%,
+        var(--pear-accent-fill) 70%
+    );
+    background-size: 220% 100%;
+    color: var(--pear-ink-2);
+    animation: pear-ask-shimmer 1.6s var(--pear-ease) infinite;
+}
+
+@keyframes pear-ask-shimmer {
+    from {
+        background-position: 120% 0;
+    }
+
+    to {
+        background-position: -60% 0;
+    }
+}
+
+/* A resolved labeled ask: the answer waits behind a chip. */
+.pear-canvas-block-rendered a.pear-aside-chip {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 0.4em;
+    padding: 0 0.6em;
+    border: 1px solid color-mix(in srgb, var(--pear-accent-ink) 35%, transparent);
+    border-radius: 999px;
+    background: var(--pear-accent-fill);
+    color: var(--pear-ink-1);
+    font-family: var(--pear-font-pixel);
+    font-size: 0.7857em; /* 11px at 14px em */
+    text-decoration: none;
+    cursor: pointer;
+    transition: border-color var(--pear-dur-1) var(--pear-ease);
+
+    &::before {
+        content: "\2726"; /* ✦ */
+        color: var(--pear-accent-ink);
+    }
+
+    &:hover {
+        border-color: var(--pear-accent-ink);
+        text-decoration: none;
+    }
+}
+
+.tippy-box[data-theme~="pear-aside"] {
+    max-width: 460px;
+    border: 1px solid var(--pear-hairline);
+    border-radius: var(--pear-radius-card);
+    background: var(--pear-surface-1);
+    color: var(--pear-ink-1);
+    box-shadow: var(--pear-shadow-pop);
+
+    .tippy-content {
+        padding: var(--pear-space-2) var(--pear-space-3);
+    }
+
+    .tippy-arrow {
+        display: none;
+    }
+}
+
+.pear-aside-popover {
+    max-height: 45vh;
+    overflow-y: auto;
+}
+
 @media (prefers-reduced-motion: reduce) {
     .pear-pane-fade,
     .pear-canvas-block-settle {
         animation: none;
+    }
+
+    .pear-ask-pending {
+        animation: none;
+        background: var(--pear-accent-fill);
     }
 }
 

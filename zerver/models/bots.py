@@ -93,6 +93,7 @@ class PearWorkerRun(models.Model):
 
     SHARED = "shared"
     SIDE = "side"
+    CANVAS_ASK = "canvas_ask"
 
     STATUS_CHOICES = [
         (QUEUED, "queued"),
@@ -105,6 +106,7 @@ class PearWorkerRun(models.Model):
     SESSION_KIND_CHOICES = [
         (SHARED, "shared"),
         (SIDE, "side"),
+        (CANVAS_ASK, "canvas_ask"),
     ]
 
     realm = models.ForeignKey("zerver.Realm", on_delete=CASCADE)

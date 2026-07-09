@@ -41,6 +41,7 @@ from zerver.lib.pear import (
     normalize_pear_response_policy,
     pear_normalize_token_usage,
     pear_token_usage_summary,
+    trim_pear_text,
 )
 from zerver.lib.pear_gate import invalidate_pear_selected_bot_cache
 from zerver.lib.pear_workspace_map import pear_workspace_topics_for_stream
@@ -1860,6 +1861,178 @@ def post_pear_run_resume_backend(
     return json_success(
         request,
         data={"pear_run": serialize_pear_worker_run(run, include_events=True)},
+    )
+
+
+PEAR_CANVAS_ASK_MAX_CHARS = 2000
+
+
+@typed_endpoint
+def post_pear_canvas_ask_backend(
+    request: HttpRequest,
+    user_profile: UserProfile,
+    *,
+    stream_name: Annotated[
+        str,
+        ApiParamConfig("stream", documentation_status=INTENTIONALLY_UNDOCUMENTED),
+    ],
+    topic_name: Annotated[
+        str,
+        ApiParamConfig("topic", documentation_status=INTENTIONALLY_UNDOCUMENTED),
+    ],
+    ask_request: Annotated[
+        str,
+        ApiParamConfig("request", documentation_status=INTENTIONALLY_UNDOCUMENTED),
+    ],
+    label: Annotated[
+        str,
+        ApiParamConfig("label", documentation_status=INTENTIONALLY_UNDOCUMENTED),
+    ] = "",
+    block: Annotated[
+        str,
+        ApiParamConfig("block", documentation_status=INTENTIONALLY_UNDOCUMENTED),
+    ] = "",
+) -> HttpResponse:
+    """The canvas ask primitive (PEAR_CANVAS_TABS_DESIGN.md T2 §B):
+    a bracketed request in a canvas block becomes a chat-silent run in
+    the topic's own workspace whose entire job is to edit CANVAS.md
+    per the ask contract. The DM anchors the transcript; the answer
+    arrives as a file change."""
+    ask_request = ask_request.strip()
+    label = label.strip()
+    if not ask_request:
+        raise JsonableError(_("Canvas ask cannot be empty."))
+    if len(ask_request) > PEAR_CANVAS_ASK_MAX_CHARS:
+        raise JsonableError(_("Canvas ask is too long."))
+    access_stream_by_name(user_profile, stream_name)
+
+    pear_bot = get_selected_pear_bot(user_profile)
+    if pear_bot is None:
+        raise JsonableError(_("Pear bot is not configured."))
+    context = ensure_pear_topic_context(
+        user_profile,
+        stream=stream_name,
+        topic=topic_name,
+    )
+
+    label_line = label if label else "(none)"
+    span = f"[{ask_request}]({label})" if label else f"[{ask_request}]"
+    task = "\n".join(
+        [
+            "Canvas ask: resolve it by editing CANVAS.md in this workspace.",
+            "Do not post the answer to the topic; the canvas edit IS the answer.",
+            "",
+            f"Ask: {ask_request}",
+            f"Label: {label_line}",
+            "The ask appears in this canvas block:",
+            "---",
+            trim_pear_text(block, limit=4000),
+            "---",
+            "Contract:",
+            "1. Edit only CANVAS.md; keep every other part of the file exactly as it is.",
+            f'2. No label: replace the bracketed ask "{span}" with your answer written as plain prose in place.',
+            (
+                f'3. With a label: replace "{span}" with "[{label or "<label>"}](#aside-<n>)" '
+                '(next unused aside number) and append "#### aside-<n>" followed by your '
+                'answer under a "## Asides" section at the end of the file (create it if missing).'
+            ),
+            f'4. If the truest answer is a link, use "[{label or "<label>"}](<url>)" instead and skip the aside.',
+            "5. Write math in Zulip's dialect ($$...$$ inline; ```math fences at column zero).",
+            "6. Keep the answer tight and self-contained. Do not commit.",
+        ]
+    )
+
+    dm_intro = "\n".join(
+        [
+            "Pear canvas ask started.",
+            "",
+            f"Topic: {stream_name} > {topic_name}",
+            f"Ask: {ask_request}",
+        ]
+    )
+    dm_message_id = internal_send_private_message(
+        pear_bot.user_profile,
+        user_profile,
+        dm_intro,
+        disable_external_notifications=True,
+    )
+    if dm_message_id is None:
+        raise JsonableError(_("Pear could not open the ask transcript."))
+
+    run = PearWorkerRun.objects.create(
+        realm=user_profile.realm,
+        bot_profile=pear_bot.user_profile,
+        requesting_user=user_profile,
+        trigger_message_id=dm_message_id,
+        stream_name=stream_name,
+        topic_name=topic_name,
+        workspace_node=context.workspace_node,
+        session_kind=PearWorkerRun.CANVAS_ASK,
+        source_stream_name=stream_name,
+        source_topic_name=topic_name,
+        status=PearWorkerRun.QUEUED,
+        summary="Queued canvas ask.",
+        current_activity=trim_pear_text(ask_request, limit=200),
+        runtime_label=str(settings.PEAR_WORKER_AGENT_RUNTIME or ""),
+        model=pear_worker_model_for_topic(
+            pear_bot.user_profile,
+            stream=stream_name,
+            topic=topic_name,
+        ),
+        sandbox=pear_worker_sandbox_for_topic(
+            pear_bot.user_profile,
+            stream=stream_name,
+            topic=topic_name,
+        ),
+        approval_policy=str(settings.PEAR_WORKER_APPROVAL_POLICY or ""),
+        workdir=pear_worker_workdir_for_topic(
+            pear_bot.user_profile,
+            stream=stream_name,
+            topic=topic_name,
+        ),
+    )
+    PearWorkerRunEvent.objects.create(
+        run=run,
+        event_type="queued",
+        summary="Queued canvas ask.",
+        payload={"ask": trim_pear_text(ask_request, limit=500), "label": label},
+    )
+
+    worker_message = {
+        "id": dm_message_id,
+        "type": "private",
+        "display_recipient": [
+            {
+                "id": user_profile.id,
+                "email": user_profile.email,
+                "full_name": user_profile.full_name,
+            }
+        ],
+        "sender_id": user_profile.id,
+        "sender_email": user_profile.email,
+        "content": task,
+    }
+    PearQueueWorkerDispatcher().dispatch(
+        PearEmbeddedBotHandler(),
+        SimpleNamespace(user_profile=pear_bot.user_profile),
+        worker_message,
+        content=task,
+        active_session=None,
+        message_id=dm_message_id,
+        stream=stream_name,
+        topic=topic_name,
+        requesting_user_id=user_profile.id,
+        session_kind=PearWorkerRun.CANVAS_ASK,
+        source_stream=stream_name,
+        source_topic=topic_name,
+        progress_message_id=dm_message_id,
+    )
+    return json_success(
+        request,
+        data={
+            "pear_run": serialize_pear_worker_run(run),
+            "dm_message_id": dm_message_id,
+        },
     )
 
 

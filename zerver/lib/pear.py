@@ -33,6 +33,7 @@ PEAR_TOPIC_CONTEXT_ENDPOINT: Final = "/pear/topic-context"
 PEAR_CANVAS_ENDPOINT: Final = "/pear/canvas"
 PEAR_RUNS_ENDPOINT: Final = "/pear/runs"
 PEAR_SIDE_ENDPOINT: Final = "/pear/side"
+PEAR_CANVAS_ASK_ENDPOINT: Final = "/pear/canvas-ask"
 PEAR_FIRST_RUN_STREAM: Final = "pear-sandbox"
 PEAR_FIRST_RUN_TOPIC: Final = "first run"
 PEAR_FIRST_RUN_STARTER_MESSAGE: Final = (

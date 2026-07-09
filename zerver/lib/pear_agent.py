@@ -912,6 +912,31 @@ class PearCodexAppServerTranscriptTranslator:
                     "metadata": {"thread_id": thread_id},
                 }
             ]
+        if method == "turn/plan/updated":
+            # The app-server emits the model's update_plan checklist as
+            # its own notification (not a thread item): full-state
+            # replacement per update, statuses in camelCase.
+            raw_steps = params.get("plan")
+            steps: list[dict[str, str]] = []
+            if isinstance(raw_steps, list):
+                for raw_step in raw_steps:
+                    if not isinstance(raw_step, dict):
+                        continue
+                    step = raw_step.get("step")
+                    status = str(raw_step.get("status", "pending"))
+                    status = {"inProgress": "in_progress"}.get(status, status)
+                    if isinstance(step, str) and step.strip():
+                        steps.append({"step": step.strip(), "status": status})
+            if not steps:
+                return []
+            return [
+                {
+                    "kind": "plan",
+                    "status": "done",
+                    "title": "Plan",
+                    "metadata": {"steps": steps},
+                }
+            ]
         if method == "turn/started":
             return [
                 {

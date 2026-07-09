@@ -1904,9 +1904,62 @@
     color: var(--pear-ink-1);
 }
 
-/* The pane replaces the feed inside the middle column. The fixed
-   navbar overlays the column top, so the pane starts below it or its
-   header vanishes underneath (live report). */
+/* The topic bar: the chat's recipient bar promoted to page chrome.
+   One sticky instance above both the feed and the workspace pane; it
+   never re-renders or moves on tab switch. The feed's own per-day
+   bars slim to date rules underneath (scoped below), so the page has
+   exactly one topic header. */
+#pear-topic-bar {
+    position: sticky;
+    z-index: 3;
+    top: var(--navbar-fixed-height);
+    margin-top: calc(var(--navbar-fixed-height) + var(--header-padding-bottom));
+    padding: 0 10px;
+
+    &[hidden] {
+        display: none;
+    }
+
+    > .message_header_stream {
+        width: 100%;
+    }
+}
+
+/* With the promoted bar carrying the topic identity, the feed's own
+   recipient bars become quiet date rules. */
+.pear-topic-bar-active #message_feed_container {
+    padding-top: var(--pear-space-2);
+
+    & .message_header_stream {
+        box-shadow: none;
+
+        & .message-header-contents {
+            height: auto;
+            justify-content: flex-end;
+            padding: 2px 0;
+            border: 0;
+            background: transparent;
+
+            > *:not(.recipient_bar_controls) {
+                display: none;
+            }
+
+            & .recipient_bar_controls > *:not(.recipient_row_date) {
+                display: none;
+            }
+
+            & .recipient_row_date {
+                color: var(--pear-ink-3);
+                font-family: var(--pear-font-pixel);
+                /* stylelint-disable-next-line declaration-property-unit-disallowed-list */
+                font-size: 11px;
+            }
+        }
+    }
+}
+
+/* The pane replaces the feed inside the middle column, sitting under
+   the promoted bar. */
 #pear-workspace-pane {
     display: flex;
     overflow: hidden;
@@ -1926,6 +1979,14 @@
     }
 }
 
+.pear-topic-bar-active #pear-workspace-pane {
+    height: calc(
+        100% - var(--navbar-fixed-height) - var(--header-padding-bottom) -
+            var(--pear-topic-bar-height, 0px)
+    );
+    padding-top: 0;
+}
+
 .pear-workspace-pane-inner {
     position: relative;
     display: flex;
@@ -1935,41 +1996,7 @@
     flex-direction: column;
 }
 
-/* Chromeless container: the cloned recipient bar brings its own
-   look; insets match the feed's so the bar sits where chat puts it. */
-.pear-workspace-pane-header {
-    display: flex;
-    flex: 0 0 auto;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: var(--pear-space-1) var(--pear-space-4);
-    padding: 0 10px;
 
-    > .message_header_stream {
-        width: 100%;
-    }
-}
-
-
-
-/* The crumb mirrors the chat recipient bar's topic title, so the
-   header reads as the same bar across tabs. */
-.pear-workspace-pane-crumb {
-    overflow: hidden;
-    color: var(--pear-ink-1);
-    font-size: 1.05em;
-    font-weight: 600;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.pear-workspace-pane-hint {
-    margin-left: auto;
-    color: var(--pear-ink-3);
-    font-family: var(--pear-font-pixel);
-    /* stylelint-disable-next-line declaration-property-unit-disallowed-list */
-    font-size: 11px;
-}
 
 /* Save/ask state floats quietly at the pane's foot; the header stays
    byte-identical to chat's bar. */

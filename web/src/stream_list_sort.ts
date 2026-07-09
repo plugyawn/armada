@@ -126,7 +126,7 @@ export function sort_groups(
     const pinned_section: StreamListSection = {
         id: "pinned-streams",
         folder_id: null,
-        section_title: $t({defaultMessage: "PINNED CHANNELS"}),
+        section_title: $t({defaultMessage: "Pinned channels"}),
         default_visible_streams: [],
         muted_streams: [],
         inactive_streams: [],
@@ -134,12 +134,12 @@ export function sort_groups(
     const normal_section: StreamListSection = {
         id: "normal-streams",
         folder_id: null,
-        section_title: $t({defaultMessage: "CHANNELS"}),
+        section_title: $t({defaultMessage: "Channels"}),
         default_visible_streams: [],
         muted_streams: [],
         inactive_streams: [],
     };
-    const NORMAL_SECTION_TITLE_WITH_OTHER_FOLDERS = $t({defaultMessage: "OTHER"});
+    const NORMAL_SECTION_TITLE_WITH_OTHER_FOLDERS = $t({defaultMessage: "Other"});
 
     // With a "topic:" prefix search, we only match on topic names, not
     // channel names, folder names, or section titles.
@@ -271,7 +271,7 @@ export function sort_groups(
                 section = {
                     id: sub.folder_id.toString(),
                     folder_id: sub.folder_id,
-                    section_title: folder.name.toUpperCase(),
+                    section_title: folder.name,
                     default_visible_streams: [],
                     muted_streams: [],
                     inactive_streams: [],

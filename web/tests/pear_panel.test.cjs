@@ -1020,7 +1020,16 @@ run_test("topic header controls template matches the retired jQuery skeleton", (
     assert.match(html, /class="pear-topic-header-runtime-separator"\s+aria-hidden="true"\s*>·</);
     // The runtime button and the branch/work controls carry the header key.
     assert.equal(html.split("data-pear-header-key").length - 1, 4);
-    assert.equal((html.match(/<button\s+type="button"/g) ?? []).length, 2);
+    // Two header controls plus the three workspace tabs.
+    assert.equal((html.match(/<button\s+type="button"/g) ?? []).length, 5);
+    for (const marker of [
+        'class="pear-workspace-tabs pear-workspace-tabs-hidden"',
+        'data-pear-tab="chat"',
+        'data-pear-tab="canvas"',
+        'data-pear-tab="files"',
+    ]) {
+        assert.ok(html.includes(marker), `missing: ${marker}`);
+    }
     // Exactly one runtime trigger remains: the merged model·effort pill.
     assert.equal(html.split("pear-runtime-menu-trigger").length - 1, 1);
 });

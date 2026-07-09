@@ -1859,3 +1859,305 @@
         animation: none;
     }
 }
+
+/* Workspace tabs (PEAR_CANVAS_TABS_DESIGN.md T1): one strip in the
+   recipient bar and mirrored atop the pane. Pixel voice, accent
+   underline on the active tab; no boxes. */
+.pear-workspace-tabs {
+    display: inline-flex;
+    min-width: 0;
+    flex: 1 0 100%;
+    align-items: center;
+    gap: var(--pear-space-4);
+    margin: 0 42px 2px 26px;
+    /* Lay out after the bar's controls, like the commit line. */
+    order: 11;
+}
+
+.pear-workspace-tabs-hidden {
+    display: none;
+}
+
+.pear-workspace-tab {
+    appearance: none;
+    padding: 3px 1px 4px;
+    border: 0;
+    border-bottom: 2px solid transparent;
+    background: transparent;
+    color: var(--pear-ink-3);
+    cursor: pointer;
+    font-family: var(--pear-font-pixel);
+    /* Pinned px by design; see the pixel-type rule in the design spec. */
+    /* stylelint-disable-next-line declaration-property-unit-disallowed-list */
+    font-size: 12px;
+    font-weight: 400;
+    line-height: 1.2;
+    transition: color var(--pear-dur-1) var(--pear-ease);
+}
+
+.pear-workspace-tab:hover {
+    color: var(--pear-ink-1);
+}
+
+.pear-workspace-tab-selected {
+    border-bottom-color: var(--pear-accent);
+    color: var(--pear-ink-1);
+}
+
+/* The pane replaces the feed inside the middle column. */
+#pear-workspace-pane {
+    display: flex;
+    overflow: hidden;
+    height: 100%;
+    flex-direction: column;
+    background: var(--pear-surface-0);
+}
+
+.pear-workspace-pane-inner {
+    display: flex;
+    overflow: hidden;
+    min-height: 0;
+    flex: 1 1 auto;
+    flex-direction: column;
+}
+
+.pear-workspace-pane-header {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: var(--pear-space-4);
+    padding: var(--pear-space-2) var(--pear-space-4);
+    border-bottom: 1px solid var(--pear-hairline);
+
+    .pear-workspace-tabs {
+        flex: 0 1 auto;
+        margin: 0;
+        order: 0;
+    }
+}
+
+.pear-workspace-pane-crumb {
+    overflow: hidden;
+    color: var(--pear-ink-3);
+    font-family: var(--pear-font-pixel);
+    /* stylelint-disable-next-line declaration-property-unit-disallowed-list */
+    font-size: 11px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.pear-workspace-pane-hint {
+    margin-left: auto;
+    color: var(--pear-ink-3);
+    font-family: var(--pear-font-pixel);
+    /* stylelint-disable-next-line declaration-property-unit-disallowed-list */
+    font-size: 11px;
+}
+
+.pear-canvas-status {
+    color: var(--pear-ink-3);
+    font-family: var(--pear-font-pixel);
+    /* stylelint-disable-next-line declaration-property-unit-disallowed-list */
+    font-size: 11px;
+}
+
+.pear-canvas-status-failed {
+    color: var(--pear-danger);
+}
+
+.pear-workspace-pane-body {
+    overflow: auto;
+    min-height: 0;
+    flex: 1 1 auto;
+    padding: var(--pear-space-4);
+}
+
+/* Canvas: the room's voice, a comfortable measure, no chrome. */
+.pear-canvas-body {
+    display: flex;
+    justify-content: center;
+}
+
+.pear-canvas-editor {
+    width: min(100%, 72ch);
+    height: 100%;
+    resize: none;
+    padding: var(--pear-space-4) 0;
+    border: 0;
+    background: transparent;
+    color: var(--pear-ink-1);
+    font-family: var(--pear-font-mono);
+    font-size: 0.9286em; /* 13px at 14px em */
+    line-height: 1.7;
+    outline: none;
+}
+
+/* Files: the directory made visible. */
+.pear-files-list {
+    max-width: 72ch;
+    margin: 0 auto;
+    padding: 0;
+    list-style: none;
+}
+
+.pear-files-row,
+.pear-files-dir {
+    display: flex;
+    align-items: center;
+    gap: var(--pear-space-2);
+    padding: 3px var(--pear-space-2);
+    padding-left: calc(var(--pear-space-2) + var(--pear-file-depth, 0) * 18px);
+    border-radius: var(--pear-radius-chip);
+    line-height: 1.7142em; /* 24px at 14px em */
+}
+
+.pear-files-dir {
+    color: var(--pear-ink-2);
+    font-weight: 500;
+}
+
+.pear-files-dir-icon {
+    font-size: 0.7em;
+    color: var(--pear-ink-3);
+}
+
+.pear-files-row {
+    cursor: default;
+}
+
+.pear-files-row:hover {
+    background: var(--pear-surface-2);
+}
+
+.pear-files-row-canvas {
+    cursor: pointer;
+}
+
+.pear-files-name {
+    overflow: hidden;
+    min-width: 0;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.pear-files-row-untracked .pear-files-name {
+    color: var(--pear-ink-3);
+    font-style: italic;
+}
+
+.pear-files-dirty {
+    color: var(--pear-warn);
+}
+
+.pear-files-meta {
+    flex: 0 0 auto;
+    margin-left: auto;
+    color: var(--pear-ink-3);
+    font-family: var(--pear-font-pixel);
+    /* stylelint-disable-next-line declaration-property-unit-disallowed-list */
+    font-size: 11px;
+}
+
+.pear-files-download {
+    display: none;
+    flex: 0 0 auto;
+    padding: 1px 4px;
+    border: 0;
+    border-radius: var(--pear-radius-chip);
+    background: transparent;
+    color: var(--pear-ink-3);
+    cursor: pointer;
+}
+
+.pear-files-row:hover .pear-files-download {
+    display: inline-flex;
+}
+
+.pear-files-download:hover {
+    background: var(--pear-surface-3);
+    color: var(--pear-ink-1);
+}
+
+.pear-files-empty,
+.pear-files-truncated {
+    max-width: 72ch;
+    margin: var(--pear-space-4) auto;
+    color: var(--pear-ink-3);
+    text-align: center;
+}
+
+/* The rail's run strip: the branch's last three runs, one pixel line
+   each, deep-linking into work details. */
+.pear-rail-runs {
+    margin: var(--pear-space-2) 0 0;
+    padding: 0;
+    list-style: none;
+}
+
+.pear-rail-run {
+    display: flex;
+    width: 100%;
+    align-items: baseline;
+    gap: var(--pear-space-2);
+    padding: 2px var(--pear-space-2);
+    border: 0;
+    border-radius: var(--pear-radius-chip);
+    background: transparent;
+    color: var(--pear-ink-3);
+    cursor: pointer;
+    font-family: var(--pear-font-pixel);
+    /* stylelint-disable-next-line declaration-property-unit-disallowed-list */
+    font-size: 11px;
+    line-height: 1.5;
+    text-align: left;
+}
+
+.pear-rail-run:hover {
+    background: var(--pear-surface-2);
+    color: var(--pear-ink-1);
+}
+
+.pear-rail-run-glyph {
+    flex: 0 0 auto;
+    color: var(--pear-accent-ink);
+}
+
+.pear-rail-run-glyph.pear-rail-run-failed {
+    color: var(--pear-danger);
+}
+
+.pear-rail-run-meta {
+    overflow: hidden;
+    min-width: 0;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.pear-rail-run-when {
+    flex: 0 0 auto;
+    margin-left: auto;
+}
+
+.pear-rail-canvas-line {
+    display: flex;
+    width: 100%;
+    align-items: center;
+    gap: var(--pear-space-2);
+    margin-top: var(--pear-space-1);
+    padding: 2px var(--pear-space-2);
+    border: 0;
+    border-radius: var(--pear-radius-chip);
+    background: transparent;
+    color: var(--pear-ink-3);
+    cursor: pointer;
+    font-family: var(--pear-font-pixel);
+    /* stylelint-disable-next-line declaration-property-unit-disallowed-list */
+    font-size: 11px;
+    line-height: 1.5;
+    text-align: left;
+}
+
+.pear-rail-canvas-line:hover {
+    background: var(--pear-surface-2);
+    color: var(--pear-ink-1);
+}

@@ -14,6 +14,7 @@ import * as narrow_state from "./narrow_state.ts";
 import * as pear_canvas from "./pear_canvas.ts";
 import * as pear_run_state from "./pear_run_state.ts";
 import * as pear_workspace_marks from "./pear_workspace_marks.ts";
+import * as pear_workspace_view from "./pear_workspace_view.ts";
 import {
     compact_reasoning_effort,
     context_key,
@@ -1066,6 +1067,14 @@ function render_topic_header_controls(options: {
     active_run_status: string | undefined;
 }): void {
     const {stream, topic, topic_context} = options;
+    pear_workspace_view.sync({
+        stream,
+        topic,
+        has_workspace:
+            topic_context !== undefined &&
+            typeof topic_context.workdir === "string" &&
+            topic_context.workdir.trim() !== "",
+    });
     if (stream === undefined || topic === undefined || topic_context === undefined) {
         return;
     }
@@ -1827,7 +1836,51 @@ function pear_rate_limit_backoff_ms(xhr: JQuery.jqXHR): number {
 
 let last_workspace_rail_signature = "";
 
-function render_workspace_rail(topic_context: PearTopicContext | undefined): void {
+function pear_rail_duration_label(duration_seconds: number): string {
+    const total_seconds = Math.round(duration_seconds);
+    if (total_seconds < 60) {
+        return `${total_seconds}s`;
+    }
+    return `${Math.floor(total_seconds / 60)}m ${total_seconds % 60}s`;
+}
+
+type PearRailRunEntry = {glyph: string; failed: boolean; label: string; when: string};
+
+function pear_rail_run_entries(runs: PearRun[]): PearRailRunEntry[] {
+    const settled = runs.filter((run) => ["done", "failed", "cancelled"].includes(run.status));
+    return settled.slice(0, 3).map((run) => {
+        const failed = run.status !== "done";
+        const parts: string[] = [];
+        const duration = run.usage?.duration_seconds;
+        if (typeof duration === "number" && duration > 0) {
+            parts.push(pear_rail_duration_label(duration));
+        }
+        const tool_count = run.tool_count ?? 0;
+        if (tool_count > 0) {
+            parts.push(
+                $t(
+                    {defaultMessage: "{tool_count, plural, one {# tool} other {# tools}}"},
+                    {tool_count},
+                ),
+            );
+        }
+        const when =
+            typeof run.date_created === "number"
+                ? timerender.relative_time_string_from_date(new Date(run.date_created * 1000), true)
+                : "";
+        return {
+            glyph: failed ? "✗" : "✓",
+            failed,
+            label: parts.join(" · ") || run.status,
+            when,
+        };
+    });
+}
+
+function render_workspace_rail(
+    topic_context: PearTopicContext | undefined,
+    runs: PearRun[] = last_runs,
+): void {
     const $rail = $("#pear-workspace-rail");
     if ($rail.length === 0) {
         return;
@@ -1858,6 +1911,8 @@ function render_workspace_rail(topic_context: PearTopicContext | undefined): voi
         status_label: dirty
             ? $t({defaultMessage: "{changed_count} changed"}, {changed_count})
             : $t({defaultMessage: "clean"}),
+        runs: pear_rail_run_entries(runs),
+        show_canvas_line: true,
     };
     const signature = JSON.stringify(args);
     if (signature === last_workspace_rail_signature) {
@@ -1923,7 +1978,7 @@ function render(
         topic_context: display_context,
         active_run_status: active_run?.status,
     });
-    render_workspace_rail(display_context);
+    render_workspace_rail(display_context, runs);
     const panel_header_state = panel_header_state_for_testing(active_run, {
         has_topic,
         show_workbench: workbench_open,
@@ -2206,6 +2261,11 @@ export function initialize(): void {
     });
     $("body").on("click", ".pear-panel-close-action", () => {
         close_work_details();
+    });
+    $("body").on("click", ".pear-rail-canvas-line", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        pear_workspace_view.set_tab("canvas");
     });
     $("body").on("click", ".pear-panel-open-action", (e) => {
         e.preventDefault();

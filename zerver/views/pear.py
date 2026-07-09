@@ -72,6 +72,9 @@ from zerver.lib.pear_worker import (
     pear_write_text_path,
     set_pear_topic_context_paused,
     set_pear_topic_context_response_policy,
+    pear_workspace_file_listing,
+    pear_workspace_relative_path,
+    pear_topic_canvas_relative_path,
 )
 from zerver.lib.response import json_response, json_success
 from zerver.lib.streams import access_stream_by_name, create_stream_if_needed
@@ -1024,6 +1027,105 @@ def post_pear_first_run_backend(
                 "message_created": message_created,
                 "selection_changed": selection_changed,
                 "pear_config": pear_config,
+            },
+        },
+    )
+
+
+@typed_endpoint
+def get_pear_workspace_files_backend(
+    request: HttpRequest,
+    user_profile: UserProfile,
+    *,
+    stream_name: Annotated[
+        str,
+        ApiParamConfig("stream", documentation_status=INTENTIONALLY_UNDOCUMENTED),
+    ],
+    topic_name: Annotated[
+        str,
+        ApiParamConfig("topic", documentation_status=INTENTIONALLY_UNDOCUMENTED),
+    ],
+) -> HttpResponse:
+    access_stream_by_name(user_profile, stream_name)
+    context = pear_topic_context_for_request(
+        user_profile,
+        stream_name=stream_name,
+        topic_name=topic_name,
+    )
+    if context is None or not context.workdir.strip():
+        return json_success(
+            request,
+            data={
+                "pear_workspace_files": {
+                    "files": [],
+                    "truncated": False,
+                    "canvas_path": None,
+                },
+            },
+        )
+    workdir = context.workdir.strip()
+    isolation_username = pear_context_isolation_username(
+        context,
+        stream_name=stream_name,
+        topic_name=topic_name,
+        workdir=workdir,
+    )
+    listing = pear_workspace_file_listing(workdir, isolation_username=isolation_username)
+    listing["canvas_path"] = pear_topic_canvas_relative_path(workdir)
+    return json_success(request, data={"pear_workspace_files": listing})
+
+
+PEAR_WORKSPACE_FILE_MAX_BYTES = 1_000_000
+
+
+@typed_endpoint
+def get_pear_workspace_file_backend(
+    request: HttpRequest,
+    user_profile: UserProfile,
+    *,
+    stream_name: Annotated[
+        str,
+        ApiParamConfig("stream", documentation_status=INTENTIONALLY_UNDOCUMENTED),
+    ],
+    topic_name: Annotated[
+        str,
+        ApiParamConfig("topic", documentation_status=INTENTIONALLY_UNDOCUMENTED),
+    ],
+    path: Annotated[
+        str,
+        ApiParamConfig("path", documentation_status=INTENTIONALLY_UNDOCUMENTED),
+    ],
+) -> HttpResponse:
+    access_stream_by_name(user_profile, stream_name)
+    context = pear_topic_context_for_request(
+        user_profile,
+        stream_name=stream_name,
+        topic_name=topic_name,
+    )
+    if context is None or not context.workdir.strip():
+        raise JsonableError(_("This topic has no workspace."))
+    workdir = context.workdir.strip()
+    resolved_path = pear_workspace_relative_path(workdir, path)
+    if resolved_path is None:
+        raise JsonableError(_("Invalid file path."))
+    isolation_username = pear_context_isolation_username(
+        context,
+        stream_name=stream_name,
+        topic_name=topic_name,
+        workdir=workdir,
+    )
+    try:
+        content = pear_read_text_path(resolved_path, isolation_username=isolation_username)
+    except OSError:
+        raise JsonableError(_("Could not read this file."))
+    if len(content.encode("utf-8")) > PEAR_WORKSPACE_FILE_MAX_BYTES:
+        raise JsonableError(_("This file is too large to view here."))
+    return json_success(
+        request,
+        data={
+            "pear_workspace_file": {
+                "path": str(resolved_path.relative_to(workdir)),
+                "content": content,
             },
         },
     )

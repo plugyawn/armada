@@ -2045,13 +2045,18 @@
         --crepe-shadow-1: var(--pear-shadow-pop);
         --crepe-shadow-2: var(--pear-shadow-pop);
         --crepe-font-title: var(--pear-font-pixel);
-        --crepe-font-default: var(--pear-font-ui);
+        --crepe-font-default: var(--pear-font-pixel);
         --crepe-font-code: var(--pear-font-mono);
 
+        -webkit-font-smoothing: none;
         max-width: 84ch;
         min-height: 40vh;
         margin: 0 auto;
         padding: 48px 56px 64px;
+        /* Pixel faces want the grid: pinned size, roomy leading. */
+        /* stylelint-disable-next-line declaration-property-unit-disallowed-list */
+        font-size: 16px;
+        line-height: 1.75;
         border: 1px solid var(--pear-hairline);
         border-radius: var(--pear-radius-card);
         background: var(--pear-surface-2);
@@ -2063,6 +2068,18 @@
            text share one left edge. */
         & .ProseMirror {
             padding: 0 0 10vh;
+        }
+
+        /* Crepe transitions 'all 0.2s' on the hover handle, so it
+           visibly glides between blocks; position snaps, only the
+           fade animates — and fast. */
+        & .milkdown-block-handle {
+            transition: opacity 80ms var(--pear-ease);
+        }
+
+        & .milkdown-slash-menu,
+        & .milkdown-toolbar {
+            transition-duration: 80ms;
         }
 
         /* The print-shop ruler: fine ticks every 6px, tall marks on

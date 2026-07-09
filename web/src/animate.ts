@@ -103,7 +103,7 @@ export function collapse_or_expand({
         });
         $blocker.css("height", "");
         $content.removeClass(
-            "content-expand-animation-start content-expand-animation-endcontent-collapse-animation-start content-collapse-animation-end",
+            "content-expand-animation-start content-expand-animation-end content-collapse-animation-start content-collapse-animation-end",
         );
     }, duration);
 }

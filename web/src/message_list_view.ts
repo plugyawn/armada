@@ -880,6 +880,43 @@ function pear_run_footer_line(footer: {
     return {text: parts.join(" · "), glyph, failed};
 }
 
+function pear_source_fingerprint(html: string): string {
+    // djb2 over the pristine template HTML; the length suffix guards the
+    // rare collision. Stored on each adopted node so later ticks can
+    // recognize unchanged content without keeping the full string.
+    let hash = 5381;
+    for (let i = 0; i < html.length; i += 1) {
+        hash = ((hash << 5) + hash + html.charCodeAt(i)) | 0;
+    }
+    return `${hash}:${html.length}`;
+}
+
+function pear_morph_content(old_content: HTMLElement, new_content: HTMLElement): void {
+    const footer = old_content.querySelector(":scope > .pear-run-footer");
+    const old_children = [...old_content.children].filter((child) => child !== footer);
+    const new_children = [...new_content.children];
+    let old_index = 0;
+    for (const incoming of new_children) {
+        const source = pear_source_fingerprint(incoming.outerHTML);
+        const current = old_children[old_index];
+        if (current instanceof HTMLElement && current.getAttribute("data-pear-source") === source) {
+            // Unchanged: the enhanced, possibly animated node stays.
+            old_index += 1;
+            continue;
+        }
+        incoming.setAttribute("data-pear-source", source);
+        if (current !== undefined) {
+            current.replaceWith(incoming);
+            old_index += 1;
+        } else {
+            old_content.insertBefore(incoming, footer);
+        }
+    }
+    for (; old_index < old_children.length; old_index += 1) {
+        old_children[old_index]!.remove();
+    }
+}
+
 let pear_run_elapsed_timer: ReturnType<typeof setInterval> | undefined;
 
 function update_pear_run_elapsed_labels(): void {
@@ -2925,6 +2962,36 @@ export class MessageListView {
         const $rendered_msg = $(this._get_message_template(message_container));
         if (message_content_edited && !message_container.is_pear_message) {
             $rendered_msg.addClass("fade-in-message");
+        }
+        if (message_container.is_pear_message && $row.length === 1) {
+            // Streaming ticks arrive every second or two; replacing the
+            // whole row each time restarts every CSS animation in it
+            // (the ✦ cycle, the settling spinner) and reads as flicker.
+            // Morph the prose in place instead: unchanged children keep
+            // their DOM identity, and the idempotent post-processing
+            // re-decorates only what actually changed.
+            const old_content = $row[0]?.querySelector(
+                ".messagebox .message_content.rendered_markdown",
+            );
+            const new_content = $rendered_msg[0]?.querySelector(
+                ".messagebox .message_content.rendered_markdown",
+            );
+            const old_row = $row[0];
+            const new_row = $rendered_msg[0];
+            if (
+                old_content instanceof HTMLElement &&
+                new_content instanceof HTMLElement &&
+                old_row instanceof HTMLElement &&
+                new_row instanceof HTMLElement
+            ) {
+                pear_morph_content(old_content, new_content);
+                old_row.className = new_row.className;
+                this._post_process($row);
+                if (was_selected && this.list === message_lists.current) {
+                    this.list.reselect_selected_id();
+                }
+                return $row;
+            }
         }
         this._post_process($rendered_msg);
         $row.replaceWith($rendered_msg);

@@ -12,7 +12,10 @@ import render_pear_workspace_pane from "../templates/pear_workspace_pane.hbs";
 import * as blueslip from "./blueslip.ts";
 import * as channel from "./channel.ts";
 import {$t} from "./i18n.ts";
+import {message_render_response_schema} from "./message_store.ts";
 import * as pear_canvas from "./pear_canvas.ts";
+import {postprocess_content} from "./postprocess_content.ts";
+import * as rendered_markdown from "./rendered_markdown.ts";
 import {user_settings} from "./user_settings.ts";
 
 export type PearWorkspaceTab = "chat" | "canvas" | "files";
@@ -41,9 +44,6 @@ let current_context_key = "";
 let current_stream: string | undefined;
 let current_topic: string | undefined;
 let has_workspace = false;
-let canvas_version = "";
-let canvas_dirty = false;
-let canvas_save_timer: ReturnType<typeof setTimeout> | undefined;
 
 function context_key(stream: string | undefined, topic: string | undefined): string {
     return JSON.stringify([stream?.toLowerCase() ?? "", topic?.toLowerCase() ?? ""]);
@@ -123,6 +123,12 @@ export function set_tab(tab: PearWorkspaceTab): void {
     }
     const was_open = pane_is_open();
     current_tab = tab;
+    try {
+        sessionStorage.setItem(`pear-tab:${current_context_key}`, tab);
+    } catch {
+        // Session storage can be unavailable; the tab just won't be
+        // remembered.
+    }
     update_tab_strips();
     if (tab === "chat") {
         hide_pane();
@@ -153,10 +159,24 @@ export function sync(opts: {
     } else if (opts.has_workspace !== undefined) {
         has_workspace = opts.has_workspace;
     }
-    if (context_changed && pane_is_open()) {
-        // A new narrow always lands on Chat.
-        current_tab = "chat";
-        hide_pane();
+    if (context_changed) {
+        // Returning to a topic restores its remembered tab; fresh
+        // topics land on Chat.
+        let remembered: string | null = null;
+        try {
+            remembered = sessionStorage.getItem(`pear-tab:${key}`);
+        } catch {
+            remembered = null;
+        }
+        if (pane_is_open()) {
+            current_tab = "chat";
+            hide_pane();
+        }
+        if ((remembered === "canvas" || remembered === "files") && (opts.has_workspace ?? false)) {
+            current_tab = remembered;
+            update_tab_strips();
+            show_pane();
+        }
     }
     if (!has_workspace && pane_is_open()) {
         current_tab = "chat";
@@ -304,7 +324,60 @@ function download_file(path: string): void {
     });
 }
 
-// ---------------- Canvas ----------------
+// ---------------- Canvas (block model, design T2 §A) ----------------
+// The file stays plain markdown; the UI derives blocks (split at blank
+// lines outside fences; headings start blocks). Shift+Enter commits a
+// block: the doc reassembles, saves through the versioned PUT, and the
+// block re-renders in place.
+
+type CanvasBlock = {source: string};
+
+let canvas_blocks: CanvasBlock[] = [];
+let canvas_version = "";
+let canvas_loaded = false;
+const rendered_block_cache = new Map<string, string>();
+let canvas_render_generation = 0;
+
+function split_canvas_blocks(text: string): CanvasBlock[] {
+    const lines = text.replaceAll("\r\n", "\n").split("\n");
+    const groups: string[][] = [];
+    let current: string[] = [];
+    let in_fence = false;
+    for (const line of lines) {
+        if (/^\s{0,3}(?:```|~~~)/.test(line)) {
+            in_fence = !in_fence;
+        }
+        if (!in_fence && line.trim() === "" && !/^\s{0,3}(?:```|~~~)/.test(line)) {
+            if (current.length > 0) {
+                groups.push(current);
+                current = [];
+            }
+            continue;
+        }
+        if (!in_fence && /^#{1,6}\s/.test(line) && current.length > 0) {
+            groups.push(current);
+            current = [];
+        }
+        current.push(line);
+    }
+    if (current.length > 0) {
+        groups.push(current);
+    }
+    return groups.map((group) => ({source: group.join("\n").trim()}));
+}
+
+function join_canvas_blocks(blocks: CanvasBlock[]): string {
+    const sources = blocks.map((block) => block.source.trim()).filter((source) => source !== "");
+    return sources.length > 0 ? sources.join("\n\n") + "\n" : "";
+}
+
+function block_cache_key(source: string): string {
+    let hash = 5381;
+    for (let i = 0; i < source.length; i += 1) {
+        hash = ((hash << 5) + hash + source.charCodeAt(i)) | 0;
+    }
+    return `${hash}:${source.length}`;
+}
 
 function set_canvas_status(text: string, failed = false): void {
     const $status = $pane().find(".pear-canvas-status");
@@ -312,10 +385,160 @@ function set_canvas_status(text: string, failed = false): void {
     $status.toggleClass("pear-canvas-status-failed", failed);
 }
 
+function render_block_markdown(index: number, source: string): void {
+    const key = block_cache_key(source);
+    const cached = rendered_block_cache.get(key);
+    const generation = canvas_render_generation;
+    const apply = (html: string): void => {
+        if (generation !== canvas_render_generation) {
+            return;
+        }
+        const $block = $pane().find(`.pear-canvas-block[data-block-index="${index}"]`);
+        const $target = $block.find(".pear-canvas-block-rendered");
+        if ($target.length === 0) {
+            return;
+        }
+        $target.html(html);
+        rendered_markdown.update_elements($target);
+    };
+    if (cached !== undefined) {
+        apply(cached);
+        return;
+    }
+    void channel.post({
+        url: "/json/messages/render",
+        data: {content: source},
+        success(raw_data) {
+            const data = message_render_response_schema.parse(raw_data);
+            const html = postprocess_content(data.rendered);
+            rendered_block_cache.set(key, html);
+            apply(html);
+        },
+        error() {
+            const $block = $pane().find(`.pear-canvas-block[data-block-index="${index}"]`);
+            $block.find(".pear-canvas-block-rendered").text(source);
+        },
+    });
+}
+
+function build_canvas_dom(): void {
+    const $body = $pane().find(".pear-canvas-body");
+    if ($body.length === 0) {
+        return;
+    }
+    canvas_render_generation += 1;
+    const $list = $("<div>").addClass("pear-canvas-blocks");
+    for (const index of canvas_blocks.keys()) {
+        $list.append(
+            $("<button>")
+                .attr("type", "button")
+                .addClass("pear-canvas-seam")
+                .attr("data-seam-index", `${index}`)
+                .attr("aria-label", $t({defaultMessage: "Insert a block"}))
+                .append($("<span>").addClass("pear-canvas-seam-plus").text("+")),
+        );
+        const $block = $("<div>")
+            .addClass("pear-canvas-block")
+            .attr("data-block-index", `${index}`);
+        $block.append($("<div>").addClass("pear-canvas-block-gutter"));
+        $block.append($("<div>").addClass("pear-canvas-block-rendered rendered_markdown"));
+        $list.append($block);
+    }
+    const $ghost = $("<div>")
+        .addClass("pear-canvas-block pear-canvas-block-ghost")
+        .attr("data-block-index", `${canvas_blocks.length}`)
+        .append($("<div>").addClass("pear-canvas-block-gutter"))
+        .append(
+            $("<div>")
+                .addClass("pear-canvas-ghost-prompt")
+                .text($t({defaultMessage: "write…"})),
+        );
+    $list.append($ghost);
+    $body.empty().append($list);
+    for (const [index, block] of canvas_blocks.entries()) {
+        render_block_markdown(index, block.source);
+    }
+}
+
+function open_block_editor(index: number, initial_source?: string): void {
+    commit_open_block();
+    const is_new = index >= canvas_blocks.length;
+    const source = initial_source ?? (is_new ? "" : (canvas_blocks[index]?.source ?? ""));
+    const $block = $pane().find(`.pear-canvas-block[data-block-index="${index}"]`);
+    if ($block.length === 0) {
+        return;
+    }
+    $block.addClass("pear-canvas-block-editing").removeClass("pear-canvas-block-ghost");
+    const $area = $("<textarea>")
+        .addClass("pear-canvas-block-source")
+        .attr("spellcheck", "true")
+        .val(source);
+    $block.find(".pear-canvas-block-rendered, .pear-canvas-ghost-prompt").remove();
+    $block.append($area);
+    autosize_block_editor($area);
+    $area.trigger("focus");
+    const el = $area[0];
+    if (el instanceof HTMLTextAreaElement) {
+        el.setSelectionRange(el.value.length, el.value.length);
+    }
+}
+
+function autosize_block_editor($area: JQuery): void {
+    const el = $area[0];
+    if (!(el instanceof HTMLTextAreaElement)) {
+        return;
+    }
+    el.style.height = "auto";
+    el.style.height = `${Math.max(el.scrollHeight + 2, 44)}px`;
+}
+
+function commit_open_block(options: {cancel?: boolean} = {}): void {
+    const $editing = $pane().find(".pear-canvas-block-editing");
+    if ($editing.length === 0) {
+        return;
+    }
+    const index = Number.parseInt($editing.attr("data-block-index") ?? "", 10);
+    const $area = $editing.find(".pear-canvas-block-source");
+    const source = String($area.val() ?? "").trim();
+    if (options.cancel === true) {
+        build_canvas_dom();
+        return;
+    }
+    if (Number.isNaN(index)) {
+        return;
+    }
+    const next_blocks = [...canvas_blocks];
+    if (index >= next_blocks.length) {
+        if (source !== "") {
+            next_blocks.push({source});
+        }
+    } else if (source === "") {
+        next_blocks.splice(index, 1);
+    } else {
+        next_blocks[index] = {source};
+    }
+    const changed = join_canvas_blocks(next_blocks) !== join_canvas_blocks(canvas_blocks);
+    canvas_blocks = next_blocks;
+    build_canvas_dom();
+    if (changed) {
+        const $committed = $pane().find(`.pear-canvas-block[data-block-index="${index}"]`);
+        $committed.addClass("pear-canvas-block-settle");
+        save_canvas_document();
+    }
+}
+
+function insert_block_at(index: number): void {
+    commit_open_block();
+    canvas_blocks.splice(index, 0, {source: ""});
+    build_canvas_dom();
+    open_block_editor(index, "");
+}
+
 async function load_canvas(): Promise<void> {
     if (current_stream === undefined || current_topic === undefined) {
         return;
     }
+    canvas_loaded = false;
     set_canvas_status($t({defaultMessage: "loading"}));
     void channel.get({
         url: "/json/pear/canvas",
@@ -326,11 +549,11 @@ async function load_canvas(): Promise<void> {
                 return;
             }
             canvas_version = parsed.data.pear_canvas.version;
-            canvas_dirty = false;
-            const $editor = $pane().find(".pear-canvas-editor");
-            $editor.val(parsed.data.pear_canvas.content);
+            canvas_blocks = split_canvas_blocks(parsed.data.pear_canvas.content);
+            canvas_loaded = true;
             set_canvas_status("");
-            $editor.trigger("focus");
+            build_canvas_dom();
+            $pane().find(".pear-workspace-pane-body").trigger("focus");
         },
         error(xhr) {
             if (xhr.readyState !== 0) {
@@ -340,16 +563,15 @@ async function load_canvas(): Promise<void> {
     });
 }
 
-function save_canvas(): void {
-    if (current_stream === undefined || current_topic === undefined || !canvas_dirty) {
+function save_canvas_document(retrying = false): void {
+    if (current_stream === undefined || current_topic === undefined || !canvas_loaded) {
         return;
     }
-    const content = String($pane().find(".pear-canvas-editor").val() ?? "");
+    const content = join_canvas_blocks(canvas_blocks);
     if (!pear_canvas.content_within_byte_limit(content, 200_000)) {
         set_canvas_status($t({defaultMessage: "too large to save"}), true);
         return;
     }
-    canvas_dirty = false;
     set_canvas_status($t({defaultMessage: "saving"}));
     void channel.put({
         url: "/json/pear/canvas",
@@ -367,12 +589,39 @@ function save_canvas(): void {
             set_canvas_status($t({defaultMessage: "saved"}));
         },
         error(xhr) {
-            canvas_dirty = true;
-            if (xhr.status === 409 || xhr.responseText.includes("version")) {
-                set_canvas_status(
-                    $t({defaultMessage: "changed elsewhere — copy your text and reload"}),
-                    true,
-                );
+            if (xhr.status === 409 && !retrying) {
+                // Someone (often the agent) changed the file. Block-
+                // level rebase: refetch, re-split, and replay this
+                // document's block set only if the fresh doc doesn't
+                // collide with it; otherwise adopt the fresh doc.
+                void channel.get({
+                    url: "/json/pear/canvas",
+                    data: {stream: current_stream, topic: current_topic},
+                    success(raw_fresh) {
+                        const fresh = canvas_response_schema.safeParse(raw_fresh);
+                        if (!fresh.success) {
+                            set_canvas_status($t({defaultMessage: "could not save"}), true);
+                            return;
+                        }
+                        canvas_version = fresh.data.pear_canvas.version;
+                        const fresh_blocks = split_canvas_blocks(fresh.data.pear_canvas.content);
+                        const mine = new Set(canvas_blocks.map((block) => block.source));
+                        const merged = [...fresh_blocks];
+                        for (const block of canvas_blocks) {
+                            if (!merged.some((entry) => entry.source === block.source)) {
+                                merged.push(block);
+                            }
+                        }
+                        void mine;
+                        canvas_blocks = merged;
+                        build_canvas_dom();
+                        set_canvas_status($t({defaultMessage: "merged remote changes"}));
+                        save_canvas_document(true);
+                    },
+                    error() {
+                        set_canvas_status($t({defaultMessage: "could not save"}), true);
+                    },
+                });
                 return;
             }
             if (xhr.readyState !== 0) {
@@ -382,24 +631,25 @@ function save_canvas(): void {
     });
 }
 
-function schedule_canvas_save(): void {
-    canvas_dirty = true;
-    set_canvas_status($t({defaultMessage: "editing"}));
-    if (canvas_save_timer !== undefined) {
-        clearTimeout(canvas_save_timer);
-    }
-    canvas_save_timer = setTimeout(() => {
-        canvas_save_timer = undefined;
-        save_canvas();
-    }, 900);
+function flush_canvas_save(): void {
+    commit_open_block();
 }
 
-function flush_canvas_save(): void {
-    if (canvas_save_timer !== undefined) {
-        clearTimeout(canvas_save_timer);
-        canvas_save_timer = undefined;
+// The panel's refresh cycle tells us about run activity; when a run
+// settles (an ask or any agent edit may have rewritten the file),
+// reload the canvas — unless a block is mid-edit.
+let last_run_active = false;
+
+export function refresh_canvas_if_open_on_settle(run_active: boolean): void {
+    const settled = last_run_active && !run_active;
+    last_run_active = run_active;
+    if (
+        settled &&
+        current_tab === "canvas" &&
+        $pane().find(".pear-canvas-block-editing").length === 0
+    ) {
+        void load_canvas();
     }
-    save_canvas();
 }
 
 // ---------------- Wiring ----------------
@@ -431,14 +681,76 @@ export function initialize(): void {
         event.preventDefault();
         set_tab("canvas");
     });
-    $("body").on("input", ".pear-canvas-editor", () => {
-        schedule_canvas_save();
+    $("body").on("click", ".pear-canvas-block-rendered", function (this: HTMLElement, event) {
+        // Links and interactive markdown inside a block still work.
+        if ($(event.target).closest("a, button, .spoiler-header").length > 0) {
+            return;
+        }
+        const index = Number.parseInt(
+            $(this).closest(".pear-canvas-block").attr("data-block-index") ?? "",
+            10,
+        );
+        if (!Number.isNaN(index)) {
+            open_block_editor(index);
+        }
+    });
+    $("body").on("click", ".pear-canvas-block-ghost", function (this: HTMLElement) {
+        const index = Number.parseInt($(this).attr("data-block-index") ?? "", 10);
+        if (!Number.isNaN(index)) {
+            open_block_editor(index, "");
+        }
+    });
+    $("body").on("click", ".pear-canvas-seam", function (this: HTMLElement, event) {
+        event.preventDefault();
+        const index = Number.parseInt($(this).attr("data-seam-index") ?? "", 10);
+        if (!Number.isNaN(index)) {
+            insert_block_at(index);
+        }
+    });
+    $("body").on("input", ".pear-canvas-block-source", function (this: HTMLElement) {
+        autosize_block_editor($(this));
+    });
+    $("body").on("keydown", ".pear-canvas-block-source", (event) => {
+        if (event.key === "Enter" && event.shiftKey) {
+            // The notebook gesture: commit the cell.
+            event.preventDefault();
+            event.stopPropagation();
+            commit_open_block();
+        } else if (event.key === "Escape") {
+            event.preventDefault();
+            event.stopPropagation();
+            commit_open_block({cancel: true});
+        }
+    });
+    $("body").on("blur", ".pear-canvas-block-source", () => {
+        // Clicking away commits too — autosave spirit; Esc is the
+        // explicit cancel.
+        setTimeout(() => {
+            if (
+                document.activeElement === null ||
+                document.activeElement.closest?.(".pear-canvas-block-editing") === null
+            ) {
+                commit_open_block();
+            }
+        }, 0);
     });
     // Keys inside the pane never leak to the feed's hotkeys; Esc
     // returns to Chat.
     document.addEventListener(
         "keydown",
         (event) => {
+            if (
+                (event.metaKey || event.ctrlKey) &&
+                !event.shiftKey &&
+                !event.altKey &&
+                has_workspace &&
+                ["1", "2", "3"].includes(event.key)
+            ) {
+                event.preventDefault();
+                event.stopPropagation();
+                set_tab((["chat", "canvas", "files"] as const)[Number(event.key) - 1]!);
+                return;
+            }
             if (!pane_is_open()) {
                 return;
             }

@@ -2011,6 +2011,7 @@ function render(
         active_run_status: active_run?.status,
     });
     render_workspace_rail(display_context, runs);
+    pear_workspace_view.refresh_canvas_if_open_on_settle(active_run !== undefined);
     const panel_header_state = panel_header_state_for_testing(active_run, {
         has_topic,
         show_workbench: workbench_open,

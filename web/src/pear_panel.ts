@@ -378,6 +378,10 @@ function reasoning_effort_meter_class(effort: string | undefined): string {
     if (effort === "low" || effort === "medium" || effort === "high" || effort === "xhigh") {
         return effort;
     }
+    if (effort === "max" || effort === "ultra") {
+        // The new top levels reuse the full-meter styling.
+        return "xhigh";
+    }
     return "medium";
 }
 

@@ -895,7 +895,10 @@ function maybe_render_pear_run_footer($row: JQuery): void {
     }
     const message_id = rows.id($row);
     const existing = content.querySelector(":scope > .pear-run-footer");
-    if (pear_run_state.is_active_run_result_message(message_id)) {
+    // The active predicate is the row's own class — the template sets
+    // it at render and the sweep maintains it afterwards, and it also
+    // covers marker-derived liveness the runs store may lag behind.
+    if ($row.hasClass("pear-active-message")) {
         if (
             existing instanceof HTMLElement &&
             existing.classList.contains("pear-run-footer-ticker")

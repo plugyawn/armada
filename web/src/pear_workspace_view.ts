@@ -225,12 +225,23 @@ function ensure_pane_shell(): boolean {
     return true;
 }
 
+// Pane views share the page scroll with chat (inline mode), so the
+// two must not inherit each other's offsets: chat's position is
+// saved on the way out and restored on the way back, and canvas or
+// files always open at their top.
+let saved_chat_scroll: number | undefined;
+
 function show_pane(): void {
     if (!ensure_pane_shell()) {
         return;
     }
+    const feed_was_visible = $("#message_feed_container")[0]?.offsetParent !== null;
+    if (feed_was_visible) {
+        saved_chat_scroll = window.scrollY;
+    }
     $("#message_feed_container").hide();
     $pane().removeAttr("hidden");
+    window.scrollTo(0, 0);
     const $canvas_body = $pane().find(".pear-canvas-body");
     const $files_body = $pane().find(".pear-files-body");
     $canvas_body.toggleClass("pear-body-hidden", current_tab !== "canvas");
@@ -252,6 +263,10 @@ function hide_pane(): void {
     flush_canvas_save();
     $pane().attr("hidden", "hidden");
     $("#message_feed_container").show();
+    if (saved_chat_scroll !== undefined) {
+        window.scrollTo(0, saved_chat_scroll);
+        saved_chat_scroll = undefined;
+    }
 }
 
 function teardown_pane_context(): void {

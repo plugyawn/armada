@@ -497,6 +497,39 @@ class PearSessionEndpointTest(ZulipTestCase):
         )
         self.assertEqual(serialize_pear_worker_run(run)["tool_count"], 5)
 
+        # The rail's plan card takes the newest plan_update; the scan
+        # must skip past newer non-plan transcript events.
+        PearWorkerRunEvent.objects.create(
+            run=run,
+            event_type="transcript",
+            summary="Plan",
+            payload={
+                "kind": "plan",
+                "metadata": {
+                    "steps": [
+                        {"step": "Check branch", "status": "completed"},
+                        {"step": "Commit fix", "status": "in_progress"},
+                        {"step": "Verify", "status": "pending"},
+                    ]
+                },
+            },
+        )
+        PearWorkerRunEvent.objects.create(
+            run=run,
+            event_type="transcript",
+            summary="Codex turn completed.",
+            payload={"kind": "status", "title": "Codex turn completed.", "status": "done"},
+        )
+        plan = serialize_pear_worker_run(run)["plan"]
+        self.assertEqual(
+            plan,
+            [
+                {"step": "Check branch", "status": "completed"},
+                {"step": "Commit fix", "status": "in_progress"},
+                {"step": "Verify", "status": "pending"},
+            ],
+        )
+
     def test_serialize_pear_worker_run_hides_stale_active_live_state(self) -> None:
         user = self.example_user("hamlet")
         pear_bot = self.create_test_bot(

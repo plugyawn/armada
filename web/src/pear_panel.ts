@@ -75,6 +75,7 @@ const pear_run_schema = z.object({
     usage: z.nullish(pear_usage_schema),
     tool_count: z.optional(z.number()),
     date_created: z.optional(z.number()),
+    plan: z.nullish(z.array(z.object({step: z.string(), status: z.string()}))),
     live: z.nullish(pear_live_run_schema),
     events: z.optional(z.array(pear_run_event_schema)),
 });
@@ -1846,6 +1847,29 @@ function pear_rail_duration_label(duration_seconds: number): string {
 
 type PearRailRunEntry = {glyph: string; failed: boolean; label: string; when: string};
 
+type PearRailPlanStep = {step: string; status_glyph: string; status_class: string};
+
+function pear_rail_plan_steps(runs: PearRun[]): PearRailPlanStep[] {
+    // Active run's plan wins; otherwise the newest settled plan keeps
+    // answering "what was the shape of the last piece of work".
+    const with_plan = runs.filter((run) => (run.plan ?? []).length > 0);
+    const source =
+        with_plan.find((run) => run.status === "running" || run.status === "queued") ??
+        with_plan[0];
+    if (source === undefined) {
+        return [];
+    }
+    return (source.plan ?? []).map((entry) => {
+        if (entry.status === "completed" || entry.status === "done") {
+            return {step: entry.step, status_glyph: "✓", status_class: "pear-rail-plan-done"};
+        }
+        if (entry.status === "in_progress") {
+            return {step: entry.step, status_glyph: "▸", status_class: "pear-rail-plan-active"};
+        }
+        return {step: entry.step, status_glyph: "·", status_class: "pear-rail-plan-pending"};
+    });
+}
+
 function pear_rail_run_entries(runs: PearRun[]): PearRailRunEntry[] {
     const settled = runs.filter((run) => ["done", "failed", "cancelled"].includes(run.status));
     return settled.slice(0, 3).map((run) => {
@@ -1913,6 +1937,8 @@ function render_workspace_rail(
             : $t({defaultMessage: "clean"}),
         runs: pear_rail_run_entries(runs),
         has_runs: pear_rail_run_entries(runs).length > 0,
+        plan_steps: pear_rail_plan_steps(runs),
+        has_plan: pear_rail_plan_steps(runs).length > 0,
         show_canvas_line: true,
     };
     const signature = JSON.stringify(args);

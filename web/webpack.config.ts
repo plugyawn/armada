@@ -125,6 +125,10 @@ const config = (
                 {
                     test: /\.css$/,
                     exclude: path.resolve(import.meta.dirname, "styles"),
+                    // Bare CSS imports are loaded for their effect; without
+                    // this, packages shipping "sideEffects": false (e.g.
+                    // @milkdown/crepe) get their stylesheets tree-shaken.
+                    sideEffects: true,
                     use: [
                         MiniCssExtractPlugin.loader,
                         {

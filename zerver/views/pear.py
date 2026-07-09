@@ -235,6 +235,8 @@ def pear_reasoning_effort_label(reasoning_effort: str) -> str:
         "medium": "Medium",
         "high": "High",
         "xhigh": "XHigh",
+        "max": "Max",
+        "ultra": "Ultra",
     }
     return labels.get(reasoning_effort, reasoning_effort)
 

@@ -891,10 +891,11 @@ function pear_source_fingerprint(html: string): string {
     return `${hash}:${html.length}`;
 }
 
-function pear_morph_content(old_content: HTMLElement, new_content: HTMLElement): void {
+function pear_morph_content(old_content: HTMLElement, new_content: HTMLElement): Element[] {
     const footer = old_content.querySelector(":scope > .pear-run-footer");
     const old_children = [...old_content.children].filter((child) => child !== footer);
     const new_children = [...new_content.children];
+    const adopted: Element[] = [];
     let old_index = 0;
     for (const incoming of new_children) {
         const source = pear_source_fingerprint(incoming.outerHTML);
@@ -911,10 +912,12 @@ function pear_morph_content(old_content: HTMLElement, new_content: HTMLElement):
         } else {
             old_content.insertBefore(incoming, footer);
         }
+        adopted.push(incoming);
     }
     for (; old_index < old_children.length; old_index += 1) {
         old_children[old_index]!.remove();
     }
+    return adopted;
 }
 
 let pear_run_elapsed_timer: ReturnType<typeof setInterval> | undefined;
@@ -2998,9 +3001,20 @@ export class MessageListView {
                 old_row instanceof HTMLElement &&
                 new_row instanceof HTMLElement
             ) {
-                pear_morph_content(old_content, new_content);
+                const adopted = pear_morph_content(old_content, new_content);
                 old_row.className = new_row.className;
-                this._post_process($row);
+                // The markdown decoration pass is not idempotent
+                // (spoiler buttons and code copy buttons append per
+                // call), so it runs only on the freshly adopted nodes;
+                // the pear decorations below are idempotent by design
+                // and run row-wide.
+                for (const node of adopted) {
+                    rendered_markdown.update_elements($(node));
+                }
+                enhance_pear_tool_rows($row);
+                enhance_pear_artifact_references($row);
+                maybe_render_pear_thinking_glyph($row);
+                maybe_render_pear_run_footer($row);
                 if (was_selected && this.list === message_lists.current) {
                     this.list.reselect_selected_id();
                 }

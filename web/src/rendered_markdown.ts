@@ -347,10 +347,14 @@ export const update_elements = ($content: JQuery): void => {
 
         $(this).find("p").addClass("spoiler-header-text");
 
-        // Add the expand/collapse button to spoiler blocks
-        const toggle_button_html =
-            '<span class="spoiler-button" aria-expanded="false"><span class="spoiler-arrow"></span></span>';
-        $(this).append($(toggle_button_html));
+        // Add the expand/collapse button to spoiler blocks. Guarded so
+        // re-running update_elements on live content (Pear's streaming
+        // morph) doesn't stack a button per pass.
+        if ($(this).find(".spoiler-button").length === 0) {
+            const toggle_button_html =
+                '<span class="spoiler-button" aria-expanded="false"><span class="spoiler-arrow"></span></span>';
+            $(this).append($(toggle_button_html));
+        }
     });
 
     // Display the view-code-in-playground and the copy-to-clipboard button inside the div.codehilite element,

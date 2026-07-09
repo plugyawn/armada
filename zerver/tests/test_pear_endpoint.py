@@ -3877,6 +3877,16 @@ class PearWorkspaceFilesTest(ZulipTestCase):
                     return_value=None,
                 ),
             ):
+                files_result = self.client_get(
+                    "/json/pear/workspace-files",
+                    {"stream": stream.name, "topic": "bare"},
+                )
+                files_payload = self.assert_json_success(files_result)["pear_workspace_files"]
+                listed = [entry["path"] for entry in files_payload["files"]]
+                # The canvas is always listed, even when git excludes it.
+                self.assertIn(files_payload["canvas_path"], listed)
+                self.assertIn("src/main.py", listed)
+
                 result = self.client_get(
                     "/json/pear/workspace-file",
                     {"stream": stream.name, "topic": "bare", "path": "src/main.py"},

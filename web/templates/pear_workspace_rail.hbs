@@ -23,3 +23,22 @@
         {{/if}}
     </span>
 </button>
+{{#if runs}}
+    <ul class="pear-rail-runs">
+        {{#each runs}}
+            <li>
+                <button type="button" class="pear-rail-run pear-panel-open-action">
+                    <span class="pear-rail-run-glyph {{#if failed}}pear-rail-run-failed{{/if}}" aria-hidden="true">{{glyph}}</span>
+                    <span class="pear-rail-run-meta">{{label}}</span>
+                    <span class="pear-rail-run-when">{{when}}</span>
+                </button>
+            </li>
+        {{/each}}
+    </ul>
+{{/if}}
+{{#if show_canvas_line}}
+    <button type="button" class="pear-rail-canvas-line">
+        <span class="pear-ui-glyph" aria-hidden="true">✎</span>
+        <span>{{t "Canvas" }}</span>
+    </button>
+{{/if}}

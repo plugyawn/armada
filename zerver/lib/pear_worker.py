@@ -1,6 +1,7 @@
 import hashlib
 import logging
 import os
+import posixpath
 import pwd
 import re
 import shutil
@@ -1080,6 +1081,66 @@ def pear_backfill_canvas_from_topic_history(
 
 def pear_sha256_text(content: str) -> str:
     return hashlib.sha256(content.encode("utf-8")).hexdigest()
+
+
+PEAR_WORKSPACE_FILE_LISTING_LIMIT = 500
+
+
+def pear_workspace_file_listing(
+    workdir: str,
+    *,
+    isolation_username: str | None = None,
+) -> dict[str, object]:
+    """List the worktree's files with their git state, for the Files tab.
+
+    One ls-files walk (tracked + untracked, .gitignore respected) plus
+    the existing porcelain status for the dirty overlay - no per-file
+    subprocesses.
+    """
+    listing_output = pear_git_output(
+        workdir,
+        ["ls-files", "-z", "--cached", "--others", "--exclude-standard"],
+        isolation_username=isolation_username,
+    )
+    paths = sorted({path for path in listing_output.split("\0") if path})
+    status_output = pear_git_output(
+        workdir,
+        ["status", "--porcelain=v2"],
+        isolation_username=isolation_username,
+    )
+    status_by_path: dict[str, str] = {}
+    for line in status_output.splitlines():
+        if not line.strip() or line.startswith("# "):
+            continue
+        entry = pear_git_changed_file_from_status_line(line)
+        if entry is not None:
+            status_by_path[entry["path"]] = (
+                "untracked" if entry["kind"] == "untracked" else "changed"
+            )
+    files = [
+        {"path": path, "status": status_by_path.get(path, "clean")}
+        for path in paths[:PEAR_WORKSPACE_FILE_LISTING_LIMIT]
+    ]
+    return {
+        "files": files,
+        "truncated": len(paths) > PEAR_WORKSPACE_FILE_LISTING_LIMIT,
+    }
+
+
+def pear_workspace_relative_path(workdir: str, relative_path: str) -> Path | None:
+    """Resolve a client-supplied path, refusing anything that could
+    escape the workdir (or poke at .git internals)."""
+    normalized = posixpath.normpath(relative_path.strip())
+    if (
+        normalized in ("", ".", "..")
+        or normalized.startswith("../")
+        or posixpath.isabs(normalized)
+        or "\\" in normalized
+        or normalized == ".git"
+        or normalized.startswith(".git/")
+    ):
+        return None
+    return Path(workdir) / normalized
 
 
 def pear_read_text_path(path: Path, *, isolation_username: str | None = None) -> str:

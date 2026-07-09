@@ -69,6 +69,8 @@ from zerver.lib.pear_worker import (
     pear_worker_workdir_for_topic,
     pear_workspace_node_default_branch,
     reap_stale_pear_worker_runs,
+    pear_workspace_file_listing,
+    pear_workspace_relative_path,
 )
 from zerver.lib.test_classes import ZulipTestCase
 from zerver.models import Message, Recipient, Subscription, UserProfile
@@ -3792,6 +3794,102 @@ class PearSessionEndpointTest(ZulipTestCase):
         self.assertFalse(active_session["worker_can_run"])
         self.assertIn("paused", active_session["worker_blocked_reason"])
 
+
+class PearWorkspaceFilesTest(ZulipTestCase):
+    def make_workspace(self, base: Path) -> Path:
+        repo = base / "repo"
+        repo.mkdir()
+        git = ["git", "-C", str(repo)]
+        subprocess.run([*git, "init", "--quiet"], check=True, timeout=10)
+        (repo / "CANVAS.md").write_text("# canvas\n", encoding="utf-8")
+        (repo / "dirty.txt").write_text("one\n", encoding="utf-8")
+        sub = repo / "src"
+        sub.mkdir()
+        (sub / "main.py").write_text("print()\n", encoding="utf-8")
+        subprocess.run([*git, "add", "-A"], check=True, timeout=10)
+        subprocess.run(
+            [
+                *git,
+                "-c",
+                "user.email=pear@example.com",
+                "-c",
+                "user.name=Pear",
+                "commit",
+                "--quiet",
+                "-m",
+                "initial",
+            ],
+            check=True,
+            timeout=10,
+        )
+        (repo / "dirty.txt").write_text("two\n", encoding="utf-8")
+        (repo / "new.txt").write_text("untracked\n", encoding="utf-8")
+        return repo
+
+    def test_workspace_file_listing_reports_git_states(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo = self.make_workspace(Path(temp_dir))
+            listing = pear_workspace_file_listing(str(repo))
+        status_by_path = {entry["path"]: entry["status"] for entry in listing["files"]}
+        self.assertEqual(status_by_path["CANVAS.md"], "clean")
+        self.assertEqual(status_by_path["src/main.py"], "clean")
+        self.assertEqual(status_by_path["dirty.txt"], "changed")
+        self.assertEqual(status_by_path["new.txt"], "untracked")
+        self.assertFalse(listing["truncated"])
+
+    def test_workspace_relative_path_guard(self) -> None:
+        self.assertIsNone(pear_workspace_relative_path("/w", "../etc/passwd"))
+        self.assertIsNone(pear_workspace_relative_path("/w", "/etc/passwd"))
+        self.assertIsNone(pear_workspace_relative_path("/w", ".git/config"))
+        self.assertIsNone(pear_workspace_relative_path("/w", "a/../.."))
+        self.assertEqual(
+            str(pear_workspace_relative_path("/w", "src/./main.py")), "/w/src/main.py"
+        )
+
+    def test_workspace_files_endpoint_without_workspace(self) -> None:
+        user = self.example_user("hamlet")
+        stream = self.subscribe(user, "workfiles")
+        self.login_user(user)
+        result = self.client_get(
+            "/json/pear/workspace-files",
+            {"stream": stream.name, "topic": "bare"},
+        )
+        payload = self.assert_json_success(result)["pear_workspace_files"]
+        self.assertEqual(payload["files"], [])
+        self.assertIsNone(payload["canvas_path"])
+
+    def test_workspace_file_endpoint_reads_and_guards(self) -> None:
+        from types import SimpleNamespace
+
+        user = self.example_user("hamlet")
+        stream = self.subscribe(user, "workfiles")
+        self.login_user(user)
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo = self.make_workspace(Path(temp_dir))
+            context = SimpleNamespace(workdir=str(repo))
+            with (
+                patch(
+                    "zerver.views.pear.pear_topic_context_for_request",
+                    return_value=context,
+                ),
+                patch(
+                    "zerver.views.pear.pear_context_isolation_username",
+                    return_value=None,
+                ),
+            ):
+                result = self.client_get(
+                    "/json/pear/workspace-file",
+                    {"stream": stream.name, "topic": "bare", "path": "src/main.py"},
+                )
+                payload = self.assert_json_success(result)["pear_workspace_file"]
+                self.assertEqual(payload["path"], "src/main.py")
+                self.assertEqual(payload["content"], "print()\n")
+
+                traversal = self.client_get(
+                    "/json/pear/workspace-file",
+                    {"stream": stream.name, "topic": "bare", "path": "../secrets"},
+                )
+                self.assert_json_error(traversal, "Invalid file path.")
 
 class PearMathNormalizationTest(ZulipTestCase):
     def test_normalize_pear_math_delimiters(self) -> None:

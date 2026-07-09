@@ -891,11 +891,11 @@ function pear_source_fingerprint(html: string): string {
     return `${hash}:${html.length}`;
 }
 
-function pear_morph_content(old_content: HTMLElement, new_content: HTMLElement): Element[] {
+function pear_morph_content(old_content: HTMLElement, new_content: HTMLElement): HTMLElement[] {
     const footer = old_content.querySelector(":scope > .pear-run-footer");
     const old_children = [...old_content.children].filter((child) => child !== footer);
     const new_children = [...new_content.children];
-    const adopted: Element[] = [];
+    const adopted: HTMLElement[] = [];
     let old_index = 0;
     for (const incoming of new_children) {
         const source = pear_source_fingerprint(incoming.outerHTML);
@@ -912,7 +912,9 @@ function pear_morph_content(old_content: HTMLElement, new_content: HTMLElement):
         } else {
             old_content.insertBefore(incoming, footer);
         }
-        adopted.push(incoming);
+        if (incoming instanceof HTMLElement) {
+            adopted.push(incoming);
+        }
     }
     for (; old_index < old_children.length; old_index += 1) {
         old_children[old_index]!.remove();

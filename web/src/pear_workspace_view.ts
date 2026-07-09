@@ -264,8 +264,16 @@ function hide_pane(): void {
     $pane().attr("hidden", "hidden");
     $("#message_feed_container").show();
     if (saved_chat_scroll !== undefined) {
-        window.scrollTo(0, saved_chat_scroll);
+        const target = saved_chat_scroll;
         saved_chat_scroll = undefined;
+        window.scrollTo(0, target);
+        // The feed re-layouts after it reappears; pin the restore
+        // once the frame settles too.
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+                window.scrollTo(0, target);
+            });
+        });
     }
 }
 

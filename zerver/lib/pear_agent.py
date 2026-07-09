@@ -444,6 +444,7 @@ def build_pear_codex_turn_prompt(active_session: PearActiveSessionSummary, task:
         f"- head: {workspace_context.get('head') or 'unknown'}",
         "- contract: the Zulip stream maps to the repository, and the Zulip topic/subthread maps to the Git branch.",
         "- privacy: refer to the workspace by branch or worktree name in replies; never print the absolute workdir path in the topic.",
+        "- math: write math in Zulip's dialect — $$...$$ for inline math and ```math fenced blocks for display equations; \\[ \\] and \\( \\) do not render here.",
     ]
     artifacts = active_session["artifacts"][:5]
     artifact_lines = [

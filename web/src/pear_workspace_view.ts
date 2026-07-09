@@ -66,6 +66,23 @@ function ensure_pane(): JQuery {
     }
     $feed.after($("<div>").attr("id", "pear-workspace-pane").prop("hidden", true));
     $existing = $pane();
+    const pane = $existing[0];
+    if (pane !== undefined) {
+        // Shield Zulip's global hotkeys at the pane's bubble phase:
+        // editor handlers (ProseMirror, the Shift+Enter set gesture)
+        // have already run by the time the event gets here. A
+        // document-capture stopPropagation, as this first shipped,
+        // silenced the pane's own listeners too.
+        pane.addEventListener("keydown", (event) => {
+            if (event.key === "Escape") {
+                event.preventDefault();
+                event.stopPropagation();
+                set_tab("chat");
+                return;
+            }
+            event.stopPropagation();
+        });
+    }
     return $existing;
 }
 
@@ -953,8 +970,7 @@ export function initialize(): void {
         event.stopPropagation();
         show_aside_popover(this);
     });
-    // Keys inside the pane never leak to the feed's hotkeys; Esc
-    // returns to Chat.
+    // ⌘1/2/3 switch tabs from anywhere in the app.
     document.addEventListener(
         "keydown",
         (event) => {
@@ -968,22 +984,6 @@ export function initialize(): void {
                 event.preventDefault();
                 event.stopPropagation();
                 set_tab((["chat", "canvas", "files"] as const)[Number(event.key) - 1]!);
-                return;
-            }
-            if (!pane_is_open()) {
-                return;
-            }
-            const target = event.target;
-            const inside_pane =
-                target instanceof Element && target.closest("#pear-workspace-pane") !== null;
-            if (event.key === "Escape" && inside_pane) {
-                event.preventDefault();
-                event.stopPropagation();
-                set_tab("chat");
-                return;
-            }
-            if (inside_pane) {
-                event.stopPropagation();
             }
         },
         true,

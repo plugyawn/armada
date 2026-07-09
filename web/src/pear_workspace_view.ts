@@ -102,38 +102,68 @@ function update_tab_strips(): void {
     $(".pear-workspace-tabs").toggleClass("pear-workspace-tabs-hidden", !has_workspace);
 }
 
-function render_pane_shell(): void {
+// The shell (header + both tab bodies) persists per topic so tab
+// flips are instant: the editor keeps its mounted instance while the
+// pane is hidden, and only a context change tears it down.
+let pane_shell_key: string | undefined;
+
+function ensure_pane_shell(): boolean {
     const $container = ensure_pane();
     if ($container.length === 0) {
-        return;
+        return false;
+    }
+    if (pane_shell_key === current_context_key && $container.children().length > 0) {
+        return true;
     }
     void pear_canvas_editor.destroy();
+    canvas_loaded = false;
     $container.html(
         render_pear_workspace_pane({
             context_label: `${current_stream ?? ""} › ${current_topic ?? ""}`,
-            is_canvas: current_tab === "canvas",
-            is_files: current_tab === "files",
         }),
     );
+    pane_shell_key = current_context_key;
+    // pear_panel owns the header cluster (model pill, commit line,
+    // tabs) and fills it on this signal — same component as chat.
+    document.dispatchEvent(new CustomEvent("pear:pane-shell-rendered"));
+    return true;
 }
 
 function show_pane(): void {
-    render_pane_shell();
+    if (!ensure_pane_shell()) {
+        return;
+    }
     $("#message_feed_container").hide();
     $pane().removeAttr("hidden");
+    const $canvas_body = $pane().find(".pear-canvas-body");
+    const $files_body = $pane().find(".pear-files-body");
+    $canvas_body.toggleClass("pear-body-hidden", current_tab !== "canvas");
+    $files_body.toggleClass("pear-body-hidden", current_tab !== "files");
     if (current_tab === "canvas") {
-        load_canvas();
+        if (pear_canvas_editor.is_mounted() && canvas_loaded) {
+            // Instant from the live instance; revalidate quietly.
+            reload_canvas_content();
+        } else {
+            load_canvas();
+        }
     } else if (current_tab === "files") {
         load_files();
     }
+    update_tab_strips();
 }
 
 function hide_pane(): void {
     flush_canvas_save();
-    canvas_loaded = false;
-    void pear_canvas_editor.destroy();
     $pane().attr("hidden", "hidden");
     $("#message_feed_container").show();
+}
+
+function teardown_pane_context(): void {
+    flush_canvas_save();
+    canvas_loaded = false;
+    void pear_canvas_editor.destroy();
+    pane_shell_key = undefined;
+    $pane().empty();
 }
 
 export function set_tab(tab: PearWorkspaceTab): void {
@@ -143,7 +173,9 @@ export function set_tab(tab: PearWorkspaceTab): void {
     if (tab !== "chat" && !has_workspace) {
         return;
     }
-    const was_open = pane_is_open();
+    if (current_tab === "canvas") {
+        flush_canvas_save();
+    }
     current_tab = tab;
     try {
         sessionStorage.setItem(`pear-tab:${current_context_key}`, tab);
@@ -154,9 +186,6 @@ export function set_tab(tab: PearWorkspaceTab): void {
     update_tab_strips();
     if (tab === "chat") {
         hide_pane();
-    } else if (was_open) {
-        flush_canvas_save();
-        show_pane();
     } else {
         show_pane();
     }
@@ -175,8 +204,9 @@ export function sync(opts: {
     const context_changed = key !== current_context_key;
     if (context_changed) {
         // Commit and save any open editor while the canvas context
-        // still points at the topic it was loaded from.
-        flush_canvas_save();
+        // still points at the topic it was loaded from, then drop
+        // the old topic's shell and editor instance.
+        teardown_pane_context();
     }
     current_context_key = key;
     current_stream = opts.stream;
@@ -221,7 +251,7 @@ function render_files_tree(
     canvas_path: string | null,
     truncated: boolean,
 ): void {
-    const $body = $pane().find(".pear-workspace-pane-body");
+    const $body = $pane().find(".pear-files-body");
     if ($body.length === 0) {
         return;
     }
@@ -362,6 +392,22 @@ type CanvasBlock = {source: string};
 let canvas_blocks: CanvasBlock[] = [];
 let canvas_version = "";
 let canvas_loaded = false;
+// Last known file per topic: reopening a canvas paints instantly
+// from here while a background fetch reconciles.
+const canvas_content_cache = new Map<string, {content: string; version: string}>();
+const CANVAS_CONTENT_CACHE_LIMIT = 20;
+
+function remember_canvas_content(key: string, content: string, version: string): void {
+    canvas_content_cache.delete(key);
+    canvas_content_cache.set(key, {content, version});
+    while (canvas_content_cache.size > CANVAS_CONTENT_CACHE_LIMIT) {
+        const oldest = canvas_content_cache.keys().next().value;
+        if (oldest === undefined) {
+            break;
+        }
+        canvas_content_cache.delete(oldest);
+    }
+}
 // The topic whose file is loaded. Saves, asks, and refetches bind to
 // this, never to current_stream/current_topic: the narrow can change
 // while an editor is open, and a canvas must only ever write to the
@@ -775,6 +821,46 @@ function apply_remote_canvas_content(content: string): void {
     pear_canvas_editor.refresh_decorations();
 }
 
+function adopt_canvas_content(content: string, version: string): void {
+    canvas_version = version;
+    canvas_blocks = split_canvas_blocks(content);
+    rebuild_aside_sections();
+    prune_pending_asks();
+    last_saved_content = content;
+    canvas_dirty = false;
+    if (context_has_pending_asks()) {
+        ensure_pending_ask_poll();
+    }
+}
+
+function mount_canvas_editor(content: string, context_key_at_request: string): void {
+    const body = $pane().find(".pear-canvas-body")[0];
+    if (!(body instanceof HTMLElement)) {
+        return;
+    }
+    void (async () => {
+        try {
+            const mounted = await pear_canvas_editor.mount(body, {
+                markdown: content,
+                placeholder: $t({
+                    defaultMessage: "Write, or [ask Pear anything] and press Shift+Enter",
+                }),
+                on_markdown_updated: handle_markdown_updated,
+                on_set_gesture: handle_set_gesture,
+                get_pending_spans: pending_ask_spans,
+            });
+            if (mounted && canvas_context?.key === context_key_at_request) {
+                canvas_loaded = true;
+                set_canvas_status("");
+                // Whatever we painted from may be stale; reconcile.
+                reload_canvas_content();
+            }
+        } catch {
+            set_canvas_status($t({defaultMessage: "could not load"}), true);
+        }
+    })();
+}
+
 function load_canvas(): void {
     if (current_stream === undefined || current_topic === undefined) {
         return;
@@ -786,6 +872,14 @@ function load_canvas(): void {
         key: current_context_key,
     };
     canvas_context = request_context;
+    const cached = canvas_content_cache.get(request_context.key);
+    if (cached !== undefined) {
+        // Instant paint from the last known file; the post-mount
+        // reconcile fetch brings in anything newer.
+        adopt_canvas_content(cached.content, cached.version);
+        mount_canvas_editor(cached.content, request_context.key);
+        return;
+    }
     set_canvas_status($t({defaultMessage: "loading"}));
     void channel.get({
         url: "/json/pear/canvas",
@@ -799,39 +893,14 @@ function load_canvas(): void {
             ) {
                 return;
             }
-            canvas_version = parsed.data.pear_canvas.version;
             const content = parsed.data.pear_canvas.content;
-            canvas_blocks = split_canvas_blocks(content);
-            rebuild_aside_sections();
-            prune_pending_asks();
-            last_saved_content = content;
-            canvas_dirty = false;
-            if (context_has_pending_asks()) {
-                ensure_pending_ask_poll();
-            }
-            const body = $pane().find(".pear-canvas-body")[0];
-            if (!(body instanceof HTMLElement)) {
-                return;
-            }
-            void (async () => {
-                try {
-                    const mounted = await pear_canvas_editor.mount(body, {
-                        markdown: content,
-                        placeholder: $t({
-                            defaultMessage: "Write, or [ask Pear anything] and press Shift+Enter",
-                        }),
-                        on_markdown_updated: handle_markdown_updated,
-                        on_set_gesture: handle_set_gesture,
-                        get_pending_spans: pending_ask_spans,
-                    });
-                    if (mounted && canvas_context?.key === request_context.key) {
-                        canvas_loaded = true;
-                        set_canvas_status("");
-                    }
-                } catch {
-                    set_canvas_status($t({defaultMessage: "could not load"}), true);
-                }
-            })();
+            remember_canvas_content(
+                request_context.key,
+                content,
+                parsed.data.pear_canvas.version,
+            );
+            adopt_canvas_content(content, parsed.data.pear_canvas.version);
+            mount_canvas_editor(content, request_context.key);
         },
         error(xhr) {
             if (xhr.readyState !== 0) {
@@ -869,6 +938,7 @@ function save_canvas_document(retrying = false): void {
             canvas_dirty = false;
             canvas_blocks = split_canvas_blocks(content);
             rebuild_aside_sections();
+            remember_canvas_content(save_context.key, content, canvas_version);
             set_canvas_status($t({defaultMessage: "saved"}));
             // Asks dispatch only once their span is durably in the
             // file, so the agent always finds what it must replace.
@@ -943,6 +1013,11 @@ function reload_canvas_content(): void {
                 return;
             }
             canvas_version = parsed.data.pear_canvas.version;
+            remember_canvas_content(
+                request_context.key,
+                parsed.data.pear_canvas.content,
+                parsed.data.pear_canvas.version,
+            );
             if (parsed.data.pear_canvas.content !== last_saved_content) {
                 apply_remote_canvas_content(parsed.data.pear_canvas.content);
             }

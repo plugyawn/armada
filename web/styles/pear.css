@@ -2010,15 +2010,21 @@
 
 /* Canvas: Milkdown Crepe re-skinned as a Pear surface. Storage stays
    plain markdown; the editor brings the Notion-grade chrome (slash
-   menu, drag handles, tables, KaTeX). Headings speak Geist Pixel;
-   prose reads in the room face. */
+   menu, drag handles, tables, KaTeX). The document reads as a proper
+   sheet: bounded, bordered, with a pixel-print ruler across the top
+   and a notebook margin rule down the left. */
+.pear-workspace-pane-body.pear-body-hidden {
+    display: none;
+}
+
 .pear-canvas-body {
     outline: none;
+    padding: var(--pear-space-5) var(--pear-space-4) 30vh;
 
     /* The frame theme defines its palette directly on .milkdown, so
        the re-skin must land there too or the light defaults win. */
     & .milkdown {
-        --crepe-color-background: var(--pear-surface-0);
+        --crepe-color-background: var(--pear-surface-1);
         --crepe-color-on-background: var(--pear-ink-1);
         --crepe-color-surface: var(--pear-surface-1);
         --crepe-color-surface-low: var(--pear-surface-2);
@@ -2040,12 +2046,53 @@
         --crepe-font-title: var(--pear-font-pixel);
         --crepe-font-default: var(--pear-font-ui);
         --crepe-font-code: var(--pear-font-mono);
-        max-width: 78ch;
+
+        max-width: 84ch;
+        min-height: 60vh;
         margin: 0 auto;
+        padding: 52px 56px 96px;
+        border: 1px solid var(--pear-hairline);
+        border-radius: var(--pear-radius-card);
+        background: var(--pear-surface-1);
+        box-shadow: var(--pear-shadow-pop);
         color: var(--pear-ink-1);
 
-        & .ProseMirror {
-            padding-bottom: 35vh;
+        /* The print-shop ruler: fine ticks every 6px, tall marks on
+           the inch. */
+        &::before {
+            content: "";
+            position: absolute;
+            top: 20px;
+            right: 56px;
+            left: 56px;
+            height: 8px;
+            background:
+                repeating-linear-gradient(
+                        to right,
+                        var(--pear-hairline) 0 1px,
+                        transparent 1px 6px
+                    )
+                    left bottom / 100% 3px no-repeat,
+                repeating-linear-gradient(
+                        to right,
+                        var(--pear-ink-3) 0 1px,
+                        transparent 1px 48px
+                    )
+                    left bottom / 100% 8px no-repeat;
+            opacity: 0.55;
+            pointer-events: none;
+        }
+
+        /* Notebook margin rule. */
+        &::after {
+            content: "";
+            position: absolute;
+            top: 36px;
+            bottom: 28px;
+            left: 38px;
+            border-left: 1px solid
+                color-mix(in srgb, var(--pear-accent-ink) 20%, transparent);
+            pointer-events: none;
         }
 
         & h1,
@@ -2061,16 +2108,13 @@
     }
 }
 
-/* Pane crossfade: switching tabs breathes rather than snapping. */
-.pear-pane-fade {
-    animation: pear-pane-fade var(--pear-dur-1) var(--pear-ease);
-}
-
-@keyframes pear-pane-fade {
-    from {
-        opacity: 0;
-        transform: translateY(4px);
-    }
+/* The shared topic-header cluster inside the pane header. */
+.pear-workspace-pane-header .pear-pane-header-cluster {
+    display: inline-flex;
+    overflow: hidden;
+    min-width: 0;
+    flex: 0 1 auto;
+    align-items: center;
 }
 
 /* Asks: a bracketed span handed to the agent shimmers until the

@@ -3004,7 +3004,17 @@ export class MessageListView {
                 new_row instanceof HTMLElement
             ) {
                 const adopted = pear_morph_content(old_content, new_content);
+                // The fresh template only knows template-driven classes;
+                // carry over the ones Zulip applies to live rows after
+                // render, or selection and condensation would strobe on
+                // every streaming tick.
+                const preserved_classes = ["selected_message", "condensed", "collapsed"].filter(
+                    (class_name) => old_row.classList.contains(class_name),
+                );
                 old_row.className = new_row.className;
+                for (const class_name of preserved_classes) {
+                    old_row.classList.add(class_name);
+                }
                 // The markdown decoration pass is not idempotent
                 // (spoiler buttons and code copy buttons append per
                 // call), so it runs only on the freshly adopted nodes;

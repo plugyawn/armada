@@ -15,6 +15,7 @@ import * as channel from "./channel.ts";
 import {$t} from "./i18n.ts";
 import {message_render_response_schema} from "./message_store.ts";
 import * as pear_canvas from "./pear_canvas.ts";
+import * as pear_canvas_editor from "./pear_canvas_editor.ts";
 import {postprocess_content} from "./postprocess_content.ts";
 import * as rendered_markdown from "./rendered_markdown.ts";
 import {user_settings} from "./user_settings.ts";
@@ -89,6 +90,7 @@ function render_pane_shell(): void {
     if ($container.length === 0) {
         return;
     }
+    void pear_canvas_editor.destroy();
     $container.html(
         render_pear_workspace_pane({
             context_label: `${current_stream ?? ""} › ${current_topic ?? ""}`,
@@ -111,6 +113,8 @@ function show_pane(): void {
 
 function hide_pane(): void {
     flush_canvas_save();
+    canvas_loaded = false;
+    void pear_canvas_editor.destroy();
     $pane().attr("hidden", "hidden");
     $("#message_feed_container").show();
 }
@@ -347,8 +351,6 @@ let canvas_loaded = false;
 // topic it was loaded from (live report: a narrow switch mid-edit
 // wrote one topic's canvas into another).
 let canvas_context: {stream: string; topic: string; key: string} | undefined;
-const rendered_block_cache = new Map<string, string>();
-let canvas_render_generation = 0;
 
 // ---------------- Asks ----------------
 // A bracketed span in a committed block is a request to the agent:
@@ -359,8 +361,8 @@ let canvas_render_generation = 0;
 type CanvasAsk = {request: string; label: string};
 
 const PEAR_ASK_PENDING_TTL_MS = 10 * 60 * 1000;
-// Keyed by `${context}|${request}|${label}` → dispatch timestamp.
-const pending_asks = new Map<string, number>();
+// Keyed by `${context}|${request}|${label}`.
+const pending_asks = new Map<string, CanvasAsk & {started_at: number}>();
 let ask_dispatch_queue: CanvasAsk[] = [];
 const aside_sections = new Map<string, string>();
 const rendered_aside_cache = new Map<string, string>();
@@ -416,18 +418,6 @@ function parse_asks_from_source(source: string): CanvasAsk[] {
     return asks;
 }
 
-function queue_new_asks(previous_source: string, committed_source: string): void {
-    const previous = new Set(
-        parse_asks_from_source(previous_source).map((ask) => ask_span_text(ask)),
-    );
-    for (const ask of parse_asks_from_source(committed_source)) {
-        if (previous.has(ask_span_text(ask)) || pending_asks.has(ask_key(ask))) {
-            continue;
-        }
-        ask_dispatch_queue.push(ask);
-    }
-}
-
 function dispatch_queued_asks(): void {
     if (canvas_context === undefined) {
         ask_dispatch_queue = [];
@@ -438,7 +428,7 @@ function dispatch_queued_asks(): void {
     for (const ask of queue) {
         const block_source =
             canvas_blocks.find((block) => block.source.includes(ask_span_text(ask)))?.source ?? "";
-        pending_asks.set(ask_key(ask), Date.now());
+        pending_asks.set(ask_key(ask), {...ask, started_at: Date.now()});
         void channel.post({
             url: "/json/pear/canvas-ask",
             data: {
@@ -450,11 +440,11 @@ function dispatch_queued_asks(): void {
             },
             success() {
                 set_canvas_status($t({defaultMessage: "pear is on it"}));
-                redecorate_pending_asks();
+                pear_canvas_editor.refresh_decorations();
             },
             error(xhr) {
                 pending_asks.delete(ask_key(ask));
-                redecorate_pending_asks();
+                pear_canvas_editor.refresh_decorations();
                 if (xhr.readyState !== 0) {
                     set_canvas_status($t({defaultMessage: "ask failed"}), true);
                 }
@@ -467,98 +457,33 @@ function prune_pending_asks(): void {
     const document_text = join_canvas_blocks(canvas_blocks);
     const now = Date.now();
     const context_prefix = `${canvas_context?.key ?? current_context_key}|`;
-    for (const [key, started_at] of pending_asks) {
+    for (const [key, entry] of pending_asks) {
         if (!key.startsWith(context_prefix)) {
             continue;
         }
-        const [, request = "", label = ""] = key.split("|");
-        const span = ask_span_text({request, label});
-        if (!document_text.includes(span) || now - started_at > PEAR_ASK_PENDING_TTL_MS) {
+        const span = ask_span_text(entry);
+        if (!document_text.includes(span) || now - entry.started_at > PEAR_ASK_PENDING_TTL_MS) {
             pending_asks.delete(key);
         }
     }
 }
 
-function wrap_pending_ask_text_nodes(root: HTMLElement, span_text: string): void {
-    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-    const matches: Text[] = [];
-    let node = walker.nextNode();
-    while (node !== null) {
-        if (
-            node instanceof Text &&
-            node.textContent !== null &&
-            node.textContent.includes(span_text) &&
-            !(node.parentElement?.closest(".pear-ask-pending, code, a") instanceof HTMLElement)
-        ) {
-            matches.push(node);
-        }
-        node = walker.nextNode();
-    }
-    for (const text_node of matches) {
-        const text = text_node.textContent ?? "";
-        const start = text.indexOf(span_text);
-        const target = text_node.splitText(start);
-        target.splitText(span_text.length);
-        const $wrapped = $("<span>")
-            .addClass("pear-ask-pending")
-            .attr("title", $t({defaultMessage: "Pear is working on this ask"}))
-            .text(span_text);
-        $(target).replaceWith($wrapped);
-    }
-}
-
-function decorate_block_asks($target: JQuery, source: string): void {
-    // Resolved asides first: rewrite #aside-N links into popover chips.
-    $target.find("a").each(function (this: HTMLElement) {
-        const href = $(this).attr("href") ?? "";
-        const aside_match = /#(aside-\d+)$/.exec(href);
-        if (aside_match?.[1] !== undefined && aside_sections.has(aside_match[1])) {
-            $(this)
-                .addClass("pear-aside-chip")
-                .attr("data-pear-aside", aside_match[1])
-                .removeAttr("target")
-                .removeAttr("rel");
-        }
-    });
-    // Then pending asks: shimmer across the bracket interior.
-    const root = $target[0];
-    if (!(root instanceof HTMLElement)) {
-        return;
-    }
-    for (const ask of parse_asks_from_source(source)) {
-        if (!pending_asks.has(ask_key(ask))) {
+// The editor's decoration plugin asks which spans should shimmer.
+function pending_ask_spans(): pear_canvas_editor.PendingAskSpans {
+    const literals: string[] = [];
+    const labeled = new Map<string, string>();
+    const context_prefix = `${canvas_context?.key ?? current_context_key}|`;
+    for (const [key, entry] of pending_asks) {
+        if (!key.startsWith(context_prefix)) {
             continue;
         }
-        const span_text = ask_span_text(ask);
-        wrap_pending_ask_text_nodes(root, span_text);
-        // Labeled asks may render as an anchor when markdown treats
-        // the label as a relative href; mark that shape too.
-        $target.find("a").each(function (this: HTMLElement) {
-            if (($(this).attr("href") ?? "") === ask.label && $(this).text() === ask.request) {
-                $(this).addClass("pear-ask-pending");
-            }
-        });
-    }
-}
-
-function redecorate_pending_asks(): void {
-    for (const [index, block] of canvas_blocks.entries()) {
-        const $block = $pane().find(`.pear-canvas-block[data-block-index="${index}"]`);
-        const $target = $block.find(".pear-canvas-block-rendered");
-        if ($target.length > 0) {
-            $target.find(".pear-ask-pending").each(function (this: HTMLElement) {
-                this.replaceWith(document.createTextNode($(this).text()));
-            });
-            decorate_block_asks($target, block.source);
+        literals.push(ask_span_text(entry));
+        if (entry.label !== "") {
+            labeled.set(entry.label, entry.request);
         }
     }
+    return {literals, labeled};
 }
-
-// ---------------- Asides ----------------
-// The agent persists popover answers under a trailing "## Asides"
-// section ("#### aside-N" per answer). Those blocks stay in the
-// document but never render in the block list; their content
-// surfaces through the chips.
 
 function show_aside_popover(chip: HTMLElement): void {
     if (chip.getAttribute("data-pear-aside-open") === "true") {
@@ -697,175 +622,94 @@ function set_canvas_status(text: string, failed = false): void {
     $status.toggleClass("pear-canvas-status-failed", failed);
 }
 
-function render_block_markdown(index: number, source: string): void {
-    const key = block_cache_key(source);
-    const cached = rendered_block_cache.get(key);
-    const generation = canvas_render_generation;
-    const apply = (html: string): void => {
-        if (generation !== canvas_render_generation) {
-            return;
-        }
-        const $block = $pane().find(`.pear-canvas-block[data-block-index="${index}"]`);
-        const $target = $block.find(".pear-canvas-block-rendered");
-        if ($target.length === 0) {
-            return;
-        }
-        $target.html(html);
-        rendered_markdown.update_elements($target);
-        decorate_block_asks($target, source);
-    };
-    if (cached !== undefined) {
-        apply(cached);
-        return;
-    }
-    void channel.post({
-        url: "/json/messages/render",
-        data: {content: source},
-        success(raw_data) {
-            const data = message_render_response_schema.parse(raw_data);
-            const html = postprocess_content(data.rendered);
-            rendered_block_cache.set(key, html);
-            apply(html);
-        },
-        error() {
-            const $block = $pane().find(`.pear-canvas-block[data-block-index="${index}"]`);
-            $block.find(".pear-canvas-block-rendered").text(source);
-        },
-    });
+function unescape_ask_brackets(markdown: string): string {
+    // remark-stringify conservatively escapes "[" in prose, which
+    // would break ask spans and the agent's span-replacement
+    // contract; the canvas dialect treats brackets as literal.
+    let in_fence = false;
+    return markdown
+        .split("\n")
+        .map((line) => {
+            if (/^\s{0,3}(?:```|~~~)/.test(line)) {
+                in_fence = !in_fence;
+            }
+            if (in_fence) {
+                return line;
+            }
+            return line.replaceAll("\\[", "[").replaceAll("\\]", "]");
+        })
+        .join("\n");
 }
 
-function build_canvas_dom(): void {
-    const $body = $pane().find(".pear-canvas-body");
-    if ($body.length === 0) {
-        return;
-    }
-    canvas_render_generation += 1;
-    rebuild_aside_sections();
-    const asides_start = asides_start_index();
-    const $list = $("<div>").addClass("pear-canvas-blocks");
-    for (const index of canvas_blocks.keys()) {
-        if (asides_start !== -1 && index >= asides_start) {
-            // Agent-managed aside storage; surfaces through chips.
-            continue;
-        }
-        $list.append(
-            $("<button>")
-                .attr("type", "button")
-                .addClass("pear-canvas-seam")
-                .attr("data-seam-index", `${index}`)
-                .attr("aria-label", $t({defaultMessage: "Insert a block"}))
-                .append($("<span>").addClass("pear-canvas-seam-plus").text("+")),
-        );
-        const $block = $("<div>")
-            .addClass("pear-canvas-block")
-            .attr("data-block-index", `${index}`);
-        $block.append($("<div>").addClass("pear-canvas-block-gutter"));
-        $block.append($("<div>").addClass("pear-canvas-block-rendered rendered_markdown"));
-        $list.append($block);
-    }
-    const $ghost = $("<div>")
-        .addClass("pear-canvas-block pear-canvas-block-ghost")
-        .attr("data-block-index", `${canvas_blocks.length}`)
-        .append($("<div>").addClass("pear-canvas-block-gutter"))
-        .append(
-            $("<div>")
-                .addClass("pear-canvas-ghost-prompt")
-                .text($t({defaultMessage: "write…"})),
-        );
-    $list.append($ghost);
-    $body.empty().append($list);
-    for (const [index, block] of canvas_blocks.entries()) {
-        if (asides_start !== -1 && index >= asides_start) {
-            continue;
-        }
-        render_block_markdown(index, block.source);
-    }
+function current_editor_content(): string | undefined {
+    const markdown = pear_canvas_editor.get_markdown();
+    return markdown === undefined ? undefined : unescape_ask_brackets(markdown);
 }
 
-function open_block_editor(index: number, initial_source?: string): void {
-    commit_open_block();
-    const is_new = index >= canvas_blocks.length;
-    const source = initial_source ?? (is_new ? "" : (canvas_blocks[index]?.source ?? ""));
-    const $block = $pane().find(`.pear-canvas-block[data-block-index="${index}"]`);
-    if ($block.length === 0) {
-        return;
-    }
-    $block.addClass("pear-canvas-block-editing").removeClass("pear-canvas-block-ghost");
-    const $area = $("<textarea>")
-        .addClass("pear-canvas-block-source")
-        .attr("spellcheck", "true")
-        .attr(
-            "placeholder",
-            $t({defaultMessage: "Write markdown — [ask Pear anything] hands that span to the agent"}),
-        )
-        .val(source);
-    $block.find(".pear-canvas-block-rendered, .pear-canvas-ghost-prompt").remove();
-    $block.append($area);
-    autosize_block_editor($area);
-    $area.trigger("focus");
-    const el = $area[0];
-    if (el instanceof HTMLTextAreaElement) {
-        el.setSelectionRange(el.value.length, el.value.length);
-    }
-}
+let last_saved_content = "";
+let canvas_dirty = false;
+let canvas_save_timer: ReturnType<typeof setTimeout> | undefined;
+// After we replace the editor's content programmatically (remote
+// refresh, conflict merge), the listener reports the reserialized
+// form once; adopt it as the baseline instead of treating it as an
+// edit.
+let adopt_baseline_until = 0;
 
-function autosize_block_editor($area: JQuery): void {
-    const el = $area[0];
-    if (!(el instanceof HTMLTextAreaElement)) {
+function handle_markdown_updated(markdown: string): void {
+    if (!canvas_loaded) {
         return;
     }
-    el.style.height = "auto";
-    el.style.height = `${Math.max(el.scrollHeight + 2, 44)}px`;
-}
-
-function commit_open_block(options: {cancel?: boolean} = {}): void {
-    const $editing = $pane().find(".pear-canvas-block-editing");
-    if ($editing.length === 0) {
+    const content = unescape_ask_brackets(markdown);
+    if (Date.now() < adopt_baseline_until) {
+        adopt_baseline_until = 0;
+        last_saved_content = content;
+        canvas_dirty = false;
         return;
     }
-    const index = Number.parseInt($editing.attr("data-block-index") ?? "", 10);
-    const $area = $editing.find(".pear-canvas-block-source");
-    const source = String($area.val() ?? "").trim();
-    if (options.cancel === true) {
-        build_canvas_dom();
+    if (content === last_saved_content) {
+        canvas_dirty = false;
         return;
     }
-    if (Number.isNaN(index)) {
-        return;
+    canvas_dirty = true;
+    if (canvas_save_timer !== undefined) {
+        clearTimeout(canvas_save_timer);
     }
-    const previous_source = index < canvas_blocks.length ? (canvas_blocks[index]?.source ?? "") : "";
-    const next_blocks = [...canvas_blocks];
-    let committed_index = index;
-    if (index >= next_blocks.length) {
-        if (source !== "") {
-            // New prose lands before the agent-managed asides tail.
-            const asides_start = asides_start_index();
-            committed_index = asides_start === -1 ? next_blocks.length : asides_start;
-            next_blocks.splice(committed_index, 0, {source});
-        }
-    } else if (source === "") {
-        next_blocks.splice(index, 1);
-    } else {
-        next_blocks[index] = {source};
-    }
-    const changed = join_canvas_blocks(next_blocks) !== join_canvas_blocks(canvas_blocks);
-    canvas_blocks = next_blocks;
-    if (changed && source !== "") {
-        queue_new_asks(previous_source, source);
-    }
-    build_canvas_dom();
-    if (changed) {
-        const $committed = $pane().find(`.pear-canvas-block[data-block-index="${committed_index}"]`);
-        $committed.addClass("pear-canvas-block-settle");
+    canvas_save_timer = setTimeout(() => {
+        canvas_save_timer = undefined;
         save_canvas_document();
-    }
+    }, 2500);
 }
 
-function insert_block_at(index: number): void {
-    commit_open_block();
-    canvas_blocks.splice(index, 0, {source: ""});
-    build_canvas_dom();
-    open_block_editor(index, "");
+// Shift+Enter is the "set" gesture: any bracketed ask in the
+// document that is not already running goes to the agent, once the
+// save that carries it lands.
+function handle_set_gesture(): void {
+    const content = current_editor_content();
+    if (content === undefined || canvas_context === undefined) {
+        return;
+    }
+    for (const block of split_canvas_blocks(content)) {
+        for (const ask of parse_asks_from_source(block.source)) {
+            if (
+                !pending_asks.has(ask_key(ask)) &&
+                !ask_dispatch_queue.some((queued) => ask_key(queued) === ask_key(ask))
+            ) {
+                ask_dispatch_queue.push(ask);
+            }
+        }
+    }
+    flush_canvas_save();
+}
+
+function apply_remote_canvas_content(content: string): void {
+    canvas_blocks = split_canvas_blocks(content);
+    rebuild_aside_sections();
+    prune_pending_asks();
+    last_saved_content = content;
+    canvas_dirty = false;
+    adopt_baseline_until = Date.now() + 500;
+    pear_canvas_editor.set_markdown(content);
+    pear_canvas_editor.refresh_decorations();
 }
 
 function load_canvas(): void {
@@ -893,12 +737,35 @@ function load_canvas(): void {
                 return;
             }
             canvas_version = parsed.data.pear_canvas.version;
-            canvas_blocks = split_canvas_blocks(parsed.data.pear_canvas.content);
-            canvas_loaded = true;
+            const content = parsed.data.pear_canvas.content;
+            canvas_blocks = split_canvas_blocks(content);
+            rebuild_aside_sections();
             prune_pending_asks();
-            set_canvas_status("");
-            build_canvas_dom();
-            $pane().find(".pear-workspace-pane-body").trigger("focus");
+            last_saved_content = content;
+            canvas_dirty = false;
+            const body = $pane().find(".pear-canvas-body")[0];
+            if (!(body instanceof HTMLElement)) {
+                return;
+            }
+            void (async () => {
+                try {
+                    const mounted = await pear_canvas_editor.mount(body, {
+                        markdown: content,
+                        placeholder: $t({
+                            defaultMessage: "Write, or [ask Pear anything] and press Shift+Enter",
+                        }),
+                        on_markdown_updated: handle_markdown_updated,
+                        on_set_gesture: handle_set_gesture,
+                        get_pending_spans: pending_ask_spans,
+                    });
+                    if (mounted && canvas_context?.key === request_context.key) {
+                        canvas_loaded = true;
+                        set_canvas_status("");
+                    }
+                } catch {
+                    set_canvas_status($t({defaultMessage: "could not load"}), true);
+                }
+            })();
         },
         error(xhr) {
             if (xhr.readyState !== 0) {
@@ -913,7 +780,7 @@ function save_canvas_document(retrying = false): void {
         return;
     }
     const save_context = canvas_context;
-    const content = join_canvas_blocks(canvas_blocks);
+    const content = current_editor_content() ?? last_saved_content;
     if (!pear_canvas.content_within_byte_limit(content, 200_000)) {
         set_canvas_status($t({defaultMessage: "too large to save"}), true);
         return;
@@ -932,6 +799,10 @@ function save_canvas_document(retrying = false): void {
             if (parsed.success) {
                 canvas_version = parsed.data.pear_canvas.version;
             }
+            last_saved_content = content;
+            canvas_dirty = false;
+            canvas_blocks = split_canvas_blocks(content);
+            rebuild_aside_sections();
             set_canvas_status($t({defaultMessage: "saved"}));
             // Asks dispatch only once their span is durably in the
             // file, so the agent always finds what it must replace.
@@ -939,10 +810,9 @@ function save_canvas_document(retrying = false): void {
         },
         error(xhr) {
             if (xhr.status === 409 && !retrying) {
-                // Someone (often the agent) changed the file. Block-
-                // level rebase: refetch, re-split, and replay this
-                // document's block set only if the fresh doc doesn't
-                // collide with it; otherwise adopt the fresh doc.
+                // Someone (often the agent) changed the file:
+                // paragraph-level rebase — fresh document first, any
+                // novel local blocks appended, then one retry.
                 void channel.get({
                     url: "/json/pear/canvas",
                     data: {stream: save_context.stream, topic: save_context.topic},
@@ -953,17 +823,13 @@ function save_canvas_document(retrying = false): void {
                             return;
                         }
                         canvas_version = fresh.data.pear_canvas.version;
-                        const fresh_blocks = split_canvas_blocks(fresh.data.pear_canvas.content);
-                        const mine = new Set(canvas_blocks.map((block) => block.source));
-                        const merged = [...fresh_blocks];
-                        for (const block of canvas_blocks) {
+                        const merged = split_canvas_blocks(fresh.data.pear_canvas.content);
+                        for (const block of split_canvas_blocks(content)) {
                             if (!merged.some((entry) => entry.source === block.source)) {
                                 merged.push(block);
                             }
                         }
-                        void mine;
-                        canvas_blocks = merged;
-                        build_canvas_dom();
+                        apply_remote_canvas_content(join_canvas_blocks(merged));
                         set_canvas_status($t({defaultMessage: "merged remote changes"}));
                         save_canvas_document(true);
                     },
@@ -981,23 +847,56 @@ function save_canvas_document(retrying = false): void {
 }
 
 function flush_canvas_save(): void {
-    commit_open_block();
+    if (canvas_save_timer !== undefined) {
+        clearTimeout(canvas_save_timer);
+        canvas_save_timer = undefined;
+    }
+    if (canvas_dirty) {
+        save_canvas_document();
+    } else {
+        dispatch_queued_asks();
+    }
+}
+
+function reload_canvas_content(): void {
+    if (canvas_context === undefined || !canvas_loaded) {
+        return;
+    }
+    const request_context = canvas_context;
+    void channel.get({
+        url: "/json/pear/canvas",
+        data: {stream: request_context.stream, topic: request_context.topic},
+        success(raw_data) {
+            const parsed = canvas_response_schema.safeParse(raw_data);
+            if (
+                !parsed.success ||
+                current_tab !== "canvas" ||
+                canvas_context?.key !== request_context.key ||
+                canvas_dirty
+            ) {
+                return;
+            }
+            canvas_version = parsed.data.pear_canvas.version;
+            if (parsed.data.pear_canvas.content !== last_saved_content) {
+                apply_remote_canvas_content(parsed.data.pear_canvas.content);
+            }
+        },
+        error() {
+            // A missed refresh self-heals on the next settle.
+        },
+    });
 }
 
 // The panel's refresh cycle tells us about run activity; when a run
 // settles (an ask or any agent edit may have rewritten the file),
-// reload the canvas — unless a block is mid-edit.
+// refresh the canvas — unless the user has unsaved edits.
 let last_run_active = false;
 
 export function refresh_canvas_if_open_on_settle(run_active: boolean): void {
     const settled = last_run_active && !run_active;
     last_run_active = run_active;
-    if (
-        settled &&
-        current_tab === "canvas" &&
-        $pane().find(".pear-canvas-block-editing").length === 0
-    ) {
-        load_canvas();
+    if (settled && current_tab === "canvas" && !canvas_dirty) {
+        reload_canvas_content();
     }
 }
 
@@ -1035,57 +934,6 @@ export function initialize(): void {
         event.preventDefault();
         event.stopPropagation();
         show_aside_popover(this);
-    });
-    $("body").on("click", ".pear-canvas-block-rendered", function (this: HTMLElement, event) {
-        // Links and interactive markdown inside a block still work.
-        if ($(event.target).closest("a, button, .spoiler-header").length > 0) {
-            return;
-        }
-        const index = Number.parseInt(
-            $(this).closest(".pear-canvas-block").attr("data-block-index") ?? "",
-            10,
-        );
-        if (!Number.isNaN(index)) {
-            open_block_editor(index);
-        }
-    });
-    $("body").on("click", ".pear-canvas-block-ghost", function (this: HTMLElement) {
-        const index = Number.parseInt($(this).attr("data-block-index") ?? "", 10);
-        if (!Number.isNaN(index)) {
-            open_block_editor(index, "");
-        }
-    });
-    $("body").on("click", ".pear-canvas-seam", function (this: HTMLElement, event) {
-        event.preventDefault();
-        const index = Number.parseInt($(this).attr("data-seam-index") ?? "", 10);
-        if (!Number.isNaN(index)) {
-            insert_block_at(index);
-        }
-    });
-    $("body").on("input", ".pear-canvas-block-source", function (this: HTMLElement) {
-        autosize_block_editor($(this));
-    });
-    $("body").on("keydown", ".pear-canvas-block-source", (event) => {
-        if (event.key === "Enter" && event.shiftKey) {
-            // The notebook gesture: commit the cell.
-            event.preventDefault();
-            event.stopPropagation();
-            commit_open_block();
-        } else if (event.key === "Escape") {
-            event.preventDefault();
-            event.stopPropagation();
-            commit_open_block({cancel: true});
-        }
-    });
-    $("body").on("blur", ".pear-canvas-block-source", () => {
-        // Clicking away commits too — autosave spirit; Esc is the
-        // explicit cancel.
-        setTimeout(() => {
-            const editing = document.activeElement?.closest(".pear-canvas-block-editing");
-            if (!editing) {
-                commit_open_block();
-            }
-        }, 0);
     });
     // Keys inside the pane never leak to the feed's hotkeys; Esc
     // returns to Chat.

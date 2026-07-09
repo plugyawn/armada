@@ -2002,133 +2002,54 @@
     padding: var(--pear-space-4);
 }
 
-/* Canvas (block model): rendered prose in the room's voice on the
-   72ch measure; a cell under edit speaks Geist Mono behind a 2px
-   accent gutter. The file underneath stays plain markdown. */
+/* Canvas: Milkdown Crepe re-skinned as a Pear surface. Storage stays
+   plain markdown; the editor brings the Notion-grade chrome (slash
+   menu, drag handles, tables, KaTeX). Headings speak Geist Pixel;
+   prose reads in the room face. */
 .pear-canvas-body {
     outline: none;
-}
 
-.pear-canvas-blocks {
-    max-width: 72ch;
-    margin: 0 auto;
-    padding-bottom: 40vh;
-}
+    --crepe-color-background: var(--pear-surface-0);
+    --crepe-color-on-background: var(--pear-ink-1);
+    --crepe-color-surface: var(--pear-surface-1);
+    --crepe-color-surface-low: var(--pear-surface-2);
+    --crepe-color-on-surface: var(--pear-ink-1);
+    --crepe-color-on-surface-variant: var(--pear-ink-2);
+    --crepe-color-outline: var(--pear-ink-3);
+    --crepe-color-primary: var(--pear-accent-ink);
+    --crepe-color-secondary: var(--pear-accent-fill);
+    --crepe-color-on-secondary: var(--pear-accent-ink);
+    --crepe-color-inverse: var(--pear-ink-1);
+    --crepe-color-on-inverse: var(--pear-surface-1);
+    --crepe-color-inline-code: var(--pear-accent-ink);
+    --crepe-color-inline-area: var(--pear-surface-2);
+    --crepe-color-error: var(--pear-danger);
+    --crepe-color-hover: var(--pear-surface-2);
+    --crepe-color-selected: var(--pear-accent-fill);
+    --crepe-font-title: var(--pear-font-pixel);
+    --crepe-font-default: var(--pear-font-ui);
+    --crepe-font-code: var(--pear-font-mono);
 
-.pear-canvas-block {
-    position: relative;
-    display: flex;
-    gap: var(--pear-space-3);
-    padding: var(--pear-space-1) 0;
-    border-radius: var(--pear-radius-chip);
-}
+    & .milkdown {
+        max-width: 78ch;
+        margin: 0 auto;
+        color: var(--pear-ink-1);
 
-.pear-canvas-block-gutter {
-    flex: 0 0 2px;
-    border-radius: 1px;
-    background: transparent;
-    transition: background-color var(--pear-dur-1) var(--pear-ease);
-}
+        & .ProseMirror {
+            padding-bottom: 35vh;
+        }
 
-.pear-canvas-block:hover > .pear-canvas-block-gutter {
-    background: var(--pear-hairline);
-}
-
-.pear-canvas-block-editing > .pear-canvas-block-gutter {
-    background: var(--pear-accent);
-}
-
-.pear-canvas-block-rendered {
-    min-width: 0;
-    flex: 1 1 auto;
-    cursor: text;
-
-    /* Canvas headings speak in the Pear voice (Geist Pixel); prose
-       stays in the room face for reading comfort. */
-    & h1,
-    & h2,
-    & h3,
-    & h4,
-    & h5,
-    & h6 {
-        font-family: var(--pear-font-pixel);
-        font-weight: 400;
-        letter-spacing: 0.02em;
+        & h1,
+        & h2,
+        & h3,
+        & h4,
+        & h5,
+        & h6 {
+            font-family: var(--pear-font-pixel);
+            font-weight: 400;
+            letter-spacing: 0.02em;
+        }
     }
-}
-
-.pear-canvas-block-source {
-    min-width: 0;
-    flex: 1 1 auto;
-    resize: none;
-    padding: var(--pear-space-1) 0;
-    border: 0;
-    background: transparent;
-    color: var(--pear-ink-1);
-    font-family: var(--pear-font-mono);
-    font-size: 0.9286em; /* 13px at 14px em */
-    line-height: 1.7;
-    outline: none;
-}
-
-/* Commit settle: the freshly rendered cell breathes in. */
-.pear-canvas-block-settle {
-    animation: pear-block-settle var(--pear-dur-2) var(--pear-ease);
-}
-
-@keyframes pear-block-settle {
-    from {
-        opacity: 0.35;
-        transform: translateY(3px);
-    }
-}
-
-/* The + seam between blocks: invisible until sought. */
-.pear-canvas-seam {
-    display: flex;
-    width: 100%;
-    height: 10px;
-    align-items: center;
-    justify-content: center;
-    padding: 0;
-    border: 0;
-    background: transparent;
-    cursor: pointer;
-    opacity: 0;
-    transition: opacity var(--pear-dur-1) var(--pear-ease);
-}
-
-.pear-canvas-seam:hover,
-.pear-canvas-seam:focus-visible {
-    opacity: 1;
-}
-
-.pear-canvas-seam::before,
-.pear-canvas-seam::after {
-    content: "";
-    height: 1px;
-    flex: 1 1 auto;
-    background: var(--pear-hairline);
-}
-
-.pear-canvas-seam-plus {
-    padding: 0 var(--pear-space-2);
-    color: var(--pear-accent-ink);
-    font-family: var(--pear-font-pixel);
-    /* stylelint-disable-next-line declaration-property-unit-disallowed-list */
-    font-size: 11px;
-    line-height: 1;
-}
-
-.pear-canvas-block-ghost {
-    cursor: text;
-}
-
-.pear-canvas-ghost-prompt {
-    color: var(--pear-ink-3);
-    font-family: var(--pear-font-pixel);
-    /* stylelint-disable-next-line declaration-property-unit-disallowed-list */
-    font-size: 11px;
 }
 
 /* Pane crossfade: switching tabs breathes rather than snapping. */
@@ -2170,7 +2091,7 @@
 }
 
 /* A resolved labeled ask: the answer waits behind a chip. */
-.pear-canvas-block-rendered a.pear-aside-chip {
+.pear-canvas-body .pear-aside-chip {
     display: inline-flex;
     align-items: baseline;
     gap: 0.4em;
@@ -2219,8 +2140,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-    .pear-pane-fade,
-    .pear-canvas-block-settle {
+    .pear-pane-fade {
         animation: none;
     }
 

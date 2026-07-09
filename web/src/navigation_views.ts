@@ -51,7 +51,7 @@ export const built_in_views_meta_data: Record<string, BuiltInViewBasicMetadata> 
         menu_icon_class: "recent-view-sidebar-menu-icon",
         menu_aria_label: $t({defaultMessage: "Recent conversations options"}),
         home_view_code: "recent",
-        prioritize_in_condensed_view: true,
+        prioritize_in_condensed_view: false,
     },
     all_messages: {
         fragment: "feed",
@@ -67,7 +67,7 @@ export const built_in_views_meta_data: Record<string, BuiltInViewBasicMetadata> 
         menu_icon_class: "all-messages-sidebar-menu-icon",
         menu_aria_label: $t({defaultMessage: "Combined feed options"}),
         home_view_code: "all_messages",
-        prioritize_in_condensed_view: true,
+        prioritize_in_condensed_view: false,
     },
     mentions: {
         fragment: "narrow/is/mentioned",
@@ -115,7 +115,7 @@ export const built_in_views_meta_data: Record<string, BuiltInViewBasicMetadata> 
         menu_icon_class: "starred-messages-sidebar-menu-icon",
         menu_aria_label: $t({defaultMessage: "Starred messages options"}),
         home_view_code: "",
-        prioritize_in_condensed_view: true,
+        prioritize_in_condensed_view: false,
     },
     drafts: {
         fragment: "drafts",
@@ -131,7 +131,7 @@ export const built_in_views_meta_data: Record<string, BuiltInViewBasicMetadata> 
         menu_icon_class: "drafts-sidebar-menu-icon",
         menu_aria_label: $t({defaultMessage: "Drafts options"}),
         home_view_code: "",
-        prioritize_in_condensed_view: false,
+        prioritize_in_condensed_view: true,
     },
     scheduled_messages: {
         fragment: "scheduled",

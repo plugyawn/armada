@@ -27,6 +27,55 @@
     --color-outline-focus: var(--pear-accent-ink);
     --color-outline-button-focus: var(--pear-accent-ink);
     --color-compose-focus-ring: var(--pear-accent-ink);
+
+    /* Sidebar fabric (B3): unread counters step off the blue tier
+       system onto the moss ramp — attention is the accent's job, so
+       only the prominent tier spends it. The active row reads in full
+       ink; the sticky header floats on the one soft shadow. */
+    --color-background-unread-counter-prominent: var(--pear-accent-fill-strong);
+    --color-unread-counter-prominent: var(--pear-accent-ink);
+    --color-background-unread-counter-normal: var(--pear-surface-2);
+    --color-unread-counter-normal: var(--pear-ink-2);
+    --color-unread-counter-quiet: var(--pear-ink-3);
+    --box-shadow-unread-counter-normal: inset 0 0 0 1px var(--pear-hairline);
+    --color-background-unread-counter-no-alpha: var(--pear-surface-3);
+    --color-background-unread-counter-dot: var(--pear-accent);
+    --color-text-active-narrow-filter: var(--pear-ink-1);
+    --box-shadow-sidebar-sticky-header-drop:
+        var(--pear-shadow-pop), 0 1px 0 var(--pear-hairline);
+
+    /* Sidebar voice: sentence-case headings in a calm 500 (the
+       shouting caps and small-caps action headings retire), and rows
+       breathe on the 4px grid (§2: 32px prominent line-boxes). */
+    --font-weight-sidebar-heading: 500;
+    --letter-spacing-sidebar-heading: 0.01em;
+    --font-weight-sidebar-action-heading: 500;
+    --font-variant-sidebar-action-heading: normal;
+    --text-transform-sidebar-action-heading: none;
+    --font-size-sidebar-action-heading: 1em;
+    --line-height-sidebar-row-prominent: 2.2857em; /* 32px at 14px em */
+    --line-height-sidebar-row: 1.7142em; /* 24px at 14px em */
+}
+
+/* Scrollbars are quiet ink — tone only, no outline ring. The
+   dark-theme selectors outrank the host's dark override. */
+.simplebar-track .simplebar-scrollbar::before,
+:root.dark-theme .simplebar-track .simplebar-scrollbar::before {
+    background-color: var(--pear-ink-3);
+    box-shadow: none;
+}
+
+.simplebar-track .simplebar-scrollbar.simplebar-hover::before,
+:root.dark-theme .simplebar-track .simplebar-scrollbar.simplebar-hover::before {
+    background-color: var(--pear-ink-2);
+}
+
+/* The narrowed row carries the 2px accent spine (§3): selection is
+   one of the four places the accent is allowed to spend. */
+li.active-filter,
+li.top-left-active-filter,
+li.active-sub-filter {
+    box-shadow: inset 2px 0 0 var(--pear-accent);
 }
 
 /* The room is set in Hanken. Form controls inherit so inputs match. */

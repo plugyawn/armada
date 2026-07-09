@@ -37,7 +37,7 @@ import * as ui_util from "./ui_util.ts";
 import {user_settings} from "./user_settings.ts";
 import * as util from "./util.ts";
 
-const LEFT_SIDEBAR_NAVIGATION_AREA_TITLE = $t({defaultMessage: "VIEWS"});
+const LEFT_SIDEBAR_NAVIGATION_AREA_TITLE = $t({defaultMessage: "Views"});
 
 export let left_sidebar_cursor: ListCursor<JQuery>;
 

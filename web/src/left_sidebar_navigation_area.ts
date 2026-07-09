@@ -31,8 +31,10 @@ export function restore_views_state(): void {
     }
 
     const views_state = ls.get(ls_key);
-    // Expanded state is default, so we only need to toggle if the state is condensed.
-    if (views_state === STATES.CONDENSED) {
+    // Pear defaults to the condensed strip (design §8.3: the views
+    // fold behind Inbox/Mentions/Drafts); expanded is the stored
+    // exception.
+    if (views_state !== STATES.EXPANDED) {
         toggle_condensed_navigation_area();
     }
 }
@@ -294,12 +296,13 @@ export function get_built_in_primary_condensed_views(): navigation_views.BuiltIn
         }
         return 0;
     }
-    // Get the top 5 prioritized views.
+    // The condensed strip holds the three views that matter in a
+    // workspace client — Inbox, Mentions, Drafts (design §8.3); the
+    // rest live behind the overflow popover.
     return navigation_views
         .get_built_in_views()
         .toSorted((view1, view2) => score(view2) - score(view1))
-        .slice(0, 5);
-    // TODO: Think about filtering out scheduled message and reminders views with UI to support less than 5 views.
+        .slice(0, 3);
 }
 
 export function get_built_in_popover_condensed_views(): navigation_views.BuiltInViewMetadata[] {

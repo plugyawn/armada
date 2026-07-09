@@ -46,21 +46,11 @@ PEAR_CANVAS_FILE_NAME: Final = "README.md"
 PEAR_LEGACY_CANVAS_FILE_NAME: Final = "CANVAS.md"
 PEAR_CANVAS_TEMPLATE: Final = """# {topic}
 
-_The living README for #{stream} > {topic} — Pear reads it before every run and keeps it current. Write anywhere; wrap a span in [brackets] and press Shift+Enter to hand it to the agent._
-
-## Definition of done
-
-_What finished looks like here. Pear treats this as the topic's goal._
+_Pear reads this before every run._
 
 ## Notes
 
 ## Pinned context
-
-_Facts, files, and links Pear should always keep in mind._
-
-## Routines
-
-_Recurring chores Pear should watch for._
 """
 PEAR_OFFICIAL_AGENT_RUNTIME: Final = "codex-app-server"
 PEAR_OFFICIAL_AGENT_RUNTIME_LABEL: Final = "Codex app-server"

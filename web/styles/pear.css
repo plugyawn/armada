@@ -2140,24 +2140,34 @@
         & h1 {
             margin: 0 0 0.4em;
             /* stylelint-disable-next-line declaration-property-unit-disallowed-list */
-            font-size: 32px;
+            font-size: 24px;
         }
 
         & h2 {
-            margin: 2.2em 0 0.35em;
+            margin: 1.8em 0 0.3em;
             color: var(--pear-ink-2);
             /* stylelint-disable-next-line declaration-property-unit-disallowed-list */
-            font-size: 20px;
+            font-size: 18px;
         }
 
         & h3,
         & h4,
         & h5,
         & h6 {
-            margin: 1.8em 0 0.3em;
+            margin: 1.5em 0 0.25em;
             color: var(--pear-ink-2);
             /* stylelint-disable-next-line declaration-property-unit-disallowed-list */
-            font-size: 16px;
+            font-size: 15px;
+        }
+
+        /* Crepe's placeholder is a height-0 absolute overlay; if it
+           ever wraps it paints across the next block (live report).
+           One line, clipped. */
+        & .crepe-placeholder::before {
+            overflow: hidden;
+            max-width: 100%;
+            text-overflow: ellipsis;
+            white-space: nowrap;
         }
 
         /* KaTeX is prose, not an accent surface. */

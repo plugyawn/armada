@@ -1802,3 +1802,58 @@
     box-shadow: inset 0 2px 0 -1px
         color-mix(in srgb, var(--pear-accent) 55%, transparent);
 }
+
+/* Moments (design §11): the Konami ✦ rain — the one place the spark
+   is allowed out of the header, for eight arrows and two letters. */
+.pear-sparkle-rain {
+    position: fixed;
+    inset: 0;
+    z-index: 220;
+    overflow: hidden;
+    pointer-events: none;
+}
+
+.pear-sparkle-rain span {
+    position: absolute;
+    top: -24px;
+    color: var(--pear-accent-ink);
+    animation: pear-sparkle-fall 3.2s linear forwards;
+}
+
+@keyframes pear-sparkle-fall {
+    to {
+        opacity: 0.1;
+        transform: translateY(110vh);
+    }
+}
+
+/* The idle sprout: an empty narrow's ◉ quietly ripens from ink to
+   accent while you look at it. Still under reduced motion. */
+.empty_feed_notice::before {
+    content: "◉";
+    display: block;
+    margin-bottom: 8px;
+    color: var(--pear-ink-3);
+    font-family: var(--pear-font-pixel);
+    /* Pinned px by design; see the pixel-type rule in the design spec. */
+    /* stylelint-disable-next-line declaration-property-unit-disallowed-list */
+    font-size: 16px;
+    text-align: center;
+    animation: pear-ripen 14s var(--pear-ease) 6s forwards;
+}
+
+@keyframes pear-ripen {
+    to {
+        color: var(--pear-accent);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .pear-sparkle-rain {
+        display: none;
+    }
+
+    .empty_feed_notice::before {
+        animation: none;
+    }
+}

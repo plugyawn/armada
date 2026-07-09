@@ -1,0 +1,25 @@
+<button type="button" class="pear-workspace-rail-card pear-panel-open-action">
+    <span class="pear-rail-line">
+        <span class="pear-ui-glyph pear-rail-glyph" aria-hidden="true">◉</span>
+        <span
+            class="pear-rail-repo"
+            title="{{repo_label}}"
+        >{{repo_label}}</span>
+        <span
+            class="pear-rail-status pear-rail-status-{{status_class}}"
+        >{{status_label}}</span>
+    </span>
+    <span class="pear-rail-line pear-rail-line-meta">
+        <i
+            class="zulip-icon zulip-icon-git-branch pear-rail-branch-icon"
+            aria-hidden="true"
+        ></i>
+        <span
+            class="pear-rail-branch"
+            title="{{branch_label}}"
+        >{{branch_label}}</span>
+        {{#if head_short}}
+            <span class="pear-rail-head">{{head_short}}</span>
+        {{/if}}
+    </span>
+</button>

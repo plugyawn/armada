@@ -141,6 +141,7 @@ import {
     realm,
     set_current_user,
     set_pear_bot_user_ids,
+    set_pear_project_stream_ids,
     set_realm,
     set_realm_billing,
     state_data_schema,
@@ -466,6 +467,7 @@ export async function initialize_everything(state_data) {
     set_realm(state_data.realm);
     set_realm_billing(state_data.realm_billing);
     set_pear_bot_user_ids(state_data.bot.pear_bot_user_ids ?? []);
+    set_pear_project_stream_ids(state_data.stream_data.pear_project_stream_ids ?? []);
 
     if (page_params.narrow_stream !== undefined) {
         // In the /?stream=X mini-window flow, the user's main Zulip

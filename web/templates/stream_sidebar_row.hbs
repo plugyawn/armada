@@ -8,6 +8,9 @@
             </span>
 
             <span class="stream-name">{{name}}</span>
+            {{#if has_pear_project}}
+            <span class="pear-ui-glyph pear-repo-mark" aria-hidden="true">◉</span>
+            {{/if}}
 
             <div class="left-sidebar-controls">
                 <div class="channel-search-topics-button" tabindex="0" data-tippy-content="{{t 'Search topics' }}" data-stream-id="{{id}}">

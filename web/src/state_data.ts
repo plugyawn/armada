@@ -667,6 +667,7 @@ export const split_state_data_schema = z.object({
         unsubscribed: z.array(api_stream_subscription_schema),
         never_subscribed: z.array(never_subscribed_stream_schema),
         realm_default_streams: z.array(z.number()),
+        pear_project_stream_ids: z.optional(z.array(z.number())),
     }),
     user_groups: z.object({realm_user_groups: z.array(raw_user_group_schema)}),
     channel_folders: z.object({channel_folders: z.array(channel_folder_schema)}),
@@ -757,4 +758,26 @@ export function remove_pear_bot_user_id(user_id: number): void {
 
 export function is_pear_bot_user_id(user_id: number): boolean {
     return pear_bot_user_ids.includes(user_id);
+}
+
+// Channels bound to a Pear repository, for the sidebar's workspace
+// marks. Register-supplied; the client adds entries locally when its
+// own topic context reports a pinned repo (there is no server event
+// stream for project bindings yet).
+export let pear_project_stream_ids = new Set<number>();
+
+export function set_pear_project_stream_ids(stream_ids: number[]): void {
+    pear_project_stream_ids = new Set(stream_ids);
+}
+
+export function add_pear_project_stream_id(stream_id: number): boolean {
+    if (pear_project_stream_ids.has(stream_id)) {
+        return false;
+    }
+    pear_project_stream_ids.add(stream_id);
+    return true;
+}
+
+export function stream_has_pear_project(stream_id: number): boolean {
+    return pear_project_stream_ids.has(stream_id);
 }

@@ -57,6 +57,7 @@ from zerver.lib.navigation_views import get_navigation_views_for_user
 from zerver.lib.onboarding_steps import get_next_onboarding_steps
 from zerver.lib.pear import PEAR_EMBEDDED_BOT_SERVICE
 from zerver.lib.pear_identity import pear_bot_user_id_has_pear_service, pear_bot_user_ids_for_realm
+from zerver.lib.pear_workspace_map import pear_project_stream_ids_for_realm
 from zerver.lib.presence import get_presence_for_user, get_presences_for_realm
 from zerver.lib.realm_icon import realm_icon_url
 from zerver.lib.realm_logo import get_realm_logo_source, get_realm_logo_url
@@ -878,6 +879,22 @@ def fetch_initial_state_data(
         state["subscriptions"] = sub_info.subscriptions
         state["unsubscribed"] = sub_info.unsubscribed
         state["never_subscribed"] = sub_info.never_subscribed
+        # Which channels are bound to a Pear repository, for the left
+        # sidebar's workspace marks — restricted to channels the user
+        # can already see. Like realm_embedded_bots, this has no
+        # apply_event counterpart yet: bindings change rarely (a
+        # channel's first Pear run), and the client patches its local
+        # copy when its own topic context reports a pinned repo.
+        accessible_stream_ids = {
+            sub["stream_id"]
+            for group in (sub_info.subscriptions, sub_info.unsubscribed, sub_info.never_subscribed)
+            for sub in group
+        }
+        state["pear_project_stream_ids"] = [
+            stream_id
+            for stream_id in pear_project_stream_ids_for_realm(realm)
+            if stream_id in accessible_stream_ids
+        ]
 
     if want("channel_folders"):
         if user_profile is None:

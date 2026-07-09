@@ -3,6 +3,7 @@ import * as z from "zod/mini";
 
 import render_pear_panel from "../templates/pear_panel.hbs";
 import render_pear_topic_header_controls from "../templates/pear_topic_header_controls.hbs";
+import render_pear_workspace_rail from "../templates/pear_workspace_rail.hbs";
 
 import * as blueslip from "./blueslip.ts";
 import * as browser_history from "./browser_history.ts";
@@ -12,6 +13,7 @@ import {message_render_response_schema} from "./message_store.ts";
 import * as narrow_state from "./narrow_state.ts";
 import * as pear_canvas from "./pear_canvas.ts";
 import * as pear_run_state from "./pear_run_state.ts";
+import * as pear_workspace_marks from "./pear_workspace_marks.ts";
 import {
     compact_reasoning_effort,
     context_key,
@@ -1659,6 +1661,20 @@ function remember_topic_context(topic_context: PearTopicContext | null | undefin
         context_key(topic_context.stream, topic_context.topic),
         topic_context,
     );
+    // Keep the sidebar's workspace marks honest without a server event
+    // stream: this context already says whether the channel is bound
+    // and whether this topic has a worktree.
+    const sub = stream_data.get_sub(topic_context.stream);
+    if (sub !== undefined) {
+        const has_pinned_repo =
+            topic_context.pinned_repo !== undefined && topic_context.pinned_repo !== "";
+        if (has_pinned_repo || topic_context.workdir !== "") {
+            pear_workspace_marks.note_pinned_repo_for_stream(sub.stream_id);
+        }
+        if (topic_context.workdir !== "") {
+            pear_workspace_marks.note_topic_workspace(sub.stream_id, topic_context.topic);
+        }
+    }
 }
 
 // The panel owns the single topic-context/runs store; the runtime menu
@@ -1807,6 +1823,49 @@ function pear_rate_limit_backoff_ms(xhr: JQuery.jqXHR): number {
     return LIVE_REFRESH_RATE_LIMIT_BACKOFF_MS;
 }
 
+let last_workspace_rail_signature = "";
+
+function render_workspace_rail(topic_context: PearTopicContext | undefined): void {
+    const $rail = $("#pear-workspace-rail");
+    if ($rail.length === 0) {
+        return;
+    }
+    if (topic_context === undefined || topic_context.workdir === "") {
+        if (last_workspace_rail_signature !== "") {
+            last_workspace_rail_signature = "";
+            $rail.attr("hidden", "hidden");
+            $rail.empty();
+        }
+        return;
+    }
+    const git = topic_context.git;
+    const repo_label =
+        topic_context.repo_label?.trim() ||
+        topic_context.repo_title?.trim() ||
+        topic_context.github_repo.trim() ||
+        topic_context.worktree_label?.trim() ||
+        topic_context.topic;
+    const branch_label = git.branch?.trim() || topic_context.branch?.trim() || topic_context.topic;
+    const dirty = git.dirty === true;
+    const changed_count = git.changed_count ?? 0;
+    const args = {
+        repo_label,
+        branch_label,
+        head_short: git.head_short?.trim() ?? "",
+        status_class: dirty ? "dirty" : "clean",
+        status_label: dirty
+            ? $t({defaultMessage: "{changed_count} changed"}, {changed_count})
+            : $t({defaultMessage: "clean"}),
+    };
+    const signature = JSON.stringify(args);
+    if (signature === last_workspace_rail_signature) {
+        return;
+    }
+    last_workspace_rail_signature = signature;
+    $rail.html(render_pear_workspace_rail(args));
+    $rail.removeAttr("hidden");
+}
+
 function render(
     runs: PearRun[] = last_runs,
     topic_context: PearTopicContext | null | undefined = last_topic_context,
@@ -1858,6 +1917,7 @@ function render(
         topic_context: display_context,
         active_run_status: active_run?.status,
     });
+    render_workspace_rail(display_context);
     const panel_header_state = panel_header_state_for_testing(active_run, {
         has_topic,
         show_workbench: workbench_open,

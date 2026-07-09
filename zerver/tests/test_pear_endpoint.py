@@ -72,7 +72,14 @@ from zerver.lib.pear_worker import (
 )
 from zerver.lib.test_classes import ZulipTestCase
 from zerver.models import Message, Recipient, Subscription, UserProfile
-from zerver.models.bots import PearProject, PearTopicContext, PearWorkerRun, PearWorkerRunEvent
+from zerver.lib.events import fetch_initial_state_data
+from zerver.models.bots import (
+    PearProject,
+    PearTopicContext,
+    PearWorkerRun,
+    PearWorkerRunEvent,
+    PearWorkspaceNode,
+)
 from zerver.models.streams import get_stream
 from zerver.views.pear import (
     build_pear_git_context,
@@ -3745,3 +3752,52 @@ class PearSessionEndpointTest(ZulipTestCase):
         self.assertEqual(active_session["worker_state"], "blocked_paused")
         self.assertFalse(active_session["worker_can_run"])
         self.assertIn("paused", active_session["worker_blocked_reason"])
+
+
+class PearWorkspaceMapTest(ZulipTestCase):
+    def test_workspace_topics_endpoint_lists_active_worktrees(self) -> None:
+        user = self.example_user("hamlet")
+        self.login_user(user)
+        stream = self.subscribe(user, "workmap")
+        project = PearProject.objects.create(realm=user.realm, stream=stream)
+        PearWorkspaceNode.objects.create(
+            realm=user.realm,
+            project=project,
+            stream_name=stream.name,
+            topic_name="feature-a",
+            branch_name="feature-a",
+        )
+        PearWorkspaceNode.objects.create(
+            realm=user.realm,
+            project=project,
+            stream_name=stream.name,
+            topic_name="retired",
+            branch_name="retired",
+            lifecycle_status=PearWorkspaceNode.ARCHIVED,
+        )
+
+        result = self.client_get("/json/pear/workspace-topics", {"stream": stream.name})
+        payload = self.assert_json_success(result)["pear_workspace_topics"]
+        self.assertEqual(payload, [{"topic": "feature-a", "branch": "feature-a"}])
+
+    def test_workspace_topics_requires_stream_access(self) -> None:
+        iago = self.example_user("iago")
+        self.make_stream("sekrit", invite_only=True)
+        self.subscribe(iago, "sekrit")
+        user = self.example_user("hamlet")
+        self.login_user(user)
+
+        result = self.client_get("/json/pear/workspace-topics", {"stream": "sekrit"})
+        self.assert_json_error(result, "Invalid channel name 'sekrit'")
+
+    def test_register_reports_accessible_pear_project_stream_ids(self) -> None:
+        user = self.example_user("hamlet")
+        stream = self.subscribe(user, "workmap")
+        PearProject.objects.create(realm=user.realm, stream=stream)
+        private_stream = self.make_stream("sekrit", invite_only=True)
+        PearProject.objects.create(realm=user.realm, stream=private_stream)
+
+        state = fetch_initial_state_data(user, realm=user.realm)
+        self.assertIn(stream.id, state["pear_project_stream_ids"])
+        # Bindings on channels the user cannot see stay invisible.
+        self.assertNotIn(private_stream.id, state["pear_project_stream_ids"])

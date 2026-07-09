@@ -43,6 +43,7 @@ from zerver.lib.pear import (
     pear_token_usage_summary,
 )
 from zerver.lib.pear_gate import invalidate_pear_selected_bot_cache
+from zerver.lib.pear_workspace_map import pear_workspace_topics_for_stream
 from zerver.lib.pear_worker import (
     PearQueueWorkerDispatcher,
     ensure_pear_child_topic_context,
@@ -1004,6 +1005,27 @@ def post_pear_first_run_backend(
                 "selection_changed": selection_changed,
                 "pear_config": pear_config,
             },
+        },
+    )
+
+
+@typed_endpoint
+def get_pear_workspace_topics_backend(
+    request: HttpRequest,
+    user_profile: UserProfile,
+    *,
+    stream_name: Annotated[
+        str,
+        ApiParamConfig("stream", documentation_status=INTENTIONALLY_UNDOCUMENTED),
+    ],
+) -> HttpResponse:
+    access_stream_by_name(user_profile, stream_name)
+    return json_success(
+        request,
+        data={
+            "pear_workspace_topics": pear_workspace_topics_for_stream(
+                user_profile.realm, stream_name
+            ),
         },
     )
 

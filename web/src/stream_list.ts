@@ -32,6 +32,7 @@ import * as scroll_util from "./scroll_util.ts";
 import {web_channel_default_view_values} from "./settings_config.ts";
 import * as settings_data from "./settings_data.ts";
 import * as sidebar_header_sticky_shadow from "./sidebar_header_sticky_shadow.ts";
+import * as state_data from "./state_data.ts";
 import {realm} from "./state_data.ts";
 import * as stream_data from "./stream_data.ts";
 import * as stream_list_sort from "./stream_list_sort.ts";
@@ -861,6 +862,7 @@ function build_stream_sidebar_li(sub: StreamSubscription, for_modal = false): JQ
             sub.stream_id,
         ),
         is_empty_topic_only_channel: stream_data.is_empty_topic_only_channel(sub.stream_id),
+        has_pear_project: state_data.stream_has_pear_project(sub.stream_id),
         for_modal,
     };
     const $list_item = $(render_stream_sidebar_row(args));

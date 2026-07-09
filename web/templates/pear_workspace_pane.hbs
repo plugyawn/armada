@@ -2,19 +2,13 @@
     <div class="pear-workspace-pane-header">
         <button type="button" class="pear-workspace-tab pear-pane-back" data-pear-tab="chat" aria-label="{{t 'Back to chat' }}">&larr; {{t "chat" }}</button>
         <span class="pear-workspace-pane-crumb">{{context_label}}</span>
-        <span class="pear-workspace-tabs" role="tablist">
-            <button type="button" class="pear-workspace-tab" data-pear-tab="chat" role="tab">{{t "Chat" }}</button>
-            <button type="button" class="pear-workspace-tab {{#if is_canvas}}pear-workspace-tab-selected{{/if}}" data-pear-tab="canvas" role="tab">{{t "Canvas" }}</button>
-            <button type="button" class="pear-workspace-tab {{#if is_files}}pear-workspace-tab-selected{{/if}}" data-pear-tab="files" role="tab">{{t "Files" }}</button>
-        </span>
-        {{#if is_canvas}}
+        {{! The same live topic-header cluster the chat shows — model
+            pill, commit line, tab strip — injected and kept fresh by
+            pear_panel, so nothing visually changes across tabs. }}
+        <span class="pear-pane-header-cluster"></span>
         <span class="pear-canvas-status"></span>
-        {{/if}}
         <span class="pear-workspace-pane-hint">{{t "Esc returns to chat" }}</span>
     </div>
-    {{#if is_canvas}}
-    <div class="pear-workspace-pane-body pear-canvas-body pear-pane-fade" tabindex="-1"></div>
-    {{else}}
-    <div class="pear-workspace-pane-body pear-pane-fade"></div>
-    {{/if}}
+    <div class="pear-workspace-pane-body pear-canvas-body pear-body-hidden" tabindex="-1"></div>
+    <div class="pear-workspace-pane-body pear-files-body pear-body-hidden"></div>
 </div>

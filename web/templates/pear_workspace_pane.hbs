@@ -12,10 +12,8 @@
         <span class="pear-workspace-pane-hint">{{t "Esc returns to chat" }}</span>
     </div>
     {{#if is_canvas}}
-    <div class="pear-workspace-pane-body pear-canvas-body">
-        <textarea class="pear-canvas-editor" spellcheck="true" placeholder="{{t 'The topic canvas — durable notes, plans, and context. Pear reads and writes this file too.' }}"></textarea>
-    </div>
+    <div class="pear-workspace-pane-body pear-canvas-body pear-pane-fade" tabindex="-1"></div>
     {{else}}
-    <div class="pear-workspace-pane-body"></div>
+    <div class="pear-workspace-pane-body pear-pane-fade"></div>
     {{/if}}
 </div>

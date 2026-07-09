@@ -1927,6 +1927,7 @@
 }
 
 .pear-workspace-pane-inner {
+    position: relative;
     display: flex;
     overflow: hidden;
     min-height: 0;
@@ -1935,14 +1936,14 @@
 }
 
 /* Chromeless container: the cloned recipient bar brings its own
-   look, identical to chat's. */
+   look; insets match the feed's so the bar sits where chat puts it. */
 .pear-workspace-pane-header {
     display: flex;
     flex: 0 0 auto;
     flex-wrap: wrap;
     align-items: center;
     gap: var(--pear-space-1) var(--pear-space-4);
-    padding: 0 var(--pear-space-1);
+    padding: 0 10px;
 
     > .message_header_stream {
         width: 100%;
@@ -1970,11 +1971,18 @@
     font-size: 11px;
 }
 
+/* Save/ask state floats quietly at the pane's foot; the header stays
+   byte-identical to chat's bar. */
 .pear-canvas-status {
+    position: absolute;
+    right: var(--pear-space-4);
+    bottom: var(--pear-space-3);
+    z-index: 5;
     color: var(--pear-ink-3);
     font-family: var(--pear-font-pixel);
     /* stylelint-disable-next-line declaration-property-unit-disallowed-list */
     font-size: 11px;
+    pointer-events: none;
 }
 
 .pear-canvas-status-failed {
@@ -2084,6 +2092,12 @@
             font-family: var(--pear-font-pixel);
             font-weight: 400;
             letter-spacing: 0.02em;
+        }
+
+        /* KaTeX is prose, not an accent surface. */
+        & span[data-type="math_inline"],
+        & .katex {
+            color: var(--pear-ink-1);
         }
     }
 }

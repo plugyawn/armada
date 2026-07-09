@@ -1921,7 +1921,9 @@
 #message_feed_container.pear-feed-clamped {
     position: sticky;
     z-index: 5;
-    top: calc(var(--navbar-fixed-height) + var(--header-padding-bottom));
+    /* Chat's pinned header sits flush at the navbar edge (measured);
+       the clamp matches it exactly. */
+    top: var(--navbar-fixed-height);
     overflow: hidden;
     height: var(--pear-topic-bar-height, 0);
     padding-top: 0;

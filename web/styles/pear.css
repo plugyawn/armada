@@ -1911,7 +1911,8 @@
    exactly one topic header. */
 #pear-topic-bar {
     position: sticky;
-    z-index: 3;
+    /* Above the feed's own sticky headers (z-index 4). */
+    z-index: 5;
     top: var(--navbar-fixed-height);
     margin-top: calc(var(--navbar-fixed-height) + var(--header-padding-bottom));
     padding: 0 10px;
@@ -1931,6 +1932,9 @@
     padding-top: var(--pear-space-2);
 
     & .message_header_stream {
+        /* The promoted bar owns the pinned position; date rules flow
+           with their groups instead of stacking beneath it. */
+        position: static;
         box-shadow: none;
 
         & .message-header-contents {

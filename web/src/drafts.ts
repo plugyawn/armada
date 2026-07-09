@@ -410,19 +410,28 @@ export function restore_message(draft: LocalStorageDraft): ComposeArguments {
 }
 
 function draft_notify(): void {
-    // Display a tooltip to notify the user about the saved draft.
-    const instance = util.the(
-        tippy.default(".top_left_drafts .unread_count", {
-            content: $t({defaultMessage: "Saved as draft"}),
-            arrow: true,
-            placement: "right",
-        }),
+    // Display a tooltip to notify the user about the saved draft. The
+    // drafts view has a row in both the condensed strip and the
+    // expanded list, so anchor on whichever is visible rather than
+    // assuming a single match.
+    const instances = tippy.default(".top_left_drafts .unread_count", {
+        content: $t({defaultMessage: "Saved as draft"}),
+        arrow: true,
+        placement: "right",
+    });
+    const visible = instances.filter(
+        (instance) =>
+            instance.reference instanceof HTMLElement &&
+            instance.reference.offsetParent !== null,
     );
-    instance.show();
-    function remove_instance(): void {
-        instance.destroy();
+    const chosen = visible.at(0) ?? instances.at(0);
+    chosen?.show();
+    function remove_instances(): void {
+        for (const instance of instances) {
+            instance.destroy();
+        }
     }
-    setTimeout(remove_instance, 3000);
+    setTimeout(remove_instances, 3000);
 }
 
 function maybe_notify(no_notify: boolean): void {

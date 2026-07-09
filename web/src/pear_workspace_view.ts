@@ -245,7 +245,14 @@ function hide_pane(): void {
     $pane().attr("hidden", "hidden");
     sync_topic_bar();
     if (saved_chat_scroll !== undefined) {
-        const target = saved_chat_scroll;
+        // A near-zero saved offset means the pane opened before
+        // Zulip's initial anchor scroll ran (remembered tab on
+        // load); restoring it would strand chat at the logo gutter
+        // above the feed. Land at the newest messages instead.
+        const target =
+            saved_chat_scroll <= 1
+                ? document.documentElement.scrollHeight
+                : saved_chat_scroll;
         saved_chat_scroll = undefined;
         window.scrollTo(0, target);
         // The feed re-layouts after it reappears; pin the restore

@@ -67,8 +67,7 @@
             visibility: hidden;
         }
 
-        .zulip-icon-bot,
-        .sender_name {
+        .zulip-icon-bot {
             display: none;
         }
 
@@ -77,6 +76,12 @@
                timestamp — let it shrink below the sender line
                height it reserves for a portrait-and-name row. */
             grid-template-rows: auto repeat(4, auto);
+
+            /* The long chain outranks the includes-sender rule
+               that lays the name out as a flex item. */
+            .message_sender .sender_name {
+                display: none;
+            }
         }
 
         .message_edit_notice,

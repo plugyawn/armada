@@ -177,10 +177,15 @@ function build_topic_bar_card(): HTMLElement {
     return card;
 }
 
+// The navbar carries its own .column-middle-inner; only the feed's
+// column may take the bar-active padding, or the view-header strip
+// gets pushed down over the bar's title row (live report).
+function $feed_column(): JQuery {
+    return $("#message_feed_container").closest(".column-middle-inner");
+}
+
 function set_topic_bar_height(height: number): void {
-    document
-        .querySelector<HTMLElement>(".column-middle-inner")
-        ?.style.setProperty("--pear-topic-bar-height", `${height}px`);
+    $feed_column()[0]?.style.setProperty("--pear-topic-bar-height", `${height}px`);
 }
 
 function sync_topic_bar(): void {
@@ -197,7 +202,7 @@ function sync_topic_bar(): void {
         pane_is_open() &&
         current_stream !== undefined &&
         current_topic !== undefined;
-    $(".column-middle-inner").toggleClass("pear-topic-bar-active", active);
+    $feed_column().toggleClass("pear-topic-bar-active", active);
     if (!active) {
         $bar.attr("hidden", "hidden").empty();
         topic_bar_signature = "";

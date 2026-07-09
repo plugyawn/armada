@@ -1946,7 +1946,10 @@
    and shifts the whole app 50px below the fixed sidebars' alignment
    (live report: the 'weird green padding'). */
 .column-middle-inner.pear-topic-bar-active {
-    padding-top: calc(var(--navbar-fixed-height) + var(--header-padding-bottom));
+    /* Exactly the navbar: the clamped bar's flow slot must sit at
+       the pixel chat's pinned header occupies (sticky cannot pin
+       above its flow position). */
+    padding-top: var(--navbar-fixed-height);
 }
 
 /* Inline mode: with the bar active, the pane joins the page flow —

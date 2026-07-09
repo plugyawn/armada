@@ -1002,6 +1002,10 @@ function update_rendered_pear_active_messages(): void {
             "pear-active-message",
             message !== undefined && is_active_pear_message(message, true),
         );
+        // The footer slot follows the run state: a run's start reaches
+        // rendered rows through this sweep (not through a row rebuild),
+        // so the settling ticker must be drawn here too.
+        maybe_render_pear_run_footer($row);
     });
     update_pear_thinking_glyphs();
 }

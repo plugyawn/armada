@@ -3977,6 +3977,15 @@ class PearWorkspaceFilesTest(ZulipTestCase):
         self.assertEqual(status_by_path["new.txt"], "untracked")
         self.assertFalse(listing["truncated"])
 
+        # GitHub-style annotations: last commit + blob size for
+        # tracked files; untracked files stay unannotated.
+        by_path = {entry["path"]: entry for entry in listing["files"]}
+        self.assertEqual(by_path["src/main.py"]["commit_subject"], "initial")
+        self.assertIsInstance(by_path["src/main.py"]["commit_time"], int)
+        self.assertEqual(by_path["src/main.py"]["size"], len("print()\n"))
+        self.assertNotIn("commit_subject", by_path["new.txt"])
+        self.assertIsNone(by_path["new.txt"]["size"])
+
     def test_workspace_relative_path_guard(self) -> None:
         self.assertIsNone(pear_workspace_relative_path("/w", "../etc/passwd"))
         self.assertIsNone(pear_workspace_relative_path("/w", "/etc/passwd"))

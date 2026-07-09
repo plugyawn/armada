@@ -133,15 +133,6 @@ function clone_topic_header_into_pane(): boolean {
     if (!(clone instanceof HTMLElement)) {
         return false;
     }
-    const strip = clone.querySelector(".pear-workspace-tabs");
-    if (strip !== null) {
-        const status = document.createElement("span");
-        status.className = "pear-canvas-status";
-        const hint = document.createElement("span");
-        hint.className = "pear-workspace-pane-hint";
-        hint.textContent = $t({defaultMessage: "Esc returns to chat"});
-        strip.append(status, hint);
-    }
     $header_slot.empty();
     $header_slot[0]?.append(clone);
     return true;

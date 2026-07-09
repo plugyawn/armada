@@ -4077,6 +4077,36 @@ class PearImageEmbedTest(ZulipTestCase):
             )
         self.assertEqual(embedded, content)
 
+class PearTaskMarkerNormalizationTest(ZulipTestCase):
+    def test_normalize_pear_task_markers(self) -> None:
+        from zerver.lib.pear import normalize_pear_task_markers
+
+        content = (
+            "Checklist:\n"
+            "- [ ] keep it standalone\n"
+            "- [x] improve the visuals\n"
+            "1. [X] numbered done item\n"
+            "```\n"
+            "- [ ] not a checklist, code\n"
+            "```\n"
+            "and inline `- [ ] code` stays.\n"
+        )
+        normalized = normalize_pear_task_markers(content)
+        self.assertIn("- \u2610 keep it standalone", normalized)
+        self.assertIn("- \u2611 improve the visuals", normalized)
+        self.assertIn("1. \u2611 numbered done item", normalized)
+        self.assertIn("- [ ] not a checklist, code", normalized)
+        self.assertIn("`- [ ] code`", normalized)
+        # Idempotent: a second pass changes nothing.
+        self.assertEqual(normalize_pear_task_markers(normalized), normalized)
+
+    def test_normalize_pear_task_markers_leaves_plain_text(self) -> None:
+        from zerver.lib.pear import normalize_pear_task_markers
+
+        content = "An array literal [ ] in prose stays untouched.\n"
+        self.assertEqual(normalize_pear_task_markers(content), content)
+
+
 class PearMathNormalizationTest(ZulipTestCase):
     def test_normalize_pear_math_delimiters(self) -> None:
         from zerver.lib.pear import normalize_pear_math_delimiters

@@ -31,8 +31,6 @@ const workspace_file_schema = z.object({
 
 const canvas_response_schema = z.object({
     pear_canvas: z.object({
-        workdir: z.string(),
-        path: z.nullish(z.string()),
         content: z.string(),
         version: z.string(),
     }),

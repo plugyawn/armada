@@ -883,7 +883,7 @@
        design — pixel faces go mushy at arbitrary scales. */
     --pear-font-ui: "Hanken Grotesk VF", "Source Sans 3 VF", sans-serif;
     --pear-font-pixel:
-        "Geist Pixel", "Geist Mono VF", ui-monospace, monospace;
+        "Geist Pixel", "Geist Pixel", "Geist Mono VF", ui-monospace, monospace;
     --pear-font-mono:
         "Geist Mono VF", ui-monospace, "SFMono-Regular", monospace;
     /* Back-compat alias for Phase B consumers (retired in B5). */

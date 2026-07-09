@@ -160,7 +160,7 @@ a:focus {
 
 code,
 pre {
-    font-family: "Source Code Pro", monospace;
+    font-family: var(--pear-font-mono);
 }
 
 .no-select {
@@ -1221,12 +1221,12 @@ nav {
 }
 
 .operator_value {
-    font-family: "Source Code Pro", monospace;
+    font-family: var(--pear-font-mono);
     color: hsl(353deg 70% 65%);
 }
 
 .operator {
-    font-family: "Source Code Pro", monospace;
+    font-family: var(--pear-font-mono);
 }
 
 #loading_older_messages_indicator,

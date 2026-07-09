@@ -707,6 +707,18 @@ def serialize_pear_worker_run_usage(run: PearWorkerRun) -> dict[str, object] | N
     }
 
 
+def serialize_pear_worker_run_tool_count(run: PearWorkerRun) -> int:
+    # The worker records one tool_results event per turn segment, each
+    # carrying that segment's tool_count; the run's total is their sum.
+    tool_count = 0
+    for payload in run.events.filter(event_type="tool_results").values_list(
+        "payload", flat=True
+    ):
+        if isinstance(payload, dict) and isinstance(payload.get("tool_count"), int):
+            tool_count += payload["tool_count"]
+    return tool_count
+
+
 def serialize_pear_worker_run(
     run: PearWorkerRun,
     *,
@@ -751,6 +763,7 @@ def serialize_pear_worker_run(
         if run.requesting_user is not None
         else None,
         "usage": serialize_pear_worker_run_usage(run),
+        "tool_count": serialize_pear_worker_run_tool_count(run),
         "live": live_state,
     }
     if include_events:

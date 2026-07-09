@@ -1,13 +1,33 @@
 type PearRunForActiveMessage = {
     status: string;
     result_message_id?: number | null | undefined;
+    tool_count?: number | undefined;
+    usage?:
+        | {
+              total_tokens?: number | undefined;
+              duration_seconds?: number | null | undefined;
+          }
+        | null
+        | undefined;
 };
 
 type PearActiveResultMessageChange = {
     removed_message_ids: number[];
+    footer_changed_message_ids?: number[];
+};
+
+export type PearRunFooter = {
+    status: string;
+    duration_seconds: number | null;
+    total_tokens: number | null;
+    tool_count: number;
 };
 
 const active_result_message_ids = new Set<number>();
+// Completed runs' stats, keyed by result message, for the run footer.
+// Cumulative across topic switches — footers are historical facts, so
+// they never expire with the active-set TTL.
+const settled_run_footers = new Map<number, PearRunFooter>();
 const active_result_message_change_listeners = new Set<
     (change: PearActiveResultMessageChange) => void
 >();
@@ -18,6 +38,29 @@ const ACTIVE_RESULT_MESSAGE_TTL_MS = 15_000;
 
 function is_active_status(status: string): boolean {
     return status === "queued" || status === "running";
+}
+
+function is_settled_status(status: string): boolean {
+    return status === "done" || status === "failed" || status === "cancelled";
+}
+
+function footer_from_run(run: PearRunForActiveMessage): PearRunFooter {
+    return {
+        status: run.status,
+        duration_seconds: run.usage?.duration_seconds ?? null,
+        total_tokens: run.usage?.total_tokens ?? null,
+        tool_count: run.tool_count ?? 0,
+    };
+}
+
+function footers_equal(left: PearRunFooter | undefined, right: PearRunFooter): boolean {
+    return (
+        left !== undefined &&
+        left.status === right.status &&
+        left.duration_seconds === right.duration_seconds &&
+        left.total_tokens === right.total_tokens &&
+        left.tool_count === right.tool_count
+    );
 }
 
 function sets_equal(left: Set<number>, right: Set<number>): boolean {
@@ -83,22 +126,34 @@ export function set_active_run_result_messages(
     options: {force_reconcile?: boolean} = {},
 ): void {
     const next_active_result_message_ids = new Set<number>();
+    const footer_changed_message_ids: number[] = [];
     for (const run of runs) {
         const result_message_id = run.result_message_id;
         if (
-            is_active_status(run.status) &&
-            typeof result_message_id === "number" &&
-            Number.isInteger(result_message_id) &&
-            result_message_id > 0
+            typeof result_message_id !== "number" ||
+            !Number.isInteger(result_message_id) ||
+            result_message_id <= 0
         ) {
+            continue;
+        }
+        if (is_active_status(run.status)) {
             next_active_result_message_ids.add(result_message_id);
+        } else if (is_settled_status(run.status)) {
+            const footer = footer_from_run(run);
+            if (!footers_equal(settled_run_footers.get(result_message_id), footer)) {
+                settled_run_footers.set(result_message_id, footer);
+                footer_changed_message_ids.push(result_message_id);
+            }
         }
     }
     active_result_message_ids_refreshed_at = Date.now();
     if (sets_equal(active_result_message_ids, next_active_result_message_ids)) {
         schedule_active_result_message_expiry();
-        if (options.force_reconcile === true) {
-            notify_active_result_message_change_listeners({removed_message_ids: []});
+        if (options.force_reconcile === true || footer_changed_message_ids.length > 0) {
+            notify_active_result_message_change_listeners({
+                removed_message_ids: [],
+                footer_changed_message_ids,
+            });
         }
         return;
     }
@@ -108,7 +163,10 @@ export function set_active_run_result_messages(
         active_result_message_ids.add(message_id);
     }
     schedule_active_result_message_expiry();
-    notify_active_result_message_change_listeners({removed_message_ids});
+    notify_active_result_message_change_listeners({
+        removed_message_ids,
+        footer_changed_message_ids,
+    });
 }
 
 export function expire_stale_active_run_result_messages(): boolean {
@@ -129,6 +187,13 @@ export function is_active_run_result_message(message_id: number | undefined): bo
     return message_id !== undefined && active_result_message_ids.has(message_id);
 }
 
+export function get_run_footer(message_id: number | undefined): PearRunFooter | undefined {
+    if (message_id === undefined) {
+        return undefined;
+    }
+    return settled_run_footers.get(message_id);
+}
+
 export function on_active_run_result_messages_changed(
     listener: (change: PearActiveResultMessageChange) => void,
 ): () => void {
@@ -138,6 +203,7 @@ export function on_active_run_result_messages_changed(
 
 export function clear_for_testing(): void {
     active_result_message_ids.clear();
+    settled_run_footers.clear();
     active_result_message_ids_refreshed_at = 0;
     clear_active_result_message_expiry_timer();
     notify_active_result_message_change_listeners({removed_message_ids: []});

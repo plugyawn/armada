@@ -173,7 +173,7 @@
 }
 
 #api_key_value {
-    font-family: "Source Code Pro", monospace;
+    font-family: var(--pear-font-mono);
     font-size: 1em;
 }
 

@@ -811,6 +811,142 @@ function maybe_render_pear_thinking_glyph($row: JQuery): void {
     mark_pear_thinking_markers($row);
 }
 
+function pear_run_footer_duration_label(duration_seconds: number): string {
+    const total_seconds = Math.round(duration_seconds);
+    if (total_seconds < 60) {
+        return `${total_seconds}s`;
+    }
+    const minutes = Math.floor(total_seconds / 60);
+    const seconds = total_seconds % 60;
+    return `${minutes}m ${seconds}s`;
+}
+
+function pear_run_footer_tokens_label(total_tokens: number): string {
+    if (total_tokens >= 1000) {
+        return `${(total_tokens / 1000).toFixed(1)}k`;
+    }
+    return `${total_tokens}`;
+}
+
+export function pear_run_footer_line_for_testing(footer: {
+    status: string;
+    duration_seconds: number | null;
+    total_tokens: number | null;
+    tool_count: number;
+}): {text: string; glyph: string; failed: boolean} {
+    return pear_run_footer_line(footer);
+}
+
+function pear_run_footer_line(footer: {
+    status: string;
+    duration_seconds: number | null;
+    total_tokens: number | null;
+    tool_count: number;
+}): {text: string; glyph: string; failed: boolean} {
+    const parts: string[] = [];
+    if (footer.duration_seconds !== null && footer.duration_seconds > 0) {
+        parts.push(
+            $t(
+                {defaultMessage: "run {duration}"},
+                {duration: pear_run_footer_duration_label(footer.duration_seconds)},
+            ),
+        );
+    }
+    if (footer.tool_count > 0) {
+        parts.push(
+            $t(
+                {defaultMessage: "{tool_count, plural, one {# tool} other {# tools}}"},
+                {tool_count: footer.tool_count},
+            ),
+        );
+    }
+    if (footer.total_tokens !== null && footer.total_tokens > 0) {
+        parts.push(
+            $t(
+                {defaultMessage: "{tokens} tokens"},
+                {tokens: pear_run_footer_tokens_label(footer.total_tokens)},
+            ),
+        );
+    }
+    const failed = footer.status !== "done";
+    let glyph = "✓";
+    if (footer.status === "cancelled") {
+        glyph = $t({defaultMessage: "✗ cancelled"});
+    } else if (failed) {
+        glyph = $t({defaultMessage: "✗ failed"});
+    }
+    return {text: parts.join(" · "), glyph, failed};
+}
+
+function maybe_render_pear_run_footer($row: JQuery): void {
+    // A completed run closes its result message with one quiet meta
+    // line (design §8.3): `run 33s · 3 tools · 13.5k tokens · ✓`.
+    // While the run is still live the slot holds the settling ticker.
+    if (!$row.hasClass("pear-message") || typeof document.createElementNS !== "function") {
+        return;
+    }
+    const row = $row[0];
+    if (!(row instanceof HTMLElement)) {
+        return;
+    }
+    const content = row.querySelector(".messagebox .message_content");
+    if (!(content instanceof HTMLElement)) {
+        return;
+    }
+    const message_id = rows.id($row);
+    const existing = content.querySelector(":scope > .pear-run-footer");
+    if (pear_run_state.is_active_run_result_message(message_id)) {
+        if (
+            existing instanceof HTMLElement &&
+            existing.classList.contains("pear-run-footer-ticker")
+        ) {
+            return;
+        }
+        existing?.remove();
+        const ticker = document.createElementNS("http://www.w3.org/1999/xhtml", "div");
+        ticker.setAttribute("class", "pear-run-footer pear-run-footer-ticker");
+        ticker.setAttribute("aria-hidden", "true");
+        const bar = document.createElementNS("http://www.w3.org/1999/xhtml", "span");
+        // The frames live in a CSS content animation on ::after.
+        bar.setAttribute("class", "pear-run-ticker-bar");
+        ticker.append(bar);
+        content.append(ticker);
+        return;
+    }
+    const footer = pear_run_state.get_run_footer(message_id);
+    if (footer === undefined) {
+        existing?.remove();
+        return;
+    }
+    const line = pear_run_footer_line(footer);
+    const signature = `${line.text}|${line.glyph}`;
+    if (
+        existing instanceof HTMLElement &&
+        !existing.classList.contains("pear-run-footer-ticker") &&
+        existing.getAttribute("data-pear-footer-signature") === signature
+    ) {
+        return;
+    }
+    existing?.remove();
+    const footer_element = document.createElementNS("http://www.w3.org/1999/xhtml", "div");
+    footer_element.setAttribute("class", "pear-run-footer");
+    footer_element.setAttribute("data-pear-footer-signature", signature);
+    if (line.text !== "") {
+        const meta = document.createElementNS("http://www.w3.org/1999/xhtml", "span");
+        meta.setAttribute("class", "pear-run-footer-meta");
+        meta.textContent = line.text;
+        footer_element.append(meta);
+    }
+    const status = document.createElementNS("http://www.w3.org/1999/xhtml", "span");
+    status.setAttribute(
+        "class",
+        line.failed ? "pear-run-footer-status pear-run-footer-failed" : "pear-run-footer-status",
+    );
+    status.textContent = line.glyph;
+    footer_element.append(status);
+    content.append(footer_element);
+}
+
 if (typeof document !== "undefined") {
     $(document).on("pear_liveness_markers_changed", () => {
         update_pear_thinking_glyphs();
@@ -954,6 +1090,14 @@ pear_run_state.on_active_run_result_messages_changed((change) => {
     const stale_message_ids = rendered_stale_pear_active_message_ids();
     update_rendered_pear_active_messages();
     refresh_settled_pear_result_messages([...change.removed_message_ids, ...stale_message_ids]);
+    // Footer stats can arrive (or grow) after the settle rerender; a
+    // rerender re-runs the row post-processing that draws them.
+    const footer_changed_message_ids = (change.footer_changed_message_ids ?? []).filter(
+        (message_id) => !change.removed_message_ids.includes(message_id),
+    );
+    if (footer_changed_message_ids.length > 0) {
+        rerender_pear_result_messages(footer_changed_message_ids);
+    }
 });
 
 type BoundaryMessageContainerInfo = {
@@ -2122,6 +2266,7 @@ export class MessageListView {
         enhance_pear_tool_rows($row);
         enhance_pear_artifact_references($row);
         maybe_render_pear_thinking_glyph($row);
+        maybe_render_pear_run_footer($row);
 
         const id = rows.id($row);
         message_edit.maybe_show_edit($row, id);

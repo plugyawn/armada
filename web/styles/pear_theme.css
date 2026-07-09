@@ -52,6 +52,48 @@
     --font-variant-sidebar-action-heading: normal;
     --text-transform-sidebar-action-heading: none;
     --font-size-sidebar-action-heading: 1em;
+
+    /* Feed fabric (B4): selection and unread attention leave the blue
+       system for the accent — the two feed places the accent's
+       selection budget covers. Mention tints move onto the moss ramp
+       with accent-derived fills instead of indigo/teal washes. */
+    --color-selected-message-outline: color-mix(
+        in srgb,
+        var(--pear-accent) 55%,
+        transparent
+    );
+    --color-unread-marker: var(--pear-accent);
+    --color-background-direct-mention: color-mix(
+        in srgb,
+        var(--pear-accent) 7%,
+        var(--pear-surface-0)
+    );
+    --color-background-group-mention: color-mix(
+        in srgb,
+        var(--pear-accent) 4%,
+        var(--pear-surface-0)
+    );
+    --color-background-text-direct-mention: var(--pear-accent-fill);
+    --color-background-text-hover-direct-mention: var(
+        --pear-accent-fill-strong
+    );
+    --color-background-text-group-mention: color-mix(
+        in srgb,
+        var(--pear-accent) 8%,
+        transparent
+    );
+    --color-background-text-hover-group-mention: color-mix(
+        in srgb,
+        var(--pear-accent) 16%,
+        transparent
+    );
+}
+
+/* Search matches keep a warm cast (distinct from the green selection
+   language) but speak from the token system, not raw yellow. */
+.highlight,
+:root.dark-theme .highlight {
+    background-color: color-mix(in srgb, var(--pear-warn) 32%, transparent);
 }
 
 /* Scrollbars are quiet ink — tone only, no outline ring. The
@@ -65,6 +107,13 @@
 .simplebar-track .simplebar-scrollbar.simplebar-hover::before,
 :root.dark-theme .simplebar-track .simplebar-scrollbar.simplebar-hover::before {
     background-color: var(--pear-ink-2);
+}
+
+/* The prose measure caps near 72ch (design §8.1): full-width lines
+   are the single biggest "unstyled" tell in a wide feed. Pear's own
+   blocks carry their tighter cap in message_row.css. */
+.message_row .messagebox-content .message_content:not(.status-message) {
+    max-width: min(100%, 72ch);
 }
 
 /* The room is set in Hanken. Form controls inherit so inputs match. */

@@ -2452,7 +2452,7 @@ label.preferences-radio-choice-label {
     }
 
     .integration-url {
-        font-family: "Source Code Pro", monospace;
+        font-family: var(--pear-font-mono);
         background-color: var(--color-background-integration-url);
         padding: 10px;
         font-size: 0.85rem;

@@ -77,6 +77,41 @@ function test(label, f) {
     });
 }
 
+run_test("pear_run_footer_line", () => {
+    const line = message_list_view.pear_run_footer_line_for_testing({
+        status: "done",
+        duration_seconds: 33.4,
+        total_tokens: 13541,
+        tool_count: 3,
+    });
+    assert.equal(line.text, "translated: run 33s · translated: 3 tools · translated: 13.5k tokens");
+    assert.equal(line.glyph, "✓");
+    assert.equal(line.failed, false);
+
+    const failed = message_list_view.pear_run_footer_line_for_testing({
+        status: "failed",
+        duration_seconds: 95,
+        total_tokens: 412,
+        tool_count: 1,
+    });
+    assert.equal(
+        failed.text,
+        "translated: run 1m 35s · translated: 1 tool · translated: 412 tokens",
+    );
+    assert.equal(failed.glyph, "translated: ✗ failed");
+    assert.equal(failed.failed, true);
+
+    const bare = message_list_view.pear_run_footer_line_for_testing({
+        status: "cancelled",
+        duration_seconds: null,
+        total_tokens: null,
+        tool_count: 0,
+    });
+    assert.equal(bare.text, "");
+    assert.equal(bare.glyph, "translated: ✗ cancelled");
+    assert.equal(bare.failed, true);
+});
+
 test("msg_edited_and_moved_vars", () => {
     // This is a test to verify that when the stream or topic is changed
     // (and the content is not), the message says "MOVED" rather than "EDITED."

@@ -22,6 +22,7 @@ from django.utils.translation import gettext as _
 from zerver.lib.exceptions import JsonableError
 from zerver.lib.pear import (
     PEAR_CANVAS_FILE_NAME,
+    PEAR_LEGACY_CANVAS_FILE_NAME,
     PEAR_CANVAS_TEMPLATE,
     PEAR_DEFAULT_RESPONSE_POLICY,
     PEAR_REASONING_EFFORTS,
@@ -89,7 +90,7 @@ pear_git_status_delta_cache: dict[
 ] = {}
 logger = logging.getLogger(__name__)
 
-PEAR_CANVAS_FALLBACK_PATH = ".pear/CANVAS.md"
+PEAR_LEGACY_CANVAS_FALLBACK_PATH = ".pear/CANVAS.md"
 
 
 @dataclass(frozen=True)
@@ -912,73 +913,31 @@ def pear_canvas_template(stream: str, topic: str, *, backfill_content: str = "")
     return f"{content}\n"
 
 
-def pear_git_workdir_tracks_path(workdir: Path, relative_path: str) -> bool:
-    if not pear_path_is_git_worktree(workdir):
-        return False
-    try:
-        completed = subprocess.run(
-            ["git", "-C", str(workdir), "ls-files", "--error-unmatch", relative_path],
-            check=False,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            timeout=10,
-        )
-    except (FileNotFoundError, OSError, subprocess.TimeoutExpired):
-        return False
-    return completed.returncode == 0
-
-
-def pear_topic_canvas_relative_path(workdir: str | Path) -> str:
+def pear_topic_canvas_relative_path(
+    workdir: str | Path,
+    *,
+    isolation_username: str | None = None,
+) -> str:
+    """The topic doc is the worktree's README.md — real, committed
+    content. Legacy workspaces that still hold their doc in the old
+    git-excluded CANVAS.md keep reading from it until the next save
+    writes README.md, which then wins."""
     path = Path(workdir)
-    if pear_git_workdir_tracks_path(path, PEAR_CANVAS_FILE_NAME):
-        return PEAR_CANVAS_FALLBACK_PATH
+    if pear_read_text_path(path / PEAR_CANVAS_FILE_NAME, isolation_username=isolation_username):
+        return PEAR_CANVAS_FILE_NAME
+    for legacy in (PEAR_LEGACY_CANVAS_FILE_NAME, PEAR_LEGACY_CANVAS_FALLBACK_PATH):
+        if pear_read_text_path(path / legacy, isolation_username=isolation_username):
+            return legacy
     return PEAR_CANVAS_FILE_NAME
 
 
-def pear_topic_canvas_path(workdir: str | Path) -> Path:
+def pear_topic_canvas_path(
+    workdir: str | Path,
+    *,
+    isolation_username: str | None = None,
+) -> Path:
     path = Path(workdir)
-    return path / pear_topic_canvas_relative_path(path)
-
-
-def pear_git_exclude_path(workdir: Path) -> Path | None:
-    if not pear_path_is_git_worktree(workdir):
-        return None
-    try:
-        completed = subprocess.run(
-            ["git", "-C", str(workdir), "rev-parse", "--git-path", "info/exclude"],
-            check=False,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
-            text=True,
-            timeout=10,
-        )
-    except (FileNotFoundError, OSError, subprocess.TimeoutExpired):
-        return None
-    if completed.returncode != 0:
-        return None
-    exclude_path = Path(completed.stdout.strip())
-    if not exclude_path.is_absolute():
-        exclude_path = workdir / exclude_path
-    return exclude_path
-
-
-def pear_exclude_canvas_from_git_delta(workdir: str | Path) -> None:
-    path = Path(workdir)
-    exclude_path = pear_git_exclude_path(path)
-    if exclude_path is None:
-        return
-    relative_path = pear_topic_canvas_relative_path(path)
-    exclude_line = f"/{relative_path}\n"
-    try:
-        exclude_path.parent.mkdir(parents=True, exist_ok=True)
-        existing = exclude_path.read_text(encoding="utf-8") if exclude_path.exists() else ""
-        if exclude_line not in existing.splitlines(keepends=True):
-            with exclude_path.open("a", encoding="utf-8") as exclude_file:
-                if existing and not existing.endswith("\n"):
-                    exclude_file.write("\n")
-                exclude_file.write(exclude_line)
-    except OSError:
-        return
+    return path / pear_topic_canvas_relative_path(path, isolation_username=isolation_username)
 
 
 PEAR_LEGACY_CANVAS_BACKFILL_PATTERN = re.compile(
@@ -1346,8 +1305,7 @@ def pear_ensure_topic_canvas(
     isolation_username: str | None = None,
 ) -> Path:
     path = Path(workdir)
-    pear_exclude_canvas_from_git_delta(path)
-    canvas_path = pear_topic_canvas_path(path)
+    canvas_path = pear_topic_canvas_path(path, isolation_username=isolation_username)
     template_content = pear_canvas_template(stream, topic)
     content_with_backfill = pear_canvas_template(
         stream,

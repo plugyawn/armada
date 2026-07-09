@@ -1112,7 +1112,7 @@ class PearSessionEndpointTest(ZulipTestCase):
             ).exists()
         )
 
-    def test_put_pear_canvas_creates_git_excluded_canvas(self) -> None:
+    def test_put_pear_canvas_saves_repo_readme(self) -> None:
         owner = self.example_user("hamlet")
         self.subscribe(owner, PEAR_DEFAULT_STREAM)
         self.login_user(owner)
@@ -1137,13 +1137,30 @@ class PearSessionEndpointTest(ZulipTestCase):
                 content = (
                     f"# {PEAR_DEFAULT_STREAM} > {PEAR_DEFAULT_TOPIC}\n\n## Notes\n\nCreated.\n"
                 )
-                result = self.client_put(
+                # The worktree is provisioned by the first save, and
+                # the base repo already ships a README — so the save
+                # conflicts and hands back the repo's README to rebase
+                # on, exactly like the client's 409 flow.
+                conflicted = self.client_put(
                     f"/json{PEAR_CANVAS_ENDPOINT}",
                     {
                         "stream": PEAR_DEFAULT_STREAM,
                         "topic": PEAR_DEFAULT_TOPIC,
                         "content": content,
                         "base_version": initial_canvas["version"],
+                    },
+                    intentionally_undocumented=True,
+                )
+                self.assertEqual(conflicted.status_code, 409)
+                conflict_canvas = orjson.loads(conflicted.content)["pear_canvas"]
+                self.assertEqual(conflict_canvas["content"], "hello\n")
+                result = self.client_put(
+                    f"/json{PEAR_CANVAS_ENDPOINT}",
+                    {
+                        "stream": PEAR_DEFAULT_STREAM,
+                        "topic": PEAR_DEFAULT_TOPIC,
+                        "content": content,
+                        "base_version": conflict_canvas["version"],
                     },
                     intentionally_undocumented=True,
                 )
@@ -1159,25 +1176,15 @@ class PearSessionEndpointTest(ZulipTestCase):
 
             canvas = self.assert_json_success(result)["pear_canvas"]
             canvas_path = Path(canvas["path"])
-            exclude_path = Path(
-                subprocess.run(
-                    ["git", "-C", context.workdir, "rev-parse", "--git-path", "info/exclude"],
-                    check=True,
-                    stdout=subprocess.PIPE,
-                    text=True,
-                    timeout=10,
-                ).stdout.strip()
-            )
-            if not exclude_path.is_absolute():
-                exclude_path = Path(context.workdir) / exclude_path
 
-            self.assertEqual(canvas["relative_path"], "CANVAS.md")
+            self.assertEqual(canvas["relative_path"], "README.md")
             self.assertEqual(canvas["content"], content)
             self.assertTrue(canvas["exists"])
             self.assertTrue(canvas_path.exists())
-            self.assertIn("/CANVAS.md", exclude_path.read_text(encoding="utf-8"))
-            self.assertFalse(delta["dirty"])
-            self.assertEqual(delta["changed_count"], 0)
+            # The README is real repo content now — it shows up as
+            # work in the worktree until committed, never excluded.
+            self.assertTrue(delta["dirty"])
+            self.assertGreaterEqual(delta["changed_count"], 1)
 
     def test_put_pear_canvas_uses_base_version_and_reports_conflict(self) -> None:
         owner = self.example_user("hamlet")
@@ -1203,13 +1210,25 @@ class PearSessionEndpointTest(ZulipTestCase):
                 )
                 initial_canvas = self.assert_json_success(get_result)["pear_canvas"]
                 updated_content = "# pair-programming > pear/session\n\n## Notes\n\nSaved.\n"
-                put_result = self.client_put(
+                first_put = self.client_put(
                     f"/json{PEAR_CANVAS_ENDPOINT}",
                     {
                         "stream": PEAR_DEFAULT_STREAM,
                         "topic": PEAR_DEFAULT_TOPIC,
                         "content": updated_content,
                         "base_version": initial_canvas["version"],
+                    },
+                    intentionally_undocumented=True,
+                )
+                self.assertEqual(first_put.status_code, 409)
+                rebase_version = orjson.loads(first_put.content)["pear_canvas"]["version"]
+                put_result = self.client_put(
+                    f"/json{PEAR_CANVAS_ENDPOINT}",
+                    {
+                        "stream": PEAR_DEFAULT_STREAM,
+                        "topic": PEAR_DEFAULT_TOPIC,
+                        "content": updated_content,
+                        "base_version": rebase_version,
                     },
                     intentionally_undocumented=True,
                 )
@@ -1272,7 +1291,7 @@ class PearSessionEndpointTest(ZulipTestCase):
 
         self.assert_json_error(result, "Pear canvas is too large.")
 
-    def test_pear_canvas_uses_fallback_when_repo_tracks_canvas_file(self) -> None:
+    def test_pear_canvas_migrates_legacy_canvas_file_to_readme(self) -> None:
         owner = self.example_user("hamlet")
         self.subscribe(owner, PEAR_DEFAULT_STREAM)
         self.login_user(owner)
@@ -1281,6 +1300,13 @@ class PearSessionEndpointTest(ZulipTestCase):
             base_workdir = Path(temp_dir) / "base"
             topic_root = str(Path(temp_dir) / "topics")
             self.create_git_repository(base_workdir)
+            # A repo README would win outright; the legacy fallback
+            # only matters when the doc lives solely in CANVAS.md.
+            subprocess.run(
+                ["git", "-C", str(base_workdir), "rm", "--quiet", "README.md"],
+                check=True,
+                timeout=10,
+            )
             (base_workdir / "CANVAS.md").write_text("repo-owned canvas\n", encoding="utf-8")
             subprocess.run(["git", "-C", str(base_workdir), "add", "CANVAS.md"], check=True)
             subprocess.run(
@@ -1315,13 +1341,29 @@ class PearSessionEndpointTest(ZulipTestCase):
                 )
                 initial_canvas = self.assert_json_success(initial_result)["pear_canvas"]
                 content = "# pair-programming > pear/session\n\n## Notes\n\nFallback.\n"
-                result = self.client_put(
+                # The first save provisions the worktree and conflicts
+                # against the legacy CANVAS.md: reads fall through to
+                # it until a save migrates the doc to README.md.
+                conflicted = self.client_put(
                     f"/json{PEAR_CANVAS_ENDPOINT}",
                     {
                         "stream": PEAR_DEFAULT_STREAM,
                         "topic": PEAR_DEFAULT_TOPIC,
                         "content": content,
                         "base_version": initial_canvas["version"],
+                    },
+                    intentionally_undocumented=True,
+                )
+                self.assertEqual(conflicted.status_code, 409)
+                conflict_canvas = orjson.loads(conflicted.content)["pear_canvas"]
+                self.assertEqual(conflict_canvas["content"], "repo-owned canvas\n")
+                result = self.client_put(
+                    f"/json{PEAR_CANVAS_ENDPOINT}",
+                    {
+                        "stream": PEAR_DEFAULT_STREAM,
+                        "topic": PEAR_DEFAULT_TOPIC,
+                        "content": content,
+                        "base_version": conflict_canvas["version"],
                     },
                     intentionally_undocumented=True,
                 )
@@ -1337,15 +1379,18 @@ class PearSessionEndpointTest(ZulipTestCase):
 
             canvas = self.assert_json_success(result)["pear_canvas"]
 
-            self.assertEqual(canvas["relative_path"], ".pear/CANVAS.md")
+            self.assertEqual(canvas["relative_path"], "README.md")
             self.assertEqual(canvas["content"], content)
+            # The legacy file stays untouched; the doc now lives in
+            # README.md and counts as uncommitted work.
             self.assertEqual(
                 (Path(context.workdir) / "CANVAS.md").read_text(),
                 "repo-owned canvas\n",
             )
             self.assertEqual(Path(canvas["path"]).read_text(), canvas["content"])
-            self.assertFalse(delta["dirty"])
-            self.assertEqual(delta["changed_count"], 0)
+            self.assertEqual(Path(canvas["path"]).name, "README.md")
+            self.assertTrue(delta["dirty"])
+            self.assertGreaterEqual(delta["changed_count"], 1)
 
     def test_existing_base_workdir_topic_context_is_repaired(self) -> None:
         owner = self.example_user("hamlet")
@@ -3553,7 +3598,7 @@ class PearSessionEndpointTest(ZulipTestCase):
             )
 
             # The ask executes in the topic's own workspace, so the
-            # answer lands in that topic's CANVAS.md.
+            # answer lands in that topic's README.
             self.assertEqual(run.session_kind, PearWorkerRun.CANVAS_ASK)
             self.assertEqual(run.stream_name, PEAR_DEFAULT_STREAM)
             self.assertEqual(run.topic_name, PEAR_DEFAULT_TOPIC)
@@ -3577,7 +3622,7 @@ class PearSessionEndpointTest(ZulipTestCase):
             self.assertEqual(kwargs["session_kind"], PearWorkerRun.CANVAS_ASK)
             self.assertEqual(kwargs["message_id"], result_dict["dm_message_id"])
             self.assertIn("write the proof of this lemma", kwargs["content"])
-            self.assertIn("CANVAS.md", kwargs["content"])
+            self.assertIn("README.md", kwargs["content"])
             self.assertIn("#aside-<n>", kwargs["content"])
 
             # The ask belongs to the topic's runs list: that is how the
@@ -3941,7 +3986,7 @@ class PearWorkspaceFilesTest(ZulipTestCase):
         repo.mkdir()
         git = ["git", "-C", str(repo)]
         subprocess.run([*git, "init", "--quiet"], check=True, timeout=10)
-        (repo / "CANVAS.md").write_text("# canvas\n", encoding="utf-8")
+        (repo / "README.md").write_text("# canvas\n", encoding="utf-8")
         (repo / "dirty.txt").write_text("one\n", encoding="utf-8")
         sub = repo / "src"
         sub.mkdir()
@@ -3971,7 +4016,7 @@ class PearWorkspaceFilesTest(ZulipTestCase):
             repo = self.make_workspace(Path(temp_dir))
             listing = pear_workspace_file_listing(str(repo))
         status_by_path = {entry["path"]: entry["status"] for entry in listing["files"]}
-        self.assertEqual(status_by_path["CANVAS.md"], "clean")
+        self.assertEqual(status_by_path["README.md"], "clean")
         self.assertEqual(status_by_path["src/main.py"], "clean")
         self.assertEqual(status_by_path["dirty.txt"], "changed")
         self.assertEqual(status_by_path["new.txt"], "untracked")
@@ -4006,6 +4051,58 @@ class PearWorkspaceFilesTest(ZulipTestCase):
         payload = self.assert_json_success(result)["pear_workspace_files"]
         self.assertEqual(payload["files"], [])
         self.assertIsNone(payload["canvas_path"])
+
+    def test_workspace_file_image_preview_base64(self) -> None:
+        import base64
+        from types import SimpleNamespace
+
+        png_bytes = base64.b64decode(
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNg"
+            "YGBgAAAABQABh6FO1AAAAABJRU5ErkJggg=="
+        )
+        user = self.example_user("hamlet")
+        stream = self.subscribe(user, "workfiles")
+        self.login_user(user)
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo = self.make_workspace(Path(temp_dir))
+            (repo / "plot.png").write_bytes(png_bytes)
+            context = SimpleNamespace(workdir=str(repo))
+            with (
+                patch(
+                    "zerver.views.pear.pear_topic_context_for_request",
+                    return_value=context,
+                ),
+                patch(
+                    "zerver.views.pear.pear_context_isolation_username",
+                    return_value=None,
+                ),
+            ):
+                result = self.client_get(
+                    "/json/pear/workspace-file",
+                    {
+                        "stream": stream.name,
+                        "topic": "bare",
+                        "path": "plot.png",
+                        "encoding": "base64",
+                    },
+                )
+                payload = self.assert_json_success(result)["pear_workspace_file"]
+                self.assertEqual(payload["encoding"], "base64")
+                self.assertEqual(payload["content_type"], "image/png")
+                self.assertEqual(base64.b64decode(payload["content"]), png_bytes)
+
+                not_image = self.client_get(
+                    "/json/pear/workspace-file",
+                    {
+                        "stream": stream.name,
+                        "topic": "bare",
+                        "path": "src/main.py",
+                        "encoding": "base64",
+                    },
+                )
+                self.assert_json_error(
+                    not_image, "Only image files can be previewed this way."
+                )
 
     def test_workspace_file_endpoint_reads_and_guards(self) -> None:
         from types import SimpleNamespace

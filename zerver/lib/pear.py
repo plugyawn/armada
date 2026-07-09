@@ -40,7 +40,10 @@ PEAR_FIRST_RUN_STARTER_MESSAGE: Final = (
     f"{PEAR_AGENT_MENTION} Start the sandbox session by saying what you can see "
     "from this topic and the current workspace."
 )
-PEAR_CANVAS_FILE_NAME: Final = "CANVAS.md"
+PEAR_CANVAS_FILE_NAME: Final = "README.md"
+# Older workspaces kept the topic doc in a git-excluded CANVAS.md;
+# reads fall through to it until a save migrates the content.
+PEAR_LEGACY_CANVAS_FILE_NAME: Final = "CANVAS.md"
 PEAR_CANVAS_TEMPLATE: Final = """# {stream} > {topic}
 
 ## Definition of done

@@ -1,4 +1,6 @@
+import base64
 import json
+import re
 import subprocess
 import time
 from pathlib import Path
@@ -22,6 +24,7 @@ from zerver.lib.pear import (
     PEAR_AGENT_NAME,
     PEAR_BOT_SHORT_NAME,
     PEAR_CANVAS_FILE_NAME,
+    PEAR_IMAGE_EMBED_MAX_BYTES,
     PEAR_EMBEDDED_BOT_SERVICE,
     PEAR_FIRST_RUN_STARTER_MESSAGE,
     PEAR_FIRST_RUN_STREAM,
@@ -50,12 +53,12 @@ from zerver.lib.pear_worker import (
     ensure_pear_child_topic_context,
     ensure_pear_topic_context,
     pear_default_worker_reasoning_effort,
-    pear_exclude_canvas_from_git_delta,
     pear_git_output,
     pear_git_status_delta,
     pear_logical_repository_label,
     pear_logical_worktree_label,
     pear_pinned_repository_value,
+    pear_read_bytes_path,
     pear_read_text_path,
     pear_repo_artifact_value_is_durable,
     pear_sha256_text,
@@ -1111,6 +1114,7 @@ def get_pear_workspace_files_backend(
 
 
 PEAR_WORKSPACE_FILE_MAX_BYTES = 1_000_000
+PEAR_WORKSPACE_IMAGE_PATTERN = re.compile(r"\.(png|jpe?g|gif|webp|svg)$", re.IGNORECASE)
 
 
 @typed_endpoint
@@ -1130,6 +1134,10 @@ def get_pear_workspace_file_backend(
         str,
         ApiParamConfig("path", documentation_status=INTENTIONALLY_UNDOCUMENTED),
     ],
+    encoding: Annotated[
+        str,
+        ApiParamConfig("encoding", documentation_status=INTENTIONALLY_UNDOCUMENTED),
+    ] = "text",
 ) -> HttpResponse:
     access_stream_by_name(user_profile, stream_name)
     context = pear_topic_context_for_request(
@@ -1149,6 +1157,39 @@ def get_pear_workspace_file_backend(
         topic_name=topic_name,
         workdir=workdir,
     )
+    if encoding == "base64":
+        # Image previews for the Files tab: same isolation-safe read
+        # the chat's image embedding uses.
+        image_match = PEAR_WORKSPACE_IMAGE_PATTERN.search(path)
+        if image_match is None:
+            raise JsonableError(_("Only image files can be previewed this way."))
+        try:
+            data = pear_read_bytes_path(
+                resolved_path,
+                isolation_username=isolation_username,
+                max_bytes=PEAR_IMAGE_EMBED_MAX_BYTES,
+            )
+        except OSError:
+            raise JsonableError(_("Could not read this file."))
+        if len(data) > PEAR_IMAGE_EMBED_MAX_BYTES:
+            raise JsonableError(_("This file is too large to view here."))
+        extension = image_match.group(1).lower()
+        content_type = {
+            "jpg": "image/jpeg",
+            "jpeg": "image/jpeg",
+            "svg": "image/svg+xml",
+        }.get(extension, f"image/{extension}")
+        return json_success(
+            request,
+            data={
+                "pear_workspace_file": {
+                    "path": str(resolved_path.relative_to(workdir)),
+                    "encoding": "base64",
+                    "content": base64.b64encode(data).decode(),
+                    "content_type": content_type,
+                },
+            },
+        )
     try:
         content = pear_read_text_path(resolved_path, isolation_username=isolation_username)
     except OSError:
@@ -1360,7 +1401,7 @@ def get_pear_canvas_backend(
         topic_name=topic_name,
         workdir=workdir,
     )
-    canvas_path = pear_topic_canvas_path(workdir)
+    canvas_path = pear_topic_canvas_path(workdir, isolation_username=isolation_username)
     content = pear_read_text_path(canvas_path, isolation_username=isolation_username)
     return json_success(
         request,
@@ -1412,9 +1453,12 @@ def put_pear_canvas_backend(
         topic_name=topic_name,
         workdir=workdir,
     )
-    pear_exclude_canvas_from_git_delta(workdir)
-    canvas_path = pear_topic_canvas_path(workdir)
-    current_content = pear_read_text_path(canvas_path, isolation_username=isolation_username)
+    # Version-check against wherever the doc currently lives (legacy
+    # CANVAS.md included), but always save to README.md — that write
+    # is what migrates a legacy workspace.
+    current_path = pear_topic_canvas_path(workdir, isolation_username=isolation_username)
+    canvas_path = Path(workdir) / PEAR_CANVAS_FILE_NAME
+    current_content = pear_read_text_path(current_path, isolation_username=isolation_username)
     current_version = pear_sha256_text(current_content)
     if base_version != current_version:
         return json_response(
@@ -1899,7 +1943,8 @@ def post_pear_canvas_ask_backend(
 ) -> HttpResponse:
     """The canvas ask primitive (PEAR_CANVAS_TABS_DESIGN.md T2 §B):
     a bracketed request in a canvas block becomes a chat-silent run in
-    the topic's own workspace whose entire job is to edit CANVAS.md
+    the topic's own workspace whose entire job is to edit the topic
+    README
     per the ask contract. The DM anchors the transcript; the answer
     arrives as a file change."""
     ask_request = ask_request.strip()
@@ -1923,7 +1968,7 @@ def post_pear_canvas_ask_backend(
     span = f"[{ask_request}]({label})" if label else f"[{ask_request}]"
     task = "\n".join(
         [
-            "Canvas ask: resolve it by editing CANVAS.md in this workspace.",
+            f"Canvas ask: resolve it by editing {PEAR_CANVAS_FILE_NAME} in this workspace.",
             "Do not post the answer to the topic; the canvas edit IS the answer.",
             "",
             f"Ask: {ask_request}",
@@ -1933,9 +1978,9 @@ def post_pear_canvas_ask_backend(
             trim_pear_text(block, limit=4000),
             "---",
             "Contract:",
-            "1. Edit only CANVAS.md; keep every other part of the file exactly as it is.",
+            f"1. Edit only {PEAR_CANVAS_FILE_NAME}; keep every other part of the file exactly as it is.",
             (
-                "1b. If the exact ask span is not present in CANVAS.md, stop and say so "
+                f"1b. If the exact ask span is not present in {PEAR_CANVAS_FILE_NAME}, stop and say so "
                 "here — never reconstruct, re-add, or duplicate other content."
             ),
             f'2. No label: replace the bracketed ask "{span}" with your answer written as plain prose in place.',

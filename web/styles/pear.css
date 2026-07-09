@@ -2161,3 +2161,71 @@
     background: var(--pear-surface-2);
     color: var(--pear-ink-1);
 }
+
+/* The rail's pinned plan (the live-state slot's first resident): the
+   agent's own checklist, full-state swapped like the codex TUI. */
+.pear-rail-plan {
+    margin-top: var(--pear-space-2);
+    padding: var(--pear-space-2);
+    border: 1px solid var(--pear-hairline);
+    border-radius: var(--pear-radius-card);
+    background: var(--pear-surface-1);
+}
+
+.pear-rail-plan-title {
+    display: block;
+    margin-bottom: var(--pear-space-1);
+    color: var(--pear-ink-3);
+    font-family: var(--pear-font-pixel);
+    /* stylelint-disable-next-line declaration-property-unit-disallowed-list */
+    font-size: 11px;
+}
+
+.pear-rail-plan-steps {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.pear-rail-plan-step {
+    display: flex;
+    align-items: baseline;
+    gap: var(--pear-space-2);
+    padding: 1px 0;
+    /* 13px at 14px em */
+    font-size: 0.9286em;
+    line-height: 1.5;
+}
+
+.pear-rail-plan-glyph {
+    flex: 0 0 auto;
+    width: 1em;
+    font-family: var(--pear-font-pixel);
+    text-align: center;
+}
+
+.pear-rail-plan-done .pear-rail-plan-glyph {
+    color: var(--pear-accent-ink);
+}
+
+.pear-rail-plan-done .pear-rail-plan-text {
+    color: var(--pear-ink-3);
+}
+
+.pear-rail-plan-active .pear-rail-plan-text {
+    color: var(--pear-ink-1);
+    font-weight: 500;
+}
+
+.pear-rail-plan-pending .pear-rail-plan-text,
+.pear-rail-plan-pending .pear-rail-plan-glyph {
+    color: var(--pear-ink-3);
+}
+
+.pear-rail-plan-text {
+    overflow: hidden;
+    min-width: 0;
+    color: var(--pear-ink-2);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}

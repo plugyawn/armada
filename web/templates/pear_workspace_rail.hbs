@@ -23,6 +23,19 @@
         {{/if}}
     </span>
 </button>
+{{#if has_plan}}
+    <div class="pear-rail-plan">
+        <span class="pear-rail-plan-title">{{t "Plan" }}</span>
+        <ul class="pear-rail-plan-steps">
+            {{#each plan_steps}}
+                <li class="pear-rail-plan-step {{status_class}}">
+                    <span class="pear-rail-plan-glyph" aria-hidden="true">{{status_glyph}}</span>
+                    <span class="pear-rail-plan-text">{{step}}</span>
+                </li>
+            {{/each}}
+        </ul>
+    </div>
+{{/if}}
 {{#if has_runs}}
     <ul class="pear-rail-runs">
         {{#each runs}}

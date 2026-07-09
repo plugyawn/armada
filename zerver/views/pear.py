@@ -717,6 +717,31 @@ def serialize_pear_worker_run_usage(run: PearWorkerRun) -> dict[str, object] | N
     }
 
 
+def serialize_pear_worker_run_plan(run: PearWorkerRun) -> list[dict[str, str]] | None:
+    """The run's latest plan_update, for the rail's pinned plan card.
+
+    Plan events carry the whole checklist (full-state replacement, the
+    codex update_plan contract), so the newest one wins; bounded scan
+    like the usage lookup.
+    """
+    for event in run.events.filter(event_type="transcript").order_by("-date_created", "-id")[:30]:
+        payload = event.payload
+        if not isinstance(payload, dict) or payload.get("kind") != "plan":
+            continue
+        metadata = payload.get("metadata")
+        raw_steps = metadata.get("steps") if isinstance(metadata, dict) else None
+        if not isinstance(raw_steps, list):
+            continue
+        steps = [
+            {"step": str(step["step"]), "status": str(step.get("status", "pending"))}
+            for step in raw_steps
+            if isinstance(step, dict) and step.get("step")
+        ]
+        if steps:
+            return steps
+    return None
+
+
 def serialize_pear_worker_run_tool_count(run: PearWorkerRun) -> int:
     # The worker records one tool_results event per turn segment, each
     # carrying that segment's tool_count; the run's total is their sum.
@@ -774,6 +799,7 @@ def serialize_pear_worker_run(
         else None,
         "usage": serialize_pear_worker_run_usage(run),
         "tool_count": serialize_pear_worker_run_tool_count(run),
+        "plan": serialize_pear_worker_run_plan(run),
         "live": live_state,
     }
     if include_events:

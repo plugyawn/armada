@@ -1927,9 +1927,15 @@
     padding-top: 0;
 
     /* The sticky offset belongs to the clamped container now; its
-       headers pin to the container's own top. */
+       headers pin to the container's own top, and the contents drop
+       their navbar-gap margin — the clamp's own top offset already
+       provides it, so the bar sits at the exact pixel chat pins to. */
     & .message_header {
         top: 0;
+
+        & .message-header-contents {
+            margin-top: 0;
+        }
     }
 }
 

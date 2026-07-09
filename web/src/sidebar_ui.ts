@@ -32,7 +32,9 @@ import * as settings_data from "./settings_data.ts";
 import * as settings_preferences from "./settings_preferences.ts";
 import * as spectators from "./spectators.ts";
 import {current_user} from "./state_data.ts";
+import * as pear_workspace_marks from "./pear_workspace_marks.ts";
 import * as stream_list from "./stream_list.ts";
+import * as topic_list from "./topic_list.ts";
 import * as ui_util from "./ui_util.ts";
 import {user_settings} from "./user_settings.ts";
 import * as util from "./util.ts";
@@ -381,6 +383,17 @@ export function initialize_left_sidebar(): void {
     });
 
     $("#left-sidebar-container").html(rendered_sidebar);
+    pear_workspace_marks.initialize({
+        redraw_stream_list() {
+            stream_list.build_stream_list(true);
+        },
+        redraw_stream_topics(stream_id) {
+            const $stream_li = stream_list.get_stream_li(stream_id);
+            if ($stream_li !== undefined && $stream_li.length > 0) {
+                topic_list.rebuild_left_sidebar($stream_li, stream_id);
+            }
+        },
+    });
     // make sure home-view and left_sidebar order persists
     left_sidebar_navigation_area.reorder_left_sidebar_navigation_list(user_settings.web_home_view);
     stream_list.update_unread_counts_visibility();

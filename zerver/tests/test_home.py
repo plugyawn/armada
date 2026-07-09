@@ -139,6 +139,7 @@ class HomeTest(ZulipTestCase):
         "realm_bot_domain",
         "realm_bots",
         "pear_bot_user_ids",
+        "pear_project_stream_ids",
         "realm_can_access_all_users_group",
         "realm_can_add_custom_emoji_group",
         "realm_can_add_subscribers_group",
@@ -308,7 +309,7 @@ class HomeTest(ZulipTestCase):
 
         # Verify succeeds once logged-in
         with (
-            self.assert_database_query_count(57),
+            self.assert_database_query_count(58),
             patch("zerver.lib.cache.cache_set") as cache_mock,
         ):
             result = self._get_home_page(stream="Denmark")
@@ -659,7 +660,7 @@ class HomeTest(ZulipTestCase):
         # Verify number of queries for Realm admin isn't much higher than for normal users.
         self.login("iago")
         with (
-            self.assert_database_query_count(58),
+            self.assert_database_query_count(60),
             patch("zerver.lib.cache.cache_set") as cache_mock,
         ):
             result = self._get_home_page()
@@ -691,7 +692,7 @@ class HomeTest(ZulipTestCase):
         self._get_home_page()
 
         # Then for the second page load, measure the number of queries.
-        with self.assert_database_query_count(53):
+        with self.assert_database_query_count(55):
             result = self._get_home_page()
 
         # Do a sanity check that our new streams were in the payload.

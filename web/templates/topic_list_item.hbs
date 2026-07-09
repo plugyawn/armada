@@ -6,6 +6,9 @@
         <span class="sidebar-topic-name">
             <span class="sidebar-topic-name-inner {{#if is_empty_string_topic}}empty-topic-display{{/if}}">{{topic_display_name}}</span>
         </span>
+        {{#if has_pear_worktree}}
+        <i class="zulip-icon zulip-icon-git-branch pear-worktree-mark" aria-hidden="true"></i>
+        {{/if}}
         <div class="topic-markers-and-unreads change_visibility_policy" data-stream-id="{{stream_id}}" data-topic-name="{{topic_name}}">
             {{#if contains_unread_mention}}
                 <span class="unread_mention_info">

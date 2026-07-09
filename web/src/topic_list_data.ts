@@ -1,6 +1,7 @@
 import assert from "minimalistic-assert";
 
 import * as narrow_state from "./narrow_state.ts";
+import * as pear_workspace_marks from "./pear_workspace_marks.ts";
 import * as resolved_topic from "./resolved_topic.ts";
 import * as stream_topic_history from "./stream_topic_history.ts";
 import * as sub_store from "./sub_store.ts";
@@ -26,6 +27,7 @@ export type TopicInfo = {
     is_active_topic: boolean;
     url: string;
     contains_unread_mention: boolean;
+    has_pear_worktree: boolean;
 };
 
 type TopicChoiceState = {
@@ -136,6 +138,7 @@ function choose_topics(
             is_active_topic,
             url: stream_topic_history.channel_topic_permalink_hash(stream_id, topic_name),
             contains_unread_mention,
+            has_pear_worktree: pear_workspace_marks.topic_has_pear_worktree(stream_id, topic_name),
         };
 
         topic_choice_state.items.push(topic_info);

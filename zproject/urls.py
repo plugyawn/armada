@@ -104,6 +104,7 @@ from zerver.views.pear import (
     get_pear_runs_backend,
     get_pear_session_backend,
     get_pear_topic_context_backend,
+    get_pear_workspace_topics_backend,
     post_pear_config_backend,
     post_pear_first_run_backend,
     post_pear_run_cancel_backend,
@@ -431,6 +432,10 @@ v1_api_and_json_patterns = [
     rest_path(
         "pear/git-tree",
         GET=(get_pear_git_tree_backend, {"intentionally_undocumented"}),
+    ),
+    rest_path(
+        "pear/workspace-topics",
+        GET=(get_pear_workspace_topics_backend, {"intentionally_undocumented"}),
     ),
     rest_path(
         "pear/canvas",

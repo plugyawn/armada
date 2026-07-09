@@ -1147,7 +1147,11 @@
 }
 
 .pear-side-body:focus-within {
-    border-color: color-mix(in srgb, var(--pear-accent) 70%, var(--color-border-legacy-input-focus) 30%);
+    border-color: color-mix(
+        in srgb,
+        var(--pear-accent) 70%,
+        var(--color-border-legacy-input-focus) 30%
+    );
 }
 
 .pear-side-request {
@@ -1646,4 +1650,86 @@
         background-color var(--pear-transition-duration) ease,
         border-color var(--pear-transition-duration) ease,
         color var(--pear-transition-duration) ease;
+}
+
+/* The workspace rail card (design §8.3): the current topic's
+   workspace, said once at the top of the right rail — repo and
+   status in the first line, branch and head in the second. The whole
+   card opens work details. */
+#pear-workspace-rail {
+    padding: var(--pear-space-2) var(--pear-space-2) 0;
+}
+
+.pear-workspace-rail-card {
+    appearance: none;
+    display: flex;
+    width: 100%;
+    flex-direction: column;
+    gap: var(--pear-space-1);
+    padding: var(--pear-space-2);
+    border: 1px solid var(--pear-hairline);
+    border-radius: var(--pear-radius-card);
+    background: var(--pear-surface-1);
+    cursor: pointer;
+    text-align: left;
+    transition: background-color var(--pear-dur-1) var(--pear-ease);
+
+    &:hover,
+    &:focus-visible {
+        background: var(--pear-surface-2);
+    }
+}
+
+.pear-rail-line {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: var(--pear-space-2);
+    font-family: var(--pear-font-pixel);
+    /* Pinned px by design; see the pixel-type rule in the design spec. */
+    /* stylelint-disable-next-line declaration-property-unit-disallowed-list */
+    font-size: 12px;
+    line-height: 1.2;
+    color: var(--pear-ink-2);
+}
+
+.pear-rail-glyph {
+    flex: 0 0 auto;
+    color: var(--pear-ink-3);
+}
+
+.pear-rail-repo,
+.pear-rail-branch {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.pear-rail-status {
+    flex: 0 0 auto;
+    margin-left: auto;
+    /* stylelint-disable-next-line declaration-property-unit-disallowed-list */
+    font-size: 11px;
+    color: var(--pear-ink-3);
+}
+
+.pear-rail-status-dirty {
+    color: var(--pear-warn);
+}
+
+.pear-rail-line-meta {
+    /* stylelint-disable-next-line declaration-property-unit-disallowed-list */
+    font-size: 11px;
+    color: var(--pear-ink-3);
+}
+
+.pear-rail-branch-icon {
+    flex: 0 0 auto;
+    font-size: 0.9em;
+}
+
+.pear-rail-head {
+    flex: 0 0 auto;
+    margin-left: auto;
 }

@@ -15,6 +15,7 @@ import * as mouse_drag from "./mouse_drag.ts";
 import * as popover_menus from "./popover_menus.ts";
 import {recent_view_messages_data} from "./recent_view_messages_data.ts";
 import * as scroll_util from "./scroll_util.ts";
+import * as pear_workspace_marks from "./pear_workspace_marks.ts";
 import * as stream_data from "./stream_data.ts";
 import * as stream_topic_history from "./stream_topic_history.ts";
 import * as stream_topic_history_util from "./stream_topic_history_util.ts";
@@ -527,6 +528,13 @@ export function rebuild_left_sidebar(
     stream_id: number,
     for_search = false,
 ): void {
+    // Load this channel's worktree map (for the topic branch glyphs)
+    // the first time its topic list renders; the loaded hook rebuilds
+    // the list.
+    const sub = sub_store.get(stream_id);
+    if (sub !== undefined) {
+        pear_workspace_marks.ensure_workspace_topics(stream_id, sub.name);
+    }
     if (zoomed) {
         if (zoomed_in_widget?.my_stream_id !== stream_id) {
             clear_zoomed();

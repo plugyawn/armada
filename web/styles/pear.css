@@ -1913,85 +1913,23 @@
    never re-renders or moves on tab switch. The feed's own per-day
    bars slim to date rules underneath (scoped below), so the page has
    exactly one topic header. */
-#pear-topic-bar {
+/* In pane views the feed itself becomes the topic bar: clamped to
+   one header's height, pinned sticky at the chat bar's position, and
+   scrolled to its newest group — Zulip's own recipient bar (date,
+   controls, pill, commit line, tabs) stays on screen, the same
+   component chat shows, maintained by the same code. */
+#message_feed_container.pear-feed-clamped {
     position: sticky;
     z-index: 5;
-    top: var(--navbar-fixed-height);
-    padding: 0 10px;
-
-    &[hidden] {
-        display: none;
-    }
-}
-
-/* The bar card mirrors the chat recipient bar's look exactly —
-   same background, border, radius, and type — but is rendered
-   deterministically from context rather than cloned from feed DOM.
-   The shared cluster's global layout classes (display: contents,
-   full-row commit line, full-row tab strip) compose inside it just
-   as they do in the feed's bars. */
-.pear-topic-bar-card {
-    display: flex;
-    min-height: 1.8666em; /* 28px at 15px em, the chat bar height */
-    flex-wrap: wrap;
-    align-items: center;
-    align-content: center;
-    gap: 4px;
-    padding: 2px 6px 2px 10px;
-    border: 1px solid var(--color-message-header-contents-border);
-    border-bottom-color: var(--color-message-header-contents-border-bottom);
-    border-radius: 7px 7px 0 0;
-    background-color: var(--color-background);
-    font-size: 1.0714em; /* 15px at 14px em */
-    line-height: 1.2;
-}
-
-.pear-topic-bar-hash {
-    font-weight: 600;
-    opacity: 0.9;
-}
-
-.pear-topic-bar-stream,
-.pear-topic-bar-topic {
+    top: calc(var(--navbar-fixed-height) + var(--header-padding-bottom));
     overflow: hidden;
-    color: var(--color-text-message-header);
-    font-weight: 600;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
+    height: var(--pear-topic-bar-height, 0);
+    padding-top: 0;
 
-.pear-topic-bar-topic {
-    min-width: 0;
-    flex: 0 1 auto;
-}
-
-.pear-topic-bar-sep {
-    color: var(--color-text-message-header);
-    opacity: 0.5;
-}
-
-#pear-topic-bar .pear-pane-header-cluster {
-    display: contents;
-}
-
-/* The pane replaces the feed inside the middle column, sitting under
-   the promoted bar. */
-#pear-workspace-pane {
-    display: flex;
-    overflow: hidden;
-    box-sizing: border-box;
-    height: 100%;
-    flex-direction: column;
-    /* padding, not margin: a top margin collapses into the block
-       parent and the pane lands back under the navbar. */
-    padding-top: var(--navbar-fixed-height);
-    background: var(--pear-surface-0);
-
-    /* display: flex would silently defeat the hidden attribute the
-       controller toggles, leaving the pane glued under the feed
-       (live report). */
-    &[hidden] {
-        display: none;
+    /* The sticky offset belongs to the clamped container now; its
+       headers pin to the container's own top. */
+    & .message_header {
+        top: 0;
     }
 }
 

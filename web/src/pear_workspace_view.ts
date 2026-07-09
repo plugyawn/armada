@@ -18,7 +18,6 @@ import * as pear_canvas from "./pear_canvas.ts";
 import * as pear_canvas_editor from "./pear_canvas_editor.ts";
 import {postprocess_content} from "./postprocess_content.ts";
 import * as rendered_markdown from "./rendered_markdown.ts";
-import * as stream_data from "./stream_data.ts";
 import {user_settings} from "./user_settings.ts";
 
 export type PearWorkspaceTab = "chat" | "canvas" | "files";
@@ -125,100 +124,61 @@ function update_tab_strips(): void {
 // pane is hidden, and only a context change tears it down.
 let pane_shell_key: string | undefined;
 
-// The topic bar heads Canvas/Files at the exact pinned position the
-// chat's recipient bar occupies, with the same shared cluster (pill,
-// commit line, tabs) pear_panel maintains everywhere. It is rendered
-// deterministically from context — an earlier live-DOM clone of the
-// feed's bar proved racy in real sessions (title row captured in a
-// degraded layout state).
-let topic_bar_signature = "";
-
-function $topic_bar(): JQuery {
-    return $("#pear-topic-bar");
-}
-
-function ensure_topic_bar(): JQuery {
-    const $existing = $topic_bar();
-    if ($existing.length > 0) {
-        return $existing;
-    }
-    const $feed = $("#message_feed_container");
-    if ($feed.length === 0) {
-        return $existing;
-    }
-    $feed.before($("<div>").attr("id", "pear-topic-bar").prop("hidden", true));
-    return $topic_bar();
-}
-
-function build_topic_bar_card(): HTMLElement {
-    const stream = current_stream ?? "";
-    const topic = current_topic ?? "";
-    const color = stream_data.get_sub(stream)?.color ?? "";
-    const card = document.createElement("div");
-    card.className = "pear-topic-bar-card";
-    const hash = document.createElement("span");
-    hash.className = "pear-topic-bar-hash";
-    hash.textContent = "#";
-    if (color !== "") {
-        hash.style.color = color;
-    }
-    const stream_label = document.createElement("span");
-    stream_label.className = "pear-topic-bar-stream";
-    stream_label.textContent = stream;
-    const sep = document.createElement("span");
-    sep.className = "pear-topic-bar-sep";
-    sep.textContent = "\u203A";
-    const topic_label = document.createElement("span");
-    topic_label.className = "pear-topic-bar-topic";
-    topic_label.textContent = topic;
-    const cluster_slot = document.createElement("span");
-    cluster_slot.className = "pear-pane-header-cluster";
-    card.append(hash, stream_label, sep, topic_label, cluster_slot);
-    return card;
-}
+// In Canvas/Files, the chat's own recipient bar stays on screen —
+// not a clone, not a recreation: the feed container clamps to a
+// sticky strip exactly one header tall, scrolled to its newest
+// group, so Zulip's real bar (date, controls, pill, commit line,
+// tabs — all maintained by Zulip and pear_panel exactly as in chat)
+// pins above the pane.
 
 // The navbar carries its own .column-middle-inner; only the feed's
 // column may take the bar-active padding, or the view-header strip
-// gets pushed down over the bar's title row (live report).
+// gets pushed down over the bar (live report).
 function $feed_column(): JQuery {
     return $("#message_feed_container").closest(".column-middle-inner");
 }
 
-function set_topic_bar_height(height: number): void {
-    $feed_column()[0]?.style.setProperty("--pear-topic-bar-height", `${height}px`);
+function feed_is_clamped(): boolean {
+    return $("#message_feed_container").hasClass("pear-feed-clamped");
+}
+
+function measure_topic_bar_height(): number {
+    const headers = [
+        ...document.querySelectorAll<HTMLElement>(
+            "#message_feed_container .message_header_stream",
+        ),
+    ];
+    return headers.at(-1)?.offsetHeight ?? 0;
+}
+
+function pin_clamped_feed(): void {
+    const feed = $("#message_feed_container")[0];
+    if (feed !== undefined) {
+        feed.scrollTop = feed.scrollHeight;
+    }
 }
 
 function sync_topic_bar(): void {
-    const $bar = ensure_topic_bar();
-    if ($bar.length === 0) {
+    const $feed = $("#message_feed_container");
+    if ($feed.length === 0) {
         return;
     }
-    // The bar substitutes for the feed's own sticky header only
-    // while the pane covers the feed; in chat, Zulip's native bar
-    // (identical content, identical pinned position) owns the page,
-    // keeping scroll anchoring untouched.
     const active =
         has_workspace &&
         pane_is_open() &&
         current_stream !== undefined &&
         current_topic !== undefined;
     $feed_column().toggleClass("pear-topic-bar-active", active);
+    $feed.toggleClass("pear-feed-clamped", active);
     if (!active) {
-        $bar.attr("hidden", "hidden").empty();
-        topic_bar_signature = "";
-        set_topic_bar_height(0);
+        $feed_column()[0]?.style.removeProperty("--pear-topic-bar-height");
         return;
     }
-    if (topic_bar_signature !== current_context_key || $bar.children().length === 0) {
-        topic_bar_signature = current_context_key;
-        $bar.empty();
-        $bar[0]?.append(build_topic_bar_card());
-        // pear_panel fills the cluster (pill, commit line, tabs)
-        // through the same updater the feed's bars use.
-        document.dispatchEvent(new CustomEvent("pear:pane-shell-rendered"));
+    const height = measure_topic_bar_height();
+    if (height > 0) {
+        $feed_column()[0]?.style.setProperty("--pear-topic-bar-height", `${height}px`);
     }
-    $bar.removeAttr("hidden");
-    set_topic_bar_height($bar[0]?.offsetHeight ?? 0);
+    pin_clamped_feed();
 }
 
 function ensure_pane_shell(): boolean {
@@ -246,12 +206,11 @@ function show_pane(): void {
     if (!ensure_pane_shell()) {
         return;
     }
-    const feed_was_visible = $("#message_feed_container")[0]?.offsetParent !== null;
-    if (feed_was_visible) {
+    if (!feed_is_clamped()) {
         saved_chat_scroll = window.scrollY;
     }
-    $("#message_feed_container").hide();
     $pane().removeAttr("hidden");
+    sync_topic_bar();
     window.scrollTo(0, 0);
     const $canvas_body = $pane().find(".pear-canvas-body");
     const $files_body = $pane().find(".pear-files-body");
@@ -273,7 +232,7 @@ function show_pane(): void {
 function hide_pane(): void {
     flush_canvas_save();
     $pane().attr("hidden", "hidden");
-    $("#message_feed_container").show();
+    sync_topic_bar();
     if (saved_chat_scroll !== undefined) {
         const target = saved_chat_scroll;
         saved_chat_scroll = undefined;

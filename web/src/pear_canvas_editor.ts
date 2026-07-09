@@ -33,7 +33,7 @@ export type CanvasEditorOptions = {
 let crepe: Crepe | undefined;
 let mount_generation = 0;
 
-const ask_plugin_key = new PluginKey("pear-canvas-asks");
+const ask_plugin_key = new PluginKey<DecorationSet>("pear-canvas-asks");
 
 function build_ask_decorations(
     doc: Parameters<typeof DecorationSet.create>[0],
@@ -105,16 +105,37 @@ export async function mount(root: HTMLElement, options: CanvasEditorOptions): Pr
                 text: options.placeholder,
                 mode: "block",
             },
+            [Crepe.Feature.Cursor]: {
+                // The virtual caret redraws through decorations on
+                // every keystroke; the native caret is free.
+                virtual: false,
+            },
         },
     });
     instance.editor.config((ctx) => {
         ctx.update(prosePluginsCtx, (plugins) => [
             ...plugins,
-            new Plugin({
+            new Plugin<DecorationSet>({
                 key: ask_plugin_key,
+                state: {
+                    init(_config, state) {
+                        return build_ask_decorations(state.doc, options.get_pending_spans);
+                    },
+                    apply(tr, old_set, _old_state, new_state) {
+                        // Rebuild only when the document or the
+                        // pending-ask set changed; caret movement and
+                        // selection just map the existing set.
+                        if (!tr.docChanged && tr.getMeta(ask_plugin_key) !== true) {
+                            // DecorationSet.map, not Array#map.
+                            // eslint-disable-next-line unicorn/no-array-callback-reference, unicorn/no-array-method-this-argument
+                            return old_set.map(tr.mapping, tr.doc);
+                        }
+                        return build_ask_decorations(new_state.doc, options.get_pending_spans);
+                    },
+                },
                 props: {
                     decorations(state) {
-                        return build_ask_decorations(state.doc, options.get_pending_spans);
+                        return ask_plugin_key.getState(state) ?? null;
                     },
                 },
             }),
@@ -176,7 +197,7 @@ export function has_focus(): boolean {
 export function refresh_decorations(): void {
     crepe?.editor.action((ctx) => {
         const view = ctx.get(editorViewCtx);
-        view.dispatch(view.state.tr);
+        view.dispatch(view.state.tr.setMeta(ask_plugin_key, true));
     });
 }
 

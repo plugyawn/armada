@@ -1698,14 +1698,18 @@ def get_pear_runs_backend(
             and topic_context_record.workspace_node_id is not None
             else None
         )
+        # Canvas asks execute in the topic's workspace, so they belong
+        # in its runs list; the panel's settle edge is also what tells
+        # an open canvas to refresh when an ask's answer lands.
+        topic_run_kinds = [PearWorkerRun.SHARED, PearWorkerRun.CANVAS_ASK]
         shared_run_filter = Q(
-            session_kind=PearWorkerRun.SHARED,
+            session_kind__in=topic_run_kinds,
             stream_name=stream_name,
             topic_name=topic_name,
         )
         if workspace_node is not None:
             shared_run_filter |= Q(
-                session_kind=PearWorkerRun.SHARED,
+                session_kind__in=topic_run_kinds,
                 workspace_node=workspace_node,
             )
         topic_runs = list(
@@ -1930,6 +1934,10 @@ def post_pear_canvas_ask_backend(
             "---",
             "Contract:",
             "1. Edit only CANVAS.md; keep every other part of the file exactly as it is.",
+            (
+                "1b. If the exact ask span is not present in CANVAS.md, stop and say so "
+                "here — never reconstruct, re-add, or duplicate other content."
+            ),
             f'2. No label: replace the bracketed ask "{span}" with your answer written as plain prose in place.',
             (
                 f'3. With a label: replace "{span}" with "[{label or "<label>"}](#aside-<n>)" '

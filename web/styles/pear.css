@@ -1911,6 +1911,13 @@
     height: 100%;
     flex-direction: column;
     background: var(--pear-surface-0);
+
+    /* display: flex would silently defeat the hidden attribute the
+       controller toggles, leaving the pane glued under the feed
+       (live report). */
+    &[hidden] {
+        display: none;
+    }
 }
 
 .pear-workspace-pane-inner {
@@ -2012,6 +2019,19 @@
     min-width: 0;
     flex: 1 1 auto;
     cursor: text;
+
+    /* Canvas headings speak in the Pear voice (Geist Pixel); prose
+       stays in the room face for reading comfort. */
+    & h1,
+    & h2,
+    & h3,
+    & h4,
+    & h5,
+    & h6 {
+        font-family: var(--pear-font-pixel);
+        font-weight: 400;
+        letter-spacing: 0.02em;
+    }
 }
 
 .pear-canvas-block-source {

@@ -45,16 +45,13 @@
         var(--pear-shadow-pop), 0 1px 0 var(--pear-hairline);
 
     /* Sidebar voice: sentence-case headings in a calm 500 (the
-       shouting caps and small-caps action headings retire), and rows
-       breathe on the 4px grid (§2: 32px prominent line-boxes). */
+       shouting caps and small-caps action headings retire). */
     --font-weight-sidebar-heading: 500;
     --letter-spacing-sidebar-heading: 0.01em;
     --font-weight-sidebar-action-heading: 500;
     --font-variant-sidebar-action-heading: normal;
     --text-transform-sidebar-action-heading: none;
     --font-size-sidebar-action-heading: 1em;
-    --line-height-sidebar-row-prominent: 2.2857em; /* 32px at 14px em */
-    --line-height-sidebar-row: 1.7142em; /* 24px at 14px em */
 }
 
 /* Scrollbars are quiet ink — tone only, no outline ring. The
@@ -68,14 +65,6 @@
 .simplebar-track .simplebar-scrollbar.simplebar-hover::before,
 :root.dark-theme .simplebar-track .simplebar-scrollbar.simplebar-hover::before {
     background-color: var(--pear-ink-2);
-}
-
-/* The narrowed row carries the 2px accent spine (§3): selection is
-   one of the four places the accent is allowed to spend. */
-li.active-filter,
-li.top-left-active-filter,
-li.active-sub-filter {
-    box-shadow: inset 2px 0 0 var(--pear-accent);
 }
 
 /* The room is set in Hanken. Form controls inherit so inputs match. */

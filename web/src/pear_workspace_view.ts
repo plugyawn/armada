@@ -153,9 +153,20 @@ function measure_topic_bar_height(): number {
 
 function pin_clamped_feed(): void {
     const feed = $("#message_feed_container")[0];
-    if (feed !== undefined) {
-        feed.scrollTop = feed.scrollHeight;
+    if (feed === undefined) {
+        return;
     }
+    const headers = [
+        ...feed.querySelectorAll<HTMLElement>(".message_header_stream"),
+    ];
+    const bar = headers.at(-1);
+    if (bar === undefined) {
+        return;
+    }
+    // Scroll the newest group's header to the clamp's top edge;
+    // scrolling to the very bottom would show the feed's trailing
+    // spacers instead and let the header slide out of the window.
+    feed.scrollTop += bar.getBoundingClientRect().top - feed.getBoundingClientRect().top;
 }
 
 function sync_topic_bar(): void {

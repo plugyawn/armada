@@ -1185,6 +1185,61 @@ def pear_read_text_path(path: Path, *, isolation_username: str | None = None) ->
     return completed.stdout
 
 
+def pear_read_bytes_path(
+    path: Path,
+    *,
+    isolation_username: str | None = None,
+    max_bytes: int = 4_000_000,
+) -> bytes:
+    """Read a worktree file as bytes (isolation-aware), for artifact
+    uploads. Returns b"" for missing files; raises OSError otherwise.
+    Reads at most max_bytes + 1 so callers can detect oversize."""
+    if isolation_username is None:
+        try:
+            data = path.read_bytes()
+        except FileNotFoundError:
+            return b""
+        except OSError as error:
+            raise OSError(f"Could not read {path}: {error}") from error
+        return data[: max_bytes + 1]
+    command = [
+        "sudo",
+        "-n",
+        "-u",
+        isolation_username,
+        "/usr/bin/env",
+        "python3",
+        "-c",
+        (
+            "import base64, sys; from pathlib import Path; "
+            "path = Path(sys.argv[1]); limit = int(sys.argv[2]); "
+            "sys.stdout.write(base64.b64encode(path.read_bytes()[:limit]).decode() "
+            "if path.exists() else '')"
+        ),
+        str(path),
+        str(max_bytes + 1),
+    ]
+    try:
+        completed = subprocess.run(
+            command,
+            check=False,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            timeout=20,
+        )
+    except (FileNotFoundError, OSError, subprocess.TimeoutExpired) as error:
+        raise OSError(f"Could not read {path}: {error}") from error
+    if completed.returncode != 0:
+        raise OSError(f"Could not read {path}: {completed.stderr.strip()}")
+    import base64
+
+    try:
+        return base64.b64decode(completed.stdout.strip() or "")
+    except ValueError as error:
+        raise OSError(f"Could not decode {path}: {error}") from error
+
+
 def pear_write_text_path(
     path: Path,
     content: str,

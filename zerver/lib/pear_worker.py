@@ -923,10 +923,20 @@ def pear_topic_canvas_relative_path(
     git-excluded CANVAS.md keep reading from it until the next save
     writes README.md, which then wins."""
     path = Path(workdir)
-    if pear_read_text_path(path / PEAR_CANVAS_FILE_NAME, isolation_username=isolation_username):
+    # Unreadable (isolated) files must not break path resolution;
+    # undetermined means the modern default.
+    def readable(candidate: Path) -> bool:
+        try:
+            return bool(
+                pear_read_text_path(candidate, isolation_username=isolation_username)
+            )
+        except OSError:
+            return False
+
+    if readable(path / PEAR_CANVAS_FILE_NAME):
         return PEAR_CANVAS_FILE_NAME
     for legacy in (PEAR_LEGACY_CANVAS_FILE_NAME, PEAR_LEGACY_CANVAS_FALLBACK_PATH):
-        if pear_read_text_path(path / legacy, isolation_username=isolation_username):
+        if readable(path / legacy):
             return legacy
     return PEAR_CANVAS_FILE_NAME
 

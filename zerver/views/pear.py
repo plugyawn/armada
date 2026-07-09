@@ -1101,11 +1101,10 @@ def get_pear_workspace_files_backend(
         workdir=workdir,
     )
     listing = pear_workspace_file_listing(workdir, isolation_username=isolation_username)
-    canvas_path = pear_topic_canvas_relative_path(workdir)
+    canvas_path = pear_topic_canvas_relative_path(workdir, isolation_username=isolation_username)
     listing["canvas_path"] = canvas_path
-    # The worker git-excludes the canvas so its edits never dirty the
-    # worktree; the Files tab still shows it — it is the one pinned,
-    # always-present file.
+    # The README is the topic's living document; the Files tab pins
+    # it even before it exists on disk.
     files = listing["files"]
     assert isinstance(files, list)
     if not any(entry["path"] == canvas_path for entry in files):

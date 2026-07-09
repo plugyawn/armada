@@ -59,24 +59,24 @@
         background-color: var(--color-background-pear-message-content);
 
         /* The agent is ambient — part of the branch, not a chat
-           participant: no portrait, no bot badge, and it speaks in
-           the pixel voice. Code samples keep Geist Mono via the
-           rendered_markdown code rules. */
+           participant: no portrait, no bot badge, no name heading.
+           The tinted block and the pixel voice are the identity;
+           only the timestamp keeps its place. Code samples keep
+           Geist Mono via the rendered_markdown code rules. */
         .message-avatar {
             visibility: hidden;
         }
 
-        .zulip-icon-bot {
+        .zulip-icon-bot,
+        .sender_name {
             display: none;
         }
 
-        .sender_name_text {
-            font-family: var(--pear-font-pixel);
-            /* stylelint-disable-next-line declaration-property-unit-disallowed-list */
-            font-size: 12px;
-            /* The pixel face has a single weight; synthesized bold
-               smears its grid. */
-            font-weight: normal;
+        &.messagebox-includes-sender .messagebox-content {
+            /* Without the name, the sender row only carries the
+               timestamp — let it shrink below the sender line
+               height it reserves for a portrait-and-name row. */
+            grid-template-rows: auto repeat(4, auto);
         }
 
         .message_edit_notice,
@@ -98,7 +98,7 @@
             overflow-wrap: anywhere;
             font-family: var(--pear-font-pixel);
             /* stylelint-disable-next-line declaration-property-unit-disallowed-list */
-            font-size: 12px;
+            font-size: 13px;
 
             /* Pixel glyphs sit on a hard grid; they need more air
                between lines than the outline faces do. The :not()

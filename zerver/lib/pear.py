@@ -1188,6 +1188,77 @@ def pear_visible_transcript_blocks(
     return [block_by_key[key] for key in block_keys]
 
 
+PEAR_IMAGE_EMBED_LIMIT: Final = 3
+PEAR_IMAGE_EMBED_MAX_BYTES: Final = 4_000_000
+PEAR_IMAGE_EMBED_PATTERN: Final = compile(
+    r"`([A-Za-z0-9_\-./]+\.(?:png|jpe?g|gif|webp))`", IGNORECASE
+)
+PEAR_IMAGE_CONTENT_TYPES: Final = {
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".gif": "image/gif",
+    ".webp": "image/webp",
+}
+
+
+def pear_embed_workspace_images(
+    content: str,
+    *,
+    workdir: str,
+    isolation_username: str | None,
+    bot_profile: Any,
+) -> str:
+    """Upload worktree images the reply references and append preview
+    links, so plots actually render in the topic instead of being
+    unreachable filesystem paths. Bounded and best-effort."""
+    if not workdir or "`" not in content:
+        return content
+    # Lazy imports: pear_worker imports this module at load time.
+    from pathlib import Path
+
+    from zerver.lib.pear_worker import pear_read_bytes_path, pear_workspace_relative_path
+    from zerver.lib.upload import upload_message_attachment
+
+    seen: set[str] = set()
+    links: list[str] = []
+    for match in PEAR_IMAGE_EMBED_PATTERN.finditer(content):
+        relative_path = match.group(1)
+        if relative_path in seen:
+            continue
+        seen.add(relative_path)
+        if len(links) >= PEAR_IMAGE_EMBED_LIMIT:
+            break
+        resolved = pear_workspace_relative_path(workdir, relative_path)
+        if resolved is None:
+            continue
+        try:
+            data = pear_read_bytes_path(
+                resolved,
+                isolation_username=isolation_username,
+                max_bytes=PEAR_IMAGE_EMBED_MAX_BYTES,
+            )
+        except OSError:
+            continue
+        if not data or len(data) > PEAR_IMAGE_EMBED_MAX_BYTES:
+            continue
+        file_name = Path(relative_path).name
+        content_type = PEAR_IMAGE_CONTENT_TYPES.get(Path(file_name).suffix.lower())
+        if content_type is None:
+            continue
+        try:
+            url, uploaded_name = upload_message_attachment(
+                file_name, content_type, data, bot_profile
+            )
+        except Exception:
+            logger.warning("Pear image embed upload failed for %s.", relative_path)
+            continue
+        links.append(f"[{uploaded_name}]({url})")
+    if links:
+        return content.rstrip() + "\n\n" + "\n".join(links)
+    return content
+
+
 def pear_append_active_marker(text: str) -> str:
     text = text.rstrip()
     if not text:
@@ -3632,6 +3703,33 @@ class PearWorkerTurn:
         )
         return segment_result
 
+
+    def embed_result_images(self, content: str) -> str:
+        workspace_context = self.active_session.get("workspace_context") or {}
+        workdir = str(workspace_context.get("workdir") or "").strip()
+        if not workdir.startswith("/"):
+            return content
+        from zerver.lib.pear_worker import (
+            pear_topic_isolation_user_exists,
+            pear_topic_isolation_username,
+        )
+
+        isolation_username: str | None = pear_topic_isolation_username(
+            self.bot_handler.user_profile,
+            stream=self.stream,
+            topic=self.topic,
+        )
+        if isolation_username is not None and not pear_topic_isolation_user_exists(
+            isolation_username
+        ):
+            isolation_username = None
+        return pear_embed_workspace_images(
+            content,
+            workdir=workdir,
+            isolation_username=isolation_username,
+            bot_profile=self.bot_handler.user_profile,
+        )
+
     def run(self) -> None:
         try:
             if self.active_session is None and self.session_kind == "side":
@@ -3837,6 +3935,7 @@ class PearWorkerTurn:
                         transcript_events=self.transcript_events,
                     )
                     content_to_post = content_chunks[0] if content_chunks else ""
+                content_to_post = self.embed_result_images(content_to_post)
                 result_updated = update_pear_worker_status_message(
                     self.bot_handler,
                     progress_message_id=self.result_message_id or self.progress_message_id,
@@ -3877,6 +3976,7 @@ class PearWorkerTurn:
                     transcript_events=self.transcript_events,
                 )
                 content_to_post = content_chunks[0] if content_chunks else ""
+                content_to_post = self.embed_result_images(content_to_post)
                 target_message_id = self.result_message_id or self.progress_message_id
                 result_updated = update_pear_worker_status_message(
                     self.bot_handler,

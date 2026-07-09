@@ -3934,6 +3934,42 @@ class PearWorkspaceFilesTest(ZulipTestCase):
                 )
                 self.assert_json_error(traversal, "Invalid file path.")
 
+class PearImageEmbedTest(ZulipTestCase):
+    def test_embed_workspace_images_uploads_and_appends(self) -> None:
+        from zerver.lib.pear import pear_embed_workspace_images
+
+        user = self.example_user("hamlet")
+        with tempfile.TemporaryDirectory() as temp_dir:
+            results = Path(temp_dir) / "results"
+            results.mkdir()
+            png = results / "training_curve.png"
+            png.write_bytes(b"\x89PNG\r\n\x1a\n" + b"0" * 32)
+            content = "The plot is at `results/training_curve.png` in the worktree."
+            embedded = pear_embed_workspace_images(
+                content,
+                workdir=temp_dir,
+                isolation_username=None,
+                bot_profile=user,
+            )
+        self.assertIn("/user_uploads/", embedded)
+        self.assertIn("[training_curve.png](", embedded)
+        # Original path reference stays; the preview link is appended.
+        self.assertIn("`results/training_curve.png`", embedded)
+
+    def test_embed_workspace_images_guards_paths_and_misses(self) -> None:
+        from zerver.lib.pear import pear_embed_workspace_images
+
+        user = self.example_user("hamlet")
+        with tempfile.TemporaryDirectory() as temp_dir:
+            content = "See `../../etc/secret.png` and `missing.png`."
+            embedded = pear_embed_workspace_images(
+                content,
+                workdir=temp_dir,
+                isolation_username=None,
+                bot_profile=user,
+            )
+        self.assertEqual(embedded, content)
+
 class PearMathNormalizationTest(ZulipTestCase):
     def test_normalize_pear_math_delimiters(self) -> None:
         from zerver.lib.pear import normalize_pear_math_delimiters

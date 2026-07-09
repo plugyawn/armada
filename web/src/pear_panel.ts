@@ -1072,9 +1072,9 @@ function render_topic_header_controls(options: {
         stream,
         topic,
         has_workspace:
-            topic_context !== undefined &&
-            typeof topic_context.workdir === "string" &&
-            topic_context.workdir.trim() !== "",
+            topic_context === undefined
+                ? undefined
+                : typeof topic_context.workdir === "string" && topic_context.workdir.trim() !== "",
     });
     if (stream === undefined || topic === undefined || topic_context === undefined) {
         return;
@@ -1219,6 +1219,11 @@ function render_topic_header_controls(options: {
         $work_control.find(".pear-commitline-sha").text(topic_context.panel_commit_sha);
         $work_control.find(".pear-commitline-subject").text(topic_context.panel_commit_subject);
         $work_control.find(".pear-commitline-meta").text(topic_context.panel_commit_meta);
+
+        // A freshly injected cluster carries the template's hidden,
+        // unselected tab strip; reapply the strip state in the same
+        // pass or it blinks until the next panel render.
+        pear_workspace_view.refresh_tab_strips();
     });
 }
 

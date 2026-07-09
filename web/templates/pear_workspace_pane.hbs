@@ -1,10 +1,6 @@
+{{! The topic bar (#pear-topic-bar) lives above this pane as page
+    chrome shared with the chat; the pane is only content. }}
 <div class="pear-workspace-pane-inner">
-    {{! Replaced at mount by a live clone of the topic's recipient
-        bar — the identical component chat shows. This row is only
-        the fallback when no source bar exists yet. }}
-    <div class="pear-workspace-pane-header">
-        <span class="pear-workspace-pane-crumb">{{context_label}}</span>
-    </div>
     <div class="pear-workspace-pane-body pear-canvas-body pear-body-hidden" tabindex="-1"></div>
     <div class="pear-workspace-pane-body pear-files-body pear-body-hidden"></div>
     <span class="pear-canvas-status"></span>

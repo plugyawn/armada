@@ -1024,26 +1024,6 @@ def pear_transcript_tool_group_block(
     )
 
 
-def pear_transcript_plan_lines(event: PearWorkerTranscriptEvent) -> list[str]:
-    metadata = event.get("metadata")
-    if not isinstance(metadata, dict):
-        return []
-    steps = metadata.get("steps")
-    if not isinstance(steps, list):
-        return []
-    lines = ["Plan:"]
-    for step in steps[:8]:
-        if not isinstance(step, dict):
-            continue
-        text = str(step.get("step", "")).strip()
-        if not text:
-            continue
-        status = str(step.get("status", "pending"))
-        suffix = " _(in progress)_" if status == "in_progress" else ""
-        lines.append(f"- {pear_transcript_checkbox(status)} {text}{suffix}")
-    return lines
-
-
 def pear_transcript_event_from_tool_result(
     result: PearWorkerToolResult,
 ) -> PearWorkerTranscriptEvent:
@@ -1144,7 +1124,11 @@ def pear_visible_transcript_event_block(
             return ""
         return pear_visible_assistant_text(body, limit=limit)
     if kind == "plan":
-        return "\n".join(pear_transcript_plan_lines(event))
+        # The plan is run-scoped process state, not prose: it renders
+        # in dedicated UI (the rail's plan card, from the run payload),
+        # never into the durable message record — matching how the
+        # codex TUI keeps its checklist out of the final answer.
+        return ""
     return pear_transcript_event_summary(event)
 
 

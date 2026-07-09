@@ -27,17 +27,6 @@
     font-display: swap;
 }
 
-/* Trial face (2026-07-09): Geist Pixel leads the pixel stack; Geist
-   Pixel stays underneath as the per-glyph fallback wherever Geist Pixel
-   lacks coverage. Owner-licensed; not OFL-vendored. */
-@font-face {
-    font-family: "Geist Pixel";
-    src: url("../fonts/pear/Geist Pixel-Regular.woff2") format("woff2");
-    font-weight: 400;
-    font-style: normal;
-    font-display: swap;
-}
-
 @font-face {
     font-family: "Geist Mono VF";
     src: url("../fonts/pear/GeistMonoVF.woff2") format("woff2");

@@ -1121,20 +1121,29 @@ function render_topic_header_controls(options: {
             $header.attr("data-topic-name") === topic
         );
     });
-    // The workspace pane clones the topic's recipient bar into its
-    // header; the clone matches these selectors, so it stays fresh
-    // through the same pass as the feed's own bars.
-    if ($headers.length === 0) {
+    // The workspace topic bar hosts the same cluster; it is filled
+    // and refreshed through this pass alongside the feed's bars.
+    const pane_slot = document.querySelector<HTMLElement>(
+        "#pear-topic-bar .pear-pane-header-cluster",
+    );
+    const cluster_hosts: HTMLElement[] = [...$headers];
+    if (pane_slot !== null) {
+        cluster_hosts.push(pane_slot);
+    }
+    if (cluster_hosts.length === 0) {
         return;
     }
 
     $(pear_topic_header_control_selector)
-        .filter((_index, element) => ![...$headers].some((header) => header.contains(element)))
+        .filter((_index, element) => !cluster_hosts.some((host) => host.contains(element)))
         .remove();
 
-    $headers.each((_index, header) => {
-        const $controls = $(header).find(".recipient_bar_controls").first();
-        if ($controls.length === 0) {
+    $(cluster_hosts).each((_index, header) => {
+        const is_pane_slot = header === pane_slot;
+        const $controls = is_pane_slot
+            ? $()
+            : $(header).find(".recipient_bar_controls").first();
+        if (!is_pane_slot && $controls.length === 0) {
             return;
         }
         let $status_cluster = $(header)
@@ -1154,7 +1163,11 @@ function render_topic_header_controls(options: {
             // tooltip updates below fill it in place so tippy instances
             // survive re-renders.
             $status_cluster = $(render_pear_topic_header_controls({control_key}));
-            $controls.before($status_cluster);
+            if (is_pane_slot) {
+                $(header).append($status_cluster);
+            } else {
+                $controls.before($status_cluster);
+            }
         }
         // Skip the label/tooltip updates below when nothing this cluster
         // displays has changed.  render() runs up to twice a second during an

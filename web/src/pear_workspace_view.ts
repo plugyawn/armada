@@ -125,12 +125,12 @@ function update_tab_strips(): void {
 // pane is hidden, and only a context change tears it down.
 let pane_shell_key: string | undefined;
 
-// The topic bar IS the chat's recipient bar, promoted to page
-// chrome: one sticky instance above both the feed and the workspace
-// pane, so nothing about it changes when tabs switch. Its content is
-// a live mirror of the feed's own bar (which the feed then renders
-// date-only underneath), and pear_panel's updater keeps the mirror's
-// cluster fresh through the same selectors it uses everywhere.
+// The topic bar heads Canvas/Files at the exact pinned position the
+// chat's recipient bar occupies, with the same shared cluster (pill,
+// commit line, tabs) pear_panel maintains everywhere. It is rendered
+// deterministically from context — an earlier live-DOM clone of the
+// feed's bar proved racy in real sessions (title row captured in a
+// degraded layout state).
 let topic_bar_signature = "";
 
 function $topic_bar(): JQuery {
@@ -150,21 +150,31 @@ function ensure_topic_bar(): JQuery {
     return $topic_bar();
 }
 
-function source_topic_header(): HTMLElement | undefined {
-    if (current_stream === undefined || current_topic === undefined) {
-        return undefined;
+function build_topic_bar_card(): HTMLElement {
+    const stream = current_stream ?? "";
+    const topic = current_topic ?? "";
+    const color = stream_data.get_sub(stream)?.color ?? "";
+    const card = document.createElement("div");
+    card.className = "pear-topic-bar-card";
+    const hash = document.createElement("span");
+    hash.className = "pear-topic-bar-hash";
+    hash.textContent = "#";
+    if (color !== "") {
+        hash.style.color = color;
     }
-    const stream_id = stream_data.get_stream_id(current_stream);
-    return [
-        ...document.querySelectorAll<HTMLElement>(
-            "#message_feed_container .message_header_stream",
-        ),
-    ].find(
-        (element) =>
-            element.getAttribute("data-topic-name") === current_topic &&
-            (stream_id === undefined ||
-                Number.parseInt(element.getAttribute("data-stream-id") ?? "", 10) === stream_id),
-    );
+    const stream_label = document.createElement("span");
+    stream_label.className = "pear-topic-bar-stream";
+    stream_label.textContent = stream;
+    const sep = document.createElement("span");
+    sep.className = "pear-topic-bar-sep";
+    sep.textContent = "\u203A";
+    const topic_label = document.createElement("span");
+    topic_label.className = "pear-topic-bar-topic";
+    topic_label.textContent = topic;
+    const cluster_slot = document.createElement("span");
+    cluster_slot.className = "pear-pane-header-cluster";
+    card.append(hash, stream_label, sep, topic_label, cluster_slot);
+    return card;
 }
 
 function set_topic_bar_height(height: number): void {
@@ -194,26 +204,13 @@ function sync_topic_bar(): void {
         set_topic_bar_height(0);
         return;
     }
-    const source = source_topic_header();
-    if (source === undefined) {
-        // Nothing to mirror yet (feed still rendering); keep the
-        // last bar rather than flashing empty.
-        if ($bar.children().length === 0) {
-            $bar.attr("hidden", "hidden");
-            set_topic_bar_height(0);
-        }
-        return;
-    }
-    const signature = `${current_context_key}|${source.textContent ?? ""}`;
-    if (signature !== topic_bar_signature || $bar.children().length === 0) {
-        topic_bar_signature = signature;
-        const clone = source.cloneNode(true);
-        if (clone instanceof HTMLElement) {
-            $bar.empty();
-            $bar[0]?.append(clone);
-            // The freshly mirrored cluster needs its labels filled.
-            document.dispatchEvent(new CustomEvent("pear:pane-shell-rendered"));
-        }
+    if (topic_bar_signature !== current_context_key || $bar.children().length === 0) {
+        topic_bar_signature = current_context_key;
+        $bar.empty();
+        $bar[0]?.append(build_topic_bar_card());
+        // pear_panel fills the cluster (pill, commit line, tabs)
+        // through the same updater the feed's bars use.
+        document.dispatchEvent(new CustomEvent("pear:pane-shell-rendered"));
     }
     $bar.removeAttr("hidden");
     set_topic_bar_height($bar[0]?.offsetHeight ?? 0);

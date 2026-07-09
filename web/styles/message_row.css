@@ -95,14 +95,23 @@
                that pins prose to the body line-height. */
             &:not(.status-message) {
                 line-height: 1.8;
+                /* Symmetric air inside the tinted block: the stock
+                   rule pads only the top and leaves the bottom to the
+                   last paragraph's margin, which reads lopsided on a
+                   filled surface. */
+                padding-block: var(--pear-space-1);
             }
 
             > p {
                 margin-block: 0.2em 0.72em;
             }
 
+            > p:first-child {
+                margin-top: 0;
+            }
+
             > p:last-child {
-                margin-bottom: 0.2em;
+                margin-bottom: 0;
             }
 
             > p > code,

@@ -414,15 +414,17 @@
     min-width: 0;
     justify-content: flex-start;
     gap: var(--pear-space-1);
-    /* No box: the runtime phrase sits in the bar at the header's own
-       text size, in the pixel voice; the chevron plus a whisper of
-       shading are the whole affordance. */
+    /* No box: the runtime phrase sits in the bar in the pixel voice;
+       the chevron plus a whisper of shading are the whole affordance.
+       The pixel face runs optically large (tall x-height, square
+       glyphs), so it sits a step below the title's size while still
+       tracking the bar. */
     padding: var(--pear-space-1) var(--pear-space-2);
     border-radius: var(--pear-radius-chip);
     background: color-mix(in srgb, currentcolor 6%, transparent);
     color: var(--pear-ink-2);
     font-family: var(--pear-font-pixel);
-    font-size: 1em;
+    font-size: 0.875em;
     font-weight: 400;
 
     &:hover,

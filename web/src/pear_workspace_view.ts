@@ -169,6 +169,12 @@ function pin_clamped_feed(): void {
     feed.scrollTop += bar.getBoundingClientRect().top - feed.getBoundingClientRect().top;
 }
 
+// sync_topic_bar runs on every panel render (~1/s). Measuring and
+// pinning force layout, which reads as typing jank in the editor —
+// so the expensive half runs only when the clamp state changes or on
+// a slow heartbeat that catches feed growth.
+let topic_bar_heartbeat = 0;
+
 function sync_topic_bar(): void {
     const $feed = $("#message_feed_container");
     if ($feed.length === 0) {
@@ -179,10 +185,18 @@ function sync_topic_bar(): void {
         pane_is_open() &&
         current_stream !== undefined &&
         current_topic !== undefined;
+    const was_active = $feed.hasClass("pear-feed-clamped");
     $feed_column().toggleClass("pear-topic-bar-active", active);
     $feed.toggleClass("pear-feed-clamped", active);
     if (!active) {
-        $feed_column()[0]?.style.removeProperty("--pear-topic-bar-height");
+        if (was_active) {
+            $feed_column()[0]?.style.removeProperty("--pear-topic-bar-height");
+        }
+        topic_bar_heartbeat = 0;
+        return;
+    }
+    topic_bar_heartbeat += 1;
+    if (was_active && topic_bar_heartbeat % 8 !== 1) {
         return;
     }
     const height = measure_topic_bar_height();

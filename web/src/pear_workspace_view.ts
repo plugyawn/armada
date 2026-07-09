@@ -458,6 +458,7 @@ function dispatch_queued_asks(): void {
             success() {
                 set_canvas_status($t({defaultMessage: "pear is on it"}));
                 pear_canvas_editor.refresh_decorations();
+                ensure_pending_ask_poll();
             },
             error(xhr) {
                 pending_asks.delete(ask_key(ask));
@@ -483,6 +484,33 @@ function prune_pending_asks(): void {
             pending_asks.delete(key);
         }
     }
+}
+
+// Ask runs answer by editing the file, without any topic message —
+// so nothing event-driven announces their settle. While asks are
+// pending and the canvas is open, poll the file; the reload prunes
+// resolved asks, which ends the poll.
+let ask_poll_timer: ReturnType<typeof setInterval> | undefined;
+
+function context_has_pending_asks(): boolean {
+    const prefix = `${canvas_context?.key ?? current_context_key}|`;
+    return [...pending_asks.keys()].some((key) => key.startsWith(prefix));
+}
+
+function ensure_pending_ask_poll(): void {
+    if (ask_poll_timer !== undefined) {
+        return;
+    }
+    ask_poll_timer = setInterval(() => {
+        if (current_tab !== "canvas" || !context_has_pending_asks()) {
+            if (ask_poll_timer !== undefined) {
+                clearInterval(ask_poll_timer);
+                ask_poll_timer = undefined;
+            }
+            return;
+        }
+        reload_canvas_content();
+    }, 8000);
 }
 
 // The editor's decoration plugin asks which spans should shimmer.
@@ -778,6 +806,9 @@ function load_canvas(): void {
             prune_pending_asks();
             last_saved_content = content;
             canvas_dirty = false;
+            if (context_has_pending_asks()) {
+                ensure_pending_ask_poll();
+            }
             const body = $pane().find(".pear-canvas-body")[0];
             if (!(body instanceof HTMLElement)) {
                 return;

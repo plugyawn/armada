@@ -1904,6 +1904,10 @@
     color: var(--pear-ink-1);
 }
 
+.pear-workspace-tab:focus:not(:focus-visible) {
+    outline: none;
+}
+
 /* The topic bar: the chat's recipient bar promoted to page chrome.
    One sticky instance above both the feed and the workspace pane; it
    never re-renders or moves on tab switch. The feed's own per-day
@@ -1911,7 +1915,6 @@
    exactly one topic header. */
 #pear-topic-bar {
     position: sticky;
-    /* Above the feed's own sticky headers (z-index 4). */
     z-index: 5;
     top: var(--navbar-fixed-height);
     margin-top: calc(var(--navbar-fixed-height) + var(--header-padding-bottom));
@@ -1923,42 +1926,6 @@
 
     > .message_header_stream {
         width: 100%;
-    }
-}
-
-/* With the promoted bar carrying the topic identity, the feed's own
-   recipient bars become quiet date rules. */
-.pear-topic-bar-active #message_feed_container {
-    padding-top: var(--pear-space-2);
-
-    & .message_header_stream {
-        /* The promoted bar owns the pinned position; date rules flow
-           with their groups instead of stacking beneath it. */
-        position: static;
-        box-shadow: none;
-
-        & .message-header-contents {
-            height: auto;
-            justify-content: flex-end;
-            padding: 2px 0;
-            border: 0;
-            background: transparent;
-
-            > *:not(.recipient_bar_controls) {
-                display: none;
-            }
-
-            & .recipient_bar_controls > *:not(.recipient_row_date) {
-                display: none;
-            }
-
-            & .recipient_row_date {
-                color: var(--pear-ink-3);
-                font-family: var(--pear-font-pixel);
-                /* stylelint-disable-next-line declaration-property-unit-disallowed-list */
-                font-size: 11px;
-            }
-        }
     }
 }
 

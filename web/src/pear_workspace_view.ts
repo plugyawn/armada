@@ -161,7 +161,15 @@ function sync_topic_bar(): void {
     if ($bar.length === 0) {
         return;
     }
-    const active = has_workspace && current_stream !== undefined && current_topic !== undefined;
+    // The bar substitutes for the feed's own sticky header only
+    // while the pane covers the feed; in chat, Zulip's native bar
+    // (identical content, identical pinned position) owns the page,
+    // keeping scroll anchoring untouched.
+    const active =
+        has_workspace &&
+        pane_is_open() &&
+        current_stream !== undefined &&
+        current_topic !== undefined;
     $(".column-middle-inner").toggleClass("pear-topic-bar-active", active);
     if (!active) {
         $bar.attr("hidden", "hidden").empty();
@@ -269,6 +277,7 @@ export function set_tab(tab: PearWorkspaceTab): void {
     } else {
         show_pane();
     }
+    sync_topic_bar();
 }
 
 // Called from pear_panel on every header render; cheap and idempotent.

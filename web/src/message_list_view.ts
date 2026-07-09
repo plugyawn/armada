@@ -318,11 +318,11 @@ function pear_thinking_markers($scope: JQuery<HTMLElement | Document> = $(docume
     wrap_bare_pear_thinking_glyphs($scope);
     const selectors = [
         ".pear-liveness-active .pear-thinking-glyph",
-        ".message_row.pear-active-message .message_content > p:last-child > .pear-thinking-glyph, .message_row.pear-active-message .spoiler-header .pear-thinking-glyph, .message_row.pear-active-message .spoiler-content li > .pear-thinking-glyph",
+        ".message_row.pear-active-message .message_content > p:last-of-type > .pear-thinking-glyph, .message_row.pear-active-message .spoiler-header .pear-thinking-glyph, .message_row.pear-active-message .spoiler-content li > .pear-thinking-glyph",
     ];
     if ($scope.hasClass("pear-active-message")) {
         selectors.push(
-            ".message_content > p:last-child > .pear-thinking-glyph, .spoiler-header .pear-thinking-glyph, .spoiler-content li > .pear-thinking-glyph",
+            ".message_content > p:last-of-type > .pear-thinking-glyph, .spoiler-header .pear-thinking-glyph, .spoiler-content li > .pear-thinking-glyph",
         );
     }
     if ($scope.hasClass("pear-liveness-active")) {
@@ -333,11 +333,13 @@ function pear_thinking_markers($scope: JQuery<HTMLElement | Document> = $(docume
 
 function pear_thinking_glyph_containers($scope: JQuery<HTMLElement | Document>): JQuery {
     let $containers = $scope.find(
-        ".message_row.pear-active-message .message_content > p:last-child, .message_row.pear-active-message .spoiler-header p, .message_row.pear-active-message .spoiler-content li",
+        ".message_row.pear-active-message .message_content > p:last-of-type, .message_row.pear-active-message .spoiler-header p, .message_row.pear-active-message .spoiler-content li",
     );
     if ($scope.hasClass("pear-active-message")) {
         $containers = $containers.add(
-            $scope.find(".message_content > p:last-child, .spoiler-header p, .spoiler-content li"),
+            $scope.find(
+                ".message_content > p:last-of-type, .spoiler-header p, .spoiler-content li",
+            ),
         );
     }
     return $containers;
@@ -345,10 +347,10 @@ function pear_thinking_glyph_containers($scope: JQuery<HTMLElement | Document>):
 
 function pear_active_progress_glyph_containers($scope: JQuery<HTMLElement | Document>): JQuery {
     let $containers = $scope.find(
-        ".message_row.pear-active-message .message_content > p:last-child",
+        ".message_row.pear-active-message .message_content > p:last-of-type",
     );
     if ($scope.hasClass("pear-active-message")) {
-        $containers = $containers.add($scope.find(".message_content > p:last-child"));
+        $containers = $containers.add($scope.find(".message_content > p:last-of-type"));
     }
     return $containers;
 }
@@ -878,6 +880,39 @@ function pear_run_footer_line(footer: {
     return {text: parts.join(" · "), glyph, failed};
 }
 
+let pear_run_elapsed_timer: ReturnType<typeof setInterval> | undefined;
+
+function update_pear_run_elapsed_labels(): void {
+    if (typeof document === "undefined" || typeof document.querySelectorAll !== "function") {
+        return;
+    }
+    const labels = document.querySelectorAll(".pear-run-elapsed");
+    if (labels.length === 0 && pear_run_elapsed_timer !== undefined) {
+        clearInterval(pear_run_elapsed_timer);
+        pear_run_elapsed_timer = undefined;
+        return;
+    }
+    const now_seconds = Date.now() / 1000;
+    for (const label of labels) {
+        const started_attr = label.getAttribute("data-pear-run-started");
+        if (started_attr === null) {
+            continue;
+        }
+        const elapsed_seconds = Math.max(0, now_seconds - Number.parseFloat(started_attr));
+        label.textContent = $t(
+            {defaultMessage: "run {duration}"},
+            {duration: pear_run_footer_duration_label(elapsed_seconds)},
+        );
+    }
+}
+
+function ensure_pear_run_elapsed_timer(): void {
+    if (pear_run_elapsed_timer !== undefined || typeof setInterval !== "function") {
+        return;
+    }
+    pear_run_elapsed_timer = setInterval(update_pear_run_elapsed_labels, 1000);
+}
+
 function maybe_render_pear_run_footer($row: JQuery): void {
     // A completed run closes its result message with one quiet meta
     // line (design §8.3): `run 33s · 3 tools · 13.5k tokens · ✓`.
@@ -909,11 +944,19 @@ function maybe_render_pear_run_footer($row: JQuery): void {
         const ticker = document.createElementNS("http://www.w3.org/1999/xhtml", "div");
         ticker.setAttribute("class", "pear-run-footer pear-run-footer-ticker");
         ticker.setAttribute("aria-hidden", "true");
-        const bar = document.createElementNS("http://www.w3.org/1999/xhtml", "span");
+        const spinner = document.createElementNS("http://www.w3.org/1999/xhtml", "span");
         // The frames live in a CSS content animation on ::after.
-        bar.setAttribute("class", "pear-run-ticker-bar");
-        ticker.append(bar);
+        spinner.setAttribute("class", "pear-braille-spinner");
+        const elapsed = document.createElementNS("http://www.w3.org/1999/xhtml", "span");
+        elapsed.setAttribute("class", "pear-run-elapsed");
+        const started_at = pear_run_state.get_active_run_started_at(message_id);
+        if (started_at !== undefined) {
+            elapsed.setAttribute("data-pear-run-started", `${started_at}`);
+        }
+        ticker.append(spinner, elapsed);
         content.append(ticker);
+        update_pear_run_elapsed_labels();
+        ensure_pear_run_elapsed_timer();
         return;
     }
     const footer = pear_run_state.get_run_footer(message_id);

@@ -56,16 +56,16 @@ function test(label, f) {
         sender_is_bot = () => false;
         channel_get_handler = () => undefined;
         $("document-stub").set_find_results(
-            ".message_row.pear-active-message .message_content > p:last-child > .pear-thinking-glyph, .message_row.pear-active-message .spoiler-header .pear-thinking-glyph, .message_row.pear-active-message .spoiler-content li > .pear-thinking-glyph",
+            ".message_row.pear-active-message .message_content > p:last-of-type > .pear-thinking-glyph, .message_row.pear-active-message .spoiler-header .pear-thinking-glyph, .message_row.pear-active-message .spoiler-content li > .pear-thinking-glyph",
             [],
         );
         $("document-stub").set_find_results(".pear-liveness-active .pear-thinking-glyph", []);
         $("document-stub").set_find_results(
-            ".pear-liveness-active .pear-thinking-glyph, .message_row.pear-active-message .message_content > p:last-child > .pear-thinking-glyph, .message_row.pear-active-message .spoiler-header .pear-thinking-glyph, .message_row.pear-active-message .spoiler-content li > .pear-thinking-glyph",
+            ".pear-liveness-active .pear-thinking-glyph, .message_row.pear-active-message .message_content > p:last-of-type > .pear-thinking-glyph, .message_row.pear-active-message .spoiler-header .pear-thinking-glyph, .message_row.pear-active-message .spoiler-content li > .pear-thinking-glyph",
             [],
         );
         $("document-stub").set_find_results(
-            ".message_row.pear-active-message .message_content > p:last-child, .message_row.pear-active-message .spoiler-header p, .message_row.pear-active-message .spoiler-content li",
+            ".message_row.pear-active-message .message_content > p:last-of-type, .message_row.pear-active-message .spoiler-header p, .message_row.pear-active-message .spoiler-content li",
             [],
         );
         pear_run_state.clear_for_testing();

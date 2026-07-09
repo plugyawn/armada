@@ -2,6 +2,7 @@ type PearRunForActiveMessage = {
     status: string;
     result_message_id?: number | null | undefined;
     tool_count?: number | undefined;
+    date_created?: number | undefined;
     usage?:
         | {
               total_tokens?: number | undefined;
@@ -34,6 +35,8 @@ const active_run_topic_listeners = new Set<() => void>();
 // Cumulative across topic switches — footers are historical facts, so
 // they never expire with the active-set TTL.
 const settled_run_footers = new Map<number, PearRunFooter>();
+// Active runs' start times (seconds), for the live elapsed counter.
+const active_run_started_at = new Map<number, number>();
 const active_result_message_change_listeners = new Set<
     (change: PearActiveResultMessageChange) => void
 >();
@@ -144,7 +147,11 @@ export function set_active_run_result_messages(
         }
         if (is_active_status(run.status)) {
             next_active_result_message_ids.add(result_message_id);
+            if (typeof run.date_created === "number") {
+                active_run_started_at.set(result_message_id, run.date_created);
+            }
         } else if (is_settled_status(run.status)) {
+            active_run_started_at.delete(result_message_id);
             const footer = footer_from_run(run);
             if (!footers_equal(settled_run_footers.get(result_message_id), footer)) {
                 settled_run_footers.set(result_message_id, footer);
@@ -223,6 +230,13 @@ export function on_active_run_topic_changed(listener: () => void): () => void {
     return () => active_run_topic_listeners.delete(listener);
 }
 
+export function get_active_run_started_at(message_id: number | undefined): number | undefined {
+    if (message_id === undefined) {
+        return undefined;
+    }
+    return active_run_started_at.get(message_id);
+}
+
 export function get_run_footer(message_id: number | undefined): PearRunFooter | undefined {
     if (message_id === undefined) {
         return undefined;
@@ -240,6 +254,7 @@ export function on_active_run_result_messages_changed(
 export function clear_for_testing(): void {
     active_result_message_ids.clear();
     settled_run_footers.clear();
+    active_run_started_at.clear();
     active_run_stream = undefined;
     active_run_topic = undefined;
     active_result_message_ids_refreshed_at = 0;

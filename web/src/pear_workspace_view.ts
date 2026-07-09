@@ -498,6 +498,10 @@ function show_aside_popover(chip: HTMLElement): void {
         const $content = $("<div>").addClass("pear-aside-popover rendered_markdown").html(html);
         rendered_markdown.update_elements($content);
         chip.setAttribute("data-pear-aside-open", "true");
+        // trigger: "manual" never auto-hides, so dismissal is ours:
+        // any press outside the popover closes it (live report — an
+        // undismissable popover walls off the canvas).
+        let dismiss: ((event: MouseEvent) => void) | undefined;
         const instance = tippy.default(chip, {
             content: $content[0]!,
             trigger: "manual",
@@ -508,9 +512,23 @@ function show_aside_popover(chip: HTMLElement): void {
             theme: "pear-aside",
             onHidden(inst) {
                 chip.removeAttribute("data-pear-aside-open");
+                if (dismiss !== undefined) {
+                    document.removeEventListener("mousedown", dismiss, {capture: true});
+                }
                 inst.destroy();
             },
         });
+        dismiss = (event: MouseEvent): void => {
+            const target = event.target;
+            if (
+                target instanceof Node &&
+                (instance.popper.contains(target) || chip.contains(target))
+            ) {
+                return;
+            }
+            instance.hide();
+        };
+        document.addEventListener("mousedown", dismiss, {capture: true});
         instance.show();
     };
     const cache_key = `${aside_id}:${block_cache_key(source)}`;

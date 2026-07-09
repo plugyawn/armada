@@ -975,6 +975,20 @@ function maybe_render_pear_run_footer($row: JQuery): void {
             existing instanceof HTMLElement &&
             existing.classList.contains("pear-run-footer-ticker")
         ) {
+            // The ticker often appears before the runs store knows the
+            // start time (the active class can come from the content
+            // marker); backfill the timestamp when it arrives.
+            const label = existing.querySelector(".pear-run-elapsed");
+            const started_at = pear_run_state.get_active_run_started_at(message_id);
+            if (
+                label instanceof HTMLElement &&
+                !label.hasAttribute("data-pear-run-started") &&
+                started_at !== undefined
+            ) {
+                label.setAttribute("data-pear-run-started", `${started_at}`);
+                update_pear_run_elapsed_labels();
+                ensure_pear_run_elapsed_timer();
+            }
             return;
         }
         existing?.remove();

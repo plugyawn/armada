@@ -686,12 +686,19 @@ def pear_usage_from_event_payload(payload: object) -> PearTokenUsage | None:
 
 
 def serialize_pear_worker_run_usage(run: PearWorkerRun) -> dict[str, object] | None:
-    event = (
-        run.events.filter(Q(event_type="usage") | Q(event_type="transcript"))
-        .order_by("-date_created", "-id")
-        .first()
-    )
-    usage = pear_usage_from_event_payload(event.payload) if event is not None else None
+    # The newest usage-bearing event wins, but the run's final events
+    # are usually usage-less transcript markers ("Codex turn
+    # completed."), so scan back a bounded window instead of trusting
+    # the single latest event.
+    usage: PearTokenUsage | None = None
+    event = None
+    for candidate in run.events.filter(
+        Q(event_type="usage") | Q(event_type="transcript")
+    ).order_by("-date_created", "-id")[:20]:
+        usage = pear_usage_from_event_payload(candidate.payload)
+        if usage is not None:
+            event = candidate
+            break
     if usage is None:
         return None
     duration_seconds = None

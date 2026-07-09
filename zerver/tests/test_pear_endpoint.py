@@ -458,6 +458,21 @@ class PearSessionEndpointTest(ZulipTestCase):
         # No tool_results events yet.
         self.assertEqual(serialized_run["tool_count"], 0)
 
+        # The run's final events are usage-less transcript markers;
+        # the serializer must scan back to the usage-bearing event
+        # rather than trust the single latest one (a live regression:
+        # every run reported usage=None once "turn completed" landed).
+        PearWorkerRunEvent.objects.create(
+            run=run,
+            event_type="transcript",
+            summary="Codex turn completed.",
+            payload={"kind": "status", "title": "Codex turn completed.", "status": "done"},
+        )
+        usage_after_completion = serialize_pear_worker_run(run)["usage"]
+        self.assertIsNotNone(usage_after_completion)
+        assert usage_after_completion is not None
+        self.assertEqual(usage_after_completion["total_tokens"], 106)
+
         # The run footer sums tool_count across the per-segment
         # tool_results events; malformed payloads are skipped.
         PearWorkerRunEvent.objects.create(

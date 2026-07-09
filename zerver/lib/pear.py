@@ -1956,6 +1956,33 @@ PEAR_MATH_DISPLAY_PATTERN = re.compile(r"\\\[\s*(.*?)\s*\\\]", re.DOTALL)
 PEAR_MATH_INLINE_PATTERN = re.compile(r"\\\((.*?)\\\)", re.DOTALL)
 
 
+PEAR_TASK_MARKER_PATTERN = re.compile(
+    r"^(\s*(?:[-*+]|\d+[.)])\s+)\[([ xX])\]\s?", flags=re.MULTILINE
+)
+
+
+def normalize_pear_task_markers(content: str) -> str:
+    """Rewrite markdown task-list markers into glyphs Zulip renders.
+
+    Zulip has no task-list markdown (its checklists are the /todo
+    widget), so "- [ ] step" arrives as literal brackets. Swap the
+    markers for ballot-box glyphs, leaving fenced code untouched.
+    """
+    if "[ ]" not in content and "[x]" not in content and "[X]" not in content:
+        return content
+    parts = PEAR_MATH_CODE_SEGMENT_PATTERN.split(content)
+    for index, part in enumerate(parts):
+        if index % 2 == 1:
+            continue
+
+        def replace_marker(match: re.Match[str]) -> str:
+            glyph = "\u2610" if match.group(2) == " " else "\u2611"
+            return f"{match.group(1)}{glyph} "
+
+        parts[index] = PEAR_TASK_MARKER_PATTERN.sub(replace_marker, part)
+    return "".join(parts)
+
+
 def normalize_pear_math_delimiters(content: str) -> str:
     """Rewrite LaTeX \\[ \\] / \\( \\) math into Zulip's dialect.
 
@@ -2002,7 +2029,7 @@ def update_pear_worker_status_message(
     try:
         update_payload: dict[str, object] = {
             "message_id": progress_message_id,
-            "content": normalize_pear_math_delimiters(content),
+            "content": normalize_pear_task_markers(normalize_pear_math_delimiters(content)),
         }
         if rendering_only:
             update_payload["rendering_only"] = True
@@ -3341,7 +3368,9 @@ class PearEmbeddedBotHandler:
                 status_markdown=PEAR_STEERING_QUEUED_MARKDOWN,
             )
             return
-        result = bot_handler.send_reply(message, normalize_pear_math_delimiters(response))
+        result = bot_handler.send_reply(
+            message, normalize_pear_task_markers(normalize_pear_math_delimiters(response))
+        )
         progress_message_id = None
         if isinstance(result, dict) and isinstance(result.get("id"), int):
             progress_message_id = result["id"]
@@ -3945,11 +3974,17 @@ class PearWorkerTurn:
                 result = None
                 if not result_updated:
                     result = self.bot_handler.send_reply(
-                        self.message, normalize_pear_math_delimiters(content_to_post)
+                        self.message,
+                        normalize_pear_task_markers(
+                            normalize_pear_math_delimiters(content_to_post)
+                        ),
                     )
                 for continuation_content in content_chunks[1:]:
                     self.bot_handler.send_reply(
-                        self.message, normalize_pear_math_delimiters(continuation_content)
+                        self.message,
+                        normalize_pear_task_markers(
+                            normalize_pear_math_delimiters(continuation_content)
+                        ),
                     )
                 write_pear_live_run_state(
                     self.message_id,
@@ -3987,7 +4022,10 @@ class PearWorkerTurn:
                 if result_updated:
                     for continuation_content in content_chunks[1:]:
                         self.bot_handler.send_reply(
-                        self.message, normalize_pear_math_delimiters(continuation_content)
+                        self.message,
+                        normalize_pear_task_markers(
+                            normalize_pear_math_delimiters(continuation_content)
+                        ),
                     )
                 write_pear_live_run_state(
                     self.message_id,

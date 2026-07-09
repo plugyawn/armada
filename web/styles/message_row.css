@@ -117,7 +117,7 @@
             > p > code,
             li > code {
                 padding: 0.05em 0.28em;
-                border-radius: var(--pear-radius-small);
+                border-radius: var(--pear-radius-chip);
                 background: color-mix(
                     in srgb,
                     var(--color-background-pear-message-content) 76%,
@@ -136,7 +136,7 @@
                 padding: 0.04em 0.28em;
                 overflow: hidden;
                 border: 1px solid transparent;
-                border-radius: var(--pear-radius-small);
+                border-radius: var(--pear-radius-chip);
                 background: transparent;
                 color: var(--color-text-message-default);
                 cursor: pointer;
@@ -172,7 +172,7 @@
                 flex: none;
                 width: 1.15em;
                 color: var(--color-text-item);
-                font-family: var(--pear-monospace-font-family);
+                font-family: var(--pear-font-mono);
                 font-size: 0.95em;
                 font-style: normal;
                 line-height: 1;
@@ -182,7 +182,7 @@
             .pear-artifact-ref-label {
                 flex: none;
                 color: var(--color-text-item);
-                font-family: var(--pear-monospace-font-family);
+                font-family: var(--pear-font-mono);
                 font-size: 0.76em;
                 font-weight: 600;
                 letter-spacing: 0;
@@ -240,7 +240,7 @@
                         var(--color-message-content-container-border) 78%,
                         transparent
                     );
-                border-radius: var(--pear-radius);
+                border-radius: var(--pear-radius-chip);
                 background: color-mix(
                     in srgb,
                     var(--color-background-pear-message-content) 94%,
@@ -263,7 +263,7 @@
                     var(--color-text-message-default) 18%
                 );
                 color: var(--color-text-message-default);
-                font-family: var(--pear-monospace-font-family);
+                font-family: var(--pear-font-mono);
                 font-weight: 600;
             }
 
@@ -393,7 +393,7 @@
                         var(--color-message-content-container-border) 66%,
                         transparent
                     );
-                border-radius: var(--pear-radius) var(--pear-radius) 0 0;
+                border-radius: var(--pear-radius-px) var(--pear-radius-px) 0 0;
                 padding: 5px 10px;
                 background: color-mix(
                     in srgb,
@@ -410,7 +410,7 @@
                         var(--color-message-content-container-border) 54%,
                         transparent
                     );
-                border-radius: var(--pear-radius);
+                border-radius: var(--pear-radius-px);
                 background: color-mix(
                     in srgb,
                     var(--color-background-pear-message-content) 94%,
@@ -518,7 +518,7 @@
                     overflow: hidden;
                     text-overflow: ellipsis;
                     white-space: nowrap;
-                    font-family: var(--pear-monospace-font-family);
+                    font-family: var(--pear-font-mono);
                     /* 11.5px at the default 14px base font size. */
                     font-size: calc(11.5 / 14 * var(--base-font-size-px));
                     line-height: 1.25;
@@ -530,7 +530,7 @@
                     flex: none;
                     align-items: center;
                     justify-content: center;
-                    border-radius: var(--pear-radius-small);
+                    border-radius: var(--pear-radius-chip);
                     color: var(--color-text-item);
                     /* 11px at the default 14px base font size. */
                     font-size: calc(11 / 14 * var(--base-font-size-px));
@@ -600,7 +600,7 @@
                 text-align: center;
                 vertical-align: -0.02em;
                 white-space: nowrap;
-                font-family: var(--pear-monospace-font-family);
+                font-family: var(--pear-font-mono);
             }
         }
     }

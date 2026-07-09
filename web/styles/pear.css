@@ -22,7 +22,7 @@
     max-height: var(--pear-workbench-popover-max-height);
     overflow: hidden;
     border: 1px solid var(--color-border-popover-menu);
-    border-radius: var(--pear-radius);
+    border-radius: var(--pear-radius-card);
     background: var(--color-background-popover-menu);
     box-shadow: var(--box-shadow-popover-menu);
     color: var(--color-text-default);
@@ -139,7 +139,7 @@
     align-items: center;
     gap: 2px;
     grid-template-columns: minmax(0, 1fr) auto;
-    border-radius: var(--pear-radius-small);
+    border-radius: var(--pear-radius-chip);
 }
 
 .pear-topic-control-title {
@@ -172,7 +172,7 @@
     width: 100%;
     min-width: 0;
     border: 0;
-    border-radius: var(--pear-radius-small);
+    border-radius: var(--pear-radius-chip);
     background: transparent;
     color: var(--color-text-sidebar-row);
     cursor: pointer;
@@ -601,13 +601,14 @@
     border-bottom: 1px solid transparent;
     border-radius: 0;
     background: transparent;
-    color: var(--color-text-sidebar-heading);
+    color: var(--pear-ink-3);
     cursor: pointer;
-    /* 12px at the default 14px base font size. */
-    font-size: calc(12 / 14 * var(--base-font-size-px));
-    font-weight: 600;
+    /* The workbench speaks pixel (design §1); pinned px by design. */
+    font-family: var(--pear-font-pixel);
+    /* stylelint-disable-next-line declaration-property-unit-disallowed-list */
+    font-size: 12px;
+    font-weight: 400;
     line-height: 15px;
-    opacity: var(--opacity-sidebar-heading);
     overflow: hidden;
     padding: 0 1px 2px;
     text-overflow: ellipsis;
@@ -615,16 +616,14 @@
 }
 
 .pear-workbench-tab:hover {
-    color: var(--color-text-default);
-    opacity: 1;
+    color: var(--pear-ink-1);
 }
 
 .pear-workbench-tab-selected {
     border-bottom-width: 2px;
     border-bottom-color: var(--pear-accent);
     background: transparent;
-    color: var(--color-text-default);
-    opacity: 1;
+    color: var(--pear-ink-1);
 }
 
 .pear-workbench-tab:disabled {
@@ -659,7 +658,7 @@
             var(--color-border-sidebar-subheader) 62%,
             transparent
         );
-    border-radius: var(--pear-radius-small);
+    border-radius: var(--pear-radius-chip);
     background: transparent;
 }
 
@@ -714,7 +713,7 @@
 }
 
 .pear-commit-row-head {
-    background: var(--pear-accent-subtle);
+    background: var(--pear-accent-fill);
     color: var(--color-text-default);
 }
 
@@ -730,7 +729,7 @@
     min-width: 0;
     overflow: hidden;
     border: 1px solid var(--color-border-sidebar-subheader);
-    border-radius: var(--pear-radius-small);
+    border-radius: var(--pear-radius-chip);
     color: var(--color-text-item);
     font-family: inherit;
     /* 11px at the default 14px base font size. */
@@ -767,7 +766,7 @@
 .pear-file-status,
 .pear-commit-hash,
 .pear-commit-ref {
-    font-family: var(--pear-monospace-font-family);
+    font-family: var(--pear-font-mono);
     /* 10px at the default 14px base font size. */
     font-size: calc(10 / 14 * var(--base-font-size-px));
 }
@@ -796,15 +795,15 @@
 .pear-file-path {
     order: 2;
     color: var(--color-text-default);
-    font-family: var(--pear-monospace-font-family);
+    font-family: var(--pear-font-mono);
     /* 11px at the default 14px base font size. */
     font-size: calc(11 / 14 * var(--base-font-size-px));
 }
 
 .pear-commit-hash {
-    font-family: var(--pear-monospace-font-family);
+    font-family: var(--pear-font-mono);
     border: 1px solid var(--color-border-sidebar-subheader);
-    border-radius: var(--pear-radius);
+    border-radius: var(--pear-radius-chip);
     color: var(--color-text-sidebar-heading);
     cursor: default;
     line-height: 13px;
@@ -813,7 +812,7 @@
 }
 
 .pear-commit-ref {
-    border-radius: var(--pear-radius);
+    border-radius: var(--pear-radius-chip);
     background: color-mix(
         in srgb,
         var(--color-text-success-text-action-button) 12%,
@@ -858,9 +857,9 @@
             var(--color-border-sidebar-subheader) 54%,
             transparent
         );
-    border-radius: var(--pear-radius-small);
+    border-radius: var(--pear-radius-chip);
     color: var(--color-text-item);
-    font-family: var(--pear-monospace-font-family);
+    font-family: var(--pear-font-mono);
     /* 10px at the default 14px base font size. */
     font-size: calc(10 / 14 * var(--base-font-size-px));
     line-height: 14px;
@@ -898,7 +897,7 @@
     min-width: 0;
     overflow: hidden;
     color: var(--color-text-sidebar-heading);
-    font-family: var(--pear-monospace-font-family);
+    font-family: var(--pear-font-mono);
     /* 10px at the default 14px base font size. */
     font-size: calc(10 / 14 * var(--base-font-size-px));
     line-height: 13px;
@@ -952,7 +951,7 @@
 
 .pear-workbench-canvas-source {
     margin: 0;
-    font-family: var(--pear-monospace-font-family);
+    font-family: var(--pear-font-mono);
     white-space: pre-wrap;
 }
 
@@ -1007,7 +1006,7 @@
             var(--color-text-danger-text-action-button) 34%,
             transparent
         );
-    border-radius: var(--pear-radius);
+    border-radius: var(--pear-radius-card);
     background: color-mix(
         in srgb,
         var(--color-text-danger-text-action-button) 7%,
@@ -1071,7 +1070,7 @@
     min-width: 128px;
     overflow: hidden;
     border: 1px solid var(--color-border-popover-menu);
-    border-radius: var(--pear-radius);
+    border-radius: var(--pear-radius-card);
     background: var(--color-background-popover-menu);
     box-shadow: var(--box-shadow-popover-menu);
 }
@@ -1118,7 +1117,7 @@
             var(--color-border-sidebar-subheader) 64%,
             transparent
         );
-    border-radius: var(--pear-radius-small);
+    border-radius: var(--pear-radius-chip);
     background: transparent;
     padding: 6px;
 }
@@ -1160,7 +1159,7 @@
     max-height: 8rem;
     resize: none;
     border: 0;
-    border-radius: var(--pear-radius);
+    border-radius: var(--pear-radius-card);
     background: transparent;
     color: var(--color-text-input);
     padding: 0;
@@ -1185,8 +1184,8 @@
     width: 26px;
     height: 26px;
     border: 1px solid color-mix(in srgb, var(--pear-accent) 34%, transparent);
-    border-radius: var(--pear-radius);
-    background: var(--pear-accent-subtle);
+    border-radius: var(--pear-radius-chip);
+    background: var(--pear-accent-fill);
     color: var(--color-text-success-text-action-button);
     cursor: pointer;
     font: inherit;
@@ -1282,7 +1281,7 @@
     justify-content: start;
     gap: 5px;
     border: 0;
-    border-radius: var(--pear-radius-small);
+    border-radius: var(--pear-radius-chip);
     background: transparent;
     color: var(--color-text-sidebar-row);
     cursor: pointer;
@@ -1462,7 +1461,7 @@
     min-width: var(--pear-runtime-menu-width);
     overflow: hidden;
     border: 1px solid var(--color-border-popover-menu);
-    border-radius: var(--pear-radius-small);
+    border-radius: var(--pear-radius-chip);
     background: var(--color-background-popover-menu);
     box-shadow: var(--box-shadow-popover-menu);
     color: var(--color-text-popover-menu);
@@ -1647,9 +1646,9 @@
 .pear-side-start,
 .pear-runtime-menu-choice {
     transition:
-        background-color var(--pear-transition-duration) ease,
-        border-color var(--pear-transition-duration) ease,
-        color var(--pear-transition-duration) ease;
+        background-color var(--pear-dur-1) var(--pear-ease),
+        border-color var(--pear-dur-1) var(--pear-ease),
+        color var(--pear-dur-1) var(--pear-ease);
 }
 
 /* The workspace rail card (design §8.3): the current topic's
@@ -1732,4 +1731,74 @@
 .pear-rail-head {
     flex: 0 0 auto;
     margin-left: auto;
+}
+
+/* The braille spinner (flavor register, B5): workbench loading
+   states tick through the classic frames in the pixel voice. */
+.pear-braille-spinner::after {
+    content: "⠋";
+    display: inline-block;
+    color: var(--pear-accent-ink);
+    font-family: var(--pear-font-pixel);
+    /* stylelint-disable plugin/no-low-performance-animation-properties --
+       discrete glyph frames, like the ✦ cycle */
+    animation: pear-braille-spin 0.9s steps(1, end) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .pear-braille-spinner::after {
+        animation: none;
+        content: "⠿";
+    }
+}
+
+@keyframes pear-braille-spin {
+    0% {
+        content: "⠋";
+    }
+
+    10% {
+        content: "⠙";
+    }
+
+    20% {
+        content: "⠹";
+    }
+
+    30% {
+        content: "⠸";
+    }
+
+    40% {
+        content: "⠼";
+    }
+
+    50% {
+        content: "⠴";
+    }
+
+    60% {
+        content: "⠦";
+    }
+
+    70% {
+        content: "⠧";
+    }
+
+    80% {
+        content: "⠇";
+    }
+
+    90% {
+        content: "⠏";
+    }
+}
+/* stylelint-enable plugin/no-low-performance-animation-properties */
+
+/* Steer-aware compose (design §8.3): while a run is live in the
+   composed-to topic, the console says so with a hairline accent
+   crown; the placeholder swap happens in compose code. */
+#compose.pear-steering #compose-content {
+    box-shadow: inset 0 2px 0 -1px
+        color-mix(in srgb, var(--pear-accent) 55%, transparent);
 }

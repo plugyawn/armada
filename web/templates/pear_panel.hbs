@@ -189,8 +189,8 @@
                         {{/if}}
                         {{#if topic_context.workbench_history_selected}}
                             {{#if topic_context.git_tree_loading}}
-                                <div class="pear-workbench-empty pear-liveness-active">
-                                    <span class="pear-ui-glyph pear-workbench-empty-glyph pear-thinking-glyph" aria-hidden="true">·</span>
+                                <div class="pear-workbench-empty">
+                                    <span class="pear-ui-glyph pear-workbench-empty-glyph pear-braille-spinner" aria-hidden="true"></span>
                                     <span>{{t "Loading Git history." }}</span>
                                 </div>
                             {{else if topic_context.git_tree_error}}
@@ -231,8 +231,8 @@
                         {{/if}}
                         {{#if topic_context.workbench_canvas_selected}}
                             {{#if topic_context.canvas_loading}}
-                                <div class="pear-workbench-empty pear-liveness-active">
-                                    <span class="pear-ui-glyph pear-workbench-empty-glyph pear-thinking-glyph" aria-hidden="true">·</span>
+                                <div class="pear-workbench-empty">
+                                    <span class="pear-ui-glyph pear-workbench-empty-glyph pear-braille-spinner" aria-hidden="true"></span>
                                     <span>{{t "Loading canvas." }}</span>
                                 </div>
                             {{else if topic_context.canvas_error}}
@@ -265,8 +265,8 @@
                                     {{/if}}
                                 </div>
                             {{else}}
-                                <div class="pear-workbench-empty pear-liveness-active">
-                                    <span class="pear-ui-glyph pear-workbench-empty-glyph pear-thinking-glyph" aria-hidden="true">·</span>
+                                <div class="pear-workbench-empty">
+                                    <span class="pear-ui-glyph pear-workbench-empty-glyph pear-braille-spinner" aria-hidden="true"></span>
                                     <span>{{t "Loading canvas." }}</span>
                                 </div>
                             {{/if}}
@@ -287,8 +287,8 @@
                 </div>
             </section>
         {{else}}
-            <div class="pear-empty-state pear-liveness-active">
-                <span class="pear-ui-glyph pear-empty-state-glyph pear-thinking-glyph" aria-hidden="true">·</span>
+            <div class="pear-empty-state">
+                <span class="pear-ui-glyph pear-empty-state-glyph pear-braille-spinner" aria-hidden="true"></span>
                 <span>{{t "Pear context is loading." }}</span>
             </div>
         {{/if}}

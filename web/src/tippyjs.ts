@@ -77,8 +77,9 @@ tippy.default.setDefaultProps({
     maxWidth: "21.4286em",
     delay: INSTANT_HOVER_DELAY,
     placement: "top",
-    // Disable animations to make the tooltips feel snappy.
-    animation: false,
+    // A minimal fade+settle (see pear_theme.css) — snappy, not abrupt.
+    animation: "pear",
+    duration: [120, 80],
     // Show tooltips on long press on touch based devices.
     touch: ["hold", 750],
     // Create the tooltip inside the parent element. This has the

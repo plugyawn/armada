@@ -24,6 +24,12 @@ export type PearRunFooter = {
 };
 
 const active_result_message_ids = new Set<number>();
+// The topic (if any) with a live run, for steer-aware surfaces like
+// the compose placeholder. Lowercased for comparison.
+let active_run_stream: string | undefined;
+let active_run_topic: string | undefined;
+const active_run_topic_listeners = new Set<() => void>();
+
 // Completed runs' stats, keyed by result message, for the run footer.
 // Cumulative across topic switches — footers are historical facts, so
 // they never expire with the active-set TTL.
@@ -187,6 +193,36 @@ export function is_active_run_result_message(message_id: number | undefined): bo
     return message_id !== undefined && active_result_message_ids.has(message_id);
 }
 
+export function set_active_run_topic(stream: string | undefined, topic: string | undefined): void {
+    const next_stream = stream?.toLowerCase();
+    const next_topic = topic?.toLowerCase();
+    if (next_stream === active_run_stream && next_topic === active_run_topic) {
+        return;
+    }
+    active_run_stream = next_stream;
+    active_run_topic = next_topic;
+    for (const listener of active_run_topic_listeners) {
+        listener();
+    }
+}
+
+export function topic_has_active_run(
+    stream: string | undefined,
+    topic: string | undefined,
+): boolean {
+    return (
+        stream !== undefined &&
+        topic !== undefined &&
+        active_run_stream === stream.toLowerCase() &&
+        active_run_topic === topic.toLowerCase()
+    );
+}
+
+export function on_active_run_topic_changed(listener: () => void): () => void {
+    active_run_topic_listeners.add(listener);
+    return () => active_run_topic_listeners.delete(listener);
+}
+
 export function get_run_footer(message_id: number | undefined): PearRunFooter | undefined {
     if (message_id === undefined) {
         return undefined;
@@ -204,6 +240,8 @@ export function on_active_run_result_messages_changed(
 export function clear_for_testing(): void {
     active_result_message_ids.clear();
     settled_run_footers.clear();
+    active_run_stream = undefined;
+    active_run_topic = undefined;
     active_result_message_ids_refreshed_at = 0;
     clear_active_result_message_expiry_timer();
     notify_active_result_message_change_listeners({removed_message_ids: []});

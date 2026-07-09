@@ -364,7 +364,7 @@
     margin: 0;
     padding: 0.15em 0.25em;
     border: 0;
-    border-radius: var(--pear-radius-small);
+    border-radius: var(--pear-radius-chip);
     background: transparent;
     color: color-mix(
         in srgb,
@@ -377,9 +377,9 @@
     line-height: 1;
     white-space: nowrap;
     transition:
-        background-color var(--pear-transition-duration) ease,
-        border-color var(--pear-transition-duration) ease,
-        color var(--pear-transition-duration) ease;
+        background-color var(--pear-dur-1) var(--pear-ease),
+        border-color var(--pear-dur-1) var(--pear-ease),
+        color var(--pear-dur-1) var(--pear-ease);
 
     &:hover,
     &:focus-visible {

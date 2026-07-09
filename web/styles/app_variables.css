@@ -859,8 +859,6 @@
     --pear-accent-ink: light-dark(var(--pear-a600), var(--pear-a300));
     --pear-accent-fill: hsl(141deg 48% 42% / 12%);
     --pear-accent-fill-strong: hsl(141deg 48% 42% / 20%);
-    /* Back-compat alias for Phase B consumers (retired in B5). */
-    --pear-accent-subtle: var(--pear-accent-fill);
 
     /* Semantic states — muted; never compete with the accent. */
     --pear-danger: light-dark(hsl(6deg 62% 38%), hsl(6deg 62% 68%));
@@ -882,12 +880,9 @@
        Hanken; code content is Geist Mono. Pixel sizes are pinned px by
        design — pixel faces go mushy at arbitrary scales. */
     --pear-font-ui: "Hanken Grotesk VF", "Source Sans 3 VF", sans-serif;
-    --pear-font-pixel:
-        "Geist Pixel", "Geist Mono VF", ui-monospace, monospace;
+    --pear-font-pixel: "Geist Pixel", "Geist Mono VF", ui-monospace, monospace;
     --pear-font-mono:
         "Geist Mono VF", ui-monospace, "SFMono-Regular", monospace;
-    /* Back-compat alias for Phase B consumers (retired in B5). */
-    --pear-monospace-font-family: var(--pear-font-mono);
 
     /* Spacing — 4px grid, the only spacing vocabulary on Pear surfaces. */
     --pear-space-1: 4px;
@@ -901,9 +896,6 @@
     --pear-radius-px: 2px;
     --pear-radius-chip: 4px;
     --pear-radius-card: 8px;
-    /* Back-compat aliases for Phase B consumers (retired per batch). */
-    --pear-radius: 6px;
-    --pear-radius-small: var(--pear-radius-chip);
     --pear-shadow-pop: light-dark(
         0 8px 24px hsl(160deg 20% 20% / 14%),
         0 8px 24px hsl(0deg 0% 0% / 32%)
@@ -914,8 +906,6 @@
     --pear-dur-1: 150ms;
     --pear-dur-2: 220ms;
     --pear-dur-3: 350ms;
-    /* Back-compat alias for Phase B consumers (retired in B5). */
-    --pear-transition-duration: 120ms;
 
     /* Pear message rows sit one tone below the page surface. */
     --color-background-pear-message-content: light-dark(

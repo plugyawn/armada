@@ -1922,10 +1922,56 @@
     &[hidden] {
         display: none;
     }
+}
 
-    > .message_header_stream {
-        width: 100%;
-    }
+/* The bar card mirrors the chat recipient bar's look exactly —
+   same background, border, radius, and type — but is rendered
+   deterministically from context rather than cloned from feed DOM.
+   The shared cluster's global layout classes (display: contents,
+   full-row commit line, full-row tab strip) compose inside it just
+   as they do in the feed's bars. */
+.pear-topic-bar-card {
+    display: flex;
+    min-height: 1.8666em; /* 28px at 15px em, the chat bar height */
+    flex-wrap: wrap;
+    align-items: center;
+    align-content: center;
+    gap: 4px;
+    padding: 2px 6px 2px 10px;
+    border: 1px solid var(--color-message-header-contents-border);
+    border-bottom-color: var(--color-message-header-contents-border-bottom);
+    border-radius: 7px 7px 0 0;
+    background-color: var(--color-background);
+    font-size: 1.0714em; /* 15px at 14px em */
+    line-height: 1.2;
+}
+
+.pear-topic-bar-hash {
+    font-weight: 600;
+    opacity: 0.9;
+}
+
+.pear-topic-bar-stream,
+.pear-topic-bar-topic {
+    overflow: hidden;
+    color: var(--color-text-message-header);
+    font-weight: 600;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.pear-topic-bar-topic {
+    min-width: 0;
+    flex: 0 1 auto;
+}
+
+.pear-topic-bar-sep {
+    color: var(--color-text-message-header);
+    opacity: 0.5;
+}
+
+#pear-topic-bar .pear-pane-header-cluster {
+    display: contents;
 }
 
 /* The pane replaces the feed inside the middle column, sitting under

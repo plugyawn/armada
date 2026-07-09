@@ -451,6 +451,25 @@ RestartSec=5
 WantedBy=multi-user.target
 EOF
 
+cat >/etc/systemd/system/pear-thumbnail.service <<'EOF'
+[Unit]
+Description=Pear Zulip thumbnail queue
+After=network-online.target pear-zulip-dev.service
+Wants=pear-zulip-dev.service
+
+[Service]
+Type=simple
+User=zulipdev
+WorkingDirectory=/home/zulipdev/zulip
+EnvironmentFile=/home/zulipdev/pear.env
+ExecStart=/bin/bash -lc 'cd /home/zulipdev/zulip && exec /home/zulipdev/zulip/.venv/bin/python3 /home/zulipdev/zulip/manage.py process_queue --queue_name thumbnail --automated'
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
 cat >/etc/systemd/system/pear-worker.service <<'EOF'
 [Unit]
 Description=Pear Codex worker queue
@@ -471,8 +490,8 @@ WantedBy=multi-user.target
 EOF
 
 systemctl daemon-reload
-systemctl enable caddy pear-zulip-dev pear-embedded-bots pear-worker
-systemctl restart caddy pear-zulip-dev pear-embedded-bots pear-worker
+systemctl enable caddy pear-zulip-dev pear-embedded-bots pear-worker pear-thumbnail
+systemctl restart caddy pear-zulip-dev pear-embedded-bots pear-worker pear-thumbnail
 REMOTE
 
 if [[ -n "$PEAR_GEMINI_API_KEY" ]]; then
@@ -534,10 +553,10 @@ print(
 )
 PY
 
-ssh_root 'systemctl restart pear-zulip-dev pear-embedded-bots pear-worker'
+ssh_root 'systemctl restart pear-zulip-dev pear-embedded-bots pear-worker pear-thumbnail'
 
 echo "Remote services:"
-ssh_root 'systemctl --no-pager --full status caddy pear-zulip-dev pear-embedded-bots pear-worker | sed -n "1,220p"'
+ssh_root 'systemctl --no-pager --full status caddy pear-zulip-dev pear-embedded-bots pear-worker pear-thumbnail | sed -n "1,220p"'
 
 echo
 echo "Done. Verify with:"

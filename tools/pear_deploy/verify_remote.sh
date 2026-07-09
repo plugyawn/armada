@@ -123,7 +123,7 @@ curl -fsSIL "https://$FQDN/devlogin" | sed -n '1,20p'
 echo
 echo "Systemd:"
 ssh -F "$SSH_CONFIG" pear-staging-root \
-    'systemctl --no-pager --full status caddy pear-zulip-dev pear-embedded-bots pear-worker | sed -n "1,220p"'
+    'systemctl --no-pager --full status caddy pear-zulip-dev pear-embedded-bots pear-worker pear-thumbnail | sed -n "1,220p"'
 
 echo
 echo "Pear config:"

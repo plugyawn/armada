@@ -3793,6 +3793,31 @@ class PearSessionEndpointTest(ZulipTestCase):
         self.assertIn("paused", active_session["worker_blocked_reason"])
 
 
+class PearMathNormalizationTest(ZulipTestCase):
+    def test_normalize_pear_math_delimiters(self) -> None:
+        from zerver.lib.pear import normalize_pear_math_delimiters
+
+        content = (
+            "Intro\n"
+            "\\[\n"
+            "g_i = (u_i, v_i)\n"
+            "\\]\n"
+            "where \\(u_i\\) is the source.\n"
+            "```python\n"
+            'x = "\\\\[not math\\\\]"\n'
+            "```\n"
+            "and `\\\\(inline code\\\\)` stays.\n"
+        )
+        normalized = normalize_pear_math_delimiters(content)
+        self.assertIn("```math\ng_i = (u_i, v_i)\n```", normalized)
+        self.assertIn("$$u_i$$", normalized)
+        # Fenced code and inline code spans stay untouched.
+        self.assertIn('x = "\\\\[not math\\\\]"', normalized)
+        self.assertIn("`\\\\(inline code\\\\)`", normalized)
+        # Idempotent, and a no-op for plain content.
+        self.assertEqual(normalize_pear_math_delimiters(normalized), normalized)
+        self.assertEqual(normalize_pear_math_delimiters("plain"), "plain")
+
 class PearWorkspaceMapTest(ZulipTestCase):
     def test_workspace_topics_endpoint_lists_active_worktrees(self) -> None:
         user = self.example_user("hamlet")

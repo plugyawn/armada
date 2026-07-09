@@ -1,4 +1,5 @@
 import logging
+import re
 import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
@@ -1886,6 +1887,38 @@ def build_pear_worker_completed_message_chunks(
     )]
 
 
+PEAR_MATH_CODE_SEGMENT_PATTERN = re.compile(
+    r"(```.*?(?:```|\Z)|~~~.*?(?:~~~|\Z)|`[^`\n]*`)", re.DOTALL
+)
+PEAR_MATH_DISPLAY_PATTERN = re.compile(r"\\\[\s*(.*?)\s*\\\]", re.DOTALL)
+PEAR_MATH_INLINE_PATTERN = re.compile(r"\\\((.*?)\\\)", re.DOTALL)
+
+
+def normalize_pear_math_delimiters(content: str) -> str:
+    """Rewrite LaTeX \\[ \\] / \\( \\) math into Zulip's dialect.
+
+    Models habitually emit LaTeX's native delimiters, which Zulip's
+    markdown passes through as literal text. Convert display math to
+    ```math fences and inline math to $$...$$, leaving fenced code
+    blocks and inline code spans untouched. Idempotent: converted
+    content contains no LaTeX delimiters to re-match.
+    """
+    if "\\[" not in content and "\\(" not in content:
+        return content
+    parts = PEAR_MATH_CODE_SEGMENT_PATTERN.split(content)
+    for index, part in enumerate(parts):
+        if index % 2 == 1:
+            continue
+        part = PEAR_MATH_DISPLAY_PATTERN.sub(
+            lambda match: "\n```math\n" + match.group(1) + "\n```\n", part
+        )
+        part = PEAR_MATH_INLINE_PATTERN.sub(
+            lambda match: "$$" + match.group(1).strip() + "$$", part
+        )
+        parts[index] = part
+    return "".join(parts)
+
+
 def update_pear_worker_status_message(
     bot_handler: Any,
     *,
@@ -1901,7 +1934,7 @@ def update_pear_worker_status_message(
     try:
         update_payload: dict[str, object] = {
             "message_id": progress_message_id,
-            "content": content,
+            "content": normalize_pear_math_delimiters(content),
         }
         if rendering_only:
             update_payload["rendering_only"] = True
@@ -3240,7 +3273,7 @@ class PearEmbeddedBotHandler:
                 status_markdown=PEAR_STEERING_QUEUED_MARKDOWN,
             )
             return
-        result = bot_handler.send_reply(message, response)
+        result = bot_handler.send_reply(message, normalize_pear_math_delimiters(response))
         progress_message_id = None
         if isinstance(result, dict) and isinstance(result.get("id"), int):
             progress_message_id = result["id"]
@@ -3815,9 +3848,13 @@ class PearWorkerTurn:
                 )
                 result = None
                 if not result_updated:
-                    result = self.bot_handler.send_reply(self.message, content_to_post)
+                    result = self.bot_handler.send_reply(
+                        self.message, normalize_pear_math_delimiters(content_to_post)
+                    )
                 for continuation_content in content_chunks[1:]:
-                    self.bot_handler.send_reply(self.message, continuation_content)
+                    self.bot_handler.send_reply(
+                        self.message, normalize_pear_math_delimiters(continuation_content)
+                    )
                 write_pear_live_run_state(
                     self.message_id,
                     status="done",
@@ -3852,7 +3889,9 @@ class PearWorkerTurn:
                 )
                 if result_updated:
                     for continuation_content in content_chunks[1:]:
-                        self.bot_handler.send_reply(self.message, continuation_content)
+                        self.bot_handler.send_reply(
+                        self.message, normalize_pear_math_delimiters(continuation_content)
+                    )
                 write_pear_live_run_state(
                     self.message_id,
                     status="done",

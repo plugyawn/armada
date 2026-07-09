@@ -152,6 +152,11 @@ export function sync(opts: {
 }): void {
     const key = context_key(opts.stream, opts.topic);
     const context_changed = key !== current_context_key;
+    if (context_changed) {
+        // Commit and save any open editor while the canvas context
+        // still points at the topic it was loaded from.
+        flush_canvas_save();
+    }
     current_context_key = key;
     current_stream = opts.stream;
     current_topic = opts.topic;
@@ -336,6 +341,12 @@ type CanvasBlock = {source: string};
 let canvas_blocks: CanvasBlock[] = [];
 let canvas_version = "";
 let canvas_loaded = false;
+// The topic whose file is loaded. Saves, asks, and refetches bind to
+// this, never to current_stream/current_topic: the narrow can change
+// while an editor is open, and a canvas must only ever write to the
+// topic it was loaded from (live report: a narrow switch mid-edit
+// wrote one topic's canvas into another).
+let canvas_context: {stream: string; topic: string; key: string} | undefined;
 const rendered_block_cache = new Map<string, string>();
 let canvas_render_generation = 0;
 
@@ -355,7 +366,7 @@ const aside_sections = new Map<string, string>();
 const rendered_aside_cache = new Map<string, string>();
 
 function ask_key(ask: CanvasAsk): string {
-    return `${current_context_key}|${ask.request}|${ask.label}`;
+    return `${canvas_context?.key ?? current_context_key}|${ask.request}|${ask.label}`;
 }
 
 function ask_span_text(ask: CanvasAsk): string {
@@ -418,7 +429,7 @@ function queue_new_asks(previous_source: string, committed_source: string): void
 }
 
 function dispatch_queued_asks(): void {
-    if (current_stream === undefined || current_topic === undefined) {
+    if (canvas_context === undefined) {
         ask_dispatch_queue = [];
         return;
     }
@@ -431,8 +442,8 @@ function dispatch_queued_asks(): void {
         void channel.post({
             url: "/json/pear/canvas-ask",
             data: {
-                stream: current_stream,
-                topic: current_topic,
+                stream: canvas_context.stream,
+                topic: canvas_context.topic,
                 request: ask.request,
                 label: ask.label,
                 block: block_source,
@@ -455,8 +466,9 @@ function dispatch_queued_asks(): void {
 function prune_pending_asks(): void {
     const document_text = join_canvas_blocks(canvas_blocks);
     const now = Date.now();
+    const context_prefix = `${canvas_context?.key ?? current_context_key}|`;
     for (const [key, started_at] of pending_asks) {
-        if (!key.startsWith(`${current_context_key}|`)) {
+        if (!key.startsWith(context_prefix)) {
             continue;
         }
         const [, request = "", label = ""] = key.split("|");
@@ -626,6 +638,11 @@ function rebuild_aside_sections(): void {
             if (body !== "") {
                 current_lines.push(body);
             }
+        } else if (/^#{1,6}\s/.test(first_line) && !is_asides_heading(block.source)) {
+            // An ordinary heading ends the aside; only its own
+            // answer belongs in the popover.
+            flush();
+            current_id = undefined;
         } else if (current_id !== undefined) {
             current_lines.push(block.source);
         }
@@ -856,13 +873,23 @@ function load_canvas(): void {
         return;
     }
     canvas_loaded = false;
+    const request_context = {
+        stream: current_stream,
+        topic: current_topic,
+        key: current_context_key,
+    };
+    canvas_context = request_context;
     set_canvas_status($t({defaultMessage: "loading"}));
     void channel.get({
         url: "/json/pear/canvas",
-        data: {stream: current_stream, topic: current_topic},
+        data: {stream: request_context.stream, topic: request_context.topic},
         success(raw_data) {
             const parsed = canvas_response_schema.safeParse(raw_data);
-            if (!parsed.success || current_tab !== "canvas") {
+            if (
+                !parsed.success ||
+                current_tab !== "canvas" ||
+                canvas_context?.key !== request_context.key
+            ) {
                 return;
             }
             canvas_version = parsed.data.pear_canvas.version;
@@ -882,9 +909,10 @@ function load_canvas(): void {
 }
 
 function save_canvas_document(retrying = false): void {
-    if (current_stream === undefined || current_topic === undefined || !canvas_loaded) {
+    if (canvas_context === undefined || !canvas_loaded) {
         return;
     }
+    const save_context = canvas_context;
     const content = join_canvas_blocks(canvas_blocks);
     if (!pear_canvas.content_within_byte_limit(content, 200_000)) {
         set_canvas_status($t({defaultMessage: "too large to save"}), true);
@@ -894,8 +922,8 @@ function save_canvas_document(retrying = false): void {
     void channel.put({
         url: "/json/pear/canvas",
         data: {
-            stream: current_stream,
-            topic: current_topic,
+            stream: save_context.stream,
+            topic: save_context.topic,
             content,
             base_version: canvas_version,
         },
@@ -917,7 +945,7 @@ function save_canvas_document(retrying = false): void {
                 // collide with it; otherwise adopt the fresh doc.
                 void channel.get({
                     url: "/json/pear/canvas",
-                    data: {stream: current_stream, topic: current_topic},
+                    data: {stream: save_context.stream, topic: save_context.topic},
                     success(raw_fresh) {
                         const fresh = canvas_response_schema.safeParse(raw_fresh);
                         if (!fresh.success) {

@@ -3580,6 +3580,17 @@ class PearSessionEndpointTest(ZulipTestCase):
             self.assertIn("CANVAS.md", kwargs["content"])
             self.assertIn("#aside-<n>", kwargs["content"])
 
+            # The ask belongs to the topic's runs list: that is how the
+            # rail shows it and how an open canvas learns to refresh
+            # when the answer lands.
+            runs_result = self.client_get(
+                f"/json{PEAR_RUNS_ENDPOINT}",
+                {"stream": PEAR_DEFAULT_STREAM, "topic": PEAR_DEFAULT_TOPIC},
+                intentionally_undocumented=True,
+            )
+            runs_dict = self.assert_json_success(runs_result)
+            self.assertIn(run.id, [r["id"] for r in runs_dict["pear_runs"]])
+
     def test_canvas_ask_rejects_empty_request(self) -> None:
         owner = self.example_user("hamlet")
         self.create_test_bot(

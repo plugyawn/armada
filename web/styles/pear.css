@@ -1934,15 +1934,19 @@
     flex-direction: column;
 }
 
+/* Chromeless container: the cloned recipient bar brings its own
+   look, identical to chat's. */
 .pear-workspace-pane-header {
     display: flex;
     flex: 0 0 auto;
     flex-wrap: wrap;
     align-items: center;
     gap: var(--pear-space-1) var(--pear-space-4);
-    padding: var(--pear-space-2) var(--pear-space-4);
-    border-bottom: 1px solid var(--pear-hairline);
-    background: var(--pear-surface-1);
+    padding: 0 var(--pear-space-1);
+
+    > .message_header_stream {
+        width: 100%;
+    }
 }
 
 
@@ -2084,15 +2088,6 @@
     }
 }
 
-/* The shared topic-header cluster participates directly in the
-   header's wrapping flex row — exactly like it does in the chat's
-   recipient bar, so the commit line and tab strip land on the same
-   rows in both places. */
-.pear-workspace-pane-header .pear-pane-header-cluster,
-.pear-workspace-pane-header .pear-pane-header-cluster > .pear-topic-header-status {
-    display: contents;
-}
-
 /* Asks: a bracketed span handed to the agent shimmers until the
    answer lands in the file (PEAR_CANVAS_TABS_DESIGN.md §B). */
 .pear-ask-pending {
@@ -2179,10 +2174,26 @@
     }
 }
 
-/* Files: the directory made visible. */
-.pear-files-list {
-    max-width: 72ch;
+/* Files: the worktree as a product surface — same bounded sheet as
+   the canvas, rows with type glyphs and status chips, click-to-read
+   previews through Zulip's own code rendering. */
+.pear-files-body {
+    padding: var(--pear-space-5) var(--pear-space-4) 20vh;
+}
+
+.pear-files-sheet {
+    max-width: 84ch;
+    min-height: 40vh;
     margin: 0 auto;
+    padding: var(--pear-space-5) var(--pear-space-6);
+    border: 1px solid var(--pear-hairline);
+    border-radius: var(--pear-radius-card);
+    background: var(--pear-surface-1);
+    box-shadow: var(--pear-shadow-pop);
+}
+
+.pear-files-list {
+    margin: 0;
     padding: 0;
     list-style: none;
 }
@@ -2192,7 +2203,7 @@
     display: flex;
     align-items: center;
     gap: var(--pear-space-2);
-    padding: 3px var(--pear-space-2);
+    padding: 4px var(--pear-space-2);
     padding-left: calc(var(--pear-space-2) + var(--pear-file-depth, 0) * 18px);
     border-radius: var(--pear-radius-chip);
     line-height: 1.7142em; /* 24px at 14px em */
@@ -2200,7 +2211,12 @@
 
 .pear-files-dir {
     color: var(--pear-ink-2);
+    cursor: pointer;
     font-weight: 500;
+
+    &:hover {
+        background: var(--pear-surface-2);
+    }
 }
 
 .pear-files-dir-icon {
@@ -2209,15 +2225,22 @@
 }
 
 .pear-files-row {
-    cursor: default;
+    cursor: pointer;
 }
 
 .pear-files-row:hover {
     background: var(--pear-surface-2);
 }
 
-.pear-files-row-canvas {
-    cursor: pointer;
+.pear-files-glyph {
+    flex: 0 0 1.2em;
+    color: var(--pear-ink-3);
+    font-family: var(--pear-font-pixel);
+    text-align: center;
+}
+
+.pear-files-row-canvas .pear-files-glyph {
+    color: var(--pear-accent-ink);
 }
 
 .pear-files-name {
@@ -2225,18 +2248,95 @@
     min-width: 0;
     text-overflow: ellipsis;
     white-space: nowrap;
+    font-family: var(--pear-font-mono);
+    font-size: 0.9286em; /* 13px at 14px em */
 }
 
-.pear-files-row-untracked .pear-files-name {
-    color: var(--pear-ink-3);
-    font-style: italic;
+.pear-files-chip {
+    flex: 0 0 auto;
+    padding: 0 0.5em;
+    border-radius: 999px;
+    font-family: var(--pear-font-pixel);
+    /* stylelint-disable-next-line declaration-property-unit-disallowed-list */
+    font-size: 11px;
+    line-height: 1.6;
 }
 
-.pear-files-dirty {
+.pear-files-chip-changed {
+    background: var(--pear-warn-fill);
     color: var(--pear-warn);
 }
 
-.pear-files-meta {
+.pear-files-chip-untracked {
+    background: var(--pear-accent-fill);
+    color: var(--pear-accent-ink);
+}
+
+.pear-files-chip-canvas {
+    border: 1px solid color-mix(in srgb, var(--pear-accent-ink) 35%, transparent);
+    background: var(--pear-accent-fill);
+    color: var(--pear-accent-ink);
+}
+
+.pear-files-actions {
+    display: flex;
+    flex: 0 0 auto;
+    gap: 2px;
+    margin-left: auto;
+    opacity: 0;
+    transition: opacity var(--pear-dur-1) var(--pear-ease);
+}
+
+.pear-files-row:hover .pear-files-actions,
+.pear-files-actions:focus-within {
+    opacity: 1;
+}
+
+.pear-files-copy,
+.pear-files-download,
+.pear-files-back {
+    display: inline-flex;
+    align-items: center;
+    padding: 1px 5px;
+    border: 0;
+    border-radius: var(--pear-radius-chip);
+    background: transparent;
+    color: var(--pear-ink-3);
+    cursor: pointer;
+
+    &:hover {
+        background: var(--pear-surface-3);
+        color: var(--pear-ink-1);
+    }
+}
+
+/* Preview: reading a file without leaving the room. */
+.pear-files-preview-header {
+    display: flex;
+    align-items: center;
+    gap: var(--pear-space-3);
+    margin-bottom: var(--pear-space-4);
+    padding-bottom: var(--pear-space-2);
+    border-bottom: 1px solid var(--pear-hairline);
+}
+
+.pear-files-back {
+    font-family: var(--pear-font-pixel);
+    /* stylelint-disable-next-line declaration-property-unit-disallowed-list */
+    font-size: 12px;
+}
+
+.pear-files-preview-path {
+    overflow: hidden;
+    min-width: 0;
+    color: var(--pear-ink-1);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-family: var(--pear-font-mono);
+    font-size: 0.9286em; /* 13px at 14px em */
+}
+
+.pear-files-preview-meta {
     flex: 0 0 auto;
     margin-left: auto;
     color: var(--pear-ink-3);
@@ -2245,29 +2345,12 @@
     font-size: 11px;
 }
 
-.pear-files-download {
-    display: none;
-    flex: 0 0 auto;
-    padding: 1px 4px;
-    border: 0;
-    border-radius: var(--pear-radius-chip);
-    background: transparent;
-    color: var(--pear-ink-3);
-    cursor: pointer;
-}
-
-.pear-files-row:hover .pear-files-download {
-    display: inline-flex;
-}
-
-.pear-files-download:hover {
-    background: var(--pear-surface-3);
-    color: var(--pear-ink-1);
+.pear-files-preview-content {
+    overflow-x: auto;
 }
 
 .pear-files-empty,
 .pear-files-truncated {
-    max-width: 72ch;
     margin: var(--pear-space-4) auto;
     color: var(--pear-ink-3);
     text-align: center;

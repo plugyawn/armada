@@ -18,6 +18,7 @@ import * as pear_canvas from "./pear_canvas.ts";
 import * as pear_canvas_editor from "./pear_canvas_editor.ts";
 import {postprocess_content} from "./postprocess_content.ts";
 import * as rendered_markdown from "./rendered_markdown.ts";
+import * as stream_data from "./stream_data.ts";
 import {user_settings} from "./user_settings.ts";
 
 export type PearWorkspaceTab = "chat" | "canvas" | "files";
@@ -107,6 +108,45 @@ function update_tab_strips(): void {
 // pane is hidden, and only a context change tears it down.
 let pane_shell_key: string | undefined;
 
+// The pane header IS the chat's recipient bar: a live clone of the
+// topic's .message_header_stream, so nothing — color, icons, date,
+// pill — changes when switching tabs. pear_panel's updater matches
+// the clone through the same selectors it uses for feed bars and
+// keeps it fresh.
+function clone_topic_header_into_pane(): boolean {
+    const $header_slot = $pane().find(".pear-workspace-pane-header");
+    if ($header_slot.length === 0 || current_stream === undefined) {
+        return false;
+    }
+    const stream_id = stream_data.get_stream_id(current_stream);
+    const source = [...document.querySelectorAll<HTMLElement>(".message_header_stream")].find(
+        (element) =>
+            element.getAttribute("data-topic-name") === current_topic &&
+            (stream_id === undefined ||
+                Number.parseInt(element.getAttribute("data-stream-id") ?? "", 10) === stream_id) &&
+            element.closest("#pear-workspace-pane") === null,
+    );
+    if (source === undefined) {
+        return false;
+    }
+    const clone = source.cloneNode(true);
+    if (!(clone instanceof HTMLElement)) {
+        return false;
+    }
+    const strip = clone.querySelector(".pear-workspace-tabs");
+    if (strip !== null) {
+        const status = document.createElement("span");
+        status.className = "pear-canvas-status";
+        const hint = document.createElement("span");
+        hint.className = "pear-workspace-pane-hint";
+        hint.textContent = $t({defaultMessage: "Esc returns to chat"});
+        strip.append(status, hint);
+    }
+    $header_slot.empty();
+    $header_slot[0]?.append(clone);
+    return true;
+}
+
 function ensure_pane_shell(): boolean {
     const $container = ensure_pane();
     if ($container.length === 0) {
@@ -122,9 +162,10 @@ function ensure_pane_shell(): boolean {
             context_label: `${current_stream ?? ""} › ${current_topic ?? ""}`,
         }),
     );
+    clone_topic_header_into_pane();
     pane_shell_key = current_context_key;
-    // pear_panel owns the header cluster (model pill, commit line,
-    // tabs) and fills it on this signal — same component as chat.
+    // pear_panel refreshes the header labels on this signal, so the
+    // cloned bar is current the moment it appears.
     document.dispatchEvent(new CustomEvent("pear:pane-shell-rendered"));
     return true;
 }
@@ -207,6 +248,8 @@ export function sync(opts: {
         // still points at the topic it was loaded from, then drop
         // the old topic's shell and editor instance.
         teardown_pane_context();
+        files_collapsed_dirs = new Set();
+        last_files_payload = undefined;
     }
     current_context_key = key;
     current_stream = opts.stream;
@@ -246,6 +289,65 @@ export function sync(opts: {
 
 type FileEntry = {path: string; status: string};
 
+let files_collapsed_dirs = new Set<string>();
+let last_files_payload:
+    | {files: FileEntry[]; canvas_path: string | null; truncated: boolean}
+    | undefined;
+
+const FILE_TYPE_GLYPHS: [RegExp, string][] = [
+    [/\.(?:md|markdown|txt|rst)$/i, "\u25A4"], // ▤ prose
+    [/\.(?:png|jpe?g|gif|webp|svg)$/i, "\u25C9"], // ◉ image
+    [/\.(?:json|ya?ml|toml|ini|cfg|lock)$/i, "\u25A6"], // ▦ config
+    [/\.(?:py|ts|tsx|js|jsx|rs|go|c|cc|cpp|h|java|rb|sh|swift|kt|html|css)$/i, "\u25C6"], // ◆ code
+];
+
+function file_type_glyph(path: string): string {
+    for (const [pattern, glyph] of FILE_TYPE_GLYPHS) {
+        if (pattern.test(path)) {
+            return glyph;
+        }
+    }
+    return "\u00B7";
+}
+
+function file_language(path: string): string {
+    const extension = path.split(".").at(-1)?.toLowerCase() ?? "";
+    const languages: Record<string, string> = {
+        py: "python",
+        ts: "typescript",
+        tsx: "typescript",
+        js: "javascript",
+        jsx: "javascript",
+        rs: "rust",
+        rb: "ruby",
+        cc: "cpp",
+        cpp: "cpp",
+        kt: "kotlin",
+        yml: "yaml",
+        sh: "bash",
+    };
+    return languages[extension] ?? extension;
+}
+
+function file_status_chip(file: FileEntry, is_canvas: boolean): JQuery | undefined {
+    if (is_canvas) {
+        return $("<span>")
+            .addClass("pear-files-chip pear-files-chip-canvas")
+            .text($t({defaultMessage: "canvas"}));
+    }
+    if (file.status === "changed") {
+        return $("<span>")
+            .addClass("pear-files-chip pear-files-chip-changed")
+            .text($t({defaultMessage: "modified"}));
+    }
+    if (file.status === "untracked") {
+        return $("<span>")
+            .addClass("pear-files-chip pear-files-chip-untracked")
+            .text($t({defaultMessage: "new"}));
+    }
+    return undefined;
+}
+
 function render_files_tree(
     files: FileEntry[],
     canvas_path: string | null,
@@ -255,13 +357,20 @@ function render_files_tree(
     if ($body.length === 0) {
         return;
     }
+    last_files_payload = {files, canvas_path, truncated};
+    const $sheet = $("<div>").addClass("pear-files-sheet");
     if (files.length === 0) {
-        $body.html(
-            `<div class="pear-files-empty">${$t({
-                defaultMessage:
-                    "This branch has no files yet — ask Pear to create some, or open the Canvas.",
-            })}</div>`,
+        $sheet.append(
+            $("<div>")
+                .addClass("pear-files-empty")
+                .text(
+                    $t({
+                        defaultMessage:
+                            "This branch has no files yet — ask Pear to create some, or open the Canvas.",
+                    }),
+                ),
         );
+        $body.empty().append($sheet);
         return;
     }
     const $list = $("<ul>").addClass("pear-files-list");
@@ -273,59 +382,152 @@ function render_files_tree(
         }
         return a.path.localeCompare(b.path);
     });
+    const hidden_by_collapse = (path: string): boolean =>
+        [...files_collapsed_dirs].some((dir) => path.startsWith(`${dir}/`));
     for (const file of ordered) {
         const parts = file.path.split("/");
         for (let depth = 0; depth < parts.length - 1; depth += 1) {
             const dir = parts.slice(0, depth + 1).join("/");
             if (!seen_dirs.has(dir)) {
                 seen_dirs.add(dir);
-                const $dir = $("<li>").addClass("pear-files-dir");
+                if (depth > 0 && hidden_by_collapse(dir)) {
+                    continue;
+                }
+                const collapsed = files_collapsed_dirs.has(dir);
+                const $dir = $("<li>")
+                    .addClass("pear-files-dir")
+                    .attr("data-pear-dir", dir)
+                    .toggleClass("pear-files-dir-collapsed", collapsed);
                 $dir.css("--pear-file-depth", `${depth}`);
                 $dir.append(
-                    $("<i>").addClass("zulip-icon zulip-icon-triangle-down pear-files-dir-icon"),
+                    $("<i>").addClass(
+                        `zulip-icon pear-files-dir-icon ${
+                            collapsed ? "zulip-icon-triangle-right" : "zulip-icon-triangle-down"
+                        }`,
+                    ),
                     $("<span>").addClass("pear-files-name").text(parts[depth]!),
                 );
                 $list.append($dir);
             }
+        }
+        if (hidden_by_collapse(file.path)) {
+            continue;
         }
         const depth = parts.length - 1;
         const is_canvas = file.path === canvas_path;
         const $row = $("<li>")
             .addClass("pear-files-row")
             .attr("data-pear-file", file.path)
-            .toggleClass("pear-files-row-canvas", is_canvas)
-            .toggleClass("pear-files-row-untracked", file.status === "untracked");
+            .toggleClass("pear-files-row-canvas", is_canvas);
         $row.css("--pear-file-depth", `${depth}`);
-        const $name = $("<span>").addClass("pear-files-name").text(parts[depth]!);
-        if (file.status === "changed") {
-            $name.append($("<span>").addClass("pear-files-dirty").text("*"));
+        $row.append(
+            $("<span>").addClass("pear-files-glyph").text(file_type_glyph(file.path)),
+            $("<span>").addClass("pear-files-name").text(parts[depth]!),
+        );
+        const $chip = file_status_chip(file, is_canvas);
+        if ($chip !== undefined) {
+            $row.append($chip);
         }
-        const $meta = $("<span>")
-            .addClass("pear-files-meta")
-            .text(
-                is_canvas
-                    ? $t({defaultMessage: "canvas"})
-                    : file.status === "clean"
-                      ? ""
-                      : file.status,
-            );
-        const $download = $("<button>")
-            .attr("type", "button")
-            .addClass("pear-files-download")
-            .attr("data-pear-file", file.path)
-            .attr("aria-label", $t({defaultMessage: "Download"}))
-            .append($("<i>").addClass("zulip-icon zulip-icon-arrow-down"));
-        $row.append($name, $meta, $download);
+        const $actions = $("<span>").addClass("pear-files-actions");
+        $actions.append(
+            $("<button>")
+                .attr("type", "button")
+                .addClass("pear-files-copy tippy-zulip-delayed-tooltip")
+                .attr("data-pear-file", file.path)
+                .attr("aria-label", $t({defaultMessage: "Copy path"}))
+                .attr("data-tippy-content", $t({defaultMessage: "Copy path"}))
+                .append($("<i>").addClass("zulip-icon zulip-icon-copy")),
+            $("<button>")
+                .attr("type", "button")
+                .addClass("pear-files-download tippy-zulip-delayed-tooltip")
+                .attr("data-pear-file", file.path)
+                .attr("aria-label", $t({defaultMessage: "Download"}))
+                .attr("data-tippy-content", $t({defaultMessage: "Download"}))
+                .append($("<i>").addClass("zulip-icon zulip-icon-arrow-down")),
+        );
+        $row.append($actions);
         $list.append($row);
     }
-    $body.empty().append($list);
+    $sheet.append($list);
     if (truncated) {
-        $body.append(
+        $sheet.append(
             $("<div>")
                 .addClass("pear-files-truncated")
                 .text($t({defaultMessage: "Only the first 500 files are shown."})),
         );
     }
+    $body.empty().append($sheet);
+}
+
+function show_file_preview(path: string): void {
+    if (current_stream === undefined || current_topic === undefined) {
+        return;
+    }
+    const $body = $pane().find(".pear-files-body");
+    if ($body.length === 0) {
+        return;
+    }
+    void channel.get({
+        url: "/json/pear/workspace-file",
+        data: {stream: current_stream, topic: current_topic, path},
+        success(raw_data) {
+            const parsed = workspace_file_schema.safeParse(raw_data);
+            if (!parsed.success || current_tab !== "files") {
+                return;
+            }
+            const content = parsed.data.pear_workspace_file.content;
+            const is_markdown = /\.(?:md|markdown)$/i.test(path);
+            const fence = "~".repeat(6);
+            const source = is_markdown
+                ? content
+                : `${fence}${file_language(path)}\n${content}\n${fence}`;
+            void channel.post({
+                url: "/json/messages/render",
+                data: {content: source},
+                success(raw_rendered) {
+                    if (current_tab !== "files") {
+                        return;
+                    }
+                    const rendered = message_render_response_schema.parse(raw_rendered);
+                    const $sheet = $("<div>").addClass("pear-files-sheet pear-files-preview");
+                    const $header = $("<div>").addClass("pear-files-preview-header");
+                    $header.append(
+                        $("<button>")
+                            .attr("type", "button")
+                            .addClass("pear-files-back")
+                            .text($t({defaultMessage: "\u2190 files"})),
+                        $("<span>").addClass("pear-files-preview-path").text(path),
+                        $("<span>")
+                            .addClass("pear-files-preview-meta")
+                            .text(
+                                $t(
+                                    {defaultMessage: "{lines} lines"},
+                                    {lines: content.split("\n").length},
+                                ),
+                            ),
+                        $("<button>")
+                            .attr("type", "button")
+                            .addClass("pear-files-download")
+                            .attr("data-pear-file", path)
+                            .attr("aria-label", $t({defaultMessage: "Download"}))
+                            .append($("<i>").addClass("zulip-icon zulip-icon-arrow-down")),
+                    );
+                    const $content = $("<div>").addClass(
+                        "pear-files-preview-content rendered_markdown",
+                    );
+                    $content.html(postprocess_content(rendered.rendered));
+                    rendered_markdown.update_elements($content);
+                    $sheet.append($header, $content);
+                    $body.empty().append($sheet);
+                },
+            });
+        },
+        error(xhr) {
+            if (xhr.readyState !== 0) {
+                blueslip.warn(`Failed to preview workspace file: ${xhr.responseText}`);
+            }
+        },
+    });
 }
 
 function load_files(): void {
@@ -1064,11 +1266,59 @@ export function initialize(): void {
         }
     });
     $("body").on("click", ".pear-files-row-canvas", (event) => {
-        if ($(event.target).closest(".pear-files-download").length > 0) {
+        if ($(event.target).closest("button").length > 0) {
             return;
         }
         event.preventDefault();
         set_tab("canvas");
+    });
+    $("body").on("click", ".pear-files-row", function (this: HTMLElement, event) {
+        if (
+            $(this).hasClass("pear-files-row-canvas") ||
+            $(event.target).closest("button").length > 0
+        ) {
+            return;
+        }
+        const path = $(this).attr("data-pear-file");
+        if (path !== undefined) {
+            show_file_preview(path);
+        }
+    });
+    $("body").on("click", ".pear-files-dir", function (this: HTMLElement) {
+        const dir = $(this).attr("data-pear-dir");
+        if (dir === undefined || last_files_payload === undefined) {
+            return;
+        }
+        if (files_collapsed_dirs.has(dir)) {
+            files_collapsed_dirs.delete(dir);
+        } else {
+            files_collapsed_dirs.add(dir);
+        }
+        render_files_tree(
+            last_files_payload.files,
+            last_files_payload.canvas_path,
+            last_files_payload.truncated,
+        );
+    });
+    $("body").on("click", ".pear-files-back", () => {
+        if (last_files_payload !== undefined) {
+            render_files_tree(
+                last_files_payload.files,
+                last_files_payload.canvas_path,
+                last_files_payload.truncated,
+            );
+        } else {
+            load_files();
+        }
+    });
+    $("body").on("click", ".pear-files-copy", function (this: HTMLElement, event) {
+        event.preventDefault();
+        event.stopPropagation();
+        const path = $(this).attr("data-pear-file");
+        if (path !== undefined) {
+            void navigator.clipboard.writeText(path);
+            set_canvas_status($t({defaultMessage: "path copied"}));
+        }
     });
     $("body").on("click", ".pear-aside-chip", function (this: HTMLElement, event) {
         // The aside answer opens as a popover, not a navigation.

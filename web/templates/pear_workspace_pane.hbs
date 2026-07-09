@@ -1,10 +1,9 @@
 <div class="pear-workspace-pane-inner">
+    {{! Replaced at mount by a live clone of the topic's recipient
+        bar — the identical component chat shows. This row is only
+        the fallback when no source bar exists yet. }}
     <div class="pear-workspace-pane-header">
         <span class="pear-workspace-pane-crumb">{{context_label}}</span>
-        {{! The same live topic-header cluster the chat shows — model
-            pill, commit line, tab strip — injected and kept fresh by
-            pear_panel, so nothing visually changes across tabs. }}
-        <span class="pear-pane-header-cluster"></span>
         <span class="pear-canvas-status"></span>
         <span class="pear-workspace-pane-hint">{{t "Esc returns to chat" }}</span>
     </div>

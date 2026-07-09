@@ -256,22 +256,27 @@ export function get_view_rows_by_view_name(view: string): JQuery {
 // Reorder <li> views elements in the DOM based on the current home_view.
 // Called twice: on initial page load and when home_view changes.
 export function reorder_left_sidebar_navigation_list(home_view: string): void {
-    const $left_sidebar = $("#left-sidebar-navigation-list");
-    const $left_sidebar_condensed = $("#left-sidebar-navigation-list-condensed");
+    // Each view moves to the front of whichever list(s) it is already
+    // in. Home-view-capable views are not guaranteed a row in the
+    // condensed strip (it holds only Inbox/Mentions/Drafts), so never
+    // move rows across lists — that used to teleport expanded rows
+    // into the strip.
+    function prepend_within_own_list($rows: JQuery): void {
+        $rows.each(function () {
+            const $row = $(this);
+            $row.prependTo($row.parent());
+        });
+    }
 
     // First, re-order the views back to the original default order, to preserve the relative order.
     for (const key of Object.keys(settings_config.web_home_view_values).toReversed()) {
         if (key !== home_view) {
-            const $view = get_view_rows_by_view_name(key);
-            $view.eq(1).prependTo($left_sidebar);
-            $view.eq(0).prependTo($left_sidebar_condensed);
+            prepend_within_own_list(get_view_rows_by_view_name(key));
         }
     }
 
     // Detach the selected home_view and inserts it at the beginning of the navigation list.
-    const $selected_home_view = get_view_rows_by_view_name(home_view);
-    $selected_home_view.eq(1).prependTo($left_sidebar);
-    $selected_home_view.eq(0).prependTo($left_sidebar_condensed);
+    prepend_within_own_list(get_view_rows_by_view_name(home_view));
 }
 
 export function handle_home_view_changed(new_home_view: string): void {

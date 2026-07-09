@@ -129,3 +129,15 @@ textarea {
 body {
     font-variant-numeric: tabular-nums;
 }
+
+/* Tooltip motion: a minimal fade+settle keyed by tippyjs.ts's
+   animation: "pear". Tippy drives the duration; we define the states. */
+.tippy-box[data-animation="pear"] {
+    transition-property: opacity, transform;
+    transition-timing-function: var(--pear-ease);
+}
+
+.tippy-box[data-animation="pear"][data-state="hidden"] {
+    opacity: 0;
+    transform: translateY(2px) scale(0.985);
+}

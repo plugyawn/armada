@@ -10,6 +10,7 @@ import render_decorated_channel_name from "../templates/decorated_channel_name.h
 import * as compose_banner from "./compose_banner.ts";
 import * as compose_fade from "./compose_fade.ts";
 import * as compose_pm_pill from "./compose_pm_pill.ts";
+import * as pear_run_state from "./pear_run_state.ts";
 import * as compose_state from "./compose_state.ts";
 import * as compose_tooltips from "./compose_tooltips.ts";
 import * as compose_ui from "./compose_ui.ts";
@@ -580,8 +581,19 @@ export let update_compose_area_placeholder_text = (): void => {
     }
 
     $textarea.attr("placeholder", placeholder);
+    // The steering state also wears a quiet accent hairline on the
+    // compose box; keep it in lockstep with the placeholder.
+    $("#compose").toggleClass(
+        "pear-steering",
+        message_type === "stream" &&
+            pear_run_state.topic_has_active_run(compose_state.stream_name(), compose_state.topic()),
+    );
     compose_ui.autosize_textarea($textarea);
 };
+
+pear_run_state.on_active_run_topic_changed(() => {
+    update_compose_area_placeholder_text();
+});
 
 export function rewire_update_compose_area_placeholder_text(
     value: typeof update_compose_area_placeholder_text,

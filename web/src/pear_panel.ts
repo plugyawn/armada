@@ -1910,6 +1910,10 @@ function render(
     pear_run_state.set_active_run_result_messages(runs, {
         force_reconcile: active_run === undefined,
     });
+    pear_run_state.set_active_run_topic(
+        active_run === undefined ? undefined : stream,
+        active_run === undefined ? undefined : topic,
+    );
     const panel_status = active_run?.status ?? "idle";
     const display_context = has_topic ? display_topic_context(source_topic_context) : undefined;
     render_topic_header_controls({

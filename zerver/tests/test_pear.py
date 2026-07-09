@@ -2252,7 +2252,7 @@ class PearSessionDefaultsTest(TestCase):
             "never print the absolute workdir path in the topic.",
             prompt,
         )
-        self.assertNotIn("Durable topic context lives in CANVAS.md", prompt)
+        self.assertNotIn("Durable topic context lives in README.md", prompt)
         self.assertNotIn("Use Codex-native skills from CODEX_HOME/skills", prompt)
         self.assertNotIn(
             "For casual, conversational, choice-only, or answer-only requests, respond directly.",
@@ -2273,7 +2273,7 @@ class PearSessionDefaultsTest(TestCase):
             "#11 Pear (bot): Verification: pytest zerver/tests/test_pear.py",
             prompt,
         )
-        self.assertIn("Canvas: durable topic context is in CANVAS.md", prompt)
+        self.assertIn("Canvas: durable topic context is in README.md", prompt)
         self.assertNotIn("Pear agent skill definitions:", prompt)
         self.assertNotIn("\nChannel memory:\n", prompt)
         self.assertNotIn("\nForgotten memory:\n", prompt)
@@ -2320,7 +2320,7 @@ class PearSessionDefaultsTest(TestCase):
         self.assertEqual(instructions, build_pear_codex_developer_instructions())
         self.assertNotIn("Memory: <channel-scoped note Pear should remember>", instructions)
         self.assertNotIn("Routine: <standing follow-up", instructions)
-        self.assertIn("CANVAS.md", instructions)
+        self.assertIn("README.md", instructions)
         self.assertNotIn(instructions, build_pear_codex_turn_prompt(active_session_a, "fix"))
         self.assertNotIn(instructions, build_pear_codex_turn_prompt(active_session_b, "fix"))
 
@@ -2974,7 +2974,7 @@ class PearSessionDefaultsTest(TestCase):
             "developerInstructions",
             thread_start_request["params"],
         )
-        self.assertIn("CANVAS.md", thread_start_request["params"]["developerInstructions"])
+        self.assertIn("README.md", thread_start_request["params"]["developerInstructions"])
         steering_request = processes[0].stdin.lines[-1]
         self.assertEqual(steering_request["params"]["expectedTurnId"], "turn-app")
         self.assertEqual(

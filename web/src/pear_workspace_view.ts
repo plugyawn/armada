@@ -1,8 +1,8 @@
-// The workspace tabs (design: pear/PEAR_CANVAS_TABS_DESIGN.md, T1).
-// Chat is the message feed; Canvas is CANVAS.md made comfortable;
-// Files is the worktree made visible. One strip, rendered in the
-// recipient bar and mirrored at the top of the pane, switches between
-// them without leaving the narrow.
+// The workspace tabs (design: pear/PEAR_CANVAS_TABS_DESIGN.md, T1/T2).
+// Chat is the message feed; README is the topic's living document
+// (the worktree's README.md, Crepe-edited); Files is the worktree as
+// a repo home. One strip switches between them without leaving the
+// narrow, under one shared topic bar.
 
 import $ from "jquery";
 import * as tippy from "tippy.js";
@@ -41,6 +41,15 @@ const workspace_files_schema = z.object({
 
 const workspace_file_schema = z.object({
     pear_workspace_file: z.object({path: z.string(), content: z.string()}),
+});
+
+const workspace_image_schema = z.object({
+    pear_workspace_file: z.object({
+        path: z.string(),
+        encoding: z.string(),
+        content: z.string(),
+        content_type: z.string(),
+    }),
 });
 
 const canvas_response_schema = z.object({
@@ -329,6 +338,7 @@ export function sync(opts: {
         teardown_pane_context();
         files_collapsed_dirs = new Set();
         last_files_payload = undefined;
+        files_filter = "";
     }
     current_context_key = key;
     current_stream = opts.stream;
@@ -399,6 +409,37 @@ function format_file_size(size: number): string {
     return `${(size / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+export type FilesGitSummary = {
+    branch: string;
+    head_sha: string;
+    head_subject: string;
+    head_meta: string;
+    changed_label: string;
+    commits: {hash: string; summary: string}[];
+};
+
+// pear_panel hands over the git context it already fetched, so the
+// Files home can show branch/HEAD/commits without a second fetch.
+let files_git_summary: FilesGitSummary | undefined;
+let files_git_summary_signature = "";
+
+export function set_files_git_summary(summary: FilesGitSummary | undefined): void {
+    const signature = JSON.stringify(summary ?? null);
+    if (signature === files_git_summary_signature) {
+        return;
+    }
+    files_git_summary_signature = signature;
+    files_git_summary = summary;
+    if (current_tab === "files" && last_files_payload !== undefined) {
+        render_files_tree(
+            last_files_payload.files,
+            last_files_payload.canvas_path,
+            last_files_payload.truncated,
+        );
+    }
+}
+
+let files_filter = "";
 let files_collapsed_dirs = new Set<string>();
 let last_files_payload:
     | {files: FileEntry[]; canvas_path: string | null; truncated: boolean}
@@ -443,7 +484,7 @@ function file_status_chip(file: FileEntry, is_canvas: boolean): JQuery | undefin
     if (is_canvas) {
         return $("<span>")
             .addClass("pear-files-chip pear-files-chip-canvas")
-            .text($t({defaultMessage: "canvas"}));
+            .text($t({defaultMessage: "readme"}));
     }
     if (file.status === "changed") {
         return $("<span>")
@@ -458,6 +499,64 @@ function file_status_chip(file: FileEntry, is_canvas: boolean): JQuery | undefin
     return undefined;
 }
 
+function build_files_repo_head(): JQuery | undefined {
+    const summary = files_git_summary;
+    if (summary === undefined) {
+        return undefined;
+    }
+    const $head = $("<div>").addClass("pear-files-repo-head");
+    if (summary.branch !== "") {
+        $head.append(
+            $("<span>")
+                .addClass("pear-files-repo-branch")
+                .text(`\u2387 ${summary.branch}`),
+        );
+    }
+    if (summary.head_sha !== "") {
+        $head.append(
+            $("<span>").addClass("pear-files-repo-sha").text(summary.head_sha),
+            $("<span>").addClass("pear-files-repo-subject").text(summary.head_subject),
+        );
+    }
+    if (summary.head_meta !== "") {
+        $head.append($("<span>").addClass("pear-files-repo-meta").text(summary.head_meta));
+    }
+    if (summary.changed_label !== "") {
+        $head.append(
+            $("<span>")
+                .addClass("pear-files-chip pear-files-chip-changed")
+                .text(summary.changed_label),
+        );
+    }
+    return $head.children().length > 0 ? $head : undefined;
+}
+
+function build_files_commits_section(): JQuery | undefined {
+    const commits = files_git_summary?.commits ?? [];
+    if (commits.length === 0) {
+        return undefined;
+    }
+    const $section = $("<div>").addClass("pear-files-commits");
+    $section.append(
+        $("<div>")
+            .addClass("pear-files-section-title")
+            .text($t({defaultMessage: "recent commits"})),
+    );
+    const $list = $("<ul>").addClass("pear-files-commits-list");
+    for (const commit of commits) {
+        $list.append(
+            $("<li>")
+                .addClass("pear-files-commit-row")
+                .append(
+                    $("<span>").addClass("pear-files-repo-sha").text(commit.hash),
+                    $("<span>").addClass("pear-files-commit-summary").text(commit.summary),
+                ),
+        );
+    }
+    $section.append($list);
+    return $section;
+}
+
 function render_files_tree(
     files: FileEntry[],
     canvas_path: string | null,
@@ -469,6 +568,10 @@ function render_files_tree(
     }
     last_files_payload = {files, canvas_path, truncated};
     const $sheet = $("<div>").addClass("pear-files-sheet");
+    const $repo_head = build_files_repo_head();
+    if ($repo_head !== undefined) {
+        $sheet.append($repo_head);
+    }
     if (files.length === 0) {
         $sheet.append(
             $("<div>")
@@ -476,16 +579,34 @@ function render_files_tree(
                 .text(
                     $t({
                         defaultMessage:
-                            "This branch has no files yet — ask Pear to create some, or open the Canvas.",
+                            "This branch has no files yet — ask Pear to create some, or open the README.",
                     }),
                 ),
         );
+        const $commits_empty = build_files_commits_section();
+        if ($commits_empty !== undefined) {
+            $sheet.append($commits_empty);
+        }
         $body.empty().append($sheet);
         return;
     }
+    if (files.length > 5) {
+        $sheet.append(
+            $("<input>")
+                .addClass("pear-files-filter")
+                .attr("type", "text")
+                .attr("placeholder", $t({defaultMessage: "filter files\u2026"}))
+                .val(files_filter),
+        );
+    }
+    const filter = files_filter.trim().toLowerCase();
+    const visible_files =
+        filter === ""
+            ? files
+            : files.filter((file) => file.path.toLowerCase().includes(filter));
     const $list = $("<ul>").addClass("pear-files-list");
     const seen_dirs = new Set<string>();
-    const ordered = files.toSorted((a, b) => {
+    const ordered = visible_files.toSorted((a, b) => {
         const canvas_first = Number(b.path === canvas_path) - Number(a.path === canvas_path);
         if (canvas_first !== 0) {
             return canvas_first;
@@ -571,12 +692,35 @@ function render_files_tree(
         $list.append($row);
     }
     $sheet.append($list);
+    if (filter !== "" && visible_files.length === 0) {
+        $sheet.append(
+            $("<div>")
+                .addClass("pear-files-empty")
+                .text($t({defaultMessage: "No files match."})),
+        );
+    }
+    if (filter === "" && files.length <= 1) {
+        $sheet.append(
+            $("<div>")
+                .addClass("pear-files-empty")
+                .text(
+                    $t({
+                        defaultMessage:
+                            "This branch is fresh — ask Pear to build something, or write in the README.",
+                    }),
+                ),
+        );
+    }
     if (truncated) {
         $sheet.append(
             $("<div>")
                 .addClass("pear-files-truncated")
                 .text($t({defaultMessage: "Only the first 500 files are shown."})),
         );
+    }
+    const $commits = build_files_commits_section();
+    if ($commits !== undefined) {
+        $sheet.append($commits);
     }
     $body.empty().append($sheet);
     const readme = ordered.find((file) => /^readme\.(?:md|markdown)$/i.test(file.path));
@@ -622,8 +766,69 @@ function render_files_readme(path: string, $sheet: JQuery): void {
     });
 }
 
+const PEAR_IMAGE_PREVIEW_PATTERN = /\.(?:png|jpe?g|gif|webp|svg)$/i;
+
+function show_image_preview(path: string): void {
+    if (current_stream === undefined || current_topic === undefined) {
+        return;
+    }
+    const $body = $pane().find(".pear-files-body");
+    if ($body.length === 0) {
+        return;
+    }
+    void channel.get({
+        url: "/json/pear/workspace-file",
+        data: {stream: current_stream, topic: current_topic, path, encoding: "base64"},
+        success(raw_data) {
+            const parsed = workspace_image_schema.safeParse(raw_data);
+            if (!parsed.success || current_tab !== "files") {
+                return;
+            }
+            const file = parsed.data.pear_workspace_file;
+            const $sheet = $("<div>").addClass("pear-files-sheet pear-files-preview");
+            const $header = $("<div>").addClass("pear-files-preview-header");
+            $header.append(
+                $("<button>")
+                    .attr("type", "button")
+                    .addClass("pear-files-back")
+                    .text($t({defaultMessage: "\u2190 files"})),
+                $("<span>").addClass("pear-files-preview-path").text(path),
+                $("<span>")
+                    .addClass("pear-files-preview-meta")
+                    .text(format_file_size((file.content.length * 3) / 4)),
+                $("<button>")
+                    .attr("type", "button")
+                    .addClass("pear-files-download")
+                    .attr("data-pear-file", path)
+                    .attr("aria-label", $t({defaultMessage: "Download"}))
+                    .append($("<i>").addClass("zulip-icon zulip-icon-arrow-down")),
+            );
+            $sheet.append(
+                $header,
+                $("<div>")
+                    .addClass("pear-files-preview-image")
+                    .append(
+                        $("<img>")
+                            .attr("alt", path)
+                            .attr("src", `data:${file.content_type};base64,${file.content}`),
+                    ),
+            );
+            $body.empty().append($sheet);
+        },
+        error(xhr) {
+            if (xhr.readyState !== 0) {
+                blueslip.warn(`Failed to preview workspace image: ${xhr.responseText}`);
+            }
+        },
+    });
+}
+
 function show_file_preview(path: string): void {
     if (current_stream === undefined || current_topic === undefined) {
+        return;
+    }
+    if (PEAR_IMAGE_PREVIEW_PATTERN.test(path)) {
+        show_image_preview(path);
         return;
     }
     const $body = $pane().find(".pear-files-body");
@@ -1467,6 +1672,21 @@ export function initialize(): void {
             last_files_payload.canvas_path,
             last_files_payload.truncated,
         );
+    });
+    $("body").on("input", ".pear-files-filter", function (this: HTMLElement) {
+        files_filter = String($(this).val() ?? "");
+        if (last_files_payload !== undefined) {
+            render_files_tree(
+                last_files_payload.files,
+                last_files_payload.canvas_path,
+                last_files_payload.truncated,
+            );
+            const refocus = $pane().find(".pear-files-filter")[0];
+            if (refocus instanceof HTMLInputElement) {
+                refocus.focus();
+                refocus.setSelectionRange(refocus.value.length, refocus.value.length);
+            }
+        }
     });
     $("body").on("click", ".pear-files-back", () => {
         if (last_files_payload !== undefined) {

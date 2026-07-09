@@ -1917,7 +1917,6 @@
     position: sticky;
     z-index: 5;
     top: var(--navbar-fixed-height);
-    margin-top: calc(var(--navbar-fixed-height) + var(--header-padding-bottom));
     padding: 0 10px;
 
     &[hidden] {
@@ -1948,6 +1947,14 @@
     &[hidden] {
         display: none;
     }
+}
+
+/* The bar's navbar clearance lives on the column as padding: a top
+   margin on the bar collapses out through .column-middle/.app-main
+   and shifts the whole app 50px below the fixed sidebars' alignment
+   (live report: the 'weird green padding'). */
+.column-middle-inner.pear-topic-bar-active {
+    padding-top: calc(var(--navbar-fixed-height) + var(--header-padding-bottom));
 }
 
 /* Inline mode: with the bar active, the pane joins the page flow —
@@ -2301,6 +2308,121 @@
     border: 1px solid color-mix(in srgb, var(--pear-accent-ink) 35%, transparent);
     background: var(--pear-accent-fill);
     color: var(--pear-accent-ink);
+}
+
+/* The repo head strip: branch, HEAD, and working-state at a glance. */
+.pear-files-repo-head {
+    display: flex;
+    overflow: hidden;
+    align-items: baseline;
+    gap: var(--pear-space-3);
+    margin-bottom: var(--pear-space-3);
+    padding-bottom: var(--pear-space-3);
+    border-bottom: 1px solid var(--pear-hairline);
+    white-space: nowrap;
+}
+
+.pear-files-repo-branch,
+.pear-files-repo-sha {
+    flex: 0 0 auto;
+    color: var(--pear-accent-ink);
+    font-family: var(--pear-font-pixel);
+    /* stylelint-disable-next-line declaration-property-unit-disallowed-list */
+    font-size: 11px;
+}
+
+.pear-files-repo-subject {
+    overflow: hidden;
+    min-width: 0;
+    color: var(--pear-ink-1);
+    text-overflow: ellipsis;
+    font-weight: 500;
+}
+
+.pear-files-repo-meta {
+    overflow: hidden;
+    flex: 0 1 auto;
+    color: var(--pear-ink-3);
+    text-overflow: ellipsis;
+    font-size: 0.857em; /* 12px at 14px em */
+}
+
+.pear-files-repo-head .pear-files-chip {
+    margin-left: auto;
+}
+
+/* Type-to-filter over the tree. */
+.pear-files-filter {
+    width: 100%;
+    margin-bottom: var(--pear-space-3);
+    padding: 4px var(--pear-space-2);
+    border: 1px solid var(--pear-hairline);
+    border-radius: var(--pear-radius-chip);
+    background: var(--pear-surface-0);
+    color: var(--pear-ink-1);
+    font-family: var(--pear-font-mono);
+    font-size: 0.9286em; /* 13px at 14px em */
+
+    &:focus {
+        border-color: var(--pear-accent-ink);
+        outline: none;
+    }
+
+    &::placeholder {
+        color: var(--pear-ink-3);
+        font-family: var(--pear-font-pixel);
+    }
+}
+
+/* Recent commits, like the repo landing page's history peek. */
+.pear-files-commits {
+    margin-top: var(--pear-space-5);
+    padding-top: var(--pear-space-3);
+    border-top: 1px solid var(--pear-hairline);
+}
+
+.pear-files-section-title {
+    margin-bottom: var(--pear-space-2);
+    color: var(--pear-ink-3);
+    font-family: var(--pear-font-pixel);
+    /* stylelint-disable-next-line declaration-property-unit-disallowed-list */
+    font-size: 11px;
+}
+
+.pear-files-commits-list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.pear-files-commit-row {
+    display: flex;
+    align-items: baseline;
+    gap: var(--pear-space-3);
+    padding: 2px var(--pear-space-2);
+    border-radius: var(--pear-radius-chip);
+}
+
+.pear-files-commit-summary {
+    overflow: hidden;
+    min-width: 0;
+    color: var(--pear-ink-2);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Image previews sit on the sheet like a plate. */
+.pear-files-preview-image {
+    display: flex;
+    justify-content: center;
+    padding: var(--pear-space-4);
+
+    & img {
+        max-width: 100%;
+        height: auto;
+        border: 1px solid var(--pear-hairline);
+        border-radius: var(--pear-radius-chip);
+    }
 }
 
 /* GitHub-style annotations: the last commit that touched the file,

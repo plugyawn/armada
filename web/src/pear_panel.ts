@@ -13,13 +13,13 @@ import {message_render_response_schema} from "./message_store.ts";
 import * as narrow_state from "./narrow_state.ts";
 import * as pear_canvas from "./pear_canvas.ts";
 import * as pear_run_state from "./pear_run_state.ts";
-import * as pear_workspace_marks from "./pear_workspace_marks.ts";
-import * as pear_workspace_view from "./pear_workspace_view.ts";
 import {
     compact_reasoning_effort,
     context_key,
     model_reasoning_efforts,
 } from "./pear_runtime_shared.ts";
+import * as pear_workspace_marks from "./pear_workspace_marks.ts";
+import * as pear_workspace_view from "./pear_workspace_view.ts";
 import {postprocess_content} from "./postprocess_content.ts";
 import * as rendered_markdown from "./rendered_markdown.ts";
 import * as stream_data from "./stream_data.ts";
@@ -917,7 +917,7 @@ function display_topic_context(topic_context: PearTopicContext | undefined | nul
             recent_commit_count > 0
                 ? $t({defaultMessage: "History {recent_commit_count}"}, {recent_commit_count})
                 : $t({defaultMessage: "History"}),
-        canvas_tab_label: $t({defaultMessage: "Canvas"}),
+        canvas_tab_label: $t({defaultMessage: "README"}),
         side_tab_label: $t({defaultMessage: "Whisper"}),
         git_tree,
         git_tree_loading: git_tree_loading_contexts.has(topic_key),
@@ -1076,6 +1076,20 @@ function render_topic_header_controls(options: {
                 ? undefined
                 : typeof topic_context.workdir === "string" && topic_context.workdir.trim() !== "",
     });
+    pear_workspace_view.set_files_git_summary(
+        topic_context === undefined
+            ? undefined
+            : {
+                  branch: topic_context.panel_header_branch_label,
+                  head_sha: topic_context.panel_commit_sha,
+                  head_subject: topic_context.panel_commit_subject,
+                  head_meta: topic_context.panel_commit_meta,
+                  changed_label: topic_context.changed_label,
+                  commits: topic_context.history_commits
+                      .slice(0, 5)
+                      .map((commit) => ({hash: commit.hash, summary: commit.summary})),
+              },
+    );
     if (stream === undefined || topic === undefined || topic_context === undefined) {
         return;
     }
@@ -1312,7 +1326,7 @@ export function workbench_popover_top_for_testing(options: {
 
 function position_workbench_popover(): void {
     const panel = ensure_pear_panel_host();
-    if (panel === undefined || !panel.classList.contains("pear-workbench-popover-open")) {
+    if (!panel?.classList.contains("pear-workbench-popover-open")) {
         return;
     }
     const anchor = visible_header_anchor();
@@ -1448,7 +1462,7 @@ function render_canvas_for_context(key: string, canvas: PearCanvas): void {
             }
             const data = message_render_response_schema.parse(raw_data);
             const current_canvas = canvas_by_context.get(key);
-            if (current_canvas === undefined || current_canvas.version !== canvas.version) {
+            if (current_canvas?.version !== canvas.version) {
                 return;
             }
             canvas_by_context.set(key, {
@@ -1463,7 +1477,7 @@ function render_canvas_for_context(key: string, canvas: PearCanvas): void {
             }
             if (xhr.readyState !== 0) {
                 const current_canvas = canvas_by_context.get(key);
-                if (current_canvas !== undefined && current_canvas.version === canvas.version) {
+                if (current_canvas?.version === canvas.version) {
                     canvas_by_context.set(key, {...current_canvas, render_failed: true});
                 }
                 blueslip.warn(`Failed to render Pear canvas: ${xhr.responseText}`);
@@ -2047,8 +2061,8 @@ function render(
         show_panel_header: panel_header_state.show_panel_header,
         panel_header_quiet:
             active_run !== undefined &&
-            active_run.show_status !== true &&
-            active_run.has_actions === true,
+            !active_run.show_status &&
+            active_run.has_actions,
         active_run_show_status: active_run?.show_status === true,
         active_run_is_active: active_run?.is_active === true,
         panel_has_active_status: panel_has_active_status_for_testing(active_run?.status),
@@ -2134,7 +2148,7 @@ export function refresh(options: {force_context?: boolean; live?: boolean} = {})
     if (
         typeof document !== "undefined" &&
         polling_paused_for_testing({
-            hidden: document.hidden === true,
+            hidden: document.hidden,
             force_context: options.force_context === true,
         })
     ) {

@@ -1410,9 +1410,7 @@ function mount_canvas_editor(content: string, context_key_at_request: string): v
         try {
             const mounted = await pear_canvas_editor.mount(body, {
                 markdown: content,
-                placeholder: $t({
-                    defaultMessage: "Write, or [ask Pear anything] and press Shift+Enter",
-                }),
+                placeholder: $t({defaultMessage: "write\u2026"}),
                 on_markdown_updated: handle_markdown_updated,
                 on_set_gesture: handle_set_gesture,
                 get_pending_spans: pending_ask_spans,

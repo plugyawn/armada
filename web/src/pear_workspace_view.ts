@@ -71,6 +71,10 @@ export function pane_is_open(): boolean {
     return current_tab !== "chat";
 }
 
+export function refresh_tab_strips(): void {
+    update_tab_strips();
+}
+
 function update_tab_strips(): void {
     $(".pear-workspace-tab").each(function (this: HTMLElement) {
         const tab = $(this).attr("data-pear-tab");
@@ -131,17 +135,24 @@ export function set_tab(tab: PearWorkspaceTab): void {
 }
 
 // Called from pear_panel on every header render; cheap and idempotent.
+// has_workspace === undefined means "context still loading — keep the
+// last known answer": flapping to hidden during fetch gaps made the
+// strip flicker (live report).
 export function sync(opts: {
     stream: string | undefined;
     topic: string | undefined;
-    has_workspace: boolean;
+    has_workspace: boolean | undefined;
 }): void {
     const key = context_key(opts.stream, opts.topic);
     const context_changed = key !== current_context_key;
     current_context_key = key;
     current_stream = opts.stream;
     current_topic = opts.topic;
-    has_workspace = opts.has_workspace;
+    if (context_changed) {
+        has_workspace = opts.has_workspace ?? false;
+    } else if (opts.has_workspace !== undefined) {
+        has_workspace = opts.has_workspace;
+    }
     if (context_changed && pane_is_open()) {
         // A new narrow always lands on Chat.
         current_tab = "chat";

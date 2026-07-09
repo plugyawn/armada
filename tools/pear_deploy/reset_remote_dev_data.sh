@@ -142,7 +142,7 @@ EOF
 fi
 
 echo "Stopping Pear/Zulip services..."
-ssh_root 'systemctl stop pear-zulip-dev pear-embedded-bots pear-worker || true'
+ssh_root 'systemctl stop pear-zulip-dev pear-embedded-bots pear-worker pear-thumbnail || true'
 
 # Topic worktrees must not survive the database reset: workdir slugs are
 # deterministic per (realm, stream, topic), so a recreated same-name topic
@@ -289,7 +289,7 @@ REMOTE
     "sudo -Hu zulipdev bash -lc 'cd /home/zulipdev/zulip && set -a && . /home/zulipdev/pear.env && set +a && bash -s'"
 
 echo "Starting services..."
-ssh_root 'systemctl daemon-reload && systemctl restart caddy pear-zulip-dev pear-embedded-bots pear-worker'
+ssh_root 'systemctl daemon-reload && systemctl restart caddy pear-zulip-dev pear-embedded-bots pear-worker pear-thumbnail'
 
 echo "Done. Verify with:"
 echo "  tools/pear_deploy/verify_remote.sh $STATE_PATH"

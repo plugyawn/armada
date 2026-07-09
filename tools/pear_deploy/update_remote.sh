@@ -343,7 +343,7 @@ fi
 chown -R zulipdev:zulipdev "$REMOTE_PATH"
 chown -R zulipdev:zulipdev /home/zulipdev/.git 2>/dev/null || true
 chown -R zulipdev:zulipdev "$REMOTE_PEAR_DIR" 2>/dev/null || true
-systemctl restart pear-worker pear-embedded-bots pear-zulip-dev
+systemctl restart pear-worker pear-embedded-bots pear-thumbnail pear-zulip-dev
 REMOTE
         local rollback_status=$?
         set -e
@@ -518,7 +518,7 @@ fi
 
 echo "Restarting Pear services..."
 RESTART_EPOCH="$(ssh_root 'date +%s')"
-ssh_root 'systemctl restart pear-worker pear-embedded-bots pear-zulip-dev'
+ssh_root 'systemctl restart pear-worker pear-embedded-bots pear-thumbnail pear-zulip-dev'
 
 echo "Waiting for https://$FQDN/ to serve..."
 SITE_CODE=""
@@ -590,7 +590,7 @@ echo "Migration tail:"
 ssh_zulip "$REMOTE_PATH/.venv/bin/python3 $REMOTE_PATH/manage.py showmigrations zerver | tail"
 
 echo "Service status:"
-ssh_root 'systemctl --no-pager --full status pear-worker pear-embedded-bots pear-zulip-dev | sed -n "1,120p"'
+ssh_root 'systemctl --no-pager --full status pear-worker pear-embedded-bots pear-thumbnail pear-zulip-dev | sed -n "1,120p"'
 
 echo "pear-worker log tail:"
 ssh_root 'journalctl -u pear-worker -n 40 --no-pager'

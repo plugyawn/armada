@@ -1912,6 +1912,7 @@ function render_workspace_rail(
             ? $t({defaultMessage: "{changed_count} changed"}, {changed_count})
             : $t({defaultMessage: "clean"}),
         runs: pear_rail_run_entries(runs),
+        has_runs: pear_rail_run_entries(runs).length > 0,
         show_canvas_line: true,
     };
     const signature = JSON.stringify(args);

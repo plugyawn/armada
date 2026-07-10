@@ -14,7 +14,7 @@ import selectors
 import subprocess
 import threading
 import time
-from collections import OrderedDict
+from collections import Counter, OrderedDict
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -147,6 +147,29 @@ class _CachedSnapshot:
 
 _snapshot_cache: OrderedDict[tuple[str, int], _CachedSnapshot] = OrderedDict()
 _snapshot_cache_lock = threading.RLock()
+_workspace_metrics: Counter[str] = Counter()
+_workspace_metrics_lock = threading.Lock()
+_workspace_request_state = threading.local()
+
+
+def record_workspace_metric(name: str) -> None:
+    with _workspace_metrics_lock:
+        _workspace_metrics[name] += 1
+
+
+def workspace_metrics_snapshot() -> dict[str, int]:
+    with _workspace_metrics_lock:
+        return dict(_workspace_metrics)
+
+
+def consume_workspace_cache_status() -> str | None:
+    status = getattr(_workspace_request_state, "cache_status", None)
+    _workspace_request_state.cache_status = None
+    return status
+
+
+def _set_workspace_cache_status(status: str) -> None:
+    _workspace_request_state.cache_status = status
 
 
 def _workspace_index_secret() -> bytes:
@@ -163,11 +186,14 @@ def _local_cache_get(workspace_uuid: str, revision: int) -> WorkspaceSnapshot | 
     with _snapshot_cache_lock:
         cached = _snapshot_cache.get(key)
         if cached is None:
+            record_workspace_metric("snapshot_local_miss")
             return None
         if cached.expires_at <= time.monotonic():
             del _snapshot_cache[key]
+            record_workspace_metric("snapshot_local_expired")
             return None
         _snapshot_cache.move_to_end(key)
+        record_workspace_metric("snapshot_local_hit")
         return cached.snapshot
 
 
@@ -1307,8 +1333,13 @@ def get_workspace_snapshot(
     if not force:
         cached = _local_cache_get(workspace_uuid, int(node.content_revision))
         if cached is not None:
+            _set_workspace_cache_status("local-hit")
             return cached
+    else:
+        record_workspace_metric("snapshot_forced")
 
+    record_workspace_metric("snapshot_rebuild")
+    _set_workspace_cache_status("rebuild")
     paths, fingerprint, branch, head, dirty_count = _enumerate_workspace(node)
     latest = cache.get(_latest_fingerprint_cache_key(workspace_uuid))
     if (

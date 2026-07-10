@@ -3,8 +3,11 @@ from __future__ import annotations
 import hashlib
 import logging
 import re
+import time
+from collections.abc import Callable
 from datetime import timedelta
-from typing import Annotated, Literal
+from functools import wraps
+from typing import Annotated, Literal, ParamSpec
 from uuid import UUID
 
 from django.http import HttpRequest, HttpResponse, StreamingHttpResponse
@@ -49,6 +52,7 @@ from zerver.lib.pear_workspace_resources import (
     WorkspaceSnapshotError,
     complete_workspace_entry_mutation_receipt,
     conflict_workspace_entry_mutation_receipt,
+    consume_workspace_cache_status,
     create_workspace_node_directory,
     create_workspace_node_file,
     delete_workspace_node_entry,
@@ -70,6 +74,7 @@ from zerver.lib.pear_workspace_resources import (
     record_workspace_entry_mutation_application,
     record_workspace_entry_mutation_stage,
     record_workspace_file_observation,
+    record_workspace_metric,
     refresh_workspace_snapshot,
     refresh_workspace_snapshot_after_conflict,
     rename_workspace_node_entry,
@@ -78,6 +83,7 @@ from zerver.lib.pear_workspace_resources import (
     workspace_entry_mutation_lookup_payload,
     workspace_entry_mutation_staging_path,
     workspace_language,
+    workspace_metrics_snapshot,
     workspace_mime_type,
     workspace_rich_mode_eligible,
     write_workspace_node_file_at_revision,
@@ -92,6 +98,38 @@ logger = logging.getLogger(__name__)
 
 PEAR_WORKSPACE_PREPARED_RECOVERY_GRACE_SECONDS = 30
 PEAR_WORKSPACE_RECOVERY_BATCH_SIZE = 8
+_P = ParamSpec("_P")
+
+
+def workspace_server_timing(
+    operation: str,
+) -> Callable[[Callable[_P, HttpResponse]], Callable[_P, HttpResponse]]:
+    def decorate(view: Callable[_P, HttpResponse]) -> Callable[_P, HttpResponse]:
+        @wraps(view)
+        def timed(*args: _P.args, **kwargs: _P.kwargs) -> HttpResponse:
+            consume_workspace_cache_status()
+            started = time.perf_counter()
+            try:
+                response = view(*args, **kwargs)
+            except Exception:
+                record_workspace_metric(f"response_{operation}_exception")
+                raise
+            duration_ms = (time.perf_counter() - started) * 1000
+            cache_status = consume_workspace_cache_status()
+            timings = [f'pear_workspace;dur={duration_ms:.2f};desc="{operation}"']
+            if cache_status is not None:
+                timings.append(f'pear_workspace_cache;desc="{cache_status}"')
+            response["Server-Timing"] = ", ".join(timings)
+            response_metric = f"response_{operation}_{response.status_code // 100}xx"
+            record_workspace_metric(response_metric)
+            response["X-Pear-Workspace-Operation-Count"] = str(
+                workspace_metrics_snapshot()[response_metric]
+            )
+            return response
+
+        return timed
+
+    return decorate
 
 
 def _workspace_error(
@@ -1089,6 +1127,7 @@ def _check_and_record_file_observation(
     return None
 
 
+@workspace_server_timing("descriptor")
 @typed_endpoint
 def get_pear_workspace_descriptor_backend(
     request: HttpRequest,
@@ -1106,6 +1145,7 @@ def get_pear_workspace_descriptor_backend(
     )
 
 
+@workspace_server_timing("tree")
 @typed_endpoint
 def get_pear_workspace_tree_backend(
     request: HttpRequest,
@@ -1183,6 +1223,7 @@ def _ancestor_payloads(
     return [_entry_payload(ancestor) for ancestor in ancestors]
 
 
+@workspace_server_timing("search")
 @typed_endpoint
 def get_pear_workspace_search_backend(
     request: HttpRequest,
@@ -1224,6 +1265,7 @@ def get_pear_workspace_search_backend(
     )
 
 
+@workspace_server_timing("file_read")
 @typed_endpoint
 def get_pear_workspace_resource_file_backend(
     request: HttpRequest,
@@ -1261,6 +1303,7 @@ def _stale_workspace_response(snapshot: WorkspaceSnapshot) -> HttpResponse:
     )
 
 
+@workspace_server_timing("file_write")
 @typed_endpoint
 def put_pear_workspace_resource_file_backend(
     request: HttpRequest,
@@ -1605,6 +1648,7 @@ def put_pear_workspace_resource_file_backend(
     return json_success(request, data={"pear_workspace_file": payload})
 
 
+@workspace_server_timing("entry_create")
 @typed_endpoint
 def post_pear_workspace_entry_backend(
     request: HttpRequest,
@@ -1805,6 +1849,7 @@ def post_pear_workspace_entry_backend(
     )
 
 
+@workspace_server_timing("entry_rename")
 @typed_endpoint
 def patch_pear_workspace_entry_backend(
     request: HttpRequest,
@@ -2070,6 +2115,7 @@ def patch_pear_workspace_entry_backend(
     )
 
 
+@workspace_server_timing("entry_delete")
 @typed_endpoint
 def delete_pear_workspace_entry_backend(
     request: HttpRequest,
@@ -2332,6 +2378,7 @@ def delete_pear_workspace_entry_backend(
     )
 
 
+@workspace_server_timing("history")
 @typed_endpoint
 def get_pear_workspace_history_backend(
     request: HttpRequest,
@@ -2405,6 +2452,7 @@ def get_pear_workspace_history_backend(
     )
 
 
+@workspace_server_timing("raw")
 @typed_endpoint
 def get_pear_workspace_raw_backend(
     request: HttpRequest,
@@ -2473,6 +2521,7 @@ def get_pear_workspace_raw_backend(
     return response
 
 
+@workspace_server_timing("refresh")
 @typed_endpoint
 def post_pear_workspace_refresh_backend(
     request: HttpRequest,

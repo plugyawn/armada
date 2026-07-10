@@ -1,3 +1,5 @@
+import hashlib
+import os
 import subprocess
 import tempfile
 from datetime import timedelta
@@ -9,6 +11,7 @@ import orjson
 from django.core.cache import cache
 from django.utils.timezone import now as timezone_now
 
+from zerver.lib.events import fetch_initial_state_data
 from zerver.lib.pear import (
     PEAR_ACTIVE_SESSION_ENDPOINT,
     PEAR_AGENT_RUNTIME_PACKAGES,
@@ -40,6 +43,16 @@ from zerver.lib.pear_gate import (
     get_selected_pear_bot_user_id_for_realm,
     pear_selected_bot_cache_key,
 )
+from zerver.lib.pear_monitor import (
+    PEAR_MONITOR_FAILURE_LIMIT,
+    PEAR_MONITOR_MAX_PER_TOPIC,
+    PearMonitorSpecError,
+    pear_apply_monitor_setup_result,
+    pear_monitor_apply_tick,
+    pear_monitor_bind_props,
+    pear_monitor_spec_relative_path,
+    pear_validate_monitor_spec,
+)
 from zerver.lib.pear_worker import (
     PearDatabaseWorkerRunStore,
     build_pear_worker_runtime_from_settings,
@@ -68,24 +81,19 @@ from zerver.lib.pear_worker import (
     pear_worker_runtime_isolation_error,
     pear_worker_sandbox_for_topic,
     pear_worker_workdir_for_topic,
-    pear_workspace_node_default_branch,
-    reap_stale_pear_worker_runs,
+    pear_workspace_allowed_file_paths,
     pear_workspace_file_listing,
+    pear_workspace_node_default_branch,
     pear_workspace_relative_path,
+    reap_stale_pear_worker_runs,
+)
+from zerver.lib.pear_workspace_io import (
+    WorkspaceFile,
+    WorkspaceVersionConflictError,
+    WorkspaceWriteResult,
 )
 from zerver.lib.test_classes import ZulipTestCase
 from zerver.models import Message, Recipient, Subscription, UserProfile
-from zerver.lib.events import fetch_initial_state_data
-from zerver.lib.pear_monitor import (
-    PEAR_MONITOR_FAILURE_LIMIT,
-    PEAR_MONITOR_MAX_PER_TOPIC,
-    PearMonitorSpecError,
-    pear_apply_monitor_setup_result,
-    pear_monitor_apply_tick,
-    pear_monitor_bind_props,
-    pear_monitor_spec_relative_path,
-    pear_validate_monitor_spec,
-)
 from zerver.models.bots import (
     PearMonitor,
     PearProject,
@@ -1236,18 +1244,164 @@ class PearSessionEndpointTest(ZulipTestCase):
                     },
                     intentionally_undocumented=True,
                 )
+                idempotent_result = self.client_put(
+                    f"/json{PEAR_CANVAS_ENDPOINT}",
+                    {
+                        "stream": PEAR_DEFAULT_STREAM,
+                        "topic": PEAR_DEFAULT_TOPIC,
+                        "content": updated_content,
+                        # Simulate retrying after the successful response was
+                        # lost: the body is current but the base is stale.
+                        "base_version": initial_canvas["version"],
+                    },
+                    intentionally_undocumented=True,
+                )
 
         saved_canvas = self.assert_json_success(put_result)["pear_canvas"]
+        idempotent_canvas = self.assert_json_success(idempotent_result)["pear_canvas"]
         self.assertEqual(saved_canvas["content"], updated_content)
         self.assertNotEqual(saved_canvas["version"], initial_canvas["version"])
+        self.assertEqual(idempotent_canvas, saved_canvas)
         self.assert_json_error(
             stale_result,
             "Pear canvas changed; reload before saving.",
             status_code=409,
         )
         stale_payload = orjson.loads(stale_result.content)
+        self.assertEqual(stale_payload["error_code"], "version_conflict")
         self.assertEqual(stale_payload["pear_canvas"]["content"], updated_content)
         self.assertEqual(stale_payload["pear_canvas"]["version"], saved_canvas["version"])
+
+    def test_pear_canvas_translates_atomic_write_race_to_typed_conflict(self) -> None:
+        owner = self.example_user("hamlet")
+        stream = self.subscribe(owner, PEAR_DEFAULT_STREAM)
+        self.login_user(owner)
+
+        initial_data = b"# Initial\n"
+        changed_data = b"# Changed elsewhere\n"
+        initial_file = WorkspaceFile(
+            data=initial_data,
+            version=hashlib.sha256(initial_data).hexdigest(),
+            size=len(initial_data),
+            mode=0o600,
+        )
+        changed_file = WorkspaceFile(
+            data=changed_data,
+            version=hashlib.sha256(changed_data).hexdigest(),
+            size=len(changed_data),
+            mode=0o600,
+        )
+        context = SimpleNamespace(workdir="/canonical/workspace")
+        with (
+            patch("zerver.views.pear.ensure_pear_topic_context", return_value=context),
+            patch("zerver.views.pear.pear_context_isolation_username", return_value=None),
+            patch("zerver.views.pear.read_workspace_file", return_value=initial_file),
+            patch(
+                "zerver.views.pear.atomic_write_workspace_file",
+                side_effect=WorkspaceVersionConflictError(
+                    "changed during write",
+                    current=changed_file,
+                ),
+            ) as atomic_write,
+        ):
+            result = self.client_put(
+                f"/json{PEAR_CANVAS_ENDPOINT}",
+                {
+                    "stream": stream.name,
+                    "topic": PEAR_DEFAULT_TOPIC,
+                    "content": "# My edit\n",
+                    "base_version": initial_file.version,
+                },
+                intentionally_undocumented=True,
+            )
+
+        atomic_write.assert_called_once()
+        self.assert_json_error(
+            result,
+            "Pear canvas changed; reload before saving.",
+            status_code=409,
+        )
+        payload = orjson.loads(result.content)
+        self.assertEqual(payload["error_code"], "version_conflict")
+        self.assertEqual(payload["pear_canvas"]["content"], changed_data.decode())
+        self.assertEqual(payload["pear_canvas"]["version"], changed_file.version)
+
+    def test_pear_canvas_uses_isolation_helper_for_reads_and_writes(self) -> None:
+        owner = self.example_user("hamlet")
+        stream = self.subscribe(owner, PEAR_DEFAULT_STREAM)
+        self.login_user(owner)
+
+        workdir = "/canonical/isolated-workspace"
+        isolation_username = "pear-0123456789abcdef01234567"
+        initial_data = b"# Old\n"
+        saved_data = b"# New\n"
+        initial_file = WorkspaceFile(
+            data=initial_data,
+            version=hashlib.sha256(initial_data).hexdigest(),
+            size=len(initial_data),
+            mode=0o600,
+        )
+        saved_file = WorkspaceFile(
+            data=saved_data,
+            version=hashlib.sha256(saved_data).hexdigest(),
+            size=len(saved_data),
+            mode=0o600,
+        )
+        context = SimpleNamespace(workdir=workdir)
+        with (
+            patch("zerver.views.pear.pear_topic_context_for_request", return_value=context),
+            patch("zerver.views.pear.ensure_pear_topic_context", return_value=context),
+            patch(
+                "zerver.views.pear.pear_context_isolation_username",
+                return_value=isolation_username,
+            ),
+            patch(
+                "zerver.views.pear.read_workspace_file_via_helper",
+                return_value=initial_file,
+            ) as helper_read,
+            patch(
+                "zerver.views.pear.atomic_write_workspace_file_via_helper",
+                return_value=WorkspaceWriteResult(
+                    file=saved_file,
+                    changed=True,
+                    created=False,
+                ),
+            ) as helper_write,
+        ):
+            get_result = self.client_get(
+                f"/json{PEAR_CANVAS_ENDPOINT}",
+                {"stream": stream.name, "topic": PEAR_DEFAULT_TOPIC},
+                intentionally_undocumented=True,
+            )
+            canvas = self.assert_json_success(get_result)["pear_canvas"]
+            put_result = self.client_put(
+                f"/json{PEAR_CANVAS_ENDPOINT}",
+                {
+                    "stream": stream.name,
+                    "topic": PEAR_DEFAULT_TOPIC,
+                    "content": saved_data.decode(),
+                    "base_version": canvas["version"],
+                },
+                intentionally_undocumented=True,
+            )
+
+        self.assert_json_success(put_result)
+        self.assertEqual(helper_read.call_count, 2)
+        helper_read.assert_called_with(
+            workdir,
+            "README.md",
+            max_bytes=64 * 1024,
+            isolation_username=isolation_username,
+        )
+        helper_write.assert_called_once_with(
+            workdir,
+            "README.md",
+            saved_data,
+            max_bytes=64 * 1024,
+            expected_version=initial_file.version,
+            create=False,
+            isolation_username=isolation_username,
+        )
 
     def test_put_pear_canvas_rejects_oversized_content(self) -> None:
         owner = self.example_user("hamlet")
@@ -4011,9 +4165,7 @@ class PearWorkspaceFilesTest(ZulipTestCase):
         self.assertIsNone(pear_workspace_relative_path("/w", "/etc/passwd"))
         self.assertIsNone(pear_workspace_relative_path("/w", ".git/config"))
         self.assertIsNone(pear_workspace_relative_path("/w", "a/../.."))
-        self.assertEqual(
-            str(pear_workspace_relative_path("/w", "src/./main.py")), "/w/src/main.py"
-        )
+        self.assertEqual(str(pear_workspace_relative_path("/w", "src/./main.py")), "/w/src/main.py")
 
     def test_workspace_files_endpoint_without_workspace(self) -> None:
         user = self.example_user("hamlet")
@@ -4076,9 +4228,7 @@ class PearWorkspaceFilesTest(ZulipTestCase):
                         "encoding": "base64",
                     },
                 )
-                self.assert_json_error(
-                    not_image, "Only image files can be previewed this way."
-                )
+                self.assert_json_error(not_image, "Only image files can be previewed this way.")
                 svg = self.client_get(
                     "/json/pear/workspace-file",
                     {
@@ -4133,6 +4283,216 @@ class PearWorkspaceFilesTest(ZulipTestCase):
                 )
                 self.assert_json_error(traversal, "Invalid file path.")
 
+    def test_workspace_file_endpoint_distinguishes_file_failures(self) -> None:
+        user = self.example_user("hamlet")
+        stream = self.subscribe(user, "workfiles")
+        self.login_user(user)
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo = self.make_workspace(Path(temp_dir).resolve())
+            (repo / "empty.txt").write_bytes(b"")
+            (repo / "invalid.txt").write_bytes(b"\xff")
+            with (repo / "oversized.txt").open("wb") as oversized:
+                oversized.seek(1_000_000)
+                oversized.write(b"x")
+            context = SimpleNamespace(workdir=str(repo))
+            with (
+                patch(
+                    "zerver.views.pear.pear_topic_context_for_request",
+                    return_value=context,
+                ),
+                patch(
+                    "zerver.views.pear.pear_context_isolation_username",
+                    return_value=None,
+                ),
+            ):
+                empty_result = self.client_get(
+                    "/json/pear/workspace-file",
+                    {"stream": stream.name, "topic": "bare", "path": "empty.txt"},
+                )
+                missing_result = self.client_get(
+                    "/json/pear/workspace-file",
+                    {"stream": stream.name, "topic": "bare", "path": "missing.txt"},
+                )
+                invalid_result = self.client_get(
+                    "/json/pear/workspace-file",
+                    {"stream": stream.name, "topic": "bare", "path": "invalid.txt"},
+                )
+                with patch("zerver.lib.pear_workspace_io.os.read") as read:
+                    oversized_result = self.client_get(
+                        "/json/pear/workspace-file",
+                        {
+                            "stream": stream.name,
+                            "topic": "bare",
+                            "path": "oversized.txt",
+                        },
+                    )
+                read.assert_not_called()
+
+        empty_payload = self.assert_json_success(empty_result)["pear_workspace_file"]
+        self.assertEqual(empty_payload["content"], "")
+        self.assert_json_error(
+            missing_result,
+            "This file is not available in the workspace.",
+        )
+        self.assert_json_error(invalid_result, "This file is not valid UTF-8.")
+        self.assert_json_error(oversized_result, "This file is too large to view here.")
+
+    def test_workspace_file_endpoint_blocks_ignored_and_unsafe_entries(self) -> None:
+        user = self.example_user("hamlet")
+        stream = self.subscribe(user, "workfiles")
+        self.login_user(user)
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo = self.make_workspace(Path(temp_dir).resolve())
+            (repo / ".gitignore").write_text(".env\n", encoding="utf-8")
+            (repo / ".env").write_text("SECRET=value\n", encoding="utf-8")
+            outside = repo.parent / "outside"
+            outside.mkdir()
+            (outside / "secret.txt").write_text("secret\n", encoding="utf-8")
+            (repo / "file-link").symlink_to(outside / "secret.txt")
+            (repo / "nested-link").symlink_to(outside, target_is_directory=True)
+            os.mkfifo(repo / "pipe")
+            os.link(repo / "README.md", repo / "hardlink.md")
+            context = SimpleNamespace(workdir=str(repo))
+            with (
+                patch(
+                    "zerver.views.pear.pear_topic_context_for_request",
+                    return_value=context,
+                ),
+                patch(
+                    "zerver.views.pear.pear_context_isolation_username",
+                    return_value=None,
+                ),
+            ):
+                ignored_result = self.client_get(
+                    "/json/pear/workspace-file",
+                    {"stream": stream.name, "topic": "bare", "path": ".env"},
+                )
+                with patch(
+                    "zerver.views.pear.pear_workspace_allowed_file_paths",
+                    return_value={
+                        "file-link",
+                        "nested-link/secret.txt",
+                        "pipe",
+                        "hardlink.md",
+                    },
+                ):
+                    unsafe_results = {
+                        path: self.client_get(
+                            "/json/pear/workspace-file",
+                            {"stream": stream.name, "topic": "bare", "path": path},
+                        )
+                        for path in (
+                            "file-link",
+                            "nested-link/secret.txt",
+                            "pipe",
+                            "hardlink.md",
+                        )
+                    }
+
+        self.assert_json_error(
+            ignored_result,
+            "This file is not available in the workspace.",
+        )
+        self.assert_json_error(
+            unsafe_results["file-link"],
+            "This file cannot be opened safely.",
+        )
+        # Linux may report a no-follow directory symlink as either ELOOP or
+        # ENOTDIR; both responses block the escape before any outside read.
+        nested_payload = orjson.loads(unsafe_results["nested-link/secret.txt"].content)
+        self.assertIn(
+            nested_payload["msg"],
+            {"This file cannot be opened safely.", "This file no longer exists."},
+        )
+        self.assert_json_error(
+            unsafe_results["pipe"],
+            "This file cannot be opened safely.",
+        )
+        self.assert_json_error(
+            unsafe_results["hardlink.md"],
+            "This file cannot be opened safely.",
+        )
+
+    def test_workspace_file_endpoint_uses_complete_allow_set(self) -> None:
+        user = self.example_user("hamlet")
+        stream = self.subscribe(user, "workfiles")
+        self.login_user(user)
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo = self.make_workspace(Path(temp_dir).resolve())
+            for index in range(501):
+                (repo / f"bulk-{index:03}.txt").write_text("bulk\n", encoding="utf-8")
+            (repo / "zz-after-list-limit.txt").write_text("reachable\n", encoding="utf-8")
+            self.assertGreater(len(pear_workspace_allowed_file_paths(str(repo))), 500)
+            context = SimpleNamespace(workdir=str(repo))
+            with (
+                patch(
+                    "zerver.views.pear.pear_topic_context_for_request",
+                    return_value=context,
+                ),
+                patch(
+                    "zerver.views.pear.pear_context_isolation_username",
+                    return_value=None,
+                ),
+            ):
+                result = self.client_get(
+                    "/json/pear/workspace-file",
+                    {
+                        "stream": stream.name,
+                        "topic": "bare",
+                        "path": "zz-after-list-limit.txt",
+                    },
+                )
+
+        payload = self.assert_json_success(result)["pear_workspace_file"]
+        self.assertEqual(payload["content"], "reachable\n")
+
+    def test_workspace_file_endpoint_uses_isolation_helper(self) -> None:
+        user = self.example_user("hamlet")
+        stream = self.subscribe(user, "workfiles")
+        self.login_user(user)
+        workdir = "/canonical/isolated-workspace"
+        isolation_username = "pear-0123456789abcdef01234567"
+        data = b"helper content\n"
+        file = WorkspaceFile(
+            data=data,
+            version=hashlib.sha256(data).hexdigest(),
+            size=len(data),
+            mode=0o600,
+        )
+        context = SimpleNamespace(workdir=workdir)
+        with (
+            patch(
+                "zerver.views.pear.pear_topic_context_for_request",
+                return_value=context,
+            ),
+            patch(
+                "zerver.views.pear.pear_context_isolation_username",
+                return_value=isolation_username,
+            ),
+            patch(
+                "zerver.views.pear.pear_workspace_allowed_file_paths",
+                return_value={"README.md"},
+            ),
+            patch(
+                "zerver.views.pear.read_workspace_file_via_helper",
+                return_value=file,
+            ) as helper_read,
+        ):
+            result = self.client_get(
+                "/json/pear/workspace-file",
+                {"stream": stream.name, "topic": "bare", "path": "README.md"},
+            )
+
+        payload = self.assert_json_success(result)["pear_workspace_file"]
+        self.assertEqual(payload["content"], data.decode())
+        helper_read.assert_called_once_with(
+            workdir,
+            "README.md",
+            max_bytes=1_000_000,
+            isolation_username=isolation_username,
+        )
+
+
 class PearImageEmbedTest(ZulipTestCase):
     def test_embed_workspace_images_uploads_and_appends(self) -> None:
         from zerver.lib.pear import pear_embed_workspace_images
@@ -4168,6 +4528,7 @@ class PearImageEmbedTest(ZulipTestCase):
                 bot_profile=user,
             )
         self.assertEqual(embedded, content)
+
 
 class PearTaskMarkerNormalizationTest(ZulipTestCase):
     def test_normalize_pear_task_markers(self) -> None:
@@ -4227,6 +4588,7 @@ class PearMathNormalizationTest(ZulipTestCase):
         # Idempotent, and a no-op for plain content.
         self.assertEqual(normalize_pear_math_delimiters(normalized), normalized)
         self.assertEqual(normalize_pear_math_delimiters("plain"), "plain")
+
 
 class PearWorkspaceMapTest(ZulipTestCase):
     def test_workspace_topics_endpoint_lists_active_worktrees(self) -> None:
@@ -4395,9 +4757,7 @@ class PearMonitorTest(ZulipTestCase):
             intentionally_undocumented=True,
         )
         # Cadence clamps to the 5s floor.
-        self.assertEqual(
-            self.assert_json_success(result)["pear_monitor"]["cadence_seconds"], 5
-        )
+        self.assertEqual(self.assert_json_success(result)["pear_monitor"]["cadence_seconds"], 5)
 
         result = self.client_patch(
             f"/json/pear/monitors/{monitor.id}",
@@ -4506,9 +4866,7 @@ class PearMonitorTest(ZulipTestCase):
             "parse": {"mode": "regex", "pattern": r"loss=(?P<loss>[\d.]+) step=(?P<step>\d+)"},
             "bindings": {"0.value": "group:loss", "1.value": "group:step"},
         }
-        bound = pear_monitor_bind_props(
-            regex_recipe, "loss=0.91 step=10\nloss=0.42 step=57\n"
-        )
+        bound = pear_monitor_bind_props(regex_recipe, "loss=0.91 step=10\nloss=0.42 step=57\n")
         # The LAST match wins: monitors track the newest line.
         self.assertEqual(bound["0.value"], 0.42)
         self.assertEqual(bound["1.value"], 57)

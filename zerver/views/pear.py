@@ -1,4 +1,5 @@
 import base64
+import hashlib
 import json
 import re
 import subprocess
@@ -24,11 +25,12 @@ from zerver.lib.pear import (
     PEAR_AGENT_NAME,
     PEAR_BOT_SHORT_NAME,
     PEAR_CANVAS_FILE_NAME,
-    PEAR_IMAGE_EMBED_MAX_BYTES,
     PEAR_EMBEDDED_BOT_SERVICE,
     PEAR_FIRST_RUN_STARTER_MESSAGE,
     PEAR_FIRST_RUN_STREAM,
     PEAR_FIRST_RUN_TOPIC,
+    PEAR_IMAGE_EMBED_MAX_BYTES,
+    PEAR_LEGACY_CANVAS_FILE_NAME,
     PEAR_REASONING_EFFORTS,
     PEAR_SELECTED_BOT_CONFIG_KEY,
     PEAR_SELECTED_BOT_CONFIG_VALUE,
@@ -55,7 +57,6 @@ from zerver.lib.pear_monitor import (
     build_pear_monitor_contract,
     serialize_pear_monitor,
 )
-from zerver.lib.pear_workspace_map import pear_workspace_topics_for_stream
 from zerver.lib.pear_worker import (
     PearQueueWorkerDispatcher,
     ensure_pear_child_topic_context,
@@ -66,11 +67,7 @@ from zerver.lib.pear_worker import (
     pear_logical_repository_label,
     pear_logical_worktree_label,
     pear_pinned_repository_value,
-    pear_read_bytes_path,
-    pear_read_text_path,
     pear_repo_artifact_value_is_durable,
-    pear_sha256_text,
-    pear_topic_canvas_path,
     pear_topic_context_is_paused,
     pear_topic_context_response_policy,
     pear_topic_isolation_user_exists,
@@ -80,14 +77,33 @@ from zerver.lib.pear_worker import (
     pear_worker_reasoning_effort_for_topic,
     pear_worker_sandbox_for_topic,
     pear_worker_workdir_for_topic,
+    pear_workspace_allowed_file_paths,
+    pear_workspace_file_listing,
     pear_workspace_node_default_branch,
-    pear_write_text_path,
     set_pear_topic_context_paused,
     set_pear_topic_context_response_policy,
-    pear_workspace_file_listing,
-    pear_workspace_relative_path,
-    pear_topic_canvas_relative_path,
 )
+from zerver.lib.pear_workspace_io import (
+    InvalidWorkspacePathError,
+    UnsafeWorkspaceEntryError,
+    WorkspaceEntryChangedError,
+    WorkspaceEntryExistsError,
+    WorkspaceEntryNotFoundError,
+    WorkspaceFile,
+    WorkspaceFileTooLargeError,
+    WorkspaceInvalidUTF8Error,
+    WorkspaceIOError,
+    WorkspaceTextFile,
+    WorkspaceVersionConflictError,
+    WorkspaceWriteResult,
+    atomic_write_workspace_file,
+    atomic_write_workspace_file_via_helper,
+    decode_workspace_text,
+    read_workspace_file,
+    read_workspace_file_via_helper,
+    validate_workspace_relative_path,
+)
+from zerver.lib.pear_workspace_map import pear_workspace_topics_for_stream
 from zerver.lib.response import json_response, json_success
 from zerver.lib.streams import access_stream_by_name, create_stream_if_needed
 from zerver.lib.timestamp import datetime_to_timestamp
@@ -710,9 +726,9 @@ def serialize_pear_worker_run_usage(run: PearWorkerRun) -> dict[str, object] | N
     # the single latest event.
     usage: PearTokenUsage | None = None
     event = None
-    for candidate in run.events.filter(
-        Q(event_type="usage") | Q(event_type="transcript")
-    ).order_by("-date_created", "-id")[:20]:
+    for candidate in run.events.filter(Q(event_type="usage") | Q(event_type="transcript")).order_by(
+        "-date_created", "-id"
+    )[:20]:
         usage = pear_usage_from_event_payload(candidate.payload)
         if usage is not None:
             event = candidate
@@ -761,9 +777,7 @@ def serialize_pear_worker_run_tool_count(run: PearWorkerRun) -> int:
     # The worker records one tool_results event per turn segment, each
     # carrying that segment's tool_count; the run's total is their sum.
     tool_count = 0
-    for payload in run.events.filter(event_type="tool_results").values_list(
-        "payload", flat=True
-    ):
+    for payload in run.events.filter(event_type="tool_results").values_list("payload", flat=True):
         if isinstance(payload, dict) and isinstance(payload.get("tool_count"), int):
             tool_count += payload["tool_count"]
     return tool_count
@@ -1111,8 +1125,11 @@ def get_pear_workspace_files_backend(
         topic_name=topic_name,
         workdir=workdir,
     )
-    listing = pear_workspace_file_listing(workdir, isolation_username=isolation_username)
-    canvas_path = pear_topic_canvas_relative_path(workdir, isolation_username=isolation_username)
+    try:
+        listing = pear_workspace_file_listing(workdir, isolation_username=isolation_username)
+    except OSError:
+        raise JsonableError(_("Could not list workspace files."))
+    canvas_path = PEAR_CANVAS_FILE_NAME
     listing["canvas_path"] = canvas_path
     # The README is the topic's living document; the Files tab pins
     # it even before it exists on disk.
@@ -1125,6 +1142,53 @@ def get_pear_workspace_files_backend(
 
 PEAR_WORKSPACE_FILE_MAX_BYTES = 1_000_000
 PEAR_WORKSPACE_IMAGE_PATTERN = re.compile(r"\.(png|jpe?g|gif|webp)$", re.IGNORECASE)
+
+
+def pear_read_workspace_file(
+    workdir: str,
+    relative_path: str,
+    *,
+    isolation_username: str | None,
+    max_bytes: int,
+) -> WorkspaceFile:
+    if isolation_username is not None:
+        return read_workspace_file_via_helper(
+            workdir,
+            relative_path,
+            max_bytes=max_bytes,
+            isolation_username=isolation_username,
+        )
+    return read_workspace_file(workdir, relative_path, max_bytes=max_bytes)
+
+
+def pear_write_workspace_file(
+    workdir: str,
+    relative_path: str,
+    data: bytes,
+    *,
+    isolation_username: str | None,
+    max_bytes: int,
+    expected_version: str | None,
+    create: bool,
+) -> WorkspaceWriteResult:
+    if isolation_username is not None:
+        return atomic_write_workspace_file_via_helper(
+            workdir,
+            relative_path,
+            data,
+            max_bytes=max_bytes,
+            expected_version=expected_version,
+            create=create,
+            isolation_username=isolation_username,
+        )
+    return atomic_write_workspace_file(
+        workdir,
+        relative_path,
+        data,
+        max_bytes=max_bytes,
+        expected_version=expected_version,
+        create=create,
+    )
 
 
 @typed_endpoint
@@ -1158,8 +1222,9 @@ def get_pear_workspace_file_backend(
     if context is None or not context.workdir.strip():
         raise JsonableError(_("This topic has no workspace."))
     workdir = context.workdir.strip()
-    resolved_path = pear_workspace_relative_path(workdir, path)
-    if resolved_path is None:
+    try:
+        validated_path = "/".join(validate_workspace_relative_path(path))
+    except InvalidWorkspacePathError:
         raise JsonableError(_("Invalid file path."))
     isolation_username = pear_context_isolation_username(
         context,
@@ -1167,22 +1232,38 @@ def get_pear_workspace_file_backend(
         topic_name=topic_name,
         workdir=workdir,
     )
+    try:
+        allowed_paths = pear_workspace_allowed_file_paths(
+            workdir,
+            isolation_username=isolation_username,
+        )
+    except OSError:
+        raise JsonableError(_("Could not verify this workspace file."))
+    if validated_path not in allowed_paths:
+        # Missing and ignored files intentionally share one response so a
+        # guessed secret path cannot reveal whether the file exists.
+        raise JsonableError(_("This file is not available in the workspace."))
+    if encoding not in {"text", "base64"}:
+        raise JsonableError(_("Invalid file encoding."))
     if encoding == "base64":
-        # Image previews for the Files tab: same isolation-safe read
-        # the chat's image embedding uses.
-        image_match = PEAR_WORKSPACE_IMAGE_PATTERN.search(path)
+        image_match = PEAR_WORKSPACE_IMAGE_PATTERN.search(validated_path)
         if image_match is None:
             raise JsonableError(_("Only image files can be previewed this way."))
         try:
-            data = pear_read_bytes_path(
-                resolved_path,
+            file = pear_read_workspace_file(
+                workdir,
+                validated_path,
                 isolation_username=isolation_username,
                 max_bytes=PEAR_IMAGE_EMBED_MAX_BYTES,
             )
-        except OSError:
-            raise JsonableError(_("Could not read this file."))
-        if len(data) > PEAR_IMAGE_EMBED_MAX_BYTES:
+        except WorkspaceFileTooLargeError:
             raise JsonableError(_("This file is too large to view here."))
+        except WorkspaceEntryNotFoundError:
+            raise JsonableError(_("This file no longer exists."))
+        except UnsafeWorkspaceEntryError:
+            raise JsonableError(_("This file cannot be opened safely."))
+        except WorkspaceIOError:
+            raise JsonableError(_("Could not read this file."))
         extension = image_match.group(1).lower()
         content_type = {
             "jpg": "image/jpeg",
@@ -1192,25 +1273,37 @@ def get_pear_workspace_file_backend(
             request,
             data={
                 "pear_workspace_file": {
-                    "path": str(resolved_path.relative_to(workdir)),
+                    "path": validated_path,
                     "encoding": "base64",
-                    "content": base64.b64encode(data).decode(),
+                    "content": base64.b64encode(file.data).decode(),
                     "content_type": content_type,
                 },
             },
         )
     try:
-        content = pear_read_text_path(resolved_path, isolation_username=isolation_username)
-    except OSError:
-        raise JsonableError(_("Could not read this file."))
-    if len(content.encode("utf-8")) > PEAR_WORKSPACE_FILE_MAX_BYTES:
+        file = pear_read_workspace_file(
+            workdir,
+            validated_path,
+            isolation_username=isolation_username,
+            max_bytes=PEAR_WORKSPACE_FILE_MAX_BYTES,
+        )
+        text_file = decode_workspace_text(file)
+    except WorkspaceFileTooLargeError:
         raise JsonableError(_("This file is too large to view here."))
+    except WorkspaceInvalidUTF8Error:
+        raise JsonableError(_("This file is not valid UTF-8."))
+    except WorkspaceEntryNotFoundError:
+        raise JsonableError(_("This file no longer exists."))
+    except UnsafeWorkspaceEntryError:
+        raise JsonableError(_("This file cannot be opened safely."))
+    except WorkspaceIOError:
+        raise JsonableError(_("Could not read this file."))
     return json_success(
         request,
         data={
             "pear_workspace_file": {
-                "path": str(resolved_path.relative_to(workdir)),
-                "content": content,
+                "path": validated_path,
+                "content": text_file.text,
             },
         },
     )
@@ -1341,23 +1434,74 @@ def get_pear_git_tree_backend(
     )
 
 
+PEAR_LEGACY_CANVAS_FALLBACK_PATH = ".pear/CANVAS.md"
+PEAR_CANVAS_READ_PATHS = (
+    PEAR_CANVAS_FILE_NAME,
+    PEAR_LEGACY_CANVAS_FILE_NAME,
+    PEAR_LEGACY_CANVAS_FALLBACK_PATH,
+)
+PEAR_EMPTY_FILE_VERSION = hashlib.sha256(b"").hexdigest()
+
+
 def pear_canvas_payload(
     *,
-    workdir: str,
-    canvas_path: Path | None,
-    content: str,
+    relative_path: str,
+    file: WorkspaceTextFile | None,
 ) -> dict[str, object]:
-    relative_path = ""
-    if canvas_path is not None and workdir:
-        relative_path = str(canvas_path.relative_to(workdir))
-    elif workdir:
-        relative_path = PEAR_CANVAS_FILE_NAME
     return {
-        "content": content,
-        "version": pear_sha256_text(content),
+        "content": file.text if file is not None else "",
+        "version": file.version if file is not None else PEAR_EMPTY_FILE_VERSION,
         "relative_path": relative_path,
         "max_bytes": PEAR_CANVAS_MAX_BYTES,
     }
+
+
+def pear_read_canvas_file(
+    workdir: str,
+    *,
+    isolation_username: str | None,
+) -> tuple[str, WorkspaceTextFile | None]:
+    for relative_path in PEAR_CANVAS_READ_PATHS:
+        try:
+            file = pear_read_workspace_file(
+                workdir,
+                relative_path,
+                isolation_username=isolation_username,
+                max_bytes=PEAR_CANVAS_MAX_BYTES,
+            )
+        except WorkspaceEntryNotFoundError:
+            continue
+        except WorkspaceFileTooLargeError:
+            raise JsonableError(_("Pear canvas is too large."))
+        except UnsafeWorkspaceEntryError:
+            raise JsonableError(_("Pear canvas is not a safe regular file."))
+        except WorkspaceEntryChangedError:
+            raise JsonableError(_("Pear canvas changed while it was being read."))
+        except WorkspaceIOError:
+            raise JsonableError(_("Could not read Pear canvas."))
+        try:
+            return relative_path, decode_workspace_text(file)
+        except WorkspaceInvalidUTF8Error:
+            raise JsonableError(_("Pear canvas is not valid UTF-8."))
+    return PEAR_CANVAS_FILE_NAME, None
+
+
+def pear_canvas_conflict_response(
+    relative_path: str,
+    file: WorkspaceTextFile | None,
+) -> HttpResponse:
+    return json_response(
+        "error",
+        msg="Pear canvas changed; reload before saving.",
+        data={
+            "error_code": WorkspaceVersionConflictError.code,
+            "pear_canvas": pear_canvas_payload(
+                relative_path=relative_path,
+                file=file,
+            ),
+        },
+        status=409,
+    )
 
 
 @typed_endpoint
@@ -1385,9 +1529,8 @@ def get_pear_canvas_backend(
             request,
             data={
                 "pear_canvas": pear_canvas_payload(
-                    workdir="",
-                    canvas_path=None,
-                    content="",
+                    relative_path="",
+                    file=None,
                 ),
             },
         )
@@ -1398,15 +1541,16 @@ def get_pear_canvas_backend(
         topic_name=topic_name,
         workdir=workdir,
     )
-    canvas_path = pear_topic_canvas_path(workdir, isolation_username=isolation_username)
-    content = pear_read_text_path(canvas_path, isolation_username=isolation_username)
+    relative_path, file = pear_read_canvas_file(
+        workdir,
+        isolation_username=isolation_username,
+    )
     return json_success(
         request,
         data={
             "pear_canvas": pear_canvas_payload(
-                workdir=workdir,
-                canvas_path=canvas_path,
-                content=content,
+                relative_path=relative_path,
+                file=file,
             ),
         },
     )
@@ -1435,7 +1579,11 @@ def put_pear_canvas_backend(
     ],
 ) -> HttpResponse:
     access_stream_by_name(user_profile, stream_name)
-    if len(content.encode("utf-8")) > PEAR_CANVAS_MAX_BYTES:
+    try:
+        content_bytes = content.encode("utf-8", errors="strict")
+    except UnicodeEncodeError:
+        raise JsonableError(_("Pear canvas is not valid UTF-8."))
+    if len(content_bytes) > PEAR_CANVAS_MAX_BYTES:
         raise JsonableError(_("Pear canvas is too large."))
     context = ensure_pear_topic_context(
         user_profile,
@@ -1449,39 +1597,97 @@ def put_pear_canvas_backend(
         topic_name=topic_name,
         workdir=workdir,
     )
-    # Version-check against wherever the doc currently lives (legacy
-    # CANVAS.md included), but always save to README.md — that write
-    # is what migrates a legacy workspace.
-    current_path = pear_topic_canvas_path(workdir, isolation_username=isolation_username)
-    canvas_path = Path(workdir) / PEAR_CANVAS_FILE_NAME
-    current_content = pear_read_text_path(current_path, isolation_username=isolation_username)
-    current_version = pear_sha256_text(current_content)
-    if base_version != current_version:
-        return json_response(
-            "error",
-            msg="Pear canvas changed; reload before saving.",
-            data={
-                "pear_canvas": pear_canvas_payload(
-                    workdir=workdir,
-                    canvas_path=canvas_path,
-                    content=current_content,
-                ),
-            },
-            status=409,
-        )
-    if not pear_write_text_path(
-        canvas_path,
-        content,
+    # Version-check against the current logical document (legacy CANVAS.md
+    # included), but always save to README.md. A secure one-pass migration
+    # removes this legacy read path in Slice 1.
+    current_path, current_file = pear_read_canvas_file(
+        workdir,
         isolation_username=isolation_username,
+    )
+    current_version = current_file.version if current_file is not None else PEAR_EMPTY_FILE_VERSION
+    target_exists = current_path == PEAR_CANVAS_FILE_NAME and current_file is not None
+    if re.fullmatch(r"[0-9a-f]{64}", base_version) is None or (
+        not target_exists and base_version != current_version
     ):
+        return pear_canvas_conflict_response(current_path, current_file)
+
+    if current_file is not None and current_path != PEAR_CANVAS_FILE_NAME:
+        # The atomic operation will target README.md, so recheck the legacy
+        # source immediately before publishing the migrated copy.
+        try:
+            legacy_file = decode_workspace_text(
+                pear_read_workspace_file(
+                    workdir,
+                    current_path,
+                    isolation_username=isolation_username,
+                    max_bytes=PEAR_CANVAS_MAX_BYTES,
+                )
+            )
+        except WorkspaceEntryNotFoundError:
+            latest_path, latest_file = pear_read_canvas_file(
+                workdir,
+                isolation_username=isolation_username,
+            )
+            return pear_canvas_conflict_response(latest_path, latest_file)
+        except WorkspaceFileTooLargeError:
+            raise JsonableError(_("Pear canvas is too large."))
+        except WorkspaceInvalidUTF8Error:
+            raise JsonableError(_("Pear canvas is not valid UTF-8."))
+        except UnsafeWorkspaceEntryError:
+            raise JsonableError(_("Pear canvas is not a safe regular file."))
+        except WorkspaceIOError:
+            raise JsonableError(_("Could not read Pear canvas."))
+        if legacy_file.version != current_version:
+            return pear_canvas_conflict_response(current_path, legacy_file)
+
+    try:
+        result = pear_write_workspace_file(
+            workdir,
+            PEAR_CANVAS_FILE_NAME,
+            content_bytes,
+            isolation_username=isolation_username,
+            max_bytes=PEAR_CANVAS_MAX_BYTES,
+            # For an existing README, the atomic layer must compare the
+            # caller's revision, not the revision from our advisory read.
+            # It also treats an identical retry as success before comparing
+            # revisions, which makes lost-response retries idempotent.
+            expected_version=base_version if target_exists else None,
+            create=not target_exists,
+        )
+    except WorkspaceVersionConflictError as error:
+        if error.current is not None:
+            try:
+                conflict_file = decode_workspace_text(error.current)
+            except WorkspaceInvalidUTF8Error:
+                raise JsonableError(_("Pear canvas is not valid UTF-8."))
+            return pear_canvas_conflict_response(PEAR_CANVAS_FILE_NAME, conflict_file)
+        latest_path, latest_file = pear_read_canvas_file(
+            workdir,
+            isolation_username=isolation_username,
+        )
+        return pear_canvas_conflict_response(latest_path, latest_file)
+    except (WorkspaceEntryExistsError, WorkspaceEntryNotFoundError, WorkspaceEntryChangedError):
+        latest_path, latest_file = pear_read_canvas_file(
+            workdir,
+            isolation_username=isolation_username,
+        )
+        return pear_canvas_conflict_response(latest_path, latest_file)
+    except WorkspaceFileTooLargeError:
+        raise JsonableError(_("Pear canvas is too large."))
+    except UnsafeWorkspaceEntryError:
+        raise JsonableError(_("Pear canvas is not a safe regular file."))
+    except WorkspaceIOError:
         raise JsonableError(_("Could not write Pear canvas."))
+    try:
+        saved_file = decode_workspace_text(result.file)
+    except WorkspaceInvalidUTF8Error:  # nocoverage: content_bytes came from valid text.
+        raise JsonableError(_("Pear canvas is not valid UTF-8."))
     return json_success(
         request,
         data={
             "pear_canvas": pear_canvas_payload(
-                workdir=workdir,
-                canvas_path=canvas_path,
-                content=content,
+                relative_path=PEAR_CANVAS_FILE_NAME,
+                file=saved_file,
             ),
         },
     )
@@ -2470,13 +2676,9 @@ def update_pear_monitor_backend(
             raise JsonableError(_("Pear bot is not configured."))
         monitor.date_updated = now
         monitor.save(update_fields=["date_updated"])
-        _dispatch_pear_monitor_run(
-            user_profile, pear_bot, monitor, repair_error=monitor.last_error
-        )
+        _dispatch_pear_monitor_run(user_profile, pear_bot, monitor, repair_error=monitor.last_error)
         monitor.refresh_from_db()
-        return json_success(
-            request, data={"pear_monitor": serialize_pear_monitor(monitor)}
-        )
+        return json_success(request, data={"pear_monitor": serialize_pear_monitor(monitor)})
     else:
         raise JsonableError(_("Unknown monitor action."))
     monitor.date_updated = now

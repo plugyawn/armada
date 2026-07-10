@@ -1,0 +1,114 @@
+<div class="pear-wall-header">
+    <input class="pear-wall-input" type="text" autocomplete="off" maxlength="500" placeholder="{{t 'watch something…' }}" aria-label="{{t 'Create a wall monitor' }}" />
+</div>
+{{#if blocks}}
+<div class="pear-wall-blocks">
+    {{#each blocks}}
+    <section class="pear-wall-block pear-wall-status-{{status}} {{#if collapsed}}pear-wall-collapsed{{/if}}" data-monitor-id="{{id}}">
+        <header class="pear-wall-block-header">
+            <button type="button" class="pear-wall-collapse" data-wall-action="collapse" aria-expanded="{{#if collapsed}}false{{else}}true{{/if}}">{{#if collapsed}}▸{{else}}▾{{/if}}</button>
+            <span class="pear-wall-title" title="{{ask}}">{{title}}</span>
+            <span class="pear-wall-dot" aria-hidden="true"></span>
+        </header>
+        {{#unless collapsed}}
+        <div class="pear-wall-body">
+            {{#if is_provisioning}}
+            <div class="pear-wall-provisioning">
+                <span class="pear-thinking-glyph-animated"></span>
+                <span>{{t "setting up…" }}</span>
+            </div>
+            {{else if is_error}}
+            <div class="pear-wall-error">
+                <span class="pear-wall-error-text" title="{{last_error}}">{{last_error_short}}</span>
+                <button type="button" class="pear-wall-foot-action" data-wall-action="rebuild">⟳ {{t "rebuild" }}</button>
+            </div>
+            {{else}}
+            {{#each components}}
+            {{#if is_meter}}
+            <div class="pear-wall-c pear-wall-meter">
+                <div class="pear-wall-c-head"><span class="pear-wall-c-label">{{label}}</span><span class="pear-wall-c-value">{{percent_label}}</span></div>
+                <div class="pear-wall-meter-bar"><div class="pear-wall-meter-fill" data-wall-percent="{{percent}}"></div></div>
+                {{#if meta_line}}<div class="pear-wall-c-meta">{{meta_line}}</div>{{/if}}
+            </div>
+            {{/if}}
+            {{#if is_stat}}
+            <div class="pear-wall-c pear-wall-stat">
+                <span class="pear-wall-c-label">{{label}}</span>
+                <span class="pear-wall-stat-value">{{value}}{{#if unit}}<span class="pear-wall-stat-unit">{{unit}}</span>{{/if}}</span>
+                {{#if delta_label}}<span class="pear-wall-stat-delta {{delta_class}}">{{delta_label}}</span>{{/if}}
+            </div>
+            {{/if}}
+            {{#if is_sparkline}}
+            <div class="pear-wall-c pear-wall-sparkline">
+                <div class="pear-wall-c-head"><span class="pear-wall-c-label">{{label}}</span><span class="pear-wall-c-value">{{value}}{{unit}}</span></div>
+                <canvas class="pear-wall-spark" height="28" data-wall-spark="{{spark_data}}"></canvas>
+            </div>
+            {{/if}}
+            {{#if is_logtail}}
+            <div class="pear-wall-c pear-wall-logtail">
+                {{#if label}}<span class="pear-wall-c-label">{{label}}</span>{{/if}}
+                <div class="pear-wall-logtail-lines">
+                    {{#each lines}}<div class="pear-wall-logtail-line">{{this}}</div>{{/each}}
+                </div>
+            </div>
+            {{/if}}
+            {{#if is_badge}}
+            <div class="pear-wall-c pear-wall-badge">
+                <span class="pear-wall-lamp pear-wall-lamp-{{state}}" aria-hidden="true"></span>
+                <span class="pear-wall-c-label">{{label}}</span>
+                <span class="pear-wall-badge-text">{{text}}</span>
+            </div>
+            {{/if}}
+            {{#if is_clock}}
+            <div class="pear-wall-c pear-wall-clock">
+                <span class="pear-wall-c-label">{{label}}</span>
+                <span class="pear-wall-clock-time" data-wall-clock="{{timezone}}"></span>
+            </div>
+            {{/if}}
+            {{#if is_countdown}}
+            <div class="pear-wall-c pear-wall-clock">
+                <span class="pear-wall-c-label">{{label}}</span>
+                <span class="pear-wall-clock-time" data-wall-countdown="{{target}}"></span>
+            </div>
+            {{/if}}
+            {{#if is_calendar}}
+            <div class="pear-wall-c pear-wall-calendar">
+                <div class="pear-wall-c-head"><span class="pear-wall-c-label">{{label}}</span><span class="pear-wall-c-value">{{month_label}}</span></div>
+                <div class="pear-wall-calendar-grid">
+                    {{#each day_headers}}<span class="pear-wall-cal-head">{{this}}</span>{{/each}}
+                    {{#each cells}}<span class="pear-wall-cal-cell {{#unless in_month}}pear-wall-cal-out{{/unless}} {{#if highlight}}pear-wall-cal-hi{{/if}} {{#if today}}pear-wall-cal-today{{/if}}">{{day}}</span>{{/each}}
+                </div>
+            </div>
+            {{/if}}
+            {{#if is_keyvals}}
+            <div class="pear-wall-c pear-wall-keyvals">
+                {{#if label}}<span class="pear-wall-c-label">{{label}}</span>{{/if}}
+                {{#each pairs}}
+                <div class="pear-wall-kv"><span class="pear-wall-kv-key">{{key}}</span><span class="pear-wall-kv-value">{{value}}</span></div>
+                {{/each}}
+            </div>
+            {{/if}}
+            {{/each}}
+            {{/if}}
+        </div>
+        <footer class="pear-wall-block-footer">
+            {{#if show_cadence}}
+            <button type="button" class="pear-wall-foot-action" data-wall-action="cadence" data-tippy-content="{{t 'Change cadence' }}">{{t "every" }} {{cadence_label}}</button>
+            {{/if}}
+            {{#if is_live}}
+            <button type="button" class="pear-wall-foot-action" data-wall-action="refresh" data-tippy-content="{{t 'Refresh now' }}">⟳</button>
+            <button type="button" class="pear-wall-foot-action" data-wall-action="pause" data-tippy-content="{{t 'Pause' }}">⏸</button>
+            {{/if}}
+            {{#if is_paused}}
+            <button type="button" class="pear-wall-foot-action" data-wall-action="resume" data-tippy-content="{{t 'Resume' }}">▶</button>
+            {{/if}}
+            <span class="pear-wall-foot-spacer"></span>
+            <button type="button" class="pear-wall-foot-action pear-wall-delete" data-wall-action="delete" data-tippy-content="{{t 'Remove' }}">✕</button>
+        </footer>
+        {{/unless}}
+    </section>
+    {{/each}}
+</div>
+{{else}}
+<div class="pear-wall-empty">{{t "type above — pear keeps it live here" }}</div>
+{{/if}}

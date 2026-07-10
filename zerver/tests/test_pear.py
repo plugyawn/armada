@@ -2273,7 +2273,7 @@ class PearSessionDefaultsTest(TestCase):
             "#11 Pear (bot): Verification: pytest zerver/tests/test_pear.py",
             prompt,
         )
-        self.assertIn("Canvas: durable topic context is in README.md", prompt)
+        self.assertNotIn("Canvas:", prompt)
         self.assertNotIn("Pear agent skill definitions:", prompt)
         self.assertNotIn("\nChannel memory:\n", prompt)
         self.assertNotIn("\nForgotten memory:\n", prompt)

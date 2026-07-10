@@ -51,6 +51,63 @@
             <header class="pear-workspace-shell__document-header">
                 <nav data-role="breadcrumb" aria-label="File path"></nav>
                 <div class="pear-workspace-shell__document-actions">
+                    <div class="pear-workspace-file-menu-wrap">
+                        <button
+                            type="button"
+                            data-role="file-menu-button"
+                            aria-haspopup="menu"
+                            aria-expanded="false"
+                        >File</button>
+                        <div
+                            data-role="file-menu"
+                            class="pear-workspace-file-menu"
+                            role="menu"
+                            aria-label="File actions"
+                            hidden
+                        >
+                            <button
+                                type="button"
+                                role="menuitem"
+                                data-file-action="create-file"
+                            >New file</button>
+                            <button
+                                type="button"
+                                role="menuitem"
+                                data-file-action="create-folder"
+                            >New folder</button>
+                            <button
+                                type="button"
+                                role="menuitem"
+                                data-file-action="create-readme"
+                                hidden
+                            >Create README</button>
+                            <button
+                                type="button"
+                                role="menuitem"
+                                data-file-action="rename"
+                            >Rename / Move</button>
+                            <button
+                                type="button"
+                                role="menuitem"
+                                data-file-action="delete"
+                            >Delete</button>
+                            <button
+                                type="button"
+                                role="menuitem"
+                                data-file-action="copy-path"
+                            >Copy path</button>
+                            <button
+                                type="button"
+                                role="menuitem"
+                                data-file-action="reveal"
+                            >Reveal in explorer</button>
+                            <button
+                                type="button"
+                                role="menuitem"
+                                data-file-action="history"
+                            >History</button>
+                        </div>
+                    </div>
                     <button
                         type="button"
                         data-action="mode-source"
@@ -95,4 +152,5 @@
             >Loading workspace…</footer>
         </main>
     </div>
+    <div data-role="file-dialog-layer"></div>
 </section>

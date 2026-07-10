@@ -87,8 +87,8 @@ function harness() {
         const fake = {
             text: options.text,
             destroyed: false,
-            dirty(selection = {anchor: 1, head: 1}) {
-                options.onDirty({origin: "user", selection});
+            dirty(selection) {
+                options.onDirty({origin: "user", selection: selection ?? {anchor: 1, head: 1}});
             },
             languageReady: Promise.resolve("applied"),
             hydrate(value) {
@@ -502,6 +502,26 @@ run_test("raster, binary, and oversize previews never issue a text GET", async (
     await test.controller.destroy();
     test.root.remove();
 });
+
+run_test(
+    "an unbounded streamed raw endpoint keeps large raw/download previews available",
+    async () => {
+        const test = harness();
+        test.controller.activateWorkspace("workspace-a", 1, {rawBytes: null, textBytes: 1000});
+        await test.controller.open(entry("large.png", {size: 50_000_000}));
+        assert.equal(test.controller.getSnapshot().surface.kind, "raster");
+        await test.controller.open(entry("large.txt", {size: 50_000_000}));
+        assert.deepEqual(test.controller.getSnapshot().surface, {
+            kind: "oversize",
+            entry: entry("large.txt", {size: 50_000_000}),
+            maxBytes: 1000,
+            rawAvailable: true,
+        });
+        assert.equal(test.gets.length, 0);
+        await test.controller.destroy();
+        test.root.remove();
+    },
+);
 
 run_test("an external workspace revision clears cached IDs and the mounted adapter", async () => {
     const test = harness();

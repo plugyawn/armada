@@ -101,7 +101,7 @@ export function create_pear_workspace_editor(
     let mounted: PearWorkspaceMountedAdapter | undefined;
     let active_file: PearWorkspaceFile | undefined;
     let active_entry: PearWorkspaceEntry | undefined;
-    let max_raw_bytes = 0;
+    let max_raw_bytes: number | null = 0;
     let max_text_bytes = 0;
     let destroyed = false;
     let mount_generation = 0;
@@ -830,7 +830,9 @@ export function create_pear_workspace_editor(
                         kind: "oversize",
                         entry,
                         maxBytes: max_text_bytes,
-                        rawAvailable: (entry.size ?? max_raw_bytes + 1) <= max_raw_bytes,
+                        rawAvailable:
+                            max_raw_bytes === null ||
+                            (entry.size ?? Number.POSITIVE_INFINITY) <= max_raw_bytes,
                     };
                 } else {
                     surface = {

@@ -124,6 +124,13 @@ run_test("descriptor parsing is strict and returns only the resource", () => {
     assert.deepEqual(result.successes, [descriptor]);
     assert.deepEqual(result.errors, []);
 
+    const streamed_raw = {
+        ...descriptor,
+        limits: {...descriptor.limits, raw_file_max_bytes: null},
+    };
+    request.options.success({pear_workspace: streamed_raw});
+    assert.deepEqual(result.successes.at(-1), streamed_raw);
+
     request.options.success({pear_workspace: {...descriptor, workspace_revision: "wrong"}});
     assert.equal(result.errors.at(-1).kind, "invalid_response");
 });

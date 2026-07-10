@@ -1047,7 +1047,7 @@ class PearSessionEndpointTest(ZulipTestCase):
         self.assertEqual(runs_payload["reasoning_effort"], "medium")
         build_git_context.assert_not_called()
 
-    def test_ensure_pear_topic_context_uses_isolation_for_canvas(self) -> None:
+    def test_ensure_pear_topic_context_does_not_create_readme(self) -> None:
         owner = self.example_user("hamlet")
         topic_name = "isolated topic"
 
@@ -1061,11 +1061,6 @@ class PearSessionEndpointTest(ZulipTestCase):
                 "zerver.lib.pear_worker.ensure_pear_topic_workdir",
                 return_value="main",
             ),
-            patch(
-                "zerver.lib.pear_worker.pear_topic_isolation_user_exists",
-                return_value=True,
-            ),
-            patch("zerver.lib.pear_worker.pear_ensure_topic_canvas") as ensure_canvas,
         ):
             context = ensure_pear_topic_context(
                 owner,
@@ -1073,16 +1068,7 @@ class PearSessionEndpointTest(ZulipTestCase):
                 topic=topic_name,
             )
 
-        ensure_canvas.assert_called_once_with(
-            context.workdir,
-            stream=PEAR_DEFAULT_STREAM,
-            topic=topic_name,
-            isolation_username=pear_topic_isolation_username(
-                owner,
-                stream=PEAR_DEFAULT_STREAM,
-                topic=topic_name,
-            ),
-        )
+        self.assertFalse((Path(context.workdir) / "README.md").exists())
 
     def test_pear_read_text_path_distinguishes_missing_from_unreadable(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -2487,28 +2473,7 @@ class PearSessionEndpointTest(ZulipTestCase):
                     expected_username,
                 )
 
-    def test_topic_context_canvas_skips_missing_os_user(self) -> None:
-        owner = self.example_user("hamlet")
-
-        with (
-            tempfile.TemporaryDirectory() as temp_dir,
-            self.settings(
-                PEAR_TOPIC_ISOLATION_BACKEND="os-user",
-                PEAR_TOPIC_WORKDIR_ROOT=temp_dir,
-            ),
-            patch("zerver.lib.pear_worker.pwd.getpwnam", side_effect=KeyError),
-            patch("zerver.lib.pear_worker.pear_ensure_topic_canvas") as ensure_canvas,
-        ):
-            context = ensure_pear_topic_context(
-                owner,
-                stream="devel",
-                topic="general chat",
-            )
-
-            ensure_canvas.assert_called_once()
-            self.assertEqual(ensure_canvas.call_args.args[0], context.workdir)
-            self.assertIsNone(ensure_canvas.call_args.kwargs["isolation_username"])
-
+    def test_topic_isolation_user_exists_rejects_missing_user(self) -> None:
         self.assertFalse(pear_topic_isolation_user_exists("pear-user-that-should-not-exist"))
 
     def test_topic_context_refactor_moves_full_topic_rename(self) -> None:

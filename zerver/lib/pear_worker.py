@@ -24,7 +24,6 @@ from zerver.lib.exceptions import JsonableError
 from zerver.lib.pear import (
     PEAR_CANVAS_FILE_NAME,
     PEAR_LEGACY_CANVAS_FILE_NAME,
-    PEAR_CANVAS_TEMPLATE,
     PEAR_DEFAULT_RESPONSE_POLICY,
     PEAR_REASONING_EFFORTS,
     PearActiveSessionSummary,
@@ -907,14 +906,6 @@ def pear_switch_workdir_to_branch(path: Path, branch_name: str) -> bool:
     return completed.returncode == 0
 
 
-def pear_canvas_template(stream: str, topic: str) -> str:
-    content = PEAR_CANVAS_TEMPLATE.format(
-        stream=stream or "Pear",
-        topic=topic or "general",
-    ).rstrip()
-    return f"{content}\n"
-
-
 def pear_topic_canvas_relative_path(
     workdir: str | Path,
     *,
@@ -1210,36 +1201,12 @@ def pear_write_text_path(
     return completed.returncode == 0
 
 
-def pear_ensure_topic_canvas(
-    workdir: str | Path,
-    *,
-    stream: str = "",
-    topic: str = "",
-    isolation_username: str | None = None,
-) -> Path:
-    path = Path(workdir)
-    canvas_path = pear_topic_canvas_path(path, isolation_username=isolation_username)
-    template_content = pear_canvas_template(stream, topic)
-    current_content = pear_read_text_path(
-        canvas_path,
-        isolation_username=isolation_username,
-    )
-    if not current_content:
-        pear_write_text_path(
-            canvas_path,
-            template_content,
-            isolation_username=isolation_username,
-        )
-    return canvas_path
-
-
 def ensure_pear_topic_context(
     user_profile: UserProfile,
     *,
     stream: str,
     topic: str,
     parent_context: PearTopicContext | None = None,
-    ensure_canvas: bool = True,
 ) -> PearTopicContext:
     context, _created = PearTopicContext.objects.get_or_create(
         realm=user_profile.realm,
@@ -1296,20 +1263,6 @@ def ensure_pear_topic_context(
         repository_url=parent_repository_url,
         branch_name=workspace_node.branch_name,
     )
-    isolation_username = (
-        pear_topic_isolation_username(user_profile, stream=stream, topic=topic)
-        if pear_topic_os_user_isolation_enabled()
-        else None
-    )
-    if isolation_username is not None and not pear_topic_isolation_user_exists(isolation_username):
-        isolation_username = None
-    if ensure_canvas:
-        pear_ensure_topic_canvas(
-            context.workdir,
-            stream=stream,
-            topic=topic,
-            isolation_username=isolation_username,
-        )
     if workspace_node.workdir != context.workdir:
         workspace_node.workdir = context.workdir
         workspace_node.date_updated = timezone_now()

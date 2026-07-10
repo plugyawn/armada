@@ -16,6 +16,7 @@ from zerver.lib.pear_workspace_io import (
     WorkspaceEntryMutationResult,
     WorkspaceFile,
     WorkspaceInspectedEntry,
+    WorkspaceRawFileMetadata,
     WorkspaceVersionConflictError,
     WorkspaceWriteResult,
 )
@@ -478,6 +479,7 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
                 entry_id=renamed_entry["entry_id"],
                 expected_path="RENAMED.md",
                 workspace_revision=renamed["workspace_revision"],
+                confirm_irreversible=True,
             )
             after_delete = self.tree(node)
             after_delete_paths = {item["path"] for item in after_delete["entries"]}
@@ -1603,7 +1605,28 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
             workdir="/canonical/workspace",
             isolation_username=username,
         )
-        raw_stream = object()
+
+        class StubRawStream:
+            def __init__(self) -> None:
+                self.metadata = WorkspaceRawFileMetadata(
+                    size=len(data),
+                    mode=0o600,
+                    cache_token="0" * 64,
+                    identity=identity,
+                )
+                self.chunks = iter((data,))
+                self.closed = False
+
+            def __iter__(self) -> StubRawStream:
+                return self
+
+            def __next__(self) -> bytes:
+                return next(self.chunks)
+
+            def close(self) -> None:
+                self.closed = True
+
+        raw_stream = StubRawStream()
         with (
             patch(
                 "zerver.lib.pear_workspace_resources.read_workspace_file_via_helper",
@@ -1677,14 +1700,13 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
                 inspect_workspace_node_entries(node, {"README.md": "file"}),
                 {"README.md": identity},
             )
-            self.assertIs(
-                open_workspace_node_file_stream(
-                    node,
-                    "README.md",
-                    expected_identity=identity,
-                ),
-                raw_stream,
+            staged_stream = open_workspace_node_file_stream(
+                node,
+                "README.md",
+                expected_identity=identity,
             )
+            self.assertEqual(b"".join(staged_stream), data)
+            self.assertTrue(raw_stream.closed)
 
         helper_read.assert_called_once_with(
             "/canonical/workspace",

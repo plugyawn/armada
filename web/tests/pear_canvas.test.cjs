@@ -12,7 +12,6 @@ function make_canvas(overrides = {}) {
         content: "# Notes\n",
         version: "abc123",
         relative_path: "CANVAS.md",
-        exists: true,
         max_bytes: 1000,
         ...overrides,
     };
@@ -72,40 +71,20 @@ run_test("read_view_plan empty vs rendered", () => {
     });
 });
 
-run_test("parse_canvas_response valid and strips extras", () => {
+run_test("parse_canvas_response valid", () => {
     const parsed = pear_canvas.parse_canvas_response({pear_canvas: make_canvas()});
     assert.deepEqual(parsed, {
         content: "# Notes\n",
         version: "abc123",
         relative_path: "CANVAS.md",
-        exists: true,
         max_bytes: 1000,
     });
-
-    // The server also sends workdir_path and path; these unknown keys
-    // are stripped rather than retained or causing a parse error.
-    const with_extras = pear_canvas.parse_canvas_response({
-        pear_canvas: {
-            ...make_canvas(),
-            workdir_path: "/home/zulipdev/zulip",
-            path: "/home/zulipdev/zulip/CANVAS.md",
-        },
-    });
-    assert.deepEqual(Object.keys(with_extras).toSorted(), [
-        "content",
-        "exists",
-        "max_bytes",
-        "relative_path",
-        "version",
-    ]);
-    assert.equal(with_extras.workdir_path, undefined);
-    assert.equal(with_extras.path, undefined);
 });
 
 run_test("parse_canvas_response requires all fields", () => {
     // The canvas schema has no optional fields; the server always
     // sends the full document, so a missing required field is an error.
-    for (const missing of ["content", "version", "relative_path", "exists", "max_bytes"]) {
+    for (const missing of ["content", "version", "relative_path", "max_bytes"]) {
         const doc = Object.fromEntries(
             Object.entries(make_canvas()).filter(([key]) => key !== missing),
         );

@@ -151,7 +151,6 @@ const pear_canvas_schema = z.object({
     content: z.string(),
     version: z.string(),
     relative_path: z.string(),
-    exists: z.boolean(),
     max_bytes: z.number(),
     rendered_html: z.optional(z.string()),
     render_failed: z.optional(z.boolean()),

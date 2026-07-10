@@ -1110,11 +1110,9 @@ class PearSessionEndpointTest(ZulipTestCase):
         )
 
         canvas = self.assert_json_success(result)["pear_canvas"]
+        self.assertEqual(set(canvas), {"content", "version", "relative_path", "max_bytes"})
         self.assertEqual(canvas["content"], "")
-        self.assertEqual(canvas["workdir_path"], "")
-        self.assertEqual(canvas["path"], "")
         self.assertEqual(canvas["relative_path"], "")
-        self.assertFalse(canvas["exists"])
         self.assertFalse(
             PearTopicContext.objects.filter(
                 realm=owner.realm,
@@ -1186,12 +1184,11 @@ class PearSessionEndpointTest(ZulipTestCase):
                 )
 
             canvas = self.assert_json_success(result)["pear_canvas"]
-            canvas_path = Path(canvas["path"])
+            self.assertEqual(set(canvas), {"content", "version", "relative_path", "max_bytes"})
 
             self.assertEqual(canvas["relative_path"], "README.md")
             self.assertEqual(canvas["content"], content)
-            self.assertTrue(canvas["exists"])
-            self.assertTrue(canvas_path.exists())
+            self.assertTrue((Path(context.workdir) / "README.md").exists())
             # The README is real repo content now — it shows up as
             # work in the worktree until committed, never excluded.
             self.assertTrue(delta["dirty"])
@@ -1398,8 +1395,10 @@ class PearSessionEndpointTest(ZulipTestCase):
                 (Path(context.workdir) / "CANVAS.md").read_text(),
                 "repo-owned canvas\n",
             )
-            self.assertEqual(Path(canvas["path"]).read_text(), canvas["content"])
-            self.assertEqual(Path(canvas["path"]).name, "README.md")
+            self.assertEqual(
+                (Path(context.workdir) / "README.md").read_text(),
+                canvas["content"],
+            )
             self.assertTrue(delta["dirty"])
             self.assertGreaterEqual(delta["changed_count"], 1)
 

@@ -1342,15 +1342,6 @@ def get_pear_git_tree_backend(
     )
 
 
-def pear_canvas_exists(canvas_path: Path, content: str) -> bool:
-    if content:
-        return True
-    try:
-        return canvas_path.exists()
-    except OSError:
-        return False
-
-
 def pear_canvas_payload(
     *,
     workdir: str,
@@ -1365,10 +1356,7 @@ def pear_canvas_payload(
     return {
         "content": content,
         "version": pear_sha256_text(content),
-        "workdir_path": workdir,
-        "path": str(canvas_path) if canvas_path is not None else "",
         "relative_path": relative_path,
-        "exists": pear_canvas_exists(canvas_path, content) if canvas_path is not None else False,
         "max_bytes": PEAR_CANVAS_MAX_BYTES,
     }
 

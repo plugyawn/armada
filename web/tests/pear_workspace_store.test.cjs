@@ -656,6 +656,106 @@ run_test("stale and no-op transitions fail closed", () => {
     assert.equal(state.ignoredStaleResponses, 8);
 });
 
+run_test("2,000 seeded save schedules never cross workspace or document authority", () => {
+    function random(seed) {
+        let value = seed;
+        return () => {
+            value = (value * 1_664_525 + 1_013_904_223) % 4_294_967_296;
+            return value;
+        };
+    }
+
+    for (let seed = 1; seed <= 2000; seed += 1) {
+        const next = random(seed);
+        const workspace_id = `workspace-${next() % 2}`;
+        const path = ["README.md", "notes/A.md", "notes/B.md"][next() % 3];
+        const loaded = loaded_store(workspace_id, path);
+        let {state} = loaded;
+        const id = identity(workspace_id, path, loaded.request_generation);
+        const first_text = `seed ${seed} first\n`;
+        state = source_edit(state, id, first_text);
+        state = reduce(state, {type: "save_started", ...id});
+        const save = get_document(
+            state,
+            workspace_id,
+            path,
+            loaded.request_generation,
+        ).saveInFlight;
+        assert.ok(save !== undefined, `seed ${seed}: save must start`);
+        const immutable_save = structuredClone(save);
+
+        const edit_after_start = next() % 2 === 0;
+        if (edit_after_start) {
+            state = source_edit(state, id, `seed ${seed} second\n`);
+        }
+
+        const navigate = next() % 3 !== 0;
+        let other_identity;
+        let other_before;
+        if (navigate) {
+            const other_workspace = next() % 2 === 0 ? workspace_id : `${workspace_id}-other`;
+            const other_path = path === "README.md" ? "notes/A.md" : "README.md";
+            state = activate(state, other_workspace);
+            const opened = open_document(state, other_workspace, other_path);
+            state = load_document(
+                opened.state,
+                other_workspace,
+                other_path,
+                opened.request_generation,
+                {text: `other ${seed}\n`},
+            );
+            other_identity = identity(other_workspace, other_path, opened.request_generation);
+            other_before = structuredClone(
+                workspace_store.get_pear_workspace_document(state, other_identity),
+            );
+        }
+
+        const valid_callback = next() % 4 !== 0;
+        const ignored_before = state.ignoredStaleResponses;
+        state = reduce(state, {
+            type: "save_succeeded",
+            ...id,
+            editRevision: valid_callback ? save.editRevision : save.editRevision + 100,
+            newEntryId: `entry:${path}:v2`,
+            newVersion: `version-${seed}-2`,
+            workspaceRevision: 2,
+        });
+
+        assert.deepEqual(save, immutable_save, `seed ${seed}: PUT snapshot mutated`);
+        if (other_identity !== undefined) {
+            assert.deepEqual(
+                workspace_store.get_pear_workspace_document(state, other_identity),
+                other_before,
+                `seed ${seed}: callback changed another document`,
+            );
+        }
+        const original_workspace = workspace_store.get_pear_workspace(state, workspace_id);
+        assert.ok(original_workspace !== undefined);
+        const original = [...original_workspace.documents.values()].find(
+            (document) => document.path === path,
+        );
+        assert.ok(original !== undefined, `seed ${seed}: original document disappeared`);
+        if (valid_callback) {
+            assert.equal(original.savedText, first_text, `seed ${seed}: wrong bytes acknowledged`);
+            assert.equal(original.saveInFlight, undefined, `seed ${seed}: save did not settle`);
+            assert.equal(original.entryId, `entry:${path}:v2`, `seed ${seed}: ID did not rebind`);
+            assert.equal(
+                original.state,
+                edit_after_start ? "dirty" : "clean",
+                `seed ${seed}: clean state is unsound`,
+            );
+            assert.equal(state.ignoredStaleResponses, ignored_before);
+        } else {
+            assert.deepEqual(
+                original.saveInFlight,
+                immutable_save,
+                `seed ${seed}: stale callback consumed the save`,
+            );
+            assert.equal(state.ignoredStaleResponses, ignored_before + 1);
+        }
+    }
+});
+
 run_test("a dirty document rejects a late reload", () => {
     const loaded = loaded_store();
     let {state} = loaded;

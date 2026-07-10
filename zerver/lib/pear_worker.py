@@ -37,7 +37,6 @@ from zerver.lib.pear import (
     build_pear_active_session_summary_from_messages,
     get_pear_session_payload,
     normalize_pear_response_policy,
-    parse_pear_artifacts,
     pear_message_id,
     pear_message_stream,
     pear_message_topic,
@@ -908,13 +907,11 @@ def pear_switch_workdir_to_branch(path: Path, branch_name: str) -> bool:
     return completed.returncode == 0
 
 
-def pear_canvas_template(stream: str, topic: str, *, backfill_content: str = "") -> str:
+def pear_canvas_template(stream: str, topic: str) -> str:
     content = PEAR_CANVAS_TEMPLATE.format(
         stream=stream or "Pear",
         topic=topic or "general",
     ).rstrip()
-    if backfill_content.strip():
-        content = f"{content}\n\n{backfill_content.strip()}"
     return f"{content}\n"
 
 
@@ -953,104 +950,6 @@ def pear_topic_canvas_path(
 ) -> Path:
     path = Path(workdir)
     return path / pear_topic_canvas_relative_path(path, isolation_username=isolation_username)
-
-
-PEAR_LEGACY_CANVAS_BACKFILL_PATTERN = re.compile(
-    r"^\s*(?:[-*]\s*)?"
-    r"(Routine disabled|Disabled routine|Routine off|Routine|Routines|"
-    r"Routine cadence|Cadence|Schedule|Watch cadence|Memory forgotten|"
-    r"Forgotten memory|Memory off|Memory|Memories|Done|Definition of done|"
-    r"Success criteria):[ \t]*([^\r\n]*?)[ \t]*$",
-    re.IGNORECASE,
-)
-
-
-def pear_legacy_canvas_backfill_items(content: str) -> list[tuple[str, str, str]]:
-    items: list[tuple[str, str, str]] = []
-    for match in PEAR_LEGACY_CANVAS_BACKFILL_PATTERN.finditer(content):
-        label = match.group(1).strip()
-        value = match.group(2).strip()
-        if not value:
-            continue
-        normalized_label = " ".join(label.lower().split())
-        if normalized_label in {"done", "definition of done", "success criteria"}:
-            section = "done"
-        elif normalized_label in {
-            "routine",
-            "routines",
-            "routine cadence",
-            "cadence",
-            "schedule",
-            "watch cadence",
-        }:
-            section = "routine"
-        elif normalized_label in {
-            "memory",
-            "memories",
-            "memory forgotten",
-            "forgotten memory",
-            "memory off",
-            "routine disabled",
-            "disabled routine",
-            "routine off",
-        }:
-            section = "pinned"
-        else:
-            section = "notes"
-        items.append((section, label, value))
-    return items
-
-
-def pear_backfill_canvas_from_topic_history(
-    messages: list[tuple[int, str, bool | None, str | None]],
-) -> str:
-    done_items: list[str] = []
-    pinned_items: list[str] = []
-    routine_items: list[str] = []
-    notes: list[str] = []
-    for message_id, content, _sender_is_bot, _sender_name in messages:
-        for artifact in parse_pear_artifacts(content, message_id=message_id):
-            value = artifact["value"].strip()
-            if not value:
-                continue
-            kind = artifact["kind"]
-            if kind in {
-                "document",
-                "ticket",
-                "pull_request",
-                "branch",
-                "repository",
-                "reviewers",
-            }:
-                pinned_items.append(f"{artifact['label']}: {value}")
-            elif kind in {"verification", "diff"}:
-                notes.append(f"{artifact['label']}: {value}")
-        for section, label, value in pear_legacy_canvas_backfill_items(content):
-            if section == "done":
-                done_items.append(value)
-            elif section == "routine":
-                routine_items.append(f"{label}: {value}")
-            elif section == "pinned":
-                pinned_items.append(f"{label}: {value}")
-            else:
-                notes.append(f"{label}: {value}")
-
-    sections: list[str] = []
-    if done_items:
-        sections.append(
-            "### Backfilled definition of done\n" + "\n".join(f"- {item}" for item in done_items)
-        )
-    if pinned_items:
-        sections.append(
-            "### Backfilled pinned context\n" + "\n".join(f"- {item}" for item in pinned_items)
-        )
-    if routine_items:
-        sections.append(
-            "### Backfilled routines\n" + "\n".join(f"- {item}" for item in routine_items)
-        )
-    if notes:
-        sections.append("### Backfilled notes\n" + "\n".join(f"- {item}" for item in notes))
-    return "\n\n".join(sections)
 
 
 def pear_sha256_text(content: str) -> str:
@@ -1316,17 +1215,11 @@ def pear_ensure_topic_canvas(
     *,
     stream: str = "",
     topic: str = "",
-    backfill_content: str = "",
     isolation_username: str | None = None,
 ) -> Path:
     path = Path(workdir)
     canvas_path = pear_topic_canvas_path(path, isolation_username=isolation_username)
     template_content = pear_canvas_template(stream, topic)
-    content_with_backfill = pear_canvas_template(
-        stream,
-        topic,
-        backfill_content=backfill_content,
-    )
     current_content = pear_read_text_path(
         canvas_path,
         isolation_username=isolation_username,
@@ -1334,13 +1227,7 @@ def pear_ensure_topic_canvas(
     if not current_content:
         pear_write_text_path(
             canvas_path,
-            content_with_backfill,
-            isolation_username=isolation_username,
-        )
-    elif backfill_content.strip() and current_content == template_content:
-        pear_write_text_path(
-            canvas_path,
-            content_with_backfill,
+            template_content,
             isolation_username=isolation_username,
         )
     return canvas_path

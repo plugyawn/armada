@@ -174,7 +174,7 @@ def _set_workspace_cache_status(status: str) -> None:
 
 def _workspace_index_secret() -> bytes:
     secret_key = settings.SECRET_KEY
-    if not isinstance(secret_key, str) or not secret_key:
+    if not secret_key:
         raise WorkspaceSnapshotError("Workspace index signing is unavailable.")
     return hashlib.sha256(
         b"pear-workspace-index-v1\0" + secret_key.encode("utf-8", errors="strict")
@@ -552,7 +552,7 @@ def prepare_workspace_entry_mutation_receipt(
     """Durably establish exact retry authority before touching the filesystem."""
 
     if lookup_payload.get("operation") == "create":
-        expected_recovery = {
+        expected_recovery: dict[str, object] = {
             "staging_path": workspace_entry_mutation_staging_path(lookup_payload),
         }
         if recovery is not None and recovery != expected_recovery:
@@ -880,7 +880,7 @@ def _decode_history_cursor(
 ) -> int:
     if cursor is None:
         return 0
-    if not isinstance(cursor, str) or not cursor:
+    if not cursor:
         raise WorkspaceHistoryCursorError("Workspace history cursor is invalid.")
     try:
         payload = base64.b64decode(
@@ -1256,19 +1256,19 @@ def _enumerate_workspace(
         raise WorkspaceSnapshotError("Git returned invalid workspace metadata.") from error
 
     fingerprint = hashlib.sha256()
-    for path in paths:
-        fingerprint.update(path.path.encode("utf-8"))
+    for workspace_path in paths:
+        fingerprint.update(workspace_path.path.encode("utf-8"))
         fingerprint.update(b"\0")
-        fingerprint.update(path.status.encode("ascii"))
+        fingerprint.update(workspace_path.status.encode("ascii"))
         fingerprint.update(b"\0")
-        fingerprint.update(path.kind.encode("ascii"))
+        fingerprint.update(workspace_path.kind.encode("ascii"))
         fingerprint.update(b"\0")
-        if path.identity is not None:
-            fingerprint.update(str(path.identity.device).encode("ascii"))
+        if workspace_path.identity is not None:
+            fingerprint.update(str(workspace_path.identity.device).encode("ascii"))
             fingerprint.update(b":")
-            fingerprint.update(str(path.identity.inode).encode("ascii"))
+            fingerprint.update(str(workspace_path.identity.inode).encode("ascii"))
             fingerprint.update(b":")
-            fingerprint.update(str(path.identity.ctime_ns).encode("ascii"))
+            fingerprint.update(str(workspace_path.identity.ctime_ns).encode("ascii"))
         fingerprint.update(b"\0")
     fingerprint.update(status_fingerprint)
     fingerprint.update(tracked_content_digest)

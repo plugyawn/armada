@@ -13,6 +13,7 @@ from typing import Any, Literal
 
 from zerver.lib.pear import (
     PearActiveSessionSummary,
+    PearUserInputProvider,
     PearWorkerToolResult,
     PearWorkerTranscriptCallback,
     PearWorkerTranscriptEvent,
@@ -1158,6 +1159,8 @@ class PearDisabledAgentRunner:
         active_session: PearActiveSessionSummary,
         task: str,
         *,
+        collaboration_mode: str | None = None,
+        user_input_provider: PearUserInputProvider | None = None,
         event_callback: PearWorkerTranscriptCallback | None = None,
     ) -> Sequence[PearWorkerToolResult]:
         return [
@@ -1215,6 +1218,7 @@ class PearCodexAppServerToolRunner:
         self.active_thread_id: str | None = None
         self.active_turn_id: str | None = None
         self.background_request_ids: set[int] = set()
+        self.current_user_input_provider: PearUserInputProvider | None = None
         self.translator = PearCodexAppServerTranscriptTranslator()
 
     def config_args(self) -> list[str]:
@@ -1426,21 +1430,41 @@ class PearCodexAppServerToolRunner:
             }
             return {"decision": decision}, None, event
         if method == "item/tool/requestUserInput":
-            # Interactive answers arrive with the plan-mode pass; until
-            # then the refusal is visible, never silent.
-            questions = params.get("questions")
-            first = questions[0] if isinstance(questions, list) and questions else {}
-            question_text = first.get("question", "") if isinstance(first, dict) else ""
+            raw_questions = params.get("questions")
+            questions = [
+                question for question in raw_questions if isinstance(question, dict)
+            ] if isinstance(raw_questions, list) else []
+            provider = self.current_user_input_provider
+            answers: dict[str, list[str]] | None = None
+            if provider is not None and questions:
+                try:
+                    answers = provider(questions)
+                except Exception:
+                    logger.exception("Pear user-input provider failed.")
+                    answers = None
+            if answers is not None:
+                return (
+                    {
+                        "answers": {
+                            question_id: {"answers": answer_list}
+                            for question_id, answer_list in answers.items()
+                        }
+                    },
+                    None,
+                    None,
+                )
+            first = questions[0] if questions else {}
+            question_text = first.get("question", "")
             event = {
                 "kind": "status",
                 "status": "done",
-                "title": "Codex asked a question; interactive answers are not wired yet.",
+                "title": "Codex asked a question and no answer arrived.",
                 "body": trim_pear_agent_text(str(question_text), limit=300),
                 "metadata": {"method": method},
             }
             return (
                 None,
-                {"code": -32601, "message": "Pear cannot collect interactive input yet."},
+                {"code": -32601, "message": "No user answer was available."},
                 event,
             )
         event = {
@@ -1496,7 +1520,9 @@ class PearCodexAppServerToolRunner:
             params["developerInstructions"] = build_pear_codex_developer_instructions()
         return {key: value for key, value in params.items() if value is not None}
 
-    def turn_params(self, thread_id: str, prompt: str) -> dict[str, Any]:
+    def turn_params(
+        self, thread_id: str, prompt: str, *, collaboration_mode: str | None = None
+    ) -> dict[str, Any]:
         params: dict[str, Any] = {
             "threadId": thread_id,
             "input": [{"type": "text", "text": prompt}],
@@ -1507,6 +1533,8 @@ class PearCodexAppServerToolRunner:
             "model": self.model,
             "personality": "pragmatic",
         }
+        if collaboration_mode is not None:
+            params["collaborationMode"] = {"mode": collaboration_mode}
         return {key: value for key, value in params.items() if value is not None}
 
     def ensure_thread(
@@ -1617,25 +1645,33 @@ class PearCodexAppServerToolRunner:
         task: str,
         *,
         event_callback: PearWorkerTranscriptCallback | None = None,
+        collaboration_mode: str | None = None,
+        user_input_provider: PearUserInputProvider | None = None,
     ) -> Sequence[PearWorkerToolResult]:
         with self.lock:
             self.ensure_started()
+            self.current_user_input_provider = user_input_provider
             thread_id = self.ensure_thread(active_session, event_callback=event_callback)
             self.active_thread_id = thread_id
             prompt = build_pear_codex_turn_prompt(active_session, task)
             result = self.request(
                 "turn/start",
-                self.turn_params(thread_id, prompt),
+                self.turn_params(thread_id, prompt, collaboration_mode=collaboration_mode),
                 event_callback=event_callback,
             )
             turn_id = pear_app_server_turn_id_from_result(result)
             if turn_id is not None:
                 self.active_turn_id = turn_id
-            final_text, command_count, file_change_count, tool_call_count = self.wait_for_turn(
-                thread_id=thread_id,
-                turn_id=turn_id,
-                event_callback=event_callback,
-            )
+            try:
+                final_text, command_count, file_change_count, tool_call_count = (
+                    self.wait_for_turn(
+                        thread_id=thread_id,
+                        turn_id=turn_id,
+                        event_callback=event_callback,
+                    )
+                )
+            finally:
+                self.current_user_input_provider = None
             results = pear_tool_results_from_text(final_text, output_limit=self.output_limit)
             summary_parts = []
             if command_count:

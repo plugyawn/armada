@@ -103,6 +103,7 @@ from zerver.lib.pear import (
     pear_normalize_token_usage,
     pear_session_record_kind,
     pear_session_record_url,
+    pear_turn_collaboration_mode,
     pear_worker_already_started,
     pear_worker_run_for_message,
     pear_worker_should_start,
@@ -1818,7 +1819,7 @@ class PearSessionDefaultsTest(TestCase):
         seen_worker_states: list[str] = []
         seen_tasks: list[str] = []
 
-        def tool_runner(active_session, task: str, *, event_callback=None) -> list[dict[str, str]]:
+        def tool_runner(active_session, task: str, *, event_callback=None, **kwargs) -> list[dict[str, str]]:
             seen_worker_states.append(active_session["worker_state"])
             seen_tasks.append(task)
             return [
@@ -1856,6 +1857,7 @@ class PearSessionDefaultsTest(TestCase):
                 task: str,
                 *,
                 event_callback: PearWorkerTranscriptCallback | None = None,
+                **kwargs: object,
             ) -> list[dict[str, str]]:
                 return []
 
@@ -2181,7 +2183,7 @@ class PearSessionDefaultsTest(TestCase):
         )
         tool_was_called = False
 
-        def tool_runner(active_session, task: str, *, event_callback=None) -> list[dict[str, str]]:
+        def tool_runner(active_session, task: str, *, event_callback=None, **kwargs) -> list[dict[str, str]]:
             nonlocal tool_was_called
             tool_was_called = True
             return []
@@ -3177,7 +3179,7 @@ class PearSessionDefaultsTest(TestCase):
             classifier_calls.append(content)
             return True
 
-        def tool_runner(active_session, task, *, event_callback=None):
+        def tool_runner(active_session, task, *, event_callback=None, **kwargs):
             seen_tasks.append(task)
             return [
                 {
@@ -3557,7 +3559,7 @@ class PearSessionDefaultsTest(TestCase):
         def active_session_loader(message, bot_handler):
             return loaded_session
 
-        def tool_runner(active_session, task, *, event_callback=None):
+        def tool_runner(active_session, task, *, event_callback=None, **kwargs):
             seen_tasks.append(task)
             return [
                 {
@@ -3647,7 +3649,7 @@ class PearSessionDefaultsTest(TestCase):
         def active_session_loader(message, bot_handler):
             return loaded_session
 
-        def tool_runner(active_session, task, *, event_callback=None):
+        def tool_runner(active_session, task, *, event_callback=None, **kwargs):
             seen_tasks.append(task)
             return [
                 {
@@ -3736,7 +3738,7 @@ class PearSessionDefaultsTest(TestCase):
         def active_session_loader(message, bot_handler):
             return loaded_session
 
-        def tool_runner(active_session, task, *, event_callback=None):
+        def tool_runner(active_session, task, *, event_callback=None, **kwargs):
             seen_tasks.append(task)
             return [
                 {
@@ -3819,7 +3821,7 @@ class PearSessionDefaultsTest(TestCase):
         def active_session_loader(message, bot_handler):
             return loaded_session
 
-        def tool_runner(active_session, task, *, event_callback=None):
+        def tool_runner(active_session, task, *, event_callback=None, **kwargs):
             seen_tasks.append(task)
             return [
                 {
@@ -3902,7 +3904,7 @@ class PearSessionDefaultsTest(TestCase):
         def active_session_loader(message, bot_handler):
             return loaded_session
 
-        def tool_runner(active_session, task, *, event_callback=None):
+        def tool_runner(active_session, task, *, event_callback=None, **kwargs):
             seen_tasks.append(task)
             return [{"label": "Verification", "value": "Router accepted"}]
 
@@ -4625,7 +4627,7 @@ class PearSessionDefaultsTest(TestCase):
                 visible_status_by_id[message_id] = content
                 updated_messages.append(message)
 
-        def tool_runner(active_session, task: str, *, event_callback=None) -> list[dict[str, str]]:
+        def tool_runner(active_session, task: str, *, event_callback=None, **kwargs) -> list[dict[str, str]]:
             tool_seen_statuses.append(visible_status_by_id[501])
             return [
                 {
@@ -4707,7 +4709,7 @@ class PearSessionDefaultsTest(TestCase):
             def update_message(self, message) -> None:
                 pass
 
-        def tool_runner(active_session, task: str, *, event_callback=None) -> list[dict[str, str]]:
+        def tool_runner(active_session, task: str, *, event_callback=None, **kwargs) -> list[dict[str, str]]:
             return [{"label": "Verification", "value": "typing test"}]
 
         message = {
@@ -5012,7 +5014,7 @@ class PearSessionDefaultsTest(TestCase):
             def update_message(self, message: dict[str, object]) -> None:
                 updated_messages.append(message)
 
-        def tool_runner(active_session, task: str, *, event_callback=None) -> list[dict[str, str]]:
+        def tool_runner(active_session, task: str, *, event_callback=None, **kwargs) -> list[dict[str, str]]:
             return [{"label": "Result", "value": long_result}]
 
         payload = get_pear_session_payload()
@@ -5479,7 +5481,7 @@ class PearSessionDefaultsTest(TestCase):
         def active_session_loader(message, bot_handler):
             raise RuntimeError("database unavailable")
 
-        def tool_runner(active_session, task: str, *, event_callback=None) -> list[dict[str, str]]:
+        def tool_runner(active_session, task: str, *, event_callback=None, **kwargs) -> list[dict[str, str]]:
             raise AssertionError("runtime must not run after a loader failure")
 
         message = {
@@ -5593,7 +5595,7 @@ class PearSessionDefaultsTest(TestCase):
             loaded_message_ids.append(message["id"])
             return refreshed_session
 
-        def tool_runner(active_session, task: str, *, event_callback=None) -> list[dict[str, str]]:
+        def tool_runner(active_session, task: str, *, event_callback=None, **kwargs) -> list[dict[str, str]]:
             prompt = build_pear_codex_turn_prompt(active_session, task)
             tool_seen_prompts.append(prompt)
             return [
@@ -5706,7 +5708,7 @@ class PearSessionDefaultsTest(TestCase):
             def update_message(self, message: dict[str, object]) -> None:
                 updated_messages.append(message)
 
-        def tool_runner(active_session, task: str, *, event_callback=None) -> list[dict[str, str]]:
+        def tool_runner(active_session, task: str, *, event_callback=None, **kwargs) -> list[dict[str, str]]:
             tool_seen_tasks.append(task)
             tool_seen_threads.append(active_session["latest_codex_thread_id"])
             if len(tool_seen_tasks) == 1:
@@ -5851,7 +5853,7 @@ class PearSessionDefaultsTest(TestCase):
             def send_reply(self, message: dict[str, object], response: str) -> None:
                 sent_replies.append(response)
 
-        def tool_runner(active_session, task: str, *, event_callback=None):
+        def tool_runner(active_session, task: str, *, event_callback=None, **kwargs):
             raise RuntimeError("codex adapter failed")
 
         bot_handler = FakeBotHandler()
@@ -6068,3 +6070,65 @@ class PearAppServerProtocolCitizenTest(TestCase):
         self.assertTrue(runner.consume_background_response({"id": 41, "error": {"code": 1}}))
         self.assertFalse(runner.consume_background_response({"id": 41, "error": {"code": 1}}))
         self.assertFalse(runner.consume_background_response({"id": 7, "result": {}}))
+
+
+class PearInteractiveTurnTest(TestCase):
+    """Plan-mode turns and the request_user_input answer path."""
+
+    def test_plan_prefix_selects_plan_collaboration_mode(self) -> None:
+        self.assertEqual(
+            pear_turn_collaboration_mode("@**Pear** plan: design the importer"), "plan"
+        )
+        self.assertEqual(pear_turn_collaboration_mode("plan: sketch the API"), "plan")
+        self.assertIsNone(pear_turn_collaboration_mode("@**Pear** make a plan for me"))
+        self.assertIsNone(pear_turn_collaboration_mode("planting trees"))
+        self.assertIsNone(pear_turn_collaboration_mode(""))
+
+    def make_runner(self) -> PearCodexAppServerToolRunner:
+        return PearCodexAppServerToolRunner(
+            codex_bin="/bin/false",
+            workdir=None,
+            model="gpt-5.5",
+            sandbox="workspace-write",
+            approval_policy="on-request",
+            timeout_seconds=5,
+            output_limit=1000,
+        )
+
+    def test_turn_params_carry_collaboration_mode(self) -> None:
+        runner = self.make_runner()
+        params = runner.turn_params("thread_1", "prompt", collaboration_mode="plan")
+        self.assertEqual(params["collaborationMode"], {"mode": "plan"})
+        default_params = runner.turn_params("thread_1", "prompt")
+        self.assertNotIn("collaborationMode", default_params)
+
+    def test_request_user_input_answers_through_the_provider(self) -> None:
+        runner = self.make_runner()
+        asked: list[list[dict[str, object]]] = []
+
+        def provider(questions: list[dict[str, object]]) -> dict[str, list[str]]:
+            asked.append(questions)
+            return {"q1": ["alpha"]}
+
+        runner.current_user_input_provider = provider
+        result, error, event = runner.answer_for_server_request(
+            "item/tool/requestUserInput",
+            {"questions": [{"id": "q1", "question": "alpha or beta?"}]},
+        )
+        self.assertIsNone(error)
+        self.assertIsNone(event)
+        self.assertEqual(result, {"answers": {"q1": {"answers": ["alpha"]}}})
+        self.assertEqual(len(asked), 1)
+
+    def test_request_user_input_declines_when_provider_times_out(self) -> None:
+        runner = self.make_runner()
+        runner.current_user_input_provider = lambda questions: None
+        result, error, event = runner.answer_for_server_request(
+            "item/tool/requestUserInput",
+            {"questions": [{"id": "q1", "question": "alpha or beta?"}]},
+        )
+        self.assertIsNone(result)
+        assert error is not None
+        self.assertEqual(error["code"], -32601)
+        assert event is not None
+        self.assertIn("no answer arrived", event["title"])

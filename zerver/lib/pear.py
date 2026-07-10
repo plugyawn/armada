@@ -95,6 +95,9 @@ PEAR_SELECTED_BOT_CONFIG_KEY: Final = "pear_selected"
 PEAR_SELECTED_BOT_CONFIG_VALUE: Final = "true"
 PEAR_WORKER_RUNS_STORAGE_KEY: Final = "pear_worker_runs"
 PEAR_WORKER_RUNS_STORAGE_LIMIT: Final = 50
+PEAR_QUESTION_TIMEOUT_SECONDS: Final = 600
+PEAR_QUESTION_POLL_SECONDS: Final = 2.0
+
 PEAR_MAX_STEERING_SEGMENTS: Final = 4
 PEAR_SESSION_CHECKLIST: Final = (
     "Confirm repo, branch, and target runtime.",
@@ -429,6 +432,22 @@ PearWorkerTranscriptCallback = Callable[[PearWorkerTranscriptEvent], None]
 PearWorkerActiveSessionLoader = Callable[[dict[str, Any], Any], PearActiveSessionSummary]
 
 
+PEAR_PLAN_MODE_PATTERN = re.compile(
+    r"^\s*(?:@\*\*[^*]+\*\*\s*)?plan\s*[:\u2014-]\s*\S", re.IGNORECASE
+)
+
+
+def pear_turn_collaboration_mode(content: str) -> str | None:
+    """'@**Pear** plan: …' runs the turn in the engine's plan
+    collaboration mode — the mode where request_user_input is live."""
+    return "plan" if PEAR_PLAN_MODE_PATTERN.match(content or "") else None
+
+
+# The engine's request_user_input questions, normalized: the provider
+# returns per-question answer lists, or None to decline/timeout.
+PearUserInputProvider = Callable[[list[dict[str, Any]]], dict[str, list[str]] | None]
+
+
 class PearWorkerToolRunner(Protocol):
     def __call__(
         self,
@@ -436,6 +455,8 @@ class PearWorkerToolRunner(Protocol):
         task: str,
         *,
         event_callback: PearWorkerTranscriptCallback | None = None,
+        collaboration_mode: str | None = None,
+        user_input_provider: PearUserInputProvider | None = None,
     ) -> Sequence[PearWorkerToolResult]:
         ...
 
@@ -2117,6 +2138,8 @@ class PearWorkerRuntime:
         active_session: PearActiveSessionSummary,
         task: str = "",
         event_callback: PearWorkerTranscriptCallback | None = None,
+        collaboration_mode: str | None = None,
+        user_input_provider: PearUserInputProvider | None = None,
     ) -> PearWorkerRunResult:
         if not active_session["worker_can_run"]:
             return {
@@ -2127,7 +2150,15 @@ class PearWorkerRuntime:
                 "tool_results": [],
             }
 
-        tool_results = list(self.run_tools(active_session, task, event_callback=event_callback))
+        tool_results = list(
+            self.run_tools(
+                active_session,
+                task,
+                event_callback=event_callback,
+                collaboration_mode=collaboration_mode,
+                user_input_provider=user_input_provider,
+            )
+        )
         return {
             "should_post": True,
             "worker_can_run": True,
@@ -2145,12 +2176,16 @@ class PearWorkerRuntime:
         task: str,
         *,
         event_callback: PearWorkerTranscriptCallback | None = None,
+        collaboration_mode: str | None = None,
+        user_input_provider: PearUserInputProvider | None = None,
     ) -> Sequence[PearWorkerToolResult]:
         if self.tool_runner is not None:
             return self.tool_runner(
                 active_session,
                 task,
                 event_callback=event_callback,
+                collaboration_mode=collaboration_mode,
+                user_input_provider=user_input_provider,
             )
         return [
             {
@@ -3506,6 +3541,7 @@ class PearWorkerTurn:
         self.steering_events_after: Any = None
         self.last_steering_event_id = 0
         self.steering_segment_count = 0
+        self.collaboration_mode = pear_turn_collaboration_mode(content)
         self.worker_result: dict[str, Any] = {}
         self.codex_thread_id: str | None = None
         self.result_summary = ""
@@ -3596,6 +3632,97 @@ class PearWorkerTurn:
         )
         self.last_volatile_transcript_flush_at = current_time
         return True
+
+    def request_user_answers(
+        self, questions: list[dict[str, Any]]
+    ) -> dict[str, list[str]] | None:
+        """The engine asked the humans something (request_user_input,
+        plan-mode). Post the question into the conversation, then wait on
+        the steering store — a reply addressed to the run IS the answer.
+        Returns per-question answers, or None on timeout/cancel."""
+        if not questions or not callable(self.steering_events_after):
+            return None
+        question_lines = ["Pear needs your input to continue:", ""]
+        for question in questions:
+            header = str(question.get("header") or "").strip()
+            text = str(question.get("question") or "").strip()
+            question_lines.append(f"**{header}** — {text}" if header else f"**{text}**")
+            options = question.get("options")
+            if isinstance(options, list):
+                for option in options:
+                    if isinstance(option, dict):
+                        label = str(option.get("label") or "").strip()
+                        description = str(option.get("description") or "").strip()
+                        question_lines.append(
+                            f"- `{label}` — {description}" if description else f"- `{label}`"
+                        )
+        question_lines.append("")
+        question_lines.append(
+            "_Reply in this thread to answer; the run resumes with your reply "
+            f"(waiting up to {PEAR_QUESTION_TIMEOUT_SECONDS // 60} minutes)._"
+        )
+        self.bot_handler.send_reply(self.message, "\n".join(question_lines))
+        self.live_operation = {"kind": "question", "label": "waiting on you"}
+        self.transcript_events.append(
+            {
+                "kind": "status",
+                "status": "running",
+                "title": "Waiting for an answer.",
+                "body": trim_pear_text(str(questions[0].get("question") or ""), limit=300),
+            }
+        )
+        self.update_volatile_transcript("running", force=True)
+
+        deadline = time.monotonic() + PEAR_QUESTION_TIMEOUT_SECONDS
+        last_heartbeat = time.monotonic()
+        answer_text: str | None = None
+        try:
+            while time.monotonic() < deadline:
+                self.raise_if_cancel_requested()
+                pending = self.steering_events_after(
+                    self.bot_handler,
+                    self.message_id,
+                    after_event_id=self.last_steering_event_id,
+                )
+                if pending:
+                    answer_text = "; ".join(event["instruction"] for event in pending)
+                    # Consume: an answer must not replay as steering.
+                    self.last_steering_event_id = pending[-1]["event_id"]
+                    break
+                if time.monotonic() - last_heartbeat >= 15:
+                    self.handler.record_worker_event(
+                        self.bot_handler,
+                        self.message_id,
+                        "question_waiting",
+                        summary="Waiting for a human answer.",
+                    )
+                    last_heartbeat = time.monotonic()
+                time.sleep(PEAR_QUESTION_POLL_SECONDS)
+        finally:
+            self.live_operation = None
+        if answer_text is None:
+            self.transcript_events.append(
+                {
+                    "kind": "status",
+                    "status": "done",
+                    "title": "No answer arrived; continuing with defaults.",
+                }
+            )
+            self.update_volatile_transcript("running", force=True)
+            return None
+        self.transcript_events.append(
+            {
+                "kind": "status",
+                "status": "done",
+                "title": "Answer received.",
+                "body": trim_pear_text(answer_text, limit=300),
+            }
+        )
+        self.update_volatile_transcript("running", force=True)
+        return {
+            str(question.get("id") or index): [answer_text]
+            for index, question in enumerate(questions)
+        }
 
     def maybe_apply_same_turn_steering(self) -> None:
         if (
@@ -3728,6 +3855,8 @@ class PearWorkerTurn:
             active_session=self.active_session,
             task=segment_task,
             event_callback=self.handle_transcript_event,
+            collaboration_mode=self.collaboration_mode,
+            user_input_provider=self.request_user_answers,
         )
         self.raise_if_cancel_requested()
         segment_summary = pear_worker_summary_from_tool_results(

@@ -23,6 +23,12 @@ import {
     read_pear_workspace_location,
     write_pear_workspace_location,
 } from "./pear_workspace_location.ts";
+import {
+    begin_pear_workspace_metric,
+    finish_pear_workspace_metric,
+    pear_workspace_metrics_snapshot,
+    record_pear_workspace_error,
+} from "./pear_workspace_metrics.ts";
 import type {PearWorkspaceShellTab} from "./pear_workspace_shell_view.ts";
 import {
     render_pear_workspace_breadcrumb,
@@ -120,6 +126,7 @@ export type PearWorkspaceShellDebugState = {
     activePath: string | undefined;
     renderedTreeRows: number;
     explorerWidth: number;
+    metrics: ReturnType<typeof pear_workspace_metrics_snapshot>;
 };
 
 export type PearWorkspaceShellController = {
@@ -182,6 +189,10 @@ function is_anchor(element: HTMLElement): element is HTMLAnchorElement {
 
 function error_message(error: pear_workspace_api.PearWorkspaceApiError): string {
     return error.kind === "server" ? error.error.msg : error.message;
+}
+
+function record_api_error(error: pear_workspace_api.PearWorkspaceApiError): void {
+    record_pear_workspace_error(error.kind === "server" ? error.status : undefined);
 }
 
 export function create_pear_workspace_shell(
@@ -526,6 +537,9 @@ export function create_pear_workspace_shell(
         root: editor_root,
         onUpdate(snapshot) {
             editor_snapshot = snapshot;
+            if (snapshot.surface.kind !== "empty" && snapshot.surface.kind !== "loading") {
+                finish_pear_workspace_metric("workspace_file_interactive");
+            }
             const document = snapshot.activeDocument;
             if (document?.state === "dirty") {
                 const tab = tabs.find((candidate) => candidate.path === document.path);
@@ -630,6 +644,7 @@ export function create_pear_workspace_shell(
             }
         }
         // Selection and tab chrome must paint before the document request starts.
+        begin_pear_workspace_metric("workspace_file_interactive");
         render_tree();
         render_tabs();
         render_breadcrumb();
@@ -755,6 +770,9 @@ export function create_pear_workspace_shell(
                     }
                     render_tree();
                     render_tabs();
+                    if (tree.rootId === directory_id) {
+                        finish_pear_workspace_metric("workspace_tree_usable");
+                    }
                     const expanded_unloaded = [...tree.entries.values()].filter(
                         (entry) =>
                             entry.kind === "directory" &&
@@ -776,6 +794,7 @@ export function create_pear_workspace_shell(
                         error_message(error),
                     );
                     status.textContent = error_message(error);
+                    record_api_error(error);
                     render_tree();
                 },
             },
@@ -892,6 +911,7 @@ export function create_pear_workspace_shell(
                     return;
                 }
                 reveal_request = undefined;
+                record_api_error(error);
                 status.textContent = error_message(error);
             },
         });
@@ -1062,6 +1082,7 @@ export function create_pear_workspace_shell(
             },
             error(error) {
                 rebind_requests.delete(tab.path);
+                record_api_error(error);
                 if (!authority_stale) {
                     status.textContent = error_message(error);
                 }
@@ -1148,6 +1169,9 @@ export function create_pear_workspace_shell(
         const generation = descriptor_generation;
         status.textContent =
             descriptor === undefined ? "Loading workspace…" : "Reloading workspace…";
+        if (descriptor === undefined) {
+            begin_pear_workspace_metric("workspace_tree_usable");
+        }
         descriptor_request = dependencies.getWorkspace(options.workspaceId, {
             success(response) {
                 if (destroyed || generation !== descriptor_generation) {
@@ -1168,6 +1192,7 @@ export function create_pear_workspace_shell(
                 }
                 descriptor_request = undefined;
                 status.textContent = error_message(error);
+                record_api_error(error);
                 ready_resolve?.();
                 ready_resolve = undefined;
             },
@@ -1212,6 +1237,7 @@ export function create_pear_workspace_shell(
                     return;
                 }
                 refresh_request = undefined;
+                record_api_error(error);
                 status.textContent = error_message(error);
             },
         });
@@ -1280,6 +1306,7 @@ export function create_pear_workspace_shell(
                     return;
                 }
                 search_request = undefined;
+                record_api_error(error);
                 explorer.renderSearchResults(undefined);
                 status.textContent = error_message(error);
             },
@@ -1549,6 +1576,7 @@ export function create_pear_workspace_shell(
                 activePath: active_path,
                 renderedTreeRows: explorer.getRenderedRowCount(),
                 explorerWidth: explorer_width,
+                metrics: pear_workspace_metrics_snapshot(),
             };
         },
         async destroy(): Promise<void> {

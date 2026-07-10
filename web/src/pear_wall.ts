@@ -598,9 +598,23 @@ export function initialize(): void {
             refresh();
         }
     });
+    // Zulip narrows without firing hashchange on a fresh load, and the
+    // wall must never lag a topic switch by a poll interval — so watch
+    // the narrow with a string compare each second; the network is only
+    // touched when the context actually changed.
     window.addEventListener("hashchange", () => {
         refresh();
     });
+    setInterval(() => {
+        if (document.hidden) {
+            return;
+        }
+        const context = wall_context();
+        const context_key = context === undefined ? "" : `${context.stream}>${context.topic}`;
+        if (context_key !== last_context_key) {
+            refresh();
+        }
+    }, 1000);
 
     refresh();
 }

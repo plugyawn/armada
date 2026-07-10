@@ -11,6 +11,18 @@ function reduce(state, action) {
     return workspace_store.reduce_pear_workspace_store(state, action);
 }
 
+function source_edit(state, id, text) {
+    const changed = reduce(state, {type: "source_changed", ...id});
+    const document = workspace_store.get_pear_workspace_document(changed, id);
+    assert.ok(document !== undefined);
+    return reduce(changed, {
+        type: "source_flushed",
+        ...id,
+        editRevision: document.editRevision,
+        text,
+    });
+}
+
 function activate(state, workspace_id, workspace_revision = 1) {
     return reduce(state, {
         type: "activate_workspace",
@@ -186,9 +198,9 @@ run_test("an older save success cannot clear a newer Source edit", () => {
     let {state} = loaded;
     const id = identity("workspace-a", "README.md", loaded.request_generation);
 
-    state = reduce(state, {type: "source_edited", ...id, text: "first edit\n"});
+    state = source_edit(state, id, "first edit\n");
     state = reduce(state, {type: "save_started", ...id});
-    state = reduce(state, {type: "source_edited", ...id, text: "second edit\n"});
+    state = source_edit(state, id, "second edit\n");
     state = reduce(state, {
         type: "save_succeeded",
         ...id,
@@ -215,7 +227,7 @@ run_test("an inactive document save acknowledges only its original session", () 
     const loaded = loaded_store();
     let {state} = loaded;
     const a_id = identity("workspace-a", "README.md", loaded.request_generation);
-    state = reduce(state, {type: "source_edited", ...a_id, text: "workspace a edit\n"});
+    state = source_edit(state, a_id, "workspace a edit\n");
     state = reduce(state, {type: "save_started", ...a_id});
 
     state = activate(state, "workspace-b");
@@ -224,7 +236,7 @@ run_test("an inactive document save acknowledges only its original session", () 
         text: "workspace b\n",
     });
     const b_id = identity("workspace-b", "README.md", b_open.request_generation);
-    state = reduce(state, {type: "source_edited", ...b_id, text: "workspace b edit\n"});
+    state = source_edit(state, b_id, "workspace b edit\n");
 
     state = reduce(state, {
         type: "save_succeeded",
@@ -250,7 +262,7 @@ run_test("stale save callbacks cannot consume the single in-flight save", () => 
     const loaded = loaded_store();
     let {state} = loaded;
     const id = identity("workspace-a", "README.md", loaded.request_generation);
-    state = reduce(state, {type: "source_edited", ...id, text: "edit\n"});
+    state = source_edit(state, id, "edit\n");
     state = reduce(state, {type: "save_started", ...id});
 
     state = reduce(state, {
@@ -271,9 +283,9 @@ run_test("conflict Overwrite keeps the latest edit and adopts only the remote ba
     const loaded = loaded_store();
     let {state} = loaded;
     const id = identity("workspace-a", "README.md", loaded.request_generation);
-    state = reduce(state, {type: "source_edited", ...id, text: "first edit\n"});
+    state = source_edit(state, id, "first edit\n");
     state = reduce(state, {type: "save_started", ...id});
-    state = reduce(state, {type: "source_edited", ...id, text: "latest edit\n"});
+    state = source_edit(state, id, "latest edit\n");
     state = reduce(state, {
         type: "save_conflicted",
         ...id,
@@ -287,7 +299,7 @@ run_test("conflict Overwrite keeps the latest edit and adopts only the remote ba
     let document = get_document(state, "workspace-a", "README.md", loaded.request_generation);
     assert.equal(document.state, "conflict");
     assert.equal(document.currentText, "latest edit\n");
-    state = reduce(state, {type: "source_edited", ...id, text: "edited after conflict\n"});
+    state = source_edit(state, id, "edited after conflict\n");
     document = get_document(state, "workspace-a", "README.md", loaded.request_generation);
     assert.equal(document.state, "conflict");
     assert.equal(document.conflict.remoteVersion, "remote-version");
@@ -321,7 +333,7 @@ run_test("conflict Reload discards the scratch edit and restores clean view stat
         selection: {anchor: 100, head: 120},
         scrollTop: 48,
     });
-    state = reduce(state, {type: "source_edited", ...id, text: "local edit\n"});
+    state = source_edit(state, id, "local edit\n");
     state = reduce(state, {type: "save_started", ...id});
     state = reduce(state, {
         type: "save_conflicted",
@@ -451,7 +463,7 @@ run_test("a stale adapter cannot edit after its mode is inactive", () => {
         eligibility: "supported",
     });
     state = reduce(state, {type: "set_editor_mode", ...id, mode: "rich"});
-    state = reduce(state, {type: "source_edited", ...id, text: "wrong adapter\n"});
+    state = reduce(state, {type: "source_changed", ...id});
     document = get_document(state, "workspace-a", "README.md", loaded.request_generation);
     assert.equal(document.currentText, "initial\n");
     assert.equal(document.editRevision, 0);
@@ -471,12 +483,43 @@ run_test("the authoritative byte limit blocks a save visibly", () => {
         workspaces: new Map(state.workspaces).set("workspace-a", {...workspace, documents}),
     };
 
-    state = reduce(state, {type: "source_edited", ...id, text: "four"});
+    state = source_edit(state, id, "four");
     state = reduce(state, {type: "save_started", ...id});
     const blocked = get_document(state, "workspace-a", "README.md", loaded.request_generation);
     assert.equal(blocked.state, "error");
     assert.equal(blocked.error, "too_large");
     assert.equal(blocked.saveInFlight, undefined);
+});
+
+run_test("Source reports dirty immediately but cannot save before an exact flush", () => {
+    const loaded = loaded_store();
+    let {state} = loaded;
+    const id = identity("workspace-a", "README.md", loaded.request_generation);
+    state = reduce(state, {type: "source_changed", ...id});
+
+    let document = get_document(state, "workspace-a", "README.md", loaded.request_generation);
+    assert.equal(document.state, "dirty");
+    assert.equal(document.currentText, "initial\n");
+    assert.equal(document.editRevision, 1);
+    assert.equal(document.serializedRevision, 0);
+    assert.deepEqual(document.serialization, {
+        state: "scheduled",
+        requestedRevision: 1,
+        error: undefined,
+    });
+
+    state = reduce(state, {type: "save_started", ...id});
+    document = get_document(state, "workspace-a", "README.md", loaded.request_generation);
+    assert.equal(document.saveInFlight, undefined);
+    state = reduce(state, {
+        type: "source_flushed",
+        ...id,
+        editRevision: 1,
+        text: "exact\r\nbytes",
+    });
+    state = reduce(state, {type: "save_started", ...id});
+    document = get_document(state, "workspace-a", "README.md", loaded.request_generation);
+    assert.equal(document.saveInFlight.text, "exact\r\nbytes");
 });
 
 run_test("stale and no-op transitions fail closed", () => {
@@ -489,8 +532,14 @@ run_test("stale and no-op transitions fail closed", () => {
     const loaded = loaded_store();
     state = loaded.state;
     const id = identity("workspace-a", "README.md", loaded.request_generation);
-    const unchanged = reduce(state, {type: "source_edited", ...id, text: "initial\n"});
-    assert.equal(unchanged, state);
+    const unchanged = reduce(state, {
+        type: "source_flushed",
+        ...id,
+        editRevision: 0,
+        text: "initial\n",
+    });
+    assert.equal(unchanged.ignoredStaleResponses, 1);
+    state = unchanged;
     state = reduce(state, {
         type: "set_rich_eligibility",
         ...id,
@@ -530,18 +579,18 @@ run_test("stale and no-op transitions fail closed", () => {
         ...identity("workspace-a", "README.md", 999),
     });
     state = reduce(state, {...id, type: "unknown_transition"});
-    assert.equal(state.ignoredStaleResponses, 6);
+    assert.equal(state.ignoredStaleResponses, 7);
 
     state = activate(state, "workspace-b");
-    state = reduce(state, {type: "source_edited", ...id, text: "inactive edit"});
-    assert.equal(state.ignoredStaleResponses, 7);
+    state = reduce(state, {type: "source_changed", ...id});
+    assert.equal(state.ignoredStaleResponses, 8);
 });
 
 run_test("a dirty document rejects a late reload", () => {
     const loaded = loaded_store();
     let {state} = loaded;
     const id = identity("workspace-a", "README.md", loaded.request_generation);
-    state = reduce(state, {type: "source_edited", ...id, text: "dirty\n"});
+    state = source_edit(state, id, "dirty\n");
     const reopened = open_document(state, "workspace-a", "README.md");
     state = load_document(reopened.state, "workspace-a", "README.md", reopened.request_generation, {
         text: "late reload\n",
@@ -584,7 +633,7 @@ run_test("save failure is scoped and a newer serialization error survives an old
     const loaded = loaded_store();
     let {state} = loaded;
     const id = identity("workspace-a", "README.md", loaded.request_generation);
-    state = reduce(state, {type: "source_edited", ...id, text: "save me\n"});
+    state = source_edit(state, id, "save me\n");
     state = reduce(state, {type: "save_started", ...id});
     state = reduce(state, {
         type: "save_failed",
@@ -640,7 +689,7 @@ run_test("a successful save adopts the revision-bound entry identity", () => {
     const loaded = loaded_store();
     let {state} = loaded;
     const old_id = identity("workspace-a", "README.md", loaded.request_generation);
-    state = reduce(state, {type: "source_edited", ...old_id, text: "saved\n"});
+    state = source_edit(state, old_id, "saved\n");
     state = reduce(state, {type: "save_started", ...old_id});
     state = reduce(state, {
         type: "save_succeeded",
@@ -662,7 +711,7 @@ run_test("a successful save adopts the revision-bound entry identity", () => {
         "revision-2-readme",
     );
 
-    state = reduce(state, {type: "source_edited", ...old_id, text: "wrong file\n"});
+    state = reduce(state, {type: "source_changed", ...old_id});
     assert.equal(state.ignoredStaleResponses, 1);
     assert.equal(workspace_store.get_pear_workspace_document(state, new_id).currentText, "saved\n");
 });

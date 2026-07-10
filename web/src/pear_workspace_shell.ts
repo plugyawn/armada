@@ -24,7 +24,7 @@ import {
     render_pear_workspace_descriptor,
     render_pear_workspace_surface,
     render_pear_workspace_tabs,
-    toggle_pear_workspace_mobile_explorer,
+    set_pear_workspace_mobile_explorer_open,
 } from "./pear_workspace_shell_view.ts";
 import type {PearWorkspaceTreeState} from "./pear_workspace_tree.ts";
 import {
@@ -167,6 +167,7 @@ export function create_pear_workspace_shell(
         is_input,
     );
     const search_results = required_element(options.root, "[data-role='search-results']");
+    const explorer_root = required_element(options.root, "#pear-workspace-explorer");
     const tabs_root = required_element(options.root, "[data-role='tabs']");
     const breadcrumb = required_element(options.root, "[data-role='breadcrumb']");
     const editor_root = required_element(options.root, "[data-role='editor']");
@@ -222,6 +223,7 @@ export function create_pear_workspace_shell(
     let descriptor_generation = 0;
     let pending_reveal: {path: string; revision: number} | undefined;
     let required_workspace_revision: number | undefined;
+    let mobile_explorer_open = false;
     const directory_requests = new Map<string, AbortableRequest>();
     const rebind_requests = new Map<string, AbortableRequest>();
     let files: PearWorkspaceFilesController | undefined;
@@ -240,6 +242,16 @@ export function create_pear_workspace_shell(
     })();
 
     const active_tab = (): WorkspaceTab | undefined => tabs.find((tab) => tab.path === active_path);
+
+    const set_mobile_explorer_open = (open: boolean, restore_focus: boolean): void => {
+        mobile_explorer_open = open;
+        set_pear_workspace_mobile_explorer_open(options.root, explorer_toggle, open);
+        if (open) {
+            search_input.focus();
+        } else if (restore_focus && !destroyed) {
+            explorer_toggle.focus();
+        }
+    };
 
     const readme_state = (): PearWorkspaceReadmeState => {
         if (
@@ -416,6 +428,34 @@ export function create_pear_workspace_shell(
         void editor.open(entry);
     };
 
+    const focus_file_tab = (path: string): void => {
+        const button = [...tabs_root.querySelectorAll<HTMLButtonElement>("[data-tab-path]")].find(
+            (candidate) => candidate.dataset["tabPath"] === path,
+        );
+        button?.focus();
+    };
+
+    const activate_tab_path = (tab_path: string, restore_focus: boolean): void => {
+        const tab = tabs.find((candidate) => candidate.path === tab_path);
+        if (tab === undefined) {
+            return;
+        }
+        active_path = tab.path;
+        render_tabs();
+        render_breadcrumb();
+        if (authority_stale || tab.workspaceRevision !== descriptor?.workspace_revision) {
+            status.textContent = "Refreshing file identity…";
+            if (!authority_stale) {
+                resolve_tab_path(tab);
+            }
+        } else {
+            activate_entry(tab.entry, !tab.preview);
+        }
+        if (restore_focus) {
+            focus_file_tab(tab.path);
+        }
+    };
+
     const load_directory = (directory_id: string, first_page_only: boolean): void => {
         if (destroyed || tree === undefined || directory_requests.has(directory_id)) {
             return;
@@ -500,6 +540,9 @@ export function create_pear_workspace_shell(
             const entry = tree?.entries.get(entry_id);
             if (entry !== undefined) {
                 activate_entry(entry, pin);
+                if (mobile_explorer_open && entry.kind === "file") {
+                    set_mobile_explorer_open(false, true);
+                }
             }
         },
         onToggle(entry_id, expanded) {
@@ -528,6 +571,9 @@ export function create_pear_workspace_shell(
             if (entry !== undefined) {
                 activate_entry(entry, false);
                 explorer.focusEntry(entry_id);
+                if (mobile_explorer_open && entry.kind === "file") {
+                    set_mobile_explorer_open(false, true);
+                }
             }
         },
     });
@@ -918,7 +964,7 @@ export function create_pear_workspace_shell(
                 break;
             }
             case "toggle-explorer": {
-                toggle_pear_workspace_mobile_explorer(options.root, explorer_toggle);
+                set_mobile_explorer_open(!mobile_explorer_open, false);
 
                 break;
             }
@@ -946,24 +992,115 @@ export function create_pear_workspace_shell(
         }
         const tab_path = target.closest<HTMLElement>("[data-tab-path]")?.dataset["tabPath"];
         if (tab_path !== undefined) {
-            const tab = tabs.find((candidate) => candidate.path === tab_path);
-            if (tab !== undefined) {
-                active_path = tab.path;
-                render_tabs();
-                render_breadcrumb();
-                if (authority_stale || tab.workspaceRevision !== descriptor?.workspace_revision) {
-                    status.textContent = "Refreshing file identity…";
-                    if (!authority_stale) {
-                        resolve_tab_path(tab);
-                    }
-                } else {
-                    activate_entry(tab.entry, !tab.preview);
-                }
+            activate_tab_path(tab_path, true);
+        }
+    };
+
+    const on_root_keydown = (event: KeyboardEvent): void => {
+        const target = event.target;
+        if (!(target instanceof Element)) {
+            return;
+        }
+        const tab_button = target.closest<HTMLButtonElement>("[data-tab-path]");
+        if (
+            tab_button !== null &&
+            tabs_root.contains(tab_button) &&
+            ["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)
+        ) {
+            const tab_paths = tabs.map((tab) => tab.path);
+            const current_index = tab_paths.indexOf(tab_button.dataset["tabPath"] ?? "");
+            if (current_index === -1 || tab_paths.length === 0) {
+                return;
             }
+            let next_index: number;
+            switch (event.key) {
+                case "Home":
+                    next_index = 0;
+                    break;
+                case "End":
+                    next_index = tab_paths.length - 1;
+                    break;
+                case "ArrowLeft":
+                    next_index = (current_index - 1 + tab_paths.length) % tab_paths.length;
+                    break;
+                default:
+                    next_index = (current_index + 1) % tab_paths.length;
+            }
+            const next_path = tab_paths[next_index];
+            if (next_path !== undefined) {
+                event.preventDefault();
+                event.stopPropagation();
+                activate_tab_path(next_path, true);
+            }
+            return;
+        }
+        if (event.key === "Escape") {
+            if (mobile_explorer_open) {
+                event.preventDefault();
+                event.stopPropagation();
+                set_mobile_explorer_open(false, true);
+                return;
+            }
+            const document_state = editor_snapshot?.activeDocument?.state;
+            if (
+                active_tab()?.dirty === true ||
+                document_state === "dirty" ||
+                document_state === "saving" ||
+                document_state === "conflict" ||
+                document_state === "error"
+            ) {
+                event.preventDefault();
+                event.stopPropagation();
+                status.textContent =
+                    "Finish saving or resolve the conflict before returning to Chat";
+            }
+            return;
+        }
+        if (event.key !== "Tab" || !mobile_explorer_open) {
+            return;
+        }
+        const focusable = [
+            ...explorer_root.querySelectorAll<HTMLElement>(
+                "button:not([disabled]), input:not([disabled]), a[href], [tabindex]:not([tabindex='-1'])",
+            ),
+        ].filter((element) => !element.hidden && element.closest<HTMLElement>("[hidden]") === null);
+        if (focusable.length === 0) {
+            return;
+        }
+        const first = focusable[0]!;
+        const last = focusable.at(-1)!;
+        if (
+            event.shiftKey &&
+            (document.activeElement === first || !explorer_root.contains(document.activeElement))
+        ) {
+            event.preventDefault();
+            event.stopPropagation();
+            last.focus();
+        } else if (
+            !event.shiftKey &&
+            (document.activeElement === last || !explorer_root.contains(document.activeElement))
+        ) {
+            event.preventDefault();
+            event.stopPropagation();
+            first.focus();
+        }
+    };
+
+    const on_document_click = (event: MouseEvent): void => {
+        const target = event.target;
+        if (
+            mobile_explorer_open &&
+            target instanceof Element &&
+            !explorer_root.contains(target) &&
+            !explorer_toggle.contains(target)
+        ) {
+            set_mobile_explorer_open(false, false);
         }
     };
 
     options.root.addEventListener("click", on_root_click);
+    options.root.addEventListener("keydown", on_root_keydown);
+    document.addEventListener("click", on_document_click);
     search_input.addEventListener("input", on_search_input);
     search_form.addEventListener("submit", on_search_submit);
 
@@ -1023,6 +1160,8 @@ export function create_pear_workspace_shell(
                 editor: {...preferences, documents: cached_documents},
             });
             options.root.removeEventListener("click", on_root_click);
+            options.root.removeEventListener("keydown", on_root_keydown);
+            document.removeEventListener("click", on_document_click);
             search_input.removeEventListener("input", on_search_input);
             search_form.removeEventListener("submit", on_search_submit);
             files?.destroy();

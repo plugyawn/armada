@@ -91,6 +91,18 @@ function harness(workspace_id) {
             options,
             opens: [],
             activations: [],
+            snapshot: {
+                surface: {kind: "empty"},
+                store: {
+                    activeWorkspaceId: undefined,
+                    workspaces: new Map(),
+                    ignoredStaleResponses: 0,
+                },
+                activeDocument: undefined,
+                activeIdentity: undefined,
+                mountedAdapter: undefined,
+                richModeLoading: false,
+            },
             preferences: {
                 mode: "source",
                 documents: {
@@ -119,18 +131,9 @@ function harness(workspace_id) {
             },
             async save() {},
             async resolveConflict() {},
-            getSnapshot: () => ({
-                surface: {kind: "empty"},
-                store: {
-                    activeWorkspaceId: undefined,
-                    workspaces: new Map(),
-                    ignoredStaleResponses: 0,
-                },
-                activeDocument: undefined,
-                activeIdentity: undefined,
-                mountedAdapter: undefined,
-                richModeLoading: false,
-            }),
+            getSnapshot() {
+                return this.snapshot;
+            },
             getPreferences() {
                 return this.preferences;
             },
@@ -140,6 +143,10 @@ function harness(workspace_id) {
             },
             saved(event) {
                 options.onSaved(event);
+            },
+            update(snapshot) {
+                this.snapshot = {...this.snapshot, ...snapshot};
+                options.onUpdate(this.snapshot);
             },
         };
         editors.push(state);
@@ -315,6 +322,98 @@ run_test(
         test.root.remove();
     },
 );
+
+run_test("file tabs, mobile drawer, and Escape preserve focus and unsaved work", async () => {
+    const test = harness("workspace-keyboard");
+    const current = descriptor("workspace-keyboard");
+    test.send_descriptor(current);
+    const a = entry("A.md");
+    const b = entry("B.md");
+    test.send_tree(0, current.root, [a, b]);
+    test.click(test.root.querySelector("[data-entry-id='r1:A.md']"), "dblclick");
+    test.click(test.root.querySelector("[data-entry-id='r1:B.md']"), "dblclick");
+
+    const first_tab = test.root.querySelector("[data-tab-path='A.md']");
+    first_tab.focus();
+    first_tab.dispatchEvent(
+        new window.KeyboardEvent("keydown", {
+            key: "ArrowRight",
+            bubbles: true,
+            cancelable: true,
+        }),
+    );
+    assert.equal(test.controller.getDebugState().activePath, "B.md");
+    assert.equal(document.activeElement.dataset.tabPath, "B.md");
+
+    const explorer_toggle = test.root.querySelector("[data-action='toggle-explorer']");
+    test.click(explorer_toggle);
+    assert.equal(explorer_toggle.getAttribute("aria-expanded"), "true");
+    assert.equal(document.activeElement, test.root.querySelector("[data-role='search-input']"));
+    document.activeElement.dispatchEvent(
+        new window.KeyboardEvent("keydown", {
+            key: "Tab",
+            shiftKey: true,
+            bubbles: true,
+            cancelable: true,
+        }),
+    );
+    assert.equal(
+        test.root.querySelector("#pear-workspace-explorer").contains(document.activeElement),
+        true,
+    );
+    assert.notEqual(document.activeElement, test.root.querySelector("[data-role='search-input']"));
+    document.activeElement.dispatchEvent(
+        new window.KeyboardEvent("keydown", {key: "Escape", bubbles: true, cancelable: true}),
+    );
+    assert.equal(explorer_toggle.getAttribute("aria-expanded"), "false");
+    assert.equal(document.activeElement, explorer_toggle);
+
+    test.click(explorer_toggle);
+    test.click(document.body);
+    assert.equal(explorer_toggle.getAttribute("aria-expanded"), "false");
+
+    let escaped_to_parent = 0;
+    const count_escape = (event) => {
+        if (event.key === "Escape") {
+            escaped_to_parent += 1;
+        }
+    };
+    document.body.addEventListener("keydown", count_escape);
+    test.editors[0].update({
+        activeDocument: {path: "B.md", state: "dirty", editorMode: "source"},
+    });
+    test.root
+        .querySelector("[data-role='editor']")
+        .dispatchEvent(
+            new window.KeyboardEvent("keydown", {key: "Escape", bubbles: true, cancelable: true}),
+        );
+    assert.equal(escaped_to_parent, 0, "dirty documents keep Escape inside Workspace");
+    assert.match(test.root.querySelector("[data-role='status']").textContent, /Finish saving/);
+
+    test.editors[0].update({
+        activeDocument: {path: "B.md", state: "conflict", editorMode: "source"},
+    });
+    test.root
+        .querySelector("[data-role='editor']")
+        .dispatchEvent(
+            new window.KeyboardEvent("keydown", {key: "Escape", bubbles: true, cancelable: true}),
+        );
+    assert.equal(escaped_to_parent, 0, "conflicts keep Escape inside Workspace");
+
+    test.editors[0].update({
+        activeDocument: {path: "B.md", state: "clean", editorMode: "source"},
+    });
+    test.root
+        .querySelector("[data-role='editor']")
+        .dispatchEvent(
+            new window.KeyboardEvent("keydown", {key: "Escape", bubbles: true, cancelable: true}),
+        );
+    assert.equal(escaped_to_parent, 1, "a clean editor lets the pane own Escape");
+    document.body.removeEventListener("keydown", count_escape);
+
+    await test.controller.destroy();
+    test.root.remove();
+});
 
 run_test("root cursor pagination remains reachable and completes README absence", async () => {
     const test = harness("workspace-root-pages");

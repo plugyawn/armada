@@ -41,6 +41,7 @@ export function render_pear_workspace_tabs(
         button.type = "button";
         button.dataset["tabPath"] = tab.path;
         button.setAttribute("role", "tab");
+        button.setAttribute("aria-controls", "pear-workspace-document-panel");
         button.setAttribute("aria-selected", String(tab.path === active_path));
         button.tabIndex = tab.path === active_path ? 0 : -1;
         button.className = tab.preview
@@ -234,15 +235,15 @@ export function render_pear_workspace_surface(options: {
     render_links(elements, options.workspaceId, options.activeTab, snapshot, options.rawUrl);
 }
 
-export function toggle_pear_workspace_mobile_explorer(
+export function set_pear_workspace_mobile_explorer_open(
     root: HTMLElement,
     button: HTMLButtonElement,
+    open: boolean,
 ): void {
     const shell = root.querySelector<HTMLElement>(".pear-workspace-shell");
     if (shell === null) {
         return;
     }
-    const open = !shell.classList.contains("pear-workspace-shell--explorer-open");
     shell.classList.toggle("pear-workspace-shell--explorer-open", open);
     button.setAttribute("aria-expanded", String(open));
 }

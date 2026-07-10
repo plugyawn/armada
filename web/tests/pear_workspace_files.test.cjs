@@ -215,9 +215,16 @@ run_test("file menu capability gates actions and implements menu keyboard behavi
     assert.equal(document.activeElement, test.action("reveal"));
     test.menu.dispatchEvent(new window.KeyboardEvent("keydown", {key: "End", bubbles: true}));
     assert.equal(document.activeElement, test.action("history"));
+    let escaped_to_parent = 0;
+    test.root.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") {
+            escaped_to_parent += 1;
+        }
+    });
     test.menu.dispatchEvent(new window.KeyboardEvent("keydown", {key: "Escape", bubbles: true}));
     assert.equal(test.menu.hidden, true);
     assert.equal(document.activeElement, test.menu_button);
+    assert.equal(escaped_to_parent, 0, "the menu consumes Escape before the workspace pane");
 
     test.set_context({authority_stale: true});
     assert.equal(test.menu_button.hidden, true);
@@ -382,10 +389,17 @@ run_test("copy, reveal, and paginated history stay bound to the active identity"
     });
     assert.equal(test.dialog_layer.querySelectorAll("li").length, 2);
     const close = test.dialog_layer.querySelector("[aria-label='Close dialog']");
+    let escaped_to_parent = 0;
+    test.root.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") {
+            escaped_to_parent += 1;
+        }
+    });
     close.focus();
     close.dispatchEvent(new window.KeyboardEvent("keydown", {key: "Escape", bubbles: true}));
     assert.equal(test.controller.getDebugState().dialogKind, undefined);
     assert.equal(document.activeElement, test.menu_button);
+    assert.equal(escaped_to_parent, 0, "the dialog consumes Escape before the workspace pane");
 
     test.open_action("history");
     test.histories[2].callbacks.error({

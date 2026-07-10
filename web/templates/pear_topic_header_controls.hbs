@@ -49,18 +49,24 @@
             <span class="pear-commitline-meta"></span>
         </button>
     </span>
-    <span class="pear-workspace-tabs pear-workspace-tabs-hidden" role="tablist">
+    <span
+        class="pear-workspace-tabs pear-workspace-tabs-hidden"
+        role="tablist"
+        aria-label="{{t 'Topic view'}}"
+    >
         <button
             type="button"
             class="pear-workspace-mode-tab pear-workspace-tab-selected"
             data-pear-tab="chat"
             role="tab"
+            aria-controls="message_feed_container"
         >{{t "Chat"}}</button>
         <button
             type="button"
             class="pear-workspace-mode-tab"
             data-pear-tab="workspace"
             role="tab"
+            aria-controls="pear-workspace-pane"
         >{{t "Workspace"}}</button>
     </span>
 </span>

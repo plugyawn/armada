@@ -9,7 +9,17 @@ import {placeholder} from "@milkdown/crepe/feature/placeholder";
 import {table} from "@milkdown/crepe/feature/table";
 import {toolbar} from "@milkdown/crepe/feature/toolbar";
 import {editorViewCtx, parserCtx, prosePluginsCtx, serializerCtx} from "@milkdown/kit/core";
-import {Plugin, PluginKey, TextSelection} from "@milkdown/kit/prose/state";
+import {EditorState, Plugin, PluginKey, TextSelection} from "@milkdown/kit/prose/state";
+
+// Webpack extracts these dynamic imports into the Rich editor's lazy CSS
+// chunk. Chat keeps only the shared KaTeX CSS in bundles/app.ts.
+const rich_styles_ready =
+    globalThis.process?.env["NODE_ENV"] === "test"
+        ? Promise.resolve()
+        : Promise.all([
+              import("@milkdown/crepe/theme/common/style.css"),
+              import("@milkdown/crepe/theme/frame.css"),
+          ]).then(() => undefined);
 
 export type PearWorkspaceRichSelection = {
     anchor: number;
@@ -34,7 +44,8 @@ export type PearWorkspaceRichEligibility =
               | "escape"
               | "extension"
               | "round_trip"
-              | "parse_error";
+              | "parse_error"
+              | "style_error";
           reason: string;
       };
 
@@ -66,7 +77,7 @@ export type PearWorkspaceMarkdownEditorOptions = {
     editRevision: number;
     readOnly?: boolean;
     placeholder?: string;
-    selection?: PearWorkspaceRichSelection;
+    selection?: PearWorkspaceRichSelection | undefined;
     scrollTop?: number;
     onDirty: (event: PearWorkspaceRichDirtyEvent) => void;
     onSerialized: (
@@ -80,7 +91,7 @@ export type PearWorkspaceMarkdownEditorOptions = {
 export type PearWorkspaceMarkdownHydration = {
     markdown: string;
     editRevision: number;
-    selection?: PearWorkspaceRichSelection;
+    selection?: PearWorkspaceRichSelection | undefined;
     scrollTop?: number;
 };
 
@@ -415,6 +426,11 @@ function build_editor(
                                 const next_changes =
                                     transaction_origin_key.getState(next_view.state)?.userChanges ??
                                     delivered_changes;
+                                if (next_changes < delivered_changes) {
+                                    // A remote hydration replaces EditorState
+                                    // to clear history and resets plugin state.
+                                    delivered_changes = next_changes;
+                                }
                                 while (delivered_changes < next_changes) {
                                     delivered_changes += 1;
                                     on_user_doc_changed();
@@ -543,6 +559,17 @@ export async function create_pear_workspace_markdown_editor(
     const unsupported = rich_source_only_reason(options.markdown);
     if (unsupported !== undefined) {
         return {ok: false, eligibility: unsupported};
+    }
+    try {
+        await rich_styles_ready;
+    } catch {
+        return {
+            ok: false,
+            eligibility: source_only(
+                "style_error",
+                "Rich editor styles could not be loaded safely.",
+            ),
+        };
     }
 
     const host = document.createElement("div");
@@ -738,21 +765,36 @@ export async function create_pear_workspace_markdown_editor(
         builder.editor.action((ctx) => {
             next_document = ctx.get(parserCtx)(hydration.markdown);
         });
-        let transaction = view.state.tr
-            .replaceWith(0, view.state.doc.content.size, next_document.content)
-            .setMeta(transaction_origin_key, "hydrate" satisfies TransactionOrigin);
-        if (hydration.selection !== undefined) {
-            const document_size = transaction.doc.content.size;
-            const anchor = clamp_position(hydration.selection.anchor, document_size);
-            const head = clamp_position(hydration.selection.head, document_size);
-            transaction = transaction.setSelection(
-                TextSelection.between(
-                    transaction.doc.resolve(anchor),
-                    transaction.doc.resolve(head),
-                ),
-            );
-        }
-        view.dispatch(transaction);
+        const requested_selection = hydration.selection ?? {
+            anchor: view.state.selection.anchor,
+            head: view.state.selection.head,
+        };
+        const document_size = next_document.content.size;
+        const anchor = clamp_position(requested_selection.anchor, document_size);
+        const head = clamp_position(requested_selection.head, document_size);
+        const selection = TextSelection.between(
+            next_document.resolve(anchor),
+            next_document.resolve(head),
+        );
+        // A replacement transaction with addToHistory=false still maps the
+        // previous history branches across this new document. Constructing a
+        // fresh state is the fail-closed file/revision boundary: undo/redo and
+        // every other per-document plugin field are reinitialized, while the
+        // production schema and plugin set remain identical.
+        view.updateState(
+            EditorState.create({
+                doc: next_document,
+                selection,
+                plugins: view.state.plugins,
+            }),
+        );
+        // Let Milkdown's trailing-node plugin restore its editor-only final
+        // paragraph without making that normalization undoable or dirty.
+        view.dispatch(
+            view.state.tr
+                .setMeta(transaction_origin_key, "hydrate" satisfies TransactionOrigin)
+                .setMeta("addToHistory", false),
+        );
         view.dom.scrollTop = Math.max(0, hydration.scrollTop ?? view.dom.scrollTop);
         current_revision = hydration.editRevision;
         cached_result = undefined;
@@ -790,15 +832,23 @@ export async function create_pear_workspace_markdown_editor(
                 }
             },
             getViewState() {
+                if (destroyed) {
+                    throw new Error(
+                        "Cannot read view state from a destroyed Rich Markdown editor.",
+                    );
+                }
                 const {anchor, head} = view.state.selection;
                 return {selection: {anchor, head}, scrollTop: view.dom.scrollTop};
             },
             getEditRevision: () => current_revision,
             getStats: () => ({serializations: serialization_count}),
             focus() {
+                if (destroyed) {
+                    throw new Error("Cannot focus a destroyed Rich Markdown editor.");
+                }
                 view.focus();
             },
-            hasFocus: () => view.hasFocus(),
+            hasFocus: () => !destroyed && view.hasFocus(),
             destroy,
         },
     };

@@ -107,6 +107,7 @@ set_global("cancelIdleCallback", (handle) => {
 });
 
 const markdown_editor_path = path.resolve(__dirname, "../src/pear_workspace_markdown_editor.ts");
+const app_bundle_path = path.resolve(__dirname, "../src/bundles/app.ts");
 const editor_module = import(pathToFileURL(markdown_editor_path).href);
 
 function prose_mirror(root) {
@@ -129,6 +130,18 @@ function paste_text(root, text) {
     assert.equal(event.defaultPrevented, true);
 }
 
+function undo_with_keyboard(root) {
+    const event = new window.KeyboardEvent("keydown", {
+        key: "z",
+        code: "KeyZ",
+        ctrlKey: true,
+        bubbles: true,
+        cancelable: true,
+    });
+    prose_mirror(root).dispatchEvent(event);
+    return event.defaultPrevented;
+}
+
 function run_idle_callbacks() {
     const callbacks = [...idle_callbacks.values()];
     idle_callbacks.clear();
@@ -149,8 +162,9 @@ async function with_timeout(promise, label) {
     throw new Error(`${label} did not settle after draining timers`);
 }
 
-run_test("uses selective Crepe feature entrypoints without the all-language bundle", () => {
+run_test("keeps selective Crepe features and themes behind the Rich lazy boundary", () => {
     const source = fs.readFileSync(markdown_editor_path, "utf8");
+    const app_bundle = fs.readFileSync(app_bundle_path, "utf8");
     assert.ok(!source.includes('from "@milkdown/crepe"'));
     assert.ok(!source.includes('from "@codemirror/language-data"'));
     for (const feature of [
@@ -165,6 +179,9 @@ run_test("uses selective Crepe feature entrypoints without the all-language bund
     ]) {
         assert.ok(source.includes(`from "@milkdown/crepe/feature/${feature}"`), feature);
     }
+    assert.ok(source.includes('import("@milkdown/crepe/theme/common/style.css")'));
+    assert.ok(source.includes('import("@milkdown/crepe/theme/frame.css")'));
+    assert.ok(!app_bundle.includes("@milkdown/crepe/theme/"));
 });
 
 run_test("fails closed on syntax the production Rich profile cannot preserve", async () => {
@@ -364,6 +381,58 @@ run_test(
         root.remove();
     },
 );
+
+run_test("remote hydration clears undo history across the document boundary", async () => {
+    const markdown_editor = await editor_module;
+    idle_callbacks.clear();
+    const root = document.createElement("div");
+    document.body.append(root);
+    const dirty_events = [];
+    const result = await with_timeout(
+        markdown_editor.create_pear_workspace_markdown_editor({
+            root,
+            markdown: "# Original\n",
+            editRevision: 1,
+            onDirty(event) {
+                dirty_events.push(event);
+            },
+            onSerialized() {},
+        }),
+        "history Rich creation",
+    );
+    assert.equal(result.ok, true);
+    const {editor} = result;
+    editor.focus();
+
+    paste_text(root, "local ");
+    assert.match(prose_mirror(root).textContent, /local/);
+    assert.equal(undo_with_keyboard(root), true, "control edit must be undoable before hydration");
+    assert.doesNotMatch(prose_mirror(root).textContent, /local/);
+
+    paste_text(root, "local ");
+    assert.match(prose_mirror(root).textContent, /local/);
+    assert.deepEqual(
+        editor.hydrate({
+            markdown: "# Remote\n\nremote only\n",
+            editRevision: 50,
+            selection: {anchor: 1, head: 1},
+        }),
+        {eligible: true},
+    );
+    const hydrated_text = prose_mirror(root).textContent;
+    assert.match(hydrated_text, /Remote.*remote only/s);
+    assert.doesNotMatch(hydrated_text, /Original|local/);
+
+    assert.equal(undo_with_keyboard(root), false, "old-document history must be empty");
+    assert.equal(prose_mirror(root).textContent, hydrated_text);
+    assert.equal(editor.getEditRevision(), 50);
+    assert.equal(dirty_events.length, 3, "hydrate and rejected undo are non-dirty");
+
+    await editor.destroy();
+    assert.throws(() => editor.getViewState(), /destroyed Rich Markdown editor/);
+    assert.equal(editor.hasFocus(), false);
+    root.remove();
+});
 
 run_test("hydration is non-dirty, fail-closed, and read-only is live", async () => {
     const markdown_editor = await editor_module;

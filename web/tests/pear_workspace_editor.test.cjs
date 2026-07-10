@@ -72,6 +72,7 @@ function harness() {
     const saved = [];
     const source_editors = [];
     const rich_editors = [];
+    let source_loads = 0;
     let rich_loads = 0;
     let rich_should_fail = false;
     let rich_destroy_gate;
@@ -206,7 +207,10 @@ function harness() {
             rawUrl(workspace_id, entry_id, download = false) {
                 return `/raw/${workspace_id}/${entry_id}${download ? "/download" : ""}`;
             },
-            createSourceEditor: create_source,
+            async loadSourceEditor() {
+                source_loads += 1;
+                return {create_pear_workspace_source_editor: create_source};
+            },
             loadRichEditor: load_rich,
             defer: (callback) => scheduled(deferred, callback),
             scheduleAutosave: (callback) => scheduled(autosaves, callback),
@@ -237,6 +241,9 @@ function harness() {
         saved,
         source_editors,
         rich_editors,
+        get source_loads() {
+            return source_loads;
+        },
         get rich_loads() {
             return rich_loads;
         },
@@ -255,12 +262,14 @@ function harness() {
     };
 }
 
-async function open_text(test, path = "README.md") {
+async function open_text(test, path = "README.md", expected_source_loads = 1) {
     await test.controller.open(entry(path));
     assert.equal(test.gets.length, 1);
+    assert.equal(test.source_loads, 0, "Source code must not load before text content arrives");
     test.gets[0].callbacks.success(file(path));
     await Promise.resolve();
     await Promise.resolve();
+    assert.equal(test.source_loads, expected_source_loads);
 }
 
 run_test("Source dirty feedback precedes exact flush and a revision-bound PUT", async () => {
@@ -585,7 +594,7 @@ run_test("restored Rich preference mounts directly with saved non-content view s
             },
         },
     );
-    await open_text(test);
+    await open_text(test, "README.md", 0);
     await Promise.resolve();
     await Promise.resolve();
     assert.equal(test.source_editors.length, 0, "restored Rich must not flash Source first");

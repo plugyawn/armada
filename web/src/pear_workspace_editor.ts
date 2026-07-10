@@ -10,15 +10,13 @@ import type {
     PearWorkspaceMountedAdapter,
     PearWorkspaceRichEditorModule,
     PearWorkspaceScheduledWork,
+    PearWorkspaceSourceEditorModule,
 } from "./pear_workspace_editor_contract.ts";
 import {
     pear_workspace_api_error_message,
     pear_workspace_initial_preview,
 } from "./pear_workspace_preview.ts";
-import {
-    create_pear_workspace_source_editor,
-    pear_workspace_source_language_for_path,
-} from "./pear_workspace_source_editor.ts";
+import {pear_workspace_source_language_for_path} from "./pear_workspace_source_language.ts";
 import type {
     PearWorkspaceDocumentIdentity,
     PearWorkspaceDocumentSession,
@@ -71,7 +69,9 @@ const default_dependencies: PearWorkspaceEditorDependencies = {
     getFile: pear_workspace_api.get_pear_workspace_file,
     putFile: pear_workspace_api.put_pear_workspace_file,
     rawUrl: pear_workspace_api.pear_workspace_raw_url,
-    createSourceEditor: create_pear_workspace_source_editor,
+    async loadSourceEditor() {
+        return import("./pear_workspace_source_editor.ts");
+    },
     async loadRichEditor() {
         return import("./pear_workspace_markdown_editor.ts");
     },
@@ -296,7 +296,25 @@ export function create_pear_workspace_editor(
         }
         mount_generation += 1;
         const generation = mount_generation;
-        const editor = dependencies.createSourceEditor({
+        let module: PearWorkspaceSourceEditorModule;
+        try {
+            module = await dependencies.loadSourceEditor();
+        } catch {
+            if (generation === mount_generation) {
+                notice = "Source editor failed to load.";
+                surface = {
+                    kind: "error",
+                    entry: active_entry,
+                    message: "Source editor failed to load. Reopen the file to retry.",
+                };
+                emit();
+            }
+            return;
+        }
+        if (destroyed || generation !== mount_generation) {
+            return;
+        }
+        const editor = module.create_pear_workspace_source_editor({
             root: options.root,
             text: document.currentText,
             selection: document.sourceView.selection,

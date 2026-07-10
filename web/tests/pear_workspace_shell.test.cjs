@@ -397,6 +397,26 @@ run_test("a save revision blocks stale tab IDs until refresh and path rebind", a
     test.root.remove();
 });
 
+run_test("Refresh retries an initial descriptor failure without remounting", async () => {
+    const test = harness("workspace-descriptor-retry");
+    test.descriptors[0].callbacks.error({
+        kind: "transport",
+        status: 503,
+        message: "Temporarily unavailable",
+    });
+    await test.controller.ready;
+    assert.match(test.root.querySelector("[data-role='status']").textContent, /unavailable/);
+    test.click(test.root.querySelector("[data-action='refresh']"));
+    assert.equal(test.descriptors.length, 2);
+    assert.equal(test.refreshes.length, 0);
+    const current = descriptor("workspace-descriptor-retry");
+    test.descriptors[1].callbacks.success(current);
+    assert.equal(test.controller.getDebugState().descriptor.uuid, "workspace-descriptor-retry");
+    assert.equal(test.trees.length, 1);
+    await test.controller.destroy();
+    test.root.remove();
+});
+
 run_test(
     "shell restore keeps only tabs, active path, expansion, mode, and view state",
     async () => {

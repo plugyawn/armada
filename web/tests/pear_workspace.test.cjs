@@ -2,8 +2,8 @@
 
 const assert = require("node:assert/strict");
 
-const {JSDOM} = require("jsdom");
 const {jQueryFactory} = require("jquery/factory");
+const {JSDOM} = require("jsdom");
 
 const {mock_esm, mock_jquery, set_global, zrequire} = require("./lib/namespace.cjs");
 const {run_test} = require("./lib/test.cjs");
@@ -38,13 +38,16 @@ for (const [name, value] of Object.entries({
 mock_jquery(jQueryFactory(window));
 
 const mounts = [];
+let reject_next_ready = false;
 mock_esm("../src/pear_workspace_shell", {
     create_pear_workspace_shell(options) {
+        const reject_ready = reject_next_ready;
+        reject_next_ready = false;
         const mounted = {
             options,
             refreshes: 0,
             destroys: 0,
-            ready: Promise.resolve(),
+            ready: reject_ready ? Promise.reject(new Error("chunk failed")) : Promise.resolve(),
             refresh() {
                 this.refreshes += 1;
             },
@@ -124,4 +127,24 @@ run_test("Chat and Workspace keep one shell mounted and reject retired tab state
             .classList.contains("pear-workspace-tabs-hidden"),
         true,
     );
+    await settle();
+
+    pear_workspace.sync({
+        stream: "Devel",
+        topic: "Retry topic",
+        workspaceId: "workspace-retry",
+    });
+    reject_next_ready = true;
+    click('[data-pear-tab="workspace"]');
+    await settle();
+    assert.equal(mounts.length, 2);
+    assert.equal(mounts[1].destroys, 1);
+    assert.match(document.querySelector(".pear-workspace-host").textContent, /failed to load/);
+
+    click('[data-pear-tab="chat"]');
+    click('[data-pear-tab="workspace"]');
+    await settle();
+    assert.equal(mounts.length, 3);
+    assert.equal(mounts[2].options.workspaceId, "workspace-retry");
+    assert.equal(document.querySelector(".pear-workspace-host").hasAttribute("aria-busy"), false);
 });

@@ -84,13 +84,17 @@ export type PearWorkspaceRichEditorModule = {
     }) => Promise<PearWorkspaceMarkdownEditorResult>;
 };
 
+export type PearWorkspaceSourceEditorModule = {
+    create_pear_workspace_source_editor: typeof create_pear_workspace_source_editor;
+};
+
 export type PearWorkspaceScheduledWork = {cancel: () => void};
 
 export type PearWorkspaceEditorDependencies = {
     getFile: typeof get_pear_workspace_file;
     putFile: typeof put_pear_workspace_file;
     rawUrl: typeof pear_workspace_raw_url;
-    createSourceEditor: typeof create_pear_workspace_source_editor;
+    loadSourceEditor: () => Promise<PearWorkspaceSourceEditorModule>;
     loadRichEditor: () => Promise<PearWorkspaceRichEditorModule>;
     defer: (callback: () => void) => PearWorkspaceScheduledWork;
     scheduleAutosave: (callback: () => void) => PearWorkspaceScheduledWork;

@@ -560,8 +560,7 @@ build_remote_production_assets() {
         -e "ssh -F $SSH_CONFIG" \
         "$REPO_ROOT/" \
         "pear-staging:$REMOTE_ASSET_BUILD_DIR/"
-    ssh_root "chown -R zulipdev:zulipdev $REMOTE_ASSET_BUILD_DIR; \
-        sudo -Hu zulipdev ln -s $REMOTE_PATH/.venv $REMOTE_ASSET_BUILD_DIR/.venv; \
+    ssh_root "sudo -Hu zulipdev ln -s $REMOTE_PATH/.venv $REMOTE_ASSET_BUILD_DIR/.venv; \
         sudo -Hu zulipdev ln -s $REMOTE_PATH/zproject/dev-secrets.conf $REMOTE_ASSET_BUILD_DIR/zproject/dev-secrets.conf; \
         sudo -Hu zulipdev mkdir -p $REMOTE_ASSET_BUILD_DIR/var/log"
     echo "Building production assets without touching the live asset graph..."
@@ -667,7 +666,6 @@ rollback_on_error() {
             "$SNAPSHOT_DIR" \
             "$REMOTE_PATH" \
             "$REMOTE_GIT_COMMON_DIR" \
-            "$REMOTE_PEAR_DIR" \
             "$REMOTE_PEAR_SKILLS_DIR" \
             "${#PEAR_DEPLOY_RUNTIME_CONFIG_PATHS[@]}" \
             "${PEAR_DEPLOY_RUNTIME_CONFIG_PATHS[@]}" \
@@ -677,10 +675,9 @@ set -euo pipefail
 SNAPSHOT_DIR="$1"
 REMOTE_PATH="$2"
 REMOTE_GIT_COMMON_DIR="$3"
-REMOTE_PEAR_DIR="$4"
-REMOTE_PEAR_SKILLS_DIR="$5"
-RUNTIME_CONFIG_COUNT="$6"
-shift 6
+REMOTE_PEAR_SKILLS_DIR="$4"
+RUNTIME_CONFIG_COUNT="$5"
+shift 5
 RUNTIME_CONFIG_PATHS=("${@:1:RUNTIME_CONFIG_COUNT}")
 shift "$RUNTIME_CONFIG_COUNT"
 RSYNC_EXCLUDE_COUNT="$1"
@@ -733,9 +730,6 @@ if [[ -s "$SNAPSHOT_DIR/runtime-config.paths" ]]; then
     tar -C / -xpf "$SNAPSHOT_DIR/runtime-config.tar"
 fi
 
-chown -R zulipdev:zulipdev "$REMOTE_PATH"
-chown -R zulipdev:zulipdev /home/zulipdev/.git 2>/dev/null || true
-chown -R zulipdev:zulipdev "$REMOTE_PEAR_DIR" 2>/dev/null || true
 systemctl daemon-reload
 systemctl restart caddy pear-worker pear-monitor-worker pear-embedded-bots pear-thumbnail pear-zulip-dev
 REMOTE
@@ -1090,10 +1084,7 @@ rsync -az --delete \
 
 cut_over_remote_production_assets "$REMOTE_FROZEN_ASSET_DIR"
 
-ssh_root "chown -R zulipdev:zulipdev $REMOTE_PATH"
-ssh_root 'chown -R zulipdev:zulipdev /home/zulipdev/.git 2>/dev/null || true'
-ssh_root "chown -R zulipdev:zulipdev $REMOTE_PEAR_DIR"
-ssh_root "sudo -Hu zulipdev git config --global --add safe.directory $REMOTE_PATH"
+ssh -F "$SSH_CONFIG" pear-staging "git config --global --add safe.directory $REMOTE_PATH"
 
 install_and_verify_remote_workspace_helper
 

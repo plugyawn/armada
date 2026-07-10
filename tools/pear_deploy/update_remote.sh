@@ -571,9 +571,9 @@ build_remote_production_assets() {
         "pear-staging:$REMOTE_ASSET_BUILD_DIR/"
     ssh_root "sudo -Hu zulipdev ln -s $REMOTE_PATH/.venv $REMOTE_ASSET_BUILD_DIR/.venv; \
         sudo -Hu zulipdev ln -s $REMOTE_PATH/zproject/dev-secrets.conf $REMOTE_ASSET_BUILD_DIR/zproject/dev-secrets.conf; \
-        sudo -Hu zulipdev mkdir -p \
+        sudo -Hu zulipdev bash -lc 'umask 022 && mkdir -p \
             $REMOTE_ASSET_BUILD_DIR/var/log \
-            $REMOTE_ASSET_BUILD_DIR/static/generated"
+            $REMOTE_ASSET_BUILD_DIR/static/generated'"
     echo "Building production assets without touching the live asset graph..."
     ssh_root "sudo -Hu zulipdev bash -lc 'cd $REMOTE_ASSET_BUILD_DIR && umask 022 && ZULIP_DEV_PRODUCTION_ASSETS=1 ./tools/update-prod-static && .venv/bin/python3 tools/pear_deploy/production_assets.py --repo-root .'"
 }

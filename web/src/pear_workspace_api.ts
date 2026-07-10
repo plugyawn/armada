@@ -58,14 +58,7 @@ export const pear_workspace_tree_response_schema = z.object({
     }),
 });
 
-const pear_workspace_search_entry_schema = z.object({
-    entry_id: z.string(),
-    path: z.string(),
-    name: z.string(),
-    kind: z.enum(["directory", "file"]),
-    status: z.string(),
-    has_children: z.boolean(),
-    size: z.nullable(z.number()),
+const pear_workspace_search_entry_schema = z.extend(pear_workspace_entry_schema, {
     ancestors: z.array(pear_workspace_entry_schema),
 });
 

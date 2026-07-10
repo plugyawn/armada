@@ -17,6 +17,7 @@ from zerver.lib import pear_workspace_io
 from zerver.lib.pear_workspace_io import (
     InvalidWorkspacePathError,
     UnsafeWorkspaceEntryError,
+    WorkspaceDirectoryNotEmptyError,
     WorkspaceEntryExistsError,
     WorkspaceEntryNotFoundError,
     WorkspaceFileTooLargeError,
@@ -26,9 +27,15 @@ from zerver.lib.pear_workspace_io import (
     WorkspaceVersionConflictError,
     atomic_write_workspace_file,
     atomic_write_workspace_file_via_helper,
+    create_workspace_directory,
+    create_workspace_directory_via_helper,
+    delete_workspace_entry,
+    delete_workspace_entry_via_helper,
     read_workspace_file,
     read_workspace_file_via_helper,
     read_workspace_text_file,
+    rename_workspace_entry,
+    rename_workspace_entry_via_helper,
     validate_workspace_relative_path,
 )
 
@@ -265,6 +272,113 @@ class PearWorkspaceIOTest(TestCase):
                 create=True,
             )
         self.assertFalse((self.root / "too-large.txt").exists())
+
+    def test_directory_create_and_noreplace_rename_are_contained(self) -> None:
+        created = create_workspace_directory(self.root, "notes", create_mode=0o750)
+        self.assertEqual((created.path, created.kind), ("notes", "directory"))
+        self.assertEqual(stat.S_IMODE((self.root / "notes").stat().st_mode), 0o750)
+        with self.assertRaises(WorkspaceEntryExistsError):
+            create_workspace_directory(self.root, "notes")
+
+        source = self.write("draft.md", b"draft")
+        destination = self.write("published.md", b"published")
+        with self.assertRaises(WorkspaceEntryExistsError):
+            rename_workspace_entry(
+                self.root,
+                source.name,
+                destination.name,
+                expected_kind="file",
+            )
+        self.assertEqual(source.read_bytes(), b"draft")
+        self.assertEqual(destination.read_bytes(), b"published")
+
+        result = rename_workspace_entry(
+            self.root,
+            source.name,
+            "notes/draft.md",
+            expected_kind="file",
+        )
+        self.assertEqual((result.path, result.kind), ("notes/draft.md", "file"))
+        self.assertFalse(source.exists())
+        self.assertEqual((self.root / result.path).read_bytes(), b"draft")
+
+        with self.assertRaises(InvalidWorkspacePathError):
+            rename_workspace_entry(
+                self.root,
+                "notes",
+                "notes/archive",
+                expected_kind="directory",
+            )
+
+    def test_delete_requires_recursive_intent_and_rejects_unsafe_descendants(self) -> None:
+        self.write("tree/one.txt", b"one")
+        self.write("tree/nested/two.txt", b"two")
+        with self.assertRaises(WorkspaceDirectoryNotEmptyError):
+            delete_workspace_entry(
+                self.root,
+                "tree",
+                expected_kind="directory",
+            )
+        self.assertTrue((self.root / "tree/nested/two.txt").exists())
+
+        deleted = delete_workspace_entry(
+            self.root,
+            "tree",
+            expected_kind="directory",
+            recursive=True,
+        )
+        self.assertEqual(deleted.removed_entries, 4)
+        self.assertFalse((self.root / "tree").exists())
+
+        outside = self.write("outside.txt", b"outside")
+        (self.root / "unsafe").mkdir()
+        (self.root / "unsafe/link").symlink_to(outside)
+        with self.assertRaises(UnsafeWorkspaceEntryError):
+            delete_workspace_entry(
+                self.root,
+                "unsafe",
+                expected_kind="directory",
+                recursive=True,
+            )
+        self.assertTrue((self.root / "unsafe/link").is_symlink())
+        self.assertEqual(outside.read_bytes(), b"outside")
+
+    def test_mutation_helper_matches_direct_operations_and_typed_errors(self) -> None:
+        helper = Path(pear_workspace_io.__file__)
+        created = create_workspace_directory_via_helper(
+            self.root,
+            "folder",
+            helper_path=helper,
+            python_executable=sys.executable,
+        )
+        self.assertEqual(created.kind, "directory")
+        self.write("source.txt", b"source")
+        renamed = rename_workspace_entry_via_helper(
+            self.root,
+            "source.txt",
+            "folder/renamed.txt",
+            expected_kind="file",
+            helper_path=helper,
+            python_executable=sys.executable,
+        )
+        self.assertEqual(renamed.path, "folder/renamed.txt")
+        with self.assertRaises(WorkspaceDirectoryNotEmptyError):
+            delete_workspace_entry_via_helper(
+                self.root,
+                "folder",
+                expected_kind="directory",
+                helper_path=helper,
+                python_executable=sys.executable,
+            )
+        deleted = delete_workspace_entry_via_helper(
+            self.root,
+            "folder",
+            expected_kind="directory",
+            recursive=True,
+            helper_path=helper,
+            python_executable=sys.executable,
+        )
+        self.assertEqual(deleted.removed_entries, 2)
 
     def test_failed_replace_keeps_original_and_cleans_temporary_file(self) -> None:
         path = self.write("notes.txt", b"original")

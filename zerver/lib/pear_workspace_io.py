@@ -18,6 +18,7 @@ from __future__ import annotations
 import argparse
 import base64
 import binascii
+import ctypes
 import errno
 import fcntl
 import hashlib
@@ -30,9 +31,10 @@ import subprocess
 import sys
 import unicodedata
 from collections.abc import Iterator, Mapping
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Literal
 
 PEAR_ISOLATION_USERNAME_RE = re.compile(r"pear-[0-9a-f]{24}\Z")
 SHA256_RE = re.compile(r"[0-9a-f]{64}\Z")
@@ -72,6 +74,19 @@ class WorkspaceWriteResult:
     created: bool
 
 
+@dataclass(frozen=True)
+class WorkspaceEntryMutationResult:
+    path: str
+    kind: Literal["file", "directory"]
+
+
+@dataclass(frozen=True)
+class WorkspaceDeleteResult:
+    path: str
+    kind: Literal["file", "directory"]
+    removed_entries: int
+
+
 class WorkspaceIOError(Exception):
     code = "io_error"
 
@@ -99,6 +114,14 @@ class WorkspaceEntryNotFoundError(WorkspaceIOError):
 
 class WorkspaceEntryExistsError(WorkspaceIOError):
     code = "already_exists"
+
+
+class WorkspaceDirectoryNotEmptyError(WorkspaceIOError):
+    code = "directory_not_empty"
+
+
+class WorkspaceOperationUnsupportedError(WorkspaceIOError):
+    code = "unsupported"
 
 
 class WorkspaceFileTooLargeError(WorkspaceIOError):
@@ -261,6 +284,42 @@ def _validate_regular_file(file_stat: os.stat_result, *, root_device: int) -> No
         raise UnsafeWorkspaceEntryError("Workspace file crosses a filesystem boundary.")
     if file_stat.st_nlink != 1:
         raise UnsafeWorkspaceEntryError("Workspace file has an untrusted hard link.")
+
+
+def _entry_kind(
+    entry_stat: os.stat_result,
+    *,
+    root_device: int,
+) -> Literal["file", "directory"]:
+    if stat.S_ISREG(entry_stat.st_mode):
+        _validate_regular_file(entry_stat, root_device=root_device)
+        return "file"
+    if stat.S_ISDIR(entry_stat.st_mode):
+        if entry_stat.st_dev != root_device:
+            raise UnsafeWorkspaceEntryError("Workspace directory crosses a filesystem boundary.")
+        return "directory"
+    raise UnsafeWorkspaceEntryError("Workspace entry is not a regular file or directory.")
+
+
+def _stat_entry_from_parent(
+    parent_fd: int,
+    name: str,
+    *,
+    root_device: int,
+) -> tuple[os.stat_result, Literal["file", "directory"]]:
+    try:
+        entry_stat = os.stat(name, dir_fd=parent_fd, follow_symlinks=False)
+    except OSError as error:
+        raise _path_open_error(error, final=True) from error
+    return entry_stat, _entry_kind(entry_stat, root_device=root_device)
+
+
+def _validate_expected_kind(
+    actual: Literal["file", "directory"],
+    expected: Literal["file", "directory"],
+) -> None:
+    if actual != expected:
+        raise WorkspaceEntryChangedError("Workspace entry kind changed before the operation.")
 
 
 def _stat_identity(file_stat: os.stat_result) -> tuple[int, int]:
@@ -426,6 +485,351 @@ def _set_file_mode(fd: int, mode: int) -> None:
         os.fchmod(fd, mode)
     except OSError as error:
         raise WorkspaceIOError("Could not set workspace file permissions.") from error
+
+
+def create_workspace_directory(
+    root: str | Path,
+    relative_path: str,
+    *,
+    create_mode: int = 0o700,
+) -> WorkspaceEntryMutationResult:
+    if isinstance(create_mode, bool) or not isinstance(create_mode, int) or create_mode & ~0o777:
+        raise ValueError("create_mode must contain ordinary Unix permission bits")
+    components = validate_workspace_relative_path(relative_path)
+    with (
+        _open_workspace_root(root) as (root_fd, root_stat),
+        _workspace_lock(root_fd, exclusive=True),
+        _open_parent_directory(root_fd, root_stat.st_dev, components) as (parent_fd, name),
+    ):
+        try:
+            os.mkdir(name, mode=create_mode, dir_fd=parent_fd)
+        except FileExistsError as error:
+            raise WorkspaceEntryExistsError("Workspace entry already exists.") from error
+        except OSError as error:
+            if error.errno in {errno.ENOENT, errno.ENOTDIR}:
+                raise WorkspaceEntryNotFoundError(
+                    "Workspace destination parent does not exist."
+                ) from error
+            raise WorkspaceIOError("Could not create the workspace directory.") from error
+        try:
+            created_stat, kind = _stat_entry_from_parent(
+                parent_fd,
+                name,
+                root_device=root_stat.st_dev,
+            )
+            if kind != "directory" or stat.S_IMODE(created_stat.st_mode) & 0o777 != create_mode:
+                raise WorkspaceEntryChangedError(
+                    "Workspace directory changed while creation was acknowledged."
+                )
+            _sync_fd(parent_fd, target="directory")
+        except Exception:
+            with suppress(OSError):
+                os.rmdir(name, dir_fd=parent_fd)
+            raise
+    return WorkspaceEntryMutationResult(path=relative_path, kind="directory")
+
+
+def workspace_rename_noreplace_supported() -> bool:
+    libc = ctypes.CDLL(None, use_errno=True)
+    return hasattr(libc, "renameat2") or (
+        sys.platform == "darwin" and hasattr(libc, "renameatx_np")
+    )
+
+
+def _rename_noreplace(
+    source_parent_fd: int,
+    source_name: str,
+    destination_parent_fd: int,
+    destination_name: str,
+) -> None:
+    libc = ctypes.CDLL(None, use_errno=True)
+    source_bytes = os.fsencode(source_name)
+    destination_bytes = os.fsencode(destination_name)
+    result: int
+    if hasattr(libc, "renameat2"):
+        renameat2 = libc.renameat2
+        renameat2.argtypes = [
+            ctypes.c_int,
+            ctypes.c_char_p,
+            ctypes.c_int,
+            ctypes.c_char_p,
+            ctypes.c_uint,
+        ]
+        renameat2.restype = ctypes.c_int
+        result = renameat2(
+            source_parent_fd,
+            source_bytes,
+            destination_parent_fd,
+            destination_bytes,
+            1,  # RENAME_NOREPLACE
+        )
+    elif sys.platform == "darwin" and hasattr(libc, "renameatx_np"):
+        renameatx_np = libc.renameatx_np
+        renameatx_np.argtypes = [
+            ctypes.c_int,
+            ctypes.c_char_p,
+            ctypes.c_int,
+            ctypes.c_char_p,
+            ctypes.c_uint,
+        ]
+        renameatx_np.restype = ctypes.c_int
+        result = renameatx_np(
+            source_parent_fd,
+            source_bytes,
+            destination_parent_fd,
+            destination_bytes,
+            0x00000004,  # RENAME_EXCL
+        )
+    else:
+        raise WorkspaceOperationUnsupportedError(
+            "No-overwrite workspace rename is unavailable on this host."
+        )
+    if result == 0:
+        return
+    error_number = ctypes.get_errno()
+    if error_number in {errno.EEXIST, errno.ENOTEMPTY}:
+        raise WorkspaceEntryExistsError("Workspace destination already exists.")
+    if error_number in {errno.ENOENT, errno.ENOTDIR}:
+        raise WorkspaceEntryChangedError("Workspace source or destination parent changed.")
+    if error_number in {errno.EXDEV, errno.ELOOP}:
+        raise UnsafeWorkspaceEntryError("Workspace rename crossed a safe filesystem boundary.")
+    if error_number in {errno.ENOSYS, errno.EINVAL, errno.ENOTSUP, errno.EOPNOTSUPP}:
+        raise WorkspaceOperationUnsupportedError(
+            "No-overwrite workspace rename is unavailable on this filesystem."
+        )
+    raise WorkspaceIOError("Could not rename the workspace entry.")
+
+
+def rename_workspace_entry(
+    root: str | Path,
+    source_path: str,
+    destination_path: str,
+    *,
+    expected_kind: Literal["file", "directory"],
+) -> WorkspaceEntryMutationResult:
+    source_components = validate_workspace_relative_path(source_path)
+    destination_components = validate_workspace_relative_path(destination_path)
+    if source_components == destination_components:
+        raise WorkspaceEntryExistsError("Workspace destination already exists.")
+
+    with _open_workspace_root(root) as (root_fd, root_stat):  # noqa: SIM117
+        with _workspace_lock(root_fd, exclusive=True):
+            with _open_parent_directory(
+                root_fd, root_stat.st_dev, source_components
+            ) as (source_parent_fd, source_name):
+                with _open_parent_directory(
+                    root_fd, root_stat.st_dev, destination_components
+                ) as (destination_parent_fd, destination_name):
+                    source_stat, actual_kind = _stat_entry_from_parent(
+                        source_parent_fd,
+                        source_name,
+                        root_device=root_stat.st_dev,
+                    )
+                    _validate_expected_kind(actual_kind, expected_kind)
+                    if actual_kind == "directory" and destination_components[
+                        : len(source_components)
+                    ] == source_components:
+                        raise InvalidWorkspacePathError(
+                            "A workspace directory cannot be moved inside itself."
+                        )
+                    try:
+                        os.stat(
+                            destination_name,
+                            dir_fd=destination_parent_fd,
+                            follow_symlinks=False,
+                        )
+                    except FileNotFoundError:
+                        pass
+                    except OSError as error:
+                        raise _path_open_error(error, final=True) from error
+                    else:
+                        raise WorkspaceEntryExistsError(
+                            "Workspace destination already exists."
+                        )
+
+                    _rename_noreplace(
+                        source_parent_fd,
+                        source_name,
+                        destination_parent_fd,
+                        destination_name,
+                    )
+                    destination_stat, destination_kind = _stat_entry_from_parent(
+                        destination_parent_fd,
+                        destination_name,
+                        root_device=root_stat.st_dev,
+                    )
+                    if (
+                        destination_kind != actual_kind
+                        or _stat_identity(destination_stat) != _stat_identity(source_stat)
+                    ):
+                        raise WorkspaceEntryChangedError(
+                            "Workspace entry changed while rename was acknowledged."
+                        )
+                    try:
+                        os.stat(source_name, dir_fd=source_parent_fd, follow_symlinks=False)
+                    except FileNotFoundError:
+                        pass
+                    else:
+                        raise WorkspaceEntryChangedError(
+                            "Workspace source remained after rename."
+                        )
+                    _sync_fd(source_parent_fd, target="directory")
+                    if _stat_identity(os.fstat(source_parent_fd)) != _stat_identity(
+                        os.fstat(destination_parent_fd)
+                    ):
+                        _sync_fd(destination_parent_fd, target="directory")
+    return WorkspaceEntryMutationResult(path=destination_path, kind=expected_kind)
+
+
+def _open_checked_directory(
+    parent_fd: int,
+    name: str,
+    *,
+    root_device: int,
+) -> int:
+    directory_fd = _open_directory_at(parent_fd, name)
+    if os.fstat(directory_fd).st_dev != root_device:
+        os.close(directory_fd)
+        raise UnsafeWorkspaceEntryError("Workspace directory crosses a filesystem boundary.")
+    return directory_fd
+
+
+def _validate_directory_tree(directory_fd: int, *, root_device: int) -> None:
+    try:
+        names = os.listdir(directory_fd)
+    except OSError as error:
+        raise WorkspaceIOError("Could not inspect the workspace directory.") from error
+    for name in names:
+        if name.casefold() == ".git":
+            raise UnsafeWorkspaceEntryError("Git metadata cannot be recursively deleted.")
+        entry_stat, kind = _stat_entry_from_parent(
+            directory_fd,
+            name,
+            root_device=root_device,
+        )
+        if kind == "directory":
+            child_fd = _open_checked_directory(
+                directory_fd,
+                name,
+                root_device=root_device,
+            )
+            try:
+                _validate_directory_tree(child_fd, root_device=root_device)
+            finally:
+                os.close(child_fd)
+
+
+def _remove_directory_tree(directory_fd: int, *, root_device: int) -> int:
+    removed_entries = 0
+    try:
+        names = os.listdir(directory_fd)
+    except OSError as error:
+        raise WorkspaceIOError("Could not inspect the workspace directory.") from error
+    for name in names:
+        _entry_stat, kind = _stat_entry_from_parent(
+            directory_fd,
+            name,
+            root_device=root_device,
+        )
+        if kind == "directory":
+            child_fd = _open_checked_directory(
+                directory_fd,
+                name,
+                root_device=root_device,
+            )
+            try:
+                removed_entries += _remove_directory_tree(
+                    child_fd,
+                    root_device=root_device,
+                )
+            finally:
+                os.close(child_fd)
+            try:
+                os.rmdir(name, dir_fd=directory_fd)
+            except OSError as error:
+                raise WorkspaceEntryChangedError(
+                    "Workspace directory changed during recursive deletion."
+                ) from error
+        else:
+            try:
+                os.unlink(name, dir_fd=directory_fd)
+            except OSError as error:
+                raise WorkspaceEntryChangedError(
+                    "Workspace file changed during recursive deletion."
+                ) from error
+        removed_entries += 1
+    _sync_fd(directory_fd, target="directory")
+    return removed_entries
+
+
+def delete_workspace_entry(
+    root: str | Path,
+    relative_path: str,
+    *,
+    expected_kind: Literal["file", "directory"],
+    recursive: bool = False,
+) -> WorkspaceDeleteResult:
+    if not isinstance(recursive, bool):
+        raise TypeError("recursive must be a boolean")
+    components = validate_workspace_relative_path(relative_path)
+    with (
+        _open_workspace_root(root) as (root_fd, root_stat),
+        _workspace_lock(root_fd, exclusive=True),
+        _open_parent_directory(root_fd, root_stat.st_dev, components) as (parent_fd, name),
+    ):
+        _entry_stat, actual_kind = _stat_entry_from_parent(
+            parent_fd,
+            name,
+            root_device=root_stat.st_dev,
+        )
+        _validate_expected_kind(actual_kind, expected_kind)
+        removed_entries = 1
+        if actual_kind == "file":
+            if recursive:
+                raise ValueError("recursive deletion applies only to directories")
+            try:
+                os.unlink(name, dir_fd=parent_fd)
+            except OSError as error:
+                raise WorkspaceEntryChangedError(
+                    "Workspace file changed during deletion."
+                ) from error
+        elif recursive:
+            directory_fd = _open_checked_directory(
+                parent_fd,
+                name,
+                root_device=root_stat.st_dev,
+            )
+            try:
+                _validate_directory_tree(directory_fd, root_device=root_stat.st_dev)
+                removed_entries += _remove_directory_tree(
+                    directory_fd,
+                    root_device=root_stat.st_dev,
+                )
+            finally:
+                os.close(directory_fd)
+            try:
+                os.rmdir(name, dir_fd=parent_fd)
+            except OSError as error:
+                raise WorkspaceEntryChangedError(
+                    "Workspace directory changed during recursive deletion."
+                ) from error
+        else:
+            try:
+                os.rmdir(name, dir_fd=parent_fd)
+            except OSError as error:
+                if error.errno in {errno.ENOTEMPTY, errno.EEXIST}:
+                    raise WorkspaceDirectoryNotEmptyError(
+                        "Workspace directory is not empty."
+                    ) from error
+                raise WorkspaceEntryChangedError(
+                    "Workspace directory changed during deletion."
+                ) from error
+        _sync_fd(parent_fd, target="directory")
+    return WorkspaceDeleteResult(
+        path=relative_path,
+        kind=expected_kind,
+        removed_entries=removed_entries,
+    )
 
 
 def atomic_write_workspace_file(
@@ -653,6 +1057,8 @@ _ERROR_TYPES: dict[str, type[WorkspaceIOError]] = {
         UnsafeWorkspaceEntryError,
         WorkspaceEntryNotFoundError,
         WorkspaceEntryExistsError,
+        WorkspaceDirectoryNotEmptyError,
+        WorkspaceOperationUnsupportedError,
         WorkspaceFileTooLargeError,
         WorkspaceInvalidUTF8Error,
         WorkspaceVersionConflictError,
@@ -749,6 +1155,70 @@ def execute_workspace_io_request(request: Mapping[str, object]) -> dict[str, obj
             "file": _workspace_file_payload(result.file),
             "changed": result.changed,
             "created": result.created,
+        }
+    if operation == "mkdir":
+        _require_request_keys(request, {"operation", "root", "path", "create_mode"})
+        root = request.get("root")
+        relative_path = request.get("path")
+        create_mode = request.get("create_mode", 0o700)
+        if (
+            not isinstance(root, str)
+            or not isinstance(relative_path, str)
+            or isinstance(create_mode, bool)
+            or not isinstance(create_mode, int)
+        ):
+            raise ValueError("Workspace helper mkdir request is invalid")
+        result = create_workspace_directory(root, relative_path, create_mode=create_mode)
+        return {"path": result.path, "kind": result.kind}
+    if operation == "rename":
+        _require_request_keys(
+            request,
+            {"operation", "root", "source_path", "destination_path", "expected_kind"},
+        )
+        root = request.get("root")
+        source_path = request.get("source_path")
+        destination_path = request.get("destination_path")
+        expected_kind = request.get("expected_kind")
+        if (
+            not isinstance(root, str)
+            or not isinstance(source_path, str)
+            or not isinstance(destination_path, str)
+            or expected_kind not in {"file", "directory"}
+        ):
+            raise ValueError("Workspace helper rename request is invalid")
+        result = rename_workspace_entry(
+            root,
+            source_path,
+            destination_path,
+            expected_kind=expected_kind,
+        )
+        return {"path": result.path, "kind": result.kind}
+    if operation == "delete":
+        _require_request_keys(
+            request,
+            {"operation", "root", "path", "expected_kind", "recursive"},
+        )
+        root = request.get("root")
+        relative_path = request.get("path")
+        expected_kind = request.get("expected_kind")
+        recursive = request.get("recursive", False)
+        if (
+            not isinstance(root, str)
+            or not isinstance(relative_path, str)
+            or expected_kind not in {"file", "directory"}
+            or not isinstance(recursive, bool)
+        ):
+            raise ValueError("Workspace helper delete request is invalid")
+        result = delete_workspace_entry(
+            root,
+            relative_path,
+            expected_kind=expected_kind,
+            recursive=recursive,
+        )
+        return {
+            "path": result.path,
+            "kind": result.kind,
+            "removed_entries": result.removed_entries,
         }
     raise ValueError("Workspace helper request has an unknown operation")
 
@@ -889,6 +1359,116 @@ def atomic_write_workspace_file_via_helper(
         file=_workspace_file_from_payload(file_payload),
         changed=changed,
         created=created,
+    )
+
+
+def _entry_mutation_result_from_helper(
+    result: Mapping[str, object],
+    *,
+    expected_path: str,
+    expected_kind: Literal["file", "directory"],
+) -> WorkspaceEntryMutationResult:
+    path = result.get("path")
+    kind = result.get("kind")
+    if path != expected_path or kind != expected_kind:
+        raise WorkspaceHelperError("Workspace helper returned an invalid mutation result.")
+    return WorkspaceEntryMutationResult(path=expected_path, kind=expected_kind)
+
+
+def create_workspace_directory_via_helper(
+    root: str | Path,
+    relative_path: str,
+    *,
+    create_mode: int = 0o700,
+    isolation_username: str | None = None,
+    helper_path: str | Path | None = None,
+    python_executable: str | Path | None = None,
+) -> WorkspaceEntryMutationResult:
+    result = invoke_workspace_io_helper(
+        {
+            "operation": "mkdir",
+            "root": os.fspath(root),
+            "path": relative_path,
+            "create_mode": create_mode,
+        },
+        isolation_username=isolation_username,
+        helper_path=helper_path,
+        python_executable=python_executable,
+    )
+    return _entry_mutation_result_from_helper(
+        result,
+        expected_path=relative_path,
+        expected_kind="directory",
+    )
+
+
+def rename_workspace_entry_via_helper(
+    root: str | Path,
+    source_path: str,
+    destination_path: str,
+    *,
+    expected_kind: Literal["file", "directory"],
+    isolation_username: str | None = None,
+    helper_path: str | Path | None = None,
+    python_executable: str | Path | None = None,
+) -> WorkspaceEntryMutationResult:
+    result = invoke_workspace_io_helper(
+        {
+            "operation": "rename",
+            "root": os.fspath(root),
+            "source_path": source_path,
+            "destination_path": destination_path,
+            "expected_kind": expected_kind,
+        },
+        isolation_username=isolation_username,
+        helper_path=helper_path,
+        python_executable=python_executable,
+    )
+    return _entry_mutation_result_from_helper(
+        result,
+        expected_path=destination_path,
+        expected_kind=expected_kind,
+    )
+
+
+def delete_workspace_entry_via_helper(
+    root: str | Path,
+    relative_path: str,
+    *,
+    expected_kind: Literal["file", "directory"],
+    recursive: bool = False,
+    isolation_username: str | None = None,
+    helper_path: str | Path | None = None,
+    python_executable: str | Path | None = None,
+) -> WorkspaceDeleteResult:
+    result = invoke_workspace_io_helper(
+        {
+            "operation": "delete",
+            "root": os.fspath(root),
+            "path": relative_path,
+            "expected_kind": expected_kind,
+            "recursive": recursive,
+        },
+        isolation_username=isolation_username,
+        helper_path=helper_path,
+        python_executable=python_executable,
+    )
+    mutation = _entry_mutation_result_from_helper(
+        result,
+        expected_path=relative_path,
+        expected_kind=expected_kind,
+    )
+    removed_entries = result.get("removed_entries")
+    if (
+        isinstance(removed_entries, bool)
+        or not isinstance(removed_entries, int)
+        or removed_entries < 1
+    ):
+        raise WorkspaceHelperError("Workspace helper returned an invalid delete result.")
+    return WorkspaceDeleteResult(
+        path=mutation.path,
+        kind=mutation.kind,
+        removed_entries=removed_entries,
     )
 
 

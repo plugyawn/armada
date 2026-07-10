@@ -501,6 +501,25 @@ def _enumerate_workspace(
         if raw_path:
             allowed_paths.add(_decode_git_path(raw_path))
 
+    # Git does not version directories, but its untracked-directory mode is a
+    # valuable policy boundary: it reports real empty directories while still
+    # applying the repository's standard ignore rules.  We only retain
+    # non-hidden directory names; hidden workspace state is never made into a
+    # client-addressable mutation target merely because it is empty.
+    directories_output = _run_git(
+        node,
+        ["ls-files", "-z", "--others", "--exclude-standard", "--directory"],
+    )
+    explicit_directories: set[str] = set()
+    for raw_path in directories_output.split(b"\0"):
+        if not raw_path or not raw_path.endswith(b"/"):
+            continue
+        path = _decode_git_path(raw_path[:-1])
+        components = validate_workspace_relative_path(path)
+        if any(component.startswith(".") for component in components):
+            continue
+        explicit_directories.add(path)
+
     status_output = _run_git(
         node,
         ["status", "--porcelain=v2", "-z", "--untracked-files=all"],
@@ -518,7 +537,14 @@ def _enumerate_workspace(
         ],
     )
     paths = tuple(
-        WorkspacePath(path, status_by_path.get(path, "clean")) for path in sorted(allowed_paths)
+        [
+            WorkspacePath(path, status_by_path.get(path, "clean"))
+            for path in sorted(allowed_paths)
+        ]
+        + [
+            WorkspacePath(path, "untracked", "directory")
+            for path in sorted(explicit_directories)
+        ]
     )
 
     branch_output = _run_git(
@@ -542,6 +568,8 @@ def _enumerate_workspace(
         fingerprint.update(path.path.encode("utf-8"))
         fingerprint.update(b"\0")
         fingerprint.update(path.status.encode("ascii"))
+        fingerprint.update(b"\0")
+        fingerprint.update(path.kind.encode("ascii"))
         fingerprint.update(b"\0")
     fingerprint.update(status_output)
     fingerprint.update(tracked_content_digest)

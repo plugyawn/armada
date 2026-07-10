@@ -19,6 +19,7 @@ import hmac
 import json
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
+from typing import Literal
 
 from zerver.lib.pear_workspace_io import validate_workspace_relative_path
 
@@ -45,6 +46,7 @@ class WorkspaceCursorError(WorkspaceIndexError):
 class WorkspacePath:
     path: str
     status: str = "clean"
+    kind: Literal["file", "directory"] = "file"
 
 
 @dataclass(frozen=True)
@@ -144,34 +146,25 @@ class WorkspaceIndex:
         children: dict[str, set[str]] = {ROOT_ENTRY_PATH: set()}
 
         for item in paths:
+            if item.kind not in {"file", "directory"}:
+                raise WorkspaceIndexError("Workspace path has an invalid kind.")
             components = validate_workspace_relative_path(item.path)
-            normalized_path = "/".join(components)
-            if normalized_path in kinds:
-                if kinds[normalized_path] != "file":
-                    raise WorkspaceIndexError(
-                        f"Workspace path is both a file and directory: {normalized_path}"
-                    )
-                statuses[normalized_path] = _stronger_status(
-                    statuses[normalized_path], item.status
-                )
-                continue
-
-            kinds[normalized_path] = "file"
-            statuses[normalized_path] = item.status
             parent = ROOT_ENTRY_PATH
             for offset, component in enumerate(components):
                 child_path = "/".join(components[: offset + 1])
                 children.setdefault(parent, set()).add(child_path)
-                if offset < len(components) - 1:
-                    existing_kind = kinds.get(child_path)
-                    if existing_kind == "file":
-                        raise WorkspaceIndexError(
-                            f"Workspace path is both a file and directory: {child_path}"
-                        )
-                    kinds[child_path] = "directory"
-                    statuses[child_path] = _stronger_status(
-                        statuses.get(child_path, "clean"), item.status
+                is_terminal = offset == len(components) - 1
+                kind = item.kind if is_terminal else "directory"
+                existing_kind = kinds.get(child_path)
+                if existing_kind is not None and existing_kind != kind:
+                    raise WorkspaceIndexError(
+                        f"Workspace path is both a file and directory: {child_path}"
                     )
+                kinds[child_path] = kind
+                statuses[child_path] = _stronger_status(
+                    statuses.get(child_path, "clean"), item.status
+                )
+                if kind == "directory":
                     children.setdefault(child_path, set())
                 parent = child_path
 

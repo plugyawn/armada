@@ -104,6 +104,11 @@ function harness() {
                 return this.text;
             },
             getViewState: () => ({selection: {anchor: 1, head: 1}, scrollTop: 7}),
+            getSelectionContext: () => ({
+                selectedText: "source selection",
+                startLine: 2,
+                endLine: 3,
+            }),
             focus() {},
             hasFocus: () => false,
             destroy() {
@@ -166,6 +171,7 @@ function harness() {
                     },
                     setReadOnly() {},
                     getViewState: () => ({selection: {anchor: 1, head: 1}, scrollTop: 3}),
+                    getSelectionContext: () => ({selectedText: "rich selection"}),
                     getEditRevision() {
                         return this.revision;
                     },
@@ -270,6 +276,16 @@ async function open_text(test, path = "README.md", expected_source_loads = 1) {
     await Promise.resolve();
     await Promise.resolve();
     assert.equal(test.source_loads, expected_source_loads);
+}
+
+async function begin_local_save(test, text = "local") {
+    await open_text(test);
+    const source = test.source_editors[0];
+    source.text = text;
+    source.dirty();
+    test.run_next(test.deferred);
+    test.run_next(test.autosaves);
+    assert.equal(test.puts.length, 1);
 }
 
 run_test("Source dirty feedback precedes exact flush and a revision-bound PUT", async () => {
@@ -521,6 +537,139 @@ run_test("a mismatched save receipt cannot acknowledge local content", async () 
     assert.equal(document.savedText, "initial\r\n");
     assert.equal(document.currentText, "local");
     assert.match(document.error, /invalid save receipt/);
+    await test.controller.destroy();
+    test.root.remove();
+});
+
+run_test(
+    "save receipts require exact authority, a revision advance, and a rebound ID",
+    async () => {
+        const invalid_receipts = [
+            ["workspace", {workspace_uuid: "workspace-b"}],
+            ["path", {path: "OTHER.md"}],
+            ["revision", {workspace_revision: 1}],
+            ["entry ID", {entry_id: "entry:README.md"}],
+        ];
+        for (const [label, override] of invalid_receipts) {
+            const test = harness();
+            await begin_local_save(test);
+            test.puts[0].callbacks.success(
+                file("README.md", {
+                    workspace_revision: 2,
+                    entry_id: "entry:README.md:v2",
+                    content: "local",
+                    version: "d".repeat(64),
+                    ...override,
+                }),
+            );
+            const document = test.controller.getSnapshot().activeDocument;
+            assert.equal(document.state, "error", `${label} mismatch must fail closed`);
+            assert.equal(document.savedText, "initial\r\n");
+            assert.equal(document.currentText, "local");
+            assert.match(document.error, /invalid save receipt/);
+            await test.controller.destroy();
+            test.root.remove();
+        }
+    },
+);
+
+run_test("409 remote files require exact newer authority before conflict adoption", async () => {
+    const invalid_conflicts = [
+        ["workspace", {remote: {workspace_uuid: "workspace-b"}}],
+        ["path", {remote: {path: "OTHER.md"}}],
+        ["revision", {remote: {workspace_revision: 1}, envelopeRevision: 1}],
+        ["entry ID", {remote: {entry_id: "entry:README.md"}}],
+        ["envelope revision", {envelopeRevision: 3}],
+        ["base version", {remote: {version: "a".repeat(64)}}],
+    ];
+    for (const [label, invalid] of invalid_conflicts) {
+        const test = harness();
+        await begin_local_save(test);
+        const remote = file("README.md", {
+            workspace_revision: 2,
+            entry_id: "entry:README.md:v2",
+            content: "remote",
+            version: "c".repeat(64),
+            ...invalid.remote,
+        });
+        test.puts[0].callbacks.error({
+            kind: "server",
+            status: 409,
+            error: {
+                result: "error",
+                msg: "changed",
+                error_code: "version_conflict",
+                workspace_revision: invalid.envelopeRevision ?? remote.workspace_revision,
+                remote_file: remote,
+            },
+        });
+        const document = test.controller.getSnapshot().activeDocument;
+        assert.equal(document.state, "error", `${label} mismatch must fail closed`);
+        assert.equal(document.conflict, undefined);
+        assert.match(document.error, /invalid conflict receipt/);
+        await test.controller.destroy();
+        test.root.remove();
+    }
+});
+
+run_test("an old save callback cannot mutate a rebound save session", async () => {
+    const test = harness();
+    await begin_local_save(test);
+    test.puts[0].callbacks.error({
+        kind: "server",
+        status: 409,
+        error: {
+            result: "error",
+            msg: "changed",
+            error_code: "version_conflict",
+            workspace_revision: 2,
+            remote_file: file("README.md", {
+                workspace_revision: 2,
+                entry_id: "entry:README.md:v2",
+                content: "remote",
+                version: "c".repeat(64),
+            }),
+        },
+    });
+    await test.controller.resolveConflict("overwrite");
+    test.run_next(test.autosaves);
+    const before = test.controller.getSnapshot().activeDocument;
+    const saved_count = test.saved.length;
+    assert.equal(before.state, "saving");
+    assert.equal(test.puts.length, 2);
+
+    test.puts[0].callbacks.success(
+        file("README.md", {
+            workspace_revision: 2,
+            entry_id: "entry:README.md:v2",
+            content: "local",
+            version: "d".repeat(64),
+        }),
+    );
+    const after = test.controller.getSnapshot().activeDocument;
+    assert.equal(after, before);
+    assert.equal(test.saved.length, saved_count);
+    assert.equal(after.state, "saving");
+    await test.controller.destroy();
+    test.root.remove();
+});
+
+run_test("selection context remains bound to the active editor and path", async () => {
+    const test = harness();
+    await open_text(test);
+    assert.deepEqual(test.controller.getSelectionContext(), {
+        path: "README.md",
+        selectedText: "source selection",
+        startLine: 2,
+        endLine: 3,
+    });
+
+    await test.controller.switchMode("rich");
+    assert.deepEqual(test.controller.getSelectionContext(), {
+        path: "README.md",
+        selectedText: "rich selection",
+    });
+
     await test.controller.destroy();
     test.root.remove();
 });

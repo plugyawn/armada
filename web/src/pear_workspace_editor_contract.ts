@@ -50,6 +50,13 @@ export type PearWorkspaceEditorSaveEvent = {
     workspaceRevision: number;
 };
 
+export type PearWorkspaceEditorSelectionContext = {
+    path: string;
+    selectedText: string;
+    startLine?: number;
+    endLine?: number;
+};
+
 export type PearWorkspaceEditorPreferences = {
     mode: "rich" | "source";
     documents: Record<
@@ -112,6 +119,7 @@ export type PearWorkspaceEditorController = {
     save: () => Promise<void>;
     resolveConflict: (resolution: "overwrite" | "reload") => Promise<void>;
     getSnapshot: () => PearWorkspaceEditorSnapshot;
+    getSelectionContext: () => PearWorkspaceEditorSelectionContext | undefined;
     getPreferences: () => PearWorkspaceEditorPreferences;
     destroy: () => Promise<void>;
 };

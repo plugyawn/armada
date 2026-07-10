@@ -597,7 +597,7 @@ REMOTE
     echo "Waiting for the detached production asset build..."
     local build_state
     local attempt
-    for attempt in $(seq 1 180); do
+    for attempt in $(seq 1 450); do
         build_state="$(ssh_root bash -s -- "$build_log" "$build_pid" <<'REMOTE'
 set -euo pipefail
 BUILD_LOG="$1"
@@ -635,7 +635,7 @@ REMOTE
                 ;;
         esac
     done
-    fail "detached production asset build did not finish within 360 seconds"
+    fail "detached production asset build did not finish within 900 seconds"
 }
 
 enable_remote_build_swap() {

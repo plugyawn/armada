@@ -5,8 +5,9 @@ const assert = require("node:assert/strict");
 const {jQueryFactory} = require("jquery/factory");
 const {JSDOM} = require("jsdom");
 
-const {mock_esm, mock_jquery, set_global, zrequire} = require("./lib/namespace.cjs");
+const {clock, mock_esm, mock_jquery, set_global, zrequire} = require("./lib/namespace.cjs");
 const {run_test} = require("./lib/test.cjs");
+const blueslip = require("./lib/zblueslip.cjs");
 
 const dom = new JSDOM(
     `<!doctype html><html><body>
@@ -105,7 +106,8 @@ function keydown(element, key) {
 }
 
 async function settle() {
-    await new Promise((resolve) => setImmediate(resolve));
+    await Promise.resolve();
+    await clock.runAllAsync();
     await Promise.resolve();
 }
 
@@ -202,6 +204,7 @@ run_test("Chat and Workspace keep one shell mounted and reject retired tab state
         workspaceId: "workspace-retry",
     });
     reject_next_ready = true;
+    blueslip.expect("error", "Pear workspace shell failed to load");
     click('[data-pear-tab="workspace"]');
     await settle();
     assert.equal(mounts.length, 2);

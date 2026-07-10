@@ -448,6 +448,7 @@ def build_pear_codex_turn_prompt(active_session: PearActiveSessionSummary, task:
         f"- head: {workspace_context.get('head') or 'unknown'}",
         "- contract: the Zulip stream maps to the repository, and the Zulip topic/subthread maps to the Git branch.",
         "- privacy: refer to the workspace by branch or worktree name in replies; never print the absolute workdir path in the topic.",
+        "- servers and watchers: never start a long-lived process (http.server, watch loops, dev servers) in the foreground — it blocks your turn from ever finishing. Run it detached (nohup ... >/dev/null 2>&1 &) and verify with a follow-up probe.",
         "- math: write math in Zulip's dialect — $$...$$ for inline math and ```math fenced blocks for display equations; \\[ \\] and \\( \\) do not render here.",
         f"- checklists: your plan tool is the working checklist — its steps render live in the topic rail, so keep it current instead of duplicating it in chat. Durable checklists belong in {PEAR_CANVAS_FILE_NAME}; - [ ] / - [x] markers render as ☐/☑.",
     ]

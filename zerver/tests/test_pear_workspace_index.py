@@ -72,6 +72,34 @@ class PearWorkspaceIndexTest(unittest.TestCase):
         with self.assertRaises(WorkspaceEntryIdError):
             second.entry_for_id(first_entry.entry_id)
 
+    def test_explicit_empty_directories_are_revision_bound_entries(self) -> None:
+        first = self.build(
+            [
+                WorkspacePath("empty", "untracked", "directory"),
+                WorkspacePath("nested/also-empty", "untracked", "directory"),
+            ],
+            revision=3,
+        )
+        second = self.build(
+            [
+                WorkspacePath("empty", "untracked", "directory"),
+                WorkspacePath("nested/also-empty", "untracked", "directory"),
+            ],
+            revision=4,
+        )
+
+        empty = first.entry_for_path("empty")
+        self.assertEqual(empty.kind, "directory")
+        self.assertFalse(empty.has_children)
+        self.assertEqual(empty.status, "untracked")
+        self.assertEqual(
+            [entry.path for entry in first.tree_page().entries],
+            ["empty", "nested"],
+        )
+        self.assertNotEqual(empty.entry_id, second.entry_for_path("empty").entry_id)
+        with self.assertRaises(WorkspaceEntryIdError):
+            second.entry_for_id(empty.entry_id)
+
     def test_entry_ids_are_workspace_bound(self) -> None:
         path = [WorkspacePath("README.md")]
         first = self.build(path, workspace_uuid="aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")

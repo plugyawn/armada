@@ -163,6 +163,28 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
             self.assertIsNone(descriptor["default_entry"])
             self.assertFalse((repo / "README.md").exists())
 
+    def test_snapshot_indexes_real_empty_directories_without_hidden_or_ignored_entries(
+        self,
+    ) -> None:
+        user = self.example_user("hamlet")
+        stream = self.subscribe(user, "workspace-resource")
+        self.login_user(user)
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo = self.make_workspace(Path(temp_dir).resolve())
+            (repo / "empty").mkdir()
+            (repo / ".hidden-empty").mkdir()
+            (repo / "ignored-empty").mkdir()
+            with (repo / ".gitignore").open("a", encoding="utf-8") as ignore_file:
+                ignore_file.write("ignored-empty/\n")
+            node = self.make_node(user, stream.name, repo)
+            entries = self.tree(node)["entries"]
+
+        by_path = {entry["path"]: entry for entry in entries}
+        self.assertEqual(by_path["empty"]["kind"], "directory")
+        self.assertFalse(by_path["empty"]["has_children"])
+        self.assertNotIn(".hidden-empty", by_path)
+        self.assertNotIn("ignored-empty", by_path)
+
     def test_text_get_and_raw_preserve_exact_bytes_and_reject_binary_editing(self) -> None:
         user = self.example_user("hamlet")
         stream = self.subscribe(user, "workspace-resource")

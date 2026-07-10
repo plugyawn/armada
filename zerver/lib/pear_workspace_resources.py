@@ -22,7 +22,7 @@ from typing import Literal
 
 from django.conf import settings
 from django.core.cache import cache
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.db.models import F
 from django.utils.timezone import now as timezone_now
 
@@ -34,6 +34,7 @@ from zerver.lib.pear_workspace_io import (
     WorkspaceFile,
     WorkspaceHelperRawFileStream,
     WorkspaceRawFileStream,
+    WorkspaceStagedRawFileStream,
     WorkspaceWriteResult,
     atomic_write_workspace_file,
     atomic_write_workspace_file_via_helper,
@@ -49,14 +50,16 @@ from zerver.lib.pear_workspace_io import (
     read_workspace_file_via_helper,
     rename_workspace_entry,
     rename_workspace_entry_via_helper,
+    stage_workspace_raw_stream,
     validate_workspace_relative_path,
     workspace_rename_noreplace_supported,
 )
-from zerver.models.bots import PearWorkspaceNode
+from zerver.models.bots import PearWorkspaceEntryMutationReceipt, PearWorkspaceNode
 
 logger = logging.getLogger(__name__)
 
 PEAR_WORKSPACE_TEXT_MAX_BYTES = 1_000_000
+PEAR_WORKSPACE_RAW_MAX_BYTES = 64 * 1024 * 1024
 PEAR_WORKSPACE_INDEX_CACHE_SECONDS = 60
 PEAR_WORKSPACE_INDEX_LOCAL_ENTRIES = 4
 PEAR_WORKSPACE_GIT_TIMEOUT_SECONDS = 15
@@ -81,6 +84,10 @@ class WorkspaceMutationReadOnlyError(Exception):
     def __init__(self, revision: int) -> None:
         super().__init__("Workspace is read-only.")
         self.revision = revision
+
+
+class WorkspaceMutationReceiptMismatchError(Exception):
+    pass
 
 
 class WorkspaceDestinationPolicyError(Exception):
@@ -439,6 +446,192 @@ def get_workspace_mutation_receipt(
         result_revision=result_revision,
         result_entry_id=result_entry_id,
     )
+
+
+def _entry_mutation_digest(namespace: bytes, payload: dict[str, object]) -> str:
+    encoded = json.dumps(
+        payload,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hmac.new(
+        _workspace_index_secret(),
+        namespace + b"\0" + encoded,
+        hashlib.sha256,
+    ).hexdigest()
+
+
+def workspace_entry_mutation_lookup_payload(
+    *,
+    actor_id: int,
+    workspace_uuid: str,
+    requested_revision: int,
+    operation: Literal["create", "rename", "delete"],
+    source_entry_id: str,
+    source_path: str,
+    destination_path: str,
+    options: dict[str, object],
+) -> dict[str, object]:
+    return {
+        "actor_id": actor_id,
+        "workspace_uuid": workspace_uuid,
+        "requested_revision": requested_revision,
+        "operation": operation,
+        "source_entry_id": source_entry_id,
+        "source_path": source_path,
+        "destination_path": destination_path,
+        "options": options,
+    }
+
+
+def get_workspace_entry_mutation_receipt(
+    *,
+    lookup_payload: dict[str, object],
+) -> PearWorkspaceEntryMutationReceipt | None:
+    lookup_digest = _entry_mutation_digest(b"pear-entry-mutation-lookup-v1", lookup_payload)
+    actor_id = lookup_payload.get("actor_id")
+    workspace_uuid = lookup_payload.get("workspace_uuid")
+    if (
+        not isinstance(actor_id, int)
+        or isinstance(actor_id, bool)
+        or not isinstance(workspace_uuid, str)
+    ):
+        raise ValueError("Workspace mutation lookup authority is invalid.")
+    return PearWorkspaceEntryMutationReceipt.objects.filter(
+        lookup_digest=lookup_digest,
+        actor_id=actor_id,
+        workspace_node__uuid=workspace_uuid,
+    ).first()
+
+
+def prepare_workspace_entry_mutation_receipt(
+    *,
+    node: PearWorkspaceNode,
+    actor_id: int,
+    lookup_payload: dict[str, object],
+    source_kind: Literal["file", "directory"] | None,
+    source_identity: WorkspaceEntryIdentity | None,
+    recovery: dict[str, object] | None = None,
+) -> tuple[PearWorkspaceEntryMutationReceipt, bool]:
+    """Durably establish exact retry authority before touching the filesystem."""
+
+    request_payload = {
+        **lookup_payload,
+        "source_kind": source_kind,
+        "source_identity": (
+            {
+                "device": source_identity.device,
+                "inode": source_identity.inode,
+                "ctime_ns": source_identity.ctime_ns,
+            }
+            if source_identity is not None
+            else None
+        ),
+        "recovery": recovery or {},
+    }
+    lookup_digest = _entry_mutation_digest(b"pear-entry-mutation-lookup-v1", lookup_payload)
+    request_digest = _entry_mutation_digest(b"pear-entry-mutation-request-v1", request_payload)
+    operation_value = lookup_payload["operation"]
+    if operation_value == "create":
+        operation: Literal["create", "rename", "delete"] = "create"
+    elif operation_value == "rename":
+        operation = "rename"
+    elif operation_value == "delete":
+        operation = "delete"
+    else:
+        raise ValueError("Workspace mutation operation is invalid.")
+    requested_revision = lookup_payload["requested_revision"]
+    if (
+        not isinstance(requested_revision, int)
+        or isinstance(requested_revision, bool)
+        or requested_revision < 0
+    ):
+        raise ValueError("Workspace mutation revision is invalid.")
+    try:
+        with transaction.atomic():
+            receipt = PearWorkspaceEntryMutationReceipt.objects.create(
+                workspace_node=node,
+                actor_id=actor_id,
+                lookup_digest=lookup_digest,
+                request_digest=request_digest,
+                operation=operation,
+                requested_revision=requested_revision,
+                request_payload=request_payload,
+            )
+            return receipt, True
+    except IntegrityError:
+        receipt = PearWorkspaceEntryMutationReceipt.objects.get(lookup_digest=lookup_digest)
+        if receipt.request_digest != request_digest or receipt.request_payload != request_payload:
+            raise WorkspaceMutationReceiptMismatchError(
+                "Workspace mutation retry does not match its durable receipt."
+            )
+        return receipt, False
+
+
+@contextmanager
+def lock_workspace_entry_mutation_receipt(
+    node: PearWorkspaceNode,
+    receipt: PearWorkspaceEntryMutationReceipt,
+) -> Iterator[tuple[PearWorkspaceNode, PearWorkspaceEntryMutationReceipt]]:
+    with transaction.atomic():
+        locked_node = PearWorkspaceNode.objects.select_for_update().get(id=node.id)
+        locked_receipt = PearWorkspaceEntryMutationReceipt.objects.select_for_update().get(
+            id=receipt.id
+        )
+        if locked_node.lifecycle_status != PearWorkspaceNode.ACTIVE:
+            raise WorkspaceMutationReadOnlyError(int(locked_node.content_revision))
+        if (
+            PearWorkspaceEntryMutationReceipt.objects.select_for_update()
+            .filter(
+                workspace_node=locked_node,
+                state=PearWorkspaceEntryMutationReceipt.APPLIED,
+            )
+            .exclude(id=locked_receipt.id)
+            .exists()
+        ):
+            raise WorkspaceMutationStaleError(int(locked_node.content_revision))
+        yield locked_node, locked_receipt
+
+
+def record_workspace_entry_mutation_application(
+    receipt: PearWorkspaceEntryMutationReceipt,
+    application_payload: dict[str, object],
+) -> None:
+    if receipt.state == PearWorkspaceEntryMutationReceipt.APPLIED:
+        if receipt.application_payload != application_payload:
+            raise WorkspaceMutationReceiptMismatchError(
+                "Workspace mutation receipt has a different applied result."
+            )
+        return
+    if receipt.state != PearWorkspaceEntryMutationReceipt.PREPARED:
+        raise WorkspaceMutationReceiptMismatchError(
+            "Workspace mutation receipt is not awaiting filesystem application."
+        )
+    receipt.state = PearWorkspaceEntryMutationReceipt.APPLIED
+    receipt.application_payload = application_payload
+    receipt.date_updated = timezone_now()
+    receipt.save(update_fields=["state", "application_payload", "date_updated"])
+
+
+def complete_workspace_entry_mutation_receipt(
+    receipt: PearWorkspaceEntryMutationReceipt,
+    result_payload: dict[str, object],
+) -> None:
+    if receipt.state == PearWorkspaceEntryMutationReceipt.COMPLETE:
+        if receipt.result_payload != result_payload:
+            raise WorkspaceMutationReceiptMismatchError(
+                "Workspace mutation receipt has a different completed result."
+            )
+        return
+    if receipt.state != PearWorkspaceEntryMutationReceipt.APPLIED:
+        raise WorkspaceMutationReceiptMismatchError(
+            "Workspace mutation receipt was not durably applied."
+        )
+    receipt.state = PearWorkspaceEntryMutationReceipt.COMPLETE
+    receipt.result_payload = result_payload
+    receipt.date_updated = timezone_now()
+    receipt.save(update_fields=["state", "result_payload", "date_updated"])
 
 
 def _run_git(
@@ -1008,6 +1201,11 @@ def lock_workspace_mutation(
             raise WorkspaceMutationReadOnlyError(revision)
         if requested_revision != revision:
             raise WorkspaceMutationStaleError(revision)
+        if PearWorkspaceEntryMutationReceipt.objects.filter(
+            workspace_node=locked,
+            state=PearWorkspaceEntryMutationReceipt.APPLIED,
+        ).exists():
+            raise WorkspaceMutationStaleError(revision)
         yield locked
 
 
@@ -1049,19 +1247,26 @@ def open_workspace_node_file_stream(
     path: str,
     *,
     expected_identity: WorkspaceEntryIdentity | None,
-) -> WorkspaceRawFileStream | WorkspaceHelperRawFileStream:
+) -> WorkspaceStagedRawFileStream:
     isolation_username = node.isolation_username.strip() or None
     if isolation_username is not None:
-        return open_workspace_file_stream_via_helper(
+        source: WorkspaceRawFileStream | WorkspaceHelperRawFileStream = (
+            open_workspace_file_stream_via_helper(
+                node.workdir.strip(),
+                path,
+                expected_identity=expected_identity,
+                isolation_username=isolation_username,
+            )
+        )
+    else:
+        source = open_workspace_file_stream(
             node.workdir.strip(),
             path,
             expected_identity=expected_identity,
-            isolation_username=isolation_username,
         )
-    return open_workspace_file_stream(
-        node.workdir.strip(),
-        path,
-        expected_identity=expected_identity,
+    return stage_workspace_raw_stream(
+        source,
+        max_bytes=PEAR_WORKSPACE_RAW_MAX_BYTES,
     )
 
 

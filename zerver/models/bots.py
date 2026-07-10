@@ -358,6 +358,52 @@ class PearWorkspaceNode(models.Model):
         ]
 
 
+class PearWorkspaceEntryMutationReceipt(models.Model):
+    PREPARED = "prepared"
+    APPLIED = "applied"
+    COMPLETE = "complete"
+
+    STATE_CHOICES = [
+        (PREPARED, "prepared"),
+        (APPLIED, "applied"),
+        (COMPLETE, "complete"),
+    ]
+    OPERATION_CHOICES = [
+        ("create", "create"),
+        ("rename", "rename"),
+        ("delete", "delete"),
+    ]
+
+    workspace_node = models.ForeignKey(
+        PearWorkspaceNode,
+        on_delete=CASCADE,
+        related_name="entry_mutation_receipts",
+    )
+    actor = models.ForeignKey(
+        UserProfile,
+        on_delete=CASCADE,
+        related_name="pear_workspace_entry_mutation_receipts",
+    )
+    lookup_digest = models.CharField(max_length=64, unique=True)
+    request_digest = models.CharField(max_length=64, unique=True)
+    operation = models.CharField(max_length=16, choices=OPERATION_CHOICES)
+    requested_revision = models.PositiveBigIntegerField()
+    request_payload = models.JSONField()
+    state = models.CharField(max_length=16, choices=STATE_CHOICES, default=PREPARED)
+    application_payload = models.JSONField(default=dict)
+    result_payload = models.JSONField(default=dict)
+    date_created = models.DateTimeField(default=timezone_now, db_index=True)
+    date_updated = models.DateTimeField(default=timezone_now)
+
+    class Meta:
+        indexes = [
+            models.Index(
+                fields=["workspace_node", "date_created"],
+                name="zerver_pear_ws_mut_created",
+            ),
+        ]
+
+
 class PearTopicContext(models.Model):
     realm = models.ForeignKey("zerver.Realm", on_delete=CASCADE)
     stream_name = models.CharField(max_length=60)

@@ -30,13 +30,14 @@ import selectors
 import stat
 import subprocess
 import sys
+import tempfile
 import time
 import unicodedata
 from collections.abc import Iterator, Mapping
 from contextlib import ExitStack, contextmanager, suppress
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
+from typing import BinaryIO, Literal
 
 PEAR_ISOLATION_USERNAME_RE = re.compile(r"pear-[0-9a-f]{24}\Z")
 SHA256_RE = re.compile(r"[0-9a-f]{64}\Z")
@@ -894,6 +895,126 @@ def _rename_noreplace(
     raise WorkspaceIOError("Could not rename the workspace entry.")
 
 
+def _rename_exchange(
+    left_parent_fd: int,
+    left_name: str,
+    right_parent_fd: int,
+    right_name: str,
+) -> None:
+    """Atomically exchange two existing directory entries.
+
+    Updates use this instead of a check followed by ``replace``: the displaced
+    target remains available under the temporary name until its identity and
+    bytes have been verified. A stale target can therefore be exchanged back
+    without deleting or overwriting it.
+    """
+
+    libc = ctypes.CDLL(None, use_errno=True)
+    left_bytes = os.fsencode(left_name)
+    right_bytes = os.fsencode(right_name)
+    result: int
+    if hasattr(libc, "renameat2"):
+        renameat2 = libc.renameat2
+        renameat2.argtypes = [
+            ctypes.c_int,
+            ctypes.c_char_p,
+            ctypes.c_int,
+            ctypes.c_char_p,
+            ctypes.c_uint,
+        ]
+        renameat2.restype = ctypes.c_int
+        result = renameat2(
+            left_parent_fd,
+            left_bytes,
+            right_parent_fd,
+            right_bytes,
+            2,  # RENAME_EXCHANGE
+        )
+    elif sys.platform == "darwin" and hasattr(libc, "renameatx_np"):
+        renameatx_np = libc.renameatx_np
+        renameatx_np.argtypes = [
+            ctypes.c_int,
+            ctypes.c_char_p,
+            ctypes.c_int,
+            ctypes.c_char_p,
+            ctypes.c_uint,
+        ]
+        renameatx_np.restype = ctypes.c_int
+        result = renameatx_np(
+            left_parent_fd,
+            left_bytes,
+            right_parent_fd,
+            right_bytes,
+            0x00000002,  # RENAME_SWAP
+        )
+    else:
+        raise WorkspaceOperationUnsupportedError(
+            "Atomic workspace exchange is unavailable on this host."
+        )
+    if result == 0:
+        return
+    error_number = ctypes.get_errno()
+    if error_number in {errno.ENOENT, errno.ENOTDIR}:
+        raise WorkspaceEntryChangedError("Workspace target changed before exchange.")
+    if error_number in {errno.EXDEV, errno.ELOOP}:
+        raise UnsafeWorkspaceEntryError("Workspace exchange crossed a safe filesystem boundary.")
+    if error_number in {errno.ENOSYS, errno.EINVAL, errno.ENOTSUP, errno.EOPNOTSUPP}:
+        raise WorkspaceOperationUnsupportedError(
+            "Atomic workspace exchange is unavailable on this filesystem."
+        )
+    raise WorkspaceIOError("Could not exchange the workspace entries.")
+
+
+def _quarantine_name(operation: str) -> str:
+    return f".pear-{operation}-{os.getpid()}-{secrets.token_hex(12)}"
+
+
+def _restore_quarantined_entry(
+    parent_fd: int,
+    quarantine_name: str,
+    original_name: str,
+) -> None:
+    try:
+        _rename_noreplace(parent_fd, quarantine_name, parent_fd, original_name)
+    except WorkspaceIOError as error:
+        raise WorkspaceEntryChangedError(
+            "Workspace entry changed while the operation was rolled back."
+        ) from error
+    _sync_fd(parent_fd, target="directory")
+
+
+def _capture_workspace_entry(
+    parent_fd: int,
+    name: str,
+    *,
+    root_device: int,
+    expected_kind: Literal["file", "directory"],
+    expected_identity: WorkspaceEntryIdentity | None,
+    operation: str,
+) -> tuple[str, os.stat_result, Literal["file", "directory"]]:
+    """Atomically move the current named object aside, then authorize it.
+
+    The unguessable quarantine name means a replacement raced in before the
+    rename is captured rather than acted on. A stale capture is restored to its
+    original name before the error escapes.
+    """
+
+    quarantine_name = _quarantine_name(operation)
+    _rename_noreplace(parent_fd, name, parent_fd, quarantine_name)
+    try:
+        captured_stat, actual_kind = _stat_entry_from_parent(
+            parent_fd,
+            quarantine_name,
+            root_device=root_device,
+        )
+        _validate_expected_kind(actual_kind, expected_kind)
+        _validate_expected_identity(captured_stat, expected_identity)
+    except Exception:
+        _restore_quarantined_entry(parent_fd, quarantine_name, name)
+        raise
+    return quarantine_name, captured_stat, actual_kind
+
+
 def rename_workspace_entry(
     root: str | Path,
     source_path: str,
@@ -917,39 +1038,35 @@ def rename_workspace_entry(
                     destination_parent_fd,
                     destination_name,
                 ):
-                    source_stat, actual_kind = _stat_entry_from_parent(
-                        source_parent_fd,
-                        source_name,
-                        root_device=root_stat.st_dev,
-                    )
-                    _validate_expected_kind(actual_kind, expected_kind)
-                    _validate_expected_identity(source_stat, expected_identity)
                     if (
-                        actual_kind == "directory"
+                        expected_kind == "directory"
                         and destination_components[: len(source_components)] == source_components
                     ):
                         raise InvalidWorkspacePathError(
                             "A workspace directory cannot be moved inside itself."
                         )
-                    try:
-                        os.stat(
-                            destination_name,
-                            dir_fd=destination_parent_fd,
-                            follow_symlinks=False,
-                        )
-                    except FileNotFoundError:
-                        pass
-                    except OSError as error:
-                        raise _path_open_error(error, final=True) from error
-                    else:
-                        raise WorkspaceEntryExistsError("Workspace destination already exists.")
-
-                    _rename_noreplace(
+                    quarantine_name, source_stat, actual_kind = _capture_workspace_entry(
                         source_parent_fd,
                         source_name,
-                        destination_parent_fd,
-                        destination_name,
+                        root_device=root_stat.st_dev,
+                        expected_kind=expected_kind,
+                        expected_identity=expected_identity,
+                        operation="rename",
                     )
+                    try:
+                        _rename_noreplace(
+                            source_parent_fd,
+                            quarantine_name,
+                            destination_parent_fd,
+                            destination_name,
+                        )
+                    except Exception:
+                        _restore_quarantined_entry(
+                            source_parent_fd,
+                            quarantine_name,
+                            source_name,
+                        )
+                        raise
                     destination_stat, destination_kind = _stat_entry_from_parent(
                         destination_parent_fd,
                         destination_name,
@@ -958,6 +1075,17 @@ def rename_workspace_entry(
                     if destination_kind != actual_kind or _stat_identity(
                         destination_stat
                     ) != _stat_identity(source_stat):
+                        try:
+                            _rename_noreplace(
+                                destination_parent_fd,
+                                destination_name,
+                                source_parent_fd,
+                                source_name,
+                            )
+                        except WorkspaceIOError as error:
+                            raise WorkspaceEntryChangedError(
+                                "Workspace rename could not be rolled back safely."
+                            ) from error
                         raise WorkspaceEntryChangedError(
                             "Workspace entry changed while rename was acknowledged."
                         )
@@ -1072,55 +1200,69 @@ def delete_workspace_entry(
         _workspace_lock(root_fd, exclusive=True),
         _open_parent_directory(root_fd, root_stat.st_dev, components) as (parent_fd, name),
     ):
-        entry_stat, actual_kind = _stat_entry_from_parent(
+        quarantine_name, entry_stat, actual_kind = _capture_workspace_entry(
             parent_fd,
             name,
             root_device=root_stat.st_dev,
+            expected_kind=expected_kind,
+            expected_identity=expected_identity,
+            operation="delete",
         )
-        _validate_expected_kind(actual_kind, expected_kind)
-        _validate_expected_identity(entry_stat, expected_identity)
         removed_entries = 1
-        if actual_kind == "file":
-            if recursive:
-                raise ValueError("recursive deletion applies only to directories")
-            try:
-                os.unlink(name, dir_fd=parent_fd)
-            except OSError as error:
-                raise WorkspaceEntryChangedError(
-                    "Workspace file changed during deletion."
-                ) from error
-        elif recursive:
-            directory_fd = _open_checked_directory(
-                parent_fd,
-                name,
-                root_device=root_stat.st_dev,
-            )
-            try:
-                _validate_directory_tree(directory_fd, root_device=root_stat.st_dev)
-                removed_entries += _remove_directory_tree(
-                    directory_fd,
+        quarantine_exists = True
+        try:
+            if actual_kind == "file":
+                if recursive:
+                    raise ValueError("recursive deletion applies only to directories")
+                try:
+                    os.unlink(quarantine_name, dir_fd=parent_fd)
+                except OSError as error:
+                    raise WorkspaceEntryChangedError(
+                        "Workspace file changed during deletion."
+                    ) from error
+                quarantine_exists = False
+            elif recursive:
+                directory_fd = _open_checked_directory(
+                    parent_fd,
+                    quarantine_name,
                     root_device=root_stat.st_dev,
                 )
-            finally:
-                os.close(directory_fd)
-            try:
-                os.rmdir(name, dir_fd=parent_fd)
-            except OSError as error:
-                raise WorkspaceEntryChangedError(
-                    "Workspace directory changed during recursive deletion."
-                ) from error
-        else:
-            try:
-                os.rmdir(name, dir_fd=parent_fd)
-            except OSError as error:
-                if error.errno in {errno.ENOTEMPTY, errno.EEXIST}:
-                    raise WorkspaceDirectoryNotEmptyError(
-                        "Workspace directory is not empty."
+                try:
+                    if _entry_identity(os.fstat(directory_fd)) != _entry_identity(entry_stat):
+                        raise WorkspaceEntryChangedError(
+                            "Workspace directory changed before recursive deletion."
+                        )
+                    _validate_directory_tree(directory_fd, root_device=root_stat.st_dev)
+                    removed_entries += _remove_directory_tree(
+                        directory_fd,
+                        root_device=root_stat.st_dev,
+                    )
+                finally:
+                    os.close(directory_fd)
+                try:
+                    os.rmdir(quarantine_name, dir_fd=parent_fd)
+                except OSError as error:
+                    raise WorkspaceEntryChangedError(
+                        "Workspace directory changed during recursive deletion."
                     ) from error
-                raise WorkspaceEntryChangedError(
-                    "Workspace directory changed during deletion."
-                ) from error
-        _sync_fd(parent_fd, target="directory")
+                quarantine_exists = False
+            else:
+                try:
+                    os.rmdir(quarantine_name, dir_fd=parent_fd)
+                except OSError as error:
+                    if error.errno in {errno.ENOTEMPTY, errno.EEXIST}:
+                        raise WorkspaceDirectoryNotEmptyError(
+                            "Workspace directory is not empty."
+                        ) from error
+                    raise WorkspaceEntryChangedError(
+                        "Workspace directory changed during deletion."
+                    ) from error
+                quarantine_exists = False
+            _sync_fd(parent_fd, target="directory")
+        except Exception:
+            if quarantine_exists:
+                _restore_quarantined_entry(parent_fd, quarantine_name, name)
+            raise
     return WorkspaceDeleteResult(
         path=relative_path,
         kind=expected_kind,
@@ -1142,9 +1284,9 @@ def atomic_write_workspace_file(
     """Replace or create a file atomically after a raw-byte version check.
 
     `flock` on the workspace root serializes writers that use this module,
-    including separate isolation-helper processes.  An arbitrary external
-    process does not honor that lock; the last identity/version check narrows
-    but cannot mathematically eliminate its final check-to-rename race.
+    including separate isolation-helper processes. The final publication is an
+    atomic exchange: the displaced target is authorized after capture and is
+    exchanged back before an error escapes if its identity or bytes are stale.
     """
 
     _validate_nonnegative_limit(max_bytes)
@@ -1201,6 +1343,7 @@ def atomic_write_workspace_file(
                 temporary_name = f".pear-write-{os.getpid()}-{secrets.token_hex(12)}"
                 temporary_fd: int | None = None
                 temporary_exists = False
+                published_file: WorkspaceFile | None = None
                 try:
                     try:
                         temporary_fd = os.open(
@@ -1273,20 +1416,63 @@ def atomic_write_workspace_file(
                                 "Workspace file changed before it could be saved.",
                                 current=latest,
                             )
+                        _rename_exchange(
+                            parent_fd,
+                            temporary_name,
+                            parent_fd,
+                            name,
+                        )
                         try:
-                            os.replace(
+                            displaced, displaced_stat = _read_file_from_parent(
+                                parent_fd,
                                 temporary_name,
-                                name,
-                                src_dir_fd=parent_fd,
-                                dst_dir_fd=parent_fd,
+                                root_device=root_stat.st_dev,
+                                max_bytes=max_bytes,
+                                expected_identity=expected_identity,
                             )
-                        except OSError as error:
-                            raise WorkspaceIOError(
-                                "Could not replace the workspace file."
-                            ) from error
+                            if displaced.version != expected_version or _stat_identity(
+                                displaced_stat
+                            ) != _stat_identity(current_stat):
+                                raise WorkspaceVersionConflictError(
+                                    "Workspace file changed before it could be saved.",
+                                    current=displaced,
+                                )
+                            saved, saved_stat = _read_file_from_parent(
+                                parent_fd,
+                                name,
+                                root_device=root_stat.st_dev,
+                                max_bytes=max_bytes,
+                            )
+                            if saved.data != data or _stat_identity(saved_stat) != _stat_identity(
+                                temporary_stat
+                            ):
+                                raise WorkspaceEntryChangedError(
+                                    "Workspace file changed while the save was published."
+                                )
+                            published_file = saved
+                        except Exception:
+                            try:
+                                _rename_exchange(
+                                    parent_fd,
+                                    temporary_name,
+                                    parent_fd,
+                                    name,
+                                )
+                            except WorkspaceIOError as rollback_error:
+                                raise WorkspaceEntryChangedError(
+                                    "Workspace save could not be rolled back safely."
+                                ) from rollback_error
+                            raise
+                        _unlink_if_present(parent_fd, temporary_name)
                         temporary_exists = False
 
                     _sync_fd(parent_fd, target="directory")
+                    if published_file is not None:
+                        return WorkspaceWriteResult(
+                            file=published_file,
+                            changed=True,
+                            created=False,
+                        )
                     saved, saved_stat = _read_file_from_parent(
                         parent_fd,
                         name,
@@ -1763,17 +1949,16 @@ def invoke_workspace_io_helper(
     return result
 
 
-def _read_exact_with_timeout(
+def _read_exact_with_deadline(
     stream: object,
     byte_count: int,
     *,
-    timeout: float,
+    deadline: float,
 ) -> bytes:
     fileno = getattr(stream, "fileno", None)
     if not callable(fileno):
         raise WorkspaceHelperError("Workspace stream helper pipe is unavailable.")
     fd = fileno()
-    deadline = time.monotonic() + timeout
     chunks: list[bytes] = []
     remaining = byte_count
     selector = selectors.DefaultSelector()
@@ -1799,6 +1984,19 @@ def _read_exact_with_timeout(
     return b"".join(chunks)
 
 
+def _terminate_helper_process(process: subprocess.Popen[bytes]) -> None:
+    if process.poll() is not None:
+        return
+    with suppress(ProcessLookupError):
+        process.terminate()
+    try:
+        process.wait(timeout=1)
+    except subprocess.TimeoutExpired:
+        with suppress(ProcessLookupError):
+            process.kill()
+        process.wait()
+
+
 class WorkspaceHelperRawFileStream(Iterator[bytes]):
     def __init__(
         self,
@@ -1806,14 +2004,14 @@ class WorkspaceHelperRawFileStream(Iterator[bytes]):
         process: subprocess.Popen[bytes],
         metadata: WorkspaceRawFileMetadata,
         chunk_bytes: int,
-        completion_timeout: float,
+        deadline: float,
     ) -> None:
         assert process.stdout is not None
         self._process = process
         self._stdout = process.stdout
         self._remaining = metadata.size
         self._chunk_bytes = chunk_bytes
-        self._completion_timeout = completion_timeout
+        self._deadline = deadline
         self._closed = False
         self.metadata = metadata
 
@@ -1825,17 +2023,22 @@ class WorkspaceHelperRawFileStream(Iterator[bytes]):
             raise StopIteration
         if self._remaining:
             try:
-                chunk = self._stdout.read(min(self._chunk_bytes, self._remaining))
-            except OSError as error:
+                chunk = _read_exact_with_deadline(
+                    self._stdout,
+                    min(self._chunk_bytes, self._remaining),
+                    deadline=self._deadline,
+                )
+            except (OSError, WorkspaceHelperError) as error:
                 self.close()
                 raise WorkspaceHelperError("Workspace stream helper failed.") from error
-            if not chunk:
-                self.close()
-                raise WorkspaceHelperError("Workspace stream helper truncated the file.")
             self._remaining -= len(chunk)
             return chunk
+        remaining_timeout = self._deadline - time.monotonic()
+        if remaining_timeout <= 0:
+            self.close()
+            raise WorkspaceHelperError("Workspace stream helper timed out.")
         try:
-            returncode = self._process.wait(timeout=self._completion_timeout)
+            returncode = self._process.wait(timeout=remaining_timeout)
         except subprocess.TimeoutExpired as error:
             self.close()
             raise WorkspaceHelperError("Workspace stream helper did not finish.") from error
@@ -1855,14 +2058,8 @@ class WorkspaceHelperRawFileStream(Iterator[bytes]):
         if self._closed:
             return
         self._closed = True
+        _terminate_helper_process(self._process)
         self._stdout.close()
-        if self._process.poll() is None:
-            self._process.terminate()
-            try:
-                self._process.wait(timeout=1)
-            except subprocess.TimeoutExpired:
-                self._process.kill()
-                self._process.wait()
 
     def __del__(self) -> None:  # nocoverage: defensive cleanup for abandoned iterators.
         self.close()
@@ -1881,6 +2078,9 @@ def open_workspace_file_stream_via_helper(
 ) -> WorkspaceHelperRawFileStream:
     if isinstance(chunk_bytes, bool) or not isinstance(chunk_bytes, int) or chunk_bytes <= 0:
         raise ValueError("chunk_bytes must be a positive integer")
+    if isinstance(timeout, bool) or not isinstance(timeout, int | float) or timeout <= 0:
+        raise ValueError("timeout must be positive")
+    deadline = time.monotonic() + timeout
     request = {
         "operation": "stream",
         "root": os.fspath(root),
@@ -1913,11 +2113,15 @@ def open_workspace_file_stream_via_helper(
         assert process.stdin is not None and process.stdout is not None
         process.stdin.write(encoded_request)
         process.stdin.close()
-        header_size_bytes = _read_exact_with_timeout(process.stdout, 8, timeout=timeout)
+        header_size_bytes = _read_exact_with_deadline(process.stdout, 8, deadline=deadline)
         header_size = int.from_bytes(header_size_bytes, "big")
         if not 1 <= header_size <= MAX_STREAM_HEADER_BYTES:
             raise WorkspaceHelperError("Workspace stream helper returned an invalid header.")
-        encoded_header = _read_exact_with_timeout(process.stdout, header_size, timeout=timeout)
+        encoded_header = _read_exact_with_deadline(
+            process.stdout,
+            header_size,
+            deadline=deadline,
+        )
         try:
             header = json.loads(encoded_header)
         except (UnicodeDecodeError, json.JSONDecodeError) as error:
@@ -1937,15 +2141,111 @@ def open_workspace_file_stream_via_helper(
             process=process,
             metadata=metadata,
             chunk_bytes=chunk_bytes,
-            completion_timeout=timeout,
+            deadline=deadline,
         )
     except Exception:
+        _terminate_helper_process(process)
         if process.stdout is not None:
             process.stdout.close()
-        if process.poll() is None:
-            process.kill()
-        process.wait()
         raise
+
+
+class WorkspaceStagedRawFileStream(Iterator[bytes]):
+    """An immutable, unlinked disk snapshot safe to expose over HTTP."""
+
+    def __init__(
+        self,
+        *,
+        file: BinaryIO,
+        metadata: WorkspaceRawFileMetadata,
+        chunk_bytes: int,
+    ) -> None:
+        self._file = file
+        self._remaining = metadata.size
+        self._chunk_bytes = chunk_bytes
+        self._closed = False
+        self.metadata = metadata
+
+    def __iter__(self) -> WorkspaceStagedRawFileStream:
+        return self
+
+    def __next__(self) -> bytes:
+        if self._closed:
+            raise StopIteration
+        if not self._remaining:
+            self.close()
+            raise StopIteration
+        try:
+            chunk = self._file.read(min(self._chunk_bytes, self._remaining))
+        except OSError as error:
+            self.close()
+            raise WorkspaceIOError("Could not read the staged workspace file.") from error
+        if not chunk:
+            self.close()
+            raise WorkspaceIOError("The staged workspace file was truncated.")
+        self._remaining -= len(chunk)
+        return chunk
+
+    def close(self) -> None:
+        if self._closed:
+            return
+        self._closed = True
+        self._file.close()
+
+    def __del__(self) -> None:  # nocoverage: defensive cleanup for abandoned responses.
+        self.close()
+
+
+def stage_workspace_raw_stream(
+    source: WorkspaceRawFileStream | WorkspaceHelperRawFileStream,
+    *,
+    max_bytes: int,
+    chunk_bytes: int = 64 * 1024,
+) -> WorkspaceStagedRawFileStream:
+    """Fully verify a bounded source into an unlinked disk file before exposure."""
+
+    _validate_nonnegative_limit(max_bytes)
+    if isinstance(chunk_bytes, bool) or not isinstance(chunk_bytes, int) or chunk_bytes <= 0:
+        source.close()
+        raise ValueError("chunk_bytes must be a positive integer")
+    if source.metadata.size > max_bytes:
+        source.close()
+        raise WorkspaceFileTooLargeError("Workspace file exceeds the raw stream limit.")
+
+    try:
+        staged_file = tempfile.TemporaryFile(prefix="pear-workspace-raw-")  # noqa: SIM115
+    except OSError as error:
+        source.close()
+        raise WorkspaceIOError("Could not stage the workspace raw file.") from error
+    digest = hashlib.sha256()
+    total = 0
+    try:
+        for chunk in source:
+            total += len(chunk)
+            if total > max_bytes:
+                raise WorkspaceFileTooLargeError("Workspace file exceeds the raw stream limit.")
+            _write_all(staged_file.fileno(), chunk)
+            digest.update(chunk)
+        if total != source.metadata.size:
+            raise WorkspaceEntryChangedError("Workspace raw stream size changed during staging.")
+        staged_file.flush()
+        staged_file.seek(0)
+    except Exception:
+        staged_file.close()
+        raise
+    finally:
+        source.close()
+
+    return WorkspaceStagedRawFileStream(
+        file=staged_file,
+        metadata=WorkspaceRawFileMetadata(
+            size=total,
+            mode=source.metadata.mode,
+            cache_token=digest.hexdigest(),
+            identity=source.metadata.identity,
+        ),
+        chunk_bytes=chunk_bytes,
+    )
 
 
 def read_workspace_file_via_helper(

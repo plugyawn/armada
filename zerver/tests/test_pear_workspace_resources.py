@@ -20,8 +20,10 @@ from zerver.lib.pear_workspace_io import (
     WorkspaceWriteResult,
 )
 from zerver.lib.pear_workspace_resources import (
+    PEAR_WORKSPACE_RAW_MAX_BYTES,
     PEAR_WORKSPACE_TEXT_MAX_BYTES,
     WorkspaceSnapshot,
+    WorkspaceSnapshotError,
     clear_workspace_snapshot_cache,
     create_workspace_node_directory,
     create_workspace_node_file,
@@ -34,7 +36,7 @@ from zerver.lib.pear_workspace_resources import (
     write_workspace_node_file,
 )
 from zerver.lib.test_classes import ZulipTestCase
-from zerver.models.bots import PearWorkspaceNode
+from zerver.models.bots import PearWorkspaceEntryMutationReceipt, PearWorkspaceNode
 from zerver.models.users import UserProfile
 
 
@@ -209,7 +211,10 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
         self.assertTrue(descriptor["capabilities"]["rename_entry"])
         self.assertTrue(descriptor["capabilities"]["delete_entry"])
         self.assertTrue(descriptor["capabilities"]["history"])
-        self.assertIsNone(descriptor["limits"]["raw_file_max_bytes"])
+        self.assertEqual(
+            descriptor["limits"]["raw_file_max_bytes"],
+            PEAR_WORKSPACE_RAW_MAX_BYTES,
+        )
         entries = [*root["entries"], *rest["entries"]]
         paths = {entry["path"] for entry in entries}
         self.assertEqual(paths, {".gitignore", "README.md", "docs", "raw.bin"})
@@ -645,11 +650,337 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
                     intentionally_undocumented=True,
                 )
                 chunk_sizes = [len(chunk) for chunk in result.streaming_content]
+            with (repo / "raw.bin").open("rb") as raw_file:
+                expected_etag = hashlib.file_digest(raw_file, "sha256").hexdigest()
 
         buffered_read.assert_not_called()
         self.assertEqual(sum(chunk_sizes), size)
         self.assertLessEqual(max(chunk_sizes), 64 * 1024)
         self.assertEqual(result["Content-Length"], str(size))
+        self.assertEqual(result["ETag"], f'"{expected_etag}"')
+
+    def test_raw_endpoint_rejects_files_above_the_finite_limit_without_iteration(self) -> None:
+        user = self.example_user("hamlet")
+        stream = self.subscribe(user, "workspace-resource")
+        self.login_user(user)
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo = self.make_workspace(Path(temp_dir).resolve())
+            with (repo / "oversized.bin").open("wb") as raw_file:
+                raw_file.seek(PEAR_WORKSPACE_RAW_MAX_BYTES)
+                raw_file.write(b"z")
+            node = self.make_node(user, stream.name, repo)
+            raw_entry = next(
+                entry for entry in self.tree(node)["entries"] if entry["path"] == "oversized.bin"
+            )
+            with patch(
+                "zerver.lib.pear_workspace_io.WorkspaceRawFileStream.__next__"
+            ) as stream_next:
+                result = self.client_get(
+                    f"/json/pear/workspaces/{node.uuid}/raw",
+                    {"entry_id": raw_entry["entry_id"]},
+                    intentionally_undocumented=True,
+                )
+
+        self.assertEqual(result.status_code, 413)
+        self.assertEqual(orjson.loads(result.content)["error_code"], "file_too_large")
+        self.assertEqual(
+            orjson.loads(result.content)["max_bytes"],
+            PEAR_WORKSPACE_RAW_MAX_BYTES,
+        )
+        stream_next.assert_not_called()
+
+    def test_entry_mutations_replay_exact_completed_receipts_once(self) -> None:
+        user = self.example_user("hamlet")
+        stream = self.subscribe(user, "workspace-resource")
+        self.login_user(user)
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo = self.make_workspace(Path(temp_dir).resolve())
+            node = self.make_node(user, stream.name, repo)
+            revision = self.descriptor(node)["workspace_revision"]
+
+            created = self.create_entry(
+                node,
+                destination_path="scratch.md",
+                kind="file",
+                workspace_revision=revision,
+                content="receipt secret\n",
+            )
+            created_retry = self.create_entry(
+                node,
+                destination_path="scratch.md",
+                kind="file",
+                workspace_revision=revision,
+                content="receipt secret\n",
+            )
+            self.assertEqual(created_retry, created)
+            created_entry = created["entry"]
+            assert isinstance(created_entry, dict)
+
+            renamed = self.rename_entry(
+                node,
+                entry_id=created_entry["entry_id"],
+                expected_path="scratch.md",
+                destination_path="renamed.md",
+                workspace_revision=created["workspace_revision"],
+            )
+            renamed_retry = self.rename_entry(
+                node,
+                entry_id=created_entry["entry_id"],
+                expected_path="scratch.md",
+                destination_path="renamed.md",
+                workspace_revision=created["workspace_revision"],
+            )
+            self.assertEqual(renamed_retry, renamed)
+            renamed_entry = renamed["entry"]
+            assert isinstance(renamed_entry, dict)
+
+            deleted = self.delete_entry(
+                node,
+                entry_id=renamed_entry["entry_id"],
+                expected_path="renamed.md",
+                workspace_revision=renamed["workspace_revision"],
+                confirm_irreversible=True,
+            )
+            deleted_retry = self.delete_entry(
+                node,
+                entry_id=renamed_entry["entry_id"],
+                expected_path="renamed.md",
+                workspace_revision=renamed["workspace_revision"],
+                confirm_irreversible=True,
+            )
+
+        self.assertEqual(deleted_retry, deleted)
+        node.refresh_from_db()
+        self.assertEqual(node.content_revision, revision + 3)
+        receipts = list(
+            PearWorkspaceEntryMutationReceipt.objects.filter(workspace_node=node).order_by("id")
+        )
+        self.assertEqual(len(receipts), 3)
+        self.assertTrue(
+            all(receipt.state == PearWorkspaceEntryMutationReceipt.COMPLETE for receipt in receipts)
+        )
+        serialized_receipts = orjson.dumps(
+            [
+                {
+                    "request": receipt.request_payload,
+                    "application": receipt.application_payload,
+                    "result": receipt.result_payload,
+                }
+                for receipt in receipts
+            ]
+        )
+        self.assertNotIn(b"receipt secret", serialized_receipts)
+        self.assertIn(b"content_sha256", serialized_receipts)
+
+    def test_applied_create_receipt_repairs_prepare_collision_once(self) -> None:
+        user = self.example_user("hamlet")
+        stream = self.subscribe(user, "workspace-resource")
+        self.login_user(user)
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo = self.make_workspace(Path(temp_dir).resolve())
+            node = self.make_node(user, stream.name, repo)
+            revision = self.descriptor(node)["workspace_revision"]
+            request_data = {
+                "destination_path": "recovered.md",
+                "kind": "file",
+                "workspace_revision": revision,
+                "content": "recover exactly\n",
+            }
+            with patch(
+                "zerver.views.pear_workspace._finish_prepared_entry_mutation",
+                side_effect=WorkspaceSnapshotError("simulated post-filesystem failure"),
+            ):
+                failed = self.client_post(
+                    f"/json/pear/workspaces/{node.uuid}/entries",
+                    request_data,
+                    intentionally_undocumented=True,
+                )
+
+            self.assertEqual(failed.status_code, 503)
+            self.assertEqual((repo / "recovered.md").read_text(), "recover exactly\n")
+            node.refresh_from_db()
+            self.assertEqual(node.content_revision, revision)
+            receipt = PearWorkspaceEntryMutationReceipt.objects.get(workspace_node=node)
+            self.assertEqual(receipt.state, PearWorkspaceEntryMutationReceipt.APPLIED)
+
+            with patch(
+                "zerver.views.pear_workspace.get_workspace_entry_mutation_receipt",
+                return_value=None,
+            ):
+                repaired = self.client_post(
+                    f"/json/pear/workspaces/{node.uuid}/entries",
+                    request_data,
+                    intentionally_undocumented=True,
+                )
+            mutation = self.assert_json_success(repaired)["pear_workspace_mutation"]
+
+        self.assertEqual(mutation["workspace_revision"], revision + 1)
+        node.refresh_from_db()
+        receipt.refresh_from_db()
+        self.assertEqual(node.content_revision, revision + 1)
+        self.assertEqual(receipt.state, PearWorkspaceEntryMutationReceipt.COMPLETE)
+
+    def test_applied_create_receipt_rejects_same_bytes_replacement(self) -> None:
+        user = self.example_user("hamlet")
+        stream = self.subscribe(user, "workspace-resource")
+        self.login_user(user)
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo = self.make_workspace(Path(temp_dir).resolve())
+            node = self.make_node(user, stream.name, repo)
+            revision = self.descriptor(node)["workspace_revision"]
+            request_data = {
+                "destination_path": "replaced.md",
+                "kind": "file",
+                "workspace_revision": revision,
+                "content": "same bytes\n",
+            }
+            with patch(
+                "zerver.views.pear_workspace._finish_prepared_entry_mutation",
+                side_effect=WorkspaceSnapshotError("simulated post-filesystem failure"),
+            ):
+                failed = self.client_post(
+                    f"/json/pear/workspaces/{node.uuid}/entries",
+                    request_data,
+                    intentionally_undocumented=True,
+                )
+            self.assertEqual(failed.status_code, 503)
+            created = repo / "replaced.md"
+            created.unlink()
+            created.write_text("same bytes\n")
+
+            retry = self.client_post(
+                f"/json/pear/workspaces/{node.uuid}/entries",
+                request_data,
+                intentionally_undocumented=True,
+            )
+
+        self.assertEqual(retry.status_code, 409)
+        self.assertEqual(orjson.loads(retry.content)["error_code"], "stale_workspace")
+        receipt = PearWorkspaceEntryMutationReceipt.objects.get(workspace_node=node)
+        self.assertEqual(receipt.state, PearWorkspaceEntryMutationReceipt.APPLIED)
+
+    def test_applied_directory_receipt_rejects_populated_directory(self) -> None:
+        user = self.example_user("hamlet")
+        stream = self.subscribe(user, "workspace-resource")
+        self.login_user(user)
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo = self.make_workspace(Path(temp_dir).resolve())
+            node = self.make_node(user, stream.name, repo)
+            revision = self.descriptor(node)["workspace_revision"]
+            request_data = {
+                "destination_path": "created-directory",
+                "kind": "directory",
+                "workspace_revision": revision,
+                "content": "",
+            }
+            with patch(
+                "zerver.views.pear_workspace._finish_prepared_entry_mutation",
+                side_effect=WorkspaceSnapshotError("simulated post-filesystem failure"),
+            ):
+                failed = self.client_post(
+                    f"/json/pear/workspaces/{node.uuid}/entries",
+                    request_data,
+                    intentionally_undocumented=True,
+                )
+            self.assertEqual(failed.status_code, 503)
+            (repo / "created-directory/attacker.txt").write_text("do not bless\n")
+
+            retry = self.client_post(
+                f"/json/pear/workspaces/{node.uuid}/entries",
+                request_data,
+                intentionally_undocumented=True,
+            )
+
+        self.assertEqual(retry.status_code, 409)
+        self.assertEqual(orjson.loads(retry.content)["error_code"], "stale_workspace")
+        receipt = PearWorkspaceEntryMutationReceipt.objects.get(workspace_node=node)
+        self.assertEqual(receipt.state, PearWorkspaceEntryMutationReceipt.APPLIED)
+
+    def test_applied_rename_and_delete_receipts_repair_once(self) -> None:
+        user = self.example_user("hamlet")
+        stream = self.subscribe(user, "workspace-resource")
+        self.login_user(user)
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo = self.make_workspace(Path(temp_dir).resolve())
+            node = self.make_node(user, stream.name, repo)
+            revision = self.descriptor(node)["workspace_revision"]
+            created = self.create_entry(
+                node,
+                destination_path="repair-source.md",
+                kind="file",
+                workspace_revision=revision,
+                content="repair\n",
+            )
+            created_entry = created["entry"]
+            assert isinstance(created_entry, dict)
+            rename_request = {
+                "entry_id": created_entry["entry_id"],
+                "expected_path": "repair-source.md",
+                "destination_path": "repair-destination.md",
+                "workspace_revision": created["workspace_revision"],
+            }
+            with patch(
+                "zerver.views.pear_workspace._finish_prepared_entry_mutation",
+                side_effect=WorkspaceSnapshotError("simulated post-rename failure"),
+            ):
+                failed_rename = self.client_patch(
+                    f"/json/pear/workspaces/{node.uuid}/entry",
+                    rename_request,
+                    intentionally_undocumented=True,
+                )
+            self.assertEqual(failed_rename.status_code, 503)
+            rename_receipt = PearWorkspaceEntryMutationReceipt.objects.get(
+                workspace_node=node,
+                operation="rename",
+            )
+            self.assertEqual(rename_receipt.state, PearWorkspaceEntryMutationReceipt.APPLIED)
+            repaired_rename_response = self.client_patch(
+                f"/json/pear/workspaces/{node.uuid}/entry",
+                rename_request,
+                intentionally_undocumented=True,
+            )
+            repaired_rename = self.assert_json_success(repaired_rename_response)[
+                "pear_workspace_mutation"
+            ]
+            renamed_entry = repaired_rename["entry"]
+            assert isinstance(renamed_entry, dict)
+
+            delete_request = {
+                "entry_id": renamed_entry["entry_id"],
+                "expected_path": "repair-destination.md",
+                "workspace_revision": repaired_rename["workspace_revision"],
+                "recursive": "false",
+                "confirm_irreversible": "true",
+            }
+            with patch(
+                "zerver.views.pear_workspace._finish_prepared_entry_mutation",
+                side_effect=WorkspaceSnapshotError("simulated post-delete failure"),
+            ):
+                failed_delete = self.client_delete(
+                    f"/json/pear/workspaces/{node.uuid}/entry",
+                    delete_request,
+                    intentionally_undocumented=True,
+                )
+            self.assertEqual(failed_delete.status_code, 503)
+            delete_receipt = PearWorkspaceEntryMutationReceipt.objects.get(
+                workspace_node=node,
+                operation="delete",
+            )
+            self.assertEqual(delete_receipt.state, PearWorkspaceEntryMutationReceipt.APPLIED)
+            repaired_delete_response = self.client_delete(
+                f"/json/pear/workspaces/{node.uuid}/entry",
+                delete_request,
+                intentionally_undocumented=True,
+            )
+            repaired_delete = self.assert_json_success(repaired_delete_response)[
+                "pear_workspace_mutation"
+            ]
+
+        self.assertIsNone(repaired_delete["entry"])
+        rename_receipt.refresh_from_db()
+        delete_receipt.refresh_from_db()
+        self.assertEqual(rename_receipt.state, PearWorkspaceEntryMutationReceipt.COMPLETE)
+        self.assertEqual(delete_receipt.state, PearWorkspaceEntryMutationReceipt.COMPLETE)
 
     def test_put_bumps_revision_conflicts_and_retries_idempotently(self) -> None:
         user = self.example_user("hamlet")

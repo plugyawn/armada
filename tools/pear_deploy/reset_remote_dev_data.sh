@@ -115,8 +115,17 @@ if [[ ! -f "$ROSTER_PATH" ]]; then
     exit 1
 fi
 
+LOCAL_SHA="$(git -C "$REPO_ROOT" rev-parse HEAD)"
+REMOTE_TRUSTED_RUNTIME="$(stage_remote_pear_deploy_bundle "$REPO_ROOT" "$LOCAL_SHA")"
+cleanup_trusted_runtime() {
+    remove_remote_pear_deploy_bundle "$REMOTE_TRUSTED_RUNTIME" >/dev/null 2>&1 || true
+}
+trap cleanup_trusted_runtime EXIT
+
 echo "Verifying fail-closed Caddy and production-assets runtime config..."
-ssh_root "python3 /home/zulipdev/zulip/tools/pear_deploy/runtime_config.py verify --repo-root /home/zulipdev/zulip --fqdn $FQDN"
+ssh_root python3 "$REMOTE_TRUSTED_RUNTIME/tools/pear_deploy/runtime_config.py" verify \
+    --repo-root "$REMOTE_TRUSTED_RUNTIME" \
+    --fqdn "$FQDN"
 
 echo "Stopping Pear/Zulip services..."
 ssh_root "systemctl stop ${PEAR_DEPLOY_SERVICES[*]}"

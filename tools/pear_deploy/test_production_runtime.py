@@ -13,8 +13,13 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from tools.pear_deploy import workspace_helper_runtime
+from tools.pear_deploy import runtime_config, workspace_helper_runtime
 from tools.pear_deploy.deployment_capacity import GIB, estimate_capacity
+from tools.pear_deploy.deployment_record import (
+    DeploymentRecordError,
+    atomic_write_deployment_record,
+)
+from tools.pear_deploy.freeze_asset_build import AssetFreezeError, freeze_asset_build
 from tools.pear_deploy.production_assets import (
     AssetValidationError,
     select_production_asset_probes,
@@ -33,7 +38,7 @@ from tools.pear_deploy.workspace_helper_runtime import (
     WorkspaceHelperDeploymentError,
     atomic_install_helper,
     inspect_installed_helper,
-    load_committed_helper,
+    load_expected_helper,
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -60,7 +65,7 @@ class DeploymentCapacityTest(unittest.TestCase):
             ),
             patch(
                 "tools.pear_deploy.deployment_capacity.shutil.disk_usage",
-                return_value=SimpleNamespace(free=4 * GIB),
+                return_value=SimpleNamespace(free=5 * GIB),
             ),
         ):
             estimate = estimate_capacity(
@@ -73,7 +78,7 @@ class DeploymentCapacityTest(unittest.TestCase):
             )
 
         self.assertEqual(estimate.snapshot_bytes, 6_800)
-        self.assertEqual(estimate.asset_build_bytes, 2 * GIB + 5_000)
+        self.assertEqual(estimate.asset_build_bytes, 3 * GIB + 5_000)
         self.assertEqual(estimate.safety_bytes, GIB)
         self.assertEqual(estimate.reclaimable_asset_build_bytes, 100)
         self.assertTrue(estimate.sufficient)
@@ -180,6 +185,7 @@ class RuntimeConfigTest(unittest.TestCase):
             pear_env = root / PEAR_ENV_PATH.relative_to("/")
             pear_env.parent.mkdir(parents=True)
             pear_env.write_text("EXTERNAL_HOST=pear.example.com\nKEEP=value\n")
+            pear_env.chmod(0o600)
             auth_env = root / AUTH_ENV_PATH.relative_to("/")
             auth_env.parent.mkdir(parents=True)
             auth_env.write_text(
@@ -211,6 +217,7 @@ class RuntimeConfigTest(unittest.TestCase):
             pear_env = root / PEAR_ENV_PATH.relative_to("/")
             pear_env.parent.mkdir(parents=True)
             pear_env.write_text("EXTERNAL_HOST=pear.example.com\n")
+            pear_env.chmod(0o600)
             with self.assertRaisesRegex(RuntimeConfigError, "auth is absent"):
                 install(self.make_args(root))
 
@@ -220,12 +227,88 @@ class RuntimeConfigTest(unittest.TestCase):
             pear_env = root / PEAR_ENV_PATH.relative_to("/")
             pear_env.parent.mkdir(parents=True)
             pear_env.write_text("EXTERNAL_HOST=pear.example.com\n")
+            pear_env.chmod(0o600)
             args = self.make_args(root, bootstrap_auth_stdin=True)
             with patch("sys.stdin", io.StringIO(TEST_HASH + "\n")):
                 install(args)
             auth_env = root / AUTH_ENV_PATH.relative_to("/")
             self.assertEqual(stat.S_IMODE(auth_env.stat().st_mode), 0o600)
             self.assertEqual(parse_auth_env(auth_env)["PEAR_CADDY_BASICAUTH_HASH"], TEST_HASH)
+
+    def test_install_rejects_symlinked_pear_env_and_runtime_destination(self) -> None:
+        for hostile_target in ("pear-env", "runtime-file"):
+            with (
+                self.subTest(hostile_target=hostile_target),
+                tempfile.TemporaryDirectory() as temporary_directory,
+            ):
+                root = Path(temporary_directory)
+                victim = root / "victim"
+                victim.write_text("do not read or overwrite\n", encoding="utf-8")
+                victim.chmod(0o600)
+                pear_env = root / PEAR_ENV_PATH.relative_to("/")
+                pear_env.parent.mkdir(parents=True)
+                if hostile_target == "pear-env":
+                    pear_env.symlink_to(victim)
+                else:
+                    pear_env.write_text("EXTERNAL_HOST=pear.example.com\n", encoding="utf-8")
+                    pear_env.chmod(0o600)
+                    caddyfile = root / "etc/caddy/Caddyfile"
+                    caddyfile.parent.mkdir(parents=True)
+                    caddyfile.symlink_to(victim)
+                auth_env = root / AUTH_ENV_PATH.relative_to("/")
+                auth_env.parent.mkdir(parents=True)
+                auth_env.write_text(
+                    "PEAR_CADDY_FQDN=pear.example.com\n"
+                    "PEAR_CADDY_BASICAUTH_USER=pear-user\n"
+                    f"PEAR_CADDY_BASICAUTH_HASH={TEST_HASH}\n",
+                    encoding="utf-8",
+                )
+                auth_env.chmod(0o600)
+
+                with self.assertRaisesRegex(
+                    RuntimeConfigError, "regular non-symlink|regular single-link"
+                ):
+                    install(self.make_args(root))
+                self.assertEqual(victim.read_text(encoding="utf-8"), "do not read or overwrite\n")
+
+    def test_runtime_file_reads_are_bounded_and_mutation_checked(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            oversized = root / "oversized"
+            oversized.write_bytes(b"x" * (runtime_config.MAX_RUNTIME_FILE_BYTES + 1))
+            oversized.chmod(0o600)
+            with self.assertRaisesRegex(RuntimeConfigError, "exceeds the size limit"):
+                runtime_config._read_regular_file_nofollow(oversized, required_mode=0o600)
+
+            changing = root / "changing"
+            changing.write_bytes(b"stable")
+            changing.chmod(0o600)
+            real_fstat = os.fstat
+            calls = 0
+
+            def changed_fstat(descriptor: int) -> os.stat_result | SimpleNamespace:
+                nonlocal calls
+                result = real_fstat(descriptor)
+                calls += 1
+                if calls != 2:
+                    return result
+                return SimpleNamespace(
+                    st_mode=result.st_mode,
+                    st_nlink=result.st_nlink,
+                    st_dev=result.st_dev,
+                    st_ino=result.st_ino,
+                    st_uid=result.st_uid,
+                    st_gid=result.st_gid,
+                    st_size=result.st_size,
+                    st_ctime_ns=result.st_ctime_ns + 1,
+                    st_mtime_ns=result.st_mtime_ns,
+                )
+
+            with (
+                patch.object(runtime_config.os, "fstat", side_effect=changed_fstat),
+                self.assertRaisesRegex(RuntimeConfigError, "changed while reading"),
+            ):
+                runtime_config._read_regular_file_nofollow(changing, required_mode=0o600)
 
 
 class SnapshotRetentionTest(unittest.TestCase):
@@ -284,40 +367,24 @@ class WorkspaceHelperRuntimeTest(unittest.TestCase):
         )
         install.assert_not_called()
 
-    def test_loads_only_the_exact_committed_helper_source(self) -> None:
+    def test_loads_only_the_exact_expected_helper_source(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             root = Path(temporary_directory)
             source_path = root / "zerver/lib/pear_workspace_io.py"
             source_path.parent.mkdir(parents=True)
             source_path.write_bytes(b"committed helper\n")
-            subprocess.run(["git", "init", "--quiet"], cwd=root, check=True)
-            subprocess.run(["git", "add", "."], cwd=root, check=True)
-            subprocess.run(
-                [
-                    "git",
-                    "-c",
-                    "user.name=Pear Test",
-                    "-c",
-                    "user.email=pear@example.test",
-                    "commit",
-                    "--quiet",
-                    "-m",
-                    "fixture",
-                ],
-                cwd=root,
-                check=True,
-            )
+            expected_sha256 = hashlib.sha256(b"committed helper\n").hexdigest()
 
-            source = load_committed_helper(root)
+            source = load_expected_helper(root, expected_sha256)
             self.assertEqual(source.payload, b"committed helper\n")
-            self.assertEqual(source.sha256, hashlib.sha256(source.payload).hexdigest())
+            self.assertEqual(source.sha256, expected_sha256)
 
             source_path.write_bytes(b"dirty helper\n")
             with self.assertRaisesRegex(
                 WorkspaceHelperDeploymentError,
-                "does not match its committed Git blob",
+                "does not match the expected SHA-256",
             ):
-                load_committed_helper(root)
+                load_expected_helper(root, expected_sha256)
 
     def test_atomic_install_is_nonwritable_and_content_addressed(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -541,6 +608,146 @@ class WorkspaceHelperRuntimeTest(unittest.TestCase):
                     self.assertEqual(after.st_gid, before.st_gid)
 
 
+class AssetBuildFreezeTest(unittest.TestCase):
+    def make_build(self, root: Path) -> Path:
+        build = root / "build"
+        for relative in (
+            "prod-static/serve/webpack-bundles",
+            "static/generated",
+            "static/webpack-bundles",
+            "static/images/landing-page/hello/generated",
+            "web/generated",
+            "locale/en/LC_MESSAGES",
+        ):
+            (build / relative).mkdir(parents=True, exist_ok=True)
+        files = {
+            "prod-static/serve/webpack-bundles/app.js": b"app",
+            "static/generated/generated.txt": b"generated",
+            "static/webpack-bundles/app.js": b"bundle",
+            "static/images/landing-page/hello/generated/hello.txt": b"hello",
+            "web/generated/types.ts": b"types",
+            "webpack-stats-production.json": b"{}",
+            "staticfiles.json": b"{}",
+            "locale/language_options.json": b"{}",
+            "locale/language_name_map.json": b"{}",
+            "locale/en/LC_MESSAGES/django.mo": b"mo",
+            "locale/en/mobile.json": b"mobile",
+            "locale/en/source.json": b"ignored",
+        }
+        for relative, payload in files.items():
+            path = build / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(payload)
+            path.chmod(0o644)
+        for directory, _, _ in os.walk(build):
+            Path(directory).chmod(0o755)
+        return build
+
+    def test_freeze_copies_only_regular_generated_outputs(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            build = self.make_build(root)
+            destination_parent = root / "frozen"
+            destination_parent.mkdir(mode=0o700)
+            frozen = freeze_asset_build(build, destination_parent)
+            self.assertEqual(
+                (frozen / "prod-static/serve/webpack-bundles/app.js").read_bytes(),
+                b"app",
+            )
+            self.assertEqual(
+                (frozen / "locale/en/LC_MESSAGES/django.mo").read_bytes(),
+                b"mo",
+            )
+            self.assertEqual((frozen / "locale/en/mobile.json").read_bytes(), b"mobile")
+            self.assertFalse((frozen / "locale/en/source.json").exists())
+
+    def test_freeze_rejects_symlinks_hardlinks_and_writable_entries(self) -> None:
+        for hostile_kind in ("symlink", "hardlink", "writable"):
+            with (
+                self.subTest(hostile_kind=hostile_kind),
+                tempfile.TemporaryDirectory() as temporary_directory,
+            ):
+                root = Path(temporary_directory)
+                build = self.make_build(root)
+                target = build / "prod-static/serve/webpack-bundles/app.js"
+                if hostile_kind == "symlink":
+                    target.unlink()
+                    target.symlink_to(root / "outside")
+                elif hostile_kind == "hardlink":
+                    os.link(target, build / "prod-static/serve/webpack-bundles/alias.js")
+                else:
+                    target.chmod(0o666)
+                destination_parent = root / "frozen"
+                destination_parent.mkdir(mode=0o700)
+                with self.assertRaises(AssetFreezeError):
+                    freeze_asset_build(build, destination_parent)
+                self.assertEqual(list(destination_parent.iterdir()), [])
+
+
+class DeploymentRecordTest(unittest.TestCase):
+    def test_atomic_record_replaces_hostile_symlink_without_following_it(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            destination = root / "pear-deployed-sha"
+            victim = root / "victim"
+            victim.write_bytes(b"do not overwrite\n")
+            destination.symlink_to(victim)
+
+            payload = b"abc123 2026-07-10T00:00:00Z\nrecord_version=2\n"
+            atomic_write_deployment_record(
+                destination,
+                payload,
+                owner_uid=os.getuid(),
+                owner_gid=os.getgid(),
+                parent_uid=os.getuid(),
+                parent_gid=os.getgid(),
+            )
+
+            self.assertEqual(victim.read_bytes(), b"do not overwrite\n")
+            self.assertFalse(destination.is_symlink())
+            self.assertEqual(destination.read_bytes(), payload)
+            self.assertEqual(stat.S_IMODE(destination.stat().st_mode), 0o644)
+
+    def test_atomic_record_ignores_preplanted_predictable_temp_symlink(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            destination = root / "pear-deployed-sha"
+            victim = root / "victim"
+            victim.write_bytes(b"safe\n")
+            predictable = root / ".pear-deployed-sha.tmp"
+            predictable.symlink_to(victim)
+
+            atomic_write_deployment_record(
+                destination,
+                b"record\n",
+                owner_uid=os.getuid(),
+                owner_gid=os.getgid(),
+                parent_uid=os.getuid(),
+                parent_gid=os.getgid(),
+            )
+
+            self.assertEqual(victim.read_bytes(), b"safe\n")
+            self.assertTrue(predictable.is_symlink())
+            self.assertEqual(destination.read_bytes(), b"record\n")
+
+    def test_atomic_record_rejects_symlink_parent(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            real_parent = root / "real"
+            real_parent.mkdir()
+            linked_parent = root / "linked"
+            linked_parent.symlink_to(real_parent, target_is_directory=True)
+            with self.assertRaisesRegex(DeploymentRecordError, "parent must be a real directory"):
+                atomic_write_deployment_record(
+                    linked_parent / "pear-deployed-sha",
+                    b"record\n",
+                    owner_uid=os.getuid(),
+                    owner_gid=os.getgid(),
+                    parent_uid=os.getuid(),
+                    parent_gid=os.getgid(),
+                )
+
+
 class StaticRuntimeContractTest(unittest.TestCase):
     def test_runtime_has_no_open_caddy_or_dev_asset_fallback(self) -> None:
         run_dev = (REPO_ROOT / "tools/run-dev").read_text()
@@ -585,22 +792,24 @@ class StaticRuntimeContractTest(unittest.TestCase):
 
         disk_preflight = "verify_remote_disk_capacity"
         self.assertLess(update.rindex(disk_preflight), update.index('if [[ "$YES" != true ]]'))
-        self.assertLess(update.rindex(disk_preflight), update.index("Snapshotting remote tree"))
+        self.assertLess(
+            update.rindex(disk_preflight), update.index("Snapshotting the drained remote tree")
+        )
         self.assertLess(
             update.rindex("verify_existing_remote_caddy_auth"),
-            update.index("Snapshotting remote tree"),
+            update.index("Snapshotting the drained remote tree"),
         )
 
         helper_path = "/usr/local/lib/pear-workspace-io"
         runtime_paths_start = common.index("PEAR_DEPLOY_RUNTIME_CONFIG_PATHS=(")
         runtime_paths_end = common.index("\n)", runtime_paths_start)
         self.assertIn(helper_path, common[runtime_paths_start:runtime_paths_end])
-        self.assertIn("workspace_helper_runtime.py install", bootstrap)
+        self.assertIn('workspace_helper_runtime.py" install', bootstrap)
         self.assertIn("--smoke-existing-isolation-user", bootstrap)
         self.assertIn("preflight_remote_workspace_helper", update)
         self.assertIn("install_and_verify_remote_workspace_helper", update)
         self.assertIn("workspace_helper_sha256=", update)
-        self.assertIn("workspace_helper_runtime.py verify", verify)
+        self.assertIn('workspace_helper_runtime.py" verify', verify)
         self.assertIn("os.replace(", helper_runtime)
         self.assertIn("os.fchown(", helper_runtime)
         self.assertIn("os.fchmod(", helper_runtime)
@@ -612,13 +821,47 @@ class StaticRuntimeContractTest(unittest.TestCase):
             update.index('if [[ "$YES" != true ]]'),
         )
         self.assertLess(
-            update.index("systemctl stop ${PEAR_DEPLOY_SERVICES[*]}"),
+            update.rindex("build_remote_production_assets"),
+            update.rindex("systemctl stop pear-zulip-dev"),
+        )
+        self.assertLess(
+            update.rindex("systemctl stop pear-zulip-dev"), update.rindex("wait_for_remote_drain")
+        )
+        self.assertLess(
+            update.rindex("wait_for_remote_drain"),
+            update.rindex("systemctl stop ${PEAR_DEPLOY_WORKER_SERVICES[*]}"),
+        )
+        self.assertLess(
+            update.rindex("systemctl stop ${PEAR_DEPLOY_WORKER_SERVICES[*]}"),
+            update.index("Snapshotting the drained remote tree"),
+        )
+        self.assertLess(
+            update.rindex("SERVICE_RESTART_REQUIRED=true"),
+            update.rindex("systemctl stop pear-zulip-dev"),
+        )
+        self.assertLess(
+            update.index("Snapshotting the drained remote tree"),
             update.rindex("install_and_verify_remote_workspace_helper"),
         )
         self.assertLess(
             update.rindex("install_and_verify_remote_workspace_helper"),
             update.rindex("systemctl restart caddy ${PEAR_DEPLOY_SERVICES[*]}"),
         )
+        for script in (update, verify, bootstrap, reset):
+            self.assertIn("stage_remote_pear_deploy_bundle", script)
+            self.assertNotIn(
+                "python3 /home/zulipdev/zulip/tools/pear_deploy/runtime_config.py",
+                script,
+            )
+            self.assertNotIn(
+                "python3 /home/zulipdev/zulip/tools/pear_deploy/workspace_helper_runtime.py",
+                script,
+            )
+        self.assertIn("--expected-sha256", update)
+        self.assertIn("--expected-sha256", verify)
+        self.assertIn("--expected-sha256", bootstrap)
+        self.assertIn("deployment_record.py", update)
+        self.assertNotIn("cat > $DEPLOY_RECORD_PATH.tmp", update)
         for suite in (
             "zerver.tests.test_pear_workspace_io",
             "zerver.tests.test_pear_workspace_index",

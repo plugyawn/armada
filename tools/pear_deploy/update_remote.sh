@@ -14,7 +14,7 @@ LOCAL_TERMINAL_ROOT="$PEAR_ROOT/zulip-terminal"
 LOCAL_PEAR_SKILLS_DIR="$PEAR_ROOT/pear/skills"
 REMOTE_PEAR_DIR="/home/zulipdev/pear"
 REMOTE_PEAR_SKILLS_DIR="$REMOTE_PEAR_DIR/skills"
-DEPLOY_RECORD_PATH="/home/zulipdev/pear-deployed-sha"
+DEPLOY_RECORD_PATH="/var/lib/pear/deployed-sha"
 SNAPSHOT_ROOT="/home/zulipdev/pear-deploy-snapshots"
 REMOTE_AUTH_ENV="/etc/pear/caddy-basic-auth.env"
 WORKSPACE_HELPER_RUNTIME="$SCRIPT_DIR/workspace_helper_runtime.py"
@@ -249,15 +249,17 @@ preflight_remote_workspace_helper() {
 }
 
 install_and_verify_remote_workspace_helper() {
-    local remote_runtime="$REMOTE_PATH/tools/pear_deploy/workspace_helper_runtime.py"
+    local remote_runtime="$REMOTE_TRUSTED_RUNTIME/tools/pear_deploy/workspace_helper_runtime.py"
     echo "Installing the committed isolated Workspace helper atomically..."
     ssh_root python3 "$remote_runtime" install \
-        --repo-root "$REMOTE_PATH" \
-        --destination "$PEAR_WORKSPACE_HELPER_PATH"
+        --repo-root "$REMOTE_TRUSTED_RUNTIME" \
+        --destination "$PEAR_WORKSPACE_HELPER_PATH" \
+        --expected-sha256 "$LOCAL_WORKSPACE_HELPER_SHA"
     echo "Verifying the installed Workspace helper and its isolation-user protocol..."
     ssh_root python3 "$remote_runtime" verify \
-        --repo-root "$REMOTE_PATH" \
+        --repo-root "$REMOTE_TRUSTED_RUNTIME" \
         --destination "$PEAR_WORKSPACE_HELPER_PATH" \
+        --expected-sha256 "$LOCAL_WORKSPACE_HELPER_SHA" \
         --smoke-existing-isolation-user
 }
 
@@ -281,9 +283,9 @@ install_remote_runtime_config() {
     local remote_command
     local command=(
         python3
-        "$REMOTE_PATH/tools/pear_deploy/runtime_config.py"
+        "$REMOTE_TRUSTED_RUNTIME/tools/pear_deploy/runtime_config.py"
         install
-        --repo-root "$REMOTE_PATH"
+        --repo-root "$REMOTE_TRUSTED_RUNTIME"
         --fqdn "$FQDN"
     )
     if [[ "$REMOTE_AUTH_READY" != true ]]; then
@@ -382,6 +384,93 @@ verify_remote_quiescence() {
     fi
 }
 
+wait_for_remote_drain() {
+    local attempt
+    echo "Maintenance drain: waiting for Pear runs and queues to become idle..."
+    for attempt in $(seq 1 60); do
+        if ssh_root "systemctl is-active ${PEAR_DEPLOY_WORKER_SERVICES[*]}" >/dev/null 2>&1 &&
+            ssh_zulip "$REMOTE_PATH/tools/pear-health-report --max-active-runs 0 --max-stale-active-runs 0 --max-orphan-active-markers 0" >/dev/null 2>&1 &&
+            ssh_root "rabbitmqctl list_queues name messages_ready messages_unacknowledged consumers" 2>/dev/null |
+                validate_pear_deploy_queue_snapshot >/dev/null; then
+            echo "Maintenance drain: Pear runs and queues are idle."
+            return 0
+        fi
+        sleep 2
+    done
+
+    ssh_root "systemctl is-active ${PEAR_DEPLOY_WORKER_SERVICES[*]}" || true
+    ssh_zulip "$REMOTE_PATH/tools/pear-health-report --max-active-runs 0 --max-stale-active-runs 0 --max-orphan-active-markers 0" || true
+    ssh_root "rabbitmqctl list_queues name messages_ready messages_unacknowledged consumers" |
+        validate_pear_deploy_queue_snapshot || true
+    fail "maintenance drain did not become idle within 120 seconds"
+}
+
+verify_remote_stopped_quiescence() {
+    echo "Stopped-state gate: Pear run health"
+    if ! ssh_zulip "$REMOTE_PATH/tools/pear-health-report --max-active-runs 0 --max-stale-active-runs 0 --max-orphan-active-markers 0"; then
+        fail "stopped-state gate failed: Pear has active, stale, or orphaned work"
+    fi
+    echo "Stopped-state gate: queue emptiness"
+    if ! ssh_root "rabbitmqctl list_queues name messages_ready messages_unacknowledged consumers" |
+        validate_pear_deploy_queue_empty_snapshot; then
+        fail "stopped-state gate failed: one or more deploy-managed queues are busy or missing"
+    fi
+}
+
+verify_local_cutover_source() {
+    local parent_head
+    local zulip_head
+    local terminal_head
+    local parent_status
+    local zulip_status
+    local terminal_status
+    local untracked_source
+    local skills_status
+
+    parent_head="$(git -C "$PEAR_ROOT" rev-parse HEAD)"
+    zulip_head="$(git -C "$REPO_ROOT" rev-parse HEAD)"
+    terminal_head="$(git -C "$LOCAL_TERMINAL_ROOT" rev-parse HEAD)"
+    parent_status="$(git -C "$PEAR_ROOT" status --porcelain --untracked-files=no)"
+    zulip_status="$(git -C "$REPO_ROOT" status --porcelain --untracked-files=no)"
+    terminal_status="$(git -C "$LOCAL_TERMINAL_ROOT" status --porcelain --untracked-files=all)"
+    untracked_source="$(local_untracked_source_files)"
+    skills_status="$(local_pear_skills_status)"
+    if [[
+        "$parent_head" != "$LOCAL_PARENT_SHA" ||
+        "$zulip_head" != "$LOCAL_SHA" ||
+        "$terminal_head" != "$LOCAL_TERMINAL_SHA" ||
+        -n "$parent_status" ||
+        -n "$zulip_status" ||
+        -n "$terminal_status" ||
+        -n "$untracked_source" ||
+        -n "$skills_status" ||
+        "$(git -C "$PEAR_ROOT" rev-parse HEAD:zulip)" != "$LOCAL_SHA" ||
+        "$(git -C "$PEAR_ROOT" rev-parse HEAD:zulip-terminal)" != "$LOCAL_TERMINAL_SHA"
+    ]]; then
+        fail "local coordinated source changed after preflight; refusing cutover"
+    fi
+}
+
+verify_remote_cutover_source() {
+    local remote_head
+    local tracked_status
+    local untracked_source
+    remote_head="$(ssh_zulip "git rev-parse HEAD")"
+    tracked_status="$(ssh_zulip "git status --porcelain --untracked-files=no")"
+    untracked_source="$(remote_untracked_source_files)"
+    if [[ "$remote_head" != "$PREV_SHA" ]]; then
+        fail "remote HEAD changed after preflight"
+    fi
+    if [[ -n "$tracked_status" ]] && ! remote_dirty_tree_matches_local_head; then
+        echo "$tracked_status" >&2
+        fail "remote tracked source changed after preflight"
+    fi
+    if [[ -n "$untracked_source" ]]; then
+        echo "$untracked_source" >&2
+        fail "remote untracked source appeared after preflight"
+    fi
+}
+
 verify_remote_disk_capacity() {
     local remote_asset_build_dir="/home/zulipdev/pear-asset-build-${LOCAL_SHA:0:12}"
     local runtime_path
@@ -477,8 +566,9 @@ build_remote_production_assets() {
 }
 
 cut_over_remote_production_assets() {
+    local build_root="${1:-$REMOTE_ASSET_BUILD_DIR}"
     echo "Cutting over the validated production asset graph..."
-    ssh_root bash -s -- "$REMOTE_ASSET_BUILD_DIR" "$REMOTE_PATH" <<'REMOTE'
+    ssh_root bash -s -- "$build_root" "$REMOTE_PATH" <<'REMOTE'
 set -euo pipefail
 BUILD_ROOT="$1"
 REMOTE_PATH="$2"
@@ -512,7 +602,7 @@ for generated_file in \
     locale/language_name_map.json; do
     mv "$BUILD_ROOT/$generated_file" "$REMOTE_PATH/$generated_file"
 done
-rsync -a --include '*/' --include '*.mo' --exclude '*' \
+rsync -a --include '*/' --include '*.mo' --include 'mobile.json' --exclude '*' \
     "$BUILD_ROOT/locale/" "$REMOTE_PATH/locale/"
 chown -R zulipdev:zulipdev \
     "$REMOTE_PATH/prod-static" \
@@ -558,8 +648,11 @@ verify_remote_production_assets() {
 
 SNAPSHOT_DIR=""
 REMOTE_ASSET_BUILD_DIR=""
+REMOTE_FROZEN_ASSET_DIR=""
+REMOTE_TRUSTED_RUNTIME=""
 ROLLBACK_READY=false
 ROLLBACK_DONE=false
+SERVICE_RESTART_REQUIRED=false
 
 rollback_on_error() {
     local status=$?
@@ -594,6 +687,8 @@ if [[ "${#RSYNC_EXCLUDES[@]}" -ne "$RSYNC_EXCLUDE_COUNT" ]]; then
     echo "invalid rollback rsync exclude argument count" >&2
     exit 1
 fi
+
+systemctl stop caddy pear-worker pear-monitor-worker pear-embedded-bots pear-thumbnail pear-zulip-dev
 
 rsync -a --delete \
     "${RSYNC_EXCLUDES[@]}" \
@@ -645,13 +740,35 @@ REMOTE
         set -e
         if [[ $rollback_status -eq 0 ]]; then
             ROLLBACK_DONE=true
+            SERVICE_RESTART_REQUIRED=false
             echo "Rollback restored the pre-deploy snapshot and restarted Pear services." >&2
         else
             echo "Rollback failed; inspect $SNAPSHOT_DIR on the box." >&2
         fi
     fi
+    if [[
+        $status -ne 0 &&
+        "$ROLLBACK_READY" != true &&
+        "$SERVICE_RESTART_REQUIRED" == true
+    ]]; then
+        echo "Update failed before a rollback snapshot was ready; restarting the pre-deploy services." >&2
+        if ssh_root "systemctl restart caddy ${PEAR_DEPLOY_SERVICES[*]}"; then
+            SERVICE_RESTART_REQUIRED=false
+        else
+            echo "Pre-snapshot service recovery failed; inspect the host immediately." >&2
+        fi
+    fi
+    if [[ $status -ne 0 && "$ROLLBACK_READY" != true && -n "$SNAPSHOT_DIR" ]]; then
+        ssh_root "rm -rf -- $SNAPSHOT_DIR" >/dev/null 2>&1 || true
+    fi
     if [[ -n "$REMOTE_ASSET_BUILD_DIR" ]]; then
         ssh_root "rm -rf $REMOTE_ASSET_BUILD_DIR" >/dev/null 2>&1 || true
+    fi
+    if [[ -n "$REMOTE_FROZEN_ASSET_DIR" ]]; then
+        ssh_root "rm -rf $REMOTE_FROZEN_ASSET_DIR" >/dev/null 2>&1 || true
+    fi
+    if [[ -n "$REMOTE_TRUSTED_RUNTIME" ]]; then
+        remove_remote_pear_deploy_bundle "$REMOTE_TRUSTED_RUNTIME" >/dev/null 2>&1 || true
     fi
     exit "$status"
 }
@@ -834,10 +951,37 @@ if [[ "$YES" != true ]]; then
     exit 0
 fi
 
+echo
+build_remote_production_assets
+
+echo "Staging privileged deployment tooling from the pinned local commit..."
+REMOTE_TRUSTED_RUNTIME="$(stage_remote_pear_deploy_bundle "$REPO_ROOT" "$LOCAL_SHA")"
+
+echo "Stopping app ingress before the final drain..."
+SERVICE_RESTART_REQUIRED=true
+ssh_root "systemctl stop pear-zulip-dev"
+wait_for_remote_drain
+
+echo "Stopping queue workers after the drain..."
+ssh_root "systemctl stop ${PEAR_DEPLOY_WORKER_SERVICES[*]}"
+verify_remote_stopped_quiescence
+verify_local_cutover_source
+verify_remote_cutover_source
+
+echo "Copying the isolated build into a no-follow root-owned asset tree..."
+REMOTE_FROZEN_ASSET_DIR="$(
+    ssh_root python3 "$REMOTE_TRUSTED_RUNTIME/tools/pear_deploy/freeze_asset_build.py" \
+        --source-root "$REMOTE_ASSET_BUILD_DIR"
+)"
+if [[ ! "$REMOTE_FROZEN_ASSET_DIR" =~ ^/root/pear-frozen-assets\.[A-Za-z0-9_-]+$ ]]; then
+    fail "asset freezer returned an invalid root-owned path"
+fi
+ssh_root python3 "$REMOTE_TRUSTED_RUNTIME/tools/pear_deploy/production_assets.py" \
+    --repo-root "$REMOTE_FROZEN_ASSET_DIR"
+
 SNAPSHOT_STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 SNAPSHOT_DIR="$SNAPSHOT_ROOT/zulip-$SNAPSHOT_STAMP-${PREV_SHA:0:12}"
-echo
-echo "Snapshotting remote tree to $SNAPSHOT_DIR"
+echo "Snapshotting the drained remote tree to $SNAPSHOT_DIR"
 ssh_root bash -s -- \
     "$REMOTE_PATH" \
     "$REMOTE_GIT_COMMON_DIR" \
@@ -927,11 +1071,6 @@ if [[ -d "$LOCAL_GIT_COMMON_DIR" ]]; then
         "root@$IP_ADDRESS:$REMOTE_GIT_COMMON_DIR/"
 fi
 
-build_remote_production_assets
-
-echo "Stopping the coordinated services for source and asset cutover..."
-ssh_root "systemctl stop ${PEAR_DEPLOY_SERVICES[*]}"
-
 echo "Syncing checkout to $REMOTE_PATH..."
 rsync -az --delete \
     "${PEAR_DEPLOY_RSYNC_EXCLUDES[@]}" \
@@ -946,7 +1085,7 @@ rsync -az --delete \
     "$LOCAL_PEAR_SKILLS_DIR/" \
     "root@$IP_ADDRESS:$REMOTE_PEAR_SKILLS_DIR/"
 
-cut_over_remote_production_assets
+cut_over_remote_production_assets "$REMOTE_FROZEN_ASSET_DIR"
 
 ssh_root "chown -R zulipdev:zulipdev $REMOTE_PATH"
 ssh_root 'chown -R zulipdev:zulipdev /home/zulipdev/.git 2>/dev/null || true'
@@ -957,7 +1096,9 @@ install_and_verify_remote_workspace_helper
 
 echo "Installing authenticated Caddy and production-assets service configuration..."
 install_remote_runtime_config
-ssh_root "python3 $REMOTE_PATH/tools/pear_deploy/runtime_config.py verify --repo-root $REMOTE_PATH --fqdn $FQDN"
+ssh_root python3 "$REMOTE_TRUSTED_RUNTIME/tools/pear_deploy/runtime_config.py" verify \
+    --repo-root "$REMOTE_TRUSTED_RUNTIME" \
+    --fqdn "$FQDN"
 ssh_root "systemctl daemon-reload"
 
 if [[ "$RUN_MIGRATE" == true ]]; then
@@ -969,6 +1110,7 @@ fi
 
 echo "Restarting Pear services..."
 ssh_root "systemctl restart caddy ${PEAR_DEPLOY_SERVICES[*]}"
+SERVICE_RESTART_REQUIRED=false
 
 echo "Waiting for the Caddy auth wall and authenticated app route to serve..."
 SITE_CODE=""
@@ -1044,6 +1186,7 @@ echo "pear-zulip-dev recent log tail:"
 ssh_root 'journalctl -u pear-zulip-dev -n 80 --no-pager'
 
 DEPLOYED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+ssh_root 'install -d -m 755 -o root -g root /var/lib/pear'
 {
     # Preserve the historical first line for humans and any lightweight
     # consumers, then identify every coordinated source that shaped the deploy.
@@ -1058,7 +1201,10 @@ DEPLOYED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
     printf 'asset_mode=production-hashed\n'
     printf 'caddy_auth=basic-auth-required\n'
     printf 'deployed_at=%s\n' "$DEPLOYED_AT"
-} | ssh_root "set -euo pipefail; umask 022; cat > $DEPLOY_RECORD_PATH.tmp; chown zulipdev:zulipdev $DEPLOY_RECORD_PATH.tmp; chmod 644 $DEPLOY_RECORD_PATH.tmp; mv -f $DEPLOY_RECORD_PATH.tmp $DEPLOY_RECORD_PATH"
+} | ssh_root python3 \
+    "$REMOTE_TRUSTED_RUNTIME/tools/pear_deploy/deployment_record.py" \
+    --destination "$DEPLOY_RECORD_PATH"
+ssh_root 'rm -f -- /home/zulipdev/pear-deployed-sha'
 
 ROLLBACK_READY=false
 echo

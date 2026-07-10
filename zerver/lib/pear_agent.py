@@ -1172,7 +1172,11 @@ class PearCodexAppServerToolRunner:
                     "title": "Pear",
                     "version": "0.1.0",
                 },
-                "capabilities": {},
+                # experimentalApi unlocks the interactive tool surface
+                # (item/tool/requestUserInput is EXPERIMENTAL in the
+                # app-server protocol); unknown experimental payloads
+                # degrade to generic transcript events by design.
+                "capabilities": {"experimentalApi": True},
             },
         )
         self.notify("initialized", {})

@@ -635,8 +635,12 @@ def _status_kind(xy: bytes) -> str:
     return "changed"
 
 
-def _parse_status(status_output: bytes, allowed_paths: set[str]) -> dict[str, str]:
+def _parse_status(
+    status_output: bytes,
+    allowed_paths: set[str],
+) -> tuple[dict[str, str], int]:
     status_by_path: dict[str, str] = {}
+    dirty_count = 0
     records = status_output.split(b"\0")
     offset = 0
     while offset < len(records):
@@ -671,10 +675,11 @@ def _parse_status(status_output: bytes, allowed_paths: set[str]) -> dict[str, st
             status = "conflict"
         else:
             raise WorkspaceSnapshotError("Git returned an invalid workspace status.")
+        dirty_count += 1
         path = _decode_git_path(raw_path)
         if path in allowed_paths:
             status_by_path[path] = status
-    return status_by_path
+    return status_by_path, dirty_count
 
 
 def _enumerate_workspace(
@@ -688,6 +693,10 @@ def _enumerate_workspace(
     for raw_path in paths_output.split(b"\0"):
         if raw_path:
             allowed_paths.add(_decode_git_path(raw_path))
+    deleted_output = _run_git(node, ["ls-files", "-z", "--deleted"])
+    for raw_path in deleted_output.split(b"\0"):
+        if raw_path:
+            allowed_paths.discard(_decode_git_path(raw_path))
 
     # Git does not version directories, but its untracked-directory mode is a
     # valuable policy boundary: it reports real empty directories while still
@@ -712,7 +721,7 @@ def _enumerate_workspace(
         node,
         ["status", "--porcelain=v2", "-z", "--untracked-files=all"],
     )
-    status_by_path = _parse_status(status_output, allowed_paths)
+    status_by_path, dirty_count = _parse_status(status_output, allowed_paths)
     tracked_content_digest = _git_output_digest(
         node,
         [
@@ -758,7 +767,6 @@ def _enumerate_workspace(
     fingerprint.update(branch.encode("utf-8"))
     fingerprint.update(b"\0")
     fingerprint.update(head.encode("ascii"))
-    dirty_count = sum(path.status != "clean" for path in paths)
     return paths, fingerprint.hexdigest(), branch, head, dirty_count
 
 

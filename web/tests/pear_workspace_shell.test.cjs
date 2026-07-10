@@ -278,6 +278,31 @@ run_test("Ask Pear fills the existing compose with active file context", async (
     test.root.remove();
 });
 
+run_test("explorer splitter is keyboard-operable and persists its bounded width", async () => {
+    const first = harness("workspace-splitter");
+    const splitter = first.root.querySelector("[data-role='explorer-splitter']");
+    splitter.dispatchEvent(
+        new window.KeyboardEvent("keydown", {key: "End", bubbles: true, cancelable: true}),
+    );
+    assert.equal(first.controller.getDebugState().explorerWidth, 480);
+    assert.equal(splitter.getAttribute("aria-valuenow"), "480");
+    splitter.dispatchEvent(
+        new window.KeyboardEvent("keydown", {
+            key: "ArrowLeft",
+            bubbles: true,
+            cancelable: true,
+        }),
+    );
+    assert.equal(first.controller.getDebugState().explorerWidth, 464);
+    await first.controller.destroy();
+    first.root.remove();
+
+    const restored = harness("workspace-splitter");
+    assert.equal(restored.controller.getDebugState().explorerWidth, 464);
+    await restored.controller.destroy();
+    restored.root.remove();
+});
+
 run_test(
     "selection and preview tab chrome update before open; edit and double-click pin",
     async () => {

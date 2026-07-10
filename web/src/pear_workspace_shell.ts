@@ -78,6 +78,27 @@ const shell_state_cache = new Map<string, CachedWorkspaceShellState>();
 const shell_state_cache_limit = 8;
 const shell_cached_tab_limit = 24;
 const shell_cached_expansion_limit = 256;
+const explorer_width_default = 270;
+const explorer_width_min = 180;
+const explorer_width_max = 480;
+
+function explorer_width_storage_key(workspace_id: string): string {
+    return `pear-workspace-explorer-width:${workspace_id}`;
+}
+
+function restored_explorer_width(workspace_id: string): number {
+    try {
+        const value = Number.parseInt(
+            localStorage.getItem(explorer_width_storage_key(workspace_id)) ?? "",
+            10,
+        );
+        return Number.isFinite(value)
+            ? Math.min(explorer_width_max, Math.max(explorer_width_min, value))
+            : explorer_width_default;
+    } catch {
+        return explorer_width_default;
+    }
+}
 
 function cache_shell_state(workspace_id: string, state: CachedWorkspaceShellState): void {
     shell_state_cache.delete(workspace_id);
@@ -93,6 +114,7 @@ export type PearWorkspaceShellDebugState = {
     tabs: readonly WorkspaceTab[];
     activePath: string | undefined;
     renderedTreeRows: number;
+    explorerWidth: number;
 };
 
 export type PearWorkspaceShellController = {
@@ -176,6 +198,8 @@ export function create_pear_workspace_shell(
     );
     const search_results = required_element(options.root, "[data-role='search-results']");
     const explorer_root = required_element(options.root, "#pear-workspace-explorer");
+    const body = required_element(options.root, ".pear-workspace-shell__body");
+    const explorer_splitter = required_element(options.root, "[data-role='explorer-splitter']");
     const tabs_root = required_element(options.root, "[data-role='tabs']");
     const breadcrumb = required_element(options.root, "[data-role='breadcrumb']");
     const document_panel = required_element(options.root, "#pear-workspace-document-panel");
@@ -244,6 +268,8 @@ export function create_pear_workspace_shell(
     let quick_open_opened_drawer = false;
     let quick_open_timer: ReturnType<typeof setTimeout> | undefined;
     let compose_integration_loading = false;
+    let explorer_width = restored_explorer_width(options.workspaceId);
+    let resize_pointer_id: number | undefined;
     const directory_requests = new Map<string, AbortableRequest>();
     const rebind_requests = new Map<string, AbortableRequest>();
     let files: PearWorkspaceFilesController | undefined;
@@ -262,6 +288,84 @@ export function create_pear_workspace_shell(
     })();
 
     const active_tab = (): WorkspaceTab | undefined => tabs.find((tab) => tab.path === active_path);
+
+    const set_explorer_width = (width: number, persist: boolean): void => {
+        explorer_width = Math.min(
+            explorer_width_max,
+            Math.max(explorer_width_min, Math.round(width)),
+        );
+        body.style.setProperty("--pear-workspace-explorer-width", `${explorer_width}px`);
+        explorer_splitter.setAttribute("aria-valuenow", String(explorer_width));
+        if (persist) {
+            try {
+                localStorage.setItem(
+                    explorer_width_storage_key(options.workspaceId),
+                    String(explorer_width),
+                );
+            } catch {
+                // Preference persistence is optional; resizing still works.
+            }
+        }
+    };
+
+    set_explorer_width(explorer_width, false);
+
+    const finish_explorer_resize = (): void => {
+        if (resize_pointer_id === undefined) {
+            return;
+        }
+        resize_pointer_id = undefined;
+        explorer_splitter.removeAttribute("data-resizing");
+        set_explorer_width(explorer_width, true);
+    };
+
+    const on_explorer_resize_move = (event: PointerEvent): void => {
+        if (resize_pointer_id === undefined || event.pointerId !== resize_pointer_id) {
+            return;
+        }
+        set_explorer_width(event.clientX - body.getBoundingClientRect().left, false);
+    };
+
+    const on_explorer_resize_end = (event: PointerEvent): void => {
+        if (resize_pointer_id !== undefined && event.pointerId === resize_pointer_id) {
+            finish_explorer_resize();
+        }
+    };
+
+    const on_explorer_resize_start = (event: PointerEvent): void => {
+        if (event.button !== 0 || resize_pointer_id !== undefined) {
+            return;
+        }
+        event.preventDefault();
+        resize_pointer_id = event.pointerId;
+        explorer_splitter.dataset["resizing"] = "true";
+        set_explorer_width(event.clientX - body.getBoundingClientRect().left, false);
+    };
+
+    const on_explorer_splitter_keydown = (event: KeyboardEvent): void => {
+        let next_width: number | undefined;
+        switch (event.key) {
+            case "ArrowLeft":
+                next_width = explorer_width - 16;
+                break;
+            case "ArrowRight":
+                next_width = explorer_width + 16;
+                break;
+            case "Home":
+                next_width = explorer_width_min;
+                break;
+            case "End":
+                next_width = explorer_width_max;
+                break;
+            // No default
+        }
+        if (next_width === undefined) {
+            return;
+        }
+        event.preventDefault();
+        event.stopPropagation();
+        set_explorer_width(next_width, true);
+    };
 
     const set_mobile_explorer_open = (open: boolean, restore_focus: boolean): void => {
         mobile_explorer_open = open;
@@ -1259,6 +1363,11 @@ export function create_pear_workspace_shell(
     search_input.addEventListener("input", on_search_input);
     search_input.addEventListener("keydown", on_search_input_keydown);
     search_form.addEventListener("submit", on_search_submit);
+    explorer_splitter.addEventListener("pointerdown", on_explorer_resize_start);
+    explorer_splitter.addEventListener("keydown", on_explorer_splitter_keydown);
+    document.addEventListener("pointermove", on_explorer_resize_move);
+    document.addEventListener("pointerup", on_explorer_resize_end);
+    document.addEventListener("pointercancel", on_explorer_resize_end);
 
     load_descriptor();
 
@@ -1273,6 +1382,7 @@ export function create_pear_workspace_shell(
                 tabs: tabs.map((tab) => ({...tab, entry: {...tab.entry}})),
                 activePath: active_path,
                 renderedTreeRows: explorer.getRenderedRowCount(),
+                explorerWidth: explorer_width,
             };
         },
         async destroy(): Promise<void> {
@@ -1322,6 +1432,12 @@ export function create_pear_workspace_shell(
             search_input.removeEventListener("input", on_search_input);
             search_input.removeEventListener("keydown", on_search_input_keydown);
             search_form.removeEventListener("submit", on_search_submit);
+            explorer_splitter.removeEventListener("pointerdown", on_explorer_resize_start);
+            explorer_splitter.removeEventListener("keydown", on_explorer_splitter_keydown);
+            document.removeEventListener("pointermove", on_explorer_resize_move);
+            document.removeEventListener("pointerup", on_explorer_resize_end);
+            document.removeEventListener("pointercancel", on_explorer_resize_end);
+            finish_explorer_resize();
             if (quick_open_timer !== undefined) {
                 clearTimeout(quick_open_timer);
                 quick_open_timer = undefined;

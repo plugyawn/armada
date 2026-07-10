@@ -112,6 +112,7 @@ from zerver.lib.pear import (
 )
 from zerver.lib.pear_agent import (
     PearCodexAppServerToolRunner,
+    PearCodexAppServerTranscriptTranslator,
     PearCodexExecAddressingIntentClassifier,
     PearDisabledAgentRunner,
     PearGeminiInteractionsAddressingIntentClassifier,
@@ -5901,3 +5902,169 @@ class PearSessionDefaultsTest(TestCase):
 
         self.assertEqual(sent_replies[0][0], message)
         return [response for _message, response in sent_replies]
+
+
+class PearAppServerProtocolCitizenTest(TestCase):
+    """The runner translates or answers everything the engine says —
+    nothing silent, nothing raising on engine chatter."""
+
+    def make_translator(self) -> PearCodexAppServerTranscriptTranslator:
+        return PearCodexAppServerTranscriptTranslator()
+
+    def test_rate_limit_events_dedupe_unchanged_readings(self) -> None:
+        translator = self.make_translator()
+        params = {
+            "rateLimits": {
+                "limitId": "codex",
+                "primary": {"usedPercent": 6, "windowDurationMins": 300},
+                "secondary": {"usedPercent": 1},
+                "planType": "pro",
+            }
+        }
+        first = translator.events_from_message(
+            {"method": "account/rateLimits/updated", "params": params}
+        )
+        self.assertEqual(len(first), 1)
+        self.assertEqual(first[0]["title"], "Rate limit window at 6% used.")
+        repeat = translator.events_from_message(
+            {"method": "account/rateLimits/updated", "params": params}
+        )
+        self.assertEqual(repeat, [])
+        changed = translator.events_from_message(
+            {
+                "method": "account/rateLimits/updated",
+                "params": {"rateLimits": {"primary": {"usedPercent": 9}}},
+            }
+        )
+        self.assertEqual(len(changed), 1)
+
+    def test_warnings_surface_and_noise_stays_ignored(self) -> None:
+        translator = self.make_translator()
+        warned = translator.events_from_message(
+            {
+                "method": "warning",
+                "params": {"message": "recorded with gpt-5.5 but resuming with gpt-5.6-luna"},
+            }
+        )
+        self.assertEqual(len(warned), 1)
+        self.assertEqual(warned[0]["title"], "Codex warning.")
+        self.assertIn("gpt-5.6-luna", warned[0]["body"])
+        for method in ("thread/status/changed", "mcpServer/startupStatus/updated"):
+            self.assertEqual(
+                translator.events_from_message({"method": method, "params": {}}), []
+            )
+
+    def test_unknown_methods_surface_once_and_deltas_never(self) -> None:
+        translator = self.make_translator()
+        first = translator.events_from_message(
+            {"method": "thread/somethingNew", "params": {"a": 1}}
+        )
+        self.assertEqual(len(first), 1)
+        self.assertEqual(first[0]["title"], "Codex signal: thread/somethingNew")
+        repeat = translator.events_from_message(
+            {"method": "thread/somethingNew", "params": {"a": 2}}
+        )
+        self.assertEqual(repeat, [])
+        delta = translator.events_from_message(
+            {"method": "item/reasoning/summaryTextDelta", "params": {}}
+        )
+        self.assertEqual(delta, [])
+
+    def test_context_compaction_items_become_operation_events(self) -> None:
+        translator = self.make_translator()
+        started = translator.events_from_message(
+            {
+                "method": "item/started",
+                "params": {"item": {"id": "item_1", "type": "contextCompaction"}},
+            }
+        )
+        self.assertEqual(len(started), 1)
+        self.assertEqual(started[0]["title"], "Compacting context…")
+        self.assertEqual(started[0]["metadata"]["operation"], "compaction")
+        self.assertEqual(started[0]["metadata"]["phase"], "started")
+        completed = translator.events_from_message(
+            {
+                "method": "item/completed",
+                "params": {
+                    "item": {"id": "item_1", "type": "contextCompaction", "status": "completed"}
+                },
+            }
+        )
+        self.assertEqual(completed[0]["title"], "Context compacted.")
+        self.assertEqual(completed[0]["metadata"]["phase"], "completed")
+
+    def test_user_message_items_stay_out_of_the_transcript(self) -> None:
+        translator = self.make_translator()
+        events = translator.events_from_message(
+            {
+                "method": "item/completed",
+                "params": {"item": {"id": "item_2", "type": "userMessage", "text": "hi"}},
+            }
+        )
+        self.assertEqual(events, [])
+
+    def make_runner(self, *, isolated: bool) -> PearCodexAppServerToolRunner:
+        return PearCodexAppServerToolRunner(
+            codex_bin="/bin/false",
+            workdir=None,
+            model="gpt-5.5",
+            sandbox="workspace-write",
+            approval_policy="on-request",
+            timeout_seconds=5,
+            output_limit=1000,
+            process_isolation=(
+                PearProcessIsolation(
+                    username="pear-test", home="/home/pear-test", codex_home="/tmp"
+                )
+                if isolated
+                else None
+            ),
+        )
+
+    def test_escalation_approvals_follow_the_isolation_boundary(self) -> None:
+        isolated = self.make_runner(isolated=True)
+        result, error, event = isolated.answer_for_server_request(
+            "item/commandExecution/requestApproval", {"command": "apt-get install jq"}
+        )
+        self.assertEqual(result, {"decision": "acceptForSession"})
+        self.assertIsNone(error)
+        assert event is not None
+        self.assertEqual(event["title"], "Approved an escalation request.")
+
+        exposed = self.make_runner(isolated=False)
+        result, error, event = exposed.answer_for_server_request(
+            "item/fileChange/requestApproval", {"reason": "write outside worktree"}
+        )
+        self.assertEqual(result, {"decision": "decline"})
+        assert event is not None
+        self.assertEqual(event["title"], "Declined an escalation request.")
+
+    def test_request_user_input_declines_visibly_for_now(self) -> None:
+        runner = self.make_runner(isolated=True)
+        result, error, event = runner.answer_for_server_request(
+            "item/tool/requestUserInput",
+            {"questions": [{"id": "q1", "question": "alpha or beta?"}]},
+        )
+        self.assertIsNone(result)
+        assert error is not None
+        self.assertEqual(error["code"], -32601)
+        assert event is not None
+        self.assertIn("alpha or beta?", event["body"])
+
+    def test_unknown_requests_decline_with_an_event(self) -> None:
+        runner = self.make_runner(isolated=True)
+        result, error, event = runner.answer_for_server_request(
+            "attestation/generate", {"nonce": "x"}
+        )
+        self.assertIsNone(result)
+        assert error is not None
+        self.assertEqual(error["code"], -32601)
+        assert event is not None
+        self.assertEqual(event["title"], "Codex request declined: attestation/generate")
+
+    def test_background_responses_never_fail_a_wait_loop(self) -> None:
+        runner = self.make_runner(isolated=True)
+        runner.background_request_ids.add(41)
+        self.assertTrue(runner.consume_background_response({"id": 41, "error": {"code": 1}}))
+        self.assertFalse(runner.consume_background_response({"id": 41, "error": {"code": 1}}))
+        self.assertFalse(runner.consume_background_response({"id": 7, "result": {}}))

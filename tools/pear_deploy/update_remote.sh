@@ -1067,7 +1067,7 @@ ROLLBACK_READY=true
 
 if [[ -d "$LOCAL_GIT_COMMON_DIR" ]]; then
     echo "Syncing Git metadata for this worktree..."
-    ssh_root "install -d -m 755 -o zulipdev -g zulipdev $REMOTE_GIT_COMMON_DIR"
+    ssh -F "$SSH_CONFIG" pear-staging "install -d -m 755 $REMOTE_GIT_COMMON_DIR"
     rsync -az --delete \
         -e "ssh -F $SSH_CONFIG" \
         "$LOCAL_GIT_COMMON_DIR/" \
@@ -1082,7 +1082,7 @@ rsync -az --delete \
     "pear-staging:$REMOTE_PATH/"
 
 echo "Syncing Pear Codex skills to $REMOTE_PEAR_SKILLS_DIR..."
-ssh_root "install -d -m 755 -o zulipdev -g zulipdev $REMOTE_PEAR_SKILLS_DIR"
+ssh -F "$SSH_CONFIG" pear-staging "install -d -m 755 $REMOTE_PEAR_SKILLS_DIR"
 rsync -az --delete \
     -e "ssh -F $SSH_CONFIG" \
     "$LOCAL_PEAR_SKILLS_DIR/" \

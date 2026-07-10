@@ -420,6 +420,42 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
         self.assertNotIn(str(repo), first_result.content.decode())
         self.assertEqual(orjson.loads(tampered_result.content)["error_code"], "stale_cursor")
 
+    def test_tracked_rename_and_delete_remove_phantom_source_paths(self) -> None:
+        user = self.example_user("hamlet")
+        stream = self.subscribe(user, "workspace-resource")
+        self.login_user(user)
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo = self.make_workspace(Path(temp_dir).resolve())
+            node = self.make_node(user, stream.name, repo)
+            descriptor = self.descriptor(node)
+            readme_entry = descriptor["default_entry"]
+            renamed = self.rename_entry(
+                node,
+                entry_id=readme_entry["entry_id"],
+                expected_path="README.md",
+                destination_path="RENAMED.md",
+                workspace_revision=descriptor["workspace_revision"],
+            )
+            renamed_entry = renamed["entry"]
+            assert isinstance(renamed_entry, dict)
+            after_rename = self.tree(node)
+            after_rename_paths = {item["path"] for item in after_rename["entries"]}
+            self.assertNotIn("README.md", after_rename_paths)
+            self.assertIn("RENAMED.md", after_rename_paths)
+
+            deleted = self.delete_entry(
+                node,
+                entry_id=renamed_entry["entry_id"],
+                expected_path="RENAMED.md",
+                workspace_revision=renamed["workspace_revision"],
+            )
+            after_delete = self.tree(node)
+            after_delete_paths = {item["path"] for item in after_delete["entries"]}
+
+        self.assertIsNone(deleted["entry"])
+        self.assertNotIn("README.md", after_delete_paths)
+        self.assertNotIn("RENAMED.md", after_delete_paths)
+
     def test_delayed_put_cannot_follow_rename_or_delete_recreate(self) -> None:
         user = self.example_user("hamlet")
         stream = self.subscribe(user, "workspace-resource")

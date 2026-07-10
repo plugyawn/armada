@@ -90,6 +90,7 @@ class WorkspaceWriteResult:
 class WorkspaceEntryMutationResult:
     path: str
     kind: Literal["file", "directory"]
+    identity: WorkspaceEntryIdentity | None = None
 
 
 @dataclass(frozen=True)
@@ -575,6 +576,54 @@ def inspect_workspace_entries(
     return tuple(inspected)
 
 
+def inspect_empty_workspace_directory(
+    root: str | Path,
+    relative_path: str,
+    *,
+    expected_identity: WorkspaceEntryIdentity | None = None,
+) -> WorkspaceEntryIdentity:
+    """Return an empty directory's identity without following any path alias."""
+
+    components = validate_workspace_relative_path(relative_path)
+    with (
+        _open_workspace_root(root) as (root_fd, root_stat),
+        _workspace_lock(root_fd, exclusive=False),
+        _open_parent_directory(root_fd, root_stat.st_dev, components) as (parent_fd, name),
+    ):
+        entry_stat, kind = _stat_entry_from_parent(
+            parent_fd,
+            name,
+            root_device=root_stat.st_dev,
+        )
+        _validate_expected_kind(kind, "directory")
+        _validate_expected_identity(entry_stat, expected_identity)
+        directory_fd = _open_checked_directory(
+            parent_fd,
+            name,
+            root_device=root_stat.st_dev,
+        )
+        try:
+            opened_stat = os.fstat(directory_fd)
+            if _entry_identity(opened_stat) != _entry_identity(entry_stat):
+                raise WorkspaceEntryChangedError(
+                    "Workspace directory changed while it was inspected."
+                )
+            try:
+                names = os.listdir(directory_fd)
+            except OSError as error:
+                raise WorkspaceIOError("Could not inspect the workspace directory.") from error
+            if names:
+                raise WorkspaceDirectoryNotEmptyError("Workspace directory is not empty.")
+            final_stat = os.fstat(directory_fd)
+            if _entry_identity(final_stat) != _entry_identity(opened_stat):
+                raise WorkspaceEntryChangedError(
+                    "Workspace directory changed while it was inspected."
+                )
+            return _entry_identity(final_stat)
+        finally:
+            os.close(directory_fd)
+
+
 def _raw_cache_token(file_stat: os.stat_result) -> str:
     revision = ":".join(str(value) for value in _stat_revision(file_stat)).encode("ascii")
     return hashlib.sha256(b"pear-workspace-raw-v1\0" + revision).hexdigest()
@@ -766,6 +815,34 @@ def _unlink_if_present(parent_fd: int, name: str) -> None:
         return
     except OSError as error:
         raise WorkspaceIOError("Could not remove a workspace temporary file.") from error
+
+
+def _unlink_if_exact_identity(
+    parent_fd: int,
+    name: str,
+    *,
+    root_device: int,
+    expected_identity: WorkspaceEntryIdentity,
+) -> Literal["removed", "missing", "mismatch", "error"]:
+    """Remove only the exact regular file that was previously authorized."""
+
+    try:
+        entry_stat, kind = _stat_entry_from_parent(
+            parent_fd,
+            name,
+            root_device=root_device,
+        )
+    except WorkspaceEntryNotFoundError:
+        return "missing"
+    except WorkspaceIOError:
+        return "mismatch"
+    if kind != "file" or _entry_identity(entry_stat) != expected_identity:
+        return "mismatch"
+    try:
+        os.unlink(name, dir_fd=parent_fd)
+    except OSError:
+        return "error"
+    return "removed"
 
 
 def _sync_fd(fd: int, *, target: str) -> None:
@@ -999,6 +1076,13 @@ def _capture_workspace_entry(
     original name before the error escapes.
     """
 
+    original_stat, original_kind = _stat_entry_from_parent(
+        parent_fd,
+        name,
+        root_device=root_device,
+    )
+    _validate_expected_kind(original_kind, expected_kind)
+    _validate_expected_identity(original_stat, expected_identity)
     quarantine_name = _quarantine_name(operation)
     _rename_noreplace(parent_fd, name, parent_fd, quarantine_name)
     try:
@@ -1008,7 +1092,8 @@ def _capture_workspace_entry(
             root_device=root_device,
         )
         _validate_expected_kind(actual_kind, expected_kind)
-        _validate_expected_identity(captured_stat, expected_identity)
+        if _stat_identity(captured_stat) != _stat_identity(original_stat):
+            raise WorkspaceEntryChangedError("Workspace entry identity changed during capture.")
     except Exception:
         _restore_quarantined_entry(parent_fd, quarantine_name, name)
         raise
@@ -1100,7 +1185,11 @@ def rename_workspace_entry(
                         os.fstat(destination_parent_fd)
                     ):
                         _sync_fd(destination_parent_fd, target="directory")
-    return WorkspaceEntryMutationResult(path=destination_path, kind=expected_kind)
+    return WorkspaceEntryMutationResult(
+        path=destination_path,
+        kind=expected_kind,
+        identity=_entry_identity(destination_stat),
+    )
 
 
 def _open_checked_directory(
@@ -1344,6 +1433,7 @@ def atomic_write_workspace_file(
                 temporary_fd: int | None = None
                 temporary_exists = False
                 published_file: WorkspaceFile | None = None
+                authorized_displaced_identity: WorkspaceEntryIdentity | None = None
                 try:
                     try:
                         temporary_fd = os.open(
@@ -1428,15 +1518,17 @@ def atomic_write_workspace_file(
                                 temporary_name,
                                 root_device=root_stat.st_dev,
                                 max_bytes=max_bytes,
-                                expected_identity=expected_identity,
                             )
-                            if displaced.version != expected_version or _stat_identity(
-                                displaced_stat
-                            ) != _stat_identity(current_stat):
+                            if _stat_identity(displaced_stat) != _stat_identity(current_stat):
+                                raise WorkspaceEntryChangedError(
+                                    "Workspace target identity changed during save publication."
+                                )
+                            if displaced.version != expected_version:
                                 raise WorkspaceVersionConflictError(
                                     "Workspace file changed before it could be saved.",
                                     current=displaced,
                                 )
+                            authorized_displaced_identity = _entry_identity(displaced_stat)
                             saved, saved_stat = _read_file_from_parent(
                                 parent_fd,
                                 name,
@@ -1451,6 +1543,44 @@ def atomic_write_workspace_file(
                                 )
                             published_file = saved
                         except Exception:
+                            target_is_published_file = False
+                            try:
+                                target_stat, target_kind = _stat_entry_from_parent(
+                                    parent_fd,
+                                    name,
+                                    root_device=root_stat.st_dev,
+                                )
+                                target_is_published_file = target_kind == "file" and _stat_identity(
+                                    target_stat
+                                ) == _stat_identity(temporary_stat)
+                            except WorkspaceIOError:
+                                pass
+                            if not target_is_published_file:
+                                # An uncooperative writer replaced the published
+                                # name after the exchange. Never exchange it into
+                                # the cleanup name. The displaced old target may
+                                # be retired only if it was already authorized and
+                                # still has that exact post-exchange identity.
+                                if authorized_displaced_identity is not None:
+                                    # From here on cleanup is identity-bound. The
+                                    # generic finally block must not unlink this
+                                    # name if it was replaced after validation.
+                                    temporary_exists = False
+                                    cleanup_outcome = _unlink_if_exact_identity(
+                                        parent_fd,
+                                        temporary_name,
+                                        root_device=root_stat.st_dev,
+                                        expected_identity=authorized_displaced_identity,
+                                    )
+                                    if cleanup_outcome == "error":
+                                        raise WorkspaceIOError(
+                                            "Could not retire the authorized displaced file; "
+                                            "it was preserved under the recovery name."
+                                        )
+                                temporary_exists = False
+                                raise WorkspaceEntryChangedError(
+                                    "Workspace target changed after save publication."
+                                )
                             try:
                                 _rename_exchange(
                                     parent_fd,
@@ -1459,8 +1589,27 @@ def atomic_write_workspace_file(
                                     name,
                                 )
                             except WorkspaceIOError as rollback_error:
+                                temporary_exists = False
+                                cleanup_outcome = "missing"
+                                if authorized_displaced_identity is not None:
+                                    cleanup_outcome = _unlink_if_exact_identity(
+                                        parent_fd,
+                                        temporary_name,
+                                        root_device=root_stat.st_dev,
+                                        expected_identity=authorized_displaced_identity,
+                                    )
                                 raise WorkspaceEntryChangedError(
-                                    "Workspace save could not be rolled back safely."
+                                    "Workspace save could not be rolled back safely; "
+                                    + (
+                                        "the authorized displaced entry was preserved under "
+                                        "the recovery name."
+                                        if cleanup_outcome == "error"
+                                        else (
+                                            "an unverified displaced entry was preserved."
+                                            if cleanup_outcome == "mismatch"
+                                            else "the published file remains in place."
+                                        )
+                                    )
                                 ) from rollback_error
                             raise
                         _unlink_if_present(parent_fd, temporary_name)
@@ -1802,7 +1951,15 @@ def execute_workspace_io_request(request: Mapping[str, object]) -> dict[str, obj
             expected_kind=rename_expected_kind,
             expected_identity=expected_identity,
         )
-        return {"path": result.path, "kind": result.kind}
+        return {
+            "path": result.path,
+            "kind": result.kind,
+            "identity": (
+                _workspace_identity_payload(result.identity)
+                if result.identity is not None
+                else None
+            ),
+        }
     if operation == "delete":
         _require_request_keys(
             request,
@@ -1877,6 +2034,24 @@ def execute_workspace_io_request(request: Mapping[str, object]) -> dict[str, obj
                 for entry in inspected
             ]
         }
+    if operation == "inspect_empty_directory":
+        _require_request_keys(
+            request,
+            {"operation", "root", "path", "expected_identity"},
+        )
+        root = request.get("root")
+        relative_path = request.get("path")
+        expected_identity = _optional_workspace_identity_from_payload(
+            request.get("expected_identity")
+        )
+        if not isinstance(root, str) or not isinstance(relative_path, str):
+            raise ValueError("Workspace helper directory inspection request is invalid")
+        identity = inspect_empty_workspace_directory(
+            root,
+            relative_path,
+            expected_identity=expected_identity,
+        )
+        return {"identity": _workspace_identity_payload(identity)}
     raise ValueError("Workspace helper request has an unknown operation")
 
 
@@ -2397,7 +2572,15 @@ def _entry_mutation_result_from_helper(
     kind = result.get("kind")
     if path != expected_path or kind != expected_kind:
         raise WorkspaceHelperError("Workspace helper returned an invalid mutation result.")
-    return WorkspaceEntryMutationResult(path=expected_path, kind=expected_kind)
+    identity_payload = result.get("identity")
+    identity = (
+        _workspace_identity_from_payload(identity_payload) if identity_payload is not None else None
+    )
+    return WorkspaceEntryMutationResult(
+        path=expected_path,
+        kind=expected_kind,
+        identity=identity,
+    )
 
 
 def create_workspace_directory_via_helper(
@@ -2425,6 +2608,37 @@ def create_workspace_directory_via_helper(
         expected_path=relative_path,
         expected_kind="directory",
     )
+
+
+def inspect_empty_workspace_directory_via_helper(
+    root: str | Path,
+    relative_path: str,
+    *,
+    expected_identity: WorkspaceEntryIdentity | None = None,
+    isolation_username: str | None = None,
+    helper_path: str | Path | None = None,
+    python_executable: str | Path | None = None,
+) -> WorkspaceEntryIdentity:
+    result = invoke_workspace_io_helper(
+        {
+            "operation": "inspect_empty_directory",
+            "root": os.fspath(root),
+            "path": relative_path,
+            "expected_identity": (
+                _workspace_identity_payload(expected_identity)
+                if expected_identity is not None
+                else None
+            ),
+        },
+        isolation_username=isolation_username,
+        helper_path=helper_path,
+        python_executable=python_executable,
+    )
+    if set(result) != {"identity"}:
+        raise WorkspaceHelperError(
+            "Workspace helper returned an invalid directory inspection result."
+        )
+    return _workspace_identity_from_payload(result["identity"])
 
 
 def rename_workspace_entry_via_helper(

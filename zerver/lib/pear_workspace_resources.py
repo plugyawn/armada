@@ -18,6 +18,7 @@ from collections import OrderedDict
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Literal
 
 from django.conf import settings
@@ -42,6 +43,8 @@ from zerver.lib.pear_workspace_io import (
     create_workspace_directory_via_helper,
     delete_workspace_entry,
     delete_workspace_entry_via_helper,
+    inspect_empty_workspace_directory,
+    inspect_empty_workspace_directory_via_helper,
     inspect_workspace_entries,
     inspect_workspace_entries_via_helper,
     open_workspace_file_stream,
@@ -68,6 +71,7 @@ PEAR_WORKSPACE_FILE_OBSERVATION_SECONDS = 60 * 60
 DEFAULT_WORKSPACE_HISTORY_LIMIT = 50
 MAX_WORKSPACE_HISTORY_LIMIT = 200
 PEAR_WORKSPACE_INSPECTION_BATCH_BYTES = 512 * 1024
+PEAR_WORKSPACE_CREATE_STAGING_PREFIX = ".pear-create-"
 
 
 class WorkspaceSnapshotError(Exception):
@@ -485,6 +489,11 @@ def workspace_entry_mutation_lookup_payload(
     }
 
 
+def workspace_entry_mutation_staging_path(lookup_payload: dict[str, object]) -> str:
+    lookup_digest = _entry_mutation_digest(b"pear-entry-mutation-lookup-v1", lookup_payload)
+    return f"{PEAR_WORKSPACE_CREATE_STAGING_PREFIX}{lookup_digest}"
+
+
 def get_workspace_entry_mutation_receipt(
     *,
     lookup_payload: dict[str, object],
@@ -516,6 +525,13 @@ def prepare_workspace_entry_mutation_receipt(
 ) -> tuple[PearWorkspaceEntryMutationReceipt, bool]:
     """Durably establish exact retry authority before touching the filesystem."""
 
+    if lookup_payload.get("operation") == "create":
+        expected_recovery = {
+            "staging_path": workspace_entry_mutation_staging_path(lookup_payload),
+        }
+        if recovery is not None and recovery != expected_recovery:
+            raise ValueError("Workspace create recovery metadata is invalid.")
+        recovery = expected_recovery
     request_payload = {
         **lookup_payload,
         "source_kind": source_kind,
@@ -585,13 +601,78 @@ def lock_workspace_entry_mutation_receipt(
             PearWorkspaceEntryMutationReceipt.objects.select_for_update()
             .filter(
                 workspace_node=locked_node,
-                state=PearWorkspaceEntryMutationReceipt.APPLIED,
+                state__in=(
+                    PearWorkspaceEntryMutationReceipt.STAGED,
+                    PearWorkspaceEntryMutationReceipt.APPLIED,
+                ),
             )
             .exclude(id=locked_receipt.id)
             .exists()
         ):
             raise WorkspaceMutationStaleError(int(locked_node.content_revision))
         yield locked_node, locked_receipt
+
+
+@contextmanager
+def lock_next_recoverable_workspace_entry_mutation(
+    node: PearWorkspaceNode,
+    *,
+    prepared_before: datetime,
+) -> Iterator[tuple[PearWorkspaceNode, PearWorkspaceEntryMutationReceipt | None]]:
+    """Lock one receipt whose interrupted filesystem work can be reconciled.
+
+    Blocking STAGED/APPLIED work is always preferred. Old PREPARED creates are
+    considered one at a time so abandoned staging artifacts are bounded without
+    turning every Workspace read into an unbounded receipt scan.
+    """
+
+    with transaction.atomic():
+        locked_node = PearWorkspaceNode.objects.select_for_update().get(id=node.id)
+        receipt = (
+            PearWorkspaceEntryMutationReceipt.objects.select_for_update()
+            .filter(
+                workspace_node=locked_node,
+                state__in=(
+                    PearWorkspaceEntryMutationReceipt.STAGED,
+                    PearWorkspaceEntryMutationReceipt.APPLIED,
+                ),
+            )
+            .order_by("date_updated", "id")
+            .first()
+        )
+        if receipt is None:
+            receipt = (
+                PearWorkspaceEntryMutationReceipt.objects.select_for_update()
+                .filter(
+                    workspace_node=locked_node,
+                    operation="create",
+                    state=PearWorkspaceEntryMutationReceipt.PREPARED,
+                    date_updated__lte=prepared_before,
+                )
+                .order_by("date_updated", "id")
+                .first()
+            )
+        yield locked_node, receipt
+
+
+def record_workspace_entry_mutation_stage(
+    receipt: PearWorkspaceEntryMutationReceipt,
+    application_payload: dict[str, object],
+) -> None:
+    if receipt.state == PearWorkspaceEntryMutationReceipt.STAGED:
+        if receipt.application_payload != application_payload:
+            raise WorkspaceMutationReceiptMismatchError(
+                "Workspace mutation receipt has a different staged result."
+            )
+        return
+    if receipt.state != PearWorkspaceEntryMutationReceipt.PREPARED:
+        raise WorkspaceMutationReceiptMismatchError(
+            "Workspace mutation receipt is not awaiting filesystem staging."
+        )
+    receipt.state = PearWorkspaceEntryMutationReceipt.STAGED
+    receipt.application_payload = application_payload
+    receipt.date_updated = timezone_now()
+    receipt.save(update_fields=["state", "application_payload", "date_updated"])
 
 
 def record_workspace_entry_mutation_application(
@@ -604,7 +685,33 @@ def record_workspace_entry_mutation_application(
                 "Workspace mutation receipt has a different applied result."
             )
         return
-    if receipt.state != PearWorkspaceEntryMutationReceipt.PREPARED:
+    if receipt.state == PearWorkspaceEntryMutationReceipt.STAGED:
+        staged_identity = receipt.application_payload.get("identity")
+        applied_identity = application_payload.get("identity")
+        staged_metadata = {
+            key: value for key, value in receipt.application_payload.items() if key != "identity"
+        }
+        applied_metadata = {
+            key: value for key, value in application_payload.items() if key != "identity"
+        }
+        if (
+            receipt.operation != "create"
+            or not isinstance(staged_identity, dict)
+            or set(staged_identity) != {"device", "inode", "ctime_ns"}
+            or not isinstance(applied_identity, dict)
+            or set(applied_identity) != {"device", "inode", "ctime_ns"}
+            or any(
+                isinstance(value, bool) or not isinstance(value, int) or value < 0
+                for value in (*staged_identity.values(), *applied_identity.values())
+            )
+            or staged_identity["device"] != applied_identity["device"]
+            or staged_identity["inode"] != applied_identity["inode"]
+            or staged_metadata != applied_metadata
+        ):
+            raise WorkspaceMutationReceiptMismatchError(
+                "Workspace mutation receipt has a different staged result."
+            )
+    elif receipt.state != PearWorkspaceEntryMutationReceipt.PREPARED:
         raise WorkspaceMutationReceiptMismatchError(
             "Workspace mutation receipt is not awaiting filesystem application."
         )
@@ -612,6 +719,40 @@ def record_workspace_entry_mutation_application(
     receipt.application_payload = application_payload
     receipt.date_updated = timezone_now()
     receipt.save(update_fields=["state", "application_payload", "date_updated"])
+
+
+def conflict_workspace_entry_mutation_receipt(
+    receipt: PearWorkspaceEntryMutationReceipt,
+    result_payload: dict[str, object],
+) -> None:
+    if receipt.state == PearWorkspaceEntryMutationReceipt.CONFLICTED:
+        if receipt.result_payload != result_payload:
+            raise WorkspaceMutationReceiptMismatchError(
+                "Workspace mutation receipt has a different conflict result."
+            )
+        return
+    if receipt.state not in {
+        PearWorkspaceEntryMutationReceipt.PREPARED,
+        PearWorkspaceEntryMutationReceipt.STAGED,
+        PearWorkspaceEntryMutationReceipt.APPLIED,
+    }:
+        raise WorkspaceMutationReceiptMismatchError(
+            "Workspace mutation receipt cannot be marked conflicted."
+        )
+    receipt.state = PearWorkspaceEntryMutationReceipt.CONFLICTED
+    receipt.result_payload = result_payload
+    receipt.date_updated = timezone_now()
+    receipt.save(update_fields=["state", "result_payload", "date_updated"])
+
+
+def discard_prepared_workspace_entry_mutation_receipt(
+    receipt: PearWorkspaceEntryMutationReceipt,
+) -> None:
+    if receipt.state != PearWorkspaceEntryMutationReceipt.PREPARED:
+        raise WorkspaceMutationReceiptMismatchError(
+            "Only an unapplied prepared workspace mutation can be discarded."
+        )
+    receipt.delete()
 
 
 def complete_workspace_entry_mutation_receipt(
@@ -856,6 +997,10 @@ def _decode_git_path(raw_path: bytes) -> str:
     return path
 
 
+def _is_internal_staging_path(path: str) -> bool:
+    return any(component.startswith(".pear-") for component in path.split("/"))
+
+
 def _status_kind(xy: bytes) -> str:
     if b"U" in xy:
         return "conflict"
@@ -867,9 +1012,10 @@ def _status_kind(xy: bytes) -> str:
 def _parse_status(
     status_output: bytes,
     allowed_paths: set[str],
-) -> tuple[dict[str, str], int]:
+) -> tuple[dict[str, str], int, bytes]:
     status_by_path: dict[str, str] = {}
     dirty_count = 0
+    fingerprint_records: list[bytes] = []
     records = status_output.split(b"\0")
     offset = 0
     while offset < len(records):
@@ -880,6 +1026,7 @@ def _parse_status(
         tag = record[:1]
         raw_path: bytes
         status: str
+        original_path_record: bytes | None = None
         if tag == b"?" and record.startswith(b"? "):
             raw_path = record[2:]
             status = "untracked"
@@ -895,6 +1042,7 @@ def _parse_status(
                 raise WorkspaceSnapshotError("Git returned an invalid workspace status.")
             raw_path = fields[9]
             status = _status_kind(fields[1])
+            original_path_record = records[offset]
             offset += 1  # The original rename path is the next NUL record.
         elif tag == b"u":
             fields = record.split(b" ", 10)
@@ -904,11 +1052,16 @@ def _parse_status(
             status = "conflict"
         else:
             raise WorkspaceSnapshotError("Git returned an invalid workspace status.")
-        dirty_count += 1
         path = _decode_git_path(raw_path)
+        if _is_internal_staging_path(path):
+            continue
+        dirty_count += 1
+        fingerprint_records.extend((record, b"\0"))
+        if original_path_record is not None:
+            fingerprint_records.extend((original_path_record, b"\0"))
         if path in allowed_paths:
             status_by_path[path] = status
-    return status_by_path, dirty_count
+    return status_by_path, dirty_count, b"".join(fingerprint_records)
 
 
 def inspect_workspace_node_entries(
@@ -950,6 +1103,27 @@ def inspect_workspace_node_entries(
     return identities
 
 
+def inspect_empty_workspace_node_directory(
+    node: PearWorkspaceNode,
+    path: str,
+    *,
+    expected_identity: WorkspaceEntryIdentity | None = None,
+) -> WorkspaceEntryIdentity:
+    isolation_username = node.isolation_username.strip() or None
+    if isolation_username is not None:
+        return inspect_empty_workspace_directory_via_helper(
+            node.workdir.strip(),
+            path,
+            expected_identity=expected_identity,
+            isolation_username=isolation_username,
+        )
+    return inspect_empty_workspace_directory(
+        node.workdir.strip(),
+        path,
+        expected_identity=expected_identity,
+    )
+
+
 def _enumerate_workspace(
     node: PearWorkspaceNode,
 ) -> tuple[tuple[WorkspacePath, ...], str, str, str, int]:
@@ -960,7 +1134,9 @@ def _enumerate_workspace(
     allowed_paths: set[str] = set()
     for raw_path in paths_output.split(b"\0"):
         if raw_path:
-            allowed_paths.add(_decode_git_path(raw_path))
+            path = _decode_git_path(raw_path)
+            if not _is_internal_staging_path(path):
+                allowed_paths.add(path)
     deleted_output = _run_git(node, ["ls-files", "-z", "--deleted"])
     for raw_path in deleted_output.split(b"\0"):
         if raw_path:
@@ -989,7 +1165,7 @@ def _enumerate_workspace(
         node,
         ["status", "--porcelain=v2", "-z", "--untracked-files=all"],
     )
-    status_by_path, dirty_count = _parse_status(status_output, allowed_paths)
+    status_by_path, dirty_count, status_fingerprint = _parse_status(status_output, allowed_paths)
     tracked_content_digest = _git_output_digest(
         node,
         [
@@ -1068,7 +1244,7 @@ def _enumerate_workspace(
             fingerprint.update(b":")
             fingerprint.update(str(path.identity.ctime_ns).encode("ascii"))
         fingerprint.update(b"\0")
-    fingerprint.update(status_output)
+    fingerprint.update(status_fingerprint)
     fingerprint.update(tracked_content_digest)
     fingerprint.update(branch.encode("utf-8"))
     fingerprint.update(b"\0")
@@ -1203,7 +1379,10 @@ def lock_workspace_mutation(
             raise WorkspaceMutationStaleError(revision)
         if PearWorkspaceEntryMutationReceipt.objects.filter(
             workspace_node=locked,
-            state=PearWorkspaceEntryMutationReceipt.APPLIED,
+            state__in=(
+                PearWorkspaceEntryMutationReceipt.STAGED,
+                PearWorkspaceEntryMutationReceipt.APPLIED,
+            ),
         ).exists():
             raise WorkspaceMutationStaleError(revision)
         yield locked

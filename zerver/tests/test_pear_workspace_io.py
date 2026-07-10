@@ -33,6 +33,8 @@ from zerver.lib.pear_workspace_io import (
     create_workspace_directory_via_helper,
     delete_workspace_entry,
     delete_workspace_entry_via_helper,
+    inspect_empty_workspace_directory,
+    inspect_empty_workspace_directory_via_helper,
     inspect_workspace_entries,
     inspect_workspace_entries_via_helper,
     open_workspace_file_stream,
@@ -382,6 +384,20 @@ class PearWorkspaceIOTest(TestCase):
         with self.assertRaises(WorkspaceEntryExistsError):
             create_workspace_directory(self.root, "notes")
 
+        identity = inspect_empty_workspace_directory(self.root, "notes")
+        helper_identity = inspect_empty_workspace_directory_via_helper(
+            self.root,
+            "notes",
+            expected_identity=identity,
+            helper_path=Path(pear_workspace_io.__file__),
+            python_executable=sys.executable,
+        )
+        self.assertEqual(helper_identity, identity)
+        self.write("notes/child.txt", b"child")
+        with self.assertRaises(WorkspaceDirectoryNotEmptyError):
+            inspect_empty_workspace_directory(self.root, "notes")
+        (self.root / "notes/child.txt").unlink()
+
         source = self.write("draft.md", b"draft")
         destination = self.write("published.md", b"published")
         with self.assertRaises(WorkspaceEntryExistsError):
@@ -660,6 +676,183 @@ class PearWorkspaceIOTest(TestCase):
         self.assertEqual(target.read_bytes(), b"replacement")
         self.assertEqual((self.root / "authorized-parked.txt").read_bytes(), b"authorized")
         self.assertEqual(list(self.root.glob(".pear-write-*")), [])
+
+    def test_write_exchange_preserves_post_publish_replacement(self) -> None:
+        target = self.write("target.txt", b"authorized")
+        current = read_workspace_file(self.root, target.name, max_bytes=100)
+        original_exchange = pear_workspace_io._rename_exchange
+        calls = 0
+
+        def race_after_exchange(
+            left_parent_fd: int,
+            left_name: str,
+            right_parent_fd: int,
+            right_name: str,
+        ) -> None:
+            nonlocal calls
+            calls += 1
+            original_exchange(left_parent_fd, left_name, right_parent_fd, right_name)
+            if calls == 1:
+                replacement = self.write("post-publish.txt", b"concurrent replacement")
+                os.replace(replacement, target)
+
+        with (
+            patch("zerver.lib.pear_workspace_io._rename_exchange", race_after_exchange),
+            self.assertRaises(WorkspaceEntryChangedError),
+        ):
+            atomic_write_workspace_file(
+                self.root,
+                target.name,
+                b"new content",
+                max_bytes=100,
+                expected_version=current.version,
+                expected_identity=current.identity,
+            )
+
+        self.assertEqual(target.read_bytes(), b"concurrent replacement")
+        # The exact authorized old inode may be retired, while the concurrent
+        # target must never be exchanged into a cleanup name and unlinked.
+        self.assertEqual(list(self.root.glob(".pear-write-*")), [])
+
+    def test_write_exchange_preserves_unknown_displaced_entry(self) -> None:
+        target = self.write("target.txt", b"authorized")
+        first_replacement = self.write("first.txt", b"first replacement")
+        second_replacement = self.write("second.txt", b"second replacement")
+        current = read_workspace_file(self.root, target.name, max_bytes=100)
+        original_exchange = pear_workspace_io._rename_exchange
+        raced = False
+
+        def race_both_sides(
+            left_parent_fd: int,
+            left_name: str,
+            right_parent_fd: int,
+            right_name: str,
+        ) -> None:
+            nonlocal raced
+            if not raced:
+                raced = True
+                os.rename(
+                    right_name,
+                    "authorized-parked.txt",
+                    src_dir_fd=right_parent_fd,
+                    dst_dir_fd=right_parent_fd,
+                )
+                os.rename(
+                    first_replacement.name,
+                    right_name,
+                    src_dir_fd=right_parent_fd,
+                    dst_dir_fd=right_parent_fd,
+                )
+            original_exchange(left_parent_fd, left_name, right_parent_fd, right_name)
+            if raced:
+                os.replace(second_replacement, target)
+
+        with (
+            patch("zerver.lib.pear_workspace_io._rename_exchange", race_both_sides),
+            self.assertRaises(WorkspaceEntryChangedError),
+        ):
+            atomic_write_workspace_file(
+                self.root,
+                target.name,
+                b"new content",
+                max_bytes=100,
+                expected_version=current.version,
+                expected_identity=current.identity,
+            )
+
+        self.assertEqual(target.read_bytes(), b"second replacement")
+        self.assertEqual((self.root / "authorized-parked.txt").read_bytes(), b"authorized")
+        quarantined = list(self.root.glob(".pear-write-*"))
+        self.assertEqual(len(quarantined), 1)
+        self.assertEqual(quarantined[0].read_bytes(), b"first replacement")
+
+    def test_write_exchange_failed_rollback_cleans_exact_authorized_displacement(self) -> None:
+        target = self.write("target.txt", b"authorized")
+        current = read_workspace_file(self.root, target.name, max_bytes=100)
+        original_exchange = pear_workspace_io._rename_exchange
+        original_read = pear_workspace_io._read_file_from_parent
+        exchange_calls = 0
+        read_calls = 0
+
+        def fail_rollback(
+            left_parent_fd: int,
+            left_name: str,
+            right_parent_fd: int,
+            right_name: str,
+        ) -> None:
+            nonlocal exchange_calls
+            exchange_calls += 1
+            if exchange_calls == 2:
+                raise WorkspaceIOError("simulated rollback failure")
+            original_exchange(left_parent_fd, left_name, right_parent_fd, right_name)
+
+        def fail_acknowledgement(*args: object, **kwargs: object) -> object:
+            nonlocal read_calls
+            read_calls += 1
+            if read_calls == 4:
+                raise WorkspaceEntryChangedError("simulated acknowledgement race")
+            return original_read(*args, **kwargs)
+
+        with (
+            patch("zerver.lib.pear_workspace_io._rename_exchange", fail_rollback),
+            patch("zerver.lib.pear_workspace_io._read_file_from_parent", fail_acknowledgement),
+            self.assertRaises(WorkspaceEntryChangedError),
+        ):
+            atomic_write_workspace_file(
+                self.root,
+                target.name,
+                b"new content",
+                max_bytes=100,
+                expected_version=current.version,
+                expected_identity=current.identity,
+            )
+
+        self.assertEqual(target.read_bytes(), b"new content")
+        self.assertEqual(list(self.root.glob(".pear-write-*")), [])
+
+    def test_write_exchange_cleanup_error_preserves_exact_displacement_explicitly(self) -> None:
+        target = self.write("target.txt", b"authorized")
+        current = read_workspace_file(self.root, target.name, max_bytes=100)
+        original_exchange = pear_workspace_io._rename_exchange
+        original_unlink = os.unlink
+        raced = False
+
+        def race_after_exchange(
+            left_parent_fd: int,
+            left_name: str,
+            right_parent_fd: int,
+            right_name: str,
+        ) -> None:
+            nonlocal raced
+            original_exchange(left_parent_fd, left_name, right_parent_fd, right_name)
+            if not raced:
+                raced = True
+                replacement = self.write("post-publish.txt", b"concurrent replacement")
+                os.replace(replacement, target)
+
+        def reject_recovery_unlink(path: str, *, dir_fd: int | None = None) -> None:
+            if path.startswith(".pear-write-"):
+                raise PermissionError("simulated cleanup failure")
+            original_unlink(path, dir_fd=dir_fd)
+
+        with (
+            patch("zerver.lib.pear_workspace_io._rename_exchange", race_after_exchange),
+            patch("zerver.lib.pear_workspace_io.os.unlink", reject_recovery_unlink),
+            self.assertRaisesRegex(WorkspaceIOError, "preserved under the recovery name"),
+        ):
+            atomic_write_workspace_file(
+                self.root,
+                target.name,
+                b"new content",
+                max_bytes=100,
+                expected_version=current.version,
+                expected_identity=current.identity,
+            )
+
+        self.assertEqual(target.read_bytes(), b"concurrent replacement")
+        quarantined = list(self.root.glob(".pear-write-*"))
+        self.assertEqual(len(quarantined), 1)
+        self.assertEqual(quarantined[0].read_bytes(), b"authorized")
 
     def test_raw_staging_fails_before_exposure_when_source_path_changes(self) -> None:
         path = self.write("raw.bin", b"abcdef")

@@ -122,11 +122,15 @@ from zerver.views.pear import (
     update_pear_monitor_backend,
 )
 from zerver.views.pear_workspace import (
+    delete_pear_workspace_entry_backend,
     get_pear_workspace_descriptor_backend,
+    get_pear_workspace_history_backend,
     get_pear_workspace_raw_backend,
     get_pear_workspace_resource_file_backend,
     get_pear_workspace_search_backend,
     get_pear_workspace_tree_backend,
+    patch_pear_workspace_entry_backend,
+    post_pear_workspace_entry_backend,
     post_pear_workspace_refresh_backend,
     put_pear_workspace_resource_file_backend,
 )
@@ -479,8 +483,21 @@ v1_api_and_json_patterns = [
         PUT=(put_pear_workspace_resource_file_backend, {"intentionally_undocumented"}),
     ),
     rest_path(
+        "pear/workspaces/<uuid:workspace_uuid>/entries",
+        POST=(post_pear_workspace_entry_backend, {"intentionally_undocumented"}),
+    ),
+    rest_path(
+        "pear/workspaces/<uuid:workspace_uuid>/entry",
+        PATCH=(patch_pear_workspace_entry_backend, {"intentionally_undocumented"}),
+        DELETE=(delete_pear_workspace_entry_backend, {"intentionally_undocumented"}),
+    ),
+    rest_path(
         "pear/workspaces/<uuid:workspace_uuid>/raw",
         GET=(get_pear_workspace_raw_backend, {"intentionally_undocumented"}),
+    ),
+    rest_path(
+        "pear/workspaces/<uuid:workspace_uuid>/history",
+        GET=(get_pear_workspace_history_backend, {"intentionally_undocumented"}),
     ),
     rest_path(
         "pear/workspaces/<uuid:workspace_uuid>/refresh",

@@ -1,9 +1,8 @@
 import json
 import subprocess
-import sys
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from types import ModuleType, SimpleNamespace
+from types import SimpleNamespace
 from unittest import TestCase
 from unittest.mock import patch
 
@@ -97,7 +96,6 @@ from zerver.lib.pear import (
     is_pear_request_message,
     is_pear_thread_request_message,
     load_pear_worker_run_records,
-    normalize_pear_response_policy,
     parse_pear_artifacts,
     parse_pear_checklist,
     parse_pear_interruption_event,
@@ -108,13 +106,11 @@ from zerver.lib.pear import (
     pear_worker_already_started,
     pear_worker_run_for_message,
     pear_worker_should_start,
-    pear_worker_task_for_message,
     record_pear_worker_run,
     split_pear_persistent_message,
     update_pear_worker_status_message,
 )
 from zerver.lib.pear_agent import (
-    PearAgentRuntimeError,
     PearCodexAppServerToolRunner,
     PearCodexExecAddressingIntentClassifier,
     PearDisabledAgentRunner,
@@ -339,9 +335,9 @@ class PearSessionDefaultsTest(TestCase):
         )
         self.assertFalse(parse_pear_artifacts(fix_message, message_id=1))
 
-    def test_parse_pear_artifacts_recognizes_commit_and_canvas_labels(self) -> None:
+    def test_parse_pear_artifacts_recognizes_commit_and_document_labels(self) -> None:
         artifacts = parse_pear_artifacts(
-            "Commit: abc1234\nSHA: deadbeef\nCanvas: CANVAS.md refreshed",
+            "Commit: abc1234\nSHA: deadbeef\nCanvas: legacy\nDoc: README.md refreshed",
             message_id=21,
         )
 
@@ -350,7 +346,7 @@ class PearSessionDefaultsTest(TestCase):
             [
                 ("commit", "abc1234"),
                 ("commit", "deadbeef"),
-                ("document", "CANVAS.md refreshed"),
+                ("document", "README.md refreshed"),
             ],
         )
 
@@ -512,7 +508,7 @@ class PearSessionDefaultsTest(TestCase):
                 (10, "@Pear fix the checkout test", False, "Ada"),
                 (11, "Verification: pytest zerver/tests/test_pear.py", True, "Pear"),
                 (12, "PR: https://github.com/example/pear/pull/7", True, "Pear"),
-                (13, "Doc: CANVAS.md", False, "Grace"),
+                (13, "Doc: README.md", False, "Grace"),
                 (14, "Reviewers: @qa", False, "Grace"),
             ],
             latest_codex_thread_id="codex-thread-7",
@@ -2326,10 +2322,10 @@ class PearSessionDefaultsTest(TestCase):
 
     def test_codex_skills_are_provisioned_into_codex_home(self) -> None:
         with TemporaryDirectory() as source_root, TemporaryDirectory() as codex_home:
-            source_skill = Path(source_root) / "pear-canvas"
+            source_skill = Path(source_root) / "workspace-editing"
             source_skill.mkdir()
             (source_skill / "SKILL.md").write_text(
-                "# pear-canvas\n\nUse CANVAS.md for topic state.\n",
+                "# workspace-editing\n\nEdit workspace files safely.\n",
                 encoding="utf-8",
             )
             ignored_dir = Path(source_root) / "not-a-skill"
@@ -2339,11 +2335,11 @@ class PearSessionDefaultsTest(TestCase):
             with patch("zerver.lib.pear_worker.settings.PEAR_CODEX_SKILLS_DIR", source_root):
                 provisioned = pear_provision_codex_skills(codex_home)
 
-            destination = Path(codex_home) / "skills" / "pear-canvas" / "SKILL.md"
-            self.assertEqual(provisioned, ["pear-canvas"])
+            destination = Path(codex_home) / "skills" / "workspace-editing" / "SKILL.md"
+            self.assertEqual(provisioned, ["workspace-editing"])
             self.assertEqual(
                 destination.read_text(encoding="utf-8"),
-                "# pear-canvas\n\nUse CANVAS.md for topic state.\n",
+                "# workspace-editing\n\nEdit workspace files safely.\n",
             )
             self.assertFalse((Path(codex_home) / "skills" / "not-a-skill").exists())
             self.assertEqual(
@@ -2352,7 +2348,7 @@ class PearSessionDefaultsTest(TestCase):
                         encoding="utf-8"
                     )
                 ),
-                {"version": 1, "skills": ["pear-canvas"]},
+                {"version": 1, "skills": ["workspace-editing"]},
             )
 
     def test_agent_text_results_parse_artifact_lines(self) -> None:

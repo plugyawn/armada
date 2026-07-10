@@ -98,18 +98,13 @@ from zerver.views.onboarding_steps import mark_onboarding_step_as_read
 from zerver.views.pear import (
     delete_pear_monitor_backend,
     get_pear_active_session_backend,
-    get_pear_canvas_backend,
     get_pear_config_backend,
-    get_pear_git_tree_backend,
     get_pear_monitors_backend,
     get_pear_run_backend,
     get_pear_runs_backend,
     get_pear_session_backend,
     get_pear_topic_context_backend,
-    get_pear_workspace_file_backend,
-    get_pear_workspace_files_backend,
     get_pear_workspace_topics_backend,
-    post_pear_canvas_ask_backend,
     post_pear_config_backend,
     post_pear_first_run_backend,
     post_pear_monitors_backend,
@@ -118,7 +113,6 @@ from zerver.views.pear import (
     post_pear_run_resume_backend,
     post_pear_side_backend,
     post_pear_topic_context_backend,
-    put_pear_canvas_backend,
     update_pear_monitor_backend,
 )
 from zerver.views.pear_workspace import (
@@ -450,20 +444,8 @@ v1_api_and_json_patterns = [
         POST=(post_pear_topic_context_backend, {"intentionally_undocumented"}),
     ),
     rest_path(
-        "pear/git-tree",
-        GET=(get_pear_git_tree_backend, {"intentionally_undocumented"}),
-    ),
-    rest_path(
         "pear/workspace-topics",
         GET=(get_pear_workspace_topics_backend, {"intentionally_undocumented"}),
-    ),
-    rest_path(
-        "pear/workspace-files",
-        GET=(get_pear_workspace_files_backend, {"intentionally_undocumented"}),
-    ),
-    rest_path(
-        "pear/workspace-file",
-        GET=(get_pear_workspace_file_backend, {"intentionally_undocumented"}),
     ),
     rest_path(
         "pear/workspaces/<uuid:workspace_uuid>",
@@ -502,15 +484,6 @@ v1_api_and_json_patterns = [
     rest_path(
         "pear/workspaces/<uuid:workspace_uuid>/refresh",
         POST=(post_pear_workspace_refresh_backend, {"intentionally_undocumented"}),
-    ),
-    rest_path(
-        "pear/canvas-ask",
-        POST=(post_pear_canvas_ask_backend, {"intentionally_undocumented"}),
-    ),
-    rest_path(
-        "pear/canvas",
-        GET=(get_pear_canvas_backend, {"intentionally_undocumented"}),
-        PUT=(put_pear_canvas_backend, {"intentionally_undocumented"}),
     ),
     rest_path(
         "pear/runs",

@@ -30,28 +30,14 @@ PEAR_ACTIVE_SESSION_ENDPOINT: Final = "/pear/session/active"
 PEAR_CONFIG_ENDPOINT: Final = "/pear/config"
 PEAR_FIRST_RUN_ENDPOINT: Final = "/pear/first-run"
 PEAR_TOPIC_CONTEXT_ENDPOINT: Final = "/pear/topic-context"
-PEAR_CANVAS_ENDPOINT: Final = "/pear/canvas"
 PEAR_RUNS_ENDPOINT: Final = "/pear/runs"
 PEAR_SIDE_ENDPOINT: Final = "/pear/side"
-PEAR_CANVAS_ASK_ENDPOINT: Final = "/pear/canvas-ask"
 PEAR_FIRST_RUN_STREAM: Final = "pear-sandbox"
 PEAR_FIRST_RUN_TOPIC: Final = "first run"
 PEAR_FIRST_RUN_STARTER_MESSAGE: Final = (
     f"{PEAR_AGENT_MENTION} Start the sandbox session by saying what you can see "
     "from this topic and the current workspace."
 )
-PEAR_CANVAS_FILE_NAME: Final = "README.md"
-# Older workspaces kept the topic doc in a git-excluded CANVAS.md;
-# reads fall through to it until a save migrates the content.
-PEAR_LEGACY_CANVAS_FILE_NAME: Final = "CANVAS.md"
-PEAR_CANVAS_TEMPLATE: Final = """# {topic}
-
-_Pear reads this before every run._
-
-## Notes
-
-## Pinned context
-"""
 PEAR_OFFICIAL_AGENT_RUNTIME: Final = "codex-app-server"
 PEAR_OFFICIAL_AGENT_RUNTIME_LABEL: Final = "Codex app-server"
 PEAR_AGENT_RUNTIME_PACKAGES: Final = ("openai-agents", "openai-codex")
@@ -212,7 +198,6 @@ PEAR_ARTIFACT_KIND_BY_LABEL: Final[dict[str, PearArtifactKind]] = {
     "session record": "session_record",
     "pear session": "session_record",
     "codex session": "session_record",
-    "canvas": "document",
     "doc": "document",
     "docs": "document",
     "issue": "ticket",
@@ -719,7 +704,7 @@ def build_pear_triage_message(request: str = "") -> str:
             f"{PEAR_AGENT_MENTION} {PEAR_TRIAGE_PROMPT}",
             "",
             request_line,
-            "Possible duplicate or related work: check this topic's artifacts, canvas, linked PRs, and linked issues.",
+            "Possible duplicate or related work: check this topic's artifacts, documents, linked PRs, and linked issues.",
             "Answer if already known: summarize the settled answer or decision from this topic.",
             "Suggested owner or reviewer: infer from Reviewers, PR, Ticket, or Issue artifacts when possible.",
             "Suggested scope: classify as bug, feature, verification, docs, or follow-up work.",
@@ -1631,7 +1616,7 @@ def build_pear_access_ack_message(
             "",
             "Pear can read the durable topic context, including the request, "
             "checklist, recent topic transcript, steering replies, pause/resume controls, "
-            "the topic canvas, Codex-native memories and skills, and artifact "
+            "the topic workspace, Codex-native memories and skills, and artifact "
             "lines such as Repo, Runtime, Branch, PR, Diff, Verification, "
             "Screenshot, Doc, Ticket, Issue, Reviewers, and Session.",
             "When the server worker is enabled, Pear runs the configured Codex "

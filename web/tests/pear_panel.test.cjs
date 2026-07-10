@@ -221,18 +221,13 @@ run_test("template renders workbench without active run", () => {
             workbench_meta: "devel / routing-fix / a3f92c1",
             workbench_diff_selected: false,
             workbench_history_selected: true,
-            workbench_canvas_selected: false,
             workbench_side_selected: false,
             workbench_diff_disabled: false,
             workbench_history_disabled: false,
             diff_tab_label: "diff",
             history_tab_label: "history",
-            canvas_tab_label: "canvas",
             side_tab_label: "whisper",
             workbench_view: "history",
-            git_tree_loading: false,
-            git_tree_error: "",
-            has_git_tree_graph: false,
             has_recent_commits: false,
             workbench_diff_summary_label: "2 files +16 -4",
             workbench_diff_file_label: "2 files",
@@ -261,7 +256,6 @@ run_test("template renders workbench without active run", () => {
     assert.match(html, /pear-workbench-close/);
     assert.match(html, /diff/);
     assert.match(html, /history/);
-    assert.match(html, /canvas/);
     assert.match(html, /whisper/);
     assert.doesNotMatch(html, /pear-workbench-head-row/);
     assert.doesNotMatch(html, /pear-workbench-diffstat/);
@@ -296,13 +290,11 @@ run_test("template keeps volatile run metadata out of workbench chrome", () => {
             workbench_scope_note: "Changes and commits are scoped to this topic worktree.",
             workbench_diff_selected: true,
             workbench_history_selected: false,
-            workbench_canvas_selected: false,
             workbench_side_selected: false,
             workbench_diff_disabled: false,
             workbench_history_disabled: false,
             diff_tab_label: "diff",
             history_tab_label: "history",
-            canvas_tab_label: "canvas",
             side_tab_label: "whisper",
             workbench_view: "diff",
             has_workbench_diff: false,
@@ -346,13 +338,11 @@ run_test("template keeps runtime controls out of workbench chrome", () => {
             workbench_scope_note: "Changes and commits are scoped to this topic worktree.",
             workbench_diff_selected: true,
             workbench_history_selected: false,
-            workbench_canvas_selected: false,
             workbench_side_selected: false,
             workbench_diff_disabled: false,
             workbench_history_disabled: false,
             diff_tab_label: "diff",
             history_tab_label: "history",
-            canvas_tab_label: "canvas",
             side_tab_label: "whisper",
             workbench_view: "diff",
             has_workbench_diff: false,
@@ -366,62 +356,6 @@ run_test("template keeps runtime controls out of workbench chrome", () => {
     assert.match(html, /pear-workbench-context-strip/);
     assert.doesNotMatch(html, /pear-workbench-runtime-trigger/);
     assert.doesNotMatch(html, /No committed work yet/);
-});
-
-run_test("template renders canvas as a workbench pane", () => {
-    const html = render_pear_panel({
-        panel_open: true,
-        show_workbench: true,
-        has_topic: true,
-        show_panel_header: false,
-        show_runtime_trigger: false,
-        panel_can_close: true,
-        active_run: undefined,
-        topic_context: {
-            workbench_title: "routing-fix",
-            workbench_meta: "devel / routing-fix / a3f92c1",
-            panel_repo_label: "devel",
-            panel_worktree_label: "routing-fix",
-            panel_git_status_label: "clean",
-            panel_git_status_class: "clean",
-            panel_git_ref_label: "main / a3f92c1",
-            panel_runtime_label: "gpt-5.5 / h",
-            panel_reasoning_effort_label: "High",
-            panel_reasoning_effort_meter_class: "high",
-            workbench_scope_note: "Changes and commits are scoped to this topic worktree.",
-            workbench_diff_selected: false,
-            workbench_history_selected: false,
-            workbench_canvas_selected: true,
-            workbench_side_selected: false,
-            workbench_diff_disabled: false,
-            workbench_history_disabled: false,
-            diff_tab_label: "diff",
-            history_tab_label: "history",
-            canvas_tab_label: "canvas",
-            side_tab_label: "whisper",
-            workbench_view: "canvas",
-            canvas_loading: false,
-            canvas_error: "",
-            canvas_rendering: false,
-            canvas_title: ".pear/CANVAS.md",
-            canvas_has_content: true,
-            canvas_has_rendered_html: true,
-            canvas_rendered_html: "<p>Project note</p>",
-            canvas_render_failed: false,
-            canvas: {
-                content: "Project note",
-            },
-        },
-    });
-
-    assert.match(html, /data-pear-workbench-view="canvas"/);
-    assert.match(html, /pear-workbench-canvas/);
-    assert.match(html, /pear-workbench-canvas-rendered rendered_markdown/);
-    assert.match(html, /<p>Project note<\/p>/);
-    assert.match(html, /pear-workbench-canvas-open/);
-    assert.match(html, /\.pear\/CANVAS\.md/);
-    assert.doesNotMatch(html, /pear-workbench-model-select/);
-    assert.doesNotMatch(html, /pear-workbench-effort-range/);
 });
 
 run_test("template renders diff rows without duplicate summary chips", () => {
@@ -447,13 +381,11 @@ run_test("template renders diff rows without duplicate summary chips", () => {
             workbench_scope_note: "Changes and commits are scoped to this topic worktree.",
             workbench_diff_selected: true,
             workbench_history_selected: false,
-            workbench_canvas_selected: false,
             workbench_side_selected: false,
             workbench_diff_disabled: false,
             workbench_history_disabled: false,
             diff_tab_label: "diff 2",
             history_tab_label: "history",
-            canvas_tab_label: "canvas",
             side_tab_label: "whisper",
             workbench_view: "diff",
             has_workbench_diff: true,
@@ -780,20 +712,11 @@ run_test("workbench_view_for_testing", () => {
         }),
         "side",
     );
-    assert.equal(
-        pear_panel.workbench_view_for_testing({
-            requested: "canvas",
-            has_diff: true,
-            has_history: true,
-        }),
-        "canvas",
-    );
 });
 
 run_test("workbench_view_for_artifact_label", () => {
     assert.equal(pear_panel.workbench_view_for_artifact_label("Diff"), "diff");
-    assert.equal(pear_panel.workbench_view_for_artifact_label("Canvas"), "canvas");
-    assert.equal(pear_panel.workbench_view_for_artifact_label("Doc"), "canvas");
+    assert.equal(pear_panel.workbench_view_for_artifact_label("Doc"), undefined);
     assert.equal(pear_panel.workbench_view_for_artifact_label("Repository"), "history");
     assert.equal(pear_panel.workbench_view_for_artifact_label("Branch"), "history");
     assert.equal(pear_panel.workbench_view_for_artifact_label("Commit"), "history");
@@ -955,20 +878,6 @@ run_test("polling_paused_for_testing", () => {
     );
 });
 
-run_test("canvas_cache_is_stale_for_testing", () => {
-    // Fresh cache (well within the 30s window) is not stale.
-    assert.equal(
-        pear_panel.canvas_cache_is_stale_for_testing({fetched_at: 1000, now: 5000}),
-        false,
-    );
-    // Past the 30s refresh window: stale, so an open canvas tab re-fetches to
-    // pick up the agent's server-side CANVAS.md edits.
-    assert.equal(
-        pear_panel.canvas_cache_is_stale_for_testing({fetched_at: 1000, now: 1000 + 30_000}),
-        true,
-    );
-});
-
 run_test("workbench_popover_top_for_testing", () => {
     const base = {viewport_height: 900, margin: 12, min_body_height: 260};
     // Normal anchor: top is used as-is.
@@ -1020,13 +929,12 @@ run_test("topic header controls template matches the retired jQuery skeleton", (
     assert.match(html, /class="pear-topic-header-runtime-separator"\s+aria-hidden="true"\s*>·</);
     // The runtime button and the branch/work controls carry the header key.
     assert.equal(html.split("data-pear-header-key").length - 1, 4);
-    // Two header controls plus the three workspace tabs.
-    assert.equal((html.match(/<button\s+type="button"/g) ?? []).length, 5);
+    // Two header controls plus Chat and Workspace.
+    assert.equal((html.match(/<button\s+type="button"/g) ?? []).length, 4);
     for (const marker of [
         'class="pear-workspace-tabs pear-workspace-tabs-hidden"',
         'data-pear-tab="chat"',
-        'data-pear-tab="canvas"',
-        'data-pear-tab="files"',
+        'data-pear-tab="workspace"',
     ]) {
         assert.ok(html.includes(marker), `missing: ${marker}`);
     }

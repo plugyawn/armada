@@ -869,12 +869,12 @@ run_test("pear_artifact_reference_detection", () => {
         },
     );
     assert.deepEqual(
-        message_list_view.extract_pear_artifact_reference_for_testing("Canvas: CANVAS.md"),
+        message_list_view.extract_pear_artifact_reference_for_testing("Docs: README.md"),
         {
-            label: "Canvas",
+            label: "Docs",
             glyph: "✧",
             class_name: "pear-artifact-doc",
-            title: "Canvas: CANVAS.md",
+            title: "Docs: README.md",
         },
     );
     assert.deepEqual(
@@ -896,7 +896,7 @@ run_test("pear_artifact_reference_detection", () => {
         },
     );
     assert.equal(
-        message_list_view.extract_pear_artifact_reference_for_testing("Canvas: "),
+        message_list_view.extract_pear_artifact_reference_for_testing("Doc: "),
         undefined,
     );
     assert.equal(

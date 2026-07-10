@@ -430,8 +430,6 @@ run_test("runtime popover does not expose workbench actions", () => {
     });
 
     assert.doesNotMatch(html, /pear-workbench-menu-link/);
-    assert.doesNotMatch(html, /pear-canvas-menu-link/);
-    assert.doesNotMatch(html, /pear-files-menu-link/);
     assert.doesNotMatch(html, />translated: Workbench</);
     assert.doesNotMatch(html, /pear-runtime-model-select/);
     assert.match(html, /pear-runtime-model-choice/);

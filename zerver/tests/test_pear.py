@@ -337,7 +337,7 @@ class PearSessionDefaultsTest(TestCase):
 
     def test_parse_pear_artifacts_recognizes_commit_and_document_labels(self) -> None:
         artifacts = parse_pear_artifacts(
-            "Commit: abc1234\nSHA: deadbeef\nCanvas: legacy\nDoc: README.md refreshed",
+            "Commit: abc1234\nSHA: deadbeef\nUnknown: ignored\nDoc: README.md refreshed",
             message_id=21,
         )
 
@@ -2269,7 +2269,6 @@ class PearSessionDefaultsTest(TestCase):
             "#11 Pear (bot): Verification: pytest zerver/tests/test_pear.py",
             prompt,
         )
-        self.assertNotIn("Canvas:", prompt)
         self.assertNotIn("Pear agent skill definitions:", prompt)
         self.assertNotIn("\nChannel memory:\n", prompt)
         self.assertNotIn("\nForgotten memory:\n", prompt)

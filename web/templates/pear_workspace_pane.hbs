@@ -1,7 +1,2 @@
-{{! The topic bar (#pear-topic-bar) lives above this pane as page
-    chrome shared with the chat; the pane is only content. }}
-<div class="pear-workspace-pane-inner">
-    <div class="pear-workspace-pane-body pear-canvas-body pear-body-hidden" tabindex="-1"></div>
-    <div class="pear-workspace-pane-body pear-files-body pear-body-hidden"></div>
-    <span class="pear-canvas-status"></span>
-</div>
+{{! The real explorer/editor shell is lazy-loaded into this stable host. }}
+<div class="pear-workspace-host" aria-label="Workspace"></div>

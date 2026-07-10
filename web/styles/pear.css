@@ -644,15 +644,10 @@
 }
 
 .pear-file-list,
-.pear-commit-list,
-.pear-git-tree {
+.pear-commit-list {
     display: flex;
     flex-direction: column;
     overflow: hidden;
-}
-
-.pear-file-list,
-.pear-commit-list {
     gap: 0;
     border: 1px solid
         color-mix(
@@ -824,137 +819,6 @@
     font-weight: 600;
     line-height: 13px;
     padding: 0 4px;
-}
-
-.pear-git-tree {
-    gap: 7px;
-}
-
-.pear-git-tree-block {
-    display: flex;
-    min-width: 0;
-    flex-direction: column;
-    gap: 3px;
-}
-
-.pear-git-tree-label {
-    color: var(--color-text-sidebar-heading);
-    /* 10px at the default 14px base font size. */
-    font-size: calc(10 / 14 * var(--base-font-size-px));
-    font-weight: var(--font-weight-sidebar-heading);
-    letter-spacing: 0;
-    line-height: 13px;
-    opacity: var(--opacity-sidebar-heading);
-    text-transform: uppercase;
-}
-
-.pear-git-tree-graph,
-.pear-git-tree-status {
-    max-height: 180px;
-    margin: 0;
-    overflow: auto;
-    border: 1px solid
-        color-mix(
-            in srgb,
-            var(--color-border-sidebar-subheader) 54%,
-            transparent
-        );
-    border-radius: var(--pear-radius-chip);
-    color: var(--color-text-item);
-    font-family: var(--pear-font-mono);
-    /* 10px at the default 14px base font size. */
-    font-size: calc(10 / 14 * var(--base-font-size-px));
-    line-height: 14px;
-    padding: 5px 6px;
-    white-space: pre-wrap;
-}
-
-.pear-git-tree-status {
-    max-height: 120px;
-}
-
-.pear-workbench-canvas {
-    display: flex;
-    min-width: 0;
-    flex-direction: column;
-    gap: 6px;
-}
-
-.pear-workbench-canvas-toolbar {
-    display: flex;
-    min-width: 0;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-    border-bottom: 1px solid
-        color-mix(
-            in srgb,
-            var(--color-border-sidebar-subheader) 44%,
-            transparent
-        );
-    padding-bottom: 5px;
-}
-
-.pear-workbench-canvas-path {
-    min-width: 0;
-    overflow: hidden;
-    color: var(--color-text-sidebar-heading);
-    font-family: var(--pear-font-mono);
-    /* 10px at the default 14px base font size. */
-    font-size: calc(10 / 14 * var(--base-font-size-px));
-    line-height: 13px;
-    opacity: var(--opacity-sidebar-heading);
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.pear-workbench-canvas-open {
-    flex: 0 0 auto;
-    border: 0;
-    border-bottom: 1px solid transparent;
-    background: transparent;
-    color: var(--color-text-sidebar-heading);
-    cursor: pointer;
-    font: inherit;
-    /* 10px at the default 14px base font size. */
-    font-size: calc(10 / 14 * var(--base-font-size-px));
-    font-weight: 600;
-    line-height: 13px;
-    opacity: var(--opacity-sidebar-heading);
-    padding: 0 1px 1px;
-}
-
-.pear-workbench-canvas-open:hover,
-.pear-workbench-canvas-open:focus-visible {
-    border-bottom-color: currentcolor;
-    color: var(--color-text-default);
-    opacity: 1;
-    outline: none;
-}
-
-.pear-workbench-canvas-rendered,
-.pear-workbench-canvas-source {
-    max-height: 240px;
-    overflow: auto;
-    color: var(--color-text-default);
-    /* 11px at the default 14px base font size. */
-    font-size: calc(11 / 14 * var(--base-font-size-px));
-    line-height: 16px;
-    overflow-wrap: anywhere;
-}
-
-.pear-workbench-canvas-rendered > :first-child {
-    margin-top: 0;
-}
-
-.pear-workbench-canvas-rendered > :last-child {
-    margin-bottom: 0;
-}
-
-.pear-workbench-canvas-source {
-    margin: 0;
-    font-family: var(--pear-font-mono);
-    white-space: pre-wrap;
 }
 
 .pear-file-added .pear-file-status,
@@ -1230,43 +1094,6 @@
     .pear-workbench-tab {
         flex: 1 1 0;
     }
-}
-
-/* Pear canvas modal (dialog_widget body); see web/src/pear_canvas.ts. */
-.pear-canvas-modal-body {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-}
-
-.pear-canvas-toolbar {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-}
-
-.pear-canvas-loading-active {
-    display: flex;
-    align-items: center;
-    gap: 5px;
-    color: var(--color-text-item);
-    font-style: italic;
-    line-height: 16px;
-}
-
-.pear-canvas-loading-active .pear-thinking-glyph {
-    color: var(--color-text-default);
-}
-
-.pear-canvas-byte-info {
-    color: var(--color-text-item);
-    /* 12px at the default 14px base font size. */
-    font-size: calc(12 / 14 * var(--base-font-size-px));
-}
-
-.pear-canvas-rendered {
-    overflow-wrap: anywhere;
 }
 
 #pear-panel .pear-runtime-menu-trigger {
@@ -1641,7 +1468,6 @@
 .pear-icon-button,
 .pear-workbench-close,
 .pear-workbench-tab,
-.pear-workbench-canvas-open,
 .pear-file-row,
 .pear-commit-row,
 .pear-run-action-menu-item,
@@ -1860,9 +1686,8 @@
     }
 }
 
-/* Workspace tabs (PEAR_CANVAS_TABS_DESIGN.md T1): one strip in the
-   recipient bar and mirrored atop the pane. Pixel voice, accent
-   underline on the active tab; no boxes. */
+/* Chat/Workspace mode strip in the recipient bar. Pixel voice, accent
+   underline on the active mode; no boxes. */
 .pear-workspace-tabs {
     display: inline-flex;
     min-width: 0;
@@ -1878,7 +1703,7 @@
     display: none;
 }
 
-.pear-workspace-tab {
+.pear-workspace-mode-tab {
     appearance: none;
     padding: 3px 1px 4px;
     border: 0;
@@ -1895,7 +1720,7 @@
     transition: color var(--pear-dur-1) var(--pear-ease);
 }
 
-.pear-workspace-tab:hover {
+.pear-workspace-mode-tab:hover {
     color: var(--pear-ink-1);
 }
 
@@ -1904,7 +1729,7 @@
     color: var(--pear-ink-1);
 }
 
-.pear-workspace-tab:focus:not(:focus-visible) {
+.pear-workspace-mode-tab:focus:not(:focus-visible) {
     outline: none;
 }
 
@@ -1952,628 +1777,13 @@
     padding-top: var(--navbar-fixed-height);
 }
 
-/* Inline mode: with the bar active, the pane joins the page flow —
-   canvas and files scroll on the page exactly like chat, and the bar
-   pins against the same scroll. No nested scrollbox. */
+/* Workspace mode keeps the same topic header pinned above the lazy shell. */
 .pear-topic-bar-active #pear-workspace-pane {
     overflow: visible;
     height: auto;
     padding-top: 0;
 }
 
-.pear-topic-bar-active #pear-workspace-pane .pear-workspace-pane-body {
-    overflow: visible;
-}
-
-/* In page flow the pane's foot scrolls away; the status pins to the
-   viewport instead. */
-.pear-topic-bar-active #pear-workspace-pane .pear-canvas-status {
-    position: fixed;
-    right: calc(var(--right-sidebar-width) + var(--pear-space-4));
-    bottom: var(--pear-space-3);
-}
-
-.pear-workspace-pane-inner {
-    position: relative;
-    display: flex;
-    overflow: hidden;
-    min-height: 0;
-    flex: 1 1 auto;
-    flex-direction: column;
-}
-
-
-
-/* Save/ask state floats quietly at the pane's foot; the header stays
-   byte-identical to chat's bar. */
-.pear-canvas-status {
-    position: absolute;
-    right: var(--pear-space-4);
-    bottom: var(--pear-space-3);
-    z-index: 5;
-    color: var(--pear-ink-3);
-    font-family: var(--pear-font-pixel);
-    /* stylelint-disable-next-line declaration-property-unit-disallowed-list */
-    font-size: 11px;
-    pointer-events: none;
-}
-
-.pear-canvas-status-failed {
-    color: var(--pear-danger);
-}
-
-.pear-workspace-pane-body {
-    overflow: auto;
-    min-height: 0;
-    flex: 1 1 auto;
-    padding: var(--pear-space-4);
-}
-
-/* Canvas: Milkdown Crepe re-skinned as a Pear surface. Storage stays
-   plain markdown; the editor brings the Notion-grade chrome (slash
-   menu, drag handles, tables, KaTeX). The document reads as a proper
-   sheet: bounded, bordered, with a pixel-print ruler across the top
-   and a notebook margin rule down the left. */
-.pear-workspace-pane-body.pear-body-hidden {
-    display: none;
-}
-
-.pear-canvas-body {
-    outline: none;
-    padding: var(--pear-space-3) var(--pear-space-4) 6vh;
-
-    /* The frame theme defines its palette directly on .milkdown, so
-       the re-skin must land there too or the light defaults win. */
-    & .milkdown {
-        --crepe-color-background: var(--pear-surface-2);
-        --crepe-color-on-background: var(--pear-ink-1);
-        --crepe-color-surface: var(--pear-surface-2);
-        --crepe-color-surface-low: var(--pear-surface-3);
-        --crepe-color-on-surface: var(--pear-ink-1);
-        --crepe-color-on-surface-variant: var(--pear-ink-2);
-        --crepe-color-outline: var(--pear-ink-3);
-        --crepe-color-primary: var(--pear-accent-ink);
-        --crepe-color-secondary: var(--pear-accent-fill);
-        --crepe-color-on-secondary: var(--pear-accent-ink);
-        --crepe-color-inverse: var(--pear-ink-1);
-        --crepe-color-on-inverse: var(--pear-surface-1);
-        --crepe-color-inline-code: var(--pear-accent-ink);
-        --crepe-color-inline-area: var(--pear-surface-3);
-        --crepe-color-error: var(--pear-danger);
-        --crepe-color-hover: var(--pear-surface-3);
-        --crepe-color-selected: var(--pear-accent-fill);
-        --crepe-shadow-1: var(--pear-shadow-pop);
-        --crepe-shadow-2: var(--pear-shadow-pop);
-        --crepe-font-title: var(--pear-font-pixel);
-        --crepe-font-default: var(--pear-font-pixel);
-        --crepe-font-code: var(--pear-font-mono);
-
-        -webkit-font-smoothing: none;
-        max-width: 84ch;
-        min-height: 40vh;
-        margin: 0 auto;
-        padding: 12px 24px 24px;
-        /* Buffer metrics: pinned pixel size, editor leading. */
-        /* stylelint-disable-next-line declaration-property-unit-disallowed-list */
-        font-size: 16px;
-        line-height: 1.5;
-        background: transparent;
-        color: var(--pear-ink-1);
-        caret-color: var(--pear-accent-ink);
-
-        /* Crepe ships its own 60px/120px editor padding; the sheet
-           is the single source of insets. */
-        & .ProseMirror {
-            padding: 0 0 8vh;
-        }
-
-        /* No floating block chrome: the drag/plus handle is Notion
-           furniture and the doc is a buffer. Structure comes from
-           typing markdown or the slash menu. */
-        & .milkdown-block-handle {
-            display: none;
-        }
-
-        & .milkdown-slash-menu,
-        & .milkdown-toolbar {
-            transition-duration: 80ms;
-        }
-
-        /* Prose packs like an editor: Crepe pads every paragraph
-           4px top and bottom, so the buffer zeroes that and keeps
-           gaps under half a line. */
-        & p {
-            margin: 0.35em 0;
-            padding: 0;
-        }
-
-        /* Crepe sizes list rows for 32px lines; the buffer runs
-           24px, so labels match the grid and item paragraphs carry
-           no extra rhythm — the line grid is the rhythm. */
-        & .milkdown-list-item-block li .label-wrapper,
-        & .milkdown-list-item-block li .label-wrapper .label {
-            height: 24px;
-        }
-
-        & .milkdown-list-item-block p {
-            margin: 0;
-        }
-
-        /* A near-flat scale, Zed-style: headings hold rank through
-           tone, not size — the pixel face reads crisp at 16/20. */
-        & h1,
-        & h2,
-        & h3,
-        & h4,
-        & h5,
-        & h6 {
-            -webkit-font-smoothing: none;
-            font-family: var(--pear-font-pixel);
-            font-weight: 400;
-            letter-spacing: -0.01em;
-        }
-
-        & h1 {
-            margin: 0 0 0.5em;
-            /* stylelint-disable-next-line declaration-property-unit-disallowed-list */
-            font-size: 20px;
-        }
-
-        & h2 {
-            margin: 1.2em 0 0.25em;
-            color: var(--pear-accent-ink);
-            /* stylelint-disable-next-line declaration-property-unit-disallowed-list */
-            font-size: 16px;
-        }
-
-        & h3,
-        & h4,
-        & h5,
-        & h6 {
-            margin: 1em 0 0.2em;
-            color: var(--pear-ink-2);
-            /* stylelint-disable-next-line declaration-property-unit-disallowed-list */
-            font-size: 16px;
-        }
-
-        /* Crepe's placeholder is a height-0 absolute overlay; if it
-           ever wraps it paints across the next block (live report).
-           One line, clipped. */
-        & .crepe-placeholder::before {
-            overflow: hidden;
-            max-width: 100%;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-        }
-
-        /* KaTeX is prose, not an accent surface. */
-        & span[data-type="math_inline"],
-        & .katex {
-            color: var(--pear-ink-1);
-        }
-    }
-}
-
-/* Asks: a bracketed span handed to the agent shimmers until the
-   answer lands in the file (PEAR_CANVAS_TABS_DESIGN.md §B). */
-.pear-ask-pending {
-    padding: 0 0.15em;
-    border-radius: var(--pear-radius-chip);
-    background: linear-gradient(
-        100deg,
-        var(--pear-accent-fill) 20%,
-        var(--pear-accent-fill-strong) 45%,
-        var(--pear-accent-fill) 70%
-    );
-    background-size: 220% 100%;
-    color: var(--pear-ink-2);
-    animation: pear-ask-shimmer 1.6s var(--pear-ease) infinite;
-}
-
-@keyframes pear-ask-shimmer {
-    from {
-        background-position: 120% 0;
-    }
-
-    to {
-        background-position: -60% 0;
-    }
-}
-
-/* A resolved labeled ask: the answer waits behind a chip. */
-.pear-canvas-body .pear-aside-chip {
-    display: inline-flex;
-    align-items: baseline;
-    gap: 0.4em;
-    padding: 0 0.6em;
-    border: 1px solid color-mix(in srgb, var(--pear-accent-ink) 35%, transparent);
-    border-radius: 999px;
-    background: var(--pear-accent-fill);
-    color: var(--pear-ink-1);
-    font-family: var(--pear-font-pixel);
-    font-size: 0.7857em; /* 11px at 14px em */
-    text-decoration: none;
-    cursor: pointer;
-    transition: border-color var(--pear-dur-1) var(--pear-ease);
-
-    &::before {
-        content: "\2726"; /* ✦ */
-        color: var(--pear-accent-ink);
-    }
-
-    &:hover {
-        border-color: var(--pear-accent-ink);
-        text-decoration: none;
-    }
-}
-
-.tippy-box[data-theme~="pear-aside"] {
-    max-width: 460px;
-    border: 1px solid var(--pear-hairline);
-    border-radius: var(--pear-radius-card);
-    background: var(--pear-surface-1);
-    color: var(--pear-ink-1);
-    box-shadow: var(--pear-shadow-pop);
-
-    .tippy-content {
-        padding: var(--pear-space-2) var(--pear-space-3);
-    }
-
-    .tippy-arrow {
-        display: none;
-    }
-}
-
-.pear-aside-popover {
-    max-height: 45vh;
-    overflow-y: auto;
-}
-
-@media (prefers-reduced-motion: reduce) {
-    .pear-ask-pending {
-        animation: none;
-        background: var(--pear-accent-fill);
-    }
-}
-
-/* Files: the worktree as a product surface — same bounded sheet as
-   the canvas, rows with type glyphs and status chips, click-to-read
-   previews through Zulip's own code rendering. */
-.pear-files-body {
-    padding: var(--pear-space-5) var(--pear-space-4) 20vh;
-}
-
-.pear-files-sheet {
-    max-width: 84ch;
-    min-height: 40vh;
-    margin: 0 auto;
-    padding: var(--pear-space-5) var(--pear-space-6);
-    border: 1px solid var(--pear-hairline);
-    border-radius: var(--pear-radius-card);
-    background: var(--pear-surface-1);
-    box-shadow: var(--pear-shadow-pop);
-}
-
-.pear-files-list {
-    margin: 0;
-    padding: 0;
-    list-style: none;
-}
-
-.pear-files-row,
-.pear-files-dir {
-    display: flex;
-    align-items: center;
-    gap: var(--pear-space-2);
-    padding: 4px var(--pear-space-2);
-    padding-left: calc(var(--pear-space-2) + var(--pear-file-depth, 0) * 18px);
-    border-radius: var(--pear-radius-chip);
-    line-height: 1.7142em; /* 24px at 14px em */
-}
-
-.pear-files-dir {
-    color: var(--pear-ink-2);
-    cursor: pointer;
-    font-weight: 500;
-
-    &:hover {
-        background: var(--pear-surface-2);
-    }
-}
-
-.pear-files-dir-icon {
-    font-size: 0.7em;
-    color: var(--pear-ink-3);
-}
-
-.pear-files-row {
-    cursor: pointer;
-}
-
-.pear-files-row:hover {
-    background: var(--pear-surface-2);
-}
-
-.pear-files-glyph {
-    flex: 0 0 1.2em;
-    color: var(--pear-ink-3);
-    font-family: var(--pear-font-pixel);
-    text-align: center;
-}
-
-.pear-files-row-canvas .pear-files-glyph {
-    color: var(--pear-accent-ink);
-}
-
-.pear-files-name {
-    overflow: hidden;
-    min-width: 0;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    font-family: var(--pear-font-mono);
-    font-size: 0.9286em; /* 13px at 14px em */
-}
-
-.pear-files-chip {
-    flex: 0 0 auto;
-    padding: 0 0.5em;
-    border-radius: 999px;
-    font-family: var(--pear-font-pixel);
-    /* stylelint-disable-next-line declaration-property-unit-disallowed-list */
-    font-size: 11px;
-    line-height: 1.6;
-}
-
-.pear-files-chip-changed {
-    background: var(--pear-warn-fill);
-    color: var(--pear-warn);
-}
-
-.pear-files-chip-untracked {
-    background: var(--pear-accent-fill);
-    color: var(--pear-accent-ink);
-}
-
-.pear-files-chip-canvas {
-    border: 1px solid color-mix(in srgb, var(--pear-accent-ink) 35%, transparent);
-    background: var(--pear-accent-fill);
-    color: var(--pear-accent-ink);
-}
-
-/* The repo head strip: branch, HEAD, and working-state at a glance. */
-.pear-files-repo-head {
-    display: flex;
-    overflow: hidden;
-    align-items: baseline;
-    gap: var(--pear-space-3);
-    margin-bottom: var(--pear-space-3);
-    padding-bottom: var(--pear-space-3);
-    border-bottom: 1px solid var(--pear-hairline);
-    white-space: nowrap;
-}
-
-.pear-files-repo-branch,
-.pear-files-repo-sha {
-    flex: 0 0 auto;
-    color: var(--pear-accent-ink);
-    font-family: var(--pear-font-pixel);
-    /* stylelint-disable-next-line declaration-property-unit-disallowed-list */
-    font-size: 11px;
-}
-
-.pear-files-repo-subject {
-    overflow: hidden;
-    min-width: 0;
-    color: var(--pear-ink-1);
-    text-overflow: ellipsis;
-    font-weight: 500;
-}
-
-.pear-files-repo-meta {
-    overflow: hidden;
-    flex: 0 1 auto;
-    color: var(--pear-ink-3);
-    text-overflow: ellipsis;
-    font-size: 0.857em; /* 12px at 14px em */
-}
-
-.pear-files-repo-head .pear-files-chip {
-    margin-left: auto;
-}
-
-/* Type-to-filter over the tree. */
-.pear-files-filter {
-    width: 100%;
-    margin-bottom: var(--pear-space-3);
-    padding: 4px var(--pear-space-2);
-    border: 1px solid var(--pear-hairline);
-    border-radius: var(--pear-radius-chip);
-    background: var(--pear-surface-0);
-    color: var(--pear-ink-1);
-    font-family: var(--pear-font-mono);
-    font-size: 0.9286em; /* 13px at 14px em */
-
-    &:focus {
-        border-color: var(--pear-accent-ink);
-        outline: none;
-    }
-
-    &::placeholder {
-        color: var(--pear-ink-3);
-        font-family: var(--pear-font-pixel);
-    }
-}
-
-/* Recent commits, like the repo landing page's history peek. */
-.pear-files-commits {
-    margin-top: var(--pear-space-5);
-    padding-top: var(--pear-space-3);
-    border-top: 1px solid var(--pear-hairline);
-}
-
-.pear-files-section-title {
-    margin-bottom: var(--pear-space-2);
-    color: var(--pear-ink-3);
-    font-family: var(--pear-font-pixel);
-    /* stylelint-disable-next-line declaration-property-unit-disallowed-list */
-    font-size: 11px;
-}
-
-.pear-files-commits-list {
-    margin: 0;
-    padding: 0;
-    list-style: none;
-}
-
-.pear-files-commit-row {
-    display: flex;
-    align-items: baseline;
-    gap: var(--pear-space-3);
-    padding: 2px var(--pear-space-2);
-    border-radius: var(--pear-radius-chip);
-}
-
-.pear-files-commit-summary {
-    overflow: hidden;
-    min-width: 0;
-    color: var(--pear-ink-2);
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-/* Image previews sit on the sheet like a plate. */
-.pear-files-preview-image {
-    display: flex;
-    justify-content: center;
-    padding: var(--pear-space-4);
-
-    & img {
-        max-width: 100%;
-        height: auto;
-        border: 1px solid var(--pear-hairline);
-        border-radius: var(--pear-radius-chip);
-    }
-}
-
-/* GitHub-style annotations: the last commit that touched the file,
-   and how long ago. */
-.pear-files-commit {
-    overflow: hidden;
-    min-width: 0;
-    flex: 1 1 auto;
-    margin-left: var(--pear-space-4);
-    color: var(--pear-ink-3);
-    font-size: 0.857em; /* 12px at 14px em */
-    text-align: right;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.pear-files-when {
-    flex: 0 0 auto;
-    min-width: 3ch;
-    color: var(--pear-ink-3);
-    font-family: var(--pear-font-pixel);
-    /* stylelint-disable-next-line declaration-property-unit-disallowed-list */
-    font-size: 11px;
-    text-align: right;
-}
-
-.pear-files-actions {
-    display: flex;
-    flex: 0 0 auto;
-    gap: 2px;
-    margin-left: var(--pear-space-2);
-    opacity: 0;
-    transition: opacity var(--pear-dur-1) var(--pear-ease);
-}
-
-/* The README reads below the tree, like a repo landing page. */
-.pear-files-readme {
-    margin-top: var(--pear-space-6);
-    padding-top: var(--pear-space-4);
-    border-top: 1px solid var(--pear-hairline);
-}
-
-.pear-files-readme-title {
-    margin-bottom: var(--pear-space-3);
-    color: var(--pear-ink-3);
-    font-family: var(--pear-font-pixel);
-    /* stylelint-disable-next-line declaration-property-unit-disallowed-list */
-    font-size: 11px;
-}
-
-.pear-files-row:hover .pear-files-actions,
-.pear-files-actions:focus-within {
-    opacity: 1;
-}
-
-.pear-files-copy,
-.pear-files-download,
-.pear-files-back {
-    display: inline-flex;
-    align-items: center;
-    padding: 1px 5px;
-    border: 0;
-    border-radius: var(--pear-radius-chip);
-    background: transparent;
-    color: var(--pear-ink-3);
-    cursor: pointer;
-
-    &:hover {
-        background: var(--pear-surface-3);
-        color: var(--pear-ink-1);
-    }
-}
-
-/* Preview: reading a file without leaving the room. */
-.pear-files-preview-header {
-    display: flex;
-    align-items: center;
-    gap: var(--pear-space-3);
-    margin-bottom: var(--pear-space-4);
-    padding-bottom: var(--pear-space-2);
-    border-bottom: 1px solid var(--pear-hairline);
-}
-
-.pear-files-back {
-    font-family: var(--pear-font-pixel);
-    /* stylelint-disable-next-line declaration-property-unit-disallowed-list */
-    font-size: 12px;
-}
-
-.pear-files-preview-path {
-    overflow: hidden;
-    min-width: 0;
-    color: var(--pear-ink-1);
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    font-family: var(--pear-font-mono);
-    font-size: 0.9286em; /* 13px at 14px em */
-}
-
-.pear-files-preview-meta {
-    flex: 0 0 auto;
-    margin-left: auto;
-    color: var(--pear-ink-3);
-    font-family: var(--pear-font-pixel);
-    /* stylelint-disable-next-line declaration-property-unit-disallowed-list */
-    font-size: 11px;
-}
-
-.pear-files-preview-content {
-    overflow-x: auto;
-}
-
-.pear-files-empty,
-.pear-files-truncated {
-    margin: var(--pear-space-4) auto;
-    color: var(--pear-ink-3);
-    text-align: center;
-}
-
-/* The rail's run strip: the branch's last three runs, one pixel line
-   each, deep-linking into work details. */
 .pear-rail-runs {
     margin: var(--pear-space-2) 0 0;
     padding: 0;
@@ -2624,7 +1834,7 @@
     margin-left: auto;
 }
 
-.pear-rail-canvas-line {
+.pear-rail-workspace-line {
     display: flex;
     width: 100%;
     align-items: center;
@@ -2643,7 +1853,7 @@
     text-align: left;
 }
 
-.pear-rail-canvas-line:hover {
+.pear-rail-workspace-line:hover {
     background: var(--pear-surface-2);
     color: var(--pear-ink-1);
 }
@@ -2780,7 +1990,11 @@
         overflow: hidden;
 
         &.pear-wall-status-error {
-            border-color: color-mix(in srgb, var(--pear-danger) 45%, transparent);
+            border-color: color-mix(
+                in srgb,
+                var(--pear-danger) 45%,
+                transparent
+            );
         }
 
         &.pear-wall-status-paused {

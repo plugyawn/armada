@@ -304,7 +304,7 @@ const pear_artifact_types: {labels: string[]; glyph: string; class_name: string}
         glyph: "✩",
         class_name: "pear-artifact-session",
     },
-    {labels: ["Canvas", "Doc", "Docs"], glyph: "✧", class_name: "pear-artifact-doc"},
+    {labels: ["Doc", "Docs"], glyph: "✧", class_name: "pear-artifact-doc"},
     {labels: ["Issue", "Ticket"], glyph: "✷", class_name: "pear-artifact-ticket"},
     {labels: ["Reviewer", "Reviewers"], glyph: "✷", class_name: "pear-artifact-reviewers"},
 ];

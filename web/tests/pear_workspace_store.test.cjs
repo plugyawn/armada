@@ -20,7 +20,13 @@ function activate(state, workspace_id, workspace_revision = 1) {
 }
 
 function open_document(state, workspace_id, path) {
-    const next = reduce(state, {type: "open_document", workspaceId: workspace_id, path});
+    const entry_id = `entry:${path}`;
+    const next = reduce(state, {
+        type: "open_document",
+        workspaceId: workspace_id,
+        entryId: entry_id,
+        path,
+    });
     const workspace = workspace_store.get_pear_workspace(next, workspace_id);
     assert.ok(workspace !== undefined);
     return {state: next, request_generation: workspace.requestGeneration};
@@ -30,6 +36,7 @@ function load_document(state, workspace_id, path, request_generation, overrides 
     return reduce(state, {
         type: "document_loaded",
         workspaceId: workspace_id,
+        entryId: `entry:${path}`,
         path,
         requestGeneration: request_generation,
         workspaceRevision: 1,
@@ -41,7 +48,12 @@ function load_document(state, workspace_id, path, request_generation, overrides 
 }
 
 function identity(workspace_id, path, request_generation) {
-    return {workspaceId: workspace_id, path, requestGeneration: request_generation};
+    return {
+        workspaceId: workspace_id,
+        entryId: `entry:${path}`,
+        path,
+        requestGeneration: request_generation,
+    };
 }
 
 function get_document(state, workspace_id, path, request_generation) {
@@ -160,6 +172,7 @@ run_test("delayed Rich serialization cannot become savable text", () => {
     assert.deepEqual(document.saveInFlight, {
         workspaceId: "workspace-a",
         workspaceRevision: 1,
+        entryId: "entry:README.md",
         path: "README.md",
         requestGeneration: loaded.request_generation,
         editRevision: 2,
@@ -180,6 +193,7 @@ run_test("an older save success cannot clear a newer Source edit", () => {
         type: "save_succeeded",
         ...id,
         editRevision: 1,
+        newEntryId: "entry:README.md",
         newVersion: "version-2",
         workspaceRevision: 2,
     });
@@ -216,6 +230,7 @@ run_test("an inactive document save acknowledges only its original session", () 
         type: "save_succeeded",
         ...a_id,
         editRevision: 1,
+        newEntryId: "entry:README.md",
         newVersion: "a-version-2",
         workspaceRevision: 2,
     });
@@ -242,6 +257,7 @@ run_test("stale save callbacks cannot consume the single in-flight save", () => 
         type: "save_succeeded",
         ...id,
         editRevision: 999,
+        newEntryId: "entry:README.md",
         newVersion: "wrong",
         workspaceRevision: 999,
     });
@@ -264,6 +280,7 @@ run_test("conflict Overwrite keeps the latest edit and adopts only the remote ba
         editRevision: 1,
         remoteText: "remote edit\n",
         remoteVersion: "remote-version",
+        remoteEntryId: "entry:README.md",
         remoteWorkspaceRevision: 7,
     });
 
@@ -312,6 +329,7 @@ run_test("conflict Reload discards the scratch edit and restores clean view stat
         editRevision: 1,
         remoteText: "remote\n",
         remoteVersion: "remote-version",
+        remoteEntryId: "entry:README.md",
         remoteWorkspaceRevision: 4,
     });
     state = reduce(state, {type: "conflict_reload", ...id});
@@ -447,7 +465,7 @@ run_test("the authoritative byte limit blocks a save visibly", () => {
     const workspace = workspace_store.get_pear_workspace(state, "workspace-a");
     const document = get_document(state, "workspace-a", "README.md", loaded.request_generation);
     const documents = new Map(workspace.documents);
-    documents.set("README.md", {...document, maxBytes: 3});
+    documents.set("entry:README.md", {...document, maxBytes: 3});
     state = {
         ...state,
         workspaces: new Map(state.workspaces).set("workspace-a", {...workspace, documents}),
@@ -499,6 +517,7 @@ run_test("stale and no-op transitions fail closed", () => {
         editRevision: 99,
         remoteText: "stale",
         remoteVersion: "stale",
+        remoteEntryId: "stale-entry",
         remoteWorkspaceRevision: 99,
     });
     const before_empty_resolutions = state;
@@ -530,7 +549,7 @@ run_test("a dirty document rejects a late reload", () => {
 
     assert.equal(state.ignoredStaleResponses, 1);
     assert.equal(
-        workspace_store.get_pear_workspace(state, "workspace-a").documents.get("README.md")
+        workspace_store.get_pear_workspace(state, "workspace-a").documents.get("entry:README.md")
             .currentText,
         "dirty\n",
     );
@@ -608,10 +627,55 @@ run_test("save failure is scoped and a newer serialization error survives an old
         type: "save_succeeded",
         ...rich_id,
         editRevision: 1,
+        newEntryId: "entry:README.md",
         newVersion: "version-2",
         workspaceRevision: 2,
     });
     document = get_document(state, "workspace-c", "README.md", rich_loaded.request_generation);
     assert.equal(document.state, "error");
     assert.equal(document.error, "serialization_error");
+});
+
+run_test("a successful save adopts the revision-bound entry identity", () => {
+    const loaded = loaded_store();
+    let {state} = loaded;
+    const old_id = identity("workspace-a", "README.md", loaded.request_generation);
+    state = reduce(state, {type: "source_edited", ...old_id, text: "saved\n"});
+    state = reduce(state, {type: "save_started", ...old_id});
+    state = reduce(state, {
+        type: "save_succeeded",
+        ...old_id,
+        editRevision: 1,
+        newEntryId: "revision-2-readme",
+        newVersion: "version-2",
+        workspaceRevision: 2,
+    });
+
+    assert.equal(workspace_store.get_pear_workspace_document(state, old_id), undefined);
+    const new_id = {...old_id, entryId: "revision-2-readme"};
+    const document = workspace_store.get_pear_workspace_document(state, new_id);
+    assert.ok(document !== undefined);
+    assert.equal(document.entryId, "revision-2-readme");
+    assert.equal(document.state, "clean");
+    assert.equal(
+        workspace_store.get_pear_workspace(state, "workspace-a").activeEntryId,
+        "revision-2-readme",
+    );
+
+    state = reduce(state, {type: "source_edited", ...old_id, text: "wrong file\n"});
+    assert.equal(state.ignoredStaleResponses, 1);
+    assert.equal(workspace_store.get_pear_workspace_document(state, new_id).currentText, "saved\n");
+});
+
+run_test("a stale snapshot cannot load bytes under a current entry identity", () => {
+    let state = workspace_store.create_pear_workspace_store();
+    state = activate(state, "workspace-a", 2);
+    const opened = open_document(state, "workspace-a", "README.md");
+    state = load_document(opened.state, "workspace-a", "README.md", opened.request_generation, {
+        workspaceRevision: 1,
+        text: "stale bytes\n",
+    });
+
+    assert.equal(state.ignoredStaleResponses, 1);
+    assert.equal(workspace_store.get_pear_workspace(state, "workspace-a").documents.size, 0);
 });

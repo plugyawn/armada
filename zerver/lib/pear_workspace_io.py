@@ -26,12 +26,14 @@ import json
 import os
 import re
 import secrets
+import selectors
 import stat
 import subprocess
 import sys
+import time
 import unicodedata
 from collections.abc import Iterator, Mapping
-from contextlib import contextmanager, suppress
+from contextlib import ExitStack, contextmanager, suppress
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
@@ -43,6 +45,7 @@ MAX_WORKSPACE_PATH_BYTES = 4096
 MAX_WORKSPACE_PATH_COMPONENTS = 256
 MAX_CLI_REQUEST_BYTES = 16 * 1024 * 1024
 MAX_CLI_RESPONSE_BYTES = 16 * 1024 * 1024
+MAX_STREAM_HEADER_BYTES = 64 * 1024
 
 DEFAULT_ISOLATED_HELPER_PATH = Path("/usr/local/lib/pear-workspace-io")
 
@@ -52,11 +55,19 @@ _FILE_WRITE_FLAGS = os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_
 
 
 @dataclass(frozen=True)
+class WorkspaceEntryIdentity:
+    device: int
+    inode: int
+    ctime_ns: int
+
+
+@dataclass(frozen=True)
 class WorkspaceFile:
     data: bytes
     version: str
     size: int
     mode: int
+    identity: WorkspaceEntryIdentity | None = None
 
 
 @dataclass(frozen=True)
@@ -85,6 +96,27 @@ class WorkspaceDeleteResult:
     path: str
     kind: Literal["file", "directory"]
     removed_entries: int
+
+
+@dataclass(frozen=True)
+class WorkspaceInspectedEntry:
+    path: str
+    kind: Literal["file", "directory"]
+    identity: WorkspaceEntryIdentity
+
+
+@dataclass(frozen=True)
+class WorkspaceRawFileMetadata:
+    size: int
+    mode: int
+    cache_token: str
+    identity: WorkspaceEntryIdentity
+
+
+@dataclass
+class _InspectionTrieNode:
+    expected_kind: Literal["file", "directory"] | None
+    children: dict[str, _InspectionTrieNode]
 
 
 class WorkspaceIOError(Exception):
@@ -326,6 +358,22 @@ def _stat_identity(file_stat: os.stat_result) -> tuple[int, int]:
     return (file_stat.st_dev, file_stat.st_ino)
 
 
+def _entry_identity(entry_stat: os.stat_result) -> WorkspaceEntryIdentity:
+    return WorkspaceEntryIdentity(
+        device=entry_stat.st_dev,
+        inode=entry_stat.st_ino,
+        ctime_ns=entry_stat.st_ctime_ns,
+    )
+
+
+def _validate_expected_identity(
+    entry_stat: os.stat_result,
+    expected_identity: WorkspaceEntryIdentity | None,
+) -> None:
+    if expected_identity is not None and _entry_identity(entry_stat) != expected_identity:
+        raise WorkspaceEntryChangedError("Workspace entry identity is stale.")
+
+
 def _stat_revision(file_stat: os.stat_result) -> tuple[int, int, int, int, int]:
     return (
         file_stat.st_dev,
@@ -360,6 +408,7 @@ def _read_file_from_parent(
     *,
     root_device: int,
     max_bytes: int,
+    expected_identity: WorkspaceEntryIdentity | None = None,
 ) -> tuple[WorkspaceFile, os.stat_result]:
     try:
         file_fd = os.open(name, _FILE_READ_FLAGS, dir_fd=parent_fd)
@@ -368,6 +417,7 @@ def _read_file_from_parent(
     try:
         before = os.fstat(file_fd)
         _validate_regular_file(before, root_device=root_device)
+        _validate_expected_identity(before, expected_identity)
         if before.st_size > max_bytes:
             raise WorkspaceFileTooLargeError("Workspace file exceeds the read limit.")
         data = _read_bounded(file_fd, max_bytes=max_bytes)
@@ -383,6 +433,7 @@ def _read_file_from_parent(
                 ) from error
             raise _path_open_error(error, final=True) from error
         _validate_regular_file(path_stat, root_device=root_device)
+        _validate_expected_identity(path_stat, expected_identity)
         if _stat_identity(path_stat) != _stat_identity(after):
             raise WorkspaceEntryChangedError("Workspace file was replaced while it was read.")
         return (
@@ -391,6 +442,7 @@ def _read_file_from_parent(
                 version=hashlib.sha256(data).hexdigest(),
                 size=len(data),
                 mode=stat.S_IMODE(after.st_mode) & 0o777,
+                identity=_entry_identity(after),
             ),
             after,
         )
@@ -403,6 +455,7 @@ def read_workspace_file(
     relative_path: str,
     *,
     max_bytes: int,
+    expected_identity: WorkspaceEntryIdentity | None = None,
 ) -> WorkspaceFile:
     _validate_nonnegative_limit(max_bytes)
     components = validate_workspace_relative_path(relative_path)
@@ -416,8 +469,241 @@ def read_workspace_file(
             name,
             root_device=root_stat.st_dev,
             max_bytes=max_bytes,
+            expected_identity=expected_identity,
         )
         return file
+
+
+def inspect_workspace_entries(
+    root: str | Path,
+    expectations: Mapping[str, Literal["file", "directory"]],
+    *,
+    skip_unsafe: bool = False,
+) -> tuple[WorkspaceInspectedEntry, ...]:
+    if not isinstance(skip_unsafe, bool):
+        raise TypeError("skip_unsafe must be a boolean")
+    trie = _InspectionTrieNode(expected_kind=None, children={})
+    for relative_path, expected_kind in expectations.items():
+        if expected_kind not in {"file", "directory"}:
+            raise ValueError("Workspace inspection kind is invalid")
+        components = validate_workspace_relative_path(relative_path)
+        node = trie
+        for component in components:
+            node = node.children.setdefault(
+                component,
+                _InspectionTrieNode(expected_kind=None, children={}),
+            )
+        if node.expected_kind is not None and node.expected_kind != expected_kind:
+            raise ValueError("Workspace inspection path has conflicting kinds")
+        node.expected_kind = expected_kind
+
+    inspected: list[WorkspaceInspectedEntry] = []
+
+    def inspect_children(
+        parent_fd: int,
+        node: _InspectionTrieNode,
+        prefix: tuple[str, ...],
+        *,
+        root_device: int,
+    ) -> None:
+        for name in sorted(node.children):
+            child_node = node.children[name]
+            try:
+                entry_stat, actual_kind = _stat_entry_from_parent(
+                    parent_fd,
+                    name,
+                    root_device=root_device,
+                )
+            except (
+                UnsafeWorkspaceEntryError,
+                WorkspaceEntryNotFoundError,
+                WorkspaceEntryChangedError,
+            ):
+                if skip_unsafe:
+                    continue
+                raise
+            child_path = (*prefix, name)
+            if child_node.expected_kind is not None:
+                try:
+                    _validate_expected_kind(actual_kind, child_node.expected_kind)
+                except WorkspaceEntryChangedError:
+                    if skip_unsafe:
+                        continue
+                    raise
+                inspected.append(
+                    WorkspaceInspectedEntry(
+                        path="/".join(child_path),
+                        kind=child_node.expected_kind,
+                        identity=_entry_identity(entry_stat),
+                    )
+                )
+            if child_node.children:
+                if actual_kind != "directory":
+                    raise UnsafeWorkspaceEntryError(
+                        "Workspace inspection path contains a non-directory component."
+                    )
+                try:
+                    child_fd = _open_checked_directory(
+                        parent_fd,
+                        name,
+                        root_device=root_device,
+                    )
+                except (UnsafeWorkspaceEntryError, WorkspaceEntryNotFoundError):
+                    if skip_unsafe:
+                        continue
+                    raise
+                try:
+                    if _stat_identity(os.fstat(child_fd)) != _stat_identity(entry_stat):
+                        raise WorkspaceEntryChangedError(
+                            "Workspace directory changed during inspection."
+                        )
+                    inspect_children(
+                        child_fd,
+                        child_node,
+                        child_path,
+                        root_device=root_device,
+                    )
+                finally:
+                    os.close(child_fd)
+
+    with (
+        _open_workspace_root(root) as (root_fd, root_stat),
+        _workspace_lock(root_fd, exclusive=False),
+    ):
+        inspect_children(root_fd, trie, (), root_device=root_stat.st_dev)
+    return tuple(inspected)
+
+
+def _raw_cache_token(file_stat: os.stat_result) -> str:
+    revision = ":".join(str(value) for value in _stat_revision(file_stat)).encode("ascii")
+    return hashlib.sha256(b"pear-workspace-raw-v1\0" + revision).hexdigest()
+
+
+class WorkspaceRawFileStream(Iterator[bytes]):
+    def __init__(
+        self,
+        *,
+        stack: ExitStack,
+        file_fd: int,
+        parent_fd: int,
+        name: str,
+        root_device: int,
+        initial_stat: os.stat_result,
+        chunk_bytes: int,
+    ) -> None:
+        self._stack = stack
+        self._file_fd = file_fd
+        self._parent_fd = parent_fd
+        self._name = name
+        self._root_device = root_device
+        self._initial_stat = initial_stat
+        self._remaining = initial_stat.st_size
+        self._chunk_bytes = chunk_bytes
+        self._closed = False
+        self.metadata = WorkspaceRawFileMetadata(
+            size=initial_stat.st_size,
+            mode=stat.S_IMODE(initial_stat.st_mode) & 0o777,
+            cache_token=_raw_cache_token(initial_stat),
+            identity=_entry_identity(initial_stat),
+        )
+
+    def __iter__(self) -> WorkspaceRawFileStream:
+        return self
+
+    def __next__(self) -> bytes:
+        if self._closed:
+            raise StopIteration
+        if self._remaining:
+            try:
+                chunk = os.read(self._file_fd, min(self._chunk_bytes, self._remaining))
+            except OSError as error:
+                self.close()
+                raise WorkspaceIOError("Could not stream the workspace file.") from error
+            if not chunk:
+                self.close()
+                raise WorkspaceEntryChangedError("Workspace file changed while it was streamed.")
+            self._remaining -= len(chunk)
+            return chunk
+        try:
+            if os.read(self._file_fd, 1):
+                raise WorkspaceEntryChangedError("Workspace file changed while it was streamed.")
+            final_stat = os.fstat(self._file_fd)
+            if _stat_revision(final_stat) != _stat_revision(self._initial_stat):
+                raise WorkspaceEntryChangedError("Workspace file changed while it was streamed.")
+            path_stat = os.stat(self._name, dir_fd=self._parent_fd, follow_symlinks=False)
+            _validate_regular_file(path_stat, root_device=self._root_device)
+            if _entry_identity(path_stat) != _entry_identity(final_stat):
+                raise WorkspaceEntryChangedError(
+                    "Workspace file was replaced while it was streamed."
+                )
+        except OSError as error:
+            self.close()
+            raise WorkspaceEntryChangedError(
+                "Workspace file changed while it was streamed."
+            ) from error
+        except WorkspaceIOError:
+            self.close()
+            raise
+        self.close()
+        raise StopIteration
+
+    def close(self) -> None:
+        if self._closed:
+            return
+        self._closed = True
+        self._stack.close()
+
+    def __del__(self) -> None:  # nocoverage: defensive cleanup for abandoned iterators.
+        self.close()
+
+
+def open_workspace_file_stream(
+    root: str | Path,
+    relative_path: str,
+    *,
+    expected_identity: WorkspaceEntryIdentity | None = None,
+    chunk_bytes: int = 64 * 1024,
+) -> WorkspaceRawFileStream:
+    if isinstance(chunk_bytes, bool) or not isinstance(chunk_bytes, int) or chunk_bytes <= 0:
+        raise ValueError("chunk_bytes must be a positive integer")
+    components = validate_workspace_relative_path(relative_path)
+    stack = ExitStack()
+    try:
+        root_fd, root_stat = stack.enter_context(_open_workspace_root(root))
+        stack.enter_context(_workspace_lock(root_fd, exclusive=False))
+        parent_fd, name = stack.enter_context(
+            _open_parent_directory(root_fd, root_stat.st_dev, components)
+        )
+        try:
+            file_fd = os.open(name, _FILE_READ_FLAGS, dir_fd=parent_fd)
+        except OSError as error:
+            raise _path_open_error(error, final=True) from error
+        stack.callback(os.close, file_fd)
+        initial_stat = os.fstat(file_fd)
+        _validate_regular_file(initial_stat, root_device=root_stat.st_dev)
+        _validate_expected_identity(initial_stat, expected_identity)
+        try:
+            path_stat = os.stat(name, dir_fd=parent_fd, follow_symlinks=False)
+        except OSError as error:
+            raise _path_open_error(error, final=True) from error
+        _validate_regular_file(path_stat, root_device=root_stat.st_dev)
+        _validate_expected_identity(path_stat, expected_identity)
+        if _stat_identity(path_stat) != _stat_identity(initial_stat):
+            raise WorkspaceEntryChangedError(
+                "Workspace file was replaced before it could be streamed."
+            )
+        return WorkspaceRawFileStream(
+            stack=stack,
+            file_fd=file_fd,
+            parent_fd=parent_fd,
+            name=name,
+            root_device=root_stat.st_dev,
+            initial_stat=initial_stat,
+            chunk_bytes=chunk_bytes,
+        )
+    except Exception:
+        stack.close()
+        raise
 
 
 def decode_workspace_text(file: WorkspaceFile) -> WorkspaceTextFile:
@@ -438,8 +724,16 @@ def read_workspace_text_file(
     relative_path: str,
     *,
     max_bytes: int,
+    expected_identity: WorkspaceEntryIdentity | None = None,
 ) -> WorkspaceTextFile:
-    return decode_workspace_text(read_workspace_file(root, relative_path, max_bytes=max_bytes))
+    return decode_workspace_text(
+        read_workspace_file(
+            root,
+            relative_path,
+            max_bytes=max_bytes,
+            expected_identity=expected_identity,
+        )
+    )
 
 
 def _validate_expected_version(expected_version: str | None, *, create: bool) -> None:
@@ -606,6 +900,7 @@ def rename_workspace_entry(
     destination_path: str,
     *,
     expected_kind: Literal["file", "directory"],
+    expected_identity: WorkspaceEntryIdentity | None = None,
 ) -> WorkspaceEntryMutationResult:
     source_components = validate_workspace_relative_path(source_path)
     destination_components = validate_workspace_relative_path(destination_path)
@@ -614,21 +909,25 @@ def rename_workspace_entry(
 
     with _open_workspace_root(root) as (root_fd, root_stat):  # noqa: SIM117
         with _workspace_lock(root_fd, exclusive=True):
-            with _open_parent_directory(
-                root_fd, root_stat.st_dev, source_components
-            ) as (source_parent_fd, source_name):
-                with _open_parent_directory(
-                    root_fd, root_stat.st_dev, destination_components
-                ) as (destination_parent_fd, destination_name):
+            with _open_parent_directory(root_fd, root_stat.st_dev, source_components) as (
+                source_parent_fd,
+                source_name,
+            ):
+                with _open_parent_directory(root_fd, root_stat.st_dev, destination_components) as (
+                    destination_parent_fd,
+                    destination_name,
+                ):
                     source_stat, actual_kind = _stat_entry_from_parent(
                         source_parent_fd,
                         source_name,
                         root_device=root_stat.st_dev,
                     )
                     _validate_expected_kind(actual_kind, expected_kind)
-                    if actual_kind == "directory" and destination_components[
-                        : len(source_components)
-                    ] == source_components:
+                    _validate_expected_identity(source_stat, expected_identity)
+                    if (
+                        actual_kind == "directory"
+                        and destination_components[: len(source_components)] == source_components
+                    ):
                         raise InvalidWorkspacePathError(
                             "A workspace directory cannot be moved inside itself."
                         )
@@ -643,9 +942,7 @@ def rename_workspace_entry(
                     except OSError as error:
                         raise _path_open_error(error, final=True) from error
                     else:
-                        raise WorkspaceEntryExistsError(
-                            "Workspace destination already exists."
-                        )
+                        raise WorkspaceEntryExistsError("Workspace destination already exists.")
 
                     _rename_noreplace(
                         source_parent_fd,
@@ -658,10 +955,9 @@ def rename_workspace_entry(
                         destination_name,
                         root_device=root_stat.st_dev,
                     )
-                    if (
-                        destination_kind != actual_kind
-                        or _stat_identity(destination_stat) != _stat_identity(source_stat)
-                    ):
+                    if destination_kind != actual_kind or _stat_identity(
+                        destination_stat
+                    ) != _stat_identity(source_stat):
                         raise WorkspaceEntryChangedError(
                             "Workspace entry changed while rename was acknowledged."
                         )
@@ -670,9 +966,7 @@ def rename_workspace_entry(
                     except FileNotFoundError:
                         pass
                     else:
-                        raise WorkspaceEntryChangedError(
-                            "Workspace source remained after rename."
-                        )
+                        raise WorkspaceEntryChangedError("Workspace source remained after rename.")
                     _sync_fd(source_parent_fd, target="directory")
                     if _stat_identity(os.fstat(source_parent_fd)) != _stat_identity(
                         os.fstat(destination_parent_fd)
@@ -767,6 +1061,7 @@ def delete_workspace_entry(
     relative_path: str,
     *,
     expected_kind: Literal["file", "directory"],
+    expected_identity: WorkspaceEntryIdentity | None = None,
     recursive: bool = False,
 ) -> WorkspaceDeleteResult:
     if not isinstance(recursive, bool):
@@ -777,12 +1072,13 @@ def delete_workspace_entry(
         _workspace_lock(root_fd, exclusive=True),
         _open_parent_directory(root_fd, root_stat.st_dev, components) as (parent_fd, name),
     ):
-        _entry_stat, actual_kind = _stat_entry_from_parent(
+        entry_stat, actual_kind = _stat_entry_from_parent(
             parent_fd,
             name,
             root_device=root_stat.st_dev,
         )
         _validate_expected_kind(actual_kind, expected_kind)
+        _validate_expected_identity(entry_stat, expected_identity)
         removed_entries = 1
         if actual_kind == "file":
             if recursive:
@@ -839,6 +1135,7 @@ def atomic_write_workspace_file(
     *,
     max_bytes: int,
     expected_version: str | None,
+    expected_identity: WorkspaceEntryIdentity | None = None,
     create: bool = False,
     create_mode: int = 0o600,
 ) -> WorkspaceWriteResult:
@@ -858,6 +1155,8 @@ def atomic_write_workspace_file(
     if isinstance(create_mode, bool) or not isinstance(create_mode, int) or create_mode & ~0o777:
         raise ValueError("create_mode must contain ordinary Unix permission bits")
     _validate_expected_version(expected_version, create=create)
+    if create and expected_identity is not None:
+        raise ValueError("A create operation cannot have an expected identity")
     components = validate_workspace_relative_path(relative_path)
 
     with _open_workspace_root(root) as (root_fd, root_stat):  # noqa: SIM117
@@ -874,6 +1173,7 @@ def atomic_write_workspace_file(
                         name,
                         root_device=root_stat.st_dev,
                         max_bytes=max_bytes,
+                        expected_identity=expected_identity,
                     )
                 except WorkspaceEntryNotFoundError:
                     current = None
@@ -958,6 +1258,7 @@ def atomic_write_workspace_file(
                             name,
                             root_device=root_stat.st_dev,
                             max_bytes=max_bytes,
+                            expected_identity=expected_identity,
                         )
                         if latest.data == data:
                             return WorkspaceWriteResult(
@@ -1006,12 +1307,98 @@ def atomic_write_workspace_file(
                         _unlink_if_present(parent_fd, temporary_name)
 
 
+def _workspace_identity_payload(identity: WorkspaceEntryIdentity) -> dict[str, int]:
+    return {
+        "device": identity.device,
+        "inode": identity.inode,
+        "ctime_ns": identity.ctime_ns,
+    }
+
+
+def _workspace_identity_from_payload(payload: object) -> WorkspaceEntryIdentity:
+    if not isinstance(payload, Mapping) or set(payload) != {"device", "inode", "ctime_ns"}:
+        raise WorkspaceHelperError("Workspace helper returned an invalid identity payload.")
+    device = payload["device"]
+    inode = payload["inode"]
+    ctime_ns = payload["ctime_ns"]
+    if (
+        isinstance(device, bool)
+        or not isinstance(device, int)
+        or device < 0
+        or isinstance(inode, bool)
+        or not isinstance(inode, int)
+        or inode < 0
+        or isinstance(ctime_ns, bool)
+        or not isinstance(ctime_ns, int)
+        or ctime_ns < 0
+    ):
+        raise WorkspaceHelperError("Workspace helper returned an invalid identity payload.")
+    return WorkspaceEntryIdentity(
+        device=device,
+        inode=inode,
+        ctime_ns=ctime_ns,
+    )
+
+
+def _optional_workspace_identity_from_payload(
+    payload: object,
+) -> WorkspaceEntryIdentity | None:
+    if payload is None:
+        return None
+    return _workspace_identity_from_payload(payload)
+
+
+def _workspace_raw_metadata_payload(
+    metadata: WorkspaceRawFileMetadata,
+) -> dict[str, object]:
+    return {
+        "size": metadata.size,
+        "mode": metadata.mode,
+        "cache_token": metadata.cache_token,
+        "identity": _workspace_identity_payload(metadata.identity),
+    }
+
+
+def _workspace_raw_metadata_from_payload(payload: object) -> WorkspaceRawFileMetadata:
+    if not isinstance(payload, Mapping) or set(payload) != {
+        "size",
+        "mode",
+        "cache_token",
+        "identity",
+    }:
+        raise WorkspaceHelperError("Workspace helper returned invalid stream metadata.")
+    size = payload["size"]
+    mode = payload["mode"]
+    cache_token = payload["cache_token"]
+    if (
+        isinstance(size, bool)
+        or not isinstance(size, int)
+        or size < 0
+        or isinstance(mode, bool)
+        or not isinstance(mode, int)
+        or mode < 0
+        or mode & ~0o777
+        or not isinstance(cache_token, str)
+        or SHA256_RE.fullmatch(cache_token) is None
+    ):
+        raise WorkspaceHelperError("Workspace helper returned invalid stream metadata.")
+    return WorkspaceRawFileMetadata(
+        size=size,
+        mode=mode,
+        cache_token=cache_token,
+        identity=_workspace_identity_from_payload(payload["identity"]),
+    )
+
+
 def _workspace_file_payload(file: WorkspaceFile) -> dict[str, object]:
+    if file.identity is None:
+        raise WorkspaceHelperError("Workspace file identity is unavailable.")
     return {
         "content_base64": base64.b64encode(file.data).decode("ascii"),
         "version": file.version,
         "size": file.size,
         "mode": file.mode,
+        "identity": _workspace_identity_payload(file.identity),
     }
 
 
@@ -1020,6 +1407,7 @@ def _workspace_file_from_payload(payload: Mapping[str, object]) -> WorkspaceFile
     version = payload.get("version")
     size = payload.get("size")
     mode = payload.get("mode")
+    identity_payload = payload.get("identity")
     if (
         not isinstance(content_base64, str)
         or not isinstance(version, str)
@@ -1039,7 +1427,13 @@ def _workspace_file_from_payload(payload: Mapping[str, object]) -> WorkspaceFile
         raise WorkspaceHelperError("Workspace helper returned invalid file bytes.") from error
     if len(data) != size or hashlib.sha256(data).hexdigest() != version:
         raise WorkspaceHelperError("Workspace helper returned inconsistent file metadata.")
-    return WorkspaceFile(data=data, version=version, size=size, mode=mode)
+    return WorkspaceFile(
+        data=data,
+        version=version,
+        size=size,
+        mode=mode,
+        identity=_workspace_identity_from_payload(identity_payload),
+    )
 
 
 def _error_payload(error: WorkspaceIOError) -> dict[str, object]:
@@ -1092,17 +1486,28 @@ def _require_request_keys(request: Mapping[str, object], allowed_keys: set[str])
 def execute_workspace_io_request(request: Mapping[str, object]) -> dict[str, object]:
     operation = request.get("operation")
     if operation == "read":
-        _require_request_keys(request, {"operation", "root", "path", "max_bytes"})
+        _require_request_keys(
+            request,
+            {"operation", "root", "path", "max_bytes", "expected_identity"},
+        )
         root = request.get("root")
         relative_path = request.get("path")
         max_bytes = request.get("max_bytes")
+        expected_identity = _optional_workspace_identity_from_payload(
+            request.get("expected_identity")
+        )
         if not isinstance(root, str) or not isinstance(relative_path, str):
             raise ValueError("Workspace helper read request has invalid paths")
         if isinstance(max_bytes, bool) or not isinstance(max_bytes, int):
             raise ValueError("Workspace helper read request has an invalid limit")
         return {
             "file": _workspace_file_payload(
-                read_workspace_file(root, relative_path, max_bytes=max_bytes)
+                read_workspace_file(
+                    root,
+                    relative_path,
+                    max_bytes=max_bytes,
+                    expected_identity=expected_identity,
+                )
             )
         }
     if operation == "write":
@@ -1115,6 +1520,7 @@ def execute_workspace_io_request(request: Mapping[str, object]) -> dict[str, obj
                 "content_base64",
                 "max_bytes",
                 "expected_version",
+                "expected_identity",
                 "create",
                 "create_mode",
             },
@@ -1124,6 +1530,9 @@ def execute_workspace_io_request(request: Mapping[str, object]) -> dict[str, obj
         content_base64 = request.get("content_base64")
         max_bytes = request.get("max_bytes")
         expected_version = request.get("expected_version")
+        expected_identity = _optional_workspace_identity_from_payload(
+            request.get("expected_identity")
+        )
         create = request.get("create", False)
         create_mode = request.get("create_mode", 0o600)
         if (
@@ -1148,6 +1557,7 @@ def execute_workspace_io_request(request: Mapping[str, object]) -> dict[str, obj
             data,
             max_bytes=max_bytes,
             expected_version=expected_version,
+            expected_identity=expected_identity,
             create=create,
             create_mode=create_mode,
         )
@@ -1173,52 +1583,113 @@ def execute_workspace_io_request(request: Mapping[str, object]) -> dict[str, obj
     if operation == "rename":
         _require_request_keys(
             request,
-            {"operation", "root", "source_path", "destination_path", "expected_kind"},
+            {
+                "operation",
+                "root",
+                "source_path",
+                "destination_path",
+                "expected_kind",
+                "expected_identity",
+            },
         )
         root = request.get("root")
         source_path = request.get("source_path")
         destination_path = request.get("destination_path")
-        expected_kind = request.get("expected_kind")
+        raw_expected_kind = request.get("expected_kind")
+        expected_identity = _optional_workspace_identity_from_payload(
+            request.get("expected_identity")
+        )
         if (
             not isinstance(root, str)
             or not isinstance(source_path, str)
             or not isinstance(destination_path, str)
-            or expected_kind not in {"file", "directory"}
+            or raw_expected_kind not in {"file", "directory"}
         ):
             raise ValueError("Workspace helper rename request is invalid")
+        rename_expected_kind: Literal["file", "directory"] = (
+            "file" if raw_expected_kind == "file" else "directory"
+        )
         result = rename_workspace_entry(
             root,
             source_path,
             destination_path,
-            expected_kind=expected_kind,
+            expected_kind=rename_expected_kind,
+            expected_identity=expected_identity,
         )
         return {"path": result.path, "kind": result.kind}
     if operation == "delete":
         _require_request_keys(
             request,
-            {"operation", "root", "path", "expected_kind", "recursive"},
+            {
+                "operation",
+                "root",
+                "path",
+                "expected_kind",
+                "expected_identity",
+                "recursive",
+            },
         )
         root = request.get("root")
         relative_path = request.get("path")
-        expected_kind = request.get("expected_kind")
+        raw_expected_kind = request.get("expected_kind")
+        expected_identity = _optional_workspace_identity_from_payload(
+            request.get("expected_identity")
+        )
         recursive = request.get("recursive", False)
         if (
             not isinstance(root, str)
             or not isinstance(relative_path, str)
-            or expected_kind not in {"file", "directory"}
+            or raw_expected_kind not in {"file", "directory"}
             or not isinstance(recursive, bool)
         ):
             raise ValueError("Workspace helper delete request is invalid")
+        delete_expected_kind: Literal["file", "directory"] = (
+            "file" if raw_expected_kind == "file" else "directory"
+        )
         result = delete_workspace_entry(
             root,
             relative_path,
-            expected_kind=expected_kind,
+            expected_kind=delete_expected_kind,
+            expected_identity=expected_identity,
             recursive=recursive,
         )
         return {
             "path": result.path,
             "kind": result.kind,
             "removed_entries": result.removed_entries,
+        }
+    if operation == "inspect":
+        _require_request_keys(request, {"operation", "root", "entries", "skip_unsafe"})
+        root = request.get("root")
+        entries_payload = request.get("entries")
+        skip_unsafe = request.get("skip_unsafe", False)
+        if (
+            not isinstance(root, str)
+            or not isinstance(entries_payload, list)
+            or not isinstance(skip_unsafe, bool)
+        ):
+            raise ValueError("Workspace helper inspect request is invalid")
+        expectations: dict[str, Literal["file", "directory"]] = {}
+        for entry_payload in entries_payload:
+            if not isinstance(entry_payload, Mapping) or set(entry_payload) != {"path", "kind"}:
+                raise ValueError("Workspace helper inspect request is invalid")
+            path = entry_payload["path"]
+            kind = entry_payload["kind"]
+            if not isinstance(path, str) or kind not in {"file", "directory"}:
+                raise ValueError("Workspace helper inspect request is invalid")
+            if path in expectations:
+                raise ValueError("Workspace helper inspect request contains duplicate paths")
+            expectations[path] = "file" if kind == "file" else "directory"
+        inspected = inspect_workspace_entries(root, expectations, skip_unsafe=skip_unsafe)
+        return {
+            "entries": [
+                {
+                    "path": entry.path,
+                    "kind": entry.kind,
+                    "identity": _workspace_identity_payload(entry.identity),
+                }
+                for entry in inspected
+            ]
         }
     raise ValueError("Workspace helper request has an unknown operation")
 
@@ -1292,11 +1763,197 @@ def invoke_workspace_io_helper(
     return result
 
 
+def _read_exact_with_timeout(
+    stream: object,
+    byte_count: int,
+    *,
+    timeout: float,
+) -> bytes:
+    fileno = getattr(stream, "fileno", None)
+    if not callable(fileno):
+        raise WorkspaceHelperError("Workspace stream helper pipe is unavailable.")
+    fd = fileno()
+    deadline = time.monotonic() + timeout
+    chunks: list[bytes] = []
+    remaining = byte_count
+    selector = selectors.DefaultSelector()
+    try:
+        os.set_blocking(fd, False)
+        selector.register(fd, selectors.EVENT_READ)
+        while remaining:
+            wait_seconds = deadline - time.monotonic()
+            if wait_seconds <= 0 or not selector.select(wait_seconds):
+                raise WorkspaceHelperError("Workspace stream helper timed out.")
+            try:
+                chunk = os.read(fd, remaining)
+            except BlockingIOError:  # nocoverage: selector reported readiness.
+                continue
+            if not chunk:
+                raise WorkspaceHelperError("Workspace stream helper ended before its header.")
+            chunks.append(chunk)
+            remaining -= len(chunk)
+    finally:
+        selector.close()
+        with suppress(OSError):
+            os.set_blocking(fd, True)
+    return b"".join(chunks)
+
+
+class WorkspaceHelperRawFileStream(Iterator[bytes]):
+    def __init__(
+        self,
+        *,
+        process: subprocess.Popen[bytes],
+        metadata: WorkspaceRawFileMetadata,
+        chunk_bytes: int,
+        completion_timeout: float,
+    ) -> None:
+        assert process.stdout is not None
+        self._process = process
+        self._stdout = process.stdout
+        self._remaining = metadata.size
+        self._chunk_bytes = chunk_bytes
+        self._completion_timeout = completion_timeout
+        self._closed = False
+        self.metadata = metadata
+
+    def __iter__(self) -> WorkspaceHelperRawFileStream:
+        return self
+
+    def __next__(self) -> bytes:
+        if self._closed:
+            raise StopIteration
+        if self._remaining:
+            try:
+                chunk = self._stdout.read(min(self._chunk_bytes, self._remaining))
+            except OSError as error:
+                self.close()
+                raise WorkspaceHelperError("Workspace stream helper failed.") from error
+            if not chunk:
+                self.close()
+                raise WorkspaceHelperError("Workspace stream helper truncated the file.")
+            self._remaining -= len(chunk)
+            return chunk
+        try:
+            returncode = self._process.wait(timeout=self._completion_timeout)
+        except subprocess.TimeoutExpired as error:
+            self.close()
+            raise WorkspaceHelperError("Workspace stream helper did not finish.") from error
+        if self._stdout.read(1) or returncode != 0:
+            self.close()
+            raise WorkspaceHelperError("Workspace stream helper failed.")
+        self._finish_close()
+        raise StopIteration
+
+    def _finish_close(self) -> None:
+        if self._closed:
+            return
+        self._closed = True
+        self._stdout.close()
+
+    def close(self) -> None:
+        if self._closed:
+            return
+        self._closed = True
+        self._stdout.close()
+        if self._process.poll() is None:
+            self._process.terminate()
+            try:
+                self._process.wait(timeout=1)
+            except subprocess.TimeoutExpired:
+                self._process.kill()
+                self._process.wait()
+
+    def __del__(self) -> None:  # nocoverage: defensive cleanup for abandoned iterators.
+        self.close()
+
+
+def open_workspace_file_stream_via_helper(
+    root: str | Path,
+    relative_path: str,
+    *,
+    expected_identity: WorkspaceEntryIdentity | None = None,
+    chunk_bytes: int = 64 * 1024,
+    isolation_username: str | None = None,
+    helper_path: str | Path | None = None,
+    python_executable: str | Path | None = None,
+    timeout: float = 20,
+) -> WorkspaceHelperRawFileStream:
+    if isinstance(chunk_bytes, bool) or not isinstance(chunk_bytes, int) or chunk_bytes <= 0:
+        raise ValueError("chunk_bytes must be a positive integer")
+    request = {
+        "operation": "stream",
+        "root": os.fspath(root),
+        "path": relative_path,
+        "expected_identity": (
+            _workspace_identity_payload(expected_identity)
+            if expected_identity is not None
+            else None
+        ),
+    }
+    encoded_request = json.dumps(request, separators=(",", ":")).encode("utf-8")
+    if len(encoded_request) > MAX_CLI_REQUEST_BYTES:
+        raise WorkspaceHelperError("Workspace stream helper request exceeds the protocol limit.")
+    command = _helper_command(
+        isolation_username=isolation_username,
+        helper_path=helper_path,
+        python_executable=python_executable,
+    )
+    command[-1] = "--stream"
+    try:
+        process = subprocess.Popen(
+            command,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+        )
+    except (FileNotFoundError, OSError) as error:
+        raise WorkspaceHelperError("Workspace stream helper could not be executed.") from error
+    try:
+        assert process.stdin is not None and process.stdout is not None
+        process.stdin.write(encoded_request)
+        process.stdin.close()
+        header_size_bytes = _read_exact_with_timeout(process.stdout, 8, timeout=timeout)
+        header_size = int.from_bytes(header_size_bytes, "big")
+        if not 1 <= header_size <= MAX_STREAM_HEADER_BYTES:
+            raise WorkspaceHelperError("Workspace stream helper returned an invalid header.")
+        encoded_header = _read_exact_with_timeout(process.stdout, header_size, timeout=timeout)
+        try:
+            header = json.loads(encoded_header)
+        except (UnicodeDecodeError, json.JSONDecodeError) as error:
+            raise WorkspaceHelperError(
+                "Workspace stream helper returned invalid metadata."
+            ) from error
+        if not isinstance(header, dict) or set(header) != {"ok", "result"}:
+            raise WorkspaceHelperError("Workspace stream helper returned invalid metadata.")
+        ok = header["ok"]
+        result = header["result"]
+        if not isinstance(ok, bool) or not isinstance(result, dict):
+            raise WorkspaceHelperError("Workspace stream helper returned invalid metadata.")
+        if not ok:
+            _raise_helper_error(result)
+        metadata = _workspace_raw_metadata_from_payload(result)
+        return WorkspaceHelperRawFileStream(
+            process=process,
+            metadata=metadata,
+            chunk_bytes=chunk_bytes,
+            completion_timeout=timeout,
+        )
+    except Exception:
+        if process.stdout is not None:
+            process.stdout.close()
+        if process.poll() is None:
+            process.kill()
+        process.wait()
+        raise
+
+
 def read_workspace_file_via_helper(
     root: str | Path,
     relative_path: str,
     *,
     max_bytes: int,
+    expected_identity: WorkspaceEntryIdentity | None = None,
     isolation_username: str | None = None,
     helper_path: str | Path | None = None,
     python_executable: str | Path | None = None,
@@ -1307,6 +1964,11 @@ def read_workspace_file_via_helper(
             "root": os.fspath(root),
             "path": relative_path,
             "max_bytes": max_bytes,
+            "expected_identity": (
+                _workspace_identity_payload(expected_identity)
+                if expected_identity is not None
+                else None
+            ),
         },
         isolation_username=isolation_username,
         helper_path=helper_path,
@@ -1318,6 +1980,63 @@ def read_workspace_file_via_helper(
     return _workspace_file_from_payload(file_payload)
 
 
+def inspect_workspace_entries_via_helper(
+    root: str | Path,
+    expectations: Mapping[str, Literal["file", "directory"]],
+    *,
+    skip_unsafe: bool = False,
+    isolation_username: str | None = None,
+    helper_path: str | Path | None = None,
+    python_executable: str | Path | None = None,
+) -> tuple[WorkspaceInspectedEntry, ...]:
+    result = invoke_workspace_io_helper(
+        {
+            "operation": "inspect",
+            "root": os.fspath(root),
+            "entries": [
+                {"path": path, "kind": kind} for path, kind in sorted(expectations.items())
+            ],
+            "skip_unsafe": skip_unsafe,
+        },
+        isolation_username=isolation_username,
+        helper_path=helper_path,
+        python_executable=python_executable,
+    )
+    entries_payload = result.get("entries")
+    if not isinstance(entries_payload, list):
+        raise WorkspaceHelperError("Workspace helper omitted inspection entries.")
+    inspected: list[WorkspaceInspectedEntry] = []
+    seen: set[str] = set()
+    for entry_payload in entries_payload:
+        if not isinstance(entry_payload, Mapping) or set(entry_payload) != {
+            "path",
+            "kind",
+            "identity",
+        }:
+            raise WorkspaceHelperError("Workspace helper returned invalid inspection data.")
+        path = entry_payload["path"]
+        kind = entry_payload["kind"]
+        if (
+            not isinstance(path, str)
+            or path in seen
+            or path not in expectations
+            or kind != expectations[path]
+        ):
+            raise WorkspaceHelperError("Workspace helper returned invalid inspection data.")
+        expected_kind = expectations[path]
+        inspected.append(
+            WorkspaceInspectedEntry(
+                path=path,
+                kind=expected_kind,
+                identity=_workspace_identity_from_payload(entry_payload["identity"]),
+            )
+        )
+        seen.add(path)
+    if not skip_unsafe and seen != set(expectations):
+        raise WorkspaceHelperError("Workspace helper omitted inspection entries.")
+    return tuple(inspected)
+
+
 def atomic_write_workspace_file_via_helper(
     root: str | Path,
     relative_path: str,
@@ -1325,6 +2044,7 @@ def atomic_write_workspace_file_via_helper(
     *,
     max_bytes: int,
     expected_version: str | None,
+    expected_identity: WorkspaceEntryIdentity | None = None,
     create: bool = False,
     create_mode: int = 0o600,
     isolation_username: str | None = None,
@@ -1339,6 +2059,11 @@ def atomic_write_workspace_file_via_helper(
             "content_base64": base64.b64encode(data).decode("ascii"),
             "max_bytes": max_bytes,
             "expected_version": expected_version,
+            "expected_identity": (
+                _workspace_identity_payload(expected_identity)
+                if expected_identity is not None
+                else None
+            ),
             "create": create,
             "create_mode": create_mode,
         },
@@ -1408,6 +2133,7 @@ def rename_workspace_entry_via_helper(
     destination_path: str,
     *,
     expected_kind: Literal["file", "directory"],
+    expected_identity: WorkspaceEntryIdentity | None = None,
     isolation_username: str | None = None,
     helper_path: str | Path | None = None,
     python_executable: str | Path | None = None,
@@ -1419,6 +2145,11 @@ def rename_workspace_entry_via_helper(
             "source_path": source_path,
             "destination_path": destination_path,
             "expected_kind": expected_kind,
+            "expected_identity": (
+                _workspace_identity_payload(expected_identity)
+                if expected_identity is not None
+                else None
+            ),
         },
         isolation_username=isolation_username,
         helper_path=helper_path,
@@ -1436,6 +2167,7 @@ def delete_workspace_entry_via_helper(
     relative_path: str,
     *,
     expected_kind: Literal["file", "directory"],
+    expected_identity: WorkspaceEntryIdentity | None = None,
     recursive: bool = False,
     isolation_username: str | None = None,
     helper_path: str | Path | None = None,
@@ -1447,6 +2179,11 @@ def delete_workspace_entry_via_helper(
             "root": os.fspath(root),
             "path": relative_path,
             "expected_kind": expected_kind,
+            "expected_identity": (
+                _workspace_identity_payload(expected_identity)
+                if expected_identity is not None
+                else None
+            ),
             "recursive": recursive,
         },
         isolation_username=isolation_username,
@@ -1498,12 +2235,79 @@ def _write_cli_response(response: Mapping[str, object]) -> None:
     sys.stdout.buffer.flush()
 
 
+def _write_stream_header(response: Mapping[str, object]) -> None:
+    encoded = json.dumps(response, separators=(",", ":")).encode("utf-8")
+    if not 1 <= len(encoded) <= MAX_STREAM_HEADER_BYTES:
+        raise WorkspaceHelperError("Workspace stream helper header is invalid.")
+    sys.stdout.buffer.write(len(encoded).to_bytes(8, "big"))
+    sys.stdout.buffer.write(encoded)
+    sys.stdout.buffer.flush()
+
+
+def _stream_cli_request() -> int:
+    stream: WorkspaceRawFileStream | None = None
+    try:
+        request = _read_cli_request()
+        _require_request_keys(
+            request,
+            {"operation", "root", "path", "expected_identity"},
+        )
+        root = request.get("root")
+        relative_path = request.get("path")
+        if (
+            request.get("operation") != "stream"
+            or not isinstance(root, str)
+            or not isinstance(relative_path, str)
+        ):
+            raise ValueError("Workspace stream helper request is invalid")
+        expected_identity = _optional_workspace_identity_from_payload(
+            request.get("expected_identity")
+        )
+        stream = open_workspace_file_stream(
+            root,
+            relative_path,
+            expected_identity=expected_identity,
+        )
+    except WorkspaceIOError as error:
+        _write_stream_header({"ok": False, "result": _error_payload(error)})
+        return 0
+    except (ValueError, TypeError, UnicodeDecodeError, json.JSONDecodeError):
+        _write_stream_header(
+            {
+                "ok": False,
+                "result": _error_payload(
+                    WorkspaceHelperError("Workspace stream helper request is invalid.")
+                ),
+            }
+        )
+        return 0
+
+    assert stream is not None
+    try:
+        _write_stream_header(
+            {"ok": True, "result": _workspace_raw_metadata_payload(stream.metadata)}
+        )
+        for chunk in stream:
+            sys.stdout.buffer.write(chunk)
+        sys.stdout.buffer.flush()
+    except BrokenPipeError:
+        return 0
+    except WorkspaceIOError:
+        return 1
+    finally:
+        stream.close()
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Perform contained Pear workspace I/O.")
     parser.add_argument("--stdio", action="store_true", help="use the internal JSON/stdio protocol")
+    parser.add_argument("--stream", action="store_true", help="stream one contained file")
     args = parser.parse_args(argv)
-    if not args.stdio:
-        parser.error("--stdio is required")
+    if args.stdio == args.stream:
+        parser.error("exactly one helper protocol is required")
+    if args.stream:
+        return _stream_cli_request()
     try:
         result = execute_workspace_io_request(_read_cli_request())
     except WorkspaceIOError as error:

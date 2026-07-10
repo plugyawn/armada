@@ -5,7 +5,7 @@ import re
 from typing import Annotated, Literal
 from uuid import UUID
 
-from django.http import HttpRequest, HttpResponse
+from django.http import HttpRequest, HttpResponse, StreamingHttpResponse
 from django.utils.http import content_disposition_header
 from django.utils.translation import gettext as _
 from pydantic import Json
@@ -34,7 +34,6 @@ from zerver.lib.pear_workspace_io import (
     validate_workspace_relative_path,
 )
 from zerver.lib.pear_workspace_resources import (
-    PEAR_WORKSPACE_RAW_MAX_BYTES,
     PEAR_WORKSPACE_TEXT_MAX_BYTES,
     WorkspaceDestinationPolicyError,
     WorkspaceHistoryCursorError,
@@ -51,6 +50,7 @@ from zerver.lib.pear_workspace_resources import (
     get_workspace_mutation_receipt,
     get_workspace_snapshot,
     lock_workspace_mutation,
+    open_workspace_node_file_stream,
     read_workspace_node_file,
     record_completed_workspace_mutation,
     record_pending_workspace_mutation,
@@ -157,7 +157,7 @@ def _workspace_descriptor_payload(
         },
         "limits": {
             "text_file_max_bytes": PEAR_WORKSPACE_TEXT_MAX_BYTES,
-            "raw_file_max_bytes": PEAR_WORKSPACE_RAW_MAX_BYTES,
+            "raw_file_max_bytes": None,
         },
     }
 
@@ -199,6 +199,14 @@ def _resolve_file_entry(
             revision=snapshot.revision,
             data={"entry": _entry_payload(entry)},
         )
+    if entry.identity is None:
+        return _workspace_error(
+            code="unsafe_entry",
+            message="Workspace entry has no safe filesystem identity.",
+            status=415,
+            revision=snapshot.revision,
+            data={"entry": _entry_payload(entry)},
+        )
     return entry
 
 
@@ -221,6 +229,14 @@ def _resolve_mutable_entry(
             message="The workspace root cannot be mutated.",
             status=400,
             revision=snapshot.revision,
+        )
+    if entry.identity is None:
+        return _workspace_error(
+            code="unsafe_entry",
+            message="Workspace entry has no safe filesystem identity.",
+            status=415,
+            revision=snapshot.revision,
+            data={"entry": _entry_payload(entry)},
         )
     return entry
 
@@ -268,6 +284,13 @@ def _validate_destination_against_snapshot(
                 code="destination_parent_missing",
                 message="Workspace destination parent is not a directory.",
                 status=409,
+                revision=snapshot.revision,
+            )
+        if parent.identity is None:
+            return _workspace_error(
+                code="unsafe_entry",
+                message="Workspace destination parent has no safe filesystem identity.",
+                status=415,
                 revision=snapshot.revision,
             )
     return normalized
@@ -386,6 +409,7 @@ def _read_text_file(
             node,
             entry.path,
             max_bytes=PEAR_WORKSPACE_TEXT_MAX_BYTES,
+            expected_identity=entry.identity,
         )
     except WorkspaceFileTooLargeError:
         return _workspace_error(
@@ -719,10 +743,13 @@ def put_pear_workspace_resource_file_backend(
                 return _stale_workspace_response(snapshot)
             if current_entry.kind != "file" or current_entry.path != normalized_path:
                 return _stale_workspace_response(snapshot)
+            if current_entry.identity != receipt.result_identity:
+                return _stale_workspace_response(snapshot)
             current_file = read_workspace_node_file(
                 node,
                 current_entry.path,
                 max_bytes=PEAR_WORKSPACE_TEXT_MAX_BYTES,
+                expected_identity=receipt.result_identity,
             )
         except (
             WorkspaceEntryIdError,
@@ -759,6 +786,7 @@ def put_pear_workspace_resource_file_backend(
                 content=content_bytes,
                 edit_revision=edit_revision,
                 result_version=current_file.version,
+                result_identity=receipt.result_identity,
                 result_revision=snapshot.revision,
                 result_entry_id=current_entry.entry_id,
             )
@@ -775,7 +803,23 @@ def put_pear_workspace_resource_file_backend(
             revision=snapshot.revision,
         )
 
+    pending_repair_receipt = get_workspace_mutation_receipt(
+        actor_id=user_profile.id,
+        workspace_uuid=snapshot.workspace_uuid,
+        requested_revision=workspace_revision,
+        entry_id=entry_id,
+        expected_path=normalized_path,
+        base_version=base_version,
+        content=content_bytes,
+        edit_revision=edit_revision,
+    )
+    write_identity = entry.identity
+    if pending_repair_receipt is not None and pending_repair_receipt.state == "pending":
+        write_identity = pending_repair_receipt.result_identity
+
     def before_finish(result: WorkspaceWriteResult) -> None:
+        if result.file.identity is None:
+            raise WorkspaceEntryChangedError("Saved workspace file identity is unavailable.")
         if result.changed:
             record_pending_workspace_mutation(
                 actor_id=user_profile.id,
@@ -787,6 +831,7 @@ def put_pear_workspace_resource_file_backend(
                 content=content_bytes,
                 edit_revision=edit_revision,
                 result_version=result.file.version,
+                result_identity=result.file.identity,
             )
             return
         if result.file.version == base_version:
@@ -805,6 +850,7 @@ def put_pear_workspace_resource_file_backend(
             pending_receipt is None
             or pending_receipt.state != "pending"
             or pending_receipt.result_version != result.file.version
+            or pending_receipt.result_identity != result.file.identity
         ):
             raise WorkspaceEntryChangedError(
                 "Workspace entry changed before the save revision was recorded."
@@ -816,6 +862,7 @@ def put_pear_workspace_resource_file_backend(
             entry.path,
             content_bytes,
             expected_version=base_version,
+            expected_identity=write_identity,
             requested_revision=workspace_revision,
             before_finish=before_finish,
         )
@@ -846,6 +893,7 @@ def put_pear_workspace_resource_file_backend(
                 node,
                 conflict_entry.path,
                 max_bytes=PEAR_WORKSPACE_TEXT_MAX_BYTES,
+                expected_identity=conflict_entry.identity,
             )
         except (WorkspaceEntryIdError, WorkspaceEntryNotFoundError, WorkspaceEntryChangedError):
             return _workspace_error(
@@ -910,6 +958,7 @@ def put_pear_workspace_resource_file_backend(
             status=503,
             revision=int(node.content_revision),
         )
+    assert result.file.identity is not None
     payload = _text_file_payload(
         saved_snapshot,
         saved_entry,
@@ -932,6 +981,7 @@ def put_pear_workspace_resource_file_backend(
         content=content_bytes,
         edit_revision=edit_revision,
         result_version=result.file.version,
+        result_identity=result.file.identity,
         result_revision=saved_snapshot.revision,
         result_entry_id=saved_entry.entry_id,
     )
@@ -1124,6 +1174,7 @@ def patch_pear_workspace_entry_backend(
                 entry.path,
                 locked_destination,
                 expected_kind=entry_kind,
+                expected_identity=entry.identity,
             )
             saved_snapshot = finish_workspace_entry_mutation(locked)
             saved_entry = saved_snapshot.index.entry_for_path(locked_destination)
@@ -1249,6 +1300,7 @@ def delete_pear_workspace_entry_backend(
                 locked,
                 entry.path,
                 expected_kind=entry_kind,
+                expected_identity=entry.identity,
                 recursive=bool(recursive),
             )
             saved_snapshot = finish_workspace_entry_mutation(locked)
@@ -1406,18 +1458,10 @@ def get_pear_workspace_raw_backend(
     if isinstance(entry, HttpResponse):
         return entry
     try:
-        file = read_workspace_node_file(
+        stream = open_workspace_node_file_stream(
             node,
             entry.path,
-            max_bytes=PEAR_WORKSPACE_RAW_MAX_BYTES,
-        )
-    except WorkspaceFileTooLargeError:
-        return _workspace_error(
-            code="file_too_large",
-            message="Workspace file exceeds the raw download size limit.",
-            status=413,
-            revision=snapshot.revision,
-            data={"max_bytes": PEAR_WORKSPACE_RAW_MAX_BYTES},
+            expected_identity=entry.identity,
         )
     except (WorkspaceEntryNotFoundError, WorkspaceEntryChangedError):
         return _workspace_error(
@@ -1435,15 +1479,15 @@ def get_pear_workspace_raw_backend(
             status=503,
             revision=snapshot.revision,
         )
-    observation_error = _check_and_record_file_observation(node, snapshot, entry, file)
-    if observation_error is not None:
-        return observation_error
-    response = HttpResponse(file.data, content_type=workspace_mime_type(entry.path))
+    response = StreamingHttpResponse(
+        streaming_content=stream,
+        content_type=workspace_mime_type(entry.path),
+    )
     response["Content-Disposition"] = content_disposition_header(bool(download), entry.name) or (
         "attachment" if download else "inline"
     )
-    response["Content-Length"] = str(file.size)
-    response["ETag"] = f'"{file.version}"'
+    response["Content-Length"] = str(stream.metadata.size)
+    response["ETag"] = f'"{stream.metadata.cache_token}"'
     response["Cache-Control"] = "private, max-age=0, must-revalidate"
     response["Content-Security-Policy"] = "default-src 'none'; sandbox"
     response["X-Content-Type-Options"] = "nosniff"

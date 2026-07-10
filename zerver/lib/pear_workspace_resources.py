@@ -29,8 +29,11 @@ from django.utils.timezone import now as timezone_now
 from zerver.lib.pear_workspace_index import WorkspaceIndex, WorkspacePath
 from zerver.lib.pear_workspace_io import (
     WorkspaceDeleteResult,
+    WorkspaceEntryIdentity,
     WorkspaceEntryMutationResult,
     WorkspaceFile,
+    WorkspaceHelperRawFileStream,
+    WorkspaceRawFileStream,
     WorkspaceWriteResult,
     atomic_write_workspace_file,
     atomic_write_workspace_file_via_helper,
@@ -38,6 +41,10 @@ from zerver.lib.pear_workspace_io import (
     create_workspace_directory_via_helper,
     delete_workspace_entry,
     delete_workspace_entry_via_helper,
+    inspect_workspace_entries,
+    inspect_workspace_entries_via_helper,
+    open_workspace_file_stream,
+    open_workspace_file_stream_via_helper,
     read_workspace_file,
     read_workspace_file_via_helper,
     rename_workspace_entry,
@@ -50,7 +57,6 @@ from zerver.models.bots import PearWorkspaceNode
 logger = logging.getLogger(__name__)
 
 PEAR_WORKSPACE_TEXT_MAX_BYTES = 1_000_000
-PEAR_WORKSPACE_RAW_MAX_BYTES = 16 * 1024 * 1024
 PEAR_WORKSPACE_INDEX_CACHE_SECONDS = 60
 PEAR_WORKSPACE_INDEX_LOCAL_ENTRIES = 4
 PEAR_WORKSPACE_GIT_TIMEOUT_SECONDS = 15
@@ -58,6 +64,7 @@ PEAR_WORKSPACE_MUTATION_RECEIPT_SECONDS = 10 * 60
 PEAR_WORKSPACE_FILE_OBSERVATION_SECONDS = 60 * 60
 DEFAULT_WORKSPACE_HISTORY_LIMIT = 50
 MAX_WORKSPACE_HISTORY_LIMIT = 200
+PEAR_WORKSPACE_INSPECTION_BATCH_BYTES = 512 * 1024
 
 
 class WorkspaceSnapshotError(Exception):
@@ -102,6 +109,7 @@ class WorkspaceSnapshot:
 class WorkspaceMutationReceipt:
     state: str
     result_version: str
+    result_identity: WorkspaceEntryIdentity
     result_revision: int | None
     result_entry_id: str | None
 
@@ -274,6 +282,11 @@ def _store_workspace_mutation_receipt(
             {
                 "state": receipt.state,
                 "result_version": receipt.result_version,
+                "result_identity": {
+                    "device": receipt.result_identity.device,
+                    "inode": receipt.result_identity.inode,
+                    "ctime_ns": receipt.result_identity.ctime_ns,
+                },
                 "result_revision": receipt.result_revision,
                 "result_entry_id": receipt.result_entry_id,
             },
@@ -296,6 +309,7 @@ def record_pending_workspace_mutation(
     content: bytes,
     edit_revision: int,
     result_version: str,
+    result_identity: WorkspaceEntryIdentity,
 ) -> None:
     _store_workspace_mutation_receipt(
         actor_id=actor_id,
@@ -309,6 +323,7 @@ def record_pending_workspace_mutation(
         receipt=WorkspaceMutationReceipt(
             state="pending",
             result_version=result_version,
+            result_identity=result_identity,
             result_revision=None,
             result_entry_id=None,
         ),
@@ -326,6 +341,7 @@ def record_completed_workspace_mutation(
     content: bytes,
     edit_revision: int,
     result_version: str,
+    result_identity: WorkspaceEntryIdentity,
     result_revision: int,
     result_entry_id: str,
 ) -> None:
@@ -341,6 +357,7 @@ def record_completed_workspace_mutation(
         receipt=WorkspaceMutationReceipt(
             state="complete",
             result_version=result_version,
+            result_identity=result_identity,
             result_revision=result_revision,
             result_entry_id=result_entry_id,
         ),
@@ -376,16 +393,34 @@ def get_workspace_mutation_receipt(
     if not isinstance(payload, dict) or set(payload) != {
         "state",
         "result_version",
+        "result_identity",
         "result_revision",
         "result_entry_id",
     }:
         return None
     state = payload["state"]
     result_version = payload["result_version"]
+    result_identity_payload = payload["result_identity"]
     result_revision = payload["result_revision"]
     result_entry_id = payload["result_entry_id"]
-    if state not in {"pending", "complete"} or not isinstance(result_version, str):
+    if (
+        state not in {"pending", "complete"}
+        or not isinstance(result_version, str)
+        or not isinstance(result_identity_payload, dict)
+        or set(result_identity_payload) != {"device", "inode", "ctime_ns"}
+    ):
         return None
+    identity_values = (
+        result_identity_payload["device"],
+        result_identity_payload["inode"],
+        result_identity_payload["ctime_ns"],
+    )
+    if any(
+        isinstance(value, bool) or not isinstance(value, int) or value < 0
+        for value in identity_values
+    ):
+        return None
+    result_identity = WorkspaceEntryIdentity(*identity_values)
     if state == "pending":
         if result_revision is not None or result_entry_id is not None:
             return None
@@ -400,6 +435,7 @@ def get_workspace_mutation_receipt(
     return WorkspaceMutationReceipt(
         state=state,
         result_version=result_version,
+        result_identity=result_identity,
         result_revision=result_revision,
         result_entry_id=result_entry_id,
     )
@@ -682,6 +718,45 @@ def _parse_status(
     return status_by_path, dirty_count
 
 
+def inspect_workspace_node_entries(
+    node: PearWorkspaceNode,
+    expectations: dict[str, Literal["file", "directory"]],
+) -> dict[str, WorkspaceEntryIdentity]:
+    isolation_username = node.isolation_username.strip() or None
+    if isolation_username is None:
+        inspected = inspect_workspace_entries(
+            node.workdir.strip(),
+            expectations,
+            skip_unsafe=True,
+        )
+        return {entry.path: entry.identity for entry in inspected}
+
+    batches: list[dict[str, Literal["file", "directory"]]] = []
+    current_batch: dict[str, Literal["file", "directory"]] = {}
+    current_bytes = 0
+    for path, kind in sorted(expectations.items()):
+        entry_bytes = len(path.encode("utf-8")) + 64
+        if current_batch and current_bytes + entry_bytes > PEAR_WORKSPACE_INSPECTION_BATCH_BYTES:
+            batches.append(current_batch)
+            current_batch = {}
+            current_bytes = 0
+        current_batch[path] = kind
+        current_bytes += entry_bytes
+    if current_batch:
+        batches.append(current_batch)
+
+    identities: dict[str, WorkspaceEntryIdentity] = {}
+    for batch in batches:
+        inspected = inspect_workspace_entries_via_helper(
+            node.workdir.strip(),
+            batch,
+            skip_unsafe=True,
+            isolation_username=isolation_username,
+        )
+        identities.update((entry.path, entry.identity) for entry in inspected)
+    return identities
+
+
 def _enumerate_workspace(
     node: PearWorkspaceNode,
 ) -> tuple[tuple[WorkspacePath, ...], str, str, str, int]:
@@ -733,9 +808,40 @@ def _enumerate_workspace(
             "--",
         ],
     )
+    directory_paths = set(explicit_directories)
+    for path in [*allowed_paths, *explicit_directories]:
+        components = validate_workspace_relative_path(path)
+        directory_paths.update(
+            "/".join(components[:offset]) for offset in range(1, len(components))
+        )
+    expectations: dict[str, Literal["file", "directory"]] = {}
+    for path in allowed_paths:
+        expectations[path] = "file"
+    for path in directory_paths:
+        existing_kind = expectations.get(path)
+        if existing_kind == "file":
+            raise WorkspaceSnapshotError(f"Workspace path is both a file and directory: {path}")
+        expectations[path] = "directory"
+    identities = inspect_workspace_node_entries(node, expectations)
     paths = tuple(
-        [WorkspacePath(path, status_by_path.get(path, "clean")) for path in sorted(allowed_paths)]
-        + [WorkspacePath(path, "untracked", "directory") for path in sorted(explicit_directories)]
+        [
+            WorkspacePath(
+                path,
+                status_by_path.get(path, "clean"),
+                "file",
+                identities.get(path),
+            )
+            for path in sorted(allowed_paths)
+        ]
+        + [
+            WorkspacePath(
+                path,
+                "untracked" if path in explicit_directories else "clean",
+                "directory",
+                identities.get(path),
+            )
+            for path in sorted(directory_paths)
+        ]
     )
 
     branch_output = _run_git(
@@ -761,6 +867,13 @@ def _enumerate_workspace(
         fingerprint.update(path.status.encode("ascii"))
         fingerprint.update(b"\0")
         fingerprint.update(path.kind.encode("ascii"))
+        fingerprint.update(b"\0")
+        if path.identity is not None:
+            fingerprint.update(str(path.identity.device).encode("ascii"))
+            fingerprint.update(b":")
+            fingerprint.update(str(path.identity.inode).encode("ascii"))
+            fingerprint.update(b":")
+            fingerprint.update(str(path.identity.ctime_ns).encode("ascii"))
         fingerprint.update(b"\0")
     fingerprint.update(status_output)
     fingerprint.update(tracked_content_digest)
@@ -912,6 +1025,7 @@ def read_workspace_node_file(
     path: str,
     *,
     max_bytes: int,
+    expected_identity: WorkspaceEntryIdentity | None = None,
 ) -> WorkspaceFile:
     isolation_username = node.isolation_username.strip() or None
     if isolation_username is not None:
@@ -919,9 +1033,36 @@ def read_workspace_node_file(
             node.workdir.strip(),
             path,
             max_bytes=max_bytes,
+            expected_identity=expected_identity,
             isolation_username=isolation_username,
         )
-    return read_workspace_file(node.workdir.strip(), path, max_bytes=max_bytes)
+    return read_workspace_file(
+        node.workdir.strip(),
+        path,
+        max_bytes=max_bytes,
+        expected_identity=expected_identity,
+    )
+
+
+def open_workspace_node_file_stream(
+    node: PearWorkspaceNode,
+    path: str,
+    *,
+    expected_identity: WorkspaceEntryIdentity | None,
+) -> WorkspaceRawFileStream | WorkspaceHelperRawFileStream:
+    isolation_username = node.isolation_username.strip() or None
+    if isolation_username is not None:
+        return open_workspace_file_stream_via_helper(
+            node.workdir.strip(),
+            path,
+            expected_identity=expected_identity,
+            isolation_username=isolation_username,
+        )
+    return open_workspace_file_stream(
+        node.workdir.strip(),
+        path,
+        expected_identity=expected_identity,
+    )
 
 
 def write_workspace_node_file(
@@ -930,6 +1071,7 @@ def write_workspace_node_file(
     data: bytes,
     *,
     expected_version: str,
+    expected_identity: WorkspaceEntryIdentity | None,
 ) -> WorkspaceWriteResult:
     isolation_username = node.isolation_username.strip() or None
     if isolation_username is not None:
@@ -939,6 +1081,7 @@ def write_workspace_node_file(
             data,
             max_bytes=PEAR_WORKSPACE_TEXT_MAX_BYTES,
             expected_version=expected_version,
+            expected_identity=expected_identity,
             create=False,
             isolation_username=isolation_username,
         )
@@ -948,6 +1091,7 @@ def write_workspace_node_file(
         data,
         max_bytes=PEAR_WORKSPACE_TEXT_MAX_BYTES,
         expected_version=expected_version,
+        expected_identity=expected_identity,
         create=False,
     )
 
@@ -998,6 +1142,7 @@ def rename_workspace_node_entry(
     destination_path: str,
     *,
     expected_kind: Literal["file", "directory"],
+    expected_identity: WorkspaceEntryIdentity | None,
 ) -> WorkspaceEntryMutationResult:
     isolation_username = node.isolation_username.strip() or None
     if isolation_username is not None:
@@ -1006,6 +1151,7 @@ def rename_workspace_node_entry(
             source_path,
             destination_path,
             expected_kind=expected_kind,
+            expected_identity=expected_identity,
             isolation_username=isolation_username,
         )
     return rename_workspace_entry(
@@ -1013,6 +1159,7 @@ def rename_workspace_node_entry(
         source_path,
         destination_path,
         expected_kind=expected_kind,
+        expected_identity=expected_identity,
     )
 
 
@@ -1021,6 +1168,7 @@ def delete_workspace_node_entry(
     path: str,
     *,
     expected_kind: Literal["file", "directory"],
+    expected_identity: WorkspaceEntryIdentity | None,
     recursive: bool,
 ) -> WorkspaceDeleteResult:
     isolation_username = node.isolation_username.strip() or None
@@ -1029,6 +1177,7 @@ def delete_workspace_node_entry(
             node.workdir.strip(),
             path,
             expected_kind=expected_kind,
+            expected_identity=expected_identity,
             recursive=recursive,
             isolation_username=isolation_username,
         )
@@ -1036,6 +1185,7 @@ def delete_workspace_node_entry(
         node.workdir.strip(),
         path,
         expected_kind=expected_kind,
+        expected_identity=expected_identity,
         recursive=recursive,
     )
 
@@ -1095,6 +1245,7 @@ def write_workspace_node_file_at_revision(
     data: bytes,
     *,
     expected_version: str,
+    expected_identity: WorkspaceEntryIdentity | None,
     requested_revision: int,
     before_finish: Callable[[WorkspaceWriteResult], None],
 ) -> tuple[WorkspaceWriteResult, WorkspaceSnapshot]:
@@ -1104,6 +1255,7 @@ def write_workspace_node_file_at_revision(
             path,
             data,
             expected_version=expected_version,
+            expected_identity=expected_identity,
         )
         before_finish(result)
         snapshot = finish_workspace_write(

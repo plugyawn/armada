@@ -10,6 +10,7 @@ from zerver.lib.pear_workspace_index import (
     WorkspaceIndexError,
     WorkspacePath,
 )
+from zerver.lib.pear_workspace_io import WorkspaceEntryIdentity
 
 
 class PearWorkspaceIndexTest(unittest.TestCase):
@@ -108,6 +109,18 @@ class PearWorkspaceIndexTest(unittest.TestCase):
             first.entry_for_path("README.md").entry_id,
             second.entry_for_path("README.md").entry_id,
         )
+
+    def test_entry_ids_bind_unexposed_filesystem_identity(self) -> None:
+        first_identity = WorkspaceEntryIdentity(device=1, inode=2, ctime_ns=3)
+        second_identity = WorkspaceEntryIdentity(device=1, inode=4, ctime_ns=5)
+        first = self.build([WorkspacePath("scratch.txt", "untracked", "file", first_identity)])
+        second = self.build([WorkspacePath("scratch.txt", "untracked", "file", second_identity)])
+
+        first_entry = first.entry_for_path("scratch.txt")
+        second_entry = second.entry_for_path("scratch.txt")
+        self.assertEqual(first_entry.identity, first_identity)
+        self.assertNotEqual(first_entry.entry_id, second_entry.entry_id)
+        self.assertNotIn(str(first_identity.inode), first_entry.entry_id)
 
     def test_cursor_rejects_tamper_and_other_revision(self) -> None:
         paths = [WorkspacePath(f"file-{index:03}.txt") for index in range(10)]

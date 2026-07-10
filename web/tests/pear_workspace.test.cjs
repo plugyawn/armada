@@ -77,10 +77,14 @@ mock_esm("../src/pear_workspace_shell", {
         const mounted = {
             options,
             refreshes: 0,
+            quickOpens: 0,
             destroys: 0,
             ready: reject_ready ? Promise.reject(new Error("chunk failed")) : Promise.resolve(),
             refresh() {
                 this.refreshes += 1;
+            },
+            openQuickOpen() {
+                this.quickOpens += 1;
             },
             async destroy() {
                 this.destroys += 1;
@@ -141,6 +145,9 @@ run_test("Chat and Workspace keep one shell mounted and reject retired tab state
         "true",
     );
     assert.equal(document.activeElement.dataset.pearTab, "workspace");
+    const quick_open_event = new window.Event("pear:workspace-quick-open", {cancelable: true});
+    assert.equal(document.dispatchEvent(quick_open_event), false);
+    assert.equal(mounts[0].quickOpens, 1);
     assert.equal(
         document
             .querySelector(".column-middle-inner")

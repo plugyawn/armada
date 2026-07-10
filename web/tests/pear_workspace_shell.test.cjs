@@ -4,7 +4,7 @@ const assert = require("node:assert/strict");
 
 const {JSDOM} = require("jsdom");
 
-const {set_global, zrequire} = require("./lib/namespace.cjs");
+const {clock, set_global, zrequire} = require("./lib/namespace.cjs");
 const {run_test} = require("./lib/test.cjs");
 
 const dom = new JSDOM("<!doctype html><html><body></body></html>", {
@@ -410,6 +410,68 @@ run_test("file tabs, mobile drawer, and Escape preserve focus and unsaved work",
         );
     assert.equal(escaped_to_parent, 1, "a clean editor lets the pane own Escape");
     document.body.removeEventListener("keydown", count_escape);
+
+    await test.controller.destroy();
+    test.root.remove();
+});
+
+run_test("quick-open searches the complete workspace and breadcrumbs reveal folders", async () => {
+    const test = harness("workspace-quick-open");
+    const current = descriptor("workspace-quick-open");
+    test.send_descriptor(current);
+    const docs = entry("docs", "directory");
+    test.send_tree(0, current.root, [docs, entry("README.md")]);
+    test.click(test.root.querySelector("[data-entry-id='r1:docs']"));
+    const guide = entry("docs/guide.md");
+    test.send_tree(1, docs, [guide]);
+    test.click(test.root.querySelector("[data-entry-id='r1:docs/guide.md']"), "dblclick");
+
+    const docs_crumb = test.root.querySelector("[data-breadcrumb-path='docs']");
+    assert.equal(docs_crumb.textContent, "docs");
+    test.click(docs_crumb);
+    assert.equal(test.controller.getDebugState().tree.selectedPath, "docs");
+    assert.equal(document.activeElement.dataset.entryId, docs.entry_id);
+
+    const return_focus = test.root.querySelector("[data-action='refresh']");
+    return_focus.focus();
+    test.controller.openQuickOpen();
+    const input = test.root.querySelector("[data-role='search-input']");
+    assert.equal(document.activeElement, input);
+    assert.equal(input.placeholder, "Quick open files");
+    input.value = "guide";
+    input.dispatchEvent(new window.Event("input", {bubbles: true}));
+    await clock.tickAsync(120);
+    assert.equal(test.searches.at(-1).query, "guide");
+    test.searches.at(-1).callbacks.success({
+        workspace_uuid: "workspace-quick-open",
+        workspace_revision: 1,
+        query: "guide",
+        entries: [{...guide, ancestors: [current.root, docs]}],
+    });
+    input.dispatchEvent(
+        new window.KeyboardEvent("keydown", {key: "ArrowDown", bubbles: true, cancelable: true}),
+    );
+    assert.equal(document.activeElement.dataset.searchEntryId, guide.entry_id);
+    document.activeElement.dispatchEvent(
+        new window.KeyboardEvent("keydown", {key: "Enter", bubbles: true, cancelable: true}),
+    );
+    assert.equal(test.controller.getDebugState().activePath, "docs/guide.md");
+    assert.equal(document.activeElement.id, "pear-workspace-document-panel");
+    assert.equal(input.placeholder, "Filter files");
+
+    return_focus.focus();
+    test.controller.openQuickOpen();
+    input.value = "late";
+    test.root
+        .querySelector("[data-role='search-form']")
+        .dispatchEvent(new window.SubmitEvent("submit", {bubbles: true, cancelable: true}));
+    const dismissed_search = test.searches.at(-1);
+    input.dispatchEvent(
+        new window.KeyboardEvent("keydown", {key: "Escape", bubbles: true, cancelable: true}),
+    );
+    assert.equal(dismissed_search.aborted, true);
+    assert.equal(document.activeElement, return_focus);
+    assert.equal(input.placeholder, "Filter files");
 
     await test.controller.destroy();
     test.root.remove();

@@ -62,14 +62,27 @@ export function render_pear_workspace_breadcrumb(
         return;
     }
     const fragment = document.createDocumentFragment();
-    for (const [index, part_text] of tab.path.split("/").entries()) {
+    const parts = tab.path.split("/");
+    let current_path = "";
+    for (const [index, part_text] of parts.entries()) {
+        current_path = current_path === "" ? part_text : `${current_path}/${part_text}`;
         if (index > 0) {
             const separator = document.createElement("span");
             separator.setAttribute("aria-hidden", "true");
             separator.textContent = " / ";
             fragment.append(separator);
         }
-        const part = document.createElement("span");
+        let part: HTMLElement;
+        if (index === parts.length - 1) {
+            part = document.createElement("span");
+            part.setAttribute("aria-current", "page");
+        } else {
+            const button = document.createElement("button");
+            button.type = "button";
+            button.dataset["breadcrumbPath"] = current_path;
+            button.setAttribute("aria-label", `Reveal ${current_path} in explorer`);
+            part = button;
+        }
         part.textContent = part_text;
         fragment.append(part);
     }

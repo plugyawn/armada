@@ -593,7 +593,7 @@ set +a
 cd "$BUILD_ROOT"
 export PATH="$BUILD_ROOT/.venv/bin:$PATH"
 umask 022
-nohup bash -c 'ZULIP_DEV_PRODUCTION_ASSETS=1 ./tools/update-prod-static && .venv/bin/python3 tools/pear_deploy/production_assets.py --repo-root . && printf "\\nPEAR_PRODUCTION_ASSETS_OK\\n"' \
+nohup bash -c "set -e; ZULIP_DEV_PRODUCTION_ASSETS=1 \"$BUILD_ROOT/.venv/bin/python3\" ./tools/update-prod-static && \"$BUILD_ROOT/.venv/bin/python3\" tools/pear_deploy/production_assets.py --repo-root . && printf '\\nPEAR_PRODUCTION_ASSETS_OK\\n'" \
     >"$BUILD_LOG" 2>&1 < /dev/null &
 printf '%s\n' "$!" >"$BUILD_PID"
 BUILD

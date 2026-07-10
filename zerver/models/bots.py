@@ -328,6 +328,7 @@ class PearWorkspaceNode(models.Model):
     upstream_ref = models.TextField(blank=True)
     dirty = models.BooleanField(default=False)
     changed_count = models.PositiveIntegerField(default=0)
+    content_revision = models.PositiveBigIntegerField(default=0)
     lifecycle_status = models.CharField(
         max_length=16,
         choices=LIFECYCLE_STATUS_CHOICES,

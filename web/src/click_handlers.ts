@@ -148,6 +148,13 @@ export function initialize(): void {
         // Ideally, this should be done via ClipboardJS, but it doesn't support
         // feature of stopPropagation once clicked.
         // See https://github.com/zenorocha/clipboard.js/pull/475
+        if (
+            $target.is(".pear-widget-pin") ||
+            $target.parents(".pear-widget-pin").length > 0
+        ) {
+            return true;
+        }
+
         if ($target.is(".copy_codeblock") || $target.parents(".copy_codeblock").length > 0) {
             return true;
         }

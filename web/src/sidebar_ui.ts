@@ -23,6 +23,7 @@ import * as pear_moments from "./pear_moments.ts";
 import * as pear_panel from "./pear_panel.ts";
 import {print_pear_signature} from "./pear_signature.ts";
 import * as pear_wall from "./pear_wall.ts";
+import * as pear_widgets from "./pear_widgets.ts";
 import * as pear_workspace from "./pear_workspace.ts";
 import * as pear_workspace_marks from "./pear_workspace_marks.ts";
 import * as pm_list from "./pm_list.ts";
@@ -419,6 +420,7 @@ export function initialize_right_sidebar(): void {
     buddy_list.initialize_tooltips();
     pear_panel.initialize();
     pear_wall.initialize();
+    pear_widgets.initialize();
     print_pear_signature();
     pear_moments.initialize();
     pear_workspace.initialize();

@@ -472,7 +472,7 @@ verify_remote_cutover_source() {
 }
 
 verify_remote_disk_capacity() {
-    local remote_asset_build_dir="/home/zulipdev/pear-asset-build-${LOCAL_SHA:0:12}"
+    local remote_asset_build_dir="/var/lib/pear-builds/asset-build-${LOCAL_SHA:0:12}"
     local runtime_path
     local -a capacity_command=(
         python3
@@ -549,14 +549,17 @@ remote_dirty_tree_matches_local_head() {
 }
 
 build_remote_production_assets() {
-    REMOTE_ASSET_BUILD_DIR="/home/zulipdev/pear-asset-build-${LOCAL_SHA:0:12}"
+    REMOTE_ASSET_BUILD_DIR="/var/lib/pear-builds/asset-build-${LOCAL_SHA:0:12}"
     echo "Staging source for an isolated production asset build..."
-    ssh_root "rm -rf $REMOTE_ASSET_BUILD_DIR && install -d -m 750 -o zulipdev -g zulipdev $REMOTE_ASSET_BUILD_DIR"
+    ssh_root "install -d -m 711 -o root -g root /var/lib/pear-builds; \
+        rm -rf $REMOTE_ASSET_BUILD_DIR; \
+        install -d -m 750 -o zulipdev -g zulipdev $REMOTE_ASSET_BUILD_DIR"
     rsync -az --delete \
         "${PEAR_DEPLOY_RSYNC_EXCLUDES[@]}" \
+        --exclude '/.git' \
         -e "ssh -F $SSH_CONFIG" \
         "$REPO_ROOT/" \
-        "root@$IP_ADDRESS:$REMOTE_ASSET_BUILD_DIR/"
+        "pear-staging:$REMOTE_ASSET_BUILD_DIR/"
     ssh_root "chown -R zulipdev:zulipdev $REMOTE_ASSET_BUILD_DIR; \
         sudo -Hu zulipdev ln -s $REMOTE_PATH/.venv $REMOTE_ASSET_BUILD_DIR/.venv; \
         sudo -Hu zulipdev ln -s $REMOTE_PATH/zproject/dev-secrets.conf $REMOTE_ASSET_BUILD_DIR/zproject/dev-secrets.conf; \
@@ -1064,11 +1067,11 @@ ROLLBACK_READY=true
 
 if [[ -d "$LOCAL_GIT_COMMON_DIR" ]]; then
     echo "Syncing Git metadata for this worktree..."
-    ssh_root "install -d -m 755 $REMOTE_GIT_COMMON_DIR"
+    ssh_root "install -d -m 755 -o zulipdev -g zulipdev $REMOTE_GIT_COMMON_DIR"
     rsync -az --delete \
         -e "ssh -F $SSH_CONFIG" \
         "$LOCAL_GIT_COMMON_DIR/" \
-        "root@$IP_ADDRESS:$REMOTE_GIT_COMMON_DIR/"
+        "pear-staging:$REMOTE_GIT_COMMON_DIR/"
 fi
 
 echo "Syncing checkout to $REMOTE_PATH..."
@@ -1076,14 +1079,14 @@ rsync -az --delete \
     "${PEAR_DEPLOY_RSYNC_EXCLUDES[@]}" \
     -e "ssh -F $SSH_CONFIG" \
     "$REPO_ROOT/" \
-    "root@$IP_ADDRESS:$REMOTE_PATH/"
+    "pear-staging:$REMOTE_PATH/"
 
 echo "Syncing Pear Codex skills to $REMOTE_PEAR_SKILLS_DIR..."
-ssh_root "install -d -m 755 $REMOTE_PEAR_SKILLS_DIR"
+ssh_root "install -d -m 755 -o zulipdev -g zulipdev $REMOTE_PEAR_SKILLS_DIR"
 rsync -az --delete \
     -e "ssh -F $SSH_CONFIG" \
     "$LOCAL_PEAR_SKILLS_DIR/" \
-    "root@$IP_ADDRESS:$REMOTE_PEAR_SKILLS_DIR/"
+    "pear-staging:$REMOTE_PEAR_SKILLS_DIR/"
 
 cut_over_remote_production_assets "$REMOTE_FROZEN_ASSET_DIR"
 

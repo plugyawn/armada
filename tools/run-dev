@@ -52,6 +52,14 @@ parser = argparse.ArgumentParser(
 
 parser.add_argument("--test", action="store_true", help="Use the testing database and ports")
 parser.add_argument("--minify", action="store_true", help="Minifies assets for testing in dev")
+parser.add_argument(
+    "--production-assets",
+    action="store_true",
+    help=(
+        "Serve a prebuilt, content-hashed production asset graph with DEBUG=False. "
+        "Fails if the build is absent or invalid; disables webpack and web-process reloaders."
+    ),
+)
 parser.add_argument("--interface", help="Set the IP or hostname for the proxy to listen on")
 parser.add_argument(
     "--no-clear-memcached",
@@ -83,6 +91,14 @@ parser.add_argument(
 )
 add_provision_check_override_param(parser)
 options = parser.parse_args()
+if options.production_assets:
+    if options.test:
+        parser.error("--production-assets cannot be combined with --test")
+    if options.minify:
+        parser.error("--production-assets cannot be combined with --minify")
+    if options.help_center_dev_server or options.only_help_center:
+        parser.error("--production-assets cannot run a help-center development server")
+    os.environ["ZULIP_DEV_PRODUCTION_ASSETS"] = "1"
 help_center_dev_server_enabled = (
     options.help_center_dev_server and not options.help_center_static_build
 )
@@ -115,16 +131,20 @@ if options.test:
     runtornado_command = ["./manage.py", "runtornado"]
 else:
     settings_module = "zproject.settings"
-    runtornado_command = [
-        "-m",
-        "tornado.autoreload",
-        "--until-success",
-        "./manage.py",
-        "runtornado",
-        "--autoreload",
-        "--immediate-reloads",
-        "--automated",
-    ]
+    if options.production_assets:
+        runserver_args = ["--noreload"]
+        runtornado_command = ["./manage.py", "runtornado", "--automated"]
+    else:
+        runtornado_command = [
+            "-m",
+            "tornado.autoreload",
+            "--until-success",
+            "./manage.py",
+            "runtornado",
+            "--autoreload",
+            "--immediate-reloads",
+            "--automated",
+        ]
 
 manage_args = [f"--settings={settings_module}"]
 os.environ["DJANGO_SETTINGS_MODULE"] = settings_module
@@ -225,6 +245,17 @@ def do_one_time_webpack_compile() -> None:
     subprocess.check_call(["./tools/webpack", "--quiet", "--test"])
 
 
+def validate_production_assets() -> None:
+    subprocess.check_call(
+        [
+            sys.executable,
+            "./tools/pear_deploy/production_assets.py",
+            "--repo-root",
+            os.getcwd(),
+        ]
+    )
+
+
 def start_webpack_watcher() -> "subprocess.Popen[bytes]":
     webpack_cmd = ["./tools/webpack", "--watch", f"--port={webpack_port}"]
     if options.minify:
@@ -240,7 +271,7 @@ def start_webpack_watcher() -> "subprocess.Popen[bytes]":
     return subprocess.Popen(webpack_cmd)
 
 
-session: aiohttp.ClientSession
+session: aiohttp.ClientSession | None = None
 
 # https://datatracker.ietf.org/doc/html/rfc2616#section-13.5.1
 HOP_BY_HOP_HEADERS = {
@@ -264,6 +295,7 @@ SKIP_AUTO_HEADERS = {
 
 
 async def forward(upstream_port: int, request: web.Request) -> web.StreamResponse:
+    assert session is not None
     upstream_response: None | aiohttp.ClientResponse = None
     request_started = time.time()
     while upstream_response is None:
@@ -403,7 +435,17 @@ build step and rerun `run-dev`.""")
             web.route(
                 hdrs.METH_ANY, r"/{path:json/events|api/v1/events}", partial(forward, tornado_port)
             ),
-            web.route(hdrs.METH_ANY, r"/{path:webpack/.*}", partial(forward, webpack_port)),
+            *(
+                []
+                if options.production_assets
+                else [
+                    web.route(
+                        hdrs.METH_ANY,
+                        r"/{path:webpack/.*}",
+                        partial(forward, webpack_port),
+                    )
+                ]
+            ),
             web.route(hdrs.METH_ANY, r"/{path:api/v1/tus/.*}", partial(forward, tusd_port)),
             web.route(hdrs.METH_ANY, r"/{path:.*}", partial(forward, django_port)),
         ]
@@ -424,7 +466,7 @@ def print_listeners(external_host_url: str) -> None:
         (tornado_port, "Tornado"),
     ]
 
-    if not options.test:
+    if not options.test and not options.production_assets:
         ports.append((webpack_port, "webpack"))
 
     if help_center_dev_server_enabled:
@@ -438,7 +480,7 @@ def print_listeners(external_host_url: str) -> None:
     print()
 
 
-runner: web.AppRunner
+runner: web.AppRunner | None = None
 children: list["subprocess.Popen[bytes]"] = []
 
 
@@ -466,7 +508,9 @@ async def serve() -> None:
         print_listeners(external_host_url)
         return
 
-    if options.test:
+    if options.production_assets:
+        validate_production_assets()
+    elif options.test:
         do_one_time_webpack_compile()
     else:
         children.append(start_webpack_watcher())
@@ -501,8 +545,10 @@ try:
         loop.add_signal_handler(s, loop.stop)
     loop.run_forever()
 finally:
-    loop.run_until_complete(runner.cleanup())
-    loop.run_until_complete(session.close())
+    if runner is not None:
+        loop.run_until_complete(runner.cleanup())
+    if session is not None:
+        loop.run_until_complete(session.close())
 
     for child in children:
         child.terminate()

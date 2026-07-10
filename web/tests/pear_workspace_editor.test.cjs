@@ -69,10 +69,12 @@ function harness() {
     const deferred = [];
     const autosaves = [];
     const updates = [];
+    const saved = [];
     const source_editors = [];
     const rich_editors = [];
     let rich_loads = 0;
     let rich_should_fail = false;
+    let rich_destroy_gate;
 
     function scheduled(queue, callback) {
         const work = {callback, cancelled: false};
@@ -86,6 +88,7 @@ function harness() {
         options.root.replaceChildren(host);
         const fake = {
             text: options.text,
+            readOnly: options.readOnly,
             destroyed: false,
             dirty(selection) {
                 options.onDirty({origin: "user", selection: selection ?? {anchor: 1, head: 1}});
@@ -126,6 +129,7 @@ function harness() {
                     markdown: options.markdown,
                     initialSelection: options.selection,
                     initialScrollTop: options.scrollTop,
+                    readOnly: options.readOnly,
                     destroyed: false,
                     dirty() {
                         this.revision += 1;
@@ -170,6 +174,8 @@ function harness() {
                     async destroy() {
                         this.destroyed = true;
                         host.remove();
+                        await rich_destroy_gate?.promise;
+                        rich_destroy_gate = undefined;
                     },
                 };
                 rich_editors.push(fake);
@@ -182,6 +188,9 @@ function harness() {
         root,
         onUpdate(snapshot) {
             updates.push(snapshot);
+        },
+        onSaved(event) {
+            saved.push(event);
         },
         dependencies: {
             getFile(workspace_id, entry_id, callbacks) {
@@ -203,7 +212,11 @@ function harness() {
             scheduleAutosave: (callback) => scheduled(autosaves, callback),
         },
     });
-    controller.activateWorkspace("workspace-a", 1, {rawBytes: 2000, textBytes: 1000});
+    controller.activateWorkspace("workspace-a", 1, {
+        rawBytes: 2000,
+        textBytes: 1000,
+        writable: true,
+    });
 
     function run_next(queue) {
         const work = queue.shift();
@@ -221,6 +234,7 @@ function harness() {
         deferred,
         autosaves,
         updates,
+        saved,
         source_editors,
         rich_editors,
         get rich_loads() {
@@ -228,6 +242,14 @@ function harness() {
         },
         failRich() {
             rich_should_fail = true;
+        },
+        deferRichDestroy() {
+            let release;
+            const promise = new Promise((resolve) => {
+                release = resolve;
+            });
+            rich_destroy_gate = {promise};
+            return release;
         },
         run_next,
     };
@@ -371,6 +393,100 @@ run_test("a conflict blocks autosave until explicit Overwrite adopts the remote 
     assert.equal(test.puts.length, 2);
     assert.equal(test.puts[1].request.entryId, "entry:README.md:v2");
     assert.equal(test.puts[1].request.baseVersion, "c".repeat(64));
+    assert.deepEqual(test.saved[0], {
+        oldEntryId: "entry:README.md",
+        newEntryId: "entry:README.md:v2",
+        path: "README.md",
+        workspaceRevision: 2,
+    });
+    await test.controller.destroy();
+    test.root.remove();
+});
+
+run_test("conflict Reload publishes the adopted identity and workspace revision", async () => {
+    const test = harness();
+    await open_text(test);
+    const source = test.source_editors[0];
+    source.text = "local";
+    source.dirty();
+    test.run_next(test.deferred);
+    test.run_next(test.autosaves);
+    test.puts[0].callbacks.error({
+        kind: "server",
+        status: 409,
+        error: {
+            result: "error",
+            msg: "changed",
+            error_code: "version_conflict",
+            workspace_revision: 2,
+            remote_file: file("README.md", {
+                workspace_revision: 2,
+                entry_id: "entry:README.md:v2",
+                content: "remote",
+                version: "c".repeat(64),
+            }),
+        },
+    });
+    await test.controller.resolveConflict("reload");
+    const snapshot = test.controller.getSnapshot();
+    assert.equal(snapshot.activeIdentity.entryId, "entry:README.md:v2");
+    assert.equal(snapshot.surface.entry.entry_id, "entry:README.md:v2");
+    assert.equal(snapshot.activeDocument.currentText, "remote");
+    assert.deepEqual(test.saved[0], {
+        oldEntryId: "entry:README.md",
+        newEntryId: "entry:README.md:v2",
+        path: "README.md",
+        workspaceRevision: 2,
+    });
+    await test.controller.destroy();
+    test.root.remove();
+});
+
+run_test(
+    "read-only workspace capability mounts text without accepting edits or saves",
+    async () => {
+        const test = harness();
+        test.controller.activateWorkspace("workspace-a", 1, {
+            rawBytes: 2000,
+            textBytes: 1000,
+            writable: false,
+        });
+        await open_text(test);
+        const source = test.source_editors[0];
+        assert.equal(source.readOnly, true);
+        source.text = "must not save";
+        source.dirty();
+        assert.equal(test.controller.getSnapshot().activeDocument.state, "clean");
+        assert.equal(test.deferred.length, 0);
+        assert.equal(test.autosaves.length, 0);
+        assert.equal(test.puts.length, 0);
+        assert.match(test.controller.getSnapshot().notice, /Read-only/);
+        await test.controller.destroy();
+        test.root.remove();
+    },
+);
+
+run_test("a slow Rich teardown cannot revive an older file-open intent", async () => {
+    const test = harness();
+    await open_text(test, "A.md");
+    assert.equal(await test.controller.switchMode("rich"), true);
+    const release = test.deferRichDestroy();
+    const opening_b = test.controller.open(entry("B.md"));
+    await Promise.resolve();
+    await Promise.resolve();
+    const opening_c = test.controller.open(entry("C.md"));
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    assert.equal(test.gets.length, 2);
+    assert.equal(test.gets[1].entry_id, "entry:C.md");
+    release();
+    await Promise.all([opening_b, opening_c]);
+    assert.equal(test.controller.getSnapshot().surface.entry.path, "C.md");
+    assert.equal(
+        test.gets.some((request) => request.entry_id === "entry:B.md"),
+        false,
+    );
     await test.controller.destroy();
     test.root.remove();
 });
@@ -458,7 +574,7 @@ run_test("restored Rich preference mounts directly with saved non-content view s
     test.controller.activateWorkspace(
         "workspace-a",
         1,
-        {rawBytes: 2000, textBytes: 1000},
+        {rawBytes: 2000, textBytes: 1000, writable: true},
         {
             mode: "rich",
             documents: {
@@ -507,7 +623,11 @@ run_test(
     "an unbounded streamed raw endpoint keeps large raw/download previews available",
     async () => {
         const test = harness();
-        test.controller.activateWorkspace("workspace-a", 1, {rawBytes: null, textBytes: 1000});
+        test.controller.activateWorkspace("workspace-a", 1, {
+            rawBytes: null,
+            textBytes: 1000,
+            writable: true,
+        });
         await test.controller.open(entry("large.png", {size: 50_000_000}));
         assert.equal(test.controller.getSnapshot().surface.kind, "raster");
         await test.controller.open(entry("large.txt", {size: 50_000_000}));
@@ -531,7 +651,11 @@ run_test("an external workspace revision clears cached IDs and the mounted adapt
     source.dirty();
     test.run_next(test.deferred);
     test.run_next(test.autosaves);
-    test.controller.activateWorkspace("workspace-a", 2, {rawBytes: 2000, textBytes: 1000});
+    test.controller.activateWorkspace("workspace-a", 2, {
+        rawBytes: 2000,
+        textBytes: 1000,
+        writable: true,
+    });
     let snapshot = test.controller.getSnapshot();
     assert.equal(snapshot.activeDocument, undefined);
     assert.equal(snapshot.mountedAdapter, undefined);

@@ -565,7 +565,13 @@ build_remote_production_assets() {
     ssh_root "install -d -m 711 -o root -g root /var/lib/pear-builds; \
         rm -rf $REMOTE_ASSET_BUILD_DIR; \
         install -d -m 750 -o zulipdev -g zulipdev $REMOTE_ASSET_BUILD_DIR"
+    # The remote checkout is clean and remains read-only throughout the build.
+    # Link unchanged files from it locally, so the constrained host link only
+    # carries the actual source diff rather than every fixture and static asset.
+    # All paths written by the production build are excluded below and seeded
+    # separately, so no build output can share an inode with the live tree.
     rsync -az --delete \
+        --link-dest="$REMOTE_PATH" \
         "${PEAR_DEPLOY_RSYNC_EXCLUDES[@]}" \
         --exclude '/.git' \
         -e "ssh -F $SSH_CONFIG" \

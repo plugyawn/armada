@@ -2346,6 +2346,14 @@ class PearSessionDefaultsTest(TestCase):
                 "# pear-canvas\n\nUse CANVAS.md for topic state.\n",
             )
             self.assertFalse((Path(codex_home) / "skills" / "not-a-skill").exists())
+            self.assertEqual(
+                json.loads(
+                    (Path(codex_home) / "skills" / ".pear-managed-skills.json").read_text(
+                        encoding="utf-8"
+                    )
+                ),
+                {"version": 1, "skills": ["pear-canvas"]},
+            )
 
     def test_agent_text_results_parse_artifact_lines(self) -> None:
         results = pear_tool_results_from_text(

@@ -23,6 +23,7 @@ export type PearWorkspaceSerialization = {
 export type PearWorkspaceSaveSnapshot = {
     workspaceId: string;
     workspaceRevision: number;
+    entryId: string;
     path: string;
     requestGeneration: number;
     editRevision: number;
@@ -33,10 +34,12 @@ export type PearWorkspaceSaveSnapshot = {
 export type PearWorkspaceConflict = {
     remoteText: string;
     remoteVersion: string;
+    remoteEntryId: string;
     remoteWorkspaceRevision: number;
 };
 
 export type PearWorkspaceDocumentSession = {
+    entryId: string;
     path: string;
     requestGeneration: number;
     baseVersion: string;
@@ -67,9 +70,10 @@ export type PearWorkspaceState = {
     workspaceId: string;
     workspaceRevision: number;
     requestGeneration: number;
-    activePath: string | undefined;
+    activeEntryId: string | undefined;
     pendingDocumentRequest:
         | {
+              entryId: string;
               path: string;
               requestGeneration: number;
           }
@@ -86,6 +90,7 @@ export type PearWorkspaceStoreState = {
 
 export type PearWorkspaceDocumentIdentity = {
     workspaceId: string;
+    entryId: string;
     path: string;
     requestGeneration: number;
 };
@@ -99,6 +104,7 @@ export type PearWorkspaceStoreAction =
     | {
           type: "open_document";
           workspaceId: string;
+          entryId: string;
           path: string;
       }
     | ({
@@ -143,6 +149,7 @@ export type PearWorkspaceStoreAction =
     | ({
           type: "save_succeeded";
           editRevision: number;
+          newEntryId: string;
           newVersion: string;
           workspaceRevision: number;
       } & PearWorkspaceDocumentIdentity)
@@ -156,6 +163,7 @@ export type PearWorkspaceStoreAction =
           editRevision: number;
           remoteText: string;
           remoteVersion: string;
+          remoteEntryId: string;
           remoteWorkspaceRevision: number;
       } & PearWorkspaceDocumentIdentity)
     | ({type: "conflict_reload" | "conflict_overwrite"} & PearWorkspaceDocumentIdentity)
@@ -189,8 +197,11 @@ export function get_pear_workspace_document(
     state: PearWorkspaceStoreState,
     identity: PearWorkspaceDocumentIdentity,
 ): PearWorkspaceDocumentSession | undefined {
-    const document = state.workspaces.get(identity.workspaceId)?.documents.get(identity.path);
-    if (document?.requestGeneration !== identity.requestGeneration) {
+    const document = state.workspaces.get(identity.workspaceId)?.documents.get(identity.entryId);
+    if (
+        document?.requestGeneration !== identity.requestGeneration ||
+        document.path !== identity.path
+    ) {
         return undefined;
     }
     return document;
@@ -209,9 +220,13 @@ function with_document(
     state: PearWorkspaceStoreState,
     workspace: PearWorkspaceState,
     document: PearWorkspaceDocumentSession,
+    previous_entry_id: string = document.entryId,
 ): PearWorkspaceStoreState {
     const documents = new Map(workspace.documents);
-    documents.set(document.path, document);
+    if (previous_entry_id !== document.entryId) {
+        documents.delete(previous_entry_id);
+    }
+    documents.set(document.entryId, document);
     return with_workspace(state, {...workspace, documents});
 }
 
@@ -224,8 +239,12 @@ function matching_document(
     identity: PearWorkspaceDocumentIdentity,
 ): {workspace: PearWorkspaceState; document: PearWorkspaceDocumentSession} | undefined {
     const workspace = state.workspaces.get(identity.workspaceId);
-    const document = workspace?.documents.get(identity.path);
-    if (workspace === undefined || document?.requestGeneration !== identity.requestGeneration) {
+    const document = workspace?.documents.get(identity.entryId);
+    if (
+        workspace === undefined ||
+        document?.requestGeneration !== identity.requestGeneration ||
+        document.path !== identity.path
+    ) {
         return undefined;
     }
     return {workspace, document};
@@ -239,7 +258,7 @@ function matching_active_document(
     if (
         match === undefined ||
         state.activeWorkspaceId !== identity.workspaceId ||
-        match.workspace.activePath !== identity.path
+        match.workspace.activeEntryId !== identity.entryId
     ) {
         return undefined;
     }
@@ -319,7 +338,7 @@ export function reduce_pear_workspace_store(
                       workspaceId: action.workspaceId,
                       workspaceRevision: action.workspaceRevision,
                       requestGeneration: 0,
-                      activePath: undefined,
+                      activeEntryId: undefined,
                       pendingDocumentRequest: undefined,
                       documents: new Map(),
                       markdownModePreference: "source",
@@ -346,8 +365,9 @@ export function reduce_pear_workspace_store(
         return with_workspace(state, {
             ...workspace,
             requestGeneration: request_generation,
-            activePath: action.path,
+            activeEntryId: action.entryId,
             pendingDocumentRequest: {
+                entryId: action.entryId,
                 path: action.path,
                 requestGeneration: request_generation,
             },
@@ -359,17 +379,20 @@ export function reduce_pear_workspace_store(
         if (
             workspace === undefined ||
             state.activeWorkspaceId !== action.workspaceId ||
-            workspace.activePath !== action.path ||
+            workspace.workspaceRevision !== action.workspaceRevision ||
+            workspace.activeEntryId !== action.entryId ||
+            workspace.pendingDocumentRequest?.entryId !== action.entryId ||
             workspace.pendingDocumentRequest?.path !== action.path ||
             workspace.pendingDocumentRequest.requestGeneration !== action.requestGeneration
         ) {
             return ignore_stale_response(state);
         }
-        const existing = workspace.documents.get(action.path);
+        const existing = workspace.documents.get(action.entryId);
         if (existing !== undefined && existing.state !== "clean") {
             return ignore_stale_response(state);
         }
         const document: PearWorkspaceDocumentSession = {
+            entryId: action.entryId,
             path: action.path,
             requestGeneration: action.requestGeneration,
             baseVersion: action.baseVersion,
@@ -597,6 +620,7 @@ export function reduce_pear_workspace_store(
         const snapshot: PearWorkspaceSaveSnapshot = {
             workspaceId: workspace.workspaceId,
             workspaceRevision: workspace.workspaceRevision,
+            entryId: document.entryId,
             path: document.path,
             requestGeneration: document.requestGeneration,
             editRevision: document.editRevision,
@@ -618,6 +642,7 @@ export function reduce_pear_workspace_store(
         const snapshot = document.saveInFlight!;
         const next_document = {
             ...document,
+            entryId: action.newEntryId,
             baseVersion: action.newVersion,
             savedText: snapshot.text,
             acknowledgedRevision: action.editRevision,
@@ -626,8 +651,16 @@ export function reduce_pear_workspace_store(
         };
         return with_document(
             state,
-            {...workspace, workspaceRevision: action.workspaceRevision},
+            {
+                ...workspace,
+                workspaceRevision: action.workspaceRevision,
+                activeEntryId:
+                    workspace.activeEntryId === document.entryId
+                        ? action.newEntryId
+                        : workspace.activeEntryId,
+            },
             acknowledge_noop_edit(next_document),
+            document.entryId,
         );
     }
 
@@ -653,6 +686,7 @@ export function reduce_pear_workspace_store(
             conflict: {
                 remoteText: action.remoteText,
                 remoteVersion: action.remoteVersion,
+                remoteEntryId: action.remoteEntryId,
                 remoteWorkspaceRevision: action.remoteWorkspaceRevision,
             },
             state: "conflict",
@@ -669,9 +703,17 @@ export function reduce_pear_workspace_store(
         const edit_revision = document.editRevision;
         return with_document(
             state,
-            {...workspace, workspaceRevision: conflict.remoteWorkspaceRevision},
+            {
+                ...workspace,
+                workspaceRevision: conflict.remoteWorkspaceRevision,
+                activeEntryId:
+                    workspace.activeEntryId === document.entryId
+                        ? conflict.remoteEntryId
+                        : workspace.activeEntryId,
+            },
             {
                 ...document,
+                entryId: conflict.remoteEntryId,
                 baseVersion: conflict.remoteVersion,
                 savedText: conflict.remoteText,
                 currentText: conflict.remoteText,
@@ -690,6 +732,7 @@ export function reduce_pear_workspace_store(
                 },
                 richView: {...document.richView, selection: undefined},
             },
+            document.entryId,
         );
     }
 
@@ -700,6 +743,7 @@ export function reduce_pear_workspace_store(
         const conflict = document.conflict;
         const next_document = {
             ...document,
+            entryId: conflict.remoteEntryId,
             baseVersion: conflict.remoteVersion,
             savedText: conflict.remoteText,
             conflict: undefined,
@@ -707,8 +751,16 @@ export function reduce_pear_workspace_store(
         };
         return with_document(
             state,
-            {...workspace, workspaceRevision: conflict.remoteWorkspaceRevision},
+            {
+                ...workspace,
+                workspaceRevision: conflict.remoteWorkspaceRevision,
+                activeEntryId:
+                    workspace.activeEntryId === document.entryId
+                        ? conflict.remoteEntryId
+                        : workspace.activeEntryId,
+            },
             acknowledge_noop_edit(next_document),
+            document.entryId,
         );
     }
 

@@ -37,6 +37,8 @@ export function render_pear_workspace_tabs(
 ): void {
     const fragment = document.createDocumentFragment();
     for (const tab of tabs) {
+        const item = document.createElement("div");
+        item.className = "pear-workspace-file-tab-item";
         const button = document.createElement("button");
         button.type = "button";
         button.dataset["tabPath"] = tab.path;
@@ -48,7 +50,14 @@ export function render_pear_workspace_tabs(
             ? "pear-workspace-file-tab pear-workspace-file-tab--preview"
             : "pear-workspace-file-tab";
         button.textContent = `${tab.entry.name}${tab.dirty ? " •" : ""}`;
-        fragment.append(button);
+        const close = document.createElement("button");
+        close.type = "button";
+        close.className = "pear-workspace-file-tab-close";
+        close.dataset["closeTabPath"] = tab.path;
+        close.setAttribute("aria-label", `Close ${tab.entry.name}`);
+        close.textContent = "×";
+        item.append(button, close);
+        fragment.append(item);
     }
     root.replaceChildren(fragment);
 }

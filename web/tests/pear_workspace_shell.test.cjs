@@ -113,6 +113,7 @@ function harness(workspace_id) {
                     },
                 },
             },
+            closes: 0,
             activateWorkspace(id, revision, limits, preferences) {
                 this.activations.push({id, revision, limits, preferences});
             },
@@ -128,6 +129,10 @@ function harness(workspace_id) {
                 });
             },
             async switchMode() {
+                return true;
+            },
+            async closeActive() {
+                this.closes += 1;
                 return true;
             },
             async save() {},
@@ -301,6 +306,36 @@ run_test("explorer splitter is keyboard-operable and persists its bounded width"
     assert.equal(restored.controller.getDebugState().explorerWidth, 464);
     await restored.controller.destroy();
     restored.root.remove();
+});
+
+run_test("file tabs close safely, select a neighbor, and reject unsaved closure", async () => {
+    const test = harness("workspace-tab-close");
+    const current = descriptor("workspace-tab-close");
+    test.send_descriptor(current);
+    test.send_tree(0, current.root, [entry("A.md"), entry("B.md")]);
+    test.click(test.root.querySelector("[data-entry-id='r1:A.md']"), "dblclick");
+    test.click(test.root.querySelector("[data-entry-id='r1:B.md']"), "dblclick");
+    assert.deepEqual(
+        test.controller.getDebugState().tabs.map((tab) => tab.path),
+        ["A.md", "B.md"],
+    );
+
+    test.click(test.root.querySelector("[data-close-tab-path='B.md']"));
+    await Promise.resolve();
+    assert.equal(test.editors[0].closes, 1);
+    assert.equal(test.controller.getDebugState().activePath, "A.md");
+    assert.deepEqual(
+        test.controller.getDebugState().tabs.map((tab) => tab.path),
+        ["A.md"],
+    );
+
+    test.editors[0].dirty("A.md");
+    test.click(test.root.querySelector("[data-close-tab-path='A.md']"));
+    assert.equal(test.editors[0].closes, 1);
+    assert.equal(test.controller.getDebugState().activePath, "A.md");
+    assert.match(test.root.querySelector("[data-role='status']").textContent, /Save or resolve/);
+    await test.controller.destroy();
+    test.root.remove();
 });
 
 run_test(

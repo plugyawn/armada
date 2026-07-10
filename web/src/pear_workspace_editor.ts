@@ -990,6 +990,30 @@ export function create_pear_workspace_editor(
             emit();
         },
         open,
+        async closeActive(): Promise<boolean> {
+            const identity = active_identity();
+            const document = active_document();
+            if (identity === undefined || document === undefined) {
+                return true;
+            }
+            if (document.state !== "clean") {
+                return false;
+            }
+            open_generation += 1;
+            mount_generation += 1;
+            request_guard.cancel("file");
+            clear_source_flush();
+            clear_autosave(identity);
+            dispatch({type: "deactivate_document", ...identity});
+            active_file = undefined;
+            active_entry = undefined;
+            rich_mode_loading = false;
+            notice = undefined;
+            surface = {kind: "empty"};
+            await destroy_mounted();
+            emit();
+            return true;
+        },
         async switchMode(mode): Promise<boolean> {
             const identity = active_identity();
             const document = active_document();

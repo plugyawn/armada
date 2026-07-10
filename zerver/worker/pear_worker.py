@@ -1,10 +1,8 @@
 # Documented in https://zulip.readthedocs.io/en/latest/subsystems/queuing.html
 import logging
-import threading
 from collections import OrderedDict
 from typing import Any
 
-from django.db import reset_queries
 from typing_extensions import override
 
 from zerver.lib.bot_lib import EmbeddedBotHandler
@@ -16,10 +14,7 @@ from zerver.lib.pear import (
     pear_message_topic,
 )
 from zerver.lib.pear_agent import PearProcessIsolation
-from zerver.lib.pear_monitor import (
-    pear_apply_monitor_setup_result,
-    pear_run_due_monitor_ticks,
-)
+from zerver.lib.pear_monitor import pear_apply_monitor_setup_result
 from zerver.lib.pear_worker import (
     PearDatabaseWorkerRunStore,
     build_pear_worker_runtime_from_settings,
@@ -218,40 +213,3 @@ class PearWorker(QueueProcessingWorker):
                 )
             except Exception:
                 logger.exception("Pear monitor setup application failed.")
-
-
-@assign_queue("pear_monitor_worker")
-class PearMonitorWorker(PearWorker):
-    """Wall monitor setup/rebuild turns plus the tick loop, on their own
-    queue and consumer: a provisioning monitor is a minutes-long Codex
-    turn, and it must never queue ahead of a chat run."""
-
-    OWNED_SESSION_KINDS = ("monitor",)
-
-    @override
-    def setup(self) -> None:
-        super().setup()
-        # Ticks are model-free shell recipes on a cadence, on their own
-        # thread because consume() blocks for minutes inside a turn.
-        self.monitor_tick_stop = threading.Event()
-        self.monitor_tick_thread = threading.Thread(
-            target=self.run_monitor_tick_loop,
-            name="pear-monitor-ticks",
-            daemon=True,
-        )
-        self.monitor_tick_thread.start()
-
-    def run_monitor_tick_loop(self) -> None:  # nocoverage
-        while not self.monitor_tick_stop.wait(5):
-            try:
-                pear_run_due_monitor_ticks()
-            except Exception:
-                logger.exception("Pear monitor tick pass failed.")
-            finally:
-                reset_queries()
-
-    @override
-    def stop(self) -> None:  # nocoverage
-        if hasattr(self, "monitor_tick_stop"):
-            self.monitor_tick_stop.set()
-        super().stop()

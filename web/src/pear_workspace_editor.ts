@@ -103,8 +103,10 @@ export function create_pear_workspace_editor(
     let active_entry: PearWorkspaceEntry | undefined;
     let max_raw_bytes: number | null = 0;
     let max_text_bytes = 0;
+    let workspace_writable = false;
     let destroyed = false;
     let mount_generation = 0;
+    let open_generation = 0;
     let rich_mode_loading = false;
     let notice: string | undefined;
     let source_flush: PearWorkspaceScheduledWork | undefined;
@@ -174,6 +176,9 @@ export function create_pear_workspace_editor(
     let start_save: (identity: PearWorkspaceDocumentIdentity) => Promise<void>;
 
     const schedule_autosave = (identity: PearWorkspaceDocumentIdentity): void => {
+        if (!workspace_writable) {
+            return;
+        }
         const document = get_pear_workspace_document(store, identity);
         if (
             document?.state !== "dirty" ||
@@ -262,6 +267,7 @@ export function create_pear_workspace_editor(
 
     const destroy_mounted = async (): Promise<void> => {
         mount_generation += 1;
+        const generation = mount_generation;
         rich_mode_loading = false;
         const previous = mounted;
         mounted = undefined;
@@ -271,7 +277,9 @@ export function create_pear_workspace_editor(
         } else if (previous?.kind === "rich") {
             await previous.editor.destroy();
         }
-        options.root.replaceChildren();
+        if (generation === mount_generation) {
+            options.root.replaceChildren();
+        }
     };
 
     const mount_source = async (
@@ -293,7 +301,7 @@ export function create_pear_workspace_editor(
             text: document.currentText,
             selection: document.sourceView.selection,
             scrollTop: document.sourceView.scrollTop,
-            readOnly: !file.editable,
+            readOnly: !workspace_writable || !file.editable,
             language: pear_workspace_source_language_for_path(document.path),
             ariaLabel: `${document.path} source editor`,
             onDirty(event) {
@@ -303,6 +311,9 @@ export function create_pear_workspace_editor(
                     mounted?.kind !== "source" ||
                     !same_identity(mounted.identity, identity)
                 ) {
+                    return;
+                }
+                if (!workspace_writable) {
                     return;
                 }
                 dispatch({type: "source_changed", ...identity});
@@ -390,7 +401,7 @@ export function create_pear_workspace_editor(
             root: options.root,
             markdown: latest.currentText,
             editRevision: latest.editRevision,
-            readOnly: !file.editable,
+            readOnly: !workspace_writable || !file.editable,
             scrollTop: latest.richView.scrollTop,
             onDirty(event: {origin: "user"; editRevision: number}) {
                 if (
@@ -399,6 +410,9 @@ export function create_pear_workspace_editor(
                     mounted?.kind !== "rich" ||
                     !same_identity(mounted.identity, identity)
                 ) {
+                    return;
+                }
+                if (!workspace_writable) {
                     return;
                 }
                 dispatch({type: "rich_edited", ...identity});
@@ -454,7 +468,7 @@ export function create_pear_workspace_editor(
             eligibility: "supported",
         });
         dispatch({type: "set_editor_mode", ...identity, mode: "rich"});
-        notice = undefined;
+        notice = workspace_writable ? undefined : "Read-only workspace";
         mounted = {kind: "rich", identity, editor: result.editor};
         emit();
         return true;
@@ -478,6 +492,20 @@ export function create_pear_workspace_editor(
         };
         file_metadata.delete(previous_identity.entryId);
         file_metadata.set(identity.entryId, active_file);
+        active_entry = {
+            ...(active_entry ?? {
+                entry_id: identity.entryId,
+                path: identity.path,
+                name: identity.path.split("/").at(-1) ?? identity.path,
+                kind: "file" as const,
+                status: "clean",
+                has_children: false,
+                size: active_file.size,
+            }),
+            entry_id: identity.entryId,
+            size: active_file.size,
+        };
+        surface = {kind: "text", entry: active_entry, file: active_file};
         if (mounted?.kind === "source") {
             mounted.editor.hydrate({
                 text: document.currentText,
@@ -506,7 +534,7 @@ export function create_pear_workspace_editor(
     };
 
     start_save = async (identity): Promise<void> => {
-        if (destroyed) {
+        if (destroyed || !workspace_writable) {
             return;
         }
         if (mounted?.kind === "source" && same_identity(mounted.identity, identity)) {
@@ -663,6 +691,8 @@ export function create_pear_workspace_editor(
         if (destroyed || entry.kind !== "file" || store.activeWorkspaceId === undefined) {
             return;
         }
+        open_generation += 1;
+        const generation = open_generation;
         const previous_identity = active_identity();
         if (previous_identity !== undefined) {
             if (mounted?.kind === "source") {
@@ -676,6 +706,9 @@ export function create_pear_workspace_editor(
                 }
             } else {
                 await flush_rich(previous_identity);
+                if (generation !== open_generation) {
+                    return;
+                }
                 if (mounted?.kind === "rich") {
                     dispatch({
                         type: "rich_view_changed",
@@ -686,10 +719,13 @@ export function create_pear_workspace_editor(
             }
         }
         await destroy_mounted();
+        if (generation !== open_generation || destroyed) {
+            return;
+        }
         request_guard.cancel("file");
         active_entry = entry;
         active_file = undefined;
-        notice = undefined;
+        notice = workspace_writable ? undefined : "Read-only workspace";
         const workspace = current_workspace()!;
         const cached = workspace.documents.get(entry.entry_id);
         dispatch({
@@ -745,10 +781,10 @@ export function create_pear_workspace_editor(
         surface = {kind: "loading", entry};
         emit();
         const pending = current_workspace()!.pendingDocumentRequest!;
-        const generation = request_guard.begin("file");
+        const request_generation = request_guard.begin("file");
         const request = dependencies.getFile(workspace.workspaceId, entry.entry_id, {
             success(file) {
-                if (!request_guard.settle("file", generation)) {
+                if (!request_guard.settle("file", request_generation)) {
                     return;
                 }
                 const identity: PearWorkspaceDocumentIdentity = {
@@ -803,20 +839,16 @@ export function create_pear_workspace_editor(
                 }
                 active_file = file;
                 file_metadata.set(file.entry_id, file);
-                surface = file.editable
-                    ? {kind: "text", entry, file}
-                    : {kind: "binary", entry, message: "This file is read-only."};
+                surface = {kind: "text", entry, file};
                 emit();
-                if (file.editable) {
-                    if (document.editorMode === "rich" && file.rich_mode_eligible) {
-                        void mount_rich(identity, file);
-                    } else {
-                        void mount_source(identity, file);
-                    }
+                if (document.editorMode === "rich" && file.rich_mode_eligible) {
+                    void mount_rich(identity, file);
+                } else {
+                    void mount_source(identity, file);
                 }
             },
             error(error) {
-                if (!request_guard.settle("file", generation)) {
+                if (!request_guard.settle("file", request_generation)) {
                     return;
                 }
                 if (error.kind === "server" && error.error.error_code === "unsupported_file") {
@@ -844,7 +876,7 @@ export function create_pear_workspace_editor(
                 emit();
             },
         });
-        request_guard.attach("file", generation, request);
+        request_guard.attach("file", request_generation, request);
     };
 
     return {
@@ -855,6 +887,7 @@ export function create_pear_workspace_editor(
             const previous_workspace = get_pear_workspace(store, workspace_id);
             max_raw_bytes = limits.rawBytes;
             max_text_bytes = limits.textBytes;
+            workspace_writable = limits.writable;
             dispatch({
                 type: "activate_workspace",
                 workspaceId: workspace_id,
@@ -864,6 +897,7 @@ export function create_pear_workspace_editor(
                 previous_workspace !== undefined &&
                 workspace_revision > previous_workspace.workspaceRevision
             ) {
+                open_generation += 1;
                 dispatch({
                     type: "invalidate_workspace_revision",
                     workspaceId: workspace_id,
@@ -937,6 +971,7 @@ export function create_pear_workspace_editor(
             if (identity === undefined) {
                 return;
             }
+            const previous_workspace_revision = current_workspace()?.workspaceRevision;
             clear_autosave(identity);
             dispatch({
                 type: resolution === "reload" ? "conflict_reload" : "conflict_overwrite",
@@ -944,6 +979,21 @@ export function create_pear_workspace_editor(
             });
             await hydrate_after_reload(identity);
             const next_identity = active_identity();
+            const workspace = current_workspace();
+            if (
+                next_identity !== undefined &&
+                workspace !== undefined &&
+                (next_identity.entryId !== identity.entryId ||
+                    workspace.workspaceRevision !== previous_workspace_revision)
+            ) {
+                options.onSaved?.({
+                    oldEntryId: identity.entryId,
+                    newEntryId: next_identity.entryId,
+                    path: next_identity.path,
+                    workspaceRevision: workspace.workspaceRevision,
+                });
+                emit();
+            }
             if (resolution === "overwrite" && next_identity !== undefined) {
                 schedule_autosave(next_identity);
             }
@@ -978,6 +1028,7 @@ export function create_pear_workspace_editor(
                 return;
             }
             destroyed = true;
+            open_generation += 1;
             request_guard.cancelAll();
             clear_source_flush();
             for (const work of autosaves.values()) {

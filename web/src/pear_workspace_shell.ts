@@ -744,6 +744,7 @@ export function create_pear_workspace_shell(
             {
                 rawBytes: next.limits.raw_file_max_bytes,
                 textBytes: next.limits.text_file_max_bytes,
+                writable: next.capabilities.write_file,
             },
             restored_preferences_applied ? undefined : restored_state?.editor,
         );

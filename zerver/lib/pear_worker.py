@@ -22,8 +22,6 @@ from django.utils.translation import gettext as _
 
 from zerver.lib.exceptions import JsonableError
 from zerver.lib.pear import (
-    PEAR_CANVAS_FILE_NAME,
-    PEAR_LEGACY_CANVAS_FILE_NAME,
     PEAR_DEFAULT_RESPONSE_POLICY,
     PEAR_REASONING_EFFORTS,
     PearActiveSessionSummary,
@@ -89,8 +87,6 @@ pear_git_status_delta_cache: dict[
     tuple[float, dict[str, object]],
 ] = {}
 logger = logging.getLogger(__name__)
-
-PEAR_LEGACY_CANVAS_FALLBACK_PATH = ".pear/CANVAS.md"
 
 
 @dataclass(frozen=True)
@@ -256,9 +252,7 @@ def reap_stale_pear_worker_runs(
             )
             if run is None:
                 continue
-            if not assume_orphaned and not pear_worker_run_is_stale(
-                run, current_time=current_time
-            ):
+            if not assume_orphaned and not pear_worker_run_is_stale(run, current_time=current_time):
                 continue
             if not store._transition(
                 run,
@@ -906,48 +900,56 @@ def pear_switch_workdir_to_branch(path: Path, branch_name: str) -> bool:
     return completed.returncode == 0
 
 
-def pear_topic_canvas_relative_path(
-    workdir: str | Path,
-    *,
-    isolation_username: str | None = None,
-) -> str:
-    """The topic doc is the worktree's README.md — real, committed
-    content. Legacy workspaces that still hold their doc in the old
-    git-excluded CANVAS.md keep reading from it until the next save
-    writes README.md, which then wins."""
-    path = Path(workdir)
-    # Unreadable (isolated) files must not break path resolution;
-    # undetermined means the modern default.
-    def readable(candidate: Path) -> bool:
-        try:
-            return bool(
-                pear_read_text_path(candidate, isolation_username=isolation_username)
-            )
-        except OSError:
-            return False
-
-    if readable(path / PEAR_CANVAS_FILE_NAME):
-        return PEAR_CANVAS_FILE_NAME
-    for legacy in (PEAR_LEGACY_CANVAS_FILE_NAME, PEAR_LEGACY_CANVAS_FALLBACK_PATH):
-        if readable(path / legacy):
-            return legacy
-    return PEAR_CANVAS_FILE_NAME
-
-
-def pear_topic_canvas_path(
-    workdir: str | Path,
-    *,
-    isolation_username: str | None = None,
-) -> Path:
-    path = Path(workdir)
-    return path / pear_topic_canvas_relative_path(path, isolation_username=isolation_username)
-
-
-def pear_sha256_text(content: str) -> str:
-    return hashlib.sha256(content.encode("utf-8")).hexdigest()
-
-
 PEAR_WORKSPACE_FILE_LISTING_LIMIT = 500
+
+
+def pear_workspace_allowed_file_paths(
+    workdir: str,
+    *,
+    isolation_username: str | None = None,
+) -> set[str]:
+    """Return every tracked or non-ignored untracked file, without truncation.
+
+    This is the fail-closed authorization set for the legacy path-based file
+    endpoint.  It intentionally does not use ``pear_git_output``: that helper
+    turns command failures into an empty string, which cannot be distinguished
+    from a valid empty repository.
+    """
+
+    command = [
+        "git",
+        "-C",
+        workdir,
+        "ls-files",
+        "-z",
+        "--cached",
+        "--others",
+        "--exclude-standard",
+    ]
+    if isolation_username is not None:
+        command = ["sudo", "-n", "-u", isolation_username, "/usr/bin/env", *command]
+    try:
+        completed = subprocess.run(
+            command,
+            check=False,
+            capture_output=True,
+            timeout=10,
+        )
+    except (FileNotFoundError, OSError, subprocess.TimeoutExpired) as error:
+        raise OSError("Could not enumerate workspace files.") from error
+    if completed.returncode != 0:
+        raise OSError("Could not enumerate workspace files.")
+
+    paths: set[str] = set()
+    for raw_path in completed.stdout.split(b"\0"):
+        if not raw_path:
+            continue
+        try:
+            path = raw_path.decode("utf-8", errors="strict")
+        except UnicodeDecodeError as error:
+            raise OSError("Workspace contains a non-UTF-8 path.") from error
+        paths.add(path)
+    return paths
 
 
 def pear_workspace_file_listing(
@@ -961,12 +963,12 @@ def pear_workspace_file_listing(
     the existing porcelain status for the dirty overlay - no per-file
     subprocesses.
     """
-    listing_output = pear_git_output(
-        workdir,
-        ["ls-files", "-z", "--cached", "--others", "--exclude-standard"],
-        isolation_username=isolation_username,
+    paths = sorted(
+        pear_workspace_allowed_file_paths(
+            workdir,
+            isolation_username=isolation_username,
+        )
     )
-    paths = sorted({path for path in listing_output.split("\0") if path})
     status_output = pear_git_output(
         workdir,
         ["status", "--porcelain=v2"],

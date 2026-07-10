@@ -35,10 +35,15 @@ from zerver.lib.pear_workspace_resources import (
     WorkspaceSnapshot,
     WorkspaceSnapshotError,
     finish_workspace_write,
+    get_workspace_file_observation,
+    get_workspace_mutation_receipt,
     get_workspace_snapshot,
     read_workspace_node_file,
+    record_completed_workspace_mutation,
+    record_pending_workspace_mutation,
+    record_workspace_file_observation,
     refresh_workspace_snapshot,
-    resolve_stale_retry_entry,
+    refresh_workspace_snapshot_after_conflict,
     workspace_language,
     workspace_mime_type,
     workspace_rich_mode_eligible,
@@ -143,9 +148,13 @@ def _workspace_descriptor_payload(
     }
 
 
-def _snapshot_or_error(node: PearWorkspaceNode) -> WorkspaceSnapshot | HttpResponse:
+def _snapshot_or_error(
+    node: PearWorkspaceNode,
+    *,
+    force: bool = False,
+) -> WorkspaceSnapshot | HttpResponse:
     try:
-        return get_workspace_snapshot(node)
+        return get_workspace_snapshot(node, force=force)
     except (WorkspaceSnapshotError, WorkspaceIOError):
         return _workspace_error(
             code="workspace_unavailable",
@@ -281,6 +290,45 @@ def _read_text_file(
     if not payload["editable"]:
         return _unsupported_file_response(snapshot, entry, file=file)
     return file, payload
+
+
+def _check_and_record_file_observation(
+    node: PearWorkspaceNode,
+    snapshot: WorkspaceSnapshot,
+    entry: WorkspaceIndexEntry,
+    file: WorkspaceFile,
+) -> HttpResponse | None:
+    observed_version = get_workspace_file_observation(
+        snapshot.workspace_uuid,
+        snapshot.revision,
+        entry.entry_id,
+    )
+    if observed_version is not None and observed_version != file.version:
+        try:
+            current_snapshot = refresh_workspace_snapshot_after_conflict(
+                node,
+                observed_revision=snapshot.revision,
+            )
+        except (WorkspaceSnapshotError, WorkspaceIOError):
+            return _workspace_error(
+                code="workspace_unavailable",
+                message="Could not refresh the replaced workspace file.",
+                status=503,
+                revision=int(node.content_revision),
+            )
+        return _workspace_error(
+            code="stale_entry",
+            message="Workspace entry changed; refresh before retrying.",
+            status=409,
+            revision=current_snapshot.revision,
+        )
+    record_workspace_file_observation(
+        snapshot.workspace_uuid,
+        snapshot.revision,
+        entry.entry_id,
+        file.version,
+    )
+    return None
 
 
 @typed_endpoint
@@ -430,7 +478,7 @@ def get_pear_workspace_resource_file_backend(
     ],
 ) -> HttpResponse:
     node = _access_workspace_node(user_profile, workspace_uuid)
-    snapshot = _snapshot_or_error(node)
+    snapshot = _snapshot_or_error(node, force=True)
     if isinstance(snapshot, HttpResponse):
         return snapshot
     entry = _resolve_file_entry(snapshot, entry_id)
@@ -439,7 +487,10 @@ def get_pear_workspace_resource_file_backend(
     result = _read_text_file(node, snapshot, entry)
     if isinstance(result, HttpResponse):
         return result
-    _file, payload = result
+    file, payload = result
+    observation_error = _check_and_record_file_observation(node, snapshot, entry, file)
+    if observation_error is not None:
+        return observation_error
     return json_success(request, data={"pear_workspace_file": payload})
 
 
@@ -484,7 +535,7 @@ def put_pear_workspace_resource_file_backend(
     ],
 ) -> HttpResponse:
     node = _access_workspace_node(user_profile, workspace_uuid)
-    snapshot = _snapshot_or_error(node)
+    snapshot = _snapshot_or_error(node, force=True)
     if isinstance(snapshot, HttpResponse):
         return snapshot
     if node.lifecycle_status != PearWorkspaceNode.ACTIVE:
@@ -520,13 +571,29 @@ def put_pear_workspace_resource_file_backend(
     if workspace_revision != snapshot.revision:
         if workspace_revision < 0 or workspace_revision > snapshot.revision:
             return _stale_workspace_response(snapshot)
+        receipt = get_workspace_mutation_receipt(
+            actor_id=user_profile.id,
+            workspace_uuid=snapshot.workspace_uuid,
+            requested_revision=workspace_revision,
+            entry_id=entry_id,
+            expected_path=normalized_path,
+            base_version=base_version,
+            content=content_bytes,
+            edit_revision=edit_revision,
+        )
+        if receipt is None:
+            return _stale_workspace_response(snapshot)
         try:
-            current_entry = resolve_stale_retry_entry(
-                snapshot,
-                requested_revision=workspace_revision,
-                entry_id=entry_id,
-                expected_path=normalized_path,
-            )
+            if receipt.state == "complete":
+                if receipt.result_revision != snapshot.revision or receipt.result_entry_id is None:
+                    return _stale_workspace_response(snapshot)
+                current_entry = snapshot.index.entry_for_id(receipt.result_entry_id)
+            elif receipt.state == "pending" and snapshot.revision == workspace_revision + 1:
+                current_entry = snapshot.index.entry_for_path(normalized_path)
+            else:
+                return _stale_workspace_response(snapshot)
+            if current_entry.kind != "file" or current_entry.path != normalized_path:
+                return _stale_workspace_response(snapshot)
             current_file = read_workspace_node_file(
                 node,
                 current_entry.path,
@@ -538,7 +605,7 @@ def put_pear_workspace_resource_file_backend(
             WorkspaceFileTooLargeError,
         ):
             return _stale_workspace_response(snapshot)
-        if current_file.data != content_bytes:
+        if current_file.data != content_bytes or current_file.version != receipt.result_version:
             return _stale_workspace_response(snapshot)
         payload = _text_file_payload(
             snapshot,
@@ -548,6 +615,28 @@ def put_pear_workspace_resource_file_backend(
         )
         if not payload["editable"]:
             return _unsupported_file_response(snapshot, current_entry, file=current_file)
+        observation_error = _check_and_record_file_observation(
+            node,
+            snapshot,
+            current_entry,
+            current_file,
+        )
+        if observation_error is not None:
+            return observation_error
+        if receipt.state == "pending":
+            record_completed_workspace_mutation(
+                actor_id=user_profile.id,
+                workspace_uuid=snapshot.workspace_uuid,
+                requested_revision=workspace_revision,
+                entry_id=entry_id,
+                expected_path=normalized_path,
+                base_version=base_version,
+                content=content_bytes,
+                edit_revision=edit_revision,
+                result_version=current_file.version,
+                result_revision=snapshot.revision,
+                result_entry_id=current_entry.entry_id,
+            )
         return json_success(request, data={"pear_workspace_file": payload})
 
     entry = _resolve_file_entry(snapshot, entry_id)
@@ -586,18 +675,57 @@ def put_pear_workspace_resource_file_backend(
             content_bytes,
             expected_version=base_version,
         )
-    except WorkspaceVersionConflictError as error:
-        remote_file = error.current
+    except WorkspaceVersionConflictError:
+        try:
+            conflict_snapshot = refresh_workspace_snapshot_after_conflict(
+                node,
+                observed_revision=snapshot.revision,
+            )
+            conflict_entry = conflict_snapshot.index.entry_for_path(entry.path)
+            if conflict_entry.kind != "file":
+                raise WorkspaceEntryIdError("Workspace entry is no longer a file.")
+            remote_file = read_workspace_node_file(
+                node,
+                conflict_entry.path,
+                max_bytes=PEAR_WORKSPACE_TEXT_MAX_BYTES,
+            )
+        except (WorkspaceEntryIdError, WorkspaceEntryNotFoundError, WorkspaceEntryChangedError):
+            return _workspace_error(
+                code="stale_entry",
+                message="Workspace entry changed; refresh before retrying.",
+                status=409,
+                revision=int(node.content_revision),
+            )
+        except WorkspaceFileTooLargeError:
+            return _workspace_error(
+                code="file_too_large",
+                message="Workspace file exceeds the editable size limit.",
+                status=413,
+                revision=int(node.content_revision),
+                data={"max_bytes": PEAR_WORKSPACE_TEXT_MAX_BYTES},
+            )
+        except (WorkspaceSnapshotError, WorkspaceIOError):
+            return _workspace_error(
+                code="workspace_unavailable",
+                message="Could not refresh the conflicting workspace file.",
+                status=503,
+                revision=int(node.content_revision),
+            )
         data: dict[str, object] = {}
-        if remote_file is not None:
-            remote_payload = _text_file_payload(snapshot, entry, remote_file)
-            if remote_payload["editable"]:
-                data["remote_file"] = remote_payload
+        remote_payload = _text_file_payload(conflict_snapshot, conflict_entry, remote_file)
+        record_workspace_file_observation(
+            conflict_snapshot.workspace_uuid,
+            conflict_snapshot.revision,
+            conflict_entry.entry_id,
+            remote_file.version,
+        )
+        if remote_payload["editable"]:
+            data["remote_file"] = remote_payload
         return _workspace_error(
             code="version_conflict",
             message="Workspace file changed; reload before saving.",
             status=409,
-            revision=snapshot.revision,
+            revision=conflict_snapshot.revision,
             data=data,
         )
     except WorkspaceFileTooLargeError:
@@ -625,6 +753,41 @@ def put_pear_workspace_resource_file_backend(
             revision=snapshot.revision,
         )
 
+    if result.changed:
+        record_pending_workspace_mutation(
+            actor_id=user_profile.id,
+            workspace_uuid=snapshot.workspace_uuid,
+            requested_revision=workspace_revision,
+            entry_id=entry_id,
+            expected_path=normalized_path,
+            base_version=base_version,
+            content=content_bytes,
+            edit_revision=edit_revision,
+            result_version=result.file.version,
+        )
+    elif result.file.version != base_version:
+        pending_receipt = get_workspace_mutation_receipt(
+            actor_id=user_profile.id,
+            workspace_uuid=snapshot.workspace_uuid,
+            requested_revision=workspace_revision,
+            entry_id=entry_id,
+            expected_path=normalized_path,
+            base_version=base_version,
+            content=content_bytes,
+            edit_revision=edit_revision,
+        )
+        if (
+            pending_receipt is None
+            or pending_receipt.state != "pending"
+            or pending_receipt.result_version != result.file.version
+        ):
+            return _workspace_error(
+                code="stale_entry",
+                message="Workspace entry changed; refresh before retrying.",
+                status=409,
+                revision=snapshot.revision,
+            )
+
     try:
         saved_snapshot = finish_workspace_write(
             node,
@@ -645,6 +808,25 @@ def put_pear_workspace_resource_file_backend(
         saved_entry,
         result.file,
         edit_revision=edit_revision,
+    )
+    record_workspace_file_observation(
+        saved_snapshot.workspace_uuid,
+        saved_snapshot.revision,
+        saved_entry.entry_id,
+        result.file.version,
+    )
+    record_completed_workspace_mutation(
+        actor_id=user_profile.id,
+        workspace_uuid=snapshot.workspace_uuid,
+        requested_revision=workspace_revision,
+        entry_id=entry_id,
+        expected_path=normalized_path,
+        base_version=base_version,
+        content=content_bytes,
+        edit_revision=edit_revision,
+        result_version=result.file.version,
+        result_revision=saved_snapshot.revision,
+        result_entry_id=saved_entry.entry_id,
     )
     logger.info(
         "Pear workspace file saved workspace=%s revision=%s entry=%s actor=%s changed=%s",
@@ -673,7 +855,7 @@ def get_pear_workspace_raw_backend(
     ] = False,
 ) -> HttpResponse:
     node = _access_workspace_node(user_profile, workspace_uuid)
-    snapshot = _snapshot_or_error(node)
+    snapshot = _snapshot_or_error(node, force=True)
     if isinstance(snapshot, HttpResponse):
         return snapshot
     entry = _resolve_file_entry(snapshot, entry_id)
@@ -709,6 +891,9 @@ def get_pear_workspace_raw_backend(
             status=503,
             revision=snapshot.revision,
         )
+    observation_error = _check_and_record_file_observation(node, snapshot, entry, file)
+    if observation_error is not None:
+        return observation_error
     response = HttpResponse(file.data, content_type=workspace_mime_type(entry.path))
     response["Content-Disposition"] = content_disposition_header(bool(download), entry.name) or (
         "attachment" if download else "inline"

@@ -40,6 +40,12 @@ export type PearWorkspaceSourceViewState = {
     scrollTop: number;
 };
 
+export type PearWorkspaceSourceSelectionContext = {
+    selectedText: string;
+    startLine: number;
+    endLine: number;
+};
+
 export type PearWorkspaceSourceDirtyEvent = {
     origin: "user";
     selection: PearWorkspaceSourceSelection;
@@ -79,6 +85,7 @@ export type PearWorkspaceSourceEditor = {
     ) => Promise<PearWorkspaceSourceLanguageResult>;
     getText: () => string;
     getViewState: () => PearWorkspaceSourceViewState;
+    getSelectionContext: () => PearWorkspaceSourceSelectionContext;
     focus: () => void;
     hasFocus: () => boolean;
     destroy: () => void;
@@ -379,6 +386,17 @@ export function create_pear_workspace_source_editor(
             return {
                 selection: {anchor: selection.anchor, head: selection.head},
                 scrollTop: view.scrollDOM.scrollTop,
+            };
+        },
+        getSelectionContext(): PearWorkspaceSourceSelectionContext {
+            assert_live();
+            const selection = view.state.selection.main;
+            const from = Math.min(selection.anchor, selection.head);
+            const to = Math.max(selection.anchor, selection.head);
+            return {
+                selectedText: view.state.sliceDoc(from, to),
+                startLine: view.state.doc.lineAt(from).number,
+                endLine: view.state.doc.lineAt(to).number,
             };
         },
         focus(): void {

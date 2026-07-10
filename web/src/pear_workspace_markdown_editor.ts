@@ -31,6 +31,10 @@ export type PearWorkspaceRichViewState = {
     scrollTop: number;
 };
 
+export type PearWorkspaceRichSelectionContext = {
+    selectedText: string;
+};
+
 export type PearWorkspaceRichEligibility =
     | {eligible: true}
     | {
@@ -104,6 +108,7 @@ export type PearWorkspaceMarkdownEditor = {
     hydrate: (hydration: PearWorkspaceMarkdownHydration) => PearWorkspaceRichEligibility;
     setReadOnly: (read_only: boolean) => void;
     getViewState: () => PearWorkspaceRichViewState;
+    getSelectionContext: () => PearWorkspaceRichSelectionContext;
     getEditRevision: () => number;
     getStats: () => PearWorkspaceMarkdownEditorStats;
     focus: () => void;
@@ -839,6 +844,13 @@ export async function create_pear_workspace_markdown_editor(
                 }
                 const {anchor, head} = view.state.selection;
                 return {selection: {anchor, head}, scrollTop: view.dom.scrollTop};
+            },
+            getSelectionContext() {
+                if (destroyed) {
+                    throw new Error("Cannot read selection from a destroyed Rich Markdown editor.");
+                }
+                const {from, to} = view.state.selection;
+                return {selectedText: view.state.doc.textBetween(from, to, "\n")};
             },
             getEditRevision: () => current_revision,
             getStats: () => ({serializations: serialization_count}),

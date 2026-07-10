@@ -5,6 +5,7 @@ import type {
     PearWorkspaceEditorDependencies,
     PearWorkspaceEditorOptions,
     PearWorkspaceEditorPreferences,
+    PearWorkspaceEditorSelectionContext,
     PearWorkspaceEditorSnapshot,
     PearWorkspaceEditorSurface,
     PearWorkspaceMountedAdapter,
@@ -34,6 +35,7 @@ export type {
     PearWorkspaceEditorDependencies,
     PearWorkspaceEditorOptions,
     PearWorkspaceEditorPreferences,
+    PearWorkspaceEditorSelectionContext,
     PearWorkspaceEditorSaveEvent,
     PearWorkspaceEditorSnapshot,
     PearWorkspaceEditorSurface,
@@ -89,6 +91,10 @@ function same_identity(
         left.path === right.path &&
         left.requestGeneration === right.requestGeneration
     );
+}
+
+function is_valid_rebound_entry_id(entry_id: string, previous_entry_id: string): boolean {
+    return entry_id.trim().length > 0 && entry_id !== previous_entry_id;
 }
 
 export function create_pear_workspace_editor(
@@ -569,6 +575,28 @@ export function create_pear_workspace_editor(
             emit();
             return;
         }
+        const callback_owns_save = (): boolean => {
+            const current = get_pear_workspace_document(store, identity);
+            return (
+                identity.workspaceId === save.workspaceId &&
+                identity.entryId === save.entryId &&
+                identity.path === save.path &&
+                identity.requestGeneration === save.requestGeneration &&
+                current?.entryId === save.entryId &&
+                current.path === save.path &&
+                current.requestGeneration === save.requestGeneration &&
+                current.saveInFlight === save
+            );
+        };
+        const reject_invalid_receipt = (kind: "conflict" | "save"): void => {
+            dispatch({
+                type: "save_failed",
+                ...identity,
+                editRevision: save.editRevision,
+                error: `Workspace returned an invalid ${kind} receipt. Refresh before retrying.`,
+            });
+            emit();
+        };
         emit();
         dependencies.putFile(
             save.workspaceId,
@@ -582,20 +610,18 @@ export function create_pear_workspace_editor(
             },
             {
                 success(file) {
+                    if (!callback_owns_save()) {
+                        return;
+                    }
                     if (
                         file.workspace_uuid !== save.workspaceId ||
                         file.path !== save.path ||
                         file.content !== save.text ||
                         file.edit_revision !== save.editRevision ||
-                        file.workspace_revision < save.workspaceRevision
+                        file.workspace_revision <= save.workspaceRevision ||
+                        !is_valid_rebound_entry_id(file.entry_id, save.entryId)
                     ) {
-                        dispatch({
-                            type: "save_failed",
-                            ...identity,
-                            editRevision: save.editRevision,
-                            error: "Workspace returned an invalid save receipt. Refresh before retrying.",
-                        });
-                        emit();
+                        reject_invalid_receipt("save");
                         return;
                     }
                     const old_entry_id = save.entryId;
@@ -676,12 +702,26 @@ export function create_pear_workspace_editor(
                     schedule_autosave(next_identity);
                 },
                 error(error) {
+                    if (!callback_owns_save()) {
+                        return;
+                    }
                     if (
                         error.kind === "server" &&
                         error.error.error_code === "version_conflict" &&
                         error.error.remote_file !== undefined
                     ) {
                         const remote = error.error.remote_file;
+                        if (
+                            remote.workspace_uuid !== save.workspaceId ||
+                            remote.path !== save.path ||
+                            remote.workspace_revision <= save.workspaceRevision ||
+                            error.error.workspace_revision !== remote.workspace_revision ||
+                            remote.version === save.baseVersion ||
+                            !is_valid_rebound_entry_id(remote.entry_id, save.entryId)
+                        ) {
+                            reject_invalid_receipt("conflict");
+                            return;
+                        }
                         dispatch({
                             type: "save_conflicted",
                             ...identity,
@@ -1017,6 +1057,19 @@ export function create_pear_workspace_editor(
             }
         },
         getSnapshot: snapshot,
+        getSelectionContext(): PearWorkspaceEditorSelectionContext | undefined {
+            const identity = active_identity();
+            if (identity === undefined) {
+                return undefined;
+            }
+            if (mounted?.kind === "source" && same_identity(mounted.identity, identity)) {
+                return {path: identity.path, ...mounted.editor.getSelectionContext()};
+            }
+            if (mounted?.kind === "rich" && same_identity(mounted.identity, identity)) {
+                return {path: identity.path, ...mounted.editor.getSelectionContext()};
+            }
+            return {path: identity.path, selectedText: ""};
+        },
         getPreferences(): PearWorkspaceEditorPreferences {
             const documents: PearWorkspaceEditorPreferences["documents"] = {};
             const workspace = current_workspace();

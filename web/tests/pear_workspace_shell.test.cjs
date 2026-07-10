@@ -84,6 +84,7 @@ function harness(workspace_id) {
     const refreshes = [];
     const editors = [];
     const file_controllers = [];
+    const compose_contexts = [];
     const abortable = (record) => ({abort: () => (record.aborted = true)});
 
     function create_editor(options) {
@@ -133,6 +134,9 @@ function harness(workspace_id) {
             async resolveConflict() {},
             getSnapshot() {
                 return this.snapshot;
+            },
+            getSelectionContext() {
+                return {path: "README.md", selectedText: "selected", startLine: 2, endLine: 2};
             },
             getPreferences() {
                 return this.preferences;
@@ -206,6 +210,13 @@ function harness(workspace_id) {
             },
             createEditor: create_editor,
             createFiles: create_files,
+            async loadComposeIntegration() {
+                return {
+                    fill_pear_compose_with_workspace_context(context) {
+                        compose_contexts.push(context);
+                    },
+                };
+            },
         },
     });
 
@@ -237,11 +248,35 @@ function harness(workspace_id) {
         refreshes,
         editors,
         file_controllers,
+        compose_contexts,
         send_descriptor,
         send_tree,
         click,
     };
 }
+
+run_test("Ask Pear fills the existing compose with active file context", async () => {
+    const test = harness("workspace-compose");
+    const current = descriptor("workspace-compose");
+    test.send_descriptor(current);
+    test.send_tree(0, current.root, [entry("README.md")]);
+    test.click(test.root.querySelector("[data-entry-id='r1:README.md']"));
+
+    const button = test.root.querySelector("[data-action='ask-pear']");
+    assert.equal(button.hidden, false);
+    test.click(button);
+    await Promise.resolve();
+    assert.deepEqual(test.compose_contexts, [
+        {path: "README.md", selectedText: "selected", startLine: 2, endLine: 2},
+    ]);
+    assert.equal(
+        test.root.querySelector("[data-role='status']").textContent,
+        "Added workspace context to compose",
+    );
+
+    await test.controller.destroy();
+    test.root.remove();
+});
 
 run_test(
     "selection and preview tab chrome update before open; edit and double-click pin",

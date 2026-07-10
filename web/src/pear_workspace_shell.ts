@@ -2,6 +2,7 @@ import render_pear_workspace_shell from "../templates/pear_workspace_shell.hbs";
 
 import type {PearWorkspaceDescriptor, PearWorkspaceEntry} from "./pear_workspace_api.ts";
 import * as pear_workspace_api from "./pear_workspace_api.ts";
+import type {fill_pear_compose_with_workspace_context} from "./pear_workspace_compose.ts";
 import type {
     PearWorkspaceEditorController,
     PearWorkspaceEditorOptions,
@@ -53,6 +54,9 @@ export type PearWorkspaceShellDependencies = {
     rawUrl: typeof pear_workspace_api.pear_workspace_raw_url;
     createEditor: (options: PearWorkspaceEditorOptions) => PearWorkspaceEditorController;
     createFiles: (options: PearWorkspaceFilesOptions) => PearWorkspaceFilesController;
+    loadComposeIntegration: () => Promise<{
+        fill_pear_compose_with_workspace_context: typeof fill_pear_compose_with_workspace_context;
+    }>;
 };
 
 export type PearWorkspaceShellOptions = {
@@ -107,6 +111,9 @@ const default_dependencies: PearWorkspaceShellDependencies = {
     rawUrl: pear_workspace_api.pear_workspace_raw_url,
     createEditor: create_pear_workspace_editor,
     createFiles: create_pear_workspace_files,
+    async loadComposeIntegration() {
+        return import("./pear_workspace_compose.ts");
+    },
 };
 
 function required_element(root: ParentNode, selector: string): HTMLElement {
@@ -186,6 +193,11 @@ export function create_pear_workspace_shell(
         "[data-action='mode-rich']",
         is_button,
     );
+    const ask_pear_button = required_typed_element(
+        options.root,
+        "[data-action='ask-pear']",
+        is_button,
+    );
     const raw_link = required_typed_element(options.root, "[data-role='raw-link']", is_anchor);
     const download_link = required_typed_element(
         options.root,
@@ -231,6 +243,7 @@ export function create_pear_workspace_shell(
     let quick_open_return_focus: HTMLElement | undefined;
     let quick_open_opened_drawer = false;
     let quick_open_timer: ReturnType<typeof setTimeout> | undefined;
+    let compose_integration_loading = false;
     const directory_requests = new Map<string, AbortableRequest>();
     const rebind_requests = new Map<string, AbortableRequest>();
     let files: PearWorkspaceFilesController | undefined;
@@ -378,6 +391,8 @@ export function create_pear_workspace_shell(
             snapshot: editor_snapshot,
             rawUrl: dependencies.rawUrl,
         });
+        ask_pear_button.hidden = active_tab() === undefined;
+        ask_pear_button.disabled = compose_integration_loading;
     };
 
     const render_links = render_surface;
@@ -1046,6 +1061,35 @@ export function create_pear_workspace_shell(
         }
     };
 
+    const add_selection_to_compose = async (): Promise<void> => {
+        const context = editor.getSelectionContext();
+        if (context === undefined || compose_integration_loading) {
+            return;
+        }
+        compose_integration_loading = true;
+        render_surface();
+        status.textContent = "Opening topic compose…";
+        let feedback = "";
+        try {
+            const module = await dependencies.loadComposeIntegration();
+            if (destroyed) {
+                return;
+            }
+            module.fill_pear_compose_with_workspace_context(context);
+            feedback = "Added workspace context to compose";
+        } catch {
+            if (!destroyed) {
+                feedback = "Could not open the topic compose. Try again.";
+            }
+        } finally {
+            compose_integration_loading = false;
+            if (!destroyed) {
+                render_surface();
+                status.textContent = feedback;
+            }
+        }
+    };
+
     const on_root_click = (event: MouseEvent): void => {
         const target = event.target;
         if (!(target instanceof Element)) {
@@ -1070,6 +1114,11 @@ export function create_pear_workspace_shell(
             }
             case "mode-rich": {
                 void editor.switchMode("rich");
+
+                break;
+            }
+            case "ask-pear": {
+                void add_selection_to_compose();
 
                 break;
             }

@@ -83,6 +83,11 @@ for env_file in "$REPO_ROOT/../env.local" "$REPO_ROOT/.env.local"; do
     fi
 done
 PEAR_GEMINI_API_KEY="${PEAR_ADDRESSING_ROUTER_GEMINI_API_KEY:-${GEMINI_API_KEY:-${GEMINI_KEY:-${GOOGLE_API_KEY:-${GOOGLE_GENAI_API_KEY:-}}}}}"
+CADDY_BASICAUTH_USER="${PEAR_CADDY_BASICAUTH_USER:-}"
+CADDY_BASICAUTH_HASH_FILE="${PEAR_CADDY_BASICAUTH_HASH_FILE:-}"
+if ! validate_local_caddy_auth_bootstrap "$CADDY_BASICAUTH_USER" "$CADDY_BASICAUTH_HASH_FILE"; then
+    fail "bootstrap requires a valid Caddy username and bcrypt hash file"
+fi
 
 ssh_root() {
     ssh -F "$SSH_CONFIG" pear-staging-root "$@"
@@ -184,49 +189,15 @@ else
     echo "WARNING: $HOME/.codex/auth.json is missing; run codex login on the server before using Pear." >&2
 fi
 
-echo "Writing Caddy and systemd config..."
-# Optional HTTP basic auth in front of the box.  The box runs Zulip's dev
-# server (passwordless dev-login + dev API-key endpoints), so with no auth it is
-# world-open.  Set PEAR_CADDY_BASICAUTH_USER and a `caddy hash-password` bcrypt
-# hash in PEAR_CADDY_BASICAUTH_HASH to require a login; unset keeps the current
-# open behavior (backward compatible) but prints a warning.
-CADDY_BASICAUTH_USER="${PEAR_CADDY_BASICAUTH_USER:-pear}"
-CADDY_BASICAUTH_HASH="${PEAR_CADDY_BASICAUTH_HASH:-}"
-if [[ -z "$CADDY_BASICAUTH_HASH" ]]; then
-    echo "WARNING: PEAR_CADDY_BASICAUTH_HASH is unset — https://${FQDN} will front Zulip's dev server with NO HTTP auth (passwordless dev-login is internet-reachable). Set PEAR_CADDY_BASICAUTH_USER + a 'caddy hash-password' bcrypt hash in PEAR_CADDY_BASICAUTH_HASH to require a login." >&2
-fi
-ssh -F "$SSH_CONFIG" pear-staging-root bash -s -- "$FQDN" "$CADDY_BASICAUTH_USER" "$CADDY_BASICAUTH_HASH" <<'REMOTE'
+echo "Writing Pear environment and queue-worker systemd config..."
+ssh -F "$SSH_CONFIG" pear-staging-root bash -s <<'REMOTE'
 set -euo pipefail
-FQDN="$1"
-CADDY_BASICAUTH_USER="${2:-pear}"
-CADDY_BASICAUTH_HASH="${3:-}"
-
-if [[ -n "$CADDY_BASICAUTH_HASH" ]]; then
-cat >/etc/caddy/Caddyfile <<EOF
-${FQDN} {
-    encode zstd gzip
-
-    basic_auth {
-        ${CADDY_BASICAUTH_USER} ${CADDY_BASICAUTH_HASH}
-    }
-
-    reverse_proxy 127.0.0.1:9991
-}
-EOF
-else
-cat >/etc/caddy/Caddyfile <<EOF
-${FQDN} {
-    encode zstd gzip
-
-    reverse_proxy 127.0.0.1:9991
-}
-EOF
-fi
 
 cat >/home/zulipdev/pear.env <<EOF
 EXTERNAL_HOST=${FQDN}
 BEHIND_HTTPS_PROXY=1
 ZULIP_DATABASE_CONN_MAX_AGE=0
+ZULIP_DEV_PRODUCTION_ASSETS=1
 PEAR_WORKER_AGENT_RUNTIME=codex-app-server
 PEAR_WORKER_CODEX_BIN=/srv/zulip-node/bin/codex
 PEAR_WORKER_WORKDIR=/home/zulipdev/zulip
@@ -380,58 +351,6 @@ zulipdev ALL=(%pear-topic) NOPASSWD: /usr/bin/env *
 EOF
 chmod 440 /etc/sudoers.d/91-pear-topic-isolation
 
-cat >/usr/local/bin/pear-run-zulip-dev <<'EOF'
-#!/usr/bin/env python3
-import os
-import signal
-import subprocess
-import sys
-
-repo = "/home/zulipdev/zulip"
-venv = os.path.join(repo, ".venv")
-env = os.environ.copy()
-env["PATH"] = os.path.join(venv, "bin") + os.pathsep + env.get("PATH", "")
-env["VIRTUAL_ENV"] = venv
-os.chdir(repo)
-
-process = subprocess.Popen(
-    [os.path.join(repo, "tools/run-dev"), "--behind-https-proxy", "--streamlined"],
-    env=env,
-)
-
-
-def stop(signum: int, frame: object) -> None:
-    if process.poll() is None:
-        process.terminate()
-
-
-signal.signal(signal.SIGTERM, stop)
-signal.signal(signal.SIGINT, stop)
-sys.exit(process.wait())
-EOF
-chmod 755 /usr/local/bin/pear-run-zulip-dev
-
-cat >/etc/systemd/system/pear-zulip-dev.service <<'EOF'
-[Unit]
-Description=Pear Zulip development server
-After=network-online.target postgresql.service rabbitmq-server.service redis-server.service memcached.service
-Wants=network-online.target
-
-[Service]
-Type=simple
-User=zulipdev
-WorkingDirectory=/home/zulipdev/zulip
-EnvironmentFile=/home/zulipdev/pear.env
-ExecStart=/usr/local/bin/pear-run-zulip-dev
-Restart=always
-RestartSec=5
-KillSignal=SIGINT
-TimeoutStopSec=30
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
 cat >/etc/systemd/system/pear-embedded-bots.service <<'EOF'
 [Unit]
 Description=Pear Zulip embedded bot queue
@@ -489,10 +408,53 @@ RestartSec=5
 WantedBy=multi-user.target
 EOF
 
-systemctl daemon-reload
-systemctl enable caddy pear-zulip-dev pear-embedded-bots pear-worker pear-thumbnail
-systemctl restart caddy pear-zulip-dev pear-embedded-bots pear-worker pear-thumbnail
+cat >/etc/systemd/system/pear-monitor-worker.service <<'EOF'
+[Unit]
+Description=Pear standing-monitor queue
+After=network-online.target pear-zulip-dev.service
+Wants=pear-zulip-dev.service
+
+[Service]
+Type=simple
+User=zulipdev
+WorkingDirectory=/home/zulipdev/zulip
+EnvironmentFile=/home/zulipdev/pear.env
+ExecStart=/bin/bash -lc 'cd /home/zulipdev/zulip && exec /home/zulipdev/zulip/.venv/bin/python3 /home/zulipdev/zulip/manage.py process_queue --queue_name pear_monitor_worker --automated'
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
 REMOTE
+
+echo "Building and validating production assets..."
+ssh_root 'rm -rf \
+    /home/zulipdev/zulip/prod-static \
+    /home/zulipdev/zulip/static/generated \
+    /home/zulipdev/zulip/static/webpack-bundles \
+    /home/zulipdev/zulip/static/images/landing-page/hello/generated \
+    /home/zulipdev/zulip/web/generated; \
+    rm -f \
+    /home/zulipdev/zulip/webpack-stats-production.json \
+    /home/zulipdev/zulip/staticfiles.json \
+    /home/zulipdev/zulip/locale/language_options.json \
+    /home/zulipdev/zulip/locale/language_name_map.json; \
+    find /home/zulipdev/zulip/locale -type f -name '"'"'*.mo'"'"' -delete'
+ssh_root 'sudo -Hu zulipdev bash -lc "cd /home/zulipdev/zulip && ZULIP_DEV_PRODUCTION_ASSETS=1 ./tools/update-prod-static && .venv/bin/python3 tools/pear_deploy/production_assets.py --repo-root ."'
+
+echo "Installing fail-closed Caddy and production-assets service config..."
+printf -v runtime_command '%q ' \
+    python3 \
+    /home/zulipdev/zulip/tools/pear_deploy/runtime_config.py \
+    install \
+    --repo-root /home/zulipdev/zulip \
+    --fqdn "$FQDN" \
+    --bootstrap-auth-user "$CADDY_BASICAUTH_USER" \
+    --bootstrap-auth-stdin
+ssh -F "$SSH_CONFIG" pear-staging-root "$runtime_command" <"$CADDY_BASICAUTH_HASH_FILE"
+ssh_root "systemctl daemon-reload && systemctl enable caddy ${PEAR_DEPLOY_SERVICES[*]} && systemctl restart caddy ${PEAR_DEPLOY_SERVICES[*]}"
 
 if [[ -n "$PEAR_GEMINI_API_KEY" ]]; then
     echo "Copying Gemini addressing-router key to the server without printing it..."
@@ -553,10 +515,10 @@ print(
 )
 PY
 
-ssh_root 'systemctl restart pear-zulip-dev pear-embedded-bots pear-worker pear-thumbnail'
+ssh_root "systemctl restart ${PEAR_DEPLOY_SERVICES[*]}"
 
 echo "Remote services:"
-ssh_root 'systemctl --no-pager --full status caddy pear-zulip-dev pear-embedded-bots pear-worker pear-thumbnail | sed -n "1,220p"'
+ssh_root "systemctl --no-pager --full status caddy ${PEAR_DEPLOY_SERVICES[*]}" | sed -n '1,260p'
 
 echo
 echo "Done. Verify with:"

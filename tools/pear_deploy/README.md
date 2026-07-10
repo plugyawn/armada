@@ -7,9 +7,11 @@ The deployment is intentionally a normal VM, not a tunnel:
 
 - DigitalOcean hosts an Ubuntu droplet.
 - GoDaddy points `pear.backpropaganda.net` at that droplet.
-- Caddy terminates HTTPS and forwards directly to Zulip devlogin.
+- Caddy terminates HTTPS behind a mandatory HTTP basic-auth wall.
 - The current local checkout is synced to `/home/zulipdev/zulip`.
-- `tools/run-dev` plus the Pear queue workers run under systemd.
+- `tools/run-dev --production-assets` serves prebuilt, content-hashed assets
+  with `DEVELOPMENT=True` and `DEBUG=False`; webpack/HMR and web-process
+  autoreload are not present on the hosted runtime.
 - Codex auth is copied from this Mac to the `zulipdev` account, so Pear can use
   the same ChatGPT-authenticated Codex CLI session without an API key.
 
@@ -25,24 +27,34 @@ The scripts load exported environment variables and also load
 - Gemini ambient router: `PEAR_ADDRESSING_ROUTER_GEMINI_API_KEY`,
   `GEMINI_API_KEY`, `GEMINI_KEY`, `GOOGLE_API_KEY`, or
   `GOOGLE_GENAI_API_KEY`
+- Caddy login name: `PEAR_CADDY_BASICAUTH_USER`
+- Caddy bcrypt hash file: `PEAR_CADDY_BASICAUTH_HASH_FILE`. The file must
+  contain exactly one hash emitted by `caddy hash-password`, must be a readable
+  regular non-symlink file, and is streamed to the box only on stdin. The hash
+  is never accepted as a plaintext environment value or command argument.
 
 Do not commit `env.local`, `output/pear-staging/`, or `.codex/auth.json`.
 
-## Access hardening (optional)
+## Access boundary (required)
 
 The box runs Zulip's development server, so `/devlogin` and the dev
-API-key endpoints are reachable by anyone who can hit the site. To put an
-HTTP basic-auth wall in front of it, export before bootstrapping (or a
-data reset):
+API-key endpoints must never be internet-reachable without an HTTP basic-auth
+wall. Before the first bootstrap, create the hash file without committing it:
 
-- `PEAR_CADDY_BASICAUTH_USER` — login name (defaults to `pear`)
-- `PEAR_CADDY_BASICAUTH_HASH` — a bcrypt hash from `caddy hash-password`
+```bash
+umask 077
+caddy hash-password > /absolute/private/path/pear-caddy.bcrypt
+export PEAR_CADDY_BASICAUTH_USER=pear
+export PEAR_CADDY_BASICAUTH_HASH_FILE=/absolute/private/path/pear-caddy.bcrypt
+```
 
-When `PEAR_CADDY_BASICAUTH_HASH` is unset the Caddyfile stays open (current
-friends-demo behavior) and the scripts print a warning. To also limit who
-can drive the agent, set `PEAR_WORKER_TRUSTED_USER_IDS` in `pear.env` to a
-comma-separated list of trusted user ids (see the commented line in
-`bootstrap_remote.sh`).
+Bootstrap and update fail closed when `/etc/pear/caddy-basic-auth.env` is
+absent or invalid. A guarded update can create that root-owned mode-0600 file
+from the local hash file; subsequent updates reuse the remote file. The
+checked-in Caddyfile, Caddy systemd drop-in, Zulip wrapper/unit, and `pear.env`
+are installed and verified by `runtime_config.py`. To also limit who can drive
+the agent, set `PEAR_WORKER_TRUSTED_USER_IDS` in `pear.env` to a comma-separated
+list of trusted user ids.
 
 ## Create or refresh the droplet and DNS
 
@@ -64,14 +76,17 @@ This is idempotent. It reuses the existing droplet named
 tools/pear_deploy/bootstrap_remote.sh
 ```
 
-This installs base packages, syncs this dirty checkout, provisions Zulip,
+This installs base packages, syncs this checkout, provisions Zulip,
 installs the same Codex CLI version as this Mac when possible, copies Codex
-auth, creates/selects the embedded `Pear` bot in the dev realm, writes
-Caddy/systemd config, and starts:
+auth, builds and validates production assets, creates/selects the embedded
+`Pear` bot in the dev realm, installs authenticated Caddy/systemd config, and
+starts:
 
 - `pear-zulip-dev.service`
 - `pear-embedded-bots.service`
 - `pear-worker.service`
+- `pear-monitor-worker.service`
+- `pear-thumbnail.service`
 - `caddy.service`
 
 After it finishes, test:
@@ -121,13 +136,25 @@ tools/pear_deploy/update_remote.sh --yes
 The first command is a read-only gate. It verifies that the local tracked tree is
 clean, the checkout is the main `zulip/` submodule rather than a linked Git
 worktree, the remote tracked tree is clean, and the remote HEAD is not ahead of
-the local `pear-main` history. The `--yes` run snapshots the current remote
-checkout, syncs this checkout with the same excludes as bootstrap, applies
-`zerver` migrations, restarts `pear-worker`, `pear-embedded-bots`, and
-`pear-zulip-dev` together, verifies the Pear backend tests, checks live Pear
-worker health (`tools/pear-health-report`) and queue emptiness, and records the
-deployed SHA in `/home/zulipdev/pear-deployed-sha`. If a post-snapshot step
-fails, it restores the pre-deploy snapshot and restarts the Pear services.
+the local `pear-main` history. The `--yes` run snapshots the current source,
+generated assets, Git metadata, Pear skills, Caddy auth/config, `pear.env`,
+wrapper, and systemd units. It source-syncs with generated outputs excluded,
+builds production assets from the synced source, validates the hashed graph,
+using an isolated sibling checkout while the old app remains live. It then
+stops the coordinated services for the short source/asset cutover, applies
+`zerver` migrations, restarts Caddy and all Pear services, verifies the
+backend tests, rejects webpack/autoreload processes and the legacy `/webpack/`
+route, checks live worker/queue health, and records the coordinated SHA and
+`asset_mode=production-hashed`. A post-snapshot failure restores every covered
+domain before restarting the old services.
+
+Snapshots are retained until explicitly pruned. The retention command is also
+read-only by default:
+
+```bash
+tools/pear_deploy/prune_remote_snapshots.sh --keep 10
+tools/pear_deploy/prune_remote_snapshots.sh --keep 10 --yes
+```
 
 ## Cleanup
 

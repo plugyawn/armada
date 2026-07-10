@@ -16,6 +16,7 @@ REMOTE_PEAR_DIR="/home/zulipdev/pear"
 REMOTE_PEAR_SKILLS_DIR="$REMOTE_PEAR_DIR/skills"
 DEPLOY_RECORD_PATH="/home/zulipdev/pear-deployed-sha"
 SNAPSHOT_ROOT="/home/zulipdev/pear-deploy-snapshots"
+REMOTE_AUTH_ENV="/etc/pear/caddy-basic-auth.env"
 YES=false
 RUN_TESTS=true
 RUN_MIGRATE=true
@@ -25,6 +26,17 @@ RUNTIME_SMOKE_ADMIN_EMAIL=""
 RUNTIME_SMOKE_TIMEOUT=150
 RUNTIME_SMOKE_EVIDENCE=""
 STATE_PATH="$DEFAULT_STATE_PATH"
+
+for env_file in "$PEAR_ROOT/env.local" "$REPO_ROOT/.env.local"; do
+    if [[ -f "$env_file" ]]; then
+        set -a
+        # shellcheck source=/dev/null
+        source "$env_file"
+        set +a
+    fi
+done
+CADDY_BASICAUTH_USER="${PEAR_CADDY_BASICAUTH_USER:-}"
+CADDY_BASICAUTH_HASH_FILE="${PEAR_CADDY_BASICAUTH_HASH_FILE:-}"
 
 fail() {
     echo "ERROR: $*" >&2
@@ -85,7 +97,7 @@ checkout. The script performs read-only gates by default. Mutating deploy steps
 require --yes.
 
 Options:
-  --yes             Take the snapshot, rsync, migrate, restart, verify, record SHA.
+  --yes             Snapshot, stage/build assets, cut over, migrate, verify, record SHA.
   --skip-tests      Skip test-backend verification.
   --skip-migrate    Skip manage.py migrate zerver --noinput.
   --skip-compat     Skip the local contract compatibility checker.
@@ -214,6 +226,70 @@ ssh_zulip_clean() {
     ssh_root "sudo -Hu zulipdev bash -lc $wrapped"
 }
 
+validate_local_auth_bootstrap() {
+    if ! validate_local_caddy_auth_bootstrap "$CADDY_BASICAUTH_USER" "$CADDY_BASICAUTH_HASH_FILE"; then
+        fail "Caddy basic-auth bootstrap username or bcrypt hash file is invalid"
+    fi
+}
+
+install_remote_runtime_config() {
+    local remote_command
+    local command=(
+        python3
+        "$REMOTE_PATH/tools/pear_deploy/runtime_config.py"
+        install
+        --repo-root "$REMOTE_PATH"
+        --fqdn "$FQDN"
+    )
+    if [[ "$REMOTE_AUTH_READY" != true ]]; then
+        command+=(--bootstrap-auth-user "$CADDY_BASICAUTH_USER" --bootstrap-auth-stdin)
+        printf -v remote_command '%q ' "${command[@]}"
+        # The bcrypt hash is sent only on stdin. It is never expanded into an
+        # environment variable, command argument, or log message.
+        ssh -F "$SSH_CONFIG" pear-staging-root "$remote_command" <"$CADDY_BASICAUTH_HASH_FILE"
+    else
+        printf -v remote_command '%q ' "${command[@]}"
+        ssh_root "$remote_command"
+    fi
+}
+
+remote_auth_env_valid() {
+    ssh_root python3 - "$REMOTE_AUTH_ENV" "$FQDN" <<'PY'
+import re
+import stat
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+fqdn = sys.argv[2].lower()
+try:
+    lines = path.read_text(encoding="utf-8").splitlines()
+except (OSError, UnicodeError):
+    raise SystemExit(1)
+path_stat = path.stat()
+if stat.S_IMODE(path_stat.st_mode) != 0o600 or path_stat.st_uid != 0 or path_stat.st_gid != 0:
+    raise SystemExit(1)
+values = {}
+for line in lines:
+    key, separator, value = line.partition("=")
+    if not separator or key in values:
+        raise SystemExit(1)
+    values[key] = value
+if set(values) != {
+    "PEAR_CADDY_FQDN",
+    "PEAR_CADDY_BASICAUTH_USER",
+    "PEAR_CADDY_BASICAUTH_HASH",
+}:
+    raise SystemExit(1)
+if values["PEAR_CADDY_FQDN"] != fqdn:
+    raise SystemExit(1)
+if re.fullmatch(r"[A-Za-z0-9._@-]{1,128}", values["PEAR_CADDY_BASICAUTH_USER"]) is None:
+    raise SystemExit(1)
+if re.fullmatch(r"\$2[aby]\$[0-9]{2}\$[./A-Za-z0-9]{53}", values["PEAR_CADDY_BASICAUTH_HASH"]) is None:
+    raise SystemExit(1)
+PY
+}
+
 verify_remote_quiescence() {
     local phase="$1"
 
@@ -290,61 +366,104 @@ remote_dirty_tree_matches_local_head() {
     done < <(ssh_zulip "git diff --name-only HEAD --")
 }
 
-remote_webpack_stats_summary() {
-    ssh_zulip_clean "$REMOTE_PATH/.venv/bin/python3 - <<'PY'
-import json
-from pathlib import Path
-
-path = Path('var/webpack-stats-dev.json')
-if not path.exists():
-    print('missing 0 false false')
-    raise SystemExit
-
-data = json.loads(path.read_text())
-assets = data.get('assets', {})
-print(
-    data.get('status', 'unknown'),
-    int(path.stat().st_mtime),
-    str('app.js' in assets).lower(),
-    str('app.css' in assets).lower(),
-)
-PY"
+build_remote_production_assets() {
+    REMOTE_ASSET_BUILD_DIR="/home/zulipdev/pear-asset-build-${LOCAL_SHA:0:12}"
+    echo "Staging source for an isolated production asset build..."
+    ssh_root "rm -rf $REMOTE_ASSET_BUILD_DIR && install -d -m 750 -o zulipdev -g zulipdev $REMOTE_ASSET_BUILD_DIR"
+    rsync -az --delete \
+        "${PEAR_DEPLOY_RSYNC_EXCLUDES[@]}" \
+        -e "ssh -F $SSH_CONFIG" \
+        "$REPO_ROOT/" \
+        "root@$IP_ADDRESS:$REMOTE_ASSET_BUILD_DIR/"
+    ssh_root "chown -R zulipdev:zulipdev $REMOTE_ASSET_BUILD_DIR; \
+        sudo -Hu zulipdev ln -s $REMOTE_PATH/.venv $REMOTE_ASSET_BUILD_DIR/.venv; \
+        sudo -Hu zulipdev ln -s $REMOTE_PATH/zproject/dev-secrets.conf $REMOTE_ASSET_BUILD_DIR/zproject/dev-secrets.conf; \
+        sudo -Hu zulipdev mkdir -p $REMOTE_ASSET_BUILD_DIR/var/log"
+    echo "Building production assets without touching the live asset graph..."
+    ssh_root "sudo -Hu zulipdev bash -lc 'cd $REMOTE_ASSET_BUILD_DIR && ZULIP_DEV_PRODUCTION_ASSETS=1 ./tools/update-prod-static && .venv/bin/python3 tools/pear_deploy/production_assets.py --repo-root .'"
 }
 
-wait_for_frontend_assets() {
-    local restart_epoch="$1"
-    local summary
-    local status
-    local stats_mtime
-    local has_app_js
-    local has_app_css
+cut_over_remote_production_assets() {
+    echo "Cutting over the validated production asset graph..."
+    ssh_root bash -s -- "$REMOTE_ASSET_BUILD_DIR" "$REMOTE_PATH" <<'REMOTE'
+set -euo pipefail
+BUILD_ROOT="$1"
+REMOTE_PATH="$2"
 
-    echo "Waiting for webpack dev assets to rebuild..."
-    for _ in $(seq 1 60); do
-        summary="$(remote_webpack_stats_summary 2>/dev/null || true)"
-        read -r status stats_mtime has_app_js has_app_css <<<"$summary"
-        if [[
-            "$status" == "done" &&
-            "$has_app_js" == "true" &&
-            "$has_app_css" == "true" &&
-            "$stats_mtime" =~ ^[0-9]+$ &&
-            "$stats_mtime" -ge "$restart_epoch"
-        ]]; then
-            if
-                curl -kfsSI --max-time 10 "https://$FQDN/webpack/app.js" >/dev/null &&
-                    curl -kfsSI --max-time 10 "https://$FQDN/webpack/app.css" >/dev/null
-            then
-                echo "Frontend assets ready: webpack-stats-dev.json status=$status mtime=$stats_mtime"
-                return
-            fi
+rm -rf \
+    "$REMOTE_PATH/prod-static" \
+    "$REMOTE_PATH/static/generated" \
+    "$REMOTE_PATH/static/webpack-bundles" \
+    "$REMOTE_PATH/static/images/landing-page/hello/generated" \
+    "$REMOTE_PATH/web/generated"
+rm -f \
+    "$REMOTE_PATH/webpack-stats-production.json" \
+    "$REMOTE_PATH/staticfiles.json" \
+    "$REMOTE_PATH/locale/language_options.json" \
+    "$REMOTE_PATH/locale/language_name_map.json"
+find "$REMOTE_PATH/locale" -type f -name '*.mo' -delete
+
+for generated_path in \
+    prod-static \
+    static/generated \
+    static/webpack-bundles \
+    static/images/landing-page/hello/generated \
+    web/generated; do
+    install -d -o zulipdev -g zulipdev "$(dirname "$REMOTE_PATH/$generated_path")"
+    mv "$BUILD_ROOT/$generated_path" "$REMOTE_PATH/$generated_path"
+done
+for generated_file in \
+    webpack-stats-production.json \
+    staticfiles.json \
+    locale/language_options.json \
+    locale/language_name_map.json; do
+    mv "$BUILD_ROOT/$generated_file" "$REMOTE_PATH/$generated_file"
+done
+rsync -a --include '*/' --include '*.mo' --exclude '*' \
+    "$BUILD_ROOT/locale/" "$REMOTE_PATH/locale/"
+chown -R zulipdev:zulipdev \
+    "$REMOTE_PATH/prod-static" \
+    "$REMOTE_PATH/static/generated" \
+    "$REMOTE_PATH/static/webpack-bundles" \
+    "$REMOTE_PATH/static/images/landing-page/hello/generated" \
+    "$REMOTE_PATH/web/generated" \
+    "$REMOTE_PATH/webpack-stats-production.json" \
+    "$REMOTE_PATH/staticfiles.json" \
+    "$REMOTE_PATH/locale"
+REMOTE
+}
+
+verify_remote_production_assets() {
+    local asset_paths
+    ssh_zulip_clean "$REMOTE_PATH/.venv/bin/python3 $REMOTE_PATH/tools/pear_deploy/production_assets.py --repo-root $REMOTE_PATH"
+    ssh_zulip "$REMOTE_PATH/.venv/bin/python3 $REMOTE_PATH/manage.py shell -c \"from django.conf import settings; assert settings.DEVELOPMENT is True; assert settings.DEBUG is False; assert settings.WEBPACK_STATS_FILE.endswith('webpack-stats-production.json'); print('Django production-asset settings valid.')\""
+
+    asset_paths="$(ssh_zulip_clean "$REMOTE_PATH/.venv/bin/python3 - <<'PY'
+import json
+
+stats = json.load(open('webpack-stats-production.json'))
+app = stats['chunks']['app']
+print(next(name for name in app if name.endswith('.js')))
+print(next(name for name in app if name.endswith('.css')))
+PY"
+)"
+    while IFS= read -r asset; do
+        [[ -n "$asset" ]] || continue
+        if ! ssh_root "curl -fsSI --max-time 10 -H 'Host: $FQDN' http://127.0.0.1:9991/static/webpack-bundles/$asset >/dev/null"; then
+            fail "production asset is not served by the app: $asset"
         fi
-        sleep 5
-    done
+    done <<<"$asset_paths"
 
-    fail "webpack dev assets did not rebuild after service restart; last status: ${summary:-none}"
+    if ssh_root "pgrep -af '[t]ools/webpack|[t]ornado\.autoreload'"; then
+        fail "development webpack/autoreload process is running in production-assets mode"
+    fi
+    if ssh_root "curl -fsS --max-time 10 -H 'Host: $FQDN' -o /dev/null http://127.0.0.1:9991/webpack/app.js 2>/dev/null"; then
+        fail "legacy webpack development route is still live"
+    fi
 }
 
 SNAPSHOT_DIR=""
+REMOTE_ASSET_BUILD_DIR=""
 ROLLBACK_READY=false
 ROLLBACK_DONE=false
 
@@ -354,15 +473,33 @@ rollback_on_error() {
         echo
         echo "Update failed after snapshot; rolling back from $SNAPSHOT_DIR" >&2
         set +e
-        ssh_root bash -s -- "$SNAPSHOT_DIR" "$REMOTE_PATH" "$REMOTE_GIT_COMMON_DIR" "$REMOTE_PEAR_DIR" "$REMOTE_PEAR_SKILLS_DIR" "${PEAR_DEPLOY_RSYNC_EXCLUDES[@]}" <<'REMOTE'
+        ssh_root bash -s -- \
+            "$SNAPSHOT_DIR" \
+            "$REMOTE_PATH" \
+            "$REMOTE_GIT_COMMON_DIR" \
+            "$REMOTE_PEAR_DIR" \
+            "$REMOTE_PEAR_SKILLS_DIR" \
+            "${#PEAR_DEPLOY_RUNTIME_CONFIG_PATHS[@]}" \
+            "${PEAR_DEPLOY_RUNTIME_CONFIG_PATHS[@]}" \
+            "${#PEAR_DEPLOY_RSYNC_EXCLUDES[@]}" \
+            "${PEAR_DEPLOY_RSYNC_EXCLUDES[@]}" <<'REMOTE'
 set -euo pipefail
 SNAPSHOT_DIR="$1"
 REMOTE_PATH="$2"
 REMOTE_GIT_COMMON_DIR="$3"
 REMOTE_PEAR_DIR="$4"
 REMOTE_PEAR_SKILLS_DIR="$5"
-shift 5
+RUNTIME_CONFIG_COUNT="$6"
+shift 6
+RUNTIME_CONFIG_PATHS=("${@:1:RUNTIME_CONFIG_COUNT}")
+shift "$RUNTIME_CONFIG_COUNT"
+RSYNC_EXCLUDE_COUNT="$1"
+shift
 RSYNC_EXCLUDES=("$@")
+if [[ "${#RSYNC_EXCLUDES[@]}" -ne "$RSYNC_EXCLUDE_COUNT" ]]; then
+    echo "invalid rollback rsync exclude argument count" >&2
+    exit 1
+fi
 
 rsync -a --delete \
     "${RSYNC_EXCLUDES[@]}" \
@@ -379,10 +516,36 @@ else
     rm -rf "$REMOTE_PEAR_SKILLS_DIR"
 fi
 
+rm -rf \
+    "$REMOTE_PATH/prod-static" \
+    "$REMOTE_PATH/static/generated" \
+    "$REMOTE_PATH/static/webpack-bundles" \
+    "$REMOTE_PATH/static/images/landing-page/hello/generated" \
+    "$REMOTE_PATH/locale/en" \
+    "$REMOTE_PATH/web/generated"
+rm -f \
+    "$REMOTE_PATH/webpack-stats-production.json" \
+    "$REMOTE_PATH/staticfiles.json" \
+    "$REMOTE_PATH/locale/language_options.json" \
+    "$REMOTE_PATH/locale/language_name_map.json"
+find "$REMOTE_PATH/locale" -type f -name '*.mo' -delete
+find "$REMOTE_PATH/locale" -type f -name 'mobile.json' -delete
+if [[ -s "$SNAPSHOT_DIR/generated-output.paths" ]]; then
+    tar -C "$REMOTE_PATH" -xpf "$SNAPSHOT_DIR/generated-output.tar"
+fi
+
+for runtime_path in "${RUNTIME_CONFIG_PATHS[@]}"; do
+    rm -rf "$runtime_path"
+done
+if [[ -s "$SNAPSHOT_DIR/runtime-config.paths" ]]; then
+    tar -C / -xpf "$SNAPSHOT_DIR/runtime-config.tar"
+fi
+
 chown -R zulipdev:zulipdev "$REMOTE_PATH"
 chown -R zulipdev:zulipdev /home/zulipdev/.git 2>/dev/null || true
 chown -R zulipdev:zulipdev "$REMOTE_PEAR_DIR" 2>/dev/null || true
-systemctl restart pear-worker pear-monitor-worker pear-embedded-bots pear-thumbnail pear-zulip-dev
+systemctl daemon-reload
+systemctl restart caddy pear-worker pear-monitor-worker pear-embedded-bots pear-thumbnail pear-zulip-dev
 REMOTE
         local rollback_status=$?
         set -e
@@ -392,6 +555,9 @@ REMOTE
         else
             echo "Rollback failed; inspect $SNAPSHOT_DIR on the box." >&2
         fi
+    fi
+    if [[ -n "$REMOTE_ASSET_BUILD_DIR" ]]; then
+        ssh_root "rm -rf $REMOTE_ASSET_BUILD_DIR" >/dev/null 2>&1 || true
     fi
     exit "$status"
 }
@@ -492,6 +658,19 @@ if ! git -C "$REPO_ROOT" merge-base --is-ancestor "$PREV_SHA" "$LOCAL_SHA"; then
     fail "remote HEAD $PREV_SHA is not an ancestor of local HEAD $LOCAL_SHA"
 fi
 
+REMOTE_AUTH_READY=false
+if ssh_root "test -e $REMOTE_AUTH_ENV"; then
+    if remote_auth_env_valid; then
+        REMOTE_AUTH_READY=true
+        echo "Preflight: remote Caddy basic-auth environment is present, valid, and mode 0600."
+    else
+        fail "remote Caddy basic-auth environment exists but is invalid"
+    fi
+else
+    validate_local_auth_bootstrap
+    echo "Preflight: remote Caddy auth is absent; validated a local bcrypt hash file for stdin-only bootstrap."
+fi
+
 echo "Preflight: remote tracked/untracked source tree is clean and not ahead of local pear-main."
 if [[ "$PREV_SHA" != "$LOCAL_SHA" ]]; then
     echo
@@ -538,16 +717,34 @@ SNAPSHOT_STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 SNAPSHOT_DIR="$SNAPSHOT_ROOT/zulip-$SNAPSHOT_STAMP-${PREV_SHA:0:12}"
 echo
 echo "Snapshotting remote tree to $SNAPSHOT_DIR"
-ssh_root bash -s -- "$REMOTE_PATH" "$REMOTE_GIT_COMMON_DIR" "$REMOTE_PEAR_SKILLS_DIR" "$SNAPSHOT_DIR" "${PEAR_DEPLOY_RSYNC_EXCLUDES[@]}" <<'REMOTE'
+ssh_root bash -s -- \
+    "$REMOTE_PATH" \
+    "$REMOTE_GIT_COMMON_DIR" \
+    "$REMOTE_PEAR_SKILLS_DIR" \
+    "$SNAPSHOT_DIR" \
+    "${#PEAR_DEPLOY_RUNTIME_CONFIG_PATHS[@]}" \
+    "${PEAR_DEPLOY_RUNTIME_CONFIG_PATHS[@]}" \
+    "${#PEAR_DEPLOY_RSYNC_EXCLUDES[@]}" \
+    "${PEAR_DEPLOY_RSYNC_EXCLUDES[@]}" <<'REMOTE'
 set -euo pipefail
+umask 077
 REMOTE_PATH="$1"
 REMOTE_GIT_COMMON_DIR="$2"
 REMOTE_PEAR_SKILLS_DIR="$3"
 SNAPSHOT_DIR="$4"
-shift 4
+RUNTIME_CONFIG_COUNT="$5"
+shift 5
+RUNTIME_CONFIG_PATHS=("${@:1:RUNTIME_CONFIG_COUNT}")
+shift "$RUNTIME_CONFIG_COUNT"
+RSYNC_EXCLUDE_COUNT="$1"
+shift
 RSYNC_EXCLUDES=("$@")
+if [[ "${#RSYNC_EXCLUDES[@]}" -ne "$RSYNC_EXCLUDE_COUNT" ]]; then
+    echo "invalid snapshot rsync exclude argument count" >&2
+    exit 1
+fi
 
-install -d -m 755 "$SNAPSHOT_DIR/worktree" "$SNAPSHOT_DIR/git-common"
+install -d -m 700 "$SNAPSHOT_DIR" "$SNAPSHOT_DIR/worktree" "$SNAPSHOT_DIR/git-common"
 rsync -a --delete \
     "${RSYNC_EXCLUDES[@]}" \
     "$REMOTE_PATH/" "$SNAPSHOT_DIR/worktree/"
@@ -559,8 +756,60 @@ if [[ -d "$REMOTE_PEAR_SKILLS_DIR" ]]; then
     rsync -a --delete "$REMOTE_PEAR_SKILLS_DIR/" "$SNAPSHOT_DIR/pear-skills/"
     touch "$SNAPSHOT_DIR/pear-skills.exists"
 fi
+
+: >"$SNAPSHOT_DIR/generated-output.paths"
+for generated_path in \
+    prod-static \
+    static/generated \
+    static/webpack-bundles \
+    static/images/landing-page/hello/generated \
+    locale/en \
+    locale/language_options.json \
+    web/generated \
+    webpack-stats-production.json \
+    staticfiles.json \
+    locale/language_name_map.json; do
+    if [[ -e "$REMOTE_PATH/$generated_path" ]]; then
+        printf '%s\n' "$generated_path" >>"$SNAPSHOT_DIR/generated-output.paths"
+    fi
+done
+if [[ -d "$REMOTE_PATH/locale" ]]; then
+    find "$REMOTE_PATH/locale" -type f -name '*.mo' -printf '%P\n' |
+        sed 's#^#locale/#' >>"$SNAPSHOT_DIR/generated-output.paths"
+    find "$REMOTE_PATH/locale" -type f -name 'mobile.json' -printf '%P\n' |
+        sed 's#^#locale/#' >>"$SNAPSHOT_DIR/generated-output.paths"
+fi
+if [[ -s "$SNAPSHOT_DIR/generated-output.paths" ]]; then
+    tar -C "$REMOTE_PATH" -cpf "$SNAPSHOT_DIR/generated-output.tar" \
+        -T "$SNAPSHOT_DIR/generated-output.paths"
+fi
+
+: >"$SNAPSHOT_DIR/runtime-config.paths"
+for runtime_path in "${RUNTIME_CONFIG_PATHS[@]}"; do
+    if [[ -e "$runtime_path" ]]; then
+        printf '%s\n' "${runtime_path#/}" >>"$SNAPSHOT_DIR/runtime-config.paths"
+    fi
+done
+if [[ -s "$SNAPSHOT_DIR/runtime-config.paths" ]]; then
+    tar -C / -cpf "$SNAPSHOT_DIR/runtime-config.tar" \
+        -T "$SNAPSHOT_DIR/runtime-config.paths"
+fi
 REMOTE
 ROLLBACK_READY=true
+
+if [[ -d "$LOCAL_GIT_COMMON_DIR" ]]; then
+    echo "Syncing Git metadata for this worktree..."
+    ssh_root "install -d -m 755 $REMOTE_GIT_COMMON_DIR"
+    rsync -az --delete \
+        -e "ssh -F $SSH_CONFIG" \
+        "$LOCAL_GIT_COMMON_DIR/" \
+        "root@$IP_ADDRESS:$REMOTE_GIT_COMMON_DIR/"
+fi
+
+build_remote_production_assets
+
+echo "Stopping the coordinated services for source and asset cutover..."
+ssh_root "systemctl stop ${PEAR_DEPLOY_SERVICES[*]}"
 
 echo "Syncing checkout to $REMOTE_PATH..."
 rsync -az --delete \
@@ -576,19 +825,17 @@ rsync -az --delete \
     "$LOCAL_PEAR_SKILLS_DIR/" \
     "root@$IP_ADDRESS:$REMOTE_PEAR_SKILLS_DIR/"
 
-if [[ -d "$LOCAL_GIT_COMMON_DIR" ]]; then
-    echo "Syncing Git metadata for this worktree..."
-    ssh_root "install -d -m 755 $REMOTE_GIT_COMMON_DIR"
-    rsync -az --delete \
-        -e "ssh -F $SSH_CONFIG" \
-        "$LOCAL_GIT_COMMON_DIR/" \
-        "root@$IP_ADDRESS:$REMOTE_GIT_COMMON_DIR/"
-fi
+cut_over_remote_production_assets
 
 ssh_root "chown -R zulipdev:zulipdev $REMOTE_PATH"
 ssh_root 'chown -R zulipdev:zulipdev /home/zulipdev/.git 2>/dev/null || true'
 ssh_root "chown -R zulipdev:zulipdev $REMOTE_PEAR_DIR"
 ssh_root "sudo -Hu zulipdev git config --global --add safe.directory $REMOTE_PATH"
+
+echo "Installing authenticated Caddy and production-assets service configuration..."
+install_remote_runtime_config
+ssh_root "python3 $REMOTE_PATH/tools/pear_deploy/runtime_config.py verify --repo-root $REMOTE_PATH --fqdn $FQDN"
+ssh_root "systemctl daemon-reload"
 
 if [[ "$RUN_MIGRATE" == true ]]; then
     echo "Applying zerver migrations..."
@@ -598,22 +845,26 @@ else
 fi
 
 echo "Restarting Pear services..."
-RESTART_EPOCH="$(ssh_root 'date +%s')"
-ssh_root "systemctl restart ${PEAR_DEPLOY_SERVICES[*]}"
+ssh_root "systemctl restart caddy ${PEAR_DEPLOY_SERVICES[*]}"
 
-echo "Waiting for https://$FQDN/ to serve..."
+echo "Waiting for authenticated https://$FQDN/ and the internal app to serve..."
 SITE_CODE=""
+INTERNAL_SITE_CODE=""
 for _ in $(seq 1 60); do
-    SITE_CODE="$(curl -kfsS --max-time 10 -o /dev/null -w '%{http_code}' "https://$FQDN/" || true)"
-    if [[ "$SITE_CODE" == "200" || "$SITE_CODE" == "302" || "$SITE_CODE" == "303" ]]; then
+    SITE_CODE="$(curl -ksS --max-time 10 -o /dev/null -w '%{http_code}' "https://$FQDN/" || true)"
+    INTERNAL_SITE_CODE="$(ssh_root "curl -sS --max-time 10 -H 'Host: $FQDN' -o /dev/null -w '%{http_code}' http://127.0.0.1:9991/" || true)"
+    if [[ "$SITE_CODE" == "401" && ( "$INTERNAL_SITE_CODE" == "200" || "$INTERNAL_SITE_CODE" == "302" || "$INTERNAL_SITE_CODE" == "303" ) ]]; then
         break
     fi
     sleep 5
 done
-if [[ "$SITE_CODE" != "200" && "$SITE_CODE" != "302" && "$SITE_CODE" != "303" ]]; then
-    fail "site did not become healthy; last HTTP code: ${SITE_CODE:-none}"
+if [[ "$SITE_CODE" != "401" ]]; then
+    fail "Caddy basic-auth wall did not become healthy; last HTTP code: ${SITE_CODE:-none}"
 fi
-wait_for_frontend_assets "$RESTART_EPOCH"
+if [[ "$INTERNAL_SITE_CODE" != "200" && "$INTERNAL_SITE_CODE" != "302" && "$INTERNAL_SITE_CODE" != "303" ]]; then
+    fail "internal app did not become healthy; last HTTP code: ${INTERNAL_SITE_CODE:-none}"
+fi
+verify_remote_production_assets
 
 if [[ "$RUN_TESTS" == true ]]; then
     echo "Running Pear backend tests on the box..."
@@ -671,7 +922,8 @@ DEPLOYED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
     printf 'zulip_terminal_sha=%s\n' "$LOCAL_TERMINAL_SHA"
     printf 'contract_version=%s\n' "$LOCAL_CONTRACT_VERSION"
     printf 'pear_skills_tree=%s\n' "$LOCAL_PEAR_SKILLS_TREE"
-    printf 'asset_mode=webpack-dev\n'
+    printf 'asset_mode=production-hashed\n'
+    printf 'caddy_auth=basic-auth-required\n'
     printf 'deployed_at=%s\n' "$DEPLOYED_AT"
 } | ssh_root "set -euo pipefail; umask 022; cat > $DEPLOY_RECORD_PATH.tmp; chown zulipdev:zulipdev $DEPLOY_RECORD_PATH.tmp; chmod 644 $DEPLOY_RECORD_PATH.tmp; mv -f $DEPLOY_RECORD_PATH.tmp $DEPLOY_RECORD_PATH"
 

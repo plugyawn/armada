@@ -1161,7 +1161,7 @@ def get_pear_workspace_tree_backend(
         ApiParamConfig("cursor", documentation_status=INTENTIONALLY_UNDOCUMENTED),
     ] = None,
     page_size: Annotated[
-        int,
+        Json[int],
         ApiParamConfig("page_size", documentation_status=INTENTIONALLY_UNDOCUMENTED),
     ] = 200,
 ) -> HttpResponse:
@@ -1235,7 +1235,7 @@ def get_pear_workspace_search_backend(
         ApiParamConfig("q", documentation_status=INTENTIONALLY_UNDOCUMENTED),
     ],
     limit: Annotated[
-        int,
+        Json[int],
         ApiParamConfig("limit", documentation_status=INTENTIONALLY_UNDOCUMENTED),
     ] = 100,
 ) -> HttpResponse:
@@ -1303,6 +1303,73 @@ def _stale_workspace_response(snapshot: WorkspaceSnapshot) -> HttpResponse:
     )
 
 
+def _workspace_version_conflict_response(
+    node: PearWorkspaceNode,
+    snapshot: WorkspaceSnapshot,
+    entry: WorkspaceIndexEntry,
+) -> HttpResponse:
+    try:
+        conflict_snapshot = refresh_workspace_snapshot_after_conflict(
+            node,
+            observed_revision=snapshot.revision,
+        )
+        conflict_entry = conflict_snapshot.index.entry_for_path(entry.path)
+        if conflict_entry.kind != "file":
+            raise WorkspaceEntryIdError("Workspace entry is no longer a file.")
+        if (
+            entry.identity is None
+            or conflict_entry.identity is None
+            or entry.identity.device != conflict_entry.identity.device
+            or entry.identity.inode != conflict_entry.identity.inode
+        ):
+            raise WorkspaceEntryIdError("Workspace entry was replaced.")
+        remote_file = read_workspace_node_file(
+            node,
+            conflict_entry.path,
+            max_bytes=PEAR_WORKSPACE_TEXT_MAX_BYTES,
+            expected_identity=conflict_entry.identity,
+        )
+    except (WorkspaceEntryIdError, WorkspaceEntryNotFoundError, WorkspaceEntryChangedError):
+        return _workspace_error(
+            code="stale_entry",
+            message="Workspace entry changed; refresh before retrying.",
+            status=409,
+            revision=int(node.content_revision),
+        )
+    except WorkspaceFileTooLargeError:
+        return _workspace_error(
+            code="file_too_large",
+            message="Workspace file exceeds the editable size limit.",
+            status=413,
+            revision=int(node.content_revision),
+            data={"max_bytes": PEAR_WORKSPACE_TEXT_MAX_BYTES},
+        )
+    except (WorkspaceSnapshotError, WorkspaceIOError):
+        return _workspace_error(
+            code="workspace_unavailable",
+            message="Could not refresh the conflicting workspace file.",
+            status=503,
+            revision=int(node.content_revision),
+        )
+    data: dict[str, object] = {}
+    remote_payload = _text_file_payload(conflict_snapshot, conflict_entry, remote_file)
+    record_workspace_file_observation(
+        conflict_snapshot.workspace_uuid,
+        conflict_snapshot.revision,
+        conflict_entry.entry_id,
+        remote_file.version,
+    )
+    if remote_payload["editable"]:
+        data["remote_file"] = remote_payload
+    return _workspace_error(
+        code="version_conflict",
+        message="Workspace file changed; reload before saving.",
+        status=409,
+        revision=conflict_snapshot.revision,
+        data=data,
+    )
+
+
 @workspace_server_timing("file_write")
 @typed_endpoint
 def put_pear_workspace_resource_file_backend(
@@ -1327,11 +1394,11 @@ def put_pear_workspace_resource_file_backend(
         ApiParamConfig("base_version", documentation_status=INTENTIONALLY_UNDOCUMENTED),
     ],
     workspace_revision: Annotated[
-        int,
+        Json[int],
         ApiParamConfig("workspace_revision", documentation_status=INTENTIONALLY_UNDOCUMENTED),
     ],
     edit_revision: Annotated[
-        int,
+        Json[int],
         ApiParamConfig("edit_revision", documentation_status=INTENTIONALLY_UNDOCUMENTED),
     ],
 ) -> HttpResponse:
@@ -1532,60 +1599,8 @@ def put_pear_workspace_resource_file_backend(
         if isinstance(latest_snapshot, HttpResponse):
             return latest_snapshot
         return _stale_workspace_response(latest_snapshot)
-    except WorkspaceVersionConflictError:
-        try:
-            conflict_snapshot = refresh_workspace_snapshot_after_conflict(
-                node,
-                observed_revision=snapshot.revision,
-            )
-            conflict_entry = conflict_snapshot.index.entry_for_path(entry.path)
-            if conflict_entry.kind != "file":
-                raise WorkspaceEntryIdError("Workspace entry is no longer a file.")
-            remote_file = read_workspace_node_file(
-                node,
-                conflict_entry.path,
-                max_bytes=PEAR_WORKSPACE_TEXT_MAX_BYTES,
-                expected_identity=conflict_entry.identity,
-            )
-        except (WorkspaceEntryIdError, WorkspaceEntryNotFoundError, WorkspaceEntryChangedError):
-            return _workspace_error(
-                code="stale_entry",
-                message="Workspace entry changed; refresh before retrying.",
-                status=409,
-                revision=int(node.content_revision),
-            )
-        except WorkspaceFileTooLargeError:
-            return _workspace_error(
-                code="file_too_large",
-                message="Workspace file exceeds the editable size limit.",
-                status=413,
-                revision=int(node.content_revision),
-                data={"max_bytes": PEAR_WORKSPACE_TEXT_MAX_BYTES},
-            )
-        except (WorkspaceSnapshotError, WorkspaceIOError):
-            return _workspace_error(
-                code="workspace_unavailable",
-                message="Could not refresh the conflicting workspace file.",
-                status=503,
-                revision=int(node.content_revision),
-            )
-        data: dict[str, object] = {}
-        remote_payload = _text_file_payload(conflict_snapshot, conflict_entry, remote_file)
-        record_workspace_file_observation(
-            conflict_snapshot.workspace_uuid,
-            conflict_snapshot.revision,
-            conflict_entry.entry_id,
-            remote_file.version,
-        )
-        if remote_payload["editable"]:
-            data["remote_file"] = remote_payload
-        return _workspace_error(
-            code="version_conflict",
-            message="Workspace file changed; reload before saving.",
-            status=409,
-            revision=conflict_snapshot.revision,
-            data=data,
-        )
+    except (WorkspaceVersionConflictError, WorkspaceEntryChangedError):
+        return _workspace_version_conflict_response(node, snapshot, entry)
     except WorkspaceFileTooLargeError:
         return _workspace_error(
             code="file_too_large",
@@ -1594,7 +1609,7 @@ def put_pear_workspace_resource_file_backend(
             revision=snapshot.revision,
             data={"max_bytes": PEAR_WORKSPACE_TEXT_MAX_BYTES},
         )
-    except (WorkspaceEntryNotFoundError, WorkspaceEntryChangedError):
+    except WorkspaceEntryNotFoundError:
         return _workspace_error(
             code="stale_entry",
             message="Workspace entry changed; refresh before retrying.",
@@ -1664,7 +1679,7 @@ def post_pear_workspace_entry_backend(
         ApiParamConfig("kind", documentation_status=INTENTIONALLY_UNDOCUMENTED),
     ],
     workspace_revision: Annotated[
-        int,
+        Json[int],
         ApiParamConfig("workspace_revision", documentation_status=INTENTIONALLY_UNDOCUMENTED),
     ],
     content: Annotated[
@@ -1869,7 +1884,7 @@ def patch_pear_workspace_entry_backend(
         ApiParamConfig("destination_path", documentation_status=INTENTIONALLY_UNDOCUMENTED),
     ],
     workspace_revision: Annotated[
-        int,
+        Json[int],
         ApiParamConfig("workspace_revision", documentation_status=INTENTIONALLY_UNDOCUMENTED),
     ],
 ) -> HttpResponse:
@@ -2131,7 +2146,7 @@ def delete_pear_workspace_entry_backend(
         ApiParamConfig("expected_path", documentation_status=INTENTIONALLY_UNDOCUMENTED),
     ],
     workspace_revision: Annotated[
-        int,
+        Json[int],
         ApiParamConfig("workspace_revision", documentation_status=INTENTIONALLY_UNDOCUMENTED),
     ],
     recursive: Annotated[
@@ -2394,7 +2409,7 @@ def get_pear_workspace_history_backend(
         ApiParamConfig("cursor", documentation_status=INTENTIONALLY_UNDOCUMENTED),
     ] = None,
     limit: Annotated[
-        int,
+        Json[int],
         ApiParamConfig("limit", documentation_status=INTENTIONALLY_UNDOCUMENTED),
     ] = 50,
 ) -> HttpResponse:

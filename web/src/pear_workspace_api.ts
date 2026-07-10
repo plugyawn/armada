@@ -24,7 +24,7 @@ const pear_workspace_capabilities_schema = z.object({
 
 const pear_workspace_limits_schema = z.object({
     text_file_max_bytes: z.number(),
-    raw_file_max_bytes: z.number(),
+    raw_file_max_bytes: z.nullable(z.number()),
 });
 
 export const pear_workspace_descriptor_schema = z.object({

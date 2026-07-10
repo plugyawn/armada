@@ -39,13 +39,13 @@ export function pear_workspace_api_error_message(error: PearWorkspaceApiError): 
 export function pear_workspace_initial_preview(
     workspace_id: string,
     entry: PearWorkspaceEntry,
-    limits: {rawBytes: number; textBytes: number},
+    limits: {rawBytes: number | null; textBytes: number},
     raw_url: typeof pear_workspace_raw_url,
 ): PearWorkspaceEditorSurface | undefined {
     const extension = extension_for_path(entry.path);
     const size = entry.size ?? 0;
     if (raster_extensions.has(extension)) {
-        if (size > limits.rawBytes) {
+        if (limits.rawBytes !== null && size > limits.rawBytes) {
             return {
                 kind: "oversize",
                 entry,
@@ -56,7 +56,7 @@ export function pear_workspace_initial_preview(
         return {kind: "raster", entry, rawUrl: raw_url(workspace_id, entry.entry_id)};
     }
     if (binary_extensions.has(extension)) {
-        if (size > limits.rawBytes) {
+        if (limits.rawBytes !== null && size > limits.rawBytes) {
             return {
                 kind: "oversize",
                 entry,
@@ -71,7 +71,7 @@ export function pear_workspace_initial_preview(
             kind: "oversize",
             entry,
             maxBytes: limits.textBytes,
-            rawAvailable: size <= limits.rawBytes,
+            rawAvailable: limits.rawBytes === null || size <= limits.rawBytes,
         };
     }
     return undefined;

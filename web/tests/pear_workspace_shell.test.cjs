@@ -83,6 +83,7 @@ function harness(workspace_id) {
     const searches = [];
     const refreshes = [];
     const editors = [];
+    const file_controllers = [];
     const abortable = (record) => ({abort: () => (record.aborted = true)});
 
     function create_editor(options) {
@@ -145,6 +146,30 @@ function harness(workspace_id) {
         return state;
     }
 
+    function create_files(options) {
+        const state = {
+            options,
+            contexts: [],
+            destroyed: false,
+            updateContext(context) {
+                this.contexts.push(context);
+            },
+            getDebugState() {
+                return {
+                    menuOpen: false,
+                    dialogKind: undefined,
+                    mutationBusy: false,
+                    awaitingRevision: undefined,
+                };
+            },
+            destroy() {
+                this.destroyed = true;
+            },
+        };
+        file_controllers.push(state);
+        return state;
+    }
+
     const controller = workspace_shell.create_pear_workspace_shell({
         root,
         workspaceId: workspace_id,
@@ -173,6 +198,7 @@ function harness(workspace_id) {
                 return `/raw/${id}/${entry_id}${download ? "/download" : ""}`;
             },
             createEditor: create_editor,
+            createFiles: create_files,
         },
     });
 
@@ -203,6 +229,7 @@ function harness(workspace_id) {
         searches,
         refreshes,
         editors,
+        file_controllers,
         send_descriptor,
         send_tree,
         click,
@@ -377,3 +404,126 @@ run_test(
         second.root.remove();
     },
 );
+
+run_test("file mutations reconcile tabs and force revision-safe descriptor rebinds", async () => {
+    const test = harness("workspace-mutations");
+    const first = descriptor("workspace-mutations", 1, {
+        capabilities: {
+            read_file: true,
+            write_file: true,
+            refresh: true,
+            create_entry: true,
+            rename_entry: true,
+            delete_entry: true,
+            history: true,
+        },
+    });
+    test.send_descriptor(first);
+    const docs = entry("docs", "directory");
+    test.send_tree(0, first.root, [docs]);
+    assert.equal(test.file_controllers[0].contexts.at(-1).readmeState, "absent");
+    test.click(test.root.querySelector("[data-entry-id='r1:docs']"));
+    const a = entry("docs/A.md");
+    const b = entry("docs/B.md");
+    test.send_tree(1, docs, [a, b]);
+    test.click(test.root.querySelector("[data-entry-id='r1:docs/A.md']"), "dblclick");
+    test.click(test.root.querySelector("[data-entry-id='r1:docs/B.md']"), "dblclick");
+    const opens_before_mutation = test.editors[0].opens.length;
+
+    const archive = entry("archive", "directory", {entry_id: "r2:archive"});
+    test.file_controllers[0].options.onMutation({
+        operation: "rename",
+        sourcePath: "docs",
+        destinationPath: "archive",
+        kind: "directory",
+        mutation: {
+            operation: "rename",
+            workspace_uuid: "workspace-mutations",
+            workspace_revision: 2,
+            previous_entry_id: docs.entry_id,
+            entry: archive,
+            path: "archive",
+        },
+    });
+    assert.deepEqual(
+        test.controller.getDebugState().tabs.map((tab) => tab.path),
+        ["archive/A.md", "archive/B.md"],
+    );
+    assert.equal(test.controller.getDebugState().activePath, "archive/B.md");
+    assert.equal(test.refreshes.length, 1);
+    assert.equal(test.file_controllers[0].contexts.at(-1).authorityStale, true);
+    assert.equal(test.file_controllers[0].contexts.at(-1).activeEntry, undefined);
+    assert.equal(test.editors[0].opens.length, opens_before_mutation);
+
+    test.refreshes[0].callbacks.success({changed: false, workspace: first});
+    assert.equal(test.file_controllers[0].contexts.at(-1).authorityStale, true);
+    test.click(test.root.querySelector("[data-tab-path='archive/B.md']"));
+    assert.equal(
+        test.editors[0].opens.length,
+        opens_before_mutation,
+        "a refresh below the mutation receipt revision cannot revive stale IDs",
+    );
+    test.controller.refresh();
+    assert.equal(test.refreshes.length, 2);
+    const second = descriptor("workspace-mutations", 2);
+    test.refreshes[1].callbacks.success({changed: true, workspace: second});
+    const tab_rebind = test.searches.find((request) => request.query === "archive/B.md");
+    assert.ok(tab_rebind !== undefined);
+    const rebound_b = entry("archive/B.md", "file", {entry_id: "r2:archive/B.md"});
+    tab_rebind.callbacks.success({
+        workspace_uuid: "workspace-mutations",
+        workspace_revision: 2,
+        query: "archive/B.md",
+        entries: [{...rebound_b, ancestors: [second.root, archive]}],
+    });
+    assert.equal(test.editors[0].opens.at(-1).entry.entry_id, "r2:archive/B.md");
+
+    test.file_controllers[0].options.onMutation({
+        operation: "delete",
+        sourcePath: "archive",
+        destinationPath: undefined,
+        kind: "directory",
+        mutation: {
+            operation: "delete",
+            workspace_uuid: "workspace-mutations",
+            workspace_revision: 3,
+            previous_entry_id: archive.entry_id,
+            entry: null,
+            path: "archive",
+            removed_entries: 3,
+        },
+    });
+    assert.deepEqual(test.controller.getDebugState().tabs, []);
+    assert.equal(test.controller.getDebugState().activePath, undefined);
+    assert.equal(test.refreshes.length, 3);
+    const third = descriptor("workspace-mutations", 3);
+    test.refreshes[2].callbacks.success({changed: true, workspace: third});
+
+    const created = entry("New.md", "file", {entry_id: "r4:New.md"});
+    test.file_controllers[0].options.onMutation({
+        operation: "create",
+        sourcePath: undefined,
+        destinationPath: "New.md",
+        kind: "file",
+        mutation: {
+            operation: "create",
+            workspace_uuid: "workspace-mutations",
+            workspace_revision: 4,
+            previous_entry_id: null,
+            entry: created,
+            path: "New.md",
+        },
+    });
+    assert.deepEqual(
+        test.controller.getDebugState().tabs.map((tab) => [tab.path, tab.workspaceRevision]),
+        [["New.md", 4]],
+    );
+    assert.equal(test.refreshes.length, 4);
+    const fourth = descriptor("workspace-mutations", 4);
+    test.refreshes[3].callbacks.success({changed: true, workspace: fourth});
+    assert.equal(test.editors[0].opens.at(-1).entry.entry_id, "r4:New.md");
+
+    await test.controller.destroy();
+    assert.equal(test.file_controllers[0].destroyed, true);
+    test.root.remove();
+});

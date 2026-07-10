@@ -11,6 +11,13 @@ import type {
 import {create_pear_workspace_editor} from "./pear_workspace_editor.ts";
 import type {PearWorkspaceExplorerController} from "./pear_workspace_explorer.ts";
 import {create_pear_workspace_explorer} from "./pear_workspace_explorer.ts";
+import type {
+    PearWorkspaceFileMutationEvent,
+    PearWorkspaceFilesController,
+    PearWorkspaceFilesOptions,
+    PearWorkspaceReadmeState,
+} from "./pear_workspace_files.ts";
+import {create_pear_workspace_files} from "./pear_workspace_files.ts";
 import type {PearWorkspaceShellTab} from "./pear_workspace_shell_view.ts";
 import {
     render_pear_workspace_breadcrumb,
@@ -45,6 +52,7 @@ export type PearWorkspaceShellDependencies = {
     refresh: typeof pear_workspace_api.refresh_pear_workspace;
     rawUrl: typeof pear_workspace_api.pear_workspace_raw_url;
     createEditor: (options: PearWorkspaceEditorOptions) => PearWorkspaceEditorController;
+    createFiles: (options: PearWorkspaceFilesOptions) => PearWorkspaceFilesController;
 };
 
 export type PearWorkspaceShellOptions = {
@@ -97,6 +105,7 @@ const default_dependencies: PearWorkspaceShellDependencies = {
     refresh: pear_workspace_api.refresh_pear_workspace,
     rawUrl: pear_workspace_api.pear_workspace_raw_url,
     createEditor: create_pear_workspace_editor,
+    createFiles: create_pear_workspace_files,
 };
 
 function required_element(root: ParentNode, selector: string): HTMLElement {
@@ -185,6 +194,13 @@ export function create_pear_workspace_shell(
         "[data-action='toggle-explorer']",
         is_button,
     );
+    const file_menu_button = required_typed_element(
+        options.root,
+        "[data-role='file-menu-button']",
+        is_button,
+    );
+    const file_menu = required_element(options.root, "[data-role='file-menu']");
+    const file_dialog_layer = required_element(options.root, "[data-role='file-dialog-layer']");
 
     let descriptor: PearWorkspaceDescriptor | undefined;
     let tree: PearWorkspaceTreeState | undefined;
@@ -199,10 +215,15 @@ export function create_pear_workspace_shell(
     let descriptor_request: AbortableRequest | undefined;
     let search_request: AbortableRequest | undefined;
     let refresh_request: AbortableRequest | undefined;
+    let reveal_request: AbortableRequest | undefined;
     let search_generation = 0;
     let refresh_generation = 0;
+    let reveal_generation = 0;
+    let pending_reveal: {path: string; revision: number} | undefined;
+    let required_workspace_revision: number | undefined;
     const directory_requests = new Map<string, AbortableRequest>();
     const rebind_requests = new Map<string, AbortableRequest>();
+    let files: PearWorkspaceFilesController | undefined;
     let ready_resolve: (() => void) | undefined;
     const descriptor_ready = new Promise<void>((resolve) => {
         ready_resolve = resolve;
@@ -217,16 +238,55 @@ export function create_pear_workspace_shell(
         }
     })();
 
+    const active_tab = (): WorkspaceTab | undefined => tabs.find((tab) => tab.path === active_path);
+
+    const readme_state = (): PearWorkspaceReadmeState => {
+        if (
+            [...(tree?.entries.values() ?? [])].some(
+                (entry) => entry.kind === "file" && entry.path.toLowerCase() === "readme.md",
+            )
+        ) {
+            return "present";
+        }
+        const root = tree?.directories.get(tree.rootId);
+        return root?.complete === true ? "absent" : "unknown";
+    };
+
+    const update_files_context = (): void => {
+        const current_tab = active_tab();
+        const identities_current =
+            !authority_stale &&
+            descriptor !== undefined &&
+            tree?.workspaceRevision === descriptor.workspace_revision;
+        const selected_entry =
+            identities_current && tree?.selectedId !== undefined
+                ? tree.entries.get(tree.selectedId)
+                : undefined;
+        const active_entry =
+            identities_current &&
+            current_tab !== undefined &&
+            current_tab.workspaceRevision === descriptor?.workspace_revision
+                ? current_tab.entry
+                : undefined;
+        files?.updateContext({
+            descriptor,
+            activeEntry: active_entry,
+            selectedEntry: selected_entry,
+            readmeState: readme_state(),
+            authorityStale: authority_stale,
+        });
+    };
+
     const render_tree = (): void => {
         if (tree !== undefined) {
             explorer.render(tree, filter);
         }
+        update_files_context();
     };
-
-    const active_tab = (): WorkspaceTab | undefined => tabs.find((tab) => tab.path === active_path);
 
     const render_tabs = (): void => {
         render_pear_workspace_tabs(tabs_root, tabs, active_path);
+        update_files_context();
     };
 
     const render_breadcrumb = (): void => {
@@ -294,7 +354,12 @@ export function create_pear_workspace_shell(
                 render_links();
             }
             authority_stale = true;
+            required_workspace_revision = Math.max(
+                required_workspace_revision ?? event.workspaceRevision,
+                event.workspaceRevision,
+            );
             status.textContent = "Refreshing file identities…";
+            update_files_context();
             refresh_workspace();
         },
     });
@@ -459,6 +524,155 @@ export function create_pear_workspace_shell(
         },
     });
 
+    const reveal_path = (path: string): void => {
+        if (destroyed || authority_stale || descriptor === undefined || tree === undefined) {
+            return;
+        }
+        const cached = [...tree.entries.values()].find((entry) => entry.path === path);
+        if (cached !== undefined) {
+            tree = select_pear_workspace_entry(tree, cached.entry_id);
+            render_tree();
+            explorer.focusEntry(cached.entry_id);
+            return;
+        }
+        reveal_request?.abort();
+        reveal_generation += 1;
+        const generation = reveal_generation;
+        const workspace_revision = descriptor.workspace_revision;
+        reveal_request = dependencies.search(descriptor.uuid, path, 100, {
+            success(response) {
+                if (
+                    destroyed ||
+                    generation !== reveal_generation ||
+                    authority_stale ||
+                    tree === undefined ||
+                    response.workspace_revision !== workspace_revision ||
+                    response.workspace_revision !== descriptor?.workspace_revision
+                ) {
+                    return;
+                }
+                reveal_request = undefined;
+                const exact = response.entries.find((entry) => entry.path === path);
+                if (exact === undefined) {
+                    status.textContent = `${path} is not in this workspace`;
+                    return;
+                }
+                tree = reveal_pear_workspace_search_result(tree, response, exact.entry_id);
+                render_tree();
+                explorer.focusEntry(exact.entry_id);
+            },
+            error(error) {
+                if (destroyed || generation !== reveal_generation || authority_stale) {
+                    return;
+                }
+                reveal_request = undefined;
+                status.textContent = error_message(error);
+            },
+        });
+    };
+
+    const path_is_entry_or_child = (path: string, entry_path: string): boolean =>
+        path === entry_path || path.startsWith(`${entry_path}/`);
+
+    const renamed_path = (path: string, source_path: string, destination_path: string): string =>
+        `${destination_path}${path.slice(source_path.length)}`;
+
+    const reconcile_file_mutation = (event: PearWorkspaceFileMutationEvent): void => {
+        authority_stale = true;
+        required_workspace_revision = Math.max(
+            required_workspace_revision ?? event.mutation.workspace_revision,
+            event.mutation.workspace_revision,
+        );
+        search_request?.abort();
+        search_request = undefined;
+        search_generation += 1;
+        reveal_request?.abort();
+        reveal_request = undefined;
+        reveal_generation += 1;
+        for (const request of directory_requests.values()) {
+            request.abort();
+        }
+        directory_requests.clear();
+        for (const request of rebind_requests.values()) {
+            request.abort();
+        }
+        rebind_requests.clear();
+
+        if (event.operation === "create") {
+            const created = event.mutation.entry;
+            if (created !== null) {
+                pending_reveal = {
+                    path: created.path,
+                    revision: event.mutation.workspace_revision,
+                };
+                if (created.kind === "file") {
+                    const existing = tabs.find((tab) => tab.path === created.path);
+                    if (existing === undefined) {
+                        tabs.push({
+                            path: created.path,
+                            entry: created,
+                            preview: false,
+                            dirty: false,
+                            workspaceRevision: event.mutation.workspace_revision,
+                        });
+                    } else {
+                        existing.entry = created;
+                        existing.preview = false;
+                        existing.dirty = false;
+                        existing.workspaceRevision = event.mutation.workspace_revision;
+                    }
+                    active_path = created.path;
+                }
+            }
+        } else if (
+            event.operation === "rename" &&
+            event.sourcePath !== undefined &&
+            event.destinationPath !== undefined
+        ) {
+            const source_path = event.sourcePath;
+            const destination_path = event.destinationPath;
+            pending_reveal = {
+                path: destination_path,
+                revision: event.mutation.workspace_revision,
+            };
+            for (const tab of tabs) {
+                if (!path_is_entry_or_child(tab.path, source_path)) {
+                    continue;
+                }
+                const next_path = renamed_path(tab.path, source_path, destination_path);
+                tab.path = next_path;
+                if (tab.entry.path === source_path && event.mutation.entry?.kind === "file") {
+                    tab.entry = event.mutation.entry;
+                    tab.workspaceRevision = event.mutation.workspace_revision;
+                } else {
+                    tab.entry = {
+                        ...tab.entry,
+                        path: next_path,
+                        name: next_path.split("/").at(-1) ?? next_path,
+                    };
+                }
+            }
+            if (active_path !== undefined && path_is_entry_or_child(active_path, source_path)) {
+                active_path = renamed_path(active_path, source_path, destination_path);
+            }
+        } else if (event.operation === "delete" && event.sourcePath !== undefined) {
+            const source_path = event.sourcePath;
+            for (let index = tabs.length - 1; index >= 0; index -= 1) {
+                if (path_is_entry_or_child(tabs[index]!.path, source_path)) {
+                    tabs.splice(index, 1);
+                }
+            }
+            if (active_path !== undefined && path_is_entry_or_child(active_path, source_path)) {
+                active_path = tabs.at(-1)?.path;
+            }
+        }
+        render_tabs();
+        render_breadcrumb();
+        render_links();
+        status.textContent = "Refreshing file identities…";
+        refresh_workspace();
+    };
+
     const resolve_tab_path = (tab: WorkspaceTab): void => {
         if (descriptor === undefined || rebind_requests.has(tab.path)) {
             return;
@@ -467,7 +681,11 @@ export function create_pear_workspace_shell(
         const request = dependencies.search(descriptor.uuid, tab.path, 100, {
             success(response) {
                 rebind_requests.delete(tab.path);
-                if (destroyed || response.workspace_revision !== descriptor?.workspace_revision) {
+                if (
+                    destroyed ||
+                    authority_stale ||
+                    response.workspace_revision !== descriptor?.workspace_revision
+                ) {
                     return;
                 }
                 const rebound = response.entries.find(
@@ -488,7 +706,9 @@ export function create_pear_workspace_shell(
             },
             error(error) {
                 rebind_requests.delete(tab.path);
-                status.textContent = error_message(error);
+                if (!authority_stale) {
+                    status.textContent = error_message(error);
+                }
             },
         });
         if (request !== undefined) {
@@ -535,6 +755,11 @@ export function create_pear_workspace_shell(
         } else if (active_path === undefined && next.default_entry?.kind === "file") {
             activate_entry(next.default_entry, false);
         }
+        if (pending_reveal !== undefined && next.workspace_revision >= pending_reveal.revision) {
+            const {path} = pending_reveal;
+            pending_reveal = undefined;
+            reveal_path(path);
+        }
     };
 
     const refresh_workspace = (): void => {
@@ -551,6 +776,16 @@ export function create_pear_workspace_shell(
                     return;
                 }
                 refresh_request = undefined;
+                if (
+                    required_workspace_revision !== undefined &&
+                    response.workspace.workspace_revision < required_workspace_revision
+                ) {
+                    authority_stale = true;
+                    update_files_context();
+                    status.textContent = `Workspace refresh has not reached revision ${required_workspace_revision}; refresh again`;
+                    return;
+                }
+                required_workspace_revision = undefined;
                 apply_descriptor(response.workspace);
                 status.textContent = response.changed
                     ? "Workspace updated"
@@ -566,6 +801,26 @@ export function create_pear_workspace_shell(
         });
         refresh_request = request;
     };
+
+    files = dependencies.createFiles({
+        menuButton: file_menu_button,
+        menu: file_menu,
+        dialogLayer: file_dialog_layer,
+        announce(message) {
+            status.textContent = message;
+        },
+        onMutation: reconcile_file_mutation,
+        onStaleAuthority() {
+            authority_stale = true;
+            update_files_context();
+            status.textContent = "Refreshing file identities…";
+            refresh_workspace();
+        },
+        onReveal(entry) {
+            reveal_path(entry.path);
+        },
+    });
+    update_files_context();
 
     const on_search_input = (): void => {
         filter = search_input.value;
@@ -705,6 +960,7 @@ export function create_pear_workspace_shell(
             descriptor_request?.abort();
             search_request?.abort();
             refresh_request?.abort();
+            reveal_request?.abort();
             for (const request of directory_requests.values()) {
                 request.abort();
             }
@@ -740,6 +996,8 @@ export function create_pear_workspace_shell(
             options.root.removeEventListener("click", on_root_click);
             search_input.removeEventListener("input", on_search_input);
             search_form.removeEventListener("submit", on_search_submit);
+            files?.destroy();
+            files = undefined;
             explorer.destroy();
             await editor.destroy();
             options.root.replaceChildren();

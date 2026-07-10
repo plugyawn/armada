@@ -100,7 +100,7 @@ export type PearWorkspaceEditorController = {
     activateWorkspace: (
         workspaceId: string,
         workspaceRevision: number,
-        limits: {rawBytes: number; textBytes: number},
+        limits: {rawBytes: number | null; textBytes: number},
         preferences?: PearWorkspaceEditorPreferences,
     ) => void;
     open: (entry: PearWorkspaceEntry) => Promise<void>;

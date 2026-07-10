@@ -501,6 +501,15 @@ run_test("print hotkey", ({override}) => {
     // Everywhere else, the browser's print dialog is not intercepted.
     override(overlays, "info_overlay_open", () => false);
     assert.equal(hotkey.process_keydown({key: "p", ctrlKey: true}), false);
+
+    // Workspace quick-open reuses the registered print chord only while
+    // its cancellable integration event has an active consumer.
+    override(document, "dispatchEvent", (event) => {
+        assert.equal(event.type, "pear:workspace-quick-open");
+        event.preventDefault();
+        return false;
+    });
+    assert.equal(hotkey.process_keydown({key: "p", ctrlKey: true}), true);
 });
 
 run_test("modal open", ({override}) => {

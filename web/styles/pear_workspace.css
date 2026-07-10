@@ -288,6 +288,19 @@
     white-space: nowrap;
 }
 
+.pear-workspace-shell [data-role="breadcrumb"] button {
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+}
+
+.pear-workspace-shell [data-role="breadcrumb"] button:hover {
+    color: var(--color-text-default, inherit);
+    text-decoration: underline;
+}
+
 .pear-workspace-shell__document-actions {
     display: flex;
     flex: 0 0 auto;

@@ -426,10 +426,54 @@ export function create_pear_workspace_explorer(
         }
     };
 
+    const on_search_result_keydown = (event: KeyboardEvent): void => {
+        const result_options = [
+            ...options.searchResultsRoot.querySelectorAll<HTMLButtonElement>(
+                "[data-search-entry-id]",
+            ),
+        ];
+        const target = event.target;
+        if (!(target instanceof Element)) {
+            return;
+        }
+        const target_button = target.closest<HTMLButtonElement>("[data-search-entry-id]");
+        if (target_button === null) {
+            return;
+        }
+        const index = result_options.indexOf(target_button);
+        if (index === -1) {
+            return;
+        }
+        let next: HTMLButtonElement | undefined;
+        switch (event.key) {
+            case "ArrowDown":
+                next = result_options[(index + 1) % result_options.length];
+                break;
+            case "ArrowUp":
+                next = result_options[(index - 1 + result_options.length) % result_options.length];
+                break;
+            case "Home":
+                next = result_options[0];
+                break;
+            case "End":
+                next = result_options.at(-1);
+                break;
+            case "Enter":
+                event.preventDefault();
+                target_button.click();
+                return;
+            default:
+                return;
+        }
+        event.preventDefault();
+        next?.focus();
+    };
+
     options.treeRoot.addEventListener("click", on_click);
     options.treeRoot.addEventListener("dblclick", on_double_click);
     options.treeRoot.addEventListener("keydown", on_keydown);
     options.searchResultsRoot.addEventListener("click", on_search_result_click);
+    options.searchResultsRoot.addEventListener("keydown", on_search_result_keydown);
 
     return {
         render(tree, filter): void {
@@ -468,6 +512,7 @@ export function create_pear_workspace_explorer(
             options.treeRoot.removeEventListener("dblclick", on_double_click);
             options.treeRoot.removeEventListener("keydown", on_keydown);
             options.searchResultsRoot.removeEventListener("click", on_search_result_click);
+            options.searchResultsRoot.removeEventListener("keydown", on_search_result_keydown);
             if (typeahead_timer !== undefined) {
                 clearTimeout(typeahead_timer);
             }

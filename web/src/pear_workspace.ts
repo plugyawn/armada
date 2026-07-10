@@ -9,8 +9,11 @@ export type PearWorkspaceTab = "chat" | "workspace";
 type WorkspaceShellController = {
     ready: Promise<void>;
     refresh: () => void;
+    openQuickOpen: () => void;
     destroy: () => Promise<void>;
 };
+
+const quick_open_event_name = "pear:workspace-quick-open";
 
 let current_tab: PearWorkspaceTab = "chat";
 let current_context_key = "";
@@ -85,6 +88,15 @@ function ensure_pane(): JQuery {
     $feed.after($("<div>").attr("id", "pear-workspace-pane").prop("hidden", true));
     $existing = $pane();
     $existing[0]?.addEventListener("keydown", (event) => {
+        if (
+            event.key.toLocaleLowerCase() === "p" &&
+            (event.ctrlKey || event.metaKey) &&
+            !event.altKey
+        ) {
+            // Let Zulip's hotkey registry translate Cmd/Ctrl+P into the
+            // cancellable workspace quick-open event.
+            return;
+        }
         if (event.key === "Escape" && !event.defaultPrevented) {
             event.preventDefault();
             event.stopPropagation();
@@ -459,6 +471,23 @@ function on_workspace_tab_keydown(this: HTMLButtonElement, event: JQuery.KeyDown
     focus_workspace_tab(next_tab, strip);
 }
 
+async function mount_and_open_quick_open(): Promise<void> {
+    await mount_shell();
+    shell?.openQuickOpen();
+}
+
+function on_quick_open_event(event: Event): void {
+    if (!pane_is_open() || !has_workspace()) {
+        return;
+    }
+    event.preventDefault();
+    if (shell !== undefined) {
+        shell.openQuickOpen();
+        return;
+    }
+    void mount_and_open_quick_open();
+}
+
 export function initialize(): void {
     if (initialized) {
         return;
@@ -466,5 +495,6 @@ export function initialize(): void {
     initialized = true;
     $("body").on("click", ".pear-workspace-mode-tab", on_workspace_tab_click);
     $("body").on("keydown", ".pear-workspace-mode-tab", on_workspace_tab_keydown);
+    document.addEventListener(quick_open_event_name, on_quick_open_event);
     observe_compose_height();
 }

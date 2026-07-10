@@ -966,6 +966,11 @@ function process_hotkey(e: JQuery.KeyDownEvent, hotkey: Hotkey): boolean {
     }
 
     if (event_name === "print") {
+        const quick_open_event = new Event("pear:workspace-quick-open", {cancelable: true});
+        const dispatched = document.dispatchEvent?.(quick_open_event);
+        if (dispatched !== undefined && !dispatched) {
+            return true;
+        }
         // Only the informational overlays have special print
         // handling; everywhere else, the browser's print of the
         // current page (styled by print.css) is what we want.

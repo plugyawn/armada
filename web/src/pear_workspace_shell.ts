@@ -94,6 +94,7 @@ export type PearWorkspaceShellDebugState = {
 export type PearWorkspaceShellController = {
     ready: Promise<void>;
     refresh: () => void;
+    openQuickOpen: () => void;
     getDebugState: () => PearWorkspaceShellDebugState;
     destroy: () => Promise<void>;
 };
@@ -170,6 +171,7 @@ export function create_pear_workspace_shell(
     const explorer_root = required_element(options.root, "#pear-workspace-explorer");
     const tabs_root = required_element(options.root, "[data-role='tabs']");
     const breadcrumb = required_element(options.root, "[data-role='breadcrumb']");
+    const document_panel = required_element(options.root, "#pear-workspace-document-panel");
     const editor_root = required_element(options.root, "[data-role='editor']");
     const nontext_root = required_element(options.root, "[data-role='nontext']");
     const conflict_root = required_element(options.root, "[data-role='conflict']");
@@ -224,6 +226,11 @@ export function create_pear_workspace_shell(
     let pending_reveal: {path: string; revision: number} | undefined;
     let required_workspace_revision: number | undefined;
     let mobile_explorer_open = false;
+    let quick_open_active = false;
+    let quick_open_previous_filter = "";
+    let quick_open_return_focus: HTMLElement | undefined;
+    let quick_open_opened_drawer = false;
+    let quick_open_timer: ReturnType<typeof setTimeout> | undefined;
     const directory_requests = new Map<string, AbortableRequest>();
     const rebind_requests = new Map<string, AbortableRequest>();
     let files: PearWorkspaceFilesController | undefined;
@@ -251,6 +258,53 @@ export function create_pear_workspace_shell(
         } else if (restore_focus && !destroyed) {
             explorer_toggle.focus();
         }
+    };
+
+    const close_quick_open = (restore_focus: boolean): void => {
+        if (!quick_open_active) {
+            return;
+        }
+        quick_open_active = false;
+        if (quick_open_timer !== undefined) {
+            clearTimeout(quick_open_timer);
+            quick_open_timer = undefined;
+        }
+        search_request?.abort();
+        search_request = undefined;
+        search_generation += 1;
+        explorer.renderSearchResults(undefined);
+        search_input.placeholder = "Filter files";
+        search_input.value = quick_open_previous_filter;
+        filter = quick_open_previous_filter;
+        render_tree();
+        if (quick_open_opened_drawer) {
+            set_mobile_explorer_open(false, false);
+        }
+        quick_open_opened_drawer = false;
+        if (restore_focus && quick_open_return_focus?.isConnected === true) {
+            quick_open_return_focus.focus();
+        }
+        quick_open_return_focus = undefined;
+    };
+
+    const open_quick_open = (): void => {
+        if (destroyed) {
+            return;
+        }
+        if (!quick_open_active) {
+            quick_open_active = true;
+            quick_open_previous_filter = search_input.value;
+            quick_open_return_focus =
+                document.activeElement instanceof HTMLElement ? document.activeElement : undefined;
+            quick_open_opened_drawer =
+                !mobile_explorer_open && explorer_toggle.offsetParent !== null;
+            if (quick_open_opened_drawer) {
+                set_mobile_explorer_open(true, false);
+            }
+        }
+        search_input.placeholder = "Quick open files";
+        search_input.focus();
+        search_input.select();
     };
 
     const readme_state = (): PearWorkspaceReadmeState => {
@@ -569,10 +623,17 @@ export function create_pear_workspace_shell(
             render_tree();
             const entry = tree.entries.get(entry_id);
             if (entry !== undefined) {
+                const focus_document = quick_open_active;
+                if (quick_open_active) {
+                    close_quick_open(false);
+                }
                 activate_entry(entry, false);
                 explorer.focusEntry(entry_id);
                 if (mobile_explorer_open && entry.kind === "file") {
-                    set_mobile_explorer_open(false, true);
+                    set_mobile_explorer_open(false, !focus_document);
+                }
+                if (focus_document && entry.kind === "file") {
+                    document_panel.focus();
                 }
             }
         },
@@ -920,11 +981,24 @@ export function create_pear_workspace_shell(
         filter = search_input.value;
         explorer.renderSearchResults(undefined);
         render_tree();
+        if (!quick_open_active) {
+            return;
+        }
+        if (quick_open_timer !== undefined) {
+            clearTimeout(quick_open_timer);
+        }
+        const query = search_input.value.trim();
+        if (query === "") {
+            quick_open_timer = undefined;
+            return;
+        }
+        quick_open_timer = setTimeout(() => {
+            quick_open_timer = undefined;
+            search_workspace(query);
+        }, 120);
     };
 
-    const on_search_submit = (event: SubmitEvent): void => {
-        event.preventDefault();
-        const query = search_input.value.trim();
+    const search_workspace = (query: string): void => {
         if (descriptor === undefined || query === "") {
             return;
         }
@@ -949,6 +1023,27 @@ export function create_pear_workspace_shell(
                 status.textContent = error_message(error);
             },
         });
+    };
+
+    const on_search_submit = (event: SubmitEvent): void => {
+        event.preventDefault();
+        if (quick_open_timer !== undefined) {
+            clearTimeout(quick_open_timer);
+            quick_open_timer = undefined;
+        }
+        search_workspace(search_input.value.trim());
+    };
+
+    const on_search_input_keydown = (event: KeyboardEvent): void => {
+        if (event.key !== "ArrowDown") {
+            return;
+        }
+        const first_result =
+            search_results.querySelector<HTMLButtonElement>("[data-search-entry-id]");
+        if (first_result !== null) {
+            event.preventDefault();
+            first_result.focus();
+        }
     };
 
     const on_root_click = (event: MouseEvent): void => {
@@ -994,6 +1089,11 @@ export function create_pear_workspace_shell(
         if (tab_path !== undefined) {
             activate_tab_path(tab_path, true);
         }
+        const breadcrumb_path =
+            target.closest<HTMLElement>("[data-breadcrumb-path]")?.dataset["breadcrumbPath"];
+        if (breadcrumb_path !== undefined) {
+            reveal_path(breadcrumb_path);
+        }
     };
 
     const on_root_keydown = (event: KeyboardEvent): void => {
@@ -1035,6 +1135,12 @@ export function create_pear_workspace_shell(
             return;
         }
         if (event.key === "Escape") {
+            if (quick_open_active) {
+                event.preventDefault();
+                event.stopPropagation();
+                close_quick_open(true);
+                return;
+            }
             if (mobile_explorer_open) {
                 event.preventDefault();
                 event.stopPropagation();
@@ -1102,6 +1208,7 @@ export function create_pear_workspace_shell(
     options.root.addEventListener("keydown", on_root_keydown);
     document.addEventListener("click", on_document_click);
     search_input.addEventListener("input", on_search_input);
+    search_input.addEventListener("keydown", on_search_input_keydown);
     search_form.addEventListener("submit", on_search_submit);
 
     load_descriptor();
@@ -1109,6 +1216,7 @@ export function create_pear_workspace_shell(
     return {
         ready,
         refresh: refresh_workspace,
+        openQuickOpen: open_quick_open,
         getDebugState(): PearWorkspaceShellDebugState {
             return {
                 descriptor,
@@ -1163,7 +1271,12 @@ export function create_pear_workspace_shell(
             options.root.removeEventListener("keydown", on_root_keydown);
             document.removeEventListener("click", on_document_click);
             search_input.removeEventListener("input", on_search_input);
+            search_input.removeEventListener("keydown", on_search_input_keydown);
             search_form.removeEventListener("submit", on_search_submit);
+            if (quick_open_timer !== undefined) {
+                clearTimeout(quick_open_timer);
+                quick_open_timer = undefined;
+            }
             files?.destroy();
             files = undefined;
             explorer.destroy();

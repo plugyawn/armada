@@ -205,6 +205,24 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
             )
 
         self.assertNotIn(str(repo), descriptor_result.content.decode())
+        self.assertRegex(
+            descriptor_result.headers["Server-Timing"],
+            r'pear_workspace;dur=[0-9.]+;desc="descriptor"',
+        )
+        self.assertIn(
+            'pear_workspace_cache;desc="rebuild"', descriptor_result.headers["Server-Timing"]
+        )
+        self.assertGreaterEqual(
+            int(descriptor_result.headers["X-Pear-Workspace-Operation-Count"]),
+            1,
+        )
+        self.assertRegex(
+            search_result.headers["Server-Timing"],
+            r'pear_workspace;dur=[0-9.]+;desc="search"',
+        )
+        self.assertIn(
+            'pear_workspace_cache;desc="local-hit"', search_result.headers["Server-Timing"]
+        )
         self.assertEqual(descriptor["uuid"], str(node.uuid))
         self.assertEqual(descriptor["default_path"], "README.md")
         self.assertEqual(descriptor["default_entry"]["path"], "README.md")

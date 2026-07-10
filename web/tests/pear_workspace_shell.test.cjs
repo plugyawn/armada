@@ -114,6 +114,7 @@ function harness(workspace_id) {
                 },
             },
             closes: 0,
+            modes: [],
             activateWorkspace(id, revision, limits, preferences) {
                 this.activations.push({id, revision, limits, preferences});
             },
@@ -128,7 +129,8 @@ function harness(workspace_id) {
                     tabBeforeOpen: tab !== null,
                 });
             },
-            async switchMode() {
+            async switchMode(mode) {
+                this.modes.push(mode);
                 return true;
             },
             async closeActive() {
@@ -306,6 +308,46 @@ run_test("explorer splitter is keyboard-operable and persists its bounded width"
     assert.equal(restored.controller.getDebugState().explorerWidth, 464);
     await restored.controller.destroy();
     restored.root.remove();
+});
+
+run_test("URL path and mode follow navigation and popstate without remounting", async () => {
+    window.history.replaceState(
+        {},
+        "",
+        "/?pear_view=workspace&pear_workspace=workspace-location&pear_path=A.md&pear_mode=rich",
+    );
+    const test = harness("workspace-location");
+    const a = entry("A.md");
+    const b = entry("B.md");
+    const current = descriptor("workspace-location", 1, {
+        default_path: "A.md",
+        default_entry: a,
+    });
+    test.send_descriptor(current);
+    test.send_tree(0, current.root, [a, b]);
+    await Promise.resolve();
+    assert.equal(test.controller.getDebugState().activePath, "A.md");
+    assert.deepEqual(test.editors[0].modes, ["rich"]);
+
+    test.click(test.root.querySelector("[data-entry-id='r1:B.md']"));
+    const location = new URL(window.location.href);
+    assert.equal(location.searchParams.get("pear_path"), "B.md");
+    assert.equal(location.searchParams.get("pear_mode"), "source");
+
+    window.history.replaceState(
+        {},
+        "",
+        "/?pear_view=workspace&pear_workspace=workspace-location&pear_path=A.md&pear_mode=source",
+    );
+    window.dispatchEvent(new window.PopStateEvent("popstate"));
+    await Promise.resolve();
+    assert.equal(test.controller.getDebugState().activePath, "A.md");
+    assert.equal(test.editors[0].modes.at(-1), "source");
+    assert.equal(test.editors.length, 1, "history navigation keeps the shell mounted");
+
+    await test.controller.destroy();
+    test.root.remove();
+    window.history.replaceState({}, "", "/");
 });
 
 run_test("file tabs close safely, select a neighbor, and reject unsaved closure", async () => {

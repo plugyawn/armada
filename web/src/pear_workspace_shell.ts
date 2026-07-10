@@ -19,6 +19,10 @@ import type {
     PearWorkspaceReadmeState,
 } from "./pear_workspace_files.ts";
 import {create_pear_workspace_files} from "./pear_workspace_files.ts";
+import {
+    read_pear_workspace_location,
+    write_pear_workspace_location,
+} from "./pear_workspace_location.ts";
 import type {PearWorkspaceShellTab} from "./pear_workspace_shell_view.ts";
 import {
     render_pear_workspace_breadcrumb,
@@ -66,6 +70,7 @@ export type PearWorkspaceShellOptions = {
 };
 
 type WorkspaceTab = PearWorkspaceShellTab;
+type LocationHistoryMode = "none" | "push" | "replace";
 
 type CachedWorkspaceShellState = {
     tabs: WorkspaceTab[];
@@ -121,6 +126,7 @@ export type PearWorkspaceShellController = {
     ready: Promise<void>;
     refresh: () => void;
     openQuickOpen: () => void;
+    applyLocation: () => void;
     getDebugState: () => PearWorkspaceShellDebugState;
     destroy: () => Promise<void>;
 };
@@ -269,6 +275,7 @@ export function create_pear_workspace_shell(
     let quick_open_timer: ReturnType<typeof setTimeout> | undefined;
     let compose_integration_loading = false;
     let closing_tab = false;
+    let location_mode_request: "rich" | "source" | undefined;
     let explorer_width = restored_explorer_width(options.workspaceId);
     let resize_pointer_id: number | undefined;
     const directory_requests = new Map<string, AbortableRequest>();
@@ -289,6 +296,19 @@ export function create_pear_workspace_shell(
     })();
 
     const active_tab = (): WorkspaceTab | undefined => tabs.find((tab) => tab.path === active_path);
+
+    const sync_location = (history_mode: Exclude<LocationHistoryMode, "none">): void => {
+        const mode = editor_snapshot?.activeDocument?.editorMode ?? editor.getPreferences().mode;
+        write_pear_workspace_location(
+            {
+                view: "workspace",
+                workspaceId: options.workspaceId,
+                path: active_path ?? null,
+                mode: active_path === undefined ? null : mode,
+            },
+            history_mode,
+        );
+    };
 
     const set_explorer_width = (width: number, persist: boolean): void => {
         explorer_width = Math.min(
@@ -551,7 +571,22 @@ export function create_pear_workspace_shell(
         },
     });
 
-    const activate_entry = (entry: PearWorkspaceEntry, pin: boolean): void => {
+    const open_entry = async (entry: PearWorkspaceEntry): Promise<void> => {
+        await editor.open(entry);
+        if (destroyed || active_path !== entry.path || location_mode_request === undefined) {
+            return;
+        }
+        const requested_mode = location_mode_request;
+        location_mode_request = undefined;
+        await editor.switchMode(requested_mode);
+        sync_location("replace");
+    };
+
+    const activate_entry = (
+        entry: PearWorkspaceEntry,
+        pin: boolean,
+        history_mode: LocationHistoryMode = "push",
+    ): void => {
         if (
             destroyed ||
             authority_stale ||
@@ -599,7 +634,11 @@ export function create_pear_workspace_shell(
         render_tabs();
         render_breadcrumb();
         render_links();
-        void editor.open(entry);
+        if (history_mode !== "none") {
+            location_mode_request = undefined;
+            sync_location(history_mode);
+        }
+        void open_entry(entry);
     };
 
     const focus_file_tab = (path: string): void => {
@@ -623,7 +662,7 @@ export function create_pear_workspace_shell(
                 resolve_tab_path(tab);
             }
         } else {
-            activate_entry(tab.entry, !tab.preview);
+            activate_entry(tab.entry, !tab.preview, "push");
         }
         if (restore_focus) {
             focus_file_tab(tab.path);
@@ -669,6 +708,7 @@ export function create_pear_workspace_shell(
         }
         const next = tabs[index] ?? tabs[index - 1];
         if (next === undefined) {
+            sync_location("push");
             document_panel.focus();
             return;
         }
@@ -804,7 +844,7 @@ export function create_pear_workspace_shell(
         },
     });
 
-    const reveal_path = (path: string): void => {
+    const reveal_path = (path: string, activate = false): void => {
         if (destroyed || authority_stale || descriptor === undefined || tree === undefined) {
             return;
         }
@@ -813,6 +853,9 @@ export function create_pear_workspace_shell(
             tree = select_pear_workspace_entry(tree, cached.entry_id);
             render_tree();
             explorer.focusEntry(cached.entry_id);
+            if (activate && cached.kind === "file") {
+                activate_entry(cached, false, "none");
+            }
             return;
         }
         reveal_request?.abort();
@@ -840,6 +883,9 @@ export function create_pear_workspace_shell(
                 tree = reveal_pear_workspace_search_result(tree, response, exact.entry_id);
                 render_tree();
                 explorer.focusEntry(exact.entry_id);
+                if (activate && exact.kind === "file") {
+                    activate_entry(exact, false, "none");
+                }
             },
             error(error) {
                 if (destroyed || generation !== reveal_generation || authority_stale) {
@@ -849,6 +895,35 @@ export function create_pear_workspace_shell(
                 status.textContent = error_message(error);
             },
         });
+    };
+
+    const apply_location = (): void => {
+        const location = read_pear_workspace_location();
+        if (location.view !== "workspace" || location.workspaceId !== options.workspaceId) {
+            return;
+        }
+        location_mode_request = location.mode;
+        if (location.path === undefined) {
+            if (location_mode_request !== undefined && active_path !== undefined) {
+                const requested_mode = location_mode_request;
+                location_mode_request = undefined;
+                void editor.switchMode(requested_mode);
+            }
+            return;
+        }
+        if (
+            active_path === location.path &&
+            active_tab()?.workspaceRevision === descriptor?.workspace_revision &&
+            editor_snapshot?.activeDocument !== undefined
+        ) {
+            if (location_mode_request !== undefined) {
+                const requested_mode = location_mode_request;
+                location_mode_request = undefined;
+                void editor.switchMode(requested_mode);
+            }
+            return;
+        }
+        reveal_path(location.path, true);
     };
 
     const path_is_entry_or_child = (path: string, entry_path: string): boolean =>
@@ -949,6 +1024,7 @@ export function create_pear_workspace_shell(
         render_tabs();
         render_breadcrumb();
         render_links();
+        sync_location("replace");
         status.textContent = "Refreshing file identities…";
         refresh_workspace();
     };
@@ -981,7 +1057,7 @@ export function create_pear_workspace_shell(
                 render_tree();
                 render_tabs();
                 if (active_path === tab.path) {
-                    activate_entry(rebound, !tab.preview);
+                    activate_entry(rebound, !tab.preview, "replace");
                 }
             },
             error(error) {
@@ -1026,20 +1102,40 @@ export function create_pear_workspace_shell(
         render_tabs();
         render_breadcrumb();
         load_directory(tree.rootId, true);
+        const location = read_pear_workspace_location();
         const restored_active = active_tab();
-        if (restored_active !== undefined) {
+        if (
+            location.view === "workspace" &&
+            location.workspaceId === options.workspaceId &&
+            location.path !== undefined
+        ) {
+            if (next.default_entry?.kind === "file" && next.default_entry.path === location.path) {
+                location_mode_request = location.mode;
+                activate_entry(next.default_entry, false, "none");
+            } else if (
+                restored_active?.path === location.path &&
+                restored_active.workspaceRevision === next.workspace_revision
+            ) {
+                location_mode_request = location.mode;
+                activate_entry(restored_active.entry, !restored_active.preview, "none");
+            } else {
+                apply_location();
+            }
+        } else if (restored_active !== undefined) {
             if (restored_active.workspaceRevision === next.workspace_revision) {
-                activate_entry(restored_active.entry, !restored_active.preview);
+                activate_entry(restored_active.entry, !restored_active.preview, "replace");
             } else {
                 resolve_tab_path(restored_active);
             }
         } else if (active_path === undefined && next.default_entry?.kind === "file") {
-            activate_entry(next.default_entry, false);
+            activate_entry(next.default_entry, false, "replace");
         }
         if (pending_reveal !== undefined && next.workspace_revision >= pending_reveal.revision) {
             const {path} = pending_reveal;
             pending_reveal = undefined;
-            reveal_path(path);
+            if (active_path === undefined) {
+                reveal_path(path);
+            }
         }
     };
 
@@ -1240,6 +1336,12 @@ export function create_pear_workspace_shell(
         }
     };
 
+    const switch_editor_mode = async (mode: "rich" | "source"): Promise<void> => {
+        if (await editor.switchMode(mode)) {
+            sync_location("push");
+        }
+    };
+
     const on_root_click = (event: MouseEvent): void => {
         const target = event.target;
         if (!(target instanceof Element)) {
@@ -1258,12 +1360,12 @@ export function create_pear_workspace_shell(
                 break;
             }
             case "mode-source": {
-                void editor.switchMode("source");
+                void switch_editor_mode("source");
 
                 break;
             }
             case "mode-rich": {
-                void editor.switchMode("rich");
+                void switch_editor_mode("rich");
 
                 break;
             }
@@ -1415,6 +1517,10 @@ export function create_pear_workspace_shell(
         }
     };
 
+    const on_popstate = (): void => {
+        apply_location();
+    };
+
     options.root.addEventListener("click", on_root_click);
     options.root.addEventListener("keydown", on_root_keydown);
     document.addEventListener("click", on_document_click);
@@ -1426,6 +1532,7 @@ export function create_pear_workspace_shell(
     document.addEventListener("pointermove", on_explorer_resize_move);
     document.addEventListener("pointerup", on_explorer_resize_end);
     document.addEventListener("pointercancel", on_explorer_resize_end);
+    window.addEventListener("popstate", on_popstate);
 
     load_descriptor();
 
@@ -1433,6 +1540,7 @@ export function create_pear_workspace_shell(
         ready,
         refresh: refresh_workspace,
         openQuickOpen: open_quick_open,
+        applyLocation: apply_location,
         getDebugState(): PearWorkspaceShellDebugState {
             return {
                 descriptor,
@@ -1495,6 +1603,7 @@ export function create_pear_workspace_shell(
             document.removeEventListener("pointermove", on_explorer_resize_move);
             document.removeEventListener("pointerup", on_explorer_resize_end);
             document.removeEventListener("pointercancel", on_explorer_resize_end);
+            window.removeEventListener("popstate", on_popstate);
             finish_explorer_resize();
             if (quick_open_timer !== undefined) {
                 clearTimeout(quick_open_timer);

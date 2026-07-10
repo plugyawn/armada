@@ -78,6 +78,7 @@ mock_esm("../src/pear_workspace_shell", {
             options,
             refreshes: 0,
             quickOpens: 0,
+            locationApplies: 0,
             destroys: 0,
             ready: reject_ready ? Promise.reject(new Error("chunk failed")) : Promise.resolve(),
             refresh() {
@@ -85,6 +86,9 @@ mock_esm("../src/pear_workspace_shell", {
             },
             openQuickOpen() {
                 this.quickOpens += 1;
+            },
+            applyLocation() {
+                this.locationApplies += 1;
             },
             async destroy() {
                 this.destroys += 1;
@@ -116,6 +120,7 @@ async function settle() {
 }
 
 run_test("Chat and Workspace keep one shell mounted and reject retired tab state", async () => {
+    window.history.replaceState({}, "", "/");
     sessionStorage.setItem('pear-tab:["devel","topic"]', "files");
     pear_workspace.initialize();
     pear_workspace.sync({
@@ -137,6 +142,7 @@ run_test("Chat and Workspace keep one shell mounted and reject retired tab state
     keydown(chat_tab, "ArrowRight");
     await settle();
     assert.equal(pear_workspace.pane_is_open(), true);
+    assert.equal(new URL(window.location.href).searchParams.get("pear_view"), "workspace");
     assert.equal(mounts.length, 1);
     assert.equal(mounts[0].options.workspaceId, "workspace-1");
     assert.equal(document.querySelector("#pear-workspace-pane").hasAttribute("hidden"), false);
@@ -165,6 +171,7 @@ run_test("Chat and Workspace keep one shell mounted and reject retired tab state
 
     keydown(document.querySelector("#pear-workspace-pane"), "Escape");
     assert.equal(pear_workspace.pane_is_open(), false);
+    assert.equal(new URL(window.location.href).searchParams.has("pear_view"), false);
     assert.equal(document.activeElement.dataset.pearTab, "chat");
     assert.equal(
         document.activeElement.closest(".message_header_stream"),
@@ -224,4 +231,14 @@ run_test("Chat and Workspace keep one shell mounted and reject retired tab state
     assert.equal(mounts.length, 3);
     assert.equal(mounts[2].options.workspaceId, "workspace-retry");
     assert.equal(document.querySelector(".pear-workspace-host").hasAttribute("aria-busy"), false);
+
+    window.history.replaceState(
+        {},
+        "",
+        "/?pear_view=workspace&pear_workspace=workspace-retry&pear_path=README.md&pear_mode=rich",
+    );
+    window.dispatchEvent(new window.PopStateEvent("popstate"));
+    await settle();
+    assert.equal(pear_workspace.pane_is_open(), true);
+    assert.equal(mounts[2].locationApplies, 1);
 });

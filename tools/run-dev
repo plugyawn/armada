@@ -133,7 +133,15 @@ else:
     settings_module = "zproject.settings"
     if options.production_assets:
         runserver_args = ["--noreload"]
-        runtornado_command = ["./manage.py", "runtornado", "--automated"]
+        # A production-asset restart is an atomic client/server cutover.  Tell
+        # any event queues restored from the previous process to reload so a
+        # cached pre-cutover bundle cannot keep calling a removed API.
+        runtornado_command = [
+            "./manage.py",
+            "runtornado",
+            "--immediate-reloads",
+            "--automated",
+        ]
     else:
         runtornado_command = [
             "-m",

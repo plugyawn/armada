@@ -764,6 +764,15 @@ class StaticRuntimeContractTest(unittest.TestCase):
         helper_runtime = (REPO_ROOT / "tools/pear_deploy/workspace_helper_runtime.py").read_text()
         backend_workflow = (REPO_ROOT / ".github/workflows/pear-backend.yml").read_text()
         self.assertIn("--production-assets", run_dev)
+        self.assertIn(
+            """runtornado_command = [
+            "./manage.py",
+            "runtornado",
+            "--immediate-reloads",
+            "--automated",
+        ]""",
+            run_dev,
+        )
         self.assertIn("--production-assets", wrapper)
         self.assertNotIn("PEAR_CADDY_BASICAUTH_HASH:-", reset)
         self.assertIn("webpack-stats-production.json", common)

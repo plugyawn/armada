@@ -590,6 +590,7 @@ BUILD_PID="$3"
 set -a
 . /home/zulipdev/pear.env
 set +a
+unset PYTHONHOME PYTHONPATH
 cd "$BUILD_ROOT"
 export PATH="$BUILD_ROOT/.venv/bin:$PATH"
 umask 022

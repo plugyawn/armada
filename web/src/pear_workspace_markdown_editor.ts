@@ -105,8 +105,9 @@ export type PearWorkspaceMarkdownEditorResult =
     | {ok: false; eligibility: Exclude<PearWorkspaceRichEligibility, {eligible: true}>};
 
 type TransactionOrigin = "hydrate";
+type TransactionTracker = {userChanges: number};
 
-const transaction_origin_key = new PluginKey<TransactionOrigin>("pear-workspace-rich-origin");
+const transaction_origin_key = new PluginKey<TransactionTracker>("pear-workspace-rich-origin");
 
 const rich_code_languages = [
     LanguageDescription.of({
@@ -390,21 +391,36 @@ function build_editor(
         builder.editor.config((ctx) => {
             ctx.update(prosePluginsCtx, (plugins) => [
                 ...plugins,
-                new Plugin<null>({
+                new Plugin<TransactionTracker>({
                     key: transaction_origin_key,
                     state: {
-                        init: () => null,
-                        apply(transaction) {
+                        init: () => ({userChanges: 0}),
+                        apply(transaction, tracker) {
                             if (
                                 transaction.docChanged &&
                                 transaction.getMeta("appendedTransaction") === undefined &&
                                 transaction.getMeta("addToHistory") !== false &&
                                 transaction.getMeta(transaction_origin_key) !== "hydrate"
                             ) {
-                                on_user_doc_changed();
+                                return {userChanges: tracker.userChanges + 1};
                             }
-                            return null;
+                            return tracker;
                         },
+                    },
+                    view(editor_view) {
+                        let delivered_changes =
+                            transaction_origin_key.getState(editor_view.state)?.userChanges ?? 0;
+                        return {
+                            update(next_view) {
+                                const next_changes =
+                                    transaction_origin_key.getState(next_view.state)?.userChanges ??
+                                    delivered_changes;
+                                while (delivered_changes < next_changes) {
+                                    delivered_changes += 1;
+                                    on_user_doc_changed();
+                                }
+                            },
+                        };
                     },
                 }),
             ]);

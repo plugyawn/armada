@@ -12,7 +12,6 @@ from dataclasses import dataclass
 from typing import Any, Literal
 
 from zerver.lib.pear import (
-    PEAR_CANVAS_FILE_NAME,
     PearActiveSessionSummary,
     PearWorkerToolResult,
     PearWorkerTranscriptCallback,
@@ -402,9 +401,8 @@ def build_pear_codex_developer_instructions() -> str:
                 "explicitly pins it."
             ),
             (
-                f"Durable topic context lives in {PEAR_CANVAS_FILE_NAME}; read or edit it "
-                "with file tools when the task depends on standing notes, pinned context, "
-                "or long-lived constraints."
+                "README.md and other workspace files are ordinary project content; inspect "
+                "or edit them only when the task calls for it, never as hidden Pear state."
             ),
             "Use Codex-native skills from CODEX_HOME/skills when a relevant SKILL.md applies.",
             (
@@ -450,7 +448,7 @@ def build_pear_codex_turn_prompt(active_session: PearActiveSessionSummary, task:
         "- privacy: refer to the workspace by branch or worktree name in replies; never print the absolute workdir path in the topic.",
         "- servers and watchers: never start a long-lived process (http.server, watch loops, dev servers) in the foreground — it blocks your turn from ever finishing. Run it detached (nohup ... >/dev/null 2>&1 &) and verify with a follow-up probe.",
         "- math: write math in Zulip's dialect — $$...$$ for inline math and ```math fenced blocks for display equations; \\[ \\] and \\( \\) do not render here.",
-        f"- checklists: your plan tool is the working checklist — its steps render live in the topic rail, so keep it current instead of duplicating it in chat. Durable checklists belong in {PEAR_CANVAS_FILE_NAME}; - [ ] / - [x] markers render as ☐/☑.",
+        "- checklists: your plan tool is the working checklist — its steps render live in the topic rail, so keep it current instead of duplicating it in chat or a workspace document.",
     ]
     artifacts = active_session["artifacts"][:5]
     artifact_lines = [
@@ -494,8 +492,6 @@ def build_pear_codex_turn_prompt(active_session: PearActiveSessionSummary, task:
             "",
             "Recent artifacts:",
             *artifact_lines,
-            "",
-            f"Canvas: durable topic context is in {PEAR_CANVAS_FILE_NAME}; inspect it when this turn depends on saved notes, pinned context, or long-lived constraints.",
         ]
     )
 

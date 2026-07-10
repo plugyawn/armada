@@ -21,7 +21,6 @@ const pear_canvas_schema = z.object({
     content: z.string(),
     version: z.string(),
     relative_path: z.string(),
-    exists: z.boolean(),
     max_bytes: z.number(),
 });
 
@@ -80,8 +79,7 @@ export function read_view_plan(content: string): ReadViewPlan {
     return {mode: "render", content};
 }
 
-// Extract the canvas document from a `{pear_canvas: {...}}` response
-// body. Unknown keys (e.g. the server's workdir_path/path) are stripped.
+// Extract the canvas document from a `{pear_canvas: {...}}` response body.
 export function parse_canvas_response(raw: unknown): PearCanvas {
     return pear_canvas_response_schema.parse(raw).pear_canvas;
 }

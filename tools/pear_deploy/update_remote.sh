@@ -587,6 +587,9 @@ set -euo pipefail
 BUILD_ROOT="$1"
 BUILD_LOG="$2"
 BUILD_PID="$3"
+set -a
+. /home/zulipdev/pear.env
+set +a
 cd "$BUILD_ROOT"
 umask 022
 nohup bash -c 'ZULIP_DEV_PRODUCTION_ASSETS=1 ./tools/update-prod-static && .venv/bin/python3 tools/pear_deploy/production_assets.py --repo-root . && printf "\\nPEAR_PRODUCTION_ASSETS_OK\\n"' \

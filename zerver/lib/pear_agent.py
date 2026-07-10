@@ -1,5 +1,3 @@
-import asyncio
-import inspect
 import json
 import logging
 import os
@@ -18,9 +16,9 @@ from zerver.lib.pear import (
     PearWorkerToolResult,
     PearWorkerTranscriptCallback,
     PearWorkerTranscriptEvent,
+    parse_pear_artifacts,
     pear_is_retired_visible_artifact_line,
     pear_normalize_token_usage,
-    parse_pear_artifacts,
 )
 
 logger = logging.getLogger(__name__)
@@ -29,6 +27,8 @@ PearAgentRuntime = Literal["disabled", "codex-app-server"]
 PearSubprocessRunner = Callable[..., subprocess.CompletedProcess[str]]
 PearSubprocessPopen = Callable[..., subprocess.Popen[str]]
 PearUrlOpen = Callable[..., Any]
+
+
 @dataclass(frozen=True)
 class PearProcessIsolation:
     username: str
@@ -68,9 +68,7 @@ def pear_capture_protocol_message(direction: str, message: dict[str, Any]) -> No
         return
     try:
         with open(capture_path, "a") as capture_file:
-            capture_file.write(
-                json.dumps({"direction": direction, "message": message}) + "\n"
-            )
+            capture_file.write(json.dumps({"direction": direction, "message": message}) + "\n")
     except OSError:
         pass
 
@@ -302,9 +300,7 @@ class PearCodexExecAddressingIntentClassifier:
         if self.model:
             command.extend(["--model", self.model])
         if self.reasoning_effort:
-            command.extend(
-                ["--config", f'model_reasoning_effort="{self.reasoning_effort}"']
-            )
+            command.extend(["--config", f'model_reasoning_effort="{self.reasoning_effort}"'])
         command.extend(self.extra_args)
         command.append("-")
         return command
@@ -391,9 +387,7 @@ class PearGeminiInteractionsAddressingIntentClassifier:
                 f"{error.code}: {trim_pear_agent_text(raw_error, limit=self.output_limit)}"
             ) from error
         except (TimeoutError, urllib.error.URLError) as error:
-            raise PearAgentRuntimeError(
-                f"Gemini addressing router failed: {error}"
-            ) from error
+            raise PearAgentRuntimeError(f"Gemini addressing router failed: {error}") from error
 
         if status != 200:
             raise PearAgentRuntimeError(
@@ -403,12 +397,12 @@ class PearGeminiInteractionsAddressingIntentClassifier:
         try:
             parsed = json.loads(raw_response)
         except json.JSONDecodeError as error:
-            raise PearAgentRuntimeError("Gemini addressing router returned invalid JSON.") from error
+            raise PearAgentRuntimeError(
+                "Gemini addressing router returned invalid JSON."
+            ) from error
         if not isinstance(parsed, dict):
             return False
-        return parse_pear_addressing_json_output(
-            pear_gemini_interaction_output_text(parsed)
-        )
+        return parse_pear_addressing_json_output(pear_gemini_interaction_output_text(parsed))
 
 
 def build_pear_codex_developer_instructions() -> str:
@@ -472,15 +466,13 @@ def build_pear_codex_turn_prompt(active_session: PearActiveSessionSummary, task:
         "- checklists: your plan tool is the working checklist — its steps render live in the topic rail, so keep it current instead of duplicating it in chat or a workspace document.",
     ]
     artifacts = active_session["artifacts"][:5]
-    artifact_lines = [
-        f"- {artifact['label']}: {artifact['value']}" for artifact in artifacts
-    ] or ["- None"]
+    artifact_lines = [f"- {artifact['label']}: {artifact['value']}" for artifact in artifacts] or [
+        "- None"
+    ]
     recent_messages = active_session.get("recent_messages", [])
     recent_human_participants = list(
         dict.fromkeys(
-            message["sender"]
-            for message in recent_messages
-            if message["sender_is_bot"] is not True
+            message["sender"] for message in recent_messages if message["sender_is_bot"] is not True
         )
     )
     recent_participant_lines = [
@@ -818,9 +810,7 @@ def pear_transcript_events_from_codex_json_event(
             {
                 **base_event,
                 "kind": "status",
-                "title": (
-                    "Context compacted." if phase == "completed" else "Compacting context…"
-                ),
+                "title": ("Context compacted." if phase == "completed" else "Compacting context…"),
                 "metadata": {
                     **pear_codex_item_metadata(item),
                     "operation": "compaction",
@@ -1234,9 +1224,7 @@ class PearCodexAppServerToolRunner:
             args.extend(["--config", "features.fast_mode=true"])
         args.extend(["--config", "features.memories=true"])
         if self.reasoning_effort:
-            args.extend(
-                ["--config", f'model_reasoning_effort="{self.reasoning_effort}"']
-            )
+            args.extend(["--config", f'model_reasoning_effort="{self.reasoning_effort}"'])
         return args
 
     def build_command(self) -> list[str]:
@@ -1660,8 +1648,7 @@ class PearCodexAppServerToolRunner:
                     0,
                     {
                         "label": "Verification",
-                        "value": "Codex app-server completed with "
-                        f"{', '.join(summary_parts)}.",
+                        "value": f"Codex app-server completed with {', '.join(summary_parts)}.",
                     },
                 )
             results = ensure_pear_runtime_result(results, self.runtime_value())

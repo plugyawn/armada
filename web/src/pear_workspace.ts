@@ -3,6 +3,10 @@ import $ from "jquery";
 import render_pear_workspace_pane from "../templates/pear_workspace_pane.hbs";
 
 import * as blueslip from "./blueslip.ts";
+import {
+    read_pear_workspace_location,
+    write_pear_workspace_location,
+} from "./pear_workspace_location.ts";
 
 export type PearWorkspaceTab = "chat" | "workspace";
 
@@ -10,6 +14,7 @@ type WorkspaceShellController = {
     ready: Promise<void>;
     refresh: () => void;
     openQuickOpen: () => void;
+    applyLocation: () => void;
     destroy: () => Promise<void>;
 };
 
@@ -328,11 +333,17 @@ export function refresh_tab_strips(): void {
     update_tab_strips();
 }
 
-export function set_tab(tab: PearWorkspaceTab): void {
+export function set_tab(tab: PearWorkspaceTab, update_history = true): void {
     if (tab === current_tab || (tab === "workspace" && !has_workspace())) {
         return;
     }
     current_tab = tab;
+    if (update_history) {
+        write_pear_workspace_location(
+            {view: tab, workspaceId: tab === "workspace" ? (current_workspace_id ?? null) : null},
+            "push",
+        );
+    }
     remember_tab(tab);
     update_tab_strips();
     if (tab === "workspace") {
@@ -366,7 +377,12 @@ export function sync(options: {
             current_tab = "chat";
             hide_pane();
         }
-        const restored = remembered_tab(next_key);
+        const requested_location = read_pear_workspace_location();
+        const restored =
+            requested_location.view === "workspace" &&
+            requested_location.workspaceId === next_workspace_id
+                ? "workspace"
+                : remembered_tab(next_key);
         if (restored === "workspace" && has_workspace()) {
             current_tab = "workspace";
             show_pane();
@@ -385,6 +401,13 @@ export function sync(options: {
     }
     sync_topic_bar();
     update_tab_strips();
+    write_pear_workspace_location(
+        {
+            view: current_tab,
+            workspaceId: current_tab === "workspace" ? (current_workspace_id ?? null) : null,
+        },
+        "replace",
+    );
 }
 
 export function refresh_if_open_on_settle(run_active: boolean): void {
@@ -488,6 +511,12 @@ function on_quick_open_event(event: Event): void {
     void mount_and_open_quick_open();
 }
 
+function on_popstate(): void {
+    const location = read_pear_workspace_location();
+    set_tab(location.view, false);
+    shell?.applyLocation();
+}
+
 export function initialize(): void {
     if (initialized) {
         return;
@@ -496,5 +525,6 @@ export function initialize(): void {
     $("body").on("click", ".pear-workspace-mode-tab", on_workspace_tab_click);
     $("body").on("keydown", ".pear-workspace-mode-tab", on_workspace_tab_keydown);
     document.addEventListener(quick_open_event_name, on_quick_open_event);
+    window.addEventListener("popstate", on_popstate);
     observe_compose_height();
 }

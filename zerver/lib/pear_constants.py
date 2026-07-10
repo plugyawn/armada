@@ -8,13 +8,13 @@ CI when the shipped copy drifts from the registry.
 from typing import Final
 
 
-PEAR_SERVER_CONTRACT_VERSION: Final = 41
+PEAR_SERVER_CONTRACT_VERSION: Final = 42
 
 PEAR_ARTIFACT_PATTERN: Final = (
     "^\\s*(?:[-*]\\s*)?(Repo|Repository|Runtime|Branch|Commit|SHA|PR|Pull r"
     "equest|Diff|Test|Tests|Verification|Screenshot|Session|Session recor"
-    "d|Pear session|Codex session|Canvas|Doc|Docs|Issue|Ticket|Reviewer|R"
-    "eviewers):[ \\t]*([^\\r\\n]*?)[ \\t]*$"
+    "d|Pear session|Codex session|Doc|Docs|Issue|Ticket|Reviewer|Reviewer"
+    "s):[ \\t]*([^\\r\\n]*?)[ \\t]*$"
 )
 
 PEAR_WORKER_INTENT_TERMS: Final = (

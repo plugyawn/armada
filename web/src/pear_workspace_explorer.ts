@@ -8,6 +8,7 @@ const tree_window_step = 100;
 export type PearWorkspaceExplorerOptions = {
     treeRoot: HTMLElement;
     searchResultsRoot: HTMLElement;
+    onSelect: (entryId: string) => void;
     onActivate: (entryId: string, pin: boolean) => void;
     onToggle: (entryId: string, expanded: boolean) => void;
     onLoadMore: (entryId: string) => void;
@@ -98,6 +99,7 @@ export function create_pear_workspace_explorer(
         for (const [id, element] of keyed_rows) {
             element.tabIndex = id === entry_id ? 0 : -1;
         }
+        options.onSelect(entry_id);
         keyed_rows.get(entry_id)?.focus();
     };
 
@@ -220,6 +222,23 @@ export function create_pear_workspace_explorer(
             next.tabIndex = -1;
             fragment.append(next);
         }
+        const root_directory = tree.directories.get(tree.rootId);
+        if (
+            normalized_filter(current_filter) === "" &&
+            !visible.hasMore &&
+            root_directory !== undefined &&
+            root_directory.childIds.length > 0 &&
+            !root_directory.complete &&
+            !root_directory.loading
+        ) {
+            const load_more = document.createElement("button");
+            load_more.type = "button";
+            load_more.dataset["action"] = "load-more-root";
+            load_more.textContent = "Load more workspace files";
+            load_more.setAttribute("role", "treeitem");
+            load_more.setAttribute("aria-level", "1");
+            fragment.append(load_more);
+        }
         for (const id of keyed_rows.keys()) {
             if (!live_ids.has(id)) {
                 keyed_rows.delete(id);
@@ -261,6 +280,12 @@ export function create_pear_workspace_explorer(
             window_offset += tree_window_step;
             render_current();
             focus_row(visible.rows[0]?.entry.entry_id ?? "");
+            return;
+        }
+        if (action === "load-more-root") {
+            if (current_tree !== undefined) {
+                options.onLoadMore(current_tree.rootId);
+            }
             return;
         }
         const row = target.closest<HTMLElement>("[role='treeitem']");

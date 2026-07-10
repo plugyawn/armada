@@ -346,7 +346,11 @@ export function pear_workspace_tree_window(
             if (entry === undefined) {
                 continue;
             }
-            if (visible_index >= offset && rows.length < limit) {
+            if (visible_index >= offset) {
+                if (rows.length >= limit) {
+                    has_more = true;
+                    return false;
+                }
                 const child_directory = state.directories.get(child_id);
                 rows.push({
                     entry,
@@ -356,10 +360,6 @@ export function pear_workspace_tree_window(
                 });
             }
             visible_index += 1;
-            if (rows.length >= limit) {
-                has_more = true;
-                return false;
-            }
             if (
                 entry.kind === "directory" &&
                 state.expandedPaths.has(entry.path) &&

@@ -316,6 +316,46 @@ run_test(
     },
 );
 
+run_test("root cursor pagination remains reachable and completes README absence", async () => {
+    const test = harness("workspace-root-pages");
+    const current = descriptor("workspace-root-pages");
+    test.send_descriptor(current);
+    const first_page = Array.from({length: 200}, (_value, index) => entry(`file-${index}.txt`));
+    test.send_tree(0, current.root, first_page, "root-page-2");
+    assert.equal(test.file_controllers[0].contexts.at(-1).readmeState, "unknown");
+    const load_more = test.root.querySelector("[data-action='load-more-root']");
+    assert.ok(load_more !== null);
+    test.click(load_more);
+    assert.equal(test.trees.length, 2);
+    assert.deepEqual(test.trees[1].request, {
+        directoryId: current.root.entry_id,
+        cursor: "root-page-2",
+        pageSize: 200,
+    });
+    test.send_tree(1, current.root, [entry("file-200.txt")], null);
+    assert.equal(test.controller.getDebugState().tree.entries.size, 202);
+    assert.equal(test.file_controllers[0].contexts.at(-1).readmeState, "absent");
+    await test.controller.destroy();
+    test.root.remove();
+});
+
+run_test("clicking a folder makes it the authoritative file-operation target", async () => {
+    const test = harness("workspace-folder-target");
+    const current = descriptor("workspace-folder-target");
+    test.send_descriptor(current);
+    const docs = entry("docs", "directory");
+    const readme = entry("README.md");
+    test.send_tree(0, current.root, [docs, readme]);
+    test.click(test.root.querySelector("[data-entry-id='r1:README.md']"));
+    test.click(test.root.querySelector("[data-entry-id='r1:docs']"));
+    const context = test.file_controllers[0].contexts.at(-1);
+    assert.equal(context.activeEntry.path, "README.md");
+    assert.equal(context.selectedEntry.path, "docs");
+    assert.equal(test.controller.getDebugState().tree.selectedPath, "docs");
+    await test.controller.destroy();
+    test.root.remove();
+});
+
 run_test("a save revision blocks stale tab IDs until refresh and path rebind", async () => {
     const test = harness("workspace-revision");
     const first = descriptor("workspace-revision");

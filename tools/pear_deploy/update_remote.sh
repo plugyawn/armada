@@ -10,6 +10,7 @@ source "$SCRIPT_DIR/deploy_common.sh"
 DEFAULT_STATE_PATH="$REPO_ROOT/output/pear-staging/server.json"
 REMOTE_PATH="/home/zulipdev/zulip"
 REMOTE_GIT_COMMON_DIR="/home/zulipdev/.git/modules/zulip"
+LOCAL_TERMINAL_ROOT="$PEAR_ROOT/zulip-terminal"
 LOCAL_PEAR_SKILLS_DIR="$PEAR_ROOT/pear/skills"
 REMOTE_PEAR_DIR="/home/zulipdev/pear"
 REMOTE_PEAR_SKILLS_DIR="$REMOTE_PEAR_DIR/skills"
@@ -30,30 +31,49 @@ fail() {
     exit 1
 }
 
-validate_local_deploy_git_metadata() {
-    local dotgit="$REPO_ROOT/.git"
+validate_relative_submodule_checkout() {
+    local checkout="$1"
+    local label="$2"
+    local dotgit="$checkout/.git"
     local gitfile
     local gitdir
     local local_git_dir
     local local_git_common_dir
 
     if [[ ! -f "$dotgit" ]]; then
-        fail "local checkout must be the canonical Zulip submodule with a relative .git gitfile; refusing to deploy from a checkout with a .git directory or missing .git file"
+        fail "$label must be the canonical submodule checkout with a relative .git gitfile"
     fi
     IFS= read -r gitfile <"$dotgit" || gitfile=""
     if [[ "$gitfile" != gitdir:\ * ]]; then
-        fail "local .git file is not a gitdir file; refusing to deploy"
+        fail "$label .git file is not a gitdir file; refusing to deploy"
     fi
     gitdir="${gitfile#gitdir: }"
     if [[ -z "$gitdir" || "$gitdir" == /* ]]; then
-        fail "local .git points at an absolute gitdir ($gitdir); deploy from the main /Users/progyan/codack/zulip checkout, not a git worktree"
+        fail "$label .git points at an absolute gitdir ($gitdir); deploy from the main /Users/progyan/codack checkout, not a linked worktree"
     fi
 
-    local_git_dir="$(git -C "$REPO_ROOT" rev-parse --path-format=absolute --git-dir)"
-    local_git_common_dir="$(git -C "$REPO_ROOT" rev-parse --path-format=absolute --git-common-dir)"
+    local_git_dir="$(git -C "$checkout" rev-parse --path-format=absolute --git-dir)"
+    local_git_common_dir="$(git -C "$checkout" rev-parse --path-format=absolute --git-common-dir)"
     if [[ "$local_git_dir" != "$local_git_common_dir" ]]; then
-        fail "local checkout is a linked Git worktree ($local_git_dir); deploy from the main checkout so the remote .git gitfile resolves to /home/zulipdev/.git/modules/zulip"
+        fail "$label is a linked Git worktree ($local_git_dir); deploy from the main checkout"
     fi
+}
+
+validate_local_deploy_git_metadata() {
+    local parent_git_dir
+    local parent_git_common_dir
+
+    if [[ ! -d "$PEAR_ROOT/.git" ]]; then
+        fail "parent checkout must be the canonical /Users/progyan/codack checkout with a .git directory"
+    fi
+    parent_git_dir="$(git -C "$PEAR_ROOT" rev-parse --path-format=absolute --git-dir)"
+    parent_git_common_dir="$(git -C "$PEAR_ROOT" rev-parse --path-format=absolute --git-common-dir)"
+    if [[ "$parent_git_dir" != "$parent_git_common_dir" ]]; then
+        fail "parent checkout is a linked Git worktree ($parent_git_dir); deploy from the main checkout"
+    fi
+
+    validate_relative_submodule_checkout "$REPO_ROOT" "Zulip checkout"
+    validate_relative_submodule_checkout "$LOCAL_TERMINAL_ROOT" "Zulip Terminal checkout"
 }
 
 usage() {
@@ -194,11 +214,30 @@ ssh_zulip_clean() {
     ssh_root "sudo -Hu zulipdev bash -lc $wrapped"
 }
 
+verify_remote_quiescence() {
+    local phase="$1"
+
+    echo "$phase: Pear run health"
+    if ! ssh_zulip "$REMOTE_PATH/tools/pear-health-report --max-active-runs 0 --max-stale-active-runs 0 --max-orphan-active-markers 0"; then
+        fail "$phase failed: Pear has active, stale, or orphaned work"
+    fi
+
+    echo "$phase: service health"
+    if ! ssh_root "systemctl is-active ${PEAR_DEPLOY_SERVICES[*]}"; then
+        fail "$phase failed: one or more deploy-managed services are inactive"
+    fi
+
+    echo "$phase: queue quiescence"
+    if ! ssh_root "rabbitmqctl list_queues name messages_ready messages_unacknowledged consumers" |
+        validate_pear_deploy_queue_snapshot; then
+        fail "$phase failed: one or more deploy-managed queues are busy, missing, or unconsumed"
+    fi
+}
+
 run_local_compat() {
     local checker="$PEAR_ROOT/tools/check_pear_compat.py"
     if [[ ! -f "$checker" ]]; then
-        echo "Skipping compat check: $checker not found."
-        return
+        fail "local Pear compatibility checker is missing: $checker"
     fi
     echo "Running local Pear contract compatibility check..."
     (cd "$PEAR_ROOT" && python3 tools/check_pear_compat.py)
@@ -358,21 +397,59 @@ REMOTE
 }
 trap rollback_on_error EXIT
 
+validate_local_deploy_git_metadata
+
+LOCAL_PARENT_BRANCH="$(git -C "$PEAR_ROOT" branch --show-current)"
+LOCAL_PARENT_SHA="$(git -C "$PEAR_ROOT" rev-parse HEAD)"
+LOCAL_PARENT_STATUS="$(git -C "$PEAR_ROOT" status --porcelain --untracked-files=no)"
 LOCAL_BRANCH="$(git -C "$REPO_ROOT" branch --show-current)"
 LOCAL_SHA="$(git -C "$REPO_ROOT" rev-parse HEAD)"
 LOCAL_GIT_COMMON_DIR="$(git -C "$REPO_ROOT" rev-parse --git-common-dir)"
 LOCAL_STATUS="$(git -C "$REPO_ROOT" status --porcelain --untracked-files=no)"
 LOCAL_UNTRACKED_SOURCE="$(local_untracked_source_files)"
+LOCAL_TERMINAL_BRANCH="$(git -C "$LOCAL_TERMINAL_ROOT" branch --show-current)"
+LOCAL_TERMINAL_SHA="$(git -C "$LOCAL_TERMINAL_ROOT" rev-parse HEAD)"
+LOCAL_TERMINAL_STATUS="$(git -C "$LOCAL_TERMINAL_ROOT" status --porcelain --untracked-files=all)"
+LOCAL_PINNED_ZULIP_SHA="$(git -C "$PEAR_ROOT" rev-parse HEAD:zulip)"
+LOCAL_PINNED_TERMINAL_SHA="$(git -C "$PEAR_ROOT" rev-parse HEAD:zulip-terminal)"
 LOCAL_PEAR_SKILLS_STATUS="$(local_pear_skills_status)"
+LOCAL_PEAR_SKILLS_TREE="$(git -C "$PEAR_ROOT" rev-parse HEAD:pear/skills)"
+LOCAL_CONTRACT_VERSION="$(
+    python3 - "$PEAR_ROOT/pear/contract.json" <<'PY'
+import json
+import sys
 
-validate_local_deploy_git_metadata
+with open(sys.argv[1]) as contract_file:
+    print(json.load(contract_file)["server_contract_version"])
+PY
+)"
 
+if [[ "$LOCAL_PARENT_BRANCH" != "pear-main" ]]; then
+    fail "parent branch is $LOCAL_PARENT_BRANCH, expected pear-main"
+fi
 if [[ "$LOCAL_BRANCH" != "pear-main" ]]; then
-    fail "local branch is $LOCAL_BRANCH, expected pear-main"
+    fail "Zulip branch is $LOCAL_BRANCH, expected pear-main"
+fi
+if [[ "$LOCAL_TERMINAL_BRANCH" != "pear-main" ]]; then
+    fail "Zulip Terminal branch is $LOCAL_TERMINAL_BRANCH, expected pear-main"
+fi
+if [[ "$LOCAL_PINNED_ZULIP_SHA" != "$LOCAL_SHA" ]]; then
+    fail "parent pins Zulip at $LOCAL_PINNED_ZULIP_SHA, but the canonical checkout is $LOCAL_SHA"
+fi
+if [[ "$LOCAL_PINNED_TERMINAL_SHA" != "$LOCAL_TERMINAL_SHA" ]]; then
+    fail "parent pins Zulip Terminal at $LOCAL_PINNED_TERMINAL_SHA, but the canonical checkout is $LOCAL_TERMINAL_SHA"
+fi
+if [[ -n "$LOCAL_PARENT_STATUS" ]]; then
+    echo "$LOCAL_PARENT_STATUS" >&2
+    fail "parent tracked tree or one of its submodules is dirty; commit and pin the coordinated stack before deploying"
 fi
 if [[ -n "$LOCAL_STATUS" ]]; then
     echo "$LOCAL_STATUS" >&2
-    fail "local tracked tree is dirty; commit or revert tracked changes before deploying"
+    fail "Zulip tracked tree is dirty; commit or revert tracked changes before deploying"
+fi
+if [[ -n "$LOCAL_TERMINAL_STATUS" ]]; then
+    echo "$LOCAL_TERMINAL_STATUS" >&2
+    fail "Zulip Terminal tracked tree is dirty; commit or revert tracked changes before deploying"
 fi
 if [[ -n "$LOCAL_UNTRACKED_SOURCE" ]]; then
     echo "$LOCAL_UNTRACKED_SOURCE" >&2
@@ -386,8 +463,10 @@ if [[ -n "$LOCAL_PEAR_SKILLS_STATUS" ]]; then
     fail "local pear/skills tree is dirty; commit or revert skill changes before deploying"
 fi
 
-echo "Preflight: local $LOCAL_BRANCH $LOCAL_SHA is tracked-clean."
+echo "Preflight: parent $LOCAL_PARENT_BRANCH $LOCAL_PARENT_SHA is tracked-clean."
+echo "Preflight: parent pins Zulip $LOCAL_SHA and Zulip Terminal $LOCAL_TERMINAL_SHA."
 echo "Preflight: local pear/skills is tracked-clean."
+echo "Preflight: Pear contract version is $LOCAL_CONTRACT_VERSION."
 
 PREV_SHA="$(ssh_zulip "git rev-parse HEAD")"
 REMOTE_STATUS="$(ssh_zulip "git status --porcelain --untracked-files=no")"
@@ -445,6 +524,8 @@ if [[ "$RUN_COMPAT" == true ]]; then
 else
     echo "Skipping compat check by request."
 fi
+
+verify_remote_quiescence "Preflight quiescence"
 
 if [[ "$YES" != true ]]; then
     echo
@@ -518,7 +599,7 @@ fi
 
 echo "Restarting Pear services..."
 RESTART_EPOCH="$(ssh_root 'date +%s')"
-ssh_root 'systemctl restart pear-worker pear-monitor-worker pear-embedded-bots pear-thumbnail pear-zulip-dev'
+ssh_root "systemctl restart ${PEAR_DEPLOY_SERVICES[*]}"
 
 echo "Waiting for https://$FQDN/ to serve..."
 SITE_CODE=""
@@ -541,26 +622,7 @@ else
     echo "Skipping test-backend by request."
 fi
 
-echo "Pear live health:"
-ssh_zulip "$REMOTE_PATH/tools/pear-health-report --max-active-runs 0 --max-stale-active-runs 0 --max-orphan-active-markers 0"
-
-echo "Pear queue health:"
-ssh_root 'rabbitmqctl list_queues name messages_ready messages_unacknowledged consumers | awk '"'"'
-$1 == "pear_worker" || $1 == "embedded_bots" {
-    seen += 1
-    print
-    if ($2 != 0 || $3 != 0 || $4 < 1) {
-        bad = 1
-    }
-}
-END {
-    if (seen < 2) {
-        print "missing Pear queues" > "/dev/stderr"
-        exit 1
-    }
-    exit bad
-}
-'"'"
+verify_remote_quiescence "Post-deploy quiescence"
 
 if [[ "$RUN_RUNTIME_SMOKE" == true ]]; then
     runtime_smoke="$REPO_ROOT/../tools/pear_dev_smoke.py"
@@ -590,7 +652,7 @@ echo "Migration tail:"
 ssh_zulip "$REMOTE_PATH/.venv/bin/python3 $REMOTE_PATH/manage.py showmigrations zerver | tail"
 
 echo "Service status:"
-ssh_root 'systemctl --no-pager --full status pear-worker pear-monitor-worker pear-embedded-bots pear-thumbnail pear-zulip-dev | sed -n "1,120p"'
+ssh_root "systemctl --no-pager --full status ${PEAR_DEPLOY_SERVICES[*]}" | sed -n "1,120p"
 
 echo "pear-worker log tail:"
 ssh_root 'journalctl -u pear-worker -n 40 --no-pager'
@@ -599,10 +661,21 @@ echo "pear-zulip-dev recent log tail:"
 ssh_root 'journalctl -u pear-zulip-dev -n 80 --no-pager'
 
 DEPLOYED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-printf '%s %s\n' "$LOCAL_SHA" "$DEPLOYED_AT" |
-    ssh_root "cat > $DEPLOY_RECORD_PATH && chown zulipdev:zulipdev $DEPLOY_RECORD_PATH"
+{
+    # Preserve the historical first line for humans and any lightweight
+    # consumers, then identify every coordinated source that shaped the deploy.
+    printf '%s %s\n' "$LOCAL_SHA" "$DEPLOYED_AT"
+    printf 'record_version=2\n'
+    printf 'parent_sha=%s\n' "$LOCAL_PARENT_SHA"
+    printf 'zulip_sha=%s\n' "$LOCAL_SHA"
+    printf 'zulip_terminal_sha=%s\n' "$LOCAL_TERMINAL_SHA"
+    printf 'contract_version=%s\n' "$LOCAL_CONTRACT_VERSION"
+    printf 'pear_skills_tree=%s\n' "$LOCAL_PEAR_SKILLS_TREE"
+    printf 'asset_mode=webpack-dev\n'
+    printf 'deployed_at=%s\n' "$DEPLOYED_AT"
+} | ssh_root "set -euo pipefail; umask 022; cat > $DEPLOY_RECORD_PATH.tmp; chown zulipdev:zulipdev $DEPLOY_RECORD_PATH.tmp; chmod 644 $DEPLOY_RECORD_PATH.tmp; mv -f $DEPLOY_RECORD_PATH.tmp $DEPLOY_RECORD_PATH"
 
 ROLLBACK_READY=false
 echo
-echo "Deployed $LOCAL_SHA at $DEPLOYED_AT"
-echo "Recorded deployment in $DEPLOY_RECORD_PATH"
+echo "Deployed parent $LOCAL_PARENT_SHA / Zulip $LOCAL_SHA / terminal $LOCAL_TERMINAL_SHA at $DEPLOYED_AT"
+echo "Recorded coordinated deployment metadata in $DEPLOY_RECORD_PATH"

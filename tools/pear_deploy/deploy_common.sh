@@ -27,6 +27,21 @@ for pear_deploy_allowed_prefix in "${PEAR_DEPLOY_UNTRACKED_ALLOW_PREFIXES[@]}"; 
 done
 unset pear_deploy_allowed_prefix
 
+PEAR_DEPLOY_SERVICES=(
+    pear-worker
+    pear-monitor-worker
+    pear-embedded-bots
+    pear-thumbnail
+    pear-zulip-dev
+)
+
+PEAR_DEPLOY_QUEUES=(
+    pear_worker
+    pear_monitor_worker
+    embedded_bots
+    thumbnail
+)
+
 filter_deploy_untracked_source_files() {
     local file
     local allowed_prefix
@@ -46,4 +61,38 @@ filter_deploy_untracked_source_files() {
             printf '%s\n' "$file"
         fi
     done
+}
+
+validate_pear_deploy_queue_snapshot() {
+    local expected_queues="${PEAR_DEPLOY_QUEUES[*]}"
+    awk -v expected_queues="$expected_queues" '
+BEGIN {
+    expected_count = split(expected_queues, expected, " ")
+    for (i = 1; i <= expected_count; i += 1) {
+        required[expected[i]] = 1
+    }
+}
+$1 in required {
+    seen[$1] = 1
+    print
+    if ($2 !~ /^[0-9]+$/ || $3 !~ /^[0-9]+$/ || $4 !~ /^[0-9]+$/) {
+        print "invalid queue health row for " $1 > "/dev/stderr"
+        bad = 1
+        next
+    }
+    if ($2 != 0 || $3 != 0 || $4 < 1) {
+        print "queue is not quiescent: " $1 > "/dev/stderr"
+        bad = 1
+    }
+}
+END {
+    for (queue in required) {
+        if (!(queue in seen)) {
+            print "missing Pear queue: " queue > "/dev/stderr"
+            bad = 1
+        }
+    }
+    exit bad
+}
+'
 }

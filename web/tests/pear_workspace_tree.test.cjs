@@ -145,7 +145,7 @@ run_test("search reveal adds only the ancestor chain and expands it", () => {
             workspace_uuid: "workspace-a",
             workspace_revision: 1,
             query: "start",
-            entries: [{...target, ancestors: [docs, guide]}],
+            entries: [{...target, ancestors: [state.entries.get(state.rootId), docs, guide]}],
         },
         target.entry_id,
     );

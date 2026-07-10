@@ -181,6 +181,39 @@ const pear_result_refresh_in_flight_message_ids = new Set<number>();
 // chrome, so refetching them again would loop forever on the idle
 // reconcile tick. A fresh active->settled transition clears the entry.
 const pear_result_refresh_exhausted_message_ids = new Set<number>();
+// A settle refetch can fail (the runs poll pressure 429s the very
+// request meant to clear the marker) or race the final marker-removing
+// edit; either way one attempt is not enough \u2014 retry with backoff
+// before declaring the marker legitimate content (live incident: a
+// missed edit event left a message animating for minutes).
+const pear_result_refresh_attempts = new Map<number, number>();
+const PEAR_RESULT_REFRESH_MAX_ATTEMPTS = 5;
+const PEAR_RESULT_REFRESH_RETRY_BASE_MS = 4000;
+
+function schedule_pear_result_refresh_retry(message_ids: number[]): void {
+    const retry_message_ids: number[] = [];
+    for (const message_id of message_ids) {
+        const attempts = (pear_result_refresh_attempts.get(message_id) ?? 0) + 1;
+        pear_result_refresh_attempts.set(message_id, attempts);
+        if (attempts >= PEAR_RESULT_REFRESH_MAX_ATTEMPTS) {
+            pear_result_refresh_exhausted_message_ids.add(message_id);
+        } else {
+            retry_message_ids.push(message_id);
+        }
+    }
+    if (retry_message_ids.length === 0) {
+        return;
+    }
+    const max_attempts = Math.max(
+        ...retry_message_ids.map((message_id) => pear_result_refresh_attempts.get(message_id) ?? 1),
+    );
+    setTimeout(
+        () => {
+            refresh_settled_pear_result_messages(retry_message_ids);
+        },
+        PEAR_RESULT_REFRESH_RETRY_BASE_MS * 2 ** (max_attempts - 1),
+    );
+}
 
 type PearToolRowMarker = {
     regex: RegExp;
@@ -1147,6 +1180,7 @@ function refresh_settled_pear_result_messages(message_ids: number[]): void {
                 .object({messages: z.array(message_store.raw_message_schema)})
                 .parse(raw_data);
             const refreshed_message_ids: number[] = [];
+            const still_marked_message_ids: number[] = [];
             for (const raw_message of data.messages) {
                 const message = message_store.get(raw_message.id);
                 if (message === undefined) {
@@ -1171,14 +1205,21 @@ function refresh_settled_pear_result_messages(message_ids: number[]): void {
                     message_has_pear_active_marker(refreshed_message) &&
                     !pear_run_state.is_active_run_result_message(refreshed_message.id)
                 ) {
-                    pear_result_refresh_exhausted_message_ids.add(refreshed_message.id);
+                    still_marked_message_ids.push(refreshed_message.id);
+                } else {
+                    pear_result_refresh_attempts.delete(raw_message.id);
                 }
             }
             rerender_pear_result_messages(refreshed_message_ids);
+            // The marker can outlive one refetch when the fetch races
+            // the final marker-removing edit; keep trying before ruling
+            // the glyph legitimate content.
+            schedule_pear_result_refresh_retry(still_marked_message_ids);
         },
         error(xhr) {
             if (xhr.readyState !== 0) {
                 blueslip.warn(`Failed to refresh settled Pear message: ${xhr.responseText}`);
+                schedule_pear_result_refresh_retry(unique_message_ids);
             }
         },
         complete() {
@@ -1192,6 +1233,7 @@ function refresh_settled_pear_result_messages(message_ids: number[]): void {
 pear_run_state.on_active_run_result_messages_changed((change) => {
     for (const message_id of change.removed_message_ids) {
         pear_result_refresh_exhausted_message_ids.delete(message_id);
+        pear_result_refresh_attempts.delete(message_id);
     }
     const stale_message_ids = rendered_stale_pear_active_message_ids();
     update_rendered_pear_active_messages();

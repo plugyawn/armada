@@ -1,6 +1,7 @@
 .pear-workspace-host {
     overflow: hidden;
     block-size: 100%;
+    container-type: inline-size;
     min-block-size: 0;
 }
 
@@ -647,7 +648,7 @@
     display: none;
 }
 
-@media (width <= 720px) {
+@container (width < 800px) {
     .pear-workspace-shell__header {
         flex-wrap: wrap;
     }

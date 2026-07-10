@@ -572,6 +572,14 @@ build_remote_production_assets() {
     # separately, so no build output can share an inode with the live tree.
     rsync -az --delete \
         --link-dest="$REMOTE_PATH" \
+        --exclude '/analytics/tests/' \
+        --exclude '/corporate/tests/' \
+        --exclude '/confirmation/tests/' \
+        --exclude '/docs/' \
+        --exclude '/api_docs/' \
+        --exclude '/web/tests/' \
+        --exclude '/zerver/tests/' \
+        --exclude '/zilencer/tests/' \
         "${PEAR_DEPLOY_RSYNC_EXCLUDES[@]}" \
         --exclude '/.git' \
         -e "ssh -F $SSH_CONFIG" \

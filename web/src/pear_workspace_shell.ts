@@ -488,6 +488,13 @@ export function create_pear_workspace_shell(
     const explorer: PearWorkspaceExplorerController = create_pear_workspace_explorer({
         treeRoot: tree_root,
         searchResultsRoot: search_results,
+        onSelect(entry_id) {
+            if (tree === undefined) {
+                return;
+            }
+            tree = select_pear_workspace_entry(tree, entry_id);
+            render_tree();
+        },
         onActivate(entry_id, pin) {
             const entry = tree?.entries.get(entry_id);
             if (entry !== undefined) {

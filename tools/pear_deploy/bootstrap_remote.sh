@@ -159,6 +159,16 @@ if [[ -d "$LOCAL_GIT_COMMON_DIR" ]]; then
         "root@$IP_ADDRESS:/home/zulipdev/.git/modules/zulip/"
 fi
 
+echo "Installing and verifying the committed isolated Workspace helper..."
+ssh_root 'install -d -m 755 -o root -g root /usr/local/lib'
+ssh_root python3 /home/zulipdev/zulip/tools/pear_deploy/workspace_helper_runtime.py install \
+    --repo-root /home/zulipdev/zulip \
+    --destination "$PEAR_WORKSPACE_HELPER_PATH"
+ssh_root python3 /home/zulipdev/zulip/tools/pear_deploy/workspace_helper_runtime.py verify \
+    --repo-root /home/zulipdev/zulip \
+    --destination "$PEAR_WORKSPACE_HELPER_PATH" \
+    --smoke-existing-isolation-user
+
 ssh_root 'chown -R zulipdev:zulipdev /home/zulipdev/zulip'
 ssh_root 'chown -R zulipdev:zulipdev /home/zulipdev/pear'
 ssh_root 'chmod 711 /home/zulipdev && chmod 750 /home/zulipdev/zulip'

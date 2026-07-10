@@ -184,6 +184,14 @@ fi
 echo "webpack_watcher=absent"
 
 echo
+echo "Isolated Workspace helper:"
+ssh -F "$SSH_CONFIG" pear-staging-root \
+    python3 /home/zulipdev/zulip/tools/pear_deploy/workspace_helper_runtime.py verify \
+    --repo-root /home/zulipdev/zulip \
+    --destination "$PEAR_WORKSPACE_HELPER_PATH" \
+    --smoke-existing-isolation-user
+
+echo
 echo "Systemd:"
 ssh -F "$SSH_CONFIG" pear-staging-root \
     "systemctl --no-pager --full status caddy ${PEAR_DEPLOY_SERVICES[*]}" | sed -n '1,260p'

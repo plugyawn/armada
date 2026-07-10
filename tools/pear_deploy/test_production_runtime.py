@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import io
 import json
 import os
@@ -12,6 +13,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
+from tools.pear_deploy import workspace_helper_runtime
 from tools.pear_deploy.deployment_capacity import GIB, estimate_capacity
 from tools.pear_deploy.production_assets import (
     AssetValidationError,
@@ -24,6 +26,14 @@ from tools.pear_deploy.runtime_config import (
     RuntimeConfigError,
     install,
     parse_auth_env,
+)
+from tools.pear_deploy.workspace_helper_runtime import (
+    HELPER_MODE,
+    HelperSource,
+    WorkspaceHelperDeploymentError,
+    atomic_install_helper,
+    inspect_installed_helper,
+    load_committed_helper,
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -244,6 +254,293 @@ class SnapshotRetentionTest(unittest.TestCase):
             self.assertEqual([snapshot.exists() for snapshot in snapshots], [False, False, True])
 
 
+class WorkspaceHelperRuntimeTest(unittest.TestCase):
+    def test_preflight_command_is_inspection_only(self) -> None:
+        expected_sha256 = "a" * 64
+        installation = workspace_helper_runtime.HelperInstallation("absent", None, None, None, None)
+        with (
+            patch.object(
+                workspace_helper_runtime,
+                "inspect_installed_helper",
+                return_value=installation,
+            ) as inspect,
+            patch.object(workspace_helper_runtime, "atomic_install_helper") as install,
+            patch("builtins.print"),
+        ):
+            status = workspace_helper_runtime.main(
+                [
+                    "preflight",
+                    "--destination",
+                    "/usr/local/lib/pear-workspace-io",
+                    "--expected-sha256",
+                    expected_sha256,
+                ]
+            )
+
+        self.assertEqual(status, 0)
+        inspect.assert_called_once_with(
+            Path("/usr/local/lib/pear-workspace-io"),
+            expected_sha256=expected_sha256,
+        )
+        install.assert_not_called()
+
+    def test_loads_only_the_exact_committed_helper_source(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            source_path = root / "zerver/lib/pear_workspace_io.py"
+            source_path.parent.mkdir(parents=True)
+            source_path.write_bytes(b"committed helper\n")
+            subprocess.run(["git", "init", "--quiet"], cwd=root, check=True)
+            subprocess.run(["git", "add", "."], cwd=root, check=True)
+            subprocess.run(
+                [
+                    "git",
+                    "-c",
+                    "user.name=Pear Test",
+                    "-c",
+                    "user.email=pear@example.test",
+                    "commit",
+                    "--quiet",
+                    "-m",
+                    "fixture",
+                ],
+                cwd=root,
+                check=True,
+            )
+
+            source = load_committed_helper(root)
+            self.assertEqual(source.payload, b"committed helper\n")
+            self.assertEqual(source.sha256, hashlib.sha256(source.payload).hexdigest())
+
+            source_path.write_bytes(b"dirty helper\n")
+            with self.assertRaisesRegex(
+                WorkspaceHelperDeploymentError,
+                "does not match its committed Git blob",
+            ):
+                load_committed_helper(root)
+
+    def test_atomic_install_is_nonwritable_and_content_addressed(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            destination = root / "pear-workspace-io"
+            owner_uid = os.getuid()
+            owner_gid = os.getgid()
+            first_payload = b"first helper\n"
+            first = HelperSource(
+                payload=first_payload,
+                sha256=hashlib.sha256(first_payload).hexdigest(),
+            )
+
+            absent = inspect_installed_helper(
+                destination,
+                expected_sha256=first.sha256,
+                expected_uid=owner_uid,
+                expected_gid=owner_gid,
+            )
+            self.assertEqual(absent.state, "absent")
+            installed = atomic_install_helper(
+                first,
+                destination,
+                owner_uid=owner_uid,
+                owner_gid=owner_gid,
+            )
+            self.assertEqual(installed.state, "current")
+            self.assertEqual(destination.read_bytes(), first_payload)
+            self.assertEqual(stat.S_IMODE(destination.stat().st_mode), HELPER_MODE)
+            self.assertFalse(stat.S_IMODE(destination.stat().st_mode) & 0o222)
+            self.assertEqual(list(root.glob(".pear-workspace-io.tmp-*")), [])
+
+            second_payload = b"second helper\n"
+            second = HelperSource(
+                payload=second_payload,
+                sha256=hashlib.sha256(second_payload).hexdigest(),
+            )
+            replaced = atomic_install_helper(
+                second,
+                destination,
+                owner_uid=owner_uid,
+                owner_gid=owner_gid,
+            )
+            self.assertEqual(replaced.state, "current")
+            self.assertEqual(destination.read_bytes(), second_payload)
+            self.assertEqual(list(root.glob(".pear-workspace-io.tmp-*")), [])
+
+            with self.assertRaisesRegex(
+                WorkspaceHelperDeploymentError,
+                "does not match its SHA-256",
+            ):
+                atomic_install_helper(
+                    HelperSource(payload=b"tampered", sha256=second.sha256),
+                    destination,
+                    owner_uid=owner_uid,
+                    owner_gid=owner_gid,
+                )
+
+    def test_inspection_rejects_unsafe_destination_types_and_modes(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            destination = root / "pear-workspace-io"
+            owner_uid = os.getuid()
+            owner_gid = os.getgid()
+            payload = b"helper\n"
+            expected_sha256 = hashlib.sha256(payload).hexdigest()
+            destination.write_bytes(payload)
+            destination.chmod(0o755)
+            with self.assertRaisesRegex(WorkspaceHelperDeploymentError, "mode 0555"):
+                inspect_installed_helper(
+                    destination,
+                    expected_sha256=expected_sha256,
+                    expected_uid=owner_uid,
+                    expected_gid=owner_gid,
+                )
+
+            destination.unlink()
+            target = root / "target"
+            target.write_bytes(payload)
+            destination.symlink_to(target)
+            with self.assertRaisesRegex(WorkspaceHelperDeploymentError, "non-symlink"):
+                inspect_installed_helper(
+                    destination,
+                    expected_sha256=expected_sha256,
+                    expected_uid=owner_uid,
+                    expected_gid=owner_gid,
+                )
+
+    def test_inspection_distinguishes_current_and_outdated_content(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            destination = root / "pear-workspace-io"
+            owner_uid = os.getuid()
+            owner_gid = os.getgid()
+            destination.write_bytes(b"old helper\n")
+            destination.chmod(HELPER_MODE)
+            old_sha256 = hashlib.sha256(destination.read_bytes()).hexdigest()
+            new_sha256 = hashlib.sha256(b"new helper\n").hexdigest()
+
+            current = inspect_installed_helper(
+                destination,
+                expected_sha256=old_sha256,
+                expected_uid=owner_uid,
+                expected_gid=owner_gid,
+            )
+            outdated = inspect_installed_helper(
+                destination,
+                expected_sha256=new_sha256,
+                expected_uid=owner_uid,
+                expected_gid=owner_gid,
+            )
+            self.assertEqual(current.state, "current")
+            self.assertEqual(outdated.state, "outdated")
+            self.assertEqual(outdated.sha256, old_sha256)
+
+    def test_isolation_smoke_uses_the_production_sudo_protocol(self) -> None:
+        response = subprocess.CompletedProcess(
+            args=[],
+            returncode=0,
+            stdout=b'{"ok":true,"result":{"entries":[]}}',
+            stderr=b"",
+        )
+        request = {
+            "operation": "inspect",
+            "root": "/srv/pear-workspaces/smoke",
+            "entries": [],
+            "skip_unsafe": False,
+        }
+        with patch(
+            "tools.pear_deploy.workspace_helper_runtime.subprocess.run",
+            return_value=response,
+        ) as run:
+            result = workspace_helper_runtime._run_smoke_request(
+                "pear-" + "a" * 24,
+                Path("/usr/local/lib/pear-workspace-io"),
+                request,
+            )
+
+        self.assertEqual(result, {"entries": []})
+        command = run.call_args.args[0]
+        self.assertEqual(
+            command,
+            [
+                "sudo",
+                "-n",
+                "-u",
+                "pear-" + "a" * 24,
+                "/usr/bin/env",
+                "python3",
+                "/usr/local/lib/pear-workspace-io",
+                "--stdio",
+            ],
+        )
+        self.assertEqual(
+            json.loads(run.call_args.kwargs["input"]),
+            request,
+        )
+
+    def test_runtime_snapshot_rollback_restores_present_and_removes_absent_helper(self) -> None:
+        for initial_payload in (None, b"predeploy helper\n"):
+            with (
+                self.subTest(initial_state="absent" if initial_payload is None else "present"),
+                tempfile.TemporaryDirectory() as temporary_directory,
+            ):
+                root = Path(temporary_directory)
+                snapshot = root / "snapshot"
+                filesystem = root / "filesystem"
+                helper = filesystem / "usr/local/lib/pear-workspace-io"
+                helper.parent.mkdir(parents=True)
+                snapshot.mkdir()
+                paths_file = snapshot / "runtime-config.paths"
+                paths_file.write_text("", encoding="utf-8")
+
+                if initial_payload is not None:
+                    helper.write_bytes(initial_payload)
+                    helper.chmod(HELPER_MODE)
+                    before = helper.stat()
+                    paths_file.write_text(
+                        "usr/local/lib/pear-workspace-io\n",
+                        encoding="utf-8",
+                    )
+                    subprocess.run(
+                        [
+                            "tar",
+                            "-C",
+                            str(filesystem),
+                            "-cpf",
+                            str(snapshot / "runtime-config.tar"),
+                            "-T",
+                            str(paths_file),
+                        ],
+                        check=True,
+                    )
+
+                helper.unlink(missing_ok=True)
+                helper.write_bytes(b"new deployed helper\n")
+                helper.chmod(HELPER_MODE)
+
+                # This is the exact remove-then-extract behavior guarded by
+                # StaticRuntimeContractTest against update_remote.sh.
+                helper.unlink()
+                if paths_file.stat().st_size:
+                    subprocess.run(
+                        [
+                            "tar",
+                            "-C",
+                            str(filesystem),
+                            "-xpf",
+                            str(snapshot / "runtime-config.tar"),
+                        ],
+                        check=True,
+                    )
+
+                if initial_payload is None:
+                    self.assertFalse(helper.exists())
+                else:
+                    after = helper.stat()
+                    self.assertEqual(helper.read_bytes(), initial_payload)
+                    self.assertEqual(stat.S_IMODE(after.st_mode), stat.S_IMODE(before.st_mode))
+                    self.assertEqual(after.st_uid, before.st_uid)
+                    self.assertEqual(after.st_gid, before.st_gid)
+
+
 class StaticRuntimeContractTest(unittest.TestCase):
     def test_runtime_has_no_open_caddy_or_dev_asset_fallback(self) -> None:
         run_dev = (REPO_ROOT / "tools/run-dev").read_text()
@@ -256,6 +553,9 @@ class StaticRuntimeContractTest(unittest.TestCase):
         ).read_text()
         update = (REPO_ROOT / "tools/pear_deploy/update_remote.sh").read_text()
         verify = (REPO_ROOT / "tools/pear_deploy/verify_remote.sh").read_text()
+        bootstrap = (REPO_ROOT / "tools/pear_deploy/bootstrap_remote.sh").read_text()
+        helper_runtime = (REPO_ROOT / "tools/pear_deploy/workspace_helper_runtime.py").read_text()
+        backend_workflow = (REPO_ROOT / ".github/workflows/pear-backend.yml").read_text()
         self.assertIn("--production-assets", run_dev)
         self.assertIn("--production-assets", wrapper)
         self.assertNotIn("PEAR_CADDY_BASICAUTH_HASH:-", reset)
@@ -290,6 +590,43 @@ class StaticRuntimeContractTest(unittest.TestCase):
             update.rindex("verify_existing_remote_caddy_auth"),
             update.index("Snapshotting remote tree"),
         )
+
+        helper_path = "/usr/local/lib/pear-workspace-io"
+        runtime_paths_start = common.index("PEAR_DEPLOY_RUNTIME_CONFIG_PATHS=(")
+        runtime_paths_end = common.index("\n)", runtime_paths_start)
+        self.assertIn(helper_path, common[runtime_paths_start:runtime_paths_end])
+        self.assertIn("workspace_helper_runtime.py install", bootstrap)
+        self.assertIn("--smoke-existing-isolation-user", bootstrap)
+        self.assertIn("preflight_remote_workspace_helper", update)
+        self.assertIn("install_and_verify_remote_workspace_helper", update)
+        self.assertIn("workspace_helper_sha256=", update)
+        self.assertIn("workspace_helper_runtime.py verify", verify)
+        self.assertIn("os.replace(", helper_runtime)
+        self.assertIn("os.fchown(", helper_runtime)
+        self.assertIn("os.fchmod(", helper_runtime)
+        self.assertIn("HELPER_MODE = 0o555", helper_runtime)
+        self.assertIn('"operation": "inspect"', helper_runtime)
+        self.assertIn('"operation": "read"', helper_runtime)
+        self.assertLess(
+            update.rindex("preflight_remote_workspace_helper"),
+            update.index('if [[ "$YES" != true ]]'),
+        )
+        self.assertLess(
+            update.index("systemctl stop ${PEAR_DEPLOY_SERVICES[*]}"),
+            update.rindex("install_and_verify_remote_workspace_helper"),
+        )
+        self.assertLess(
+            update.rindex("install_and_verify_remote_workspace_helper"),
+            update.rindex("systemctl restart caddy ${PEAR_DEPLOY_SERVICES[*]}"),
+        )
+        for suite in (
+            "zerver.tests.test_pear_workspace_io",
+            "zerver.tests.test_pear_workspace_index",
+            "zerver.tests.test_pear_workspace_resources",
+        ):
+            self.assertIn(suite, update)
+            self.assertIn(suite, backend_workflow)
+        self.assertIn("tools.pear_deploy.test_production_runtime", backend_workflow)
 
     def test_verification_password_file_is_fail_closed(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:

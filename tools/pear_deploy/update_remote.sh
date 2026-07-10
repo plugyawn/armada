@@ -17,6 +17,7 @@ REMOTE_PEAR_SKILLS_DIR="$REMOTE_PEAR_DIR/skills"
 DEPLOY_RECORD_PATH="/home/zulipdev/pear-deployed-sha"
 SNAPSHOT_ROOT="/home/zulipdev/pear-deploy-snapshots"
 REMOTE_AUTH_ENV="/etc/pear/caddy-basic-auth.env"
+WORKSPACE_HELPER_RUNTIME="$SCRIPT_DIR/workspace_helper_runtime.py"
 YES=false
 RUN_TESTS=true
 RUN_MIGRATE=true
@@ -237,6 +238,27 @@ ssh_zulip_clean() {
     local wrapped
     wrapped="$(printf '%q' "cd $REMOTE_PATH && $command")"
     ssh_root "sudo -Hu zulipdev bash -lc $wrapped"
+}
+
+preflight_remote_workspace_helper() {
+    echo "Preflight: inspecting the isolated Workspace helper without mutation..."
+    ssh_root python3 - preflight \
+        --destination "$PEAR_WORKSPACE_HELPER_PATH" \
+        --expected-sha256 "$LOCAL_WORKSPACE_HELPER_SHA" \
+        <"$WORKSPACE_HELPER_RUNTIME"
+}
+
+install_and_verify_remote_workspace_helper() {
+    local remote_runtime="$REMOTE_PATH/tools/pear_deploy/workspace_helper_runtime.py"
+    echo "Installing the committed isolated Workspace helper atomically..."
+    ssh_root python3 "$remote_runtime" install \
+        --repo-root "$REMOTE_PATH" \
+        --destination "$PEAR_WORKSPACE_HELPER_PATH"
+    echo "Verifying the installed Workspace helper and its isolation-user protocol..."
+    ssh_root python3 "$remote_runtime" verify \
+        --repo-root "$REMOTE_PATH" \
+        --destination "$PEAR_WORKSPACE_HELPER_PATH" \
+        --smoke-existing-isolation-user
 }
 
 validate_local_auth_bootstrap() {
@@ -701,10 +723,22 @@ if [[ -n "$LOCAL_PEAR_SKILLS_STATUS" ]]; then
     fail "local pear/skills tree is dirty; commit or revert skill changes before deploying"
 fi
 
+LOCAL_WORKSPACE_HELPER_SHA="$(
+    git -C "$REPO_ROOT" cat-file blob "$LOCAL_SHA:$PEAR_WORKSPACE_HELPER_SOURCE_RELATIVE" |
+        shasum -a 256 | awk '{print $1}'
+)"
+LOCAL_WORKSPACE_HELPER_WORKTREE_SHA="$(
+    shasum -a 256 "$REPO_ROOT/$PEAR_WORKSPACE_HELPER_SOURCE_RELATIVE" | awk '{print $1}'
+)"
+if [[ "$LOCAL_WORKSPACE_HELPER_WORKTREE_SHA" != "$LOCAL_WORKSPACE_HELPER_SHA" ]]; then
+    fail "local Workspace helper source does not match the committed $LOCAL_SHA blob"
+fi
+
 echo "Preflight: parent $LOCAL_PARENT_BRANCH $LOCAL_PARENT_SHA is tracked-clean."
 echo "Preflight: parent pins Zulip $LOCAL_SHA and Zulip Terminal $LOCAL_TERMINAL_SHA."
 echo "Preflight: local pear/skills is tracked-clean."
 echo "Preflight: Pear contract version is $LOCAL_CONTRACT_VERSION."
+echo "Preflight: committed Workspace helper SHA-256 is $LOCAL_WORKSPACE_HELPER_SHA."
 
 PREV_SHA="$(ssh_zulip "git rev-parse HEAD")"
 REMOTE_STATUS="$(ssh_zulip "git status --porcelain --untracked-files=no")"
@@ -762,8 +796,12 @@ if [[ "$PREV_SHA" != "$LOCAL_SHA" ]]; then
         zerver/lib/pear_gate.py \
         zerver/lib/pear_agent.py \
         zerver/lib/pear_worker.py \
+        zerver/lib/pear_workspace_index.py \
+        zerver/lib/pear_workspace_io.py \
+        zerver/lib/pear_workspace_resources.py \
         zerver/worker/pear_worker.py \
         zerver/views/pear.py \
+        zerver/views/pear_workspace.py \
         zerver/views/users.py \
         zerver/models/bots.py \
         zerver/migrations \
@@ -786,6 +824,7 @@ else
 fi
 
 verify_remote_quiescence "Preflight quiescence"
+preflight_remote_workspace_helper
 verify_remote_disk_capacity
 
 if [[ "$YES" != true ]]; then
@@ -914,6 +953,8 @@ ssh_root 'chown -R zulipdev:zulipdev /home/zulipdev/.git 2>/dev/null || true'
 ssh_root "chown -R zulipdev:zulipdev $REMOTE_PEAR_DIR"
 ssh_root "sudo -Hu zulipdev git config --global --add safe.directory $REMOTE_PATH"
 
+install_and_verify_remote_workspace_helper
+
 echo "Installing authenticated Caddy and production-assets service configuration..."
 install_remote_runtime_config
 ssh_root "python3 $REMOTE_PATH/tools/pear_deploy/runtime_config.py verify --repo-root $REMOTE_PATH --fqdn $FQDN"
@@ -954,7 +995,12 @@ verify_remote_production_assets
 
 if [[ "$RUN_TESTS" == true ]]; then
     echo "Running Pear backend tests on the box..."
-    ssh_zulip_clean "./tools/test-backend zerver.tests.test_pear zerver.tests.test_pear_endpoint"
+    ssh_zulip_clean "./tools/test-backend \
+        zerver.tests.test_pear \
+        zerver.tests.test_pear_endpoint \
+        zerver.tests.test_pear_workspace_io \
+        zerver.tests.test_pear_workspace_index \
+        zerver.tests.test_pear_workspace_resources"
 else
     echo "Skipping test-backend by request."
 fi
@@ -1008,6 +1054,7 @@ DEPLOYED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
     printf 'zulip_terminal_sha=%s\n' "$LOCAL_TERMINAL_SHA"
     printf 'contract_version=%s\n' "$LOCAL_CONTRACT_VERSION"
     printf 'pear_skills_tree=%s\n' "$LOCAL_PEAR_SKILLS_TREE"
+    printf 'workspace_helper_sha256=%s\n' "$LOCAL_WORKSPACE_HELPER_SHA"
     printf 'asset_mode=production-hashed\n'
     printf 'caddy_auth=basic-auth-required\n'
     printf 'deployed_at=%s\n' "$DEPLOYED_AT"

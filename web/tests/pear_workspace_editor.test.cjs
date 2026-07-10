@@ -674,6 +674,27 @@ run_test("selection context remains bound to the active editor and path", async 
     test.root.remove();
 });
 
+run_test("clean active documents close and reopen without stale adapter authority", async () => {
+    const test = harness();
+    await open_text(test);
+    assert.equal(await test.controller.closeActive(), true);
+    assert.equal(test.controller.getSnapshot().activeDocument, undefined);
+    assert.equal(test.controller.getSnapshot().surface.kind, "empty");
+    assert.equal(test.source_editors[0].destroyed, true);
+
+    const reopened = test.controller.open(entry("README.md"));
+    await reopened;
+    assert.equal(test.gets.length, 1, "reopening a clean cached file avoids a duplicate GET");
+    assert.equal(test.controller.getSnapshot().activeDocument.path, "README.md");
+
+    test.source_editors[1].text = "dirty";
+    test.source_editors[1].dirty();
+    assert.equal(await test.controller.closeActive(), false);
+    assert.equal(test.controller.getSnapshot().activeDocument.path, "README.md");
+    await test.controller.destroy();
+    test.root.remove();
+});
+
 run_test("Rich loads only on demand and shares the document save session", async () => {
     const test = harness();
     await open_text(test);

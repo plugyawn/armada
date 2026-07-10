@@ -115,6 +115,7 @@ export type PearWorkspaceEditorController = {
         preferences?: PearWorkspaceEditorPreferences,
     ) => void;
     open: (entry: PearWorkspaceEntry) => Promise<void>;
+    closeActive: () => Promise<boolean>;
     switchMode: (mode: "rich" | "source") => Promise<boolean>;
     save: () => Promise<void>;
     resolveConflict: (resolution: "overwrite" | "reload") => Promise<void>;

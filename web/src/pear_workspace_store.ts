@@ -107,6 +107,7 @@ export type PearWorkspaceStoreAction =
           entryId: string;
           path: string;
       }
+    | ({type: "deactivate_document"} & PearWorkspaceDocumentIdentity)
     | {
           type: "invalidate_workspace_revision";
           workspaceId: string;
@@ -384,6 +385,19 @@ export function reduce_pear_workspace_store(
                 path: action.path,
                 requestGeneration: request_generation,
             },
+        });
+    }
+
+    if (action.type === "deactivate_document") {
+        const match = matching_active_document(state, action);
+        if (match?.document.state !== "clean") {
+            return ignore_stale_response(state);
+        }
+        return with_workspace(state, {
+            ...match.workspace,
+            requestGeneration: match.workspace.requestGeneration + 1,
+            activeEntryId: undefined,
+            pendingDocumentRequest: undefined,
         });
     }
 

@@ -268,6 +268,7 @@ export function create_pear_workspace_shell(
     let quick_open_opened_drawer = false;
     let quick_open_timer: ReturnType<typeof setTimeout> | undefined;
     let compose_integration_loading = false;
+    let closing_tab = false;
     let explorer_width = restored_explorer_width(options.workspaceId);
     let resize_pointer_id: number | undefined;
     const directory_requests = new Map<string, AbortableRequest>();
@@ -627,6 +628,51 @@ export function create_pear_workspace_shell(
         if (restore_focus) {
             focus_file_tab(tab.path);
         }
+    };
+
+    const close_tab_path = async (tab_path: string): Promise<void> => {
+        if (closing_tab) {
+            return;
+        }
+        const index = tabs.findIndex((tab) => tab.path === tab_path);
+        const tab = tabs[index];
+        if (tab === undefined) {
+            return;
+        }
+        const active_document = editor_snapshot?.activeDocument;
+        const document_is_unsafe =
+            active_document?.path === tab_path && active_document.state !== "clean";
+        if (tab.dirty || document_is_unsafe) {
+            status.textContent = "Save or resolve this file before closing its tab";
+            return;
+        }
+        const was_active = active_path === tab_path;
+        tabs.splice(index, 1);
+        if (!was_active) {
+            render_tabs();
+            return;
+        }
+        closing_tab = true;
+        active_path = undefined;
+        render_tabs();
+        render_breadcrumb();
+        render_links();
+        const closed = await editor.closeActive();
+        closing_tab = false;
+        if (!closed || destroyed) {
+            tabs.splice(Math.min(index, tabs.length), 0, tab);
+            active_path = tab.path;
+            render_tabs();
+            render_breadcrumb();
+            render_links();
+            return;
+        }
+        const next = tabs[index] ?? tabs[index - 1];
+        if (next === undefined) {
+            document_panel.focus();
+            return;
+        }
+        activate_tab_path(next.path, true);
     };
 
     const load_directory = (directory_id: string, first_page_only: boolean): void => {
@@ -1238,6 +1284,12 @@ export function create_pear_workspace_shell(
             }
             // No default
         }
+        const close_tab_path_value =
+            target.closest<HTMLElement>("[data-close-tab-path]")?.dataset["closeTabPath"];
+        if (close_tab_path_value !== undefined) {
+            void close_tab_path(close_tab_path_value);
+            return;
+        }
         const tab_path = target.closest<HTMLElement>("[data-tab-path]")?.dataset["tabPath"];
         if (tab_path !== undefined) {
             activate_tab_path(tab_path, true);
@@ -1255,6 +1307,12 @@ export function create_pear_workspace_shell(
             return;
         }
         const tab_button = target.closest<HTMLButtonElement>("[data-tab-path]");
+        if (tab_button !== null && tabs_root.contains(tab_button) && event.key === "Delete") {
+            event.preventDefault();
+            event.stopPropagation();
+            void close_tab_path(tab_button.dataset["tabPath"] ?? "");
+            return;
+        }
         if (
             tab_button !== null &&
             tabs_root.contains(tab_button) &&

@@ -14,6 +14,12 @@ import type {
     PearWorkspaceSourceEditorModule,
 } from "./pear_workspace_editor_contract.ts";
 import {
+    begin_pear_workspace_metric,
+    finish_pear_workspace_metric,
+    increment_pear_workspace_counter,
+    record_pear_workspace_error,
+} from "./pear_workspace_metrics.ts";
+import {
     pear_workspace_api_error_message,
     pear_workspace_initial_preview,
 } from "./pear_workspace_preview.ts";
@@ -340,6 +346,7 @@ export function create_pear_workspace_editor(
                 if (!workspace_writable) {
                     return;
                 }
+                begin_pear_workspace_metric("workspace_dirty_feedback");
                 dispatch({type: "source_changed", ...identity});
                 const view = mounted.editor.getViewState();
                 dispatch({
@@ -350,6 +357,7 @@ export function create_pear_workspace_editor(
                 });
                 options.onDirty?.(identity.path);
                 emit();
+                finish_pear_workspace_metric("workspace_dirty_feedback");
                 schedule_source_flush(identity);
             },
             onLanguageError(event) {
@@ -439,6 +447,7 @@ export function create_pear_workspace_editor(
                 if (!workspace_writable) {
                     return;
                 }
+                begin_pear_workspace_metric("workspace_dirty_feedback");
                 dispatch({type: "rich_edited", ...identity});
                 const changed = get_pear_workspace_document(store, identity);
                 if (changed?.editRevision !== event.editRevision) {
@@ -449,10 +458,12 @@ export function create_pear_workspace_editor(
                             "Rich editor revision drifted; switch to Source before continuing.",
                     };
                     emit();
+                    finish_pear_workspace_metric("workspace_dirty_feedback");
                     return;
                 }
                 options.onDirty?.(identity.path);
                 emit();
+                finish_pear_workspace_metric("workspace_dirty_feedback");
             },
             onSerialized(result: {status: "serialized"; editRevision: number; markdown: string}) {
                 update_rich_serialization(identity, result);
@@ -598,6 +609,7 @@ export function create_pear_workspace_editor(
             emit();
         };
         emit();
+        begin_pear_workspace_metric("workspace_save_ack");
         dependencies.putFile(
             save.workspaceId,
             {
@@ -613,6 +625,7 @@ export function create_pear_workspace_editor(
                     if (!callback_owns_save()) {
                         return;
                     }
+                    finish_pear_workspace_metric("workspace_save_ack");
                     if (
                         file.workspace_uuid !== save.workspaceId ||
                         file.path !== save.path ||
@@ -705,6 +718,8 @@ export function create_pear_workspace_editor(
                     if (!callback_owns_save()) {
                         return;
                     }
+                    finish_pear_workspace_metric("workspace_save_ack");
+                    record_pear_workspace_error(error.kind === "server" ? error.status : undefined);
                     if (
                         error.kind === "server" &&
                         error.error.error_code === "version_conflict" &&
@@ -805,6 +820,7 @@ export function create_pear_workspace_editor(
             return;
         }
         if (cached !== undefined) {
+            increment_pear_workspace_counter("workspace_file_cache_hit");
             const identity = {
                 workspaceId: workspace.workspaceId,
                 entryId: cached.entryId,
@@ -836,6 +852,7 @@ export function create_pear_workspace_editor(
             return;
         }
 
+        increment_pear_workspace_counter("workspace_file_cache_miss");
         surface = {kind: "loading", entry};
         emit();
         const pending = current_workspace()!.pendingDocumentRequest!;
@@ -909,6 +926,7 @@ export function create_pear_workspace_editor(
                 if (!request_guard.settle("file", request_generation)) {
                     return;
                 }
+                record_pear_workspace_error(error.kind === "server" ? error.status : undefined);
                 if (error.kind === "server" && error.error.error_code === "unsupported_file") {
                     surface = {
                         kind: "binary",

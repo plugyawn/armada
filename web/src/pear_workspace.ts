@@ -7,6 +7,10 @@ import {
     read_pear_workspace_location,
     write_pear_workspace_location,
 } from "./pear_workspace_location.ts";
+import {
+    begin_pear_workspace_metric,
+    finish_pear_workspace_metric,
+} from "./pear_workspace_metrics.ts";
 
 export type PearWorkspaceTab = "chat" | "workspace";
 
@@ -249,6 +253,7 @@ async function mount_shell(): Promise<void> {
         mounted = module.create_pear_workspace_shell({root: host, workspaceId: workspace_id});
         shell = mounted;
         await mounted.ready;
+        finish_pear_workspace_metric("workspace_click_to_shell");
         if (generation === shell_generation && shell === mounted) {
             host.removeAttribute("aria-busy");
         }
@@ -283,6 +288,9 @@ function show_pane(): void {
     sync_topic_bar();
     window.scrollTo(0, 0);
     void mount_shell();
+    if (shell !== undefined) {
+        finish_pear_workspace_metric("workspace_click_to_shell");
+    }
     update_tab_strips();
 }
 
@@ -338,6 +346,9 @@ export function set_tab(tab: PearWorkspaceTab, update_history = true): void {
         return;
     }
     current_tab = tab;
+    if (tab === "workspace") {
+        begin_pear_workspace_metric("workspace_click_to_shell");
+    }
     if (update_history) {
         write_pear_workspace_location(
             {view: tab, workspaceId: tab === "workspace" ? (current_workspace_id ?? null) : null},

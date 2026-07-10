@@ -18,6 +18,7 @@ from zerver.lib.pear_workspace_io import (
     InvalidWorkspacePathError,
     UnsafeWorkspaceEntryError,
     WorkspaceDirectoryNotEmptyError,
+    WorkspaceEntryChangedError,
     WorkspaceEntryExistsError,
     WorkspaceEntryNotFoundError,
     WorkspaceFileTooLargeError,
@@ -31,6 +32,10 @@ from zerver.lib.pear_workspace_io import (
     create_workspace_directory_via_helper,
     delete_workspace_entry,
     delete_workspace_entry_via_helper,
+    inspect_workspace_entries,
+    inspect_workspace_entries_via_helper,
+    open_workspace_file_stream,
+    open_workspace_file_stream_via_helper,
     read_workspace_file,
     read_workspace_file_via_helper,
     read_workspace_text_file,
@@ -168,6 +173,101 @@ class PearWorkspaceIOTest(TestCase):
         for path in ("original.txt", "hardlink.txt"):
             with self.subTest(path=path), self.assertRaises(UnsafeWorkspaceEntryError):
                 read_workspace_file(self.root, path, max_bytes=100)
+
+    def test_snapshot_identity_rejects_first_read_and_mutation_of_replacement(self) -> None:
+        path = self.write("scratch.txt", b"same bytes")
+        inspected = inspect_workspace_entries(self.root, {path.name: "file"})
+        self.assertEqual(len(inspected), 1)
+        identity = inspected[0].identity
+
+        replacement = self.write("replacement.tmp", b"same bytes")
+        os.replace(replacement, path)
+
+        with self.assertRaises(WorkspaceEntryChangedError):
+            read_workspace_file(
+                self.root,
+                path.name,
+                max_bytes=100,
+                expected_identity=identity,
+            )
+        with self.assertRaises(WorkspaceEntryChangedError):
+            atomic_write_workspace_file(
+                self.root,
+                path.name,
+                b"must not land",
+                max_bytes=100,
+                expected_version=hashlib.sha256(b"same bytes").hexdigest(),
+                expected_identity=identity,
+            )
+        with self.assertRaises(WorkspaceEntryChangedError):
+            rename_workspace_entry(
+                self.root,
+                path.name,
+                "renamed.txt",
+                expected_kind="file",
+                expected_identity=identity,
+            )
+        with self.assertRaises(WorkspaceEntryChangedError):
+            delete_workspace_entry(
+                self.root,
+                path.name,
+                expected_kind="file",
+                expected_identity=identity,
+            )
+        self.assertEqual(path.read_bytes(), b"same bytes")
+
+    def test_inspection_and_unbounded_raw_stream_have_helper_parity(self) -> None:
+        path = self.root / "large.bin"
+        size = 17 * 1024 * 1024 + 17
+        with path.open("wb") as file:
+            file.seek(size - 1)
+            file.write(b"z")
+        helper = Path(pear_workspace_io.__file__)
+        direct_inspection = inspect_workspace_entries(self.root, {path.name: "file"})
+        helper_inspection = inspect_workspace_entries_via_helper(
+            self.root,
+            {path.name: "file"},
+            helper_path=helper,
+            python_executable=sys.executable,
+        )
+        self.assertEqual(helper_inspection, direct_inspection)
+        identity = direct_inspection[0].identity
+
+        direct_stream = open_workspace_file_stream(
+            self.root,
+            path.name,
+            expected_identity=identity,
+            chunk_bytes=32 * 1024,
+        )
+        first_chunk = next(direct_stream)
+        self.assertEqual(len(first_chunk), 32 * 1024)
+        direct_size = len(first_chunk) + sum(len(chunk) for chunk in direct_stream)
+        self.assertEqual(direct_size, size)
+        self.assertEqual(direct_stream.metadata.size, size)
+
+        helper_stream = open_workspace_file_stream_via_helper(
+            self.root,
+            path.name,
+            expected_identity=identity,
+            chunk_bytes=48 * 1024,
+            helper_path=helper,
+            python_executable=sys.executable,
+        )
+        chunk_sizes = [len(chunk) for chunk in helper_stream]
+        self.assertEqual(sum(chunk_sizes), size)
+        self.assertLessEqual(max(chunk_sizes), 48 * 1024)
+        self.assertEqual(helper_stream.metadata.identity, identity)
+
+        replacement = self.write("replacement.bin", b"replacement")
+        os.replace(replacement, path)
+        with self.assertRaises(WorkspaceEntryChangedError):
+            open_workspace_file_stream_via_helper(
+                self.root,
+                path.name,
+                expected_identity=identity,
+                helper_path=helper,
+                python_executable=sys.executable,
+            )
 
     def test_oversize_sparse_file_is_rejected_before_read(self) -> None:
         path = self.root / "sparse.bin"

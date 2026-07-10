@@ -12,8 +12,10 @@ import orjson
 from zerver.lib.pear_workspace_index import WorkspaceIndex, WorkspacePath
 from zerver.lib.pear_workspace_io import (
     WorkspaceDeleteResult,
+    WorkspaceEntryIdentity,
     WorkspaceEntryMutationResult,
     WorkspaceFile,
+    WorkspaceInspectedEntry,
     WorkspaceVersionConflictError,
     WorkspaceWriteResult,
 )
@@ -24,6 +26,8 @@ from zerver.lib.pear_workspace_resources import (
     create_workspace_node_directory,
     create_workspace_node_file,
     delete_workspace_node_entry,
+    inspect_workspace_node_entries,
+    open_workspace_node_file_stream,
     read_workspace_node_file,
     record_pending_workspace_mutation,
     rename_workspace_node_entry,
@@ -205,6 +209,7 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
         self.assertTrue(descriptor["capabilities"]["rename_entry"])
         self.assertTrue(descriptor["capabilities"]["delete_entry"])
         self.assertTrue(descriptor["capabilities"]["history"])
+        self.assertIsNone(descriptor["limits"]["raw_file_max_bytes"])
         entries = [*root["entries"], *rest["entries"]]
         paths = {entry["path"] for entry in entries}
         self.assertEqual(paths, {".gitignore", "README.md", "docs", "raw.bin"})
@@ -583,6 +588,7 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
                 {"entry_id": raw_id, "download": orjson.dumps(True).decode()},
                 intentionally_undocumented=True,
             )
+            raw_content = b"".join(raw_result.streaming_content)
 
         text = self.assert_json_success(text_result)["pear_workspace_file"]
         self.assertEqual(text["content"].encode(), b"\xef\xbb\xbf# Notes\r\n\r\ntrailing  \r\n")
@@ -594,7 +600,7 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
             status_code=415,
         )
         self.assertEqual(orjson.loads(binary_result.content)["error_code"], "unsupported_file")
-        self.assertEqual(raw_result.content, b"\x00\xff\x10binary")
+        self.assertEqual(raw_content, b"\x00\xff\x10binary")
         self.assertEqual(raw_result["Content-Type"], "application/octet-stream")
         self.assertTrue(raw_result["Content-Disposition"].startswith("attachment"))
         self.assertEqual(raw_result["X-Content-Type-Options"], "nosniff")
@@ -617,6 +623,33 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
 
         self.assert_json_success(result)
         enumerate.assert_not_called()
+
+    def test_raw_endpoint_streams_beyond_the_legacy_buffer_limit(self) -> None:
+        user = self.example_user("hamlet")
+        stream = self.subscribe(user, "workspace-resource")
+        self.login_user(user)
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo = self.make_workspace(Path(temp_dir).resolve())
+            size = 17 * 1024 * 1024 + 9
+            with (repo / "raw.bin").open("wb") as raw_file:
+                raw_file.seek(size - 1)
+                raw_file.write(b"z")
+            node = self.make_node(user, stream.name, repo)
+            raw_entry = next(
+                entry for entry in self.tree(node)["entries"] if entry["path"] == "raw.bin"
+            )
+            with patch("zerver.views.pear_workspace.read_workspace_node_file") as buffered_read:
+                result = self.client_get(
+                    f"/json/pear/workspaces/{node.uuid}/raw",
+                    {"entry_id": raw_entry["entry_id"]},
+                    intentionally_undocumented=True,
+                )
+                chunk_sizes = [len(chunk) for chunk in result.streaming_content]
+
+        buffered_read.assert_not_called()
+        self.assertEqual(sum(chunk_sizes), size)
+        self.assertLessEqual(max(chunk_sizes), 64 * 1024)
+        self.assertEqual(result["Content-Length"], str(size))
 
     def test_put_bumps_revision_conflicts_and_retries_idempotently(self) -> None:
         user = self.example_user("hamlet")
@@ -735,6 +768,12 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
             original = self.assert_json_success(get_result)["pear_workspace_file"]
             desired = b"saved before database bump\n"
             (repo / "README.md").write_bytes(desired)
+            desired_stat = (repo / "README.md").stat()
+            result_identity = WorkspaceEntryIdentity(
+                desired_stat.st_dev,
+                desired_stat.st_ino,
+                desired_stat.st_ctime_ns,
+            )
             record_pending_workspace_mutation(
                 actor_id=user.id,
                 workspace_uuid=str(node.uuid),
@@ -745,6 +784,7 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
                 content=desired,
                 edit_revision=2,
                 result_version=hashlib.sha256(desired).hexdigest(),
+                result_identity=result_identity,
             )
             result = self.client_put(
                 f"/json/pear/workspaces/{node.uuid}/file",
@@ -810,6 +850,35 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
         self.assertEqual(orjson.loads(put_result.content)["error_code"], "stale_entry")
         self.assertEqual(orjson.loads(old_id_read.content)["error_code"], "stale_entry")
 
+    def test_first_read_rejects_unopened_untracked_same_path_replacement(self) -> None:
+        user = self.example_user("hamlet")
+        stream = self.subscribe(user, "workspace-resource")
+        self.login_user(user)
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo = self.make_workspace(Path(temp_dir).resolve())
+            (repo / "scratch.txt").write_bytes(b"same bytes\n")
+            node = self.make_node(user, stream.name, repo)
+            tree = self.tree(node)
+            scratch_entry = next(
+                entry for entry in tree["entries"] if entry["path"] == "scratch.txt"
+            )
+            replacement = repo / "replacement.tmp"
+            replacement.write_bytes(b"same bytes\n")
+            os.replace(replacement, repo / "scratch.txt")
+
+            with patch("zerver.lib.pear_workspace_resources._enumerate_workspace") as enumerate:
+                first_read = self.client_get(
+                    f"/json/pear/workspaces/{node.uuid}/file",
+                    {"entry_id": scratch_entry["entry_id"]},
+                    intentionally_undocumented=True,
+                )
+
+            self.assertEqual((repo / "scratch.txt").read_bytes(), b"same bytes\n")
+
+        enumerate.assert_not_called()
+        self.assertEqual(orjson.loads(first_read.content)["error_code"], "stale_entry")
+        self.assertNotIn("identity", repr(tree))
+
     def test_conflict_after_agent_mutation_uses_current_revision_bound_entry(self) -> None:
         user = self.example_user("hamlet")
         stream = self.subscribe(user, "workspace-resource")
@@ -839,8 +908,10 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
                 _data: bytes,
                 *,
                 expected_version: str,
+                expected_identity: WorkspaceEntryIdentity | None,
             ) -> WorkspaceWriteResult:
                 self.assertEqual(expected_version, original["version"])
+                self.assertIsNotNone(expected_identity)
                 (repo / "README.md").write_bytes(remote_data)
                 PearWorkspaceNode.objects.filter(id=node.id).update(content_revision=1)
                 raise WorkspaceVersionConflictError(
@@ -963,16 +1034,19 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
     def test_isolated_nodes_route_all_mutations_through_helper(self) -> None:
         username = "pear-0123456789abcdef01234567"
         data = b"hello\n"
+        identity = WorkspaceEntryIdentity(1, 2, 3)
         file = WorkspaceFile(
             data=data,
             version=hashlib.sha256(data).hexdigest(),
             size=len(data),
             mode=0o600,
+            identity=identity,
         )
         node = PearWorkspaceNode(
             workdir="/canonical/workspace",
             isolation_username=username,
         )
+        raw_stream = object()
         with (
             patch(
                 "zerver.lib.pear_workspace_resources.read_workspace_file_via_helper",
@@ -994,6 +1068,14 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
                 "zerver.lib.pear_workspace_resources.delete_workspace_entry_via_helper",
                 return_value=WorkspaceDeleteResult("renamed.md", "file", 1),
             ) as helper_delete,
+            patch(
+                "zerver.lib.pear_workspace_resources.inspect_workspace_entries_via_helper",
+                return_value=(WorkspaceInspectedEntry("README.md", "file", identity),),
+            ) as helper_inspect,
+            patch(
+                "zerver.lib.pear_workspace_resources.open_workspace_file_stream_via_helper",
+                return_value=raw_stream,
+            ) as helper_stream,
         ):
             self.assertEqual(
                 read_workspace_node_file(node, "README.md", max_bytes=100),
@@ -1005,6 +1087,7 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
                     "README.md",
                     data,
                     expected_version=file.version,
+                    expected_identity=identity,
                 ).file,
                 file,
             )
@@ -1019,6 +1102,7 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
                     "README.md",
                     "renamed.md",
                     expected_kind="file",
+                    expected_identity=identity,
                 ).path,
                 "renamed.md",
             )
@@ -1027,15 +1111,29 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
                     node,
                     "renamed.md",
                     expected_kind="file",
+                    expected_identity=identity,
                     recursive=False,
                 ).removed_entries,
                 1,
+            )
+            self.assertEqual(
+                inspect_workspace_node_entries(node, {"README.md": "file"}),
+                {"README.md": identity},
+            )
+            self.assertIs(
+                open_workspace_node_file_stream(
+                    node,
+                    "README.md",
+                    expected_identity=identity,
+                ),
+                raw_stream,
             )
 
         helper_read.assert_called_once_with(
             "/canonical/workspace",
             "README.md",
             max_bytes=100,
+            expected_identity=None,
             isolation_username=username,
         )
         self.assertEqual(helper_write.call_count, 2)
@@ -1045,6 +1143,7 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
             data,
             max_bytes=PEAR_WORKSPACE_TEXT_MAX_BYTES,
             expected_version=file.version,
+            expected_identity=identity,
             create=False,
             isolation_username=username,
         )
@@ -1067,13 +1166,27 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
             "README.md",
             "renamed.md",
             expected_kind="file",
+            expected_identity=identity,
             isolation_username=username,
         )
         helper_delete.assert_called_once_with(
             "/canonical/workspace",
             "renamed.md",
             expected_kind="file",
+            expected_identity=identity,
             recursive=False,
+            isolation_username=username,
+        )
+        helper_inspect.assert_called_once_with(
+            "/canonical/workspace",
+            {"README.md": "file"},
+            skip_unsafe=True,
+            isolation_username=username,
+        )
+        helper_stream.assert_called_once_with(
+            "/canonical/workspace",
+            "README.md",
+            expected_identity=identity,
             isolation_username=username,
         )
 

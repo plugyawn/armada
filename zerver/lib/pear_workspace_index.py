@@ -21,7 +21,7 @@ from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Literal
 
-from zerver.lib.pear_workspace_io import validate_workspace_relative_path
+from zerver.lib.pear_workspace_io import WorkspaceEntryIdentity, validate_workspace_relative_path
 
 ROOT_ENTRY_PATH = ""
 DEFAULT_TREE_PAGE_SIZE = 200
@@ -47,6 +47,7 @@ class WorkspacePath:
     path: str
     status: str = "clean"
     kind: Literal["file", "directory"] = "file"
+    identity: WorkspaceEntryIdentity | None = None
 
 
 @dataclass(frozen=True)
@@ -57,6 +58,7 @@ class WorkspaceIndexEntry:
     kind: str
     status: str
     has_children: bool
+    identity: WorkspaceEntryIdentity | None
 
 
 @dataclass(frozen=True)
@@ -144,10 +146,13 @@ class WorkspaceIndex:
         statuses: dict[str, str] = {ROOT_ENTRY_PATH: "clean"}
         kinds: dict[str, str] = {ROOT_ENTRY_PATH: "directory"}
         children: dict[str, set[str]] = {ROOT_ENTRY_PATH: set()}
+        identities: dict[str, WorkspaceEntryIdentity | None] = {ROOT_ENTRY_PATH: None}
 
         for item in paths:
             if item.kind not in {"file", "directory"}:
                 raise WorkspaceIndexError("Workspace path has an invalid kind.")
+            if item.identity is not None and not isinstance(item.identity, WorkspaceEntryIdentity):
+                raise WorkspaceIndexError("Workspace path has invalid identity metadata.")
             components = validate_workspace_relative_path(item.path)
             parent = ROOT_ENTRY_PATH
             for offset, component in enumerate(components):
@@ -161,6 +166,15 @@ class WorkspaceIndex:
                         f"Workspace path is both a file and directory: {child_path}"
                     )
                 kinds[child_path] = kind
+                if is_terminal and item.identity is not None:
+                    existing_identity = identities.get(child_path)
+                    if existing_identity is not None and existing_identity != item.identity:
+                        raise WorkspaceIndexError(
+                            f"Workspace path has conflicting identities: {child_path}"
+                        )
+                    identities[child_path] = item.identity
+                else:
+                    identities.setdefault(child_path, None)
                 statuses[child_path] = _stronger_status(
                     statuses.get(child_path, "clean"), item.status
                 )
@@ -168,9 +182,18 @@ class WorkspaceIndex:
                     children.setdefault(child_path, set())
                 parent = child_path
 
-        def entry_id(path: str, kind: str) -> str:
+        def entry_id(
+            path: str,
+            kind: str,
+            identity: WorkspaceEntryIdentity | None,
+        ) -> str:
+            identity_payload = (
+                [identity.device, identity.inode, identity.ctime_ns]
+                if identity is not None
+                else None
+            )
             message = json.dumps(
-                [workspace_uuid, revision, kind, path],
+                [workspace_uuid, revision, kind, path, identity_payload],
                 ensure_ascii=False,
                 separators=(",", ":"),
             ).encode("utf-8")
@@ -180,12 +203,13 @@ class WorkspaceIndex:
         for path, kind in kinds.items():
             name = path.rsplit("/", 1)[-1] if path else ""
             entries[path] = WorkspaceIndexEntry(
-                entry_id=entry_id(path, kind),
+                entry_id=entry_id(path, kind, identities.get(path)),
                 path=path,
                 name=name,
                 kind=kind,
                 status=statuses.get(path, "clean"),
                 has_children=bool(children.get(path)),
+                identity=identities.get(path),
             )
 
         index = cls(
@@ -303,6 +327,4 @@ class WorkspaceIndex:
         return tuple(item[2] for item in ranked[:limit])
 
     def file_paths(self) -> Sequence[str]:
-        return tuple(
-            entry.path for entry in self._entries.values() if entry.kind == "file"
-        )
+        return tuple(entry.path for entry in self._entries.values() if entry.kind == "file")

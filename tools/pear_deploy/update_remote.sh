@@ -559,6 +559,8 @@ remote_dirty_tree_matches_local_head() {
 
 build_remote_production_assets() {
     REMOTE_ASSET_BUILD_DIR="/var/lib/pear-builds/asset-build-${LOCAL_SHA:0:12}"
+    local build_log="$REMOTE_ASSET_BUILD_DIR/.pear-production-build.log"
+    local build_pid="$REMOTE_ASSET_BUILD_DIR/.pear-production-build.pid"
     echo "Staging source for an isolated production asset build..."
     ssh_root "install -d -m 711 -o root -g root /var/lib/pear-builds; \
         rm -rf $REMOTE_ASSET_BUILD_DIR; \
@@ -575,7 +577,65 @@ build_remote_production_assets() {
             $REMOTE_ASSET_BUILD_DIR/var/log \
             $REMOTE_ASSET_BUILD_DIR/static/generated'"
     echo "Building production assets without touching the live asset graph..."
-    ssh_root "sudo -Hu zulipdev bash -lc 'cd $REMOTE_ASSET_BUILD_DIR && umask 022 && ZULIP_DEV_PRODUCTION_ASSETS=1 ./tools/update-prod-static && .venv/bin/python3 tools/pear_deploy/production_assets.py --repo-root .'"
+    ssh_root bash -s -- "$REMOTE_ASSET_BUILD_DIR" "$build_log" "$build_pid" <<'REMOTE'
+set -euo pipefail
+BUILD_ROOT="$1"
+BUILD_LOG="$2"
+BUILD_PID="$3"
+sudo -Hu zulipdev bash -s -- "$BUILD_ROOT" "$BUILD_LOG" "$BUILD_PID" <<'BUILD'
+set -euo pipefail
+BUILD_ROOT="$1"
+BUILD_LOG="$2"
+BUILD_PID="$3"
+cd "$BUILD_ROOT"
+umask 022
+nohup bash -c 'ZULIP_DEV_PRODUCTION_ASSETS=1 ./tools/update-prod-static && .venv/bin/python3 tools/pear_deploy/production_assets.py --repo-root . && printf "\\nPEAR_PRODUCTION_ASSETS_OK\\n"' \
+    >"$BUILD_LOG" 2>&1 < /dev/null &
+printf '%s\n' "$!" >"$BUILD_PID"
+BUILD
+REMOTE
+    echo "Waiting for the detached production asset build..."
+    local build_state
+    local attempt
+    for attempt in $(seq 1 180); do
+        build_state="$(ssh_root bash -s -- "$build_log" "$build_pid" <<'REMOTE'
+set -euo pipefail
+BUILD_LOG="$1"
+BUILD_PID="$2"
+if [[ ! -s "$BUILD_PID" ]]; then
+    echo "MISSING_PID"
+    exit 0
+fi
+pid="$(<"$BUILD_PID")"
+if kill -0 "$pid" 2>/dev/null; then
+    echo "RUNNING"
+    exit 0
+fi
+if grep -q '^PEAR_PRODUCTION_ASSETS_OK$' "$BUILD_LOG"; then
+    echo "COMPLETE"
+    exit 0
+fi
+echo "FAILED"
+tail -80 "$BUILD_LOG" >&2 || true
+exit 1
+REMOTE
+        )"
+        case "$build_state" in
+            COMPLETE)
+                return 0
+                ;;
+            RUNNING)
+                sleep 2
+                ;;
+            MISSING_PID)
+                fail "detached production asset build did not publish its PID"
+                ;;
+            *)
+                fail "detached production asset build failed"
+                ;;
+        esac
+    done
+    fail "detached production asset build did not finish within 360 seconds"
 }
 
 enable_remote_build_swap() {

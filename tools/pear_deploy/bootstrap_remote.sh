@@ -85,8 +85,12 @@ done
 PEAR_GEMINI_API_KEY="${PEAR_ADDRESSING_ROUTER_GEMINI_API_KEY:-${GEMINI_API_KEY:-${GEMINI_KEY:-${GOOGLE_API_KEY:-${GOOGLE_GENAI_API_KEY:-}}}}}"
 CADDY_BASICAUTH_USER="${PEAR_CADDY_BASICAUTH_USER:-}"
 CADDY_BASICAUTH_HASH_FILE="${PEAR_CADDY_BASICAUTH_HASH_FILE:-}"
-if ! validate_local_caddy_auth_bootstrap "$CADDY_BASICAUTH_USER" "$CADDY_BASICAUTH_HASH_FILE"; then
-    fail "bootstrap requires a valid Caddy username and bcrypt hash file"
+CADDY_BASICAUTH_PASSWORD_FILE="${PEAR_CADDY_BASICAUTH_PASSWORD_FILE:-}"
+if ! validate_local_caddy_auth_pair \
+    "$CADDY_BASICAUTH_USER" \
+    "$CADDY_BASICAUTH_HASH_FILE" \
+    "$CADDY_BASICAUTH_PASSWORD_FILE"; then
+    fail "bootstrap requires matching mode-0600 Caddy bcrypt-hash and verification-password files"
 fi
 
 ssh_root() {
@@ -522,4 +526,4 @@ ssh_root "systemctl --no-pager --full status caddy ${PEAR_DEPLOY_SERVICES[*]}" |
 
 echo
 echo "Done. Verify with:"
-echo "  tools/pear_deploy/verify_remote.sh $STATE_PATH"
+echo "  tools/pear_deploy/verify_remote.sh --auth-password-file <mode-0600-password-file> $STATE_PATH"

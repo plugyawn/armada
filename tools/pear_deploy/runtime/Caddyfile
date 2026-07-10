@@ -1,9 +1,30 @@
 {$PEAR_CADDY_FQDN} {
-    encode zstd gzip
+	encode zstd gzip
 
-    basic_auth {
-        {$PEAR_CADDY_BASICAUTH_USER} {$PEAR_CADDY_BASICAUTH_HASH}
-    }
+	# The deployed Debian Caddy 2.6 runtime names this directive basicauth.
+	basicauth {
+		{$PEAR_CADDY_BASICAUTH_USER} {$PEAR_CADDY_BASICAUTH_HASH}
+	}
 
-    reverse_proxy 127.0.0.1:9991
+	handle_path /static/webpack-bundles/* {
+		root * /home/zulipdev/zulip/prod-static/serve/webpack-bundles
+		header Cache-Control "public, max-age=31536000, immutable"
+		header X-Content-Type-Options "nosniff"
+		file_server {
+			precompressed gzip
+		}
+	}
+
+	handle_path /static/* {
+		root * /home/zulipdev/zulip/prod-static/serve
+		header Cache-Control "no-cache"
+		header X-Content-Type-Options "nosniff"
+		file_server {
+			precompressed gzip
+		}
+	}
+
+	handle {
+		reverse_proxy 127.0.0.1:9991
+	}
 }

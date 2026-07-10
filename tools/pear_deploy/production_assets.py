@@ -129,15 +129,57 @@ def validate_production_assets(repo_root: Path) -> dict[str, int]:
     }
 
 
+def select_production_asset_probes(repo_root: Path) -> tuple[str, str, str]:
+    repo_root = repo_root.resolve()
+    stats = read_json_object(repo_root / "webpack-stats-production.json")
+    manifest = read_json_object(repo_root / "staticfiles.json")
+    chunks = stats.get("chunks")
+    paths = manifest.get("paths")
+    if not isinstance(chunks, dict) or not isinstance(chunks.get("app"), list):
+        raise AssetValidationError("production webpack app entrypoint is missing")
+    if not isinstance(paths, dict):
+        raise AssetValidationError("staticfiles manifest paths are missing")
+
+    app = chunks["app"]
+    try:
+        javascript = next(
+            value for value in app if isinstance(value, str) and value.endswith(".js")
+        )
+        stylesheet = next(
+            value for value in app if isinstance(value, str) and value.endswith(".css")
+        )
+    except StopIteration as exc:
+        raise AssetValidationError("production webpack app probes are incomplete") from exc
+
+    general_static = next(
+        (
+            target
+            for target in sorted(paths.values())
+            if isinstance(target, str) and not target.startswith("webpack-bundles/")
+        ),
+        None,
+    )
+    if general_static is None:
+        raise AssetValidationError(
+            "no non-webpack static asset is available for Caddy verification"
+        )
+    return javascript, stylesheet, general_static
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--repo-root", type=Path, required=True)
+    parser.add_argument("--print-probe-paths", action="store_true")
     args = parser.parse_args()
     try:
         summary = validate_production_assets(args.repo_root)
+        probes = select_production_asset_probes(args.repo_root) if args.print_probe_paths else None
     except (OSError, AssetValidationError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         raise SystemExit(1)
+    if probes is not None:
+        print(*probes, sep="\n")
+        return
     print(
         "Production assets valid: "
         f"{summary['webpack_bundles']} bundles, "

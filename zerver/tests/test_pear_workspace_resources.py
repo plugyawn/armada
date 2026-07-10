@@ -30,9 +30,11 @@ from zerver.lib.pear_workspace_resources import (
     delete_workspace_node_entry,
     inspect_workspace_node_entries,
     open_workspace_node_file_stream,
+    prepare_workspace_entry_mutation_receipt,
     read_workspace_node_file,
     record_pending_workspace_mutation,
     rename_workspace_node_entry,
+    workspace_entry_mutation_lookup_payload,
     write_workspace_node_file,
 )
 from zerver.lib.test_classes import ZulipTestCase
@@ -803,15 +805,11 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
             receipt = PearWorkspaceEntryMutationReceipt.objects.get(workspace_node=node)
             self.assertEqual(receipt.state, PearWorkspaceEntryMutationReceipt.APPLIED)
 
-            with patch(
-                "zerver.views.pear_workspace.get_workspace_entry_mutation_receipt",
-                return_value=None,
-            ):
-                repaired = self.client_post(
-                    f"/json/pear/workspaces/{node.uuid}/entries",
-                    request_data,
-                    intentionally_undocumented=True,
-                )
+            repaired = self.client_post(
+                f"/json/pear/workspaces/{node.uuid}/entries",
+                request_data,
+                intentionally_undocumented=True,
+            )
             mutation = self.assert_json_success(repaired)["pear_workspace_mutation"]
 
         self.assertEqual(mutation["workspace_revision"], revision + 1)
@@ -857,7 +855,7 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
         self.assertEqual(retry.status_code, 409)
         self.assertEqual(orjson.loads(retry.content)["error_code"], "stale_workspace")
         receipt = PearWorkspaceEntryMutationReceipt.objects.get(workspace_node=node)
-        self.assertEqual(receipt.state, PearWorkspaceEntryMutationReceipt.APPLIED)
+        self.assertEqual(receipt.state, PearWorkspaceEntryMutationReceipt.CONFLICTED)
 
     def test_applied_directory_receipt_rejects_populated_directory(self) -> None:
         user = self.example_user("hamlet")
@@ -894,7 +892,7 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
         self.assertEqual(retry.status_code, 409)
         self.assertEqual(orjson.loads(retry.content)["error_code"], "stale_workspace")
         receipt = PearWorkspaceEntryMutationReceipt.objects.get(workspace_node=node)
-        self.assertEqual(receipt.state, PearWorkspaceEntryMutationReceipt.APPLIED)
+        self.assertEqual(receipt.state, PearWorkspaceEntryMutationReceipt.CONFLICTED)
 
     def test_applied_rename_and_delete_receipts_repair_once(self) -> None:
         user = self.example_user("hamlet")
@@ -981,6 +979,216 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
         delete_receipt.refresh_from_db()
         self.assertEqual(rename_receipt.state, PearWorkspaceEntryMutationReceipt.COMPLETE)
         self.assertEqual(delete_receipt.state, PearWorkspaceEntryMutationReceipt.COMPLETE)
+
+    def test_abandoned_applied_receipt_is_reconciled_by_descriptor(self) -> None:
+        user = self.example_user("hamlet")
+        stream = self.subscribe(user, "workspace-resource")
+        self.login_user(user)
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo = self.make_workspace(Path(temp_dir).resolve())
+            node = self.make_node(user, stream.name, repo)
+            revision = self.descriptor(node)["workspace_revision"]
+            request_data = {
+                "destination_path": "abandoned.md",
+                "kind": "file",
+                "workspace_revision": revision,
+                "content": "recover without request replay\n",
+            }
+            with patch(
+                "zerver.views.pear_workspace._finish_prepared_entry_mutation",
+                side_effect=WorkspaceSnapshotError("simulated abandoned request"),
+            ):
+                failed = self.client_post(
+                    f"/json/pear/workspaces/{node.uuid}/entries",
+                    request_data,
+                    intentionally_undocumented=True,
+                )
+            self.assertEqual(failed.status_code, 503)
+            receipt = PearWorkspaceEntryMutationReceipt.objects.get(workspace_node=node)
+            self.assertEqual(receipt.state, PearWorkspaceEntryMutationReceipt.APPLIED)
+
+            descriptor = self.descriptor(node)
+            receipt.refresh_from_db()
+            created = self.create_entry(
+                node,
+                destination_path="after-recovery.md",
+                kind="file",
+                workspace_revision=descriptor["workspace_revision"],
+                content="workspace remains writable\n",
+            )
+
+        self.assertEqual(receipt.state, PearWorkspaceEntryMutationReceipt.COMPLETE)
+        self.assertEqual(descriptor["workspace_revision"], revision + 1)
+        self.assertEqual(created["workspace_revision"], revision + 2)
+
+    def test_prepared_create_stage_replays_without_revision_noise_or_leak(self) -> None:
+        user = self.example_user("hamlet")
+        stream = self.subscribe(user, "workspace-resource")
+        self.login_user(user)
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo = self.make_workspace(Path(temp_dir).resolve())
+            node = self.make_node(user, stream.name, repo)
+            before = self.descriptor(node)
+            request_data = {
+                "destination_path": "prepared.md",
+                "kind": "file",
+                "workspace_revision": before["workspace_revision"],
+                "content": "staged exactly once\n",
+            }
+            with patch(
+                "zerver.views.pear_workspace.record_workspace_entry_mutation_stage",
+                side_effect=WorkspaceSnapshotError("simulated stage receipt failure"),
+            ):
+                failed = self.client_post(
+                    f"/json/pear/workspaces/{node.uuid}/entries",
+                    request_data,
+                    intentionally_undocumented=True,
+                )
+            self.assertEqual(failed.status_code, 503)
+            receipt = PearWorkspaceEntryMutationReceipt.objects.get(workspace_node=node)
+            self.assertEqual(receipt.state, PearWorkspaceEntryMutationReceipt.PREPARED)
+            staging_path = receipt.request_payload["recovery"]["staging_path"]
+            self.assertEqual((repo / staging_path).read_text(), "staged exactly once\n")
+
+            staged_descriptor = self.descriptor(node)
+            with patch(
+                "zerver.views.pear_workspace.PEAR_WORKSPACE_PREPARED_RECOVERY_GRACE_SECONDS",
+                0,
+            ):
+                repaired_descriptor = self.descriptor(node)
+            receipt.refresh_from_db()
+            mutation = receipt.result_payload
+
+        self.assertEqual(
+            staged_descriptor["workspace_revision"],
+            before["workspace_revision"],
+        )
+        self.assertEqual(staged_descriptor["dirty_count"], before["dirty_count"])
+        self.assertEqual(mutation["workspace_revision"], before["workspace_revision"] + 1)
+        self.assertEqual(
+            repaired_descriptor["workspace_revision"],
+            before["workspace_revision"] + 1,
+        )
+        self.assertEqual(receipt.state, PearWorkspaceEntryMutationReceipt.COMPLETE)
+        self.assertFalse((repo / staging_path).exists())
+
+    def test_conflicted_staged_create_cleans_only_exact_staging_identity(self) -> None:
+        user = self.example_user("hamlet")
+        stream = self.subscribe(user, "workspace-resource")
+        self.login_user(user)
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo = self.make_workspace(Path(temp_dir).resolve())
+            node = self.make_node(user, stream.name, repo)
+            revision = self.descriptor(node)["workspace_revision"]
+            request_data = {
+                "destination_path": "occupied.md",
+                "kind": "file",
+                "workspace_revision": revision,
+                "content": "staged content\n",
+            }
+            with patch(
+                "zerver.views.pear_workspace._publish_staged_create",
+                side_effect=WorkspaceSnapshotError("simulated pre-publish stop"),
+            ):
+                failed = self.client_post(
+                    f"/json/pear/workspaces/{node.uuid}/entries",
+                    request_data,
+                    intentionally_undocumented=True,
+                )
+            self.assertEqual(failed.status_code, 503)
+            receipt = PearWorkspaceEntryMutationReceipt.objects.get(workspace_node=node)
+            self.assertEqual(receipt.state, PearWorkspaceEntryMutationReceipt.STAGED)
+            staging_path = receipt.request_payload["recovery"]["staging_path"]
+            self.assertTrue((repo / staging_path).exists())
+            (repo / "occupied.md").write_text("concurrent destination\n")
+
+            descriptor = self.descriptor(node)
+            receipt.refresh_from_db()
+            self.assertEqual(receipt.state, PearWorkspaceEntryMutationReceipt.CONFLICTED)
+            self.assertFalse((repo / staging_path).exists())
+            self.assertEqual((repo / "occupied.md").read_text(), "concurrent destination\n")
+            created = self.create_entry(
+                node,
+                destination_path="after-conflict.md",
+                kind="file",
+                workspace_revision=descriptor["workspace_revision"],
+                content="not frozen\n",
+            )
+
+        self.assertEqual(created["workspace_revision"], descriptor["workspace_revision"] + 1)
+
+    def test_conflicted_staged_create_never_deletes_replaced_staging_entry(self) -> None:
+        user = self.example_user("hamlet")
+        stream = self.subscribe(user, "workspace-resource")
+        self.login_user(user)
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo = self.make_workspace(Path(temp_dir).resolve())
+            node = self.make_node(user, stream.name, repo)
+            revision = self.descriptor(node)["workspace_revision"]
+            request_data = {
+                "destination_path": "never-published.md",
+                "kind": "file",
+                "workspace_revision": revision,
+                "content": "original stage\n",
+            }
+            with patch(
+                "zerver.views.pear_workspace._publish_staged_create",
+                side_effect=WorkspaceSnapshotError("simulated pre-publish stop"),
+            ):
+                failed = self.client_post(
+                    f"/json/pear/workspaces/{node.uuid}/entries",
+                    request_data,
+                    intentionally_undocumented=True,
+                )
+            self.assertEqual(failed.status_code, 503)
+            receipt = PearWorkspaceEntryMutationReceipt.objects.get(workspace_node=node)
+            staging_path = receipt.request_payload["recovery"]["staging_path"]
+            replacement = repo / ".replacement-stage"
+            replacement.write_text("wrong replacement\n")
+            os.replace(replacement, repo / staging_path)
+
+            self.descriptor(node)
+            receipt.refresh_from_db()
+            replaced_staging_content = (repo / staging_path).read_text()
+
+        self.assertEqual(receipt.state, PearWorkspaceEntryMutationReceipt.CONFLICTED)
+        self.assertEqual(replaced_staging_content, "wrong replacement\n")
+
+    def test_fresh_prepared_receipts_do_not_trigger_unbounded_recovery_work(self) -> None:
+        user = self.example_user("hamlet")
+        stream = self.subscribe(user, "workspace-resource")
+        self.login_user(user)
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo = self.make_workspace(Path(temp_dir).resolve())
+            node = self.make_node(user, stream.name, repo)
+            revision = self.descriptor(node)["workspace_revision"]
+            for index in range(24):
+                lookup_payload = workspace_entry_mutation_lookup_payload(
+                    actor_id=user.id,
+                    workspace_uuid=str(node.uuid),
+                    requested_revision=revision,
+                    operation="create",
+                    source_entry_id="",
+                    source_path="",
+                    destination_path=f"prepared-{index}.md",
+                    options={
+                        "kind": "file",
+                        "content_sha256": hashlib.sha256(b"").hexdigest(),
+                    },
+                )
+                prepare_workspace_entry_mutation_receipt(
+                    node=node,
+                    actor_id=user.id,
+                    lookup_payload=lookup_payload,
+                    source_kind=None,
+                    source_identity=None,
+                )
+
+            with patch("zerver.views.pear_workspace._inspect_created_path") as inspect:
+                descriptor = self.descriptor(node)
+
+        inspect.assert_not_called()
+        self.assertEqual(descriptor["workspace_revision"], revision)
 
     def test_put_bumps_revision_conflicts_and_retries_idempotently(self) -> None:
         user = self.example_user("hamlet")

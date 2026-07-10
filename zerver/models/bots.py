@@ -360,13 +360,17 @@ class PearWorkspaceNode(models.Model):
 
 class PearWorkspaceEntryMutationReceipt(models.Model):
     PREPARED = "prepared"
+    STAGED = "staged"
     APPLIED = "applied"
     COMPLETE = "complete"
+    CONFLICTED = "conflicted"
 
     STATE_CHOICES = [
         (PREPARED, "prepared"),
+        (STAGED, "staged"),
         (APPLIED, "applied"),
         (COMPLETE, "complete"),
+        (CONFLICTED, "conflicted"),
     ]
     OPERATION_CHOICES = [
         ("create", "create"),
@@ -400,6 +404,10 @@ class PearWorkspaceEntryMutationReceipt(models.Model):
             models.Index(
                 fields=["workspace_node", "date_created"],
                 name="zerver_pear_ws_mut_created",
+            ),
+            models.Index(
+                fields=["workspace_node", "state", "date_updated"],
+                name="zerver_pear_ws_mut_state",
             ),
         ]
 

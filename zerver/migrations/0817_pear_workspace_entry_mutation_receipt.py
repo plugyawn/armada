@@ -42,8 +42,10 @@ class Migration(migrations.Migration):
                     models.CharField(
                         choices=[
                             ("prepared", "prepared"),
+                            ("staged", "staged"),
                             ("applied", "applied"),
                             ("complete", "complete"),
+                            ("conflicted", "conflicted"),
                         ],
                         default="prepared",
                         max_length=16,
@@ -78,7 +80,11 @@ class Migration(migrations.Migration):
                     models.Index(
                         fields=["workspace_node", "date_created"],
                         name="zerver_pear_ws_mut_created",
-                    )
+                    ),
+                    models.Index(
+                        fields=["workspace_node", "state", "date_updated"],
+                        name="zerver_pear_ws_mut_state",
+                    ),
                 ],
             },
         ),

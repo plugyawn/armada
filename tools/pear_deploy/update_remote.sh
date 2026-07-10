@@ -18,6 +18,7 @@ DEPLOY_RECORD_PATH="/var/lib/pear/deployed-sha"
 SNAPSHOT_ROOT="/home/zulipdev/pear-deploy-snapshots"
 REMOTE_AUTH_ENV="/etc/pear/caddy-basic-auth.env"
 WORKSPACE_HELPER_RUNTIME="$SCRIPT_DIR/workspace_helper_runtime.py"
+PEAR_BUILD_SWAP_BYTES=$((8 * 1024 * 1024 * 1024))
 YES=false
 RUN_TESTS=true
 RUN_MIGRATE=true
@@ -482,6 +483,7 @@ verify_remote_disk_capacity() {
         --pear-skills-dir "$REMOTE_PEAR_SKILLS_DIR"
         --snapshot-root "$SNAPSHOT_ROOT"
         --asset-build-dir "$remote_asset_build_dir"
+        --build-swap-bytes "$PEAR_BUILD_SWAP_BYTES"
     )
     for runtime_path in "${PEAR_DEPLOY_RUNTIME_CONFIG_PATHS[@]}"; do
         capacity_command+=(--runtime-path "$runtime_path")
@@ -569,6 +571,55 @@ build_remote_production_assets() {
     ssh_root "sudo -Hu zulipdev bash -lc 'cd $REMOTE_ASSET_BUILD_DIR && ZULIP_DEV_PRODUCTION_ASSETS=1 ./tools/update-prod-static && .venv/bin/python3 tools/pear_deploy/production_assets.py --repo-root .'"
 }
 
+enable_remote_build_swap() {
+    REMOTE_BUILD_SWAP_PATH="/var/lib/pear-builds/asset-build-${LOCAL_SHA:0:12}-$$.swap"
+    echo "Enabling bounded temporary swap for the isolated production build..."
+    ssh_root bash -s -- "$REMOTE_BUILD_SWAP_PATH" "$PEAR_BUILD_SWAP_BYTES" <<'REMOTE'
+set -euo pipefail
+SWAP_PATH="$1"
+SWAP_BYTES="$2"
+if [[ ! "$SWAP_PATH" =~ ^/var/lib/pear-builds/asset-build-[0-9a-f]{12}-[0-9]+\.swap$ ]]; then
+    echo "invalid temporary build swap path" >&2
+    exit 1
+fi
+if [[ ! "$SWAP_BYTES" =~ ^[0-9]+$ ]] || (( SWAP_BYTES < 1073741824 )); then
+    echo "invalid temporary build swap size" >&2
+    exit 1
+fi
+if [[ -e "$SWAP_PATH" ]]; then
+    echo "temporary build swap path already exists" >&2
+    exit 1
+fi
+cleanup_failed_swap() {
+    rm -f -- "$SWAP_PATH"
+}
+trap cleanup_failed_swap EXIT
+umask 077
+fallocate -l "$SWAP_BYTES" "$SWAP_PATH"
+chmod 0600 "$SWAP_PATH"
+mkswap --quiet "$SWAP_PATH"
+swapon "$SWAP_PATH"
+trap - EXIT
+REMOTE
+    REMOTE_BUILD_SWAP_ACTIVE=true
+}
+
+disable_remote_build_swap() {
+    if [[ "$REMOTE_BUILD_SWAP_ACTIVE" != true ]]; then
+        return
+    fi
+    echo "Removing temporary production-build swap..."
+    ssh_root bash -s -- "$REMOTE_BUILD_SWAP_PATH" <<'REMOTE'
+set -euo pipefail
+SWAP_PATH="$1"
+if swapon --noheadings --show=NAME | grep -Fxq -- "$SWAP_PATH"; then
+    swapoff "$SWAP_PATH"
+fi
+rm -f -- "$SWAP_PATH"
+REMOTE
+    REMOTE_BUILD_SWAP_ACTIVE=false
+}
+
 cut_over_remote_production_assets() {
     local build_root="${1:-$REMOTE_ASSET_BUILD_DIR}"
     echo "Cutting over the validated production asset graph..."
@@ -654,6 +705,8 @@ SNAPSHOT_DIR=""
 REMOTE_ASSET_BUILD_DIR=""
 REMOTE_FROZEN_ASSET_DIR=""
 REMOTE_TRUSTED_RUNTIME=""
+REMOTE_BUILD_SWAP_PATH=""
+REMOTE_BUILD_SWAP_ACTIVE=false
 ROLLBACK_READY=false
 ROLLBACK_DONE=false
 SERVICE_RESTART_REQUIRED=false
@@ -762,6 +815,9 @@ REMOTE
     fi
     if [[ -n "$REMOTE_ASSET_BUILD_DIR" ]]; then
         ssh_root "rm -rf $REMOTE_ASSET_BUILD_DIR" >/dev/null 2>&1 || true
+    fi
+    if [[ "$REMOTE_BUILD_SWAP_ACTIVE" == true ]]; then
+        disable_remote_build_swap >/dev/null 2>&1 || true
     fi
     if [[ -n "$REMOTE_FROZEN_ASSET_DIR" ]]; then
         ssh_root "rm -rf $REMOTE_FROZEN_ASSET_DIR" >/dev/null 2>&1 || true
@@ -951,7 +1007,9 @@ if [[ "$YES" != true ]]; then
 fi
 
 echo
+enable_remote_build_swap
 build_remote_production_assets
+disable_remote_build_swap
 
 echo "Staging privileged deployment tooling from the pinned local commit..."
 REMOTE_TRUSTED_RUNTIME="$(stage_remote_pear_deploy_bundle "$REPO_ROOT" "$LOCAL_SHA")"

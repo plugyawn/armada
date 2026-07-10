@@ -65,7 +65,7 @@ class DeploymentCapacityTest(unittest.TestCase):
             ),
             patch(
                 "tools.pear_deploy.deployment_capacity.shutil.disk_usage",
-                return_value=SimpleNamespace(free=5 * GIB),
+                return_value=SimpleNamespace(free=7 * GIB),
             ),
         ):
             estimate = estimate_capacity(
@@ -74,11 +74,13 @@ class DeploymentCapacityTest(unittest.TestCase):
                 pear_skills_dir=Path("/remote/skills"),
                 snapshot_root=Path("/remote/snapshots"),
                 asset_build_dir=Path("/remote/asset-build"),
+                build_swap_bytes=2 * GIB,
                 runtime_paths=[Path("/etc/runtime")],
             )
 
         self.assertEqual(estimate.snapshot_bytes, 6_800)
         self.assertEqual(estimate.asset_build_bytes, 3 * GIB + 5_000)
+        self.assertEqual(estimate.build_swap_bytes, 2 * GIB)
         self.assertEqual(estimate.safety_bytes, GIB)
         self.assertEqual(estimate.reclaimable_asset_build_bytes, 100)
         self.assertTrue(estimate.sufficient)
@@ -834,6 +836,14 @@ class StaticRuntimeContractTest(unittest.TestCase):
             update.rindex("systemctl stop pear-zulip-dev"),
         )
         self.assertIn("$REMOTE_ASSET_BUILD_DIR/static/generated", update)
+        self.assertLess(
+            update.rindex("enable_remote_build_swap"),
+            update.rindex("build_remote_production_assets"),
+        )
+        self.assertLess(
+            update.rindex("build_remote_production_assets"),
+            update.rindex("disable_remote_build_swap"),
+        )
         self.assertLess(
             update.rindex("systemctl stop pear-zulip-dev"), update.rindex("wait_for_remote_drain")
         )

@@ -575,7 +575,7 @@ build_remote_production_assets() {
             $REMOTE_ASSET_BUILD_DIR/var/log \
             $REMOTE_ASSET_BUILD_DIR/static/generated"
     echo "Building production assets without touching the live asset graph..."
-    ssh_root "sudo -Hu zulipdev bash -lc 'cd $REMOTE_ASSET_BUILD_DIR && ZULIP_DEV_PRODUCTION_ASSETS=1 ./tools/update-prod-static && .venv/bin/python3 tools/pear_deploy/production_assets.py --repo-root .'"
+    ssh_root "sudo -Hu zulipdev bash -lc 'cd $REMOTE_ASSET_BUILD_DIR && umask 022 && ZULIP_DEV_PRODUCTION_ASSETS=1 ./tools/update-prod-static && .venv/bin/python3 tools/pear_deploy/production_assets.py --repo-root .'"
 }
 
 enable_remote_build_swap() {

@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import hashlib
+import hmac
+import json
 import logging
 import mimetypes
 import subprocess
@@ -16,12 +18,7 @@ from django.core.cache import cache
 from django.db.models import F
 from django.utils.timezone import now as timezone_now
 
-from zerver.lib.pear_workspace_index import (
-    WorkspaceEntryIdError,
-    WorkspaceIndex,
-    WorkspaceIndexEntry,
-    WorkspacePath,
-)
+from zerver.lib.pear_workspace_index import WorkspaceIndex, WorkspacePath
 from zerver.lib.pear_workspace_io import (
     WorkspaceFile,
     WorkspaceWriteResult,
@@ -40,6 +37,8 @@ PEAR_WORKSPACE_RAW_MAX_BYTES = 16 * 1024 * 1024
 PEAR_WORKSPACE_INDEX_CACHE_SECONDS = 60
 PEAR_WORKSPACE_INDEX_LOCAL_ENTRIES = 4
 PEAR_WORKSPACE_GIT_TIMEOUT_SECONDS = 15
+PEAR_WORKSPACE_MUTATION_RECEIPT_SECONDS = 10 * 60
+PEAR_WORKSPACE_FILE_OBSERVATION_SECONDS = 60 * 60
 
 
 class WorkspaceSnapshotError(Exception):
@@ -56,6 +55,14 @@ class WorkspaceSnapshot:
     branch: str
     head: str
     dirty_count: int
+
+
+@dataclass(frozen=True)
+class WorkspaceMutationReceipt:
+    state: str
+    result_version: str
+    result_revision: int | None
+    result_entry_id: str | None
 
 
 @dataclass(frozen=True)
@@ -109,6 +116,238 @@ def clear_workspace_snapshot_cache() -> None:
 
 def _latest_fingerprint_cache_key(workspace_uuid: str) -> str:
     return f"pear:workspace-index-fingerprint:v1:{workspace_uuid}"
+
+
+def _file_observation_cache_key(
+    workspace_uuid: str,
+    revision: int,
+    entry_id: str,
+) -> str:
+    message = json.dumps(
+        [workspace_uuid, revision, entry_id],
+        separators=(",", ":"),
+    ).encode("utf-8")
+    digest = hmac.new(_workspace_index_secret(), message, hashlib.sha256).hexdigest()
+    return f"pear:workspace-file-observation:v1:{digest}"
+
+
+def get_workspace_file_observation(
+    workspace_uuid: str,
+    revision: int,
+    entry_id: str,
+) -> str | None:
+    try:
+        version = cache.get(_file_observation_cache_key(workspace_uuid, revision, entry_id))
+    except Exception:
+        logger.warning("Could not read Pear workspace file observation", exc_info=True)
+        return None
+    if not isinstance(version, str) or len(version) != 64:
+        return None
+    return version
+
+
+def record_workspace_file_observation(
+    workspace_uuid: str,
+    revision: int,
+    entry_id: str,
+    version: str,
+) -> None:
+    try:
+        cache.set(
+            _file_observation_cache_key(workspace_uuid, revision, entry_id),
+            version,
+            timeout=PEAR_WORKSPACE_FILE_OBSERVATION_SECONDS,
+        )
+    except Exception:
+        logger.warning("Could not store Pear workspace file observation", exc_info=True)
+
+
+def _mutation_receipt_cache_key(
+    *,
+    actor_id: int,
+    workspace_uuid: str,
+    requested_revision: int,
+    entry_id: str,
+    expected_path: str,
+    base_version: str,
+    content: bytes,
+    edit_revision: int,
+) -> str:
+    message = json.dumps(
+        [
+            actor_id,
+            workspace_uuid,
+            requested_revision,
+            entry_id,
+            expected_path,
+            base_version,
+            hashlib.sha256(content).hexdigest(),
+            edit_revision,
+        ],
+        ensure_ascii=False,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    digest = hmac.new(_workspace_index_secret(), message, hashlib.sha256).hexdigest()
+    return f"pear:workspace-mutation-receipt:v1:{digest}"
+
+
+def _store_workspace_mutation_receipt(
+    *,
+    actor_id: int,
+    workspace_uuid: str,
+    requested_revision: int,
+    entry_id: str,
+    expected_path: str,
+    base_version: str,
+    content: bytes,
+    edit_revision: int,
+    receipt: WorkspaceMutationReceipt,
+) -> None:
+    key = _mutation_receipt_cache_key(
+        actor_id=actor_id,
+        workspace_uuid=workspace_uuid,
+        requested_revision=requested_revision,
+        entry_id=entry_id,
+        expected_path=expected_path,
+        base_version=base_version,
+        content=content,
+        edit_revision=edit_revision,
+    )
+    try:
+        cache.set(
+            key,
+            {
+                "state": receipt.state,
+                "result_version": receipt.result_version,
+                "result_revision": receipt.result_revision,
+                "result_entry_id": receipt.result_entry_id,
+            },
+            timeout=PEAR_WORKSPACE_MUTATION_RECEIPT_SECONDS,
+        )
+    except Exception:
+        # Losing a receipt makes a later retry fail closed as stale; it never
+        # broadens mutation authority.
+        logger.warning("Could not store Pear workspace mutation receipt", exc_info=True)
+
+
+def record_pending_workspace_mutation(
+    *,
+    actor_id: int,
+    workspace_uuid: str,
+    requested_revision: int,
+    entry_id: str,
+    expected_path: str,
+    base_version: str,
+    content: bytes,
+    edit_revision: int,
+    result_version: str,
+) -> None:
+    _store_workspace_mutation_receipt(
+        actor_id=actor_id,
+        workspace_uuid=workspace_uuid,
+        requested_revision=requested_revision,
+        entry_id=entry_id,
+        expected_path=expected_path,
+        base_version=base_version,
+        content=content,
+        edit_revision=edit_revision,
+        receipt=WorkspaceMutationReceipt(
+            state="pending",
+            result_version=result_version,
+            result_revision=None,
+            result_entry_id=None,
+        ),
+    )
+
+
+def record_completed_workspace_mutation(
+    *,
+    actor_id: int,
+    workspace_uuid: str,
+    requested_revision: int,
+    entry_id: str,
+    expected_path: str,
+    base_version: str,
+    content: bytes,
+    edit_revision: int,
+    result_version: str,
+    result_revision: int,
+    result_entry_id: str,
+) -> None:
+    _store_workspace_mutation_receipt(
+        actor_id=actor_id,
+        workspace_uuid=workspace_uuid,
+        requested_revision=requested_revision,
+        entry_id=entry_id,
+        expected_path=expected_path,
+        base_version=base_version,
+        content=content,
+        edit_revision=edit_revision,
+        receipt=WorkspaceMutationReceipt(
+            state="complete",
+            result_version=result_version,
+            result_revision=result_revision,
+            result_entry_id=result_entry_id,
+        ),
+    )
+
+
+def get_workspace_mutation_receipt(
+    *,
+    actor_id: int,
+    workspace_uuid: str,
+    requested_revision: int,
+    entry_id: str,
+    expected_path: str,
+    base_version: str,
+    content: bytes,
+    edit_revision: int,
+) -> WorkspaceMutationReceipt | None:
+    key = _mutation_receipt_cache_key(
+        actor_id=actor_id,
+        workspace_uuid=workspace_uuid,
+        requested_revision=requested_revision,
+        entry_id=entry_id,
+        expected_path=expected_path,
+        base_version=base_version,
+        content=content,
+        edit_revision=edit_revision,
+    )
+    try:
+        payload = cache.get(key)
+    except Exception:
+        logger.warning("Could not read Pear workspace mutation receipt", exc_info=True)
+        return None
+    if not isinstance(payload, dict) or set(payload) != {
+        "state",
+        "result_version",
+        "result_revision",
+        "result_entry_id",
+    }:
+        return None
+    state = payload["state"]
+    result_version = payload["result_version"]
+    result_revision = payload["result_revision"]
+    result_entry_id = payload["result_entry_id"]
+    if state not in {"pending", "complete"} or not isinstance(result_version, str):
+        return None
+    if state == "pending":
+        if result_revision is not None or result_entry_id is not None:
+            return None
+    elif (
+        isinstance(result_revision, bool)
+        or not isinstance(result_revision, int)
+        or result_revision < 0
+        or not isinstance(result_entry_id, str)
+        or not result_entry_id
+    ):
+        return None
+    return WorkspaceMutationReceipt(
+        state=state,
+        result_version=result_version,
+        result_revision=result_revision,
+        result_entry_id=result_entry_id,
+    )
 
 
 def _run_git(
@@ -352,38 +591,6 @@ def _update_workspace_metadata(node: PearWorkspaceNode, snapshot: WorkspaceSnaps
         node.save(update_fields=[*update_fields, "date_updated"])
 
 
-def workspace_index_for_revision(
-    snapshot: WorkspaceSnapshot,
-    revision: int,
-) -> WorkspaceIndex:
-    if isinstance(revision, bool) or revision < 0:
-        raise WorkspaceEntryIdError("Workspace revision is invalid.")
-    return WorkspaceIndex.build(
-        workspace_uuid=snapshot.workspace_uuid,
-        revision=revision,
-        paths=snapshot.paths,
-        secret=_workspace_index_secret(),
-    )
-
-
-def resolve_stale_retry_entry(
-    snapshot: WorkspaceSnapshot,
-    *,
-    requested_revision: int,
-    entry_id: str,
-    expected_path: str,
-) -> WorkspaceIndexEntry:
-    path = "/".join(validate_workspace_relative_path(expected_path))
-    stale_index = workspace_index_for_revision(snapshot, requested_revision)
-    stale_entry = stale_index.entry_for_id(entry_id)
-    if stale_entry.path != path or stale_entry.kind != "file":
-        raise WorkspaceEntryIdError("Workspace entry identifier is stale or invalid.")
-    current_entry = snapshot.index.entry_for_path(path)
-    if current_entry.kind != "file":
-        raise WorkspaceEntryIdError("Workspace entry identifier is stale or invalid.")
-    return current_entry
-
-
 def read_workspace_node_file(
     node: PearWorkspaceNode,
     path: str,
@@ -427,6 +634,19 @@ def write_workspace_node_file(
         expected_version=expected_version,
         create=False,
     )
+
+
+def refresh_workspace_snapshot_after_conflict(
+    node: PearWorkspaceNode,
+    *,
+    observed_revision: int,
+) -> WorkspaceSnapshot:
+    node.refresh_from_db()
+    if node.content_revision == observed_revision:
+        _advance_revision_if_current(node, observed_revision)
+    snapshot = get_workspace_snapshot(node, force=True)
+    _update_workspace_metadata(node, snapshot)
+    return snapshot
 
 
 def finish_workspace_write(

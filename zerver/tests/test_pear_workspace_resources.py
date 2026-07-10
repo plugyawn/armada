@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import os
 import subprocess
 import tempfile
 from pathlib import Path
@@ -9,12 +10,17 @@ from unittest.mock import patch
 import orjson
 
 from zerver.lib.pear_workspace_index import WorkspaceIndex, WorkspacePath
-from zerver.lib.pear_workspace_io import WorkspaceFile, WorkspaceWriteResult
+from zerver.lib.pear_workspace_io import (
+    WorkspaceFile,
+    WorkspaceVersionConflictError,
+    WorkspaceWriteResult,
+)
 from zerver.lib.pear_workspace_resources import (
     PEAR_WORKSPACE_TEXT_MAX_BYTES,
     WorkspaceSnapshot,
     clear_workspace_snapshot_cache,
     read_workspace_node_file,
+    record_pending_workspace_mutation,
     write_workspace_node_file,
 )
 from zerver.lib.test_classes import ZulipTestCase
@@ -266,6 +272,7 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
                 },
                 intentionally_undocumented=True,
             )
+            conflict_descriptor = self.descriptor(node)
 
             self.assertEqual((repo / "README.md").read_text(), remote_content)
 
@@ -291,6 +298,15 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
         conflict = orjson.loads(conflict_result.content)
         self.assertEqual(conflict["error_code"], "version_conflict")
         self.assertEqual(conflict["remote_file"]["content"], remote_content)
+        self.assertEqual(
+            conflict["workspace_revision"],
+            saved["workspace_revision"] + 1,
+        )
+        self.assertEqual(
+            conflict["remote_file"]["entry_id"],
+            conflict_descriptor["default_entry"]["entry_id"],
+        )
+        self.assertNotEqual(conflict["remote_file"]["entry_id"], saved["entry_id"])
 
     def test_idempotent_write_repairs_missed_content_revision_bump(self) -> None:
         user = self.example_user("hamlet")
@@ -309,6 +325,17 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
             original = self.assert_json_success(get_result)["pear_workspace_file"]
             desired = b"saved before database bump\n"
             (repo / "README.md").write_bytes(desired)
+            record_pending_workspace_mutation(
+                actor_id=user.id,
+                workspace_uuid=str(node.uuid),
+                requested_revision=descriptor["workspace_revision"],
+                entry_id=entry["entry_id"],
+                expected_path="README.md",
+                base_version=original["version"],
+                content=desired,
+                edit_revision=2,
+                result_version=hashlib.sha256(desired).hexdigest(),
+            )
             result = self.client_put(
                 f"/json/pear/workspaces/{node.uuid}/file",
                 {
@@ -327,6 +354,117 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
         self.assertEqual(node.content_revision, descriptor["workspace_revision"] + 1)
         self.assertEqual(payload["workspace_revision"], node.content_revision)
         self.assertEqual(payload["version"], hashlib.sha256(desired).hexdigest())
+
+    def test_matching_replacement_cannot_masquerade_as_idempotent_retry(self) -> None:
+        user = self.example_user("hamlet")
+        stream = self.subscribe(user, "workspace-resource")
+        self.login_user(user)
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo = self.make_workspace(Path(temp_dir).resolve())
+            # Start dirty so delete/recreate keeps the same Git status and
+            # exercises the receipt gate rather than snapshot invalidation.
+            (repo / "README.md").write_bytes(b"old dirty bytes\n")
+            node = self.make_node(user, stream.name, repo)
+            descriptor = self.descriptor(node)
+            entry = descriptor["default_entry"]
+            get_result = self.client_get(
+                f"/json/pear/workspaces/{node.uuid}/file",
+                {"entry_id": entry["entry_id"]},
+                intentionally_undocumented=True,
+            )
+            original = self.assert_json_success(get_result)["pear_workspace_file"]
+            delayed_content = b"delayed request bytes\n"
+            replacement = repo / ".replacement"
+            replacement.write_bytes(delayed_content)
+            os.replace(replacement, repo / "README.md")
+            put_result = self.client_put(
+                f"/json/pear/workspaces/{node.uuid}/file",
+                {
+                    "entry_id": entry["entry_id"],
+                    "expected_path": "README.md",
+                    "content": delayed_content.decode(),
+                    "base_version": original["version"],
+                    "workspace_revision": descriptor["workspace_revision"],
+                    "edit_revision": 3,
+                },
+                intentionally_undocumented=True,
+            )
+            old_id_read = self.client_get(
+                f"/json/pear/workspaces/{node.uuid}/file",
+                {"entry_id": entry["entry_id"]},
+                intentionally_undocumented=True,
+            )
+
+            self.assertEqual((repo / "README.md").read_bytes(), delayed_content)
+
+        self.assertEqual(orjson.loads(put_result.content)["error_code"], "stale_entry")
+        self.assertEqual(orjson.loads(old_id_read.content)["error_code"], "stale_entry")
+
+    def test_conflict_after_agent_mutation_uses_current_revision_bound_entry(self) -> None:
+        user = self.example_user("hamlet")
+        stream = self.subscribe(user, "workspace-resource")
+        self.login_user(user)
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo = self.make_workspace(Path(temp_dir).resolve())
+            node = self.make_node(user, stream.name, repo)
+            descriptor = self.descriptor(node)
+            entry = descriptor["default_entry"]
+            get_result = self.client_get(
+                f"/json/pear/workspaces/{node.uuid}/file",
+                {"entry_id": entry["entry_id"]},
+                intentionally_undocumented=True,
+            )
+            original = self.assert_json_success(get_result)["pear_workspace_file"]
+            remote_data = b"agent mutation\n"
+            remote_file = WorkspaceFile(
+                data=remote_data,
+                version=hashlib.sha256(remote_data).hexdigest(),
+                size=len(remote_data),
+                mode=0o600,
+            )
+
+            def race_write(
+                _node: PearWorkspaceNode,
+                _path: str,
+                _data: bytes,
+                *,
+                expected_version: str,
+            ) -> WorkspaceWriteResult:
+                self.assertEqual(expected_version, original["version"])
+                (repo / "README.md").write_bytes(remote_data)
+                PearWorkspaceNode.objects.filter(id=node.id).update(content_revision=1)
+                raise WorkspaceVersionConflictError(
+                    "agent won the race",
+                    current=remote_file,
+                )
+
+            with patch(
+                "zerver.views.pear_workspace.write_workspace_node_file",
+                side_effect=race_write,
+            ):
+                conflict_result = self.client_put(
+                    f"/json/pear/workspaces/{node.uuid}/file",
+                    {
+                        "entry_id": entry["entry_id"],
+                        "expected_path": "README.md",
+                        "content": "local mutation\n",
+                        "base_version": original["version"],
+                        "workspace_revision": descriptor["workspace_revision"],
+                        "edit_revision": 4,
+                    },
+                    intentionally_undocumented=True,
+                )
+            current_descriptor = self.descriptor(node)
+
+        conflict = orjson.loads(conflict_result.content)
+        self.assertEqual(conflict["error_code"], "version_conflict")
+        self.assertEqual(conflict["workspace_revision"], 1)
+        self.assertEqual(conflict["remote_file"]["content"], remote_data.decode())
+        self.assertNotEqual(conflict["remote_file"]["entry_id"], entry["entry_id"])
+        self.assertEqual(
+            conflict["remote_file"]["entry_id"],
+            current_descriptor["default_entry"]["entry_id"],
+        )
 
     def test_refresh_invalidates_ids_and_cursor_without_creating_readme(self) -> None:
         user = self.example_user("hamlet")

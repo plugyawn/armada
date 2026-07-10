@@ -1,3 +1,9 @@
+.pear-workspace-host {
+    overflow: hidden;
+    block-size: 100%;
+    min-block-size: 0;
+}
+
 .pear-workspace-shell {
     --pear-workspace-border: color-mix(in srgb, currentcolor 14%, transparent);
     --pear-workspace-muted: color-mix(in srgb, currentcolor 58%, transparent);
@@ -14,7 +20,7 @@
     display: grid;
     grid-template-rows: auto minmax(0, 1fr);
     block-size: 100%;
-    min-block-size: 420px;
+    min-block-size: 0;
     color: var(--color-text-default, inherit);
     background: var(--color-background, Canvas);
     font-family: var(--pear-font-ui, "Hanken Grotesk VF", sans-serif);
@@ -642,10 +648,6 @@
 }
 
 @media (width <= 720px) {
-    .pear-workspace-shell {
-        min-block-size: 360px;
-    }
-
     .pear-workspace-shell__header {
         flex-wrap: wrap;
     }
@@ -664,6 +666,19 @@
 
     .pear-workspace-shell__body {
         position: relative;
+        display: block;
+    }
+
+    .pear-workspace-shell__body::after {
+        position: absolute;
+        z-index: 5;
+        inset: 0;
+        display: none;
+        background: color-mix(in srgb, hsl(0deg 0% 0%) 22%, transparent);
+        content: "";
+    }
+
+    .pear-workspace-shell--explorer-open .pear-workspace-shell__body::after {
         display: block;
     }
 

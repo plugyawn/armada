@@ -23,6 +23,8 @@ let shell_generation = 0;
 let shell_teardown: Promise<void> = Promise.resolve();
 let previous_run_active = false;
 let initialized = false;
+let observed_compose: HTMLElement | undefined;
+let compose_height_observer: ResizeObserver | undefined;
 
 function context_key(stream: string | undefined, topic: string | undefined): string {
     return JSON.stringify([stream?.toLowerCase() ?? "", topic?.toLowerCase() ?? ""]);
@@ -38,6 +40,33 @@ function $pane(): JQuery {
 
 function $feed_column(): JQuery {
     return $("#message_feed_container").closest(".column-middle-inner");
+}
+
+function sync_compose_height(): void {
+    const column = $feed_column()[0];
+    if (column === undefined) {
+        return;
+    }
+    const height = Math.max(0, observed_compose?.getBoundingClientRect().height ?? 0);
+    column.style.setProperty("--pear-workspace-compose-height", `${height}px`);
+}
+
+function observe_compose_height(): void {
+    const compose = document.querySelector<HTMLElement>("#compose") ?? undefined;
+    if (compose !== observed_compose) {
+        compose_height_observer?.disconnect();
+        observed_compose = compose;
+        compose_height_observer =
+            compose === undefined
+                ? undefined
+                : new ResizeObserver(() => {
+                      sync_compose_height();
+                  });
+        if (compose !== undefined) {
+            compose_height_observer?.observe(compose);
+        }
+    }
+    sync_compose_height();
 }
 
 function feed_is_clamped(): boolean {
@@ -56,10 +85,11 @@ function ensure_pane(): JQuery {
     $feed.after($("<div>").attr("id", "pear-workspace-pane").prop("hidden", true));
     $existing = $pane();
     $existing[0]?.addEventListener("keydown", (event) => {
-        if (event.key === "Escape") {
+        if (event.key === "Escape" && !event.defaultPrevented) {
             event.preventDefault();
             event.stopPropagation();
             set_tab("chat");
+            focus_workspace_tab("chat");
             return;
         }
         // Workspace editors own their keymaps. Do not let Zulip's global
@@ -111,6 +141,7 @@ function sync_topic_bar(): void {
         current_stream !== undefined &&
         current_topic !== undefined;
     const was_active = $feed.hasClass("pear-feed-clamped");
+    observe_compose_height();
     $feed_column().toggleClass("pear-topic-bar-active", active);
     $feed.toggleClass("pear-feed-clamped", active);
     if (!active) {
@@ -360,10 +391,80 @@ function on_workspace_tab_click(this: HTMLElement, event: JQuery.ClickEvent): vo
     }
 }
 
+function active_workspace_tab_strip(): Element | undefined {
+    const topic_headers = [
+        ...document.querySelectorAll<HTMLElement>("#message_feed_container .message_header_stream"),
+    ];
+    const current_header_strip = topic_headers
+        .at(-1)
+        ?.querySelector<HTMLElement>(".pear-workspace-tabs");
+    if (current_header_strip !== null && current_header_strip !== undefined) {
+        return current_header_strip;
+    }
+    const candidates = [...document.querySelectorAll<HTMLElement>(".pear-workspace-tabs")].filter(
+        (candidate) =>
+            candidate.isConnected &&
+            candidate.closest("[hidden], [aria-hidden='true']") === null &&
+            !candidate.classList.contains("pear-workspace-tabs-hidden"),
+    );
+    const in_viewport = candidates.filter((candidate) => {
+        const bounds = candidate.getBoundingClientRect();
+        return bounds.bottom > 0 && bounds.top < window.innerHeight;
+    });
+    return in_viewport.at(-1) ?? candidates.at(-1);
+}
+
+function focus_workspace_tab(tab: PearWorkspaceTab, strip?: Element | null): void {
+    (strip ?? active_workspace_tab_strip())
+        ?.querySelector<HTMLButtonElement>(`.pear-workspace-mode-tab[data-pear-tab="${tab}"]`)
+        ?.focus();
+}
+
+function on_workspace_tab_keydown(this: HTMLButtonElement, event: JQuery.KeyDownEvent): void {
+    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) {
+        return;
+    }
+    const strip = this.closest(".pear-workspace-tabs");
+    if (strip === null) {
+        return;
+    }
+    const tabs = [
+        ...strip.querySelectorAll<HTMLButtonElement>(".pear-workspace-mode-tab[data-pear-tab]"),
+    ];
+    const current_index = tabs.indexOf(this);
+    if (current_index === -1 || tabs.length === 0) {
+        return;
+    }
+    let next_index: number;
+    switch (event.key) {
+        case "Home":
+            next_index = 0;
+            break;
+        case "End":
+            next_index = tabs.length - 1;
+            break;
+        case "ArrowLeft":
+            next_index = (current_index - 1 + tabs.length) % tabs.length;
+            break;
+        default:
+            next_index = (current_index + 1) % tabs.length;
+    }
+    const next_tab = tabs[next_index]?.dataset["pearTab"];
+    if (next_tab !== "chat" && next_tab !== "workspace") {
+        return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    set_tab(next_tab);
+    focus_workspace_tab(next_tab, strip);
+}
+
 export function initialize(): void {
     if (initialized) {
         return;
     }
     initialized = true;
     $("body").on("click", ".pear-workspace-mode-tab", on_workspace_tab_click);
+    $("body").on("keydown", ".pear-workspace-mode-tab", on_workspace_tab_keydown);
+    observe_compose_height();
 }

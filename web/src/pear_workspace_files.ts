@@ -901,6 +901,7 @@ export function create_pear_workspace_files(
                 break;
             case "Escape":
                 event.preventDefault();
+                event.stopPropagation();
                 close_menu(true);
                 return;
             default:
@@ -937,8 +938,9 @@ export function create_pear_workspace_files(
             return;
         }
         if (event.key === "Escape") {
+            event.preventDefault();
+            event.stopPropagation();
             if (!mutation_busy) {
-                event.preventDefault();
                 close_dialog(true);
             }
             return;

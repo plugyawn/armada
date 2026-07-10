@@ -1,5 +1,5 @@
 <section class="pear-workspace-shell" aria-label="Workspace">
-    <header class="pear-workspace-shell__header" data-role="workspace-header">
+    <header class="pear-workspace-shell__header">
         <div class="pear-workspace-shell__identity">
             <strong data-role="workspace-title">Workspace</strong>
             <span data-role="workspace-meta"></span>
@@ -8,6 +8,7 @@
             type="button"
             data-action="toggle-explorer"
             class="pear-workspace-shell__explorer-toggle"
+            aria-controls="pear-workspace-explorer"
             aria-expanded="false"
         >Files</button>
         <button
@@ -18,6 +19,7 @@
     </header>
     <div class="pear-workspace-shell__body">
         <aside
+            id="pear-workspace-explorer"
             class="pear-workspace-shell__explorer"
             aria-label="Workspace explorer"
         >
@@ -44,8 +46,10 @@
             ></div>
         </aside>
         <main
+            id="pear-workspace-document-panel"
             class="pear-workspace-shell__document"
             aria-label="Workspace document"
+            role="tabpanel"
         >
             <div data-role="tabs" role="tablist" aria-label="Open files"></div>
             <header class="pear-workspace-shell__document-header">

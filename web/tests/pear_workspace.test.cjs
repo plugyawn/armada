@@ -12,18 +12,47 @@ const dom = new JSDOM(
     `<!doctype html><html><body>
         <div class="column-middle-inner">
             <div id="message_feed_container">
-                <div class="message_header_stream" data-height="42"></div>
+                <div class="message_header_stream" data-height="42" data-header="old">
+                    <span class="pear-workspace-tabs pear-workspace-tabs-hidden" role="tablist">
+                        <button class="pear-workspace-mode-tab pear-workspace-tab-selected" data-pear-tab="chat" role="tab">Chat</button>
+                        <button class="pear-workspace-mode-tab" data-pear-tab="workspace" role="tab">Workspace</button>
+                    </span>
+                </div>
+                <div class="message_header_stream" data-height="42" data-header="active">
+                    <span class="pear-workspace-tabs pear-workspace-tabs-hidden" role="tablist">
+                        <button class="pear-workspace-mode-tab pear-workspace-tab-selected" data-pear-tab="chat" role="tab">Chat</button>
+                        <button class="pear-workspace-mode-tab" data-pear-tab="workspace" role="tab">Workspace</button>
+                    </span>
+                </div>
             </div>
         </div>
-        <span class="pear-workspace-tabs pear-workspace-tabs-hidden" role="tablist">
-            <button class="pear-workspace-mode-tab pear-workspace-tab-selected" data-pear-tab="chat" role="tab">Chat</button>
-            <button class="pear-workspace-mode-tab" data-pear-tab="workspace" role="tab">Workspace</button>
-        </span>
+        <div id="compose"></div>
     </body></html>`,
     {pretendToBeVisual: true, url: "http://zulip.zulipdev.com/"},
 );
 const {window} = dom;
 window.scrollTo = () => {};
+const resize_observers = [];
+class ResizeObserver {
+    constructor(callback) {
+        this.callback = callback;
+        resize_observers.push(this);
+    }
+
+    observe(target) {
+        this.target = target;
+    }
+
+    disconnect() {
+        this.target = undefined;
+    }
+
+    trigger() {
+        this.callback([], this);
+    }
+}
+let compose_height = 144;
+window.document.querySelector("#compose").getBoundingClientRect = () => ({height: compose_height});
 for (const [name, value] of Object.entries({
     window,
     document: window.document,
@@ -32,6 +61,7 @@ for (const [name, value] of Object.entries({
     HTMLElement: window.HTMLElement,
     CustomEvent: window.CustomEvent,
     requestAnimationFrame: window.requestAnimationFrame.bind(window),
+    ResizeObserver,
 })) {
     set_global(name, value);
 }
@@ -68,6 +98,12 @@ function click(selector) {
     element.dispatchEvent(new window.MouseEvent("click", {bubbles: true}));
 }
 
+function keydown(element, key) {
+    element.dispatchEvent(
+        new window.KeyboardEvent("keydown", {key, bubbles: true, cancelable: true}),
+    );
+}
+
 async function settle() {
     await new Promise((resolve) => setImmediate(resolve));
     await Promise.resolve();
@@ -89,7 +125,10 @@ run_test("Chat and Workspace keep one shell mounted and reject retired tab state
         false,
     );
 
-    click('[data-pear-tab="workspace"]');
+    const active_header = document.querySelector("[data-header='active']");
+    const chat_tab = active_header.querySelector('[data-pear-tab="chat"]');
+    chat_tab.focus();
+    keydown(chat_tab, "ArrowRight");
     await settle();
     assert.equal(pear_workspace.pane_is_open(), true);
     assert.equal(mounts.length, 1);
@@ -99,6 +138,34 @@ run_test("Chat and Workspace keep one shell mounted and reject retired tab state
         document.querySelector('[data-pear-tab="workspace"]').getAttribute("aria-selected"),
         "true",
     );
+    assert.equal(document.activeElement.dataset.pearTab, "workspace");
+    assert.equal(
+        document
+            .querySelector(".column-middle-inner")
+            .style.getPropertyValue("--pear-workspace-compose-height"),
+        "144px",
+    );
+    compose_height = 216;
+    resize_observers.at(-1).trigger();
+    assert.equal(
+        document
+            .querySelector(".column-middle-inner")
+            .style.getPropertyValue("--pear-workspace-compose-height"),
+        "216px",
+    );
+
+    keydown(document.querySelector("#pear-workspace-pane"), "Escape");
+    assert.equal(pear_workspace.pane_is_open(), false);
+    assert.equal(document.activeElement.dataset.pearTab, "chat");
+    assert.equal(
+        document.activeElement.closest(".message_header_stream"),
+        active_header,
+        "Escape restores focus to the current visible topic header, not an older duplicate",
+    );
+    assert.equal(mounts[0].destroys, 0, "Escape keeps the warm shell mounted");
+    click('[data-pear-tab="workspace"]');
+    await settle();
+    assert.equal(mounts.length, 1);
 
     click('[data-pear-tab="chat"]');
     assert.equal(pear_workspace.pane_is_open(), false);

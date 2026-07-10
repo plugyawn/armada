@@ -1779,8 +1779,16 @@
 
 /* Workspace mode keeps the same topic header pinned above the lazy shell. */
 .pear-topic-bar-active #pear-workspace-pane {
-    overflow: visible;
-    height: auto;
+    overflow: hidden;
+    block-size: max(
+        0px,
+        calc(
+            100dvh - var(--navbar-fixed-height) -
+                var(--pear-topic-bar-height, 0px) -
+                var(--pear-workspace-compose-height, 0px)
+        )
+    );
+    min-block-size: 0;
     padding-top: 0;
 }
 

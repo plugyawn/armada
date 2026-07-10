@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Diff the codex binary's app-server method surface against the baseline.
+"""Diff Codex's generated app-server method surface against the baseline.
 
 The codexification doctrine: Pear replicates Codex, so every Codex
 upgrade should answer "what did the engine add?" in one command. This
-extracts JSON-RPC-shaped method names from the binary's strings and
-diffs them against tools/pear-codex-surface-baseline.txt.
+asks Codex to generate its authoritative experimental JSON schemas and diffs
+their four wire surfaces against tools/pear-codex-surface-baseline.txt.
 
 Usage:
     tools/pear-codex-surface-diff --binary /path/to/codex [--write]
@@ -14,41 +14,61 @@ the baseline after reviewing the additions.
 """
 
 import argparse
-import re
+import json
+import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
-METHOD_PREFIXES = (
-    "thread",
-    "turn",
-    "item",
-    "commandExecution",
-    "fileChange",
-    "model",
-    "account",
-    "review",
-    "skills",
-    "mcpServer",
-    "fuzzyFileSearch",
-    "collaborationMode",
-    "agent",
-    "realtime",
-)
-# A plausible wire method: known prefix, one or two clean camelCase
-# segments. The strings table concatenates adjacent literals, so
-# anything longer or oddly-cased is noise.
-METHOD_PATTERN = re.compile(
-    (
-        "(?:" + "|".join(METHOD_PREFIXES) + ")"
-        "(?:/[a-z][a-zA-Z]{1,30}){1,2}"
-    ).encode()
+SCHEMA_SURFACES = (
+    "ClientRequest.json",
+    "ClientNotification.json",
+    "ServerRequest.json",
+    "ServerNotification.json",
 )
 BASELINE_PATH = Path(__file__).parent / "pear-codex-surface-baseline.txt"
 
 
+def extract_methods_from_schema(schema_root: Path) -> set[str]:
+    methods: set[str] = set()
+    for filename in SCHEMA_SURFACES:
+        schema = json.loads((schema_root / filename).read_text())
+        variants = schema.get("oneOf")
+        if not isinstance(variants, list):
+            raise ValueError(f"{filename} has no oneOf wire variants")
+        for variant in variants:
+            if not isinstance(variant, dict):
+                raise ValueError(f"{filename} contains an invalid wire variant")
+            properties = variant.get("properties")
+            method_schema = properties.get("method") if isinstance(properties, dict) else None
+            enum = method_schema.get("enum") if isinstance(method_schema, dict) else None
+            if (
+                not isinstance(enum, list)
+                or len(enum) != 1
+                or not isinstance(enum[0], str)
+                or not enum[0]
+            ):
+                raise ValueError(f"{filename} contains an invalid method discriminator")
+            methods.add(enum[0])
+    return methods
+
+
 def extract_methods(binary_path: Path) -> set[str]:
-    blob = binary_path.read_bytes()
-    return {match.group().decode() for match in METHOD_PATTERN.finditer(blob)}
+    with tempfile.TemporaryDirectory(prefix="pear-codex-schema-") as temporary_directory:
+        subprocess.run(
+            [
+                binary_path,
+                "app-server",
+                "generate-json-schema",
+                "--experimental",
+                "--out",
+                temporary_directory,
+            ],
+            check=True,
+            stdout=subprocess.DEVNULL,
+            timeout=60,
+        )
+        return extract_methods_from_schema(Path(temporary_directory))
 
 
 def main() -> int:
@@ -57,10 +77,12 @@ def main() -> int:
     parser.add_argument("--write", action="store_true", help="update the baseline")
     args = parser.parse_args()
 
-    methods = extract_methods(args.binary)
-    baseline = (
-        set(BASELINE_PATH.read_text().split()) if BASELINE_PATH.exists() else set()
-    )
+    try:
+        methods = extract_methods(args.binary)
+    except (OSError, subprocess.SubprocessError, ValueError, json.JSONDecodeError) as error:
+        print(f"could not generate Codex app-server surface: {error}", file=sys.stderr)
+        return 2
+    baseline = set(BASELINE_PATH.read_text().split()) if BASELINE_PATH.exists() else set()
     added = sorted(methods - baseline)
     removed = sorted(baseline - methods)
     for method in added:

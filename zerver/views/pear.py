@@ -1442,7 +1442,6 @@ def put_pear_canvas_backend(
         user_profile,
         stream=stream_name,
         topic=topic_name,
-        ensure_canvas=False,
     )
     workdir = context.workdir.strip()
     isolation_username = pear_context_isolation_username(

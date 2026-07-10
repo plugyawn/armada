@@ -144,7 +144,7 @@ class WorkspaceIndex:
         secret: bytes,
     ) -> WorkspaceIndex:
         statuses: dict[str, str] = {ROOT_ENTRY_PATH: "clean"}
-        kinds: dict[str, str] = {ROOT_ENTRY_PATH: "directory"}
+        kinds: dict[str, Literal["file", "directory"]] = {ROOT_ENTRY_PATH: "directory"}
         children: dict[str, set[str]] = {ROOT_ENTRY_PATH: set()}
         identities: dict[str, WorkspaceEntryIdentity | None] = {ROOT_ENTRY_PATH: None}
 
@@ -184,7 +184,7 @@ class WorkspaceIndex:
 
         def entry_id(
             path: str,
-            kind: str,
+            kind: Literal["file", "directory"],
             identity: WorkspaceEntryIdentity | None,
         ) -> str:
             identity_payload = (
@@ -238,7 +238,7 @@ class WorkspaceIndex:
         return self._entries[ROOT_ENTRY_PATH]
 
     def entry_for_id(self, entry_id: str) -> WorkspaceIndexEntry:
-        if not isinstance(entry_id, str) or not entry_id:
+        if not entry_id:
             raise WorkspaceEntryIdError("Workspace entry identifier is invalid.")
         try:
             return self._entries_by_id[entry_id]
@@ -266,7 +266,7 @@ class WorkspaceIndex:
     def _decode_cursor(self, cursor: str | None) -> int:
         if cursor is None:
             return 0
-        if not isinstance(cursor, str) or not cursor:
+        if not cursor:
             raise WorkspaceCursorError("Workspace tree cursor is invalid.")
         try:
             padded = cursor + "=" * (-len(cursor) % 4)

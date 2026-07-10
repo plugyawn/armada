@@ -39,6 +39,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import BinaryIO, Literal
 
+from typing_extensions import override
+
 PEAR_ISOLATION_USERNAME_RE = re.compile(r"pear-[0-9a-f]{24}\Z")
 SHA256_RE = re.compile(r"[0-9a-f]{64}\Z")
 
@@ -179,7 +181,7 @@ class WorkspaceHelperError(WorkspaceIOError):
 
 
 def _validate_nonnegative_limit(max_bytes: int) -> None:
-    if isinstance(max_bytes, bool) or not isinstance(max_bytes, int) or max_bytes < 0:
+    if isinstance(max_bytes, bool) or max_bytes < 0:
         raise ValueError("max_bytes must be a nonnegative integer")
 
 
@@ -657,9 +659,11 @@ class WorkspaceRawFileStream(Iterator[bytes]):
             identity=_entry_identity(initial_stat),
         )
 
+    @override
     def __iter__(self) -> WorkspaceRawFileStream:
         return self
 
+    @override
     def __next__(self) -> bytes:
         if self._closed:
             raise StopIteration
@@ -714,7 +718,7 @@ def open_workspace_file_stream(
     expected_identity: WorkspaceEntryIdentity | None = None,
     chunk_bytes: int = 64 * 1024,
 ) -> WorkspaceRawFileStream:
-    if isinstance(chunk_bytes, bool) or not isinstance(chunk_bytes, int) or chunk_bytes <= 0:
+    if isinstance(chunk_bytes, bool) or chunk_bytes <= 0:
         raise ValueError("chunk_bytes must be a positive integer")
     components = validate_workspace_relative_path(relative_path)
     stack = ExitStack()
@@ -865,7 +869,7 @@ def create_workspace_directory(
     *,
     create_mode: int = 0o700,
 ) -> WorkspaceEntryMutationResult:
-    if isinstance(create_mode, bool) or not isinstance(create_mode, int) or create_mode & ~0o777:
+    if isinstance(create_mode, bool) or create_mode & ~0o777:
         raise ValueError("create_mode must contain ordinary Unix permission bits")
     components = validate_workspace_relative_path(relative_path)
     with (
@@ -1383,7 +1387,7 @@ def atomic_write_workspace_file(
         raise TypeError("data must be bytes")
     if len(data) > max_bytes:
         raise WorkspaceFileTooLargeError("Workspace file exceeds the write limit.")
-    if isinstance(create_mode, bool) or not isinstance(create_mode, int) or create_mode & ~0o777:
+    if isinstance(create_mode, bool) or create_mode & ~0o777:
         raise ValueError("create_mode must contain ordinary Unix permission bits")
     _validate_expected_version(expected_version, create=create)
     if create and expected_identity is not None:
@@ -1886,7 +1890,7 @@ def execute_workspace_io_request(request: Mapping[str, object]) -> dict[str, obj
             data = base64.b64decode(content_base64, validate=True)
         except (binascii.Error, ValueError) as error:
             raise ValueError("Workspace helper write request has invalid content") from error
-        result = atomic_write_workspace_file(
+        write_result = atomic_write_workspace_file(
             root,
             relative_path,
             data,
@@ -1897,9 +1901,9 @@ def execute_workspace_io_request(request: Mapping[str, object]) -> dict[str, obj
             create_mode=create_mode,
         )
         return {
-            "file": _workspace_file_payload(result.file),
-            "changed": result.changed,
-            "created": result.created,
+            "file": _workspace_file_payload(write_result.file),
+            "changed": write_result.changed,
+            "created": write_result.created,
         }
     if operation == "mkdir":
         _require_request_keys(request, {"operation", "root", "path", "create_mode"})
@@ -1913,8 +1917,8 @@ def execute_workspace_io_request(request: Mapping[str, object]) -> dict[str, obj
             or not isinstance(create_mode, int)
         ):
             raise ValueError("Workspace helper mkdir request is invalid")
-        result = create_workspace_directory(root, relative_path, create_mode=create_mode)
-        return {"path": result.path, "kind": result.kind}
+        mkdir_result = create_workspace_directory(root, relative_path, create_mode=create_mode)
+        return {"path": mkdir_result.path, "kind": mkdir_result.kind}
     if operation == "rename":
         _require_request_keys(
             request,
@@ -1944,7 +1948,7 @@ def execute_workspace_io_request(request: Mapping[str, object]) -> dict[str, obj
         rename_expected_kind: Literal["file", "directory"] = (
             "file" if raw_expected_kind == "file" else "directory"
         )
-        result = rename_workspace_entry(
+        rename_result = rename_workspace_entry(
             root,
             source_path,
             destination_path,
@@ -1952,11 +1956,11 @@ def execute_workspace_io_request(request: Mapping[str, object]) -> dict[str, obj
             expected_identity=expected_identity,
         )
         return {
-            "path": result.path,
-            "kind": result.kind,
+            "path": rename_result.path,
+            "kind": rename_result.kind,
             "identity": (
-                _workspace_identity_payload(result.identity)
-                if result.identity is not None
+                _workspace_identity_payload(rename_result.identity)
+                if rename_result.identity is not None
                 else None
             ),
         }
@@ -1989,7 +1993,7 @@ def execute_workspace_io_request(request: Mapping[str, object]) -> dict[str, obj
         delete_expected_kind: Literal["file", "directory"] = (
             "file" if raw_expected_kind == "file" else "directory"
         )
-        result = delete_workspace_entry(
+        delete_result = delete_workspace_entry(
             root,
             relative_path,
             expected_kind=delete_expected_kind,
@@ -1997,9 +2001,9 @@ def execute_workspace_io_request(request: Mapping[str, object]) -> dict[str, obj
             recursive=recursive,
         )
         return {
-            "path": result.path,
-            "kind": result.kind,
-            "removed_entries": result.removed_entries,
+            "path": delete_result.path,
+            "kind": delete_result.kind,
+            "removed_entries": delete_result.removed_entries,
         }
     if operation == "inspect":
         _require_request_keys(request, {"operation", "root", "entries", "skip_unsafe"})
@@ -2190,9 +2194,11 @@ class WorkspaceHelperRawFileStream(Iterator[bytes]):
         self._closed = False
         self.metadata = metadata
 
+    @override
     def __iter__(self) -> WorkspaceHelperRawFileStream:
         return self
 
+    @override
     def __next__(self) -> bytes:
         if self._closed:
             raise StopIteration
@@ -2251,9 +2257,9 @@ def open_workspace_file_stream_via_helper(
     python_executable: str | Path | None = None,
     timeout: float = 20,
 ) -> WorkspaceHelperRawFileStream:
-    if isinstance(chunk_bytes, bool) or not isinstance(chunk_bytes, int) or chunk_bytes <= 0:
+    if isinstance(chunk_bytes, bool) or chunk_bytes <= 0:
         raise ValueError("chunk_bytes must be a positive integer")
-    if isinstance(timeout, bool) or not isinstance(timeout, int | float) or timeout <= 0:
+    if isinstance(timeout, bool) or timeout <= 0:
         raise ValueError("timeout must be positive")
     deadline = time.monotonic() + timeout
     request = {
@@ -2341,9 +2347,11 @@ class WorkspaceStagedRawFileStream(Iterator[bytes]):
         self._closed = False
         self.metadata = metadata
 
+    @override
     def __iter__(self) -> WorkspaceStagedRawFileStream:
         return self
 
+    @override
     def __next__(self) -> bytes:
         if self._closed:
             raise StopIteration
@@ -2380,7 +2388,7 @@ def stage_workspace_raw_stream(
     """Fully verify a bounded source into an unlinked disk file before exposure."""
 
     _validate_nonnegative_limit(max_bytes)
-    if isinstance(chunk_bytes, bool) or not isinstance(chunk_bytes, int) or chunk_bytes <= 0:
+    if isinstance(chunk_bytes, bool) or chunk_bytes <= 0:
         source.close()
         raise ValueError("chunk_bytes must be a positive integer")
     if source.metadata.size > max_bytes:

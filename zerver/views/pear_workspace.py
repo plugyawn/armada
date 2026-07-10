@@ -7,10 +7,10 @@ import time
 from collections.abc import Callable
 from datetime import timedelta
 from functools import wraps
-from typing import Annotated, Literal, ParamSpec
+from typing import Annotated, Literal, ParamSpec, TypeVar, cast
 from uuid import UUID
 
-from django.http import HttpRequest, HttpResponse, StreamingHttpResponse
+from django.http import HttpRequest, HttpResponse, HttpResponseBase, StreamingHttpResponse
 from django.utils.http import content_disposition_header
 from django.utils.timezone import now as timezone_now
 from django.utils.translation import gettext as _
@@ -99,14 +99,15 @@ logger = logging.getLogger(__name__)
 PEAR_WORKSPACE_PREPARED_RECOVERY_GRACE_SECONDS = 30
 PEAR_WORKSPACE_RECOVERY_BATCH_SIZE = 8
 _P = ParamSpec("_P")
+_ResponseT = TypeVar("_ResponseT", bound=HttpResponseBase)
 
 
 def workspace_server_timing(
     operation: str,
-) -> Callable[[Callable[_P, HttpResponse]], Callable[_P, HttpResponse]]:
-    def decorate(view: Callable[_P, HttpResponse]) -> Callable[_P, HttpResponse]:
+) -> Callable[[Callable[_P, _ResponseT]], Callable[_P, _ResponseT]]:
+    def decorate(view: Callable[_P, _ResponseT]) -> Callable[_P, _ResponseT]:
         @wraps(view)
-        def timed(*args: _P.args, **kwargs: _P.kwargs) -> HttpResponse:
+        def timed(*args: _P.args, **kwargs: _P.kwargs) -> _ResponseT:
             consume_workspace_cache_status()
             started = time.perf_counter()
             try:
@@ -688,7 +689,7 @@ def _publish_staged_create(
         expected_identity=identity,
     )
     destination_entry = _live_entry_for_path(observed_snapshot, destination)
-    published_identity: WorkspaceEntryIdentity
+    published_identity: WorkspaceEntryIdentity | None
     if staged_identity is not None:
         if (
             int(node.content_revision) != int(receipt.requested_revision)
@@ -819,7 +820,11 @@ def _complete_applied_entry_mutation(
     observed_snapshot: WorkspaceSnapshot,
 ) -> WorkspaceSnapshot:
     request_payload = receipt.request_payload
-    operation = receipt.operation
+    if receipt.operation not in {"create", "rename", "delete"}:
+        raise WorkspaceMutationReceiptMismatchError(
+            "Workspace mutation receipt has an invalid operation."
+        )
+    operation = cast(Literal["create", "rename", "delete"], receipt.operation)
     source_path = request_payload.get("source_path")
     destination_path = request_payload.get("destination_path")
     source_entry_id = request_payload.get("source_entry_id")
@@ -894,11 +899,6 @@ def _complete_applied_entry_mutation(
         previous_entry_id = source_entry_id
         entry = None
         path = source_path
-    else:
-        raise WorkspaceMutationReceiptMismatchError(
-            "Workspace mutation receipt has an invalid operation."
-        )
-
     saved_snapshot = _finish_prepared_entry_mutation(node, receipt, observed_snapshot)
     if entry is not None:
         entry = saved_snapshot.index.entry_for_path(path)
@@ -2250,15 +2250,16 @@ def delete_pear_workspace_entry_backend(
             raise WorkspaceMutationReceiptMismatchError(
                 "Workspace delete receipt has invalid recovery metadata."
             )
-        removed_entries_hint = recovery_payload.get("removed_entries")
+        raw_removed_entries_hint = recovery_payload.get("removed_entries")
         if (
-            isinstance(removed_entries_hint, bool)
-            or not isinstance(removed_entries_hint, int)
-            or removed_entries_hint < 1
+            isinstance(raw_removed_entries_hint, bool)
+            or not isinstance(raw_removed_entries_hint, int)
+            or raw_removed_entries_hint < 1
         ):
             raise WorkspaceMutationReceiptMismatchError(
                 "Workspace delete receipt has invalid removed-entry metadata."
             )
+        removed_entries_hint = raw_removed_entries_hint
     try:
         with lock_workspace_entry_mutation_receipt(node, receipt) as (
             locked,
@@ -2482,7 +2483,7 @@ def get_pear_workspace_raw_backend(
         Json[bool] | None,
         ApiParamConfig("download", documentation_status=INTENTIONALLY_UNDOCUMENTED),
     ] = False,
-) -> HttpResponse:
+) -> HttpResponseBase:
     node = _access_workspace_node(user_profile, workspace_uuid)
     snapshot = _snapshot_or_error(node)
     if isinstance(snapshot, HttpResponse):

@@ -478,7 +478,7 @@ def get_pear_workspace_resource_file_backend(
     ],
 ) -> HttpResponse:
     node = _access_workspace_node(user_profile, workspace_uuid)
-    snapshot = _snapshot_or_error(node, force=True)
+    snapshot = _snapshot_or_error(node)
     if isinstance(snapshot, HttpResponse):
         return snapshot
     entry = _resolve_file_entry(snapshot, entry_id)
@@ -535,7 +535,7 @@ def put_pear_workspace_resource_file_backend(
     ],
 ) -> HttpResponse:
     node = _access_workspace_node(user_profile, workspace_uuid)
-    snapshot = _snapshot_or_error(node, force=True)
+    snapshot = _snapshot_or_error(node)
     if isinstance(snapshot, HttpResponse):
         return snapshot
     if node.lifecycle_status != PearWorkspaceNode.ACTIVE:
@@ -855,7 +855,7 @@ def get_pear_workspace_raw_backend(
     ] = False,
 ) -> HttpResponse:
     node = _access_workspace_node(user_profile, workspace_uuid)
-    snapshot = _snapshot_or_error(node, force=True)
+    snapshot = _snapshot_or_error(node)
     if isinstance(snapshot, HttpResponse):
         return snapshot
     entry = _resolve_file_entry(snapshot, entry_id)

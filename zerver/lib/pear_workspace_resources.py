@@ -7,6 +7,8 @@ import hmac
 import json
 import logging
 import mimetypes
+import os
+import selectors
 import subprocess
 import threading
 import time
@@ -376,6 +378,58 @@ def _run_git(
     return completed.stdout
 
 
+def _git_output_digest(node: PearWorkspaceNode, arguments: list[str]) -> bytes:
+    if not node.workdir.strip():
+        raise WorkspaceSnapshotError("Workspace storage is unavailable.")
+    command = ["git", "-C", node.workdir.strip(), *arguments]
+    isolation_username = node.isolation_username.strip()
+    if isolation_username:
+        command = ["sudo", "-n", "-u", isolation_username, "/usr/bin/env", *command]
+    try:
+        process = subprocess.Popen(
+            command,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+        )
+    except (FileNotFoundError, OSError) as error:
+        raise WorkspaceSnapshotError("Could not inspect workspace content state.") from error
+    assert process.stdout is not None
+    digest = hashlib.sha256()
+    deadline = time.monotonic() + PEAR_WORKSPACE_GIT_TIMEOUT_SECONDS
+    selector = selectors.DefaultSelector()
+    try:
+        os.set_blocking(process.stdout.fileno(), False)
+        selector.register(process.stdout, selectors.EVENT_READ)
+        while selector.get_map():
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise subprocess.TimeoutExpired(command, PEAR_WORKSPACE_GIT_TIMEOUT_SECONDS)
+            events = selector.select(remaining)
+            if not events:
+                raise subprocess.TimeoutExpired(command, PEAR_WORKSPACE_GIT_TIMEOUT_SECONDS)
+            for key, _mask in events:
+                try:
+                    chunk = os.read(key.fd, 64 * 1024)
+                except BlockingIOError:  # nocoverage: selector reported readiness.
+                    continue
+                if chunk:
+                    digest.update(chunk)
+                else:
+                    selector.unregister(key.fileobj)
+        remaining = max(0.0, deadline - time.monotonic())
+        returncode = process.wait(timeout=remaining)
+    except (OSError, subprocess.TimeoutExpired) as error:
+        process.kill()
+        process.wait()
+        raise WorkspaceSnapshotError("Could not inspect workspace content state.") from error
+    finally:
+        selector.close()
+        process.stdout.close()
+    if returncode != 0:
+        raise WorkspaceSnapshotError("Could not inspect workspace content state.")
+    return digest.digest()
+
+
 def _decode_git_path(raw_path: bytes) -> str:
     try:
         path = raw_path.decode("utf-8", errors="strict")
@@ -452,6 +506,17 @@ def _enumerate_workspace(
         ["status", "--porcelain=v2", "-z", "--untracked-files=all"],
     )
     status_by_path = _parse_status(status_output, allowed_paths)
+    tracked_content_digest = _git_output_digest(
+        node,
+        [
+            "diff",
+            "--no-ext-diff",
+            "--no-textconv",
+            "--binary",
+            "--no-renames",
+            "--",
+        ],
+    )
     paths = tuple(
         WorkspacePath(path, status_by_path.get(path, "clean")) for path in sorted(allowed_paths)
     )
@@ -479,6 +544,7 @@ def _enumerate_workspace(
         fingerprint.update(path.status.encode("ascii"))
         fingerprint.update(b"\0")
     fingerprint.update(status_output)
+    fingerprint.update(tracked_content_digest)
     fingerprint.update(branch.encode("utf-8"))
     fingerprint.update(b"\0")
     fingerprint.update(head.encode("ascii"))

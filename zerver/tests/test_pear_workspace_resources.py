@@ -208,6 +208,24 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
         self.assertEqual(raw_result["X-Content-Type-Options"], "nosniff")
         self.assertIn("sandbox", raw_result["Content-Security-Policy"])
 
+    def test_warm_file_get_reuses_index_without_git_enumeration(self) -> None:
+        user = self.example_user("hamlet")
+        stream = self.subscribe(user, "workspace-resource")
+        self.login_user(user)
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo = self.make_workspace(Path(temp_dir).resolve())
+            node = self.make_node(user, stream.name, repo)
+            descriptor = self.descriptor(node)
+            with patch("zerver.lib.pear_workspace_resources._enumerate_workspace") as enumerate:
+                result = self.client_get(
+                    f"/json/pear/workspaces/{node.uuid}/file",
+                    {"entry_id": descriptor["default_entry"]["entry_id"]},
+                    intentionally_undocumented=True,
+                )
+
+        self.assert_json_success(result)
+        enumerate.assert_not_called()
+
     def test_put_bumps_revision_conflicts_and_retries_idempotently(self) -> None:
         user = self.example_user("hamlet")
         stream = self.subscribe(user, "workspace-resource")
@@ -511,6 +529,28 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
         )
         self.assertEqual(orjson.loads(stale_cursor_result.content)["error_code"], "stale_cursor")
         self.assertEqual(orjson.loads(stale_entry_result.content)["error_code"], "stale_entry")
+
+    def test_refresh_detects_repeated_change_to_already_dirty_tracked_file(self) -> None:
+        user = self.example_user("hamlet")
+        stream = self.subscribe(user, "workspace-resource")
+        self.login_user(user)
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo = self.make_workspace(Path(temp_dir).resolve())
+            (repo / "README.md").write_text("first dirty version\n", encoding="utf-8")
+            node = self.make_node(user, stream.name, repo)
+            descriptor = self.descriptor(node)
+            (repo / "README.md").write_text("second dirty version\n", encoding="utf-8")
+            refresh_result = self.client_post(
+                f"/json/pear/workspaces/{node.uuid}/refresh",
+                intentionally_undocumented=True,
+            )
+            refresh = self.assert_json_success(refresh_result)["pear_workspace_refresh"]
+
+        self.assertTrue(refresh["changed"])
+        self.assertEqual(
+            refresh["workspace"]["workspace_revision"],
+            descriptor["workspace_revision"] + 1,
+        )
 
     def test_workspace_uuid_still_requires_channel_access(self) -> None:
         owner = self.example_user("iago")

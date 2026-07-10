@@ -1,0 +1,98 @@
+<section class="pear-workspace-shell" aria-label="Workspace">
+    <header class="pear-workspace-shell__header" data-role="workspace-header">
+        <div class="pear-workspace-shell__identity">
+            <strong data-role="workspace-title">Workspace</strong>
+            <span data-role="workspace-meta"></span>
+        </div>
+        <button
+            type="button"
+            data-action="toggle-explorer"
+            class="pear-workspace-shell__explorer-toggle"
+            aria-expanded="false"
+        >Files</button>
+        <button
+            type="button"
+            data-action="refresh"
+            aria-label="Refresh workspace"
+        >Refresh</button>
+    </header>
+    <div class="pear-workspace-shell__body">
+        <aside
+            class="pear-workspace-shell__explorer"
+            aria-label="Workspace explorer"
+        >
+            <form data-role="search-form" role="search">
+                <input
+                    data-role="search-input"
+                    type="search"
+                    autocomplete="off"
+                    aria-label="Search files"
+                    placeholder="Filter files"
+                />
+            </form>
+            <div
+                data-role="search-results"
+                role="listbox"
+                aria-label="Workspace search results"
+                hidden
+            ></div>
+            <div
+                class="pear-workspace-shell__tree"
+                data-role="tree"
+                role="tree"
+                aria-label="Workspace files"
+            ></div>
+        </aside>
+        <main
+            class="pear-workspace-shell__document"
+            aria-label="Workspace document"
+        >
+            <div data-role="tabs" role="tablist" aria-label="Open files"></div>
+            <header class="pear-workspace-shell__document-header">
+                <nav data-role="breadcrumb" aria-label="File path"></nav>
+                <div class="pear-workspace-shell__document-actions">
+                    <button
+                        type="button"
+                        data-action="mode-source"
+                    >Source</button>
+                    <button type="button" data-action="mode-rich">Rich</button>
+                    <a
+                        data-role="raw-link"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                    >Raw</a>
+                    <a data-role="download-link">Download</a>
+                </div>
+            </header>
+            <div data-role="conflict" role="alert" hidden>
+                <span>This file changed outside the editor.</span>
+                <button
+                    type="button"
+                    data-action="conflict-reload"
+                >Reload</button>
+                <button
+                    type="button"
+                    data-action="conflict-overwrite"
+                >Overwrite</button>
+            </div>
+            <div data-role="surface" class="pear-workspace-shell__surface">
+                <div
+                    data-role="editor"
+                    class="pear-workspace-shell__editor"
+                ></div>
+                <div
+                    data-role="nontext"
+                    class="pear-workspace-shell__nontext"
+                    hidden
+                ></div>
+            </div>
+            <footer
+                data-role="status"
+                class="pear-workspace-shell__status"
+                role="status"
+                aria-live="polite"
+                aria-atomic="true"
+            >Loading workspace…</footer>
+        </main>
+    </div>
+</section>

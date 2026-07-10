@@ -279,6 +279,76 @@ run_test("stale save callbacks cannot consume the single in-flight save", () => 
     assert.equal(state.ignoredStaleResponses, 1);
 });
 
+run_test("a revision advance invalidates every session except the saved identity", () => {
+    const loaded = loaded_store("workspace-a", "A.md");
+    let {state} = loaded;
+    const a_id = identity("workspace-a", "A.md", loaded.request_generation);
+    state = source_edit(state, a_id, "A edit\n");
+    state = reduce(state, {type: "save_started", ...a_id});
+
+    const b_open = open_document(state, "workspace-a", "B.md");
+    state = load_document(b_open.state, "workspace-a", "B.md", b_open.request_generation, {
+        text: "B content\n",
+    });
+    state = reduce(state, {
+        type: "save_succeeded",
+        ...a_id,
+        editRevision: 1,
+        newEntryId: "entry:A.md:v2",
+        newVersion: "version-2",
+        workspaceRevision: 2,
+    });
+    const generation_before_invalidation = workspace_store.get_pear_workspace(
+        state,
+        "workspace-a",
+    ).requestGeneration;
+
+    state = reduce(state, {
+        type: "invalidate_workspace_revision",
+        workspaceId: "workspace-a",
+        workspaceRevision: 2,
+        preservedEntryId: "entry:A.md:v2",
+    });
+    const workspace = workspace_store.get_pear_workspace(state, "workspace-a");
+    assert.deepEqual([...workspace.documents.keys()], ["entry:A.md:v2"]);
+    assert.equal(workspace.activeEntryId, undefined);
+    assert.equal(workspace.pendingDocumentRequest, undefined);
+    assert.equal(workspace.requestGeneration, generation_before_invalidation + 1);
+    assert.equal(
+        workspace_store.get_pear_workspace_document(
+            state,
+            identity("workspace-a", "B.md", b_open.request_generation),
+        ),
+        undefined,
+    );
+});
+
+run_test("workspace mode preference is restored without creating a document session", () => {
+    let state = activate(workspace_store.create_pear_workspace_store(), "workspace-a");
+    state = reduce(state, {
+        type: "set_workspace_mode_preference",
+        workspaceId: "workspace-a",
+        mode: "rich",
+    });
+    const workspace = workspace_store.get_pear_workspace(state, "workspace-a");
+    assert.equal(workspace.markdownModePreference, "rich");
+    assert.equal(workspace.documents.size, 0);
+});
+
+run_test("an external revision advance can invalidate every cached document", () => {
+    const loaded = loaded_store("workspace-a", "A.md");
+    let state = activate(loaded.state, "workspace-a", 2);
+    state = reduce(state, {
+        type: "invalidate_workspace_revision",
+        workspaceId: "workspace-a",
+        workspaceRevision: 2,
+    });
+    const workspace = workspace_store.get_pear_workspace(state, "workspace-a");
+    assert.equal(workspace.activeEntryId, undefined);
+    assert.equal(workspace.documents.size, 0);
+    assert.equal(workspace.pendingDocumentRequest, undefined);
+});
+
 run_test("conflict Overwrite keeps the latest edit and adopts only the remote base", () => {
     const loaded = loaded_store();
     let {state} = loaded;

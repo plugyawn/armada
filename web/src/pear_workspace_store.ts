@@ -107,6 +107,17 @@ export type PearWorkspaceStoreAction =
           entryId: string;
           path: string;
       }
+    | {
+          type: "invalidate_workspace_revision";
+          workspaceId: string;
+          workspaceRevision: number;
+          preservedEntryId?: string;
+      }
+    | {
+          type: "set_workspace_mode_preference";
+          workspaceId: string;
+          mode: PearWorkspaceEditorMode;
+      }
     | ({
           type: "document_loaded";
           workspaceRevision: number;
@@ -374,6 +385,43 @@ export function reduce_pear_workspace_store(
                 requestGeneration: request_generation,
             },
         });
+    }
+
+    if (action.type === "invalidate_workspace_revision") {
+        const workspace = state.workspaces.get(action.workspaceId);
+        const preserved =
+            action.preservedEntryId === undefined
+                ? undefined
+                : workspace?.documents.get(action.preservedEntryId);
+        if (
+            workspace?.workspaceRevision !== action.workspaceRevision ||
+            (action.preservedEntryId !== undefined && preserved === undefined)
+        ) {
+            return ignore_stale_response(state);
+        }
+        const documents = new Map<string, PearWorkspaceDocumentSession>();
+        if (action.preservedEntryId !== undefined && preserved !== undefined) {
+            documents.set(action.preservedEntryId, preserved);
+        }
+        return with_workspace(state, {
+            ...workspace,
+            requestGeneration: workspace.requestGeneration + 1,
+            activeEntryId:
+                action.preservedEntryId !== undefined &&
+                workspace.activeEntryId === action.preservedEntryId
+                    ? action.preservedEntryId
+                    : undefined,
+            pendingDocumentRequest: undefined,
+            documents,
+        });
+    }
+
+    if (action.type === "set_workspace_mode_preference") {
+        const workspace = state.workspaces.get(action.workspaceId);
+        if (workspace === undefined) {
+            return ignore_stale_response(state);
+        }
+        return with_workspace(state, {...workspace, markdownModePreference: action.mode});
     }
 
     if (action.type === "document_loaded") {

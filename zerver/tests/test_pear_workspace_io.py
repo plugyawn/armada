@@ -8,6 +8,7 @@ import socket
 import stat
 import subprocess
 import sys
+import time
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest import TestCase
@@ -41,6 +42,7 @@ from zerver.lib.pear_workspace_io import (
     read_workspace_text_file,
     rename_workspace_entry,
     rename_workspace_entry_via_helper,
+    stage_workspace_raw_stream,
     validate_workspace_relative_path,
 )
 
@@ -486,8 +488,8 @@ class PearWorkspaceIOTest(TestCase):
 
         with (
             patch(
-                "zerver.lib.pear_workspace_io.os.replace",
-                side_effect=OSError("simulated failure"),
+                "zerver.lib.pear_workspace_io._rename_exchange",
+                side_effect=WorkspaceIOError("simulated failure"),
             ),
             self.assertRaises(WorkspaceIOError),
         ):
@@ -501,6 +503,217 @@ class PearWorkspaceIOTest(TestCase):
 
         self.assertEqual(path.read_bytes(), b"original")
         self.assertEqual(list(self.root.glob(".pear-write-*")), [])
+
+    def test_rename_race_restores_replacement_and_never_publishes_it(self) -> None:
+        source = self.write("source.txt", b"authorized")
+        replacement = self.write("replacement.txt", b"replacement")
+        expected_identity = read_workspace_file(
+            self.root,
+            source.name,
+            max_bytes=100,
+        ).identity
+        original_rename = pear_workspace_io._rename_noreplace
+        raced = False
+
+        def race_before_capture(
+            source_parent_fd: int,
+            source_name: str,
+            destination_parent_fd: int,
+            destination_name: str,
+        ) -> None:
+            nonlocal raced
+            if not raced and source_name == "source.txt":
+                raced = True
+                os.rename(
+                    source_name,
+                    "authorized-parked.txt",
+                    src_dir_fd=source_parent_fd,
+                    dst_dir_fd=source_parent_fd,
+                )
+                os.rename(
+                    replacement.name,
+                    source_name,
+                    src_dir_fd=source_parent_fd,
+                    dst_dir_fd=source_parent_fd,
+                )
+            original_rename(
+                source_parent_fd,
+                source_name,
+                destination_parent_fd,
+                destination_name,
+            )
+
+        with (
+            patch("zerver.lib.pear_workspace_io._rename_noreplace", race_before_capture),
+            self.assertRaises(WorkspaceEntryChangedError),
+        ):
+            rename_workspace_entry(
+                self.root,
+                source.name,
+                "destination.txt",
+                expected_kind="file",
+                expected_identity=expected_identity,
+            )
+
+        self.assertEqual(source.read_bytes(), b"replacement")
+        self.assertEqual((self.root / "authorized-parked.txt").read_bytes(), b"authorized")
+        self.assertFalse((self.root / "destination.txt").exists())
+        self.assertEqual(list(self.root.glob(".pear-rename-*")), [])
+
+    def test_delete_race_restores_replacement_without_deleting_it(self) -> None:
+        target = self.write("target.txt", b"authorized")
+        replacement = self.write("replacement.txt", b"replacement")
+        expected_identity = read_workspace_file(
+            self.root,
+            target.name,
+            max_bytes=100,
+        ).identity
+        original_rename = pear_workspace_io._rename_noreplace
+        raced = False
+
+        def race_before_capture(
+            source_parent_fd: int,
+            source_name: str,
+            destination_parent_fd: int,
+            destination_name: str,
+        ) -> None:
+            nonlocal raced
+            if not raced and source_name == "target.txt":
+                raced = True
+                os.rename(
+                    source_name,
+                    "authorized-parked.txt",
+                    src_dir_fd=source_parent_fd,
+                    dst_dir_fd=source_parent_fd,
+                )
+                os.rename(
+                    replacement.name,
+                    source_name,
+                    src_dir_fd=source_parent_fd,
+                    dst_dir_fd=source_parent_fd,
+                )
+            original_rename(
+                source_parent_fd,
+                source_name,
+                destination_parent_fd,
+                destination_name,
+            )
+
+        with (
+            patch("zerver.lib.pear_workspace_io._rename_noreplace", race_before_capture),
+            self.assertRaises(WorkspaceEntryChangedError),
+        ):
+            delete_workspace_entry(
+                self.root,
+                target.name,
+                expected_kind="file",
+                expected_identity=expected_identity,
+            )
+
+        self.assertEqual(target.read_bytes(), b"replacement")
+        self.assertEqual((self.root / "authorized-parked.txt").read_bytes(), b"authorized")
+        self.assertEqual(list(self.root.glob(".pear-delete-*")), [])
+
+    def test_write_exchange_rolls_back_a_raced_replacement(self) -> None:
+        target = self.write("target.txt", b"authorized")
+        replacement = self.write("replacement.txt", b"replacement")
+        current = read_workspace_file(self.root, target.name, max_bytes=100)
+        original_exchange = pear_workspace_io._rename_exchange
+        raced = False
+
+        def race_before_exchange(
+            left_parent_fd: int,
+            left_name: str,
+            right_parent_fd: int,
+            right_name: str,
+        ) -> None:
+            nonlocal raced
+            if not raced:
+                raced = True
+                os.rename(
+                    right_name,
+                    "authorized-parked.txt",
+                    src_dir_fd=right_parent_fd,
+                    dst_dir_fd=right_parent_fd,
+                )
+                os.rename(
+                    replacement.name,
+                    right_name,
+                    src_dir_fd=right_parent_fd,
+                    dst_dir_fd=right_parent_fd,
+                )
+            original_exchange(left_parent_fd, left_name, right_parent_fd, right_name)
+
+        with (
+            patch("zerver.lib.pear_workspace_io._rename_exchange", race_before_exchange),
+            self.assertRaises(WorkspaceEntryChangedError),
+        ):
+            atomic_write_workspace_file(
+                self.root,
+                target.name,
+                b"new content",
+                max_bytes=100,
+                expected_version=current.version,
+                expected_identity=current.identity,
+            )
+
+        self.assertEqual(target.read_bytes(), b"replacement")
+        self.assertEqual((self.root / "authorized-parked.txt").read_bytes(), b"authorized")
+        self.assertEqual(list(self.root.glob(".pear-write-*")), [])
+
+    def test_raw_staging_fails_before_exposure_when_source_path_changes(self) -> None:
+        path = self.write("raw.bin", b"abcdef")
+        source = open_workspace_file_stream(self.root, path.name, chunk_bytes=3)
+        original_next = pear_workspace_io.WorkspaceRawFileStream.__next__
+        raced = False
+
+        def race_after_first_chunk(stream: pear_workspace_io.WorkspaceRawFileStream) -> bytes:
+            nonlocal raced
+            chunk = original_next(stream)
+            if not raced:
+                raced = True
+                path.unlink()
+                path.write_bytes(b"ABCDEF")
+            return chunk
+
+        with (
+            patch.object(
+                pear_workspace_io.WorkspaceRawFileStream,
+                "__next__",
+                race_after_first_chunk,
+            ),
+            self.assertRaises(WorkspaceEntryChangedError),
+        ):
+            stage_workspace_raw_stream(source, max_bytes=100, chunk_bytes=3)
+
+        self.assertTrue(source._closed)
+
+    def test_helper_body_timeout_reaps_process_before_pipe_close(self) -> None:
+        process = subprocess.Popen(
+            [
+                sys.executable,
+                "-c",
+                "import os,time; os.write(1, b'x'); time.sleep(60)",
+            ],
+            stdout=subprocess.PIPE,
+        )
+        stream = pear_workspace_io.WorkspaceHelperRawFileStream(
+            process=process,
+            metadata=pear_workspace_io.WorkspaceRawFileMetadata(
+                size=2,
+                mode=0o600,
+                cache_token="0" * 64,
+                identity=pear_workspace_io.WorkspaceEntryIdentity(1, 2, 3),
+            ),
+            chunk_bytes=2,
+            deadline=time.monotonic() + 0.2,
+        )
+        started = time.monotonic()
+        with self.assertRaises(WorkspaceHelperError):
+            next(stream)
+
+        self.assertLess(time.monotonic() - started, 2)
+        self.assertIsNotNone(process.poll())
 
     def test_cli_helper_matches_direct_read_write_and_typed_errors(self) -> None:
         path = self.write("README.md", b"old")

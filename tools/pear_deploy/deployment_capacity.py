@@ -48,11 +48,14 @@ class CapacityEstimate:
     reclaimable_asset_build_bytes: int
     snapshot_bytes: int
     asset_build_bytes: int
+    build_swap_bytes: int
     safety_bytes: int
 
     @property
     def required_bytes(self) -> int:
-        return self.snapshot_bytes + self.asset_build_bytes + self.safety_bytes
+        return (
+            self.snapshot_bytes + self.asset_build_bytes + self.build_swap_bytes + self.safety_bytes
+        )
 
     @property
     def effective_available_bytes(self) -> int:
@@ -82,8 +85,11 @@ def estimate_capacity(
     pear_skills_dir: Path,
     snapshot_root: Path,
     asset_build_dir: Path,
+    build_swap_bytes: int,
     runtime_paths: list[Path],
 ) -> CapacityEstimate:
+    if build_swap_bytes < 0:
+        raise ValueError("build_swap_bytes must be nonnegative")
     # The worktree snapshot excludes mutable/build-heavy paths and archives
     # generated outputs separately. These relative paths are disjoint, which
     # keeps subtraction conservative without charging for the live venv/node tree.
@@ -112,6 +118,7 @@ def estimate_capacity(
         reclaimable_asset_build_bytes=allocated_bytes(asset_build_dir),
         snapshot_bytes=snapshot_bytes,
         asset_build_bytes=asset_build_bytes,
+        build_swap_bytes=build_swap_bytes,
         safety_bytes=GIB,
     )
 
@@ -123,6 +130,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--pear-skills-dir", type=Path, required=True)
     parser.add_argument("--snapshot-root", type=Path, required=True)
     parser.add_argument("--asset-build-dir", type=Path, required=True)
+    parser.add_argument("--build-swap-bytes", type=int, default=0)
     parser.add_argument("--runtime-path", type=Path, action="append", default=[])
     return parser
 
@@ -135,12 +143,14 @@ def main() -> None:
         pear_skills_dir=args.pear_skills_dir,
         snapshot_root=args.snapshot_root,
         asset_build_dir=args.asset_build_dir,
+        build_swap_bytes=args.build_swap_bytes,
         runtime_paths=args.runtime_path,
     )
     print(f"remote_disk_available_bytes={estimate.available_bytes}")
     print(f"remote_disk_reclaimable_asset_build_bytes={estimate.reclaimable_asset_build_bytes}")
     print(f"remote_disk_snapshot_estimate_bytes={estimate.snapshot_bytes}")
     print(f"remote_disk_asset_build_estimate_bytes={estimate.asset_build_bytes}")
+    print(f"remote_disk_build_swap_bytes={estimate.build_swap_bytes}")
     print(f"remote_disk_safety_bytes={estimate.safety_bytes}")
     print(f"remote_disk_required_bytes={estimate.required_bytes}")
     if not estimate.sufficient:

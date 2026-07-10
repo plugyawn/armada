@@ -51,6 +51,7 @@ const pear_live_run_schema = z.object({
     status: z.string(),
     content: z.string(),
     updated_at: z.number(),
+    operation: z.nullish(z.object({kind: z.string(), label: z.string()})),
 });
 
 const pear_run_schema = z.object({

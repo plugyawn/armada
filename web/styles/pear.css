@@ -2389,3 +2389,87 @@
         animation: none;
     }
 }
+
+/* ================================================================
+   Live engine operations: while the app-server runs a long internal
+   job (context compaction, …) the run ticker trades the braille
+   spinner for an ASCII operation loader — frames on ::after, label
+   alongside, all CSS-driven. */
+
+.pear-run-footer-ticker .pear-op-label {
+    color: var(--pear-ink-3);
+    font-family: var(--pear-font-pixel);
+    /* stylelint-disable-next-line declaration-property-unit-disallowed-list */
+    font-size: 12px;
+    -webkit-font-smoothing: none;
+}
+
+.pear-op-frames {
+    color: var(--pear-accent-ink);
+    font-family: var(--pear-font-mono);
+    /* stylelint-disable-next-line declaration-property-unit-disallowed-list */
+    font-size: 11px;
+    letter-spacing: 0.05em;
+
+    &::after {
+        content: "▓▓▓▓░░░░";
+    }
+}
+
+/* Compaction squeezes the bar down and rebounds — the context getting
+   pressed smaller. */
+.pear-op-compaction::after {
+    animation: pear-compaction-frames 1.8s steps(1, end) infinite;
+}
+
+/* stylelint-disable plugin/no-low-performance-animation-properties --
+   Same rationale as pear-thinking-frames: a discrete step-end character
+   swap (~5fps) on one tiny span, not a continuous animation. */
+@keyframes pear-compaction-frames {
+    0% {
+        content: "▓▓▓▓▓▓▓▓";
+    }
+
+    11% {
+        content: "▓▓▓▓▓▓▓░";
+    }
+
+    22% {
+        content: "▓▓▓▓▓▓░░";
+    }
+
+    33% {
+        content: "▓▓▓▓▓░░░";
+    }
+
+    44% {
+        content: "▓▓▓▓░░░░";
+    }
+
+    55% {
+        content: "▓▓▓░░░░░";
+    }
+
+    66% {
+        content: "▓▓░░░░░░";
+    }
+
+    77% {
+        content: "▓░░░░░░░";
+    }
+
+    88% {
+        content: "▓▓░░░░░░";
+    }
+
+    100% {
+        content: "▓░░░░░░░";
+    }
+}
+/* stylelint-enable plugin/no-low-performance-animation-properties */
+
+@media (prefers-reduced-motion: reduce) {
+    .pear-op-compaction::after {
+        animation: none;
+    }
+}

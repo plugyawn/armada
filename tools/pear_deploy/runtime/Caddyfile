@@ -1,0 +1,9 @@
+{$PEAR_CADDY_FQDN} {
+    encode zstd gzip
+
+    basic_auth {
+        {$PEAR_CADDY_BASICAUTH_USER} {$PEAR_CADDY_BASICAUTH_HASH}
+    }
+
+    reverse_proxy 127.0.0.1:9991
+}

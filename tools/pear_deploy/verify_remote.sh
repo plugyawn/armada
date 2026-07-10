@@ -117,13 +117,40 @@ echo "DNS:"
 dig +short "$FQDN" A || true
 
 echo
-echo "HTTPS /devlogin:"
-curl -fsSIL "https://$FQDN/devlogin" | sed -n '1,20p'
+echo "HTTPS auth wall:"
+HTTPS_CODE="$(curl -sS --max-time 10 -o /dev/null -w '%{http_code}' "https://$FQDN/devlogin" || true)"
+if [[ "$HTTPS_CODE" != "401" ]]; then
+    echo "Expected unauthenticated HTTPS to return 401, got ${HTTPS_CODE:-none}" >&2
+    exit 1
+fi
+echo "unauthenticated_https=401"
+
+echo
+echo "Production runtime config and assets:"
+ssh -F "$SSH_CONFIG" pear-staging-root \
+    "python3 /home/zulipdev/zulip/tools/pear_deploy/runtime_config.py verify --repo-root /home/zulipdev/zulip --fqdn $FQDN"
+ssh -F "$SSH_CONFIG" pear-staging-root \
+    'sudo -Hu zulipdev bash -lc '"'"'cd /home/zulipdev/zulip && .venv/bin/python3 tools/pear_deploy/production_assets.py --repo-root .'"'"''
+INTERNAL_CODE="$(ssh -F "$SSH_CONFIG" pear-staging-root "curl -sS --max-time 10 -H 'Host: $FQDN' -o /dev/null -w '%{http_code}' http://127.0.0.1:9991/devlogin" || true)"
+if [[ "$INTERNAL_CODE" != "200" && "$INTERNAL_CODE" != "302" && "$INTERNAL_CODE" != "303" ]]; then
+    echo "Internal Zulip app is unhealthy: ${INTERNAL_CODE:-none}" >&2
+    exit 1
+fi
+if ssh -F "$SSH_CONFIG" pear-staging-root "pgrep -af '[t]ools/webpack|[t]ornado\.autoreload'"; then
+    echo "Development webpack/autoreload process is running" >&2
+    exit 1
+fi
+if ssh -F "$SSH_CONFIG" pear-staging-root \
+    "curl -fsS --max-time 10 -H 'Host: $FQDN' -o /dev/null http://127.0.0.1:9991/webpack/app.js 2>/dev/null"; then
+    echo "Legacy webpack development route is live" >&2
+    exit 1
+fi
+echo "internal_app=$INTERNAL_CODE; webpack_watcher=absent; legacy_webpack_route=absent"
 
 echo
 echo "Systemd:"
 ssh -F "$SSH_CONFIG" pear-staging-root \
-    'systemctl --no-pager --full status caddy pear-zulip-dev pear-embedded-bots pear-worker pear-thumbnail | sed -n "1,220p"'
+    "systemctl --no-pager --full status caddy ${PEAR_DEPLOY_SERVICES[*]}" | sed -n '1,260p'
 
 echo
 echo "Pear config:"
@@ -159,6 +186,9 @@ if user is None:
 
 config = build_pear_config_for_user(user)
 summary = {
+    "development": settings.DEVELOPMENT,
+    "debug": settings.DEBUG,
+    "webpack_stats_file": settings.WEBPACK_STATS_FILE,
     "configured": config["configured"],
     "enabled": config["enabled"],
     "bot_user_id": config["bot_user_id"],
@@ -178,6 +208,10 @@ summary = {
         settings.PEAR_ADDRESSING_ROUTER_GEMINI_API_KEY
     ),
 }
+if settings.DEVELOPMENT is not True or settings.DEBUG is not False:
+    raise SystemExit("Hosted runtime must keep DEVELOPMENT=True with DEBUG=False")
+if not settings.WEBPACK_STATS_FILE.endswith("webpack-stats-production.json"):
+    raise SystemExit("Hosted runtime is not using production webpack stats")
 print(summary)
 print(
     list(
@@ -199,19 +233,6 @@ ssh -F "$SSH_CONFIG" pear-staging-root \
 
 echo
 echo "Pear queue health:"
-ssh -F "$SSH_CONFIG" pear-staging-root 'rabbitmqctl list_queues name messages_ready messages_unacknowledged consumers | awk '"'"'
-$1 == "pear_worker" || $1 == "embedded_bots" {
-    seen += 1
-    print
-    if ($2 != 0 || $3 != 0 || $4 < 1) {
-        bad = 1
-    }
-}
-END {
-    if (seen < 2) {
-        print "missing Pear queues" > "/dev/stderr"
-        exit 1
-    }
-    exit bad
-}
-'"'"
+ssh -F "$SSH_CONFIG" pear-staging-root \
+    'rabbitmqctl list_queues name messages_ready messages_unacknowledged consumers' |
+    validate_pear_deploy_queue_snapshot

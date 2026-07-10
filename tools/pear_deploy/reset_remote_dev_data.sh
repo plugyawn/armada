@@ -4,6 +4,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+# shellcheck source=tools/pear_deploy/deploy_common.sh
+source "$SCRIPT_DIR/deploy_common.sh"
 DEFAULT_STATE_PATH="$REPO_ROOT/output/pear-staging/server.json"
 STATE_PATH="$DEFAULT_STATE_PATH"
 YES=false
@@ -113,36 +115,11 @@ if [[ ! -f "$ROSTER_PATH" ]]; then
     exit 1
 fi
 
-# Rewrite the Caddyfile, preserving HTTP basic auth when configured instead of
-# unconditionally stripping it (a reset must not silently reopen the box).
-CADDY_BASICAUTH_USER="${PEAR_CADDY_BASICAUTH_USER:-pear}"
-CADDY_BASICAUTH_HASH="${PEAR_CADDY_BASICAUTH_HASH:-}"
-if [[ -n "$CADDY_BASICAUTH_HASH" ]]; then
-    echo "Writing Caddy config with HTTP basic auth..."
-    ssh_root "cat >/etc/caddy/Caddyfile" <<EOF
-${FQDN} {
-    encode zstd gzip
-
-    basic_auth {
-        ${CADDY_BASICAUTH_USER} ${CADDY_BASICAUTH_HASH}
-    }
-
-    reverse_proxy 127.0.0.1:9991
-}
-EOF
-else
-    echo "WARNING: PEAR_CADDY_BASICAUTH_HASH is unset — writing Caddy config with NO HTTP auth (passwordless dev-login stays internet-reachable)." >&2
-    ssh_root "cat >/etc/caddy/Caddyfile" <<EOF
-${FQDN} {
-    encode zstd gzip
-
-    reverse_proxy 127.0.0.1:9991
-}
-EOF
-fi
+echo "Verifying fail-closed Caddy and production-assets runtime config..."
+ssh_root "python3 /home/zulipdev/zulip/tools/pear_deploy/runtime_config.py verify --repo-root /home/zulipdev/zulip --fqdn $FQDN"
 
 echo "Stopping Pear/Zulip services..."
-ssh_root 'systemctl stop pear-zulip-dev pear-embedded-bots pear-worker pear-thumbnail || true'
+ssh_root "systemctl stop ${PEAR_DEPLOY_SERVICES[*]}"
 
 # Topic worktrees must not survive the database reset: workdir slugs are
 # deterministic per (realm, stream, topic), so a recreated same-name topic
@@ -289,7 +266,7 @@ REMOTE
     "sudo -Hu zulipdev bash -lc 'cd /home/zulipdev/zulip && set -a && . /home/zulipdev/pear.env && set +a && bash -s'"
 
 echo "Starting services..."
-ssh_root 'systemctl daemon-reload && systemctl restart caddy pear-zulip-dev pear-embedded-bots pear-worker pear-thumbnail'
+ssh_root "systemctl daemon-reload && systemctl restart caddy ${PEAR_DEPLOY_SERVICES[*]}"
 
 echo "Done. Verify with:"
 echo "  tools/pear_deploy/verify_remote.sh $STATE_PATH"

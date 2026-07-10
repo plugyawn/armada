@@ -47,6 +47,14 @@ from zerver.lib.pear import (
     trim_pear_text,
 )
 from zerver.lib.pear_gate import invalidate_pear_selected_bot_cache
+from zerver.lib.pear_monitor import (
+    PEAR_MONITOR_MAX_CADENCE_SECONDS,
+    PEAR_MONITOR_MAX_PER_REALM,
+    PEAR_MONITOR_MAX_PER_TOPIC,
+    PEAR_MONITOR_MIN_CADENCE_SECONDS,
+    build_pear_monitor_contract,
+    serialize_pear_monitor,
+)
 from zerver.lib.pear_workspace_map import pear_workspace_topics_for_stream
 from zerver.lib.pear_worker import (
     PearQueueWorkerDispatcher,
@@ -92,6 +100,7 @@ from zerver.lib.typed_endpoint import (
 )
 from zerver.lib.url_encoding import topic_narrow_url
 from zerver.models.bots import (
+    PearMonitor,
     PearTopicContext,
     PearWorkerRun,
     PearWorkerRunEvent,
@@ -2238,3 +2247,263 @@ def post_pear_side_backend(
             "side_endpoint": PEAR_SIDE_ENDPOINT,
         },
     )
+
+
+def _dispatch_pear_monitor_run(
+    user_profile: UserProfile,
+    pear_bot: Service,
+    monitor: PearMonitor,
+    *,
+    repair_error: str = "",
+) -> None:
+    """Mint a DM anchor and queue the monitor's setup/repair agent run.
+    The run is a normal MONITOR-kind PearWorkerRun; ticks never are."""
+    stream_name = monitor.stream_name
+    topic_name = monitor.topic_name
+    task = build_pear_monitor_contract(
+        monitor_id=monitor.id,
+        ask=monitor.ask,
+        stream=stream_name,
+        topic=topic_name,
+        repair_error=repair_error,
+    )
+    dm_intro = "\n".join(
+        [
+            "Pear monitor setup started.",
+            "",
+            f"Topic: {stream_name} > {topic_name}",
+            f"Monitor: {monitor.ask}",
+        ]
+    )
+    dm_message_id = internal_send_private_message(
+        pear_bot.user_profile,
+        user_profile,
+        dm_intro,
+        disable_external_notifications=True,
+    )
+    if dm_message_id is None:
+        raise JsonableError(_("Pear could not open the monitor transcript."))
+    monitor.anchor_message_id = dm_message_id
+    monitor.status = PearMonitor.PROVISIONING
+    monitor.date_updated = timezone_now()
+    monitor.save(update_fields=["anchor_message_id", "status", "date_updated"])
+
+    run = PearWorkerRun.objects.create(
+        realm=user_profile.realm,
+        bot_profile=pear_bot.user_profile,
+        requesting_user=user_profile,
+        trigger_message_id=dm_message_id,
+        stream_name=stream_name,
+        topic_name=topic_name,
+        session_kind=PearWorkerRun.MONITOR,
+        source_stream_name=stream_name,
+        source_topic_name=topic_name,
+        status=PearWorkerRun.QUEUED,
+        summary="Queued monitor setup.",
+        current_activity=trim_pear_text(monitor.ask, limit=200),
+        runtime_label=str(settings.PEAR_WORKER_AGENT_RUNTIME or ""),
+        model=pear_worker_model_for_topic(
+            pear_bot.user_profile, stream=stream_name, topic=topic_name
+        ),
+        sandbox=pear_worker_sandbox_for_topic(
+            pear_bot.user_profile, stream=stream_name, topic=topic_name
+        ),
+        approval_policy=str(settings.PEAR_WORKER_APPROVAL_POLICY or ""),
+        workdir=pear_worker_workdir_for_topic(
+            pear_bot.user_profile, stream=stream_name, topic=topic_name
+        ),
+    )
+    PearWorkerRunEvent.objects.create(
+        run=run,
+        event_type="queued",
+        summary="Queued monitor setup.",
+        payload={"monitor_id": monitor.id, "ask": trim_pear_text(monitor.ask, limit=500)},
+    )
+    worker_message = {
+        "id": dm_message_id,
+        "type": "private",
+        "display_recipient": [
+            {
+                "id": user_profile.id,
+                "email": user_profile.email,
+                "full_name": user_profile.full_name,
+            }
+        ],
+        "sender_id": user_profile.id,
+        "sender_email": user_profile.email,
+        "content": task,
+    }
+    PearQueueWorkerDispatcher().dispatch(
+        PearEmbeddedBotHandler(),
+        SimpleNamespace(user_profile=pear_bot.user_profile),
+        worker_message,
+        content=task,
+        active_session=None,
+        message_id=dm_message_id,
+        stream=stream_name,
+        topic=topic_name,
+        requesting_user_id=user_profile.id,
+        session_kind=PearWorkerRun.MONITOR,
+        source_stream=stream_name,
+        source_topic=topic_name,
+        progress_message_id=dm_message_id,
+    )
+
+
+@typed_endpoint
+def get_pear_monitors_backend(
+    request: HttpRequest,
+    user_profile: UserProfile,
+    *,
+    stream_name: Annotated[
+        str,
+        ApiParamConfig("stream", documentation_status=INTENTIONALLY_UNDOCUMENTED),
+    ],
+    topic_name: Annotated[
+        str,
+        ApiParamConfig("topic", documentation_status=INTENTIONALLY_UNDOCUMENTED),
+    ],
+) -> HttpResponse:
+    access_stream_by_name(user_profile, stream_name)
+    monitors = PearMonitor.objects.filter(
+        realm=user_profile.realm, stream_name=stream_name, topic_name=topic_name
+    ).order_by("position", "id")
+    return json_success(
+        request,
+        data={"pear_monitors": [serialize_pear_monitor(monitor) for monitor in monitors]},
+    )
+
+
+@typed_endpoint
+def post_pear_monitors_backend(
+    request: HttpRequest,
+    user_profile: UserProfile,
+    *,
+    ask_request: Annotated[
+        str,
+        ApiParamConfig("request", documentation_status=INTENTIONALLY_UNDOCUMENTED),
+    ],
+    stream_name: Annotated[
+        str,
+        ApiParamConfig("stream", documentation_status=INTENTIONALLY_UNDOCUMENTED),
+    ],
+    topic_name: Annotated[
+        str,
+        ApiParamConfig("topic", documentation_status=INTENTIONALLY_UNDOCUMENTED),
+    ],
+) -> HttpResponse:
+    ask_request = ask_request.strip()
+    if not ask_request:
+        raise JsonableError(_("Pear monitor request cannot be empty."))
+    access_stream_by_name(user_profile, stream_name)
+    pear_bot = get_selected_pear_bot(user_profile)
+    if pear_bot is None:
+        raise JsonableError(_("Pear bot is not configured."))
+    topic_count = PearMonitor.objects.filter(
+        realm=user_profile.realm, stream_name=stream_name, topic_name=topic_name
+    ).count()
+    if topic_count >= PEAR_MONITOR_MAX_PER_TOPIC:
+        raise JsonableError(_("This topic already has the maximum number of monitors."))
+    realm_count = PearMonitor.objects.filter(realm=user_profile.realm).count()
+    if realm_count >= PEAR_MONITOR_MAX_PER_REALM:
+        raise JsonableError(_("This organization already has the maximum number of monitors."))
+
+    monitor = PearMonitor.objects.create(
+        realm=user_profile.realm,
+        bot_profile=pear_bot.user_profile,
+        creator=user_profile,
+        stream_name=stream_name,
+        topic_name=topic_name,
+        title=trim_pear_text(ask_request, limit=24),
+        ask=trim_pear_text(ask_request, limit=500),
+        position=topic_count,
+    )
+    _dispatch_pear_monitor_run(user_profile, pear_bot, monitor)
+    return json_success(request, data={"pear_monitor": serialize_pear_monitor(monitor)})
+
+
+def _get_accessible_pear_monitor(user_profile: UserProfile, monitor_id: int) -> PearMonitor:
+    try:
+        monitor = PearMonitor.objects.get(id=monitor_id, realm=user_profile.realm)
+    except PearMonitor.DoesNotExist as error:
+        raise JsonableError(_("Pear monitor not found.")) from error
+    access_stream_by_name(user_profile, monitor.stream_name)
+    return monitor
+
+
+@typed_endpoint
+def update_pear_monitor_backend(
+    request: HttpRequest,
+    user_profile: UserProfile,
+    monitor_id: int,
+    *,
+    action: Annotated[
+        str,
+        ApiParamConfig("action", documentation_status=INTENTIONALLY_UNDOCUMENTED),
+    ],
+    cadence_seconds: Annotated[
+        Json[int] | None,
+        ApiParamConfig("cadence_seconds", documentation_status=INTENTIONALLY_UNDOCUMENTED),
+    ] = None,
+    title: Annotated[
+        str | None,
+        ApiParamConfig("title", documentation_status=INTENTIONALLY_UNDOCUMENTED),
+    ] = None,
+) -> HttpResponse:
+    monitor = _get_accessible_pear_monitor(user_profile, monitor_id)
+    now = timezone_now()
+    if action == "pause":
+        monitor.status = PearMonitor.PAUSED
+        monitor.next_due_at = None
+    elif action == "resume":
+        if not monitor.recipe:
+            raise JsonableError(_("This monitor has no recipe to resume."))
+        monitor.status = PearMonitor.LIVE
+        monitor.consecutive_failures = 0
+        monitor.next_due_at = now
+    elif action == "refresh_now":
+        if monitor.status != PearMonitor.LIVE:
+            raise JsonableError(_("Only live monitors can refresh."))
+        monitor.next_due_at = now
+    elif action == "cadence":
+        if cadence_seconds is None:
+            raise JsonableError(_("cadence_seconds is required."))
+        monitor.cadence_seconds = min(
+            max(cadence_seconds, PEAR_MONITOR_MIN_CADENCE_SECONDS),
+            PEAR_MONITOR_MAX_CADENCE_SECONDS,
+        )
+        if monitor.status == PearMonitor.LIVE:
+            monitor.next_due_at = now
+    elif action == "rename":
+        if title is None or not title.strip():
+            raise JsonableError(_("title is required."))
+        monitor.title = title.strip()[:24]
+    elif action == "rebuild":
+        pear_bot = get_selected_pear_bot(user_profile)
+        if pear_bot is None:
+            raise JsonableError(_("Pear bot is not configured."))
+        monitor.date_updated = now
+        monitor.save(update_fields=["date_updated"])
+        _dispatch_pear_monitor_run(
+            user_profile, pear_bot, monitor, repair_error=monitor.last_error
+        )
+        monitor.refresh_from_db()
+        return json_success(
+            request, data={"pear_monitor": serialize_pear_monitor(monitor)}
+        )
+    else:
+        raise JsonableError(_("Unknown monitor action."))
+    monitor.date_updated = now
+    monitor.save()
+    return json_success(request, data={"pear_monitor": serialize_pear_monitor(monitor)})
+
+
+@typed_endpoint_without_parameters
+def delete_pear_monitor_backend(
+    request: HttpRequest,
+    user_profile: UserProfile,
+    monitor_id: int,
+) -> HttpResponse:
+    monitor = _get_accessible_pear_monitor(user_profile, monitor_id)
+    monitor.delete()
+    return json_success(request)

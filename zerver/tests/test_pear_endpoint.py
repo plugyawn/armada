@@ -76,7 +76,18 @@ from zerver.lib.pear_worker import (
 from zerver.lib.test_classes import ZulipTestCase
 from zerver.models import Message, Recipient, Subscription, UserProfile
 from zerver.lib.events import fetch_initial_state_data
+from zerver.lib.pear_monitor import (
+    PEAR_MONITOR_FAILURE_LIMIT,
+    PEAR_MONITOR_MAX_PER_TOPIC,
+    PearMonitorSpecError,
+    pear_apply_monitor_setup_result,
+    pear_monitor_apply_tick,
+    pear_monitor_bind_props,
+    pear_monitor_spec_relative_path,
+    pear_validate_monitor_spec,
+)
 from zerver.models.bots import (
+    PearMonitor,
     PearProject,
     PearTopicContext,
     PearWorkerRun,
@@ -4289,3 +4300,331 @@ class PearWorkspaceMapTest(ZulipTestCase):
         self.assertIn(stream.id, state["pear_project_stream_ids"])
         # Bindings on channels the user cannot see stay invisible.
         self.assertNotIn(private_stream.id, state["pear_project_stream_ids"])
+
+
+class PearMonitorTest(ZulipTestCase):
+    def create_pear_bot(self, owner: UserProfile) -> UserProfile:
+        return self.create_test_bot(
+            "pear",
+            owner,
+            full_name="Pear",
+            bot_type=UserProfile.EMBEDDED_BOT,
+            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+        )
+
+    def create_live_monitor(
+        self, owner: UserProfile, pear_bot: UserProfile, **overrides: object
+    ) -> PearMonitor:
+        fields: dict[str, object] = dict(
+            realm=owner.realm,
+            bot_profile=pear_bot,
+            creator=owner,
+            stream_name=PEAR_DEFAULT_STREAM,
+            topic_name=PEAR_DEFAULT_TOPIC,
+            title="loader",
+            ask="training loader",
+            status=PearMonitor.LIVE,
+            cadence_seconds=20,
+            block_spec={"components": [{"type": "stat", "props": {"label": "loss"}}]},
+            recipe={
+                "command": "echo value=0.5",
+                "parse": {"mode": "regex", "pattern": r"value=(?P<loss>[\d.]+)"},
+                "bindings": {"0.value": "group:loss"},
+            },
+            next_due_at=timezone_now(),
+        )
+        fields.update(overrides)
+        return PearMonitor.objects.create(**fields)
+
+    def test_create_monitor_queues_setup_run(self) -> None:
+        owner = self.example_user("hamlet")
+        pear_bot = self.create_pear_bot(owner)
+        self.subscribe(owner, PEAR_DEFAULT_STREAM)
+        self.subscribe(pear_bot, PEAR_DEFAULT_STREAM)
+        self.login_user(owner)
+
+        with (
+            tempfile.TemporaryDirectory() as temp_dir,
+            self.settings(PEAR_WORKER_MODEL="gpt-5.5", PEAR_TOPIC_WORKDIR_ROOT=temp_dir),
+            patch("zerver.views.pear.PearQueueWorkerDispatcher.dispatch") as dispatch_mock,
+        ):
+            result = self.client_post(
+                "/json/pear/monitors",
+                {
+                    "stream": PEAR_DEFAULT_STREAM,
+                    "topic": PEAR_DEFAULT_TOPIC,
+                    "request": "training loader",
+                },
+                intentionally_undocumented=True,
+            )
+            result_dict = self.assert_json_success(result)
+            monitor = PearMonitor.objects.get(id=result_dict["pear_monitor"]["id"])
+            self.assertEqual(monitor.status, PearMonitor.PROVISIONING)
+            self.assertEqual(monitor.ask, "training loader")
+            self.assertIsNotNone(monitor.anchor_message_id)
+
+            run = PearWorkerRun.objects.get(
+                bot_profile=pear_bot, trigger_message_id=monitor.anchor_message_id
+            )
+            self.assertEqual(run.session_kind, PearWorkerRun.MONITOR)
+            kwargs = dispatch_mock.call_args.kwargs
+            self.assertEqual(kwargs["session_kind"], PearWorkerRun.MONITOR)
+            self.assertIn("training loader", kwargs["content"])
+            self.assertIn(pear_monitor_spec_relative_path(monitor.id), kwargs["content"])
+
+            # Setup runs are DM-anchored and never appear in the topic's
+            # runs list: the wall itself is the provisioning surface.
+            runs_result = self.client_get(
+                f"/json{PEAR_RUNS_ENDPOINT}",
+                {"stream": PEAR_DEFAULT_STREAM, "topic": PEAR_DEFAULT_TOPIC},
+                intentionally_undocumented=True,
+            )
+            runs_dict = self.assert_json_success(runs_result)
+            self.assertNotIn(run.id, [r["id"] for r in runs_dict["pear_runs"]])
+
+    def test_create_monitor_enforces_topic_limit(self) -> None:
+        owner = self.example_user("hamlet")
+        pear_bot = self.create_pear_bot(owner)
+        self.subscribe(owner, PEAR_DEFAULT_STREAM)
+        self.login_user(owner)
+        for index in range(PEAR_MONITOR_MAX_PER_TOPIC):
+            self.create_live_monitor(owner, pear_bot, title=f"m{index}")
+        result = self.client_post(
+            "/json/pear/monitors",
+            {
+                "stream": PEAR_DEFAULT_STREAM,
+                "topic": PEAR_DEFAULT_TOPIC,
+                "request": "one too many",
+            },
+            intentionally_undocumented=True,
+        )
+        self.assert_json_error(result, "This topic already has the maximum number of monitors.")
+
+    def test_monitor_actions_and_delete(self) -> None:
+        owner = self.example_user("hamlet")
+        pear_bot = self.create_pear_bot(owner)
+        self.subscribe(owner, PEAR_DEFAULT_STREAM)
+        self.login_user(owner)
+        monitor = self.create_live_monitor(owner, pear_bot)
+
+        result = self.client_patch(
+            f"/json/pear/monitors/{monitor.id}",
+            {"action": "pause"},
+            intentionally_undocumented=True,
+        )
+        self.assertEqual(self.assert_json_success(result)["pear_monitor"]["status"], "paused")
+
+        result = self.client_patch(
+            f"/json/pear/monitors/{monitor.id}",
+            {"action": "cadence", "cadence_seconds": "2"},
+            intentionally_undocumented=True,
+        )
+        # Cadence clamps to the 5s floor.
+        self.assertEqual(
+            self.assert_json_success(result)["pear_monitor"]["cadence_seconds"], 5
+        )
+
+        result = self.client_patch(
+            f"/json/pear/monitors/{monitor.id}",
+            {"action": "rename", "title": "gpu loss"},
+            intentionally_undocumented=True,
+        )
+        self.assertEqual(self.assert_json_success(result)["pear_monitor"]["title"], "gpu loss")
+
+        result = self.client_patch(
+            f"/json/pear/monitors/{monitor.id}",
+            {"action": "resume"},
+            intentionally_undocumented=True,
+        )
+        self.assertEqual(self.assert_json_success(result)["pear_monitor"]["status"], "live")
+
+        result = self.client_patch(
+            f"/json/pear/monitors/{monitor.id}",
+            {"action": "sabotage"},
+            intentionally_undocumented=True,
+        )
+        self.assert_json_error(result, "Unknown monitor action.")
+
+        result = self.client_delete(
+            f"/json/pear/monitors/{monitor.id}",
+            intentionally_undocumented=True,
+        )
+        self.assert_json_success(result)
+        self.assertFalse(PearMonitor.objects.filter(id=monitor.id).exists())
+
+    def test_monitor_list_requires_stream_access(self) -> None:
+        owner = self.example_user("hamlet")
+        outsider = self.example_user("cordelia")
+        pear_bot = self.create_pear_bot(owner)
+        self.make_stream("pear-private", invite_only=True)
+        self.subscribe(owner, "pear-private")
+        monitor = self.create_live_monitor(owner, pear_bot, stream_name="pear-private")
+        self.login_user(outsider)
+        result = self.client_get(
+            "/json/pear/monitors",
+            {"stream": "pear-private", "topic": PEAR_DEFAULT_TOPIC},
+            intentionally_undocumented=True,
+        )
+        self.assert_json_error(result, "Invalid channel name 'pear-private'")
+        result = self.client_delete(
+            f"/json/pear/monitors/{monitor.id}",
+            intentionally_undocumented=True,
+        )
+        self.assert_json_error(result, "Invalid channel name 'pear-private'")
+        self.assertTrue(PearMonitor.objects.filter(id=monitor.id).exists())
+
+    def test_validate_monitor_spec(self) -> None:
+        good = {
+            "title": "training loader",
+            "cadence_seconds": 15,
+            "block": {
+                "components": [
+                    {"type": "meter", "props": {"label": "epoch", "value": 0}},
+                    {"type": "sparkline", "props": {"label": "loss"}},
+                ]
+            },
+            "recipe": {
+                "command": "tail -n 5 train.log",
+                "parse": {"mode": "regex", "pattern": r"loss=(?P<loss>[\d.]+)"},
+                "bindings": {"0.value": "group:loss", "1.value": "group:loss"},
+            },
+        }
+        spec = pear_validate_monitor_spec(good)
+        self.assertEqual(spec["cadence_seconds"], 15)
+        self.assertEqual(spec["title"], "training loader")
+        self.assertEqual(len(spec["block_spec"]["components"]), 2)
+
+        with self.assertRaisesRegex(PearMonitorSpecError, "Unknown component type"):
+            pear_validate_monitor_spec(
+                {
+                    **good,
+                    "block": {"components": [{"type": "hologram", "props": {}}]},
+                }
+            )
+        with self.assertRaisesRegex(PearMonitorSpecError, "Unknown props"):
+            pear_validate_monitor_spec(
+                {
+                    **good,
+                    "block": {"components": [{"type": "stat", "props": {"blink": True}}]},
+                }
+            )
+        with self.assertRaisesRegex(PearMonitorSpecError, "Bad binding source"):
+            pear_validate_monitor_spec(
+                {
+                    **good,
+                    "recipe": {
+                        **good["recipe"],
+                        "bindings": {"0.value": "exec:rm -rf /"},
+                    },
+                }
+            )
+        with self.assertRaisesRegex(PearMonitorSpecError, "Invalid regex"):
+            pear_validate_monitor_spec(
+                {
+                    **good,
+                    "recipe": {**good["recipe"], "parse": {"mode": "regex", "pattern": "("}},
+                }
+            )
+
+    def test_monitor_bind_props_modes(self) -> None:
+        regex_recipe = {
+            "parse": {"mode": "regex", "pattern": r"loss=(?P<loss>[\d.]+) step=(?P<step>\d+)"},
+            "bindings": {"0.value": "group:loss", "1.value": "group:step"},
+        }
+        bound = pear_monitor_bind_props(
+            regex_recipe, "loss=0.91 step=10\nloss=0.42 step=57\n"
+        )
+        # The LAST match wins: monitors track the newest line.
+        self.assertEqual(bound["0.value"], 0.42)
+        self.assertEqual(bound["1.value"], 57)
+
+        json_recipe = {
+            "parse": {"mode": "json"},
+            "bindings": {
+                "0.value": "path:credits.remaining",
+                "0.label": "literal:lambda",
+            },
+        }
+        bound = pear_monitor_bind_props(json_recipe, '{"credits": {"remaining": 41.5}}')
+        self.assertEqual(bound["0.value"], 41.5)
+        self.assertEqual(bound["0.label"], "lambda")
+
+        text_recipe = {
+            "parse": {"mode": "text"},
+            "bindings": {"0.lines": "lines:2", "0.label": "text"},
+        }
+        bound = pear_monitor_bind_props(text_recipe, "one\ntwo\nthree")
+        self.assertEqual(bound["0.lines"], ["two", "three"])
+
+    def test_monitor_tick_success_and_failure(self) -> None:
+        owner = self.example_user("hamlet")
+        pear_bot = self.create_pear_bot(owner)
+        monitor = self.create_live_monitor(owner, pear_bot)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            pear_monitor_apply_tick(monitor, workdir=temp_dir, process_isolation=None)
+            monitor.refresh_from_db()
+            self.assertEqual(monitor.version, 1)
+            self.assertEqual(monitor.last_sample["props"]["0.value"], 0.5)
+            self.assertEqual(monitor.consecutive_failures, 0)
+            self.assertIsNotNone(monitor.next_due_at)
+
+            monitor.recipe = {
+                "command": "false",
+                "parse": {"mode": "text"},
+                "bindings": {},
+            }
+            monitor.save(update_fields=["recipe"])
+            for _ in range(PEAR_MONITOR_FAILURE_LIMIT):
+                pear_monitor_apply_tick(monitor, workdir=temp_dir, process_isolation=None)
+                monitor.refresh_from_db()
+            self.assertEqual(monitor.status, PearMonitor.ERROR)
+            self.assertIn("recipe exited", monitor.last_error)
+            # The sample from the good ticks is preserved on error.
+            self.assertEqual(monitor.version, 1)
+
+    def test_apply_monitor_setup_result(self) -> None:
+        owner = self.example_user("hamlet")
+        pear_bot = self.create_pear_bot(owner)
+        monitor = self.create_live_monitor(
+            owner,
+            pear_bot,
+            status=PearMonitor.PROVISIONING,
+            anchor_message_id=987654,
+            recipe={},
+            block_spec={},
+        )
+        spec = {
+            "title": "gpu credits",
+            "cadence_seconds": 30,
+            "block": {"components": [{"type": "stat", "props": {"label": "credits"}}]},
+            "recipe": {
+                "command": "echo 41",
+                "parse": {"mode": "text"},
+                "bindings": {"0.value": "text"},
+            },
+        }
+        with tempfile.TemporaryDirectory() as temp_dir:
+            spec_path = Path(temp_dir) / pear_monitor_spec_relative_path(monitor.id)
+            spec_path.parent.mkdir(parents=True)
+            spec_path.write_text(orjson.dumps(spec).decode())
+            pear_apply_monitor_setup_result(
+                pear_bot, 987654, workdir=temp_dir, isolation_username=None
+            )
+            monitor.refresh_from_db()
+            self.assertEqual(monitor.status, PearMonitor.LIVE)
+            self.assertEqual(monitor.title, "gpu credits")
+            self.assertEqual(monitor.cadence_seconds, 30)
+            self.assertEqual(monitor.recipe["command"], "echo 41")
+            self.assertIsNotNone(monitor.next_due_at)
+
+        # A run whose agent never wrote the file settles to error.
+        monitor.status = PearMonitor.PROVISIONING
+        monitor.save(update_fields=["status"])
+        with tempfile.TemporaryDirectory() as temp_dir:
+            pear_apply_monitor_setup_result(
+                pear_bot, 987654, workdir=temp_dir, isolation_username=None
+            )
+        monitor.refresh_from_db()
+        self.assertEqual(monitor.status, PearMonitor.ERROR)
+        self.assertIn("did not write the spec file", monitor.last_error)

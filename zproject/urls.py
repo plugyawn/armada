@@ -101,6 +101,8 @@ from zerver.views.pear import (
     get_pear_config_backend,
     get_pear_git_tree_backend,
     get_pear_run_backend,
+    delete_pear_monitor_backend,
+    get_pear_monitors_backend,
     get_pear_runs_backend,
     get_pear_session_backend,
     get_pear_topic_context_backend,
@@ -113,7 +115,9 @@ from zerver.views.pear import (
     post_pear_run_cancel_backend,
     post_pear_run_pause_backend,
     post_pear_run_resume_backend,
+    post_pear_monitors_backend,
     post_pear_side_backend,
+    update_pear_monitor_backend,
     post_pear_topic_context_backend,
     put_pear_canvas_backend,
 )
@@ -480,6 +484,16 @@ v1_api_and_json_patterns = [
     rest_path(
         "pear/side",
         POST=(post_pear_side_backend, {"intentionally_undocumented"}),
+    ),
+    rest_path(
+        "pear/monitors",
+        GET=(get_pear_monitors_backend, {"intentionally_undocumented"}),
+        POST=(post_pear_monitors_backend, {"intentionally_undocumented"}),
+    ),
+    rest_path(
+        "pear/monitors/<int:monitor_id>",
+        PATCH=(update_pear_monitor_backend, {"intentionally_undocumented"}),
+        DELETE=(delete_pear_monitor_backend, {"intentionally_undocumented"}),
     ),
     rest_path(
         "navigation_views/<path:fragment>",

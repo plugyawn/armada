@@ -94,6 +94,7 @@ class PearWorkerRun(models.Model):
     SHARED = "shared"
     SIDE = "side"
     CANVAS_ASK = "canvas_ask"
+    MONITOR = "monitor"
 
     STATUS_CHOICES = [
         (QUEUED, "queued"),
@@ -107,6 +108,7 @@ class PearWorkerRun(models.Model):
         (SHARED, "shared"),
         (SIDE, "side"),
         (CANVAS_ASK, "canvas_ask"),
+        (MONITOR, "monitor"),
     ]
 
     realm = models.ForeignKey("zerver.Realm", on_delete=CASCADE)
@@ -180,6 +182,66 @@ class PearWorkerRunEvent(models.Model):
             models.Index(
                 fields=["run", "date_created"],
                 name="zerver_pear_run_event_run_date",
+            ),
+        ]
+
+
+class PearMonitor(models.Model):
+    PROVISIONING = "provisioning"
+    LIVE = "live"
+    PAUSED = "paused"
+    ERROR = "error"
+
+    STATUS_CHOICES = [
+        (PROVISIONING, "provisioning"),
+        (LIVE, "live"),
+        (PAUSED, "paused"),
+        (ERROR, "error"),
+    ]
+
+    realm = models.ForeignKey("zerver.Realm", on_delete=CASCADE)
+    bot_profile = models.ForeignKey(
+        UserProfile,
+        on_delete=CASCADE,
+        related_name="pear_bot_monitors",
+    )
+    creator = models.ForeignKey(
+        UserProfile,
+        null=True,
+        on_delete=SET_NULL,
+        related_name="pear_monitors",
+    )
+    stream_name = models.CharField(max_length=60)
+    topic_name = models.CharField(max_length=MAX_TOPIC_NAME_LENGTH)
+    title = models.CharField(max_length=60, blank=True)
+    anchor_message_id = models.IntegerField(null=True, db_index=True)
+    ask = models.TextField()
+    block_spec = models.JSONField(default=dict)
+    recipe = models.JSONField(default=dict)
+    cadence_seconds = models.PositiveIntegerField(default=20)
+    codex_thread_id = models.TextField(blank=True)
+    status = models.CharField(
+        max_length=16, choices=STATUS_CHOICES, default=PROVISIONING, db_index=True
+    )
+    version = models.PositiveIntegerField(default=0)
+    last_sample = models.JSONField(default=dict)
+    last_ok_at = models.DateTimeField(null=True)
+    last_error = models.TextField(blank=True)
+    consecutive_failures = models.PositiveSmallIntegerField(default=0)
+    next_due_at = models.DateTimeField(null=True, db_index=True)
+    position = models.PositiveSmallIntegerField(default=0)
+    date_created = models.DateTimeField(default=timezone_now, db_index=True)
+    date_updated = models.DateTimeField(default=timezone_now)
+
+    class Meta:
+        indexes = [
+            models.Index(
+                fields=["realm", "stream_name", "topic_name", "position"],
+                name="zerver_pear_monitor_topic",
+            ),
+            models.Index(
+                fields=["status", "next_due_at"],
+                name="zerver_pear_monitor_due",
             ),
         ]
 

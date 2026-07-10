@@ -1,6 +1,7 @@
 import asyncio
 import inspect
 import json
+import logging
 import os
 import queue
 import subprocess
@@ -21,6 +22,8 @@ from zerver.lib.pear import (
     pear_normalize_token_usage,
     parse_pear_artifacts,
 )
+
+logger = logging.getLogger(__name__)
 
 PearAgentRuntime = Literal["disabled", "codex-app-server"]
 PearSubprocessRunner = Callable[..., subprocess.CompletedProcess[str]]
@@ -807,6 +810,27 @@ def pear_transcript_events_from_codex_json_event(
                 "metadata": {**pear_codex_item_metadata(item), "steps": steps},
             }
         ]
+    if item_type == "context_compaction":
+        # The engine compacts its own context; surface it as a first-class
+        # moment (the client renders a loader while it runs).
+        phase = "completed" if status == "done" else "started"
+        return [
+            {
+                **base_event,
+                "kind": "status",
+                "title": (
+                    "Context compacted." if phase == "completed" else "Compacting context…"
+                ),
+                "metadata": {
+                    **pear_codex_item_metadata(item),
+                    "operation": "compaction",
+                    "phase": phase,
+                },
+            }
+        ]
+    if item_type == "user_message":
+        # The turn prompt echoed back as an item; the topic already shows it.
+        return []
     if isinstance(item_type, str) and ("tool" in item_type or item_type == "web_search"):
         return [{**base_event, "kind": "tool", "title": title or item_type}]
     if isinstance(item_type, str):
@@ -857,7 +881,22 @@ PEAR_APP_SERVER_ITEM_TYPE_MAP: dict[str, str] = {
     "dynamicToolCall": "dynamic_tool_call",
     "plan": "plan_update",
     "webSearch": "web_search",
+    "contextCompaction": "context_compaction",
+    "userMessage": "user_message",
 }
+
+# Engine chatter that never belongs in a run transcript. turn/diff joins
+# the translated set with the live-diff surface.
+PEAR_APP_SERVER_IGNORED_METHODS = frozenset(
+    {
+        "thread/status/changed",
+        "mcpServer/startupStatus/updated",
+        "remoteControl/status/changed",
+        "thread/goal/cleared",
+        "thread/goal/updated",
+        "turn/diff/updated",
+    }
+)
 
 
 def pear_app_server_thread_id_from_result(result: object) -> str | None:
@@ -911,6 +950,60 @@ def pear_app_server_usage_event(params: dict[str, Any]) -> PearWorkerTranscriptE
 class PearCodexAppServerTranscriptTranslator:
     def __init__(self) -> None:
         self.json_translator = PearCodexJsonTranscriptTranslator()
+        self.last_rate_limit_key: tuple[object, ...] | None = None
+        self.reported_unknown_methods: set[str] = set()
+
+    def rate_limit_events(self, params: dict[str, Any]) -> list[PearWorkerTranscriptEvent]:
+        limits = params.get("rateLimits")
+        if not isinstance(limits, dict):
+            return []
+        raw_primary = limits.get("primary")
+        primary = raw_primary if isinstance(raw_primary, dict) else {}
+        raw_secondary = limits.get("secondary")
+        secondary = raw_secondary if isinstance(raw_secondary, dict) else {}
+        key = (
+            primary.get("usedPercent"),
+            secondary.get("usedPercent"),
+            limits.get("planType"),
+        )
+        # The engine re-announces limits after every command; only a
+        # changed reading is worth a transcript row.
+        if key == self.last_rate_limit_key:
+            return []
+        self.last_rate_limit_key = key
+        used = primary.get("usedPercent")
+        title = (
+            f"Rate limit window at {used:.0f}% used."
+            if isinstance(used, int | float)
+            else "Rate limits updated."
+        )
+        return [
+            {
+                "kind": "status",
+                "status": "done",
+                "title": title,
+                "metadata": {"rate_limits": limits},
+            }
+        ]
+
+    def unknown_method_events(
+        self, method: str, params: dict[str, Any]
+    ) -> list[PearWorkerTranscriptEvent]:
+        """Tolerant reader: an untranslated engine signal surfaces once per
+        runtime instead of vanishing — the codexification surface-diff
+        feeds on these logs after every Codex upgrade."""
+        if method in self.reported_unknown_methods or "elta" in method:
+            return []
+        self.reported_unknown_methods.add(method)
+        logger.info("Pear observed untranslated app-server method: %s", method)
+        return [
+            {
+                "kind": "status",
+                "status": "done",
+                "title": f"Codex signal: {method}",
+                "metadata": {"method": method, "param_keys": sorted(params)[:8]},
+            }
+        ]
 
     def events_from_message(self, message: dict[str, Any]) -> list[PearWorkerTranscriptEvent]:
         method = message.get("method")
@@ -995,8 +1088,25 @@ class PearCodexAppServerTranscriptTranslator:
                     "delta": params.get("delta", ""),
                 }
             )
-        if method not in {"item/started", "item/completed"}:
+        if method == "account/rateLimits/updated":
+            return self.rate_limit_events(params)
+        if method in {"warning", "configWarning"}:
+            body = str(params.get("message") or params.get("summary") or "").strip()
+            if not body:
+                return []
+            return [
+                {
+                    "kind": "status",
+                    "status": "done",
+                    "title": "Codex warning.",
+                    "body": trim_pear_agent_text(body, limit=600),
+                    "metadata": {"method": method},
+                }
+            ]
+        if method in PEAR_APP_SERVER_IGNORED_METHODS:
             return []
+        if method not in {"item/started", "item/completed"}:
+            return self.unknown_method_events(method, params)
         item = params.get("item")
         if not isinstance(item, dict):
             return []
@@ -1113,6 +1223,7 @@ class PearCodexAppServerToolRunner:
         self.loaded_thread_id: str | None = None
         self.active_thread_id: str | None = None
         self.active_turn_id: str | None = None
+        self.background_request_ids: set[int] = set()
         self.translator = PearCodexAppServerTranscriptTranslator()
 
     def config_args(self) -> list[str]:
@@ -1248,10 +1359,12 @@ class PearCodexAppServerToolRunner:
             message = self.next_message(timeout)
             if message is None:
                 raise PearAgentRuntimeError("Codex app-server stopped unexpectedly.")
-            if self.handle_server_request(message):
+            if self.handle_server_request(message, event_callback=event_callback):
                 continue
             if "method" in message:
                 self.handle_notification(message, event_callback=event_callback)
+                continue
+            if self.consume_background_response(message):
                 continue
             if message.get("id") != request_id:
                 continue
@@ -1270,23 +1383,91 @@ class PearCodexAppServerToolRunner:
                 f"Codex app-server timed out after {self.timeout_seconds} seconds."
             ) from error
 
-    def handle_server_request(self, message: dict[str, Any]) -> bool:
+    def handle_server_request(
+        self,
+        message: dict[str, Any],
+        *,
+        event_callback: PearWorkerTranscriptCallback | None = None,
+    ) -> bool:
         if "id" not in message or "method" not in message:
             return False
         if "result" in message or "error" in message:
             return False
         request_id = message["id"]
         method = str(message.get("method", "unknown"))
-        self.send_message(
-            {
-                "id": request_id,
-                "error": {
-                    "code": -32601,
-                    "message": f"Pear does not implement app-server request {method}.",
-                },
-            }
-        )
+        raw_params = message.get("params")
+        params = raw_params if isinstance(raw_params, dict) else {}
+        result, error, event = self.answer_for_server_request(method, params)
+        reply: dict[str, Any] = {"id": request_id}
+        if error is not None:
+            reply["error"] = error
+        else:
+            reply["result"] = result
+        self.send_message(reply)
+        if event is not None and event_callback is not None:
+            event_callback(event)
         return True
+
+    def answer_for_server_request(
+        self, method: str, params: dict[str, Any]
+    ) -> tuple[dict[str, Any] | None, dict[str, Any] | None, PearWorkerTranscriptEvent | None]:
+        """Answer a server-initiated request → (result, error, event).
+
+        Escalation approvals are granted when OS-user isolation is the
+        enforcement boundary — the isolation user cannot escape its home
+        and worktree, so the engine's prompt is a formality there. Without
+        isolation the decline preserves the sandbox."""
+        isolated = self.process_isolation is not None
+        if method in {
+            "item/commandExecution/requestApproval",
+            "item/fileChange/requestApproval",
+        }:
+            decision = "acceptForSession" if isolated else "decline"
+            subject = params.get("command") or params.get("reason") or method
+            event: PearWorkerTranscriptEvent = {
+                "kind": "status",
+                "status": "done",
+                "title": (
+                    "Approved an escalation request."
+                    if isolated
+                    else "Declined an escalation request."
+                ),
+                "body": trim_pear_agent_text(str(subject), limit=300),
+                "metadata": {"method": method, "decision": decision},
+            }
+            return {"decision": decision}, None, event
+        if method == "item/tool/requestUserInput":
+            # Interactive answers arrive with the plan-mode pass; until
+            # then the refusal is visible, never silent.
+            questions = params.get("questions")
+            first = questions[0] if isinstance(questions, list) and questions else {}
+            question_text = first.get("question", "") if isinstance(first, dict) else ""
+            event = {
+                "kind": "status",
+                "status": "done",
+                "title": "Codex asked a question; interactive answers are not wired yet.",
+                "body": trim_pear_agent_text(str(question_text), limit=300),
+                "metadata": {"method": method},
+            }
+            return (
+                None,
+                {"code": -32601, "message": "Pear cannot collect interactive input yet."},
+                event,
+            )
+        event = {
+            "kind": "status",
+            "status": "done",
+            "title": f"Codex request declined: {method}",
+            "metadata": {"method": method, "param_keys": sorted(params)[:8]},
+        }
+        return (
+            None,
+            {
+                "code": -32601,
+                "message": f"Pear does not implement app-server request {method}.",
+            },
+            event,
+        )
 
     def handle_notification(
         self,
@@ -1400,9 +1581,11 @@ class PearCodexAppServerToolRunner:
             message = self.next_message(timeout)
             if message is None:
                 raise PearAgentRuntimeError("Codex app-server stopped unexpectedly.")
-            if self.handle_server_request(message):
+            if self.handle_server_request(message, event_callback=event_callback):
                 continue
             if "method" not in message:
+                if self.consume_background_response(message):
+                    continue
                 if "error" in message:
                     raise PearAgentRuntimeError(
                         "Codex app-server failed: "
@@ -1484,6 +1667,21 @@ class PearCodexAppServerToolRunner:
             results = ensure_pear_runtime_result(results, self.runtime_value())
             return append_pear_codex_thread_artifact(results, thread_id)
 
+    def consume_background_response(self, message: dict[str, Any]) -> bool:
+        """Swallow responses to fire-and-forget requests (steer/interrupt):
+        a late error reply must not fail an unrelated wait loop."""
+        message_id = message.get("id")
+        if not isinstance(message_id, int) or message_id not in self.background_request_ids:
+            return False
+        self.background_request_ids.discard(message_id)
+        if "error" in message:
+            logger.info(
+                "Pear background app-server request %s failed: %s",
+                message_id,
+                trim_pear_agent_text(str(message["error"]), limit=300),
+            )
+        return True
+
     def steer(self, instruction: str) -> bool:
         with self.lock:
             if self.process is None or self.process.poll() is not None:
@@ -1491,6 +1689,7 @@ class PearCodexAppServerToolRunner:
             if self.active_thread_id is None or self.active_turn_id is None:
                 return False
             request_id = self.next_id()
+            self.background_request_ids.add(request_id)
             self.send_message(
                 {
                     "id": request_id,
@@ -1511,6 +1710,7 @@ class PearCodexAppServerToolRunner:
             if self.active_thread_id is None or self.active_turn_id is None:
                 return False
             request_id = self.next_id()
+            self.background_request_ids.add(request_id)
             self.send_message(
                 {
                     "id": request_id,

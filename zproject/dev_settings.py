@@ -9,6 +9,18 @@ ZULIP_ADMINISTRATOR = "desdemona+admin@zulip.com"
 # Initiatize TEST_SUITE early, so other code can rely on the setting.
 TEST_SUITE = os.getenv("ZULIP_TEST_SUITE") == "true"
 
+# Pear's hosted development deployment intentionally keeps DEVELOPMENT=True so
+# that devlogin and the development realm remain available, while serving a
+# production-built, content-hashed asset graph with Django DEBUG disabled.
+# tools/run-dev owns this environment variable; accepting only 0/1 keeps a
+# misspelled service configuration from silently reverting to development
+# assets.
+_production_assets_env = os.getenv("ZULIP_DEV_PRODUCTION_ASSETS", "0")
+if _production_assets_env not in {"0", "1"}:
+    raise RuntimeError("ZULIP_DEV_PRODUCTION_ASSETS must be 0 or 1")
+if _production_assets_env == "1":
+    DEBUG = False
+
 # We want LOCAL_UPLOADS_DIR to be an absolute path so that code can
 # chdir without having problems accessing it.  Unfortunately, this
 # means we need a duplicate definition of DEPLOY_ROOT with the one in

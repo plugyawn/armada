@@ -407,6 +407,10 @@ def build_pear_codex_developer_instructions() -> str:
                 "or long-lived constraints."
             ),
             "Use Codex-native skills from CODEX_HOME/skills when a relevant SKILL.md applies.",
+            (
+                "Track multi-step work with your plan tool and update step statuses as "
+                "you go — the plan renders live for the people in the topic."
+            ),
             "Keep changes focused on the user's request and verify them before finishing.",
             "For casual, conversational, choice-only, or answer-only requests, respond directly.",
             "Do not run repository/session checks just to make a casual reply sound grounded.",
@@ -445,7 +449,7 @@ def build_pear_codex_turn_prompt(active_session: PearActiveSessionSummary, task:
         "- contract: the Zulip stream maps to the repository, and the Zulip topic/subthread maps to the Git branch.",
         "- privacy: refer to the workspace by branch or worktree name in replies; never print the absolute workdir path in the topic.",
         "- math: write math in Zulip's dialect — $$...$$ for inline math and ```math fenced blocks for display equations; \\[ \\] and \\( \\) do not render here.",
-        f"- checklists: Zulip does not render [ ] task lists — use plain bullets in chat, and keep working checklists in your plan or in {PEAR_CANVAS_FILE_NAME}.",
+        f"- checklists: your plan tool is the working checklist — its steps render live in the topic rail, so keep it current instead of duplicating it in chat. Durable checklists belong in {PEAR_CANVAS_FILE_NAME}; - [ ] / - [x] markers render as ☐/☑.",
     ]
     artifacts = active_session["artifacts"][:5]
     artifact_lines = [

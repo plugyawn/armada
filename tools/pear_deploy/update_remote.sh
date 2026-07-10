@@ -37,6 +37,7 @@ for env_file in "$PEAR_ROOT/env.local" "$REPO_ROOT/.env.local"; do
 done
 CADDY_BASICAUTH_USER="${PEAR_CADDY_BASICAUTH_USER:-}"
 CADDY_BASICAUTH_HASH_FILE="${PEAR_CADDY_BASICAUTH_HASH_FILE:-}"
+CADDY_BASICAUTH_PASSWORD_FILE="${PEAR_CADDY_BASICAUTH_PASSWORD_FILE:-}"
 
 fail() {
     echo "ERROR: $*" >&2
@@ -110,6 +111,10 @@ Options:
                    Runtime smoke timeout in seconds (default: 150).
   --runtime-smoke-evidence PATH
                    Write runtime smoke JSON evidence to PATH.
+  --auth-password-file PATH
+                   Read the Caddy verification password from a local mode-0600
+                   regular non-symlink file. The password is sent to curl only
+                   through an stdin config and is never placed in argv or logs.
   --state PATH      Use a specific pear_do.py state file.
   -h, --help        Show this help.
 EOF
@@ -159,6 +164,14 @@ while [[ $# -gt 0 ]]; do
                 exit 2
             fi
             RUNTIME_SMOKE_EVIDENCE="$2"
+            shift 2
+            ;;
+        --auth-password-file)
+            if [[ $# -lt 2 ]]; then
+                echo "Missing value for --auth-password-file" >&2
+                exit 2
+            fi
+            CADDY_BASICAUTH_PASSWORD_FILE="$2"
             shift 2
             ;;
         --state)
@@ -227,8 +240,18 @@ ssh_zulip_clean() {
 }
 
 validate_local_auth_bootstrap() {
-    if ! validate_local_caddy_auth_bootstrap "$CADDY_BASICAUTH_USER" "$CADDY_BASICAUTH_HASH_FILE"; then
-        fail "Caddy basic-auth bootstrap username or bcrypt hash file is invalid"
+    if ! validate_local_caddy_auth_pair \
+        "$CADDY_BASICAUTH_USER" \
+        "$CADDY_BASICAUTH_HASH_FILE" \
+        "$CADDY_BASICAUTH_PASSWORD_FILE"; then
+        fail "Caddy bootstrap hash/password inputs are invalid or do not match"
+    fi
+}
+
+validate_local_auth_verification() {
+    if ! validate_local_caddy_verification_auth \
+        "$CADDY_BASICAUTH_USER" "$CADDY_BASICAUTH_PASSWORD_FILE"; then
+        fail "Caddy verification requires the configured username and a valid local mode-0600 password file"
     fi
 }
 
@@ -290,6 +313,33 @@ if re.fullmatch(r"\$2[aby]\$[0-9]{2}\$[./A-Za-z0-9]{53}", values["PEAR_CADDY_BAS
 PY
 }
 
+remote_auth_username() {
+    ssh_root python3 - "$REMOTE_AUTH_ENV" <<'PY'
+import sys
+from pathlib import Path
+
+for line in Path(sys.argv[1]).read_text(encoding="utf-8").splitlines():
+    key, separator, value = line.partition("=")
+    if separator and key == "PEAR_CADDY_BASICAUTH_USER":
+        print(value)
+        raise SystemExit(0)
+raise SystemExit(1)
+PY
+}
+
+verify_existing_remote_caddy_auth() {
+    local status
+    status="$(caddy_authenticated_curl \
+        "$CADDY_BASICAUTH_USER" \
+        "$CADDY_BASICAUTH_PASSWORD_FILE" \
+        --silent --show-error --max-time 10 --output /dev/null \
+        --write-out '%{http_code}' --url "https://$FQDN/devlogin" || true)"
+    if [[ "$status" != "200" && "$status" != "302" && "$status" != "303" ]]; then
+        fail "installed Caddy rejected the supplied verification credential before snapshot (HTTP ${status:-none})"
+    fi
+    echo "Preflight: installed Caddy accepted the supplied verification credential through HTTPS."
+}
+
 verify_remote_quiescence() {
     local phase="$1"
 
@@ -307,6 +357,27 @@ verify_remote_quiescence() {
     if ! ssh_root "rabbitmqctl list_queues name messages_ready messages_unacknowledged consumers" |
         validate_pear_deploy_queue_snapshot; then
         fail "$phase failed: one or more deploy-managed queues are busy, missing, or unconsumed"
+    fi
+}
+
+verify_remote_disk_capacity() {
+    local remote_asset_build_dir="/home/zulipdev/pear-asset-build-${LOCAL_SHA:0:12}"
+    local runtime_path
+    local -a capacity_command=(
+        python3
+        -
+        --remote-path "$REMOTE_PATH"
+        --git-common-dir "$REMOTE_GIT_COMMON_DIR"
+        --pear-skills-dir "$REMOTE_PEAR_SKILLS_DIR"
+        --snapshot-root "$SNAPSHOT_ROOT"
+        --asset-build-dir "$remote_asset_build_dir"
+    )
+    for runtime_path in "${PEAR_DEPLOY_RUNTIME_CONFIG_PATHS[@]}"; do
+        capacity_command+=(--runtime-path "$runtime_path")
+    done
+    echo "Preflight: estimating free space for rollback snapshot and isolated asset build..."
+    if ! ssh_root "${capacity_command[@]}" <"$SCRIPT_DIR/deployment_capacity.py"; then
+        fail "remote disk capacity is insufficient for a rollback-safe deploy"
     fi
 }
 
@@ -435,30 +506,31 @@ REMOTE
 
 verify_remote_production_assets() {
     local asset_paths
+    local -a assets
+    local asset
     ssh_zulip_clean "$REMOTE_PATH/.venv/bin/python3 $REMOTE_PATH/tools/pear_deploy/production_assets.py --repo-root $REMOTE_PATH"
     ssh_zulip "$REMOTE_PATH/.venv/bin/python3 $REMOTE_PATH/manage.py shell -c \"from django.conf import settings; assert settings.DEVELOPMENT is True; assert settings.DEBUG is False; assert settings.WEBPACK_STATS_FILE.endswith('webpack-stats-production.json'); print('Django production-asset settings valid.')\""
 
-    asset_paths="$(ssh_zulip_clean "$REMOTE_PATH/.venv/bin/python3 - <<'PY'
-import json
-
-stats = json.load(open('webpack-stats-production.json'))
-app = stats['chunks']['app']
-print(next(name for name in app if name.endswith('.js')))
-print(next(name for name in app if name.endswith('.css')))
-PY"
-)"
+    asset_paths="$(ssh_zulip_clean "$REMOTE_PATH/.venv/bin/python3 $REMOTE_PATH/tools/pear_deploy/production_assets.py --repo-root $REMOTE_PATH --print-probe-paths")"
     while IFS= read -r asset; do
-        [[ -n "$asset" ]] || continue
-        if ! ssh_root "curl -fsSI --max-time 10 -H 'Host: $FQDN' http://127.0.0.1:9991/static/webpack-bundles/$asset >/dev/null"; then
-            fail "production asset is not served by the app: $asset"
-        fi
+        [[ -n "$asset" ]] && assets+=("$asset")
     done <<<"$asset_paths"
+    if [[ "${#assets[@]}" -ne 3 || -z "${assets[0]}" || -z "${assets[1]}" || -z "${assets[2]}" ]]; then
+        fail "remote production asset discovery did not return JS, CSS, and general-static paths"
+    fi
+
+    if ! verify_caddy_https_runtime \
+        "$FQDN" \
+        "$CADDY_BASICAUTH_USER" \
+        "$CADDY_BASICAUTH_PASSWORD_FILE" \
+        "${assets[0]}" \
+        "${assets[1]}" \
+        "${assets[2]}"; then
+        fail "authenticated Caddy production-runtime verification failed"
+    fi
 
     if ssh_root "pgrep -af '[t]ools/webpack|[t]ornado\.autoreload'"; then
         fail "development webpack/autoreload process is running in production-assets mode"
-    fi
-    if ssh_root "curl -fsS --max-time 10 -H 'Host: $FQDN' -o /dev/null http://127.0.0.1:9991/webpack/app.js 2>/dev/null"; then
-        fail "legacy webpack development route is still live"
     fi
 }
 
@@ -670,6 +742,15 @@ else
     validate_local_auth_bootstrap
     echo "Preflight: remote Caddy auth is absent; validated a local bcrypt hash file for stdin-only bootstrap."
 fi
+validate_local_auth_verification
+if [[ "$REMOTE_AUTH_READY" == true ]]; then
+    REMOTE_CADDY_BASICAUTH_USER="$(remote_auth_username)"
+    if [[ "$REMOTE_CADDY_BASICAUTH_USER" != "$CADDY_BASICAUTH_USER" ]]; then
+        fail "local Caddy verification username does not match the installed remote username"
+    fi
+    verify_existing_remote_caddy_auth
+fi
+echo "Preflight: local Caddy verification password file is a current-user-owned mode-0600 regular non-symlink file."
 
 echo "Preflight: remote tracked/untracked source tree is clean and not ahead of local pear-main."
 if [[ "$PREV_SHA" != "$LOCAL_SHA" ]]; then
@@ -705,6 +786,7 @@ else
 fi
 
 verify_remote_quiescence "Preflight quiescence"
+verify_remote_disk_capacity
 
 if [[ "$YES" != true ]]; then
     echo
@@ -847,13 +929,17 @@ fi
 echo "Restarting Pear services..."
 ssh_root "systemctl restart caddy ${PEAR_DEPLOY_SERVICES[*]}"
 
-echo "Waiting for authenticated https://$FQDN/ and the internal app to serve..."
+echo "Waiting for the Caddy auth wall and authenticated app route to serve..."
 SITE_CODE=""
-INTERNAL_SITE_CODE=""
+AUTHENTICATED_SITE_CODE=""
 for _ in $(seq 1 60); do
-    SITE_CODE="$(curl -ksS --max-time 10 -o /dev/null -w '%{http_code}' "https://$FQDN/" || true)"
-    INTERNAL_SITE_CODE="$(ssh_root "curl -sS --max-time 10 -H 'Host: $FQDN' -o /dev/null -w '%{http_code}' http://127.0.0.1:9991/" || true)"
-    if [[ "$SITE_CODE" == "401" && ( "$INTERNAL_SITE_CODE" == "200" || "$INTERNAL_SITE_CODE" == "302" || "$INTERNAL_SITE_CODE" == "303" ) ]]; then
+    SITE_CODE="$(curl -sS --max-time 10 -o /dev/null -w '%{http_code}' "https://$FQDN/devlogin" || true)"
+    AUTHENTICATED_SITE_CODE="$(caddy_authenticated_curl \
+        "$CADDY_BASICAUTH_USER" \
+        "$CADDY_BASICAUTH_PASSWORD_FILE" \
+        --silent --show-error --max-time 10 --output /dev/null \
+        --write-out '%{http_code}' --url "https://$FQDN/devlogin" || true)"
+    if [[ "$SITE_CODE" == "401" && ( "$AUTHENTICATED_SITE_CODE" == "200" || "$AUTHENTICATED_SITE_CODE" == "302" || "$AUTHENTICATED_SITE_CODE" == "303" ) ]]; then
         break
     fi
     sleep 5
@@ -861,8 +947,8 @@ done
 if [[ "$SITE_CODE" != "401" ]]; then
     fail "Caddy basic-auth wall did not become healthy; last HTTP code: ${SITE_CODE:-none}"
 fi
-if [[ "$INTERNAL_SITE_CODE" != "200" && "$INTERNAL_SITE_CODE" != "302" && "$INTERNAL_SITE_CODE" != "303" ]]; then
-    fail "internal app did not become healthy; last HTTP code: ${INTERNAL_SITE_CODE:-none}"
+if [[ "$AUTHENTICATED_SITE_CODE" != "200" && "$AUTHENTICATED_SITE_CODE" != "302" && "$AUTHENTICATED_SITE_CODE" != "303" ]]; then
+    fail "authenticated app route through Caddy did not become healthy; last HTTP code: ${AUTHENTICATED_SITE_CODE:-none}"
 fi
 verify_remote_production_assets
 

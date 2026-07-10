@@ -4,10 +4,22 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+PEAR_ROOT="$(cd "$REPO_ROOT/.." && pwd)"
 # shellcheck source=tools/pear_deploy/deploy_common.sh
 source "$SCRIPT_DIR/deploy_common.sh"
 DEFAULT_STATE_PATH="$REPO_ROOT/output/pear-staging/server.json"
 STATE_PATH="$DEFAULT_STATE_PATH"
+
+for env_file in "$PEAR_ROOT/env.local" "$REPO_ROOT/.env.local"; do
+    if [[ -f "$env_file" ]]; then
+        set -a
+        # shellcheck source=/dev/null
+        source "$env_file"
+        set +a
+    fi
+done
+CADDY_BASICAUTH_USER="${PEAR_CADDY_BASICAUTH_USER:-}"
+CADDY_BASICAUTH_PASSWORD_FILE="${PEAR_CADDY_BASICAUTH_PASSWORD_FILE:-}"
 
 usage() {
     cat <<EOF
@@ -16,6 +28,9 @@ Usage: tools/pear_deploy/verify_remote.sh [options] [state.json]
 Read-only verification for the hosted Pear/Zulip dev server.
 
 Options:
+  --auth-password-file PATH
+                Read the Caddy verification password from a local mode-0600
+                regular non-symlink file; curl receives it via stdin config.
   --state PATH  Use a specific pear_do.py state file.
   -h, --help    Show this help.
 EOF
@@ -29,6 +44,14 @@ while [[ $# -gt 0 ]]; do
                 exit 2
             fi
             STATE_PATH="$2"
+            shift 2
+            ;;
+        --auth-password-file)
+            if [[ $# -lt 2 ]]; then
+                echo "Missing value for --auth-password-file" >&2
+                exit 2
+            fi
+            CADDY_BASICAUTH_PASSWORD_FILE="$2"
             shift 2
             ;;
         -h | --help)
@@ -50,6 +73,12 @@ done
 if [[ ! -f "$STATE_PATH" ]]; then
     echo "Missing state file: $STATE_PATH" >&2
     echo "Run: python3 tools/pear_deploy/pear_do.py create" >&2
+    exit 1
+fi
+
+if ! validate_local_caddy_verification_auth \
+    "$CADDY_BASICAUTH_USER" "$CADDY_BASICAUTH_PASSWORD_FILE"; then
+    echo "Caddy verification requires the configured username and a valid local mode-0600 password file" >&2
     exit 1
 fi
 
@@ -131,21 +160,28 @@ ssh -F "$SSH_CONFIG" pear-staging-root \
     "python3 /home/zulipdev/zulip/tools/pear_deploy/runtime_config.py verify --repo-root /home/zulipdev/zulip --fqdn $FQDN"
 ssh -F "$SSH_CONFIG" pear-staging-root \
     'sudo -Hu zulipdev bash -lc '"'"'cd /home/zulipdev/zulip && .venv/bin/python3 tools/pear_deploy/production_assets.py --repo-root .'"'"''
-INTERNAL_CODE="$(ssh -F "$SSH_CONFIG" pear-staging-root "curl -sS --max-time 10 -H 'Host: $FQDN' -o /dev/null -w '%{http_code}' http://127.0.0.1:9991/devlogin" || true)"
-if [[ "$INTERNAL_CODE" != "200" && "$INTERNAL_CODE" != "302" && "$INTERNAL_CODE" != "303" ]]; then
-    echo "Internal Zulip app is unhealthy: ${INTERNAL_CODE:-none}" >&2
+ASSET_PATHS="$(ssh -F "$SSH_CONFIG" pear-staging-root \
+    'sudo -Hu zulipdev bash -lc '"'"'cd /home/zulipdev/zulip && .venv/bin/python3 tools/pear_deploy/production_assets.py --repo-root . --print-probe-paths'"'"'')"
+ASSETS=()
+while IFS= read -r asset; do
+    [[ -n "$asset" ]] && ASSETS+=("$asset")
+done <<<"$ASSET_PATHS"
+if [[ "${#ASSETS[@]}" -ne 3 || -z "${ASSETS[0]}" || -z "${ASSETS[1]}" || -z "${ASSETS[2]}" ]]; then
+    echo "Remote production asset discovery did not return JS, CSS, and general-static paths" >&2
     exit 1
 fi
+verify_caddy_https_runtime \
+    "$FQDN" \
+    "$CADDY_BASICAUTH_USER" \
+    "$CADDY_BASICAUTH_PASSWORD_FILE" \
+    "${ASSETS[0]}" \
+    "${ASSETS[1]}" \
+    "${ASSETS[2]}"
 if ssh -F "$SSH_CONFIG" pear-staging-root "pgrep -af '[t]ools/webpack|[t]ornado\.autoreload'"; then
     echo "Development webpack/autoreload process is running" >&2
     exit 1
 fi
-if ssh -F "$SSH_CONFIG" pear-staging-root \
-    "curl -fsS --max-time 10 -H 'Host: $FQDN' -o /dev/null http://127.0.0.1:9991/webpack/app.js 2>/dev/null"; then
-    echo "Legacy webpack development route is live" >&2
-    exit 1
-fi
-echo "internal_app=$INTERNAL_CODE; webpack_watcher=absent; legacy_webpack_route=absent"
+echo "webpack_watcher=absent"
 
 echo
 echo "Systemd:"

@@ -48,7 +48,9 @@ from zerver.lib.pear_monitor import (
     PEAR_MONITOR_MAX_PER_REALM,
     PEAR_MONITOR_MAX_PER_TOPIC,
     PEAR_MONITOR_MIN_CADENCE_SECONDS,
+    PearMonitorSpecError,
     build_pear_monitor_contract,
+    pear_create_monitor_from_spec,
     serialize_pear_monitor,
 )
 from zerver.lib.pear_worker import (
@@ -1822,6 +1824,10 @@ def post_pear_monitors_backend(
         str,
         ApiParamConfig("topic", documentation_status=INTENTIONALLY_UNDOCUMENTED),
     ],
+    spec: Annotated[
+        Json[dict[str, object]] | None,
+        ApiParamConfig("spec", documentation_status=INTENTIONALLY_UNDOCUMENTED),
+    ] = None,
 ) -> HttpResponse:
     ask_request = ask_request.strip()
     if not ask_request:
@@ -1838,6 +1844,26 @@ def post_pear_monitors_backend(
     realm_count = PearMonitor.objects.filter(realm=user_profile.realm).count()
     if realm_count >= PEAR_MONITOR_MAX_PER_REALM:
         raise JsonableError(_("This organization already has the maximum number of monitors."))
+
+    if spec is not None:
+        # Pin-to-wall: the widget spec is already composed; the monitor
+        # goes live immediately with no agent run.
+        try:
+            monitor = pear_create_monitor_from_spec(
+                realm=user_profile.realm,
+                bot_profile=pear_bot.user_profile,
+                creator=user_profile,
+                stream_name=stream_name,
+                topic_name=topic_name,
+                ask=ask_request,
+                raw_spec=spec,
+                position=topic_count,
+            )
+        except PearMonitorSpecError as error:
+            raise JsonableError(_("Invalid widget spec: {error}").format(error=error))
+        return json_success(
+            request, data={"pear_monitor": serialize_pear_monitor(monitor)}
+        )
 
     monitor = PearMonitor.objects.create(
         realm=user_profile.realm,

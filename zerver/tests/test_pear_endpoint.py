@@ -4016,3 +4016,61 @@ class PearMonitorTest(ZulipTestCase):
             # wall block never queues ahead of a chat run.
             self.assertEqual(queue_name, "pear_monitor_worker")
             self.assertEqual(event["session_kind"], PearWorkerRun.MONITOR)
+
+    def test_spec_direct_monitor_creation_pins_without_agent_run(self) -> None:
+        owner = self.example_user("hamlet")
+        pear_bot = self.create_pear_bot(owner)
+        self.subscribe(owner, PEAR_DEFAULT_STREAM)
+        self.login_user(owner)
+        spec = {
+            "title": "gpu credits",
+            "cadence_seconds": 60,
+            "block": {"components": [{"type": "stat", "props": {"label": "credits", "value": 41}}]},
+            "recipe": {"command": "", "parse": {"mode": "static"}, "bindings": {}},
+        }
+        runs_before = PearWorkerRun.objects.count()
+        messages_before = Message.objects.count()
+        with patch("zerver.views.pear.PearQueueWorkerDispatcher.dispatch") as dispatch_mock:
+            result = self.client_post(
+                "/json/pear/monitors",
+                {
+                    "stream": PEAR_DEFAULT_STREAM,
+                    "topic": PEAR_DEFAULT_TOPIC,
+                    "request": "pinned from chat",
+                    "spec": orjson.dumps(spec).decode(),
+                },
+                intentionally_undocumented=True,
+            )
+        result_dict = self.assert_json_success(result)
+        monitor = PearMonitor.objects.get(id=result_dict["pear_monitor"]["id"])
+        # Pinning is instant: live monitor, no setup run, no DM anchor.
+        self.assertEqual(monitor.status, PearMonitor.LIVE)
+        self.assertEqual(monitor.title, "gpu credits")
+        self.assertIsNotNone(monitor.next_due_at)
+        self.assertIsNone(monitor.anchor_message_id)
+        dispatch_mock.assert_not_called()
+        self.assertEqual(PearWorkerRun.objects.count(), runs_before)
+        self.assertEqual(Message.objects.count(), messages_before)
+
+    def test_spec_direct_monitor_creation_rejects_bad_specs(self) -> None:
+        owner = self.example_user("hamlet")
+        self.create_pear_bot(owner)
+        self.subscribe(owner, PEAR_DEFAULT_STREAM)
+        self.login_user(owner)
+        bad_spec = {
+            "title": "nope",
+            "block": {"components": [{"type": "hologram", "props": {}}]},
+            "recipe": {"command": "", "parse": {"mode": "static"}, "bindings": {}},
+        }
+        result = self.client_post(
+            "/json/pear/monitors",
+            {
+                "stream": PEAR_DEFAULT_STREAM,
+                "topic": PEAR_DEFAULT_TOPIC,
+                "request": "pinned from chat",
+                "spec": orjson.dumps(bad_spec).decode(),
+            },
+            intentionally_undocumented=True,
+        )
+        self.assert_json_error_contains(result, "Invalid widget spec")
+        self.assertFalse(PearMonitor.objects.exists())

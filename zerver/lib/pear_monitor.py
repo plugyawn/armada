@@ -528,6 +528,38 @@ def pear_apply_monitor_setup_result(
     )
 
 
+def pear_create_monitor_from_spec(
+    *,
+    realm: Any,
+    bot_profile: UserProfile,
+    creator: UserProfile,
+    stream_name: str,
+    topic_name: str,
+    ask: str,
+    raw_spec: Any,
+    position: int,
+) -> PearMonitor:
+    """Create a LIVE monitor directly from a validated spec — the
+    pin-to-wall path: a widget the agent already composed in chat needs
+    no setup run, no DM anchor, no provisioning state."""
+    spec = pear_validate_monitor_spec(raw_spec)
+    return PearMonitor.objects.create(
+        realm=realm,
+        bot_profile=bot_profile,
+        creator=creator,
+        stream_name=stream_name,
+        topic_name=topic_name,
+        title=spec["title"] or ask[:24],
+        ask=ask[:500],
+        block_spec=spec["block_spec"],
+        recipe=spec["recipe"],
+        cadence_seconds=spec["cadence_seconds"],
+        status=PearMonitor.LIVE,
+        next_due_at=timezone_now(),
+        position=position,
+    )
+
+
 def serialize_pear_monitor(monitor: PearMonitor) -> dict[str, Any]:
     return {
         "id": monitor.id,

@@ -20,9 +20,11 @@ import * as message_reminder from "./message_reminder.ts";
 import * as message_viewport from "./message_viewport.ts";
 import {page_params} from "./page_params.ts";
 import * as pear_moments from "./pear_moments.ts";
-import * as pear_workspace_view from "./pear_workspace_view.ts";
 import * as pear_panel from "./pear_panel.ts";
 import {print_pear_signature} from "./pear_signature.ts";
+import * as pear_wall from "./pear_wall.ts";
+import * as pear_workspace_marks from "./pear_workspace_marks.ts";
+import * as pear_workspace_view from "./pear_workspace_view.ts";
 import * as pm_list from "./pm_list.ts";
 import * as popover_menus from "./popover_menus.ts";
 import * as popovers from "./popovers.ts";
@@ -34,7 +36,6 @@ import * as settings_data from "./settings_data.ts";
 import * as settings_preferences from "./settings_preferences.ts";
 import * as spectators from "./spectators.ts";
 import {current_user} from "./state_data.ts";
-import * as pear_workspace_marks from "./pear_workspace_marks.ts";
 import * as stream_list from "./stream_list.ts";
 import * as topic_list from "./topic_list.ts";
 import * as ui_util from "./ui_util.ts";
@@ -417,6 +418,7 @@ export function initialize_right_sidebar(): void {
 
     buddy_list.initialize_tooltips();
     pear_panel.initialize();
+    pear_wall.initialize();
     print_pear_signature();
     pear_moments.initialize();
     pear_workspace_view.initialize();

@@ -2719,3 +2719,455 @@
     text-overflow: ellipsis;
     white-space: nowrap;
 }
+
+/* ================================================================
+   The Wall: persistent monitor blocks in the right sidebar. Each
+   block is a standing subroutine's display; everything here stays
+   cheap — compositor-only animation, no layout work on ticks. */
+
+#pear-wall {
+    display: flex;
+    flex-direction: column;
+    max-height: 42vh;
+    margin: 0 var(--pear-space-2) var(--pear-space-2);
+    border-bottom: 1px solid var(--pear-hairline);
+    padding-bottom: var(--pear-space-2);
+
+    & .pear-wall-header {
+        padding: var(--pear-space-1) 0;
+    }
+
+    & .pear-wall-input {
+        width: 100%;
+        box-sizing: border-box;
+        padding: 4px 8px;
+        border: 1px solid var(--pear-hairline);
+        border-radius: var(--pear-radius-chip);
+        background: var(--pear-surface-1);
+        color: var(--pear-ink-1);
+        font-family: var(--pear-font-pixel);
+        /* stylelint-disable-next-line declaration-property-unit-disallowed-list */
+        font-size: 12px;
+        -webkit-font-smoothing: none;
+
+        &::placeholder {
+            color: var(--pear-ink-3);
+        }
+
+        &:focus {
+            border-color: var(--pear-accent-ink);
+            outline: none;
+        }
+    }
+
+    & .pear-wall-blocks {
+        display: flex;
+        flex-direction: column;
+        gap: var(--pear-space-1);
+        overflow-y: auto;
+        min-height: 0;
+    }
+
+    & .pear-wall-empty {
+        padding: var(--pear-space-1) 2px;
+        color: var(--pear-ink-3);
+        font-family: var(--pear-font-pixel);
+        /* stylelint-disable-next-line declaration-property-unit-disallowed-list */
+        font-size: 11px;
+        -webkit-font-smoothing: none;
+    }
+
+    & .pear-wall-block {
+        border: 1px solid var(--pear-hairline);
+        border-radius: var(--pear-radius-card);
+        background: var(--pear-surface-1);
+        overflow: hidden;
+
+        &.pear-wall-status-error {
+            border-color: color-mix(in srgb, var(--pear-danger) 45%, transparent);
+        }
+
+        &.pear-wall-status-paused {
+            opacity: 0.75;
+        }
+    }
+
+    & .pear-wall-block-header {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        padding: 3px 8px 3px 4px;
+    }
+
+    & .pear-wall-collapse {
+        border: none;
+        background: none;
+        padding: 0 2px;
+        color: var(--pear-ink-3);
+        font-family: var(--pear-font-pixel);
+        /* stylelint-disable-next-line declaration-property-unit-disallowed-list */
+        font-size: 11px;
+        cursor: pointer;
+
+        &:hover {
+            color: var(--pear-ink-1);
+        }
+    }
+
+    & .pear-wall-title {
+        flex: 1;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        color: var(--pear-ink-1);
+        font-family: var(--pear-font-pixel);
+        /* stylelint-disable-next-line declaration-property-unit-disallowed-list */
+        font-size: 12px;
+        -webkit-font-smoothing: none;
+    }
+
+    & .pear-wall-dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 1px;
+        background: var(--pear-ink-3);
+        opacity: 0.5;
+    }
+
+    & .pear-wall-status-live .pear-wall-dot {
+        background: var(--pear-accent-ink);
+    }
+
+    & .pear-wall-status-error .pear-wall-dot {
+        background: var(--pear-danger);
+        opacity: 1;
+    }
+
+    & .pear-wall-dot-pulse {
+        animation: pear-wall-pulse 900ms var(--pear-ease);
+    }
+
+    & .pear-wall-body {
+        display: flex;
+        flex-direction: column;
+        gap: var(--pear-space-1);
+        padding: 2px 8px 6px;
+    }
+
+    & .pear-wall-provisioning {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        color: var(--pear-ink-2);
+        font-family: var(--pear-font-pixel);
+        /* stylelint-disable-next-line declaration-property-unit-disallowed-list */
+        font-size: 11px;
+        -webkit-font-smoothing: none;
+    }
+
+    & .pear-wall-error {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        align-items: flex-start;
+    }
+
+    & .pear-wall-error-text {
+        color: var(--pear-danger);
+        font-family: var(--pear-font-mono);
+        /* stylelint-disable-next-line declaration-property-unit-disallowed-list */
+        font-size: 10px;
+        overflow-wrap: anywhere;
+    }
+
+    & .pear-wall-c-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        gap: 6px;
+    }
+
+    & .pear-wall-c-label {
+        color: var(--pear-ink-3);
+        font-family: var(--pear-font-pixel);
+        /* stylelint-disable-next-line declaration-property-unit-disallowed-list */
+        font-size: 11px;
+        letter-spacing: 0.02em;
+        -webkit-font-smoothing: none;
+    }
+
+    & .pear-wall-c-value {
+        color: var(--pear-ink-1);
+        font-family: var(--pear-font-pixel);
+        /* stylelint-disable-next-line declaration-property-unit-disallowed-list */
+        font-size: 12px;
+        font-variant-numeric: tabular-nums;
+        -webkit-font-smoothing: none;
+    }
+
+    & .pear-wall-c-meta {
+        color: var(--pear-ink-3);
+        font-family: var(--pear-font-pixel);
+        /* stylelint-disable-next-line declaration-property-unit-disallowed-list */
+        font-size: 10px;
+        -webkit-font-smoothing: none;
+    }
+
+    /* meter: tqdm as pixel blocks — the fill clips a repeating block
+       gradient so progress advances in discrete cells. */
+    & .pear-wall-meter-bar {
+        height: 10px;
+        margin: 3px 0 2px;
+        border: 1px solid var(--pear-hairline);
+        border-radius: var(--pear-radius-px);
+        background: var(--pear-surface-0);
+        overflow: hidden;
+    }
+
+    & .pear-wall-meter-fill {
+        height: 100%;
+        width: 0%;
+        background: repeating-linear-gradient(
+            to right,
+            var(--pear-accent-ink) 0 6px,
+            transparent 6px 8px
+        );
+    }
+
+    & .pear-wall-stat {
+        display: flex;
+        align-items: baseline;
+        gap: 6px;
+    }
+
+    & .pear-wall-stat-value {
+        color: var(--pear-ink-1);
+        font-family: var(--pear-font-pixel);
+        /* stylelint-disable-next-line declaration-property-unit-disallowed-list */
+        font-size: 20px;
+        font-variant-numeric: tabular-nums;
+        -webkit-font-smoothing: none;
+    }
+
+    & .pear-wall-stat-unit {
+        margin-left: 2px;
+        color: var(--pear-ink-3);
+        /* stylelint-disable-next-line declaration-property-unit-disallowed-list */
+        font-size: 11px;
+    }
+
+    & .pear-wall-stat-delta {
+        font-family: var(--pear-font-pixel);
+        /* stylelint-disable-next-line declaration-property-unit-disallowed-list */
+        font-size: 10px;
+        -webkit-font-smoothing: none;
+
+        &.pear-wall-delta-up {
+            color: var(--pear-accent-ink);
+        }
+
+        &.pear-wall-delta-down {
+            color: var(--pear-danger);
+        }
+    }
+
+    & .pear-wall-spark {
+        display: block;
+        width: 100%;
+        margin-top: 2px;
+    }
+
+    & .pear-wall-logtail-lines {
+        border: 1px solid var(--pear-hairline);
+        border-radius: var(--pear-radius-px);
+        background: var(--pear-surface-0);
+        padding: 3px 6px;
+        max-height: 96px;
+        overflow-y: auto;
+    }
+
+    & .pear-wall-logtail-line {
+        color: var(--pear-ink-3);
+        font-family: var(--pear-font-mono);
+        /* stylelint-disable-next-line declaration-property-unit-disallowed-list */
+        font-size: 10px;
+        line-height: 1.5;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+
+        &:last-child {
+            color: var(--pear-ink-1);
+        }
+    }
+
+    & .pear-wall-badge {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+
+    & .pear-wall-lamp {
+        width: 8px;
+        height: 8px;
+        border-radius: 1px;
+
+        &.pear-wall-lamp-ok {
+            background: var(--pear-accent-ink);
+        }
+
+        &.pear-wall-lamp-warn {
+            background: var(--pear-warn);
+        }
+
+        &.pear-wall-lamp-err {
+            background: var(--pear-danger);
+        }
+    }
+
+    & .pear-wall-badge-text {
+        color: var(--pear-ink-1);
+        font-family: var(--pear-font-pixel);
+        /* stylelint-disable-next-line declaration-property-unit-disallowed-list */
+        font-size: 12px;
+        -webkit-font-smoothing: none;
+    }
+
+    & .pear-wall-clock {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 6px;
+    }
+
+    & .pear-wall-clock-time {
+        color: var(--pear-ink-1);
+        font-family: var(--pear-font-pixel);
+        /* stylelint-disable-next-line declaration-property-unit-disallowed-list */
+        font-size: 16px;
+        font-variant-numeric: tabular-nums;
+        -webkit-font-smoothing: none;
+    }
+
+    & .pear-wall-calendar-grid {
+        display: grid;
+        grid-template-columns: repeat(7, 1fr);
+        gap: 1px;
+        margin-top: 3px;
+    }
+
+    & .pear-wall-cal-head {
+        color: var(--pear-ink-3);
+        text-align: center;
+        font-family: var(--pear-font-pixel);
+        /* stylelint-disable-next-line declaration-property-unit-disallowed-list */
+        font-size: 9px;
+        -webkit-font-smoothing: none;
+    }
+
+    & .pear-wall-cal-cell {
+        color: var(--pear-ink-2);
+        text-align: center;
+        padding: 1px 0;
+        border-radius: var(--pear-radius-px);
+        font-family: var(--pear-font-pixel);
+        /* stylelint-disable-next-line declaration-property-unit-disallowed-list */
+        font-size: 9px;
+        font-variant-numeric: tabular-nums;
+        -webkit-font-smoothing: none;
+
+        &.pear-wall-cal-out {
+            color: var(--pear-ink-3);
+            opacity: 0.4;
+        }
+
+        &.pear-wall-cal-hi {
+            background: var(--pear-accent-fill);
+            color: var(--pear-accent-ink);
+        }
+
+        &.pear-wall-cal-today {
+            outline: 1px solid var(--pear-accent-ink);
+            outline-offset: -1px;
+        }
+    }
+
+    & .pear-wall-kv {
+        display: flex;
+        justify-content: space-between;
+        gap: 8px;
+        font-family: var(--pear-font-pixel);
+        /* stylelint-disable-next-line declaration-property-unit-disallowed-list */
+        font-size: 11px;
+        -webkit-font-smoothing: none;
+    }
+
+    & .pear-wall-kv-key {
+        color: var(--pear-ink-3);
+    }
+
+    & .pear-wall-kv-value {
+        color: var(--pear-ink-1);
+        font-variant-numeric: tabular-nums;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    & .pear-wall-block-footer {
+        display: flex;
+        align-items: center;
+        gap: 2px;
+        padding: 2px 6px 4px;
+    }
+
+    & .pear-wall-foot-spacer {
+        flex: 1;
+    }
+
+    & .pear-wall-foot-action {
+        border: none;
+        background: none;
+        padding: 1px 4px;
+        border-radius: var(--pear-radius-chip);
+        color: var(--pear-ink-3);
+        font-family: var(--pear-font-pixel);
+        /* stylelint-disable-next-line declaration-property-unit-disallowed-list */
+        font-size: 10px;
+        -webkit-font-smoothing: none;
+        cursor: pointer;
+
+        &:hover {
+            color: var(--pear-ink-1);
+            background: var(--pear-surface-2);
+        }
+    }
+
+    & .pear-wall-delete:hover {
+        color: var(--pear-danger);
+    }
+
+    & .pear-wall-armed {
+        color: var(--pear-danger);
+        background: var(--pear-danger-fill);
+    }
+}
+
+@keyframes pear-wall-pulse {
+    0% {
+        opacity: 1;
+        transform: scale(1.6);
+    }
+
+    100% {
+        opacity: 0.5;
+        transform: scale(1);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    #pear-wall .pear-wall-dot-pulse {
+        animation: none;
+    }
+}

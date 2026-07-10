@@ -99,7 +99,7 @@ class PearWorker(QueueProcessingWorker):
 
     # The session kinds this consumer owns; boot reaping must never
     # touch the other consumer's RUNNING rows.
-    OWNED_SESSION_KINDS: tuple[str, ...] = ("shared", "side", "canvas_ask")
+    OWNED_SESSION_KINDS: tuple[str, ...] = ("shared", "side")
 
     @override
     def setup(self) -> None:

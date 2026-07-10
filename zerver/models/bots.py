@@ -93,7 +93,6 @@ class PearWorkerRun(models.Model):
 
     SHARED = "shared"
     SIDE = "side"
-    CANVAS_ASK = "canvas_ask"
     MONITOR = "monitor"
 
     STATUS_CHOICES = [
@@ -107,7 +106,6 @@ class PearWorkerRun(models.Model):
     SESSION_KIND_CHOICES = [
         (SHARED, "shared"),
         (SIDE, "side"),
-        (CANVAS_ASK, "canvas_ask"),
         (MONITOR, "monitor"),
     ]
 

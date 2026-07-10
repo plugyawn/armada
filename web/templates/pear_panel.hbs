@@ -146,9 +146,6 @@
                                 <button type="button" role="tab" aria-selected="{{#if topic_context.workbench_history_selected}}true{{else}}false{{/if}}" class="pear-workbench-tab {{#if topic_context.workbench_history_selected}}pear-workbench-tab-selected{{/if}}" data-pear-workbench-view="history" {{#if topic_context.workbench_history_disabled}}disabled{{/if}}>
                                     {{topic_context.history_tab_label}}
                                 </button>
-                                <button type="button" role="tab" aria-selected="{{#if topic_context.workbench_canvas_selected}}true{{else}}false{{/if}}" class="pear-workbench-tab {{#if topic_context.workbench_canvas_selected}}pear-workbench-tab-selected{{/if}}" data-pear-workbench-view="canvas">
-                                    {{topic_context.canvas_tab_label}}
-                                </button>
                                 <button type="button" role="tab" aria-selected="{{#if topic_context.workbench_side_selected}}true{{else}}false{{/if}}" class="pear-workbench-tab {{#if topic_context.workbench_side_selected}}pear-workbench-tab-selected{{/if}}" data-pear-workbench-view="side">
                                     {{topic_context.side_tab_label}}
                                 </button>
@@ -188,86 +185,22 @@
                             {{/if}}
                         {{/if}}
                         {{#if topic_context.workbench_history_selected}}
-                            {{#if topic_context.git_tree_loading}}
-                                <div class="pear-workbench-empty">
-                                    <span class="pear-ui-glyph pear-workbench-empty-glyph pear-braille-spinner" aria-hidden="true"></span>
-                                    <span>{{t "Loading Git history." }}</span>
-                                </div>
-                            {{else if topic_context.git_tree_error}}
-                                <div class="pear-workbench-empty pear-workbench-empty-blocked">
-                                    <span class="pear-ui-glyph pear-workbench-empty-glyph" aria-hidden="true">✷</span>
-                                    <span>{{topic_context.git_tree_error}}</span>
-                                </div>
-                            {{else if topic_context.has_git_tree_graph}}
-                                <div class="pear-git-tree">
-                                    <pre class="pear-git-tree-graph">{{topic_context.git_tree.graph}}</pre>
-                                    {{#if topic_context.has_git_tree_status}}
-                                        <div class="pear-git-tree-block">
-                                            <div class="pear-git-tree-label">{{t "Status" }}</div>
-                                            <pre class="pear-git-tree-status">{{topic_context.git_tree.status_short}}</pre>
+                            {{#if topic_context.has_recent_commits}}
+                                <div class="pear-commit-list">
+                                    {{#each topic_context.history_commits}}
+                                        <div class="pear-commit-row {{#if is_head}}pear-commit-row-head{{/if}}">
+                                            <span class="pear-commit-summary" title="{{summary}}">{{summary}}</span>
+                                            <span class="pear-commit-hash">{{hash}}</span>
+                                            {{#if ref_label}}
+                                                <span class="pear-commit-ref">{{ref_label}}</span>
+                                            {{/if}}
                                         </div>
-                                    {{/if}}
-                                </div>
-                            {{else}}
-                                {{#if topic_context.has_recent_commits}}
-                                    <div class="pear-commit-list">
-                                        {{#each topic_context.history_commits}}
-                                            <div class="pear-commit-row {{#if is_head}}pear-commit-row-head{{/if}}">
-                                                <span class="pear-commit-summary" title="{{summary}}">{{summary}}</span>
-                                                <span class="pear-commit-hash">{{hash}}</span>
-                                                {{#if ref_label}}
-                                                    <span class="pear-commit-ref">{{ref_label}}</span>
-                                                {{/if}}
-                                            </div>
-                                        {{/each}}
-                                    </div>
-                                {{else}}
-                                    <div class="pear-workbench-empty">
-                                        <span class="pear-ui-glyph pear-workbench-empty-glyph" aria-hidden="true">·</span>
-                                        <span>{{t "No Git history." }}</span>
-                                    </div>
-                                {{/if}}
-                            {{/if}}
-                        {{/if}}
-                        {{#if topic_context.workbench_canvas_selected}}
-                            {{#if topic_context.canvas_loading}}
-                                <div class="pear-workbench-empty">
-                                    <span class="pear-ui-glyph pear-workbench-empty-glyph pear-braille-spinner" aria-hidden="true"></span>
-                                    <span>{{t "Loading canvas." }}</span>
-                                </div>
-                            {{else if topic_context.canvas_error}}
-                                <div class="pear-workbench-empty pear-workbench-empty-blocked">
-                                    <span class="pear-ui-glyph pear-workbench-empty-glyph" aria-hidden="true">✷</span>
-                                    <span>{{topic_context.canvas_error}}</span>
-                                </div>
-                            {{else if topic_context.canvas}}
-                                <div class="pear-workbench-canvas">
-                                    <div class="pear-workbench-canvas-toolbar">
-                                        <span class="pear-workbench-canvas-path" title="{{topic_context.canvas_title}}">{{topic_context.canvas_title}}</span>
-                                        <button type="button" class="pear-workbench-canvas-open tippy-zulip-delayed-tooltip" aria-label="{{t 'Edit canvas' }}" data-tippy-content="{{t 'Edit canvas' }}">{{t "edit" }}</button>
-                                    </div>
-                                    {{#if topic_context.canvas_has_content}}
-                                        {{#if topic_context.canvas_has_rendered_html}}
-                                            <div class="pear-workbench-canvas-rendered rendered_markdown">{{{topic_context.canvas_rendered_html}}}</div>
-                                        {{else if topic_context.canvas_rendering}}
-                                            <div class="pear-workbench-empty pear-liveness-active">
-                                                <span class="pear-ui-glyph pear-workbench-empty-glyph pear-thinking-glyph" aria-hidden="true">·</span>
-                                                <span>{{t "Rendering canvas." }}</span>
-                                            </div>
-                                        {{else}}
-                                            <pre class="pear-workbench-canvas-source">{{topic_context.canvas.content}}</pre>
-                                        {{/if}}
-                                    {{else}}
-                                        <div class="pear-workbench-empty">
-                                            <span class="pear-ui-glyph pear-workbench-empty-glyph" aria-hidden="true">·</span>
-                                            <span>{{t "Canvas is empty." }}</span>
-                                        </div>
-                                    {{/if}}
+                                    {{/each}}
                                 </div>
                             {{else}}
                                 <div class="pear-workbench-empty">
-                                    <span class="pear-ui-glyph pear-workbench-empty-glyph pear-braille-spinner" aria-hidden="true"></span>
-                                    <span>{{t "Loading canvas." }}</span>
+                                    <span class="pear-ui-glyph pear-workbench-empty-glyph" aria-hidden="true">·</span>
+                                    <span>{{t "No Git history." }}</span>
                                 </div>
                             {{/if}}
                         {{/if}}

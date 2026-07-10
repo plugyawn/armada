@@ -1,6 +1,7 @@
 import asyncio
 import inspect
 import json
+import os
 import queue
 import subprocess
 import threading
@@ -52,6 +53,23 @@ class PearProcessIsolation:
 
 class PearAgentRuntimeError(RuntimeError):
     pass
+
+
+def pear_capture_protocol_message(direction: str, message: dict[str, Any]) -> None:
+    """Append one wire message to the capture file when
+    PEAR_CODEX_PROTOCOL_CAPTURE names a path. Diagnostic-only: the
+    surface-diff workflow uses it to see exactly what an app-server
+    version emits and asks; never allowed to break a turn."""
+    capture_path = os.environ.get("PEAR_CODEX_PROTOCOL_CAPTURE")
+    if not capture_path:
+        return
+    try:
+        with open(capture_path, "a") as capture_file:
+            capture_file.write(
+                json.dumps({"direction": direction, "message": message}) + "\n"
+            )
+    except OSError:
+        pass
 
 
 def pear_isolated_command(
@@ -1173,6 +1191,7 @@ class PearCodexAppServerToolRunner:
                 except json.JSONDecodeError:
                     continue
                 if isinstance(message, dict):
+                    pear_capture_protocol_message("recv", message)
                     self.messages.put(message)
         finally:
             self.messages.put(None)
@@ -1185,6 +1204,7 @@ class PearCodexAppServerToolRunner:
         process = self.process
         if process is None or process.stdin is None or process.poll() is not None:
             raise PearAgentRuntimeError("Codex app-server is not running.")
+        pear_capture_protocol_message("send", message)
         process.stdin.write(json.dumps(message, separators=(",", ":")) + "\n")
         process.stdin.flush()
 

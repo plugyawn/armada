@@ -11,6 +11,8 @@ import orjson
 
 from zerver.lib.pear_workspace_index import WorkspaceIndex, WorkspacePath
 from zerver.lib.pear_workspace_io import (
+    WorkspaceDeleteResult,
+    WorkspaceEntryMutationResult,
     WorkspaceFile,
     WorkspaceVersionConflictError,
     WorkspaceWriteResult,
@@ -19,8 +21,12 @@ from zerver.lib.pear_workspace_resources import (
     PEAR_WORKSPACE_TEXT_MAX_BYTES,
     WorkspaceSnapshot,
     clear_workspace_snapshot_cache,
+    create_workspace_node_directory,
+    create_workspace_node_file,
+    delete_workspace_node_entry,
     read_workspace_node_file,
     record_pending_workspace_mutation,
+    rename_workspace_node_entry,
     write_workspace_node_file,
 )
 from zerver.lib.test_classes import ZulipTestCase
@@ -105,6 +111,71 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
         )
         return self.assert_json_success(result)["pear_workspace_tree"]
 
+    def create_entry(
+        self,
+        node: PearWorkspaceNode,
+        *,
+        destination_path: str,
+        kind: str,
+        workspace_revision: int,
+        content: str = "",
+    ) -> dict[str, object]:
+        result = self.client_post(
+            f"/json/pear/workspaces/{node.uuid}/entries",
+            {
+                "destination_path": destination_path,
+                "kind": kind,
+                "workspace_revision": workspace_revision,
+                "content": content,
+            },
+            intentionally_undocumented=True,
+        )
+        return self.assert_json_success(result)["pear_workspace_mutation"]
+
+    def rename_entry(
+        self,
+        node: PearWorkspaceNode,
+        *,
+        entry_id: str,
+        expected_path: str,
+        destination_path: str,
+        workspace_revision: int,
+    ) -> dict[str, object]:
+        result = self.client_patch(
+            f"/json/pear/workspaces/{node.uuid}/entry",
+            {
+                "entry_id": entry_id,
+                "expected_path": expected_path,
+                "destination_path": destination_path,
+                "workspace_revision": workspace_revision,
+            },
+            intentionally_undocumented=True,
+        )
+        return self.assert_json_success(result)["pear_workspace_mutation"]
+
+    def delete_entry(
+        self,
+        node: PearWorkspaceNode,
+        *,
+        entry_id: str,
+        expected_path: str,
+        workspace_revision: int,
+        recursive: bool = False,
+        confirm_irreversible: bool = False,
+    ) -> dict[str, object]:
+        result = self.client_delete(
+            f"/json/pear/workspaces/{node.uuid}/entry",
+            {
+                "entry_id": entry_id,
+                "expected_path": expected_path,
+                "workspace_revision": workspace_revision,
+                "recursive": orjson.dumps(recursive).decode(),
+                "confirm_irreversible": orjson.dumps(confirm_irreversible).decode(),
+            },
+            intentionally_undocumented=True,
+        )
+        return self.assert_json_success(result)["pear_workspace_mutation"]
+
     def test_descriptor_tree_and_search_are_complete_opaque_and_relative(self) -> None:
         user = self.example_user("hamlet")
         stream = self.subscribe(user, "workspace-resource")
@@ -130,7 +201,10 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
         self.assertEqual(descriptor["default_path"], "README.md")
         self.assertEqual(descriptor["default_entry"]["path"], "README.md")
         self.assertEqual(descriptor["root"]["path"], "")
-        self.assertFalse(descriptor["capabilities"]["create_entry"])
+        self.assertTrue(descriptor["capabilities"]["create_entry"])
+        self.assertTrue(descriptor["capabilities"]["rename_entry"])
+        self.assertTrue(descriptor["capabilities"]["delete_entry"])
+        self.assertTrue(descriptor["capabilities"]["history"])
         entries = [*root["entries"], *rest["entries"]]
         paths = {entry["path"] for entry in entries}
         self.assertEqual(paths, {".gitignore", "README.md", "docs", "raw.bin"})
@@ -184,6 +258,266 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
         self.assertFalse(by_path["empty"]["has_children"])
         self.assertNotIn(".hidden-empty", by_path)
         self.assertNotIn("ignored-empty", by_path)
+
+    def test_create_rename_delete_enforce_policy_revision_and_confirmation(self) -> None:
+        user = self.example_user("hamlet")
+        stream = self.subscribe(user, "workspace-resource")
+        self.login_user(user)
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo = self.make_workspace(Path(temp_dir).resolve())
+            with (repo / ".gitignore").open("a", encoding="utf-8") as ignore_file:
+                ignore_file.write("private.txt\n")
+            node = self.make_node(user, stream.name, repo)
+            descriptor = self.descriptor(node)
+            revision = descriptor["workspace_revision"]
+            assert isinstance(revision, int)
+
+            hidden_result = self.client_post(
+                f"/json/pear/workspaces/{node.uuid}/entries",
+                {
+                    "destination_path": ".secret",
+                    "kind": "file",
+                    "workspace_revision": revision,
+                    "content": "secret",
+                },
+                intentionally_undocumented=True,
+            )
+            ignored_result = self.client_post(
+                f"/json/pear/workspaces/{node.uuid}/entries",
+                {
+                    "destination_path": "private.txt",
+                    "kind": "file",
+                    "workspace_revision": revision,
+                    "content": "secret",
+                },
+                intentionally_undocumented=True,
+            )
+
+            folder = self.create_entry(
+                node,
+                destination_path="notes",
+                kind="directory",
+                workspace_revision=revision,
+            )
+            folder_entry = folder["entry"]
+            assert isinstance(folder_entry, dict)
+            self.assertEqual(folder_entry["kind"], "directory")
+            self.assertFalse(folder_entry["has_children"])
+            file_mutation = self.create_entry(
+                node,
+                destination_path="draft.md",
+                kind="file",
+                workspace_revision=folder["workspace_revision"],
+                content="scratch\n",
+            )
+            file_entry = file_mutation["entry"]
+            assert isinstance(file_entry, dict)
+            renamed = self.rename_entry(
+                node,
+                entry_id=file_entry["entry_id"],
+                expected_path="draft.md",
+                destination_path="notes/draft.md",
+                workspace_revision=file_mutation["workspace_revision"],
+            )
+            renamed_entry = renamed["entry"]
+            assert isinstance(renamed_entry, dict)
+            self.assertNotEqual(renamed["previous_entry_id"], renamed_entry["entry_id"])
+            self.assertEqual((repo / "notes/draft.md").read_text(), "scratch\n")
+
+            stale_old_id = self.client_get(
+                f"/json/pear/workspaces/{node.uuid}/file",
+                {"entry_id": file_entry["entry_id"]},
+                intentionally_undocumented=True,
+            )
+            confirmation_result = self.client_delete(
+                f"/json/pear/workspaces/{node.uuid}/entry",
+                {
+                    "entry_id": renamed_entry["entry_id"],
+                    "expected_path": "notes/draft.md",
+                    "workspace_revision": renamed["workspace_revision"],
+                    "recursive": "false",
+                    "confirm_irreversible": "false",
+                },
+                intentionally_undocumented=True,
+            )
+            deleted = self.delete_entry(
+                node,
+                entry_id=renamed_entry["entry_id"],
+                expected_path="notes/draft.md",
+                workspace_revision=renamed["workspace_revision"],
+                confirm_irreversible=True,
+            )
+            current_tree = self.tree(node)
+            self.assertFalse((repo / "notes/draft.md").exists())
+            notes_entry = next(item for item in current_tree["entries"] if item["path"] == "notes")
+            notes_tree = self.tree(node, directory_id=notes_entry["entry_id"])
+            self.assertNotIn(
+                "notes/draft.md",
+                {item["path"] for item in notes_tree["entries"]},
+            )
+
+        self.assertEqual(orjson.loads(hidden_result.content)["error_code"], "hidden_destination")
+        self.assertEqual(orjson.loads(ignored_result.content)["error_code"], "ignored_destination")
+        self.assertEqual(orjson.loads(stale_old_id.content)["error_code"], "stale_entry")
+        self.assertEqual(
+            orjson.loads(confirmation_result.content)["error_code"],
+            "confirmation_required",
+        )
+        self.assertIsNone(deleted["entry"])
+
+    def test_history_is_bounded_cursor_signed_and_relative(self) -> None:
+        user = self.example_user("hamlet")
+        stream = self.subscribe(user, "workspace-resource")
+        self.login_user(user)
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo = self.make_workspace(Path(temp_dir).resolve())
+            git = ["git", "-C", str(repo)]
+            for number in (2, 3):
+                (repo / "README.md").write_text(f"revision {number}\n", encoding="utf-8")
+                subprocess.run([*git, "add", "README.md"], check=True, timeout=10)
+                subprocess.run(
+                    [
+                        *git,
+                        "-c",
+                        "user.email=pear@example.com",
+                        "-c",
+                        "user.name=Pear",
+                        "commit",
+                        "--quiet",
+                        "-m",
+                        f"revision {number}",
+                    ],
+                    check=True,
+                    timeout=10,
+                )
+            node = self.make_node(user, stream.name, repo)
+            descriptor = self.descriptor(node)
+            entry_id = descriptor["default_entry"]["entry_id"]
+            first_result = self.client_get(
+                f"/json/pear/workspaces/{node.uuid}/history",
+                {"entry_id": entry_id, "limit": 1},
+                intentionally_undocumented=True,
+            )
+            first = self.assert_json_success(first_result)["pear_workspace_history"]
+            second_result = self.client_get(
+                f"/json/pear/workspaces/{node.uuid}/history",
+                {"entry_id": entry_id, "limit": 1, "cursor": first["next_cursor"]},
+                intentionally_undocumented=True,
+            )
+            second = self.assert_json_success(second_result)["pear_workspace_history"]
+            tampered_result = self.client_get(
+                f"/json/pear/workspaces/{node.uuid}/history",
+                {
+                    "entry_id": entry_id,
+                    "limit": 1,
+                    "cursor": f"{first['next_cursor']}x",
+                },
+                intentionally_undocumented=True,
+            )
+
+        self.assertEqual([commit["subject"] for commit in first["commits"]], ["revision 3"])
+        self.assertEqual([commit["subject"] for commit in second["commits"]], ["revision 2"])
+        self.assertNotIn(str(repo), first_result.content.decode())
+        self.assertEqual(orjson.loads(tampered_result.content)["error_code"], "stale_cursor")
+
+    def test_delayed_put_cannot_follow_rename_or_delete_recreate(self) -> None:
+        user = self.example_user("hamlet")
+        stream = self.subscribe(user, "workspace-resource")
+        self.login_user(user)
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo = self.make_workspace(Path(temp_dir).resolve())
+            node = self.make_node(user, stream.name, repo)
+            descriptor = self.descriptor(node)
+            readme_entry = descriptor["default_entry"]
+            read_result = self.client_get(
+                f"/json/pear/workspaces/{node.uuid}/file",
+                {"entry_id": readme_entry["entry_id"]},
+                intentionally_undocumented=True,
+            )
+            readme = self.assert_json_success(read_result)["pear_workspace_file"]
+            delayed_rename_put = {
+                "entry_id": readme_entry["entry_id"],
+                "expected_path": "README.md",
+                "content": "delayed rename write\n",
+                "base_version": readme["version"],
+                "workspace_revision": descriptor["workspace_revision"],
+                "edit_revision": 90,
+            }
+            renamed = self.rename_entry(
+                node,
+                entry_id=readme_entry["entry_id"],
+                expected_path="README.md",
+                destination_path="RENAMED.md",
+                workspace_revision=descriptor["workspace_revision"],
+            )
+            recreated = self.create_entry(
+                node,
+                destination_path="README.md",
+                kind="file",
+                workspace_revision=renamed["workspace_revision"],
+                content="replacement after rename\n",
+            )
+            delayed_rename_result = self.client_put(
+                f"/json/pear/workspaces/{node.uuid}/file",
+                delayed_rename_put,
+                intentionally_undocumented=True,
+            )
+
+            scratch = self.create_entry(
+                node,
+                destination_path="scratch.txt",
+                kind="file",
+                workspace_revision=recreated["workspace_revision"],
+                content="scratch original\n",
+            )
+            scratch_entry = scratch["entry"]
+            assert isinstance(scratch_entry, dict)
+            scratch_read_result = self.client_get(
+                f"/json/pear/workspaces/{node.uuid}/file",
+                {"entry_id": scratch_entry["entry_id"]},
+                intentionally_undocumented=True,
+            )
+            scratch_file = self.assert_json_success(scratch_read_result)["pear_workspace_file"]
+            delayed_delete_put = {
+                "entry_id": scratch_entry["entry_id"],
+                "expected_path": "scratch.txt",
+                "content": "delayed delete write\n",
+                "base_version": scratch_file["version"],
+                "workspace_revision": scratch["workspace_revision"],
+                "edit_revision": 91,
+            }
+            deleted = self.delete_entry(
+                node,
+                entry_id=scratch_entry["entry_id"],
+                expected_path="scratch.txt",
+                workspace_revision=scratch["workspace_revision"],
+                confirm_irreversible=True,
+            )
+            self.create_entry(
+                node,
+                destination_path="scratch.txt",
+                kind="file",
+                workspace_revision=deleted["workspace_revision"],
+                content="replacement after delete\n",
+            )
+            delayed_delete_result = self.client_put(
+                f"/json/pear/workspaces/{node.uuid}/file",
+                delayed_delete_put,
+                intentionally_undocumented=True,
+            )
+
+            self.assertEqual((repo / "RENAMED.md").read_bytes(), readme["content"].encode())
+            self.assertEqual((repo / "README.md").read_text(), "replacement after rename\n")
+            self.assertEqual((repo / "scratch.txt").read_text(), "replacement after delete\n")
+
+        self.assertEqual(
+            orjson.loads(delayed_rename_result.content)["error_code"],
+            "stale_workspace",
+        )
+        self.assertEqual(
+            orjson.loads(delayed_delete_result.content)["error_code"],
+            "stale_workspace",
+        )
 
     def test_text_get_and_raw_preserve_exact_bytes_and_reject_binary_editing(self) -> None:
         user = self.example_user("hamlet")
@@ -479,7 +813,7 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
                 )
 
             with patch(
-                "zerver.views.pear_workspace.write_workspace_node_file",
+                "zerver.lib.pear_workspace_resources.write_workspace_node_file",
                 side_effect=race_write,
             ):
                 conflict_result = self.client_put(
@@ -590,7 +924,7 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
 
         self.assert_json_error(result, "Invalid channel name 'workspace-private'")
 
-    def test_isolated_nodes_route_reads_and_writes_through_helper(self) -> None:
+    def test_isolated_nodes_route_all_mutations_through_helper(self) -> None:
         username = "pear-0123456789abcdef01234567"
         data = b"hello\n"
         file = WorkspaceFile(
@@ -612,6 +946,18 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
                 "zerver.lib.pear_workspace_resources.atomic_write_workspace_file_via_helper",
                 return_value=WorkspaceWriteResult(file=file, changed=False, created=False),
             ) as helper_write,
+            patch(
+                "zerver.lib.pear_workspace_resources.create_workspace_directory_via_helper",
+                return_value=WorkspaceEntryMutationResult("folder", "directory"),
+            ) as helper_mkdir,
+            patch(
+                "zerver.lib.pear_workspace_resources.rename_workspace_entry_via_helper",
+                return_value=WorkspaceEntryMutationResult("renamed.md", "file"),
+            ) as helper_rename,
+            patch(
+                "zerver.lib.pear_workspace_resources.delete_workspace_entry_via_helper",
+                return_value=WorkspaceDeleteResult("renamed.md", "file", 1),
+            ) as helper_delete,
         ):
             self.assertEqual(
                 read_workspace_node_file(node, "README.md", max_bytes=100),
@@ -626,6 +972,29 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
                 ).file,
                 file,
             )
+            self.assertFalse(create_workspace_node_file(node, "new.md", data).created)
+            self.assertEqual(
+                create_workspace_node_directory(node, "folder").kind,
+                "directory",
+            )
+            self.assertEqual(
+                rename_workspace_node_entry(
+                    node,
+                    "README.md",
+                    "renamed.md",
+                    expected_kind="file",
+                ).path,
+                "renamed.md",
+            )
+            self.assertEqual(
+                delete_workspace_node_entry(
+                    node,
+                    "renamed.md",
+                    expected_kind="file",
+                    recursive=False,
+                ).removed_entries,
+                1,
+            )
 
         helper_read.assert_called_once_with(
             "/canonical/workspace",
@@ -633,13 +1002,42 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
             max_bytes=100,
             isolation_username=username,
         )
-        helper_write.assert_called_once_with(
+        self.assertEqual(helper_write.call_count, 2)
+        helper_write.assert_any_call(
             "/canonical/workspace",
             "README.md",
             data,
             max_bytes=PEAR_WORKSPACE_TEXT_MAX_BYTES,
             expected_version=file.version,
             create=False,
+            isolation_username=username,
+        )
+        helper_write.assert_any_call(
+            "/canonical/workspace",
+            "new.md",
+            data,
+            max_bytes=PEAR_WORKSPACE_TEXT_MAX_BYTES,
+            expected_version=None,
+            create=True,
+            isolation_username=username,
+        )
+        helper_mkdir.assert_called_once_with(
+            "/canonical/workspace",
+            "folder",
+            isolation_username=username,
+        )
+        helper_rename.assert_called_once_with(
+            "/canonical/workspace",
+            "README.md",
+            "renamed.md",
+            expected_kind="file",
+            isolation_username=username,
+        )
+        helper_delete.assert_called_once_with(
+            "/canonical/workspace",
+            "renamed.md",
+            expected_kind="file",
+            recursive=False,
             isolation_username=username,
         )
 

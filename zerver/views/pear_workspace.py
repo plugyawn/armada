@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 import re
-from typing import Annotated
+from typing import Annotated, Literal
 from uuid import UUID
 
 from django.http import HttpRequest, HttpResponse
@@ -19,35 +19,51 @@ from zerver.lib.pear_workspace_index import (
 from zerver.lib.pear_workspace_io import (
     InvalidWorkspacePathError,
     UnsafeWorkspaceEntryError,
+    WorkspaceDirectoryNotEmptyError,
     WorkspaceEntryChangedError,
+    WorkspaceEntryExistsError,
     WorkspaceEntryNotFoundError,
     WorkspaceFile,
     WorkspaceFileTooLargeError,
     WorkspaceInvalidUTF8Error,
     WorkspaceIOError,
+    WorkspaceOperationUnsupportedError,
     WorkspaceVersionConflictError,
+    WorkspaceWriteResult,
     decode_workspace_text,
     validate_workspace_relative_path,
 )
 from zerver.lib.pear_workspace_resources import (
     PEAR_WORKSPACE_RAW_MAX_BYTES,
     PEAR_WORKSPACE_TEXT_MAX_BYTES,
+    WorkspaceDestinationPolicyError,
+    WorkspaceHistoryCursorError,
+    WorkspaceMutationReadOnlyError,
+    WorkspaceMutationStaleError,
     WorkspaceSnapshot,
     WorkspaceSnapshotError,
-    finish_workspace_write,
+    create_workspace_node_directory,
+    create_workspace_node_file,
+    delete_workspace_node_entry,
+    finish_workspace_entry_mutation,
     get_workspace_file_observation,
+    get_workspace_history,
     get_workspace_mutation_receipt,
     get_workspace_snapshot,
+    lock_workspace_mutation,
     read_workspace_node_file,
     record_completed_workspace_mutation,
     record_pending_workspace_mutation,
     record_workspace_file_observation,
     refresh_workspace_snapshot,
     refresh_workspace_snapshot_after_conflict,
+    rename_workspace_node_entry,
+    validate_workspace_destination,
+    workspace_entry_mutation_capabilities,
     workspace_language,
     workspace_mime_type,
     workspace_rich_mode_eligible,
-    write_workspace_node_file,
+    write_workspace_node_file_at_revision,
 )
 from zerver.lib.response import json_response, json_success
 from zerver.lib.streams import access_stream_by_name
@@ -118,6 +134,7 @@ def _workspace_descriptor_payload(
     except WorkspaceEntryIdError:
         default_entry = None
     can_write = node.lifecycle_status == PearWorkspaceNode.ACTIVE
+    mutation_capabilities = workspace_entry_mutation_capabilities(node)
     topic_label = node.topic_name or _("general chat")
     return {
         "uuid": snapshot.workspace_uuid,
@@ -136,10 +153,7 @@ def _workspace_descriptor_payload(
             "read_file": True,
             "write_file": can_write,
             "refresh": True,
-            "create_entry": False,
-            "rename_entry": False,
-            "delete_entry": False,
-            "history": False,
+            **mutation_capabilities,
         },
         "limits": {
             "text_file_max_bytes": PEAR_WORKSPACE_TEXT_MAX_BYTES,
@@ -186,6 +200,117 @@ def _resolve_file_entry(
             data={"entry": _entry_payload(entry)},
         )
     return entry
+
+
+def _resolve_mutable_entry(
+    snapshot: WorkspaceSnapshot,
+    entry_id: str,
+) -> WorkspaceIndexEntry | HttpResponse:
+    try:
+        entry = snapshot.index.entry_for_id(entry_id)
+    except WorkspaceEntryIdError:
+        return _workspace_error(
+            code="stale_entry",
+            message="Workspace entry is stale or invalid.",
+            status=409,
+            revision=snapshot.revision,
+        )
+    if not entry.path or entry.kind not in {"file", "directory"}:
+        return _workspace_error(
+            code="invalid_entry",
+            message="The workspace root cannot be mutated.",
+            status=400,
+            revision=snapshot.revision,
+        )
+    return entry
+
+
+def _validate_destination_against_snapshot(
+    node: PearWorkspaceNode,
+    snapshot: WorkspaceSnapshot,
+    destination_path: str,
+) -> str | HttpResponse:
+    try:
+        normalized = validate_workspace_destination(node, destination_path)
+    except (InvalidWorkspacePathError, WorkspaceDestinationPolicyError) as error:
+        code = error.code if isinstance(error, WorkspaceDestinationPolicyError) else "invalid_path"
+        return _workspace_error(
+            code=code,
+            message=str(error),
+            status=400,
+            revision=snapshot.revision,
+        )
+    try:
+        existing_entry = snapshot.index.entry_for_path(normalized)
+    except WorkspaceEntryIdError:
+        pass
+    else:
+        if existing_entry.status != "deleted":
+            return _workspace_error(
+                code="already_exists",
+                message="Workspace destination already exists.",
+                status=409,
+                revision=snapshot.revision,
+            )
+    parent_path = normalized.rpartition("/")[0]
+    if parent_path:
+        try:
+            parent = snapshot.index.entry_for_path(parent_path)
+        except WorkspaceEntryIdError:
+            return _workspace_error(
+                code="destination_parent_missing",
+                message="Workspace destination parent does not exist.",
+                status=409,
+                revision=snapshot.revision,
+            )
+        if parent.kind != "directory":
+            return _workspace_error(
+                code="destination_parent_missing",
+                message="Workspace destination parent is not a directory.",
+                status=409,
+                revision=snapshot.revision,
+            )
+    return normalized
+
+
+def _locked_mutation_error_response(
+    node: PearWorkspaceNode,
+    error: WorkspaceMutationReadOnlyError | WorkspaceMutationStaleError,
+) -> HttpResponse:
+    if isinstance(error, WorkspaceMutationReadOnlyError):
+        return _workspace_error(
+            code="workspace_read_only",
+            message="Workspace is read-only.",
+            status=403,
+            revision=error.revision,
+        )
+    node.refresh_from_db()
+    snapshot = _snapshot_or_error(node)
+    if isinstance(snapshot, HttpResponse):
+        return snapshot
+    return _stale_workspace_response(snapshot)
+
+
+def _entry_mutation_payload(
+    snapshot: WorkspaceSnapshot,
+    *,
+    operation: Literal["create", "rename", "delete"],
+    previous_entry_id: str | None,
+    entry: WorkspaceIndexEntry | None,
+    path: str,
+    removed_entries: int | None = None,
+) -> dict[str, object]:
+    payload: dict[str, object] = {
+        "operation": operation,
+        "workspace_uuid": snapshot.workspace_uuid,
+        "workspace_revision": snapshot.revision,
+        "previous_entry_id": previous_entry_id,
+        "entry": _entry_payload(entry) if entry is not None else None,
+        "path": path,
+    }
+    if removed_entries is not None:
+        payload["removed_entries"] = removed_entries
+    return payload
 
 
 def _text_file_payload(
@@ -649,32 +774,65 @@ def put_pear_workspace_resource_file_backend(
             status=409,
             revision=snapshot.revision,
         )
-    authority_is_current = PearWorkspaceNode.objects.filter(
-        id=node.id,
-        realm=user_profile.realm,
-        lifecycle_status=PearWorkspaceNode.ACTIVE,
-        content_revision=snapshot.revision,
-    ).exists()
-    if not authority_is_current:
-        node.refresh_from_db()
-        if node.lifecycle_status != PearWorkspaceNode.ACTIVE:
-            return _workspace_error(
-                code="workspace_read_only",
-                message="Workspace is read-only.",
-                status=403,
-                revision=int(node.content_revision),
+
+    def before_finish(result: WorkspaceWriteResult) -> None:
+        if result.changed:
+            record_pending_workspace_mutation(
+                actor_id=user_profile.id,
+                workspace_uuid=snapshot.workspace_uuid,
+                requested_revision=workspace_revision,
+                entry_id=entry_id,
+                expected_path=normalized_path,
+                base_version=base_version,
+                content=content_bytes,
+                edit_revision=edit_revision,
+                result_version=result.file.version,
             )
-        latest_snapshot = _snapshot_or_error(node)
-        if isinstance(latest_snapshot, HttpResponse):
-            return latest_snapshot
-        return _stale_workspace_response(latest_snapshot)
+            return
+        if result.file.version == base_version:
+            return
+        pending_receipt = get_workspace_mutation_receipt(
+            actor_id=user_profile.id,
+            workspace_uuid=snapshot.workspace_uuid,
+            requested_revision=workspace_revision,
+            entry_id=entry_id,
+            expected_path=normalized_path,
+            base_version=base_version,
+            content=content_bytes,
+            edit_revision=edit_revision,
+        )
+        if (
+            pending_receipt is None
+            or pending_receipt.state != "pending"
+            or pending_receipt.result_version != result.file.version
+        ):
+            raise WorkspaceEntryChangedError(
+                "Workspace entry changed before the save revision was recorded."
+            )
+
     try:
-        result = write_workspace_node_file(
+        result, saved_snapshot = write_workspace_node_file_at_revision(
             node,
             entry.path,
             content_bytes,
             expected_version=base_version,
+            requested_revision=workspace_revision,
+            before_finish=before_finish,
         )
+        saved_entry = saved_snapshot.index.entry_for_path(entry.path)
+    except WorkspaceMutationReadOnlyError as error:
+        return _workspace_error(
+            code="workspace_read_only",
+            message="Workspace is read-only.",
+            status=403,
+            revision=error.revision,
+        )
+    except WorkspaceMutationStaleError:
+        node.refresh_from_db()
+        latest_snapshot = _snapshot_or_error(node)
+        if isinstance(latest_snapshot, HttpResponse):
+            return latest_snapshot
+        return _stale_workspace_response(latest_snapshot)
     except WorkspaceVersionConflictError:
         try:
             conflict_snapshot = refresh_workspace_snapshot_after_conflict(
@@ -745,61 +903,10 @@ def put_pear_workspace_resource_file_backend(
         )
     except UnsafeWorkspaceEntryError:
         return _unsupported_file_response(snapshot, entry)
-    except (WorkspaceIOError, ValueError):
+    except (WorkspaceIOError, WorkspaceSnapshotError, WorkspaceEntryIdError, ValueError):
         return _workspace_error(
             code="workspace_unavailable",
-            message="Could not save this workspace file.",
-            status=503,
-            revision=snapshot.revision,
-        )
-
-    if result.changed:
-        record_pending_workspace_mutation(
-            actor_id=user_profile.id,
-            workspace_uuid=snapshot.workspace_uuid,
-            requested_revision=workspace_revision,
-            entry_id=entry_id,
-            expected_path=normalized_path,
-            base_version=base_version,
-            content=content_bytes,
-            edit_revision=edit_revision,
-            result_version=result.file.version,
-        )
-    elif result.file.version != base_version:
-        pending_receipt = get_workspace_mutation_receipt(
-            actor_id=user_profile.id,
-            workspace_uuid=snapshot.workspace_uuid,
-            requested_revision=workspace_revision,
-            entry_id=entry_id,
-            expected_path=normalized_path,
-            base_version=base_version,
-            content=content_bytes,
-            edit_revision=edit_revision,
-        )
-        if (
-            pending_receipt is None
-            or pending_receipt.state != "pending"
-            or pending_receipt.result_version != result.file.version
-        ):
-            return _workspace_error(
-                code="stale_entry",
-                message="Workspace entry changed; refresh before retrying.",
-                status=409,
-                revision=snapshot.revision,
-            )
-
-    try:
-        saved_snapshot = finish_workspace_write(
-            node,
-            requested_revision=workspace_revision,
-            base_version=base_version,
-            result=result,
-        )
-        saved_entry = saved_snapshot.index.entry_for_path(entry.path)
-    except (WorkspaceSnapshotError, WorkspaceEntryIdError):
-        return _workspace_error(
-            code="workspace_unavailable",
-            message="Workspace file was saved but its index could not be refreshed.",
+            message="Could not save and refresh this workspace file.",
             status=503,
             revision=int(node.content_revision),
         )
@@ -837,6 +944,443 @@ def put_pear_workspace_resource_file_backend(
         result.changed,
     )
     return json_success(request, data={"pear_workspace_file": payload})
+
+
+@typed_endpoint
+def post_pear_workspace_entry_backend(
+    request: HttpRequest,
+    user_profile: UserProfile,
+    *,
+    workspace_uuid: Annotated[UUID, ApiParamConfig("workspace_uuid", path_only=True)],
+    destination_path: Annotated[
+        str,
+        ApiParamConfig("destination_path", documentation_status=INTENTIONALLY_UNDOCUMENTED),
+    ],
+    kind: Annotated[
+        Literal["file", "directory"],
+        ApiParamConfig("kind", documentation_status=INTENTIONALLY_UNDOCUMENTED),
+    ],
+    workspace_revision: Annotated[
+        int,
+        ApiParamConfig("workspace_revision", documentation_status=INTENTIONALLY_UNDOCUMENTED),
+    ],
+    content: Annotated[
+        str,
+        ApiParamConfig("content", documentation_status=INTENTIONALLY_UNDOCUMENTED),
+    ] = "",
+) -> HttpResponse:
+    node = _access_workspace_node(user_profile, workspace_uuid)
+    snapshot = _snapshot_or_error(node)
+    if isinstance(snapshot, HttpResponse):
+        return snapshot
+    if workspace_revision != snapshot.revision:
+        return _stale_workspace_response(snapshot)
+    destination = _validate_destination_against_snapshot(node, snapshot, destination_path)
+    if isinstance(destination, HttpResponse):
+        return destination
+    if kind == "directory" and content:
+        raise JsonableError(_("A directory cannot have file content."))
+    try:
+        content_bytes = content.encode("utf-8", errors="strict")
+    except UnicodeEncodeError:
+        raise JsonableError(_("Workspace file content must be valid UTF-8."))
+    if len(content_bytes) > PEAR_WORKSPACE_TEXT_MAX_BYTES:
+        return _workspace_error(
+            code="file_too_large",
+            message="Workspace file exceeds the editable size limit.",
+            status=413,
+            revision=snapshot.revision,
+            data={"max_bytes": PEAR_WORKSPACE_TEXT_MAX_BYTES},
+        )
+
+    try:
+        with lock_workspace_mutation(node, requested_revision=workspace_revision) as locked:
+            locked_destination = _validate_destination_against_snapshot(
+                locked,
+                snapshot,
+                destination,
+            )
+            if isinstance(locked_destination, HttpResponse):
+                return locked_destination
+            if kind == "file":
+                result = create_workspace_node_file(locked, locked_destination, content_bytes)
+                if not result.created:
+                    raise WorkspaceEntryExistsError("Workspace destination already exists.")
+            else:
+                create_workspace_node_directory(locked, locked_destination)
+            saved_snapshot = finish_workspace_entry_mutation(locked)
+            saved_entry = saved_snapshot.index.entry_for_path(locked_destination)
+    except (WorkspaceMutationReadOnlyError, WorkspaceMutationStaleError) as error:
+        return _locked_mutation_error_response(node, error)
+    except WorkspaceEntryExistsError:
+        return _workspace_error(
+            code="already_exists",
+            message="Workspace destination already exists.",
+            status=409,
+            revision=int(node.content_revision),
+        )
+    except WorkspaceFileTooLargeError:
+        return _workspace_error(
+            code="file_too_large",
+            message="Workspace file exceeds the editable size limit.",
+            status=413,
+            revision=int(node.content_revision),
+            data={"max_bytes": PEAR_WORKSPACE_TEXT_MAX_BYTES},
+        )
+    except (WorkspaceEntryNotFoundError, WorkspaceEntryChangedError):
+        return _workspace_error(
+            code="stale_entry",
+            message="Workspace destination changed; refresh before retrying.",
+            status=409,
+            revision=int(node.content_revision),
+        )
+    except (WorkspaceSnapshotError, WorkspaceIOError, WorkspaceEntryIdError):
+        return _workspace_error(
+            code="workspace_unavailable",
+            message="Could not create and index the workspace entry.",
+            status=503,
+            revision=int(node.content_revision),
+        )
+    logger.info(
+        "Pear workspace entry created workspace=%s revision=%s entry=%s actor=%s kind=%s",
+        saved_snapshot.workspace_uuid,
+        saved_snapshot.revision,
+        saved_entry.entry_id,
+        user_profile.id,
+        kind,
+    )
+    return json_success(
+        request,
+        data={
+            "pear_workspace_mutation": _entry_mutation_payload(
+                saved_snapshot,
+                operation="create",
+                previous_entry_id=None,
+                entry=saved_entry,
+                path=saved_entry.path,
+            )
+        },
+    )
+
+
+@typed_endpoint
+def patch_pear_workspace_entry_backend(
+    request: HttpRequest,
+    user_profile: UserProfile,
+    *,
+    workspace_uuid: Annotated[UUID, ApiParamConfig("workspace_uuid", path_only=True)],
+    entry_id: Annotated[
+        str,
+        ApiParamConfig("entry_id", documentation_status=INTENTIONALLY_UNDOCUMENTED),
+    ],
+    expected_path: Annotated[
+        str,
+        ApiParamConfig("expected_path", documentation_status=INTENTIONALLY_UNDOCUMENTED),
+    ],
+    destination_path: Annotated[
+        str,
+        ApiParamConfig("destination_path", documentation_status=INTENTIONALLY_UNDOCUMENTED),
+    ],
+    workspace_revision: Annotated[
+        int,
+        ApiParamConfig("workspace_revision", documentation_status=INTENTIONALLY_UNDOCUMENTED),
+    ],
+) -> HttpResponse:
+    node = _access_workspace_node(user_profile, workspace_uuid)
+    snapshot = _snapshot_or_error(node)
+    if isinstance(snapshot, HttpResponse):
+        return snapshot
+    if workspace_revision != snapshot.revision:
+        return _stale_workspace_response(snapshot)
+    entry = _resolve_mutable_entry(snapshot, entry_id)
+    if isinstance(entry, HttpResponse):
+        return entry
+    try:
+        normalized_expected_path = "/".join(validate_workspace_relative_path(expected_path))
+    except InvalidWorkspacePathError:
+        normalized_expected_path = ""
+    if entry.path != normalized_expected_path:
+        return _workspace_error(
+            code="stale_entry",
+            message="Workspace entry path is stale or invalid.",
+            status=409,
+            revision=snapshot.revision,
+        )
+    destination = _validate_destination_against_snapshot(node, snapshot, destination_path)
+    if isinstance(destination, HttpResponse):
+        return destination
+    entry_kind: Literal["file", "directory"] = "file" if entry.kind == "file" else "directory"
+    try:
+        with lock_workspace_mutation(node, requested_revision=workspace_revision) as locked:
+            locked_destination = _validate_destination_against_snapshot(
+                locked,
+                snapshot,
+                destination,
+            )
+            if isinstance(locked_destination, HttpResponse):
+                return locked_destination
+            rename_workspace_node_entry(
+                locked,
+                entry.path,
+                locked_destination,
+                expected_kind=entry_kind,
+            )
+            saved_snapshot = finish_workspace_entry_mutation(locked)
+            saved_entry = saved_snapshot.index.entry_for_path(locked_destination)
+    except (WorkspaceMutationReadOnlyError, WorkspaceMutationStaleError) as error:
+        return _locked_mutation_error_response(node, error)
+    except WorkspaceEntryExistsError:
+        return _workspace_error(
+            code="already_exists",
+            message="Workspace destination already exists.",
+            status=409,
+            revision=int(node.content_revision),
+        )
+    except (InvalidWorkspacePathError, WorkspaceEntryNotFoundError, WorkspaceEntryChangedError):
+        return _workspace_error(
+            code="stale_entry",
+            message="Workspace entry changed; refresh before retrying.",
+            status=409,
+            revision=int(node.content_revision),
+        )
+    except WorkspaceOperationUnsupportedError:
+        return _workspace_error(
+            code="unsupported_operation",
+            message="No-overwrite rename is unavailable for this workspace.",
+            status=501,
+            revision=int(node.content_revision),
+        )
+    except (WorkspaceSnapshotError, WorkspaceIOError, WorkspaceEntryIdError):
+        return _workspace_error(
+            code="workspace_unavailable",
+            message="Could not rename and index the workspace entry.",
+            status=503,
+            revision=int(node.content_revision),
+        )
+    logger.info(
+        "Pear workspace entry renamed workspace=%s revision=%s old_entry=%s new_entry=%s actor=%s",
+        saved_snapshot.workspace_uuid,
+        saved_snapshot.revision,
+        entry.entry_id,
+        saved_entry.entry_id,
+        user_profile.id,
+    )
+    return json_success(
+        request,
+        data={
+            "pear_workspace_mutation": _entry_mutation_payload(
+                saved_snapshot,
+                operation="rename",
+                previous_entry_id=entry.entry_id,
+                entry=saved_entry,
+                path=saved_entry.path,
+            )
+        },
+    )
+
+
+@typed_endpoint
+def delete_pear_workspace_entry_backend(
+    request: HttpRequest,
+    user_profile: UserProfile,
+    *,
+    workspace_uuid: Annotated[UUID, ApiParamConfig("workspace_uuid", path_only=True)],
+    entry_id: Annotated[
+        str,
+        ApiParamConfig("entry_id", documentation_status=INTENTIONALLY_UNDOCUMENTED),
+    ],
+    expected_path: Annotated[
+        str,
+        ApiParamConfig("expected_path", documentation_status=INTENTIONALLY_UNDOCUMENTED),
+    ],
+    workspace_revision: Annotated[
+        int,
+        ApiParamConfig("workspace_revision", documentation_status=INTENTIONALLY_UNDOCUMENTED),
+    ],
+    recursive: Annotated[
+        Json[bool],
+        ApiParamConfig("recursive", documentation_status=INTENTIONALLY_UNDOCUMENTED),
+    ] = False,
+    confirm_irreversible: Annotated[
+        Json[bool],
+        ApiParamConfig("confirm_irreversible", documentation_status=INTENTIONALLY_UNDOCUMENTED),
+    ] = False,
+) -> HttpResponse:
+    node = _access_workspace_node(user_profile, workspace_uuid)
+    snapshot = _snapshot_or_error(node)
+    if isinstance(snapshot, HttpResponse):
+        return snapshot
+    if workspace_revision != snapshot.revision:
+        return _stale_workspace_response(snapshot)
+    entry = _resolve_mutable_entry(snapshot, entry_id)
+    if isinstance(entry, HttpResponse):
+        return entry
+    try:
+        normalized_expected_path = "/".join(validate_workspace_relative_path(expected_path))
+    except InvalidWorkspacePathError:
+        normalized_expected_path = ""
+    if entry.path != normalized_expected_path:
+        return _workspace_error(
+            code="stale_entry",
+            message="Workspace entry path is stale or invalid.",
+            status=409,
+            revision=snapshot.revision,
+        )
+    if entry.kind == "file" and entry.status == "untracked" and not confirm_irreversible:
+        return _workspace_error(
+            code="confirmation_required",
+            message="Deleting an untracked file is irreversible and requires confirmation.",
+            status=409,
+            revision=snapshot.revision,
+            data={"confirmation": "untracked_file"},
+        )
+    if recursive and not confirm_irreversible:
+        return _workspace_error(
+            code="confirmation_required",
+            message="Recursive deletion is irreversible and requires confirmation.",
+            status=409,
+            revision=snapshot.revision,
+            data={"confirmation": "recursive_delete"},
+        )
+    entry_kind: Literal["file", "directory"] = "file" if entry.kind == "file" else "directory"
+    try:
+        with lock_workspace_mutation(node, requested_revision=workspace_revision) as locked:
+            result = delete_workspace_node_entry(
+                locked,
+                entry.path,
+                expected_kind=entry_kind,
+                recursive=bool(recursive),
+            )
+            saved_snapshot = finish_workspace_entry_mutation(locked)
+            try:
+                remaining_entry = saved_snapshot.index.entry_for_path(entry.path)
+            except WorkspaceEntryIdError:
+                remaining_entry = None
+            else:
+                if remaining_entry.status != "deleted":
+                    raise WorkspaceEntryChangedError(
+                        "Deleted workspace path remained live in the refreshed index."
+                    )
+    except (WorkspaceMutationReadOnlyError, WorkspaceMutationStaleError) as error:
+        return _locked_mutation_error_response(node, error)
+    except WorkspaceDirectoryNotEmptyError:
+        return _workspace_error(
+            code="directory_not_empty",
+            message="Workspace directory is not empty; recursive deletion must be explicit.",
+            status=409,
+            revision=int(node.content_revision),
+            data={"requires_recursive": True, "requires_confirmation": True},
+        )
+    except (WorkspaceEntryNotFoundError, WorkspaceEntryChangedError):
+        return _workspace_error(
+            code="stale_entry",
+            message="Workspace entry changed; refresh before retrying.",
+            status=409,
+            revision=int(node.content_revision),
+        )
+    except (WorkspaceSnapshotError, WorkspaceIOError):
+        return _workspace_error(
+            code="workspace_unavailable",
+            message="Could not delete and refresh the workspace entry.",
+            status=503,
+            revision=int(node.content_revision),
+        )
+    logger.info(
+        "Pear workspace entry deleted workspace=%s revision=%s old_entry=%s actor=%s kind=%s recursive=%s removed=%s",
+        saved_snapshot.workspace_uuid,
+        saved_snapshot.revision,
+        entry.entry_id,
+        user_profile.id,
+        entry_kind,
+        bool(recursive),
+        result.removed_entries,
+    )
+    return json_success(
+        request,
+        data={
+            "pear_workspace_mutation": _entry_mutation_payload(
+                saved_snapshot,
+                operation="delete",
+                previous_entry_id=entry.entry_id,
+                entry=remaining_entry,
+                path=entry.path,
+                removed_entries=result.removed_entries,
+            )
+        },
+    )
+
+
+@typed_endpoint
+def get_pear_workspace_history_backend(
+    request: HttpRequest,
+    user_profile: UserProfile,
+    *,
+    workspace_uuid: Annotated[UUID, ApiParamConfig("workspace_uuid", path_only=True)],
+    entry_id: Annotated[
+        str,
+        ApiParamConfig("entry_id", documentation_status=INTENTIONALLY_UNDOCUMENTED),
+    ],
+    cursor: Annotated[
+        str | None,
+        ApiParamConfig("cursor", documentation_status=INTENTIONALLY_UNDOCUMENTED),
+    ] = None,
+    limit: Annotated[
+        int,
+        ApiParamConfig("limit", documentation_status=INTENTIONALLY_UNDOCUMENTED),
+    ] = 50,
+) -> HttpResponse:
+    node = _access_workspace_node(user_profile, workspace_uuid)
+    snapshot = _snapshot_or_error(node)
+    if isinstance(snapshot, HttpResponse):
+        return snapshot
+    entry = _resolve_file_entry(snapshot, entry_id)
+    if isinstance(entry, HttpResponse):
+        return entry
+    try:
+        page = get_workspace_history(
+            node,
+            snapshot,
+            entry_id=entry.entry_id,
+            path=entry.path,
+            cursor=cursor,
+            limit=limit,
+        )
+    except WorkspaceHistoryCursorError:
+        return _workspace_error(
+            code="stale_cursor",
+            message="Workspace history cursor is stale or invalid.",
+            status=409,
+            revision=snapshot.revision,
+        )
+    except ValueError as error:
+        raise JsonableError(str(error))
+    except WorkspaceSnapshotError:
+        return _workspace_error(
+            code="workspace_unavailable",
+            message="Could not load workspace history.",
+            status=503,
+            revision=snapshot.revision,
+        )
+    return json_success(
+        request,
+        data={
+            "pear_workspace_history": {
+                "workspace_uuid": snapshot.workspace_uuid,
+                "workspace_revision": snapshot.revision,
+                "entry": _entry_payload(entry),
+                "commits": [
+                    {
+                        "commit": item.commit,
+                        "authored_at": item.authored_at,
+                        "author_name": item.author_name,
+                        "subject": item.subject,
+                    }
+                    for item in page.entries
+                ],
+                "next_cursor": page.next_cursor,
+            }
+        },
+    )
 
 
 @typed_endpoint

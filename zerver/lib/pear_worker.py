@@ -7,6 +7,7 @@ import re
 import shutil
 import subprocess
 import time
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -63,6 +64,7 @@ from zerver.models.bots import (
 from zerver.models.users import UserProfile
 
 PEAR_WORKER_QUEUE_NAME = "pear_worker"
+PEAR_MONITOR_WORKER_QUEUE_NAME = "pear_monitor_worker"
 PEAR_WORKER_TOPIC_HISTORY_LIMIT = 200
 PEAR_WORKER_RUN_ACTIVE_STATUSES = frozenset(
     (PearWorkerRun.QUEUED, PearWorkerRun.RUNNING, PearWorkerRun.DONE)
@@ -214,6 +216,7 @@ def reap_stale_pear_worker_runs(
     stream: str | None = None,
     topic: str | None = None,
     assume_orphaned: bool = False,
+    session_kinds: Sequence[str] | None = None,
 ) -> int:
     """Fail RUNNING runs that no longer have a live worker behind them.
 
@@ -226,6 +229,8 @@ def reap_stale_pear_worker_runs(
     current_time = timezone_now()
     cutoff = current_time - timedelta(seconds=pear_worker_stale_after_seconds())
     stale_runs = PearWorkerRun.objects.filter(status=PearWorkerRun.RUNNING)
+    if session_kinds is not None:
+        stale_runs = stale_runs.filter(session_kind__in=list(session_kinds))
     if not assume_orphaned:
         stale_runs = stale_runs.filter(
             Q(heartbeat_at__isnull=False, heartbeat_at__lte=cutoff)
@@ -3275,8 +3280,15 @@ class PearQueueWorkerDispatcher:
             raise AssertionError("Pear queue dispatch requires a bot user id")
         worker_message = dict(message)
         worker_message["content"] = content
+        # Monitor turns ride their own queue/consumer: a provisioning
+        # wall block must never queue ahead of a chat run.
+        queue_name = (
+            PEAR_MONITOR_WORKER_QUEUE_NAME
+            if session_kind == PearWorkerRun.MONITOR
+            else PEAR_WORKER_QUEUE_NAME
+        )
         queue_json_publish_rollback_unsafe(
-            PEAR_WORKER_QUEUE_NAME,
+            queue_name,
             {
                 "user_profile_id": user_profile_id,
                 "message_id": message_id,

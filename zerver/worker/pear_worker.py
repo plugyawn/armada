@@ -102,37 +102,22 @@ class PearWorker(QueueProcessingWorker):
     # only dispatch to this worker, not own the runtime budget.
     MAX_CONSUME_SECONDS = None
 
+    # The session kinds this consumer owns; boot reaping must never
+    # touch the other consumer's RUNNING rows.
+    OWNED_SESSION_KINDS: tuple[str, ...] = ("shared", "side", "canvas_ask")
+
     @override
     def setup(self) -> None:
         super().setup()
-        # The pear queue is single-consumer: at boot, any RUNNING run was
-        # orphaned by a restart mid-turn. Reap unconditionally so zombies
-        # never block the deploy health gate for the staleness window.
-        reap_stale_pear_worker_runs(assume_orphaned=True)
-        # Wall monitor ticks are model-free shell recipes on a cadence.
-        # They run on their own thread because consume() legitimately
-        # blocks for minutes inside a Codex turn.
-        self.monitor_tick_stop = threading.Event()
-        self.monitor_tick_thread = threading.Thread(
-            target=self.run_monitor_tick_loop,
-            name="pear-monitor-ticks",
-            daemon=True,
+        # Each pear queue is single-consumer: at boot, any RUNNING run of
+        # our kinds was orphaned by a restart mid-turn. Reap them so
+        # zombies never block the deploy health gate.
+        reap_stale_pear_worker_runs(
+            assume_orphaned=True, session_kinds=self.OWNED_SESSION_KINDS
         )
-        self.monitor_tick_thread.start()
-
-    def run_monitor_tick_loop(self) -> None:  # nocoverage
-        while not self.monitor_tick_stop.wait(5):
-            try:
-                pear_run_due_monitor_ticks()
-            except Exception:
-                logger.exception("Pear monitor tick pass failed.")
-            finally:
-                reset_queries()
 
     @override
     def stop(self) -> None:  # nocoverage
-        if hasattr(self, "monitor_tick_stop"):
-            self.monitor_tick_stop.set()
         try:
             close_pear_worker_runtimes()
         finally:
@@ -233,3 +218,40 @@ class PearWorker(QueueProcessingWorker):
                 )
             except Exception:
                 logger.exception("Pear monitor setup application failed.")
+
+
+@assign_queue("pear_monitor_worker")
+class PearMonitorWorker(PearWorker):
+    """Wall monitor setup/rebuild turns plus the tick loop, on their own
+    queue and consumer: a provisioning monitor is a minutes-long Codex
+    turn, and it must never queue ahead of a chat run."""
+
+    OWNED_SESSION_KINDS = ("monitor",)
+
+    @override
+    def setup(self) -> None:
+        super().setup()
+        # Ticks are model-free shell recipes on a cadence, on their own
+        # thread because consume() blocks for minutes inside a turn.
+        self.monitor_tick_stop = threading.Event()
+        self.monitor_tick_thread = threading.Thread(
+            target=self.run_monitor_tick_loop,
+            name="pear-monitor-ticks",
+            daemon=True,
+        )
+        self.monitor_tick_thread.start()
+
+    def run_monitor_tick_loop(self) -> None:  # nocoverage
+        while not self.monitor_tick_stop.wait(5):
+            try:
+                pear_run_due_monitor_ticks()
+            except Exception:
+                logger.exception("Pear monitor tick pass failed.")
+            finally:
+                reset_queries()
+
+    @override
+    def stop(self) -> None:  # nocoverage
+        if hasattr(self, "monitor_tick_stop"):
+            self.monitor_tick_stop.set()
+        super().stop()

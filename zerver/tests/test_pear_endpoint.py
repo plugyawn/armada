@@ -4628,3 +4628,29 @@ class PearMonitorTest(ZulipTestCase):
         monitor.refresh_from_db()
         self.assertEqual(monitor.status, PearMonitor.ERROR)
         self.assertIn("did not write the spec file", monitor.last_error)
+
+    def test_monitor_dispatch_routes_to_monitor_queue(self) -> None:
+        owner = self.example_user("hamlet")
+        pear_bot = self.create_pear_bot(owner)
+        self.subscribe(owner, PEAR_DEFAULT_STREAM)
+        self.login_user(owner)
+        with (
+            tempfile.TemporaryDirectory() as temp_dir,
+            self.settings(PEAR_WORKER_MODEL="gpt-5.5", PEAR_TOPIC_WORKDIR_ROOT=temp_dir),
+            patch("zerver.lib.pear_worker.queue_json_publish_rollback_unsafe") as publish_mock,
+        ):
+            result = self.client_post(
+                "/json/pear/monitors",
+                {
+                    "stream": PEAR_DEFAULT_STREAM,
+                    "topic": PEAR_DEFAULT_TOPIC,
+                    "request": "training loader",
+                },
+                intentionally_undocumented=True,
+            )
+            self.assert_json_success(result)
+            queue_name, event = publish_mock.call_args.args
+            # Monitor turns ride their own consumer so a provisioning
+            # wall block never queues ahead of a chat run.
+            self.assertEqual(queue_name, "pear_monitor_worker")
+            self.assertEqual(event["session_kind"], PearWorkerRun.MONITOR)

@@ -105,6 +105,37 @@ export const pear_workspace_refresh_response_schema = z.object({
     }),
 });
 
+export const pear_workspace_mutation_schema = z.object({
+    operation: z.enum(["create", "rename", "delete"]),
+    workspace_uuid: z.string(),
+    workspace_revision: z.number(),
+    previous_entry_id: z.nullable(z.string()),
+    entry: z.nullable(pear_workspace_entry_schema),
+    path: z.string(),
+    removed_entries: z.optional(z.number()),
+});
+
+export const pear_workspace_mutation_response_schema = z.object({
+    pear_workspace_mutation: pear_workspace_mutation_schema,
+});
+
+const pear_workspace_history_commit_schema = z.object({
+    commit: z.string(),
+    authored_at: z.number(),
+    author_name: z.string(),
+    subject: z.string(),
+});
+
+export const pear_workspace_history_response_schema = z.object({
+    pear_workspace_history: z.object({
+        workspace_uuid: z.string(),
+        workspace_revision: z.number(),
+        entry: pear_workspace_entry_schema,
+        commits: z.array(pear_workspace_history_commit_schema),
+        next_cursor: z.nullable(z.string()),
+    }),
+});
+
 export const pear_workspace_error_schema = z.object({
     result: z.literal("error"),
     msg: z.string(),
@@ -119,6 +150,8 @@ export type PearWorkspaceTreeResponse = z.infer<typeof pear_workspace_tree_respo
 export type PearWorkspaceSearchResponse = z.infer<typeof pear_workspace_search_response_schema>;
 export type PearWorkspaceFile = z.infer<typeof pear_workspace_file_schema>;
 export type PearWorkspaceRefreshResponse = z.infer<typeof pear_workspace_refresh_response_schema>;
+export type PearWorkspaceMutation = z.infer<typeof pear_workspace_mutation_schema>;
+export type PearWorkspaceHistoryResponse = z.infer<typeof pear_workspace_history_response_schema>;
 export type PearWorkspaceServerError = z.infer<typeof pear_workspace_error_schema>;
 
 export type PearWorkspaceApiError =
@@ -366,6 +399,125 @@ export function put_pear_workspace_file(
             parse_success(pear_workspace_file_response_schema, raw, {
                 success(value): void {
                     callbacks.success(value.pear_workspace_file);
+                },
+                error: callbacks.error,
+            });
+        },
+        error: error_callback(callbacks),
+    });
+}
+
+export function create_pear_workspace_entry(
+    workspace_uuid: string,
+    request: {
+        destinationPath: string;
+        kind: "file" | "directory";
+        workspaceRevision: number;
+        content?: string;
+    },
+    callbacks: PearWorkspaceRequestCallbacks<PearWorkspaceMutation>,
+): JQuery.jqXHR<unknown> | undefined {
+    return channel.post({
+        url: workspace_url(workspace_uuid, "/entries"),
+        data: {
+            destination_path: request.destinationPath,
+            kind: request.kind,
+            workspace_revision: request.workspaceRevision,
+            ...(request.content === undefined ? {} : {content: request.content}),
+        },
+        success(raw): void {
+            parse_success(pear_workspace_mutation_response_schema, raw, {
+                success(value): void {
+                    callbacks.success(value.pear_workspace_mutation);
+                },
+                error: callbacks.error,
+            });
+        },
+        error: error_callback(callbacks),
+    });
+}
+
+export function rename_pear_workspace_entry(
+    workspace_uuid: string,
+    request: {
+        entryId: string;
+        expectedPath: string;
+        destinationPath: string;
+        workspaceRevision: number;
+    },
+    callbacks: PearWorkspaceRequestCallbacks<PearWorkspaceMutation>,
+): JQuery.jqXHR<unknown> | undefined {
+    return channel.patch({
+        url: workspace_url(workspace_uuid, "/entry"),
+        data: {
+            entry_id: request.entryId,
+            expected_path: request.expectedPath,
+            destination_path: request.destinationPath,
+            workspace_revision: request.workspaceRevision,
+        },
+        success(raw): void {
+            parse_success(pear_workspace_mutation_response_schema, raw, {
+                success(value): void {
+                    callbacks.success(value.pear_workspace_mutation);
+                },
+                error: callbacks.error,
+            });
+        },
+        error: error_callback(callbacks),
+    });
+}
+
+export function delete_pear_workspace_entry(
+    workspace_uuid: string,
+    request: {
+        entryId: string;
+        expectedPath: string;
+        workspaceRevision: number;
+        recursive?: boolean;
+        confirmIrreversible?: boolean;
+    },
+    callbacks: PearWorkspaceRequestCallbacks<PearWorkspaceMutation>,
+): JQuery.jqXHR<unknown> | undefined {
+    return channel.del({
+        url: workspace_url(workspace_uuid, "/entry"),
+        data: {
+            entry_id: request.entryId,
+            expected_path: request.expectedPath,
+            workspace_revision: request.workspaceRevision,
+            recursive: request.recursive ?? false,
+            confirm_irreversible: request.confirmIrreversible ?? false,
+        },
+        success(raw): void {
+            parse_success(pear_workspace_mutation_response_schema, raw, {
+                success(value): void {
+                    callbacks.success(value.pear_workspace_mutation);
+                },
+                error: callbacks.error,
+            });
+        },
+        error: error_callback(callbacks),
+    });
+}
+
+export function get_pear_workspace_history(
+    workspace_uuid: string,
+    entry_id: string,
+    options: {cursor?: string; limit?: number},
+    callbacks: PearWorkspaceRequestCallbacks<
+        PearWorkspaceHistoryResponse["pear_workspace_history"]
+    >,
+): JQuery.jqXHR<unknown> | undefined {
+    return channel.get({
+        url: workspace_url(workspace_uuid, "/history"),
+        data: {
+            entry_id,
+            ...(options.cursor === undefined ? {} : {cursor: options.cursor}),
+            ...(options.limit === undefined ? {} : {limit: options.limit}),
+        },
+        success(raw): void {
+            parse_success(pear_workspace_history_response_schema, raw, {
+                success(value): void {
+                    callbacks.success(value.pear_workspace_history);
                 },
                 error: callbacks.error,
             });

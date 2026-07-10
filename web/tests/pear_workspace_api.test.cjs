@@ -21,7 +21,9 @@ function mock_request(method) {
     };
 }
 mock_esm("../src/channel", {
+    del: mock_request("del"),
     get: mock_request("get"),
+    patch: mock_request("patch"),
     post: mock_request("post"),
     put: mock_request("put"),
 });
@@ -240,6 +242,150 @@ run_test("typed conflicts and transport failures stay distinct", () => {
     workspace_api.get_pear_workspace(descriptor.uuid, transport.callbacks);
     last_request().options.error({status: 503, statusText: "Unavailable", responseJSON: {}});
     assert.deepEqual(transport.errors, [{kind: "transport", status: 503, message: "Unavailable"}]);
+});
+
+run_test("entry mutations preserve revision and path identity contracts", () => {
+    requests = [];
+    const created = callbacks();
+    workspace_api.create_pear_workspace_entry(
+        descriptor.uuid,
+        {
+            destinationPath: "notes/today.md",
+            kind: "file",
+            workspaceRevision: 7,
+            content: "# Today\n",
+        },
+        created.callbacks,
+    );
+    let request = last_request();
+    assert.equal(request.method, "post");
+    assert.equal(request.options.url, `/json/pear/workspaces/${descriptor.uuid}/entries`);
+    assert.deepEqual(request.options.data, {
+        destination_path: "notes/today.md",
+        kind: "file",
+        workspace_revision: 7,
+        content: "# Today\n",
+    });
+    const created_entry = {
+        ...entry,
+        entry_id: "created-entry",
+        path: "notes/today.md",
+        name: "today.md",
+        status: "untracked",
+    };
+    request.options.success({
+        pear_workspace_mutation: {
+            operation: "create",
+            workspace_uuid: descriptor.uuid,
+            workspace_revision: 8,
+            previous_entry_id: null,
+            entry: created_entry,
+            path: created_entry.path,
+        },
+    });
+    assert.equal(created.successes[0].workspace_revision, 8);
+    assert.equal(created.successes[0].entry.entry_id, "created-entry");
+
+    const renamed = callbacks();
+    workspace_api.rename_pear_workspace_entry(
+        descriptor.uuid,
+        {
+            entryId: created_entry.entry_id,
+            expectedPath: created_entry.path,
+            destinationPath: "notes/archive.md",
+            workspaceRevision: 8,
+        },
+        renamed.callbacks,
+    );
+    request = last_request();
+    assert.equal(request.method, "patch");
+    assert.deepEqual(request.options.data, {
+        entry_id: "created-entry",
+        expected_path: "notes/today.md",
+        destination_path: "notes/archive.md",
+        workspace_revision: 8,
+    });
+
+    const deleted = callbacks();
+    workspace_api.delete_pear_workspace_entry(
+        descriptor.uuid,
+        {
+            entryId: "renamed-entry",
+            expectedPath: "notes/archive.md",
+            workspaceRevision: 9,
+            recursive: true,
+            confirmIrreversible: true,
+        },
+        deleted.callbacks,
+    );
+    request = last_request();
+    assert.equal(request.method, "del");
+    assert.deepEqual(request.options.data, {
+        entry_id: "renamed-entry",
+        expected_path: "notes/archive.md",
+        workspace_revision: 9,
+        recursive: true,
+        confirm_irreversible: true,
+    });
+    request.options.success({
+        pear_workspace_mutation: {
+            operation: "delete",
+            workspace_uuid: descriptor.uuid,
+            workspace_revision: 10,
+            previous_entry_id: "renamed-entry",
+            entry: null,
+            path: "notes/archive.md",
+            removed_entries: 1,
+        },
+    });
+    assert.equal(deleted.successes[0].removed_entries, 1);
+});
+
+run_test("entry history serializes pagination and rejects malformed commits", () => {
+    requests = [];
+    const history = callbacks();
+    workspace_api.get_pear_workspace_history(
+        descriptor.uuid,
+        entry.entry_id,
+        {cursor: "opaque-cursor", limit: 25},
+        history.callbacks,
+    );
+    const request = last_request();
+    assert.equal(request.method, "get");
+    assert.equal(request.options.url, `/json/pear/workspaces/${descriptor.uuid}/history`);
+    assert.deepEqual(request.options.data, {
+        entry_id: entry.entry_id,
+        cursor: "opaque-cursor",
+        limit: 25,
+    });
+    request.options.success({
+        pear_workspace_history: {
+            workspace_uuid: descriptor.uuid,
+            workspace_revision: 7,
+            entry,
+            commits: [
+                {
+                    commit: "abc123",
+                    authored_at: 1_700_000_000,
+                    author_name: "Pear",
+                    subject: "Document the workspace",
+                },
+            ],
+            next_cursor: null,
+        },
+    });
+    assert.equal(history.successes[0].commits[0].subject, "Document the workspace");
+
+    request.options.success({
+        pear_workspace_history: {
+            workspace_uuid: descriptor.uuid,
+            workspace_revision: 7,
+            entry,
+            commits: [{commit: "abc123", authored_at: "yesterday"}],
+            next_cursor: null,
+        },
+    });
+    assert.equal(history.errors.at(-1).kind, "invalid_response");
 });
 
 run_test("request guard aborts superseded work and rejects late attachment", () => {

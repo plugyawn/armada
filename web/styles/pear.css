@@ -2020,7 +2020,7 @@
 
 .pear-canvas-body {
     outline: none;
-    padding: var(--pear-space-5) var(--pear-space-4) 12vh;
+    padding: var(--pear-space-3) var(--pear-space-4) 6vh;
 
     /* The frame theme defines its palette directly on .milkdown, so
        the re-skin must land there too or the light defaults win. */
@@ -2052,29 +2052,26 @@
         max-width: 84ch;
         min-height: 40vh;
         margin: 0 auto;
-        padding: 48px 56px 64px;
-        /* Pixel faces want the grid: pinned size, roomy leading. */
+        padding: 12px 24px 24px;
+        /* Buffer metrics: pinned pixel size, editor leading. */
         /* stylelint-disable-next-line declaration-property-unit-disallowed-list */
         font-size: 16px;
-        line-height: 1.75;
-        border: 1px solid var(--pear-hairline);
-        border-radius: var(--pear-radius-card);
-        background: var(--pear-surface-2);
-        box-shadow: var(--pear-shadow-pop);
+        line-height: 1.5;
+        background: transparent;
         color: var(--pear-ink-1);
+        caret-color: var(--pear-accent-ink);
 
         /* Crepe ships its own 60px/120px editor padding; the sheet
-           is the single source of insets, so ruler, margin rule, and
-           text share one left edge. */
+           is the single source of insets. */
         & .ProseMirror {
-            padding: 0 0 10vh;
+            padding: 0 0 8vh;
         }
 
-        /* Crepe transitions 'all 0.2s' on the hover handle, so it
-           visibly glides between blocks; position snaps, only the
-           fade animates — and fast. */
+        /* No floating block chrome: the drag/plus handle is Notion
+           furniture and the doc is a buffer. Structure comes from
+           typing markdown or the slash menu. */
         & .milkdown-block-handle {
-            transition: opacity 80ms var(--pear-ease);
+            display: none;
         }
 
         & .milkdown-slash-menu,
@@ -2082,49 +2079,20 @@
             transition-duration: 80ms;
         }
 
-        /* The print-shop ruler: fine ticks every 6px, tall marks on
-           the inch. */
-        &::before {
-            content: "";
-            position: absolute;
-            top: 20px;
-            right: 56px;
-            left: 56px;
-            height: 8px;
-            background:
-                repeating-linear-gradient(
-                        to right,
-                        var(--pear-hairline) 0 1px,
-                        transparent 1px 6px
-                    )
-                    left bottom / 100% 3px no-repeat,
-                repeating-linear-gradient(
-                        to right,
-                        var(--pear-ink-3) 0 1px,
-                        transparent 1px 48px
-                    )
-                    left bottom / 100% 8px no-repeat;
-            opacity: 0.55;
-            pointer-events: none;
+        /* Prose packs like an editor: block gaps under half a line. */
+        & p {
+            margin: 0.35em 0;
         }
 
-        /* Notebook margin rule: a fixed 18px gutter off the text
-           edge, so the ruled-page metaphor lines up with the page. */
-        &::after {
-            content: "";
-            position: absolute;
-            top: 44px;
-            bottom: 28px;
-            left: 38px;
-            border-left: 1px solid
-                color-mix(in srgb, var(--pear-accent-ink) 20%, transparent);
-            pointer-events: none;
+        /* Crepe sizes list bullets for 32px rows; the buffer runs
+           24px lines, so the label matches or every list floats. */
+        & .milkdown-list-item-block li .label-wrapper,
+        & .milkdown-list-item-block li .label-wrapper .label {
+            height: 24px;
         }
 
-        /* A working scale: the title towers, sections recede a
-           tone, rhythm binds headings to what follows them. Pixel
-           sizes stay on the face's grid and skip smoothing so the
-           stair-steps read as deliberate. */
+        /* A near-flat scale, Zed-style: headings hold rank through
+           tone, not size — the pixel face reads crisp at 16/20. */
         & h1,
         & h2,
         & h3,
@@ -2138,26 +2106,26 @@
         }
 
         & h1 {
-            margin: 0 0 0.4em;
+            margin: 0 0 0.5em;
             /* stylelint-disable-next-line declaration-property-unit-disallowed-list */
-            font-size: 24px;
+            font-size: 20px;
         }
 
         & h2 {
-            margin: 1.8em 0 0.3em;
-            color: var(--pear-ink-2);
+            margin: 1.2em 0 0.25em;
+            color: var(--pear-accent-ink);
             /* stylelint-disable-next-line declaration-property-unit-disallowed-list */
-            font-size: 18px;
+            font-size: 16px;
         }
 
         & h3,
         & h4,
         & h5,
         & h6 {
-            margin: 1.5em 0 0.25em;
+            margin: 1em 0 0.2em;
             color: var(--pear-ink-2);
             /* stylelint-disable-next-line declaration-property-unit-disallowed-list */
-            font-size: 15px;
+            font-size: 16px;
         }
 
         /* Crepe's placeholder is a height-0 absolute overlay; if it

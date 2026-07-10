@@ -2079,16 +2079,24 @@
             transition-duration: 80ms;
         }
 
-        /* Prose packs like an editor: block gaps under half a line. */
+        /* Prose packs like an editor: Crepe pads every paragraph
+           4px top and bottom, so the buffer zeroes that and keeps
+           gaps under half a line. */
         & p {
             margin: 0.35em 0;
+            padding: 0;
         }
 
-        /* Crepe sizes list bullets for 32px rows; the buffer runs
-           24px lines, so the label matches or every list floats. */
+        /* Crepe sizes list rows for 32px lines; the buffer runs
+           24px, so labels match the grid and item paragraphs carry
+           no extra rhythm — the line grid is the rhythm. */
         & .milkdown-list-item-block li .label-wrapper,
         & .milkdown-list-item-block li .label-wrapper .label {
             height: 24px;
+        }
+
+        & .milkdown-list-item-block p {
+            margin: 0;
         }
 
         /* A near-flat scale, Zed-style: headings hold rank through

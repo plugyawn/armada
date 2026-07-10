@@ -48,9 +48,13 @@ PEAR_DEPLOY_RUNTIME_CONFIG_PATHS=(
     /etc/pear/caddy-basic-auth.env
     /etc/systemd/system/caddy.service.d/pear-basic-auth.conf
     /usr/local/bin/pear-run-zulip-dev
+    /usr/local/lib/pear-workspace-io
     /etc/systemd/system/pear-zulip-dev.service
     /home/zulipdev/pear.env
 )
+
+PEAR_WORKSPACE_HELPER_SOURCE_RELATIVE="zerver/lib/pear_workspace_io.py"
+PEAR_WORKSPACE_HELPER_PATH="/usr/local/lib/pear-workspace-io"
 
 PEAR_DEPLOY_SERVICES=(
     pear-worker

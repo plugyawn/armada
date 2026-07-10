@@ -1,8 +1,10 @@
 # Documented in https://zulip.readthedocs.io/en/latest/subsystems/queuing.html
 import logging
+import threading
 from collections import OrderedDict
 from typing import Any
 
+from django.db import reset_queries
 from typing_extensions import override
 
 from zerver.lib.bot_lib import EmbeddedBotHandler
@@ -14,6 +16,10 @@ from zerver.lib.pear import (
     pear_message_topic,
 )
 from zerver.lib.pear_agent import PearProcessIsolation
+from zerver.lib.pear_monitor import (
+    pear_apply_monitor_setup_result,
+    pear_run_due_monitor_ticks,
+)
 from zerver.lib.pear_worker import (
     PearDatabaseWorkerRunStore,
     build_pear_worker_runtime_from_settings,
@@ -103,9 +109,30 @@ class PearWorker(QueueProcessingWorker):
         # orphaned by a restart mid-turn. Reap unconditionally so zombies
         # never block the deploy health gate for the staleness window.
         reap_stale_pear_worker_runs(assume_orphaned=True)
+        # Wall monitor ticks are model-free shell recipes on a cadence.
+        # They run on their own thread because consume() legitimately
+        # blocks for minutes inside a Codex turn.
+        self.monitor_tick_stop = threading.Event()
+        self.monitor_tick_thread = threading.Thread(
+            target=self.run_monitor_tick_loop,
+            name="pear-monitor-ticks",
+            daemon=True,
+        )
+        self.monitor_tick_thread.start()
+
+    def run_monitor_tick_loop(self) -> None:  # nocoverage
+        while not self.monitor_tick_stop.wait(5):
+            try:
+                pear_run_due_monitor_ticks()
+            except Exception:
+                logger.exception("Pear monitor tick pass failed.")
+            finally:
+                reset_queries()
 
     @override
     def stop(self) -> None:  # nocoverage
+        if hasattr(self, "monitor_tick_stop"):
+            self.monitor_tick_stop.set()
         try:
             close_pear_worker_runtimes()
         finally:
@@ -192,3 +219,17 @@ class PearWorker(QueueProcessingWorker):
             source_message_id=source_message_id,
             progress_message_id=progress_message_id,
         )
+        if session_kind == "monitor":
+            # The setup agent wrote its spec file in the worktree; read
+            # it and bring the monitor live (or record why not).
+            try:
+                pear_apply_monitor_setup_result(
+                    user_profile,
+                    message_id,
+                    workdir=workdir,
+                    isolation_username=(
+                        process_isolation.username if process_isolation is not None else None
+                    ),
+                )
+            except Exception:
+                logger.exception("Pear monitor setup application failed.")

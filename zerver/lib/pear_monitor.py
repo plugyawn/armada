@@ -13,6 +13,7 @@ import json
 import logging
 import random
 import re
+import shlex
 import subprocess
 from datetime import timedelta
 from pathlib import Path
@@ -254,8 +255,11 @@ def pear_monitor_run_recipe_command(
     process_isolation: PearProcessIsolation | None,
 ) -> str:
     """Run a recipe command, isolation-aware, with a stripped environment
-    so worker secrets never leak into agent-authored shell."""
-    argv = pear_isolated_command(["/usr/bin/env", "bash", "-c", command], process_isolation)
+    so worker secrets never leak into agent-authored shell. The chdir
+    happens inside the wrapped shell: isolation worktrees are mode-700,
+    so a subprocess cwd= would EACCES before sudo ever runs."""
+    wrapped = f"cd {shlex.quote(workdir)} && ({command})"
+    argv = pear_isolated_command(["/usr/bin/env", "bash", "-c", wrapped], process_isolation)
     env = {
         "PATH": "/usr/local/bin:/usr/bin:/bin",
         "HOME": process_isolation.home if process_isolation is not None else str(Path.home()),
@@ -263,7 +267,6 @@ def pear_monitor_run_recipe_command(
     }
     completed = subprocess.run(
         argv,
-        cwd=workdir,
         env=env,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,

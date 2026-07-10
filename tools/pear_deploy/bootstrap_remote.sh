@@ -10,6 +10,7 @@ source "$SCRIPT_DIR/deploy_common.sh"
 STATE_PATH="${1:-$REPO_ROOT/output/pear-staging/server.json}"
 LOCAL_PEAR_SKILLS_DIR="$PEAR_ROOT/pear/skills"
 REMOTE_PEAR_SKILLS_DIR="/home/zulipdev/pear/skills"
+LOCAL_TERMINAL_ROOT="$PEAR_ROOT/zulip-terminal"
 
 fail() {
     echo "ERROR: $*" >&2
@@ -102,6 +103,65 @@ if [[ ! -d "$LOCAL_PEAR_SKILLS_DIR" ]]; then
     fail "local Pear skills directory is missing: $LOCAL_PEAR_SKILLS_DIR"
 fi
 LOCAL_GIT_COMMON_DIR="$(git -C "$REPO_ROOT" rev-parse --git-common-dir)"
+LOCAL_SHA="$(git -C "$REPO_ROOT" rev-parse HEAD)"
+LOCAL_PARENT_SHA="$(git -C "$PEAR_ROOT" rev-parse HEAD)"
+LOCAL_TERMINAL_SHA="$(git -C "$LOCAL_TERMINAL_ROOT" rev-parse HEAD)"
+LOCAL_PARENT_STATUS="$(git -C "$PEAR_ROOT" status --porcelain --untracked-files=no)"
+LOCAL_STATUS="$(git -C "$REPO_ROOT" status --porcelain --untracked-files=no)"
+LOCAL_TERMINAL_STATUS="$(git -C "$LOCAL_TERMINAL_ROOT" status --porcelain --untracked-files=all)"
+LOCAL_UNTRACKED_SOURCE="$(
+    git -C "$REPO_ROOT" ls-files --others --exclude-standard |
+        filter_deploy_untracked_source_files
+)"
+LOCAL_PEAR_SKILLS_STATUS="$(git -C "$PEAR_ROOT" status --porcelain --untracked-files=all -- pear/skills)"
+if [[ "$(git -C "$PEAR_ROOT" branch --show-current)" != "pear-main" ]]; then
+    fail "parent checkout must be on pear-main"
+fi
+if [[ "$(git -C "$REPO_ROOT" branch --show-current)" != "pear-main" ]]; then
+    fail "Zulip checkout must be on pear-main"
+fi
+if [[ "$(git -C "$LOCAL_TERMINAL_ROOT" branch --show-current)" != "pear-main" ]]; then
+    fail "Zulip Terminal checkout must be on pear-main"
+fi
+if [[ "$(git -C "$PEAR_ROOT" rev-parse HEAD:zulip)" != "$LOCAL_SHA" ]]; then
+    fail "parent does not pin the canonical Zulip checkout"
+fi
+if [[ "$(git -C "$PEAR_ROOT" rev-parse HEAD:zulip-terminal)" != "$LOCAL_TERMINAL_SHA" ]]; then
+    fail "parent does not pin the canonical Zulip Terminal checkout"
+fi
+if [[
+    -n "$LOCAL_PARENT_STATUS" ||
+    -n "$LOCAL_STATUS" ||
+    -n "$LOCAL_TERMINAL_STATUS" ||
+    -n "$LOCAL_UNTRACKED_SOURCE"
+]]; then
+    fail "bootstrap requires a clean coordinated source tree"
+fi
+if [[ -n "$LOCAL_PEAR_SKILLS_STATUS" ]]; then
+    fail "bootstrap requires a clean pear/skills tree"
+fi
+LOCAL_WORKSPACE_HELPER_SHA="$(
+    git -C "$REPO_ROOT" cat-file blob "$LOCAL_SHA:$PEAR_WORKSPACE_HELPER_SOURCE_RELATIVE" |
+        shasum -a 256 | awk '{print $1}'
+)"
+LOCAL_PEAR_SKILLS_TREE="$(git -C "$PEAR_ROOT" rev-parse HEAD:pear/skills)"
+LOCAL_CONTRACT_VERSION="$(
+    python3 - "$PEAR_ROOT/pear/contract.json" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1]) as contract_file:
+    print(json.load(contract_file)["server_contract_version"])
+PY
+)"
+REMOTE_TRUSTED_RUNTIME=""
+
+cleanup_trusted_runtime() {
+    if [[ -n "$REMOTE_TRUSTED_RUNTIME" ]]; then
+        remove_remote_pear_deploy_bundle "$REMOTE_TRUSTED_RUNTIME" >/dev/null 2>&1 || true
+    fi
+}
+trap cleanup_trusted_runtime EXIT
 
 echo "Waiting for SSH on $IP_ADDRESS..."
 for _ in $(seq 1 90); do
@@ -159,14 +219,19 @@ if [[ -d "$LOCAL_GIT_COMMON_DIR" ]]; then
         "root@$IP_ADDRESS:/home/zulipdev/.git/modules/zulip/"
 fi
 
+echo "Staging privileged deployment tooling from the pinned local commit..."
+REMOTE_TRUSTED_RUNTIME="$(stage_remote_pear_deploy_bundle "$REPO_ROOT" "$LOCAL_SHA")"
+
 echo "Installing and verifying the committed isolated Workspace helper..."
 ssh_root 'install -d -m 755 -o root -g root /usr/local/lib'
-ssh_root python3 /home/zulipdev/zulip/tools/pear_deploy/workspace_helper_runtime.py install \
-    --repo-root /home/zulipdev/zulip \
-    --destination "$PEAR_WORKSPACE_HELPER_PATH"
-ssh_root python3 /home/zulipdev/zulip/tools/pear_deploy/workspace_helper_runtime.py verify \
-    --repo-root /home/zulipdev/zulip \
+ssh_root python3 "$REMOTE_TRUSTED_RUNTIME/tools/pear_deploy/workspace_helper_runtime.py" install \
+    --repo-root "$REMOTE_TRUSTED_RUNTIME" \
     --destination "$PEAR_WORKSPACE_HELPER_PATH" \
+    --expected-sha256 "$LOCAL_WORKSPACE_HELPER_SHA"
+ssh_root python3 "$REMOTE_TRUSTED_RUNTIME/tools/pear_deploy/workspace_helper_runtime.py" verify \
+    --repo-root "$REMOTE_TRUSTED_RUNTIME" \
+    --destination "$PEAR_WORKSPACE_HELPER_PATH" \
+    --expected-sha256 "$LOCAL_WORKSPACE_HELPER_SHA" \
     --smoke-existing-isolation-user
 
 ssh_root 'chown -R zulipdev:zulipdev /home/zulipdev/zulip'
@@ -461,9 +526,9 @@ ssh_root 'sudo -Hu zulipdev bash -lc "cd /home/zulipdev/zulip && ZULIP_DEV_PRODU
 echo "Installing fail-closed Caddy and production-assets service config..."
 printf -v runtime_command '%q ' \
     python3 \
-    /home/zulipdev/zulip/tools/pear_deploy/runtime_config.py \
+    "$REMOTE_TRUSTED_RUNTIME/tools/pear_deploy/runtime_config.py" \
     install \
-    --repo-root /home/zulipdev/zulip \
+    --repo-root "$REMOTE_TRUSTED_RUNTIME" \
     --fqdn "$FQDN" \
     --bootstrap-auth-user "$CADDY_BASICAUTH_USER" \
     --bootstrap-auth-stdin
@@ -530,6 +595,24 @@ print(
 PY
 
 ssh_root "systemctl restart ${PEAR_DEPLOY_SERVICES[*]}"
+
+DEPLOYED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+ssh_root 'install -d -m 755 -o root -g root /var/lib/pear'
+{
+    printf '%s %s\n' "$LOCAL_SHA" "$DEPLOYED_AT"
+    printf 'record_version=2\n'
+    printf 'parent_sha=%s\n' "$LOCAL_PARENT_SHA"
+    printf 'zulip_sha=%s\n' "$LOCAL_SHA"
+    printf 'zulip_terminal_sha=%s\n' "$LOCAL_TERMINAL_SHA"
+    printf 'contract_version=%s\n' "$LOCAL_CONTRACT_VERSION"
+    printf 'pear_skills_tree=%s\n' "$LOCAL_PEAR_SKILLS_TREE"
+    printf 'workspace_helper_sha256=%s\n' "$LOCAL_WORKSPACE_HELPER_SHA"
+    printf 'asset_mode=production-hashed\n'
+    printf 'caddy_auth=basic-auth-required\n'
+    printf 'deployed_at=%s\n' "$DEPLOYED_AT"
+} | ssh_root python3 \
+    "$REMOTE_TRUSTED_RUNTIME/tools/pear_deploy/deployment_record.py" \
+    --destination /var/lib/pear/deployed-sha
 
 echo "Remote services:"
 ssh_root "systemctl --no-pager --full status caddy ${PEAR_DEPLOY_SERVICES[*]}" | sed -n '1,260p'

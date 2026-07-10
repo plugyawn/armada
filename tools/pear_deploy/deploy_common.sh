@@ -51,6 +51,21 @@ PEAR_DEPLOY_RUNTIME_CONFIG_PATHS=(
     /usr/local/lib/pear-workspace-io
     /etc/systemd/system/pear-zulip-dev.service
     /home/zulipdev/pear.env
+    /home/zulipdev/pear-deployed-sha
+    /var/lib/pear
+)
+
+PEAR_DEPLOY_TRUSTED_BUNDLE_PATHS=(
+    tools/pear_deploy/deployment_record.py
+    tools/pear_deploy/freeze_asset_build.py
+    tools/pear_deploy/production_assets.py
+    tools/pear_deploy/runtime_config.py
+    tools/pear_deploy/workspace_helper_runtime.py
+    tools/pear_deploy/runtime/Caddyfile
+    tools/pear_deploy/runtime/caddy-pear-basic-auth.conf
+    tools/pear_deploy/runtime/pear-run-zulip-dev
+    tools/pear_deploy/runtime/pear-zulip-dev.service
+    zerver/lib/pear_workspace_io.py
 )
 
 PEAR_WORKSPACE_HELPER_SOURCE_RELATIVE="zerver/lib/pear_workspace_io.py"
@@ -62,6 +77,13 @@ PEAR_DEPLOY_SERVICES=(
     pear-embedded-bots
     pear-thumbnail
     pear-zulip-dev
+)
+
+PEAR_DEPLOY_WORKER_SERVICES=(
+    pear-worker
+    pear-monitor-worker
+    pear-embedded-bots
+    pear-thumbnail
 )
 
 PEAR_DEPLOY_QUEUES=(
@@ -95,9 +117,10 @@ filter_deploy_untracked_source_files() {
     done
 }
 
-validate_pear_deploy_queue_snapshot() {
+_validate_pear_deploy_queue_snapshot() {
+    local require_consumers="$1"
     local expected_queues="${PEAR_DEPLOY_QUEUES[*]}"
-    awk -v expected_queues="$expected_queues" '
+    awk -v expected_queues="$expected_queues" -v require_consumers="$require_consumers" '
 BEGIN {
     expected_count = split(expected_queues, expected, " ")
     for (i = 1; i <= expected_count; i += 1) {
@@ -112,7 +135,7 @@ $1 in required {
         bad = 1
         next
     }
-    if ($2 != 0 || $3 != 0 || $4 < 1) {
+    if ($2 != 0 || $3 != 0 || (require_consumers == "true" && $4 < 1)) {
         print "queue is not quiescent: " $1 > "/dev/stderr"
         bad = 1
     }
@@ -127,6 +150,60 @@ END {
     exit bad
 }
 '
+}
+
+validate_pear_deploy_queue_snapshot() {
+    _validate_pear_deploy_queue_snapshot true
+}
+
+validate_pear_deploy_queue_empty_snapshot() {
+    _validate_pear_deploy_queue_snapshot false
+}
+
+stage_remote_pear_deploy_bundle() {
+    local repo_root="$1"
+    local revision="$2"
+    local stage
+
+    stage="$(
+        git -C "$repo_root" archive --format=tar "$revision" -- \
+            "${PEAR_DEPLOY_TRUSTED_BUNDLE_PATHS[@]}" |
+            ssh -F "$SSH_CONFIG" pear-staging-root '
+                set -euo pipefail
+                umask 077
+                stage="$(mktemp -d /root/pear-deploy-runtime.XXXXXXXX)"
+                complete=false
+                cleanup() {
+                    if [[ "$complete" != true ]]; then
+                        rm -rf -- "$stage"
+                    fi
+                }
+                trap cleanup EXIT
+                tar --no-same-owner -xpf - -C "$stage"
+                chown -R root:root "$stage"
+                chmod -R go-rwx "$stage"
+                if find "$stage" -type l -print -quit | grep -q .; then
+                    echo "trusted deployment bundle contains a symlink" >&2
+                    exit 1
+                fi
+                complete=true
+                printf "%s\n" "$stage"
+            '
+    )"
+    if [[ ! "$stage" =~ ^/root/pear-deploy-runtime\.[A-Za-z0-9]{8}$ ]]; then
+        echo "remote trusted deployment bundle returned an invalid path" >&2
+        return 1
+    fi
+    printf '%s\n' "$stage"
+}
+
+remove_remote_pear_deploy_bundle() {
+    local stage="$1"
+    if [[ ! "$stage" =~ ^/root/pear-deploy-runtime\.[A-Za-z0-9]{8}$ ]]; then
+        echo "refusing to remove an invalid trusted deployment bundle path" >&2
+        return 1
+    fi
+    ssh -F "$SSH_CONFIG" pear-staging-root "rm -rf -- $stage"
 }
 
 validate_local_caddy_auth_bootstrap() {

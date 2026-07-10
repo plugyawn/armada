@@ -99,6 +99,26 @@ PY
 )"
 
 LOCAL_SHA="$(git -C "$REPO_ROOT" rev-parse HEAD)"
+REMOTE_SHA="$(
+    ssh -F "$SSH_CONFIG" pear-staging-root \
+        "sudo -Hu zulipdev git -C /home/zulipdev/zulip rev-parse HEAD"
+)"
+if [[ "$REMOTE_SHA" != "$LOCAL_SHA" ]]; then
+    echo "Remote HEAD $REMOTE_SHA does not match local HEAD $LOCAL_SHA" >&2
+    exit 1
+fi
+LOCAL_WORKSPACE_HELPER_SHA="$(
+    git -C "$REPO_ROOT" cat-file blob "$LOCAL_SHA:$PEAR_WORKSPACE_HELPER_SOURCE_RELATIVE" |
+        shasum -a 256 | awk '{print $1}'
+)"
+REMOTE_TRUSTED_RUNTIME=""
+cleanup_trusted_runtime() {
+    if [[ -n "$REMOTE_TRUSTED_RUNTIME" ]]; then
+        remove_remote_pear_deploy_bundle "$REMOTE_TRUSTED_RUNTIME" >/dev/null 2>&1 || true
+    fi
+}
+trap cleanup_trusted_runtime EXIT
+REMOTE_TRUSTED_RUNTIME="$(stage_remote_pear_deploy_bundle "$REPO_ROOT" "$LOCAL_SHA")"
 LOCAL_UNTRACKED_SOURCE="$(git -C "$REPO_ROOT" ls-files --others --exclude-standard | filter_deploy_untracked_source_files)"
 REMOTE_UNTRACKED_SOURCE="$(
     ssh -F "$SSH_CONFIG" pear-staging-root 'sudo -Hu zulipdev bash -lc '"'"'
@@ -120,7 +140,8 @@ fi
 ssh -F "$SSH_CONFIG" pear-staging-root 'sudo -Hu zulipdev bash -lc '"'"'
 set -euo pipefail
 cd /home/zulipdev/zulip
-echo "remote_head=$(git rev-parse HEAD)"
+remote_head="$(git rev-parse HEAD)"
+echo "remote_head=$remote_head"
 remote_status="$(git status --porcelain --untracked-files=no)"
 if [[ -n "$remote_status" ]]; then
     echo "remote_tracked_status:"
@@ -128,10 +149,21 @@ if [[ -n "$remote_status" ]]; then
     exit 1
 fi
 echo "remote_tracked_status=clean"
-if [[ -f /home/zulipdev/pear-deployed-sha ]]; then
-    echo "deployed_record=$(cat /home/zulipdev/pear-deployed-sha)"
+if [[ -f /var/lib/pear/deployed-sha ]]; then
+    record_meta="$(stat -c "%U:%G %a %h %F" /var/lib/pear/deployed-sha)"
+    if [[ "$record_meta" != "root:root 644 1 regular file" ]]; then
+        echo "deployed_record_unsafe=$record_meta" >&2
+        exit 1
+    fi
+    if ! head -n1 /var/lib/pear/deployed-sha | grep -Eq "^${remote_head} [0-9]{4}-" ||
+        ! grep -Fxq "zulip_sha=${remote_head}" /var/lib/pear/deployed-sha; then
+        echo "deployed_record_sha_mismatch" >&2
+        exit 1
+    fi
+    echo "deployed_record=$(cat /var/lib/pear/deployed-sha)"
 else
     echo "deployed_record=missing"
+    exit 1
 fi
 '"'"
 if [[ -n "$REMOTE_UNTRACKED_SOURCE" ]]; then
@@ -157,7 +189,9 @@ echo "unauthenticated_https=401"
 echo
 echo "Production runtime config and assets:"
 ssh -F "$SSH_CONFIG" pear-staging-root \
-    "python3 /home/zulipdev/zulip/tools/pear_deploy/runtime_config.py verify --repo-root /home/zulipdev/zulip --fqdn $FQDN"
+    python3 "$REMOTE_TRUSTED_RUNTIME/tools/pear_deploy/runtime_config.py" verify \
+    --repo-root "$REMOTE_TRUSTED_RUNTIME" \
+    --fqdn "$FQDN"
 ssh -F "$SSH_CONFIG" pear-staging-root \
     'sudo -Hu zulipdev bash -lc '"'"'cd /home/zulipdev/zulip && .venv/bin/python3 tools/pear_deploy/production_assets.py --repo-root .'"'"''
 ASSET_PATHS="$(ssh -F "$SSH_CONFIG" pear-staging-root \
@@ -186,9 +220,10 @@ echo "webpack_watcher=absent"
 echo
 echo "Isolated Workspace helper:"
 ssh -F "$SSH_CONFIG" pear-staging-root \
-    python3 /home/zulipdev/zulip/tools/pear_deploy/workspace_helper_runtime.py verify \
-    --repo-root /home/zulipdev/zulip \
+    python3 "$REMOTE_TRUSTED_RUNTIME/tools/pear_deploy/workspace_helper_runtime.py" verify \
+    --repo-root "$REMOTE_TRUSTED_RUNTIME" \
     --destination "$PEAR_WORKSPACE_HELPER_PATH" \
+    --expected-sha256 "$LOCAL_WORKSPACE_HELPER_SHA" \
     --smoke-existing-isolation-user
 
 echo

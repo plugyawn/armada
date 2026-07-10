@@ -78,28 +78,15 @@ def _read_regular_file_nofollow(path: Path) -> bytes:
         return input_file.read()
 
 
-def load_committed_helper(repo_root: Path) -> HelperSource:
+def load_expected_helper(repo_root: Path, expected_sha256: str) -> HelperSource:
+    if SHA256_RE.fullmatch(expected_sha256) is None:
+        _fail("expected workspace helper SHA-256 is invalid")
     source_path = repo_root / HELPER_SOURCE_RELATIVE
-    worktree_payload = _read_regular_file_nofollow(source_path)
-    completed = subprocess.run(
-        [
-            "git",
-            "-c",
-            f"safe.directory={repo_root}",
-            "-C",
-            os.fspath(repo_root),
-            "cat-file",
-            "blob",
-            f"HEAD:{HELPER_SOURCE_RELATIVE.as_posix()}",
-        ],
-        check=False,
-        capture_output=True,
-    )
-    if completed.returncode != 0:
-        _fail("could not read the committed workspace helper blob")
-    if completed.stdout != worktree_payload:
-        _fail("deployed workspace helper source does not match its committed Git blob")
-    return HelperSource(payload=completed.stdout, sha256=_sha256(completed.stdout))
+    payload = _read_regular_file_nofollow(source_path)
+    source_sha256 = _sha256(payload)
+    if source_sha256 != expected_sha256:
+        _fail("staged workspace helper source does not match the expected SHA-256")
+    return HelperSource(payload=payload, sha256=source_sha256)
 
 
 def _validate_destination_parent(path: Path, *, expected_uid: int) -> None:
@@ -397,6 +384,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         command_parser = subparsers.add_parser(command)
         command_parser.add_argument("--repo-root", type=Path, required=True)
         command_parser.add_argument("--destination", type=Path, default=DEFAULT_HELPER_PATH)
+        command_parser.add_argument("--expected-sha256", required=True)
         if command == "verify":
             command_parser.add_argument("--smoke-existing-isolation-user", action="store_true")
     return parser.parse_args(argv)
@@ -413,7 +401,7 @@ def main(argv: list[str] | None = None) -> int:
             _print_installation(installation, expected_sha256=args.expected_sha256)
             return 0
 
-        source = load_committed_helper(args.repo_root)
+        source = load_expected_helper(args.repo_root, args.expected_sha256)
         if args.command == "install":
             if os.geteuid() != 0:
                 _fail("workspace helper installation must run as root")

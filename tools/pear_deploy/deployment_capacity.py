@@ -103,9 +103,10 @@ def estimate_capacity(
         + sum(allocated_bytes(path) for path in runtime_paths)
     )
 
-    # The isolated build duplicates source and can transiently hold old and new
-    # compressed graphs. Keep a 2 GiB output floor plus 1 GiB filesystem margin.
-    asset_build_bytes = source_bytes + max(generated_bytes * 2, 2 * GIB)
+    # The isolated build duplicates source, can transiently hold old and new
+    # compressed graphs, and is then copied once into a root-owned frozen tree.
+    # Keep a 3 GiB output floor plus the separate 1 GiB filesystem margin.
+    asset_build_bytes = source_bytes + max(generated_bytes * 3, 3 * GIB)
     return CapacityEstimate(
         available_bytes=shutil.disk_usage(snapshot_root.parent).free,
         reclaimable_asset_build_bytes=allocated_bytes(asset_build_dir),

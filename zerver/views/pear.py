@@ -1124,7 +1124,7 @@ def get_pear_workspace_files_backend(
 
 
 PEAR_WORKSPACE_FILE_MAX_BYTES = 1_000_000
-PEAR_WORKSPACE_IMAGE_PATTERN = re.compile(r"\.(png|jpe?g|gif|webp|svg)$", re.IGNORECASE)
+PEAR_WORKSPACE_IMAGE_PATTERN = re.compile(r"\.(png|jpe?g|gif|webp)$", re.IGNORECASE)
 
 
 @typed_endpoint
@@ -1187,7 +1187,6 @@ def get_pear_workspace_file_backend(
         content_type = {
             "jpg": "image/jpeg",
             "jpeg": "image/jpeg",
-            "svg": "image/svg+xml",
         }.get(extension, f"image/{extension}")
         return json_success(
             request,

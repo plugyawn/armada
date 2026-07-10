@@ -759,7 +759,7 @@ function render_files_readme(path: string, $sheet: JQuery): void {
     });
 }
 
-const PEAR_IMAGE_PREVIEW_PATTERN = /\.(?:png|jpe?g|gif|webp|svg)$/i;
+const PEAR_IMAGE_PREVIEW_PATTERN = /\.(?:png|jpe?g|gif|webp)$/i;
 
 function show_image_preview(path: string): void {
     if (current_stream === undefined || current_topic === undefined) {

@@ -4041,6 +4041,7 @@ class PearWorkspaceFilesTest(ZulipTestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             repo = self.make_workspace(Path(temp_dir))
             (repo / "plot.png").write_bytes(png_bytes)
+            (repo / "diagram.svg").write_text("<svg></svg>\n", encoding="utf-8")
             context = SimpleNamespace(workdir=str(repo))
             with (
                 patch(
@@ -4078,6 +4079,16 @@ class PearWorkspaceFilesTest(ZulipTestCase):
                 self.assert_json_error(
                     not_image, "Only image files can be previewed this way."
                 )
+                svg = self.client_get(
+                    "/json/pear/workspace-file",
+                    {
+                        "stream": stream.name,
+                        "topic": "bare",
+                        "path": "diagram.svg",
+                        "encoding": "base64",
+                    },
+                )
+                self.assert_json_error(svg, "Only image files can be previewed this way.")
 
     def test_workspace_file_endpoint_reads_and_guards(self) -> None:
         from types import SimpleNamespace

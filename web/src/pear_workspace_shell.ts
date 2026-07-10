@@ -219,6 +219,7 @@ export function create_pear_workspace_shell(
     let search_generation = 0;
     let refresh_generation = 0;
     let reveal_generation = 0;
+    let descriptor_generation = 0;
     let pending_reveal: {path: string; revision: number} | undefined;
     let required_workspace_revision: number | undefined;
     const directory_requests = new Map<string, AbortableRequest>();
@@ -770,8 +771,47 @@ export function create_pear_workspace_shell(
         }
     };
 
+    const load_descriptor = (): void => {
+        if (destroyed) {
+            return;
+        }
+        descriptor_request?.abort();
+        descriptor_generation += 1;
+        const generation = descriptor_generation;
+        status.textContent =
+            descriptor === undefined ? "Loading workspace…" : "Reloading workspace…";
+        descriptor_request = dependencies.getWorkspace(options.workspaceId, {
+            success(response) {
+                if (destroyed || generation !== descriptor_generation) {
+                    return;
+                }
+                descriptor_request = undefined;
+                if (response.uuid !== options.workspaceId) {
+                    status.textContent = "Workspace returned the wrong identity. Retry refresh.";
+                } else {
+                    apply_descriptor(response);
+                }
+                ready_resolve?.();
+                ready_resolve = undefined;
+            },
+            error(error) {
+                if (destroyed || generation !== descriptor_generation) {
+                    return;
+                }
+                descriptor_request = undefined;
+                status.textContent = error_message(error);
+                ready_resolve?.();
+                ready_resolve = undefined;
+            },
+        });
+    };
+
     const refresh_workspace = (): void => {
-        if (destroyed || descriptor === undefined) {
+        if (destroyed) {
+            return;
+        }
+        if (descriptor === undefined) {
+            load_descriptor();
             return;
         }
         refresh_request?.abort();
@@ -927,26 +967,7 @@ export function create_pear_workspace_shell(
     search_input.addEventListener("input", on_search_input);
     search_form.addEventListener("submit", on_search_submit);
 
-    descriptor_request = dependencies.getWorkspace(options.workspaceId, {
-        success(response) {
-            if (destroyed || response.uuid !== options.workspaceId) {
-                return;
-            }
-            descriptor_request = undefined;
-            apply_descriptor(response);
-            ready_resolve?.();
-            ready_resolve = undefined;
-        },
-        error(error) {
-            if (destroyed) {
-                return;
-            }
-            descriptor_request = undefined;
-            status.textContent = error_message(error);
-            ready_resolve?.();
-            ready_resolve = undefined;
-        },
-    });
+    load_descriptor();
 
     return {
         ready,

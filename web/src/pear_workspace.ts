@@ -174,6 +174,7 @@ async function mount_shell(): Promise<void> {
     }
     shell_generation += 1;
     const generation = shell_generation;
+    let mounted: WorkspaceShellController | undefined;
     host.setAttribute("aria-busy", "true");
     host.textContent = "Loading workspace…";
     try {
@@ -197,7 +198,7 @@ async function mount_shell(): Promise<void> {
         ) {
             return;
         }
-        const mounted = module.create_pear_workspace_shell({root: host, workspaceId: workspace_id});
+        mounted = module.create_pear_workspace_shell({root: host, workspaceId: workspace_id});
         shell = mounted;
         await mounted.ready;
         if (generation === shell_generation && shell === mounted) {
@@ -206,6 +207,14 @@ async function mount_shell(): Promise<void> {
     } catch (error) {
         if (generation !== shell_generation || !host.isConnected) {
             return;
+        }
+        if (mounted !== undefined && shell === mounted) {
+            shell = undefined;
+            try {
+                await mounted.destroy();
+            } catch {
+                // The failed shell is already detached; retry must remain available.
+            }
         }
         host.removeAttribute("aria-busy");
         host.textContent = "Workspace failed to load. Return to Chat and try again.";

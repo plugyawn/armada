@@ -15,6 +15,7 @@ import render_pear_wall from "../templates/pear_wall.hbs";
 import * as channel from "./channel.ts";
 import {$t} from "./i18n.ts";
 import * as narrow_state from "./narrow_state.ts";
+import * as pear_wall_components from "./pear_wall_components.ts";
 
 const monitor_schema = z.object({
     id: z.number(),
@@ -79,172 +80,6 @@ function cadence_label(seconds: number): string {
     return `${Math.round(seconds / 86400)}d`;
 }
 
-function prop_value(monitor: PearMonitorPayload, index: number, prop: string): unknown {
-    const live = monitor.props[`${index}.${prop}`];
-    if (live !== undefined && live !== null) {
-        return live;
-    }
-    return monitor.block_spec.components?.[index]?.props[prop];
-}
-
-function as_number(value: unknown): number | undefined {
-    if (typeof value === "number" && Number.isFinite(value)) {
-        return value;
-    }
-    if (typeof value === "string" && value.trim() !== "" && Number.isFinite(Number(value))) {
-        return Number(value);
-    }
-    return undefined;
-}
-
-function as_text(value: unknown): string {
-    if (typeof value === "string") {
-        return value;
-    }
-    if (typeof value === "number" || typeof value === "boolean") {
-        return String(value);
-    }
-    return "";
-}
-
-function format_number(value: number): string {
-    if (Number.isInteger(value)) {
-        return String(value);
-    }
-    return value >= 100 ? value.toFixed(1) : value.toFixed(3).replace(/0+$/, "").replace(/\.$/, "");
-}
-
-const DAY_HEADERS = ["m", "t", "w", "t", "f", "s", "s"];
-
-function calendar_cells(highlights: Set<string>): {
-    month_label: string;
-    cells: {day: number; in_month: boolean; highlight: boolean; today: boolean}[];
-} {
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = now.getMonth();
-    const first = new Date(year, month, 1);
-    // Monday-first grid.
-    const lead = (first.getDay() + 6) % 7;
-    const start = new Date(year, month, 1 - lead);
-    const cells = [];
-    const iso = (date: Date): string =>
-        `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
-    const today_iso = iso(now);
-    for (let index = 0; index < 42; index += 1) {
-        const date = new Date(start.getFullYear(), start.getMonth(), start.getDate() + index);
-        cells.push({
-            day: date.getDate(),
-            in_month: date.getMonth() === month,
-            highlight: highlights.has(iso(date)),
-            today: iso(date) === today_iso,
-        });
-    }
-    const month_label = now.toLocaleDateString(undefined, {month: "short"}).toLowerCase();
-    return {month_label, cells};
-}
-
-function component_context(
-    monitor: PearMonitorPayload,
-    component: {type: string; props: Record<string, unknown>},
-    index: number,
-): Record<string, unknown> {
-    const type = component.type;
-    const label = as_text(prop_value(monitor, index, "label"));
-    const context: Record<string, unknown> = {[`is_${type}`]: true, label};
-    switch (type) {
-    case "meter": {
-        const value = as_number(prop_value(monitor, index, "value")) ?? 0;
-        const total = as_number(prop_value(monitor, index, "total"));
-        const percent = Math.max(
-            0,
-            Math.min(100, total !== undefined && total > 0 ? (value / total) * 100 : value),
-        );
-        const meta_parts = [
-            as_text(prop_value(monitor, index, "rate")),
-            as_text(prop_value(monitor, index, "eta")),
-        ].filter((part) => part !== "");
-        context["percent"] = Math.round(percent);
-        context["percent_label"] =
-            total !== undefined && total > 0
-                ? `${format_number(value)}/${format_number(total)}`
-                : `${Math.round(percent)}%`;
-        context["meta_line"] = meta_parts.join(" · ");
-    
-    break;
-    }
-    case "stat": {
-        const value = as_number(prop_value(monitor, index, "value"));
-        context["value"] = value === undefined ? as_text(prop_value(monitor, index, "value")) : format_number(value);
-        context["unit"] = as_text(prop_value(monitor, index, "unit"));
-        const delta = as_number(prop_value(monitor, index, "delta"));
-        if (delta !== undefined && delta !== 0) {
-            context["delta_label"] = `${delta > 0 ? "▲" : "▼"}${format_number(Math.abs(delta))}`;
-            context["delta_class"] = delta > 0 ? "pear-wall-delta-up" : "pear-wall-delta-down";
-        }
-    
-    break;
-    }
-    case "sparkline": {
-        const value = as_number(prop_value(monitor, index, "value"));
-        context["value"] = value === undefined ? "" : format_number(value);
-        context["unit"] = as_text(prop_value(monitor, index, "unit"));
-        context["spark_data"] = monitor.history.map((point) => point.toPrecision(6)).join(",");
-    
-    break;
-    }
-    case "logtail": {
-        const lines = prop_value(monitor, index, "lines");
-        const limit = as_number(prop_value(monitor, index, "limit")) ?? 8;
-        context["lines"] = Array.isArray(lines)
-            ? lines.slice(-limit).map((line) => as_text(line))
-            : [];
-    
-    break;
-    }
-    case "badge": {
-        const state = as_text(prop_value(monitor, index, "state"));
-        context["state"] = ["ok", "warn", "err"].includes(state) ? state : "ok";
-        context["text"] = as_text(prop_value(monitor, index, "text"));
-    
-    break;
-    }
-    case "clock": {
-        context["timezone"] = as_text(prop_value(monitor, index, "timezone"));
-    
-    break;
-    }
-    case "countdown": {
-        context["target"] = as_text(prop_value(monitor, index, "target"));
-    
-    break;
-    }
-    case "calendar": {
-        const highlights = prop_value(monitor, index, "highlights");
-        const highlight_set = new Set(
-            Array.isArray(highlights) ? highlights.map((entry) => as_text(entry)) : [],
-        );
-        Object.assign(context, calendar_cells(highlight_set));
-        context["day_headers"] = DAY_HEADERS;
-    
-    break;
-    }
-    case "keyvals": {
-        const pairs = prop_value(monitor, index, "pairs");
-        context["pairs"] = Array.isArray(pairs)
-            ? pairs
-                  .filter((pair) => Array.isArray(pair) && pair.length >= 2)
-                  .slice(0, 12)
-                  .map((pair: unknown[]) => ({key: as_text(pair[0]), value: as_text(pair[1])}))
-            : [];
-    
-    break;
-    }
-    // No default
-    }
-    return context;
-}
-
 function render_context(): Record<string, unknown> {
     const blocks = monitors.map((monitor) => ({
         id: monitor.id,
@@ -264,85 +99,19 @@ function render_context(): Record<string, unknown> {
                 ? monitor.last_error.slice(0, 60) + "…"
                 : monitor.last_error,
         components: (monitor.block_spec.components ?? []).map((component, index) =>
-            component_context(monitor, component, index),
+            pear_wall_components.component_context(
+                component,
+                index,
+                monitor.props,
+                monitor.history,
+            ),
         ),
     }));
     return {has_blocks: blocks.length > 0, blocks};
 }
 
-function draw_sparklines($wall: JQuery): void {
-    $wall.find<HTMLCanvasElement>("canvas[data-wall-spark]").each((_index, canvas) => {
-        const points = (canvas.dataset["wallSpark"] ?? "")
-            .split(",")
-            .map(Number)
-            .filter((point) => Number.isFinite(point));
-        const width = canvas.parentElement?.clientWidth ?? 120;
-        canvas.width = width;
-        const height = canvas.height;
-        const context = canvas.getContext("2d");
-        if (!context || points.length < 2) {
-            return;
-        }
-        const accent = getComputedStyle(canvas).getPropertyValue("--pear-accent-ink").trim();
-        const low = Math.min(...points);
-        const high = Math.max(...points);
-        const range = high - low || 1;
-        context.fillStyle = accent || "#8bd0a2";
-        // Pixel steps, not a smooth line: one 2px column per sample.
-        const step = Math.max(2, Math.floor(width / points.length));
-        for (const [index, point] of points.entries()) {
-            const x = index * step;
-            const bar_height = Math.max(2, Math.round(((point - low) / range) * (height - 4)) + 2);
-            context.fillRect(x, height - bar_height, Math.max(1, step - 1), 2);
-        }
-    });
-}
-
-function apply_meter_fills($wall: JQuery): void {
-    $wall.find(".pear-wall-meter-fill").each(function () {
-        const percent = Number($(this).attr("data-wall-percent") ?? "0");
-        $(this).css("width", `${Math.max(0, Math.min(100, percent))}%`);
-    });
-}
-
 function update_clocks(): void {
-    const $wall = $("#pear-wall");
-    $wall.find("[data-wall-clock]").each(function () {
-        const timezone = $(this).attr("data-wall-clock") ?? "";
-        try {
-            $(this).text(
-                new Date().toLocaleTimeString(undefined, {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                    second: "2-digit",
-                    hour12: false,
-                    ...(timezone === "" ? {} : {timeZone: timezone}),
-                }),
-            );
-        } catch {
-            $(this).text(new Date().toLocaleTimeString(undefined, {hour12: false}));
-        }
-    });
-    $wall.find("[data-wall-countdown]").each(function () {
-        const target = new Date($(this).attr("data-wall-countdown") ?? "");
-        if (Number.isNaN(target.getTime())) {
-            $(this).text("—");
-            return;
-        }
-        let remaining = Math.max(0, Math.floor((target.getTime() - Date.now()) / 1000));
-        const days = Math.floor(remaining / 86400);
-        remaining -= days * 86400;
-        const hours = Math.floor(remaining / 3600);
-        remaining -= hours * 3600;
-        const minutes = Math.floor(remaining / 60);
-        const seconds = remaining - minutes * 60;
-        const pad = (value: number): string => String(value).padStart(2, "0");
-        $(this).text(
-            days > 0
-                ? `${days}d ${pad(hours)}:${pad(minutes)}:${pad(seconds)}`
-                : `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`,
-        );
-    });
+    pear_wall_components.update_clocks($("#pear-wall"));
 }
 
 function sync_clock_timer(): void {
@@ -407,8 +176,8 @@ function render(): void {
     if (input_focused) {
         $new_input.trigger("focus");
     }
-    apply_meter_fills($wall);
-    draw_sparklines($wall);
+    pear_wall_components.apply_meter_fills($wall);
+    pear_wall_components.draw_sparklines($wall);
     pulse_changed_blocks($wall);
     sync_clock_timer();
 }

@@ -96,30 +96,39 @@ from zerver.views.navigation_views import (
 )
 from zerver.views.onboarding_steps import mark_onboarding_step_as_read
 from zerver.views.pear import (
+    delete_pear_monitor_backend,
     get_pear_active_session_backend,
     get_pear_canvas_backend,
     get_pear_config_backend,
     get_pear_git_tree_backend,
-    get_pear_run_backend,
-    delete_pear_monitor_backend,
     get_pear_monitors_backend,
+    get_pear_run_backend,
     get_pear_runs_backend,
     get_pear_session_backend,
     get_pear_topic_context_backend,
+    get_pear_workspace_file_backend,
+    get_pear_workspace_files_backend,
     get_pear_workspace_topics_backend,
     post_pear_canvas_ask_backend,
-    get_pear_workspace_files_backend,
-    get_pear_workspace_file_backend,
     post_pear_config_backend,
     post_pear_first_run_backend,
+    post_pear_monitors_backend,
     post_pear_run_cancel_backend,
     post_pear_run_pause_backend,
     post_pear_run_resume_backend,
-    post_pear_monitors_backend,
     post_pear_side_backend,
-    update_pear_monitor_backend,
     post_pear_topic_context_backend,
     put_pear_canvas_backend,
+    update_pear_monitor_backend,
+)
+from zerver.views.pear_workspace import (
+    get_pear_workspace_descriptor_backend,
+    get_pear_workspace_raw_backend,
+    get_pear_workspace_resource_file_backend,
+    get_pear_workspace_search_backend,
+    get_pear_workspace_tree_backend,
+    post_pear_workspace_refresh_backend,
+    put_pear_workspace_resource_file_backend,
 )
 from zerver.views.presence import (
     get_presence_backend,
@@ -451,6 +460,31 @@ v1_api_and_json_patterns = [
     rest_path(
         "pear/workspace-file",
         GET=(get_pear_workspace_file_backend, {"intentionally_undocumented"}),
+    ),
+    rest_path(
+        "pear/workspaces/<uuid:workspace_uuid>",
+        GET=(get_pear_workspace_descriptor_backend, {"intentionally_undocumented"}),
+    ),
+    rest_path(
+        "pear/workspaces/<uuid:workspace_uuid>/tree",
+        GET=(get_pear_workspace_tree_backend, {"intentionally_undocumented"}),
+    ),
+    rest_path(
+        "pear/workspaces/<uuid:workspace_uuid>/search",
+        GET=(get_pear_workspace_search_backend, {"intentionally_undocumented"}),
+    ),
+    rest_path(
+        "pear/workspaces/<uuid:workspace_uuid>/file",
+        GET=(get_pear_workspace_resource_file_backend, {"intentionally_undocumented"}),
+        PUT=(put_pear_workspace_resource_file_backend, {"intentionally_undocumented"}),
+    ),
+    rest_path(
+        "pear/workspaces/<uuid:workspace_uuid>/raw",
+        GET=(get_pear_workspace_raw_backend, {"intentionally_undocumented"}),
+    ),
+    rest_path(
+        "pear/workspaces/<uuid:workspace_uuid>/refresh",
+        POST=(post_pear_workspace_refresh_backend, {"intentionally_undocumented"}),
     ),
     rest_path(
         "pear/canvas-ask",

@@ -1,7 +1,7 @@
 <div class="pear-wall-header">
     <input class="pear-wall-input" type="text" autocomplete="off" maxlength="500" placeholder="{{t 'watch something…' }}" aria-label="{{t 'Create a wall monitor' }}" />
 </div>
-{{#if blocks}}
+{{#if has_blocks}}
 <div class="pear-wall-blocks">
     {{#each blocks}}
     <section class="pear-wall-block pear-wall-status-{{status}} {{#if collapsed}}pear-wall-collapsed{{/if}}" data-monitor-id="{{id}}">

@@ -267,7 +267,7 @@ function render_context(): Record<string, unknown> {
             component_context(monitor, component, index),
         ),
     }));
-    return {blocks};
+    return {has_blocks: blocks.length > 0, blocks};
 }
 
 function draw_sparklines($wall: JQuery): void {

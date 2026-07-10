@@ -4,7 +4,6 @@ import os
 import posixpath
 import pwd
 import re
-import shutil
 import subprocess
 import time
 from collections.abc import Sequence
@@ -46,6 +45,7 @@ from zerver.lib.pear_agent import (
     PearGeminiInteractionsAddressingIntentClassifier,
     PearProcessIsolation,
 )
+from zerver.lib.pear_skills import reconcile_pear_codex_skills
 from zerver.lib.queue import queue_json_publish_rollback_unsafe
 from zerver.lib.streams import access_stream_by_name
 from zerver.lib.topic import messages_for_topic
@@ -668,21 +668,7 @@ def pear_provision_codex_skills(codex_home: str | Path) -> list[str]:
     if source_dir is None or not source_dir.is_dir():
         return []
 
-    skills_home = Path(codex_home).expanduser() / "skills"
-    skills_home.mkdir(parents=True, exist_ok=True)
-    provisioned_skills: list[str] = []
-    for source_skill_dir in sorted(source_dir.iterdir(), key=lambda path: path.name):
-        if not source_skill_dir.is_dir() or not (source_skill_dir / "SKILL.md").is_file():
-            continue
-        destination = skills_home / source_skill_dir.name
-        shutil.copytree(
-            source_skill_dir,
-            destination,
-            dirs_exist_ok=True,
-            ignore=shutil.ignore_patterns("__pycache__", "*.pyc"),
-        )
-        provisioned_skills.append(source_skill_dir.name)
-    return provisioned_skills
+    return reconcile_pear_codex_skills(source_dir, codex_home)
 
 
 def pear_normalize_path(path: str | Path) -> Path:

@@ -1009,9 +1009,13 @@ function maybe_render_pear_run_footer($row: JQuery): void {
     // it at render and the sweep maintains it afterwards, and it also
     // covers marker-derived liveness the runs store may lag behind.
     if ($row.hasClass("pear-active-message")) {
+        const operation = pear_run_state.get_active_run_operation(message_id);
+        const operation_signature =
+            operation === undefined ? "" : `${operation.kind}|${operation.label}`;
         if (
             existing instanceof HTMLElement &&
-            existing.classList.contains("pear-run-footer-ticker")
+            existing.classList.contains("pear-run-footer-ticker") &&
+            (existing.getAttribute("data-pear-op") ?? "") === operation_signature
         ) {
             // The ticker often appears before the runs store knows the
             // start time (the active class can come from the content
@@ -1033,16 +1037,32 @@ function maybe_render_pear_run_footer($row: JQuery): void {
         const ticker = document.createElementNS("http://www.w3.org/1999/xhtml", "div");
         ticker.setAttribute("class", "pear-run-footer pear-run-footer-ticker");
         ticker.setAttribute("aria-hidden", "true");
-        const spinner = document.createElementNS("http://www.w3.org/1999/xhtml", "span");
-        // The frames live in a CSS content animation on ::after.
-        spinner.setAttribute("class", "pear-braille-spinner");
+        ticker.setAttribute("data-pear-op", operation_signature);
+        if (operation === undefined) {
+            const spinner = document.createElementNS("http://www.w3.org/1999/xhtml", "span");
+            // The frames live in a CSS content animation on ::after.
+            spinner.setAttribute("class", "pear-braille-spinner");
+            ticker.append(spinner);
+        } else {
+            // A long engine operation owns the slot: ASCII frames on
+            // ::after plus its label, e.g. `▓▓▓▓░░░░ compacting context`.
+            const frames = document.createElementNS("http://www.w3.org/1999/xhtml", "span");
+            frames.setAttribute("class", `pear-op-frames pear-op-${operation.kind}`);
+            const operation_label = document.createElementNS(
+                "http://www.w3.org/1999/xhtml",
+                "span",
+            );
+            operation_label.setAttribute("class", "pear-op-label");
+            operation_label.textContent = operation.label;
+            ticker.append(frames, operation_label);
+        }
         const elapsed = document.createElementNS("http://www.w3.org/1999/xhtml", "span");
         elapsed.setAttribute("class", "pear-run-elapsed");
         const started_at = pear_run_state.get_active_run_started_at(message_id);
         if (started_at !== undefined) {
             elapsed.setAttribute("data-pear-run-started", `${started_at}`);
         }
-        ticker.append(spinner, elapsed);
+        ticker.append(elapsed);
         content.append(ticker);
         update_pear_run_elapsed_labels();
         ensure_pear_run_elapsed_timer();

@@ -4,7 +4,7 @@ import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from re import IGNORECASE, MULTILINE, compile, finditer, search, sub
-from typing import Any, Final, Literal, Protocol, TypedDict
+from typing import Any, Final, Literal, NotRequired, Protocol, TypedDict
 
 from django.core.cache import cache
 
@@ -286,10 +286,16 @@ class PearPendingSteeringEvent(TypedDict):
     instruction: str
 
 
+class PearLiveRunOperation(TypedDict):
+    kind: str
+    label: str
+
+
 class PearLiveRunState(TypedDict):
     status: str
     content: str
     updated_at: float
+    operation: NotRequired[PearLiveRunOperation | None]
 
 
 class PearInterruptionEvent(TypedDict):
@@ -1466,11 +1472,13 @@ def write_pear_live_run_state(
     *,
     status: PearWorkerRunStatus,
     content: str,
+    operation: PearLiveRunOperation | None = None,
 ) -> None:
     state: PearLiveRunState = {
         "status": status,
         "content": content,
         "updated_at": time.time(),
+        "operation": operation,
     }
     cache.set(
         pear_live_run_cache_key(trigger_message_id),
@@ -1490,10 +1498,18 @@ def get_pear_live_run_state(trigger_message_id: int) -> PearLiveRunState | None:
         return None
     if not isinstance(updated_at, (int, float)):
         return None
+    raw_operation = state.get("operation")
+    operation: PearLiveRunOperation | None = None
+    if isinstance(raw_operation, dict):
+        kind = raw_operation.get("kind")
+        label = raw_operation.get("label")
+        if isinstance(kind, str) and isinstance(label, str):
+            operation = {"kind": kind, "label": label}
     return {
         "status": status,
         "content": content,
         "updated_at": float(updated_at),
+        "operation": operation,
     }
 
 
@@ -3481,6 +3497,7 @@ class PearWorkerTurn:
         self.started_progress_posted = False
         self.result_message_id = progress_message_id
         self.transcript_events: list[PearWorkerTranscriptEvent] = []
+        self.live_operation: PearLiveRunOperation | None = None
         self.task = pear_worker_task_line(content)
         self.last_transcript_flush_at = 0.0
         self.last_volatile_transcript_flush_at = 0.0
@@ -3575,6 +3592,7 @@ class PearWorkerTurn:
             self.message_id,
             status=status,
             content=content_to_update,
+            operation=self.live_operation,
         )
         self.last_volatile_transcript_flush_at = current_time
         return True
@@ -3632,6 +3650,16 @@ class PearWorkerTurn:
         summary = title or body or "Codex event."
         event_kind = event.get("kind")
         metadata = event.get("metadata")
+        if isinstance(metadata, dict) and isinstance(metadata.get("operation"), str):
+            # Long engine operations (compaction, …) drive the client's
+            # footer loader through the volatile channel.
+            if metadata.get("phase") == "started":
+                self.live_operation = {
+                    "kind": metadata["operation"],
+                    "label": title or metadata["operation"],
+                }
+            else:
+                self.live_operation = None
         streaming_assistant = (
             event_kind == "assistant"
             and event.get("status") == "running"

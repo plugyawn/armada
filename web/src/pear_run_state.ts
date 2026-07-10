@@ -10,6 +10,17 @@ type PearRunForActiveMessage = {
           }
         | null
         | undefined;
+    live?:
+        | {
+              operation?: {kind: string; label: string} | null | undefined;
+          }
+        | null
+        | undefined;
+};
+
+export type PearRunOperation = {
+    kind: string;
+    label: string;
 };
 
 type PearActiveResultMessageChange = {
@@ -37,6 +48,9 @@ const active_run_topic_listeners = new Set<() => void>();
 const settled_run_footers = new Map<number, PearRunFooter>();
 // Active runs' start times (seconds), for the live elapsed counter.
 const active_run_started_at = new Map<number, number>();
+// A long engine operation (compaction, …) currently animating in the
+// active run's footer, keyed by result message.
+const active_run_operations = new Map<number, PearRunOperation>();
 const active_result_message_change_listeners = new Set<
     (change: PearActiveResultMessageChange) => void
 >();
@@ -64,8 +78,7 @@ function footer_from_run(run: PearRunForActiveMessage): PearRunFooter {
 
 function footers_equal(left: PearRunFooter | undefined, right: PearRunFooter): boolean {
     return (
-        left !== undefined &&
-        left.status === right.status &&
+        left?.status === right.status &&
         left.duration_seconds === right.duration_seconds &&
         left.total_tokens === right.total_tokens &&
         left.tool_count === right.tool_count
@@ -150,8 +163,22 @@ export function set_active_run_result_messages(
             if (typeof run.date_created === "number") {
                 active_run_started_at.set(result_message_id, run.date_created);
             }
+            const operation = run.live?.operation ?? undefined;
+            const previous_operation = active_run_operations.get(result_message_id);
+            if (
+                operation?.kind !== previous_operation?.kind ||
+                operation?.label !== previous_operation?.label
+            ) {
+                if (operation === undefined) {
+                    active_run_operations.delete(result_message_id);
+                } else {
+                    active_run_operations.set(result_message_id, operation);
+                }
+                footer_changed_message_ids.push(result_message_id);
+            }
         } else if (is_settled_status(run.status)) {
             active_run_started_at.delete(result_message_id);
+            active_run_operations.delete(result_message_id);
             const footer = footer_from_run(run);
             if (!footers_equal(settled_run_footers.get(result_message_id), footer)) {
                 settled_run_footers.set(result_message_id, footer);
@@ -228,6 +255,12 @@ export function topic_has_active_run(
 export function on_active_run_topic_changed(listener: () => void): () => void {
     active_run_topic_listeners.add(listener);
     return () => active_run_topic_listeners.delete(listener);
+}
+
+export function get_active_run_operation(
+    message_id: number | undefined,
+): PearRunOperation | undefined {
+    return message_id === undefined ? undefined : active_run_operations.get(message_id);
 }
 
 export function get_active_run_started_at(message_id: number | undefined): number | undefined {

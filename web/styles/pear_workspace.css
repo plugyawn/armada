@@ -114,7 +114,9 @@
 .pear-workspace-shell__body {
     display: grid;
     min-block-size: 0;
-    grid-template-columns: clamp(240px, 20vw, 300px) minmax(0, 1fr);
+    grid-template-columns:
+        var(--pear-workspace-explorer-width, 270px) 5px
+        minmax(0, 1fr);
 }
 
 .pear-workspace-shell__explorer {
@@ -122,12 +124,29 @@
     min-inline-size: 0;
     min-block-size: 0;
     grid-template-rows: auto auto minmax(0, 1fr);
-    border-inline-end: 1px solid var(--pear-workspace-border);
     background: color-mix(
         in srgb,
         var(--color-background, Canvas) 96%,
         currentcolor
     );
+}
+
+.pear-workspace-shell__splitter {
+    position: relative;
+    z-index: 2;
+    min-inline-size: 5px;
+    border-inline: 1px solid transparent;
+    background: var(--pear-workspace-border);
+    cursor: col-resize;
+    touch-action: none;
+}
+
+.pear-workspace-shell__splitter:hover,
+.pear-workspace-shell__splitter:focus-visible,
+.pear-workspace-shell__splitter[data-resizing="true"] {
+    border-color: var(--pear-workspace-focus);
+    background: var(--pear-workspace-focus);
+    outline: 0;
 }
 
 .pear-workspace-shell [data-role="search-form"] {
@@ -681,6 +700,10 @@
     .pear-workspace-shell__body {
         position: relative;
         display: block;
+    }
+
+    .pear-workspace-shell__splitter {
+        display: none;
     }
 
     .pear-workspace-shell__body::after {

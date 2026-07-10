@@ -833,6 +833,7 @@ class StaticRuntimeContractTest(unittest.TestCase):
             update.rindex("build_remote_production_assets"),
             update.rindex("systemctl stop pear-zulip-dev"),
         )
+        self.assertIn("$REMOTE_ASSET_BUILD_DIR/static/generated", update)
         self.assertLess(
             update.rindex("systemctl stop pear-zulip-dev"), update.rindex("wait_for_remote_drain")
         )

@@ -472,6 +472,20 @@ run_test("quick-open searches the complete workspace and breadcrumbs reveal fold
     assert.equal(dismissed_search.aborted, true);
     assert.equal(document.activeElement, return_focus);
     assert.equal(input.placeholder, "Filter files");
+    const status_after_dismiss = test.root.querySelector("[data-role='status']").textContent;
+    dismissed_search.callbacks.success({
+        workspace_uuid: "workspace-quick-open",
+        workspace_revision: 1,
+        query: "late",
+        entries: [{...guide, ancestors: [current.root, docs]}],
+    });
+    dismissed_search.callbacks.error({kind: "transport", status: 503, message: "Too late"});
+    assert.equal(test.root.querySelector("[data-role='search-results']").hidden, true);
+    assert.equal(
+        test.root.querySelector("[data-role='status']").textContent,
+        status_after_dismiss,
+        "late quick-open callbacks cannot repaint normal explorer state",
+    );
 
     await test.controller.destroy();
     test.root.remove();

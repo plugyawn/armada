@@ -123,8 +123,10 @@ export type PearWorkspaceStoreAction =
           editRevision: number;
           eligibility: Exclude<PearWorkspaceRichEligibility, "unchecked">;
       } & PearWorkspaceDocumentIdentity)
+    | ({type: "source_changed"} & PearWorkspaceDocumentIdentity)
     | ({
-          type: "source_edited";
+          type: "source_flushed";
+          editRevision: number;
           text: string;
       } & PearWorkspaceDocumentIdentity)
     | ({type: "rich_edited"} & PearWorkspaceDocumentIdentity)
@@ -431,7 +433,7 @@ export function reduce_pear_workspace_store(
     const any_match = matching_document(state, identity);
 
     if (
-        action.type === "source_edited" ||
+        action.type === "source_changed" ||
         action.type === "rich_edited" ||
         action.type === "set_editor_mode" ||
         action.type === "set_rich_eligibility" ||
@@ -473,24 +475,44 @@ export function reduce_pear_workspace_store(
         });
     }
 
-    if (action.type === "source_edited") {
+    if (action.type === "source_changed") {
         if (document.editorMode !== "source") {
             return ignore_stale_response(state);
         }
-        if (action.text === document.currentText) {
-            return state;
-        }
         const edit_revision = document.editRevision + 1;
+        const next_document: PearWorkspaceDocumentSession = {
+            ...document,
+            editRevision: edit_revision,
+            serialization: {
+                state: "scheduled",
+                requestedRevision: edit_revision,
+                error: undefined,
+            },
+            richModeEligibility: "unchecked",
+            error: undefined,
+        };
+        return with_document(state, workspace, {
+            ...next_document,
+            state: document_state_after_change(next_document),
+        });
+    }
+
+    if (action.type === "source_flushed") {
+        if (
+            document.editorMode !== "source" ||
+            action.editRevision !== document.editRevision ||
+            document.serialization.requestedRevision !== action.editRevision
+        ) {
+            return ignore_stale_response(state);
+        }
         return with_document(
             state,
             workspace,
             acknowledge_noop_edit({
                 ...document,
                 currentText: action.text,
-                editRevision: edit_revision,
-                serializedRevision: edit_revision,
+                serializedRevision: action.editRevision,
                 serialization: {state: "idle", requestedRevision: undefined, error: undefined},
-                richModeEligibility: "unchecked",
                 error: undefined,
             }),
         );

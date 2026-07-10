@@ -291,9 +291,14 @@ export function reveal_pear_workspace_search_result(
     const entries = new Map(state.entries);
     const directories = new Map(state.directories);
     const expanded_paths = new Set(state.expandedPaths);
-    const chain = [state.entries.get(state.rootId), ...result.ancestors, result].filter(
-        (entry): entry is PearWorkspaceEntry => entry !== undefined,
-    );
+    const chain: PearWorkspaceEntry[] = [];
+    const seen_ids = new Set<string>();
+    for (const entry of [state.entries.get(state.rootId), ...result.ancestors, result]) {
+        if (entry !== undefined && !seen_ids.has(entry.entry_id)) {
+            chain.push(entry);
+            seen_ids.add(entry.entry_id);
+        }
+    }
     for (let index = 0; index < chain.length; index += 1) {
         const entry = chain[index]!;
         entries.set(entry.entry_id, entry);

@@ -224,7 +224,14 @@ PY
 )"
 
 ssh_root() {
-    ssh -F "$SSH_CONFIG" pear-staging-root "$@"
+    # Production asset builds can saturate this small VM long enough that the
+    # sshd process does not answer three consecutive keepalives.  Keep probing,
+    # but tolerate ten minutes of scheduler pressure before abandoning a
+    # guarded build; the remote command still exits normally on real failures.
+    ssh -F "$SSH_CONFIG" \
+        -o ServerAliveInterval=30 \
+        -o ServerAliveCountMax=20 \
+        pear-staging-root "$@"
 }
 
 ssh_zulip() {

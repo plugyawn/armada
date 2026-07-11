@@ -859,6 +859,12 @@ class StaticRuntimeContractTest(unittest.TestCase):
         self.assertNotIn("127.0.0.1:9991", verify)
         self.assertIn("verify_caddy_https_runtime", update)
         self.assertIn("verify_caddy_https_runtime", verify)
+        self.assertIn("checkout-index --force", update)
+        self.assertIn("verify_remote_deployed_source_clean", update)
+        self.assertLess(
+            update.rindex("verify_remote_deployed_source_clean"),
+            update.index('DEPLOYED_AT="$(date'),
+        )
         self.assertIn("validate_local_caddy_auth_pair", update)
         self.assertIn("curl --config -", common)
         self.assertNotIn("curl --user", common)

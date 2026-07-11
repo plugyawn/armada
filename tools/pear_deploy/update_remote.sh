@@ -479,6 +479,27 @@ verify_remote_cutover_source() {
     fi
 }
 
+verify_remote_deployed_source_clean() {
+    local remote_head
+    local tracked_status
+    local untracked_source
+    remote_head="$(ssh_zulip_clean "git rev-parse HEAD")"
+    tracked_status="$(ssh_zulip_clean "git status --porcelain --untracked-files=no")"
+    untracked_source="$(remote_untracked_source_files)"
+    if [[ "$remote_head" != "$LOCAL_SHA" ]]; then
+        fail "deployed remote HEAD is $remote_head, expected $LOCAL_SHA"
+    fi
+    if [[ -n "$tracked_status" ]]; then
+        echo "$tracked_status" >&2
+        fail "deployed remote tracked tree is dirty"
+    fi
+    if [[ -n "$untracked_source" ]]; then
+        echo "$untracked_source" >&2
+        fail "deployed remote source tree has unexpected untracked files"
+    fi
+    echo "Post-deploy source gate: remote HEAD and tracked/untracked source are clean."
+}
+
 verify_remote_disk_capacity() {
     local remote_asset_build_dir="/var/lib/pear-builds/asset-build-${LOCAL_SHA:0:12}"
     local runtime_path
@@ -752,6 +773,9 @@ for generated_file in \
     locale/language_name_map.json; do
     mv "$BUILD_ROOT/$generated_file" "$REMOTE_PATH/$generated_file"
 done
+git -C "$REMOTE_PATH" checkout-index --force -- \
+    static/generated/README.md \
+    web/generated/README.md
 rsync -a --include '*/' --include '*.mo' --include 'mobile.json' --exclude '*' \
     "$BUILD_ROOT/locale/" "$REMOTE_PATH/locale/"
 chown -R zulipdev:zulipdev \
@@ -1297,6 +1321,7 @@ else
 fi
 
 verify_remote_quiescence "Post-deploy quiescence"
+verify_remote_deployed_source_clean
 
 if [[ "$RUN_RUNTIME_SMOKE" == true ]]; then
     runtime_smoke="$REPO_ROOT/../tools/pear_dev_smoke.py"

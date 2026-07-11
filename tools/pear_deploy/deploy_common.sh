@@ -401,9 +401,9 @@ verify_caddy_https_runtime() (
     trap 'rm -rf "$temporary_directory"' EXIT
 
     app_status="$(caddy_authenticated_curl "$username" "$password_file" \
-        --silent --show-error --max-time 10 --output /dev/null \
+        --silent --show-error --location --max-redirs 3 --max-time 10 --output /dev/null \
         --write-out '%{http_code}' --url "https://$fqdn/devlogin")"
-    if [[ "$app_status" != "200" && "$app_status" != "301" && "$app_status" != "302" && "$app_status" != "303" ]]; then
+    if [[ "$app_status" != "200" ]]; then
         echo "authenticated Caddy app check returned HTTP ${app_status:-none}" >&2
         return 1
     fi

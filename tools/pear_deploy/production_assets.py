@@ -54,7 +54,7 @@ def validate_production_assets(repo_root: Path) -> dict[str, int]:
     chunks = stats.get("chunks")
     if not isinstance(chunks, dict):
         raise AssetValidationError("production webpack chunks are missing")
-    for entrypoint in ("app", "common"):
+    for entrypoint in ("app", "common", "dev-login"):
         entrypoint_chunks = chunks.get(entrypoint)
         if not isinstance(entrypoint_chunks, list) or not entrypoint_chunks:
             raise AssetValidationError(f"production webpack entrypoint is missing: {entrypoint}")

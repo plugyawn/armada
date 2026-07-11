@@ -147,6 +147,7 @@ class ProductionAssetsTest(unittest.TestCase):
         chunks = {
             "app": ["app.0123456789abcdef.js", "app.fedcba9876543210.css"],
             "common": ["common.1111111111111111.js"],
+            "dev-login": ["dev-login.2222222222222222.js"],
         }
         for filename in {filename for values in chunks.values() for filename in values}:
             (bundle_root / filename).write_text("asset", encoding="utf-8")
@@ -186,7 +187,7 @@ class ProductionAssetsTest(unittest.TestCase):
             self.make_fixture(root)
             self.assertEqual(
                 validate_production_assets(root),
-                {"webpack_bundles": 3, "static_manifest_paths": 2},
+                {"webpack_bundles": 4, "static_manifest_paths": 2},
             )
 
     def test_selects_caddy_verification_probes(self) -> None:
@@ -219,6 +220,17 @@ class ProductionAssetsTest(unittest.TestCase):
             self.make_fixture(root)
             (root / "prod-static/serve/webpack-bundles/app.0123456789abcdef.js").unlink()
             with self.assertRaisesRegex(AssetValidationError, "missing or empty"):
+                validate_production_assets(root)
+
+    def test_rejects_missing_dev_login_entrypoint(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            self.make_fixture(root)
+            stats_path = root / "webpack-stats-production.json"
+            stats = json.loads(stats_path.read_text())
+            del stats["chunks"]["dev-login"]
+            stats_path.write_text(json.dumps(stats))
+            with self.assertRaisesRegex(AssetValidationError, "entrypoint is missing: dev-login"):
                 validate_production_assets(root)
 
 
@@ -924,9 +936,10 @@ class StaticRuntimeContractTest(unittest.TestCase):
         self.assertIn("validate_local_caddy_auth_pair", update)
         self.assertIn("curl --config -", common)
         self.assertNotIn("curl --user", common)
-        self.assertIn('"$app_status" != "301"', common)
+        self.assertIn('"$app_status" != "200"', common)
+        self.assertIn("--location --max-redirs 3", common)
         self.assertIn('"$status" != "301"', update)
-        self.assertIn('"$AUTHENTICATED_SITE_CODE" == "301"', update)
+        self.assertIn('"$AUTHENTICATED_SITE_CODE" == "200"', update)
 
         disk_preflight = "verify_remote_disk_capacity"
         self.assertLess(update.rindex(disk_preflight), update.index('if [[ "$YES" != true ]]'))
@@ -1212,7 +1225,8 @@ sys.stdout.write(status)
                 text=True,
                 env={**environment, "FAKE_CURL_APP_STATUS": "301"},
             )
-            self.assertEqual(redirect.returncode, 0, redirect.stderr)
+            self.assertNotEqual(redirect.returncode, 0)
+            self.assertIn("app check returned HTTP 301", redirect.stderr)
 
             missing_header = subprocess.run(
                 command,

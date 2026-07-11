@@ -14,6 +14,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from tools.pear_deploy import runtime_config, workspace_helper_runtime
+from tools.pear_deploy.asset_reuse_policy import asset_rebuild_trigger
 from tools.pear_deploy.deployment_capacity import GIB, estimate_capacity
 from tools.pear_deploy.deployment_record import (
     DeploymentRecordError,
@@ -48,6 +49,32 @@ from tools.pear_deploy.workspace_helper_runtime import (
 REPO_ROOT = Path(__file__).resolve().parents[2]
 TEST_HASH = "$2b$12$" + "A" * 53
 MATCHING_TEST_HASH = "$2b$04$fRycSErhIEsfAHfYRqtIDuSu8dmFES90MoaYCROKQo7yj7HaG2d3i"
+
+
+class AssetReusePolicyTest(unittest.TestCase):
+    def test_backend_only_pear_changes_reuse_assets(self) -> None:
+        self.assertIsNone(
+            asset_rebuild_trigger(
+                [
+                    "zerver/lib/pear_workspace_io.py",
+                    "zerver/views/pear_workspace.py",
+                    "zerver/tests/test_pear_workspace_io.py",
+                    "tools/pear_deploy/update_remote.sh",
+                ]
+            )
+        )
+
+    def test_unknown_or_frontend_change_forces_rebuild(self) -> None:
+        self.assertEqual(
+            asset_rebuild_trigger(
+                ["zerver/lib/pear.py", "web/src/pear_panel.ts", "zerver/tests/test_pear.py"]
+            ),
+            "web/src/pear_panel.ts",
+        )
+        self.assertEqual(
+            asset_rebuild_trigger(["tools/pear_deploy/production_assets.py"]),
+            "tools/pear_deploy/production_assets.py",
+        )
 
 
 class DeploymentCapacityTest(unittest.TestCase):
@@ -87,6 +114,29 @@ class DeploymentCapacityTest(unittest.TestCase):
         self.assertEqual(estimate.build_swap_bytes, 2 * GIB)
         self.assertEqual(estimate.safety_bytes, GIB)
         self.assertEqual(estimate.reclaimable_asset_build_bytes, 100)
+        self.assertTrue(estimate.sufficient)
+
+    def test_reused_assets_do_not_reserve_build_or_swap_space(self) -> None:
+        with (
+            patch("tools.pear_deploy.deployment_capacity.allocated_bytes", return_value=0),
+            patch(
+                "tools.pear_deploy.deployment_capacity.shutil.disk_usage",
+                return_value=SimpleNamespace(free=2 * GIB),
+            ),
+        ):
+            estimate = estimate_capacity(
+                remote_path=Path("/remote/zulip"),
+                git_common_dir=Path("/remote/git"),
+                pear_skills_dir=Path("/remote/skills"),
+                snapshot_root=Path("/remote/snapshots"),
+                asset_build_dir=Path("/remote/asset-build"),
+                build_swap_bytes=0,
+                runtime_paths=[],
+                build_assets=False,
+            )
+
+        self.assertEqual(estimate.asset_build_bytes, 0)
+        self.assertEqual(estimate.build_swap_bytes, 0)
         self.assertTrue(estimate.sufficient)
 
 
@@ -861,6 +911,12 @@ class StaticRuntimeContractTest(unittest.TestCase):
         self.assertIn("verify_caddy_https_runtime", verify)
         self.assertIn("checkout-index --force", update)
         self.assertIn("verify_remote_deployed_source_clean", update)
+        self.assertIn("classify_production_asset_requirement", update)
+        self.assertIn("asset_source_zulip_sha=", update)
+        self.assertLess(
+            update.rindex("classify_production_asset_requirement"),
+            update.index('if [[ "$YES" != true ]]'),
+        )
         self.assertLess(
             update.rindex("verify_remote_deployed_source_clean"),
             update.index('DEPLOYED_AT="$(date'),

@@ -87,6 +87,7 @@ def estimate_capacity(
     asset_build_dir: Path,
     build_swap_bytes: int,
     runtime_paths: list[Path],
+    build_assets: bool = True,
 ) -> CapacityEstimate:
     if build_swap_bytes < 0:
         raise ValueError("build_swap_bytes must be nonnegative")
@@ -112,7 +113,7 @@ def estimate_capacity(
     # The isolated build duplicates source, can transiently hold old and new
     # compressed graphs, and is then copied once into a root-owned frozen tree.
     # Keep a 3 GiB output floor plus the separate 1 GiB filesystem margin.
-    asset_build_bytes = source_bytes + max(generated_bytes * 3, 3 * GIB)
+    asset_build_bytes = source_bytes + max(generated_bytes * 3, 3 * GIB) if build_assets else 0
     return CapacityEstimate(
         available_bytes=shutil.disk_usage(snapshot_root.parent).free,
         reclaimable_asset_build_bytes=allocated_bytes(asset_build_dir),
@@ -131,6 +132,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--snapshot-root", type=Path, required=True)
     parser.add_argument("--asset-build-dir", type=Path, required=True)
     parser.add_argument("--build-swap-bytes", type=int, default=0)
+    parser.add_argument("--reuse-assets", action="store_true")
     parser.add_argument("--runtime-path", type=Path, action="append", default=[])
     return parser
 
@@ -145,6 +147,7 @@ def main() -> None:
         asset_build_dir=args.asset_build_dir,
         build_swap_bytes=args.build_swap_bytes,
         runtime_paths=args.runtime_path,
+        build_assets=not args.reuse_assets,
     )
     print(f"remote_disk_available_bytes={estimate.available_bytes}")
     print(f"remote_disk_reclaimable_asset_build_bytes={estimate.reclaimable_asset_build_bytes}")

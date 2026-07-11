@@ -157,6 +157,21 @@ class PearWorkspaceIOTest(TestCase):
         with self.assertRaises(UnsafeWorkspaceEntryError):
             read_workspace_file(self.root, "directory.txt", max_bytes=100)
 
+    def test_execute_only_workspace_parent_can_be_traversed(self) -> None:
+        if not hasattr(os, "O_PATH"):
+            self.skipTest("execute-only ancestor traversal requires O_PATH")
+
+        self.write("README.md", b"workspace")
+        parent = self.root.parent
+        original_mode = stat.S_IMODE(parent.stat().st_mode)
+        try:
+            parent.chmod(0o711)
+            file = read_workspace_file(self.root, "README.md", max_bytes=64)
+        finally:
+            parent.chmod(original_mode)
+
+        self.assertEqual(file.data, b"workspace")
+
     def test_special_files_and_hardlinks_are_rejected_without_blocking(self) -> None:
         fifo = self.root / "pipe"
         os.mkfifo(fifo)

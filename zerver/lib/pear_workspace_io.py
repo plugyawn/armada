@@ -53,6 +53,9 @@ MAX_STREAM_HEADER_BYTES = 64 * 1024
 DEFAULT_ISOLATED_HELPER_PATH = Path("/usr/local/lib/pear-workspace-io")
 
 _DIRECTORY_OPEN_FLAGS = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC
+_ANCESTOR_DIRECTORY_OPEN_FLAGS = (
+    getattr(os, "O_PATH", os.O_RDONLY) | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC
+)
 _FILE_READ_FLAGS = os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC | os.O_NONBLOCK
 _FILE_WRITE_FLAGS = os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC
 
@@ -266,13 +269,37 @@ def _open_directory_at(parent_fd: int, component: str) -> int:
     return child_fd
 
 
+def _open_ancestor_directory_at(parent_fd: int, component: str) -> int:
+    """Open a trusted path component without requiring directory-list access.
+
+    Isolated workspace users intentionally only have execute permission on the
+    shared workspace parent, so they can reach their own root without listing
+    sibling workspace names.  Linux's O_PATH provides exactly that traversal
+    capability while O_DIRECTORY and O_NOFOLLOW preserve the component checks.
+    Platforms without O_PATH retain the ordinary directory-open behavior.
+    """
+
+    try:
+        child_fd = os.open(component, _ANCESTOR_DIRECTORY_OPEN_FLAGS, dir_fd=parent_fd)
+    except OSError as error:
+        raise _path_open_error(error, final=False) from error
+    child_stat = os.fstat(child_fd)
+    if not stat.S_ISDIR(child_stat.st_mode):  # nocoverage: O_DIRECTORY enforces this.
+        os.close(child_fd)
+        raise UnsafeWorkspaceEntryError("Workspace path contains a non-directory component.")
+    return child_fd
+
+
 @contextmanager
 def _open_workspace_root(root: str | Path) -> Iterator[tuple[int, os.stat_result]]:
     components = _validate_workspace_root(root)
     current_fd = os.open("/", _DIRECTORY_OPEN_FLAGS)
     try:
-        for component in components:
-            next_fd = _open_directory_at(current_fd, component)
+        for offset, component in enumerate(components):
+            if offset == len(components) - 1:
+                next_fd = _open_directory_at(current_fd, component)
+            else:
+                next_fd = _open_ancestor_directory_at(current_fd, component)
             os.close(current_fd)
             current_fd = next_fd
         root_stat = os.fstat(current_fd)

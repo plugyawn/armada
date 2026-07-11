@@ -20,6 +20,10 @@ from tools.pear_deploy.deployment_record import (
     atomic_write_deployment_record,
 )
 from tools.pear_deploy.freeze_asset_build import AssetFreezeError, freeze_asset_build
+from tools.pear_deploy.materialize_emoji_assets import (
+    EmojiMaterializationError,
+    materialize_generated_emoji,
+)
 from tools.pear_deploy.production_assets import (
     AssetValidationError,
     select_production_asset_probes,
@@ -684,6 +688,44 @@ class AssetBuildFreezeTest(unittest.TestCase):
                 with self.assertRaises(AssetFreezeError):
                     freeze_asset_build(build, destination_parent)
                 self.assertEqual(list(destination_parent.iterdir()), [])
+
+
+class EmojiAssetMaterializationTest(unittest.TestCase):
+    def test_materializes_only_the_known_cache_link_without_symlinks(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            build = root / "build"
+            emoji_link = build / "static/generated/emoji"
+            emoji_link.parent.mkdir(parents=True)
+            cache_root = root / "emoji-cache"
+            cache = cache_root / "cache-id/static/images"
+            cache.mkdir(parents=True)
+            (cache / "emoji.png").write_bytes(b"emoji")
+            (cache / "alias.png").symlink_to("emoji.png")
+            emoji_link.symlink_to(cache.parent)
+
+            self.assertTrue(
+                materialize_generated_emoji(build, emoji_cache_root=cache_root),
+            )
+
+            self.assertFalse(emoji_link.is_symlink())
+            self.assertEqual((emoji_link / "images/alias.png").read_bytes(), b"emoji")
+            self.assertFalse((emoji_link / "images/alias.png").is_symlink())
+            self.assertFalse(materialize_generated_emoji(build, emoji_cache_root=cache_root))
+
+    def test_rejects_an_emoji_link_outside_the_known_cache(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            build = root / "build"
+            emoji_link = build / "static/generated/emoji"
+            emoji_link.parent.mkdir(parents=True)
+            foreign = root / "foreign"
+            foreign.mkdir()
+            emoji_link.symlink_to(foreign)
+
+            with self.assertRaisesRegex(EmojiMaterializationError, "must resolve inside"):
+                materialize_generated_emoji(build, emoji_cache_root=root / "emoji-cache")
+            self.assertTrue(emoji_link.is_symlink())
 
 
 class DeploymentRecordTest(unittest.TestCase):

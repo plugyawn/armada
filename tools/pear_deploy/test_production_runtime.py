@@ -173,6 +173,15 @@ class ProductionAssetsTest(unittest.TestCase):
 
 
 class RuntimeConfigTest(unittest.TestCase):
+    def test_caddy_runtime_avoids_logging_the_auth_environment(self) -> None:
+        service_override = (
+            REPO_ROOT / "tools/pear_deploy/runtime/caddy-pear-basic-auth.conf"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn("EnvironmentFile=/etc/pear/caddy-basic-auth.env", service_override)
+        self.assertIn("ExecStart=/usr/bin/caddy run --config /etc/caddy/Caddyfile", service_override)
+        self.assertNotIn("--environ", service_override)
+
     def make_args(self, root: Path, **overrides: object) -> argparse.Namespace:
         values: dict[str, object] = {
             "repo_root": REPO_ROOT,
@@ -844,6 +853,8 @@ class StaticRuntimeContractTest(unittest.TestCase):
         self.assertIn("handle {", caddyfile)
         self.assertIn("reverse_proxy 127.0.0.1:9991", caddyfile)
         self.assertIn("/etc/pear/caddy-basic-auth.env", caddy_drop_in)
+        self.assertIn("ExecStart=/usr/bin/caddy run --config /etc/caddy/Caddyfile", caddy_drop_in)
+        self.assertNotIn("--environ", caddy_drop_in)
         self.assertNotIn("127.0.0.1:9991", update)
         self.assertNotIn("127.0.0.1:9991", verify)
         self.assertIn("verify_caddy_https_runtime", update)
@@ -851,6 +862,8 @@ class StaticRuntimeContractTest(unittest.TestCase):
         self.assertIn("validate_local_caddy_auth_pair", update)
         self.assertIn("curl --config -", common)
         self.assertNotIn("curl --user", common)
+        self.assertIn('"$status" != "301"', update)
+        self.assertIn('"$AUTHENTICATED_SITE_CODE" == "301"', update)
 
         disk_preflight = "verify_remote_disk_capacity"
         self.assertLess(update.rindex(disk_preflight), update.index('if [[ "$YES" != true ]]'))

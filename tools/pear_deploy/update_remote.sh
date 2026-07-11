@@ -366,7 +366,7 @@ verify_existing_remote_caddy_auth() {
         "$CADDY_BASICAUTH_PASSWORD_FILE" \
         --silent --show-error --max-time 10 --output /dev/null \
         --write-out '%{http_code}' --url "https://$FQDN/devlogin" || true)"
-    if [[ "$status" != "200" && "$status" != "302" && "$status" != "303" ]]; then
+    if [[ "$status" != "200" && "$status" != "301" && "$status" != "302" && "$status" != "303" ]]; then
         fail "installed Caddy rejected the supplied verification credential before snapshot (HTTP ${status:-none})"
     fi
     echo "Preflight: installed Caddy accepted the supplied verification credential through HTTPS."
@@ -1271,7 +1271,7 @@ for _ in $(seq 1 60); do
         "$CADDY_BASICAUTH_PASSWORD_FILE" \
         --silent --show-error --max-time 10 --output /dev/null \
         --write-out '%{http_code}' --url "https://$FQDN/devlogin" || true)"
-    if [[ "$SITE_CODE" == "401" && ( "$AUTHENTICATED_SITE_CODE" == "200" || "$AUTHENTICATED_SITE_CODE" == "302" || "$AUTHENTICATED_SITE_CODE" == "303" ) ]]; then
+    if [[ "$SITE_CODE" == "401" && ( "$AUTHENTICATED_SITE_CODE" == "200" || "$AUTHENTICATED_SITE_CODE" == "301" || "$AUTHENTICATED_SITE_CODE" == "302" || "$AUTHENTICATED_SITE_CODE" == "303" ) ]]; then
         break
     fi
     sleep 5
@@ -1279,7 +1279,7 @@ done
 if [[ "$SITE_CODE" != "401" ]]; then
     fail "Caddy basic-auth wall did not become healthy; last HTTP code: ${SITE_CODE:-none}"
 fi
-if [[ "$AUTHENTICATED_SITE_CODE" != "200" && "$AUTHENTICATED_SITE_CODE" != "302" && "$AUTHENTICATED_SITE_CODE" != "303" ]]; then
+if [[ "$AUTHENTICATED_SITE_CODE" != "200" && "$AUTHENTICATED_SITE_CODE" != "301" && "$AUTHENTICATED_SITE_CODE" != "302" && "$AUTHENTICATED_SITE_CODE" != "303" ]]; then
     fail "authenticated app route through Caddy did not become healthy; last HTTP code: ${AUTHENTICATED_SITE_CODE:-none}"
 fi
 verify_remote_production_assets

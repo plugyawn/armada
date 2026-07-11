@@ -1686,14 +1686,14 @@
     }
 }
 
-/* Chat/Workspace mode strip in the recipient bar. Pixel voice, accent
+/* Chat/README/Files room strip in the recipient bar. Pixel voice, accent
    underline on the active mode; no boxes. */
 .pear-workspace-tabs {
     display: inline-flex;
     min-width: 0;
     flex: 1 0 100%;
     align-items: center;
-    gap: var(--pear-space-4);
+    gap: 22px;
     margin: 0 42px 2px 26px;
     /* Lay out after the bar's controls, like the commit line. */
     order: 11;
@@ -2175,7 +2175,6 @@
         text-overflow: ellipsis;
         white-space: nowrap;
     }
-
 }
 
 #pear-wall {

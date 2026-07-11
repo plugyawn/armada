@@ -72,8 +72,11 @@ export type PearWorkspaceShellDependencies = {
 export type PearWorkspaceShellOptions = {
     root: HTMLElement;
     workspaceId: string;
+    initialRoom: PearWorkspaceRoom;
     dependencies?: Partial<PearWorkspaceShellDependencies>;
 };
+
+export type PearWorkspaceRoom = "readme" | "files";
 
 type WorkspaceTab = PearWorkspaceShellTab;
 type LocationHistoryMode = "none" | "push" | "replace";
@@ -81,6 +84,7 @@ type LocationHistoryMode = "none" | "push" | "replace";
 type CachedWorkspaceShellState = {
     tabs: WorkspaceTab[];
     activePath: string | undefined;
+    lastFilesPath: string | undefined;
     expandedPaths: string[];
     editor: PearWorkspaceEditorPreferences;
 };
@@ -126,6 +130,7 @@ export type PearWorkspaceShellDebugState = {
     activePath: string | undefined;
     renderedTreeRows: number;
     explorerWidth: number;
+    room: PearWorkspaceRoom;
     metrics: ReturnType<typeof pear_workspace_metrics_snapshot>;
 };
 
@@ -134,6 +139,7 @@ export type PearWorkspaceShellController = {
     refresh: () => void;
     openQuickOpen: () => void;
     applyLocation: () => void;
+    setRoom: (room: PearWorkspaceRoom) => void;
     getDebugState: () => PearWorkspaceShellDebugState;
     destroy: () => Promise<void>;
 };
@@ -257,12 +263,16 @@ export function create_pear_workspace_shell(
     );
     const file_menu = required_element(options.root, "[data-role='file-menu']");
     const file_dialog_layer = required_element(options.root, "[data-role='file-dialog-layer']");
+    const shell_root = required_element(options.root, ".pear-workspace-shell");
+    const readme_empty = required_element(options.root, "[data-role='readme-empty']");
 
     let descriptor: PearWorkspaceDescriptor | undefined;
     let tree: PearWorkspaceTreeState | undefined;
     let destroyed = false;
     let filter = "";
     let active_path = restored_state?.activePath;
+    let last_files_path = restored_state?.lastFilesPath ?? restored_state?.activePath;
+    let room = options.initialRoom;
     const tabs: WorkspaceTab[] =
         restored_state?.tabs.map((tab) => ({...tab, entry: {...tab.entry}, dirty: false})) ?? [];
     let editor_snapshot: PearWorkspaceEditorSnapshot | undefined;
@@ -308,11 +318,21 @@ export function create_pear_workspace_shell(
 
     const active_tab = (): WorkspaceTab | undefined => tabs.find((tab) => tab.path === active_path);
 
+    const apply_room_chrome = (): void => {
+        shell_root.dataset["room"] = room;
+        shell_root.setAttribute(
+            "aria-label",
+            room === "readme" ? "README context" : "Workspace files",
+        );
+    };
+
+    apply_room_chrome();
+
     const sync_location = (history_mode: Exclude<LocationHistoryMode, "none">): void => {
         const mode = editor_snapshot?.activeDocument?.editorMode ?? editor.getPreferences().mode;
         write_pear_workspace_location(
             {
-                view: "workspace",
+                view: room,
                 workspaceId: options.workspaceId,
                 path: active_path ?? null,
                 mode: active_path === undefined ? null : mode,
@@ -497,6 +517,9 @@ export function create_pear_workspace_shell(
         if (tree !== undefined) {
             explorer.render(tree, filter);
         }
+        const state = readme_state();
+        shell_root.dataset["readmeState"] = state;
+        readme_empty.hidden = room !== "readme" || state !== "absent";
         update_files_context();
     };
 
@@ -615,6 +638,9 @@ export function create_pear_workspace_shell(
         }
         tree = select_pear_workspace_entry(tree, entry.entry_id);
         active_path = entry.path;
+        if (room === "files" && entry.path.toLowerCase() !== "readme.md") {
+            last_files_path = entry.path;
+        }
         const existing = tabs.find((tab) => tab.path === entry.path);
         if (existing !== undefined) {
             existing.entry = entry;
@@ -917,9 +943,62 @@ export function create_pear_workspace_shell(
         });
     };
 
+    const open_readme = (): void => {
+        if (destroyed || descriptor === undefined || tree === undefined) {
+            return;
+        }
+        const cached_readme = [...tree.entries.values()].find(
+            (entry) => entry.kind === "file" && entry.path.toLowerCase() === "readme.md",
+        );
+        const default_readme =
+            descriptor.default_entry?.kind === "file" &&
+            descriptor.default_entry.path.toLowerCase() === "readme.md"
+                ? descriptor.default_entry
+                : undefined;
+        const entry = cached_readme ?? default_readme;
+        if (entry !== undefined) {
+            location_mode_request = "rich";
+            activate_entry(entry, false, "none");
+            return;
+        }
+        if (readme_state() === "absent") {
+            render_tree();
+            sync_location("replace");
+            return;
+        }
+        location_mode_request = "rich";
+        reveal_path("README.md", true);
+    };
+
+    const set_room = (next_room: PearWorkspaceRoom): void => {
+        if (destroyed || room === next_room) {
+            return;
+        }
+        if (
+            next_room === "readme" &&
+            active_path !== undefined &&
+            active_path.toLowerCase() !== "readme.md"
+        ) {
+            last_files_path = active_path;
+        }
+        room = next_room;
+        apply_room_chrome();
+        render_tree();
+        render_surface();
+        if (room === "readme") {
+            open_readme();
+            return;
+        }
+        if (last_files_path !== undefined && last_files_path !== active_path) {
+            reveal_path(last_files_path, true);
+        } else {
+            sync_location("replace");
+        }
+    };
+
     const apply_location = (): void => {
         const location = read_pear_workspace_location();
-        if (location.view !== "workspace" || location.workspaceId !== options.workspaceId) {
+        if (location.view !== room || location.workspaceId !== options.workspaceId) {
             return;
         }
         location_mode_request = location.mode;
@@ -1125,8 +1204,10 @@ export function create_pear_workspace_shell(
         load_directory(tree.rootId, true);
         const location = read_pear_workspace_location();
         const restored_active = active_tab();
-        if (
-            location.view === "workspace" &&
+        if (room === "readme") {
+            open_readme();
+        } else if (
+            location.view === "files" &&
             location.workspaceId === options.workspaceId &&
             location.path !== undefined
         ) {
@@ -1401,6 +1482,11 @@ export function create_pear_workspace_shell(
 
                 break;
             }
+            case "create-readme": {
+                files?.createReadme();
+
+                break;
+            }
             case "conflict-reload": {
                 void editor.resolveConflict("reload");
 
@@ -1568,6 +1654,7 @@ export function create_pear_workspace_shell(
         refresh: refresh_workspace,
         openQuickOpen: open_quick_open,
         applyLocation: apply_location,
+        setRoom: set_room,
         getDebugState(): PearWorkspaceShellDebugState {
             return {
                 descriptor,
@@ -1576,6 +1663,7 @@ export function create_pear_workspace_shell(
                 activePath: active_path,
                 renderedTreeRows: explorer.getRenderedRowCount(),
                 explorerWidth: explorer_width,
+                room,
                 metrics: pear_workspace_metrics_snapshot(),
             };
         },
@@ -1615,6 +1703,7 @@ export function create_pear_workspace_shell(
             cache_shell_state(options.workspaceId, {
                 tabs: cached_tabs,
                 activePath: active_path,
+                lastFilesPath: last_files_path,
                 expandedPaths: [...(tree?.expandedPaths ?? [])].slice(
                     -shell_cached_expansion_limit,
                 ),

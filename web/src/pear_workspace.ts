@@ -12,13 +12,15 @@ import {
     finish_pear_workspace_metric,
 } from "./pear_workspace_metrics.ts";
 
-export type PearWorkspaceTab = "chat" | "workspace";
+export type PearWorkspaceTab = "chat" | "readme" | "files";
+type PearWorkspaceRoom = Exclude<PearWorkspaceTab, "chat">;
 
 type WorkspaceShellController = {
     ready: Promise<void>;
     refresh: () => void;
     openQuickOpen: () => void;
     applyLocation: () => void;
+    setRoom: (room: PearWorkspaceRoom) => void;
     destroy: () => Promise<void>;
 };
 
@@ -235,7 +237,7 @@ async function mount_shell(): Promise<void> {
         await shell_teardown;
         if (
             generation !== shell_generation ||
-            current_tab !== "workspace" ||
+            current_tab === "chat" ||
             current_workspace_id !== workspace_id ||
             !host.isConnected
         ) {
@@ -244,13 +246,17 @@ async function mount_shell(): Promise<void> {
         const module = await import("./pear_workspace_shell.ts");
         if (
             generation !== shell_generation ||
-            current_tab !== "workspace" ||
+            !(["readme", "files"] as const).includes(current_tab) ||
             current_workspace_id !== workspace_id ||
             !host.isConnected
         ) {
             return;
         }
-        mounted = module.create_pear_workspace_shell({root: host, workspaceId: workspace_id});
+        mounted = module.create_pear_workspace_shell({
+            root: host,
+            workspaceId: workspace_id,
+            initialRoom: current_tab,
+        });
         shell = mounted;
         await mounted.ready;
         finish_pear_workspace_metric("workspace_click_to_shell");
@@ -288,6 +294,9 @@ function show_pane(): void {
     sync_topic_bar();
     window.scrollTo(0, 0);
     void mount_shell();
+    if (current_tab !== "chat") {
+        shell?.setRoom(current_tab);
+    }
     if (shell !== undefined) {
         finish_pear_workspace_metric("workspace_click_to_shell");
     }
@@ -319,7 +328,11 @@ function teardown_context(): void {
 
 function remembered_tab(key: string): PearWorkspaceTab {
     try {
-        return sessionStorage.getItem(`pear-tab:${key}`) === "workspace" ? "workspace" : "chat";
+        const remembered = sessionStorage.getItem(`pear-tab:${key}`);
+        if (remembered === "readme" || remembered === "files") {
+            return remembered;
+        }
+        return remembered === "workspace" ? "readme" : "chat";
     } catch {
         return "chat";
     }
@@ -334,7 +347,7 @@ function remember_tab(tab: PearWorkspaceTab): void {
 }
 
 export function pane_is_open(): boolean {
-    return current_tab === "workspace";
+    return current_tab !== "chat";
 }
 
 export function refresh_tab_strips(): void {
@@ -342,22 +355,22 @@ export function refresh_tab_strips(): void {
 }
 
 export function set_tab(tab: PearWorkspaceTab, update_history = true): void {
-    if (tab === current_tab || (tab === "workspace" && !has_workspace())) {
+    if (tab === current_tab || (tab !== "chat" && !has_workspace())) {
         return;
     }
     current_tab = tab;
-    if (tab === "workspace") {
+    if (tab !== "chat") {
         begin_pear_workspace_metric("workspace_click_to_shell");
     }
     if (update_history) {
         write_pear_workspace_location(
-            {view: tab, workspaceId: tab === "workspace" ? (current_workspace_id ?? null) : null},
+            {view: tab, workspaceId: tab === "chat" ? null : (current_workspace_id ?? null)},
             "push",
         );
     }
     remember_tab(tab);
     update_tab_strips();
-    if (tab === "workspace") {
+    if (tab !== "chat") {
         show_pane();
     } else {
         hide_pane();
@@ -390,12 +403,12 @@ export function sync(options: {
         }
         const requested_location = read_pear_workspace_location();
         const restored =
-            requested_location.view === "workspace" &&
+            requested_location.view !== "chat" &&
             requested_location.workspaceId === next_workspace_id
-                ? "workspace"
+                ? requested_location.view
                 : remembered_tab(next_key);
-        if (restored === "workspace" && has_workspace()) {
-            current_tab = "workspace";
+        if (restored !== "chat" && has_workspace()) {
+            current_tab = restored;
             show_pane();
         }
     } else if (workspace_changed && pane_is_open()) {
@@ -415,7 +428,7 @@ export function sync(options: {
     write_pear_workspace_location(
         {
             view: current_tab,
-            workspaceId: current_tab === "workspace" ? (current_workspace_id ?? null) : null,
+            workspaceId: current_tab === "chat" ? null : (current_workspace_id ?? null),
         },
         "replace",
     );
@@ -432,7 +445,7 @@ export function refresh_if_open_on_settle(run_active: boolean): void {
 function on_workspace_tab_click(this: HTMLElement, event: JQuery.ClickEvent): void {
     event.preventDefault();
     const tab = $(this).attr("data-pear-tab");
-    if (tab === "chat" || tab === "workspace") {
+    if (tab === "chat" || tab === "readme" || tab === "files") {
         set_tab(tab);
     }
 }
@@ -496,7 +509,7 @@ function on_workspace_tab_keydown(this: HTMLButtonElement, event: JQuery.KeyDown
             next_index = (current_index + 1) % tabs.length;
     }
     const next_tab = tabs[next_index]?.dataset["pearTab"];
-    if (next_tab !== "chat" && next_tab !== "workspace") {
+    if (next_tab !== "chat" && next_tab !== "readme" && next_tab !== "files") {
         return;
     }
     event.preventDefault();
@@ -506,6 +519,9 @@ function on_workspace_tab_keydown(this: HTMLButtonElement, event: JQuery.KeyDown
 }
 
 async function mount_and_open_quick_open(): Promise<void> {
+    if (current_tab === "readme") {
+        set_tab("files");
+    }
     await mount_shell();
     shell?.openQuickOpen();
 }
@@ -515,6 +531,9 @@ function on_quick_open_event(event: Event): void {
         return;
     }
     event.preventDefault();
+    if (current_tab === "readme") {
+        set_tab("files");
+    }
     if (shell !== undefined) {
         shell.openQuickOpen();
         return;

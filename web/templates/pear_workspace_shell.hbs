@@ -1,7 +1,12 @@
-<section class="pear-workspace-shell" aria-label="Workspace">
+<section
+    class="pear-workspace-shell"
+    aria-label="Workspace"
+    data-room="files"
+    data-readme-state="unknown"
+>
     <header class="pear-workspace-shell__header">
         <div class="pear-workspace-shell__identity">
-            <strong data-role="workspace-title">Workspace</strong>
+            <strong data-role="workspace-title">Files</strong>
             <span data-role="workspace-meta"></span>
         </div>
         <button
@@ -147,6 +152,19 @@
                     type="button"
                     data-action="conflict-overwrite"
                 >Overwrite</button>
+            </div>
+            <div
+                class="pear-workspace-readme-empty"
+                data-role="readme-empty"
+                hidden
+            >
+                <span
+                    class="pear-workspace-readme-empty__glyph"
+                    aria-hidden="true"
+                >README</span>
+                <strong>No README yet</strong>
+                <span>Create the durable context layer for this topic.</span>
+                <button type="button" data-action="create-readme">Create README</button>
             </div>
             <div class="pear-workspace-shell__surface">
                 <div

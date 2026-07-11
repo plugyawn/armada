@@ -1,5 +1,5 @@
 export type PearWorkspaceLocation = {
-    view: "chat" | "workspace";
+    view: "chat" | "readme" | "files";
     workspaceId: string | undefined;
     path: string | undefined;
     mode: "rich" | "source" | undefined;
@@ -8,8 +8,14 @@ export type PearWorkspaceLocation = {
 export function read_pear_workspace_location(): PearWorkspaceLocation {
     const url = new URL(window.location.href);
     const mode = url.searchParams.get("pear_mode");
+    const requested_view = url.searchParams.get("pear_view");
     return {
-        view: url.searchParams.get("pear_view") === "workspace" ? "workspace" : "chat",
+        view:
+            requested_view === "readme"
+                ? "readme"
+                : requested_view === "files" || requested_view === "workspace"
+                  ? "files"
+                  : "chat",
         workspaceId: url.searchParams.get("pear_workspace") ?? undefined,
         path: url.searchParams.get("pear_path") ?? undefined,
         mode: mode === "rich" || mode === "source" ? mode : undefined,
@@ -18,7 +24,7 @@ export function read_pear_workspace_location(): PearWorkspaceLocation {
 
 export function write_pear_workspace_location(
     update: {
-        view?: "chat" | "workspace";
+        view?: "chat" | "readme" | "files";
         workspaceId?: string | null;
         path?: string | null;
         mode?: "rich" | "source" | null;
@@ -32,8 +38,8 @@ export function write_pear_workspace_location(
         url.searchParams.delete("pear_path");
         url.searchParams.delete("pear_mode");
     } else {
-        if (update.view === "workspace") {
-            url.searchParams.set("pear_view", "workspace");
+        if (update.view === "readme" || update.view === "files") {
+            url.searchParams.set("pear_view", update.view);
         }
         if (update.workspaceId === null) {
             url.searchParams.delete("pear_workspace");

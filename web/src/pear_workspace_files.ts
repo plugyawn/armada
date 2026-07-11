@@ -46,6 +46,7 @@ export type PearWorkspaceFilesOptions = {
 
 export type PearWorkspaceFilesController = {
     updateContext: (context: PearWorkspaceFilesContext) => void;
+    createReadme: () => void;
     getDebugState: () => {
         menuOpen: boolean;
         dialogKind: "create" | "delete" | "history" | "rename" | undefined;
@@ -976,6 +977,11 @@ export function create_pear_workspace_files(
     render_menu();
 
     return {
+        createReadme(): void {
+            if (!destroyed) {
+                run_action("create-readme");
+            }
+        },
         updateContext(next_context): void {
             if (destroyed) {
                 return;

@@ -2180,6 +2180,12 @@ class PearWorkerRuntime:
         user_input_provider: PearUserInputProvider | None = None,
     ) -> Sequence[PearWorkerToolResult]:
         if self.tool_runner is not None:
+            if collaboration_mode is None and user_input_provider is None:
+                return self.tool_runner(
+                    active_session,
+                    task,
+                    event_callback=event_callback,
+                )
             return self.tool_runner(
                 active_session,
                 task,

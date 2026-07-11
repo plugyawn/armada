@@ -3851,13 +3851,20 @@ class PearWorkerTurn:
 
     def run_runtime_segment(self, segment_task: str, *, segment_index: int) -> dict[str, Any]:
         self.raise_if_cancel_requested()
-        segment_result = self.handler.worker_runtime.run(
-            active_session=self.active_session,
-            task=segment_task,
-            event_callback=self.handle_transcript_event,
-            collaboration_mode=self.collaboration_mode,
-            user_input_provider=self.request_user_answers,
-        )
+        if self.collaboration_mode is None:
+            segment_result = self.handler.worker_runtime.run(
+                active_session=self.active_session,
+                task=segment_task,
+                event_callback=self.handle_transcript_event,
+            )
+        else:
+            segment_result = self.handler.worker_runtime.run(
+                active_session=self.active_session,
+                task=segment_task,
+                event_callback=self.handle_transcript_event,
+                collaboration_mode=self.collaboration_mode,
+                user_input_provider=self.request_user_answers,
+            )
         self.raise_if_cancel_requested()
         segment_summary = pear_worker_summary_from_tool_results(
             segment_result["tool_results"]

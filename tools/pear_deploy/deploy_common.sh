@@ -403,7 +403,7 @@ verify_caddy_https_runtime() (
     app_status="$(caddy_authenticated_curl "$username" "$password_file" \
         --silent --show-error --max-time 10 --output /dev/null \
         --write-out '%{http_code}' --url "https://$fqdn/devlogin")"
-    if [[ "$app_status" != "200" && "$app_status" != "302" && "$app_status" != "303" ]]; then
+    if [[ "$app_status" != "200" && "$app_status" != "301" && "$app_status" != "302" && "$app_status" != "303" ]]; then
         echo "authenticated Caddy app check returned HTTP ${app_status:-none}" >&2
         return 1
     fi

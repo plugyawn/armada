@@ -862,6 +862,7 @@ class StaticRuntimeContractTest(unittest.TestCase):
         self.assertIn("validate_local_caddy_auth_pair", update)
         self.assertIn("curl --config -", common)
         self.assertNotIn("curl --user", common)
+        self.assertIn('"$app_status" != "301"', common)
         self.assertIn('"$status" != "301"', update)
         self.assertIn('"$AUTHENTICATED_SITE_CODE" == "301"', update)
 
@@ -1090,11 +1091,11 @@ headers_path = None
 if "--dump-header" in arguments:
     headers_path = Path(arguments[arguments.index("--dump-header") + 1])
 
-status = "200"
+status = "200" if authenticated else "401"
+if authenticated and url.endswith("/devlogin"):
+    status = os.environ.get("FAKE_CURL_APP_STATUS", status)
 headers = []
-if not authenticated:
-    status = "401"
-elif "/static/webpack-bundles/" in url:
+if authenticated and "/static/webpack-bundles/" in url:
     headers.extend(
         [
             "Cache-Control: public, max-age=31536000, immutable",
@@ -1141,6 +1142,15 @@ sys.stdout.write(status)
             self.assertEqual(valid.returncode, 0, valid.stderr)
             self.assertIn("static_cache=valid", valid.stdout)
             self.assertNotIn("dummy-secret", curl_log.read_text(encoding="utf-8"))
+
+            redirect = subprocess.run(
+                command,
+                check=False,
+                capture_output=True,
+                text=True,
+                env={**environment, "FAKE_CURL_APP_STATUS": "301"},
+            )
+            self.assertEqual(redirect.returncode, 0, redirect.stderr)
 
             missing_header = subprocess.run(
                 command,

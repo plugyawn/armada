@@ -288,6 +288,24 @@ async function begin_local_save(test, text = "local") {
     assert.equal(test.puts.length, 1);
 }
 
+run_test("a preferred Rich mode survives the asynchronous file fetch", async () => {
+    const test = harness();
+    await test.controller.open(entry("README.md"), "rich");
+    assert.equal(test.rich_loads, 0);
+    assert.equal(test.source_loads, 0);
+
+    test.gets[0].callbacks.success(file("README.md"));
+    for (let index = 0; index < 4; index += 1) {
+        await Promise.resolve();
+    }
+    assert.equal(test.rich_loads, 1);
+    assert.equal(test.source_loads, 0);
+    assert.equal(test.controller.getSnapshot().activeDocument.editorMode, "rich");
+
+    await test.controller.destroy();
+    test.root.remove();
+});
+
 run_test("Source dirty feedback precedes exact flush and a revision-bound PUT", async () => {
     const test = harness();
     await open_text(test);

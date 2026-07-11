@@ -609,20 +609,15 @@ export function create_pear_workspace_shell(
     });
 
     const open_entry = async (entry: PearWorkspaceEntry): Promise<void> => {
-        await editor.open(entry);
-        if (destroyed || active_path !== entry.path) {
-            return;
-        }
         const requested_mode =
             room === "readme" && entry.path.toLowerCase() === "readme.md"
                 ? "rich"
                 : location_mode_request;
-        if (requested_mode === undefined) {
-            return;
-        }
         location_mode_request = undefined;
-        await editor.switchMode(requested_mode);
-        sync_location("replace");
+        await editor.open(entry, requested_mode);
+        if (!destroyed && active_path === entry.path && requested_mode !== undefined) {
+            sync_location("replace");
+        }
     };
 
     const activate_entry = (

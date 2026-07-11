@@ -114,7 +114,7 @@ export type PearWorkspaceEditorController = {
         limits: {rawBytes: number | null; textBytes: number; writable: boolean},
         preferences?: PearWorkspaceEditorPreferences,
     ) => void;
-    open: (entry: PearWorkspaceEntry) => Promise<void>;
+    open: (entry: PearWorkspaceEntry, preferredMode?: "rich" | "source") => Promise<void>;
     closeActive: () => Promise<boolean>;
     switchMode: (mode: "rich" | "source") => Promise<boolean>;
     save: () => Promise<void>;

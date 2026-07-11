@@ -667,6 +667,15 @@ class AssetBuildFreezeTest(unittest.TestCase):
             self.assertEqual((frozen / "locale/en/mobile.json").read_bytes(), b"mobile")
             self.assertFalse((frozen / "locale/en/source.json").exists())
 
+            ignored_locale_source = build / "locale/en/LC_MESSAGES/ignored.po"
+            ignored_locale_source.write_bytes(b"source")
+            os.link(
+                ignored_locale_source,
+                build / "locale/en/LC_MESSAGES/ignored-copy.po",
+            )
+            frozen = freeze_asset_build(build, destination_parent)
+            self.assertFalse((frozen / "locale/en/LC_MESSAGES/ignored.po").exists())
+
     def test_freeze_rejects_symlinks_hardlinks_and_writable_entries(self) -> None:
         for hostile_kind in ("symlink", "hardlink", "writable"):
             with (

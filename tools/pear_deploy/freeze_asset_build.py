@@ -210,11 +210,12 @@ def _copy_directory_contents(
             finally:
                 os.close(source_child)
         elif stat.S_ISREG(entry_stat.st_mode):
+            if generated_locale_only and not (name.endswith(".mo") or name == "mobile.json"):
+                continue
             if entry_stat.st_nlink != 1:
                 _fail(f"asset file must be single-link: {entry_label}")
             _safe_mode(entry_stat, label=entry_label)
-            if not generated_locale_only or name.endswith(".mo") or name == "mobile.json":
-                _copy_regular_file(source_fd, target_fd, name, label=entry_label)
+            _copy_regular_file(source_fd, target_fd, name, label=entry_label)
         else:
             _fail(f"asset build contains a symlink or special node: {entry_label}")
     if sorted(os.listdir(source_fd)) != names:

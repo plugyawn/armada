@@ -617,7 +617,7 @@ nohup env \
     PATH="$VENV_ROOT/bin:$PATH" \
     VIRTUAL_ENV="$VENV_ROOT" \
     PYTHONNOUSERSITE=1 \
-    bash -c "set -e; ZULIP_DEV_PRODUCTION_ASSETS=1 \"$VENV_ROOT/bin/python3\" -E ./tools/update-prod-static && \"$VENV_ROOT/bin/python3\" -E tools/pear_deploy/production_assets.py --repo-root . && printf '\\nPEAR_PRODUCTION_ASSETS_OK\\n'" \
+    bash -c "set -e; ZULIP_DEV_PRODUCTION_ASSETS=1 \"$VENV_ROOT/bin/python3\" -E ./tools/update-prod-static && \"$VENV_ROOT/bin/python3\" -E tools/pear_deploy/production_assets.py --repo-root . && for generated_path in prod-static static/generated static/webpack-bundles static/images/landing-page/hello/generated web/generated locale; do [ ! -e \"\$generated_path\" ] || find \"\$generated_path\" -exec chmod go-w {} +; done && printf '\\nPEAR_PRODUCTION_ASSETS_OK\\n'" \
     >"$BUILD_LOG" 2>&1 < /dev/null &
 printf '%s\n' "$!" >"$BUILD_PID"
 BUILD

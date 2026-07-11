@@ -75,7 +75,7 @@ function descriptor(workspace_id, revision = 1, overrides = {}) {
     };
 }
 
-function harness(workspace_id) {
+function harness(workspace_id, initial_room = "files") {
     const root = document.createElement("div");
     document.body.append(root);
     const descriptors = [];
@@ -168,6 +168,7 @@ function harness(workspace_id) {
         const state = {
             options,
             contexts: [],
+            readmeCreates: 0,
             destroyed: false,
             updateContext(context) {
                 this.contexts.push(context);
@@ -180,6 +181,9 @@ function harness(workspace_id) {
                     awaitingRevision: undefined,
                 };
             },
+            createReadme() {
+                this.readmeCreates += 1;
+            },
             destroy() {
                 this.destroyed = true;
             },
@@ -191,6 +195,7 @@ function harness(workspace_id) {
     const controller = workspace_shell.create_pear_workspace_shell({
         root,
         workspaceId: workspace_id,
+        initialRoom: initial_room,
         dependencies: {
             getWorkspace(id, callbacks) {
                 const record = {id, callbacks, aborted: false};
@@ -262,6 +267,59 @@ function harness(workspace_id) {
     };
 }
 
+run_test("README and Files rooms share one editor and restore the last working file", async () => {
+    const test = harness("workspace-rooms");
+    const working_file = entry("fast-path.ts");
+    const readme = entry("README.md");
+    const current = descriptor("workspace-rooms", 1, {
+        default_path: working_file.path,
+        default_entry: working_file,
+    });
+    test.send_descriptor(current);
+    test.send_tree(0, current.root, [working_file, readme]);
+    await Promise.resolve();
+    assert.equal(test.controller.getDebugState().activePath, working_file.path);
+    assert.equal(test.controller.getDebugState().room, "files");
+
+    test.controller.setRoom("readme");
+    await Promise.resolve();
+    assert.equal(test.controller.getDebugState().room, "readme");
+    assert.equal(test.controller.getDebugState().activePath, "README.md");
+    assert.equal(test.root.querySelector(".pear-workspace-shell").dataset.room, "readme");
+    assert.equal(test.editors.length, 1, "room changes keep the editor session warm");
+    assert.equal(test.editors[0].modes.at(-1), "rich");
+
+    test.controller.setRoom("files");
+    await Promise.resolve();
+    assert.equal(test.controller.getDebugState().room, "files");
+    assert.equal(test.controller.getDebugState().activePath, working_file.path);
+    assert.equal(test.editors.length, 1);
+
+    await test.controller.destroy();
+    test.root.remove();
+});
+
+run_test("README room offers an intentional empty state", async () => {
+    const test = harness("workspace-readme-empty", "readme");
+    const current = descriptor("workspace-readme-empty", 1, {
+        capabilities: {
+            ...descriptor("unused").capabilities,
+            create_entry: true,
+        },
+    });
+    test.send_descriptor(current);
+    test.send_tree(0, current.root, []);
+    const empty_state = test.root.querySelector("[data-role='readme-empty']");
+    assert.equal(empty_state.hidden, false);
+    assert.equal(test.root.querySelector(".pear-workspace-shell").dataset.readmeState, "absent");
+
+    test.click(empty_state.querySelector("[data-action='create-readme']"));
+    assert.equal(test.file_controllers[0].readmeCreates, 1);
+
+    await test.controller.destroy();
+    test.root.remove();
+});
+
 run_test("Ask Pear fills the existing compose with active file context", async () => {
     const test = harness("workspace-compose");
     const current = descriptor("workspace-compose");
@@ -314,7 +372,7 @@ run_test("URL path and mode follow navigation and popstate without remounting", 
     window.history.replaceState(
         {},
         "",
-        "/?pear_view=workspace&pear_workspace=workspace-location&pear_path=A.md&pear_mode=rich",
+        "/?pear_view=files&pear_workspace=workspace-location&pear_path=A.md&pear_mode=rich",
     );
     const test = harness("workspace-location");
     const a = entry("A.md");
@@ -337,7 +395,7 @@ run_test("URL path and mode follow navigation and popstate without remounting", 
     window.history.replaceState(
         {},
         "",
-        "/?pear_view=workspace&pear_workspace=workspace-location&pear_path=A.md&pear_mode=source",
+        "/?pear_view=files&pear_workspace=workspace-location&pear_path=A.md&pear_mode=source",
     );
     window.dispatchEvent(new window.PopStateEvent("popstate"));
     await Promise.resolve();

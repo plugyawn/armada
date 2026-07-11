@@ -929,12 +929,13 @@ run_test("topic header controls template matches the retired jQuery skeleton", (
     assert.match(html, /class="pear-topic-header-runtime-separator"\s+aria-hidden="true"\s*>·</);
     // The runtime button and the branch/work controls carry the header key.
     assert.equal(html.split("data-pear-header-key").length - 1, 4);
-    // Two header controls plus Chat and Workspace.
-    assert.equal((html.match(/<button\s+type="button"/g) ?? []).length, 4);
+    // Two header controls plus Chat, README, and Files.
+    assert.equal((html.match(/<button\s+type="button"/g) ?? []).length, 5);
     for (const marker of [
         'class="pear-workspace-tabs pear-workspace-tabs-hidden"',
         'data-pear-tab="chat"',
-        'data-pear-tab="workspace"',
+        'data-pear-tab="readme"',
+        'data-pear-tab="files"',
     ]) {
         assert.ok(html.includes(marker), `missing: ${marker}`);
     }

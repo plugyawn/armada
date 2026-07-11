@@ -16,13 +16,15 @@ const dom = new JSDOM(
                 <div class="message_header_stream" data-height="42" data-header="old">
                     <span class="pear-workspace-tabs pear-workspace-tabs-hidden" role="tablist">
                         <button class="pear-workspace-mode-tab pear-workspace-tab-selected" data-pear-tab="chat" role="tab">Chat</button>
-                        <button class="pear-workspace-mode-tab" data-pear-tab="workspace" role="tab">Workspace</button>
+                        <button class="pear-workspace-mode-tab" data-pear-tab="readme" role="tab">README</button>
+                        <button class="pear-workspace-mode-tab" data-pear-tab="files" role="tab">Files</button>
                     </span>
                 </div>
                 <div class="message_header_stream" data-height="42" data-header="active">
                     <span class="pear-workspace-tabs pear-workspace-tabs-hidden" role="tablist">
                         <button class="pear-workspace-mode-tab pear-workspace-tab-selected" data-pear-tab="chat" role="tab">Chat</button>
-                        <button class="pear-workspace-mode-tab" data-pear-tab="workspace" role="tab">Workspace</button>
+                        <button class="pear-workspace-mode-tab" data-pear-tab="readme" role="tab">README</button>
+                        <button class="pear-workspace-mode-tab" data-pear-tab="files" role="tab">Files</button>
                     </span>
                 </div>
             </div>
@@ -79,6 +81,7 @@ mock_esm("../src/pear_workspace_shell", {
             refreshes: 0,
             quickOpens: 0,
             locationApplies: 0,
+            rooms: [options.initialRoom],
             destroys: 0,
             ready: reject_ready ? Promise.reject(new Error("chunk failed")) : Promise.resolve(),
             refresh() {
@@ -89,6 +92,9 @@ mock_esm("../src/pear_workspace_shell", {
             },
             applyLocation() {
                 this.locationApplies += 1;
+            },
+            setRoom(room) {
+                this.rooms.push(room);
             },
             async destroy() {
                 this.destroys += 1;
@@ -119,9 +125,9 @@ async function settle() {
     await Promise.resolve();
 }
 
-run_test("Chat and Workspace keep one shell mounted and reject retired tab state", async () => {
+run_test("Chat, README, and Files keep one warm shell with separate rooms", async () => {
     window.history.replaceState({}, "", "/");
-    sessionStorage.setItem('pear-tab:["devel","topic"]', "files");
+    sessionStorage.setItem('pear-tab:["devel","topic"]', "retired-document-view");
     pear_workspace.initialize();
     pear_workspace.sync({
         stream: "Devel",
@@ -142,18 +148,23 @@ run_test("Chat and Workspace keep one shell mounted and reject retired tab state
     keydown(chat_tab, "ArrowRight");
     await settle();
     assert.equal(pear_workspace.pane_is_open(), true);
-    assert.equal(new URL(window.location.href).searchParams.get("pear_view"), "workspace");
+    assert.equal(new URL(window.location.href).searchParams.get("pear_view"), "readme");
     assert.equal(mounts.length, 1);
     assert.equal(mounts[0].options.workspaceId, "workspace-1");
     assert.equal(document.querySelector("#pear-workspace-pane").hasAttribute("hidden"), false);
     assert.equal(
-        document.querySelector('[data-pear-tab="workspace"]').getAttribute("aria-selected"),
+        document.querySelector('[data-pear-tab="readme"]').getAttribute("aria-selected"),
         "true",
     );
-    assert.equal(document.activeElement.dataset.pearTab, "workspace");
+    assert.equal(document.activeElement.dataset.pearTab, "readme");
     const quick_open_event = new window.Event("pear:workspace-quick-open", {cancelable: true});
     assert.equal(document.dispatchEvent(quick_open_event), false);
     assert.equal(mounts[0].quickOpens, 1);
+    assert.equal(
+        document.querySelector('[data-pear-tab="files"]').getAttribute("aria-selected"),
+        "true",
+    );
+    assert.deepEqual(mounts[0].rooms, ["readme", "files"]);
     assert.equal(
         document
             .querySelector(".column-middle-inner")
@@ -179,16 +190,16 @@ run_test("Chat and Workspace keep one shell mounted and reject retired tab state
         "Escape restores focus to the current visible topic header, not an older duplicate",
     );
     assert.equal(mounts[0].destroys, 0, "Escape keeps the warm shell mounted");
-    click('[data-pear-tab="workspace"]');
+    click('[data-pear-tab="readme"]');
     await settle();
     assert.equal(mounts.length, 1);
 
     click('[data-pear-tab="chat"]');
     assert.equal(pear_workspace.pane_is_open(), false);
     assert.equal(mounts[0].destroys, 0, "Chat keeps the workspace shell warm");
-    click('[data-pear-tab="workspace"]');
+    click('[data-pear-tab="files"]');
     await settle();
-    assert.equal(mounts.length, 1, "returning to Workspace reuses the shell");
+    assert.equal(mounts.length, 1, "returning to Files reuses the shell");
 
     pear_workspace.refresh_if_open_on_settle(true);
     pear_workspace.refresh_if_open_on_settle(false);
@@ -219,14 +230,14 @@ run_test("Chat and Workspace keep one shell mounted and reject retired tab state
     });
     reject_next_ready = true;
     blueslip.expect("error", "Pear workspace shell failed to load");
-    click('[data-pear-tab="workspace"]');
+    click('[data-pear-tab="readme"]');
     await settle();
     assert.equal(mounts.length, 2);
     assert.equal(mounts[1].destroys, 1);
     assert.match(document.querySelector(".pear-workspace-host").textContent, /failed to load/);
 
     click('[data-pear-tab="chat"]');
-    click('[data-pear-tab="workspace"]');
+    click('[data-pear-tab="files"]');
     await settle();
     assert.equal(mounts.length, 3);
     assert.equal(mounts[2].options.workspaceId, "workspace-retry");
@@ -235,7 +246,7 @@ run_test("Chat and Workspace keep one shell mounted and reject retired tab state
     window.history.replaceState(
         {},
         "",
-        "/?pear_view=workspace&pear_workspace=workspace-retry&pear_path=README.md&pear_mode=rich",
+        "/?pear_view=readme&pear_workspace=workspace-retry&pear_path=README.md&pear_mode=rich",
     );
     window.dispatchEvent(new window.PopStateEvent("popstate"));
     await settle();

@@ -623,7 +623,7 @@ export function open_work_details(
 
 export function open_work_details_for_artifact_label(label: string): void {
     if (["doc", "document"].includes(label.trim().toLowerCase())) {
-        pear_workspace.set_tab("workspace");
+        pear_workspace.set_tab("readme");
         return;
     }
     open_work_details(workbench_view_for_artifact_label(label));
@@ -2020,7 +2020,7 @@ export function initialize(): void {
     $("body").on("click", ".pear-rail-workspace-line", (e) => {
         e.preventDefault();
         e.stopPropagation();
-        pear_workspace.set_tab("workspace");
+        pear_workspace.set_tab("files");
     });
     $("body").on("click", ".pear-panel-open-action", (e) => {
         e.preventDefault();

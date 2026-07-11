@@ -118,7 +118,7 @@ function harness(workspace_id, initial_room = "files") {
             activateWorkspace(id, revision, limits, preferences) {
                 this.activations.push({id, revision, limits, preferences});
             },
-            async open(opened_entry) {
+            async open(opened_entry, preferred_mode) {
                 const selected = root.querySelector(
                     `[data-entry-id='${opened_entry.entry_id}'][aria-selected='true']`,
                 );
@@ -127,6 +127,7 @@ function harness(workspace_id, initial_room = "files") {
                     entry: opened_entry,
                     selectedBeforeOpen: selected !== null,
                     tabBeforeOpen: tab !== null,
+                    ...(preferred_mode === undefined ? {} : {preferredMode: preferred_mode}),
                 });
             },
             async switchMode(mode) {
@@ -287,7 +288,7 @@ run_test("README and Files rooms share one editor and restore the last working f
     assert.equal(test.controller.getDebugState().activePath, "README.md");
     assert.equal(test.root.querySelector(".pear-workspace-shell").dataset.room, "readme");
     assert.equal(test.editors.length, 1, "room changes keep the editor session warm");
-    assert.equal(test.editors[0].modes.at(-1), "rich");
+    assert.equal(test.editors[0].opens.at(-1).preferredMode, "rich");
 
     test.controller.setRoom("files");
     await Promise.resolve();
@@ -385,7 +386,7 @@ run_test("URL path and mode follow navigation and popstate without remounting", 
     test.send_tree(0, current.root, [a, b]);
     await Promise.resolve();
     assert.equal(test.controller.getDebugState().activePath, "A.md");
-    assert.deepEqual(test.editors[0].modes, ["rich"]);
+    assert.equal(test.editors[0].opens.at(-1).preferredMode, "rich");
 
     test.click(test.root.querySelector("[data-entry-id='r1:B.md']"));
     const location = new URL(window.location.href);
@@ -400,7 +401,7 @@ run_test("URL path and mode follow navigation and popstate without remounting", 
     window.dispatchEvent(new window.PopStateEvent("popstate"));
     await Promise.resolve();
     assert.equal(test.controller.getDebugState().activePath, "A.md");
-    assert.equal(test.editors[0].modes.at(-1), "source");
+    assert.equal(test.editors[0].opens.at(-1).preferredMode, "source");
     assert.equal(test.editors.length, 1, "history navigation keeps the shell mounted");
 
     await test.controller.destroy();

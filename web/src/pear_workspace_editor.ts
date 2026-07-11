@@ -760,7 +760,10 @@ export function create_pear_workspace_editor(
         );
     };
 
-    const open = async (entry: PearWorkspaceEntry): Promise<void> => {
+    const open = async (
+        entry: PearWorkspaceEntry,
+        preferred_mode?: "rich" | "source",
+    ): Promise<void> => {
         if (destroyed || entry.kind !== "file" || store.activeWorkspaceId === undefined) {
             return;
         }
@@ -844,9 +847,16 @@ export function create_pear_workspace_editor(
             active_file = file;
             surface = {kind: "text", entry, file};
             emit();
-            if (cached.editorMode === "rich" && file.rich_mode_eligible) {
+            if (
+                file.rich_mode_eligible &&
+                (preferred_mode === "rich" ||
+                    (preferred_mode === undefined && cached.editorMode === "rich"))
+            ) {
                 await mount_rich(identity, file);
             } else {
+                if (preferred_mode === "source" && cached.editorMode === "rich") {
+                    dispatch({type: "set_editor_mode", ...identity, mode: "source"});
+                }
                 await mount_source(identity, file);
             }
             return;
@@ -916,9 +926,16 @@ export function create_pear_workspace_editor(
                 file_metadata.set(file.entry_id, file);
                 surface = {kind: "text", entry, file};
                 emit();
-                if (document.editorMode === "rich" && file.rich_mode_eligible) {
+                if (
+                    file.rich_mode_eligible &&
+                    (preferred_mode === "rich" ||
+                        (preferred_mode === undefined && document.editorMode === "rich"))
+                ) {
                     void mount_rich(identity, file);
                 } else {
+                    if (preferred_mode === "source" && document.editorMode === "rich") {
+                        dispatch({type: "set_editor_mode", ...identity, mode: "source"});
+                    }
                     void mount_source(identity, file);
                 }
             },

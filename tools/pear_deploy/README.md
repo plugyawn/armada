@@ -136,11 +136,14 @@ tools/pear_deploy/update_remote.sh --yes
 The first command is a read-only gate. It verifies that the local tracked tree is
 clean, the checkout is the main `zulip/` submodule rather than a linked Git
 worktree, the remote tracked tree is clean, and the remote HEAD is not ahead of
-the local `pear-main` history. The `--yes` run first builds production assets in
-an isolated sibling checkout while the old app remains live. It then stops app
-ingress, drains and stops the queue workers, copies only regular single-link
-generated outputs into a root-owned frozen tree, and snapshots the drained
-source, prior assets, Git metadata, Pear skills, Caddy auth/config, `pear.env`,
+the local `pear-main` history. The `--yes` run classifies the committed delta.
+Frontend, template, asset-tooling, and unknown changes build production assets
+in an isolated sibling checkout while the old app remains live. A narrow
+allowlist of server-only Pear and test changes instead reuses the already
+validated hashed graph; unknown paths fail closed to a rebuild. It then stops
+app ingress, drains and stops the queue workers, copies only regular single-link
+generated outputs into a root-owned frozen tree when rebuilding, and snapshots
+the drained source, prior assets, Git metadata, Pear skills, Caddy auth/config, `pear.env`,
 privileged helper, deployment record, wrapper, and systemd units. Privileged
 deployment managers, templates, and helper source are staged directly from the
 pinned local commit in a root-only directory; root never executes tooling from
@@ -148,8 +151,8 @@ the service-user-owned checkout. The cutover source-syncs with generated
 outputs excluded, applies `zerver` migrations, restarts Caddy and all Pear
 services, verifies the
 backend tests, rejects webpack/autoreload processes and the legacy `/webpack/`
-route, checks live worker/queue health, and records the coordinated SHA and
-`asset_mode=production-hashed` in root-owned
+route, checks live worker/queue health, and records the coordinated SHA,
+`asset_mode=production-hashed`, and exact `asset_source_zulip_sha` in root-owned
 `/var/lib/pear/deployed-sha`. A pre-snapshot failure restarts the untouched
 services; a post-snapshot failure restores every covered domain before
 restarting the old services.

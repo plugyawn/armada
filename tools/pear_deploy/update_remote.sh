@@ -503,6 +503,10 @@ verify_remote_deployed_source_clean() {
 verify_remote_disk_capacity() {
     local remote_asset_build_dir="/var/lib/pear-builds/asset-build-${LOCAL_SHA:0:12}"
     local runtime_path
+    local build_swap_bytes="$PEAR_BUILD_SWAP_BYTES"
+    if [[ "$ASSET_BUILD_REQUIRED" != true ]]; then
+        build_swap_bytes=0
+    fi
     local -a capacity_command=(
         python3
         -
@@ -511,12 +515,15 @@ verify_remote_disk_capacity() {
         --pear-skills-dir "$REMOTE_PEAR_SKILLS_DIR"
         --snapshot-root "$SNAPSHOT_ROOT"
         --asset-build-dir "$remote_asset_build_dir"
-        --build-swap-bytes "$PEAR_BUILD_SWAP_BYTES"
+        --build-swap-bytes "$build_swap_bytes"
     )
+    if [[ "$ASSET_BUILD_REQUIRED" != true ]]; then
+        capacity_command+=(--reuse-assets)
+    fi
     for runtime_path in "${PEAR_DEPLOY_RUNTIME_CONFIG_PATHS[@]}"; do
         capacity_command+=(--runtime-path "$runtime_path")
     done
-    echo "Preflight: estimating free space for rollback snapshot and isolated asset build..."
+    echo "Preflight: estimating free space for rollback and selected asset strategy..."
     if ! ssh_root "${capacity_command[@]}" <"$SCRIPT_DIR/deployment_capacity.py"; then
         fail "remote disk capacity is insufficient for a rollback-safe deploy"
     fi
@@ -829,6 +836,53 @@ REMOTE_BUILD_SWAP_ACTIVE=false
 ROLLBACK_READY=false
 ROLLBACK_DONE=false
 SERVICE_RESTART_REQUIRED=false
+ASSET_BUILD_REQUIRED=true
+ASSET_REBUILD_TRIGGER=""
+ASSET_SOURCE_SHA=""
+
+classify_production_asset_requirement() {
+    local policy_status
+    if ASSET_REBUILD_TRIGGER="$(
+        git -C "$REPO_ROOT" diff --name-only --no-renames -z "$PREV_SHA..$LOCAL_SHA" |
+            python3 "$SCRIPT_DIR/asset_reuse_policy.py"
+    )"; then
+        ASSET_BUILD_REQUIRED=false
+        return
+    else
+        policy_status=$?
+    fi
+    if [[ "$policy_status" -ne 10 || -z "$ASSET_REBUILD_TRIGGER" ]]; then
+        fail "production asset reuse policy could not classify the source delta"
+    fi
+    ASSET_BUILD_REQUIRED=true
+}
+
+load_remote_asset_source_sha() {
+    local recorded_sha
+    recorded_sha="$(
+        ssh_root "sed -n 's/^asset_source_zulip_sha=//p' $DEPLOY_RECORD_PATH | tail -1"
+    )"
+    if [[ -z "$recorded_sha" ]]; then
+        # Records before the change-aware deploy lane always rebuilt assets.
+        recorded_sha="$PREV_SHA"
+    fi
+    if [[ ! "$recorded_sha" =~ ^[0-9a-f]{40}$ ]]; then
+        fail "recorded production asset source SHA is invalid"
+    fi
+    if ! git -C "$REPO_ROOT" cat-file -e "$recorded_sha^{commit}" 2>/dev/null; then
+        fail "recorded production asset source SHA is absent locally"
+    fi
+    if ! git -C "$REPO_ROOT" merge-base --is-ancestor "$recorded_sha" "$PREV_SHA"; then
+        fail "recorded production asset source SHA is not an ancestor of the live source"
+    fi
+    ASSET_SOURCE_SHA="$recorded_sha"
+}
+
+verify_reusable_remote_production_assets() {
+    echo "Preflight: validating the production asset graph selected for reuse..."
+    ssh_zulip_clean "$REMOTE_PATH/.venv/bin/python3 \
+        $REMOTE_PATH/tools/pear_deploy/production_assets.py --repo-root $REMOTE_PATH"
+}
 
 rollback_on_error() {
     local status=$?
@@ -1078,6 +1132,15 @@ fi
 echo "Preflight: local Caddy verification password file is a current-user-owned mode-0600 regular non-symlink file."
 
 echo "Preflight: remote tracked/untracked source tree is clean and not ahead of local pear-main."
+classify_production_asset_requirement
+if [[ "$ASSET_BUILD_REQUIRED" == true ]]; then
+    ASSET_SOURCE_SHA="$LOCAL_SHA"
+    echo "Preflight: production assets require a rebuild (trigger: $ASSET_REBUILD_TRIGGER)."
+else
+    load_remote_asset_source_sha
+    echo "Preflight: backend-only delta can reuse production assets from $ASSET_SOURCE_SHA."
+    verify_reusable_remote_production_assets
+fi
 if [[ "$PREV_SHA" != "$LOCAL_SHA" ]]; then
     echo
     echo "Deploy delta:"
@@ -1126,9 +1189,13 @@ if [[ "$YES" != true ]]; then
 fi
 
 echo
-enable_remote_build_swap
-build_remote_production_assets
-disable_remote_build_swap
+if [[ "$ASSET_BUILD_REQUIRED" == true ]]; then
+    enable_remote_build_swap
+    build_remote_production_assets
+    disable_remote_build_swap
+else
+    echo "Reusing the validated production asset graph; skipping swap and webpack build."
+fi
 
 echo "Staging privileged deployment tooling from the pinned local commit..."
 REMOTE_TRUSTED_RUNTIME="$(stage_remote_pear_deploy_bundle "$REPO_ROOT" "$LOCAL_SHA")"
@@ -1144,16 +1211,18 @@ verify_remote_stopped_quiescence
 verify_local_cutover_source
 verify_remote_cutover_source
 
-echo "Copying the isolated build into a no-follow root-owned asset tree..."
-REMOTE_FROZEN_ASSET_DIR="$(
-    ssh_root python3 "$REMOTE_TRUSTED_RUNTIME/tools/pear_deploy/freeze_asset_build.py" \
-        --source-root "$REMOTE_ASSET_BUILD_DIR"
-)"
-if [[ ! "$REMOTE_FROZEN_ASSET_DIR" =~ ^/root/pear-frozen-assets\.[A-Za-z0-9_-]+$ ]]; then
-    fail "asset freezer returned an invalid root-owned path"
+if [[ "$ASSET_BUILD_REQUIRED" == true ]]; then
+    echo "Copying the isolated build into a no-follow root-owned asset tree..."
+    REMOTE_FROZEN_ASSET_DIR="$(
+        ssh_root python3 "$REMOTE_TRUSTED_RUNTIME/tools/pear_deploy/freeze_asset_build.py" \
+            --source-root "$REMOTE_ASSET_BUILD_DIR"
+    )"
+    if [[ ! "$REMOTE_FROZEN_ASSET_DIR" =~ ^/root/pear-frozen-assets\.[A-Za-z0-9_-]+$ ]]; then
+        fail "asset freezer returned an invalid root-owned path"
+    fi
+    ssh_root python3 "$REMOTE_TRUSTED_RUNTIME/tools/pear_deploy/production_assets.py" \
+        --repo-root "$REMOTE_FROZEN_ASSET_DIR"
 fi
-ssh_root python3 "$REMOTE_TRUSTED_RUNTIME/tools/pear_deploy/production_assets.py" \
-    --repo-root "$REMOTE_FROZEN_ASSET_DIR"
 
 SNAPSHOT_STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 SNAPSHOT_DIR="$SNAPSHOT_ROOT/zulip-$SNAPSHOT_STAMP-${PREV_SHA:0:12}"
@@ -1261,7 +1330,11 @@ rsync -az --delete \
     "$LOCAL_PEAR_SKILLS_DIR/" \
     "pear-staging:$REMOTE_PEAR_SKILLS_DIR/"
 
-cut_over_remote_production_assets "$REMOTE_FROZEN_ASSET_DIR"
+if [[ "$ASSET_BUILD_REQUIRED" == true ]]; then
+    cut_over_remote_production_assets "$REMOTE_FROZEN_ASSET_DIR"
+else
+    echo "Keeping the validated production asset graph from $ASSET_SOURCE_SHA."
+fi
 
 ssh -F "$SSH_CONFIG" pear-staging "git config --global --add safe.directory $REMOTE_PATH"
 
@@ -1373,6 +1446,7 @@ ssh_root 'install -d -m 755 -o root -g root /var/lib/pear'
     printf 'pear_skills_tree=%s\n' "$LOCAL_PEAR_SKILLS_TREE"
     printf 'workspace_helper_sha256=%s\n' "$LOCAL_WORKSPACE_HELPER_SHA"
     printf 'asset_mode=production-hashed\n'
+    printf 'asset_source_zulip_sha=%s\n' "$ASSET_SOURCE_SHA"
     printf 'caddy_auth=basic-auth-required\n'
     printf 'deployed_at=%s\n' "$DEPLOYED_AT"
 } | ssh_root python3 \

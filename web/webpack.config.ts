@@ -73,7 +73,9 @@ const config = (
         ...baseConfig,
         name: "frontend",
         entry: production
-            ? assets
+            ? process.env["ZULIP_DEV_PRODUCTION_ASSETS"] === "1"
+                ? {...assets, "dev-login": dev_assets["dev-login"]}
+                : assets
             : Object.fromEntries(
                   Object.entries({...assets, ...dev_assets}).map(([name, paths]) => [
                       name,

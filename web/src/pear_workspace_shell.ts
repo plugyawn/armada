@@ -564,29 +564,19 @@ export function create_pear_workspace_shell(
                 finish_pear_workspace_metric("workspace_file_interactive");
             }
             const document = snapshot.activeDocument;
-            if (document?.state === "dirty") {
+            if (document !== undefined) {
                 const tab = tabs.find((candidate) => candidate.path === document.path);
                 if (tab !== undefined) {
-                    tab.preview = false;
-                    tab.dirty = true;
-                    render_tabs();
-                }
-            } else if (document !== undefined) {
-                const tab = tabs.find((candidate) => candidate.path === document.path);
-                if (tab !== undefined) {
-                    tab.dirty = document.state !== "clean";
-                    render_tabs();
+                    const next_preview = document.state === "dirty" ? false : tab.preview;
+                    const next_dirty = document.state !== "clean";
+                    if (tab.preview !== next_preview || tab.dirty !== next_dirty) {
+                        tab.preview = next_preview;
+                        tab.dirty = next_dirty;
+                        render_tabs();
+                    }
                 }
             }
             render_surface();
-        },
-        onDirty(path) {
-            const tab = tabs.find((candidate) => candidate.path === path);
-            if (tab !== undefined) {
-                tab.preview = false;
-                tab.dirty = true;
-                render_tabs();
-            }
         },
         onSaved(event) {
             const tab = tabs.find((candidate) => candidate.path === event.path);

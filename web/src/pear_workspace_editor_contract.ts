@@ -103,7 +103,7 @@ export type PearWorkspaceEditorDependencies = {
     rawUrl: typeof pear_workspace_raw_url;
     loadSourceEditor: () => Promise<PearWorkspaceSourceEditorModule>;
     loadRichEditor: () => Promise<PearWorkspaceRichEditorModule>;
-    defer: (callback: () => void) => PearWorkspaceScheduledWork;
+    scheduleSourceFlush: (callback: () => void) => PearWorkspaceScheduledWork;
     scheduleAutosave: (callback: () => void) => PearWorkspaceScheduledWork;
 };
 
@@ -128,7 +128,6 @@ export type PearWorkspaceEditorController = {
 export type PearWorkspaceEditorOptions = {
     root: HTMLElement;
     onUpdate: (snapshot: PearWorkspaceEditorSnapshot) => void;
-    onDirty?: (path: string) => void;
     onSaved?: (event: PearWorkspaceEditorSaveEvent) => void;
     dependencies?: Partial<PearWorkspaceEditorDependencies>;
 };

@@ -47,16 +47,8 @@ export type {
     PearWorkspaceEditorSurface,
 } from "./pear_workspace_editor_contract.ts";
 
-function default_defer(callback: () => void): PearWorkspaceScheduledWork {
-    if (typeof globalThis.requestIdleCallback === "function") {
-        const handle = globalThis.requestIdleCallback(callback, {timeout: 80});
-        return {
-            cancel() {
-                globalThis.cancelIdleCallback?.(handle);
-            },
-        };
-    }
-    const handle = setTimeout(callback, 0);
+function default_source_flush(callback: () => void): PearWorkspaceScheduledWork {
+    const handle = setTimeout(callback, 650);
     return {
         cancel() {
             clearTimeout(handle);
@@ -83,7 +75,7 @@ const default_dependencies: PearWorkspaceEditorDependencies = {
     async loadRichEditor() {
         return import("./pear_workspace_markdown_editor.ts");
     },
-    defer: default_defer,
+    scheduleSourceFlush: default_source_flush,
     scheduleAutosave: default_autosave,
 };
 
@@ -235,7 +227,7 @@ export function create_pear_workspace_editor(
 
     const schedule_source_flush = (identity: PearWorkspaceDocumentIdentity): void => {
         clear_source_flush();
-        source_flush = dependencies.defer(() => {
+        source_flush = dependencies.scheduleSourceFlush(() => {
             source_flush = undefined;
             flush_source_now(identity);
         });
@@ -355,7 +347,6 @@ export function create_pear_workspace_editor(
                     selection: event.selection,
                     scrollTop: view.scrollTop,
                 });
-                options.onDirty?.(identity.path);
                 emit();
                 finish_pear_workspace_metric("workspace_dirty_feedback");
                 schedule_source_flush(identity);
@@ -461,7 +452,6 @@ export function create_pear_workspace_editor(
                     finish_pear_workspace_metric("workspace_dirty_feedback");
                     return;
                 }
-                options.onDirty?.(identity.path);
                 emit();
                 finish_pear_workspace_metric("workspace_dirty_feedback");
             },

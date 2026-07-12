@@ -1,0 +1,8 @@
+{{#if title}}<header class="pear-chat-explainer-head"><span class="pear-chat-explainer-kicker">explainer</span><h2>{{title}}</h2></header>{{/if}}
+<div class="pear-wall-kit pear-chat-explainer-body">
+    {{> pear_wall_components . }}
+</div>
+<footer class="pear-chat-explainer-foot">
+    <span class="pear-chat-explainer-mark" aria-hidden="true">◧</span>
+    <button type="button" class="pear-explainer-pin" data-tippy-content="{{pin_tooltip}}">⤴ {{pin_label}}</button>
+</footer>

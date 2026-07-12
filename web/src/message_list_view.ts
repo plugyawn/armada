@@ -35,9 +35,9 @@ import type {MessageViewportInfo} from "./message_viewport.ts";
 import * as muted_users from "./muted_users.ts";
 import * as narrow_state from "./narrow_state.ts";
 import {page_params} from "./page_params.ts";
+import * as pear_explainers from "./pear_explainers.ts";
 import * as pear_panel from "./pear_panel.ts";
 import * as pear_run_state from "./pear_run_state.ts";
-import * as pear_widgets from "./pear_widgets.ts";
 import * as people from "./people.ts";
 import * as popovers from "./popovers.ts";
 import * as reactions from "./reactions.ts";
@@ -2434,7 +2434,7 @@ export class MessageListView {
         rendered_markdown.update_elements($content);
         enhance_pear_tool_rows($row);
         enhance_pear_artifact_references($row);
-        pear_widgets.enhance_pear_chat_widgets($row);
+        pear_explainers.enhance_pear_chat_explainers($row);
         maybe_render_pear_thinking_glyph($row);
         maybe_render_pear_run_footer($row);
 

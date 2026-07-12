@@ -15,6 +15,7 @@ import render_pear_wall from "../templates/pear_wall.hbs";
 import * as channel from "./channel.ts";
 import {$t} from "./i18n.ts";
 import * as narrow_state from "./narrow_state.ts";
+import {send_pear_explainer_action} from "./pear_explainer_actions.ts";
 import * as pear_wall_components from "./pear_wall_components.ts";
 
 const monitor_schema = z.object({
@@ -30,6 +31,14 @@ const monitor_schema = z.object({
                 z.object({
                     type: z.string(),
                     props: z.record(z.string(), z.unknown()),
+                }),
+            ),
+        ),
+        actions: z.optional(
+            z.array(
+                z.object({
+                    label: z.string(),
+                    prompt: z.string(),
                 }),
             ),
         ),
@@ -57,6 +66,7 @@ let last_render_signature = "";
 let last_context_key = "";
 const collapsed_ids = new Set<number>();
 const seen_versions = new Map<number, number>();
+const last_valid_svg_markup = new Map<number, Map<number, string>>();
 
 function wall_context(): {stream: string; topic: string} | undefined {
     const stream = narrow_state.stream_name();
@@ -106,6 +116,11 @@ function render_context(): Record<string, unknown> {
                 monitor.history,
             ),
         ),
+        has_actions: (monitor.block_spec.actions ?? []).length > 0,
+        actions: (monitor.block_spec.actions ?? []).map((action, action_index) => ({
+            action_index,
+            label: action.label,
+        })),
     }));
     return {has_blocks: blocks.length > 0, blocks};
 }
@@ -170,6 +185,25 @@ function render(): void {
     const input_focused = $input.is(":focus");
 
     $wall.html(render_pear_wall(template_context));
+
+    for (const monitor of monitors) {
+        let cache = last_valid_svg_markup.get(monitor.id);
+        if (cache === undefined) {
+            cache = new Map();
+            last_valid_svg_markup.set(monitor.id, cache);
+        }
+        pear_wall_components.mount_svg_components(
+            $wall.find(`.pear-wall-block[data-monitor-id="${monitor.id}"]`),
+            monitor.block_spec.components ?? [],
+            monitor.props,
+            cache,
+        );
+    }
+    for (const monitor_id of last_valid_svg_markup.keys()) {
+        if (!monitors.some((monitor) => monitor.id === monitor_id)) {
+            last_valid_svg_markup.delete(monitor_id);
+        }
+    }
 
     const $new_input = $wall.find<HTMLInputElement>(".pear-wall-input");
     $new_input.val(input_value);
@@ -242,7 +276,11 @@ export function refresh(): void {
     });
 }
 
-function monitor_action(monitor_id: number, action: string, extra: Record<string, string> = {}): void {
+function monitor_action(
+    monitor_id: number,
+    action: string,
+    extra: Record<string, string> = {},
+): void {
     void channel.patch({
         url: `/json/pear/monitors/${monitor_id}`,
         data: {action, ...extra},
@@ -264,9 +302,7 @@ function create_monitor(ask: string): void {
             refresh();
         },
         error(xhr) {
-            const parsed = z
-                .object({msg: z.string()})
-                .safeParse(xhr.responseJSON ?? {});
+            const parsed = z.object({msg: z.string()}).safeParse(xhr.responseJSON ?? {});
             const $input = $("#pear-wall .pear-wall-input");
             $input.attr(
                 "placeholder",
@@ -293,6 +329,36 @@ export function initialize(): void {
         }
         $input.val("");
         create_monitor(ask);
+    });
+
+    $wall.on("click", ".pear-explainer-action", function (this: HTMLButtonElement, event) {
+        event.preventDefault();
+        event.stopPropagation();
+        const monitor_id = Number(
+            this.closest(".pear-wall-block")?.getAttribute("data-monitor-id") ?? "0",
+        );
+        const action_index = Number(this.getAttribute("data-pear-explainer-action") ?? "-1");
+        const monitor = monitors.find((entry) => entry.id === monitor_id);
+        const action = monitor?.block_spec.actions?.[action_index];
+        const target = wall_context();
+        if (action === undefined || target === undefined || this.disabled) {
+            return;
+        }
+        const label = this.textContent ?? action.label;
+        this.disabled = true;
+        this.setAttribute("aria-busy", "true");
+        this.textContent = $t({defaultMessage: "asking…"});
+        send_pear_explainer_action(target, action.prompt, {
+            success: () => {
+                this.removeAttribute("aria-busy");
+                this.textContent = $t({defaultMessage: "asked ✓"});
+            },
+            error: () => {
+                this.disabled = false;
+                this.removeAttribute("aria-busy");
+                this.textContent = label;
+            },
+        });
     });
 
     $wall.on("click", "[data-wall-action]", (event) => {

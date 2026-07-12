@@ -37,11 +37,18 @@ PEAR_MONITOR_TICK_BATCH_LIMIT: Final = 16
 PEAR_MONITOR_HISTORY_LIMIT: Final = 64
 PEAR_MONITOR_SPEC_DIR: Final = ".pear/monitors"
 PEAR_MONITOR_SETUP_STALE_SECONDS: Final = 1800
+PEAR_EXPLAINER_ACTION_LIMIT: Final = 4
+PEAR_EXPLAINER_ACTION_LABEL_LIMIT: Final = 40
+PEAR_EXPLAINER_ACTION_PROMPT_LIMIT: Final = 1000
+PEAR_EXPLAINER_TEXT_LIMIT: Final = 4000
+PEAR_SVG_MARKUP_LIMIT: Final = 64_000
 
 # Component catalog: prop names the validator accepts and the contract
 # teaches. The client renders defensively, so prop VALUES are only
 # lightly coerced here (numbers to float, strings trimmed).
 PEAR_MONITOR_COMPONENTS: Final[dict[str, frozenset[str]]] = {
+    "text": frozenset({"eyebrow", "heading", "body"}),
+    "svg": frozenset({"label", "markup"}),
     "meter": frozenset({"label", "value", "total", "rate", "eta", "unit"}),
     "stat": frozenset({"label", "value", "delta", "unit"}),
     "sparkline": frozenset({"label", "value", "unit"}),
@@ -65,6 +72,8 @@ to write its spec; after that a dumb scheduler re-runs your recipe on a \
 cadence with no AI involved, so the recipe must do all the work.
 
 Component catalog (the only block types that exist — never invent one):
+- text: an explainer section. Props: eyebrow, heading, body.
+- svg: a safe, theme-aware vector diagram. Props: label, markup (one complete SVG document).
 - meter: progress toward a total. Props: label, value (number), total \
 (number, optional; omit if value is already 0-100), rate (string), eta \
 (string), unit.
@@ -86,7 +95,10 @@ Spec file schema (JSON):
 {
   "title": "<wall label, at most 24 chars, lowercase preferred>",
   "cadence_seconds": <5..86400 — as slow as the data allows>,
-  "block": {"components": [{"type": "<catalog type>", "props": {...}}]},
+  "block": {
+    "components": [{"type": "<catalog type>", "props": {...}}],
+    "actions": [{"label": "<short button>", "prompt": "<instruction for Pear>"}]
+  },
   "recipe": {
     "command": "<shell command run from the topic worktree, finishes \
 fast, read-only in spirit>",
@@ -104,7 +116,7 @@ Rules:
 a log file, a command, an API. Test your command and pattern against \
 real output before writing the spec.
 2. Prefer ONE component; use at most %(max_components)s. Labels stay \
-under 16 characters.
+under 16 characters. Add actions only when a useful follow-up needs the agent.
 3. The recipe command must be idempotent, finish within \
 %(timeout_seconds)s seconds, write nothing, and print small output. For \
 clock/countdown/calendar-only blocks use parse mode "static" and a \
@@ -159,6 +171,14 @@ def _clean_string(value: Any, *, limit: int) -> str:
     return str(value).strip()[:limit]
 
 
+def _required_bounded_string(value: Any, *, name: str, limit: int) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise PearMonitorSpecError(f"{name} must be a non-empty string.")
+    if len(value) > limit:
+        raise PearMonitorSpecError(f"{name} exceeds {limit} characters.")
+    return value.strip()
+
+
 def pear_validate_monitor_spec(raw: Any) -> dict[str, Any]:
     """Validate an agent-written spec into (title, cadence, block, recipe)."""
     if not isinstance(raw, dict):
@@ -195,9 +215,48 @@ def pear_validate_monitor_spec(raw: Any) -> dict[str, Any]:
             raise PearMonitorSpecError(
                 f"Unknown props for {component_type}: {sorted(unknown)!r}."
             )
-        clean_components.append({"type": component_type, "props": props})
+        clean_props = dict(props)
+        if component_type == "text":
+            clean_props = {
+                key: _clean_string(value, limit=PEAR_EXPLAINER_TEXT_LIMIT)
+                for key, value in props.items()
+            }
+            if not any(clean_props.values()):
+                raise PearMonitorSpecError("text requires non-empty explainer copy.")
+        elif component_type == "svg":
+            markup = _required_bounded_string(
+                props.get("markup"), name="svg markup", limit=PEAR_SVG_MARKUP_LIMIT
+            )
+            clean_props = {"markup": markup}
+            if "label" in props:
+                clean_props["label"] = _clean_string(props["label"], limit=64)
+        clean_components.append({"type": component_type, "props": clean_props})
 
-    recipe = raw.get("recipe")
+    actions = block.get("actions", [])
+    if not isinstance(actions, list) or len(actions) > PEAR_EXPLAINER_ACTION_LIMIT:
+        raise PearMonitorSpecError(
+            f"block.actions must contain at most {PEAR_EXPLAINER_ACTION_LIMIT} actions."
+        )
+    clean_actions: list[dict[str, str]] = []
+    for action in actions:
+        if not isinstance(action, dict) or set(action) != {"label", "prompt"}:
+            raise PearMonitorSpecError("Each action requires exactly label and prompt.")
+        clean_actions.append(
+            {
+                "label": _required_bounded_string(
+                    action["label"],
+                    name="action label",
+                    limit=PEAR_EXPLAINER_ACTION_LABEL_LIMIT,
+                ),
+                "prompt": _required_bounded_string(
+                    action["prompt"],
+                    name="action prompt",
+                    limit=PEAR_EXPLAINER_ACTION_PROMPT_LIMIT,
+                ),
+            }
+        )
+
+    recipe = raw.get("recipe", {"parse": {"mode": "static"}})
     if not isinstance(recipe, dict):
         raise PearMonitorSpecError("recipe must be an object.")
     command = _clean_string(recipe.get("command", ""), limit=2000)
@@ -239,7 +298,7 @@ def pear_validate_monitor_spec(raw: Any) -> dict[str, Any]:
     return {
         "title": title,
         "cadence_seconds": cadence,
-        "block_spec": {"components": clean_components},
+        "block_spec": {"components": clean_components, "actions": clean_actions},
         "recipe": {
             "command": command,
             "parse": {"mode": mode, "pattern": pattern},
@@ -297,7 +356,9 @@ def _json_path_lookup(data: Any, path: str) -> Any:
     return current
 
 
-def pear_monitor_bind_props(recipe: dict[str, Any], output: str) -> dict[str, Any]:
+def pear_monitor_bind_props(
+    recipe: dict[str, Any], output: str, *, block_spec: dict[str, Any] | None = None
+) -> dict[str, Any]:
     """Evaluate bindings against recipe output → {"<idx>.<prop>": value}."""
     parse = recipe.get("parse", {})
     mode = parse.get("mode", "text")
@@ -331,7 +392,16 @@ def pear_monitor_bind_props(recipe: dict[str, Any], output: str) -> dict[str, An
     lines = output.splitlines()
     for key, source in recipe.get("bindings", {}).items():
         if source == "text":
-            bound[key] = output.strip()[:2000]
+            index, _, prop = key.partition(".")
+            components = (block_spec or {}).get("components", [])
+            is_svg_markup = (
+                index.isdigit()
+                and int(index) < len(components)
+                and components[int(index)].get("type") == "svg"
+                and prop == "markup"
+            )
+            limit = PEAR_SVG_MARKUP_LIMIT if is_svg_markup else 2000
+            bound[key] = output.strip()[:limit]
         elif source.startswith("lines:"):
             count = min(int(source.removeprefix("lines:") or "8"), 50)
             bound[key] = [line[:300] for line in lines[-count:]]
@@ -376,7 +446,7 @@ def pear_monitor_apply_tick(
                 workdir=workdir,
                 process_isolation=process_isolation,
             )
-            bound = pear_monitor_bind_props(recipe, output)
+            bound = pear_monitor_bind_props(recipe, output, block_spec=monitor.block_spec)
     except (OSError, subprocess.TimeoutExpired, ValueError) as error:
         monitor.consecutive_failures += 1
         monitor.last_error = str(error)[:500]

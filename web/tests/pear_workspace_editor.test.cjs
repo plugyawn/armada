@@ -218,7 +218,7 @@ function harness() {
                 return {create_pear_workspace_source_editor: create_source};
             },
             loadRichEditor: load_rich,
-            defer: (callback) => scheduled(deferred, callback),
+            scheduleSourceFlush: (callback) => scheduled(deferred, callback),
             scheduleAutosave: (callback) => scheduled(autosaves, callback),
         },
     });
@@ -333,6 +333,28 @@ run_test("Source dirty feedback precedes exact flush and a revision-bound PUT", 
         workspaceRevision: 1,
         editRevision: 1,
     });
+    await test.controller.destroy();
+    test.root.remove();
+});
+
+run_test("Source reconstruction is trailing-debounced across rapid edits", async () => {
+    const test = harness();
+    await open_text(test);
+    const source = test.source_editors[0];
+
+    source.text = "first";
+    source.dirty();
+    source.text = "second";
+    source.dirty();
+    assert.equal(test.deferred.length, 2);
+    assert.equal(test.deferred[0].cancelled, true);
+    assert.equal(test.controller.getSnapshot().activeDocument.currentText, "initial\r\n");
+
+    test.run_next(test.deferred);
+    test.run_next(test.deferred);
+    assert.equal(test.controller.getSnapshot().activeDocument.currentText, "second");
+    assert.equal(test.autosaves.length, 1);
+
     await test.controller.destroy();
     test.root.remove();
 });

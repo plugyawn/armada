@@ -151,7 +151,11 @@ function harness(workspace_id, initial_room = "files") {
             },
             async destroy() {},
             dirty(path) {
-                options.onDirty(path);
+                this.snapshot = {
+                    ...this.snapshot,
+                    activeDocument: {path, state: "dirty"},
+                };
+                options.onUpdate(this.snapshot);
             },
             saved(event) {
                 options.onSaved(event);
@@ -468,6 +472,13 @@ run_test(
             "a clean preview replaces the prior preview",
         );
         test.editors[0].dirty("B.md");
+        const pinned_tab = test.root.querySelector("[data-tab-path='B.md']");
+        test.editors[0].dirty("B.md");
+        assert.equal(
+            test.root.querySelector("[data-tab-path='B.md']"),
+            pinned_tab,
+            "repeated edits keep the existing tab DOM once dirty state is painted",
+        );
         test.click(test.root.querySelector("[data-entry-id='r1:C.md']"));
         assert.deepEqual(
             test.controller.getDebugState().tabs.map((tab) => [tab.path, tab.preview]),

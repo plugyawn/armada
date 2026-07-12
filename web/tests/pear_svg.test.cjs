@@ -131,12 +131,21 @@ run_test("unknown elements and attributes drop silently", () => {
     assert.equal(rect.hasAttribute("data-custom"), false);
 });
 
-run_test("non-psvg class tokens are filtered, psvg ones kept", () => {
+run_test("only catalogued psvg class tokens survive", () => {
     const svg = sanitize_pear_svg(
-        '<svg viewBox="0 0 10 10"><rect class="psvg-accent sneaky-app-class" width="5" height="5"/></svg>',
+        '<svg viewBox="0 0 10 10"><rect class="psvg-accent psvg-invented sneaky-app-class" width="5" height="5"/></svg>',
     );
     const rect = svg.querySelector("rect");
     assert.equal(rect.getAttribute("class"), "psvg-accent");
+});
+
+run_test("duplicate ids reject the ambiguous document", () => {
+    assert.equal(
+        sanitize_pear_svg(
+            '<svg viewBox="0 0 10 10"><rect id="same"/><circle id="same" r="2"/></svg>',
+        ),
+        REJECTED,
+    );
 });
 
 run_test("event-based SMIL begin is dropped (no click handlers via animation)", () => {

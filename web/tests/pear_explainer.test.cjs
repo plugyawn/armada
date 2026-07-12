@@ -103,6 +103,20 @@ run_test("rejects unknown components and unbounded agent actions", () => {
         make({components: Array.from({length: 5}, () => ({type: "text", props: {body: "x"}}))}),
         undefined,
     );
+    assert.equal(
+        make({components: [{type: "text", props: {body: "x", html: "<b>x</b>"}}]}),
+        undefined,
+    );
+    assert.equal(
+        explainer_spec.parse_pear_explainer_spec(
+            JSON.stringify({
+                title: "x".repeat(25),
+                block: {components: [{type: "text", props: {body: "x"}}]},
+            }),
+            "pear-explainer",
+        ),
+        undefined,
+    );
 });
 
 run_test("mounts rebuilt SVG nodes without adopting hostile source nodes", () => {
@@ -136,4 +150,32 @@ run_test("keeps the last valid Wall drawing when a later tick is hostile", () =>
         document.querySelector("#host").classList.contains("pear-explainer-svg-stale"),
         true,
     );
+});
+
+run_test("falls back to safe static markup on the first hostile live tick", () => {
+    const cache = new Map();
+    const spec = [{type: "svg", props: {markup: safe_svg}}];
+    document.body.innerHTML = '<div id="host" data-pear-svg-component="0"></div>';
+    const valid = components.mount_svg_components(
+        $(document.body),
+        spec,
+        {"0.markup": '<svg viewBox="0 0 10 10"><script>alert(1)</script></svg>'},
+        cache,
+    );
+    assert.equal(valid, false);
+    assert.ok(document.querySelector("#host > svg.psvg") instanceof window.SVGElement);
+    assert.equal(cache.get(0).markup, safe_svg);
+});
+
+run_test("clones an unchanged cached drawing instead of reparsing it", () => {
+    const cache = new Map();
+    const spec = [{type: "svg", props: {markup: safe_svg}}];
+    document.body.innerHTML = '<div id="host" data-pear-svg-component="0"></div>';
+    components.mount_svg_components($(document.body), spec, {}, cache);
+    const cached = cache.get(0).svg;
+    document.body.innerHTML = '<div id="host" data-pear-svg-component="0"></div>';
+    components.mount_svg_components($(document.body), spec, {}, cache);
+    const mounted = document.querySelector("#host > svg.psvg");
+    assert.notEqual(mounted, cached);
+    assert.equal(cache.get(0).svg, cached);
 });

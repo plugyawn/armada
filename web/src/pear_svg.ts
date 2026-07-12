@@ -21,6 +21,51 @@ const SVG_NS = "http://www.w3.org/2000/svg";
 export const PEAR_SVG_SOURCE_LIMIT = 64_000;
 const PEAR_SVG_NODE_LIMIT = 4000;
 
+export const PEAR_SVG_CLASS_NAMES = [
+    "psvg",
+    "psvg-ink1",
+    "psvg-ink2",
+    "psvg-ink3",
+    "psvg-accent",
+    "psvg-ok",
+    "psvg-warn",
+    "psvg-danger",
+    "psvg-surface0",
+    "psvg-surface1",
+    "psvg-surface2",
+    "psvg-surface3",
+    "psvg-cat1",
+    "psvg-cat2",
+    "psvg-cat3",
+    "psvg-cat4",
+    "psvg-cat5",
+    "psvg-cat6",
+    "psvg-line",
+    "psvg-hairline",
+    "psvg-line-accent",
+    "psvg-line-warn",
+    "psvg-line-danger",
+    "psvg-line-cat1",
+    "psvg-line-cat2",
+    "psvg-line-cat3",
+    "psvg-line-cat4",
+    "psvg-line-cat5",
+    "psvg-line-cat6",
+    "psvg-card",
+    "psvg-card-raised",
+    "psvg-title",
+    "psvg-label",
+    "psvg-mono",
+    "psvg-num",
+    "psvg-pixel",
+    "psvg-pulse",
+    "psvg-blink-step",
+    "psvg-march",
+    "psvg-flow",
+    "psvg-orbit",
+] as const;
+const ALLOWED_CLASSES = new Set<string>(PEAR_SVG_CLASS_NAMES);
+
 const ALLOWED_ELEMENTS = new Set([
     // structure
     "svg",
@@ -235,7 +280,7 @@ function scan_is_hostile(root: Element): boolean {
     return false;
 }
 
-function collect_ids(root: Element): Map<string, string> {
+function collect_ids(root: Element): Map<string, string> | undefined {
     const prefix = `psvg-i${instance_counter}-`;
     const id_map = new Map<string, string>();
     const stack: Element[] = [root];
@@ -243,6 +288,9 @@ function collect_ids(root: Element): Map<string, string> {
         const element = stack.pop()!;
         const id = element.getAttribute("id");
         if (id !== null && /^[\w.:-]+$/.test(id)) {
+            if (id_map.has(id)) {
+                return undefined;
+            }
             id_map.set(id, `${prefix}${id}`);
         }
         for (const child of element.children) {
@@ -290,7 +338,7 @@ function sanitized_attribute_value(
     if (name === "class") {
         // Only the design-system vocabulary: arbitrary app classes
         // could restyle or reposition the drawing into the page.
-        const kept = value.split(/\s+/).filter((token) => /^psvg(-[\w-]+)?$/.test(token));
+        const kept = value.split(/\s+/).filter((token) => ALLOWED_CLASSES.has(token));
         return kept.length > 0 ? kept.join(" ") : undefined;
     }
     if (name === "attributeName") {
@@ -402,6 +450,9 @@ export function sanitize_pear_svg(source: string): SVGSVGElement | undefined {
     }
     instance_counter += 1;
     const id_map = collect_ids(root);
+    if (id_map === undefined) {
+        return undefined;
+    }
     let rebuilt: SVGElement | undefined;
     try {
         rebuilt = rebuild_element(root, document, id_map, {nodes: 0});

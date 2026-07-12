@@ -11,19 +11,20 @@ export type PearKitComponent = {
     props: Record<string, unknown>;
 };
 
-export const PEAR_KIT_COMPONENT_TYPES = new Set([
-    "text",
-    "svg",
-    "meter",
-    "stat",
-    "sparkline",
-    "logtail",
-    "badge",
-    "clock",
-    "countdown",
-    "calendar",
-    "keyvals",
-]);
+export const PEAR_KIT_COMPONENT_PROPS: Readonly<Record<string, ReadonlySet<string>>> = {
+    text: new Set(["eyebrow", "heading", "body"]),
+    svg: new Set(["label", "markup"]),
+    meter: new Set(["label", "value", "total", "rate", "eta", "unit"]),
+    stat: new Set(["label", "value", "delta", "unit"]),
+    sparkline: new Set(["label", "value", "unit"]),
+    logtail: new Set(["label", "lines", "limit"]),
+    badge: new Set(["label", "state", "text"]),
+    clock: new Set(["label", "timezone"]),
+    countdown: new Set(["label", "target"]),
+    calendar: new Set(["label", "highlights"]),
+    keyvals: new Set(["label", "pairs"]),
+};
+export const PEAR_KIT_COMPONENT_TYPES = new Set(Object.keys(PEAR_KIT_COMPONENT_PROPS));
 
 function as_number(value: unknown): number | undefined {
     if (typeof value === "number" && Number.isFinite(value)) {
@@ -205,11 +206,13 @@ export function component_context(
     return context;
 }
 
+export type PearSvgCacheEntry = {markup: string; svg: SVGSVGElement};
+
 export function mount_svg_components(
     $scope: JQuery,
     components: PearKitComponent[],
     live_props: Record<string, unknown>,
-    last_valid_markup: Map<number, string>,
+    last_valid: Map<number, PearSvgCacheEntry>,
 ): boolean {
     let all_valid = true;
     $scope.find("[data-pear-svg-component]").each((_placeholder_index, host) => {
@@ -222,21 +225,34 @@ export function mount_svg_components(
             return;
         }
         const current = as_text(prop_value(component, index, "markup", live_props));
-        let markup = current;
-        let svg = sanitize_pear_svg(markup);
+        const cached = last_valid.get(index);
+        if (cached?.markup === current) {
+            host.replaceChildren(cached.svg.cloneNode(true));
+            return;
+        }
+        let rendered_markup = current;
+        let svg = sanitize_pear_svg(current);
         if (svg === undefined) {
             all_valid = false;
-            markup = last_valid_markup.get(index) ?? "";
-            svg = sanitize_pear_svg(markup);
             host.classList.add("pear-explainer-svg-stale");
-        } else {
-            last_valid_markup.set(index, markup);
+            if (cached !== undefined) {
+                host.replaceChildren(cached.svg.cloneNode(true));
+                return;
+            }
+            const static_markup = as_text(component.props["markup"]);
+            if (static_markup !== current) {
+                svg = sanitize_pear_svg(static_markup);
+                if (svg !== undefined) {
+                    rendered_markup = static_markup;
+                }
+            }
         }
         if (svg === undefined) {
             host.textContent = "diagram unavailable";
             host.classList.add("pear-explainer-svg-invalid");
             return;
         }
+        last_valid.set(index, {markup: rendered_markup, svg});
         host.replaceChildren(svg);
     });
     return all_valid;

@@ -41,6 +41,7 @@ PEAR_EXPLAINER_ACTION_LIMIT: Final = 4
 PEAR_EXPLAINER_ACTION_LABEL_LIMIT: Final = 40
 PEAR_EXPLAINER_ACTION_PROMPT_LIMIT: Final = 1000
 PEAR_EXPLAINER_TEXT_LIMIT: Final = 4000
+PEAR_EXPLAINER_TITLE_LIMIT: Final = 24
 PEAR_SVG_MARKUP_LIMIT: Final = 64_000
 
 # Component catalog: prop names the validator accepts and the contract
@@ -183,7 +184,7 @@ def pear_validate_monitor_spec(raw: Any) -> dict[str, Any]:
     """Validate an agent-written spec into (title, cadence, block, recipe)."""
     if not isinstance(raw, dict):
         raise PearMonitorSpecError("Spec must be a JSON object.")
-    title = _clean_string(raw.get("title", ""), limit=24)
+    title = _clean_string(raw.get("title", ""), limit=PEAR_EXPLAINER_TITLE_LIMIT)
     cadence = raw.get("cadence_seconds", 20)
     if not isinstance(cadence, int | float):
         raise PearMonitorSpecError("cadence_seconds must be a number.")

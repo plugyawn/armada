@@ -66,7 +66,10 @@ let last_render_signature = "";
 let last_context_key = "";
 const collapsed_ids = new Set<number>();
 const seen_versions = new Map<number, number>();
-const last_valid_svg_markup = new Map<number, Map<number, string>>();
+const last_valid_svg_markup = new Map<
+    number,
+    Map<number, pear_wall_components.PearSvgCacheEntry>
+>();
 
 function wall_context(): {stream: string; topic: string} | undefined {
     const stream = narrow_state.stream_name();

@@ -96,6 +96,7 @@ from zerver.views.pear import (
     build_pear_git_context,
     extract_pear_codex_model_catalog,
     pear_context_isolation_username,
+    pear_worker_run_summary_events,
     serialize_pear_topic_context,
     serialize_pear_worker_run,
 )
@@ -570,6 +571,47 @@ class PearSessionEndpointTest(ZulipTestCase):
 
         self.assertEqual(serialized_run["status"], PearWorkerRun.DONE)
         self.assertIsNone(serialized_run["live"])
+
+    def test_run_summary_events_are_batched_for_polling(self) -> None:
+        user = self.example_user("hamlet")
+        pear_bot = self.create_test_bot(
+            "pear",
+            user,
+            full_name="Pear",
+            bot_type=UserProfile.EMBEDDED_BOT,
+            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+        )
+        runs = [
+            PearWorkerRun.objects.create(
+                realm=user.realm,
+                bot_profile=pear_bot,
+                trigger_message_id=100 + index,
+                requesting_user=user,
+                status=PearWorkerRun.RUNNING,
+                tool_count=index + 2,
+            )
+            for index in range(5)
+        ]
+        for index, run in enumerate(runs):
+            PearWorkerRunEvent.objects.create(
+                run=run,
+                event_type="usage",
+                payload={"usage": {"input_tokens": index + 1, "total_tokens": index + 1}},
+            )
+
+        with self.assert_database_query_count(2):
+            events_by_run_id = pear_worker_run_summary_events(runs)
+        with self.assert_database_query_count(0):
+            serialized = [
+                serialize_pear_worker_run(run, summary_events=events_by_run_id[run.id])
+                for run in runs
+            ]
+
+        self.assertEqual([item["tool_count"] for item in serialized], [2, 3, 4, 5, 6])
+        self.assertEqual(
+            [item["usage"]["input_tokens"] for item in serialized],  # type: ignore[index]
+            [1, 2, 3, 4, 5],
+        )
 
     def test_get_pear_runs_includes_requested_run_ids_outside_topic_window(self) -> None:
         owner = self.example_user("hamlet")

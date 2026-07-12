@@ -1437,6 +1437,8 @@ _PEAR_ENV_OVERRIDES: Final[dict[str, Callable[[str], object]]] = {
     "PEAR_WORKER_TRUSTED_USER_IDS": _pear_parse_int_list,
     "PEAR_WORKER_MAX_ACTIVE_RUNS_PER_TOPIC": _pear_parse_int,
     "PEAR_WORKER_MAX_ACTIVE_RUNS_PER_REALM": _pear_parse_int,
+    "PEAR_WORKSPACE_INDEX_LOCAL_MAX_ENTRIES": _pear_parse_int,
+    "PEAR_WORKSPACE_INDEX_LOCAL_MAX_PATHS": _pear_parse_int,
     "PEAR_ADDRESSING_ROUTER_RUNTIME": _pear_parse_string,
     "PEAR_ADDRESSING_ROUTER_MODEL": _pear_parse_optional_string,
     "PEAR_ADDRESSING_ROUTER_REASONING_EFFORT": _pear_parse_string,

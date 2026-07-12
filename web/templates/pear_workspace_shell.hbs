@@ -71,6 +71,15 @@
             <header class="pear-workspace-shell__document-header">
                 <nav data-role="breadcrumb" aria-label="File path"></nav>
                 <div class="pear-workspace-shell__document-actions">
+                    <span
+                        id="pear-workspace-mode-feedback"
+                        class="pear-workspace-shell__mode-feedback"
+                        data-role="mode-feedback"
+                        role="status"
+                        aria-live="polite"
+                        aria-atomic="true"
+                        hidden
+                    ></span>
                     <div class="pear-workspace-file-menu-wrap">
                         <button
                             type="button"
@@ -132,8 +141,13 @@
                     <button
                         type="button"
                         data-action="mode-source"
+                        aria-describedby="pear-workspace-mode-feedback"
                     >Source</button>
-                    <button type="button" data-action="mode-rich">Rich</button>
+                    <button
+                        type="button"
+                        data-action="mode-rich"
+                        aria-describedby="pear-workspace-mode-feedback"
+                    >Rich</button>
                     <a
                         data-role="raw-link"
                         target="_blank"

@@ -314,6 +314,74 @@ function mask_math(markdown: string): string {
     return characters.join("");
 }
 
+export function normalize_safe_rich_breaks(markdown: string): string {
+    // Only normalize forms with an unambiguous Markdown equivalent: an inline
+    // break between text becomes a hard break, and a standalone spacer already
+    // surrounded by blank lines is redundant. Boundary and line-adjacent tags
+    // remain visible to the raw-HTML guard below.
+    markdown = markdown.replaceAll("\r\n", "\n").replaceAll("\r", "\n");
+    const visible = mask_math(mask_inline_code(mask_fenced_and_indented_code(markdown)));
+    const matches = [...visible.matchAll(/<br\s*\/?>/gi)];
+    const line_starts = [0];
+    for (const newline of visible.matchAll(/\n/g)) {
+        line_starts.push(newline.index + 1);
+    }
+    let line_index = 0;
+    const located_matches = matches.flatMap((match) => {
+        const start = match.index;
+        if (start === undefined) {
+            return [];
+        }
+        while (line_starts[line_index + 1] !== undefined && line_starts[line_index + 1]! <= start) {
+            line_index += 1;
+        }
+        return [{match, start, lineIndex: line_index}];
+    });
+    const matches_per_line = new Map<number, number>();
+    for (const {lineIndex} of located_matches) {
+        matches_per_line.set(lineIndex, (matches_per_line.get(lineIndex) ?? 0) + 1);
+    }
+    const replacements: {start: number; end: number; value: string}[] = [];
+    for (const {match, start, lineIndex} of located_matches) {
+        const end = start + match[0].length;
+        const line_start = line_starts[lineIndex]!;
+        const next_line_start = line_starts[lineIndex + 1];
+        const next_newline = next_line_start === undefined ? -1 : next_line_start - 1;
+        const line_end = next_newline === -1 ? visible.length : next_newline;
+        if (matches_per_line.get(lineIndex) !== 1 || is_escaped(visible, start)) {
+            continue;
+        }
+        const has_prefix = visible.slice(line_start, start).trim() !== "";
+        const has_suffix = visible.slice(end, line_end).trim() !== "";
+        if (has_prefix && has_suffix) {
+            replacements.push({start, end, value: "  \n"});
+            continue;
+        }
+        if (has_prefix || has_suffix || lineIndex === 0 || next_line_start === undefined) {
+            continue;
+        }
+        const previous_line_start = line_starts[lineIndex - 1]!;
+        const previous_line = visible.slice(previous_line_start, line_start - 1).trim();
+        const following_line_start = next_line_start;
+        const following_line_end = line_starts[lineIndex + 2] ?? visible.length;
+        const following_line = visible.slice(following_line_start, following_line_end).trim();
+        if (previous_line === "" && following_line === "") {
+            replacements.push({start: line_start, end: next_line_start, value: ""});
+        }
+    }
+    const parts: string[] = [];
+    let cursor = 0;
+    for (const replacement of replacements) {
+        if (replacement.start < cursor) {
+            continue;
+        }
+        parts.push(markdown.slice(cursor, replacement.start), replacement.value);
+        cursor = replacement.end;
+    }
+    parts.push(markdown.slice(cursor));
+    return parts.join("");
+}
+
 function source_only(
     code: Exclude<PearWorkspaceRichEligibility, {eligible: true}>["code"],
     reason: string,
@@ -340,7 +408,17 @@ export function rich_source_only_reason(
         return source_only("frontmatter", "TOML frontmatter is available in Source mode only.");
     }
 
-    const visible = mask_math(mask_inline_code(mask_fenced_and_indented_code(without_bom)));
+    const original_visible = mask_math(
+        mask_inline_code(mask_fenced_and_indented_code(without_bom)),
+    );
+    if (/\\[!-/:-@[-`{-~]/.test(original_visible)) {
+        return source_only(
+            "escape",
+            "Backslash-escaped Markdown is available in Source mode only.",
+        );
+    }
+    const rich_markdown = normalize_safe_rich_breaks(without_bom);
+    const visible = mask_math(mask_inline_code(mask_fenced_and_indented_code(rich_markdown)));
     if (/<!--|<!\[CDATA\[|<!DOCTYPE\s|<\?|<\/?[A-Za-z][\w:.-]*(?:\s|\/?>)/i.test(visible)) {
         return source_only(
             "raw_html",
@@ -369,12 +447,6 @@ export function rich_source_only_reason(
         return source_only(
             "mdx",
             "MDX expressions, brace extensions, and module syntax are available in Source mode only.",
-        );
-    }
-    if (/\\[!-/:-@[-`{-~]/.test(visible)) {
-        return source_only(
-            "escape",
-            "Backslash-escaped Markdown is available in Source mode only.",
         );
     }
     if (
@@ -530,14 +602,15 @@ export async function can_enter_rich(markdown: string): Promise<PearWorkspaceRic
     if (unsupported !== undefined) {
         return unsupported;
     }
+    const rich_markdown = normalize_safe_rich_breaks(markdown);
     const detached_root = document.createElement("div");
-    const builder = build_editor(detached_root, markdown, "Write Markdown…");
+    const builder = build_editor(detached_root, rich_markdown, "Write Markdown…");
     builder.setReadonly(true);
     let created = false;
     try {
         await builder.create();
         created = true;
-        return semantic_round_trip(builder, markdown);
+        return semantic_round_trip(builder, rich_markdown);
     } catch (error) {
         // Milkdown leaves the editor in OnCreate after a rejected create(). Its
         // destroy() polls forever in that state, so only destroy completed
@@ -565,6 +638,7 @@ export async function create_pear_workspace_markdown_editor(
     if (unsupported !== undefined) {
         return {ok: false, eligibility: unsupported};
     }
+    const rich_markdown = normalize_safe_rich_breaks(options.markdown);
     try {
         await rich_styles_ready;
     } catch {
@@ -619,7 +693,7 @@ export async function create_pear_workspace_markdown_editor(
 
     const builder = build_editor(
         host,
-        options.markdown,
+        rich_markdown,
         options.placeholder ?? "Write Markdown…",
         () => {
             if (!accept_user_changes) {
@@ -642,7 +716,7 @@ export async function create_pear_workspace_markdown_editor(
             eligibility: parse_failure(error),
         };
     }
-    const eligibility = semantic_round_trip(builder, options.markdown);
+    const eligibility = semantic_round_trip(builder, rich_markdown);
     if (!eligibility.eligible) {
         await builder.destroy();
         return {ok: false, eligibility};
@@ -761,14 +835,15 @@ export async function create_pear_workspace_markdown_editor(
         if (source_reason !== undefined) {
             return source_reason;
         }
-        const next_eligibility = semantic_round_trip(builder, hydration.markdown);
+        const rich_markdown = normalize_safe_rich_breaks(hydration.markdown);
+        const next_eligibility = semantic_round_trip(builder, rich_markdown);
         if (!next_eligibility.eligible) {
             return next_eligibility;
         }
 
         let next_document = view.state.doc;
         builder.editor.action((ctx) => {
-            next_document = ctx.get(parserCtx)(hydration.markdown);
+            next_document = ctx.get(parserCtx)(rich_markdown);
         });
         const requested_selection = hydration.selection ?? {
             anchor: view.state.selection.anchor,

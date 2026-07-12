@@ -240,6 +240,7 @@ export function create_pear_workspace_shell(
         "[data-action='mode-rich']",
         is_button,
     );
+    const mode_feedback = required_element(options.root, "[data-role='mode-feedback']");
     const ask_pear_button = required_typed_element(
         options.root,
         "[data-action='ask-pear']",
@@ -541,6 +542,7 @@ export function create_pear_workspace_shell(
                 status,
                 sourceButton: source_button,
                 richButton: rich_button,
+                modeFeedback: mode_feedback,
                 rawLink: raw_link,
                 downloadLink: download_link,
             },
@@ -1464,7 +1466,9 @@ export function create_pear_workspace_shell(
                 break;
             }
             case "mode-rich": {
-                void switch_editor_mode("rich");
+                if (rich_button.getAttribute("aria-disabled") !== "true") {
+                    void switch_editor_mode("rich");
+                }
 
                 break;
             }

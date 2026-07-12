@@ -16,6 +16,7 @@ export type PearWorkspaceShellSurfaceElements = {
     status: HTMLElement;
     sourceButton: HTMLButtonElement;
     richButton: HTMLButtonElement;
+    modeFeedback: HTMLElement;
     rawLink: HTMLAnchorElement;
     downloadLink: HTMLAnchorElement;
 };
@@ -157,7 +158,52 @@ export function render_pear_workspace_surface(options: {
         "aria-pressed",
         String(document_session?.editorMode === "rich"),
     );
-    elements.richButton.disabled = snapshot?.richModeLoading ?? false;
+    const rich_issue = snapshot?.richModeIssue;
+    const rich_loading = snapshot?.richModeLoading ?? false;
+    if (elements.richButton.disabled !== rich_loading) {
+        elements.richButton.disabled = rich_loading;
+    }
+    const rich_source_only = rich_issue !== undefined && !rich_issue.retryable;
+    if (rich_source_only && elements.richButton.getAttribute("aria-disabled") !== "true") {
+        elements.richButton.setAttribute("aria-disabled", "true");
+    } else if (!rich_source_only && elements.richButton.hasAttribute("aria-disabled")) {
+        elements.richButton.removeAttribute("aria-disabled");
+    }
+    const rich_label = rich_issue?.retryable ? "Retry Rich" : "Rich";
+    if (elements.richButton.textContent !== rich_label) {
+        elements.richButton.textContent = rich_label;
+    }
+    const rich_state = rich_loading ? "loading" : (rich_issue?.kind ?? "idle");
+    if (elements.richButton.dataset["state"] !== rich_state) {
+        elements.richButton.dataset["state"] = rich_state;
+    }
+    if (rich_issue === undefined) {
+        if (elements.richButton.hasAttribute("title")) {
+            elements.richButton.removeAttribute("title");
+        }
+        if (!elements.modeFeedback.hidden) {
+            elements.modeFeedback.hidden = true;
+        }
+        if (elements.modeFeedback.textContent !== "") {
+            elements.modeFeedback.textContent = "";
+        }
+        if (elements.modeFeedback.dataset["state"] !== undefined) {
+            delete elements.modeFeedback.dataset["state"];
+        }
+    } else {
+        if (elements.richButton.title !== rich_issue.message) {
+            elements.richButton.title = rich_issue.message;
+        }
+        if (elements.modeFeedback.hidden) {
+            elements.modeFeedback.hidden = false;
+        }
+        if (elements.modeFeedback.textContent !== rich_issue.message) {
+            elements.modeFeedback.textContent = rich_issue.message;
+        }
+        if (elements.modeFeedback.dataset["state"] !== rich_issue.kind) {
+            elements.modeFeedback.dataset["state"] = rich_issue.kind;
+        }
+    }
     elements.editorRoot.hidden = surface?.kind !== "text";
     elements.nontextRoot.hidden = surface?.kind === "text" || surface?.kind === "empty";
     elements.nontextRoot.replaceChildren();

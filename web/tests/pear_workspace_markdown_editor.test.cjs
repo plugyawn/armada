@@ -234,6 +234,79 @@ run_test(
     },
 );
 
+run_test("normalizes safe br tags for Rich without touching protected source", async () => {
+    const markdown_editor = await editor_module;
+    const safe_cases = new Map([
+        ["first<br />second", "first  \nsecond"],
+        ["first<br />second\r\n", "first  \nsecond\n"],
+        ["first\n\n<br />\n\nsecond", "first\n\n\nsecond"],
+    ]);
+    for (const [markdown, expected] of safe_cases) {
+        assert.equal(markdown_editor.normalize_safe_rich_breaks(markdown), expected, markdown);
+        assert.equal(markdown_editor.rich_source_only_reason(markdown), undefined, markdown);
+    }
+
+    const protected_markdown = "`literal <br />`\n\n```html\n<br />\n```\n";
+    assert.equal(
+        markdown_editor.normalize_safe_rich_breaks(protected_markdown),
+        protected_markdown,
+    );
+    assert.equal(markdown_editor.rich_source_only_reason(protected_markdown), undefined);
+    for (const [markdown, code] of [
+        ["literal \\<br>\n", "escape"],
+        ["first<br>\nsecond\n", "raw_html"],
+        ["first\n<br>second\n", "raw_html"],
+        ["first\n<br>\nsecond\n", "raw_html"],
+        ["first<br><br>second\n", "raw_html"],
+        ["first\n<br>\n<br>\nsecond\n", "raw_html"],
+        ["<br>\nfirst\n", "raw_html"],
+        ["first\n<br>\n", "raw_html"],
+    ]) {
+        assert.equal(markdown_editor.rich_source_only_reason(markdown)?.code, code, markdown);
+    }
+
+    const markdown = "# Heading\n\nfirst\n\n<br />\n\nsecond\n";
+    assert.deepEqual(
+        await with_timeout(markdown_editor.can_enter_rich(markdown), "safe br validation"),
+        {eligible: true},
+    );
+
+    const root = document.createElement("div");
+    document.body.append(root);
+    const serialized_results = [];
+    const result = await with_timeout(
+        markdown_editor.create_pear_workspace_markdown_editor({
+            root,
+            markdown,
+            editRevision: 0,
+            onDirty() {},
+            onSerialized(serialized) {
+                serialized_results.push(serialized);
+            },
+        }),
+        "safe br Rich creation",
+    );
+    assert.equal(result.ok, true);
+    assert.deepEqual(serialized_results, [], "mounting Rich must not rewrite source bytes");
+    paste_text(root, "X");
+    const flushed = await result.editor.flush(1);
+    assert.equal(flushed.status, "serialized");
+    assert.equal(
+        markdown_editor.rich_source_only_reason(flushed.markdown),
+        undefined,
+        JSON.stringify(flushed.markdown),
+    );
+    assert.deepEqual(
+        await with_timeout(
+            markdown_editor.can_enter_rich(flushed.markdown),
+            "serialized safe br reopen",
+        ),
+        {eligible: true},
+    );
+    await result.editor.destroy();
+    root.remove();
+});
+
 run_test(
     "production parser round-trips the supported profile and keeps invalid math editable",
     async () => {

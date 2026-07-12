@@ -1703,6 +1703,34 @@
     display: none;
 }
 
+.pear-workspace-load-error {
+    display: grid;
+    min-height: 100%;
+    align-content: center;
+    justify-items: center;
+    gap: var(--pear-space-3);
+    padding: var(--pear-space-4);
+    background: var(--pear-surface-0);
+    color: var(--pear-ink-2);
+    font-family: var(--pear-font-ui);
+
+    & button {
+        padding: var(--pear-space-2) var(--pear-space-3);
+        border: 1px solid var(--pear-hairline);
+        border-radius: var(--pear-radius-control);
+        background: var(--pear-surface-1);
+        color: var(--pear-ink-1);
+        cursor: pointer;
+        font-family: var(--pear-font-pixel);
+    }
+
+    & button:hover,
+    & button:focus-visible {
+        border-color: var(--pear-accent-ink);
+        background: var(--pear-surface-2);
+    }
+}
+
 .pear-workspace-mode-tab {
     appearance: none;
     padding: 3px 1px 4px;

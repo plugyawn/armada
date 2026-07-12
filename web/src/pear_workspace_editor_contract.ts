@@ -40,6 +40,9 @@ export type PearWorkspaceEditorSnapshot = {
     activeIdentity: PearWorkspaceDocumentIdentity | undefined;
     mountedAdapter: "rich" | "source" | undefined;
     richModeLoading: boolean;
+    richModeIssue:
+        | {kind: "source_only" | "load_error"; message: string; retryable: boolean}
+        | undefined;
     notice: string | undefined;
 };
 

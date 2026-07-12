@@ -325,6 +325,72 @@ run_test("README room offers an intentional empty state", async () => {
     test.root.remove();
 });
 
+run_test("Rich failures are explained beside a retryable mode control", async () => {
+    const test = harness("workspace-rich-feedback", "readme");
+    const readme = entry("README.md");
+    const current = descriptor("workspace-rich-feedback", 1, {
+        default_path: readme.path,
+        default_entry: readme,
+    });
+    test.send_descriptor(current);
+    test.send_tree(0, current.root, [readme]);
+    await Promise.resolve();
+
+    test.editors[0].update({
+        surface: {
+            kind: "text",
+            entry: readme,
+            file: {
+                entry_id: readme.entry_id,
+                path: readme.path,
+                rich_mode_eligible: true,
+            },
+        },
+        activeDocument: {path: readme.path, editorMode: "source", state: "clean"},
+    });
+    const rich = test.root.querySelector("[data-action='mode-rich']");
+    const stable_label_node = rich.firstChild;
+    test.editors[0].update({
+        activeDocument: {path: readme.path, editorMode: "source", state: "dirty"},
+    });
+    assert.equal(
+        rich.firstChild,
+        stable_label_node,
+        "source keystroke updates preserve unchanged mode-control DOM",
+    );
+
+    test.editors[0].update({
+        richModeIssue: {
+            kind: "load_error",
+            message: "Rich editor failed to load. Source remains available.",
+            retryable: true,
+        },
+    });
+    const feedback = test.root.querySelector("[data-role='mode-feedback']");
+    assert.equal(rich.textContent, "Retry Rich");
+    assert.equal(rich.disabled, false);
+    assert.equal(rich.dataset.state, "load_error");
+    assert.equal(feedback.hidden, false);
+    assert.match(feedback.textContent, /failed to load/);
+
+    test.editors[0].update({
+        richModeIssue: {
+            kind: "source_only",
+            message: "Raw HTML is available in Source mode only.",
+            retryable: false,
+        },
+    });
+    assert.equal(rich.textContent, "Rich");
+    assert.equal(rich.disabled, false);
+    assert.equal(rich.getAttribute("aria-disabled"), "true");
+    assert.match(rich.title, /Raw HTML/);
+    test.click(rich);
+    assert.deepEqual(test.editors[0].modes, [], "aria-disabled Rich cannot activate");
+
+    await test.controller.destroy();
+    test.root.remove();
+});
+
 run_test("Ask Pear fills the existing compose with active file context", async () => {
     const test = harness("workspace-compose");
     const current = descriptor("workspace-compose");

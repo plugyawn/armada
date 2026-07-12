@@ -632,14 +632,32 @@
     line-height: 1.62;
 }
 
-.pear-workspace-shell .pear-workspace-rich-editor .ProseMirror {
+.pear-workspace-shell .pear-workspace-rich-editor .milkdown {
+    box-shadow: none;
+    background: transparent;
+    color: inherit;
+    font-family: inherit;
+    font-size: inherit;
+    line-height: inherit;
+}
+
+.pear-workspace-shell
+    .pear-workspace-rich-editor
+    .milkdown
+    .ProseMirror.editor {
     min-block-size: 100%;
+    padding: 0;
+    background: transparent;
+    color: inherit;
+    font-family: inherit;
+    font-size: inherit;
+    line-height: inherit;
     outline: 0;
 }
 
-.pear-workspace-shell .pear-workspace-rich-editor h1,
-.pear-workspace-shell .pear-workspace-rich-editor h2,
-.pear-workspace-shell .pear-workspace-rich-editor h3 {
+.pear-workspace-shell .pear-workspace-rich-editor .milkdown .ProseMirror h1,
+.pear-workspace-shell .pear-workspace-rich-editor .milkdown .ProseMirror h2,
+.pear-workspace-shell .pear-workspace-rich-editor .milkdown .ProseMirror h3 {
     color: inherit;
     font-family: var(--pear-font-ui, "Hanken Grotesk VF", sans-serif);
     font-weight: 600;
@@ -647,13 +665,13 @@
     text-wrap: balance;
 }
 
-.pear-workspace-shell .pear-workspace-rich-editor h1 {
+.pear-workspace-shell .pear-workspace-rich-editor .milkdown .ProseMirror h1 {
     margin: 0 0 0.8em;
     font-size: 32px;
     letter-spacing: -0.025em;
 }
 
-.pear-workspace-shell .pear-workspace-rich-editor h2 {
+.pear-workspace-shell .pear-workspace-rich-editor .milkdown .ProseMirror h2 {
     margin: 1.65em 0 0.65em;
     padding-block-end: 0;
     border-block-end: 0;
@@ -661,50 +679,77 @@
     letter-spacing: -0.015em;
 }
 
-.pear-workspace-shell .pear-workspace-rich-editor h3 {
+.pear-workspace-shell .pear-workspace-rich-editor .milkdown .ProseMirror h3 {
     margin: 1.35em 0 0.5em;
     font-size: 18px;
 }
 
-.pear-workspace-shell .pear-workspace-rich-editor p,
-.pear-workspace-shell .pear-workspace-rich-editor ul,
-.pear-workspace-shell .pear-workspace-rich-editor ol,
-.pear-workspace-shell .pear-workspace-rich-editor blockquote,
-.pear-workspace-shell .pear-workspace-rich-editor pre,
-.pear-workspace-shell .pear-workspace-rich-editor table,
-.pear-workspace-shell .pear-workspace-rich-editor .katex-display {
+.pear-workspace-shell .pear-workspace-rich-editor .milkdown .ProseMirror p,
+.pear-workspace-shell .pear-workspace-rich-editor .milkdown .ProseMirror ul,
+.pear-workspace-shell .pear-workspace-rich-editor .milkdown .ProseMirror ol,
+.pear-workspace-shell
+    .pear-workspace-rich-editor
+    .milkdown
+    .ProseMirror
+    blockquote,
+.pear-workspace-shell .pear-workspace-rich-editor .milkdown .ProseMirror pre,
+.pear-workspace-shell .pear-workspace-rich-editor .milkdown .ProseMirror table,
+.pear-workspace-shell
+    .pear-workspace-rich-editor
+    .milkdown
+    .ProseMirror
+    .katex-display {
     margin-block: 0 1em;
 }
 
-.pear-workspace-shell .pear-workspace-rich-editor ul,
-.pear-workspace-shell .pear-workspace-rich-editor ol {
+.pear-workspace-shell .pear-workspace-rich-editor .milkdown .ProseMirror ul,
+.pear-workspace-shell .pear-workspace-rich-editor .milkdown .ProseMirror ol {
     padding-inline-start: 1.55em;
 }
 
-.pear-workspace-shell .pear-workspace-rich-editor li + li {
+.pear-workspace-shell
+    .pear-workspace-rich-editor
+    .milkdown
+    .ProseMirror
+    li
+    + li {
     margin-block-start: 0.28em;
 }
 
-.pear-workspace-shell .pear-workspace-rich-editor blockquote {
+.pear-workspace-shell
+    .pear-workspace-rich-editor
+    .milkdown
+    .ProseMirror
+    blockquote {
     padding: 0.1em 0 0.1em 1em;
     border-inline-start: 3px solid var(--pear-workspace-border);
     color: var(--pear-workspace-muted);
 }
 
-.pear-workspace-shell .pear-workspace-rich-editor code,
-.pear-workspace-shell .pear-workspace-rich-editor pre {
+.pear-workspace-shell .pear-workspace-rich-editor .milkdown .ProseMirror a {
+    color: var(--pear-accent-ink, currentcolor);
+    text-decoration-color: color-mix(in srgb, currentcolor 55%, transparent);
+}
+
+.pear-workspace-shell .pear-workspace-rich-editor .milkdown .ProseMirror code,
+.pear-workspace-shell .pear-workspace-rich-editor .milkdown .ProseMirror pre {
     font-family: var(--pear-font-mono, "Geist Mono VF", monospace);
     font-size: 0.88em;
 }
 
-.pear-workspace-shell .pear-workspace-rich-editor :not(pre) > code {
+.pear-workspace-shell
+    .pear-workspace-rich-editor
+    .milkdown
+    .ProseMirror
+    :not(pre)
+    > code {
     padding: 0.12em 0.34em;
     border: 1px solid var(--pear-workspace-border);
     border-radius: 2px;
     background: var(--pear-workspace-hover);
 }
 
-.pear-workspace-shell .pear-workspace-rich-editor pre {
+.pear-workspace-shell .pear-workspace-rich-editor .milkdown .ProseMirror pre {
     overflow-x: auto;
     padding: 13px 15px;
     border: 1px solid var(--pear-workspace-border);
@@ -713,15 +758,15 @@
     line-height: 1.5;
 }
 
-.pear-workspace-shell .pear-workspace-rich-editor table {
+.pear-workspace-shell .pear-workspace-rich-editor .milkdown .ProseMirror table {
     display: block;
     overflow-x: auto;
     inline-size: 100%;
     border-collapse: collapse;
 }
 
-.pear-workspace-shell .pear-workspace-rich-editor th,
-.pear-workspace-shell .pear-workspace-rich-editor td {
+.pear-workspace-shell .pear-workspace-rich-editor .milkdown .ProseMirror th,
+.pear-workspace-shell .pear-workspace-rich-editor .milkdown .ProseMirror td {
     min-inline-size: 90px;
     padding: 7px 9px;
     border: 1px solid var(--pear-workspace-border);
@@ -729,12 +774,16 @@
     vertical-align: top;
 }
 
-.pear-workspace-shell .pear-workspace-rich-editor th {
+.pear-workspace-shell .pear-workspace-rich-editor .milkdown .ProseMirror th {
     background: var(--pear-workspace-hover);
     font-weight: 600;
 }
 
-.pear-workspace-shell .pear-workspace-rich-editor .katex-display {
+.pear-workspace-shell
+    .pear-workspace-rich-editor
+    .milkdown
+    .ProseMirror
+    .katex-display {
     overflow-x: auto;
     padding-block: 0.35em;
 }

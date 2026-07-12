@@ -9,6 +9,7 @@ from zerver.lib.pear_workspace_index import (
     WorkspaceIndex,
     WorkspaceIndexError,
     WorkspacePath,
+    _subsequence_score,
 )
 from zerver.lib.pear_workspace_io import WorkspaceEntryIdentity
 
@@ -151,6 +152,36 @@ class PearWorkspaceIndexTest(unittest.TestCase):
         self.assertEqual(len(index.search("r", limit=2)), 2)
         with self.assertRaises(ValueError):
             index.search("r", limit=MAX_SEARCH_LIMIT + 1)
+
+    def test_bounded_search_preserves_complete_sort_ranking(self) -> None:
+        paths = [
+            WorkspacePath(f"package-{number % 73:02}/ReadMe-{number:05}.md")
+            for number in range(5000)
+        ]
+        paths.extend(
+            [
+                WorkspacePath("README.md"),
+                WorkspacePath("readme.md"),
+                WorkspacePath("docs/read-me.md"),
+            ]
+        )
+        index = self.build(paths)
+        query = "readme"
+        expected = sorted(
+            (
+                entry
+                for entry in index._entries.values()
+                if entry.path
+                and _subsequence_score(query, entry.path.casefold()) is not None
+            ),
+            key=lambda entry: (
+                _subsequence_score(query, entry.path.casefold()),
+                entry.path.casefold(),
+                entry.path,
+            ),
+        )[:MAX_SEARCH_LIMIT]
+
+        self.assertEqual(index.search(query), tuple(expected))
 
     def test_rejects_file_directory_collision(self) -> None:
         with self.assertRaises(WorkspaceIndexError):

@@ -144,6 +144,7 @@ class PearWorkerRun(models.Model):
     result_message_id = models.IntegerField(null=True)
     error = models.TextField(null=True)
     attempts = models.PositiveSmallIntegerField(default=0)
+    tool_count = models.PositiveIntegerField(default=0)
     heartbeat_at = models.DateTimeField(null=True)
     cancel_requested_at = models.DateTimeField(null=True)
     date_created = models.DateTimeField(default=timezone_now, db_index=True)

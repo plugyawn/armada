@@ -7,7 +7,8 @@ from types import SimpleNamespace
 from typing import Annotated, Any
 
 from django.conf import settings
-from django.db.models import Q
+from django.db.models import F, Q, Window
+from django.db.models.functions import RowNumber
 from django.http import HttpRequest, HttpResponse
 from django.utils.timezone import now as timezone_now
 from django.utils.translation import gettext as _
@@ -690,16 +691,78 @@ def pear_usage_from_event_payload(payload: object) -> PearTokenUsage | None:
     return pear_normalize_token_usage(payload)
 
 
-def serialize_pear_worker_run_usage(run: PearWorkerRun) -> dict[str, object] | None:
+def pear_worker_run_summary_events(
+    runs: list[PearWorkerRun],
+) -> dict[int, list[PearWorkerRunEvent]]:
+    """Load all event data used by run cards in one query.
+
+    The run-list endpoint is polled while work is active, so summary
+    serialization must not issue per-run event queries.  Detail serialization
+    can still use the model managers when no batch was supplied.
+    """
+    events_by_run_id = {run.id: [] for run in runs}
+    if not events_by_run_id:
+        return events_by_run_id
+    newest_usage_candidates = (
+        PearWorkerRunEvent.objects.filter(
+            run_id__in=events_by_run_id,
+            event_type__in=("usage", "transcript"),
+        )
+        .annotate(
+            summary_rank=Window(
+                expression=RowNumber(),
+                partition_by=(F("run_id"),),
+                order_by=(F("date_created").desc(), F("id").desc()),
+            )
+        )
+        .filter(summary_rank__lte=20)
+        .only("id", "run_id", "event_type", "payload", "date_created")
+    )
+    newest_plan_candidates = (
+        PearWorkerRunEvent.objects.filter(
+            run_id__in=events_by_run_id,
+            event_type="transcript",
+        )
+        .annotate(
+            summary_rank=Window(
+                expression=RowNumber(),
+                partition_by=(F("run_id"),),
+                order_by=(F("date_created").desc(), F("id").desc()),
+            )
+        )
+        .filter(summary_rank__lte=30)
+        .only("id", "run_id", "event_type", "payload", "date_created")
+    )
+    unique_events: dict[int, PearWorkerRunEvent] = {}
+    for event in [*newest_usage_candidates, *newest_plan_candidates]:
+        unique_events[event.id] = event
+    for event in sorted(
+        unique_events.values(),
+        key=lambda candidate: (candidate.run_id, candidate.date_created, candidate.id),
+        reverse=True,
+    ):
+        events_by_run_id[event.run_id].append(event)
+    return events_by_run_id
+
+
+def serialize_pear_worker_run_usage(
+    run: PearWorkerRun,
+    summary_events: list[PearWorkerRunEvent] | None = None,
+) -> dict[str, object] | None:
     # The newest usage-bearing event wins, but the run's final events
     # are usually usage-less transcript markers ("Codex turn
     # completed."), so scan back a bounded window instead of trusting
     # the single latest event.
     usage: PearTokenUsage | None = None
     event = None
-    for candidate in run.events.filter(Q(event_type="usage") | Q(event_type="transcript")).order_by(
-        "-date_created", "-id"
-    )[:20]:
+    candidates = (
+        [event for event in summary_events if event.event_type in {"usage", "transcript"}][:20]
+        if summary_events is not None
+        else run.events.filter(Q(event_type="usage") | Q(event_type="transcript")).order_by(
+            "-date_created", "-id"
+        )[:20]
+    )
+    for candidate in candidates:
         usage = pear_usage_from_event_payload(candidate.payload)
         if usage is not None:
             event = candidate
@@ -719,14 +782,22 @@ def serialize_pear_worker_run_usage(run: PearWorkerRun) -> dict[str, object] | N
     }
 
 
-def serialize_pear_worker_run_plan(run: PearWorkerRun) -> list[dict[str, str]] | None:
+def serialize_pear_worker_run_plan(
+    run: PearWorkerRun,
+    summary_events: list[PearWorkerRunEvent] | None = None,
+) -> list[dict[str, str]] | None:
     """The run's latest plan_update, for the rail's pinned plan card.
 
     Plan events carry the whole checklist (full-state replacement, the
     codex update_plan contract), so the newest one wins; bounded scan
     like the usage lookup.
     """
-    for event in run.events.filter(event_type="transcript").order_by("-date_created", "-id")[:30]:
+    events = (
+        [event for event in summary_events if event.event_type == "transcript"][:30]
+        if summary_events is not None
+        else run.events.filter(event_type="transcript").order_by("-date_created", "-id")[:30]
+    )
+    for event in events:
         payload = event.payload
         if not isinstance(payload, dict) or payload.get("kind") != "plan":
             continue
@@ -744,9 +815,14 @@ def serialize_pear_worker_run_plan(run: PearWorkerRun) -> list[dict[str, str]] |
     return None
 
 
-def serialize_pear_worker_run_tool_count(run: PearWorkerRun) -> int:
+def serialize_pear_worker_run_tool_count(
+    run: PearWorkerRun,
+    summary_events: list[PearWorkerRunEvent] | None = None,
+) -> int:
     # The worker records one tool_results event per turn segment, each
     # carrying that segment's tool_count; the run's total is their sum.
+    if summary_events is not None:
+        return run.tool_count
     tool_count = 0
     for payload in run.events.filter(event_type="tool_results").values_list("payload", flat=True):
         if isinstance(payload, dict) and isinstance(payload.get("tool_count"), int):
@@ -758,6 +834,7 @@ def serialize_pear_worker_run(
     run: PearWorkerRun,
     *,
     include_events: bool = False,
+    summary_events: list[PearWorkerRunEvent] | None = None,
 ) -> dict[str, object]:
     live_state = get_pear_live_run_state(run.trigger_message_id)
     if (
@@ -797,9 +874,9 @@ def serialize_pear_worker_run(
         "requesting_user_full_name": run.requesting_user.full_name
         if run.requesting_user is not None
         else None,
-        "usage": serialize_pear_worker_run_usage(run),
-        "tool_count": serialize_pear_worker_run_tool_count(run),
-        "plan": serialize_pear_worker_run_plan(run),
+        "usage": serialize_pear_worker_run_usage(run, summary_events),
+        "tool_count": serialize_pear_worker_run_tool_count(run, summary_events),
+        "plan": serialize_pear_worker_run_plan(run, summary_events),
         "live": live_state,
     }
     if include_events:
@@ -1057,7 +1134,6 @@ def post_pear_first_run_backend(
         },
     )
 
-
 @typed_endpoint
 def get_pear_workspace_topics_backend(
     request: HttpRequest,
@@ -1114,6 +1190,7 @@ def get_pear_topic_context_backend(
             ),
         },
     )
+
 
 @typed_endpoint
 def post_pear_topic_context_backend(
@@ -1405,6 +1482,7 @@ def get_pear_runs_backend(
 
     runs_by_id = {run.id: run for run in [*topic_runs, *requested_runs]}
     runs = sorted(runs_by_id.values(), key=lambda run: (run.date_created, run.id), reverse=True)
+    summary_events_by_run_id = pear_worker_run_summary_events(runs)
     topic_context = None
     if bool(include_context) and stream_name is not None and topic_name is not None:
         topic_context = serialize_pear_topic_context(
@@ -1423,7 +1501,12 @@ def get_pear_runs_backend(
         request,
         data={
             "pear_runs": [
-                serialize_pear_worker_run(run, include_events=bool(include_events)) for run in runs
+                serialize_pear_worker_run(
+                    run,
+                    include_events=bool(include_events),
+                    summary_events=summary_events_by_run_id[run.id],
+                )
+                for run in runs
             ],
             "runtime_config": build_pear_runtime_config_payload(),
             "pear_topic_context": topic_context,

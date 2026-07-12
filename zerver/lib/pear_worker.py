@@ -15,7 +15,7 @@ from urllib.parse import urlparse
 
 from django.conf import settings
 from django.db import IntegrityError, transaction
-from django.db.models import Q
+from django.db.models import F, Q
 from django.utils.timezone import now as timezone_now
 from django.utils.translation import gettext as _
 
@@ -2884,6 +2884,10 @@ class PearDatabaseWorkerRunStore:
             summary=summary,
             payload=payload,
         )
+        event_tool_count = payload.get("tool_count")
+        if event_type == "tool_results" and isinstance(event_tool_count, int):
+            PearWorkerRun.objects.filter(id=run.id).update(tool_count=F("tool_count") + event_tool_count)
+            run.tool_count += event_tool_count
         if run.workdir:
             invalidate_pear_git_status_delta(run.workdir)
         current_time = timezone_now()

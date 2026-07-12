@@ -4,12 +4,16 @@
 
 import $ from "jquery";
 
+import {sanitize_pear_svg} from "./pear_svg.ts";
+
 export type PearKitComponent = {
     type: string;
     props: Record<string, unknown>;
 };
 
 export const PEAR_KIT_COMPONENT_TYPES = new Set([
+    "text",
+    "svg",
     "meter",
     "stat",
     "sparkline",
@@ -100,8 +104,19 @@ export function component_context(
     const type = component.type;
     const value_of = (prop: string): unknown => prop_value(component, index, prop, live_props);
     const label = as_text(value_of("label"));
-    const context: Record<string, unknown> = {[`is_${type}`]: true, label};
+    const context: Record<string, unknown> = {
+        [`is_${type}`]: true,
+        component_index: index,
+        label,
+    };
     switch (type) {
+        case "text":
+            context["eyebrow"] = as_text(value_of("eyebrow"));
+            context["heading"] = as_text(value_of("heading"));
+            context["body"] = as_text(value_of("body"));
+            break;
+        case "svg":
+            break;
         case "meter": {
             const value = as_number(value_of("value")) ?? 0;
             const total = as_number(value_of("total"));
@@ -127,9 +142,9 @@ export function component_context(
             context["unit"] = as_text(value_of("unit"));
             const delta = as_number(value_of("delta"));
             if (delta !== undefined && delta !== 0) {
-                context["delta_label"] = `${delta > 0 ? "▲" : "▼"}${format_number(Math.abs(delta))}`;
-                context["delta_class"] =
-                    delta > 0 ? "pear-wall-delta-up" : "pear-wall-delta-down";
+                context["delta_label"] =
+                    `${delta > 0 ? "▲" : "▼"}${format_number(Math.abs(delta))}`;
+                context["delta_class"] = delta > 0 ? "pear-wall-delta-up" : "pear-wall-delta-down";
             }
             break;
         }
@@ -188,6 +203,43 @@ export function component_context(
             break;
     }
     return context;
+}
+
+export function mount_svg_components(
+    $scope: JQuery,
+    components: PearKitComponent[],
+    live_props: Record<string, unknown>,
+    last_valid_markup: Map<number, string>,
+): boolean {
+    let all_valid = true;
+    $scope.find("[data-pear-svg-component]").each((_placeholder_index, host) => {
+        const index = Number(host.dataset["pearSvgComponent"] ?? "-1");
+        const component = components[index];
+        if (component?.type !== "svg") {
+            all_valid = false;
+            host.textContent = "diagram unavailable";
+            host.classList.add("pear-explainer-svg-invalid");
+            return;
+        }
+        const current = as_text(prop_value(component, index, "markup", live_props));
+        let markup = current;
+        let svg = sanitize_pear_svg(markup);
+        if (svg === undefined) {
+            all_valid = false;
+            markup = last_valid_markup.get(index) ?? "";
+            svg = sanitize_pear_svg(markup);
+            host.classList.add("pear-explainer-svg-stale");
+        } else {
+            last_valid_markup.set(index, markup);
+        }
+        if (svg === undefined) {
+            host.textContent = "diagram unavailable";
+            host.classList.add("pear-explainer-svg-invalid");
+            return;
+        }
+        host.replaceChildren(svg);
+    });
+    return all_valid;
 }
 
 export function draw_sparklines($scope: JQuery): void {

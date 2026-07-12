@@ -18,7 +18,7 @@
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 
-export const PEAR_SVG_SOURCE_LIMIT = 65536;
+export const PEAR_SVG_SOURCE_LIMIT = 64_000;
 const PEAR_SVG_NODE_LIMIT = 4000;
 
 const ALLOWED_ELEMENTS = new Set([

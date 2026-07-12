@@ -3900,6 +3900,27 @@ class PearMonitorTest(ZulipTestCase):
         self.assertEqual(spec["title"], "training loader")
         self.assertEqual(len(spec["block_spec"]["components"]), 2)
 
+        explainer = pear_validate_monitor_spec(
+            {
+                "title": "pipeline",
+                "block": {
+                    "components": [
+                        {"type": "text", "props": {"heading": "Pipeline", "body": "Live"}},
+                        {
+                            "type": "svg",
+                            "props": {
+                                "label": "topology",
+                                "markup": '<svg viewBox="0 0 10 10"><rect width="10" height="10"/></svg>',
+                            },
+                        },
+                    ],
+                    "actions": [{"label": "Explain", "prompt": "Explain this pipeline"}],
+                },
+            }
+        )
+        self.assertEqual(explainer["recipe"]["parse"]["mode"], "static")
+        self.assertEqual(explainer["block_spec"]["actions"][0]["label"], "Explain")
+
         with self.assertRaisesRegex(PearMonitorSpecError, "Unknown component type"):
             pear_validate_monitor_spec(
                 {
@@ -3931,6 +3952,23 @@ class PearMonitorTest(ZulipTestCase):
                     "recipe": {**good["recipe"], "parse": {"mode": "regex", "pattern": "("}},
                 }
             )
+        with self.assertRaisesRegex(PearMonitorSpecError, "svg markup exceeds"):
+            pear_validate_monitor_spec(
+                {
+                    "block": {
+                        "components": [{"type": "svg", "props": {"markup": "x" * 64_001}}]
+                    }
+                }
+            )
+        with self.assertRaisesRegex(PearMonitorSpecError, "requires exactly label and prompt"):
+            pear_validate_monitor_spec(
+                {
+                    "block": {
+                        "components": [{"type": "text", "props": {"body": "hello"}}],
+                        "actions": [{"label": "broken"}],
+                    }
+                }
+            )
 
     def test_monitor_bind_props_modes(self) -> None:
         regex_recipe = {
@@ -3959,6 +3997,17 @@ class PearMonitorTest(ZulipTestCase):
         }
         bound = pear_monitor_bind_props(text_recipe, "one\ntwo\nthree")
         self.assertEqual(bound["0.lines"], ["two", "three"])
+
+        svg_output = "<svg>" + ("x" * 3000) + "</svg>"
+        svg_recipe = {"parse": {"mode": "text"}, "bindings": {"0.markup": "text"}}
+        bound = pear_monitor_bind_props(
+            svg_recipe,
+            svg_output,
+            block_spec={"components": [{"type": "svg", "props": {}}]},
+        )
+        self.assertEqual(bound["0.markup"], svg_output)
+        bound = pear_monitor_bind_props(svg_recipe, svg_output)
+        self.assertEqual(len(bound["0.markup"]), 2000)
 
     def test_monitor_tick_success_and_failure(self) -> None:
         owner = self.example_user("hamlet")

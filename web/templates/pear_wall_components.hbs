@@ -1,4 +1,17 @@
 {{#each components}}
+{{#if is_text}}
+<section class="pear-wall-c pear-explainer-copy">
+    {{#if eyebrow}}<span class="pear-explainer-eyebrow">{{eyebrow}}</span>{{/if}}
+    {{#if heading}}<h3 class="pear-explainer-heading">{{heading}}</h3>{{/if}}
+    {{#if body}}<div class="pear-explainer-body">{{body}}</div>{{/if}}
+</section>
+{{/if}}
+{{#if is_svg}}
+<figure class="pear-wall-c pear-explainer-figure">
+    {{#if label}}<figcaption class="pear-wall-c-label">{{label}}</figcaption>{{/if}}
+    <div class="pear-explainer-svg" data-pear-svg-component="{{component_index}}"></div>
+</figure>
+{{/if}}
 {{#if is_meter}}
 <div class="pear-wall-c pear-wall-meter">
     <div class="pear-wall-c-head"><span class="pear-wall-c-label">{{label}}</span><span class="pear-wall-c-value">{{percent_label}}</span></div>
@@ -64,3 +77,10 @@
 </div>
 {{/if}}
 {{/each}}
+{{#if has_actions}}
+<div class="pear-explainer-actions" role="group" aria-label="Ask Pear about this explainer">
+    {{#each actions}}
+    <button type="button" class="pear-explainer-action" data-pear-explainer-action="{{action_index}}">{{label}}</button>
+    {{/each}}
+</div>
+{{/if}}

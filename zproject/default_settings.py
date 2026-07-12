@@ -797,6 +797,10 @@ PEAR_CODEX_SKILLS_DIR: str | None = None
 PEAR_WORKER_TRUSTED_USER_IDS: list[int] = []
 PEAR_WORKER_MAX_ACTIVE_RUNS_PER_TOPIC = 1
 PEAR_WORKER_MAX_ACTIVE_RUNS_PER_REALM = 3
+# Each web process retains recent immutable Workspace indexes.  The path budget
+# prevents a handful of huge repositories from consuming unbounded memory.
+PEAR_WORKSPACE_INDEX_LOCAL_MAX_ENTRIES = 32
+PEAR_WORKSPACE_INDEX_LOCAL_MAX_PATHS = 250_000
 PEAR_ADDRESSING_ROUTER_RUNTIME: Literal["disabled", "codex-exec", "gemini-interactions"] = (
     "disabled"
 )

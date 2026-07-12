@@ -64,7 +64,6 @@ logger = logging.getLogger(__name__)
 PEAR_WORKSPACE_TEXT_MAX_BYTES = 1_000_000
 PEAR_WORKSPACE_RAW_MAX_BYTES = 64 * 1024 * 1024
 PEAR_WORKSPACE_INDEX_CACHE_SECONDS = 60
-PEAR_WORKSPACE_INDEX_LOCAL_ENTRIES = 4
 PEAR_WORKSPACE_GIT_TIMEOUT_SECONDS = 15
 PEAR_WORKSPACE_MUTATION_RECEIPT_SECONDS = 10 * 60
 PEAR_WORKSPACE_FILE_OBSERVATION_SECONDS = 60 * 60
@@ -143,10 +142,20 @@ class WorkspaceHistoryPage:
 class _CachedSnapshot:
     snapshot: WorkspaceSnapshot
     expires_at: float
+    path_count: int
+
+
+@dataclass
+class _SnapshotBuild:
+    ready: threading.Event
+    snapshot: WorkspaceSnapshot | None = None
+    error: BaseException | None = None
 
 
 _snapshot_cache: OrderedDict[tuple[str, int], _CachedSnapshot] = OrderedDict()
 _snapshot_cache_lock = threading.RLock()
+_snapshot_cache_path_count = 0
+_snapshot_builds: dict[tuple[str, int], _SnapshotBuild] = {}
 _workspace_metrics: Counter[str] = Counter()
 _workspace_metrics_lock = threading.Lock()
 _workspace_request_state = threading.local()
@@ -182,6 +191,7 @@ def _workspace_index_secret() -> bytes:
 
 
 def _local_cache_get(workspace_uuid: str, revision: int) -> WorkspaceSnapshot | None:
+    global _snapshot_cache_path_count
     key = (workspace_uuid, revision)
     with _snapshot_cache_lock:
         cached = _snapshot_cache.get(key)
@@ -190,6 +200,7 @@ def _local_cache_get(workspace_uuid: str, revision: int) -> WorkspaceSnapshot | 
             return None
         if cached.expires_at <= time.monotonic():
             del _snapshot_cache[key]
+            _snapshot_cache_path_count -= cached.path_count
             record_workspace_metric("snapshot_local_expired")
             return None
         _snapshot_cache.move_to_end(key)
@@ -198,20 +209,61 @@ def _local_cache_get(workspace_uuid: str, revision: int) -> WorkspaceSnapshot | 
 
 
 def _local_cache_put(snapshot: WorkspaceSnapshot) -> None:
+    global _snapshot_cache_path_count
     key = (snapshot.workspace_uuid, snapshot.revision)
+    path_count = len(snapshot.paths)
     with _snapshot_cache_lock:
+        previous = _snapshot_cache.pop(key, None)
+        if previous is not None:
+            _snapshot_cache_path_count -= previous.path_count
         _snapshot_cache[key] = _CachedSnapshot(
             snapshot=snapshot,
             expires_at=time.monotonic() + PEAR_WORKSPACE_INDEX_CACHE_SECONDS,
+            path_count=path_count,
         )
+        _snapshot_cache_path_count += path_count
         _snapshot_cache.move_to_end(key)
-        while len(_snapshot_cache) > PEAR_WORKSPACE_INDEX_LOCAL_ENTRIES:
-            _snapshot_cache.popitem(last=False)
+        max_entries = max(1, int(settings.PEAR_WORKSPACE_INDEX_LOCAL_MAX_ENTRIES))
+        max_paths = max(1, int(settings.PEAR_WORKSPACE_INDEX_LOCAL_MAX_PATHS))
+        while len(_snapshot_cache) > max_entries or (
+            len(_snapshot_cache) > 1 and _snapshot_cache_path_count > max_paths
+        ):
+            _, evicted = _snapshot_cache.popitem(last=False)
+            _snapshot_cache_path_count -= evicted.path_count
+            record_workspace_metric("snapshot_local_eviction")
 
 
 def clear_workspace_snapshot_cache() -> None:
+    global _snapshot_cache_path_count
     with _snapshot_cache_lock:
         _snapshot_cache.clear()
+        _snapshot_cache_path_count = 0
+
+
+def _join_or_start_snapshot_build(
+    key: tuple[str, int],
+) -> tuple[_SnapshotBuild, bool]:
+    with _snapshot_cache_lock:
+        build = _snapshot_builds.get(key)
+        if build is not None:
+            return build, False
+        build = _SnapshotBuild(ready=threading.Event())
+        _snapshot_builds[key] = build
+        return build, True
+
+
+def _finish_snapshot_build(
+    key: tuple[str, int],
+    build: _SnapshotBuild,
+    *,
+    snapshot: WorkspaceSnapshot | None = None,
+    error: BaseException | None = None,
+) -> None:
+    with _snapshot_cache_lock:
+        build.snapshot = snapshot
+        build.error = error
+        _snapshot_builds.pop(key, None)
+        build.ready.set()
 
 
 def _latest_fingerprint_cache_key(workspace_uuid: str) -> str:
@@ -1330,36 +1382,54 @@ def get_workspace_snapshot(
     force: bool = False,
 ) -> WorkspaceSnapshot:
     workspace_uuid = str(node.uuid)
+    requested_revision = int(node.content_revision)
     if not force:
-        cached = _local_cache_get(workspace_uuid, int(node.content_revision))
+        cached = _local_cache_get(workspace_uuid, requested_revision)
         if cached is not None:
             _set_workspace_cache_status("local-hit")
             return cached
     else:
         record_workspace_metric("snapshot_forced")
 
-    record_workspace_metric("snapshot_rebuild")
-    _set_workspace_cache_status("rebuild")
-    paths, fingerprint, branch, head, dirty_count = _enumerate_workspace(node)
-    latest = cache.get(_latest_fingerprint_cache_key(workspace_uuid))
-    if (
-        isinstance(latest, dict)
-        and latest.get("revision") == node.content_revision
-        and isinstance(latest.get("fingerprint"), str)
-        and latest["fingerprint"] != fingerprint
-    ):
-        previous_revision = int(node.content_revision)
-        _advance_revision_if_current(node, previous_revision)
+    build_key = (workspace_uuid, requested_revision)
+    build, is_builder = _join_or_start_snapshot_build(build_key)
+    if not is_builder:
+        record_workspace_metric("snapshot_singleflight_wait")
+        _set_workspace_cache_status("shared-build")
+        build.ready.wait()
+        if build.error is not None:
+            raise build.error
+        if build.snapshot is None:
+            raise WorkspaceSnapshotError("Workspace snapshot build produced no result.")
+        return build.snapshot
 
-    snapshot = _build_snapshot(
-        node,
-        paths=paths,
-        fingerprint=fingerprint,
-        branch=branch,
-        head=head,
-        dirty_count=dirty_count,
-    )
-    _record_latest_snapshot(snapshot)
+    try:
+        record_workspace_metric("snapshot_rebuild")
+        _set_workspace_cache_status("rebuild")
+        paths, fingerprint, branch, head, dirty_count = _enumerate_workspace(node)
+        latest = cache.get(_latest_fingerprint_cache_key(workspace_uuid))
+        if (
+            isinstance(latest, dict)
+            and latest.get("revision") == node.content_revision
+            and isinstance(latest.get("fingerprint"), str)
+            and latest["fingerprint"] != fingerprint
+        ):
+            previous_revision = int(node.content_revision)
+            _advance_revision_if_current(node, previous_revision)
+
+        snapshot = _build_snapshot(
+            node,
+            paths=paths,
+            fingerprint=fingerprint,
+            branch=branch,
+            head=head,
+            dirty_count=dirty_count,
+        )
+        _record_latest_snapshot(snapshot)
+    except BaseException as error:
+        _finish_snapshot_build(build_key, build, error=error)
+        raise
+    _finish_snapshot_build(build_key, build, snapshot=snapshot)
     return snapshot
 
 

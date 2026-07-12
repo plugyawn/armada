@@ -4,8 +4,11 @@ import hashlib
 import os
 import subprocess
 import tempfile
+import threading
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
+from uuid import UUID
 
 import orjson
 
@@ -25,10 +28,15 @@ from zerver.lib.pear_workspace_resources import (
     PEAR_WORKSPACE_TEXT_MAX_BYTES,
     WorkspaceSnapshot,
     WorkspaceSnapshotError,
+    _join_or_start_snapshot_build,
+    _local_cache_get,
+    _local_cache_put,
+    _SnapshotBuild,
     clear_workspace_snapshot_cache,
     create_workspace_node_directory,
     create_workspace_node_file,
     delete_workspace_node_entry,
+    get_workspace_snapshot,
     inspect_workspace_node_entries,
     open_workspace_node_file_stream,
     prepare_workspace_entry_mutation_receipt,
@@ -1771,6 +1779,113 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
 
 
 class PearWorkspaceResourcePayloadTest(ZulipTestCase):
+    def setUp(self) -> None:
+        super().setUp()
+        clear_workspace_snapshot_cache()
+
+    def make_snapshot(self, number: int, path_count: int = 1) -> WorkspaceSnapshot:
+        workspace_uuid = str(UUID(int=number))
+        paths = tuple(WorkspacePath(f"file-{index}.md") for index in range(path_count))
+        return WorkspaceSnapshot(
+            workspace_uuid=workspace_uuid,
+            revision=1,
+            paths=paths,
+            index=WorkspaceIndex.build(
+                workspace_uuid=workspace_uuid,
+                revision=1,
+                paths=paths,
+                secret=b"resource-payload-test-secret-32bytes",
+            ),
+            fingerprint="f" * 64,
+            branch="main",
+            head="a" * 40,
+            dirty_count=0,
+        )
+
+    def test_local_snapshot_cache_retains_more_than_four_workspaces(self) -> None:
+        snapshots = [self.make_snapshot(number) for number in range(1, 7)]
+        with self.settings(
+            PEAR_WORKSPACE_INDEX_LOCAL_MAX_ENTRIES=8,
+            PEAR_WORKSPACE_INDEX_LOCAL_MAX_PATHS=100,
+        ):
+            for snapshot in snapshots:
+                _local_cache_put(snapshot)
+            self.assertEqual(
+                [_local_cache_get(snapshot.workspace_uuid, 1) for snapshot in snapshots],
+                snapshots,
+            )
+
+    def test_local_snapshot_cache_evicts_by_path_budget(self) -> None:
+        snapshots = [self.make_snapshot(number, path_count=2) for number in range(1, 4)]
+        with self.settings(
+            PEAR_WORKSPACE_INDEX_LOCAL_MAX_ENTRIES=8,
+            PEAR_WORKSPACE_INDEX_LOCAL_MAX_PATHS=3,
+        ):
+            for snapshot in snapshots:
+                _local_cache_put(snapshot)
+            self.assertIsNone(_local_cache_get(snapshots[0].workspace_uuid, 1))
+            self.assertIsNone(_local_cache_get(snapshots[1].workspace_uuid, 1))
+            self.assertEqual(_local_cache_get(snapshots[2].workspace_uuid, 1), snapshots[2])
+
+    def test_concurrent_snapshot_requests_share_one_rebuild(self) -> None:
+        node = SimpleNamespace(
+            uuid=UUID(int=42),
+            content_revision=1,
+            branch_name="main",
+        )
+        enumerate_started = threading.Event()
+        second_joined = threading.Event()
+        release_enumeration = threading.Event()
+        enumerate_count = 0
+        join_count = 0
+        results: list[WorkspaceSnapshot] = []
+
+        def enumerate_workspace(
+            unused_node: object,
+        ) -> tuple[tuple[WorkspacePath, ...], str, str, str, int]:
+            nonlocal enumerate_count
+            enumerate_count += 1
+            enumerate_started.set()
+            release_enumeration.wait(timeout=5)
+            return ((WorkspacePath("README.md"),), "f" * 64, "main", "a" * 40, 0)
+
+        def join_or_start(key: tuple[str, int]) -> tuple[_SnapshotBuild, bool]:
+            nonlocal join_count
+            join_count += 1
+            result = _join_or_start_snapshot_build(key)
+            if join_count == 2:
+                second_joined.set()
+            return result
+
+        def load_snapshot() -> None:
+            results.append(get_workspace_snapshot(node, force=True))  # type: ignore[arg-type]
+
+        with (
+            patch(
+                "zerver.lib.pear_workspace_resources._enumerate_workspace",
+                side_effect=enumerate_workspace,
+            ),
+            patch(
+                "zerver.lib.pear_workspace_resources._join_or_start_snapshot_build",
+                side_effect=join_or_start,
+            ),
+        ):
+            first = threading.Thread(target=load_snapshot)
+            second = threading.Thread(target=load_snapshot)
+            first.start()
+            self.assertTrue(enumerate_started.wait(timeout=5))
+            second.start()
+            self.assertTrue(second_joined.wait(timeout=5))
+            release_enumeration.set()
+            first.join(timeout=5)
+            second.join(timeout=5)
+
+        self.assertFalse(first.is_alive())
+        self.assertFalse(second.is_alive())
+        self.assertEqual(enumerate_count, 1)
+        self.assertEqual(len(results), 2)
+        self.assertIs(results[0], results[1])
+
     def test_snapshot_ids_do_not_embed_absolute_paths(self) -> None:
         paths = (WorkspacePath("README.md"), WorkspacePath("src/main.py"))
         index = WorkspaceIndex.build(

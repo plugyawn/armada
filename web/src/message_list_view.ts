@@ -3089,6 +3089,7 @@ export class MessageListView {
                 }
                 enhance_pear_tool_rows($row);
                 enhance_pear_artifact_references($row);
+                pear_explainers.enhance_pear_chat_explainers($row);
                 maybe_render_pear_thinking_glyph($row);
                 maybe_render_pear_run_footer($row);
                 if (was_selected && this.list === message_lists.current) {

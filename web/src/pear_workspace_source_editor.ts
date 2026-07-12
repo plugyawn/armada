@@ -1,8 +1,8 @@
 import {autocompletion, closeBrackets, closeBracketsKeymap} from "@codemirror/autocomplete";
 import {defaultKeymap, history, historyKeymap, indentWithTab} from "@codemirror/commands";
 import {
+    HighlightStyle,
     bracketMatching,
-    defaultHighlightStyle,
     foldGutter,
     foldKeymap,
     indentOnInput,
@@ -22,6 +22,7 @@ import {
     lineNumbers,
     rectangularSelection,
 } from "@codemirror/view";
+import {tags} from "@lezer/highlight";
 
 import type {PearWorkspaceSourceLanguage} from "./pear_workspace_source_language.ts";
 
@@ -141,6 +142,19 @@ const editor_theme = EditorView.theme({
         overflow: "auto",
     },
 });
+
+const pear_highlight_style = HighlightStyle.define([
+    {tag: tags.heading, color: "var(--pear-ink-1)", fontWeight: "700"},
+    {tag: [tags.link, tags.url], color: "var(--pear-accent-ink)", textDecoration: "underline"},
+    {tag: [tags.comment, tags.meta], color: "var(--pear-ink-3)", fontStyle: "italic"},
+    {tag: [tags.keyword, tags.operatorKeyword], color: "var(--pear-accent-ink)"},
+    {tag: [tags.string, tags.special(tags.string)], color: "var(--pear-ink-2)"},
+    {tag: [tags.number, tags.bool, tags.null], color: "var(--pear-accent-ink)"},
+    {tag: [tags.typeName, tags.className, tags.namespace], color: "var(--pear-ink-1)"},
+    {tag: [tags.variableName, tags.propertyName], color: "var(--pear-ink-1)"},
+    {tag: [tags.punctuation, tags.bracket], color: "var(--pear-ink-2)"},
+    {tag: tags.invalid, color: "var(--pear-danger)", textDecoration: "underline wavy"},
+]);
 
 function normalize_text(text: string): string {
     return text.replaceAll(/\r\n?|\n/g, "\n");
@@ -270,7 +284,7 @@ export function create_pear_workspace_source_editor(
             dropCursor(),
             EditorState.allowMultipleSelections.of(true),
             indentOnInput(),
-            syntaxHighlighting(defaultHighlightStyle, {fallback: true}),
+            syntaxHighlighting(pear_highlight_style, {fallback: true}),
             bracketMatching(),
             closeBrackets(),
             autocompletion(),

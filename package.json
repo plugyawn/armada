@@ -24,6 +24,7 @@
     "@formatjs/intl": "^4.0.7",
     "@gfx/zopfli": "^1.0.15",
     "@koa/bodyparser": "^6.0.0",
+    "@lezer/highlight": "^1.2.3",
     "@milkdown/crepe": "^7.21.2",
     "@milkdown/kit": "^7.21.2",
     "@sentry/browser": "^10.5.0",

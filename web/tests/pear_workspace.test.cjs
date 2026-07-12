@@ -142,7 +142,12 @@ run_test("Chat, README, and Files keep one warm shell with separate rooms", asyn
         false,
     );
 
-    const active_header = document.querySelector("[data-header='active']");
+    let active_header = document.querySelector("[data-header='active']");
+    let active_header_height = 42;
+    Object.defineProperty(active_header, "offsetHeight", {
+        configurable: true,
+        get: () => active_header_height,
+    });
     const chat_tab = active_header.querySelector('[data-pear-tab="chat"]');
     chat_tab.focus();
     keydown(chat_tab, "ArrowRight");
@@ -152,6 +157,12 @@ run_test("Chat, README, and Files keep one warm shell with separate rooms", asyn
     assert.equal(mounts.length, 1);
     assert.equal(mounts[0].options.workspaceId, "workspace-1");
     assert.equal(document.querySelector("#pear-workspace-pane").hasAttribute("hidden"), false);
+    assert.equal(
+        document
+            .querySelector(".column-middle-inner")
+            .style.getPropertyValue("--pear-topic-bar-height"),
+        "42px",
+    );
     assert.equal(
         document.querySelector('[data-pear-tab="readme"]').getAttribute("aria-selected"),
         "true",
@@ -172,12 +183,42 @@ run_test("Chat, README, and Files keep one warm shell with separate rooms", asyn
         "144px",
     );
     compose_height = 216;
-    resize_observers.at(-1).trigger();
+    resize_observers.find((observer) => observer.target?.id === "compose").trigger();
     assert.equal(
         document
             .querySelector(".column-middle-inner")
             .style.getPropertyValue("--pear-workspace-compose-height"),
         "216px",
+    );
+    active_header_height = 68;
+    resize_observers.find((observer) => observer.target === active_header).trigger();
+    assert.equal(
+        document
+            .querySelector(".column-middle-inner")
+            .style.getPropertyValue("--pear-topic-bar-height"),
+        "68px",
+        "the clamp follows late tab insertion, font loading, and header wrapping",
+    );
+    const previous_header = active_header;
+    const replacement_header = active_header.cloneNode(true);
+    Object.defineProperty(replacement_header, "offsetHeight", {
+        configurable: true,
+        get: () => 74,
+    });
+    active_header.replaceWith(replacement_header);
+    active_header = replacement_header;
+    resize_observers.find((observer) => observer.target === previous_header).trigger();
+    assert.equal(
+        document
+            .querySelector(".column-middle-inner")
+            .style.getPropertyValue("--pear-topic-bar-height"),
+        "74px",
+        "a late header replacement transfers observation and clamp authority",
+    );
+    assert.equal(
+        resize_observers.at(-1).target,
+        replacement_header,
+        "the detached header is no longer observed",
     );
 
     keydown(document.querySelector("#pear-workspace-pane"), "Escape");
@@ -190,6 +231,13 @@ run_test("Chat, README, and Files keep one warm shell with separate rooms", asyn
         "Escape restores focus to the current visible topic header, not an older duplicate",
     );
     assert.equal(mounts[0].destroys, 0, "Escape keeps the warm shell mounted");
+    assert.equal(resize_observers.at(-1).target, undefined);
+    assert.equal(
+        document
+            .querySelector(".column-middle-inner")
+            .style.getPropertyValue("--pear-topic-bar-height"),
+        "",
+    );
     click('[data-pear-tab="readme"]');
     await settle();
     assert.equal(mounts.length, 1);
@@ -236,8 +284,9 @@ run_test("Chat, README, and Files keep one warm shell with separate rooms", asyn
     assert.equal(mounts[1].destroys, 1);
     assert.match(document.querySelector(".pear-workspace-host").textContent, /failed to load/);
 
-    click('[data-pear-tab="chat"]');
-    click('[data-pear-tab="files"]');
+    document.querySelector(".pear-workspace-load-error button").focus();
+    click(".pear-workspace-load-error button");
+    assert.equal(document.activeElement, document.querySelector(".pear-workspace-host"));
     await settle();
     assert.equal(mounts.length, 3);
     assert.equal(mounts[2].options.workspaceId, "workspace-retry");

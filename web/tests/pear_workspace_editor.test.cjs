@@ -783,7 +783,14 @@ run_test("a failed Rich chunk restores the exact Source surface", async () => {
     assert.equal(snapshot.activeDocument.editorMode, "source");
     assert.equal(snapshot.mountedAdapter, "source");
     assert.match(snapshot.notice, /Source remains available/);
+    assert.deepEqual(snapshot.richModeIssue, {
+        kind: "load_error",
+        message: "Rich editor failed to load. Source remains available.",
+        retryable: true,
+    });
     assert.equal(test.root.querySelectorAll(".fake-source").length, 1);
+    test.source_editors.at(-1).dirty();
+    assert.equal(test.controller.getSnapshot().richModeIssue, undefined);
     await test.controller.destroy();
     test.root.remove();
 });

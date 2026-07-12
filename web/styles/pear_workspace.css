@@ -16,6 +16,14 @@
     );
     --pear-workspace-focus: var(--color-outline-focus);
     --pear-workspace-row-height: 28px;
+    --pear-workspace-editor-surface: var(
+        --pear-surface-0,
+        var(--color-background, Canvas)
+    );
+    --pear-workspace-editor-gutter: var(
+        --pear-surface-1,
+        var(--color-background, Canvas)
+    );
 
     box-sizing: border-box;
     display: grid;
@@ -346,7 +354,25 @@
 .pear-workspace-shell__document-actions {
     display: flex;
     flex: 0 0 auto;
+    align-items: center;
     gap: 5px;
+}
+
+.pear-workspace-shell__mode-feedback {
+    max-inline-size: min(42vw, 520px);
+    color: var(--pear-workspace-muted);
+    font-family: var(--pear-font-ui, "Hanken Grotesk VF", sans-serif);
+    font-size: 12px;
+    line-height: 1.25;
+    white-space: normal;
+}
+
+.pear-workspace-shell__mode-feedback[data-state="source_only"] {
+    color: var(--pear-warn, var(--pear-workspace-muted));
+}
+
+.pear-workspace-shell__mode-feedback[data-state="load_error"] {
+    color: var(--pear-danger, var(--pear-workspace-muted));
 }
 
 .pear-workspace-file-menu-wrap {
@@ -508,11 +534,17 @@
 
 .pear-workspace-shell__document-actions button[aria-pressed="true"] {
     border-color: var(--pear-workspace-focus);
+    box-shadow: inset 0 -2px var(--pear-workspace-focus);
     background: var(--pear-workspace-selected);
 }
 
+.pear-workspace-shell__document-actions button:disabled {
+    cursor: not-allowed;
+    opacity: 0.58;
+}
+
 .pear-workspace-shell__document-actions [aria-disabled="true"] {
-    pointer-events: none;
+    cursor: not-allowed;
     opacity: 0.45;
 }
 
@@ -543,12 +575,51 @@
 
 .pear-workspace-shell__editor > .cm-editor {
     block-size: 100%;
+    color: var(--pear-ink-1, var(--color-text-default, inherit));
+    background: var(--pear-workspace-editor-surface);
     font-family: var(--pear-font-mono, "Geist Mono VF", monospace);
     font-size: 13px;
+    line-height: 1.55;
 }
 
 .pear-workspace-shell__editor .cm-scroller {
     min-block-size: 100%;
+}
+
+.pear-workspace-shell__editor .cm-gutters {
+    border-inline-end: 1px solid var(--pear-workspace-border);
+    background: var(--pear-workspace-editor-gutter);
+    color: var(--pear-ink-3, var(--pear-workspace-muted));
+}
+
+.pear-workspace-shell__editor .cm-activeLineGutter {
+    background: var(--pear-surface-2, var(--pear-workspace-hover));
+    color: var(--pear-ink-1, inherit);
+}
+
+.pear-workspace-shell__editor .cm-activeLine {
+    background: color-mix(in srgb, var(--pear-accent) 6%, transparent);
+}
+
+.pear-workspace-shell__editor .cm-selectionBackground,
+.pear-workspace-shell__editor .cm-editor.cm-focused .cm-selectionBackground,
+.pear-workspace-shell__editor .cm-content ::selection {
+    background: color-mix(
+        in srgb,
+        var(--pear-accent) 28%,
+        transparent
+    ) !important;
+}
+
+.pear-workspace-shell__editor .cm-cursor,
+.pear-workspace-shell__editor .cm-dropCursor {
+    border-inline-start-color: var(--pear-accent-ink, currentcolor);
+}
+
+.pear-workspace-shell__editor .cm-foldPlaceholder {
+    border-color: var(--pear-workspace-border);
+    background: var(--pear-surface-2, var(--pear-workspace-hover));
+    color: var(--pear-ink-2, inherit);
 }
 
 .pear-workspace-shell .pear-workspace-rich-editor {
@@ -763,46 +834,43 @@
 
 .pear-workspace-shell[data-room="readme"] .pear-workspace-shell__document {
     block-size: 100%;
-    grid-template-rows: auto minmax(0, 1fr) auto;
+    grid-template-rows: auto auto minmax(0, 1fr) auto;
 }
 
 .pear-workspace-shell[data-room="readme"] [data-role="conflict"] {
-    grid-row: 1;
+    grid-row: 2;
 }
 
 .pear-workspace-shell[data-room="readme"] .pear-workspace-readme-empty,
 .pear-workspace-shell[data-room="readme"] .pear-workspace-shell__surface {
-    grid-row: 2;
+    grid-row: 3;
+}
+
+.pear-workspace-shell[data-room="readme"] .pear-workspace-shell__surface {
+    overflow: hidden;
+}
+
+.pear-workspace-shell[data-room="readme"] .pear-workspace-shell__editor {
+    min-block-size: 0;
+    overflow: auto;
 }
 
 .pear-workspace-shell[data-room="readme"] .pear-workspace-shell__status {
-    grid-row: 3;
+    grid-row: 4;
     border: 0;
     background: transparent;
 }
 
 .pear-workspace-shell[data-room="readme"]
     .pear-workspace-shell__document-header {
-    position: absolute;
+    position: sticky;
     z-index: 4;
-    inset: 8px 12px auto auto;
-    min-block-size: 28px;
-    padding: 0;
-    border: 0;
-    background: transparent;
-}
-
-.pear-workspace-shell[data-room="readme"]
-    .pear-workspace-shell__document-actions {
-    opacity: 0.38;
-    transition: opacity var(--pear-dur-1) var(--pear-ease);
-}
-
-.pear-workspace-shell[data-room="readme"]
-    .pear-workspace-shell__document-actions:hover,
-.pear-workspace-shell[data-room="readme"]
-    .pear-workspace-shell__document-actions:focus-within {
-    opacity: 1;
+    inset: 0 0 auto;
+    min-block-size: 38px;
+    justify-content: flex-end;
+    padding: 5px 12px;
+    border-block-end: 1px solid var(--pear-workspace-border);
+    background: var(--pear-workspace-editor-surface);
 }
 
 .pear-workspace-shell[data-room="readme"]

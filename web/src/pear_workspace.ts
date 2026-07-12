@@ -39,6 +39,8 @@ let previous_run_active = false;
 let initialized = false;
 let observed_compose: HTMLElement | undefined;
 let compose_height_observer: ResizeObserver | undefined;
+let observed_topic_bar: HTMLElement | undefined;
+let topic_bar_height_observer: ResizeObserver | undefined;
 
 function context_key(stream: string | undefined, topic: string | undefined): string {
     return JSON.stringify([stream?.toLowerCase() ?? "", topic?.toLowerCase() ?? ""]);
@@ -132,11 +134,41 @@ function update_tab_strips(): void {
     $(".pear-workspace-tabs").toggleClass("pear-workspace-tabs-hidden", !has_workspace());
 }
 
-function measure_topic_bar_height(): number {
+function current_topic_bar(): HTMLElement | undefined {
     const headers = [
         ...document.querySelectorAll<HTMLElement>("#message_feed_container .message_header_stream"),
     ];
-    return headers.at(-1)?.offsetHeight ?? 0;
+    return headers.at(-1);
+}
+
+function sync_topic_bar_height(): void {
+    const column = $feed_column()[0];
+    if (column === undefined || observed_topic_bar === undefined || !feed_is_clamped()) {
+        return;
+    }
+    const height = observed_topic_bar.offsetHeight;
+    if (height > 0) {
+        column.style.setProperty("--pear-topic-bar-height", `${height}px`);
+    }
+    pin_clamped_feed();
+}
+
+function observe_topic_bar_height(): void {
+    const topic_bar = current_topic_bar();
+    if (topic_bar !== observed_topic_bar) {
+        topic_bar_height_observer?.disconnect();
+        observed_topic_bar = topic_bar;
+        topic_bar_height_observer =
+            topic_bar === undefined
+                ? undefined
+                : new ResizeObserver(() => {
+                      observe_topic_bar_height();
+                  });
+        if (topic_bar !== undefined) {
+            topic_bar_height_observer?.observe(topic_bar);
+        }
+    }
+    sync_topic_bar_height();
 }
 
 function pin_clamped_feed(): void {
@@ -150,8 +182,6 @@ function pin_clamped_feed(): void {
         feed.scrollTop += bar.getBoundingClientRect().top - feed.getBoundingClientRect().top;
     }
 }
-
-let topic_bar_heartbeat = 0;
 
 function sync_topic_bar(): void {
     const $feed = $("#message_feed_container");
@@ -171,18 +201,12 @@ function sync_topic_bar(): void {
         if (was_active) {
             $feed_column()[0]?.style.removeProperty("--pear-topic-bar-height");
         }
-        topic_bar_heartbeat = 0;
+        topic_bar_height_observer?.disconnect();
+        topic_bar_height_observer = undefined;
+        observed_topic_bar = undefined;
         return;
     }
-    topic_bar_heartbeat += 1;
-    if (was_active && topic_bar_heartbeat % 8 !== 1) {
-        return;
-    }
-    const height = measure_topic_bar_height();
-    if (height > 0) {
-        $feed_column()[0]?.style.setProperty("--pear-topic-bar-height", `${height}px`);
-    }
-    pin_clamped_feed();
+    observe_topic_bar_height();
 }
 
 function ensure_pane_shell(): HTMLElement | undefined {
@@ -276,7 +300,21 @@ async function mount_shell(): Promise<void> {
             }
         }
         host.removeAttribute("aria-busy");
-        host.textContent = "Workspace failed to load. Return to Chat and try again.";
+        const failure = document.createElement("div");
+        failure.className = "pear-workspace-load-error";
+        failure.setAttribute("role", "alert");
+        const message = document.createElement("span");
+        message.textContent = "Workspace failed to load.";
+        const retry = document.createElement("button");
+        retry.type = "button";
+        retry.textContent = "Retry Workspace";
+        retry.addEventListener("click", () => {
+            host.tabIndex = -1;
+            host.focus();
+            void mount_shell();
+        });
+        failure.append(message, retry);
+        host.replaceChildren(failure);
         blueslip.error("Pear workspace shell failed to load", {error});
     }
 }

@@ -89,6 +89,9 @@ importers:
       '@koa/bodyparser':
         specifier: ^6.0.0
         version: 6.1.0(koa@3.2.0)
+      '@lezer/highlight':
+        specifier: ^1.2.3
+        version: 1.2.3
       '@milkdown/crepe':
         specifier: ^7.21.2
         version: 7.21.2(prosemirror-model@1.25.10)(prosemirror-state@1.4.4)(prosemirror-view@1.42.0)(typescript@6.0.3)

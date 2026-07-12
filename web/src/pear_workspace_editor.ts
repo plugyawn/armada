@@ -112,6 +112,7 @@ export function create_pear_workspace_editor(
     let mount_generation = 0;
     let open_generation = 0;
     let rich_mode_loading = false;
+    let rich_mode_issue: PearWorkspaceEditorSnapshot["richModeIssue"];
     let notice: string | undefined;
     let source_flush: PearWorkspaceScheduledWork | undefined;
     const autosaves = new Map<string, PearWorkspaceScheduledWork>();
@@ -154,6 +155,7 @@ export function create_pear_workspace_editor(
         activeIdentity: active_identity(),
         mountedAdapter: mounted?.kind,
         richModeLoading: rich_mode_loading,
+        richModeIssue: rich_mode_issue,
         notice,
     });
 
@@ -339,6 +341,12 @@ export function create_pear_workspace_editor(
                     return;
                 }
                 begin_pear_workspace_metric("workspace_dirty_feedback");
+                if (rich_mode_issue !== undefined) {
+                    if (notice === rich_mode_issue.message) {
+                        notice = undefined;
+                    }
+                    rich_mode_issue = undefined;
+                }
                 dispatch({type: "source_changed", ...identity});
                 const view = mounted.editor.getViewState();
                 dispatch({
@@ -398,6 +406,7 @@ export function create_pear_workspace_editor(
             return false;
         }
         rich_mode_loading = true;
+        rich_mode_issue = undefined;
         emit();
         mount_generation += 1;
         const generation = mount_generation;
@@ -406,7 +415,9 @@ export function create_pear_workspace_editor(
             module = await dependencies.loadRichEditor();
         } catch {
             rich_mode_loading = false;
-            notice = "Rich editor failed to load; Source remains available.";
+            const message = "Rich editor failed to load. Source remains available.";
+            rich_mode_issue = {kind: "load_error", message, retryable: true};
+            notice = message;
             surface = {kind: "text", entry: active_entry!, file};
             emit();
             await mount_source(identity, file);
@@ -475,6 +486,12 @@ export function create_pear_workspace_editor(
         rich_mode_loading = false;
         if (!result.ok) {
             notice = result.eligibility.reason;
+            const retryable = ["parse_error", "style_error"].includes(result.eligibility.code);
+            rich_mode_issue = {
+                kind: retryable ? "load_error" : "source_only",
+                message: result.eligibility.reason,
+                retryable,
+            };
             dispatch({
                 type: "set_rich_eligibility",
                 ...identity,
@@ -493,6 +510,7 @@ export function create_pear_workspace_editor(
             eligibility: "supported",
         });
         dispatch({type: "set_editor_mode", ...identity, mode: "rich"});
+        rich_mode_issue = undefined;
         notice = workspace_writable ? undefined : "Read-only workspace";
         mounted = {kind: "rich", identity, editor: result.editor};
         emit();
@@ -792,6 +810,7 @@ export function create_pear_workspace_editor(
         active_entry = entry;
         active_file = undefined;
         notice = workspace_writable ? undefined : "Read-only workspace";
+        rich_mode_issue = undefined;
         const workspace = current_workspace()!;
         const cached = workspace.documents.get(entry.entry_id);
         dispatch({
@@ -1033,6 +1052,7 @@ export function create_pear_workspace_editor(
             active_file = undefined;
             active_entry = undefined;
             rich_mode_loading = false;
+            rich_mode_issue = undefined;
             notice = undefined;
             surface = {kind: "empty"};
             await destroy_mounted();

@@ -871,6 +871,14 @@
         hsl(36deg 74% 34% / 10%),
         hsl(38deg 66% 66% / 12%)
     );
+    /* Categorical drawing hues stay distinct from Pear's accent and
+       semantic state colors in both themes. */
+    --pear-cat-1: light-dark(hsl(190deg 55% 32%), hsl(190deg 45% 62%));
+    --pear-cat-2: light-dark(hsl(225deg 50% 42%), hsl(225deg 55% 72%));
+    --pear-cat-3: light-dark(hsl(275deg 40% 44%), hsl(275deg 45% 74%));
+    --pear-cat-4: light-dark(hsl(330deg 50% 40%), hsl(330deg 50% 72%));
+    --pear-cat-5: light-dark(hsl(50deg 65% 32%), hsl(50deg 60% 62%));
+    --pear-cat-6: light-dark(hsl(100deg 40% 32%), hsl(100deg 35% 62%));
     --pear-diff-add: var(--pear-a400);
     --pear-diff-add-fill: hsl(140deg 44% 56% / 10%);
     --pear-diff-del: var(--pear-danger);

@@ -2556,3 +2556,256 @@
         }
     }
 }
+
+/* pear-svg: sanitized inline vector drawings (chat + wall).
+   Inline SVG inherits the pear tokens, so every color below
+   re-themes automatically in dark mode. */
+
+.pear-chat-svg {
+    /* Card chrome mirrors .pear-chat-widget on landing (border,
+       radius, padding, pin button live there). */
+    container-type: inline-size;
+
+    svg.psvg {
+        display: block;
+        max-width: 100%;
+        height: auto;
+    }
+}
+
+/* psvg-catalog:begin (parsed by pear/tools/generate_svg_skill.py) */
+
+/* fills — ink & semantic */
+.psvg-ink1 {
+    fill: var(--pear-ink-1);
+}
+
+.psvg-ink2 {
+    fill: var(--pear-ink-2);
+}
+
+.psvg-ink3 {
+    fill: var(--pear-ink-3);
+}
+
+.psvg-accent {
+    fill: var(--pear-accent-ink);
+}
+
+.psvg-ok {
+    fill: var(--pear-accent-ink);
+}
+
+.psvg-warn {
+    fill: var(--pear-warn);
+}
+
+.psvg-danger {
+    fill: var(--pear-danger);
+}
+
+/* fills — surfaces (boxes, lanes, backgrounds) */
+.psvg-surface0 {
+    fill: var(--pear-surface-0);
+}
+
+.psvg-surface1 {
+    fill: var(--pear-surface-1);
+}
+
+.psvg-surface2 {
+    fill: var(--pear-surface-2);
+}
+
+.psvg-surface3 {
+    fill: var(--pear-surface-3);
+}
+
+/* fills — categorical (series, states, lanes) */
+.psvg-cat1 {
+    fill: var(--pear-cat-1);
+}
+
+.psvg-cat2 {
+    fill: var(--pear-cat-2);
+}
+
+.psvg-cat3 {
+    fill: var(--pear-cat-3);
+}
+
+.psvg-cat4 {
+    fill: var(--pear-cat-4);
+}
+
+.psvg-cat5 {
+    fill: var(--pear-cat-5);
+}
+
+.psvg-cat6 {
+    fill: var(--pear-cat-6);
+}
+
+/* strokes — lines, connectors, axes (fill off so paths read as
+   strokes without an explicit fill="none") */
+.psvg-line {
+    stroke: var(--pear-ink-2);
+    fill: none;
+}
+
+.psvg-hairline {
+    stroke: var(--pear-hairline);
+    fill: none;
+}
+
+.psvg-line-accent {
+    stroke: var(--pear-accent-ink);
+    fill: none;
+}
+
+.psvg-line-warn {
+    stroke: var(--pear-warn);
+    fill: none;
+}
+
+.psvg-line-danger {
+    stroke: var(--pear-danger);
+    fill: none;
+}
+
+.psvg-line-cat1 {
+    stroke: var(--pear-cat-1);
+    fill: none;
+}
+
+.psvg-line-cat2 {
+    stroke: var(--pear-cat-2);
+    fill: none;
+}
+
+.psvg-line-cat3 {
+    stroke: var(--pear-cat-3);
+    fill: none;
+}
+
+.psvg-line-cat4 {
+    stroke: var(--pear-cat-4);
+    fill: none;
+}
+
+.psvg-line-cat5 {
+    stroke: var(--pear-cat-5);
+    fill: none;
+}
+
+.psvg-line-cat6 {
+    stroke: var(--pear-cat-6);
+    fill: none;
+}
+
+/* boxes — bordered surfaces for nodes and cards */
+.psvg-card {
+    fill: var(--pear-surface-1);
+    stroke: var(--pear-hairline);
+}
+
+.psvg-card-raised {
+    fill: var(--pear-surface-2);
+    stroke: var(--pear-hairline);
+}
+
+/* type — pixel faces hold the 12px floor (wall precedent) */
+.psvg-title {
+    font-family: var(--pear-font-pixel);
+    font-size: 14px;
+    fill: var(--pear-ink-1);
+}
+
+.psvg-label {
+    font-family: var(--pear-font-pixel);
+    font-size: 12px;
+    fill: var(--pear-ink-2);
+}
+
+.psvg-mono {
+    font-family: var(--pear-font-mono);
+    font-size: 11px;
+    fill: var(--pear-ink-2);
+}
+
+.psvg-num {
+    font-family: var(--pear-font-mono);
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+    fill: var(--pear-ink-1);
+}
+
+/* pixel art — integer coordinates render as crisp blocks */
+.psvg-pixel {
+    shape-rendering: crispedges;
+}
+
+/* motion — shares the loader language: --pear-ease and steps()
+   cadences, ~1.8-2s periods like pear-thinking-frames and
+   pear-compaction-frames */
+.psvg-pulse {
+    animation: psvg-pulse 1.8s var(--pear-ease) infinite;
+}
+
+.psvg-blink-step {
+    animation: psvg-blink-step 2s step-end infinite;
+}
+
+.psvg-march {
+    stroke-dasharray: 4 3;
+    animation: psvg-dash-cycle 1.8s steps(7, end) infinite;
+}
+
+.psvg-flow {
+    stroke-dasharray: 4 3;
+    animation: psvg-dash-cycle 1.2s linear infinite;
+}
+
+.psvg-orbit {
+    animation: psvg-orbit 6s linear infinite;
+    transform-box: fill-box;
+    transform-origin: center;
+}
+
+/* psvg-catalog:end */
+
+@keyframes psvg-pulse {
+    50% {
+        opacity: 0.35;
+    }
+}
+
+@keyframes psvg-blink-step {
+    50% {
+        opacity: 0.25;
+    }
+}
+
+/* One full dash period (4 + 3), so the loop is seamless; steps(7)
+   in .psvg-march clicks it forward 1px at a time. */
+@keyframes psvg-dash-cycle {
+    to {
+        stroke-dashoffset: -7px;
+    }
+}
+
+@keyframes psvg-orbit {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .psvg-pulse,
+    .psvg-blink-step,
+    .psvg-march,
+    .psvg-flow,
+    .psvg-orbit {
+        animation: none;
+    }
+}

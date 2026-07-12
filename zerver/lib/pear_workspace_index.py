@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import heapq
 import hmac
 import json
 from collections.abc import Iterable, Mapping, Sequence
@@ -315,16 +316,14 @@ class WorkspaceIndex:
         if not normalized_query:
             return ()
 
-        ranked: list[tuple[tuple[int, int, int], str, WorkspaceIndexEntry]] = []
-        for entry in self._entries.values():
-            if entry.path == ROOT_ENTRY_PATH:
-                continue
-            score = _subsequence_score(normalized_query, entry.path.casefold())
-            if score is None:
-                continue
-            ranked.append((score, entry.path.casefold(), entry))
-        ranked.sort(key=lambda item: (item[0], item[1], item[2].path))
-        return tuple(item[2] for item in ranked[:limit])
+        ranked = (
+            (score, entry.path.casefold(), entry.path, entry)
+            for entry in self._entries.values()
+            if entry.path != ROOT_ENTRY_PATH
+            if (score := _subsequence_score(normalized_query, entry.path.casefold())) is not None
+        )
+        best = heapq.nsmallest(limit, ranked, key=lambda item: item[:3])
+        return tuple(item[3] for item in best)
 
     def file_paths(self) -> Sequence[str]:
         return tuple(entry.path for entry in self._entries.values() if entry.kind == "file")

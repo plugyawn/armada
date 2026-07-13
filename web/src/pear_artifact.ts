@@ -520,6 +520,42 @@ type Connector = {
     state?: string;
 };
 
+function graph_distance_ranks(
+    node_ids: Iterable<string>,
+    connectors: Connector[],
+): Map<string, number> {
+    const neighbours = new Map([...node_ids].map((id) => [id, [] as string[]]));
+    for (const connector of connectors) {
+        neighbours.get(connector.from)?.push(connector.to);
+        neighbours.get(connector.to)?.push(connector.from);
+    }
+    const ranks = new Map<string, number>();
+    const remaining = new Set(neighbours.keys());
+    let component_offset = 0;
+    while (remaining.size > 0) {
+        const root = remaining.values().next().value!;
+        const queue = [root];
+        ranks.set(root, component_offset);
+        remaining.delete(root);
+        let component_max = component_offset;
+        for (let index = 0; index < queue.length; index += 1) {
+            const id = queue[index]!;
+            const rank = ranks.get(id) ?? component_offset;
+            component_max = Math.max(component_max, rank);
+            for (const target of neighbours.get(id) ?? []) {
+                if (!remaining.has(target)) {
+                    continue;
+                }
+                ranks.set(target, rank + 1);
+                remaining.delete(target);
+                queue.push(target);
+            }
+        }
+        component_offset = component_max + 2;
+    }
+    return ranks;
+}
+
 function layout_graph_group(host: HTMLElement, connectors: Connector[]): void {
     const nodes = [...host.querySelectorAll<HTMLElement>(":scope > [data-pear-artifact-node]")];
     const node_by_id = new Map(
@@ -534,6 +570,14 @@ function layout_graph_group(host: HTMLElement, connectors: Connector[]): void {
     const local_connectors = connectors.filter(
         (connector) => node_by_id.has(connector.from) && node_by_id.has(connector.to),
     );
+    if (local_connectors.some((connector) => !connector.directed)) {
+        position_graph_nodes(
+            host,
+            node_by_id,
+            graph_distance_ranks(node_by_id.keys(), local_connectors),
+        );
+        return;
+    }
     const incoming = new Map([...node_by_id.keys()].map((id) => [id, 0]));
     const outgoing = new Map([...node_by_id.keys()].map((id) => [id, [] as string[]]));
     for (const connector of local_connectors) {
@@ -542,9 +586,6 @@ function layout_graph_group(host: HTMLElement, connectors: Connector[]): void {
     }
     const ranks = new Map<string, number>();
     const queue = [...node_by_id.keys()].filter((id) => incoming.get(id) === 0);
-    if (queue.length === 0) {
-        queue.push(node_by_id.keys().next().value!);
-    }
     for (const id of queue) {
         ranks.set(id, 0);
     }
@@ -560,12 +601,22 @@ function layout_graph_group(host: HTMLElement, connectors: Connector[]): void {
             }
         }
     }
-    const fallback_rank = Math.max(0, ...ranks.values()) + 1;
-    for (const id of node_by_id.keys()) {
-        if (!ranks.has(id)) {
-            ranks.set(id, fallback_rank);
-        }
+    if (ranks.size !== node_by_id.size) {
+        position_graph_nodes(
+            host,
+            node_by_id,
+            graph_distance_ranks(node_by_id.keys(), local_connectors),
+        );
+        return;
     }
+    position_graph_nodes(host, node_by_id, ranks);
+}
+
+function position_graph_nodes(
+    host: HTMLElement,
+    node_by_id: Map<string, HTMLElement>,
+    ranks: Map<string, number>,
+): void {
     const columns = Math.max(...ranks.values()) + 1;
     const nodes_by_rank = Array.from({length: columns}, () => [] as HTMLElement[]);
     for (const [id, node] of node_by_id) {
@@ -911,7 +962,8 @@ function mount_connectors(scene: HTMLElement, connectors: Connector[]): void {
     definitions.append(marker);
     overlay.append(definitions);
     scene.prepend(overlay);
-    requestAnimationFrame(() => {
+    const draw = (): void => {
+        overlay.replaceChildren(definitions);
         const bounds = scene.getBoundingClientRect();
         overlay.setAttribute("viewBox", `0 0 ${bounds.width} ${bounds.height}`);
         for (const [index, connector] of connectors.entries()) {
@@ -966,15 +1018,37 @@ function mount_connectors(scene: HTMLElement, connectors: Connector[]): void {
             overlay.append(line);
             if (connector.label !== undefined) {
                 const label = document.createElementNS("http://www.w3.org/2000/svg", "text");
-                label.setAttribute("x", String((x1 + x2) / 2));
-                label.setAttribute("y", String((y1 + y2) / 2 - 7));
+                const length = Math.max(Math.hypot(delta_x, delta_y), 1);
+                let normal_x = -delta_y / length;
+                let normal_y = delta_x / length;
+                if (normal_y > 0) {
+                    normal_x *= -1;
+                    normal_y *= -1;
+                }
+                label.setAttribute("x", String((x1 + x2) / 2 + normal_x * 9));
+                label.setAttribute("y", String((y1 + y2) / 2 + normal_y * 9));
                 label.setAttribute("class", "pear-artifact-connector-label");
                 label.setAttribute("text-anchor", "middle");
                 label.textContent = connector.label;
                 overlay.append(label);
             }
         }
-    });
+    };
+    let draw_scheduled = false;
+    const schedule_draw = (): void => {
+        if (draw_scheduled) {
+            return;
+        }
+        draw_scheduled = true;
+        requestAnimationFrame(() => {
+            draw_scheduled = false;
+            draw();
+        });
+    };
+    schedule_draw();
+    if (typeof ResizeObserver !== "undefined") {
+        new ResizeObserver(schedule_draw).observe(scene);
+    }
 }
 
 function render_scene(block: PearArtifactBlock, data: JsonObject): HTMLElement {

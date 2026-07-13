@@ -127,6 +127,49 @@ run_test("renders native semantic nodes without exposing source JSON or adopting
     assert.equal(rendered.querySelector(".pear-artifact-connector-label").textContent, "force");
 });
 
+run_test("lays out undirected graph branches by topological distance", () => {
+    const document = valid_document();
+    document.blocks[1].root.children = [
+        {type: "shape", id: "a", shape: "circle", label: "A"},
+        {type: "shape", id: "b", shape: "circle", label: "B"},
+        {type: "shape", id: "c", shape: "circle", label: "C"},
+        {type: "shape", id: "d", shape: "circle", label: "D"},
+        {type: "connector", from: "a", to: "b", directed: false},
+        {type: "connector", from: "a", to: "c", directed: false},
+        {type: "connector", from: "b", to: "d", directed: false},
+        {type: "connector", from: "c", to: "d", directed: false},
+    ];
+    const parsed = artifact.parse_pear_artifact(JSON.stringify(document));
+    assert.ok(parsed);
+    const rendered = artifact.render_pear_artifact(parsed, {density: "chat"});
+    assert.equal(rendered.querySelector('[data-pear-artifact-node="a"]').style.gridColumn, "1");
+    assert.equal(rendered.querySelector('[data-pear-artifact-node="b"]').style.gridColumn, "2");
+    assert.equal(rendered.querySelector('[data-pear-artifact-node="c"]').style.gridColumn, "2");
+    assert.equal(rendered.querySelector('[data-pear-artifact-node="d"]').style.gridColumn, "3");
+    assert.notEqual(
+        rendered.querySelector('[data-pear-artifact-node="b"]').style.gridRow,
+        rendered.querySelector('[data-pear-artifact-node="c"]').style.gridRow,
+    );
+});
+
+run_test("falls back to distance layout for directed cycles", () => {
+    const document = valid_document();
+    document.blocks[1].root.children = [
+        {type: "shape", id: "a", shape: "circle", label: "A"},
+        {type: "shape", id: "b", shape: "circle", label: "B"},
+        {type: "shape", id: "c", shape: "circle", label: "C"},
+        {type: "connector", from: "a", to: "b", directed: true},
+        {type: "connector", from: "b", to: "c", directed: true},
+        {type: "connector", from: "c", to: "a", directed: true},
+    ];
+    const parsed = artifact.parse_pear_artifact(JSON.stringify(document));
+    assert.ok(parsed);
+    const rendered = artifact.render_pear_artifact(parsed, {density: "chat"});
+    assert.equal(rendered.querySelector('[data-pear-artifact-node="a"]').style.gridColumn, "1");
+    assert.equal(rendered.querySelector('[data-pear-artifact-node="b"]').style.gridColumn, "2");
+    assert.equal(rendered.querySelector('[data-pear-artifact-node="c"]').style.gridColumn, "2");
+});
+
 run_test("renders bounded repeat data and keeps interactions local", () => {
     const document = {
         version: 1,

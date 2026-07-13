@@ -1992,6 +1992,30 @@
         & .pear-artifact-body {
             gap: var(--pear-space-2);
         }
+
+        & .pear-artifact-scene:has(.pear-artifact-group[data-layout="graph"]) {
+            min-height: 180px;
+            aspect-ratio: auto;
+        }
+
+        & .pear-artifact-group[data-layout="graph"] {
+            grid-template-columns: repeat(
+                var(--pear-artifact-graph-columns, 2),
+                minmax(44px, 1fr)
+            );
+            grid-template-rows: repeat(
+                var(--pear-artifact-graph-rows, 1),
+                minmax(48px, 1fr)
+            );
+            gap: var(--pear-space-2);
+        }
+
+        & .pear-artifact-shape[data-shape="circle"] {
+            min-width: 42px;
+            width: 42px;
+            min-height: 42px;
+            height: 42px;
+        }
     }
 
     &[data-lifecycle="preparing"],
@@ -2439,7 +2463,9 @@
     padding: var(--pear-space-2);
     color: var(--pear-ink-1);
     font-size: 0.9em;
+    line-height: 1.15;
     text-align: center;
+    white-space: pre-line;
 }
 
 .pear-artifact-connectors {

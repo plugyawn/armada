@@ -895,10 +895,7 @@ run_test("pear_artifact_reference_detection", () => {
             title: "SHA: a3f92c1",
         },
     );
-    assert.equal(
-        message_list_view.extract_pear_artifact_reference_for_testing("Doc: "),
-        undefined,
-    );
+    assert.equal(message_list_view.extract_pear_artifact_reference_for_testing("Doc: "), undefined);
     assert.equal(
         message_list_view.extract_pear_artifact_reference_for_testing("Summary: done"),
         undefined,
@@ -937,6 +934,42 @@ test("pear_stale_thinking_row_refreshes_without_removed_active_id", () => {
         message_ids: JSON.stringify([message_id]),
         allow_empty_topic_name: true,
     });
+});
+
+run_test("pear result refresh recovers missed artifact submessages", () => {
+    const existing = {
+        id: 1004,
+        submessages: [
+            {
+                id: 11,
+                message_id: 1004,
+                sender_id: 25,
+                msg_type: "widget",
+                content: "{}",
+            },
+        ],
+    };
+    const artifact = {
+        id: 12,
+        message_id: 1004,
+        sender_id: 25,
+        msg_type: "pear_artifact",
+        content: '{"version":1,"blocks":[]}',
+    };
+
+    assert.equal(
+        message_list_view.merge_pear_result_submessages(existing, [
+            existing.submessages[0],
+            artifact,
+        ]),
+        true,
+    );
+    assert.deepEqual(existing.submessages, [existing.submessages[0], artifact]);
+    assert.equal(
+        message_list_view.merge_pear_result_submessages(existing, [artifact]),
+        false,
+    );
+    assert.equal(existing.submessages.length, 2);
 });
 
 test("merge_message_groups", ({mock_template}) => {

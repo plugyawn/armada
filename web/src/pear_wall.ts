@@ -15,8 +15,9 @@ import render_pear_wall from "../templates/pear_wall.hbs";
 import * as channel from "./channel.ts";
 import {$t} from "./i18n.ts";
 import * as narrow_state from "./narrow_state.ts";
-import {send_pear_explainer_action} from "./pear_explainer_actions.ts";
-import * as pear_wall_components from "./pear_wall_components.ts";
+import type {PearArtifactDocument, PearArtifactModule} from "./pear_artifact.ts";
+import {send_pear_artifact_action} from "./pear_artifact_actions.ts";
+import {mount_pear_artifact_lifecycle} from "./pear_artifact_lifecycle.ts";
 
 const monitor_schema = z.object({
     id: z.number(),
@@ -25,26 +26,8 @@ const monitor_schema = z.object({
     status: z.string(),
     version: z.number(),
     cadence_seconds: z.number(),
-    block_spec: z.object({
-        components: z.optional(
-            z.array(
-                z.object({
-                    type: z.string(),
-                    props: z.record(z.string(), z.unknown()),
-                }),
-            ),
-        ),
-        actions: z.optional(
-            z.array(
-                z.object({
-                    label: z.string(),
-                    prompt: z.string(),
-                }),
-            ),
-        ),
-    }),
-    props: z.record(z.string(), z.unknown()),
-    history: z.array(z.number()),
+    artifact_spec: z.record(z.string(), z.unknown()),
+    data: z.record(z.string(), z.unknown()),
     last_error: z.string(),
     position: z.number(),
 });
@@ -60,16 +43,15 @@ const CADENCE_PRESETS = [5, 20, 60, 300, 3600, 86400];
 
 let monitors: PearMonitorPayload[] = [];
 let poll_timer: ReturnType<typeof setTimeout> | undefined;
-let clock_timer: ReturnType<typeof setInterval> | undefined;
 let backoff_ms = 0;
 let last_render_signature = "";
 let last_context_key = "";
 const collapsed_ids = new Set<number>();
 const seen_versions = new Map<number, number>();
-const last_valid_svg_markup = new Map<
-    number,
-    Map<number, pear_wall_components.PearSvgCacheEntry>
->();
+let artifact_module: PearArtifactModule | undefined;
+let artifact_module_promise: Promise<PearArtifactModule> | undefined;
+const last_valid_artifacts = new Map<number, PearArtifactDocument>();
+const rendered_versions = new Map<number, number>();
 
 function wall_context(): {stream: string; topic: string} | undefined {
     const stream = narrow_state.stream_name();
@@ -100,6 +82,9 @@ function render_context(): Record<string, unknown> {
         ask: monitor.ask,
         status: monitor.status,
         collapsed: collapsed_ids.has(monitor.id),
+        collapsed_class: collapsed_ids.has(monitor.id) ? "pear-wall-collapsed" : "",
+        aria_expanded: collapsed_ids.has(monitor.id) ? "false" : "true",
+        collapse_glyph: collapsed_ids.has(monitor.id) ? "▸" : "▾",
         is_provisioning: monitor.status === "provisioning",
         is_error: monitor.status === "error",
         is_live: monitor.status === "live",
@@ -111,36 +96,8 @@ function render_context(): Record<string, unknown> {
             monitor.last_error.length > 60
                 ? monitor.last_error.slice(0, 60) + "…"
                 : monitor.last_error,
-        components: (monitor.block_spec.components ?? []).map((component, index) =>
-            pear_wall_components.component_context(
-                component,
-                index,
-                monitor.props,
-                monitor.history,
-            ),
-        ),
-        has_actions: (monitor.block_spec.actions ?? []).length > 0,
-        actions: (monitor.block_spec.actions ?? []).map((action, action_index) => ({
-            action_index,
-            label: action.label,
-        })),
     }));
     return {has_blocks: blocks.length > 0, blocks};
-}
-
-function update_clocks(): void {
-    pear_wall_components.update_clocks($("#pear-wall"));
-}
-
-function sync_clock_timer(): void {
-    const needs_clock = $("#pear-wall").find("[data-wall-clock], [data-wall-countdown]").length > 0;
-    if (needs_clock && clock_timer === undefined && !document.hidden) {
-        update_clocks();
-        clock_timer = setInterval(update_clocks, 1000);
-    } else if ((!needs_clock || document.hidden) && clock_timer !== undefined) {
-        clearInterval(clock_timer);
-        clock_timer = undefined;
-    }
 }
 
 function pulse_changed_blocks($wall: JQuery): void {
@@ -163,6 +120,127 @@ function pulse_changed_blocks($wall: JQuery): void {
     }
 }
 
+async function settle_artifact_module(): Promise<void> {
+    try {
+        const pending = artifact_module_promise;
+        if (pending === undefined) {
+            return;
+        }
+        artifact_module = await pending;
+        render_artifacts($("#pear-wall"));
+    } catch {
+        for (const monitor of monitors) {
+            if (monitor.status !== "live" && monitor.status !== "paused") {
+                continue;
+            }
+            const $host = $("#pear-wall").find(
+                `.pear-wall-block[data-monitor-id="${monitor.id}"] [data-pear-artifact-host]`,
+            );
+            mount_pear_artifact_lifecycle($host, "wall", "failed", "artifact renderer unavailable");
+        }
+    }
+}
+
+function mount_monitor_artifact($host: JQuery, document_value: PearArtifactDocument): void {
+    artifact_module?.mount_pear_artifact($host, document_value, {
+        density: "wall",
+        onAction(action, button) {
+            const target = wall_context();
+            if (target === undefined || button.disabled) {
+                return;
+            }
+            const label = button.textContent ?? action.label;
+            button.disabled = true;
+            button.textContent = $t({defaultMessage: "asking…"});
+            send_pear_artifact_action(target, action.prompt, {
+                success() {
+                    button.textContent = $t({defaultMessage: "asked ✓"});
+                },
+                error() {
+                    button.disabled = false;
+                    button.textContent = label;
+                },
+            });
+        },
+    });
+}
+
+function render_artifacts($wall: JQuery): void {
+    const renderable = monitors.filter(
+        (monitor) => monitor.status === "live" || monitor.status === "paused",
+    );
+    if (renderable.length === 0) {
+        return;
+    }
+    if (artifact_module === undefined) {
+        for (const monitor of renderable) {
+            const $host = $wall.find(
+                `.pear-wall-block[data-monitor-id="${monitor.id}"] [data-pear-artifact-host]`,
+            );
+            if ($host.children().length === 0) {
+                mount_pear_artifact_lifecycle($host, "wall", "preparing", "preparing artifact…");
+            }
+        }
+        if (artifact_module_promise === undefined) {
+            artifact_module_promise = import("./pear_artifact.ts");
+            void settle_artifact_module();
+        }
+        return;
+    }
+
+    for (const monitor of renderable) {
+        const $host = $wall.find(
+            `.pear-wall-block[data-monitor-id="${monitor.id}"] [data-pear-artifact-host]`,
+        );
+        const base_data = monitor.artifact_spec["data"];
+        const raw_document = {
+            ...monitor.artifact_spec,
+            data: {
+                ...(typeof base_data === "object" && base_data !== null && !Array.isArray(base_data)
+                    ? base_data
+                    : {}),
+                ...monitor.data,
+            },
+        };
+        const parsed = artifact_module.parse_pear_artifact(JSON.stringify(raw_document));
+        if (parsed === undefined) {
+            const last_valid = last_valid_artifacts.get(monitor.id);
+            if (last_valid !== undefined && $host.children(".pear-artifact").length === 0) {
+                mount_monitor_artifact($host, last_valid);
+            }
+            const existing = $host.children(".pear-artifact")[0];
+            if (last_valid !== undefined && existing !== undefined) {
+                existing.dataset["lifecycle"] = "stale";
+                existing.removeAttribute("aria-busy");
+                existing.setAttribute("aria-label", "Showing the last valid artifact update");
+            } else {
+                mount_pear_artifact_lifecycle($host, "wall", "failed", "artifact update rejected");
+            }
+            continue;
+        }
+        last_valid_artifacts.set(monitor.id, parsed);
+        if (
+            rendered_versions.get(monitor.id) === monitor.version &&
+            $host.children('.pear-artifact[data-lifecycle="ready"]').length > 0
+        ) {
+            continue;
+        }
+        const existing = $host.children(".pear-artifact")[0];
+        existing?.setAttribute("data-lifecycle", "updating");
+        existing?.setAttribute("aria-busy", "true");
+        mount_monitor_artifact($host, parsed);
+        $host.attr("data-pear-artifact-version", String(monitor.version));
+        rendered_versions.set(monitor.id, monitor.version);
+    }
+
+    for (const monitor_id of last_valid_artifacts.keys()) {
+        if (!monitors.some((monitor) => monitor.id === monitor_id)) {
+            last_valid_artifacts.delete(monitor_id);
+            rendered_versions.delete(monitor_id);
+        }
+    }
+}
+
 function render(): void {
     const $wall = $("#pear-wall");
     if ($wall.length === 0) {
@@ -171,13 +249,13 @@ function render(): void {
     const context = wall_context();
     if (context === undefined) {
         $wall.attr("hidden", "hidden");
-        sync_clock_timer();
         return;
     }
     $wall.removeAttr("hidden");
     const template_context = render_context();
     const signature = JSON.stringify(template_context);
     if (signature === last_render_signature) {
+        render_artifacts($wall);
         pulse_changed_blocks($wall);
         return;
     }
@@ -189,34 +267,14 @@ function render(): void {
 
     $wall.html(render_pear_wall(template_context));
 
-    for (const monitor of monitors) {
-        let cache = last_valid_svg_markup.get(monitor.id);
-        if (cache === undefined) {
-            cache = new Map();
-            last_valid_svg_markup.set(monitor.id, cache);
-        }
-        pear_wall_components.mount_svg_components(
-            $wall.find(`.pear-wall-block[data-monitor-id="${monitor.id}"]`),
-            monitor.block_spec.components ?? [],
-            monitor.props,
-            cache,
-        );
-    }
-    for (const monitor_id of last_valid_svg_markup.keys()) {
-        if (!monitors.some((monitor) => monitor.id === monitor_id)) {
-            last_valid_svg_markup.delete(monitor_id);
-        }
-    }
+    render_artifacts($wall);
 
     const $new_input = $wall.find<HTMLInputElement>(".pear-wall-input");
     $new_input.val(input_value);
     if (input_focused) {
         $new_input.trigger("focus");
     }
-    pear_wall_components.apply_meter_fills($wall);
-    pear_wall_components.draw_sparklines($wall);
     pulse_changed_blocks($wall);
-    sync_clock_timer();
 }
 
 function poll_delay_ms(): number {
@@ -252,6 +310,8 @@ export function refresh(): void {
     if (context_key !== last_context_key) {
         last_context_key = context_key;
         monitors = [];
+        last_valid_artifacts.clear();
+        rendered_versions.clear();
         last_render_signature = "";
         render();
     }
@@ -334,36 +394,6 @@ export function initialize(): void {
         create_monitor(ask);
     });
 
-    $wall.on("click", ".pear-explainer-action", function (this: HTMLButtonElement, event) {
-        event.preventDefault();
-        event.stopPropagation();
-        const monitor_id = Number(
-            this.closest(".pear-wall-block")?.getAttribute("data-monitor-id") ?? "0",
-        );
-        const action_index = Number(this.getAttribute("data-pear-explainer-action") ?? "-1");
-        const monitor = monitors.find((entry) => entry.id === monitor_id);
-        const action = monitor?.block_spec.actions?.[action_index];
-        const target = wall_context();
-        if (action === undefined || target === undefined || this.disabled) {
-            return;
-        }
-        const label = this.textContent ?? action.label;
-        this.disabled = true;
-        this.setAttribute("aria-busy", "true");
-        this.textContent = $t({defaultMessage: "asking…"});
-        send_pear_explainer_action(target, action.prompt, {
-            success: () => {
-                this.removeAttribute("aria-busy");
-                this.textContent = $t({defaultMessage: "asked ✓"});
-            },
-            error: () => {
-                this.disabled = false;
-                this.removeAttribute("aria-busy");
-                this.textContent = label;
-            },
-        });
-    });
-
     $wall.on("click", "[data-wall-action]", (event) => {
         event.preventDefault();
         event.stopPropagation();
@@ -431,7 +461,6 @@ export function initialize(): void {
     });
 
     document.addEventListener("visibilitychange", () => {
-        sync_clock_timer();
         if (!document.hidden) {
             refresh();
         }

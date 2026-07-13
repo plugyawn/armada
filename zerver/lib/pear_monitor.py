@@ -2,7 +2,7 @@
 
 A monitor is a small standing subroutine attached to a topic. A Codex
 agent runs ONCE at setup (its own sibling thread — never the topic's
-shared thread) and writes a spec: which wall components to render and a
+shared thread) and writes a spec: which artifact to render and a
 shell recipe that refreshes them. After that the worker's tick thread
 re-runs the recipe at cadence with no model involved, so a 20-second
 cadence costs zero tokens. The agent only returns for a rebuild after
@@ -22,6 +22,7 @@ from typing import Any, Final
 from django.utils.timezone import now as timezone_now
 
 from zerver.lib.pear_agent import PearProcessIsolation, pear_isolated_command
+from zerver.lib.pear_artifact import PearArtifactError, canonicalize_pear_artifact
 from zerver.models import PearMonitor, UserProfile
 
 logger = logging.getLogger(__name__)
@@ -34,78 +35,35 @@ PEAR_MONITOR_FAILURE_LIMIT: Final = 5
 PEAR_MONITOR_RECIPE_TIMEOUT_SECONDS: Final = 8
 PEAR_MONITOR_RECIPE_OUTPUT_LIMIT: Final = 64_000
 PEAR_MONITOR_TICK_BATCH_LIMIT: Final = 16
-PEAR_MONITOR_HISTORY_LIMIT: Final = 64
 PEAR_MONITOR_SPEC_DIR: Final = ".pear/monitors"
 PEAR_MONITOR_SETUP_STALE_SECONDS: Final = 1800
-PEAR_EXPLAINER_ACTION_LIMIT: Final = 4
-PEAR_EXPLAINER_ACTION_LABEL_LIMIT: Final = 40
-PEAR_EXPLAINER_ACTION_PROMPT_LIMIT: Final = 1000
-PEAR_EXPLAINER_TEXT_LIMIT: Final = 4000
-PEAR_EXPLAINER_TITLE_LIMIT: Final = 24
-PEAR_SVG_MARKUP_LIMIT: Final = 64_000
-
-# Component catalog: prop names the validator accepts and the contract
-# teaches. The client renders defensively, so prop VALUES are only
-# lightly coerced here (numbers to float, strings trimmed).
-PEAR_MONITOR_COMPONENTS: Final[dict[str, frozenset[str]]] = {
-    "text": frozenset({"eyebrow", "heading", "body"}),
-    "svg": frozenset({"label", "markup"}),
-    "meter": frozenset({"label", "value", "total", "rate", "eta", "unit"}),
-    "stat": frozenset({"label", "value", "delta", "unit"}),
-    "sparkline": frozenset({"label", "value", "unit"}),
-    "logtail": frozenset({"label", "lines", "limit"}),
-    "badge": frozenset({"label", "state", "text"}),
-    "clock": frozenset({"label", "timezone"}),
-    "countdown": frozenset({"label", "target"}),
-    "calendar": frozenset({"label", "highlights"}),
-    "keyvals": frozenset({"label", "pairs"}),
-}
-PEAR_MONITOR_MAX_COMPONENTS: Final = 4
 PEAR_MONITOR_PARSE_MODES: Final = frozenset({"text", "regex", "json", "static"})
-
-# Client-ticked components need no recipe execution to stay alive.
-PEAR_MONITOR_STATIC_COMPONENTS: Final = frozenset({"clock", "countdown", "calendar"})
 
 PEAR_MONITOR_CONTRACT_PREFIX: Final = """\
 You are setting up a Pear wall monitor: a small standing display block \
 that keeps one thing visible next to a Zulip topic. You run once, now, \
 to write its spec; after that a dumb scheduler re-runs your recipe on a \
-cadence with no AI involved, so the recipe must do all the work.
+cadence with no AI involved. The artifact is the same native, theme-owned \
+document used in chat. Never emit SVG, HTML, CSS, colors, fonts, URLs, or scripts.
 
-Component catalog (the only block types that exist — never invent one):
-- text: an explainer section. Props: eyebrow, heading, body.
-- svg: a safe, theme-aware vector diagram. Props: label, markup (one complete SVG document).
-- meter: progress toward a total. Props: label, value (number), total \
-(number, optional; omit if value is already 0-100), rate (string), eta \
-(string), unit.
-- stat: one big number. Props: label, value, delta (signed number, \
-optional), unit.
-- sparkline: a numeric series over time; the scheduler keeps history \
-automatically from the bound value. Props: label, value (number), unit.
-- logtail: the last lines of a stream. Props: label, lines (list of \
-strings), limit (number, default 8).
-- badge: a status lamp. Props: label, state (ok|warn|err), text.
-- clock: current time, ticks client-side. Props: label, timezone (IANA).
-- countdown: time until a moment, ticks client-side. Props: label, \
-target (ISO 8601 datetime).
-- calendar: a month grid. Props: label, highlights (list of ISO dates).
-- keyvals: small label:value rows. Props: label, pairs (list of \
-[key, value] pairs).
+Artifact vocabulary: copy, metric, meter, series, log, key_value, and scene. \
+A scene uses only group, text, shape, connector, path, symbol, mark, and control \
+nodes. Supply meaning, data, and relationships; Pear owns every pixel.
 
 Spec file schema (JSON):
 {
   "title": "<wall label, at most 24 chars, lowercase preferred>",
   "cadence_seconds": <5..86400 — as slow as the data allows>,
-  "block": {
-    "components": [{"type": "<catalog type>", "props": {...}}],
-    "actions": [{"label": "<short button>", "prompt": "<instruction for Pear>"}]
-  },
+  "artifact": {"version": 1, "title": "...", "data": {"signal": 0},
+    "blocks": [{"type": "metric", "label": "signal", "value": 0,
+                "bind": "data.signal"}],
+    "actions": [{"label": "<short button>", "prompt": "<instruction for Pear>"}]},
   "recipe": {
     "command": "<shell command run from the topic worktree, finishes \
 fast, read-only in spirit>",
     "parse": {"mode": "text" | "regex" | "json" | "static",
               "pattern": "<regex with named groups, regex mode only>"},
-    "bindings": {"<componentIndex.propName>": "<source>"}
+    "bindings": {"data.<name>": "<source>"}
   }
 }
 Binding sources: "group:<name>" (regex mode), "path:<dotted.json.path>" \
@@ -116,14 +74,13 @@ Rules:
 1. Explore first (read-only) to find where the signal actually lives — \
 a log file, a command, an API. Test your command and pattern against \
 real output before writing the spec.
-2. Prefer ONE component; use at most %(max_components)s. Labels stay \
-under 16 characters. Add actions only when a useful follow-up needs the agent.
+2. Prefer one clear artifact thesis, not a dashboard. Add actions only when a \
+useful follow-up needs the agent.
 3. The recipe command must be idempotent, finish within \
 %(timeout_seconds)s seconds, write nothing, and print small output. For \
-clock/countdown/calendar-only blocks use parse mode "static" and a \
-slow cadence (they tick in the client).
-4. Static props you know now go in block.components[].props; bindings \
-overwrite props with fresh values every tick.
+client-local display use parse mode "static" and a slow cadence.
+4. Static values go in artifact.data. Bindings may update only artifact data; \
+they never replace layout, copy, controls, or scene topology.
 5. Write the spec as valid JSON to exactly this file, creating parent \
 directories if needed: %(spec_path)s
 6. Do not modify any other file. Do not commit. Do not post the spec \
@@ -145,7 +102,6 @@ def build_pear_monitor_contract(
     repair_error: str = "",
 ) -> str:
     prefix = PEAR_MONITOR_CONTRACT_PREFIX % {
-        "max_components": PEAR_MONITOR_MAX_COMPONENTS,
         "timeout_seconds": PEAR_MONITOR_RECIPE_TIMEOUT_SECONDS,
         "spec_path": pear_monitor_spec_relative_path(monitor_id),
     }
@@ -172,90 +128,25 @@ def _clean_string(value: Any, *, limit: int) -> str:
     return str(value).strip()[:limit]
 
 
-def _required_bounded_string(value: Any, *, name: str, limit: int) -> str:
-    if not isinstance(value, str) or not value.strip():
-        raise PearMonitorSpecError(f"{name} must be a non-empty string.")
-    if len(value) > limit:
-        raise PearMonitorSpecError(f"{name} exceeds {limit} characters.")
-    return value.strip()
-
-
 def pear_validate_monitor_spec(raw: Any) -> dict[str, Any]:
-    """Validate an agent-written spec into (title, cadence, block, recipe)."""
+    """Validate a monitor wrapper around one canonical artifact document."""
     if not isinstance(raw, dict):
         raise PearMonitorSpecError("Spec must be a JSON object.")
-    title = _clean_string(raw.get("title", ""), limit=PEAR_EXPLAINER_TITLE_LIMIT)
+    artifact_raw = raw.get("artifact")
+    if artifact_raw is None and raw.get("version") == 1:
+        artifact_raw = raw
+        raw = {"artifact": raw, "recipe": {"parse": {"mode": "static"}}}
+    try:
+        artifact, _encoded = canonicalize_pear_artifact(artifact_raw)
+    except PearArtifactError as error:
+        raise PearMonitorSpecError(f"Invalid artifact: {error}") from error
+    title = _clean_string(raw.get("title", artifact.get("title", "")), limit=60)
     cadence = raw.get("cadence_seconds", 20)
-    if not isinstance(cadence, int | float):
+    if not isinstance(cadence, int | float) or isinstance(cadence, bool):
         raise PearMonitorSpecError("cadence_seconds must be a number.")
     cadence = int(
         min(max(cadence, PEAR_MONITOR_MIN_CADENCE_SECONDS), PEAR_MONITOR_MAX_CADENCE_SECONDS)
     )
-
-    block = raw.get("block")
-    if not isinstance(block, dict) or not isinstance(block.get("components"), list):
-        raise PearMonitorSpecError("block.components must be a list.")
-    components = block["components"]
-    if not 1 <= len(components) <= PEAR_MONITOR_MAX_COMPONENTS:
-        raise PearMonitorSpecError(
-            f"Between 1 and {PEAR_MONITOR_MAX_COMPONENTS} components required."
-        )
-    clean_components: list[dict[str, Any]] = []
-    for component in components:
-        if not isinstance(component, dict):
-            raise PearMonitorSpecError("Each component must be an object.")
-        component_type = component.get("type")
-        if component_type not in PEAR_MONITOR_COMPONENTS:
-            raise PearMonitorSpecError(f"Unknown component type: {component_type!r}.")
-        props = component.get("props", {})
-        if not isinstance(props, dict):
-            raise PearMonitorSpecError("Component props must be an object.")
-        allowed = PEAR_MONITOR_COMPONENTS[component_type]
-        unknown = set(props) - allowed
-        if unknown:
-            raise PearMonitorSpecError(
-                f"Unknown props for {component_type}: {sorted(unknown)!r}."
-            )
-        clean_props = dict(props)
-        if component_type == "text":
-            clean_props = {
-                key: _clean_string(value, limit=PEAR_EXPLAINER_TEXT_LIMIT)
-                for key, value in props.items()
-            }
-            if not any(clean_props.values()):
-                raise PearMonitorSpecError("text requires non-empty explainer copy.")
-        elif component_type == "svg":
-            markup = _required_bounded_string(
-                props.get("markup"), name="svg markup", limit=PEAR_SVG_MARKUP_LIMIT
-            )
-            clean_props = {"markup": markup}
-            if "label" in props:
-                clean_props["label"] = _clean_string(props["label"], limit=64)
-        clean_components.append({"type": component_type, "props": clean_props})
-
-    actions = block.get("actions", [])
-    if not isinstance(actions, list) or len(actions) > PEAR_EXPLAINER_ACTION_LIMIT:
-        raise PearMonitorSpecError(
-            f"block.actions must contain at most {PEAR_EXPLAINER_ACTION_LIMIT} actions."
-        )
-    clean_actions: list[dict[str, str]] = []
-    for action in actions:
-        if not isinstance(action, dict) or set(action) != {"label", "prompt"}:
-            raise PearMonitorSpecError("Each action requires exactly label and prompt.")
-        clean_actions.append(
-            {
-                "label": _required_bounded_string(
-                    action["label"],
-                    name="action label",
-                    limit=PEAR_EXPLAINER_ACTION_LABEL_LIMIT,
-                ),
-                "prompt": _required_bounded_string(
-                    action["prompt"],
-                    name="action prompt",
-                    limit=PEAR_EXPLAINER_ACTION_PROMPT_LIMIT,
-                ),
-            }
-        )
 
     recipe = raw.get("recipe", {"parse": {"mode": "static"}})
     if not isinstance(recipe, dict):
@@ -281,25 +172,21 @@ def pear_validate_monitor_spec(raw: Any) -> dict[str, Any]:
         raise PearMonitorSpecError("recipe.bindings must be an object.")
     clean_bindings: dict[str, str] = {}
     for key, source in bindings.items():
-        if not re.fullmatch(r"\d+\.[a-z_]+", str(key)):
-            raise PearMonitorSpecError(f"Binding key must be index.prop: {key!r}.")
-        index, prop = str(key).split(".", 1)
-        if int(index) >= len(clean_components):
-            raise PearMonitorSpecError(f"Binding index out of range: {key!r}.")
-        component_type = clean_components[int(index)]["type"]
-        if prop not in PEAR_MONITOR_COMPONENTS[component_type]:
-            raise PearMonitorSpecError(f"Binding prop unknown for {component_type}: {prop!r}.")
+        if not re.fullmatch(r"data\.[A-Za-z][A-Za-z0-9_-]{0,39}", str(key)):
+            raise PearMonitorSpecError(f"Binding key must be a bounded data.<name>: {key!r}.")
         if not isinstance(source, str) or not re.fullmatch(
             r"(group:[A-Za-z_][A-Za-z0-9_]*|path:[\w.\[\]-]+|text|lines:\d+|literal:.*)",
             source,
         ):
             raise PearMonitorSpecError(f"Bad binding source: {source!r}.")
-        clean_bindings[f"{index}.{prop}"] = source
+        clean_bindings[str(key)] = source
+    if len(clean_bindings) > 32:
+        raise PearMonitorSpecError("recipe.bindings exceeds 32 data fields.")
 
     return {
         "title": title,
         "cadence_seconds": cadence,
-        "block_spec": {"components": clean_components, "actions": clean_actions},
+        "artifact_spec": artifact,
         "recipe": {
             "command": command,
             "parse": {"mode": mode, "pattern": pattern},
@@ -357,10 +244,8 @@ def _json_path_lookup(data: Any, path: str) -> Any:
     return current
 
 
-def pear_monitor_bind_props(
-    recipe: dict[str, Any], output: str, *, block_spec: dict[str, Any] | None = None
-) -> dict[str, Any]:
-    """Evaluate bindings against recipe output → {"<idx>.<prop>": value}."""
+def pear_monitor_bind_data(recipe: dict[str, Any], output: str) -> dict[str, Any]:
+    """Evaluate recipe output into bounded artifact data fields."""
     parse = recipe.get("parse", {})
     mode = parse.get("mode", "text")
     groups: dict[str, str] = {}
@@ -370,9 +255,7 @@ def pear_monitor_bind_props(
         if not matches:
             raise OSError("recipe output did not match the pattern")
         groups = {
-            name: value
-            for name, value in matches[-1].groupdict().items()
-            if value is not None
+            name: value for name, value in matches[-1].groupdict().items() if value is not None
         }
     elif mode == "json":
         try:
@@ -393,40 +276,19 @@ def pear_monitor_bind_props(
     lines = output.splitlines()
     for key, source in recipe.get("bindings", {}).items():
         if source == "text":
-            index, _, prop = key.partition(".")
-            components = (block_spec or {}).get("components", [])
-            is_svg_markup = (
-                index.isdigit()
-                and int(index) < len(components)
-                and components[int(index)].get("type") == "svg"
-                and prop == "markup"
-            )
-            limit = PEAR_SVG_MARKUP_LIMIT if is_svg_markup else 2000
-            bound[key] = output.strip()[:limit]
+            bound[key.removeprefix("data.")] = output.strip()[:2000]
         elif source.startswith("lines:"):
             count = min(int(source.removeprefix("lines:") or "8"), 50)
-            bound[key] = [line[:300] for line in lines[-count:]]
+            bound[key.removeprefix("data.")] = [line[:300] for line in lines[-count:]]
         elif source.startswith("literal:"):
-            bound[key] = source.removeprefix("literal:")
+            bound[key.removeprefix("data.")] = source.removeprefix("literal:")
         elif source.startswith("group:"):
-            bound[key] = coerce(groups.get(source.removeprefix("group:")))
+            bound[key.removeprefix("data.")] = coerce(groups.get(source.removeprefix("group:")))
         elif source.startswith("path:"):
-            bound[key] = coerce(_json_path_lookup(parsed_json, source.removeprefix("path:")))
+            bound[key.removeprefix("data.")] = coerce(
+                _json_path_lookup(parsed_json, source.removeprefix("path:"))
+            )
     return bound
-
-
-def _advance_history(monitor: PearMonitor, bound: dict[str, Any]) -> list[float]:
-    history = monitor.last_sample.get("history", [])
-    if not isinstance(history, list):
-        history = []
-    components = monitor.block_spec.get("components", [])
-    for index, component in enumerate(components):
-        if component.get("type") == "sparkline":
-            value = bound.get(f"{index}.value")
-            if isinstance(value, int | float):
-                history.append(float(value))
-            break
-    return history[-PEAR_MONITOR_HISTORY_LIMIT:]
 
 
 def pear_monitor_apply_tick(
@@ -447,7 +309,7 @@ def pear_monitor_apply_tick(
                 workdir=workdir,
                 process_isolation=process_isolation,
             )
-            bound = pear_monitor_bind_props(recipe, output, block_spec=monitor.block_spec)
+            bound = pear_monitor_bind_data(recipe, output)
     except (OSError, subprocess.TimeoutExpired, ValueError) as error:
         monitor.consecutive_failures += 1
         monitor.last_error = str(error)[:500]
@@ -468,9 +330,9 @@ def pear_monitor_apply_tick(
         )
         return
 
+    static_data = monitor.artifact_spec.get("data", {})
     monitor.last_sample = {
-        "props": bound,
-        "history": _advance_history(monitor, bound),
+        "data": {**(static_data if isinstance(static_data, dict) else {}), **bound},
     }
     monitor.version += 1
     monitor.consecutive_failures = 0
@@ -527,9 +389,7 @@ def pear_run_due_monitor_ticks() -> int:
             process_isolation = pear_topic_process_isolation(
                 monitor.bot_profile, stream=monitor.stream_name, topic=monitor.topic_name
             )
-            pear_monitor_apply_tick(
-                monitor, workdir=workdir, process_isolation=process_isolation
-            )
+            pear_monitor_apply_tick(monitor, workdir=workdir, process_isolation=process_isolation)
             ticked += 1
         except Exception:
             logger.exception("Pear monitor tick failed for monitor %s", monitor.id)
@@ -574,7 +434,7 @@ def pear_apply_monitor_setup_result(
     ).first()
     monitor.title = spec["title"] or monitor.title
     monitor.cadence_seconds = spec["cadence_seconds"]
-    monitor.block_spec = spec["block_spec"]
+    monitor.artifact_spec = spec["artifact_spec"]
     monitor.recipe = spec["recipe"]
     monitor.status = PearMonitor.LIVE
     monitor.consecutive_failures = 0
@@ -587,7 +447,7 @@ def pear_apply_monitor_setup_result(
         update_fields=[
             "title",
             "cadence_seconds",
-            "block_spec",
+            "artifact_spec",
             "recipe",
             "status",
             "consecutive_failures",
@@ -611,7 +471,7 @@ def pear_create_monitor_from_spec(
     position: int,
 ) -> PearMonitor:
     """Create a LIVE monitor directly from a validated spec — the
-    pin-to-wall path: a widget the agent already composed in chat needs
+    pin-to-wall path: an artifact the agent already composed in chat needs
     no setup run, no DM anchor, no provisioning state."""
     spec = pear_validate_monitor_spec(raw_spec)
     return PearMonitor.objects.create(
@@ -622,7 +482,7 @@ def pear_create_monitor_from_spec(
         topic_name=topic_name,
         title=spec["title"] or ask[:24],
         ask=ask[:500],
-        block_spec=spec["block_spec"],
+        artifact_spec=spec["artifact_spec"],
         recipe=spec["recipe"],
         cadence_seconds=spec["cadence_seconds"],
         status=PearMonitor.LIVE,
@@ -639,9 +499,8 @@ def serialize_pear_monitor(monitor: PearMonitor) -> dict[str, Any]:
         "status": monitor.status,
         "version": monitor.version,
         "cadence_seconds": monitor.cadence_seconds,
-        "block_spec": monitor.block_spec,
-        "props": monitor.last_sample.get("props", {}),
-        "history": monitor.last_sample.get("history", []),
+        "artifact_spec": monitor.artifact_spec,
+        "data": monitor.last_sample.get("data", {}),
         "last_ok_at": monitor.last_ok_at.isoformat() if monitor.last_ok_at else None,
         "last_error": monitor.last_error,
         "position": monitor.position,

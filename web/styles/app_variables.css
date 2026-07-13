@@ -860,6 +860,21 @@
     --pear-accent-fill: hsl(141deg 48% 42% / 12%);
     --pear-accent-fill-strong: hsl(141deg 48% 42% / 20%);
 
+    /* Generic interaction is violet. Pear green is presence/live/success
+       only; using it for ordinary buttons and selection caused the old
+       Zulip/Pear green-purple collision. */
+    --pear-interaction: light-dark(hsl(252deg 52% 48%), hsl(252deg 72% 74%));
+    --pear-interaction-fill: light-dark(
+        hsl(252deg 52% 48% / 10%),
+        hsl(252deg 72% 74% / 12%)
+    );
+    --pear-interaction-fill-strong: light-dark(
+        hsl(252deg 52% 48% / 17%),
+        hsl(252deg 72% 74% / 20%)
+    );
+    --pear-artifact-surface: light-dark(hsl(0deg 0% 99%), hsl(0deg 0% 8%));
+    --pear-artifact-raised: light-dark(hsl(0deg 0% 96.5%), hsl(0deg 0% 12%));
+
     /* Semantic states — muted; never compete with the accent. */
     --pear-danger: light-dark(hsl(6deg 62% 38%), hsl(6deg 62% 68%));
     --pear-danger-fill: light-dark(

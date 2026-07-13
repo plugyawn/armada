@@ -87,8 +87,8 @@ from zerver.lib.pear import (
     build_pear_verify_changes_message,
     build_pear_worker_completed_message,
     build_pear_worker_completed_message_chunks,
-    clean_pear_task_text,
     build_pear_worker_progress_message,
+    clean_pear_task_text,
     get_pear_live_run_state,
     get_pear_session_defaults,
     get_pear_session_payload,
@@ -105,8 +105,10 @@ from zerver.lib.pear import (
     pear_session_record_url,
     pear_turn_collaboration_mode,
     pear_worker_already_started,
+    pear_worker_event_tool_results,
     pear_worker_run_for_message,
     pear_worker_should_start,
+    pear_worker_summary_from_tool_results,
     record_pear_worker_run,
     split_pear_persistent_message,
     update_pear_worker_status_message,
@@ -202,6 +204,15 @@ class PearSessionDefaultsTest(TestCase):
         self.assertEqual(PEAR_EMBEDDED_BOT_SERVICE, "pear")
         self.assertEqual(PEAR_STEER_PROMPT, "Steering update:")
         self.assertEqual(PEAR_FIX_BUG_PROMPT, "Fix bug:")
+
+    def test_structured_artifacts_never_enter_run_telemetry_or_summary(self) -> None:
+        raw = '{"version":1,"blocks":[{"type":"copy","body":"private detail"}]}'
+        results = [{"label": "Artifact", "value": raw}]
+        self.assertEqual(pear_worker_summary_from_tool_results(results), "")
+        sanitized = pear_worker_event_tool_results(results)
+        self.assertEqual(sanitized[0]["label"], "Artifact")
+        self.assertIn("Structured artifact", sanitized[0]["value"])
+        self.assertNotIn("private detail", sanitized[0]["value"])
 
     def test_update_pear_worker_status_message_logs_rejected_update(self) -> None:
         class FakeBotHandler:
@@ -421,7 +432,9 @@ class PearSessionDefaultsTest(TestCase):
         self.assertIn("@**Pear** Review changes:", review_message)
         self.assertIn("Scope: current branch", review_message)
         self.assertIn("Review focus: correctness", review_message)
-        self.assertIn("Diff or files to inspect: use the latest Pear workspace artifacts", review_message)
+        self.assertIn(
+            "Diff or files to inspect: use the latest Pear workspace artifacts", review_message
+        )
         self.assertIn("Risk areas: ", review_message)
         self.assertIn("Expected output: prioritized findings", review_message)
         self.assertIn("Verification to consider: ", review_message)
@@ -1048,7 +1061,9 @@ class PearSessionDefaultsTest(TestCase):
         self.assertFalse(is_pear_request_message("@Pearl fix the checkout test"))
 
     def test_clean_pear_task_text_removes_mentions_anywhere(self) -> None:
-        self.assertEqual(clean_pear_task_text("@Pear fix the checkout test"), "fix the checkout test")
+        self.assertEqual(
+            clean_pear_task_text("@Pear fix the checkout test"), "fix the checkout test"
+        )
         self.assertEqual(clean_pear_task_text("Hi @Pear"), "Hi")
         self.assertEqual(clean_pear_task_text("Hi @**Pear**"), "Hi")
 
@@ -1057,9 +1072,7 @@ class PearSessionDefaultsTest(TestCase):
         self.assertTrue(is_pear_thread_request_message("@Pear implement the login view"))
         self.assertTrue(is_pear_thread_request_message("@Pear start a new pairing session"))
         self.assertTrue(
-            is_pear_thread_request_message(
-                "@Pear every weekday at 9am, check the linked PRs"
-            )
+            is_pear_thread_request_message("@Pear every weekday at 9am, check the linked PRs")
         )
         self.assertTrue(is_pear_thread_request_message("@Pear hi"))
         self.assertTrue(is_pear_thread_request_message("@Pear Hello."))
@@ -1074,9 +1087,7 @@ class PearSessionDefaultsTest(TestCase):
 
     def test_is_pear_access_request_message(self) -> None:
         self.assertTrue(
-            is_pear_access_request_message(
-                "@**Pear** What can you access from this topic?"
-            )
+            is_pear_access_request_message("@**Pear** What can you access from this topic?")
         )
         self.assertTrue(is_pear_access_request_message("@Pear what can you reach?"))
         self.assertFalse(is_pear_access_request_message("@Pear fix the checkout test"))
@@ -1421,13 +1432,9 @@ class PearSessionDefaultsTest(TestCase):
                 explicitly_addressed=True,
             )
         )
-        self.assertTrue(
-            pear_worker_should_start("@Pear hey tell me something", active_session)
-        )
+        self.assertTrue(pear_worker_should_start("@Pear hey tell me something", active_session))
         self.assertTrue(pear_worker_should_start("@Pear tell me a story", active_session))
-        self.assertTrue(
-            pear_worker_should_start("@Pear find answer to question", active_session)
-        )
+        self.assertTrue(pear_worker_should_start("@Pear find answer to question", active_session))
         self.assertTrue(
             pear_worker_should_start(
                 build_pear_status_check_message("checkout flow"),
@@ -1819,7 +1826,9 @@ class PearSessionDefaultsTest(TestCase):
         seen_worker_states: list[str] = []
         seen_tasks: list[str] = []
 
-        def tool_runner(active_session, task: str, *, event_callback=None, **kwargs) -> list[dict[str, str]]:
+        def tool_runner(
+            active_session, task: str, *, event_callback=None, **kwargs
+        ) -> list[dict[str, str]]:
             seen_worker_states.append(active_session["worker_state"])
             seen_tasks.append(task)
             return [
@@ -2044,7 +2053,7 @@ class PearSessionDefaultsTest(TestCase):
         self.assertTrue(completed_message.startswith("Tokenmaxxer."))
         self.assertNotIn("Repo: /Users/progyan/codack/zulip\nRuntime:", completed_message)
         self.assertNotIn("Result: Tokenmaxxer.", completed_message)
-        self.assertNotIn("Task: choose between A, B, D, and \"Tokenmaxxer\"", completed_message)
+        self.assertNotIn('Task: choose between A, B, D, and "Tokenmaxxer"', completed_message)
         self.assertNotIn("Runtime: codex-exec cwd=/home/vagrant/zulip", completed_message)
 
     def test_worker_completed_message_keeps_intermediate_blocks_before_final_answer(self) -> None:
@@ -2183,7 +2192,9 @@ class PearSessionDefaultsTest(TestCase):
         )
         tool_was_called = False
 
-        def tool_runner(active_session, task: str, *, event_callback=None, **kwargs) -> list[dict[str, str]]:
+        def tool_runner(
+            active_session, task: str, *, event_callback=None, **kwargs
+        ) -> list[dict[str, str]]:
             nonlocal tool_was_called
             tool_was_called = True
             return []
@@ -2279,9 +2290,7 @@ class PearSessionDefaultsTest(TestCase):
         self.assertNotIn("\nStanding routines:\n", prompt)
         self.assertNotIn("\nRoutine cadence:\n", prompt)
         self.assertNotIn("Verification: <command or check result>", prompt)
-        self.assertNotIn(
-            "Session: <session record URL or Codex thread reference>", prompt
-        )
+        self.assertNotIn("Session: <session record URL or Codex thread reference>", prompt)
         self.assertNotIn("Ticket: <ticket URL, ID, or path>", prompt)
         self.assertNotIn("Issue: <issue URL, ID, or path>", prompt)
         self.assertNotIn("Reviewers: <reviewer handles or teams>", prompt)
@@ -2696,15 +2705,9 @@ class PearSessionDefaultsTest(TestCase):
         self.assertEqual(request_payload["model"], "gemini-3.1-flash-lite")
         self.assertIs(request_payload["store"], False)
         self.assertEqual(request_payload["generation_config"]["temperature"], 0)
-        self.assertEqual(
-            request_payload["generation_config"]["thinking_level"], "minimal"
-        )
-        self.assertEqual(
-            request_payload["response_format"]["mime_type"], "application/json"
-        )
-        self.assertEqual(
-            request_payload["response_format"]["schema"]["required"], ["addressed"]
-        )
+        self.assertEqual(request_payload["generation_config"]["thinking_level"], "minimal")
+        self.assertEqual(request_payload["response_format"]["mime_type"], "application/json")
+        self.assertEqual(request_payload["response_format"]["schema"]["required"], ["addressed"])
         self.assertIn("Do not answer the user.", request_payload["input"])
         self.assertIn("New message:\nhey pear, can you check this?", request_payload["input"])
 
@@ -2989,7 +2992,16 @@ class PearSessionDefaultsTest(TestCase):
         )
         self.assertEqual(
             [event["kind"] for event in streamed_events],
-            ["session", "status", "command", "usage", "command", "assistant", "assistant", "status"],
+            [
+                "session",
+                "status",
+                "command",
+                "usage",
+                "command",
+                "assistant",
+                "assistant",
+                "status",
+            ],
         )
         self.assertEqual(streamed_events[3]["metadata"]["usage"]["cache_percent"], 60.0)
         self.assertIn({"label": "Verification", "value": "app-server ok"}, results)
@@ -3602,10 +3614,7 @@ class PearSessionDefaultsTest(TestCase):
                 return {"id": 400 + len(sent_replies)}
 
         run_store = FakeRunStore()
-        content = (
-            "@Pear every weekday at 9am, check the linked PRs and post a "
-            "one-line status"
-        )
+        content = "@Pear every weekday at 9am, check the linked PRs and post a one-line status"
         message = {
             "id": 204,
             "type": "stream",
@@ -3969,7 +3978,10 @@ class PearSessionDefaultsTest(TestCase):
             FakeBotHandler(),
         )
 
-        self.assertEqual(classifier_calls, [("hey agent, can you check the failing parser test?", "mentions_only")])
+        self.assertEqual(
+            classifier_calls,
+            [("hey agent, can you check the failing parser test?", "mentions_only")],
+        )
         self.assertEqual(run_store.starts, [208])
         self.assertEqual(seen_tasks, ["hey agent, can you check the failing parser test?"])
         self.assertEqual(len(sent_replies), 2)
@@ -4402,9 +4414,7 @@ class PearSessionDefaultsTest(TestCase):
                 result_message_id: int | None = None,
                 error: str | None = None,
             ) -> None:
-                self.records.append(
-                    (message_id, status, stream, topic, result_message_id, error)
-                )
+                self.records.append((message_id, status, stream, topic, result_message_id, error))
 
             def register_progress_message(
                 self,
@@ -4415,9 +4425,7 @@ class PearSessionDefaultsTest(TestCase):
                 topic: str,
                 progress_message_id: int | None,
             ) -> None:
-                self.progress_messages.append(
-                    (message_id, stream, topic, progress_message_id)
-                )
+                self.progress_messages.append((message_id, stream, topic, progress_message_id))
 
         class FakeBotHandler:
             def send_reply(self, message: dict[str, object], response: str) -> dict[str, int]:
@@ -4627,7 +4635,9 @@ class PearSessionDefaultsTest(TestCase):
                 visible_status_by_id[message_id] = content
                 updated_messages.append(message)
 
-        def tool_runner(active_session, task: str, *, event_callback=None, **kwargs) -> list[dict[str, str]]:
+        def tool_runner(
+            active_session, task: str, *, event_callback=None, **kwargs
+        ) -> list[dict[str, str]]:
             tool_seen_statuses.append(visible_status_by_id[501])
             return [
                 {
@@ -4709,7 +4719,9 @@ class PearSessionDefaultsTest(TestCase):
             def update_message(self, message) -> None:
                 pass
 
-        def tool_runner(active_session, task: str, *, event_callback=None, **kwargs) -> list[dict[str, str]]:
+        def tool_runner(
+            active_session, task: str, *, event_callback=None, **kwargs
+        ) -> list[dict[str, str]]:
             return [{"label": "Verification", "value": "typing test"}]
 
         message = {
@@ -4976,9 +4988,7 @@ class PearSessionDefaultsTest(TestCase):
         )
 
         self.assertGreater(len(sent_replies), 0)
-        all_persisted_text = "\n\n".join(
-            [str(updated_messages[-1]["content"]), *sent_replies]
-        )
+        all_persisted_text = "\n\n".join([str(updated_messages[-1]["content"]), *sent_replies])
         self.assertIn("Section 0:", all_persisted_text)
         self.assertIn("Section 11:", all_persisted_text)
         self.assertNotIn("[earlier progress details truncated]", all_persisted_text)
@@ -4988,9 +4998,7 @@ class PearSessionDefaultsTest(TestCase):
     def test_run_worker_turn_posts_continuation_messages_for_long_result(self) -> None:
         sent_replies: list[str] = []
         updated_messages: list[dict[str, object]] = []
-        long_result = "\n\n".join(
-            f"Section {index}: {'result text ' * 90}" for index in range(12)
-        )
+        long_result = "\n\n".join(f"Section {index}: {'result text ' * 90}" for index in range(12))
 
         class FakeRunStore:
             def record(
@@ -5014,7 +5022,9 @@ class PearSessionDefaultsTest(TestCase):
             def update_message(self, message: dict[str, object]) -> None:
                 updated_messages.append(message)
 
-        def tool_runner(active_session, task: str, *, event_callback=None, **kwargs) -> list[dict[str, str]]:
+        def tool_runner(
+            active_session, task: str, *, event_callback=None, **kwargs
+        ) -> list[dict[str, str]]:
             return [{"label": "Result", "value": long_result}]
 
         payload = get_pear_session_payload()
@@ -5049,9 +5059,7 @@ class PearSessionDefaultsTest(TestCase):
 
         self.assertGreater(len(sent_replies), 0)
         self.assertEqual(updated_messages[-1]["message_id"], 503)
-        all_persisted_text = "\n\n".join(
-            [str(updated_messages[-1]["content"]), *sent_replies]
-        )
+        all_persisted_text = "\n\n".join([str(updated_messages[-1]["content"]), *sent_replies])
         self.assertIn("Section 0:", all_persisted_text)
         self.assertIn("Section 11:", all_persisted_text)
         self.assertNotIn("[earlier progress details truncated]", all_persisted_text)
@@ -5292,9 +5300,7 @@ class PearSessionDefaultsTest(TestCase):
         # can animate the ✦ liveness glyph on the streaming message; the
         # final settled content must shed it.
         self.assertTrue(
-            all(
-                PEAR_ACTIVE_MARKDOWN_PREFIX in content for content in updated_contents[:-1]
-            )
+            all(PEAR_ACTIVE_MARKDOWN_PREFIX in content for content in updated_contents[:-1])
         )
         self.assertNotIn(PEAR_ACTIVE_MARKDOWN_PREFIX, updated_contents[-1])
 
@@ -5481,7 +5487,9 @@ class PearSessionDefaultsTest(TestCase):
         def active_session_loader(message, bot_handler):
             raise RuntimeError("database unavailable")
 
-        def tool_runner(active_session, task: str, *, event_callback=None, **kwargs) -> list[dict[str, str]]:
+        def tool_runner(
+            active_session, task: str, *, event_callback=None, **kwargs
+        ) -> list[dict[str, str]]:
             raise AssertionError("runtime must not run after a loader failure")
 
         message = {
@@ -5595,7 +5603,9 @@ class PearSessionDefaultsTest(TestCase):
             loaded_message_ids.append(message["id"])
             return refreshed_session
 
-        def tool_runner(active_session, task: str, *, event_callback=None, **kwargs) -> list[dict[str, str]]:
+        def tool_runner(
+            active_session, task: str, *, event_callback=None, **kwargs
+        ) -> list[dict[str, str]]:
             prompt = build_pear_codex_turn_prompt(active_session, task)
             tool_seen_prompts.append(prompt)
             return [
@@ -5646,6 +5656,7 @@ class PearSessionDefaultsTest(TestCase):
         tool_seen_tasks: list[str] = []
         tool_seen_threads: list[str | None] = []
         recorded_events: list[tuple[str, str, dict[str, object]]] = []
+        attached_artifacts: list[dict[str, str]] = []
 
         class FakeRunStore:
             def record(
@@ -5708,15 +5719,26 @@ class PearSessionDefaultsTest(TestCase):
             def update_message(self, message: dict[str, object]) -> None:
                 updated_messages.append(message)
 
-        def tool_runner(active_session, task: str, *, event_callback=None, **kwargs) -> list[dict[str, str]]:
+        def tool_runner(
+            active_session, task: str, *, event_callback=None, **kwargs
+        ) -> list[dict[str, str]]:
             tool_seen_tasks.append(task)
             tool_seen_threads.append(active_session["latest_codex_thread_id"])
             if len(tool_seen_tasks) == 1:
                 return [
                     {"label": "Session", "value": "Codex thread thread-1"},
                     {"label": "Result", "value": "first result"},
+                    {
+                        "label": "Artifact",
+                        "value": '{"blocks":[{"body":"first visual","type":"copy"}],"version":1}',
+                    },
                 ]
             return [{"label": "Result", "value": "steered result"}]
+
+        def attach_artifact(bot_handler, *, message_id, tool_results) -> bool:
+            del bot_handler, message_id
+            attached_artifacts.extend(tool_results)
+            return True
 
         payload = get_pear_session_payload()
         active_session = build_pear_active_session_summary_from_messages(
@@ -5733,20 +5755,23 @@ class PearSessionDefaultsTest(TestCase):
             "content": "@Pear fix the checkout test",
         }
 
-        PearEmbeddedBotHandler(
-            worker_runtime=PearWorkerRuntime(tool_runner),
-            worker_run_store=FakeRunStore(),
-        ).run_worker_turn(
-            message,
-            FakeBotHandler(),
-            content="@Pear fix the checkout test",
-            active_session=active_session,
-            message_id=205,
-            stream=PEAR_DEFAULT_STREAM,
-            topic=PEAR_DEFAULT_TOPIC,
-            post_started_progress=True,
-            progress_message_id=501,
-        )
+        with patch(
+            "zerver.lib.pear.attach_pear_artifact_to_message", side_effect=attach_artifact
+        ):
+            PearEmbeddedBotHandler(
+                worker_runtime=PearWorkerRuntime(tool_runner),
+                worker_run_store=FakeRunStore(),
+            ).run_worker_turn(
+                message,
+                FakeBotHandler(),
+                content="@Pear fix the checkout test",
+                active_session=active_session,
+                message_id=205,
+                stream=PEAR_DEFAULT_STREAM,
+                topic=PEAR_DEFAULT_TOPIC,
+                post_started_progress=True,
+                progress_message_id=501,
+            )
 
         self.assertEqual(
             tool_seen_tasks,
@@ -5756,6 +5781,7 @@ class PearSessionDefaultsTest(TestCase):
             ],
         )
         self.assertEqual(tool_seen_threads, [None, "thread-1"])
+        self.assertEqual([result["label"] for result in attached_artifacts], ["Artifact"])
         self.assertTrue(
             any(
                 PEAR_STEERING_APPLIED_MARKDOWN in str(message["content"])
@@ -5952,9 +5978,7 @@ class PearAppServerProtocolCitizenTest(TestCase):
         self.assertEqual(warned[0]["title"], "Codex warning.")
         self.assertIn("gpt-5.6-luna", warned[0]["body"])
         for method in ("thread/status/changed", "mcpServer/startupStatus/updated"):
-            self.assertEqual(
-                translator.events_from_message({"method": method, "params": {}}), []
-            )
+            self.assertEqual(translator.events_from_message({"method": method, "params": {}}), [])
 
     def test_unknown_methods_surface_once_and_deltas_never(self) -> None:
         translator = self.make_translator()
@@ -6101,6 +6125,52 @@ class PearInteractiveTurnTest(TestCase):
         self.assertEqual(params["collaborationMode"], {"mode": "plan"})
         default_params = runner.turn_params("thread_1", "prompt")
         self.assertNotIn("collaborationMode", default_params)
+
+    def test_thread_params_register_native_artifact_tool(self) -> None:
+        params = self.make_runner().thread_params()
+        [tool] = params["dynamicTools"]
+        self.assertEqual(tool["type"], "function")
+        self.assertEqual(tool["name"], "pear_artifact")
+        self.assertEqual(
+            tool["inputSchema"]["$id"], "https://pear.backpropaganda.net/contracts/artifact-v1.json"
+        )
+
+    def test_artifact_dynamic_tool_accepts_and_retains_canonical_document(self) -> None:
+        runner = self.make_runner()
+        result, error, event = runner.answer_for_server_request(
+            "item/tool/call",
+            {
+                "tool": "pear_artifact",
+                "namespace": None,
+                "arguments": {
+                    "version": 1,
+                    "blocks": [{"type": "copy", "body": "A concise explanation."}],
+                },
+            },
+        )
+        self.assertIsNone(error)
+        assert result is not None
+        self.assertTrue(result["success"])
+        self.assertEqual(len(runner.pending_artifacts), 1)
+        self.assertEqual(json.loads(runner.pending_artifacts[0])["version"], 1)
+        assert event is not None
+        self.assertEqual(event["title"], "Artifact ready.")
+
+    def test_artifact_dynamic_tool_returns_actionable_validation_error(self) -> None:
+        runner = self.make_runner()
+        result, error, event = runner.answer_for_server_request(
+            "item/tool/call",
+            {
+                "tool": "pear_artifact",
+                "arguments": {"version": 1, "blocks": [], "style": "green"},
+            },
+        )
+        self.assertIsNone(error)
+        assert result is not None
+        self.assertFalse(result["success"])
+        self.assertEqual(runner.pending_artifacts, [])
+        assert event is not None
+        self.assertEqual(event["status"], "failed")
 
     def test_request_user_input_answers_through_the_provider(self) -> None:
         runner = self.make_runner()

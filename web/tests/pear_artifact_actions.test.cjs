@@ -24,11 +24,11 @@ mock_esm("../src/transmit", {
     },
 });
 
-const actions = zrequire("pear_explainer_actions");
+const actions = zrequire("pear_artifact_actions");
 
 run_test("sends a visible topic message through the normal transmit path", () => {
     let result = "";
-    actions.send_pear_explainer_action(
+    actions.send_pear_artifact_action(
         {stream: "devel", topic: "attention"},
         "Explain the highlighted edge",
         {
@@ -58,7 +58,7 @@ run_test("sends a visible topic message through the normal transmit path", () =>
 run_test("rejects an empty action without sending", () => {
     sent = undefined;
     let error = "";
-    actions.send_pear_explainer_action({stream: "devel", topic: "attention"}, "   ", {
+    actions.send_pear_artifact_action({stream: "devel", topic: "attention"}, "   ", {
         success() {},
         error: (message) => (error = message),
     });

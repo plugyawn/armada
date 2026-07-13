@@ -1,10 +1,12 @@
+from types import SimpleNamespace
 from typing import Any
 from unittest import mock
 
 from zerver.actions.submessage import do_add_submessage
 from zerver.lib.message_cache import MessageDict
+from zerver.lib.pear import PEAR_EMBEDDED_BOT_SERVICE, attach_pear_artifact_to_message
 from zerver.lib.test_classes import ZulipTestCase
-from zerver.models import Message, SubMessage
+from zerver.models import Message, SubMessage, UserProfile
 
 
 class TestBasics(ZulipTestCase):
@@ -87,6 +89,10 @@ class TestBasics(ZulipTestCase):
         result = self.client_post("/json/submessage", payload)
         self.assert_json_error(result, "Invalid json for submessage")
 
+        payload = dict(message_id=message_id, msg_type="pear_artifact", content="{}")
+        result = self.client_post("/json/submessage", payload)
+        self.assert_json_error(result, "Pear artifacts can only be attached by the Pear runtime.")
+
         hamlet = self.example_user("hamlet")
         bad_message_id = self.send_personal_message(
             from_user=hamlet,
@@ -99,6 +105,44 @@ class TestBasics(ZulipTestCase):
         )
         result = self.client_post("/json/submessage", payload)
         self.assert_json_error(result, "Invalid message(s)")
+
+    def test_pear_runtime_artifact_is_durable_and_emits_event(self) -> None:
+        owner = self.example_user("hamlet")
+        pear_bot = self.create_test_bot(
+            "pear",
+            owner,
+            full_name="Pear",
+            bot_type=UserProfile.EMBEDDED_BOT,
+            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+        )
+        message_id = self.send_stream_message(pear_bot, "Denmark", content="Here is the diagram.")
+        document = '{"blocks":[{"body":"Force changes motion.","type":"copy"}],"version":1}'
+
+        with self.capture_send_event_calls(expected_num_events=1) as events:
+            attached = attach_pear_artifact_to_message(
+                SimpleNamespace(user_profile=pear_bot),
+                message_id=message_id,
+                tool_results=[{"label": "Artifact", "value": document}],
+            )
+        self.assertTrue(attached)
+        submessage = SubMessage.objects.get(message_id=message_id, msg_type="pear_artifact")
+        self.assertEqual(submessage.content, document)
+        self.assertEqual(events[0]["event"]["type"], "submessage")
+        self.assertEqual(events[0]["event"]["msg_type"], "pear_artifact")
+
+        self.login_user(owner)
+        response = self.assert_json_success(self.client_get(f"/json/messages/{message_id}"))
+        [reloaded] = response["message"]["submessages"]
+        self.assertEqual(reloaded["content"], document)
+
+        # Worker retries are idempotent for byte-identical canonical documents.
+        attached = attach_pear_artifact_to_message(
+            SimpleNamespace(user_profile=pear_bot),
+            message_id=message_id,
+            tool_results=[{"label": "Artifact", "value": document}],
+        )
+        self.assertTrue(attached)
+        self.assertEqual(SubMessage.objects.filter(message_id=message_id).count(), 1)
 
     def test_original_sender_enforced(self) -> None:
         cordelia = self.example_user("cordelia")

@@ -8,6 +8,7 @@ from pydantic import Json
 from zerver.actions.submessage import do_add_submessage, verify_submessage_sender
 from zerver.lib.exceptions import JsonableError
 from zerver.lib.message import access_message
+from zerver.lib.pear_artifact import PEAR_ARTIFACT_SUBMESSAGE_TYPE
 from zerver.lib.response import json_success
 from zerver.lib.typed_endpoint import typed_endpoint
 from zerver.lib.validator import validate_poll_data, validate_todo_data
@@ -26,6 +27,8 @@ def process_submessage(
     message_id: Json[int],
     msg_type: str,
 ) -> HttpResponse:
+    if msg_type == PEAR_ARTIFACT_SUBMESSAGE_TYPE:
+        raise JsonableError(_("Pear artifacts can only be attached by the Pear runtime."))
     message = access_message(user_profile, message_id, lock_message=True, is_modifying_message=True)
 
     verify_submessage_sender(

@@ -19,9 +19,15 @@ run_test("get_message_events", () => {
     assert.equal(submessage.get_message_events(msg), undefined);
 
     const submessages = [
-        {id: 222, sender_id: 99, content: '{"type":"new_option","idx":1,"option":"bar"}'},
+        {
+            id: 222,
+            msg_type: "widget",
+            sender_id: 99,
+            content: '{"type":"new_option","idx":1,"option":"bar"}',
+        },
         {
             id: 9,
+            msg_type: "widget",
             sender_id: 33,
             content: '{"widget_type": "poll", "extra_data": {"question": "foo", "options": []}}',
         },
@@ -58,6 +64,41 @@ run_test("get_message_events", () => {
     ]);
 });
 
+run_test("typed dispatch keeps Pear artifacts out of widget replay", () => {
+    const message = {
+        id: 77,
+        sender_id: 33,
+        submessages: [
+            {
+                id: 1,
+                msg_type: "pear_artifact",
+                sender_id: 33,
+                content: '{"version":1,"blocks":[{"type":"copy","body":"safe"}]}',
+            },
+            {
+                id: 2,
+                msg_type: "widget",
+                sender_id: 33,
+                content: '{"widget_type":"poll","extra_data":{"question":"Q?","options":[]}}',
+            },
+        ],
+    };
+    assert.deepEqual(submessage.get_message_events(message), [
+        {
+            sender_id: 33,
+            data: {widget_type: "poll", extra_data: {question: "Q?", options: []}},
+        },
+    ]);
+
+    let activated;
+    widgetize.activate = (options) => {
+        activated = options;
+    };
+    submessage.process_submessages(message);
+    assert.equal(activated.message, message);
+    assert.equal(activated.any_data.widget_type, "poll");
+});
+
 run_test("make_server_callback", () => {
     const message_id = 444;
     const callback = submessage.make_server_callback(message_id);
@@ -91,6 +132,7 @@ run_test("check sender", () => {
         sender_id: 1,
         submessages: [
             {
+                msg_type: "widget",
                 sender_id: 2,
                 content:
                     '{"widget_type": "poll", "extra_data": {"question": "foo", "options": []}}',
@@ -151,45 +193,61 @@ run_test("is_poll_message", () => {
 
     // Poll message
     assert.equal(
-        submessage.is_poll_message({submessages: [{content: '{"widget_type": "poll"}'}]}),
+        submessage.is_poll_message({
+            submessages: [{msg_type: "widget", content: '{"widget_type": "poll"}'}],
+        }),
         true,
     );
 
     // Non-poll widget
     assert.equal(
-        submessage.is_poll_message({submessages: [{content: '{"widget_type": "todo"}'}]}),
+        submessage.is_poll_message({
+            submessages: [{msg_type: "widget", content: '{"widget_type": "todo"}'}],
+        }),
         false,
     );
 
     // Invalid JSON
-    assert.equal(submessage.is_poll_message({submessages: [{content: "INVALID"}]}), false);
+    assert.equal(
+        submessage.is_poll_message({submessages: [{msg_type: "widget", content: "INVALID"}]}),
+        false,
+    );
 });
 
 run_test("is_widget_edited", () => {
     // Poll with no edits (only creation submessage)
     let message = {
-        submessages: [{content: '{"widget_type": "poll"}'}],
+        submessages: [{msg_type: "widget", content: '{"widget_type": "poll"}'}],
     };
     assert.equal(submessage.is_widget_edited(message), false);
     assert.equal(message.has_widget_edits, false);
 
     // Poll with new_option edit
     message = {
-        submessages: [{content: '{"widget_type": "poll"}'}, {content: '{"type": "new_option"}'}],
+        submessages: [
+            {msg_type: "widget", content: '{"widget_type": "poll"}'},
+            {msg_type: "widget", content: '{"type": "new_option"}'},
+        ],
     };
     assert.equal(submessage.is_widget_edited(message), true);
     assert.equal(message.has_widget_edits, true);
 
     // Poll with question edit
     message = {
-        submessages: [{content: '{"widget_type": "poll"}'}, {content: '{"type": "question"}'}],
+        submessages: [
+            {msg_type: "widget", content: '{"widget_type": "poll"}'},
+            {msg_type: "widget", content: '{"type": "question"}'},
+        ],
     };
     assert.equal(submessage.is_widget_edited(message), true);
     assert.equal(message.has_widget_edits, true);
 
     // Poll with only votes (not an edit)
     message = {
-        submessages: [{content: '{"widget_type": "poll"}'}, {content: '{"type": "vote"}'}],
+        submessages: [
+            {msg_type: "widget", content: '{"widget_type": "poll"}'},
+            {msg_type: "widget", content: '{"type": "vote"}'},
+        ],
     };
     assert.equal(submessage.is_widget_edited(message), false);
     assert.equal(message.has_widget_edits, false);
@@ -204,13 +262,19 @@ run_test("is_widget_edited", () => {
 
     // Non-poll widget is not considered edited
     message = {
-        submessages: [{content: '{"widget_type": "todo"}'}, {content: '{"type": "new_task"}'}],
+        submessages: [
+            {msg_type: "widget", content: '{"widget_type": "todo"}'},
+            {msg_type: "widget", content: '{"type": "new_task"}'},
+        ],
     };
     assert.equal(submessage.is_widget_edited(message), false);
 
     // Malformed JSON in subsequent submessages is skipped
     message = {
-        submessages: [{content: '{"widget_type": "poll"}'}, {content: "INVALID JSON"}],
+        submessages: [
+            {msg_type: "widget", content: '{"widget_type": "poll"}'},
+            {msg_type: "widget", content: "INVALID JSON"},
+        ],
     };
     assert.equal(submessage.is_widget_edited(message), false);
 });

@@ -512,7 +512,79 @@ function derive_value(derive: unknown, data: JsonObject): unknown {
     }
 }
 
-type Connector = {from: string; to: string; directed: boolean; label?: string};
+type Connector = {
+    from: string;
+    to: string;
+    directed: boolean;
+    label?: string;
+    state?: string;
+};
+
+function layout_graph_group(host: HTMLElement, connectors: Connector[]): void {
+    const nodes = [...host.querySelectorAll<HTMLElement>(":scope > [data-pear-artifact-node]")];
+    const node_by_id = new Map(
+        nodes.flatMap((node) => {
+            const id = node.dataset["pearArtifactNode"];
+            return id === undefined ? [] : [[id, node] as const];
+        }),
+    );
+    if (node_by_id.size === 0) {
+        return;
+    }
+    const local_connectors = connectors.filter(
+        (connector) => node_by_id.has(connector.from) && node_by_id.has(connector.to),
+    );
+    const incoming = new Map([...node_by_id.keys()].map((id) => [id, 0]));
+    const outgoing = new Map([...node_by_id.keys()].map((id) => [id, [] as string[]]));
+    for (const connector of local_connectors) {
+        incoming.set(connector.to, (incoming.get(connector.to) ?? 0) + 1);
+        outgoing.get(connector.from)?.push(connector.to);
+    }
+    const ranks = new Map<string, number>();
+    const queue = [...node_by_id.keys()].filter((id) => incoming.get(id) === 0);
+    if (queue.length === 0) {
+        queue.push(node_by_id.keys().next().value!);
+    }
+    for (const id of queue) {
+        ranks.set(id, 0);
+    }
+    for (let index = 0; index < queue.length; index += 1) {
+        const id = queue[index]!;
+        const rank = ranks.get(id) ?? 0;
+        for (const target of outgoing.get(id) ?? []) {
+            ranks.set(target, Math.max(ranks.get(target) ?? 0, rank + 1));
+            const remaining = (incoming.get(target) ?? 1) - 1;
+            incoming.set(target, remaining);
+            if (remaining === 0) {
+                queue.push(target);
+            }
+        }
+    }
+    const fallback_rank = Math.max(0, ...ranks.values()) + 1;
+    for (const id of node_by_id.keys()) {
+        if (!ranks.has(id)) {
+            ranks.set(id, fallback_rank);
+        }
+    }
+    const columns = Math.max(...ranks.values()) + 1;
+    const nodes_by_rank = Array.from({length: columns}, () => [] as HTMLElement[]);
+    for (const [id, node] of node_by_id) {
+        nodes_by_rank[ranks.get(id) ?? 0]!.push(node);
+    }
+    const rows = Math.max(1, ...nodes_by_rank.map((rank_nodes) => rank_nodes.length));
+    host.style.setProperty("--pear-artifact-graph-columns", String(columns));
+    host.style.setProperty("--pear-artifact-graph-rows", String(rows));
+    for (const [column, rank_nodes] of nodes_by_rank.entries()) {
+        for (const [index, node] of rank_nodes.entries()) {
+            node.style.gridColumn = String(column + 1);
+            node.style.gridRow =
+                rank_nodes.length === 1
+                    ? `1 / span ${rows}`
+                    : String(Math.round((index * (rows - 1)) / (rank_nodes.length - 1)) + 1);
+            node.style.setProperty("--pear-artifact-order", String(column * rows + index));
+        }
+    }
+}
 
 let connector_instance = 0;
 
@@ -637,6 +709,9 @@ function render_scene_node(
         if (typeof node["label"] === "string") {
             connector.label = node["label"];
         }
+        if (typeof node["state"] === "string") {
+            connector.state = node["state"];
+        }
         connectors.push(connector);
         return undefined;
     }
@@ -689,7 +764,6 @@ function render_scene_node(
                     }
                 }
             }
-
             break;
         }
         case "text": {
@@ -840,7 +914,7 @@ function mount_connectors(scene: HTMLElement, connectors: Connector[]): void {
     requestAnimationFrame(() => {
         const bounds = scene.getBoundingClientRect();
         overlay.setAttribute("viewBox", `0 0 ${bounds.width} ${bounds.height}`);
-        for (const connector of connectors) {
+        for (const [index, connector] of connectors.entries()) {
             const from = scene.querySelector<HTMLElement>(
                 `[data-pear-artifact-node="${CSS.escape(connector.from)}"]`,
             );
@@ -857,10 +931,29 @@ function mount_connectors(scene: HTMLElement, connectors: Connector[]): void {
             const start_y = start.top + start.height / 2 - bounds.top;
             const end_x = end.left + end.width / 2 - bounds.left;
             const end_y = end.top + end.height / 2 - bounds.top;
-            line.setAttribute("x1", String(start_x));
-            line.setAttribute("y1", String(start_y));
-            line.setAttribute("x2", String(end_x));
-            line.setAttribute("y2", String(end_y));
+            const delta_x = end_x - start_x;
+            const delta_y = end_y - start_y;
+            const start_scale = Math.min(
+                delta_x === 0 ? Infinity : Math.max(0, start.width / 2 - 4) / Math.abs(delta_x),
+                delta_y === 0 ? Infinity : Math.max(0, start.height / 2 - 4) / Math.abs(delta_y),
+            );
+            const end_scale = Math.min(
+                delta_x === 0 ? Infinity : Math.max(0, end.width / 2 - 4) / Math.abs(delta_x),
+                delta_y === 0 ? Infinity : Math.max(0, end.height / 2 - 4) / Math.abs(delta_y),
+            );
+            const x1 = start_x + delta_x * (Number.isFinite(start_scale) ? start_scale : 0);
+            const y1 = start_y + delta_y * (Number.isFinite(start_scale) ? start_scale : 0);
+            const x2 = end_x - delta_x * (Number.isFinite(end_scale) ? end_scale : 0);
+            const y2 = end_y - delta_y * (Number.isFinite(end_scale) ? end_scale : 0);
+            line.setAttribute("x1", String(x1));
+            line.setAttribute("y1", String(y1));
+            line.setAttribute("x2", String(x2));
+            line.setAttribute("y2", String(y2));
+            line.setAttribute("pathLength", "1");
+            line.style.setProperty("--pear-artifact-order", String(index));
+            if (connector.state !== undefined) {
+                line.dataset["state"] = connector.state;
+            }
             line.setAttribute(
                 "class",
                 connector.directed
@@ -873,8 +966,8 @@ function mount_connectors(scene: HTMLElement, connectors: Connector[]): void {
             overlay.append(line);
             if (connector.label !== undefined) {
                 const label = document.createElementNS("http://www.w3.org/2000/svg", "text");
-                label.setAttribute("x", String((start_x + end_x) / 2));
-                label.setAttribute("y", String((start_y + end_y) / 2 - 7));
+                label.setAttribute("x", String((x1 + x2) / 2));
+                label.setAttribute("y", String((y1 + y2) / 2 - 7));
                 label.setAttribute("class", "pear-artifact-connector-label");
                 label.setAttribute("text-anchor", "middle");
                 label.textContent = connector.label;
@@ -896,6 +989,11 @@ function render_scene(block: PearArtifactBlock, data: JsonObject): HTMLElement {
         : undefined;
     if (root !== undefined) {
         scene.append(root);
+    }
+    for (const graph of scene.querySelectorAll<HTMLElement>(
+        '.pear-artifact-group[data-layout="graph"]',
+    )) {
+        layout_graph_group(graph, connectors);
     }
     mount_connectors(scene, connectors);
     return scene;

@@ -326,7 +326,8 @@ export function render_submessage(in_opts: {$row: JQuery; message_id: number}): 
         if ($host.length === 0) {
             const host = document.createElement("div");
             host.className = "pear-artifact-message-host";
-            $content[0]?.append(host);
+            const footer = $content.children(".pear-run-footer")[0];
+            $content[0]?.insertBefore(host, footer ?? null);
             $host = $(host);
         }
         const artifact_id = String(latest_artifact.id);

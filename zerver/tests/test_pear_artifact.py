@@ -92,6 +92,16 @@ class PearArtifactValidationTest(TestCase):
         with self.assertRaisesRegex(PearArtifactError, "missing node"):
             canonicalize_pear_artifact(document)
 
+    def test_graph_layout_and_semantic_connector_state_are_canonical(self) -> None:
+        document = valid_document()
+        root = document["blocks"][0]["root"]  # type: ignore[index]
+        root["layout"] = "graph"  # type: ignore[index]
+        root["children"][2]["state"] = "selected"  # type: ignore[index]
+        canonical, _encoded = canonicalize_pear_artifact(document)
+        canonical_root = canonical["blocks"][0]["root"]
+        self.assertEqual(canonical_root["layout"], "graph")
+        self.assertEqual(canonical_root["children"][2]["state"], "selected")
+
     def test_rejects_primitive_fields_that_the_renderer_would_ignore(self) -> None:
         for ignored in (
             {"children": [{"type": "text", "text": "hidden"}]},

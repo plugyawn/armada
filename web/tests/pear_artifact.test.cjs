@@ -38,7 +38,7 @@ function valid_document() {
                 aspect: "wide",
                 root: {
                     type: "group",
-                    layout: "row",
+                    layout: "graph",
                     align: "center",
                     children: [
                         {type: "shape", id: "a", shape: "circle", label: "A"},
@@ -49,6 +49,7 @@ function valid_document() {
                             to: "b",
                             directed: true,
                             label: "force",
+                            state: "selected",
                         },
                     ],
                 },
@@ -113,6 +114,12 @@ run_test("renders native semantic nodes without exposing source JSON or adopting
     assert.equal(rendered.textContent.includes('"version"'), false);
     assert.equal(rendered.querySelectorAll("script, iframe, foreignObject").length, 0);
     assert.equal(rendered.querySelectorAll(".pear-artifact-connectors line").length, 1);
+    assert.equal(rendered.querySelector('[data-pear-artifact-node="a"]').style.gridColumn, "1");
+    assert.equal(rendered.querySelector('[data-pear-artifact-node="b"]').style.gridColumn, "2");
+    assert.equal(
+        rendered.querySelector(".pear-artifact-connectors line").dataset.state,
+        "selected",
+    );
     assert.match(
         rendered.querySelector(".pear-artifact-connectors line").getAttribute("marker-end"),
         /^url\(#pear-artifact-arrow-/,

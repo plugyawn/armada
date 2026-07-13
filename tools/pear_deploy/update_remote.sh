@@ -1149,6 +1149,8 @@ if [[ "$PREV_SHA" != "$LOCAL_SHA" ]]; then
         zerver/lib/pear.py \
         zerver/lib/pear_gate.py \
         zerver/lib/pear_agent.py \
+        zerver/lib/pear_artifact.py \
+        zerver/lib/pear_artifact_contract.py \
         zerver/lib/pear_worker.py \
         zerver/lib/pear_workspace_index.py \
         zerver/lib/pear_workspace_io.py \
@@ -1161,6 +1163,7 @@ if [[ "$PREV_SHA" != "$LOCAL_SHA" ]]; then
         zerver/migrations \
         zerver/tests/test_service_bot_system.py \
         zerver/tests/test_pear.py \
+        zerver/tests/test_pear_artifact.py \
         zerver/tests/test_pear_endpoint.py \
         web/src \
         web/styles \

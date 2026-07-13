@@ -40,7 +40,6 @@ from zerver.lib.pear import (
 )
 from zerver.lib.pear_agent import (
     PearCodexAppServerToolRunner,
-    PearCodexExecAddressingIntentClassifier,
     PearDisabledAgentRunner,
     PearGeminiInteractionsAddressingIntentClassifier,
     PearProcessIsolation,
@@ -1983,24 +1982,12 @@ def build_pear_addressing_intent_classifier_from_settings() -> (
     PearAddressingIntentClassifier | None
 ):
     runtime = settings.PEAR_ADDRESSING_ROUTER_RUNTIME
-    if runtime == "codex-exec":
-        return PearCodexExecAddressingIntentClassifier(
-            codex_bin=settings.PEAR_WORKER_CODEX_BIN,
-            workdir=settings.PEAR_WORKER_WORKDIR,
-            model=settings.PEAR_ADDRESSING_ROUTER_MODEL,
-            reasoning_effort=settings.PEAR_ADDRESSING_ROUTER_REASONING_EFFORT,
-            sandbox="read-only",
-            approval_policy="never",
-            timeout_seconds=settings.PEAR_ADDRESSING_ROUTER_TIMEOUT_SECONDS,
-            output_limit=settings.PEAR_ADDRESSING_ROUTER_OUTPUT_LIMIT,
-            extra_args=settings.PEAR_ADDRESSING_ROUTER_CODEX_EXTRA_ARGS,
-        )
     if runtime == "gemini-interactions":
         return PearGeminiInteractionsAddressingIntentClassifier(
             api_key=settings.PEAR_ADDRESSING_ROUTER_GEMINI_API_KEY,
             model=settings.PEAR_ADDRESSING_ROUTER_GEMINI_MODEL,
-            timeout_seconds=settings.PEAR_ADDRESSING_ROUTER_TIMEOUT_SECONDS,
-            output_limit=settings.PEAR_ADDRESSING_ROUTER_OUTPUT_LIMIT,
+            timeout_seconds=4,
+            output_limit=1000,
             url=settings.PEAR_ADDRESSING_ROUTER_GEMINI_URL,
             thinking_level=settings.PEAR_ADDRESSING_ROUTER_GEMINI_THINKING_LEVEL,
         )
@@ -2886,7 +2873,9 @@ class PearDatabaseWorkerRunStore:
         )
         event_tool_count = payload.get("tool_count")
         if event_type == "tool_results" and isinstance(event_tool_count, int):
-            PearWorkerRun.objects.filter(id=run.id).update(tool_count=F("tool_count") + event_tool_count)
+            PearWorkerRun.objects.filter(id=run.id).update(
+                tool_count=F("tool_count") + event_tool_count
+            )
             run.tool_count += event_tool_count
         if run.workdir:
             invalidate_pear_git_status_delta(run.workdir)

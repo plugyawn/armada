@@ -801,14 +801,7 @@ PEAR_WORKER_MAX_ACTIVE_RUNS_PER_REALM = 3
 # prevents a handful of huge repositories from consuming unbounded memory.
 PEAR_WORKSPACE_INDEX_LOCAL_MAX_ENTRIES = 32
 PEAR_WORKSPACE_INDEX_LOCAL_MAX_PATHS = 250_000
-PEAR_ADDRESSING_ROUTER_RUNTIME: Literal["disabled", "codex-exec", "gemini-interactions"] = (
-    "disabled"
-)
-PEAR_ADDRESSING_ROUTER_MODEL: str | None = "gpt-5.5"
-PEAR_ADDRESSING_ROUTER_REASONING_EFFORT: Literal["low", "medium", "high", "xhigh"] = "low"
-PEAR_ADDRESSING_ROUTER_TIMEOUT_SECONDS = 20
-PEAR_ADDRESSING_ROUTER_OUTPUT_LIMIT = 1000
-PEAR_ADDRESSING_ROUTER_CODEX_EXTRA_ARGS: list[str] = ["--ignore-rules"]
+PEAR_ADDRESSING_ROUTER_RUNTIME: Literal["disabled", "gemini-interactions"] = "disabled"
 PEAR_ADDRESSING_ROUTER_GEMINI_API_KEY = ""
 PEAR_ADDRESSING_ROUTER_GEMINI_MODEL = "gemini-3.1-flash-lite"
 PEAR_ADDRESSING_ROUTER_GEMINI_THINKING_LEVEL: str | None = "minimal"

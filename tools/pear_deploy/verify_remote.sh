@@ -281,7 +281,6 @@ summary = {
     "worker_runtime_ready": config["worker_runtime_ready"],
     "worker_runtime_auth_ready": config["worker_runtime_auth_ready"],
     "addressing_router_runtime": settings.PEAR_ADDRESSING_ROUTER_RUNTIME,
-    "addressing_router_model": settings.PEAR_ADDRESSING_ROUTER_MODEL,
     "addressing_router_gemini_model": settings.PEAR_ADDRESSING_ROUTER_GEMINI_MODEL,
     "addressing_router_gemini_key_ready": bool(
         settings.PEAR_ADDRESSING_ROUTER_GEMINI_API_KEY

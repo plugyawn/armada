@@ -400,9 +400,20 @@ verify_caddy_https_runtime() (
     temporary_directory="$(mktemp -d)"
     trap 'rm -rf "$temporary_directory"' EXIT
 
-    app_status="$(caddy_authenticated_curl "$username" "$password_file" \
-        --silent --show-error --location --max-redirs 3 --max-time 10 --output /dev/null \
-        --write-out '%{http_code}' --url "https://$fqdn/devlogin")"
+    app_status=""
+    for attempt in $(seq 1 4); do
+        app_status="$(caddy_authenticated_curl "$username" "$password_file" \
+            --silent --show-error --location --max-redirs 3 \
+            --connect-timeout 5 --max-time 20 --output /dev/null \
+            --write-out '%{http_code}' --url "https://$fqdn/devlogin" || true)"
+        if [[ "$app_status" == "200" ]]; then
+            break
+        fi
+        if [[ "$attempt" -lt 4 ]]; then
+            echo "authenticated Caddy app check attempt $attempt returned HTTP ${app_status:-none}; retrying" >&2
+            sleep 2
+        fi
+    done
     if [[ "$app_status" != "200" ]]; then
         echo "authenticated Caddy app check returned HTTP ${app_status:-none}" >&2
         return 1

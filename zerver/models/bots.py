@@ -215,7 +215,9 @@ class PearMonitor(models.Model):
     title = models.CharField(max_length=60, blank=True)
     anchor_message_id = models.IntegerField(null=True, db_index=True)
     ask = models.TextField()
-    artifact_spec = models.JSONField(default=dict)
+    # Keep the physical column backward-compatible with the pre-artifact
+    # release so a guarded code rollback remains operational after migrations.
+    artifact_spec = models.JSONField(default=dict, db_column="block_spec")
     recipe = models.JSONField(default=dict)
     cadence_seconds = models.PositiveIntegerField(default=20)
     codex_thread_id = models.TextField(blank=True)

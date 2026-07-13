@@ -1226,6 +1226,7 @@ sys.stdout.write(status)
                 env={**environment, "FAKE_CURL_APP_STATUS": "301"},
             )
             self.assertNotEqual(redirect.returncode, 0)
+            self.assertEqual(redirect.stderr.count("; retrying"), 3)
             self.assertIn("app check returned HTTP 301", redirect.stderr)
 
             missing_header = subprocess.run(

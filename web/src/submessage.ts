@@ -321,13 +321,13 @@ export function render_submessage(in_opts: {$row: JQuery; message_id: number}): 
         .toSorted((m1, m2) => m1.id - m2.id);
     const latest_artifact = artifacts.at(-1);
     if (latest_artifact !== undefined) {
-        const $content = $row.find(".message_content").first();
-        let $host = $content.children(".pear-artifact-message-host");
+        const $messagebox = $row.find(".messagebox-content").first();
+        let $host = $messagebox.children(".pear-artifact-message-host");
         if ($host.length === 0) {
             const host = document.createElement("div");
             host.className = "pear-artifact-message-host";
-            const footer = $content.children(".pear-run-footer")[0];
-            $content[0]?.insertBefore(host, footer ?? null);
+            const reactions = $messagebox.children(".message_reactions")[0];
+            $messagebox[0]?.insertBefore(host, reactions ?? null);
             $host = $(host);
         }
         const artifact_id = String(latest_artifact.id);

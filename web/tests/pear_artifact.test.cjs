@@ -170,6 +170,27 @@ run_test("falls back to distance layout for directed cycles", () => {
     assert.equal(rendered.querySelector('[data-pear-artifact-node="c"]').style.gridColumn, "2");
 });
 
+run_test("orders graph layers to reduce connector crossings", () => {
+    const document = valid_document();
+    document.blocks[1].root.children = [
+        {type: "shape", id: "a", shape: "circle", label: "A"},
+        {type: "shape", id: "b", shape: "circle", label: "B"},
+        {type: "shape", id: "c", shape: "circle", label: "C"},
+        {type: "shape", id: "d", shape: "circle", label: "D"},
+        {type: "shape", id: "e", shape: "circle", label: "E"},
+        {type: "connector", from: "a", to: "b", directed: false},
+        {type: "connector", from: "a", to: "c", directed: false},
+        {type: "connector", from: "b", to: "d", directed: false},
+        {type: "connector", from: "c", to: "d", directed: false},
+        {type: "connector", from: "b", to: "e", directed: false},
+    ];
+    const parsed = artifact.parse_pear_artifact(JSON.stringify(document));
+    assert.ok(parsed);
+    const rendered = artifact.render_pear_artifact(parsed, {density: "chat"});
+    assert.equal(rendered.querySelector('[data-pear-artifact-node="e"]').style.gridRow, "1");
+    assert.equal(rendered.querySelector('[data-pear-artifact-node="d"]').style.gridRow, "2");
+});
+
 run_test("renders bounded repeat data and keeps interactions local", () => {
     const document = {
         version: 1,

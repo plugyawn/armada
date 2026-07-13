@@ -666,7 +666,7 @@
         ensures the timestamp will always have enough space
         in the column. */
     grid-template:
-        minmax(var(--message-box-sender-line-height), auto) repeat(4, auto) /
+        minmax(var(--message-box-sender-line-height), auto) repeat(5, auto) /
         var(--message-box-avatar-column-width) minmax(0, 1fr) max-content
         8px minmax(var(--message-box-timestamp-column-width), max-content);
     /* Named grid areas provide flexibility for positioning grid items
@@ -675,6 +675,7 @@
         "edited message   controls . time"
         ".      message   .        . .   "
         ".      more      .        . .   "
+        ".      artifact  .        . .   "
         ".      reactions .        . .   "
         ".      reminders .        . .   ";
 
@@ -901,6 +902,7 @@
             "avatar sender    controls . time"
             "avatar message   .        . .   "
             ".      more      .        . .   "
+            ".      artifact  .        . .   "
             ".      reactions .        . .   "
             ".      reminders .        . .   ";
 
@@ -914,11 +916,12 @@
                 ".      .         .        . .   "
                 "avatar sender    controls . time"
                 ".      more      .        . .   "
+                ".      artifact  .        . .   "
                 ".      reactions .        . .   "
                 ".      reminders .        . .   ";
             grid-template-rows:
                 var(--message-box-vertical-margin)
-                minmax(var(--message-box-avatar-height), auto) repeat(3, auto);
+                minmax(var(--message-box-avatar-height), auto) repeat(4, auto);
             /* We align items to the baseline on me messages,
                and unset the align-content property. */
             align-items: baseline;

@@ -3089,6 +3089,10 @@ export class MessageListView {
                 enhance_pear_artifact_references($row);
                 maybe_render_pear_thinking_glyph($row);
                 maybe_render_pear_run_footer($row);
+                submessage.render_submessage({
+                    $row,
+                    message_id: rows.id($row),
+                });
                 if (was_selected && this.list === message_lists.current) {
                     this.list.reselect_selected_id();
                 }

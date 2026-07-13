@@ -2289,6 +2289,8 @@
 
     &[data-layout="row"] {
         flex-direction: row;
+        align-items: center;
+        justify-content: space-evenly;
     }
 
     &[data-layout="column"] {
@@ -2301,6 +2303,26 @@
             var(--pear-artifact-columns, 2),
             minmax(0, 1fr)
         );
+    }
+
+    &[data-layout="graph"] {
+        display: grid;
+        grid-template-columns: repeat(
+            var(--pear-artifact-graph-columns, 2),
+            minmax(64px, 1fr)
+        );
+        grid-template-rows: repeat(
+            var(--pear-artifact-graph-rows, 1),
+            minmax(64px, 1fr)
+        );
+        align-items: center;
+        justify-items: center;
+    }
+
+    &[data-layout="graph"] > [data-pear-artifact-node] {
+        animation: pear-artifact-node-enter var(--pear-dur-3) var(--pear-ease)
+            both;
+        animation-delay: calc(var(--pear-artifact-order, 0) * 70ms);
     }
 
     &[data-layout="overlay"],
@@ -2366,10 +2388,22 @@
     border-radius: var(--pear-radius-chip);
     background: var(--pear-artifact-surface);
 
+    &[data-state="selected"],
+    &[data-state="success"] {
+        border-color: var(--pear-interaction);
+        background: var(--pear-interaction-fill);
+        box-shadow: 0 0 0 3px var(--pear-interaction-fill);
+    }
+
+    &[data-state="muted"] {
+        opacity: 0.58;
+    }
+
     &[data-shape="circle"] {
         min-width: 56px;
         width: 56px;
         min-height: 56px;
+        height: 56px;
         border-radius: 50%;
     }
 
@@ -2420,11 +2454,46 @@
 .pear-artifact-connector {
     stroke: var(--pear-ink-3);
     stroke-width: 1.5;
+    stroke-dasharray: 1;
+    stroke-dashoffset: 0;
     vector-effect: non-scaling-stroke;
+    animation: pear-artifact-connector-draw var(--pear-dur-3) var(--pear-ease)
+        both;
+    animation-delay: calc(var(--pear-artifact-order, 0) * 70ms + 90ms);
+
+    &[data-state="selected"],
+    &[data-state="success"] {
+        stroke: var(--pear-interaction);
+        stroke-width: 2.5;
+    }
+
+    &[data-state="muted"] {
+        opacity: 0.45;
+    }
 }
 
 .pear-artifact-connector-arrow {
     fill: var(--pear-ink-3);
+}
+
+@keyframes pear-artifact-node-enter {
+    from {
+        opacity: 0;
+        transform: translateY(5px) scale(0.96);
+    }
+}
+
+@keyframes pear-artifact-connector-draw {
+    from {
+        stroke-dashoffset: 1;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .pear-artifact-group[data-layout="graph"] > [data-pear-artifact-node],
+    .pear-artifact-connector {
+        animation: none;
+    }
 }
 
 .pear-artifact-connector-label {

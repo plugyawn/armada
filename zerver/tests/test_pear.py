@@ -126,7 +126,6 @@ from zerver.lib.pear_agent import (
     ensure_pear_runtime_result,
     merge_pear_tool_results,
     parse_pear_addressing_router_output,
-    pear_codex_thread_id_from_active_session,
     pear_tool_results_from_text,
 )
 from zerver.lib.pear_worker import (
@@ -2302,6 +2301,11 @@ class PearSessionDefaultsTest(TestCase):
         self.assertNotIn("Recent artifacts:\n- Routine", prompt)
         self.assertNotIn("Recent artifacts:\n- Done", prompt)
         self.assertNotIn("Done: <definition of done or success criteria>", prompt)
+        self.assertIn(
+            "if you announce the pear-artifacts skill, you must complete a successful call",
+            prompt,
+        )
+        self.assertIn("must not substitute ASCII art or a fenced diagram", prompt)
 
     def test_codex_developer_instructions_are_byte_stable(self) -> None:
         payload = get_pear_session_payload()
@@ -2465,24 +2469,6 @@ class PearSessionDefaultsTest(TestCase):
             ],
         )
 
-    def test_codex_thread_id_from_active_session_prefers_runtime_state(self) -> None:
-        payload = get_pear_session_payload()
-        active_session = build_pear_active_session_summary_from_messages(
-            pear_session=payload,
-            source="server",
-            stream_exists=True,
-            messages=[
-                (10, "@Pear fix the checkout test", False),
-                (11, "Doc: Codex thread thread-visible", True),
-            ],
-            latest_codex_thread_id="thread-runtime",
-        )
-
-        self.assertEqual(
-            pear_codex_thread_id_from_active_session(active_session),
-            "thread-runtime",
-        )
-
     def test_codex_app_server_tool_runner_runs_under_topic_os_user(self) -> None:
         process_isolation = PearProcessIsolation(
             username="pear-0123456789abcdef01234567",
@@ -2536,6 +2522,7 @@ class PearSessionDefaultsTest(TestCase):
         self.assertEqual(resumed_params["threadId"], "thread-existing")
         self.assertNotIn("developerInstructions", resumed_params)
         self.assertNotIn("ephemeral", resumed_params)
+        self.assertNotIn("dynamicTools", resumed_params)
 
     def test_codex_exec_addressing_router_is_stateless_per_message(self) -> None:
         payload = get_pear_session_payload()
@@ -6171,6 +6158,10 @@ class PearInteractiveTurnTest(TestCase):
         self.assertEqual(runner.pending_artifacts, [])
         assert event is not None
         self.assertEqual(event["status"], "failed")
+        self.assertEqual(event["body"], "$.blocks: array must contain at least 1 item")
+        self.assertIn(
+            "$.blocks: array must contain at least 1 item", result["contentItems"][0]["text"]
+        )
 
     def test_request_user_input_answers_through_the_provider(self) -> None:
         runner = self.make_runner()

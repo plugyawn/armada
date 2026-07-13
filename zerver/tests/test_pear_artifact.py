@@ -55,6 +55,30 @@ class PearArtifactValidationTest(TestCase):
             with self.assertRaises(PearArtifactError):
                 canonicalize_pear_artifact(document)
 
+    def test_schema_errors_identify_the_exact_invalid_property(self) -> None:
+        document = {
+            "version": 1,
+            "blocks": [
+                {
+                    "type": "meter",
+                    "label": "Force",
+                    "value": 8,
+                    "total": 0,
+                }
+            ],
+        }
+        with self.assertRaisesRegex(
+            PearArtifactError, r"\$\.blocks\[0\]\.total: value must be > 0"
+        ):
+            canonicalize_pear_artifact(document)
+
+        document["blocks"][0]["total"] = 20  # type: ignore[index]
+        document["blocks"][0]["style"] = "green"  # type: ignore[index]
+        with self.assertRaisesRegex(
+            PearArtifactError, r"\$\.blocks\[0\]\.style: unsupported property"
+        ):
+            canonicalize_pear_artifact(document)
+
     def test_duplicate_ids_and_missing_connector_targets_are_rejected(self) -> None:
         document = valid_document()
         children = document["blocks"][0]["root"]["children"]  # type: ignore[index]

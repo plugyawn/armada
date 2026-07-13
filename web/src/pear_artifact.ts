@@ -575,6 +575,7 @@ function layout_graph_group(host: HTMLElement, connectors: Connector[]): void {
             host,
             node_by_id,
             graph_distance_ranks(node_by_id.keys(), local_connectors),
+            local_connectors,
         );
         return;
     }
@@ -606,27 +607,55 @@ function layout_graph_group(host: HTMLElement, connectors: Connector[]): void {
             host,
             node_by_id,
             graph_distance_ranks(node_by_id.keys(), local_connectors),
+            local_connectors,
         );
         return;
     }
-    position_graph_nodes(host, node_by_id, ranks);
+    position_graph_nodes(host, node_by_id, ranks, local_connectors);
 }
 
 function position_graph_nodes(
     host: HTMLElement,
     node_by_id: Map<string, HTMLElement>,
     ranks: Map<string, number>,
+    connectors: Connector[],
 ): void {
     const columns = Math.max(...ranks.values()) + 1;
-    const nodes_by_rank = Array.from({length: columns}, () => [] as HTMLElement[]);
+    const nodes_by_rank = Array.from(
+        {length: columns},
+        () => [] as {id: string; node: HTMLElement}[],
+    );
     for (const [id, node] of node_by_id) {
-        nodes_by_rank[ranks.get(id) ?? 0]!.push(node);
+        nodes_by_rank[ranks.get(id) ?? 0]!.push({id, node});
+    }
+    for (let column = 1; column < nodes_by_rank.length; column += 1) {
+        const previous = new Map(
+            nodes_by_rank[column - 1]!.map(({id}, index) => [id, index] as const),
+        );
+        const crossing_score = (id: string): number => {
+            const positions = connectors.flatMap((connector) => {
+                if (connector.from === id && previous.has(connector.to)) {
+                    return [previous.get(connector.to)!];
+                }
+                if (connector.to === id && previous.has(connector.from)) {
+                    return [previous.get(connector.from)!];
+                }
+                return [];
+            });
+            return positions.length === 0
+                ? Number.POSITIVE_INFINITY
+                : positions.reduce((sum, position) => sum + position, 0) / positions.length;
+        };
+        nodes_by_rank[column]!.sort((left, right) => {
+            const delta = crossing_score(left.id) - crossing_score(right.id);
+            return Number.isNaN(delta) ? 0 : delta;
+        });
     }
     const rows = Math.max(1, ...nodes_by_rank.map((rank_nodes) => rank_nodes.length));
     host.style.setProperty("--pear-artifact-graph-columns", String(columns));
     host.style.setProperty("--pear-artifact-graph-rows", String(rows));
     for (const [column, rank_nodes] of nodes_by_rank.entries()) {
-        for (const [index, node] of rank_nodes.entries()) {
+        for (const [index, {node}] of rank_nodes.entries()) {
             node.style.gridColumn = String(column + 1);
             node.style.gridRow =
                 rank_nodes.length === 1

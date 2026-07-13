@@ -1161,8 +1161,32 @@ function update_rendered_pear_active_messages(): void {
         // rendered rows through this sweep (not through a row rebuild),
         // so the settling ticker must be drawn here too.
         maybe_render_pear_run_footer($row);
+        // Artifact submessages can arrive immediately before the final
+        // streaming edit.  Keep the independently mounted artifact host
+        // present while those two event streams settle; render_submessage is
+        // idempotent once the latest artifact is ready.
+        if (message !== undefined && message.submessages.length > 0) {
+            submessage.render_submessage({message_id: message.id, $row});
+        }
     });
     update_pear_thinking_glyphs();
+}
+
+export function merge_pear_result_submessages(
+    message: Message,
+    refreshed_submessages: Message["submessages"],
+): boolean {
+    const known_ids = new Set(message.submessages.map((item) => item.id));
+    let changed = false;
+    for (const item of refreshed_submessages) {
+        if (known_ids.has(item.id)) {
+            continue;
+        }
+        message.submessages.push(item);
+        known_ids.add(item.id);
+        changed = true;
+    }
+    return changed;
 }
 
 function rerender_pear_result_messages(message_ids: number[]): void {
@@ -1205,18 +1229,25 @@ function refresh_settled_pear_result_messages(message_ids: number[]): void {
                 const message = message_store.get(raw_message.id);
                 if (message === undefined) {
                     message_helper.process_new_server_message(raw_message);
-                } else if (
-                    (raw_message.last_edit_timestamp ?? 0) >= (message.last_edit_timestamp ?? 0)
-                ) {
-                    // Only apply the fetched content when it is at least as new
-                    // as what the store already holds.  An update_message event
-                    // can deliver newer content while this fetch is in flight;
-                    // clobbering it with a stale fetch would regress the row.
-                    message_store.update_message_content(message, raw_message.content);
-                    message_store.update_booleans(message, raw_message.flags);
-                    message.is_me_message = raw_message.is_me_message;
-                    message.last_edit_timestamp = raw_message.last_edit_timestamp;
-                    message.last_moved_timestamp = raw_message.last_moved_timestamp;
+                } else {
+                    // Submessages are append-only and travel on a separate
+                    // event stream.  Merge the authoritative response even if
+                    // its prose edit is stale, so a missed/racing artifact
+                    // event cannot leave the durable artifact invisible.
+                    merge_pear_result_submessages(message, raw_message.submessages);
+                    if (
+                        (raw_message.last_edit_timestamp ?? 0) >= (message.last_edit_timestamp ?? 0)
+                    ) {
+                        // Only apply the fetched content when it is at least as new
+                        // as what the store already holds.  An update_message event
+                        // can deliver newer content while this fetch is in flight;
+                        // clobbering it with a stale fetch would regress the row.
+                        message_store.update_message_content(message, raw_message.content);
+                        message_store.update_booleans(message, raw_message.flags);
+                        message.is_me_message = raw_message.is_me_message;
+                        message.last_edit_timestamp = raw_message.last_edit_timestamp;
+                        message.last_moved_timestamp = raw_message.last_moved_timestamp;
+                    }
                 }
                 refreshed_message_ids.push(raw_message.id);
                 const refreshed_message = message_store.get(raw_message.id);

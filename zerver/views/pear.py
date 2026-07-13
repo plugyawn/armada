@@ -1134,6 +1134,7 @@ def post_pear_first_run_backend(
         },
     )
 
+
 @typed_endpoint
 def get_pear_workspace_topics_backend(
     request: HttpRequest,
@@ -1929,7 +1930,7 @@ def post_pear_monitors_backend(
         raise JsonableError(_("This organization already has the maximum number of monitors."))
 
     if spec is not None:
-        # Pin-to-wall: the widget spec is already composed; the monitor
+        # Pin-to-wall: the artifact spec is already composed; the monitor
         # goes live immediately with no agent run.
         try:
             monitor = pear_create_monitor_from_spec(
@@ -1943,10 +1944,8 @@ def post_pear_monitors_backend(
                 position=topic_count,
             )
         except PearMonitorSpecError as error:
-            raise JsonableError(_("Invalid widget spec: {error}").format(error=error))
-        return json_success(
-            request, data={"pear_monitor": serialize_pear_monitor(monitor)}
-        )
+            raise JsonableError(_("Invalid artifact spec: {error}").format(error=error))
+        return json_success(request, data={"pear_monitor": serialize_pear_monitor(monitor)})
 
     monitor = PearMonitor.objects.create(
         realm=user_profile.realm,

@@ -45,7 +45,7 @@ from zerver.lib.pear_monitor import (
     PearMonitorSpecError,
     pear_apply_monitor_setup_result,
     pear_monitor_apply_tick,
-    pear_monitor_bind_props,
+    pear_monitor_bind_data,
     pear_monitor_spec_relative_path,
     pear_validate_monitor_spec,
 )
@@ -1120,7 +1120,6 @@ class PearSessionEndpointTest(ZulipTestCase):
             with self.assertRaises(OSError):
                 pear_read_text_path(Path("/unreadable/README.md"))
 
-
     def test_existing_base_workdir_topic_context_is_repaired(self) -> None:
         owner = self.example_user("hamlet")
         self.subscribe(owner, PEAR_DEFAULT_STREAM)
@@ -1916,7 +1915,6 @@ class PearSessionEndpointTest(ZulipTestCase):
         log_output = "\n".join(logs.output)
         self.assertIn("status 128", log_output)
         self.assertIn("fatal: not a git repository", log_output)
-
 
     def test_workspace_context_reports_local_topic_repo_without_external_pin(self) -> None:
         owner = self.example_user("hamlet")
@@ -3230,7 +3228,6 @@ class PearSessionEndpointTest(ZulipTestCase):
             self.assertTrue(run.workdir.startswith(temp_dir))
             self.assertEqual(dispatch_mock.call_args.kwargs["topic"], run.topic_name)
 
-
     def test_get_pear_active_session_without_stream(self) -> None:
         self.login("hamlet")
 
@@ -3733,11 +3730,16 @@ class PearMonitorTest(ZulipTestCase):
             ask="training loader",
             status=PearMonitor.LIVE,
             cadence_seconds=20,
-            block_spec={"components": [{"type": "stat", "props": {"label": "loss"}}]},
+            artifact_spec={
+                "version": 1,
+                "title": "loader",
+                "data": {"loss": 0},
+                "blocks": [{"type": "metric", "label": "loss", "value": 0, "bind": "data.loss"}],
+            },
             recipe={
                 "command": "echo value=0.5",
                 "parse": {"mode": "regex", "pattern": r"value=(?P<loss>[\d.]+)"},
-                "bindings": {"0.value": "group:loss"},
+                "bindings": {"data.loss": "group:loss"},
             },
             next_due_at=timezone_now(),
         )
@@ -3883,56 +3885,55 @@ class PearMonitorTest(ZulipTestCase):
         good = {
             "title": "training loader",
             "cadence_seconds": 15,
-            "block": {
-                "components": [
-                    {"type": "meter", "props": {"label": "epoch", "value": 0}},
-                    {"type": "sparkline", "props": {"label": "loss"}},
-                ]
+            "artifact": {
+                "version": 1,
+                "data": {"epoch": 0, "loss": 0},
+                "blocks": [
+                    {"type": "meter", "label": "epoch", "value": 0, "bind": "data.epoch"},
+                    {"type": "metric", "label": "loss", "value": 0, "bind": "data.loss"},
+                ],
             },
             "recipe": {
                 "command": "tail -n 5 train.log",
                 "parse": {"mode": "regex", "pattern": r"loss=(?P<loss>[\d.]+)"},
-                "bindings": {"0.value": "group:loss", "1.value": "group:loss"},
+                "bindings": {"data.epoch": "literal:1", "data.loss": "group:loss"},
             },
         }
         spec = pear_validate_monitor_spec(good)
         self.assertEqual(spec["cadence_seconds"], 15)
         self.assertEqual(spec["title"], "training loader")
-        self.assertEqual(len(spec["block_spec"]["components"]), 2)
+        self.assertEqual(len(spec["artifact_spec"]["blocks"]), 2)
 
         explainer = pear_validate_monitor_spec(
             {
                 "title": "pipeline",
-                "block": {
-                    "components": [
-                        {"type": "text", "props": {"heading": "Pipeline", "body": "Live"}},
-                        {
-                            "type": "svg",
-                            "props": {
-                                "label": "topology",
-                                "markup": '<svg viewBox="0 0 10 10"><rect width="10" height="10"/></svg>',
-                            },
-                        },
-                    ],
+                "artifact": {
+                    "version": 1,
+                    "title": "pipeline",
+                    "blocks": [{"type": "copy", "heading": "Pipeline", "body": "Live"}],
                     "actions": [{"label": "Explain", "prompt": "Explain this pipeline"}],
                 },
+                "recipe": {"parse": {"mode": "static"}},
             }
         )
         self.assertEqual(explainer["recipe"]["parse"]["mode"], "static")
-        self.assertEqual(explainer["block_spec"]["actions"][0]["label"], "Explain")
+        self.assertEqual(explainer["artifact_spec"]["actions"][0]["label"], "Explain")
 
-        with self.assertRaisesRegex(PearMonitorSpecError, "Unknown component type"):
+        with self.assertRaisesRegex(PearMonitorSpecError, "Invalid artifact"):
             pear_validate_monitor_spec(
                 {
                     **good,
-                    "block": {"components": [{"type": "hologram", "props": {}}]},
+                    "artifact": {"version": 1, "blocks": [{"type": "hologram"}]},
                 }
             )
-        with self.assertRaisesRegex(PearMonitorSpecError, "Unknown props"):
+        with self.assertRaisesRegex(PearMonitorSpecError, "Invalid artifact"):
             pear_validate_monitor_spec(
                 {
                     **good,
-                    "block": {"components": [{"type": "stat", "props": {"blink": True}}]},
+                    "artifact": {
+                        "version": 1,
+                        "blocks": [{"type": "metric", "label": "x", "value": 1, "style": {}}],
+                    },
                 }
             )
         with self.assertRaisesRegex(PearMonitorSpecError, "Bad binding source"):
@@ -3941,7 +3942,7 @@ class PearMonitorTest(ZulipTestCase):
                     **good,
                     "recipe": {
                         **good["recipe"],
-                        "bindings": {"0.value": "exec:rm -rf /"},
+                        "bindings": {"data.loss": "exec:rm -rf /"},
                     },
                 }
             )
@@ -3952,62 +3953,51 @@ class PearMonitorTest(ZulipTestCase):
                     "recipe": {**good["recipe"], "parse": {"mode": "regex", "pattern": "("}},
                 }
             )
-        with self.assertRaisesRegex(PearMonitorSpecError, "svg markup exceeds"):
+        with self.assertRaisesRegex(PearMonitorSpecError, "Invalid artifact"):
             pear_validate_monitor_spec(
                 {
-                    "block": {
-                        "components": [{"type": "svg", "props": {"markup": "x" * 64_001}}]
-                    }
+                    "artifact": {"version": 1, "blocks": [{"type": "svg", "markup": "x"}]},
                 }
             )
-        with self.assertRaisesRegex(PearMonitorSpecError, "requires exactly label and prompt"):
+        with self.assertRaisesRegex(PearMonitorSpecError, "Invalid artifact"):
             pear_validate_monitor_spec(
                 {
-                    "block": {
-                        "components": [{"type": "text", "props": {"body": "hello"}}],
+                    "artifact": {
+                        "version": 1,
+                        "blocks": [{"type": "copy", "body": "hello"}],
                         "actions": [{"label": "broken"}],
                     }
                 }
             )
 
-    def test_monitor_bind_props_modes(self) -> None:
+    def test_monitor_bind_data_modes(self) -> None:
         regex_recipe = {
             "parse": {"mode": "regex", "pattern": r"loss=(?P<loss>[\d.]+) step=(?P<step>\d+)"},
-            "bindings": {"0.value": "group:loss", "1.value": "group:step"},
+            "bindings": {"data.loss": "group:loss", "data.step": "group:step"},
         }
-        bound = pear_monitor_bind_props(regex_recipe, "loss=0.91 step=10\nloss=0.42 step=57\n")
+        bound = pear_monitor_bind_data(regex_recipe, "loss=0.91 step=10\nloss=0.42 step=57\n")
         # The LAST match wins: monitors track the newest line.
-        self.assertEqual(bound["0.value"], 0.42)
-        self.assertEqual(bound["1.value"], 57)
+        self.assertEqual(bound["loss"], 0.42)
+        self.assertEqual(bound["step"], 57)
 
         json_recipe = {
             "parse": {"mode": "json"},
             "bindings": {
-                "0.value": "path:credits.remaining",
-                "0.label": "literal:lambda",
+                "data.remaining": "path:credits.remaining",
+                "data.provider": "literal:lambda",
             },
         }
-        bound = pear_monitor_bind_props(json_recipe, '{"credits": {"remaining": 41.5}}')
-        self.assertEqual(bound["0.value"], 41.5)
-        self.assertEqual(bound["0.label"], "lambda")
+        bound = pear_monitor_bind_data(json_recipe, '{"credits": {"remaining": 41.5}}')
+        self.assertEqual(bound["remaining"], 41.5)
+        self.assertEqual(bound["provider"], "lambda")
 
         text_recipe = {
             "parse": {"mode": "text"},
-            "bindings": {"0.lines": "lines:2", "0.label": "text"},
+            "bindings": {"data.lines": "lines:2", "data.raw": "text"},
         }
-        bound = pear_monitor_bind_props(text_recipe, "one\ntwo\nthree")
-        self.assertEqual(bound["0.lines"], ["two", "three"])
-
-        svg_output = "<svg>" + ("x" * 3000) + "</svg>"
-        svg_recipe = {"parse": {"mode": "text"}, "bindings": {"0.markup": "text"}}
-        bound = pear_monitor_bind_props(
-            svg_recipe,
-            svg_output,
-            block_spec={"components": [{"type": "svg", "props": {}}]},
-        )
-        self.assertEqual(bound["0.markup"], svg_output)
-        bound = pear_monitor_bind_props(svg_recipe, svg_output)
-        self.assertEqual(len(bound["0.markup"]), 2000)
+        bound = pear_monitor_bind_data(text_recipe, "one\ntwo\nthree")
+        self.assertEqual(bound["lines"], ["two", "three"])
+        self.assertEqual(bound["raw"], "one\ntwo\nthree")
 
     def test_monitor_tick_success_and_failure(self) -> None:
         owner = self.example_user("hamlet")
@@ -4018,7 +4008,7 @@ class PearMonitorTest(ZulipTestCase):
             pear_monitor_apply_tick(monitor, workdir=temp_dir, process_isolation=None)
             monitor.refresh_from_db()
             self.assertEqual(monitor.version, 1)
-            self.assertEqual(monitor.last_sample["props"]["0.value"], 0.5)
+            self.assertEqual(monitor.last_sample["data"]["loss"], 0.5)
             self.assertEqual(monitor.consecutive_failures, 0)
             self.assertIsNotNone(monitor.next_due_at)
 
@@ -4045,16 +4035,22 @@ class PearMonitorTest(ZulipTestCase):
             status=PearMonitor.PROVISIONING,
             anchor_message_id=987654,
             recipe={},
-            block_spec={},
+            artifact_spec={},
         )
         spec = {
             "title": "gpu credits",
             "cadence_seconds": 30,
-            "block": {"components": [{"type": "stat", "props": {"label": "credits"}}]},
+            "artifact": {
+                "version": 1,
+                "data": {"credits": 0},
+                "blocks": [
+                    {"type": "metric", "label": "credits", "value": 0, "bind": "data.credits"}
+                ],
+            },
             "recipe": {
                 "command": "echo 41",
                 "parse": {"mode": "text"},
-                "bindings": {"0.value": "text"},
+                "bindings": {"data.credits": "text"},
             },
         }
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -4084,7 +4080,7 @@ class PearMonitorTest(ZulipTestCase):
 
     def test_monitor_dispatch_routes_to_monitor_queue(self) -> None:
         owner = self.example_user("hamlet")
-        pear_bot = self.create_pear_bot(owner)
+        self.create_pear_bot(owner)
         self.subscribe(owner, PEAR_DEFAULT_STREAM)
         self.login_user(owner)
         with (
@@ -4110,13 +4106,18 @@ class PearMonitorTest(ZulipTestCase):
 
     def test_spec_direct_monitor_creation_pins_without_agent_run(self) -> None:
         owner = self.example_user("hamlet")
-        pear_bot = self.create_pear_bot(owner)
+        self.create_pear_bot(owner)
         self.subscribe(owner, PEAR_DEFAULT_STREAM)
         self.login_user(owner)
         spec = {
             "title": "gpu credits",
             "cadence_seconds": 60,
-            "block": {"components": [{"type": "stat", "props": {"label": "credits", "value": 41}}]},
+            "artifact": {
+                "version": 1,
+                "title": "gpu credits",
+                "data": {"credits": 41},
+                "blocks": [{"type": "metric", "label": "credits", "value": 41}],
+            },
             "recipe": {"command": "", "parse": {"mode": "static"}, "bindings": {}},
         }
         runs_before = PearWorkerRun.objects.count()
@@ -4150,7 +4151,7 @@ class PearMonitorTest(ZulipTestCase):
         self.login_user(owner)
         bad_spec = {
             "title": "nope",
-            "block": {"components": [{"type": "hologram", "props": {}}]},
+            "artifact": {"version": 1, "blocks": [{"type": "hologram"}]},
             "recipe": {"command": "", "parse": {"mode": "static"}, "bindings": {}},
         }
         result = self.client_post(
@@ -4163,5 +4164,5 @@ class PearMonitorTest(ZulipTestCase):
             },
             intentionally_undocumented=True,
         )
-        self.assert_json_error_contains(result, "Invalid widget spec")
+        self.assert_json_error_contains(result, "Invalid artifact spec")
         self.assertFalse(PearMonitor.objects.exists())

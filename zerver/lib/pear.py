@@ -9,10 +9,7 @@ from typing import Any, Final, Literal, NotRequired, Protocol, TypedDict
 from django.core.cache import cache
 
 from zerver.lib.exceptions import JsonableError
-from zerver.lib.pear_constants import (
-    PEAR_ARTIFACT_PATTERN,
-    PEAR_SERVER_CONTRACT_VERSION,
-)
+from zerver.lib.pear_constants import PEAR_ARTIFACT_PATTERN, PEAR_SERVER_CONTRACT_VERSION
 
 PEAR_AGENT_NAME: Final = "Pear"
 PEAR_BOT_SHORT_NAME: Final = "pear"
@@ -113,9 +110,7 @@ PEAR_BACKGROUND_TRANSCRIPT_FLUSH_INTERVAL_SECONDS: Final = 0.5
 PEAR_TYPING_REFRESH_INTERVAL_SECONDS: Final = 10.0
 PEAR_LIVE_RUN_CACHE_KEY_PREFIX: Final = "pear:live-run:"
 PEAR_LIVE_RUN_CACHE_TTL_SECONDS: Final = 3600
-PEAR_MARKDOWN_IMAGE_PATTERN: Final = (
-    r"!\[([^\]\n]*)\]\((\S+?)(?:\s+\"[^\"]*\")?\)"
-)
+PEAR_MARKDOWN_IMAGE_PATTERN: Final = r"!\[([^\]\n]*)\]\((\S+?)(?:\s+\"[^\"]*\")?\)"
 PEAR_CHECKLIST_PATTERN: Final = r"^\s*[-*]\s+\[([ xX~])\]\s+(.+?)\s*$"
 # PEAR_ARTIFACT_PATTERN is imported from zerver.lib.pear_constants (vendored
 # from pear/registry.py) so the artifact vocabulary cannot drift per fork.
@@ -127,12 +122,8 @@ PEAR_RETIRED_VISIBLE_ARTIFACT_PATTERN: Final = (
     r"Done|Definition of done|Success criteria|Ambient|Response policy|"
     r"Followups|Follow-up mode):"
 )
-PEAR_VISIBLE_ARTIFACT_FALLBACK_PATTERN: Final = (
-    r"^\s*(?:[-*]\s*)?(Result):[ \t]*([^\r\n]*?)[ \t]*$"
-)
-PEAR_TRANSCRIPT_TOOL_DETAIL_KINDS: Final = frozenset(
-    {"command", "file_change", "tool"}
-)
+PEAR_VISIBLE_ARTIFACT_FALLBACK_PATTERN: Final = r"^\s*(?:[-*]\s*)?(Result):[ \t]*([^\r\n]*?)[ \t]*$"
+PEAR_TRANSCRIPT_TOOL_DETAIL_KINDS: Final = frozenset({"command", "file_change", "tool"})
 PEAR_TRIVIAL_ACKNOWLEDGMENT_MESSAGES: Final = frozenset(
     {
         "ack",
@@ -457,8 +448,7 @@ class PearWorkerToolRunner(Protocol):
         event_callback: PearWorkerTranscriptCallback | None = None,
         collaboration_mode: str | None = None,
         user_input_provider: PearUserInputProvider | None = None,
-    ) -> Sequence[PearWorkerToolResult]:
-        ...
+    ) -> Sequence[PearWorkerToolResult]: ...
 
 
 class PearWorkerRunResult(TypedDict):
@@ -568,8 +558,7 @@ class PearWorkerRunStore(Protocol):
         *,
         stream: str,
         topic: str,
-    ) -> bool:
-        ...
+    ) -> bool: ...
 
     def record(
         self,
@@ -581,8 +570,7 @@ class PearWorkerRunStore(Protocol):
         topic: str,
         result_message_id: int | None = None,
         error: str | None = None,
-    ) -> None:
-        ...
+    ) -> None: ...
 
 
 class PearWorkerDispatcher(Protocol):
@@ -603,8 +591,7 @@ class PearWorkerDispatcher(Protocol):
         source_topic: str = "",
         source_message_id: int | None = None,
         progress_message_id: int | None = None,
-    ) -> None:
-        ...
+    ) -> None: ...
 
 
 class PearAddressingIntentClassifier(Protocol):
@@ -615,8 +602,7 @@ class PearAddressingIntentClassifier(Protocol):
         active_session: PearActiveSessionSummary | None,
         message: dict[str, Any],
         bot_handler: Any,
-    ) -> bool:
-        ...
+    ) -> bool: ...
 
 
 def get_pear_session_defaults() -> PearSessionDefaults:
@@ -944,7 +930,9 @@ def pear_transcript_event_summary(event: PearWorkerTranscriptEvent) -> str:
             label = "Failed"
         return f"- {pear_transcript_checkbox(status)} {label}: `{trim_pear_text(title or body, limit=160)}`"
     if kind == "file_change":
-        return f"- {pear_transcript_checkbox(status)} File: {trim_pear_text(title or body, limit=160)}"
+        return (
+            f"- {pear_transcript_checkbox(status)} File: {trim_pear_text(title or body, limit=160)}"
+        )
     if kind == "tool":
         label = "Tool"
         if status in {"running", "in_progress"}:
@@ -1002,15 +990,11 @@ def pear_transcript_tool_group_title(
     events: Sequence[PearWorkerTranscriptEvent],
 ) -> str:
     tool_count = len(events)
-    completed_count = sum(
-        1 for event in events if event.get("status", "") in {"done", "completed"}
-    )
+    completed_count = sum(1 for event in events if event.get("status", "") in {"done", "completed"})
     running_count = sum(
         1 for event in events if event.get("status", "") in {"running", "in_progress"}
     )
-    failed_count = sum(
-        1 for event in events if event.get("status", "") in {"failed", "error"}
-    )
+    failed_count = sum(1 for event in events if event.get("status", "") in {"failed", "error"})
 
     if failed_count:
         return f"{failed_count} failed {pear_pluralize_tool(failed_count)}"
@@ -1100,13 +1084,15 @@ def pear_visible_assistant_text(
                 visible_lines.append("")
             previous_blank = True
             continue
-        if search(
-            PEAR_ARTIFACT_PATTERN, stripped, MULTILINE | IGNORECASE
-        ) or search(
-            PEAR_VISIBLE_ARTIFACT_FALLBACK_PATTERN,
-            stripped,
-            MULTILINE | IGNORECASE,
-        ) or pear_is_retired_visible_artifact_line(stripped):
+        if (
+            search(PEAR_ARTIFACT_PATTERN, stripped, MULTILINE | IGNORECASE)
+            or search(
+                PEAR_VISIBLE_ARTIFACT_FALLBACK_PATTERN,
+                stripped,
+                MULTILINE | IGNORECASE,
+            )
+            or pear_is_retired_visible_artifact_line(stripped)
+        ):
             previous_blank = True
             continue
         visible_lines.append(line.rstrip())
@@ -1363,6 +1349,52 @@ def pear_diagnostic_tool_text(tool_results: Sequence[PearWorkerToolResult]) -> s
     return ""
 
 
+def attach_pear_artifact_to_message(
+    bot_handler: Any,
+    *,
+    message_id: int | None,
+    tool_results: Sequence[PearWorkerToolResult],
+) -> bool:
+    """Persist the last valid artifact emitted by a turn on its result message.
+
+    Submessages are append-only. A retried or steered turn may therefore add a
+    newer artifact to the same progress/result message; clients render the last
+    valid pear_artifact entry and older clients safely ignore the unknown type.
+    """
+    if message_id is None:
+        return False
+    from django.db import transaction
+
+    from zerver.actions.submessage import do_add_submessage
+    from zerver.lib.pear_artifact import PEAR_ARTIFACT_SUBMESSAGE_TYPE, artifacts_from_tool_results
+    from zerver.models import Message, SubMessage, UserProfile
+
+    artifacts = artifacts_from_tool_results(tool_results)
+    if not artifacts:
+        return False
+    content = artifacts[-1]
+    user_profile = bot_handler.user_profile
+    assert isinstance(user_profile, UserProfile)
+    with transaction.atomic():
+        message = Message.objects.select_for_update().get(id=message_id)
+        if message.sender_id != user_profile.id:
+            raise JsonableError("Pear cannot attach an artifact to another sender's message.")
+        if SubMessage.objects.filter(
+            message=message,
+            msg_type=PEAR_ARTIFACT_SUBMESSAGE_TYPE,
+            content=content,
+        ).exists():
+            return True
+        do_add_submessage(
+            realm=user_profile.realm,
+            sender_id=user_profile.id,
+            message_id=message.id,
+            msg_type=PEAR_ARTIFACT_SUBMESSAGE_TYPE,
+            content=content,
+        )
+    return True
+
+
 def pear_visible_assistant_texts(
     transcript_events: Sequence[PearWorkerTranscriptEvent],
 ) -> list[str]:
@@ -1553,9 +1585,7 @@ def build_pear_steering_task(
     steering_events: Sequence[PearPendingSteeringEvent],
 ) -> str:
     instructions = [
-        event["instruction"].strip()
-        for event in steering_events
-        if event["instruction"].strip()
+        event["instruction"].strip() for event in steering_events if event["instruction"].strip()
     ]
     if not instructions:
         return "Steering update: continue the active task."
@@ -1618,9 +1648,7 @@ def build_pear_access_ack_message(
 ) -> str:
     stream = active_session["stream"] if active_session is not None else PEAR_DEFAULT_STREAM
     topic = active_session["topic"] if active_session is not None else PEAR_DEFAULT_TOPIC
-    worker_state = (
-        active_session["worker_state"] if active_session is not None else "unknown"
-    )
+    worker_state = active_session["worker_state"] if active_session is not None else "unknown"
     if active_session is not None and active_session["worker_can_run"]:
         worker_access = "ready"
     elif active_session is not None and active_session["worker_blocked_reason"]:
@@ -1628,17 +1656,11 @@ def build_pear_access_ack_message(
     else:
         worker_access = "unknown until a Pear request starts"
     artifact_count = active_session["artifact_count"] if active_session is not None else 0
-    response_policy = (
-        active_session["response_policy"] if active_session is not None else "unknown"
-    )
+    response_policy = active_session["response_policy"] if active_session is not None else "unknown"
     latest_verification = (
-        active_session["latest_verification"] or "none"
-        if active_session is not None
-        else "none"
+        active_session["latest_verification"] or "none" if active_session is not None else "none"
     )
-    topic_message_count = (
-        active_session["topic_message_count"] if active_session is not None else 0
-    )
+    topic_message_count = active_session["topic_message_count"] if active_session is not None else 0
     recent_message_count = (
         len(active_session["recent_messages"]) if active_session is not None else 0
     )
@@ -1720,10 +1742,7 @@ def is_pear_thread_request_message(content: str) -> bool:
         return False
     if is_pear_interruption_template_message(content):
         return PEAR_RESUME_PROMPT in content
-    if (
-        is_pear_steering_template_message(content)
-        or is_pear_access_request_message(content)
-    ):
+    if is_pear_steering_template_message(content) or is_pear_access_request_message(content):
         return False
     if is_pear_trivial_acknowledgment_message(content):
         return False
@@ -1776,9 +1795,7 @@ def pear_worker_should_start(
     explicitly_addressed: bool = False,
     response_policy: str | None = None,
 ) -> bool:
-    synthetic_explicit_request = explicitly_addressed and not is_pear_request_message(
-        content
-    )
+    synthetic_explicit_request = explicitly_addressed and not is_pear_request_message(content)
     content = normalize_pear_explicit_request_content(
         content,
         explicitly_addressed=explicitly_addressed,
@@ -1810,9 +1827,7 @@ def pear_worker_should_start(
     )
     if effective_response_policy != "ambient":
         return False
-    return active_session["state"] in {"requested", "active"} and active_session[
-        "worker_can_run"
-    ]
+    return active_session["state"] in {"requested", "active"} and active_session["worker_can_run"]
 
 
 def build_pear_worker_blocked_message(active_session: PearActiveSessionSummary) -> str:
@@ -1965,11 +1980,13 @@ def build_pear_worker_completed_message_chunks(
     if result_text:
         return split_pear_persistent_message(result_text)
 
-    return [build_pear_worker_completed_message(
-        task=task,
-        tool_results=tool_results,
-        transcript_events=transcript_events,
-    )]
+    return [
+        build_pear_worker_completed_message(
+            task=task,
+            tool_results=tool_results,
+            transcript_events=transcript_events,
+        )
+    ]
 
 
 PEAR_MATH_CODE_SEGMENT_PATTERN = re.compile(
@@ -2021,6 +2038,7 @@ def normalize_pear_math_delimiters(content: str) -> str:
     for index, part in enumerate(parts):
         if index % 2 == 1:
             continue
+
         def replace_display(match: re.Match[str]) -> str:
             body = match.group(1).strip()
             # Inside list items an indented ```math fence misses
@@ -2073,7 +2091,6 @@ def update_pear_worker_status_message(
     return True
 
 
-
 def send_pear_worker_typing_notification(
     bot_handler: Any,
     *,
@@ -2103,6 +2120,7 @@ def send_pear_worker_typing_notification(
         logger.warning("Pear typing notification failed.", exc_info=True)
         return False
 
+
 def pear_worker_summary_from_tool_results(
     tool_results: Sequence[PearWorkerToolResult],
 ) -> str:
@@ -2111,9 +2129,28 @@ def pear_worker_summary_from_tool_results(
             if result["label"] == preferred_label and result["value"].strip():
                 return result["value"].strip()
     for result in tool_results:
+        if result["label"] == "Artifact":
+            continue
         if result["value"].strip():
             return result["value"].strip()
     return ""
+
+
+def pear_worker_event_tool_results(
+    tool_results: Sequence[PearWorkerToolResult],
+) -> list[PearWorkerToolResult]:
+    """Keep structured artifact content out of run telemetry and diagnostics."""
+    return [
+        {
+            "label": result["label"],
+            "value": (
+                f"Structured artifact ({len(result['value'].encode())} bytes)."
+                if result["label"] == "Artifact"
+                else result["value"]
+            ),
+        }
+        for result in tool_results
+    ]
 
 
 def pear_codex_thread_id_from_tool_results(
@@ -2514,9 +2551,8 @@ def is_pear_interruption_template_message(content: str) -> bool:
 
 
 def is_pear_control_template_message(content: str) -> bool:
-    return (
-        is_pear_steering_template_message(content)
-        or is_pear_interruption_template_message(content)
+    return is_pear_steering_template_message(content) or is_pear_interruption_template_message(
+        content
     )
 
 
@@ -2612,9 +2648,7 @@ def is_pear_plain_mention_alias_message(content: str) -> bool:
 
 
 PearMessage = (
-    tuple[int, str]
-    | tuple[int, str, bool | None]
-    | tuple[int, str, bool | None, str | None]
+    tuple[int, str] | tuple[int, str, bool | None] | tuple[int, str, bool | None, str | None]
 )
 
 
@@ -2708,19 +2742,13 @@ def build_pear_active_session_summary(
 
     if latest_verification is None:
         latest_verification = next(
-            (
-                artifact["value"]
-                for artifact in artifact_list
-                if artifact["kind"] == "verification"
-            ),
+            (artifact["value"] for artifact in artifact_list if artifact["kind"] == "verification"),
             None,
         )
     session_record_artifacts = [
         artifact for artifact in artifact_list if artifact["kind"] == "session_record"
     ]
-    latest_session_record = (
-        session_record_artifacts[0] if session_record_artifacts else None
-    )
+    latest_session_record = session_record_artifacts[0] if session_record_artifacts else None
     latest_session_record_value = (
         latest_session_record["value"] if latest_session_record is not None else None
     )
@@ -2746,12 +2774,8 @@ def build_pear_active_session_summary(
         if latest_session_record is not None
         else None,
         "latest_session_record": latest_session_record_value,
-        "latest_session_record_kind": pear_session_record_kind(
-            latest_session_record_value
-        ),
-        "latest_session_record_url": pear_session_record_url(
-            latest_session_record_value
-        ),
+        "latest_session_record_kind": pear_session_record_kind(latest_session_record_value),
+        "latest_session_record_url": pear_session_record_url(latest_session_record_value),
         "latest_codex_thread_id": latest_codex_thread_id,
         "response_policy": normalized_response_policy,
         "steering_count": len(steering_event_list),
@@ -2818,11 +2842,7 @@ def build_pear_active_session_summary_from_messages(
             if message_checklist:
                 latest_checklist_message_id = message_id
                 checklist = message_checklist
-        if (
-            latest_bot_reply_message_id is None
-            and _sender_is_bot is True
-            and content.strip()
-        ):
+        if latest_bot_reply_message_id is None and _sender_is_bot is True and content.strip():
             latest_bot_reply_message_id = message_id
 
     if latest_request_message_id is not None:
@@ -2982,8 +3002,7 @@ def build_pear_config_payload(
         "worker_service_tier": worker_service_tier,
         "worker_fast_mode": worker_fast_mode,
         "worker_runtime_ready": worker_runtime_ready,
-        "worker_runtime_auth_ready": supported_worker_runtime
-        and worker_runtime_auth_available,
+        "worker_runtime_auth_ready": supported_worker_runtime and worker_runtime_auth_available,
         "worker_runtime_login_method": worker_runtime_login_method,
         "worker_runtime_login_command": worker_runtime_login_command,
         "worker_runtime_login_target": worker_runtime_login_target,
@@ -3328,10 +3347,7 @@ class PearEmbeddedBotHandler:
             message_id=message_id,
             sender_is_bot=False,
             session_started=active_run_message_id is not None
-            or (
-                active_session is not None
-                and active_session["state"] in {"requested", "active"}
-            ),
+            or (active_session is not None and active_session["state"] in {"requested", "active"}),
         )
         should_start_worker = message.get("type") == "stream" and pear_worker_should_start(
             raw_content,
@@ -3549,6 +3565,7 @@ class PearWorkerTurn:
         self.steering_segment_count = 0
         self.collaboration_mode = pear_turn_collaboration_mode(content)
         self.worker_result: dict[str, Any] = {}
+        self.artifact_tool_results: list[PearWorkerToolResult] = []
         self.codex_thread_id: str | None = None
         self.result_summary = ""
         self.typing_started = False
@@ -3639,9 +3656,7 @@ class PearWorkerTurn:
         self.last_volatile_transcript_flush_at = current_time
         return True
 
-    def request_user_answers(
-        self, questions: list[dict[str, Any]]
-    ) -> dict[str, list[str]] | None:
+    def request_user_answers(self, questions: list[dict[str, Any]]) -> dict[str, list[str]] | None:
         """The engine asked the humans something (request_user_input,
         plan-mode). Post the question into the conversation, then wait on
         the steering store — a reply addressed to the run IS the answer.
@@ -3744,9 +3759,7 @@ class PearWorkerTurn:
         )
         if not pending_steering_events:
             return
-        latest_steering = "; ".join(
-            event["instruction"] for event in pending_steering_events
-        )
+        latest_steering = "; ".join(event["instruction"] for event in pending_steering_events)
         if not self.handler.worker_runtime.steer(latest_steering):
             return
         self.last_steering_event_id = pending_steering_events[-1]["event_id"]
@@ -3854,7 +3867,6 @@ class PearWorkerTurn:
         if event_kind in {"assistant", "command", "file_change", "plan", "tool"}:
             self.maybe_apply_same_turn_steering()
 
-
     def run_runtime_segment(self, segment_task: str, *, segment_index: int) -> dict[str, Any]:
         self.raise_if_cancel_requested()
         if self.collaboration_mode is None:
@@ -3872,9 +3884,10 @@ class PearWorkerTurn:
                 user_input_provider=self.request_user_answers,
             )
         self.raise_if_cancel_requested()
-        segment_summary = pear_worker_summary_from_tool_results(
-            segment_result["tool_results"]
+        self.artifact_tool_results.extend(
+            result for result in segment_result["tool_results"] if result["label"] == "Artifact"
         )
+        segment_summary = pear_worker_summary_from_tool_results(segment_result["tool_results"])
         self.handler.record_worker_event(
             self.bot_handler,
             self.message_id,
@@ -3883,12 +3896,11 @@ class PearWorkerTurn:
             payload={
                 "segment_index": segment_index,
                 "tool_count": segment_result["tool_count"],
-                "tool_results": segment_result["tool_results"],
+                "tool_results": pear_worker_event_tool_results(segment_result["tool_results"]),
                 "worker_can_run": segment_result["worker_can_run"],
             },
         )
         return segment_result
-
 
     def embed_result_images(self, content: str) -> str:
         workspace_context = self.active_session.get("workspace_context") or {}
@@ -3950,7 +3962,7 @@ class PearWorkerTurn:
                         self.message,
                         self.content,
                     )
-            )
+                )
             self.task = pear_worker_task_for_message(self.content, self.active_session)
             runtime_label = self.handler.worker_runtime.runtime_value()
             if not callable(getattr(self.handler.worker_run_store, "claim_for_run", None)):
@@ -4104,9 +4116,10 @@ class PearWorkerTurn:
                     steering_task,
                     segment_index=self.steering_segment_count,
                 )
-                self.codex_thread_id = pear_codex_thread_id_from_tool_results(
-                    self.worker_result["tool_results"]
-                ) or self.codex_thread_id
+                self.codex_thread_id = (
+                    pear_codex_thread_id_from_tool_results(self.worker_result["tool_results"])
+                    or self.codex_thread_id
+                )
 
             self.result_summary = pear_worker_summary_from_tool_results(
                 self.worker_result["tool_results"]
@@ -4178,11 +4191,11 @@ class PearWorkerTurn:
                 if result_updated:
                     for continuation_content in content_chunks[1:]:
                         self.bot_handler.send_reply(
-                        self.message,
-                        normalize_pear_task_markers(
-                            normalize_pear_math_delimiters(continuation_content)
-                        ),
-                    )
+                            self.message,
+                            normalize_pear_task_markers(
+                                normalize_pear_math_delimiters(continuation_content)
+                            ),
+                        )
                 write_pear_live_run_state(
                     self.message_id,
                     status="done",
@@ -4197,6 +4210,14 @@ class PearWorkerTurn:
                         summary="Settled worker progress message.",
                         payload={"result_message_id": self.result_message_id},
                     )
+            has_artifact = bool(self.artifact_tool_results)
+            artifact_attached = attach_pear_artifact_to_message(
+                self.bot_handler,
+                message_id=self.result_message_id,
+                tool_results=self.artifact_tool_results,
+            )
+            if has_artifact and not artifact_attached:
+                raise RuntimeError("Pear artifact could not be attached to the result message.")
             self.handler.worker_run_store.record(
                 self.bot_handler,
                 self.message_id,

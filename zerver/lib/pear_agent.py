@@ -21,6 +21,13 @@ from zerver.lib.pear import (
     pear_is_retired_visible_artifact_line,
     pear_normalize_token_usage,
 )
+from zerver.lib.pear_artifact import (
+    PearArtifactError,
+    artifact_tool_result,
+    canonicalize_pear_artifact,
+    pear_artifact_node_count,
+)
+from zerver.lib.pear_artifact_contract import PEAR_ARTIFACT_TOOL_SPEC
 
 logger = logging.getLogger(__name__)
 
@@ -462,7 +469,7 @@ def build_pear_codex_turn_prompt(active_session: PearActiveSessionSummary, task:
         f"- head: {workspace_context.get('head') or 'unknown'}",
         "- contract: the Zulip stream maps to the repository, and the Zulip topic/subthread maps to the Git branch.",
         "- privacy: refer to the workspace by branch or worktree name in replies; never print the absolute workdir path in the topic.",
-        "- explainers: fenced ```pear-explainer specs and ```pear-svg drawings render as native visual teaching cards with agent actions and pin-to-Wall live recipes — use them when a diagram, simulation, status display, or interactive follow-up answers better than prose (the pear-explainers skill has the contract).",
+        "- artifacts: call pear_artifact once when a native diagram, compact explainer, status display, or local interaction answers better than prose; provide meaning and data only because Pear owns all styling, and do not print the artifact JSON in the reply.",
         "- servers and watchers: never start a long-lived process (http.server, watch loops, dev servers) in the foreground — it blocks your turn from ever finishing. Run it detached (nohup ... >/dev/null 2>&1 &) and verify with a follow-up probe.",
         "- math: write math in Zulip's dialect — $$...$$ for inline math and ```math fenced blocks for display equations; \\[ \\] and \\( \\) do not render here.",
         "- checklists: your plan tool is the working checklist — its steps render live in the topic rail, so keep it current instead of duplicating it in chat or a workspace document.",
@@ -1219,6 +1226,7 @@ class PearCodexAppServerToolRunner:
         self.active_turn_id: str | None = None
         self.background_request_ids: set[int] = set()
         self.current_user_input_provider: PearUserInputProvider | None = None
+        self.pending_artifacts: list[str] = []
         self.translator = PearCodexAppServerTranscriptTranslator()
 
     def config_args(self) -> list[str]:
@@ -1431,9 +1439,11 @@ class PearCodexAppServerToolRunner:
             return {"decision": decision}, None, event
         if method == "item/tool/requestUserInput":
             raw_questions = params.get("questions")
-            questions = [
-                question for question in raw_questions if isinstance(question, dict)
-            ] if isinstance(raw_questions, list) else []
+            questions = (
+                [question for question in raw_questions if isinstance(question, dict)]
+                if isinstance(raw_questions, list)
+                else []
+            )
             provider = self.current_user_input_provider
             answers: dict[str, list[str]] | None = None
             if provider is not None and questions:
@@ -1466,6 +1476,72 @@ class PearCodexAppServerToolRunner:
                 None,
                 {"code": -32601, "message": "No user answer was available."},
                 event,
+            )
+        if method == "item/tool/call":
+            tool_name = params.get("tool")
+            if tool_name != "pear_artifact" or params.get("namespace") not in {None, ""}:
+                return (
+                    {"success": False, "contentItems": []},
+                    None,
+                    {
+                        "kind": "tool",
+                        "status": "failed",
+                        "title": f"Unsupported dynamic tool: {tool_name}",
+                    },
+                )
+            arguments = params.get("arguments")
+            if isinstance(arguments, str):
+                try:
+                    arguments = json.loads(arguments)
+                except json.JSONDecodeError as error:
+                    arguments = {"invalid_json": str(error)}
+            try:
+                document, encoded = canonicalize_pear_artifact(arguments)
+            except PearArtifactError as error:
+                detail = trim_pear_agent_text(str(error), limit=500)
+                return (
+                    {
+                        "success": False,
+                        "contentItems": [
+                            {
+                                "type": "inputText",
+                                "text": f"Artifact rejected: {detail}",
+                            }
+                        ],
+                    },
+                    None,
+                    {
+                        "kind": "tool",
+                        "status": "failed",
+                        "title": "Artifact rejected.",
+                        "body": detail,
+                        "metadata": {"tool_name": "pear_artifact"},
+                    },
+                )
+            self.pending_artifacts.append(encoded)
+            return (
+                {
+                    "success": True,
+                    "contentItems": [
+                        {
+                            "type": "inputText",
+                            "text": "Artifact accepted and attached to the final Pear message.",
+                        }
+                    ],
+                },
+                None,
+                {
+                    "kind": "tool",
+                    "status": "done",
+                    "title": "Artifact ready.",
+                    "metadata": {
+                        "tool_name": "pear_artifact",
+                        "artifact_version": document["version"],
+                        "artifact_bytes": len(encoded.encode()),
+                        "artifact_blocks": len(document["blocks"]),
+                        "artifact_nodes": pear_artifact_node_count(document),
+                    },
+                },
             )
         event = {
             "kind": "status",
@@ -1512,6 +1588,7 @@ class PearCodexAppServerToolRunner:
             "model": self.model,
             "sandbox": self.sandbox,
             "personality": "pragmatic",
+            "dynamicTools": [PEAR_ARTIFACT_TOOL_SPEC],
         }
         if existing_thread_id is not None:
             params["threadId"] = existing_thread_id
@@ -1650,6 +1727,7 @@ class PearCodexAppServerToolRunner:
     ) -> Sequence[PearWorkerToolResult]:
         with self.lock:
             self.ensure_started()
+            self.pending_artifacts = []
             self.current_user_input_provider = user_input_provider
             thread_id = self.ensure_thread(active_session, event_callback=event_callback)
             self.active_thread_id = thread_id
@@ -1663,16 +1741,15 @@ class PearCodexAppServerToolRunner:
             if turn_id is not None:
                 self.active_turn_id = turn_id
             try:
-                final_text, command_count, file_change_count, tool_call_count = (
-                    self.wait_for_turn(
-                        thread_id=thread_id,
-                        turn_id=turn_id,
-                        event_callback=event_callback,
-                    )
+                final_text, command_count, file_change_count, tool_call_count = self.wait_for_turn(
+                    thread_id=thread_id,
+                    turn_id=turn_id,
+                    event_callback=event_callback,
                 )
             finally:
                 self.current_user_input_provider = None
             results = pear_tool_results_from_text(final_text, output_limit=self.output_limit)
+            results.extend(artifact_tool_result(encoded) for encoded in self.pending_artifacts)
             summary_parts = []
             if command_count:
                 summary_parts.append(f"{command_count} command event(s)")

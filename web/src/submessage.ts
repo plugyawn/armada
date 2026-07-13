@@ -1,3 +1,4 @@
+import $ from "jquery";
 import * as z from "zod/mini";
 
 import * as blueslip from "./blueslip.ts";
@@ -6,11 +7,17 @@ import type {MessageList} from "./message_list.ts";
 import * as message_lists from "./message_lists.ts";
 import * as message_store from "./message_store.ts";
 import type {Message} from "./message_store.ts";
+import {mount_pear_artifact_lifecycle} from "./pear_artifact_lifecycle.ts";
 import {any_widget_data_schema} from "./widget_schema.ts";
 import type {WidgetOutboundData} from "./widget_schema.ts";
 import * as widgetize from "./widgetize.ts";
 
 export type Submessage = z.infer<typeof message_store.submessage_schema>;
+const PEAR_ARTIFACT_SUBMESSAGE_TYPE = "pear_artifact";
+
+function submessages_of_type(message: Message, msg_type: string): Submessage[] {
+    return (message.submessages ?? []).filter((submessage) => submessage.msg_type === msg_type);
+}
 
 const widget_data_event_schema = z.object({
     sender_id: z.number(),
@@ -36,15 +43,16 @@ export function get_message_events(message: Message): SubmessageEvents | undefin
         return undefined;
     }
 
-    if (message.submessages.length === 0) {
+    const widget_submessages = submessages_of_type(message, "widget");
+    if (widget_submessages.length === 0) {
         return undefined;
     }
 
-    message.submessages.sort((m1, m2) => m1.id - m2.id);
+    const sorted_widget_submessages = widget_submessages.toSorted((m1, m2) => m1.id - m2.id);
 
     const events: {sender_id: number; data: unknown}[] = [];
 
-    for (const obj of message.submessages) {
+    for (const obj of sorted_widget_submessages) {
         let data: unknown;
         try {
             data = JSON.parse(obj.content);
@@ -69,7 +77,13 @@ export function is_poll_message(message: Message): boolean {
     }
 
     try {
-        const first_data: unknown = JSON.parse(message.submessages[0]!.content);
+        const first_widget = submessages_of_type(message, "widget").toSorted(
+            (m1, m2) => m1.id - m2.id,
+        )[0];
+        if (first_widget === undefined) {
+            return false;
+        }
+        const first_data: unknown = JSON.parse(first_widget.content);
         return (
             typeof first_data === "object" &&
             first_data !== null &&
@@ -141,6 +155,10 @@ export function process_submessages(message: Message): void {
 }
 
 export function do_process_submessages(message: Message): void {
+    const artifacts = submessages_of_type(message, PEAR_ARTIFACT_SUBMESSAGE_TYPE);
+    if (artifacts.some((artifact) => artifact.sender_id !== message.sender_id)) {
+        blueslip.warn(`A user tried to attach a Pear artifact to message ${message.id}`);
+    }
     const events = get_message_events(message);
 
     if (!events) {
@@ -164,6 +182,131 @@ export function do_process_submessages(message: Message): void {
     });
 }
 
+async function load_and_render_pear_artifact(
+    message: Message,
+    artifact: Submessage,
+    $host: JQuery,
+): Promise<void> {
+    try {
+        const pear_artifact = await import("./pear_artifact.ts");
+        mount_pear_artifact_lifecycle($host, "chat", "rendering", "rendering artifact…");
+        const document_value = pear_artifact.parse_pear_artifact(artifact.content);
+        if (document_value === undefined) {
+            blueslip.warn(`Invalid Pear artifact on message ${message.id}`);
+            mount_pear_artifact_lifecycle(
+                $host,
+                "chat",
+                "failed",
+                "artifact could not be rendered",
+            );
+            return;
+        }
+        pear_artifact.mount_pear_artifact($host, document_value, {
+            density: "chat",
+            onAction(action, button) {
+                if (message.type !== "stream" || button.disabled) {
+                    return;
+                }
+                const original = button.textContent ?? action.label;
+                button.disabled = true;
+                button.setAttribute("aria-busy", "true");
+                button.textContent = "asking…";
+                void (async () => {
+                    try {
+                        const [pear_artifact_actions, stream_data] = await Promise.all([
+                            import("./pear_artifact_actions.ts"),
+                            import("./stream_data.ts"),
+                        ]);
+                        const subscription = stream_data.get_sub_by_id(message.stream_id);
+                        if (subscription === undefined) {
+                            throw new Error("stream subscription unavailable");
+                        }
+                        pear_artifact_actions.send_pear_artifact_action(
+                            {stream: subscription.name, topic: message.topic},
+                            action.prompt,
+                            {
+                                success() {
+                                    button.removeAttribute("aria-busy");
+                                    button.textContent = "asked ✓";
+                                },
+                                error() {
+                                    button.disabled = false;
+                                    button.removeAttribute("aria-busy");
+                                    button.textContent = original;
+                                },
+                            },
+                        );
+                    } catch (error) {
+                        blueslip.error("Could not load Pear artifact actions", undefined, error);
+                        button.disabled = false;
+                        button.removeAttribute("aria-busy");
+                        button.textContent = original;
+                    }
+                })();
+            },
+            onPin(button) {
+                if (message.type !== "stream" || button.disabled) {
+                    return;
+                }
+                const original = button.textContent ?? "↗ pin to wall";
+                button.disabled = true;
+                button.setAttribute("aria-busy", "true");
+                button.textContent = "pinning…";
+                void (async () => {
+                    try {
+                        const stream_data = await import("./stream_data.ts");
+                        const subscription = stream_data.get_sub_by_id(message.stream_id);
+                        if (subscription === undefined) {
+                            throw new Error("stream subscription unavailable");
+                        }
+                        void channel.post({
+                            url: "/json/pear/monitors",
+                            data: {
+                                stream: subscription.name,
+                                topic: message.topic,
+                                request: document_value.title ?? "pinned artifact",
+                                spec: JSON.stringify({
+                                    title: document_value.title,
+                                    cadence_seconds: 300,
+                                    artifact: document_value,
+                                    recipe: {parse: {mode: "static"}, bindings: {}},
+                                }),
+                            },
+                            success() {
+                                button.removeAttribute("aria-busy");
+                                button.textContent = "pinned ✓";
+                                void refresh_pear_wall();
+                            },
+                            error() {
+                                button.disabled = false;
+                                button.removeAttribute("aria-busy");
+                                button.textContent = "pin failed — retry";
+                            },
+                        });
+                    } catch (error) {
+                        blueslip.error("Could not load Pear pin action", undefined, error);
+                        button.disabled = false;
+                        button.removeAttribute("aria-busy");
+                        button.textContent = original;
+                    }
+                })();
+            },
+        });
+    } catch (error) {
+        blueslip.error("Could not load the Pear artifact renderer", undefined, error);
+        mount_pear_artifact_lifecycle($host, "chat", "failed", "artifact renderer unavailable");
+    }
+}
+
+async function refresh_pear_wall(): Promise<void> {
+    try {
+        const pear_wall = await import("./pear_wall.ts");
+        pear_wall.refresh();
+    } catch (error) {
+        blueslip.error("Could not refresh the Pear wall", undefined, error);
+    }
+}
+
 export function render_submessage(in_opts: {$row: JQuery; message_id: number}): void {
     const message_id = in_opts.message_id;
     const message = message_store.get(message_id);
@@ -172,6 +315,32 @@ export function render_submessage(in_opts: {$row: JQuery; message_id: number}): 
     }
 
     const $row = in_opts.$row;
+
+    const artifacts = submessages_of_type(message, PEAR_ARTIFACT_SUBMESSAGE_TYPE)
+        .filter((artifact) => artifact.sender_id === message.sender_id)
+        .toSorted((m1, m2) => m1.id - m2.id);
+    const latest_artifact = artifacts.at(-1);
+    if (latest_artifact !== undefined) {
+        const $content = $row.find(".message_content").first();
+        let $host = $content.children(".pear-artifact-message-host");
+        if ($host.length === 0) {
+            const host = document.createElement("div");
+            host.className = "pear-artifact-message-host";
+            $content[0]?.append(host);
+            $host = $(host);
+        }
+        const artifact_id = String(latest_artifact.id);
+        if (
+            $host.attr("data-pear-artifact-id") === artifact_id &&
+            $host.children('.pear-artifact[data-lifecycle="ready"]').length > 0
+        ) {
+            return;
+        }
+        $host.attr("data-pear-artifact-id", artifact_id);
+        mount_pear_artifact_lifecycle($host, "chat", "preparing", "preparing artifact…");
+        void load_and_render_pear_artifact(message, latest_artifact, $host);
+        return;
+    }
 
     const post_to_server = make_server_callback(message_id);
 
@@ -209,9 +378,15 @@ export function handle_event(submsg: Submessage): void {
 
     update_message(message, submsg);
 
-    // Right now, our only use of submessages is widgets.
     const msg_type = submsg.msg_type;
 
+    if (msg_type === PEAR_ARTIFACT_SUBMESSAGE_TYPE) {
+        const $row = message_lists.current?.get_row(submsg.message_id);
+        if ($row && $row.length > 0) {
+            render_submessage({message_id: submsg.message_id, $row});
+        }
+        return;
+    }
     if (msg_type !== "widget") {
         blueslip.warn("unknown msg_type: " + msg_type);
         return;

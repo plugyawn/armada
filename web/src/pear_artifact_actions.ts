@@ -4,19 +4,19 @@ import {current_user} from "./state_data.ts";
 import * as transmit from "./transmit.ts";
 
 const PEAR_AGENT_MENTION = "@**Pear**";
-const PEAR_EXPLAINER_ACTION_PROMPT_LIMIT = 1000;
+const PEAR_ARTIFACT_ACTION_PROMPT_LIMIT = 1000;
 
-export type PearExplainerActionTarget = {
+export type PearArtifactActionTarget = {
     stream: string;
     topic: string;
 };
 
-export function send_pear_explainer_action(
-    target: PearExplainerActionTarget,
+export function send_pear_artifact_action(
+    target: PearArtifactActionTarget,
     prompt: string,
     callbacks: {success: () => void; error: (message: string) => void},
 ): void {
-    const instruction = prompt.trim().slice(0, PEAR_EXPLAINER_ACTION_PROMPT_LIMIT);
+    const instruction = prompt.trim().slice(0, PEAR_ARTIFACT_ACTION_PROMPT_LIMIT);
     if (instruction === "") {
         callbacks.error("empty action");
         return;

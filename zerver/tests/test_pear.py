@@ -54,6 +54,7 @@ from zerver.lib.pear import (
     PEAR_VERIFY_CHANGES_PROMPT,
     PEAR_WORKER_RUNS_STORAGE_KEY,
     PearActiveSessionSummary,
+    PearAmbientDecision,
     PearEmbeddedBotHandler,
     PearWorkerRunResult,
     PearWorkerRuntime,
@@ -116,7 +117,6 @@ from zerver.lib.pear import (
 from zerver.lib.pear_agent import (
     PearCodexAppServerToolRunner,
     PearCodexAppServerTranscriptTranslator,
-    PearCodexExecAddressingIntentClassifier,
     PearDisabledAgentRunner,
     PearGeminiInteractionsAddressingIntentClassifier,
     PearProcessIsolation,
@@ -125,7 +125,7 @@ from zerver.lib.pear_agent import (
     build_pear_codex_turn_prompt,
     ensure_pear_runtime_result,
     merge_pear_tool_results,
-    parse_pear_addressing_router_output,
+    parse_pear_addressing_json_output,
     pear_tool_results_from_text,
 )
 from zerver.lib.pear_worker import (
@@ -2524,104 +2524,6 @@ class PearSessionDefaultsTest(TestCase):
         self.assertNotIn("ephemeral", resumed_params)
         self.assertNotIn("dynamicTools", resumed_params)
 
-    def test_codex_exec_addressing_router_is_stateless_per_message(self) -> None:
-        payload = get_pear_session_payload()
-        active_session = build_pear_active_session_summary_from_messages(
-            pear_session=payload,
-            source="server",
-            stream_exists=True,
-            messages=[(10, "@Pear fix the checkout test", False)],
-        )
-        calls = []
-
-        class FakeStorage:
-            def __init__(self) -> None:
-                self.values: dict[str, object] = {}
-
-            def contains(self, key: str) -> bool:
-                return key in self.values
-
-            def get(self, key: str) -> object:
-                return self.values[key]
-
-            def put(self, key: str, value: object) -> None:
-                self.values[key] = value
-
-        class FakeBotHandler:
-            storage = FakeStorage()
-
-        def fake_run(command, **kwargs):
-            calls.append((command, kwargs))
-            if len(calls) == 1:
-                stdout = (
-                    '{"type":"thread.started","thread_id":"router-thread"}\n'
-                    '{"type":"item.completed","item":{"type":"agent_message",'
-                    '"text":"{\\"addressed\\": true}"}}\n'
-                )
-            else:
-                stdout = (
-                    '{"type":"item.completed","item":{"type":"agent_message",'
-                    '"text":"{\\"addressed\\": false}"}}\n'
-                )
-            return subprocess.CompletedProcess(command, 0, stdout=stdout, stderr="")
-
-        classifier = PearCodexExecAddressingIntentClassifier(
-            codex_bin="codex",
-            workdir="/workspace",
-            model="gpt-router",
-            reasoning_effort="low",
-            sandbox="read-only",
-            approval_policy="never",
-            timeout_seconds=5,
-            output_limit=200,
-            extra_args=["--ignore-rules"],
-            run_command=fake_run,
-        )
-
-        self.assertTrue(
-            classifier(
-                content="hey agent, can you check the failing test?",
-                active_session=active_session,
-                message={
-                    "display_recipient": PEAR_DEFAULT_STREAM,
-                    "topic": PEAR_DEFAULT_TOPIC,
-                },
-                bot_handler=FakeBotHandler(),
-            )
-        )
-        self.assertEqual(FakeBotHandler.storage.values, {})
-        self.assertFalse(
-            classifier(
-                content="I pushed the branch",
-                active_session=active_session,
-                message={
-                    "display_recipient": PEAR_DEFAULT_STREAM,
-                    "topic": PEAR_DEFAULT_TOPIC,
-                },
-                bot_handler=FakeBotHandler(),
-            )
-        )
-        expected_command = [
-            "codex",
-            "exec",
-            "--json",
-            "--sandbox",
-            "read-only",
-            "--config",
-            'approval_policy="never"',
-            "--cd",
-            "/workspace",
-            "--model",
-            "gpt-router",
-            "--config",
-            'model_reasoning_effort="low"',
-            "--ignore-rules",
-            "-",
-        ]
-        self.assertEqual(calls[0][0], expected_command)
-        self.assertEqual(calls[1][0], expected_command)
-        self.assertIn("Do not run commands or use tools.", calls[0][1]["input"])
-
     def test_gemini_interactions_addressing_router_uses_stateless_json(self) -> None:
         payload = get_pear_session_payload()
         active_session = build_pear_active_session_summary_from_messages(
@@ -2651,7 +2553,10 @@ class PearSessionDefaultsTest(TestCase):
                                 "content": [
                                     {
                                         "type": "text",
-                                        "text": '{"addressed": true}',
+                                        "text": (
+                                            '{"addressee":"pear","action":"run",'
+                                            '"presentation":"diff","duplicate":false}'
+                                        ),
                                     }
                                 ],
                             }
@@ -2673,7 +2578,7 @@ class PearSessionDefaultsTest(TestCase):
             urlopen=fake_urlopen,
         )
 
-        self.assertTrue(
+        self.assertEqual(
             classifier(
                 content="hey pear, can you check this?",
                 active_session=active_session,
@@ -2682,7 +2587,13 @@ class PearSessionDefaultsTest(TestCase):
                     "topic": PEAR_DEFAULT_TOPIC,
                 },
                 bot_handler=object(),
-            )
+            ),
+            {
+                "addressee": "pear",
+                "action": "run",
+                "presentation": "diff",
+                "duplicate": False,
+            },
         )
         self.assertEqual(len(calls), 1)
         request, kwargs = calls[0]
@@ -2694,80 +2605,24 @@ class PearSessionDefaultsTest(TestCase):
         self.assertEqual(request_payload["generation_config"]["temperature"], 0)
         self.assertEqual(request_payload["generation_config"]["thinking_level"], "minimal")
         self.assertEqual(request_payload["response_format"]["mime_type"], "application/json")
-        self.assertEqual(request_payload["response_format"]["schema"]["required"], ["addressed"])
+        self.assertEqual(
+            request_payload["response_format"]["schema"]["required"],
+            ["addressee", "action", "presentation", "duplicate"],
+        )
         self.assertIn("Do not answer the user.", request_payload["input"])
+        self.assertIn("Recent topic messages", request_payload["input"])
+        self.assertIn("@Pear fix the checkout test", request_payload["input"])
         self.assertIn("New message:\nhey pear, can you check this?", request_payload["input"])
 
-    def test_gemini_interactions_addressing_router_omits_gemma_thinking_budget(
-        self,
-    ) -> None:
-        calls = []
-
-        class FakeResponse:
-            status = 200
-
-            def __enter__(self):
-                return self
-
-            def __exit__(self, *args) -> None:
-                pass
-
-            def read(self) -> bytes:
-                return json.dumps(
-                    {
-                        "status": "completed",
-                        "steps": [
-                            {
-                                "type": "model_output",
-                                "content": [
-                                    {
-                                        "type": "text",
-                                        "text": '{"addressed": false}',
-                                    }
-                                ],
-                            }
-                        ],
-                    }
-                ).encode()
-
-        def fake_urlopen(request, **kwargs):
-            calls.append(request)
-            return FakeResponse()
-
-        classifier = PearGeminiInteractionsAddressingIntentClassifier(
-            api_key="gemini-secret",
-            model="gemma-4-26b-a4b-it",
-            timeout_seconds=7,
-            output_limit=200,
-            url="https://example.test/interactions",
-            thinking_level="minimal",
-            urlopen=fake_urlopen,
-        )
-
-        self.assertFalse(
-            classifier(
-                content="I pushed the branch",
-                active_session=None,
-                message={
-                    "display_recipient": PEAR_DEFAULT_STREAM,
-                    "topic": PEAR_DEFAULT_TOPIC,
-                },
-                bot_handler=object(),
-            )
-        )
-        request_payload = json.loads(calls[0].data.decode())
-        self.assertEqual(request_payload["model"], "gemma-4-26b-a4b-it")
-        self.assertNotIn("thinking_level", request_payload["generation_config"])
-
-    def test_parse_pear_addressing_router_output_defaults_false(self) -> None:
-        self.assertEqual(parse_pear_addressing_router_output("not json"), (False, None))
+    def test_parse_pear_addressing_router_output_defaults_to_ignore(self) -> None:
         self.assertEqual(
-            parse_pear_addressing_router_output(
-                '{"type":"thread.started","thread_id":"router-thread"}\n'
-                '{"type":"item.completed","item":{"type":"agent_message",'
-                '"text":"{\\"addressed\\": true}"}}\n'
-            ),
-            (True, "router-thread"),
+            parse_pear_addressing_json_output("not json"),
+            {
+                "addressee": "uncertain",
+                "action": "ignore",
+                "presentation": "compact",
+                "duplicate": False,
+            },
         )
 
     def test_build_pear_addressing_router_prompt_includes_session_context(self) -> None:
@@ -2785,10 +2640,9 @@ class PearSessionDefaultsTest(TestCase):
             topic=PEAR_DEFAULT_TOPIC,
         )
 
-        self.assertIn('{"addressed": true}', prompt)
-        self.assertIn("When uncertain, return false.", prompt)
-        self.assertIn("addressed to Pear", prompt)
-        self.assertIn("Infer the addressee from the conversation", prompt)
+        self.assertIn("action: ignore", prompt)
+        self.assertIn("addressee=uncertain and action=ignore", prompt)
+        self.assertIn("Recent topic messages", prompt)
         self.assertIn(f"Stream: {PEAR_DEFAULT_STREAM}", prompt)
         self.assertIn("New message:\nhey agent, can you check?", prompt)
 
@@ -3174,9 +3028,14 @@ class PearSessionDefaultsTest(TestCase):
             active_session,
             message,
             bot_handler,
-        ) -> bool:
+        ) -> PearAmbientDecision:
             classifier_calls.append(content)
-            return True
+            return {
+                "addressee": "pear",
+                "action": "run",
+                "presentation": "diff",
+                "duplicate": False,
+            }
 
         def tool_runner(active_session, task, *, event_callback=None, **kwargs):
             seen_tasks.append(task)
@@ -3654,6 +3513,9 @@ class PearSessionDefaultsTest(TestCase):
                 }
             ]
 
+        def addressing_intent_classifier(**kwargs: object) -> PearAmbientDecision:
+            raise AssertionError("quiet topics must not spend a Gemini routing call")
+
         class FakeRunStore:
             def __init__(self) -> None:
                 self.starts: list[int] = []
@@ -3700,6 +3562,7 @@ class PearSessionDefaultsTest(TestCase):
             worker_runtime=PearWorkerRuntime(tool_runner),
             active_session_loader=active_session_loader,
             worker_run_store=run_store,
+            addressing_intent_classifier=addressing_intent_classifier,
         )
         handler.handle_message(message, FakeBotHandler())
 
@@ -3891,7 +3754,7 @@ class PearSessionDefaultsTest(TestCase):
             messages=[
                 (10, "@Pear fix the checkout test", False),
             ],
-            response_policy="mentions_only",
+            response_policy="ambient",
         )
         seen_tasks: list[str] = []
         sent_replies: list[str] = []
@@ -3910,9 +3773,14 @@ class PearSessionDefaultsTest(TestCase):
             active_session,
             message,
             bot_handler,
-        ) -> bool:
+        ) -> PearAmbientDecision:
             classifier_calls.append((content, active_session["response_policy"]))
-            return True
+            return {
+                "addressee": "pear",
+                "action": "run",
+                "presentation": "diff",
+                "duplicate": False,
+            }
 
         class FakeRunStore:
             def __init__(self) -> None:
@@ -3967,7 +3835,7 @@ class PearSessionDefaultsTest(TestCase):
 
         self.assertEqual(
             classifier_calls,
-            [("hey agent, can you check the failing parser test?", "mentions_only")],
+            [("hey agent, can you check the failing parser test?", "ambient")],
         )
         self.assertEqual(run_store.starts, [208])
         self.assertEqual(seen_tasks, ["hey agent, can you check the failing parser test?"])
@@ -3984,7 +3852,7 @@ class PearSessionDefaultsTest(TestCase):
             messages=[
                 (10, "@Pear fix the checkout test", False),
             ],
-            response_policy="mentions_only",
+            response_policy="ambient",
         )
         sent_replies: list[str] = []
 
@@ -3997,8 +3865,13 @@ class PearSessionDefaultsTest(TestCase):
             active_session,
             message,
             bot_handler,
-        ) -> bool:
-            return False
+        ) -> PearAmbientDecision:
+            return {
+                "addressee": "general",
+                "action": "ignore",
+                "presentation": "compact",
+                "duplicate": False,
+            }
 
         class FakeRunStore:
             def start(
@@ -4068,8 +3941,13 @@ class PearSessionDefaultsTest(TestCase):
             active_session,
             message,
             bot_handler,
-        ) -> bool:
-            return True
+        ) -> PearAmbientDecision:
+            return {
+                "addressee": "pear",
+                "action": "steer",
+                "presentation": "status",
+                "duplicate": False,
+            }
 
         class FakeRunStore:
             def active_worker_run_message_id(
@@ -5742,9 +5620,7 @@ class PearSessionDefaultsTest(TestCase):
             "content": "@Pear fix the checkout test",
         }
 
-        with patch(
-            "zerver.lib.pear.attach_pear_artifact_to_message", side_effect=attach_artifact
-        ):
+        with patch("zerver.lib.pear.attach_pear_artifact_to_message", side_effect=attach_artifact):
             PearEmbeddedBotHandler(
                 worker_runtime=PearWorkerRuntime(tool_runner),
                 worker_run_store=FakeRunStore(),

@@ -9,10 +9,14 @@ import urllib.error
 import urllib.request
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 from zerver.lib.pear import (
     PearActiveSessionSummary,
+    PearAmbientAction,
+    PearAmbientAddressee,
+    PearAmbientDecision,
+    PearResponsePresentation,
     PearUserInputProvider,
     PearWorkerToolResult,
     PearWorkerTranscriptCallback,
@@ -32,7 +36,6 @@ from zerver.lib.pear_artifact_contract import PEAR_ARTIFACT_TOOL_SPEC
 logger = logging.getLogger(__name__)
 
 PearAgentRuntime = Literal["disabled", "codex-app-server"]
-PearSubprocessRunner = Callable[..., subprocess.CompletedProcess[str]]
 PearSubprocessPopen = Callable[..., subprocess.Popen[str]]
 PearUrlOpen = Callable[..., Any]
 
@@ -112,6 +115,7 @@ def build_pear_addressing_router_prompt(
     active_session: PearActiveSessionSummary | None,
     stream: str = "",
     topic: str = "",
+    message_id: int | None = None,
 ) -> str:
     if active_session is None:
         session_lines = [
@@ -130,80 +134,84 @@ def build_pear_addressing_router_prompt(
             f"- latest_steering: {active_session['latest_steering_instruction'] or 'None'}",
         ]
 
+    recent_messages = (
+        [
+            message
+            for message in active_session["recent_messages"]
+            if message_id is None or message["message_id"] != message_id
+        ][-6:]
+        if active_session is not None
+        else []
+    )
+    recent_lines = [
+        f"- {message['sender']}{' [bot]' if message['sender_is_bot'] else ''}: "
+        f"{trim_pear_agent_text(message['content'], limit=240)}"
+        for message in recent_messages
+    ]
+    if not recent_lines:
+        recent_lines = ["- none"]
+
     return "\n".join(
         [
-            "You are Pear's message-addressing router for a Zulip coding agent.",
-            "Decide whether the new untagged Zulip message is addressed to Pear.",
+            "You are Pear's low-latency routing layer for a Zulip coding agent.",
+            "Classify one new untagged message. Do not answer it.",
             "Do not answer the user. Do not run commands or use tools.",
-            'Return exactly one JSON object: {"addressed": true} or {"addressed": false}.',
+            "Return only the JSON object required by the response schema.",
             "",
-            "Return true when the message is addressed to Pear, Codex, the agent, or the assistant in this topic.",
-            "Infer the addressee from the conversation, the active session state, and the new message.",
-            "Return true when an active Pear run exists and the message is clearly steering that run, even if it says only 'you' or 'agent'.",
-            "Return false for ordinary team chat, human-to-human discussion, status narration, ambiguous comments, or third-person mentions that do not ask Pear to act.",
-            "When uncertain, return false.",
+            "addressee: pear only when the request is for Pear, Codex, the agent, or the assistant; other for a named/recent human; general for team chatter; uncertain otherwise.",
+            "action: ignore for chatter, ambiguity, acknowledgements, duplicates, and messages for humans; steer only when an active run exists and this changes or continues it; run only for a concrete request when no run is active.",
+            "presentation: choose the likely final UI shape: compact, prose, status, explainer, or diff.",
+            "duplicate: true only when the new message repeats a recent request without adding information.",
+            "When uncertain, use addressee=uncertain and action=ignore.",
             "",
             f"Stream: {stream or 'unknown'}",
             f"Topic: {topic or 'unknown'}",
             "Session:",
             *session_lines,
             "",
+            "Recent topic messages (oldest to newest):",
+            *recent_lines,
+            "",
             "New message:",
-            content.strip(),
+            trim_pear_agent_text(content, limit=1000),
         ]
     )
 
 
-def parse_pear_addressing_router_output(
-    output: str,
-) -> tuple[bool, str | None]:
-    thread_id = None
-    final_text = ""
-    for line in output.splitlines():
-        if not line.strip():
-            continue
-        try:
-            event = json.loads(line)
-        except json.JSONDecodeError:
-            final_text = line
-            continue
-        if not isinstance(event, dict):
-            continue
-        event_type = event.get("type")
-        if event_type == "thread.started" and isinstance(event.get("thread_id"), str):
-            thread_id = event["thread_id"]
-            continue
-        if event_type != "item.completed":
-            continue
-        item = event.get("item")
-        if not isinstance(item, dict):
-            continue
-        if item.get("type") == "agent_message" and isinstance(item.get("text"), str):
-            final_text = item["text"]
-
-    start = final_text.find("{")
-    end = final_text.rfind("}")
-    if start == -1 or end == -1 or end < start:
-        return False, thread_id
-    try:
-        parsed = json.loads(final_text[start : end + 1])
-    except json.JSONDecodeError:
-        return False, thread_id
-    if not isinstance(parsed, dict):
-        return False, thread_id
-    return parsed.get("addressed") is True, thread_id
-
-
-def parse_pear_addressing_json_output(output: str) -> bool:
+def parse_pear_addressing_json_output(output: str) -> PearAmbientDecision:
+    ignored: PearAmbientDecision = {
+        "addressee": "uncertain",
+        "action": "ignore",
+        "presentation": "compact",
+        "duplicate": False,
+    }
     start = output.find("{")
     end = output.rfind("}")
     if start == -1 or end == -1 or end < start:
-        return False
+        return ignored
     try:
         parsed = json.loads(output[start : end + 1])
     except json.JSONDecodeError:
-        return False
-    return isinstance(parsed, dict) and parsed.get("addressed") is True
+        return ignored
+    if not isinstance(parsed, dict):
+        return ignored
+    addressee = parsed.get("addressee")
+    action = parsed.get("action")
+    presentation = parsed.get("presentation")
+    duplicate = parsed.get("duplicate")
+    if (
+        addressee not in {"pear", "other", "general", "uncertain"}
+        or action not in {"ignore", "steer", "run"}
+        or presentation not in {"compact", "prose", "status", "explainer", "diff"}
+        or not isinstance(duplicate, bool)
+    ):
+        return ignored
+    return {
+        "addressee": cast(PearAmbientAddressee, addressee),
+        "action": cast(PearAmbientAction, action),
+        "presentation": cast(PearResponsePresentation, presentation),
+        "duplicate": duplicate,
+    }
 
 
 def pear_gemini_interaction_output_text(payload: dict[str, Any]) -> str:
@@ -221,97 +229,6 @@ def pear_gemini_interaction_output_text(payload: dict[str, Any]) -> str:
             if isinstance(part, dict) and part.get("type") == "text":
                 text_parts.append(str(part.get("text", "")))
     return "".join(text_parts)
-
-
-class PearCodexExecAddressingIntentClassifier:
-    def __init__(
-        self,
-        *,
-        codex_bin: str,
-        workdir: str | None,
-        model: str | None,
-        reasoning_effort: str | None,
-        sandbox: str,
-        approval_policy: str,
-        timeout_seconds: int,
-        output_limit: int,
-        extra_args: Sequence[str] = (),
-        run_command: PearSubprocessRunner | None = None,
-    ) -> None:
-        self.codex_bin = codex_bin
-        self.workdir = workdir
-        self.model = model
-        self.reasoning_effort = reasoning_effort
-        self.sandbox = sandbox
-        self.approval_policy = approval_policy
-        self.timeout_seconds = timeout_seconds
-        self.output_limit = output_limit
-        self.extra_args = list(extra_args)
-        self.run_command = run_command or subprocess.run
-
-    def __call__(
-        self,
-        *,
-        content: str,
-        active_session: PearActiveSessionSummary | None,
-        message: dict[str, Any],
-        bot_handler: Any,
-    ) -> bool:
-        stream = str(message.get("display_recipient") or "")
-        topic = str(message.get("topic") or message.get("subject") or "")
-        command = self.build_command()
-        prompt = build_pear_addressing_router_prompt(
-            content=content,
-            active_session=active_session,
-            stream=stream,
-            topic=topic,
-        )
-        try:
-            completed = self.run_command(
-                command,
-                input=prompt,
-                cwd=self.workdir,
-                text=True,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                timeout=self.timeout_seconds,
-            )
-        except FileNotFoundError as error:
-            raise PearAgentRuntimeError(f"Codex executable not found: {self.codex_bin}") from error
-        except subprocess.TimeoutExpired as error:
-            raise PearAgentRuntimeError(
-                f"Codex addressing router timed out after {self.timeout_seconds} seconds."
-            ) from error
-
-        if completed.returncode != 0:
-            output = "\n".join(part for part in (completed.stdout, completed.stderr) if part)
-            raise PearAgentRuntimeError(
-                "Codex addressing router failed with exit code "
-                f"{completed.returncode}: "
-                f"{trim_pear_agent_text(output, limit=self.output_limit)}"
-            )
-        addressed, _thread_id = parse_pear_addressing_router_output(completed.stdout)
-        return addressed
-
-    def build_command(self) -> list[str]:
-        command = [
-            self.codex_bin,
-            "exec",
-            "--json",
-            "--sandbox",
-            self.sandbox,
-            "--config",
-            f'approval_policy="{self.approval_policy}"',
-        ]
-        if self.workdir is not None:
-            command.extend(["--cd", self.workdir])
-        if self.model:
-            command.extend(["--model", self.model])
-        if self.reasoning_effort:
-            command.extend(["--config", f'model_reasoning_effort="{self.reasoning_effort}"'])
-        command.extend(self.extra_args)
-        command.append("-")
-        return command
 
 
 class PearGeminiInteractionsAddressingIntentClassifier:
@@ -341,7 +258,7 @@ class PearGeminiInteractionsAddressingIntentClassifier:
         active_session: PearActiveSessionSummary | None,
         message: dict[str, Any],
         bot_handler: Any,
-    ) -> bool:
+    ) -> PearAmbientDecision:
         if not self.api_key:
             raise PearAgentRuntimeError("Gemini addressing router API key is not configured.")
 
@@ -352,6 +269,7 @@ class PearGeminiInteractionsAddressingIntentClassifier:
             active_session=active_session,
             stream=stream,
             topic=topic,
+            message_id=message.get("id") if isinstance(message.get("id"), int) else None,
         )
         payload: dict[str, Any] = {
             "model": self.model,
@@ -365,14 +283,25 @@ class PearGeminiInteractionsAddressingIntentClassifier:
                 "mime_type": "application/json",
                 "schema": {
                     "type": "object",
-                    "properties": {"addressed": {"type": "boolean"}},
-                    "required": ["addressed"],
+                    "properties": {
+                        "addressee": {
+                            "type": "string",
+                            "enum": ["pear", "other", "general", "uncertain"],
+                        },
+                        "action": {"type": "string", "enum": ["ignore", "steer", "run"]},
+                        "presentation": {
+                            "type": "string",
+                            "enum": ["compact", "prose", "status", "explainer", "diff"],
+                        },
+                        "duplicate": {"type": "boolean"},
+                    },
+                    "required": ["addressee", "action", "presentation", "duplicate"],
                     "additionalProperties": False,
                 },
             },
             "generation_config": {"temperature": 0},
         }
-        if self.thinking_level and not self.model.startswith("gemma-"):
+        if self.thinking_level:
             payload["generation_config"]["thinking_level"] = self.thinking_level
 
         request = urllib.request.Request(
@@ -409,7 +338,7 @@ class PearGeminiInteractionsAddressingIntentClassifier:
                 "Gemini addressing router returned invalid JSON."
             ) from error
         if not isinstance(parsed, dict):
-            return False
+            return parse_pear_addressing_json_output("")
         return parse_pear_addressing_json_output(pear_gemini_interaction_output_text(parsed))
 
 

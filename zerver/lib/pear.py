@@ -305,6 +305,18 @@ class PearRecentMessage(TypedDict):
     content: str
 
 
+PearAmbientAddressee = Literal["pear", "other", "general", "uncertain"]
+PearAmbientAction = Literal["ignore", "steer", "run"]
+PearResponsePresentation = Literal["compact", "prose", "status", "explainer", "diff"]
+
+
+class PearAmbientDecision(TypedDict):
+    addressee: PearAmbientAddressee
+    action: PearAmbientAction
+    presentation: PearResponsePresentation
+    duplicate: bool
+
+
 class PearWorkspaceContext(TypedDict, total=False):
     repository: str
     remote_url: str
@@ -602,7 +614,7 @@ class PearAddressingIntentClassifier(Protocol):
         active_session: PearActiveSessionSummary | None,
         message: dict[str, Any],
         bot_handler: Any,
-    ) -> bool: ...
+    ) -> PearAmbientDecision: ...
 
 
 def get_pear_session_defaults() -> PearSessionDefaults:
@@ -3142,16 +3154,22 @@ class PearEmbeddedBotHandler:
             content=pear_with_steering_status(status_message["content"], status_markdown),
         )
 
-    def is_implicitly_addressed(
+    def route_ambient_message(
         self,
         *,
         content: str,
         active_session: PearActiveSessionSummary | None,
         message: dict[str, Any],
         bot_handler: Any,
-    ) -> bool:
+    ) -> PearAmbientDecision:
+        ignored: PearAmbientDecision = {
+            "addressee": "uncertain",
+            "action": "ignore",
+            "presentation": "compact",
+            "duplicate": False,
+        }
         if self.addressing_intent_classifier is None:
-            return False
+            return ignored
         try:
             return self.addressing_intent_classifier(
                 content=content,
@@ -3161,7 +3179,7 @@ class PearEmbeddedBotHandler:
             )
         except Exception:
             logger.warning("Pear addressing router failed.", exc_info=True)
-            return False
+            return ignored
 
     def record_worker_event(
         self,
@@ -3319,18 +3337,45 @@ class PearEmbeddedBotHandler:
             if message.get("type") == "stream"
             else None
         )
+        effective_response_policy = (
+            db_response_policy
+            if db_response_policy is not None
+            else active_session["response_policy"]
+            if active_session is not None
+            else None
+        )
+        response_policy_allows_ambient = (
+            normalize_pear_response_policy(effective_response_policy) == "ambient"
+        )
         should_route_untagged_message = (
             message.get("type") == "stream"
             and not explicitly_addressed
             and self.addressing_intent_classifier is not None
+            and response_policy_allows_ambient
         )
+        ambient_decision: PearAmbientDecision | None = None
+        if (
+            message.get("type") == "stream"
+            and not explicitly_addressed
+            and not response_policy_allows_ambient
+        ):
+            return
         if should_route_untagged_message:
-            explicitly_addressed = self.is_implicitly_addressed(
+            ambient_decision = self.route_ambient_message(
                 content=raw_content,
                 active_session=active_session,
                 message=message,
                 bot_handler=bot_handler,
             )
+            explicitly_addressed = (
+                ambient_decision["addressee"] == "pear"
+                and ambient_decision["action"] != "ignore"
+                and not ambient_decision["duplicate"]
+            )
+            if explicitly_addressed and active_run_message_id is None:
+                explicitly_addressed = ambient_decision["action"] == "run"
+            elif explicitly_addressed:
+                explicitly_addressed = ambient_decision["action"] == "steer"
             content = normalize_pear_explicit_request_content(
                 raw_content,
                 explicitly_addressed=explicitly_addressed,
@@ -3403,17 +3448,20 @@ class PearEmbeddedBotHandler:
 
         if should_steer_active_run and active_run_message_id is not None:
             assert steering_event is not None
+            steering_payload: dict[str, Any] = {
+                "message_id": message_id,
+                "instruction": steering_event["instruction"],
+                "stream": stream,
+                "topic": topic,
+            }
+            if ambient_decision is not None:
+                steering_payload["ambient_decision"] = ambient_decision
             self.record_worker_event(
                 bot_handler,
                 active_run_message_id,
                 "steering",
                 summary=trim_pear_text(steering_event["instruction"], limit=500),
-                payload={
-                    "message_id": message_id,
-                    "instruction": steering_event["instruction"],
-                    "stream": stream,
-                    "topic": topic,
-                },
+                payload=steering_payload,
             )
             self.update_worker_metadata(
                 bot_handler,
@@ -3449,6 +3497,14 @@ class PearEmbeddedBotHandler:
                     content=stale_ack_message,
                 )
                 return
+            if ambient_decision is not None:
+                self.record_worker_event(
+                    bot_handler,
+                    message_id,
+                    "ambient_routing",
+                    summary=f"{ambient_decision['action']} · {ambient_decision['presentation']}",
+                    payload=dict(ambient_decision),
+                )
             self.register_worker_progress_message(
                 bot_handler,
                 message_id,

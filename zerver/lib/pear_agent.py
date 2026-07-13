@@ -469,7 +469,7 @@ def build_pear_codex_turn_prompt(active_session: PearActiveSessionSummary, task:
         f"- head: {workspace_context.get('head') or 'unknown'}",
         "- contract: the Zulip stream maps to the repository, and the Zulip topic/subthread maps to the Git branch.",
         "- privacy: refer to the workspace by branch or worktree name in replies; never print the absolute workdir path in the topic.",
-        "- artifacts: call pear_artifact once when a native diagram, compact explainer, status display, or local interaction answers better than prose; provide meaning and data only because Pear owns all styling, and do not print the artifact JSON in the reply.",
+        "- artifacts: call pear_artifact when a native diagram, compact explainer, status display, or local interaction answers better than prose; if you announce the pear-artifacts skill, you must complete a successful call and must not substitute ASCII art or a fenced diagram. Provide meaning and data only because Pear owns all styling, and do not print artifact JSON in the reply.",
         "- servers and watchers: never start a long-lived process (http.server, watch loops, dev servers) in the foreground — it blocks your turn from ever finishing. Run it detached (nohup ... >/dev/null 2>&1 &) and verify with a follow-up probe.",
         "- math: write math in Zulip's dialect — $$...$$ for inline math and ```math fenced blocks for display equations; \\[ \\] and \\( \\) do not render here.",
         "- checklists: your plan tool is the working checklist — its steps render live in the topic rail, so keep it current instead of duplicating it in chat or a workspace document.",
@@ -1117,23 +1117,6 @@ class PearCodexAppServerTranscriptTranslator:
         )
 
 
-def pear_codex_thread_id_from_active_session(
-    active_session: PearActiveSessionSummary,
-) -> str | None:
-    latest_codex_thread_id = active_session.get("latest_codex_thread_id")
-    if isinstance(latest_codex_thread_id, str) and latest_codex_thread_id.strip():
-        return latest_codex_thread_id.strip()
-
-    for artifact in active_session["artifacts"]:
-        if artifact["kind"] not in {"session_record", "document"}:
-            continue
-        value = artifact["value"].strip()
-        if value.startswith("Codex thread "):
-            thread_id = value[len("Codex thread ") :].strip()
-            return thread_id or None
-    return None
-
-
 def append_pear_codex_thread_artifact(
     results: list[PearWorkerToolResult], thread_id: str | None
 ) -> list[PearWorkerToolResult]:
@@ -1593,6 +1576,7 @@ class PearCodexAppServerToolRunner:
         if existing_thread_id is not None:
             params["threadId"] = existing_thread_id
             params.pop("ephemeral", None)
+            params.pop("dynamicTools", None)
         else:
             params["developerInstructions"] = build_pear_codex_developer_instructions()
         return {key: value for key, value in params.items() if value is not None}
@@ -1620,7 +1604,12 @@ class PearCodexAppServerToolRunner:
         *,
         event_callback: PearWorkerTranscriptCallback | None,
     ) -> str:
-        existing_thread_id = pear_codex_thread_id_from_active_session(active_session)
+        latest_thread_id = active_session.get("latest_codex_thread_id")
+        existing_thread_id = (
+            latest_thread_id.strip()
+            if isinstance(latest_thread_id, str) and latest_thread_id.strip()
+            else None
+        )
         thread_id = existing_thread_id
         if thread_id is not None and thread_id == self.loaded_thread_id:
             return thread_id

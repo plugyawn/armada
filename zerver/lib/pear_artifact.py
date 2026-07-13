@@ -49,96 +49,152 @@ def _has_type(value: object, expected: str) -> bool:
     return False
 
 
-def _validates(schema: dict[str, Any], value: object) -> bool:
+def _schema_variant_for_type(variants: list[object], value: object) -> dict[str, Any] | None:
+    if not isinstance(value, dict) or not isinstance(value.get("type"), str):
+        return None
+    value_type = value["type"]
+    for variant in variants:
+        if not isinstance(variant, dict):
+            continue
+        reference = variant.get("$ref")
+        resolved = _schema_reference(reference) if isinstance(reference, str) else variant
+        if not isinstance(resolved, dict):
+            continue
+        properties = resolved.get("properties")
+        if not isinstance(properties, dict):
+            continue
+        type_schema = properties.get("type")
+        if isinstance(type_schema, dict) and type_schema.get("const") == value_type:
+            return variant
+    return None
+
+
+def _value_preview(value: object) -> str:
+    encoded = json.dumps(value, ensure_ascii=False, allow_nan=False, separators=(",", ":"))
+    return encoded if len(encoded) <= 120 else encoded[:117] + "..."
+
+
+def _validation_error(schema: dict[str, Any], value: object, *, path: str = "$") -> str | None:
     reference = schema.get("$ref")
     if isinstance(reference, str):
         target = _schema_reference(reference)
-        return target is not None and _validates(target, value)
+        if target is None:
+            return f"{path}: contract contains an unresolved reference {reference!r}"
+        return _validation_error(target, value, path=path)
     variants = schema.get("oneOf")
     if isinstance(variants, list):
-        return (
-            sum(isinstance(variant, dict) and _validates(variant, value) for variant in variants)
-            == 1
-        )
+        valid_variants = [
+            variant
+            for variant in variants
+            if isinstance(variant, dict) and _validation_error(variant, value, path=path) is None
+        ]
+        if len(valid_variants) == 1:
+            return None
+        if len(valid_variants) > 1:
+            return f"{path}: value matches multiple mutually exclusive contract variants"
+        preferred = _schema_variant_for_type(variants, value)
+        if preferred is not None:
+            return _validation_error(preferred, value, path=path)
+        return f"{path}: value does not match any allowed contract variant"
     variants = schema.get("anyOf")
     if isinstance(variants, list):
-        return any(isinstance(variant, dict) and _validates(variant, value) for variant in variants)
+        errors = [
+            _validation_error(variant, value, path=path)
+            for variant in variants
+            if isinstance(variant, dict)
+        ]
+        if any(error is None for error in errors):
+            return None
+        return errors[0] if errors else f"{path}: value does not match any allowed contract variant"
     if "const" in schema and value != schema["const"]:
-        return False
+        return f"{path}: expected {_value_preview(schema['const'])}, got {_value_preview(value)}"
     choices = schema.get("enum")
     if isinstance(choices, list) and value not in choices:
-        return False
+        return f"{path}: expected one of {_value_preview(choices)}, got {_value_preview(value)}"
     raw_type = schema.get("type")
     types = raw_type if isinstance(raw_type, list) else [] if raw_type is None else [raw_type]
     if types and not any(
         isinstance(expected, str) and _has_type(value, expected) for expected in types
     ):
-        return False
+        return f"{path}: expected type {' or '.join(str(expected) for expected in types)}"
     if isinstance(value, str):
         minimum = schema.get("minLength")
         maximum = schema.get("maxLength")
         pattern = schema.get("pattern")
         if isinstance(minimum, int) and len(value) < minimum:
-            return False
+            return f"{path}: string must contain at least {minimum} characters"
         if isinstance(maximum, int) and len(value) > maximum:
-            return False
+            return f"{path}: string exceeds {maximum} characters"
         if isinstance(pattern, str) and re.search(pattern, value) is None:
-            return False
+            return f"{path}: value {_value_preview(value)} does not match {pattern!r}"
     if isinstance(value, int | float) and not isinstance(value, bool):
         minimum = schema.get("minimum")
         maximum = schema.get("maximum")
         exclusive_minimum = schema.get("exclusiveMinimum")
         if isinstance(minimum, int | float) and value < minimum:
-            return False
+            return f"{path}: value must be >= {minimum}"
         if isinstance(maximum, int | float) and value > maximum:
-            return False
+            return f"{path}: value must be <= {maximum}"
         if isinstance(exclusive_minimum, int | float) and value <= exclusive_minimum:
-            return False
+            return f"{path}: value must be > {exclusive_minimum}"
     if isinstance(value, list):
         minimum = schema.get("minItems")
         maximum = schema.get("maxItems")
         if isinstance(minimum, int) and len(value) < minimum:
-            return False
+            unit = "item" if minimum == 1 else "items"
+            return f"{path}: array must contain at least {minimum} {unit}"
         if isinstance(maximum, int) and len(value) > maximum:
-            return False
+            return f"{path}: array exceeds {maximum} items"
         prefix = schema.get("prefixItems")
         if isinstance(prefix, list):
             for index, child_schema in enumerate(prefix):
-                if (
-                    index >= len(value)
-                    or not isinstance(child_schema, dict)
-                    or not _validates(child_schema, value[index])
-                ):
-                    return False
+                if index >= len(value):
+                    return f"{path}: array is missing item {index}"
+                if not isinstance(child_schema, dict):
+                    return f"{path}[{index}]: contract item schema is invalid"
+                error = _validation_error(child_schema, value[index], path=f"{path}[{index}]")
+                if error is not None:
+                    return error
         start = len(prefix) if isinstance(prefix, list) else 0
         items = schema.get("items")
         if items is False and len(value) > start:
-            return False
-        if isinstance(items, dict) and any(not _validates(items, item) for item in value[start:]):
-            return False
+            return f"{path}: array contains unsupported trailing items"
+        if isinstance(items, dict):
+            for index, item in enumerate(value[start:], start=start):
+                error = _validation_error(items, item, path=f"{path}[{index}]")
+                if error is not None:
+                    return error
     if isinstance(value, dict):
         maximum = schema.get("maxProperties")
         if isinstance(maximum, int) and len(value) > maximum:
-            return False
+            return f"{path}: object exceeds {maximum} properties"
         required = schema.get("required")
-        if isinstance(required, list) and any(
-            key not in value for key in required if isinstance(key, str)
-        ):
-            return False
+        if isinstance(required, list):
+            for key in required:
+                if isinstance(key, str) and key not in value:
+                    return f"{path}: missing required property {key!r}"
         properties = schema.get("properties")
         property_schemas = properties if isinstance(properties, dict) else {}
         for key, child in value.items():
+            child_path = f"{path}.{key}"
             child_schema = property_schemas.get(key)
             if isinstance(child_schema, dict):
-                if not _validates(child_schema, child):
-                    return False
+                error = _validation_error(child_schema, child, path=child_path)
+                if error is not None:
+                    return error
                 continue
             additional = schema.get("additionalProperties")
             if additional is False:
-                return False
-            if isinstance(additional, dict) and not _validates(additional, child):
-                return False
-    return True
+                return f"{child_path}: unsupported property"
+            if isinstance(additional, dict):
+                error = _validation_error(additional, child, path=child_path)
+                if error is not None:
+                    return error
+    return None
+
+
+def _validates(schema: dict[str, Any], value: object) -> bool:
+    return _validation_error(schema, value) is None
 
 
 def _iter_nodes(node: dict[str, Any], *, depth: int = 1) -> Iterable[tuple[dict[str, Any], int]]:
@@ -266,8 +322,9 @@ def canonicalize_pear_artifact(value: object) -> tuple[dict[str, Any], str]:
     if len(encoded.encode()) > PEAR_ARTIFACT_SERIALIZED_LIMIT:
         raise PearArtifactError(f"artifact exceeds {PEAR_ARTIFACT_SERIALIZED_LIMIT} bytes")
     decoded: object = json.loads(encoded)
-    if not _validates(PEAR_ARTIFACT_SCHEMA, decoded):
-        raise PearArtifactError("document does not match the Pear artifact contract")
+    schema_error = _validation_error(PEAR_ARTIFACT_SCHEMA, decoded)
+    if schema_error is not None:
+        raise PearArtifactError(schema_error)
     assert isinstance(decoded, dict)
     for block in decoded["blocks"]:
         if block["type"] == "scene":

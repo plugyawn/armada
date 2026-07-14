@@ -2011,6 +2011,15 @@
             gap: var(--pear-space-2);
         }
 
+        &
+            .pear-artifact-group[data-layout="graph"][data-graph-direction="vertical"] {
+            grid-template-columns: minmax(0, 1fr);
+            grid-template-rows: repeat(
+                var(--pear-artifact-graph-rows, 1),
+                minmax(48px, auto)
+            );
+        }
+
         & .pear-artifact-shape[data-shape="circle"] {
             min-width: 42px;
             width: 42px;
@@ -2224,6 +2233,8 @@
 }
 
 .pear-artifact-media-content {
+    position: absolute;
+    inset: 0;
     display: block;
     width: 100%;
     height: 100%;
@@ -2366,6 +2377,11 @@
 
     &[data-aspect="wide"] {
         aspect-ratio: 16 / 7;
+    }
+
+    &:has(.pear-artifact-group[data-graph-direction="vertical"]) {
+        min-height: 360px;
+        aspect-ratio: auto;
     }
 }
 
@@ -2562,6 +2578,23 @@
         place-items: center;
     }
 
+    &[data-layout="graph"][data-graph-direction="vertical"] {
+        grid-template-columns: minmax(0, 1fr);
+        grid-template-rows: repeat(
+            var(--pear-artifact-graph-rows, 1),
+            minmax(64px, auto)
+        );
+        align-content: center;
+    }
+
+    &[data-layout="graph"][data-graph-direction="vertical"]
+        > .pear-artifact-shape:not(
+            [data-shape="circle"],
+            [data-shape="diamond"]
+        ) {
+        width: min(100%, 34rem);
+    }
+
     &[data-layout="graph"] > [data-pear-artifact-node] {
         animation: pear-artifact-node-enter var(--pear-dur-3) var(--pear-ease)
             both;
@@ -2676,6 +2709,14 @@
         min-height: 56px;
         height: 56px;
         border-radius: 50%;
+    }
+
+    &[data-shape="circle"][data-label-density="long"] {
+        width: min(100%, 18rem);
+        min-width: 120px;
+        height: auto;
+        min-height: 56px;
+        border-radius: 999px;
     }
 
     &[data-shape="ellipse"] {

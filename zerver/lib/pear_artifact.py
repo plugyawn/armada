@@ -277,6 +277,10 @@ def _validate_scene(root: dict[str, Any]) -> int:
         elif node_type == "shape":
             if not isinstance(node.get("shape"), str):
                 raise PearArtifactError("shape nodes require shape")
+            if node.get("shape") == "circle" and "\n" in str(node.get("label", "")):
+                raise PearArtifactError(
+                    "circle labels must be compact and single-line; use a pill for explanatory text"
+                )
         elif node_type == "connector":
             start, end = node.get("from"), node.get("to")
             if not isinstance(start, str) or not isinstance(end, str):
@@ -385,6 +389,10 @@ def _validate_media(block: dict[str, Any], *, allow_unresolved_media: bool) -> N
         raise PearArtifactError("image media requires a PNG, SVG, or WebP source")
     if kind == "video" and primary_extension != "webm":
         raise PearArtifactError("video media requires a WebM source")
+    if kind == "video" and (dark is None or poster is None or poster_dark is None):
+        raise PearArtifactError(
+            "video media requires light and dark WebM sources with matching posters"
+        )
     if kind == "image" and (poster is not None or poster_dark is not None):
         raise PearArtifactError("image media cannot provide a video poster")
     if kind == "video" and poster_dark is not None and poster is None:

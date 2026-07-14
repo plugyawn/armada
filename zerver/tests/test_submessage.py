@@ -163,6 +163,9 @@ class TestBasics(ZulipTestCase):
             media_dir = Path(workdir) / ".pear" / "artifacts"
             media_dir.mkdir(parents=True)
             (media_dir / "wave.webm").write_bytes(b"\x1a\x45\xdf\xa3bounded-webm")
+            (media_dir / "wave-dark.webm").write_bytes(b"\x1a\x45\xdf\xa3bounded-dark-webm")
+            (media_dir / "wave.webp").write_bytes(b"RIFF\0\0\0\0WEBPbounded")
+            (media_dir / "wave-dark.webp").write_bytes(b"RIFF\0\0\0\0WEBPbounded-dark")
             document = json.dumps(
                 {
                     "version": 1,
@@ -171,6 +174,9 @@ class TestBasics(ZulipTestCase):
                             "type": "media",
                             "kind": "video",
                             "source": ".pear/artifacts/wave.webm",
+                            "sourceDark": ".pear/artifacts/wave-dark.webm",
+                            "posterSource": ".pear/artifacts/wave.webp",
+                            "posterSourceDark": ".pear/artifacts/wave-dark.webp",
                             "alt": "A wave moves from left to right.",
                             "motion": "manual",
                         }
@@ -198,7 +204,7 @@ class TestBasics(ZulipTestCase):
                 workdir=workdir,
             )
             self.assertEqual(SubMessage.objects.filter(message_id=message_id).count(), 1)
-            self.assertEqual(Attachment.objects.filter(owner=pear_bot).count(), 1)
+            self.assertEqual(Attachment.objects.filter(owner=pear_bot).count(), 4)
 
     def test_pear_runtime_resolves_generated_media_as_the_topic_user(self) -> None:
         owner = self.example_user("hamlet")

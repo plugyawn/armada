@@ -428,7 +428,7 @@ function semantic_media_is_valid(block: JsonObject): boolean {
     const kind = block["kind"];
     const extension = block["src"].split(".").at(-1)?.toLowerCase();
     if (
-        (kind === "image" && extension !== "png" && extension !== "webp") ||
+        (kind === "image" && extension !== "png" && extension !== "svg" && extension !== "webp") ||
         (kind === "video" && extension !== "webm")
     ) {
         return false;

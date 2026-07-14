@@ -165,7 +165,10 @@ def _validation_error(schema: dict[str, Any], value: object, *, path: str = "$")
                 if error is not None:
                     return error
     if isinstance(value, dict):
+        minimum = schema.get("minProperties")
         maximum = schema.get("maxProperties")
+        if isinstance(minimum, int) and len(value) < minimum:
+            return f"{path}: object must contain at least {minimum} properties"
         if isinstance(maximum, int) and len(value) > maximum:
             return f"{path}: object exceeds {maximum} properties"
         required = schema.get("required")
@@ -230,7 +233,12 @@ def _validate_scene(root: dict[str, Any]) -> None:
 
     ids: set[str] = set()
     connector_refs: list[tuple[str, str]] = []
-    total_text = 0
+    total_text = sum(
+        len(value)
+        for node, _depth in _iter_nodes(root)
+        for key in ("text", "label", "ariaLabel")
+        if isinstance((value := node.get(key)), str)
+    )
     node_schema = PEAR_ARTIFACT_SCHEMA["$defs"]["node"]
     allowed_properties_by_type = node_schema["x-pear-type-properties"]
     for node, _depth in nodes:
@@ -308,6 +316,54 @@ def _validate_scene(root: dict[str, Any]) -> None:
             raise PearArtifactError(f"connector references missing node: {start} -> {end}")
 
 
+def _validate_scene_steps(block: dict[str, Any]) -> None:
+    steps = block.get("steps")
+    if not isinstance(steps, list):
+        return
+    root = block.get("root")
+    assert isinstance(root, dict)
+    target_types = {
+        node_id: str(node.get("type"))
+        for node, _depth in _iter_nodes(root)
+        if isinstance((node_id := node.get("id")), str)
+    }
+    total_text = 0
+    for step_index, step in enumerate(steps):
+        assert isinstance(step, dict)
+        label = step.get("label")
+        if isinstance(label, str):
+            total_text += len(label)
+        changes = step.get("changes")
+        assert isinstance(changes, list)
+        seen_targets: set[str] = set()
+        for change in changes:
+            assert isinstance(change, dict)
+            target = change.get("target")
+            assert isinstance(target, str)
+            target_type = target_types.get(target)
+            if target_type is None:
+                raise PearArtifactError(f"scene step references missing target: {target}")
+            if target in seen_targets:
+                raise PearArtifactError(
+                    f"scene step {step_index + 1} changes target {target} more than once"
+                )
+            seen_targets.add(target)
+            if "state" in change and target_type not in {"shape", "connector"}:
+                raise PearArtifactError(
+                    "scene step state changes require a shape or connector target"
+                )
+            if "label" in change and target_type != "shape":
+                raise PearArtifactError("scene step label changes require a shape target")
+            if "text" in change and target_type != "text":
+                raise PearArtifactError("scene step text changes require a text target")
+            for key in ("label", "text"):
+                value = change.get(key)
+                if isinstance(value, str):
+                    total_text += len(value)
+    if total_text > PEAR_ARTIFACT_TOTAL_TEXT_LIMIT:
+        raise PearArtifactError("scene step text budget exceeded")
+
+
 def canonicalize_pear_artifact(value: object) -> tuple[dict[str, Any], str]:
     try:
         encoded = json.dumps(
@@ -329,6 +385,7 @@ def canonicalize_pear_artifact(value: object) -> tuple[dict[str, Any], str]:
     for block in decoded["blocks"]:
         if block["type"] == "scene":
             _validate_scene(block["root"])
+            _validate_scene_steps(block)
     return decoded, encoded
 
 

@@ -2268,6 +2268,134 @@
     }
 }
 
+.pear-artifact-scene-frame {
+    display: grid;
+    gap: var(--pear-space-2);
+}
+
+.pear-artifact-timeline {
+    display: grid;
+    grid-template-columns: 36px 36px minmax(0, 1fr) 36px;
+    align-items: center;
+    gap: var(--pear-space-1);
+    color: var(--pear-ink-3);
+    font-family: var(--pear-font-pixel);
+    font-size: 12px;
+}
+
+.pear-artifact-step-button {
+    display: grid;
+    width: 36px;
+    height: 36px;
+    place-items: center;
+    padding: 0;
+    border: 1px solid var(--pear-hairline);
+    border-radius: var(--pear-radius-px);
+    background: transparent;
+    color: var(--pear-ink-2);
+    cursor: pointer;
+    font: inherit;
+
+    &::before {
+        display: block;
+        content: "";
+    }
+
+    &.is-previous::before,
+    &.is-next::before {
+        width: 7px;
+        height: 7px;
+        border-right: 1.5px solid currentcolor;
+        border-bottom: 1.5px solid currentcolor;
+    }
+
+    &.is-previous::before {
+        transform: rotate(135deg);
+    }
+
+    &.is-next::before {
+        transform: rotate(-45deg);
+    }
+
+    &.is-play::before {
+        width: 0;
+        height: 0;
+        margin-left: 2px;
+        border-top: 5px solid transparent;
+        border-bottom: 5px solid transparent;
+        border-left: 8px solid currentcolor;
+    }
+
+    &.is-play[data-playing="true"]::before {
+        width: 7px;
+        height: 10px;
+        margin-left: 0;
+        border: 0;
+        border-right: 2px solid currentcolor;
+        border-left: 2px solid currentcolor;
+    }
+
+    &:hover:not(:disabled) {
+        border-color: color-mix(
+            in srgb,
+            var(--pear-interaction) 44%,
+            var(--pear-hairline)
+        );
+        background: var(--pear-interaction-fill);
+        color: var(--pear-interaction);
+    }
+
+    &:focus-visible {
+        outline: 2px solid var(--pear-interaction);
+        outline-offset: 1px;
+    }
+
+    &:disabled {
+        cursor: default;
+        opacity: 0.34;
+    }
+}
+
+.pear-artifact-step-meta {
+    display: grid;
+    min-width: 0;
+    gap: 3px;
+    padding-inline: var(--pear-space-1);
+}
+
+.pear-artifact-step-status {
+    overflow: hidden;
+    color: var(--pear-ink-2);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.pear-artifact-step-announcement {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+}
+
+.pear-artifact-step-track {
+    overflow: hidden;
+    height: 2px;
+    border-radius: 1px;
+    background: var(--pear-surface-3);
+}
+
+.pear-artifact-step-fill {
+    display: block;
+    width: 100%;
+    height: 100%;
+    background: var(--pear-interaction);
+    transform: scaleX(var(--pear-artifact-step-progress, 0));
+    transform-origin: left;
+    transition: transform var(--pear-dur-2) var(--pear-ease);
+}
+
 .pear-artifact-node {
     position: relative;
     z-index: 1;
@@ -2401,12 +2529,41 @@
         color-mix(in srgb, var(--pear-interaction) 36%, var(--pear-hairline));
     border-radius: var(--pear-radius-chip);
     background: var(--pear-artifact-surface);
+    transition:
+        opacity var(--pear-dur-2) var(--pear-ease),
+        border-color var(--pear-dur-2) var(--pear-ease),
+        background-color var(--pear-dur-2) var(--pear-ease),
+        box-shadow var(--pear-dur-2) var(--pear-ease),
+        transform var(--pear-dur-2) var(--pear-ease);
 
-    &[data-state="selected"],
-    &[data-state="success"] {
+    &[data-state="selected"] {
         border-color: var(--pear-interaction);
         background: var(--pear-interaction-fill);
         box-shadow: 0 0 0 3px var(--pear-interaction-fill);
+    }
+
+    &[data-state="running"] {
+        border-color: var(--pear-accent-ink);
+        box-shadow: 0 0 0 3px var(--pear-accent-fill);
+        animation: pear-artifact-state-running 900ms var(--pear-ease) infinite alternate;
+    }
+
+    &[data-state="success"] {
+        border-color: var(--pear-accent-ink);
+        background: var(--pear-accent-fill);
+        box-shadow: inset 0 -2px var(--pear-accent-ink);
+    }
+
+    &[data-state="warning"] {
+        border-color: var(--pear-warn);
+        background: var(--pear-warn-fill);
+        box-shadow: 0 0 0 3px var(--pear-warn-fill);
+    }
+
+    &[data-state="error"] {
+        border-color: var(--pear-danger);
+        background: var(--pear-danger-fill);
+        box-shadow: 0 0 0 3px var(--pear-danger-fill);
     }
 
     &[data-state="muted"] {
@@ -2476,10 +2633,35 @@
     animation: pear-artifact-connector-draw var(--pear-dur-3) var(--pear-ease)
         both;
     animation-delay: calc(var(--pear-artifact-order, 0) * 70ms + 90ms);
+    transition:
+        opacity var(--pear-dur-2) var(--pear-ease),
+        stroke var(--pear-dur-2) var(--pear-ease),
+        stroke-width var(--pear-dur-2) var(--pear-ease);
 
-    &[data-state="selected"],
-    &[data-state="success"] {
+    &[data-state="selected"] {
         stroke: var(--pear-interaction);
+        stroke-width: 2.5;
+    }
+
+    &[data-state="running"] {
+        stroke: var(--pear-accent-ink);
+        stroke-width: 2.5;
+        stroke-dasharray: 0.08 0.05;
+        animation: pear-artifact-connector-running 700ms linear infinite;
+    }
+
+    &[data-state="success"] {
+        stroke: var(--pear-accent-ink);
+        stroke-width: 3;
+    }
+
+    &[data-state="warning"] {
+        stroke: var(--pear-warn);
+        stroke-width: 2.5;
+    }
+
+    &[data-state="error"] {
+        stroke: var(--pear-danger);
         stroke-width: 2.5;
     }
 
@@ -2489,7 +2671,20 @@
 }
 
 .pear-artifact-connector-arrow {
-    fill: var(--pear-ink-3);
+    fill: context-stroke;
+}
+
+@keyframes pear-artifact-state-running {
+    to {
+        box-shadow: 0 0 0 5px var(--pear-accent-fill-strong);
+        transform: translateY(-1px);
+    }
+}
+
+@keyframes pear-artifact-connector-running {
+    to {
+        stroke-dashoffset: -0.13;
+    }
 }
 
 @keyframes pear-artifact-node-enter {
@@ -2506,9 +2701,11 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-    .pear-artifact-group[data-layout="graph"] > [data-pear-artifact-node],
-    .pear-artifact-connector {
+    .pear-artifact-node,
+    .pear-artifact-connector,
+    .pear-artifact-step-fill {
         animation: none;
+        transition: none;
     }
 }
 

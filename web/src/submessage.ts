@@ -186,19 +186,42 @@ async function load_and_render_pear_artifact(
     message: Message,
     artifact: Submessage,
     $host: JQuery,
+    artifact_id: string,
 ): Promise<void> {
+    const is_current = (): boolean =>
+        $host.attr("data-pear-artifact-id") === artifact_id && $host[0]?.isConnected === true;
+    const show_failure = (label: string): void => {
+        if (!is_current()) {
+            return;
+        }
+        const existing = $host.children(".pear-artifact:not(.pear-artifact-lifecycle)")[0];
+        if (existing !== undefined) {
+            existing.dataset["lifecycle"] = "stale";
+            existing.removeAttribute("aria-busy");
+            existing.setAttribute("aria-label", `Showing the last valid artifact. ${label}`);
+            return;
+        }
+        mount_pear_artifact_lifecycle($host, "chat", "failed", label);
+    };
     try {
         const pear_artifact = await import("./pear_artifact.ts");
-        mount_pear_artifact_lifecycle($host, "chat", "rendering", "rendering artifact…");
+        if (!is_current()) {
+            return;
+        }
+        const existing = $host.children(".pear-artifact:not(.pear-artifact-lifecycle)")[0];
+        if (existing !== undefined) {
+            existing.dataset["lifecycle"] = "updating";
+            existing.setAttribute("aria-busy", "true");
+        } else {
+            mount_pear_artifact_lifecycle($host, "chat", "rendering", "rendering artifact…");
+        }
         const document_value = pear_artifact.parse_pear_artifact(artifact.content);
+        if (!is_current()) {
+            return;
+        }
         if (document_value === undefined) {
             blueslip.warn(`Invalid Pear artifact on message ${message.id}`);
-            mount_pear_artifact_lifecycle(
-                $host,
-                "chat",
-                "failed",
-                "artifact could not be rendered",
-            );
+            show_failure("artifact could not be rendered");
             return;
         }
         pear_artifact.mount_pear_artifact($host, document_value, {
@@ -294,7 +317,7 @@ async function load_and_render_pear_artifact(
         });
     } catch (error) {
         blueslip.error("Could not load the Pear artifact renderer", undefined, error);
-        mount_pear_artifact_lifecycle($host, "chat", "failed", "artifact renderer unavailable");
+        show_failure("artifact renderer unavailable");
     }
 }
 
@@ -338,8 +361,14 @@ export function render_submessage(in_opts: {$row: JQuery; message_id: number}): 
             return;
         }
         $host.attr("data-pear-artifact-id", artifact_id);
-        mount_pear_artifact_lifecycle($host, "chat", "preparing", "preparing artifact…");
-        void load_and_render_pear_artifact(message, latest_artifact, $host);
+        const existing = $host.children(".pear-artifact:not(.pear-artifact-lifecycle)")[0];
+        if (existing !== undefined) {
+            existing.dataset["lifecycle"] = "updating";
+            existing.setAttribute("aria-busy", "true");
+        } else {
+            mount_pear_artifact_lifecycle($host, "chat", "preparing", "preparing artifact…");
+        }
+        void load_and_render_pear_artifact(message, latest_artifact, $host, artifact_id);
         return;
     }
 

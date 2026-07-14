@@ -1197,9 +1197,11 @@ def pear_visible_transcript_blocks(
     *,
     include_transient_status: bool = True,
     block_limit: int | None = PEAR_PERSISTENT_MESSAGE_LIMIT,
+    assistant_mode: Literal["all", "latest", "disclosure_last"] = "all",
 ) -> list[str]:
     block_by_key: dict[str, str] = {}
     block_keys: list[str] = []
+    assistant_keys: list[str] = []
     anonymous_index = 0
     tool_events: list[PearWorkerTranscriptEvent] = []
 
@@ -1237,8 +1239,27 @@ def pear_visible_transcript_blocks(
             continue
         block_keys.append(key)
         block_by_key[key] = block
+        if event.get("kind") == "assistant":
+            assistant_keys.append(key)
     flush_tool_events()
+    if assistant_mode != "all" and assistant_keys:
+        retained_assistant_keys = {assistant_keys[-1]}
+        if assistant_mode == "disclosure_last":
+            for key in assistant_keys:
+                assistant_text = block_by_key[key].lower()
+                if "artifact" in assistant_text and "skill" in assistant_text:
+                    retained_assistant_keys.add(key)
+                    break
+        block_keys = [
+            key for key in block_keys if key not in assistant_keys or key in retained_assistant_keys
+        ]
     return [block_by_key[key] for key in block_keys]
+
+
+def pear_tool_results_include_artifact(
+    tool_results: Sequence[PearWorkerToolResult],
+) -> bool:
+    return any(result["label"].strip().lower() == "artifact" for result in tool_results)
 
 
 PEAR_IMAGE_EMBED_LIMIT: Final = 3
@@ -1699,6 +1720,14 @@ def build_pear_live_transcript_message(
     transcript_blocks = pear_visible_transcript_blocks(
         transcript_events,
         include_transient_status=status in {"queued", "running"},
+        assistant_mode=(
+            "disclosure_last"
+            if status not in {"queued", "running"}
+            and pear_tool_results_include_artifact(tool_results)
+            else "latest"
+            if status in {"queued", "running"}
+            else "all"
+        ),
     )
     if transcript_blocks:
         if status not in {"queued", "running"}:
@@ -2179,6 +2208,9 @@ def build_pear_worker_completed_message_chunks(
         transcript_events,
         include_transient_status=False,
         block_limit=None,
+        assistant_mode=(
+            "disclosure_last" if pear_tool_results_include_artifact(tool_results) else "all"
+        ),
     )
     if transcript_blocks:
         result_text = pear_result_tool_text(tool_results, limit=None)

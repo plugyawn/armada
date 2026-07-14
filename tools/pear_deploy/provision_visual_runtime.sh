@@ -26,7 +26,7 @@ PACKAGES=(
 )
 
 check_runtime() {
-    local catalog_commit reported_version
+    local catalog_commit inaccessible reported_version writable
     for command in ffmpeg ffprobe latex dvisvgm manim; do
         command -v "$command" >/dev/null || {
             echo "missing visual runtime command: $command" >&2
@@ -59,6 +59,30 @@ check_runtime() {
         echo "missing Penrose example registry" >&2
         return 1
     }
+    inaccessible="$(
+        find "$NODE_TOOL_DIR" "$PENROSE_CATALOG_DIR" \
+            -type d ! -perm -0005 -print -quit
+    )"
+    if [[ -n "$inaccessible" ]]; then
+        echo "visual runtime directory is not isolation-user accessible: $inaccessible" >&2
+        return 1
+    fi
+    inaccessible="$(
+        find "$NODE_TOOL_DIR" "$PENROSE_CATALOG_DIR" \
+            -type f ! -perm -0004 -print -quit
+    )"
+    if [[ -n "$inaccessible" ]]; then
+        echo "visual runtime file is not isolation-user readable: $inaccessible" >&2
+        return 1
+    fi
+    writable="$(
+        find "$NODE_TOOL_DIR" "$PENROSE_CATALOG_DIR" \
+            \( -type d -o -type f \) -perm /022 -print -quit
+    )"
+    if [[ -n "$writable" ]]; then
+        echo "visual runtime is writable outside root ownership: $writable" >&2
+        return 1
+    fi
     echo "visual_runtime=ready"
     echo "manim_version=$reported_version"
     echo "penrose_version=$PENROSE_VERSION"
@@ -135,5 +159,8 @@ if [[ "$existing_catalog_commit" != "$PENROSE_COMMIT" ]]; then
     trap - EXIT
 fi
 chown -R root:root "$NODE_TOOL_DIR" "$(dirname "$PENROSE_CATALOG_DIR")"
-chmod -R go-w "$NODE_TOOL_DIR" "$(dirname "$PENROSE_CATALOG_DIR")"
+find "$NODE_TOOL_DIR" "$(dirname "$PENROSE_CATALOG_DIR")" -type d \
+    -exec chmod a+rx,go-w {} +
+find "$NODE_TOOL_DIR" "$(dirname "$PENROSE_CATALOG_DIR")" -type f \
+    -exec chmod a+r,go-w {} +
 check_runtime

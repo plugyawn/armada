@@ -256,6 +256,11 @@ preflight_remote_workspace_helper() {
         <"$WORKSPACE_HELPER_RUNTIME"
 }
 
+preflight_remote_visual_runtime() {
+    echo "Preflight: verifying the out-of-process scientific visual runtime..."
+    ssh_root bash -s -- --check <"$SCRIPT_DIR/provision_visual_runtime.sh"
+}
+
 install_and_verify_remote_workspace_helper() {
     local remote_runtime="$REMOTE_TRUSTED_RUNTIME/tools/pear_deploy/workspace_helper_runtime.py"
     echo "Installing the committed isolated Workspace helper atomically..."
@@ -1182,6 +1187,7 @@ fi
 
 verify_remote_quiescence "Preflight quiescence"
 preflight_remote_workspace_helper
+preflight_remote_visual_runtime
 verify_remote_disk_capacity
 
 if [[ "$YES" != true ]]; then

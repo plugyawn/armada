@@ -55,10 +55,10 @@ fi
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
 apt-get install -y --no-install-recommends "${PACKAGES[@]}"
+UV_TOOL_DIR="$MANIM_TOOL_DIR" \
+UV_TOOL_BIN_DIR="$MANIM_BIN_DIR" \
 uv tool install \
     --force \
     --python /usr/bin/python3 \
-    --tool-dir "$MANIM_TOOL_DIR" \
-    --bin-dir "$MANIM_BIN_DIR" \
     "manim==$MANIM_VERSION"
 check_runtime

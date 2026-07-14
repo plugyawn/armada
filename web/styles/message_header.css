@@ -436,7 +436,7 @@
 }
 
 .pear-topic-header-running .pear-topic-header-runtime-control {
-    background: var(--pear-accent-subtle);
+    background: var(--pear-accent-fill);
 }
 
 .pear-topic-header-runtime-control .pear-runtime-menu-glyph {

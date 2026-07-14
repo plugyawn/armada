@@ -7,7 +7,7 @@
 
 :root,
 :root.dark-theme {
-    /* Page & panels onto the moss ramp. */
+    /* Page and panels use the neutral graphite ramp. */
     --color-background: var(--pear-surface-0);
     --color-background-navbar: var(--pear-surface-1);
     --color-background-stream-message-content: var(--pear-surface-0);
@@ -22,24 +22,27 @@
     --color-border-popover-menu: var(--pear-hairline);
     --box-shadow-popover-menu: var(--pear-shadow-pop);
 
-    /* Focus is accent territory (spend rule, design §4): one ring color
-       across views, buttons, and compose instead of three blues. */
-    --color-outline-focus: var(--pear-accent-ink);
-    --color-outline-button-focus: var(--pear-accent-ink);
-    --color-compose-focus-ring: var(--pear-accent-ink);
+    /* Ordinary interaction is violet; Pear green is reserved for
+       running, presence, and success state. */
+    --color-outline-focus: var(--pear-interaction);
+    --color-outline-button-focus: var(--pear-interaction);
+    --color-compose-focus-ring: var(--pear-interaction);
+    --color-message-content-container-border-focus: var(--pear-interaction);
 
     /* Sidebar fabric (B3): unread counters step off the blue tier
-       system onto the moss ramp — attention is the accent's job, so
-       only the prominent tier spends it. The active row reads in full
-       ink; the sticky header floats on the one soft shadow. */
-    --color-background-unread-counter-prominent: var(--pear-accent-fill-strong);
-    --color-unread-counter-prominent: var(--pear-accent-ink);
+       system onto the graphite ramp. Prominent attention uses the
+       interaction family; the active row reads in full ink and the
+       sticky header floats on the one soft shadow. */
+    --color-background-unread-counter-prominent: var(
+        --pear-interaction-fill-strong
+    );
+    --color-unread-counter-prominent: var(--pear-interaction);
     --color-background-unread-counter-normal: var(--pear-surface-2);
     --color-unread-counter-normal: var(--pear-ink-2);
     --color-unread-counter-quiet: var(--pear-ink-3);
     --box-shadow-unread-counter-normal: inset 0 0 0 1px var(--pear-hairline);
     --color-background-unread-counter-no-alpha: var(--pear-surface-3);
-    --color-background-unread-counter-dot: var(--pear-accent);
+    --color-background-unread-counter-dot: var(--pear-interaction);
     --color-text-active-narrow-filter: var(--pear-ink-1);
     --box-shadow-sidebar-sticky-header-drop:
         var(--pear-shadow-pop), 0 1px 0 var(--pear-hairline);
@@ -53,43 +56,90 @@
     --text-transform-sidebar-action-heading: none;
     --font-size-sidebar-action-heading: 1em;
 
-    /* Feed fabric (B4): selection and unread attention leave the blue
-       system for the accent — the two feed places the accent's
-       selection budget covers. Mention tints move onto the moss ramp
-       with accent-derived fills instead of indigo/teal washes. */
+    /* Feed selection, unread attention, and mentions are all ordinary
+       interaction, so they share one adaptive violet family. */
     --color-selected-message-outline: color-mix(
         in srgb,
-        var(--pear-accent) 55%,
+        var(--pear-interaction) 55%,
         transparent
     );
-    --color-unread-marker: var(--pear-accent);
+    --color-unread-marker: var(--pear-interaction);
     --color-background-direct-mention: color-mix(
         in srgb,
-        var(--pear-accent) 7%,
+        var(--pear-interaction) 7%,
         var(--pear-surface-0)
     );
     --color-background-group-mention: color-mix(
         in srgb,
-        var(--pear-accent) 4%,
+        var(--pear-interaction) 4%,
         var(--pear-surface-0)
     );
-    --color-background-text-direct-mention: var(--pear-accent-fill);
+    --color-background-text-direct-mention: var(--pear-interaction-fill);
     --color-background-text-hover-direct-mention: var(
-        --pear-accent-fill-strong
+        --pear-interaction-fill-strong
     );
     --color-background-text-group-mention: color-mix(
         in srgb,
-        var(--pear-accent) 8%,
+        var(--pear-interaction) 8%,
         transparent
     );
     --color-background-text-hover-group-mention: color-mix(
         in srgb,
-        var(--pear-accent) 16%,
+        var(--pear-interaction) 16%,
+        transparent
+    );
+
+    /* Composer and message-expansion controls inherit the same fabric
+       instead of mixing Zulip indigo, Pear green, and raw greys. */
+    --color-compose-box-background: var(--pear-surface-1);
+    --color-border-compose-content: var(--pear-hairline);
+    --color-compose-message-content-background: var(--pear-surface-0);
+    --color-compose-collapsed-reply-button-area-background: var(
+        --pear-surface-1
+    );
+    --color-compose-collapsed-reply-button-area-background-interactive: var(
+        --pear-surface-2
+    );
+    --color-compose-collapsed-reply-button-area-border: var(--pear-hairline);
+    --color-compose-collapsed-reply-button-area-border-interactive: color-mix(
+        in srgb,
+        var(--pear-interaction) 45%,
+        var(--pear-hairline)
+    );
+    --color-compose-embedded-button-text-color: var(--pear-ink-2);
+    --color-compose-embedded-button-text-color-hover: var(--pear-interaction);
+    --color-compose-embedded-button-background: transparent;
+    --color-compose-embedded-button-background-hover: var(
+        --pear-interaction-fill
+    );
+    --color-background-compose-new-message-button: var(--pear-surface-1);
+    --color-background-compose-new-message-button-hover: var(--pear-surface-2);
+    --color-background-compose-new-message-button-active: var(--pear-surface-3);
+    --color-border-compose-new-message-button: var(--pear-hairline);
+    --color-border-compose-new-message-button-hover: color-mix(
+        in srgb,
+        var(--pear-interaction) 45%,
+        var(--pear-hairline)
+    );
+    --color-compose-send-button-background: var(--pear-interaction);
+    --color-compose-send-button-background-interactive: color-mix(
+        in srgb,
+        var(--pear-interaction) 76%,
+        var(--pear-ink-1)
+    );
+    --color-text-show-more-less-button: var(--pear-interaction);
+    --color-show-more-less-button-background: var(--pear-interaction-fill);
+    --color-show-more-less-button-background-hover: var(
+        --pear-interaction-fill-strong
+    );
+    --color-show-more-less-button-background-active: color-mix(
+        in srgb,
+        var(--pear-interaction) 24%,
         transparent
     );
 }
 
-/* Search matches keep a warm cast (distinct from the green selection
+/* Search matches keep a warm cast (distinct from violet selection
    language) but speak from the token system, not raw yellow. */
 .highlight,
 :root.dark-theme .highlight {

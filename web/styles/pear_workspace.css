@@ -598,7 +598,7 @@
 }
 
 .pear-workspace-shell__editor .cm-activeLine {
-    background: color-mix(in srgb, var(--pear-accent) 6%, transparent);
+    background: var(--pear-surface-1, var(--pear-workspace-hover));
 }
 
 .pear-workspace-shell__editor .cm-selectionBackground,
@@ -606,14 +606,14 @@
 .pear-workspace-shell__editor .cm-content ::selection {
     background: color-mix(
         in srgb,
-        var(--pear-accent) 28%,
+        var(--pear-interaction) 26%,
         transparent
     ) !important;
 }
 
 .pear-workspace-shell__editor .cm-cursor,
 .pear-workspace-shell__editor .cm-dropCursor {
-    border-inline-start-color: var(--pear-accent-ink, currentcolor);
+    border-inline-start-color: var(--pear-interaction, currentcolor);
 }
 
 .pear-workspace-shell__editor .cm-foldPlaceholder {
@@ -727,7 +727,7 @@
 }
 
 .pear-workspace-shell .pear-workspace-rich-editor .milkdown .ProseMirror a {
-    color: var(--pear-accent-ink, currentcolor);
+    color: var(--pear-interaction, currentcolor);
     text-decoration-color: color-mix(in srgb, currentcolor 55%, transparent);
 }
 

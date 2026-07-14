@@ -623,7 +623,7 @@
 
 .pear-workbench-tab-selected {
     border-bottom-width: 2px;
-    border-bottom-color: var(--pear-accent);
+    border-bottom-color: var(--pear-interaction);
     background: transparent;
     color: var(--pear-ink-1);
 }
@@ -710,7 +710,7 @@
 }
 
 .pear-commit-row-head {
-    background: var(--pear-accent-fill);
+    background: var(--pear-interaction-fill);
     color: var(--color-text-default);
 }
 
@@ -1014,7 +1014,7 @@
 .pear-side-body:focus-within {
     border-color: color-mix(
         in srgb,
-        var(--pear-accent) 70%,
+        var(--pear-interaction) 70%,
         var(--color-border-legacy-input-focus) 30%
     );
 }
@@ -1049,10 +1049,11 @@
     min-width: 0;
     width: 26px;
     height: 26px;
-    border: 1px solid color-mix(in srgb, var(--pear-accent) 34%, transparent);
+    border: 1px solid
+        color-mix(in srgb, var(--pear-interaction) 34%, transparent);
     border-radius: var(--pear-radius-chip);
-    background: var(--pear-accent-fill);
-    color: var(--color-text-success-text-action-button);
+    background: var(--pear-interaction-fill);
+    color: var(--pear-interaction);
     cursor: pointer;
     font: inherit;
     /* 12px at the default 14px base font size. */
@@ -1072,11 +1073,7 @@
 
 .pear-side-start:hover,
 .pear-side-start:focus-visible {
-    background: color-mix(
-        in srgb,
-        var(--color-text-success-text-action-button) 18%,
-        transparent
-    );
+    background: var(--pear-interaction-fill-strong);
     outline: none;
 }
 
@@ -1623,14 +1620,6 @@
 }
 /* stylelint-enable plugin/no-low-performance-animation-properties */
 
-/* Steer-aware compose (design §8.3): while a run is live in the
-   composed-to topic, the console says so with a hairline accent
-   crown; the placeholder swap happens in compose code. */
-#compose.pear-steering #compose-content {
-    box-shadow: inset 0 2px 0 -1px
-        color-mix(in srgb, var(--pear-accent) 55%, transparent);
-}
-
 /* Moments (design §11): the Konami ✦ rain — the one place the spark
    is allowed out of the header, for eight arrows and two letters. */
 .pear-sparkle-rain {
@@ -1726,7 +1715,7 @@
 
     & button:hover,
     & button:focus-visible {
-        border-color: var(--pear-accent-ink);
+        border-color: var(--pear-interaction);
         background: var(--pear-surface-2);
     }
 }
@@ -1753,7 +1742,7 @@
 }
 
 .pear-workspace-tab-selected {
-    border-bottom-color: var(--pear-accent);
+    border-bottom-color: var(--pear-interaction);
     color: var(--pear-ink-1);
 }
 
@@ -2341,8 +2330,7 @@
             var(--pear-artifact-graph-rows, 1),
             minmax(64px, 1fr)
         );
-        align-items: center;
-        justify-items: center;
+        place-items: center;
     }
 
     &[data-layout="graph"] > [data-pear-artifact-node] {
@@ -2713,11 +2701,17 @@
     border-top: 1px solid var(--pear-hairline);
 }
 
+.pear-artifact-actions:not(:has(.pear-artifact-action)) {
+    padding: var(--pear-space-1) var(--pear-space-3);
+}
+
 .pear-artifact-action-spacer {
     flex: 1 1 auto;
 }
 
 .pear-artifact-pin {
+    min-height: 24px;
+    padding: 0 var(--pear-space-1);
     border-color: transparent;
     background: transparent;
     color: var(--pear-ink-3);
@@ -2770,7 +2764,7 @@
         }
 
         &:focus {
-            border-color: var(--pear-accent-ink);
+            border-color: var(--pear-interaction);
             outline: none;
         }
     }

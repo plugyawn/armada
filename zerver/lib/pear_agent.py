@@ -1390,6 +1390,7 @@ class PearCodexAppServerToolRunner:
             )
         if method == "item/tool/call":
             tool_name = params.get("tool")
+            call_id = params.get("callId")
             if tool_name != "pear_artifact" or params.get("namespace") not in {None, ""}:
                 return (
                     {"success": False, "contentItems": []},
@@ -1428,7 +1429,11 @@ class PearCodexAppServerToolRunner:
                         "status": "failed",
                         "title": "Artifact rejected.",
                         "body": detail,
-                        "metadata": {"tool_name": "pear_artifact"},
+                        **({"item_id": call_id} if isinstance(call_id, str) else {}),
+                        "metadata": {
+                            "tool_name": "pear_artifact",
+                            "human_tool_result": True,
+                        },
                     },
                 )
             self.pending_artifacts.append(encoded)
@@ -1447,8 +1452,10 @@ class PearCodexAppServerToolRunner:
                     "kind": "tool",
                     "status": "done",
                     "title": "Artifact ready.",
+                    **({"item_id": call_id} if isinstance(call_id, str) else {}),
                     "metadata": {
                         "tool_name": "pear_artifact",
+                        "human_tool_result": True,
                         "artifact_version": document["version"],
                         "artifact_bytes": len(encoded.encode()),
                         "artifact_blocks": len(document["blocks"]),

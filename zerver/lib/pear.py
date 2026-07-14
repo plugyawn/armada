@@ -981,6 +981,51 @@ def pear_transcript_event_is_tool_detail(event: PearWorkerTranscriptEvent) -> bo
     return event.get("kind", "") in PEAR_TRANSCRIPT_TOOL_DETAIL_KINDS
 
 
+def pear_distinct_transcript_tool_events(
+    events: Sequence[PearWorkerTranscriptEvent],
+) -> list[PearWorkerTranscriptEvent]:
+    """Return the latest event for each user-visible tool action."""
+    event_by_key: dict[str, PearWorkerTranscriptEvent] = {}
+    event_keys: list[str] = []
+    anonymous_index = 0
+    for event in events:
+        if not pear_transcript_event_is_tool_detail(event):
+            continue
+        key = pear_transcript_event_key(event, anonymous_index=anonymous_index)
+        if key.startswith("event:"):
+            anonymous_index += 1
+        if key not in event_by_key:
+            event_keys.append(key)
+            event_by_key[key] = event
+            continue
+
+        previous = event_by_key[key]
+        merged: PearWorkerTranscriptEvent = event.copy()
+        previous_metadata = previous.get("metadata")
+        event_metadata = event.get("metadata")
+        previous_is_human_result = isinstance(previous_metadata, dict) and bool(
+            previous_metadata.get("human_tool_result")
+        )
+        event_is_human_result = isinstance(event_metadata, dict) and bool(
+            event_metadata.get("human_tool_result")
+        )
+        human_result = (
+            event if event_is_human_result else previous if previous_is_human_result else None
+        )
+        if human_result is not None:
+            for field in ("title", "body"):
+                value = human_result.get(field)
+                if isinstance(value, str) and value:
+                    merged[field] = value
+            merged["metadata"] = {
+                **(previous_metadata if isinstance(previous_metadata, dict) else {}),
+                **(event_metadata if isinstance(event_metadata, dict) else {}),
+            }
+        event_by_key[key] = merged
+
+    return [event_by_key[key] for key in event_keys]
+
+
 def pear_transcript_tool_detail_line(event: PearWorkerTranscriptEvent) -> str:
     kind = event.get("kind", "")
     status = event.get("status", "")
@@ -1028,11 +1073,12 @@ def pear_spoiler_block(title: str, body: str) -> str:
 def pear_transcript_tool_group_block(
     events: Sequence[PearWorkerTranscriptEvent],
 ) -> str:
-    if not events:
+    distinct_events = pear_distinct_transcript_tool_events(events)
+    if not distinct_events:
         return ""
     return pear_spoiler_block(
-        pear_transcript_tool_group_title(events),
-        "\n".join(pear_transcript_tool_detail_line(event) for event in events),
+        pear_transcript_tool_group_title(distinct_events),
+        "\n".join(pear_transcript_tool_detail_line(event) for event in distinct_events),
     )
 
 
@@ -1155,31 +1201,24 @@ def pear_visible_transcript_blocks(
     block_by_key: dict[str, str] = {}
     block_keys: list[str] = []
     anonymous_index = 0
-    tool_event_by_key: dict[str, PearWorkerTranscriptEvent] = {}
-    tool_event_keys: list[str] = []
+    tool_events: list[PearWorkerTranscriptEvent] = []
 
     def flush_tool_events() -> None:
-        nonlocal tool_event_by_key, tool_event_keys
-        if not tool_event_keys:
+        nonlocal tool_events
+        if not tool_events:
             return
-        block = pear_transcript_tool_group_block(
-            [tool_event_by_key[key] for key in tool_event_keys]
-        )
+        block = pear_transcript_tool_group_block(tool_events)
         if block:
             key = f"tool-group:{len(block_keys)}"
             block_keys.append(key)
             block_by_key[key] = block
-        tool_event_by_key = {}
-        tool_event_keys = []
+        tool_events = []
 
     for event in transcript_events:
         if not include_transient_status and event.get("kind") == "steering":
             continue
         if pear_transcript_event_is_tool_detail(event):
-            key = pear_transcript_event_key(event, anonymous_index=len(tool_event_keys))
-            if key not in tool_event_by_key:
-                tool_event_keys.append(key)
-            tool_event_by_key[key] = event
+            tool_events.append(event)
             continue
 
         block = pear_visible_transcript_event_block(event, limit=block_limit).strip()
@@ -4089,6 +4128,7 @@ class PearWorkerTurn:
 
     def run_runtime_segment(self, segment_task: str, *, segment_index: int) -> dict[str, Any]:
         self.raise_if_cancel_requested()
+        segment_event_start = len(self.transcript_events)
         if self.collaboration_mode is None:
             segment_result = self.handler.worker_runtime.run(
                 active_session=self.active_session,
@@ -4106,6 +4146,9 @@ class PearWorkerTurn:
         self.raise_if_cancel_requested()
         self.artifact_tool_results.extend(
             result for result in segment_result["tool_results"] if result["label"] == "Artifact"
+        )
+        segment_result["tool_count"] = len(
+            pear_distinct_transcript_tool_events(self.transcript_events[segment_event_start:])
         )
         segment_summary = pear_worker_summary_from_tool_results(segment_result["tool_results"])
         self.handler.record_worker_event(

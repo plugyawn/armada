@@ -1592,10 +1592,17 @@ class PearSessionDefaultsTest(TestCase):
             transcript_events=[
                 {
                     "kind": "assistant",
+                    "status": "done",
+                    "title": "Assistant",
+                    "body": "I’ll inspect the helper and repository first.",
+                    "item_id": "msg-0",
+                },
+                {
+                    "kind": "assistant",
                     "status": "running",
                     "title": "Assistant",
                     "body": "Partial answer",
-                }
+                },
             ],
             tool_results=[],
         )
@@ -1604,7 +1611,7 @@ class PearSessionDefaultsTest(TestCase):
         self.assertNotIn("Thinking", progress_message)
         self.assertNotIn("Status:", progress_message)
 
-    def test_build_worker_progress_message_retains_intermediate_assistant_text(self) -> None:
+    def test_build_worker_progress_message_keeps_only_latest_assistant_text(self) -> None:
         progress_message = build_pear_worker_progress_message(
             task="answer quickly",
             transcript_events=[
@@ -1634,8 +1641,9 @@ class PearSessionDefaultsTest(TestCase):
 
         self.assertEqual(
             progress_message,
-            "I'll check the repo first.\n\nThe answer is almost ready. *✦*",
+            "The answer is almost ready. *✦*",
         )
+        self.assertNotIn("I'll check the repo first.", progress_message)
         self.assertNotIn("private chain of thought", progress_message)
         self.assertNotIn("Status:", progress_message)
 
@@ -2197,6 +2205,48 @@ class PearSessionDefaultsTest(TestCase):
         self.assertNotIn("Repo:", completed_message)
         self.assertNotIn("Verification:", completed_message)
         self.assertNotIn("Result:", completed_message)
+
+    def test_worker_completed_artifact_message_hides_production_diary(self) -> None:
+        completed_message = build_pear_worker_completed_message(
+            task="explain the projection",
+            transcript_events=[
+                {
+                    "kind": "assistant",
+                    "status": "done",
+                    "title": "Assistant",
+                    "body": "I’m using the artifact skill because motion clarifies projection.",
+                    "item_id": "msg-1",
+                },
+                {
+                    "kind": "assistant",
+                    "status": "done",
+                    "title": "Assistant",
+                    "body": "I’m checking the renderer and probing the output now.",
+                    "item_id": "msg-2",
+                },
+                {
+                    "kind": "command",
+                    "status": "done",
+                    "title": "render visual",
+                    "body": "",
+                    "item_id": "cmd-1",
+                },
+                {
+                    "kind": "assistant",
+                    "status": "done",
+                    "title": "Assistant",
+                    "body": "Watch the ambient vector rotate into the tangent space.",
+                    "item_id": "msg-3",
+                },
+            ],
+            tool_results=[{"label": "Artifact", "value": '{"version":1}'}],
+        )
+
+        self.assertIn("motion clarifies projection", completed_message)
+        self.assertIn("Watch the ambient vector", completed_message)
+        self.assertIn("render visual", completed_message)
+        self.assertNotIn("inspect the helper", completed_message)
+        self.assertNotIn("checking the renderer", completed_message)
 
     def test_worker_completed_message_preserves_final_answer_after_long_tool_details(self) -> None:
         transcript_events = [

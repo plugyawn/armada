@@ -777,12 +777,15 @@ function layout_graph_group(host: HTMLElement, connectors: Connector[]): void {
     const local_connectors = connectors.filter(
         (connector) => node_by_id.has(connector.from) && node_by_id.has(connector.to),
     );
+    const stack_dense_chain = graph_should_stack_dense_chain(node_by_id, local_connectors);
+    host.dataset["graphDirection"] = stack_dense_chain ? "vertical" : "horizontal";
     if (local_connectors.some((connector) => !connector.directed)) {
         position_graph_nodes(
             host,
             node_by_id,
             graph_distance_ranks(node_by_id.keys(), local_connectors),
             local_connectors,
+            stack_dense_chain,
         );
         return;
     }
@@ -823,10 +826,43 @@ function layout_graph_group(host: HTMLElement, connectors: Connector[]): void {
             node_by_id,
             graph_distance_ranks(node_by_id.keys(), local_connectors),
             local_connectors,
+            stack_dense_chain,
         );
         return;
     }
-    position_graph_nodes(host, node_by_id, ranks, local_connectors);
+    position_graph_nodes(host, node_by_id, ranks, local_connectors, stack_dense_chain);
+}
+
+function graph_should_stack_dense_chain(
+    node_by_id: Map<string, HTMLElement>,
+    connectors: Connector[],
+): boolean {
+    if (node_by_id.size < 4 || connectors.length !== node_by_id.size - 1) {
+        return false;
+    }
+    const incoming = new Map([...node_by_id.keys()].map((id) => [id, 0]));
+    const outgoing = new Map([...node_by_id.keys()].map((id) => [id, 0]));
+    for (const connector of connectors) {
+        if (!connector.directed) {
+            return false;
+        }
+        incoming.set(connector.to, (incoming.get(connector.to) ?? 0) + 1);
+        outgoing.set(connector.from, (outgoing.get(connector.from) ?? 0) + 1);
+    }
+    if (
+        [...incoming.values()].some((count) => count > 1) ||
+        [...outgoing.values()].some((count) => count > 1) ||
+        [...incoming.values()].filter((count) => count === 0).length !== 1 ||
+        [...outgoing.values()].filter((count) => count === 0).length !== 1
+    ) {
+        return false;
+    }
+    let source_length = 0;
+    for (const node of node_by_id.values()) {
+        const label = node.querySelector<HTMLElement>(".pear-artifact-shape-label");
+        source_length += (label?.dataset["pearArtifactSource"] ?? label?.textContent ?? "").length;
+    }
+    return source_length > Math.max(72, node_by_id.size * 16);
 }
 
 function position_graph_nodes(
@@ -834,6 +870,7 @@ function position_graph_nodes(
     node_by_id: Map<string, HTMLElement>,
     ranks: Map<string, number>,
     connectors: Connector[],
+    stack_dense_chain = false,
 ): void {
     const columns = Math.max(...ranks.values()) + 1;
     const nodes_by_rank = Array.from(
@@ -865,6 +902,18 @@ function position_graph_nodes(
             const delta = crossing_score(left.id) - crossing_score(right.id);
             return Number.isNaN(delta) ? 0 : delta;
         });
+    }
+    if (stack_dense_chain) {
+        host.style.setProperty("--pear-artifact-graph-columns", "1");
+        host.style.setProperty("--pear-artifact-graph-rows", String(columns));
+        for (const [row, rank_nodes] of nodes_by_rank.entries()) {
+            for (const {node} of rank_nodes) {
+                node.style.gridColumn = "1";
+                node.style.gridRow = String(row + 1);
+                node.style.setProperty("--pear-artifact-order", String(row));
+            }
+        }
+        return;
     }
     const rows = Math.max(1, ...nodes_by_rank.map((rank_nodes) => rank_nodes.length));
     host.style.setProperty("--pear-artifact-graph-columns", String(columns));
@@ -1082,6 +1131,9 @@ function render_scene_node(
             if (typeof node["label"] === "string") {
                 const label = element("span", "pear-artifact-shape-label");
                 set_artifact_text(label, node["label"]);
+                if (node["shape"] === "circle" && node["label"].includes("\n")) {
+                    host.dataset["labelDensity"] = "long";
+                }
                 host.append(label);
             }
 

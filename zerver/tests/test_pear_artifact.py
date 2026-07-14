@@ -102,6 +102,13 @@ class PearArtifactValidationTest(TestCase):
         self.assertEqual(canonical_root["layout"], "graph")
         self.assertEqual(canonical_root["children"][2]["state"], "selected")
 
+    def test_circle_labels_stay_compact(self) -> None:
+        document = valid_document()
+        shape = document["blocks"][0]["root"]["children"][0]  # type: ignore[index]
+        shape["label"] = "retract\n$$x_{k+1}=R_{x_k}(v_k)$$"  # type: ignore[index]
+        with self.assertRaisesRegex(PearArtifactError, "circle labels must be compact"):
+            canonicalize_pear_artifact(document)
+
     def test_coordinate_free_layout_is_rejected(self) -> None:
         document = valid_document()
         root = document["blocks"][0]["root"]  # type: ignore[index]
@@ -312,6 +319,21 @@ class PearArtifactValidationTest(TestCase):
             )
 
         media["kind"] = "video"
+        media["sourceDark"] = ".pear/artifacts/not-an-image-dark.webm"
+        media["posterSource"] = ".pear/artifacts/not-an-image.webp"
+        media["posterSourceDark"] = ".pear/artifacts/not-an-image-dark.webp"
         document = {"version": 1, "blocks": [dict(media), dict(media), dict(media)]}
         with self.assertRaisesRegex(PearArtifactError, "2 media blocks"):
             canonicalize_pear_artifact(document, allow_unresolved_media=True)
+
+    def test_video_media_requires_both_themes_and_posters(self) -> None:
+        media = {
+            "type": "media",
+            "kind": "video",
+            "source": ".pear/artifacts/step.webm",
+            "alt": "A tangent vector is retracted onto the manifold.",
+        }
+        with self.assertRaisesRegex(PearArtifactError, "light and dark WebM"):
+            canonicalize_pear_artifact(
+                {"version": 1, "blocks": [media]}, allow_unresolved_media=True
+            )

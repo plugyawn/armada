@@ -416,6 +416,28 @@ run_test("lays out undirected graph branches by topological distance", () => {
     );
 });
 
+run_test("stacks dense explanatory chains instead of squeezing them into one row", () => {
+    const document = valid_document();
+    document.blocks[1].root.children = [
+        {type: "shape", id: "a", shape: "circle", label: "x_k"},
+        {type: "shape", id: "b", shape: "pill", label: "compute the ambient gradient"},
+        {type: "shape", id: "c", shape: "pill", label: "project onto the tangent space"},
+        {type: "shape", id: "d", shape: "pill", label: "retract onto the manifold"},
+        {type: "connector", from: "a", to: "b", directed: true},
+        {type: "connector", from: "b", to: "c", directed: true},
+        {type: "connector", from: "c", to: "d", directed: true},
+    ];
+    const parsed = artifact.parse_pear_artifact(JSON.stringify(document));
+    assert.ok(parsed);
+    const rendered = artifact.render_pear_artifact(parsed, {density: "chat"});
+    const graph = rendered.querySelector('.pear-artifact-group[data-layout="graph"]');
+    assert.equal(graph.dataset.graphDirection, "vertical");
+    assert.equal(graph.style.getPropertyValue("--pear-artifact-graph-columns"), "1");
+    assert.equal(graph.style.getPropertyValue("--pear-artifact-graph-rows"), "4");
+    assert.equal(rendered.querySelector('[data-pear-artifact-node="a"]').style.gridRow, "1");
+    assert.equal(rendered.querySelector('[data-pear-artifact-node="d"]').style.gridRow, "4");
+});
+
 run_test("falls back to distance layout for directed cycles", () => {
     const document = valid_document();
     document.blocks[1].root.children = [

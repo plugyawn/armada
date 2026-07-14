@@ -1699,12 +1699,12 @@ class PearSessionDefaultsTest(TestCase):
             progress_message,
             "\n\n".join(
                 [
-                    "I'll check the repo state.",
                     "```spoiler Ran 1 tool\n- · `/bin/bash -lc pwd`\n```",
                     "Status checked. *✦*",
                 ]
             ),
         )
+        self.assertNotIn("I'll check the repo state.", progress_message)
         self.assertNotIn("Result: Status checked.", progress_message)
 
     def test_build_worker_progress_message_collapses_running_tool_group(self) -> None:

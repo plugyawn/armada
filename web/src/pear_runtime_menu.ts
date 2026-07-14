@@ -9,8 +9,8 @@ import * as channel from "./channel.ts";
 import {$t} from "./i18n.ts";
 import * as narrow_state from "./narrow_state.ts";
 import * as pear_panel from "./pear_panel.ts";
+import {model_reasoning_efforts, context_key as narrow_context_key} from "./pear_runtime_shared.ts";
 import * as popover_menus from "./popover_menus.ts";
-import {context_key as narrow_context_key, model_reasoning_efforts} from "./pear_runtime_shared.ts";
 import {parse_html} from "./ui_util.ts";
 
 const pear_reasoning_effort_schema = z.object({
@@ -52,6 +52,7 @@ const pear_runtime_context_schema = z.object({
     model_catalog: z.optional(z.array(pear_model_catalog_entry_schema)),
     reasoning_effort: z.string(),
     reasoning_efforts: z.optional(z.array(pear_reasoning_effort_schema)),
+    response_policy: z.union([z.literal("ambient"), z.literal("mentions_only")]),
 });
 
 const pear_runtime_response_schema = z.object({
@@ -104,6 +105,7 @@ type RuntimeSave = {
     topic: string;
     model: string;
     reasoning_effort: string;
+    response_policy: "ambient" | "mentions_only";
 };
 
 let topic_context: PearRuntimeContext | undefined;
@@ -112,7 +114,6 @@ let context_key = "";
 let last_error = "";
 let request_in_flight = false;
 let pending_runtime_save: RuntimeSave | undefined;
-let runtime_save_generation = 0;
 let initialized = false;
 
 const runtime_menu_selectors = [
@@ -130,17 +131,6 @@ const forbidden_header_mount_selectors = [
 
 export const runtime_menu_selector_for_testing = runtime_menu_selector;
 export const forbidden_header_mount_selectors_for_testing = forbidden_header_mount_selectors;
-
-export function should_accept_runtime_fetch_for_testing(options: {
-    fetch_generation: number;
-    runtime_save_generation: number;
-    fetch_started_during_save: boolean;
-}): boolean {
-    return (
-        options.fetch_generation === options.runtime_save_generation &&
-        !options.fetch_started_during_save
-    );
-}
 
 function current_narrow(): {stream: string | undefined; topic: string | undefined} {
     return {
@@ -189,6 +179,24 @@ export function effort_choices(context: PearRuntimeContext | undefined): PearRun
         label: choice.label,
         selected: choice.effort === context.reasoning_effort,
     }));
+}
+
+export function presence_choices(context: PearRuntimeContext | undefined): PearRuntimeMenuChoice[] {
+    if (context === undefined) {
+        return [];
+    }
+    return [
+        {
+            value: "ambient",
+            label: $t({defaultMessage: "Join when useful"}),
+            selected: context.response_policy === "ambient",
+        },
+        {
+            value: "mentions_only",
+            label: $t({defaultMessage: "Only when asked"}),
+            selected: context.response_policy === "mentions_only",
+        },
+    ];
 }
 
 export function runtime_summary(context: PearRuntimeContext | undefined): PearRuntimeSummary {
@@ -375,6 +383,7 @@ function popover_context(): {
     runtime_usage_meter: PearRuntimeUsageMeter;
     model_choices: PearRuntimeMenuChoice[];
     effort_choices: PearRuntimeMenuChoice[];
+    presence_choices: PearRuntimeMenuChoice[];
 } {
     const {stream, topic} = current_narrow();
     let status_message = "";
@@ -401,6 +410,7 @@ function popover_context(): {
             runtime_usage_meter: runtime_usage_meter_for_testing(undefined),
             model_choices: [],
             effort_choices: [],
+            presence_choices: [],
         };
     }
     const choices = effort_choices(topic_context);
@@ -420,6 +430,7 @@ function popover_context(): {
         runtime_usage_meter: runtime_usage_meter_for_testing(usage),
         model_choices: model_choices(topic_context),
         effort_choices: choices,
+        presence_choices: presence_choices(topic_context),
     };
 }
 
@@ -430,11 +441,13 @@ function render_popover_content(instance: tippy.Instance): void {
     const focused = document.activeElement;
     let refocus_selector: string | undefined;
     if (focused instanceof HTMLElement && instance.popper.contains(focused)) {
-        const choice = focused.closest<HTMLElement>("[data-model], [data-effort]");
+        const choice = focused.closest<HTMLElement>("[data-model], [data-effort], [data-policy]");
         if (choice?.dataset["model"] !== undefined) {
             refocus_selector = `.pear-runtime-model-menu-choice[data-model='${CSS.escape(choice.dataset["model"])}']`;
         } else if (choice?.dataset["effort"] !== undefined) {
             refocus_selector = `.pear-runtime-effort-menu-choice[data-effort='${CSS.escape(choice.dataset["effort"])}']`;
+        } else if (choice?.dataset["policy"] !== undefined) {
+            refocus_selector = `.pear-runtime-presence-menu-choice[data-policy='${CSS.escape(choice.dataset["policy"])}']`;
         }
     }
     const context = popover_context();
@@ -446,9 +459,7 @@ function render_popover_content(instance: tippy.Instance): void {
         meter_fill.style.width = `${context.runtime_usage_meter.percent}%`;
     }
     if (refocus_selector !== undefined) {
-        instance.popper
-            .querySelector<HTMLElement>(refocus_selector)
-            ?.focus({preventScroll: true});
+        instance.popper.querySelector<HTMLElement>(refocus_selector)?.focus({preventScroll: true});
     }
     $(document).trigger("pear_liveness_markers_changed");
 }
@@ -564,7 +575,11 @@ function fetch_topic_context(): void {
     }
 }
 
-function apply_runtime_locally(model: string, reasoning_effort: string): void {
+function apply_runtime_locally(
+    model: string,
+    reasoning_effort: string,
+    response_policy: "ambient" | "mentions_only",
+): void {
     if (topic_context === undefined) {
         return;
     }
@@ -572,6 +587,7 @@ function apply_runtime_locally(model: string, reasoning_effort: string): void {
         ...topic_context,
         model,
         reasoning_effort,
+        response_policy,
     };
     update_runtime_button_label();
     rerender_popover_if_open();
@@ -582,7 +598,8 @@ function same_runtime_save(a: RuntimeSave, b: RuntimeSave): boolean {
         a.stream === b.stream &&
         a.topic === b.topic &&
         a.model === b.model &&
-        a.reasoning_effort === b.reasoning_effort
+        a.reasoning_effort === b.reasoning_effort &&
+        a.response_policy === b.response_policy
     );
 }
 
@@ -600,6 +617,7 @@ function post_runtime_save(
             topic: save.topic,
             model: save.model,
             reasoning_effort: save.reasoning_effort,
+            response_policy: save.response_policy,
             include_git: false,
         },
         success(raw_data) {
@@ -613,6 +631,7 @@ function post_runtime_save(
                               ...data.pear_topic_context,
                               model: pending_runtime_save.model,
                               reasoning_effort: pending_runtime_save.reasoning_effort,
+                              response_policy: pending_runtime_save.response_policy,
                           };
                 context_key = narrow_context_key(save.stream, save.topic);
                 // Push the saved context into the shared store so the
@@ -647,15 +666,18 @@ function post_runtime_save(
     });
 }
 
-function save_runtime(model: string, reasoning_effort: string): void {
+function save_runtime(
+    model: string,
+    reasoning_effort: string,
+    response_policy: "ambient" | "mentions_only",
+): void {
     const {stream, topic} = current_narrow();
     if (stream === undefined || topic === undefined) {
         return;
     }
-    runtime_save_generation += 1;
-    const save = {stream, topic, model, reasoning_effort};
+    const save = {stream, topic, model, reasoning_effort, response_policy};
     const previous_context = topic_context;
-    apply_runtime_locally(model, reasoning_effort);
+    apply_runtime_locally(model, reasoning_effort, response_policy);
     if (request_in_flight) {
         pending_runtime_save = save;
         return;
@@ -679,7 +701,7 @@ function on_model_change(model: string): void {
         const catalog_entry = topic_context?.model_catalog?.find((entry) => entry.slug === model);
         effort = catalog_entry?.default_reasoning_level ?? efforts[0]?.effort ?? effort;
     }
-    save_runtime(model, effort);
+    save_runtime(model, effort, topic_context?.response_policy ?? "ambient");
 }
 
 function on_effort_change(effort: string): void {
@@ -687,7 +709,17 @@ function on_effort_change(effort: string): void {
     if (model === undefined) {
         return;
     }
-    save_runtime(model, effort);
+    save_runtime(model, effort, topic_context?.response_policy ?? "ambient");
+}
+
+function on_presence_change(response_policy: string): void {
+    if (
+        topic_context === undefined ||
+        (response_policy !== "ambient" && response_policy !== "mentions_only")
+    ) {
+        return;
+    }
+    save_runtime(topic_context.model, topic_context.reasoning_effort, response_policy);
 }
 
 export function initialize(): void {
@@ -785,6 +817,25 @@ export function initialize(): void {
             const model = this.dataset["model"];
             if (model !== undefined && model !== topic_context?.model) {
                 on_model_change(model);
+            }
+        },
+    );
+
+    $("body").on(
+        "click keydown",
+        "#pear-runtime-menu-popover .pear-runtime-presence-menu-choice",
+        function (this: HTMLElement, e) {
+            if (e.type === "keydown" && e.key !== "Enter" && e.key !== " ") {
+                return;
+            }
+            e.preventDefault();
+            e.stopPropagation();
+            const response_policy = this.dataset["policy"];
+            if (
+                response_policy !== undefined &&
+                response_policy !== topic_context?.response_policy
+            ) {
+                on_presence_change(response_policy);
             }
         },
     );

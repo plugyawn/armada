@@ -142,6 +142,7 @@ const pear_topic_context_schema = z.object({
     reasoning_effort: z.string(),
     default_reasoning_effort: z.string(),
     reasoning_efforts: z.array(pear_reasoning_effort_schema),
+    response_policy: z.union([z.literal("ambient"), z.literal("mentions_only")]),
     github_repo: z.string(),
     pinned_repo: z.optional(z.string()),
     repo_label: z.optional(z.string()),

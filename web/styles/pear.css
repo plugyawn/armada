@@ -1365,6 +1365,15 @@
         white-space: nowrap;
     }
 
+    .pear-runtime-presence-note {
+        padding: 1px 12px 7px 36px;
+        color: var(--color-text-sidebar-heading);
+        font-family: var(--pear-font-pixel);
+        font-size: calc(10 / 14 * var(--base-font-size-px));
+        line-height: 13px;
+        opacity: var(--opacity-sidebar-heading);
+    }
+
     .pear-runtime-meter-block {
         display: grid;
         gap: 4px;

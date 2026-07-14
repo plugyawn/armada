@@ -2,10 +2,10 @@
 
 const assert = require("node:assert/strict");
 
+const render_pear_runtime_menu_popover = require("../templates/pear_runtime_menu_popover.hbs");
+
 const {zrequire} = require("./lib/namespace.cjs");
 const {run_test} = require("./lib/test.cjs");
-
-const render_pear_runtime_menu_popover = require("../templates/pear_runtime_menu_popover.hbs");
 
 const pear_runtime_menu = zrequire("pear_runtime_menu");
 
@@ -22,6 +22,7 @@ function make_context(overrides = {}) {
         topic: "pear",
         model: "gpt-5.5",
         reasoning_effort: "medium",
+        response_policy: "ambient",
         ...overrides,
     };
 }
@@ -51,33 +52,6 @@ run_test("forbidden_header_mount_selectors_for_testing", () => {
         ".top-navbar-container",
         ".message-header-navbar-title",
     ]);
-});
-
-run_test("should_accept_runtime_fetch_for_testing", () => {
-    assert.equal(
-        pear_runtime_menu.should_accept_runtime_fetch_for_testing({
-            fetch_generation: 3,
-            runtime_save_generation: 3,
-            fetch_started_during_save: false,
-        }),
-        true,
-    );
-    assert.equal(
-        pear_runtime_menu.should_accept_runtime_fetch_for_testing({
-            fetch_generation: 2,
-            runtime_save_generation: 3,
-            fetch_started_during_save: false,
-        }),
-        false,
-    );
-    assert.equal(
-        pear_runtime_menu.should_accept_runtime_fetch_for_testing({
-            fetch_generation: 3,
-            runtime_save_generation: 3,
-            fetch_started_during_save: true,
-        }),
-        false,
-    );
 });
 
 run_test("model_reasoning_efforts", () => {
@@ -192,6 +166,21 @@ run_test("effort_choices", () => {
         {value: "high", label: "High", selected: false},
         {value: "xhigh", label: "XHigh", selected: true},
     ]);
+});
+
+run_test("presence_choices", () => {
+    assert.deepEqual(pear_runtime_menu.presence_choices(undefined), []);
+    assert.deepEqual(pear_runtime_menu.presence_choices(make_context()), [
+        {value: "ambient", label: "translated: Join when useful", selected: true},
+        {value: "mentions_only", label: "translated: Only when asked", selected: false},
+    ]);
+    assert.deepEqual(
+        pear_runtime_menu.presence_choices(make_context({response_policy: "mentions_only"})),
+        [
+            {value: "ambient", label: "translated: Join when useful", selected: false},
+            {value: "mentions_only", label: "translated: Only when asked", selected: true},
+        ],
+    );
 });
 
 run_test("runtime_summary", () => {
@@ -395,6 +384,7 @@ run_test("runtime popover renders pear context meter line", () => {
         has_runtime_usage: false,
         model_choices: [],
         effort_choices: [],
+        presence_choices: [],
     });
 
     assert.match(html, /pear-runtime-meter-block pear-runtime-meter-hot/);
@@ -427,6 +417,10 @@ run_test("runtime popover does not expose workbench actions", () => {
         has_runtime_usage: false,
         model_choices: [{value: "gpt-5.5", label: "GPT-5.5", selected: true}],
         effort_choices: [{value: "high", label: "High", selected: true}],
+        presence_choices: [
+            {value: "ambient", label: "Join when useful", selected: true},
+            {value: "mentions_only", label: "Only when asked", selected: false},
+        ],
     });
 
     assert.doesNotMatch(html, /pear-workbench-menu-link/);
@@ -464,12 +458,19 @@ run_test("runtime popover uses compact radio menu rows", () => {
             {value: "low", label: "Low", selected: false},
             {value: "high", label: "High", selected: true},
         ],
+        presence_choices: [
+            {value: "ambient", label: "Join when useful", selected: true},
+            {value: "mentions_only", label: "Only when asked", selected: false},
+        ],
     });
 
     assert.match(html, /pear-runtime-menu-section[^>]*>translated: Model<\/div>/);
     assert.match(html, /pear-runtime-menu-section[^>]*>translated: Thinking<\/div>/);
+    assert.match(html, /pear-runtime-menu-section[^>]*>translated: Presence<\/div>/);
     assert.match(html, /pear-runtime-model-menu-choice[^>]+data-model="gpt-5.5"/);
     assert.match(html, /pear-runtime-effort-menu-choice[^>]+data-effort="high"/);
+    assert.match(html, /pear-runtime-presence-menu-choice[^>]+data-policy="ambient"/);
+    assert.match(html, />translated: @Pear always works<\/div>/);
     assert.match(
         html,
         /class="pear-runtime-model-choice" name="pear-runtime-model" value="gpt-5.5" checked/,

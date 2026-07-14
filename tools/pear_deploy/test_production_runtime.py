@@ -914,6 +914,7 @@ class StaticRuntimeContractTest(unittest.TestCase):
         self.assertEqual(caddyfile.count("precompressed gzip"), 2)
         self.assertIn("handle {", caddyfile)
         self.assertIn("reverse_proxy 127.0.0.1:9991", caddyfile)
+        self.assertIn("header_up -Authorization", caddyfile)
         self.assertIn("/etc/pear/caddy-basic-auth.env", caddy_drop_in)
         self.assertIn("ExecStart=/usr/bin/caddy run --config /etc/caddy/Caddyfile", caddy_drop_in)
         self.assertNotIn("--environ", caddy_drop_in)

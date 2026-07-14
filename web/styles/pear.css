@@ -1969,6 +1969,7 @@
 }
 
 .pear-artifact {
+    box-sizing: border-box;
     overflow: hidden;
     border: 1px solid var(--pear-hairline);
     border-radius: var(--pear-radius-card);

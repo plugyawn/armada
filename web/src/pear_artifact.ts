@@ -160,8 +160,12 @@ function validates(schema: JsonSchema, value: unknown, root: JsonSchema): boolea
     if (is_json_object(value)) {
         const object = value;
         const keys = Object.keys(object);
+        const min = schema["minProperties"];
         const max = schema["maxProperties"];
-        if (typeof max === "number" && keys.length > max) {
+        if (
+            (typeof min === "number" && keys.length < min) ||
+            (typeof max === "number" && keys.length > max)
+        ) {
             return false;
         }
         const required = schema["required"];
@@ -340,6 +344,82 @@ function semantic_scene_is_valid(root: JsonObject): boolean {
     );
 }
 
+function semantic_scene_steps_are_valid(block: JsonObject): boolean {
+    const raw_steps = block["steps"];
+    if (raw_steps === undefined) {
+        return true;
+    }
+    const root = block["root"];
+    if (!Array.isArray(raw_steps) || !is_json_object(root)) {
+        return false;
+    }
+    const target_types = new Map<string, string>();
+    function collect(node: JsonObject): void {
+        if (typeof node["id"] === "string" && typeof node["type"] === "string") {
+            target_types.set(node["id"], node["type"]);
+        }
+        const children = node["children"];
+        if (Array.isArray(children)) {
+            for (const child of children) {
+                if (is_json_object(child)) {
+                    collect(child);
+                }
+            }
+        }
+    }
+    collect(root);
+    let total_text = 0;
+    function count_root_text(node: JsonObject): void {
+        for (const key of ["text", "label", "ariaLabel"]) {
+            if (typeof node[key] === "string") {
+                total_text += node[key].length;
+            }
+        }
+        const children = node["children"];
+        if (Array.isArray(children)) {
+            for (const child of children) {
+                if (is_json_object(child)) {
+                    count_root_text(child);
+                }
+            }
+        }
+    }
+    count_root_text(root);
+    for (const raw_step of raw_steps) {
+        if (!is_json_object(raw_step) || !Array.isArray(raw_step["changes"])) {
+            return false;
+        }
+        if (typeof raw_step["label"] === "string") {
+            total_text += raw_step["label"].length;
+        }
+        const seen_targets = new Set<string>();
+        for (const raw_change of raw_step["changes"]) {
+            if (!is_json_object(raw_change) || typeof raw_change["target"] !== "string") {
+                return false;
+            }
+            const target = raw_change["target"];
+            const target_type = target_types.get(target);
+            if (target_type === undefined || seen_targets.has(target)) {
+                return false;
+            }
+            seen_targets.add(target);
+            if (
+                ("state" in raw_change && target_type !== "shape" && target_type !== "connector") ||
+                ("label" in raw_change && target_type !== "shape") ||
+                ("text" in raw_change && target_type !== "text")
+            ) {
+                return false;
+            }
+            for (const key of ["label", "text"]) {
+                if (typeof raw_change[key] === "string") {
+                    total_text += raw_change[key].length;
+                }
+            }
+        }
+    }
+    return total_text <= 12000;
+}
+
 export function parse_pear_artifact(raw: string): PearArtifactDocument | undefined {
     if (new TextEncoder().encode(raw).length > 64000) {
         return undefined;
@@ -379,12 +459,12 @@ export function parse_pear_artifact(raw: string): PearArtifactDocument | undefin
         );
     }
     if (
-        document.blocks.some((block) => block.type === "scene" && !is_json_object(block["root"])) ||
         document.blocks.some(
             (block) =>
                 block.type === "scene" &&
-                is_json_object(block["root"]) &&
-                !semantic_scene_is_valid(block["root"]),
+                (!is_json_object(block["root"]) ||
+                    !semantic_scene_is_valid(block["root"]) ||
+                    !semantic_scene_steps_are_valid(block)),
         )
     ) {
         return undefined;
@@ -513,18 +593,23 @@ function derive_value(derive: unknown, data: JsonObject): unknown {
 }
 
 type Connector = {
+    id?: string;
     from: string;
     to: string;
     directed: boolean;
     label?: string;
     state?: string;
+    current_state?: string;
 };
 
 function graph_distance_ranks(
     node_ids: Iterable<string>,
     connectors: Connector[],
 ): Map<string, number> {
-    const neighbours = new Map([...node_ids].map((id) => [id, [] as string[]]));
+    const neighbours = new Map<string, string[]>();
+    for (const id of node_ids) {
+        neighbours.set(id, []);
+    }
     for (const connector of connectors) {
         neighbours.get(connector.from)?.push(connector.to);
         neighbours.get(connector.to)?.push(connector.from);
@@ -533,13 +618,21 @@ function graph_distance_ranks(
     const remaining = new Set(neighbours.keys());
     let component_offset = 0;
     while (remaining.size > 0) {
-        const root = remaining.values().next().value!;
+        const root = remaining.values().next().value;
+        if (root === undefined) {
+            break;
+        }
         const queue = [root];
         ranks.set(root, component_offset);
         remaining.delete(root);
         let component_max = component_offset;
-        for (let index = 0; index < queue.length; index += 1) {
-            const id = queue[index]!;
+        let queue_index = 0;
+        while (queue_index < queue.length) {
+            const id = queue[queue_index];
+            queue_index += 1;
+            if (id === undefined) {
+                continue;
+            }
             const rank = ranks.get(id) ?? component_offset;
             component_max = Math.max(component_max, rank);
             for (const target of neighbours.get(id) ?? []) {
@@ -580,7 +673,10 @@ function layout_graph_group(host: HTMLElement, connectors: Connector[]): void {
         return;
     }
     const incoming = new Map([...node_by_id.keys()].map((id) => [id, 0]));
-    const outgoing = new Map([...node_by_id.keys()].map((id) => [id, [] as string[]]));
+    const outgoing = new Map<string, string[]>();
+    for (const id of node_by_id.keys()) {
+        outgoing.set(id, []);
+    }
     for (const connector of local_connectors) {
         incoming.set(connector.to, (incoming.get(connector.to) ?? 0) + 1);
         outgoing.get(connector.from)?.push(connector.to);
@@ -590,8 +686,13 @@ function layout_graph_group(host: HTMLElement, connectors: Connector[]): void {
     for (const id of queue) {
         ranks.set(id, 0);
     }
-    for (let index = 0; index < queue.length; index += 1) {
-        const id = queue[index]!;
+    let queue_index = 0;
+    while (queue_index < queue.length) {
+        const id = queue[queue_index];
+        queue_index += 1;
+        if (id === undefined) {
+            continue;
+        }
         const rank = ranks.get(id) ?? 0;
         for (const target of outgoing.get(id) ?? []) {
             ranks.set(target, Math.max(ranks.get(target) ?? 0, rank + 1));
@@ -623,7 +724,7 @@ function position_graph_nodes(
     const columns = Math.max(...ranks.values()) + 1;
     const nodes_by_rank = Array.from(
         {length: columns},
-        () => [] as {id: string; node: HTMLElement}[],
+        (): {id: string; node: HTMLElement}[] => [],
     );
     for (const [id, node] of node_by_id) {
         nodes_by_rank[ranks.get(id) ?? 0]!.push({id, node});
@@ -667,6 +768,8 @@ function position_graph_nodes(
 }
 
 let connector_instance = 0;
+let scene_step_instance = 0;
+const artifact_lifecycles = new WeakMap<HTMLElement, AbortController>();
 
 function render_mark(node: JsonObject, data: JsonObject): HTMLElement {
     const host = element(
@@ -786,6 +889,9 @@ function render_scene_node(
             to: String(node["to"]),
             directed: node["directed"] !== false,
         };
+        if (typeof node["id"] === "string") {
+            connector.id = node["id"];
+        }
         if (typeof node["label"] === "string") {
             connector.label = node["label"];
         }
@@ -798,6 +904,7 @@ function render_scene_node(
     const host = element("div", `pear-artifact-node pear-artifact-${String(type)}`);
     if (typeof node["id"] === "string") {
         host.dataset["pearArtifactNode"] = node["id"];
+        host.dataset["pearArtifactTarget"] = node["id"];
     }
     if (typeof node["state"] === "string") {
         host.dataset["state"] = node["state"];
@@ -966,9 +1073,14 @@ function render_scene_node(
     return host;
 }
 
-function mount_connectors(scene: HTMLElement, connectors: Connector[]): void {
+function mount_connectors(
+    scene: HTMLElement,
+    connectors: Connector[],
+    controller: AbortController,
+): () => void {
+    const {signal} = controller;
     if (connectors.length === 0) {
-        return;
+        return () => undefined;
     }
     const overlay = document.createElementNS("http://www.w3.org/2000/svg", "svg");
     overlay.setAttribute("class", "pear-artifact-connectors");
@@ -991,7 +1103,17 @@ function mount_connectors(scene: HTMLElement, connectors: Connector[]): void {
     definitions.append(marker);
     overlay.append(definitions);
     scene.prepend(overlay);
+    let was_connected = false;
     const draw = (): void => {
+        if (signal.aborted) {
+            return;
+        }
+        if (scene.isConnected) {
+            was_connected = true;
+        } else if (was_connected) {
+            controller.abort();
+            return;
+        }
         overlay.replaceChildren(definitions);
         const bounds = scene.getBoundingClientRect();
         overlay.setAttribute("viewBox", `0 0 ${bounds.width} ${bounds.height}`);
@@ -1032,8 +1154,12 @@ function mount_connectors(scene: HTMLElement, connectors: Connector[]): void {
             line.setAttribute("y2", String(y2));
             line.setAttribute("pathLength", "1");
             line.style.setProperty("--pear-artifact-order", String(index));
-            if (connector.state !== undefined) {
-                line.dataset["state"] = connector.state;
+            if (connector.id !== undefined) {
+                line.dataset["pearArtifactTarget"] = connector.id;
+            }
+            const state = connector.current_state ?? connector.state;
+            if (state !== undefined) {
+                line.dataset["state"] = state;
             }
             line.setAttribute(
                 "class",
@@ -1065,22 +1191,372 @@ function mount_connectors(scene: HTMLElement, connectors: Connector[]): void {
     };
     let draw_scheduled = false;
     const schedule_draw = (): void => {
-        if (draw_scheduled) {
+        if (draw_scheduled || signal.aborted) {
             return;
         }
         draw_scheduled = true;
         requestAnimationFrame(() => {
             draw_scheduled = false;
-            draw();
+            if (!signal.aborted) {
+                draw();
+            }
         });
     };
     schedule_draw();
     if (typeof ResizeObserver !== "undefined") {
-        new ResizeObserver(schedule_draw).observe(scene);
+        const observer = new ResizeObserver(() => {
+            if (!scene.isConnected && was_connected) {
+                controller.abort();
+                return;
+            }
+            schedule_draw();
+        });
+        observer.observe(scene);
+        signal.addEventListener(
+            "abort",
+            () => {
+                observer.disconnect();
+            },
+            {once: true},
+        );
+    }
+    return schedule_draw;
+}
+
+type SceneTargetSnapshot = {
+    element: HTMLElement;
+    state?: string;
+    label?: string;
+    text?: string;
+};
+
+function set_semantic_state(element: Element, state: string | undefined): void {
+    if (state === undefined) {
+        element.removeAttribute("data-state");
+    } else {
+        element.setAttribute("data-state", state);
     }
 }
 
-function render_scene(block: PearArtifactBlock, data: JsonObject): HTMLElement {
+function set_shape_label(element: HTMLElement, value: string | undefined): void {
+    const existing = element.querySelector<HTMLElement>(".pear-artifact-shape-label");
+    if (value === undefined) {
+        existing?.remove();
+        return;
+    }
+    const label = existing ?? element.ownerDocument.createElement("span");
+    if (existing === null) {
+        element.append(label);
+    }
+    label.className = "pear-artifact-shape-label";
+    label.textContent = value;
+}
+
+function mount_scene_steps(
+    scene: HTMLElement,
+    raw_steps: unknown,
+    connectors: Connector[],
+    schedule_connector_draw: () => void,
+    controller: AbortController,
+): HTMLElement | undefined {
+    if (!Array.isArray(raw_steps)) {
+        return undefined;
+    }
+    const steps = raw_steps.filter(is_json_object);
+    if (steps.length < 2) {
+        return undefined;
+    }
+    const target_ids = new Set<string>();
+    for (const step of steps) {
+        const changes = step["changes"];
+        if (!Array.isArray(changes)) {
+            continue;
+        }
+        for (const change of changes) {
+            if (is_json_object(change) && typeof change["target"] === "string") {
+                target_ids.add(change["target"]);
+            }
+        }
+    }
+    const snapshots = new Map<string, SceneTargetSnapshot>();
+    for (const target of target_ids) {
+        const target_element = scene.querySelector<HTMLElement>(
+            `[data-pear-artifact-target="${CSS.escape(target)}"]`,
+        );
+        if (target_element === null) {
+            continue;
+        }
+        const snapshot: SceneTargetSnapshot = {
+            element: target_element,
+        };
+        if (target_element.dataset["state"] !== undefined) {
+            snapshot.state = target_element.dataset["state"];
+        }
+        const label = target_element.querySelector<HTMLElement>(".pear-artifact-shape-label");
+        if (label !== null) {
+            snapshot.label = label.textContent ?? "";
+        }
+        if (target_element.classList.contains("pear-artifact-text")) {
+            snapshot.text = target_element.textContent ?? "";
+        }
+        snapshots.set(target, snapshot);
+    }
+    const connector_by_id = new Map(
+        connectors.flatMap((connector) =>
+            connector.id === undefined ? [] : [[connector.id, connector] as const],
+        ),
+    );
+    const timeline = element("div", "pear-artifact-timeline");
+    timeline.setAttribute("role", "group");
+    timeline.setAttribute("aria-label", "Scene playback");
+    const previous = element("button", "pear-artifact-step-button is-previous");
+    previous.type = "button";
+    previous.setAttribute("aria-label", "Previous step");
+    const play = element("button", "pear-artifact-step-button is-play");
+    play.type = "button";
+    play.setAttribute("aria-label", "Play animation");
+    const meta = element("div", "pear-artifact-step-meta");
+    const status = element("div", "pear-artifact-step-status");
+    status.setAttribute("aria-hidden", "true");
+    const announcement = element("div", "pear-artifact-step-announcement");
+    const announcement_id = `pear-artifact-step-${scene_step_instance}`;
+    scene_step_instance += 1;
+    announcement.id = announcement_id;
+    announcement.setAttribute("aria-live", "polite");
+    announcement.setAttribute("aria-atomic", "true");
+    scene.setAttribute("aria-describedby", announcement_id);
+    const track = element("div", "pear-artifact-step-track");
+    const fill = element("span", "pear-artifact-step-fill");
+    track.append(fill);
+    meta.append(status, track, announcement);
+    const next = element("button", "pear-artifact-step-button is-next");
+    next.type = "button";
+    next.setAttribute("aria-label", "Next step");
+    timeline.append(previous, play, meta, next);
+
+    let current_index = 0;
+    let playing = false;
+    let visible = false;
+    let wants_autoplay = true;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const signal = controller.signal;
+    const motion_query =
+        typeof globalThis.matchMedia === "function"
+            ? globalThis.matchMedia("(prefers-reduced-motion: reduce)")
+            : undefined;
+    const sync_connectors = (): void => {
+        for (const connector of connector_by_id.values()) {
+            const line = scene.querySelector(
+                `[data-pear-artifact-target="${CSS.escape(connector.id!)}"]`,
+            );
+            if (line !== null) {
+                set_semantic_state(line, connector.current_state ?? connector.state);
+            }
+        }
+    };
+    const apply_step = (index: number): void => {
+        current_index = Math.max(0, Math.min(steps.length - 1, index));
+        for (const snapshot of snapshots.values()) {
+            set_semantic_state(snapshot.element, snapshot.state);
+            if (snapshot.element.classList.contains("pear-artifact-shape")) {
+                set_shape_label(snapshot.element, snapshot.label);
+            }
+            if (snapshot.text !== undefined) {
+                snapshot.element.textContent = snapshot.text;
+            }
+        }
+        for (const connector of connector_by_id.values()) {
+            if (connector.state === undefined) {
+                delete connector.current_state;
+            } else {
+                connector.current_state = connector.state;
+            }
+        }
+        for (const step of steps.slice(0, current_index + 1)) {
+            const changes = step["changes"];
+            if (!Array.isArray(changes)) {
+                continue;
+            }
+            for (const change of changes) {
+                if (!is_json_object(change) || typeof change["target"] !== "string") {
+                    continue;
+                }
+                const target = change["target"];
+                const connector = connector_by_id.get(target);
+                if (connector !== undefined && typeof change["state"] === "string") {
+                    connector.current_state = change["state"];
+                }
+                const snapshot = snapshots.get(target);
+                if (snapshot === undefined) {
+                    continue;
+                }
+                if (typeof change["state"] === "string") {
+                    set_semantic_state(snapshot.element, change["state"]);
+                }
+                if (typeof change["label"] === "string") {
+                    set_shape_label(snapshot.element, change["label"]);
+                }
+                if (typeof change["text"] === "string") {
+                    snapshot.element.textContent = change["text"];
+                }
+            }
+        }
+        sync_connectors();
+        schedule_connector_draw();
+        const current_step = steps[current_index];
+        const step_label = scalar_text(current_step?.["label"]);
+        status.textContent = `${current_index + 1}/${steps.length}  ${step_label}`;
+        const descriptions: string[] = [];
+        const current_changes = current_step?.["changes"];
+        if (Array.isArray(current_changes)) {
+            for (const change of current_changes) {
+                if (!is_json_object(change) || typeof change["target"] !== "string") {
+                    continue;
+                }
+                if (typeof change["state"] === "string") {
+                    descriptions.push(`${change["target"]} is ${change["state"]}`);
+                }
+                if (typeof change["label"] === "string") {
+                    descriptions.push(`${change["target"]} label: ${change["label"]}`);
+                }
+                if (typeof change["text"] === "string") {
+                    descriptions.push(`${change["target"]} text: ${change["text"]}`);
+                }
+            }
+        }
+        announcement.textContent = `Step ${current_index + 1} of ${steps.length}: ${step_label}.${
+            descriptions.length > 0 ? ` ${descriptions.join(". ")}.` : ""
+        }`;
+        fill.style.setProperty(
+            "--pear-artifact-step-progress",
+            String((current_index + 1) / steps.length),
+        );
+        previous.disabled = current_index === 0;
+        next.disabled = current_index === steps.length - 1;
+    };
+    const schedule_next = (): void => {
+        if (!playing || signal.aborted) {
+            return;
+        }
+        timer = setTimeout(() => {
+            timer = undefined;
+            if (signal.aborted) {
+                return;
+            }
+            if (!scene.isConnected) {
+                controller.abort();
+                return;
+            }
+            if (document.hidden || motion_query?.matches || !visible) {
+                set_playing(false);
+                return;
+            }
+            if (current_index >= steps.length - 1) {
+                wants_autoplay = false;
+                set_playing(false);
+                return;
+            }
+            apply_step(current_index + 1);
+            schedule_next();
+        }, 1050);
+    };
+    const set_playing = (value: boolean, user_initiated = false): void => {
+        if (timer !== undefined) {
+            clearTimeout(timer);
+            timer = undefined;
+        }
+        playing =
+            value &&
+            !signal.aborted &&
+            scene.isConnected &&
+            !document.hidden &&
+            !motion_query?.matches &&
+            (visible || user_initiated);
+        play.dataset["playing"] = playing ? "true" : "false";
+        play.setAttribute("aria-label", playing ? "Pause animation" : "Play animation");
+        if (playing) {
+            schedule_next();
+        }
+    };
+    previous.addEventListener("click", () => {
+        wants_autoplay = false;
+        set_playing(false);
+        apply_step(current_index - 1);
+    });
+    next.addEventListener("click", () => {
+        wants_autoplay = false;
+        set_playing(false);
+        apply_step(current_index + 1);
+    });
+    play.addEventListener("click", () => {
+        if (playing) {
+            wants_autoplay = false;
+            set_playing(false);
+            return;
+        }
+        if (current_index === steps.length - 1) {
+            apply_step(0);
+        }
+        wants_autoplay = true;
+        set_playing(true, true);
+    });
+    apply_step(0);
+    let visibility_observer: IntersectionObserver | undefined;
+    if (typeof IntersectionObserver !== "undefined") {
+        visibility_observer = new IntersectionObserver((entries) => {
+            if (!scene.isConnected) {
+                controller.abort();
+                return;
+            }
+            visible = entries.some((entry) => entry.target === scene && entry.isIntersecting);
+            if (visible && wants_autoplay) {
+                set_playing(true);
+            } else if (!visible) {
+                set_playing(false);
+            }
+        });
+        visibility_observer.observe(scene);
+    }
+    const handle_visibility_change = (): void => {
+        if (document.hidden) {
+            set_playing(false);
+        } else if (visible && wants_autoplay) {
+            set_playing(true);
+        }
+    };
+    const handle_motion_change = (): void => {
+        if (motion_query?.matches) {
+            wants_autoplay = false;
+            set_playing(false);
+        }
+    };
+    document.addEventListener("visibilitychange", handle_visibility_change);
+    motion_query?.addEventListener("change", handle_motion_change);
+    signal.addEventListener(
+        "abort",
+        () => {
+            if (timer !== undefined) {
+                clearTimeout(timer);
+                timer = undefined;
+            }
+            playing = false;
+            play.dataset["playing"] = "false";
+            play.setAttribute("aria-label", "Play animation");
+            visibility_observer?.disconnect();
+            document.removeEventListener("visibilitychange", handle_visibility_change);
+            motion_query?.removeEventListener("change", handle_motion_change);
+        },
+        {once: true},
+    );
+    return timeline;
+}
+
+function render_scene(
+    block: PearArtifactBlock,
+    data: JsonObject,
+    controller: AbortController,
+): HTMLElement {
+    const frame = element("div", "pear-artifact-scene-frame");
     const scene = element("div", "pear-artifact-scene");
     scene.dataset["aspect"] = scalar_text(block["aspect"] ?? "wide");
     scene.setAttribute("role", "img");
@@ -1098,11 +1574,26 @@ function render_scene(block: PearArtifactBlock, data: JsonObject): HTMLElement {
     )) {
         layout_graph_group(graph, connectors);
     }
-    mount_connectors(scene, connectors);
-    return scene;
+    const schedule_connector_draw = mount_connectors(scene, connectors, controller);
+    frame.append(scene);
+    const timeline = mount_scene_steps(
+        scene,
+        block["steps"],
+        connectors,
+        schedule_connector_draw,
+        controller,
+    );
+    if (timeline !== undefined) {
+        frame.append(timeline);
+    }
+    return frame;
 }
 
-function render_block(block: PearArtifactBlock, data: JsonObject): HTMLElement {
+function render_block(
+    block: PearArtifactBlock,
+    data: JsonObject,
+    controller: AbortController,
+): HTMLElement {
     const host = element("section", `pear-artifact-block pear-artifact-block-${block.type}`);
     switch (block.type) {
         case "copy": {
@@ -1117,7 +1608,7 @@ function render_block(block: PearArtifactBlock, data: JsonObject): HTMLElement {
             break;
         }
         case "scene": {
-            host.append(render_scene(block, data));
+            host.append(render_scene(block, data, controller));
 
             break;
         }
@@ -1261,6 +1752,8 @@ export function render_pear_artifact(
 ): HTMLElement {
     const render_started = globalThis.performance?.now() ?? Date.now();
     const article = element("article", "pear-artifact");
+    const controller = new AbortController();
+    artifact_lifecycles.set(article, controller);
     article.dataset["density"] = options.density;
     article.dataset["lifecycle"] = "ready";
     if (document_value.title !== undefined) {
@@ -1273,7 +1766,7 @@ export function render_pear_artifact(
     }
     const body = element("div", "pear-artifact-body");
     const data = document_value.data ?? {};
-    body.append(...document_value.blocks.map((block) => render_block(block, data)));
+    body.append(...document_value.blocks.map((block) => render_block(block, data, controller)));
     article.append(body);
     const document_actions = document_value.actions ?? [];
     if (document_actions.length > 0 || options.onPin) {
@@ -1308,6 +1801,10 @@ export function mount_pear_artifact(
     options: PearArtifactRenderOptions,
 ): HTMLElement {
     const artifact = render_pear_artifact(document_value, options);
+    for (const previous of $host.children(".pear-artifact")) {
+        artifact_lifecycles.get(previous)?.abort();
+        artifact_lifecycles.delete(previous);
+    }
     $host.empty();
     $host[0]?.append(artifact);
     return artifact;

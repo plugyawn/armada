@@ -102,6 +102,67 @@ class PearArtifactValidationTest(TestCase):
         self.assertEqual(canonical_root["layout"], "graph")
         self.assertEqual(canonical_root["children"][2]["state"], "selected")
 
+    def test_scene_steps_are_bounded_and_reference_typed_targets(self) -> None:
+        document = valid_document()
+        block = document["blocks"][0]  # type: ignore[index]
+        children = block["root"]["children"]  # type: ignore[index]
+        children[2]["id"] = "force_edge"  # type: ignore[index]
+        block["steps"] = [  # type: ignore[index]
+            {
+                "label": "Start at A",
+                "changes": [
+                    {"target": "a", "state": "running", "label": "A  0"},
+                ],
+            },
+            {
+                "label": "Reach B",
+                "changes": [
+                    {"target": "a", "state": "success"},
+                    {"target": "force_edge", "state": "selected"},
+                    {"target": "b", "state": "running", "label": "B  1"},
+                ],
+            },
+        ]
+        canonical, _encoded = canonicalize_pear_artifact(document)
+        self.assertEqual(canonical["blocks"][0]["steps"][1]["label"], "Reach B")
+
+        block["steps"][1]["changes"][0]["target"] = "missing"  # type: ignore[index]
+        with self.assertRaisesRegex(PearArtifactError, "missing target"):
+            canonicalize_pear_artifact(document)
+
+        block["steps"][1]["changes"][0] = {  # type: ignore[index]
+            "target": "force_edge",
+            "label": "not a shape",
+        }
+        with self.assertRaisesRegex(PearArtifactError, "shape target"):
+            canonicalize_pear_artifact(document)
+
+        block["steps"][1]["changes"][0] = {"target": "force_edge"}  # type: ignore[index]
+        with self.assertRaisesRegex(PearArtifactError, "at least 2 properties"):
+            canonicalize_pear_artifact(document)
+
+        children.append({"type": "text", "id": "caption", "text": "caption"})  # type: ignore[union-attr]
+        block["steps"][1]["changes"][0] = {  # type: ignore[index]
+            "target": "caption",
+            "state": "warning",
+        }
+        with self.assertRaisesRegex(PearArtifactError, "shape or connector target"):
+            canonicalize_pear_artifact(document)
+
+    def test_scene_and_step_text_share_one_budget(self) -> None:
+        document = valid_document()
+        block = document["blocks"][0]  # type: ignore[index]
+        children = block["root"]["children"]  # type: ignore[index]
+        children.extend(  # type: ignore[union-attr]
+            {"type": "text", "id": f"copy_{index}", "text": "x" * 1000} for index in range(11)
+        )
+        block["steps"] = [  # type: ignore[index]
+            {"label": "One", "changes": [{"target": "copy_0", "text": "y" * 1000}]},
+            {"label": "Two", "changes": [{"target": "copy_1", "text": "z" * 1000}]},
+        ]
+        with self.assertRaisesRegex(PearArtifactError, "text budget"):
+            canonicalize_pear_artifact(document)
+
     def test_rejects_primitive_fields_that_the_renderer_would_ignore(self) -> None:
         for ignored in (
             {"children": [{"type": "text", "text": "hidden"}]},

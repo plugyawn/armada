@@ -8,15 +8,73 @@ const {JSDOM} = require("jsdom");
 const {mock_jquery, set_global, zrequire} = require("./lib/namespace.cjs");
 const {run_test} = require("./lib/test.cjs");
 
-const dom = new JSDOM("<!doctype html><html><body><div id='host'></div></body></html>");
+const dom = new JSDOM("<!doctype html><html><body><div id='host'></div></body></html>", {
+    pretendToBeVisual: true,
+});
 const {window} = dom;
+let frame_count = 0;
+let reduced_motion = false;
+const motion_listeners = new Set();
+const motion_query = {
+    get matches() {
+        return reduced_motion;
+    },
+    addEventListener(_event, listener) {
+        motion_listeners.add(listener);
+    },
+    removeEventListener(_event, listener) {
+        motion_listeners.delete(listener);
+    },
+};
+const intersection_observers = [];
+class TestIntersectionObserver {
+    constructor(callback) {
+        this.callback = callback;
+        this.disconnected = false;
+        intersection_observers.push(this);
+    }
+
+    observe(target) {
+        this.target = target;
+    }
+
+    disconnect() {
+        this.disconnected = true;
+    }
+
+    set_visible(visible) {
+        this.callback([{target: this.target, isIntersecting: visible}]);
+    }
+}
+const resize_observers = [];
+class TestResizeObserver {
+    constructor(callback) {
+        this.callback = callback;
+        this.disconnected = false;
+        resize_observers.push(this);
+    }
+
+    observe(target) {
+        this.target = target;
+    }
+
+    disconnect() {
+        this.disconnected = true;
+    }
+}
 for (const [name, value] of Object.entries({
     window,
     document: window.document,
     Element: window.Element,
     HTMLElement: window.HTMLElement,
     TextEncoder,
-    requestAnimationFrame: (callback) => callback(0),
+    requestAnimationFrame(callback) {
+        frame_count += 1;
+        return callback(0);
+    },
+    matchMedia: () => motion_query,
+    IntersectionObserver: TestIntersectionObserver,
+    ResizeObserver: TestResizeObserver,
     CSS: {escape: (value) => value.replaceAll('"', '\\"')},
 })) {
     set_global(name, value);
@@ -45,6 +103,7 @@ function valid_document() {
                         {type: "shape", id: "b", shape: "circle", label: "B"},
                         {
                             type: "connector",
+                            id: "force-edge",
                             from: "a",
                             to: "b",
                             directed: true,
@@ -125,6 +184,127 @@ run_test("renders native semantic nodes without exposing source JSON or adopting
         /^url\(#pear-artifact-arrow-/,
     );
     assert.equal(rendered.querySelector(".pear-artifact-connector-label").textContent, "force");
+    assert.equal(
+        rendered.querySelector('.pear-artifact-connectors [data-pear-artifact-target="force-edge"]')
+            .dataset.state,
+        "selected",
+    );
+});
+
+run_test("plays cumulative semantic scene steps with local controls", () => {
+    const document = valid_document();
+    document.blocks[1].root.children[2].state = "neutral";
+    document.blocks[1].steps = [
+        {
+            label: "Start at A",
+            changes: [{target: "a", state: "running", label: "A  0"}],
+        },
+        {
+            label: "Relax A to B",
+            changes: [
+                {target: "a", state: "success"},
+                {target: "force-edge", state: "selected"},
+                {target: "b", state: "running", label: "B  1"},
+            ],
+        },
+    ];
+    const parsed = artifact.parse_pear_artifact(JSON.stringify(document));
+    assert.ok(parsed);
+    const rendered = artifact.render_pear_artifact(parsed, {density: "chat"});
+    const a = rendered.querySelector('[data-pear-artifact-target="a"]');
+    const b = rendered.querySelector('[data-pear-artifact-target="b"]');
+    const edge = () => rendered.querySelector('[data-pear-artifact-target="force-edge"]');
+    const status = rendered.querySelector(".pear-artifact-step-status");
+    assert.equal(a.dataset.state, "running");
+    assert.equal(a.textContent, "A  0");
+    assert.equal(edge().dataset.state, "neutral");
+    assert.equal(status.textContent, "1/2  Start at A");
+    assert.match(
+        rendered.querySelector(".pear-artifact-step-announcement").textContent,
+        /Step 1 of 2: Start at A\. a is running\. a label: A {2}0\./,
+    );
+    assert.equal(
+        rendered.querySelector(".pear-artifact-scene").getAttribute("aria-describedby"),
+        rendered.querySelector(".pear-artifact-step-announcement").id,
+    );
+
+    rendered.querySelector('[aria-label="Next step"]').click();
+    assert.equal(a.dataset.state, "success");
+    assert.equal(b.dataset.state, "running");
+    assert.equal(b.textContent, "B  1");
+    assert.equal(edge().dataset.state, "selected");
+    assert.equal(status.textContent, "2/2  Relax A to B");
+
+    rendered.querySelector('[aria-label="Previous step"]').click();
+    assert.equal(a.dataset.state, "running");
+    assert.equal(b.dataset.state, undefined);
+    assert.equal(b.textContent, "B");
+    assert.equal(edge().dataset.state, "neutral");
+});
+
+run_test("creates and resets labels on initially unlabeled shapes", () => {
+    const document = valid_document();
+    delete document.blocks[1].root.children[0].label;
+    document.blocks[1].steps = [
+        {label: "Name A", changes: [{target: "a", label: "A  0"}]},
+        {label: "Update A", changes: [{target: "a", label: "A  1"}]},
+    ];
+    const parsed = artifact.parse_pear_artifact(JSON.stringify(document));
+    assert.ok(parsed);
+    const rendered = artifact.render_pear_artifact(parsed, {density: "chat"});
+    assert.equal(rendered.querySelector('[data-pear-artifact-target="a"]').textContent, "A  0");
+    rendered.querySelector('[aria-label="Next step"]').click();
+    assert.equal(rendered.querySelector('[data-pear-artifact-target="a"]').textContent, "A  1");
+    rendered.querySelector('[aria-label="Previous step"]').click();
+    assert.equal(rendered.querySelector('[data-pear-artifact-target="a"]').textContent, "A  0");
+});
+
+run_test("rejects scene steps with missing or empty targets", () => {
+    const document = valid_document();
+    document.blocks[1].steps = [
+        {label: "One", changes: [{target: "missing", state: "running"}]},
+        {label: "Two", changes: [{target: "a", state: "success"}]},
+    ];
+    assert.equal(artifact.parse_pear_artifact(JSON.stringify(document)), undefined);
+
+    document.blocks[1].steps[0].changes[0] = {target: "a"};
+    assert.equal(artifact.parse_pear_artifact(JSON.stringify(document)), undefined);
+
+    document.blocks[1].steps[0].changes[0] = {target: "a", state: "warning"};
+    document.blocks[1].root.children.push({type: "text", id: "caption", text: "caption"});
+    document.blocks[1].steps[0].changes[0] = {target: "caption", state: "warning"};
+    assert.equal(artifact.parse_pear_artifact(JSON.stringify(document)), undefined);
+});
+
+run_test("owns autoplay and connector observers across remounts", () => {
+    const document = valid_document();
+    document.blocks[1].steps = [
+        {label: "Start", changes: [{target: "a", state: "running"}]},
+        {label: "Finish", changes: [{target: "a", state: "success"}]},
+    ];
+    const parsed = artifact.parse_pear_artifact(JSON.stringify(document));
+    assert.ok(parsed);
+    const host = window.document.querySelector("#host");
+    const first = artifact.mount_pear_artifact($(host), parsed, {density: "chat"});
+    const first_intersection = intersection_observers.at(-1);
+    const first_resize = resize_observers.at(-1);
+    first_intersection.set_visible(true);
+    assert.equal(first.querySelector(".is-play").dataset.playing, "true");
+
+    const before_step = frame_count;
+    first.querySelector('[aria-label="Next step"]').click();
+    assert.ok(frame_count > before_step);
+
+    artifact.mount_pear_artifact($(host), parsed, {density: "chat"});
+    assert.equal(first_intersection.disconnected, true);
+    assert.equal(first_resize.disconnected, true);
+    assert.equal(first.querySelector(".is-play").dataset.playing, "false");
+
+    reduced_motion = true;
+    const latest_intersection = intersection_observers.at(-1);
+    latest_intersection.set_visible(true);
+    assert.equal(host.querySelector(".is-play").dataset.playing, "false");
+    reduced_motion = false;
 });
 
 run_test("lays out undirected graph branches by topological distance", () => {

@@ -139,6 +139,14 @@
     );
 }
 
+/* Pear selection is a quiet adaptive rail. A full-grid outline creates a
+   misleading bottom seam below tall artifacts and pinned controls. */
+.selected_message .messagebox-content {
+    border-radius: 0;
+    outline: 0;
+    box-shadow: inset 2px 0 var(--color-selected-message-outline);
+}
+
 /* Search matches keep a warm cast (distinct from violet selection
    language) but speak from the token system, not raw yellow. */
 .highlight,

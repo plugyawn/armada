@@ -13,6 +13,7 @@ PEAR_ARTIFACT_SERIALIZED_LIMIT = 64_000
 PEAR_ARTIFACT_NODE_LIMIT = 128
 PEAR_ARTIFACT_DEPTH_LIMIT = 8
 PEAR_ARTIFACT_TOTAL_TEXT_LIMIT = 12_000
+PEAR_ARTIFACT_MEDIA_BLOCK_LIMIT = 2
 
 
 class PearArtifactError(ValueError):
@@ -364,7 +365,50 @@ def _validate_scene_steps(block: dict[str, Any]) -> None:
         raise PearArtifactError("scene step text budget exceeded")
 
 
-def canonicalize_pear_artifact(value: object) -> tuple[dict[str, Any], str]:
+def _validate_media(block: dict[str, Any], *, allow_unresolved_media: bool) -> None:
+    source_keys = {"source", "sourceDark", "posterSource", "posterSourceDark"}
+    resolved_keys = {"src", "srcDark", "poster", "posterDark"}
+    present_source_keys = source_keys & block.keys()
+    present_resolved_keys = resolved_keys & block.keys()
+    if allow_unresolved_media:
+        if "source" not in block or present_resolved_keys:
+            raise PearArtifactError("authored media requires source and cannot provide upload URLs")
+    elif "src" not in block or present_source_keys:
+        raise PearArtifactError("persisted media requires src and cannot contain workspace paths")
+
+    primary = block.get("source") if allow_unresolved_media else block.get("src")
+    dark = block.get("sourceDark") if allow_unresolved_media else block.get("srcDark")
+    poster = block.get("posterSource") if allow_unresolved_media else block.get("poster")
+    poster_dark = (
+        block.get("posterSourceDark") if allow_unresolved_media else block.get("posterDark")
+    )
+    assert isinstance(primary, str)
+    kind = block.get("kind")
+    primary_extension = primary.rsplit(".", 1)[-1].lower()
+    if kind == "image" and primary_extension not in {"png", "webp"}:
+        raise PearArtifactError("image media requires a PNG or WebP source")
+    if kind == "video" and primary_extension != "webm":
+        raise PearArtifactError("video media requires a WebM source")
+    if kind == "image" and (poster is not None or poster_dark is not None):
+        raise PearArtifactError("image media cannot provide a video poster")
+    if kind == "video" and poster_dark is not None and poster is None:
+        raise PearArtifactError("a dark video poster requires a default poster")
+    for poster_value in (poster, poster_dark):
+        if isinstance(poster_value, str) and poster_value.rsplit(".", 1)[-1].lower() not in {
+            "png",
+            "webp",
+        }:
+            raise PearArtifactError("video posters require PNG or WebP sources")
+    if dark is not None:
+        assert isinstance(dark, str)
+        dark_extension = dark.rsplit(".", 1)[-1].lower()
+        if dark_extension != primary_extension:
+            raise PearArtifactError("light and dark media sources require the same file type")
+
+
+def canonicalize_pear_artifact(
+    value: object, *, allow_unresolved_media: bool = False
+) -> tuple[dict[str, Any], str]:
     try:
         encoded = json.dumps(
             value,
@@ -382,10 +426,15 @@ def canonicalize_pear_artifact(value: object) -> tuple[dict[str, Any], str]:
     if schema_error is not None:
         raise PearArtifactError(schema_error)
     assert isinstance(decoded, dict)
+    media_blocks = [block for block in decoded["blocks"] if block["type"] == "media"]
+    if len(media_blocks) > PEAR_ARTIFACT_MEDIA_BLOCK_LIMIT:
+        raise PearArtifactError(f"artifact exceeds {PEAR_ARTIFACT_MEDIA_BLOCK_LIMIT} media blocks")
     for block in decoded["blocks"]:
         if block["type"] == "scene":
             _validate_scene(block["root"])
             _validate_scene_steps(block)
+        elif block["type"] == "media":
+            _validate_media(block, allow_unresolved_media=allow_unresolved_media)
     return decoded, encoded
 
 
@@ -401,13 +450,18 @@ def artifact_tool_result(encoded: str) -> dict[str, str]:
     return {"label": PEAR_ARTIFACT_TOOL_RESULT_LABEL, "value": encoded}
 
 
-def artifacts_from_tool_results(tool_results: Iterable[dict[str, str]]) -> list[str]:
+def artifacts_from_tool_results(
+    tool_results: Iterable[dict[str, str]], *, allow_unresolved_media: bool = False
+) -> list[str]:
     artifacts: list[str] = []
     for result in tool_results:
         if result.get("label") != PEAR_ARTIFACT_TOOL_RESULT_LABEL:
             continue
         try:
-            _document, encoded = canonicalize_pear_artifact(json.loads(result.get("value", "")))
+            _document, encoded = canonicalize_pear_artifact(
+                json.loads(result.get("value", "")),
+                allow_unresolved_media=allow_unresolved_media,
+            )
         except (json.JSONDecodeError, PearArtifactError):
             continue
         artifacts.append(encoded)

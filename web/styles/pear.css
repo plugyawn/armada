@@ -2166,6 +2166,81 @@
     white-space: pre-wrap;
 }
 
+.pear-artifact-media {
+    display: grid;
+    gap: var(--pear-space-2);
+    margin: 0;
+}
+
+.pear-artifact-media-frame {
+    position: relative;
+    display: grid;
+    overflow: hidden;
+    min-height: 160px;
+    border: 1px solid transparent;
+    border-radius: var(--pear-radius-card);
+    background: transparent;
+    place-items: center;
+
+    .pear-artifact-media[data-status="loading"] &,
+    .pear-artifact-media[data-status="failed"] & {
+        border-color: var(--pear-hairline);
+        border-style: dashed;
+        background: var(--pear-artifact-raised);
+    }
+
+    .pear-artifact-media[data-aspect="wide"] & {
+        aspect-ratio: 16 / 9;
+    }
+
+    .pear-artifact-media[data-aspect="standard"] & {
+        aspect-ratio: 4 / 3;
+    }
+
+    .pear-artifact-media[data-aspect="square"] & {
+        aspect-ratio: 1;
+    }
+
+    .pear-artifact-media[data-aspect="tall"] & {
+        aspect-ratio: 3 / 4;
+    }
+}
+
+.pear-artifact-media-content {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+}
+
+.pear-artifact-media-status {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    color: var(--pear-ink-3);
+    font-family: var(--pear-font-pixel);
+    font-size: 12px;
+    letter-spacing: 0.02em;
+    pointer-events: none;
+    place-items: center;
+
+    .pear-artifact-media[data-status="ready"] & {
+        display: none;
+    }
+
+    .pear-artifact-media[data-status="failed"] & {
+        background: var(--pear-artifact-raised);
+        color: var(--pear-danger);
+    }
+}
+
+.pear-artifact-media-caption {
+    max-width: 72ch;
+    color: var(--pear-ink-2);
+    font-size: 14px;
+    line-height: 1.4;
+}
+
 .pear-artifact-metric {
     color: var(--pear-artifact-state, var(--pear-ink-1));
     font-family: var(--pear-font-mono);
@@ -2554,7 +2629,8 @@
     &[data-state="running"] {
         border-color: var(--pear-accent-ink);
         box-shadow: 0 0 0 3px var(--pear-accent-fill);
-        animation: pear-artifact-state-running 900ms var(--pear-ease) infinite alternate;
+        animation: pear-artifact-state-running 900ms var(--pear-ease) infinite
+            alternate;
     }
 
     &[data-state="success"] {

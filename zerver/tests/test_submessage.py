@@ -1,3 +1,6 @@
+import json
+import tempfile
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 from unittest import mock
@@ -6,7 +9,7 @@ from zerver.actions.submessage import do_add_submessage
 from zerver.lib.message_cache import MessageDict
 from zerver.lib.pear import PEAR_EMBEDDED_BOT_SERVICE, attach_pear_artifact_to_message
 from zerver.lib.test_classes import ZulipTestCase
-from zerver.models import Message, SubMessage, UserProfile
+from zerver.models import Attachment, Message, SubMessage, UserProfile
 
 
 class TestBasics(ZulipTestCase):
@@ -143,6 +146,57 @@ class TestBasics(ZulipTestCase):
         )
         self.assertTrue(attached)
         self.assertEqual(SubMessage.objects.filter(message_id=message_id).count(), 1)
+
+    def test_pear_runtime_materializes_and_claims_generated_media(self) -> None:
+        owner = self.example_user("hamlet")
+        pear_bot = self.create_test_bot(
+            "pear-media",
+            owner,
+            full_name="Pear Media",
+            bot_type=UserProfile.EMBEDDED_BOT,
+            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+        )
+        message_id = self.send_stream_message(pear_bot, "Denmark", content="Wave motion.")
+        with tempfile.TemporaryDirectory() as workdir:
+            media_dir = Path(workdir) / ".pear" / "artifacts"
+            media_dir.mkdir(parents=True)
+            (media_dir / "wave.webm").write_bytes(b"\x1a\x45\xdf\xa3bounded-webm")
+            document = json.dumps(
+                {
+                    "version": 1,
+                    "blocks": [
+                        {
+                            "type": "media",
+                            "kind": "video",
+                            "source": ".pear/artifacts/wave.webm",
+                            "alt": "A wave moves from left to right.",
+                            "motion": "manual",
+                        }
+                    ],
+                }
+            )
+            attached = attach_pear_artifact_to_message(
+                SimpleNamespace(user_profile=pear_bot),
+                message_id=message_id,
+                tool_results=[{"label": "Artifact", "value": document}],
+                workdir=workdir,
+            )
+            self.assertTrue(attached)
+            submessage = SubMessage.objects.get(message_id=message_id, msg_type="pear_artifact")
+            media = json.loads(submessage.content)["blocks"][0]
+            self.assertNotIn("source", media)
+            self.assertRegex(media["src"], r"^/user_uploads/")
+            attachment = Attachment.objects.get(path_id=media["src"].removeprefix("/user_uploads/"))
+            self.assertEqual(list(attachment.messages.values_list("id", flat=True)), [message_id])
+
+            attach_pear_artifact_to_message(
+                SimpleNamespace(user_profile=pear_bot),
+                message_id=message_id,
+                tool_results=[{"label": "Artifact", "value": document}],
+                workdir=workdir,
+            )
+            self.assertEqual(SubMessage.objects.filter(message_id=message_id).count(), 1)
+            self.assertEqual(Attachment.objects.filter(owner=pear_bot).count(), 1)
 
     def test_original_sender_enforced(self) -> None:
         cordelia = self.example_user("cordelia")

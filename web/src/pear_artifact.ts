@@ -420,6 +420,34 @@ function semantic_scene_steps_are_valid(block: JsonObject): boolean {
     return total_text <= 12000;
 }
 
+function semantic_media_is_valid(block: JsonObject): boolean {
+    const source_fields = ["source", "sourceDark", "posterSource", "posterSourceDark"];
+    if (source_fields.some((field) => field in block) || typeof block["src"] !== "string") {
+        return false;
+    }
+    const kind = block["kind"];
+    const extension = block["src"].split(".").at(-1)?.toLowerCase();
+    if (
+        (kind === "image" && extension !== "png" && extension !== "webp") ||
+        (kind === "video" && extension !== "webm")
+    ) {
+        return false;
+    }
+    if (kind === "image" && ("poster" in block || "posterDark" in block)) {
+        return false;
+    }
+    if ("posterDark" in block && !("poster" in block)) {
+        return false;
+    }
+    return [block["poster"], block["posterDark"]].every((value) => {
+        if (value === undefined) {
+            return true;
+        }
+        const poster_extension = typeof value === "string" ? value.split(".").at(-1) : undefined;
+        return poster_extension === "png" || poster_extension === "webp";
+    });
+}
+
 export function parse_pear_artifact(raw: string): PearArtifactDocument | undefined {
     if (new TextEncoder().encode(raw).length > 64000) {
         return undefined;
@@ -469,6 +497,10 @@ export function parse_pear_artifact(raw: string): PearArtifactDocument | undefin
     ) {
         return undefined;
     }
+    const media_blocks = document.blocks.filter((block) => block.type === "media");
+    if (media_blocks.length > 2 || media_blocks.some((block) => !semantic_media_is_valid(block))) {
+        return undefined;
+    }
     return document;
 }
 
@@ -489,6 +521,40 @@ function scalar_text(value: unknown): string {
     return typeof value === "string" || typeof value === "number" || typeof value === "boolean"
         ? String(value)
         : "";
+}
+
+function dark_theme_is_active(): boolean {
+    const root = document.documentElement;
+    return (
+        root.classList.contains("dark-theme") ||
+        (root.classList.contains("color-scheme-automatic") &&
+            window.matchMedia?.("(prefers-color-scheme: dark)").matches)
+    );
+}
+
+function watch_theme(controller: AbortController, callback: () => void): void {
+    const color_query = window.matchMedia?.("(prefers-color-scheme: dark)");
+    color_query?.addEventListener("change", callback, {signal: controller.signal});
+    if (typeof MutationObserver === "undefined") {
+        return;
+    }
+    const observer = new MutationObserver(callback);
+    observer.observe(document.documentElement, {attributes: true, attributeFilter: ["class"]});
+    controller.signal.addEventListener(
+        "abort",
+        () => {
+            observer.disconnect();
+        },
+        {once: true},
+    );
+}
+
+function themed_media_value(block: PearArtifactBlock, field: string): string {
+    const dark_value = block[`${field}Dark`];
+    if (dark_theme_is_active() && typeof dark_value === "string") {
+        return dark_value;
+    }
+    return scalar_text(block[field]);
 }
 
 function data_value(data: JsonObject, path: unknown): unknown {
@@ -1589,6 +1655,118 @@ function render_scene(
     return frame;
 }
 
+function render_media(block: PearArtifactBlock, controller: AbortController): HTMLElement {
+    const figure = element("figure", "pear-artifact-media");
+    figure.dataset["aspect"] = scalar_text(block["aspect"] ?? "wide");
+    figure.dataset["status"] = "loading";
+    const frame = element("div", "pear-artifact-media-frame");
+    const status = element("div", "pear-artifact-media-status", "Loading visual…");
+    status.setAttribute("role", "status");
+    const set_ready = (): void => {
+        figure.dataset["status"] = "ready";
+        status.textContent = "";
+    };
+    const set_failed = (): void => {
+        figure.dataset["status"] = "failed";
+        status.textContent = "Visual unavailable";
+    };
+
+    if (block["kind"] === "image") {
+        const image = document.createElement("img");
+        image.className = "pear-artifact-media-content";
+        image.alt = scalar_text(block["alt"]);
+        image.loading = "lazy";
+        image.decoding = "async";
+        const update_source = (): void => {
+            const source = themed_media_value(block, "src");
+            if (image.getAttribute("src") !== source) {
+                figure.dataset["status"] = "loading";
+                status.textContent = "Loading visual…";
+                image.src = source;
+            }
+        };
+        image.addEventListener("load", set_ready, {signal: controller.signal});
+        image.addEventListener("error", set_failed, {signal: controller.signal});
+        watch_theme(controller, update_source);
+        update_source();
+        frame.append(image);
+    } else {
+        const video = document.createElement("video");
+        video.className = "pear-artifact-media-content";
+        video.setAttribute("aria-label", scalar_text(block["alt"]));
+        video.controls = true;
+        video.muted = true;
+        video.playsInline = true;
+        video.preload = "metadata";
+        video.loop = block["motion"] === "loop";
+        let has_played = false;
+        let is_visible = false;
+        const reduced_motion_query = window.matchMedia?.("(prefers-reduced-motion: reduce)");
+        const may_autoplay = (): boolean =>
+            block["motion"] !== "manual" && !reduced_motion_query?.matches;
+        const play_video = async (): Promise<void> => {
+            try {
+                await video.play();
+            } catch {
+                // Native controls remain available when autoplay is denied.
+            }
+        };
+        const update_playback = (): void => {
+            if (!is_visible || !may_autoplay() || (block["motion"] === "once" && has_played)) {
+                video.pause();
+                return;
+            }
+            has_played = true;
+            void play_video();
+        };
+        const update_source = (): void => {
+            const source = themed_media_value(block, "src");
+            const poster = themed_media_value(block, "poster");
+            if (video.getAttribute("src") !== source) {
+                video.pause();
+                has_played = false;
+                figure.dataset["status"] = "loading";
+                status.textContent = "Loading visual…";
+                video.src = source;
+            }
+            if (poster) {
+                video.poster = poster;
+            } else {
+                video.removeAttribute("poster");
+            }
+            update_playback();
+        };
+        video.addEventListener("loadeddata", set_ready, {signal: controller.signal});
+        video.addEventListener("error", set_failed, {signal: controller.signal});
+        video.addEventListener("ended", () => (has_played = true), {signal: controller.signal});
+        reduced_motion_query?.addEventListener("change", update_playback, {
+            signal: controller.signal,
+        });
+        const observer = new IntersectionObserver((entries) => {
+            is_visible = entries.some((entry) => entry.isIntersecting);
+            update_playback();
+        });
+        observer.observe(video);
+        controller.signal.addEventListener(
+            "abort",
+            () => {
+                observer.disconnect();
+                video.pause();
+            },
+            {once: true},
+        );
+        watch_theme(controller, update_source);
+        update_source();
+        frame.append(video);
+    }
+    frame.append(status);
+    figure.append(frame);
+    if (typeof block["caption"] === "string" && block["caption"] !== "") {
+        figure.append(element("figcaption", "pear-artifact-media-caption", block["caption"]));
+    }
+    return figure;
+}
+
 function render_block(
     block: PearArtifactBlock,
     data: JsonObject,
@@ -1609,6 +1787,11 @@ function render_block(
         }
         case "scene": {
             host.append(render_scene(block, data, controller));
+
+            break;
+        }
+        case "media": {
+            host.append(render_media(block, controller));
 
             break;
         }

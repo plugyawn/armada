@@ -398,7 +398,6 @@ def build_pear_codex_turn_prompt(active_session: PearActiveSessionSummary, task:
         f"- head: {workspace_context.get('head') or 'unknown'}",
         "- contract: the Zulip stream maps to the repository, and the Zulip topic/subthread maps to the Git branch.",
         "- privacy: refer to the workspace by branch or worktree name in replies; never print the absolute workdir path in the topic.",
-        "- artifacts: call pear_artifact when a native diagram, compact explainer, status display, or local interaction answers better than prose; if you announce the pear-artifacts skill, you must complete a successful call and must not substitute ASCII art or a fenced diagram. Provide meaning and data only because Pear owns all styling, and do not print artifact JSON in the reply.",
         "- servers and watchers: never start a long-lived process (http.server, watch loops, dev servers) in the foreground — it blocks your turn from ever finishing. Run it detached (nohup ... >/dev/null 2>&1 &) and verify with a follow-up probe.",
         "- math: write math in Zulip's dialect — $$...$$ for inline math and ```math fenced blocks for display equations; \\[ \\] and \\( \\) do not render here.",
         "- checklists: your plan tool is the working checklist — its steps render live in the topic rail, so keep it current instead of duplicating it in chat or a workspace document.",
@@ -1408,7 +1407,9 @@ class PearCodexAppServerToolRunner:
                 except json.JSONDecodeError as error:
                     arguments = {"invalid_json": str(error)}
             try:
-                document, encoded = canonicalize_pear_artifact(arguments)
+                document, encoded = canonicalize_pear_artifact(
+                    arguments, allow_unresolved_media=True
+                )
             except PearArtifactError as error:
                 detail = trim_pear_agent_text(str(error), limit=500)
                 return (

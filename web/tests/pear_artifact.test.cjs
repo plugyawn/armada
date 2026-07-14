@@ -67,6 +67,8 @@ for (const [name, value] of Object.entries({
     document: window.document,
     Element: window.Element,
     HTMLElement: window.HTMLElement,
+    AbortController: window.AbortController,
+    MutationObserver: window.MutationObserver,
     TextEncoder,
     requestAnimationFrame(callback) {
         frame_count += 1;
@@ -132,6 +134,49 @@ run_test("parses the generated artifact contract and rejects authored presentati
         Object.assign(document.blocks[1].root, hostile);
         assert.equal(artifact.parse_pear_artifact(JSON.stringify(document)), undefined);
     }
+});
+
+run_test("renders durable theme-aware media and rejects workspace paths", () => {
+    const document = {
+        version: 1,
+        blocks: [
+            {
+                type: "media",
+                kind: "image",
+                src: "/user_uploads/1/ab/diagram.webp",
+                srcDark: "/user_uploads/1/cd/diagram-dark.webp",
+                alt: "A geometric construction.",
+                caption: "Constraints determine the geometry.",
+                aspect: "standard",
+            },
+        ],
+    };
+    window.document.documentElement.classList.add("dark-theme");
+    const parsed = artifact.parse_pear_artifact(JSON.stringify(document));
+    assert.ok(parsed);
+    const rendered = artifact.render_pear_artifact(parsed, {density: "chat"});
+    const image = rendered.querySelector(".pear-artifact-media-content");
+    assert.equal(image.getAttribute("src"), "/user_uploads/1/cd/diagram-dark.webp");
+    assert.equal(image.getAttribute("alt"), "A geometric construction.");
+    assert.equal(
+        rendered.querySelector(".pear-artifact-media-status").textContent,
+        "Loading visual…",
+    );
+    image.dispatchEvent(new window.Event("load"));
+    assert.equal(rendered.querySelector(".pear-artifact-media").dataset.status, "ready");
+    assert.equal(
+        rendered.querySelector("figcaption").textContent,
+        "Constraints determine the geometry.",
+    );
+    window.document.documentElement.classList.remove("dark-theme");
+
+    document.blocks[0] = {
+        type: "media",
+        kind: "image",
+        source: ".pear/artifacts/diagram.webp",
+        alt: "Unresolved workspace image.",
+    };
+    assert.equal(artifact.parse_pear_artifact(JSON.stringify(document)), undefined);
 });
 
 run_test("rejects unresolved connectors and duplicate ids", () => {

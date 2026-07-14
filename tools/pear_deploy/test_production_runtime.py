@@ -59,6 +59,7 @@ class AssetReusePolicyTest(unittest.TestCase):
                     "zerver/lib/pear_workspace_io.py",
                     "zerver/views/pear_workspace.py",
                     "zerver/tests/test_pear_workspace_io.py",
+                    "tools/pear_deploy/runtime/Caddyfile",
                     "tools/pear_deploy/update_remote.sh",
                 ]
             )

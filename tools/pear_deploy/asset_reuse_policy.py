@@ -27,6 +27,7 @@ BACKEND_ONLY_PATTERNS = (
     "tools/pear_deploy/README.md",
     "tools/pear_deploy/asset_reuse_policy.py",
     "tools/pear_deploy/deployment_capacity.py",
+    "tools/pear_deploy/runtime/Caddyfile",
     "tools/pear_deploy/test_production_runtime.py",
     "tools/pear_deploy/update_remote.sh",
 )

@@ -834,23 +834,22 @@
        these. Both themes derive from the same scales via light-dark().
        ============================================================ */
 
-    /* Moss neutrals: green-cast ramp; saturation falls as lightness
-       rises so light theme reads as warm paper, not mint. */
-    --pear-surface-0: light-dark(hsl(100deg 20% 97.5%), hsl(160deg 10% 5.5%));
-    --pear-surface-1: light-dark(hsl(100deg 15% 94.5%), hsl(158deg 9% 8%));
-    --pear-surface-2: light-dark(hsl(100deg 12% 91%), hsl(156deg 8% 11.5%));
-    --pear-surface-3: light-dark(hsl(100deg 12% 87.5%), hsl(154deg 7% 15%));
-    --pear-ink-1: light-dark(hsl(160deg 18% 12%), hsl(150deg 12% 92%));
-    --pear-ink-2: light-dark(hsl(158deg 10% 34%), hsl(150deg 8% 68%));
-    --pear-ink-3: light-dark(hsl(156deg 8% 52%), hsl(150deg 6% 46%));
+    /* Warm graphite neutrals. Green is semantic live/success state,
+       not the ambient cast of every surface. */
+    --pear-surface-0: light-dark(hsl(40deg 12% 98%), hsl(240deg 5% 6%));
+    --pear-surface-1: light-dark(hsl(40deg 9% 95%), hsl(240deg 5% 8.5%));
+    --pear-surface-2: light-dark(hsl(40deg 7% 92%), hsl(240deg 4% 12%));
+    --pear-surface-3: light-dark(hsl(40deg 6% 88%), hsl(240deg 4% 16%));
+    --pear-ink-1: light-dark(hsl(240deg 7% 12%), hsl(40deg 8% 92%));
+    --pear-ink-2: light-dark(hsl(240deg 4% 34%), hsl(40deg 5% 68%));
+    --pear-ink-3: light-dark(hsl(240deg 3% 52%), hsl(40deg 4% 46%));
     --pear-hairline: light-dark(
-        hsl(160deg 18% 12% / 9%),
+        hsl(240deg 8% 12% / 9%),
         hsl(0deg 0% 100% / 9%)
     );
 
-    /* Anjou accent scale — states derive from the scale, never from
-       ad-hoc mixes. Spend rule: live/active state, focus, selection,
-       and the ✦ cycle. Nothing else. */
+    /* Anjou accent scale — reserved for live/presence/success state
+       and the Pear ✦ identity cycle. Ordinary interaction is violet. */
     --pear-a300: hsl(140deg 42% 68%);
     --pear-a400: hsl(140deg 44% 56%);
     --pear-a500: hsl(141deg 48% 42%);
@@ -920,7 +919,7 @@
     --pear-radius-chip: 4px;
     --pear-radius-card: 8px;
     --pear-shadow-pop: light-dark(
-        0 8px 24px hsl(160deg 20% 20% / 14%),
+        0 8px 24px hsl(240deg 8% 12% / 14%),
         0 8px 24px hsl(0deg 0% 0% / 32%)
     );
 
@@ -931,13 +930,11 @@
     --pear-dur-3: 350ms;
 
     /* Pear message rows sit one tone below the page surface. */
-    --color-background-pear-message-content: light-dark(
-        hsl(100deg 15% 95%),
-        hsl(158deg 8% 9%)
-    );
-    --color-selected-message-outline: light-dark(
-        hsl(217deg 64% 59% / 60%),
-        hsl(217deg 64% 59% / 70%)
+    --color-background-pear-message-content: var(--pear-surface-1);
+    --color-selected-message-outline: color-mix(
+        in srgb,
+        var(--pear-interaction) 60%,
+        transparent
     );
     --color-selected-gif-in-grid-picker: light-dark(
         hsl(217deg 75% 59%),

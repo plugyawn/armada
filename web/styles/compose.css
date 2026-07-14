@@ -8,13 +8,16 @@
        and maintain uniform heights between the
        reply button and the new-message button. */
     align-items: stretch;
+    padding: 3px;
+    border-top: 1px solid var(--pear-hairline);
+    background: var(--pear-surface-1);
 
     .compose_mobile_button {
         /* Keep the new message button sized to match
            adjacent buttons. */
         min-width: inherit;
         padding: 3px 10px;
-        border-radius: 4px;
+        border-radius: var(--pear-radius-px);
         outline: none;
         /* This is ugly, but necessary to use the
            text + for the compose button. An icon
@@ -54,7 +57,7 @@
         min-width: 0;
 
         /* Button-like styling */
-        border-radius: 4px;
+        border-radius: var(--pear-radius-px);
         background-color: var(
             --color-compose-collapsed-reply-button-area-background
         );
@@ -84,7 +87,7 @@
             border: none;
             color: var(--color-text-default);
             background: var(--color-compose-embedded-button-background);
-            border-radius: 3px;
+            border-radius: calc(var(--pear-radius-px) - 1px);
             line-height: var(--line-height-compose-buttons);
         }
 
@@ -129,7 +132,8 @@
             margin: 1px;
             flex-shrink: 0;
             align-self: stretch;
-            font-weight: 600;
+            font-family: var(--pear-font-pixel);
+            font-weight: 400;
             color: var(--color-compose-embedded-button-text-color);
             border-left: 1px solid
                 var(--color-compose-collapsed-reply-button-area-border);
@@ -174,7 +178,7 @@
         min-width: inherit;
         line-height: var(--line-height-compose-buttons);
         padding: 3px 10px;
-        border-radius: 4px;
+        border-radius: var(--pear-radius-px);
         outline: none;
         color: var(--color-text-default);
         background-color: var(--color-background-compose-new-message-button);

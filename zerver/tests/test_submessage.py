@@ -278,13 +278,15 @@ class TestBasics(ZulipTestCase):
         message_id = self.send_stream_message(pear_bot, "Denmark", content="Vector lattice.")
         with tempfile.TemporaryDirectory() as workdir:
             media_path = Path(workdir) / ".pear" / "artifacts" / "lattice.svg"
+            dark_media_path = Path(workdir) / ".pear" / "artifacts" / "lattice-dark.svg"
             media_path.parent.mkdir(parents=True)
-            media_path.write_text(
+            svg = (
                 '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10" penrose="0">'
                 "<penrose><croppedViewBox>0 0 10 10</croppedViewBox></penrose>"
-                '<circle cx="5" cy="5" r="4" fill="#8080ff"/></svg>',
-                encoding="utf-8",
+                '<circle cx="5" cy="5" r="4" fill="#8080ff"/></svg>'
             )
+            media_path.write_text(svg, encoding="utf-8")
+            dark_media_path.write_text(svg.replace("#8080ff", "#b0b0ff"), encoding="utf-8")
             sanitized_digest = hashlib.sha256(
                 sanitize_pear_generated_vector(media_path.read_bytes())
             ).hexdigest()
@@ -296,6 +298,7 @@ class TestBasics(ZulipTestCase):
                             "type": "media",
                             "kind": "image",
                             "source": ".pear/artifacts/lattice.svg",
+                            "sourceDark": ".pear/artifacts/lattice-dark.svg",
                             "alt": "A vector crystal lattice.",
                         }
                     ],

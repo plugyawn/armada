@@ -387,6 +387,8 @@ def _validate_media(block: dict[str, Any], *, allow_unresolved_media: bool) -> N
     primary_extension = primary.rsplit(".", 1)[-1].lower()
     if kind == "image" and primary_extension not in {"png", "svg", "webp"}:
         raise PearArtifactError("image media requires a PNG, SVG, or WebP source")
+    if kind == "image" and primary_extension == "svg" and dark is None:
+        raise PearArtifactError("SVG image media requires light and dark sources")
     if kind == "video" and primary_extension != "webm":
         raise PearArtifactError("video media requires a WebM source")
     if kind == "video" and (dark is None or poster is None or poster_dark is None):

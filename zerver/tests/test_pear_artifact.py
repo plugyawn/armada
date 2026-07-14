@@ -300,11 +300,16 @@ class PearArtifactValidationTest(TestCase):
                     "type": "media",
                     "kind": "image",
                     "source": ".pear/artifacts/lattice.svg",
+                    "sourceDark": ".pear/artifacts/lattice-dark.svg",
                     "alt": "A vector crystal lattice.",
                 }
             ],
         }
         canonicalize_pear_artifact(vector, allow_unresolved_media=True)
+
+        del vector["blocks"][0]["sourceDark"]
+        with self.assertRaisesRegex(PearArtifactError, "light and dark sources"):
+            canonicalize_pear_artifact(vector, allow_unresolved_media=True)
 
     def test_media_types_and_count_are_bounded(self) -> None:
         media = {

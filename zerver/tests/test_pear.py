@@ -2301,11 +2301,11 @@ class PearSessionDefaultsTest(TestCase):
         self.assertNotIn("Recent artifacts:\n- Routine", prompt)
         self.assertNotIn("Recent artifacts:\n- Done", prompt)
         self.assertNotIn("Done: <definition of done or success criteria>", prompt)
-        self.assertIn(
+        self.assertNotIn(
             "if you announce the pear-artifacts skill, you must complete a successful call",
             prompt,
         )
-        self.assertIn("must not substitute ASCII art or a fenced diagram", prompt)
+        self.assertNotIn("must not substitute ASCII art or a fenced diagram", prompt)
 
     def test_codex_developer_instructions_are_byte_stable(self) -> None:
         payload = get_pear_session_payload()
@@ -5605,8 +5605,17 @@ class PearSessionDefaultsTest(TestCase):
                 ]
             return [{"label": "Result", "value": "steered result"}]
 
-        def attach_artifact(bot_handler, *, message_id, tool_results) -> bool:
+        def attach_artifact(
+            bot_handler: object,
+            *,
+            message_id: int | None,
+            tool_results: list[dict[str, str]],
+            workdir: str,
+            isolation_username: str | None,
+        ) -> bool:
             del bot_handler, message_id
+            self.assertEqual(workdir, "")
+            self.assertIsNone(isolation_username)
             attached_artifacts.extend(tool_results)
             return True
 

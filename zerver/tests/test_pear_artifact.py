@@ -242,3 +242,56 @@ class PearArtifactValidationTest(TestCase):
         }
         canonical, _encoded = canonicalize_pear_artifact(document)
         self.assertEqual(canonical["blocks"][0]["root"]["derive"]["op"], "divide")
+
+    def test_media_sources_exist_only_at_the_tool_boundary(self) -> None:
+        authored = {
+            "version": 1,
+            "blocks": [
+                {
+                    "type": "media",
+                    "kind": "video",
+                    "source": ".pear/artifacts/wave.webm",
+                    "sourceDark": ".pear/artifacts/wave-dark.webm",
+                    "posterSource": ".pear/artifacts/wave.webp",
+                    "posterSourceDark": ".pear/artifacts/wave-dark.webp",
+                    "alt": "A wave packet disperses over time.",
+                    "motion": "once",
+                }
+            ],
+        }
+        canonicalize_pear_artifact(authored, allow_unresolved_media=True)
+        with self.assertRaisesRegex(PearArtifactError, "persisted media requires src"):
+            canonicalize_pear_artifact(authored)
+
+        persisted = {
+            "version": 1,
+            "blocks": [
+                {
+                    "type": "media",
+                    "kind": "image",
+                    "src": "/user_uploads/1/ab/diagram.webp",
+                    "srcDark": "/user_uploads/1/cd/diagram-dark.webp",
+                    "alt": "A constraint diagram.",
+                }
+            ],
+        }
+        canonicalize_pear_artifact(persisted)
+        with self.assertRaisesRegex(PearArtifactError, "cannot provide upload URLs"):
+            canonicalize_pear_artifact(persisted, allow_unresolved_media=True)
+
+    def test_media_types_and_count_are_bounded(self) -> None:
+        media = {
+            "type": "media",
+            "kind": "image",
+            "source": ".pear/artifacts/not-an-image.webm",
+            "alt": "Wrong type.",
+        }
+        with self.assertRaisesRegex(PearArtifactError, "PNG or WebP"):
+            canonicalize_pear_artifact(
+                {"version": 1, "blocks": [media]}, allow_unresolved_media=True
+            )
+
+        media["kind"] = "video"
+        document = {"version": 1, "blocks": [dict(media), dict(media), dict(media)]}
+        with self.assertRaisesRegex(PearArtifactError, "2 media blocks"):
+            canonicalize_pear_artifact(document, allow_unresolved_media=True)

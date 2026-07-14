@@ -1,3 +1,5 @@
+import hashlib
+import json
 import logging
 import re
 import time
@@ -1212,6 +1214,127 @@ PEAR_IMAGE_CONTENT_TYPES: Final = {
     ".gif": "image/gif",
     ".webp": "image/webp",
 }
+PEAR_ARTIFACT_MEDIA_MAX_BYTES: Final = {
+    ".png": 4_000_000,
+    ".webp": 4_000_000,
+    ".webm": 12_000_000,
+}
+PEAR_ARTIFACT_MEDIA_CONTENT_TYPES: Final = {
+    ".png": "image/png",
+    ".webp": "image/webp",
+    ".webm": "video/webm",
+}
+PEAR_ARTIFACT_MEDIA_FIELDS: Final = {
+    "source": "src",
+    "sourceDark": "srcDark",
+    "posterSource": "poster",
+    "posterSourceDark": "posterDark",
+}
+
+
+def _pear_artifact_media_signature_is_valid(extension: str, data: bytes) -> bool:
+    if extension == ".png":
+        return data.startswith(b"\x89PNG\r\n\x1a\n")
+    if extension == ".webp":
+        return len(data) >= 12 and data.startswith(b"RIFF") and data[8:12] == b"WEBP"
+    if extension == ".webm":
+        return data.startswith(b"\x1a\x45\xdf\xa3")
+    return False
+
+
+def pear_materialize_artifact_media(
+    document: dict[str, Any],
+    *,
+    workdir: str,
+    isolation_username: str | None,
+    bot_profile: Any,
+) -> tuple[dict[str, Any], list[str]]:
+    """Replace bounded workspace media sources with durable upload URLs."""
+    from pathlib import Path
+
+    from zerver.lib.pear_artifact import PearArtifactError, canonicalize_pear_artifact
+    from zerver.lib.pear_worker import pear_read_bytes_path, pear_workspace_relative_path
+    from zerver.lib.upload import upload_message_attachment
+    from zerver.models import Attachment, UserProfile
+
+    assert isinstance(bot_profile, UserProfile)
+    resolved_document = json.loads(json.dumps(document))
+    if not any(block.get("type") == "media" for block in resolved_document["blocks"]):
+        canonical, _encoded = canonicalize_pear_artifact(resolved_document)
+        return canonical, []
+    if not workdir.startswith("/"):
+        raise PearArtifactError("generated media requires an active workspace")
+    try:
+        workspace_root = Path(workdir).resolve(strict=True)
+    except OSError as error:
+        raise PearArtifactError("generated media workspace is unavailable") from error
+
+    uploaded_by_source: dict[str, tuple[str, str]] = {}
+    claimed_path_ids: list[str] = []
+    for block in resolved_document["blocks"]:
+        if block.get("type") != "media":
+            continue
+        for source_field, url_field in PEAR_ARTIFACT_MEDIA_FIELDS.items():
+            source = block.pop(source_field, None)
+            if source is None:
+                continue
+            assert isinstance(source, str)
+            cached = uploaded_by_source.get(source)
+            if cached is not None:
+                block[url_field], path_id = cached
+                claimed_path_ids.append(path_id)
+                continue
+            path = pear_workspace_relative_path(workdir, source)
+            if path is None:
+                raise PearArtifactError(f"generated media path is unsafe: {source}")
+            try:
+                resolved_path = path.resolve(strict=True)
+            except OSError as error:
+                raise PearArtifactError(f"generated media is missing: {source}") from error
+            if not resolved_path.is_relative_to(workspace_root) or not resolved_path.is_file():
+                raise PearArtifactError(f"generated media path escapes the workspace: {source}")
+            extension = resolved_path.suffix.lower()
+            max_bytes = PEAR_ARTIFACT_MEDIA_MAX_BYTES.get(extension)
+            content_type = PEAR_ARTIFACT_MEDIA_CONTENT_TYPES.get(extension)
+            if max_bytes is None or content_type is None:
+                raise PearArtifactError(f"unsupported generated media type: {extension}")
+            data = pear_read_bytes_path(
+                resolved_path,
+                isolation_username=isolation_username,
+                max_bytes=max_bytes,
+            )
+            if not data:
+                raise PearArtifactError(f"generated media is empty: {source}")
+            if len(data) > max_bytes:
+                raise PearArtifactError(f"generated media exceeds {max_bytes} bytes: {source}")
+            if not _pear_artifact_media_signature_is_valid(extension, data):
+                raise PearArtifactError(
+                    f"generated media content does not match {extension}: {source}"
+                )
+            digest = hashlib.sha256(data).hexdigest()
+            file_name = f"pear-artifact-{digest}{extension}"
+            attachment = Attachment.objects.filter(
+                owner=bot_profile,
+                file_name=file_name,
+                size=len(data),
+                content_type=content_type,
+            ).first()
+            if attachment is None:
+                url, _uploaded_name = upload_message_attachment(
+                    file_name,
+                    content_type,
+                    data,
+                    bot_profile,
+                )
+                path_id = url.removeprefix("/user_uploads/")
+            else:
+                path_id = attachment.path_id
+                url = f"/user_uploads/{path_id}"
+            block[url_field] = url
+            uploaded_by_source[source] = (url, path_id)
+            claimed_path_ids.append(path_id)
+    canonical, _encoded = canonicalize_pear_artifact(resolved_document)
+    return canonical, list(dict.fromkeys(claimed_path_ids))
 
 
 def pear_embed_workspace_images(
@@ -1366,6 +1489,8 @@ def attach_pear_artifact_to_message(
     *,
     message_id: int | None,
     tool_results: Sequence[PearWorkerToolResult],
+    workdir: str = "",
+    isolation_username: str | None = None,
 ) -> bool:
     """Persist the last valid artifact emitted by a turn on its result message.
 
@@ -1378,15 +1503,26 @@ def attach_pear_artifact_to_message(
     from django.db import transaction
 
     from zerver.actions.submessage import do_add_submessage
-    from zerver.lib.pear_artifact import PEAR_ARTIFACT_SUBMESSAGE_TYPE, artifacts_from_tool_results
+    from zerver.actions.uploads import do_claim_attachments
+    from zerver.lib.pear_artifact import (
+        PEAR_ARTIFACT_SUBMESSAGE_TYPE,
+        artifacts_from_tool_results,
+        canonicalize_pear_artifact,
+    )
     from zerver.models import Message, SubMessage, UserProfile
 
-    artifacts = artifacts_from_tool_results(tool_results)
+    artifacts = artifacts_from_tool_results(tool_results, allow_unresolved_media=True)
     if not artifacts:
         return False
-    content = artifacts[-1]
     user_profile = bot_handler.user_profile
     assert isinstance(user_profile, UserProfile)
+    document, path_ids = pear_materialize_artifact_media(
+        json.loads(artifacts[-1]),
+        workdir=workdir,
+        isolation_username=isolation_username,
+        bot_profile=user_profile,
+    )
+    _document, content = canonicalize_pear_artifact(document)
     with transaction.atomic():
         message = Message.objects.select_for_update().get(id=message_id)
         if message.sender_id != user_profile.id:
@@ -1404,6 +1540,8 @@ def attach_pear_artifact_to_message(
             msg_type=PEAR_ARTIFACT_SUBMESSAGE_TYPE,
             content=content,
         )
+        if path_ids and not do_claim_attachments(message, path_ids):
+            raise JsonableError("Pear could not claim generated artifact media.")
     return True
 
 
@@ -3963,11 +4101,11 @@ class PearWorkerTurn:
         )
         return segment_result
 
-    def embed_result_images(self, content: str) -> str:
+    def artifact_workspace_context(self) -> tuple[str, str | None]:
         workspace_context = self.active_session.get("workspace_context") or {}
         workdir = str(workspace_context.get("workdir") or "").strip()
         if not workdir.startswith("/"):
-            return content
+            return "", None
         from zerver.lib.pear_worker import (
             pear_topic_isolation_user_exists,
             pear_topic_isolation_username,
@@ -3982,6 +4120,12 @@ class PearWorkerTurn:
             isolation_username
         ):
             isolation_username = None
+        return workdir, isolation_username
+
+    def embed_result_images(self, content: str) -> str:
+        workdir, isolation_username = self.artifact_workspace_context()
+        if not workdir:
+            return content
         return pear_embed_workspace_images(
             content,
             workdir=workdir,
@@ -4272,10 +4416,13 @@ class PearWorkerTurn:
                         payload={"result_message_id": self.result_message_id},
                     )
             has_artifact = bool(self.artifact_tool_results)
+            artifact_workdir, artifact_isolation_username = self.artifact_workspace_context()
             artifact_attached = attach_pear_artifact_to_message(
                 self.bot_handler,
                 message_id=self.result_message_id,
                 tool_results=self.artifact_tool_results,
+                workdir=artifact_workdir,
+                isolation_username=artifact_isolation_username,
             )
             if has_artifact and not artifact_attached:
                 raise RuntimeError("Pear artifact could not be attached to the result message.")

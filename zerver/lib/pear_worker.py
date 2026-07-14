@@ -1,4 +1,5 @@
 import hashlib
+import json
 import logging
 import os
 import posixpath
@@ -899,6 +900,62 @@ def pear_workspace_relative_path(workdir: str, relative_path: str) -> Path | Non
     ):
         return None
     return Path(workdir) / normalized
+
+
+def pear_resolve_file_path(
+    path: Path,
+    *,
+    isolation_username: str | None = None,
+) -> Path | None:
+    """Resolve an existing regular file without crossing the OS-user boundary.
+
+    Topic workdirs are intentionally mode 0700.  The service user can name the
+    workdir but cannot traverse it, so resolving artifact media as the service
+    user produces a misleading ``PermissionError``.  Resolve as the topic user
+    and return the canonical path to the service, which can then enforce that
+    it remains below the trusted workspace root before reading it through the
+    same isolation boundary.
+    """
+    if isolation_username is None:
+        try:
+            resolved = path.resolve(strict=True)
+        except (OSError, RuntimeError):
+            return None
+        return resolved if resolved.is_file() else None
+    command = [
+        "sudo",
+        "-n",
+        "-u",
+        isolation_username,
+        "/usr/bin/env",
+        "python3",
+        "-c",
+        (
+            "import json, sys; from pathlib import Path; "
+            "path = Path(sys.argv[1]).resolve(strict=True); "
+            "sys.stdout.write(json.dumps(str(path)) if path.is_file() else '')"
+        ),
+        str(path),
+    ]
+    try:
+        completed = subprocess.run(
+            command,
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+    except (FileNotFoundError, OSError, subprocess.TimeoutExpired) as error:
+        raise OSError(f"Could not resolve {path}: {error}") from error
+    if completed.returncode != 0 or not completed.stdout:
+        return None
+    try:
+        resolved_value = json.loads(completed.stdout)
+    except (json.JSONDecodeError, TypeError) as error:
+        raise OSError(f"Could not decode resolved path for {path}") from error
+    if not isinstance(resolved_value, str) or not Path(resolved_value).is_absolute():
+        raise OSError(f"Could not resolve {path}: invalid path returned")
+    return Path(resolved_value)
 
 
 def pear_read_text_path(path: Path, *, isolation_username: str | None = None) -> str:

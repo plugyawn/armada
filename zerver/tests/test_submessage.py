@@ -198,6 +198,66 @@ class TestBasics(ZulipTestCase):
             self.assertEqual(SubMessage.objects.filter(message_id=message_id).count(), 1)
             self.assertEqual(Attachment.objects.filter(owner=pear_bot).count(), 1)
 
+    def test_pear_runtime_resolves_generated_media_as_the_topic_user(self) -> None:
+        owner = self.example_user("hamlet")
+        pear_bot = self.create_test_bot(
+            "pear-isolated-media",
+            owner,
+            full_name="Pear Isolated Media",
+            bot_type=UserProfile.EMBEDDED_BOT,
+            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+        )
+        message_id = self.send_stream_message(pear_bot, "Denmark", content="Crystal lattice.")
+        with tempfile.TemporaryDirectory() as workdir:
+            media_path = Path(workdir) / ".pear" / "artifacts" / "lattice.png"
+            media_path.parent.mkdir(parents=True)
+            media_bytes = b"\x89PNG\r\n\x1a\nbounded-png"
+            media_path.write_bytes(media_bytes)
+            document = json.dumps(
+                {
+                    "version": 1,
+                    "blocks": [
+                        {
+                            "type": "media",
+                            "kind": "image",
+                            "source": ".pear/artifacts/lattice.png",
+                            "alt": "A hexagonal crystal lattice.",
+                        }
+                    ],
+                }
+            )
+            with (
+                mock.patch(
+                    "zerver.lib.pear_worker.pear_resolve_file_path",
+                    return_value=media_path.resolve(),
+                ) as resolve_path,
+                mock.patch(
+                    "zerver.lib.pear_worker.pear_read_bytes_path",
+                    return_value=media_bytes,
+                ) as read_path,
+            ):
+                attached = attach_pear_artifact_to_message(
+                    SimpleNamespace(user_profile=pear_bot),
+                    message_id=message_id,
+                    tool_results=[{"label": "Artifact", "value": document}],
+                    workdir=workdir,
+                    isolation_username="pear-topic-test",
+                )
+        self.assertTrue(attached)
+        resolve_path.assert_called_once_with(
+            media_path,
+            isolation_username="pear-topic-test",
+        )
+        read_path.assert_called_once_with(
+            media_path.resolve(),
+            isolation_username="pear-topic-test",
+            max_bytes=4_000_000,
+        )
+        self.assertEqual(
+            SubMessage.objects.filter(message_id=message_id, msg_type="pear_artifact").count(),
+            1,
+        )
+
     def test_original_sender_enforced(self) -> None:
         cordelia = self.example_user("cordelia")
         hamlet = self.example_user("hamlet")

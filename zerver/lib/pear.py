@@ -1253,7 +1253,11 @@ def pear_materialize_artifact_media(
     from pathlib import Path
 
     from zerver.lib.pear_artifact import PearArtifactError, canonicalize_pear_artifact
-    from zerver.lib.pear_worker import pear_read_bytes_path, pear_workspace_relative_path
+    from zerver.lib.pear_worker import (
+        pear_read_bytes_path,
+        pear_resolve_file_path,
+        pear_workspace_relative_path,
+    )
     from zerver.lib.upload import upload_message_attachment
     from zerver.models import Attachment, UserProfile
 
@@ -1288,10 +1292,15 @@ def pear_materialize_artifact_media(
             if path is None:
                 raise PearArtifactError(f"generated media path is unsafe: {source}")
             try:
-                resolved_path = path.resolve(strict=True)
+                resolved_path = pear_resolve_file_path(
+                    path,
+                    isolation_username=isolation_username,
+                )
             except OSError as error:
-                raise PearArtifactError(f"generated media is missing: {source}") from error
-            if not resolved_path.is_relative_to(workspace_root) or not resolved_path.is_file():
+                raise PearArtifactError(f"generated media is unavailable: {source}") from error
+            if resolved_path is None:
+                raise PearArtifactError(f"generated media is missing: {source}")
+            if not resolved_path.is_relative_to(workspace_root):
                 raise PearArtifactError(f"generated media path escapes the workspace: {source}")
             extension = resolved_path.suffix.lower()
             max_bytes = PEAR_ARTIFACT_MEDIA_MAX_BYTES.get(extension)

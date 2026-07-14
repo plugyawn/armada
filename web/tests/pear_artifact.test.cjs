@@ -143,8 +143,8 @@ run_test("renders durable theme-aware media and rejects workspace paths", () => 
             {
                 type: "media",
                 kind: "image",
-                src: "/user_uploads/1/ab/diagram.webp",
-                srcDark: "/user_uploads/1/cd/diagram-dark.webp",
+                src: "/user_uploads/1/ab/diagram.svg",
+                srcDark: "/user_uploads/1/cd/diagram-dark.svg",
                 alt: "A geometric construction.",
                 caption: "Constraints determine the geometry.",
                 aspect: "standard",
@@ -156,7 +156,7 @@ run_test("renders durable theme-aware media and rejects workspace paths", () => 
     assert.ok(parsed);
     const rendered = artifact.render_pear_artifact(parsed, {density: "chat"});
     const image = rendered.querySelector(".pear-artifact-media-content");
-    assert.equal(image.getAttribute("src"), "/user_uploads/1/cd/diagram-dark.webp");
+    assert.equal(image.getAttribute("src"), "/user_uploads/1/cd/diagram-dark.svg");
     assert.equal(image.getAttribute("alt"), "A geometric construction.");
     assert.equal(
         rendered.querySelector(".pear-artifact-media-status").textContent,
@@ -173,7 +173,7 @@ run_test("renders durable theme-aware media and rejects workspace paths", () => 
     document.blocks[0] = {
         type: "media",
         kind: "image",
-        source: ".pear/artifacts/diagram.webp",
+        source: ".pear/artifacts/diagram.svg",
         alt: "Unresolved workspace image.",
     };
     assert.equal(artifact.parse_pear_artifact(JSON.stringify(document)), undefined);

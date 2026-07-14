@@ -1169,6 +1169,7 @@ if [[ "$PREV_SHA" != "$LOCAL_SHA" ]]; then
         zerver/tests/test_service_bot_system.py \
         zerver/tests/test_pear.py \
         zerver/tests/test_pear_artifact.py \
+        zerver/tests/test_pear_generated_vector.py \
         zerver/tests/test_pear_endpoint.py \
         web/src \
         web/styles \
@@ -1395,6 +1396,7 @@ if [[ "$RUN_TESTS" == true ]]; then
     ssh_zulip_clean "./tools/test-backend \
         zerver.tests.test_pear \
         zerver.tests.test_pear_artifact \
+        zerver.tests.test_pear_generated_vector \
         zerver.tests.test_pear_endpoint \
         zerver.tests.test_pear_workspace_io \
         zerver.tests.test_pear_workspace_index \

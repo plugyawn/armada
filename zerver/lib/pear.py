@@ -1216,11 +1216,13 @@ PEAR_IMAGE_CONTENT_TYPES: Final = {
 }
 PEAR_ARTIFACT_MEDIA_MAX_BYTES: Final = {
     ".png": 4_000_000,
+    ".svg": 1_000_000,
     ".webp": 4_000_000,
     ".webm": 12_000_000,
 }
 PEAR_ARTIFACT_MEDIA_CONTENT_TYPES: Final = {
     ".png": "image/png",
+    ".svg": "image/svg+xml",
     ".webp": "image/webp",
     ".webm": "video/webm",
 }
@@ -1316,7 +1318,17 @@ def pear_materialize_artifact_media(
                 raise PearArtifactError(f"generated media is empty: {source}")
             if len(data) > max_bytes:
                 raise PearArtifactError(f"generated media exceeds {max_bytes} bytes: {source}")
-            if not _pear_artifact_media_signature_is_valid(extension, data):
+            if extension == ".svg":
+                from zerver.lib.pear_generated_vector import (
+                    PearGeneratedVectorError,
+                    sanitize_pear_generated_vector,
+                )
+
+                try:
+                    data = sanitize_pear_generated_vector(data)
+                except PearGeneratedVectorError as error:
+                    raise PearArtifactError(f"generated SVG is unsafe: {source}") from error
+            elif not _pear_artifact_media_signature_is_valid(extension, data):
                 raise PearArtifactError(
                     f"generated media content does not match {extension}: {source}"
                 )

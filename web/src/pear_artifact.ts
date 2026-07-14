@@ -1,3 +1,5 @@
+import katex from "katex";
+
 import {PEAR_ARTIFACT_SCHEMA} from "./pear_artifact_contract_generated.ts";
 
 export const PEAR_ARTIFACT_SUBMESSAGE_TYPE = "pear_artifact";
@@ -523,6 +525,52 @@ function scalar_text(value: unknown): string {
         : "";
 }
 
+const artifact_math_pattern = /```math[\t ]*\n([\s\S]*?)```|\$\$([\s\S]*?)\$\$/gu;
+
+function set_artifact_text(host: HTMLElement, source: string): void {
+    host.replaceChildren();
+    host.dataset["pearArtifactSource"] = source;
+    let offset = 0;
+    for (const match of source.matchAll(artifact_math_pattern)) {
+        const index = match.index;
+        if (index > offset) {
+            host.append(document.createTextNode(source.slice(offset, index)));
+        }
+        const display_mode = match[1] !== undefined;
+        const tex = (match[1] ?? match[2] ?? "").trim();
+        const math = element(
+            "span",
+            display_mode ? "pear-artifact-math pear-artifact-math-display" : "pear-artifact-math",
+        );
+        try {
+            katex.render(tex, math, {
+                displayMode: display_mode,
+                maxExpand: 1000,
+                maxSize: 10,
+                strict: "ignore",
+                throwOnError: true,
+                trust: false,
+            });
+        } catch {
+            math.classList.add("is-invalid");
+            math.textContent = match[0];
+        }
+        host.append(math);
+        offset = index + match[0].length;
+    }
+    if (offset < source.length) {
+        host.append(document.createTextNode(source.slice(offset)));
+    }
+}
+
+function artifact_accessible_text(source: string): string {
+    return source.replaceAll(
+        artifact_math_pattern,
+        (_match, display: string | undefined, inline: string | undefined) =>
+            (display ?? inline ?? "").trim(),
+    );
+}
+
 function dark_theme_is_active(): boolean {
     const root = document.documentElement;
     return (
@@ -1025,14 +1073,16 @@ function render_scene_node(
                 derive_value(node["derive"], data) ??
                 data_value(data, node["bind"]) ??
                 node["text"];
-            host.textContent = scalar_text(value);
+            set_artifact_text(host, scalar_text(value));
 
             break;
         }
         case "shape": {
             host.dataset["shape"] = scalar_text(node["shape"]);
             if (typeof node["label"] === "string") {
-                host.append(element("span", "pear-artifact-shape-label", node["label"]));
+                const label = element("span", "pear-artifact-shape-label");
+                set_artifact_text(label, node["label"]);
+                host.append(label);
             }
 
             break;
@@ -1315,7 +1365,7 @@ function set_shape_label(element: HTMLElement, value: string | undefined): void 
         element.append(label);
     }
     label.className = "pear-artifact-shape-label";
-    label.textContent = value;
+    set_artifact_text(label, value);
 }
 
 function mount_scene_steps(
@@ -1360,10 +1410,11 @@ function mount_scene_steps(
         }
         const label = target_element.querySelector<HTMLElement>(".pear-artifact-shape-label");
         if (label !== null) {
-            snapshot.label = label.textContent ?? "";
+            snapshot.label = label.dataset["pearArtifactSource"] ?? label.textContent ?? "";
         }
         if (target_element.classList.contains("pear-artifact-text")) {
-            snapshot.text = target_element.textContent ?? "";
+            snapshot.text =
+                target_element.dataset["pearArtifactSource"] ?? target_element.textContent ?? "";
         }
         snapshots.set(target, snapshot);
     }
@@ -1428,7 +1479,7 @@ function mount_scene_steps(
                 set_shape_label(snapshot.element, snapshot.label);
             }
             if (snapshot.text !== undefined) {
-                snapshot.element.textContent = snapshot.text;
+                set_artifact_text(snapshot.element, snapshot.text);
             }
         }
         for (const connector of connector_by_id.values()) {
@@ -1463,14 +1514,14 @@ function mount_scene_steps(
                     set_shape_label(snapshot.element, change["label"]);
                 }
                 if (typeof change["text"] === "string") {
-                    snapshot.element.textContent = change["text"];
+                    set_artifact_text(snapshot.element, change["text"]);
                 }
             }
         }
         sync_connectors();
         schedule_connector_draw();
         const current_step = steps[current_index];
-        const step_label = scalar_text(current_step?.["label"]);
+        const step_label = artifact_accessible_text(scalar_text(current_step?.["label"]));
         status.textContent = `${current_index + 1}/${steps.length}  ${step_label}`;
         const descriptions: string[] = [];
         const current_changes = current_step?.["changes"];
@@ -1483,10 +1534,14 @@ function mount_scene_steps(
                     descriptions.push(`${change["target"]} is ${change["state"]}`);
                 }
                 if (typeof change["label"] === "string") {
-                    descriptions.push(`${change["target"]} label: ${change["label"]}`);
+                    descriptions.push(
+                        `${change["target"]} label: ${artifact_accessible_text(change["label"])}`,
+                    );
                 }
                 if (typeof change["text"] === "string") {
-                    descriptions.push(`${change["target"]} text: ${change["text"]}`);
+                    descriptions.push(
+                        `${change["target"]} text: ${artifact_accessible_text(change["text"])}`,
+                    );
                 }
             }
         }
@@ -1762,7 +1817,9 @@ function render_media(block: PearArtifactBlock, controller: AbortController): HT
     frame.append(status);
     figure.append(frame);
     if (typeof block["caption"] === "string" && block["caption"] !== "") {
-        figure.append(element("figcaption", "pear-artifact-media-caption", block["caption"]));
+        const caption = element("figcaption", "pear-artifact-media-caption");
+        set_artifact_text(caption, block["caption"]);
+        figure.append(caption);
     }
     return figure;
 }
@@ -1781,7 +1838,9 @@ function render_block(
             if (typeof block["heading"] === "string") {
                 host.append(element("h3", "pear-artifact-heading", block["heading"]));
             }
-            host.append(element("p", "pear-artifact-copy", scalar_text(block["body"])));
+            const copy = element("div", "pear-artifact-copy");
+            set_artifact_text(copy, scalar_text(block["body"]));
+            host.append(copy);
 
             break;
         }

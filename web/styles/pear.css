@@ -2167,6 +2167,22 @@
     white-space: pre-wrap;
 }
 
+.pear-artifact-math {
+    color: inherit;
+
+    &.is-invalid {
+        color: var(--pear-danger);
+        font-family: var(--pear-font-mono);
+    }
+}
+
+.pear-artifact-math-display {
+    display: block;
+    overflow: auto hidden;
+    margin-block: var(--pear-space-2);
+    text-align: center;
+}
+
 .pear-artifact-media {
     display: grid;
     gap: var(--pear-space-2);
@@ -2552,13 +2568,11 @@
         animation-delay: calc(var(--pear-artifact-order, 0) * 70ms);
     }
 
-    &[data-layout="overlay"],
-    &[data-layout="free"] {
+    &[data-layout="overlay"] {
         display: grid;
     }
 
-    &[data-layout="overlay"] > *,
-    &[data-layout="free"] > * {
+    &[data-layout="overlay"] > * {
         grid-area: 1 / 1;
     }
 

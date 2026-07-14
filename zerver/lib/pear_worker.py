@@ -2571,6 +2571,10 @@ class PearDatabaseWorkerRunStore:
                 if isinstance(value, str):
                     setattr(run, field, value)
                     update_fields.append(field)
+            ambient_triggered = metadata.get("ambient_triggered")
+            if isinstance(ambient_triggered, bool):
+                run.ambient_triggered = ambient_triggered
+                update_fields.append("ambient_triggered")
             context_stream = run.stream_name
             context_topic = run.topic_name
             source_stream = metadata.get("source_stream")

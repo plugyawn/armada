@@ -70,6 +70,13 @@
             display: none;
         }
 
+        /* The ordinary collapsed flag is the durable per-user hiding
+           mechanism. Native artifacts sit beside message_content, so
+           collapse them with the prose instead of leaving an orphan card. */
+        .message_content.collapsed ~ .pear-artifact-message-host {
+            display: none;
+        }
+
         .message_embed .data-container::after {
             background: linear-gradient(
                 0deg,

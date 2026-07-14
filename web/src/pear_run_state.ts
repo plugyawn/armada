@@ -1,5 +1,7 @@
 type PearRunForActiveMessage = {
+    id: number;
     status: string;
+    ambient_triggered: boolean;
     result_message_id?: number | null | undefined;
     tool_count?: number | undefined;
     date_created?: number | undefined;
@@ -46,6 +48,7 @@ const active_run_topic_listeners = new Set<() => void>();
 // Cumulative across topic switches — footers are historical facts, so
 // they never expire with the active-set TTL.
 const settled_run_footers = new Map<number, PearRunFooter>();
+const ambient_run_ids_by_result_message = new Map<number, number>();
 // Active runs' start times (seconds), for the live elapsed counter.
 const active_run_started_at = new Map<number, number>();
 // A long engine operation (compaction, …) currently animating in the
@@ -157,6 +160,11 @@ export function set_active_run_result_messages(
             result_message_id <= 0
         ) {
             continue;
+        }
+        if (run.ambient_triggered) {
+            ambient_run_ids_by_result_message.set(result_message_id, run.id);
+        } else {
+            ambient_run_ids_by_result_message.delete(result_message_id);
         }
         if (is_active_status(run.status)) {
             next_active_result_message_ids.add(result_message_id);
@@ -277,6 +285,13 @@ export function get_run_footer(message_id: number | undefined): PearRunFooter | 
     return settled_run_footers.get(message_id);
 }
 
+export function get_ambient_run_id(message_id: number | undefined): number | undefined {
+    if (message_id === undefined) {
+        return undefined;
+    }
+    return ambient_run_ids_by_result_message.get(message_id);
+}
+
 export function on_active_run_result_messages_changed(
     listener: (change: PearActiveResultMessageChange) => void,
 ): () => void {
@@ -287,6 +302,7 @@ export function on_active_run_result_messages_changed(
 export function clear_for_testing(): void {
     active_result_message_ids.clear();
     settled_run_footers.clear();
+    ambient_run_ids_by_result_message.clear();
     active_run_started_at.clear();
     active_run_stream = undefined;
     active_run_topic = undefined;

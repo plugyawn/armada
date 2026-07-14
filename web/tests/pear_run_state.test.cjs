@@ -32,6 +32,21 @@ test("set_active_run_result_messages tracks only active result messages", () => 
     assert.ok(!pear_run_state.is_active_run_result_message(3));
 });
 
+test("ambient run ids are retained by result message", () => {
+    pear_run_state.set_active_run_result_messages([
+        {id: 41, status: "done", ambient_triggered: true, result_message_id: 301},
+        {id: 42, status: "done", ambient_triggered: false, result_message_id: 302},
+    ]);
+
+    assert.equal(pear_run_state.get_ambient_run_id(301), 41);
+    assert.equal(pear_run_state.get_ambient_run_id(302), undefined);
+
+    pear_run_state.set_active_run_result_messages([
+        {id: 41, status: "done", ambient_triggered: false, result_message_id: 301},
+    ]);
+    assert.equal(pear_run_state.get_ambient_run_id(301), undefined);
+});
+
 test("done run clears active result message immediately", () => {
     const changes = [];
     const unsubscribe = pear_run_state.on_active_run_result_messages_changed((change) =>

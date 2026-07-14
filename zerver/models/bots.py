@@ -141,6 +141,7 @@ class PearWorkerRun(models.Model):
         related_name="worker_runs",
     )
     codex_thread_id = models.TextField(blank=True)
+    ambient_triggered = models.BooleanField(default=False)
     result_message_id = models.IntegerField(null=True)
     error = models.TextField(null=True)
     attempts = models.PositiveSmallIntegerField(default=0)

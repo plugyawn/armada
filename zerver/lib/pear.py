@@ -3505,6 +3505,11 @@ class PearEmbeddedBotHandler:
                     summary=f"{ambient_decision['action']} · {ambient_decision['presentation']}",
                     payload=dict(ambient_decision),
                 )
+                self.update_worker_metadata(
+                    bot_handler,
+                    message_id,
+                    ambient_triggered=True,
+                )
             self.register_worker_progress_message(
                 bot_handler,
                 message_id,

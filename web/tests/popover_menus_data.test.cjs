@@ -13,6 +13,7 @@ const {page_params} = require("./lib/zpage_params.cjs");
 const {Filter} = zrequire("filter");
 const {MessageList} = zrequire("message_list");
 const message_lists = zrequire("message_lists");
+const pear_run_state = zrequire("pear_run_state");
 
 const popover_menus_data = zrequire("popover_menus_data");
 const people = zrequire("people");
@@ -187,7 +188,12 @@ function test(label, f) {
         // Clear stuff for testing environment
         add_initialize_users();
         message_lists.initialize();
-        f(helpers);
+        pear_run_state.clear_for_testing();
+        try {
+            f(helpers);
+        } finally {
+            pear_run_state.clear_for_testing();
+        }
     });
 }
 
@@ -245,6 +251,39 @@ test("my_message_all_actions", ({override}) => {
     assert.equal(response.should_display_delete_option, true);
     assert.equal(response.should_display_read_receipts_option, true);
     assert.equal(response.should_display_quote_message, true);
+    assert.equal(response.not_for_pear_run_id, undefined);
+});
+
+test("ambient Pear response offers Not for Pear feedback", ({override}) => {
+    set_page_params_no_edit_restrictions({override});
+    override(realm, "realm_can_delete_any_message_group", everyone.id);
+    override(realm, "realm_can_delete_own_message_group", everyone.id);
+    override(realm, "realm_can_move_messages_between_topics_group", everyone.id);
+    override(current_user, "user_id", me.user_id);
+    const list = init_message_list();
+    message_lists.set_current(list);
+    add_message_with_view(list, [
+        {
+            id: 77,
+            type: "stream",
+            sender_id: mike.user_id,
+            is_pear_message: true,
+            is_hidden: false,
+            sent_by_me: false,
+            locally_echoed: false,
+            is_stream: true,
+            stream_id: 1,
+            unread: false,
+            collapsed: false,
+            submessages: [],
+        },
+    ]);
+    pear_run_state.set_active_run_result_messages([
+        {id: 12, status: "done", ambient_triggered: true, result_message_id: 77},
+    ]);
+
+    const response = popover_menus_data.get_actions_popover_content_context(77);
+    assert.equal(response.not_for_pear_run_id, 12);
 });
 
 test("not_my_message_view_actions", ({override}) => {

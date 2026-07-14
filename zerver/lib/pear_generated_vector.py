@@ -4,6 +4,8 @@ import hashlib
 import re
 import xml.etree.ElementTree as ET
 
+from defusedxml import ElementTree as DefusedET
+
 SVG_NAMESPACE = "http://www.w3.org/2000/svg"
 PEAR_SVG_SOURCE_LIMIT = 1_000_000
 PEAR_SVG_NODE_LIMIT = 5_000
@@ -171,7 +173,7 @@ def sanitize_pear_generated_vector(data: bytes) -> bytes:
     if re.search(r"<!\s*(?:DOCTYPE|ENTITY)", source, re.IGNORECASE):
         raise PearGeneratedVectorError("SVG document declarations are not allowed")
     try:
-        root = ET.fromstring(source)
+        root = DefusedET.fromstring(source)
     except ET.ParseError as error:
         raise PearGeneratedVectorError("SVG source is malformed") from error
     if _local_name(root.tag) != "svg":

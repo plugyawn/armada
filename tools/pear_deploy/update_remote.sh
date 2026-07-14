@@ -1394,10 +1394,12 @@ if [[ "$RUN_TESTS" == true ]]; then
     echo "Running Pear backend tests on the box..."
     ssh_zulip_clean "./tools/test-backend \
         zerver.tests.test_pear \
+        zerver.tests.test_pear_artifact \
         zerver.tests.test_pear_endpoint \
         zerver.tests.test_pear_workspace_io \
         zerver.tests.test_pear_workspace_index \
-        zerver.tests.test_pear_workspace_resources"
+        zerver.tests.test_pear_workspace_resources \
+        zerver.tests.test_submessage"
 else
     echo "Skipping test-backend by request."
 fi

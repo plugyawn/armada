@@ -381,8 +381,8 @@ def _validate_media(block: dict[str, Any], *, allow_unresolved_media: bool) -> N
     assert isinstance(primary, str)
     kind = block.get("kind")
     primary_extension = primary.rsplit(".", 1)[-1].lower()
-    if kind == "image" and primary_extension not in {"png", "webp"}:
-        raise PearArtifactError("image media requires a PNG or WebP source")
+    if kind == "image" and primary_extension not in {"png", "svg", "webp"}:
+        raise PearArtifactError("image media requires a PNG, SVG, or WebP source")
     if kind == "video" and primary_extension != "webm":
         raise PearArtifactError("video media requires a WebM source")
     if kind == "image" and (poster is not None or poster_dark is not None):

@@ -97,6 +97,11 @@ uv tool install \
     --force \
     --python /usr/bin/python3 \
     "manim==$MANIM_VERSION"
+npm uninstall \
+    --prefix "$NODE_TOOL_DIR" \
+    --no-audit \
+    --no-fund \
+    "@resvg/resvg-js-cli"
 npm install \
     --prefix "$NODE_TOOL_DIR" \
     --no-audit \

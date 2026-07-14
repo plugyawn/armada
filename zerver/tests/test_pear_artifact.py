@@ -279,6 +279,19 @@ class PearArtifactValidationTest(TestCase):
         with self.assertRaisesRegex(PearArtifactError, "cannot provide upload URLs"):
             canonicalize_pear_artifact(persisted, allow_unresolved_media=True)
 
+        vector = {
+            "version": 1,
+            "blocks": [
+                {
+                    "type": "media",
+                    "kind": "image",
+                    "source": ".pear/artifacts/lattice.svg",
+                    "alt": "A vector crystal lattice.",
+                }
+            ],
+        }
+        canonicalize_pear_artifact(vector, allow_unresolved_media=True)
+
     def test_media_types_and_count_are_bounded(self) -> None:
         media = {
             "type": "media",
@@ -286,7 +299,7 @@ class PearArtifactValidationTest(TestCase):
             "source": ".pear/artifacts/not-an-image.webm",
             "alt": "Wrong type.",
         }
-        with self.assertRaisesRegex(PearArtifactError, "PNG or WebP"):
+        with self.assertRaisesRegex(PearArtifactError, "PNG, SVG, or WebP"):
             canonicalize_pear_artifact(
                 {"version": 1, "blocks": [media]}, allow_unresolved_media=True
             )

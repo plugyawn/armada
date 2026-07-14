@@ -1,3 +1,4 @@
+import hashlib
 import json
 import tempfile
 from pathlib import Path
@@ -8,6 +9,7 @@ from unittest import mock
 from zerver.actions.submessage import do_add_submessage
 from zerver.lib.message_cache import MessageDict
 from zerver.lib.pear import PEAR_EMBEDDED_BOT_SERVICE, attach_pear_artifact_to_message
+from zerver.lib.pear_generated_vector import sanitize_pear_generated_vector
 from zerver.lib.test_classes import ZulipTestCase
 from zerver.models import Attachment, Message, SubMessage, UserProfile
 
@@ -257,6 +259,55 @@ class TestBasics(ZulipTestCase):
             SubMessage.objects.filter(message_id=message_id, msg_type="pear_artifact").count(),
             1,
         )
+
+    def test_pear_runtime_rebuilds_generated_svg_before_upload(self) -> None:
+        owner = self.example_user("hamlet")
+        pear_bot = self.create_test_bot(
+            "pear-vector-media",
+            owner,
+            full_name="Pear Vector Media",
+            bot_type=UserProfile.EMBEDDED_BOT,
+            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+        )
+        message_id = self.send_stream_message(pear_bot, "Denmark", content="Vector lattice.")
+        with tempfile.TemporaryDirectory() as workdir:
+            media_path = Path(workdir) / ".pear" / "artifacts" / "lattice.svg"
+            media_path.parent.mkdir(parents=True)
+            media_path.write_text(
+                '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10" penrose="0">'
+                "<penrose><croppedViewBox>0 0 10 10</croppedViewBox></penrose>"
+                '<circle cx="5" cy="5" r="4" fill="#8080ff"/></svg>',
+                encoding="utf-8",
+            )
+            sanitized_digest = hashlib.sha256(
+                sanitize_pear_generated_vector(media_path.read_bytes())
+            ).hexdigest()
+            document = json.dumps(
+                {
+                    "version": 1,
+                    "blocks": [
+                        {
+                            "type": "media",
+                            "kind": "image",
+                            "source": ".pear/artifacts/lattice.svg",
+                            "alt": "A vector crystal lattice.",
+                        }
+                    ],
+                }
+            )
+            attached = attach_pear_artifact_to_message(
+                SimpleNamespace(user_profile=pear_bot),
+                message_id=message_id,
+                tool_results=[{"label": "Artifact", "value": document}],
+                workdir=workdir,
+            )
+        self.assertTrue(attached)
+        media = json.loads(
+            SubMessage.objects.get(message_id=message_id, msg_type="pear_artifact").content
+        )["blocks"][0]
+        attachment = Attachment.objects.get(path_id=media["src"].removeprefix("/user_uploads/"))
+        self.assertEqual(attachment.content_type, "image/svg+xml")
+        self.assertEqual(attachment.file_name, f"pear-artifact-{sanitized_digest}.svg")
 
     def test_original_sender_enforced(self) -> None:
         cordelia = self.example_user("cordelia")

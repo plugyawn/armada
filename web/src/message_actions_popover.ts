@@ -4,11 +4,13 @@ import type * as tippy from "tippy.js";
 
 import render_message_actions_popover from "../templates/popovers/message_actions_popover.hbs";
 
+import * as channel from "./channel.ts";
 import * as clipboard_handler from "./clipboard_handler.ts";
 import * as compose_reply from "./compose_reply.ts";
 import * as condense from "./condense.ts";
 import {show_copied_confirmation} from "./copied_tooltip.ts";
 import * as emoji_picker from "./emoji_picker.ts";
+import {$t} from "./i18n.ts";
 import * as message_delete from "./message_delete.ts";
 import * as message_edit from "./message_edit.ts";
 import * as message_lists from "./message_lists.ts";
@@ -21,6 +23,7 @@ import * as popovers from "./popovers.ts";
 import * as read_receipts from "./read_receipts.ts";
 import * as rows from "./rows.ts";
 import * as stream_popover from "./stream_popover.ts";
+import * as ui_report from "./ui_report.ts";
 import {parse_html} from "./ui_util.ts";
 import * as unread_ops from "./unread_ops.ts";
 import {the} from "./util.ts";
@@ -215,6 +218,31 @@ export function initialize({
             $popper.one("click", ".delete_message", (e) => {
                 const message_id = Number($(e.currentTarget).attr("data-message-id"));
                 message_delete.delete_message(message_id);
+                e.preventDefault();
+                e.stopPropagation();
+                popover_menus.hide_current_popover_if_visible(instance);
+            });
+
+            $popper.one("click", ".not_for_pear", (e) => {
+                const message_id = Number($(e.currentTarget).attr("data-message-id"));
+                const run_id = Number($(e.currentTarget).attr("data-run-id"));
+                assert(message_lists.current !== undefined);
+                const message = message_lists.current.get(message_id);
+                assert(message !== undefined);
+                void channel.post({
+                    url: `/json/pear/runs/${run_id}/not-for-pear`,
+                    success() {
+                        condense.collapse(message);
+                    },
+                    error(xhr) {
+                        ui_report.error(
+                            $t({defaultMessage: "Could not record Pear feedback."}),
+                            xhr,
+                            $("#home-error"),
+                            2000,
+                        );
+                    },
+                });
                 e.preventDefault();
                 e.stopPropagation();
                 popover_menus.hide_current_popover_if_visible(instance);

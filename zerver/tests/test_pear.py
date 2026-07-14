@@ -3785,6 +3785,7 @@ class PearSessionDefaultsTest(TestCase):
         class FakeRunStore:
             def __init__(self) -> None:
                 self.starts: list[int] = []
+                self.metadata: list[tuple[int, dict[str, object]]] = []
 
             def start(
                 self,
@@ -3809,6 +3810,9 @@ class PearSessionDefaultsTest(TestCase):
                 error: str | None = None,
             ) -> None:
                 pass
+
+            def update_metadata(self, bot_handler, message_id: int, **metadata: object) -> None:
+                self.metadata.append((message_id, metadata))
 
         class FakeBotHandler:
             def send_reply(self, message: dict[str, object], response: str) -> dict[str, int]:
@@ -3838,6 +3842,7 @@ class PearSessionDefaultsTest(TestCase):
             [("hey agent, can you check the failing parser test?", "ambient")],
         )
         self.assertEqual(run_store.starts, [208])
+        self.assertIn((208, {"ambient_triggered": True}), run_store.metadata)
         self.assertEqual(seen_tasks, ["hey agent, can you check the failing parser test?"])
         self.assertEqual(len(sent_replies), 2)
         self.assertEqual(sent_replies[0], PEAR_ACTIVE_THINKING_MARKDOWN)

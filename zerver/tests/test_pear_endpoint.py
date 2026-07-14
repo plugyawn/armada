@@ -2970,6 +2970,80 @@ class PearSessionEndpointTest(ZulipTestCase):
         self.assertEqual(run.status, PearWorkerRun.CANCELLED)
         self.assertIsNotNone(run.cancel_requested_at)
 
+    def test_not_for_pear_feedback_is_ambient_only_and_idempotent(self) -> None:
+        owner = self.example_user("hamlet")
+        self.subscribe(owner, PEAR_DEFAULT_STREAM)
+        pear_bot = self.create_test_bot(
+            "pear",
+            owner,
+            full_name="Pear",
+            bot_type=UserProfile.EMBEDDED_BOT,
+            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+        )
+        ambient_run = PearWorkerRun.objects.create(
+            realm=owner.realm,
+            bot_profile=pear_bot,
+            requesting_user=owner,
+            trigger_message_id=915,
+            result_message_id=916,
+            stream_name=PEAR_DEFAULT_STREAM,
+            topic_name="topic-a",
+            status=PearWorkerRun.RUNNING,
+            ambient_triggered=True,
+        )
+        explicit_run = PearWorkerRun.objects.create(
+            realm=owner.realm,
+            bot_profile=pear_bot,
+            requesting_user=owner,
+            trigger_message_id=917,
+            result_message_id=918,
+            stream_name=PEAR_DEFAULT_STREAM,
+            topic_name="topic-a",
+            status=PearWorkerRun.DONE,
+        )
+        self.login_user(owner)
+
+        first_result = self.client_post(
+            f"/json/pear/runs/{ambient_run.id}/not-for-pear",
+            intentionally_undocumented=True,
+        )
+        first_payload = self.assert_json_success(first_result)
+        self.assertTrue(first_payload["changed"])
+        ambient_run.refresh_from_db()
+        self.assertEqual(ambient_run.status, PearWorkerRun.CANCELLED)
+        self.assertEqual(
+            PearWorkerRunEvent.objects.get(
+                run=ambient_run,
+                event_type="routing_feedback",
+            ).payload,
+            {
+                "label": "false_positive",
+                "trigger_message_id": 915,
+                "result_message_id": 916,
+                "user_id": owner.id,
+            },
+        )
+
+        second_result = self.client_post(
+            f"/json/pear/runs/{ambient_run.id}/not-for-pear",
+            intentionally_undocumented=True,
+        )
+        second_payload = self.assert_json_success(second_result)
+        self.assertFalse(second_payload["changed"])
+        self.assertEqual(
+            PearWorkerRunEvent.objects.filter(
+                run=ambient_run,
+                event_type="routing_feedback",
+            ).count(),
+            1,
+        )
+
+        explicit_result = self.client_post(
+            f"/json/pear/runs/{explicit_run.id}/not-for-pear",
+            intentionally_undocumented=True,
+        )
+        self.assert_json_error(explicit_result, "This Pear response was explicitly requested.")
+
     def test_worker_run_store_sets_topic_response_policy(self) -> None:
         owner = self.example_user("hamlet")
         pear_bot = self.create_test_bot(

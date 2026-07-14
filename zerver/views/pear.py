@@ -7,6 +7,7 @@ from types import SimpleNamespace
 from typing import Annotated, Any
 
 from django.conf import settings
+from django.db import transaction
 from django.db.models import F, Q, Window
 from django.db.models.functions import RowNumber
 from django.http import HttpRequest, HttpResponse
@@ -863,6 +864,7 @@ def serialize_pear_worker_run(
         "approval_policy": run.approval_policy,
         "workdir": run.workdir,
         "codex_thread_id": run.codex_thread_id,
+        "ambient_triggered": run.ambient_triggered,
         "error": run.error,
         "date_created": datetime_to_timestamp(run.date_created),
         "date_updated": datetime_to_timestamp(run.date_updated),
@@ -1587,6 +1589,49 @@ def post_pear_run_cancel_backend(
     return json_success(
         request,
         data={"pear_run": serialize_pear_worker_run(run, include_events=True)},
+    )
+
+
+@typed_endpoint_without_parameters
+def post_pear_run_not_for_pear_backend(
+    request: HttpRequest,
+    user_profile: UserProfile,
+    run_id: int,
+) -> HttpResponse:
+    visible_run = get_visible_pear_worker_run(user_profile, run_id)
+    if not visible_run.ambient_triggered:
+        raise JsonableError(_("This Pear response was explicitly requested."))
+
+    if visible_run.status in {PearWorkerRun.QUEUED, PearWorkerRun.RUNNING}:
+        visible_run = update_pear_run_control_event(
+            user_profile,
+            run_id,
+            "cancel",
+            "Cancelled after Not for Pear feedback.",
+        )
+
+    with transaction.atomic():
+        run = PearWorkerRun.objects.select_for_update().get(id=visible_run.id)
+        feedback_exists = run.events.filter(event_type="routing_feedback").exists()
+        if not feedback_exists:
+            PearWorkerRunEvent.objects.create(
+                run=run,
+                event_type="routing_feedback",
+                summary="Not for Pear.",
+                payload={
+                    "label": "false_positive",
+                    "trigger_message_id": run.trigger_message_id,
+                    "result_message_id": run.result_message_id,
+                    "user_id": user_profile.id,
+                },
+            )
+
+    return json_success(
+        request,
+        data={
+            "changed": not feedback_exists,
+            "pear_run": serialize_pear_worker_run(run, include_events=True),
+        },
     )
 
 

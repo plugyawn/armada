@@ -109,6 +109,7 @@ from zerver.views.pear import (
     post_pear_first_run_backend,
     post_pear_monitors_backend,
     post_pear_run_cancel_backend,
+    post_pear_run_not_for_pear_backend,
     post_pear_run_pause_backend,
     post_pear_run_resume_backend,
     post_pear_side_backend,
@@ -496,6 +497,10 @@ v1_api_and_json_patterns = [
     rest_path(
         "pear/runs/<int:run_id>/cancel",
         POST=(post_pear_run_cancel_backend, {"intentionally_undocumented"}),
+    ),
+    rest_path(
+        "pear/runs/<int:run_id>/not-for-pear",
+        POST=(post_pear_run_not_for_pear_backend, {"intentionally_undocumented"}),
     ),
     rest_path(
         "pear/runs/<int:run_id>/pause",

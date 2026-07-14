@@ -69,6 +69,7 @@ const pear_run_schema = z.object({
     approval_policy: z.string(),
     workdir: z.string(),
     codex_thread_id: z.string(),
+    ambient_triggered: z.boolean(),
     usage: z.nullish(pear_usage_schema),
     tool_count: z.optional(z.number()),
     date_created: z.optional(z.number()),

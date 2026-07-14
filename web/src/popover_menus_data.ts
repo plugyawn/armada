@@ -13,6 +13,7 @@ import * as message_lists from "./message_lists.ts";
 import type {Message} from "./message_store.ts";
 import * as narrow_state from "./narrow_state.ts";
 import {page_params} from "./page_params.ts";
+import * as pear_run_state from "./pear_run_state.ts";
 import * as people from "./people.ts";
 import * as resolved_topic from "./resolved_topic.ts";
 import * as settings_config from "./settings_config.ts";
@@ -47,6 +48,7 @@ type ActionPopoverContext = {
     should_display_read_receipts_option: boolean;
     should_display_add_reaction_option: boolean;
     should_display_message_report_option: boolean;
+    not_for_pear_run_id: number | undefined;
 };
 
 type TopicPopoverContext = {
@@ -223,6 +225,10 @@ export function get_actions_popover_content_context(message_id: number): ActionP
         // You can report any message you can access
         return true;
     };
+    const not_for_pear_run_id =
+        message.is_pear_message && not_spectator
+            ? pear_run_state.get_ambient_run_id(message.id)
+            : undefined;
 
     function is_add_reaction_icon_visible(): boolean {
         assert(message_lists.current !== undefined);
@@ -256,6 +262,7 @@ export function get_actions_popover_content_context(message_id: number): ActionP
         should_display_read_receipts_option,
         should_display_quote_message,
         should_display_message_report_option: should_display_message_report_option(),
+        not_for_pear_run_id,
     };
 }
 

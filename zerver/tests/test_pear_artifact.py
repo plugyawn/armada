@@ -102,6 +102,13 @@ class PearArtifactValidationTest(TestCase):
         self.assertEqual(canonical_root["layout"], "graph")
         self.assertEqual(canonical_root["children"][2]["state"], "selected")
 
+    def test_coordinate_free_layout_is_rejected(self) -> None:
+        document = valid_document()
+        root = document["blocks"][0]["root"]  # type: ignore[index]
+        root["layout"] = "free"  # type: ignore[index]
+        with self.assertRaisesRegex(PearArtifactError, "expected one of.*overlay"):
+            canonicalize_pear_artifact(document)
+
     def test_scene_steps_are_bounded_and_reference_typed_targets(self) -> None:
         document = valid_document()
         block = document["blocks"][0]  # type: ignore[index]

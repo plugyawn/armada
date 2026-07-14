@@ -263,7 +263,7 @@ def _validate_scene(root: dict[str, Any]) -> int:
             names = ", ".join(sorted(ignored_properties))
             raise PearArtifactError(f"{node_type} node has unsupported properties: {names}")
         if node_type == "group":
-            if node.get("layout") not in {"row", "column", "grid", "graph", "overlay", "free"}:
+            if node.get("layout") not in {"row", "column", "grid", "graph", "overlay"}:
                 raise PearArtifactError("group nodes require a layout")
             if not node.get("children"):
                 raise PearArtifactError("group nodes require children")

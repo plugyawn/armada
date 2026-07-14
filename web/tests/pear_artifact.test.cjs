@@ -179,6 +179,45 @@ run_test("renders durable theme-aware media and rejects workspace paths", () => 
     assert.equal(artifact.parse_pear_artifact(JSON.stringify(document)), undefined);
 });
 
+run_test("renders bounded KaTeX in artifact prose, captions, and scene labels", () => {
+    const document = valid_document();
+    document.blocks[0].body =
+        "At $$x_t$$, project the gradient.\n```math\nx_{t+1}=R_{x_t}(v_t)\n```";
+    document.blocks[1].root.children[0].label = "$$x_t$$";
+    document.blocks[1].steps = [
+        {label: "Start", changes: [{target: "a", label: "$$x_t$$"}]},
+        {label: "Advance", changes: [{target: "a", label: "$$x_{t+1}$$"}]},
+    ];
+    document.blocks.push({
+        type: "media",
+        kind: "image",
+        src: "/user_uploads/1/ab/diagram.svg",
+        alt: "A tangent construction.",
+        caption: "The step stays in $$T_{x_t}M$$.",
+    });
+    const parsed = artifact.parse_pear_artifact(JSON.stringify(document));
+    assert.ok(parsed);
+    const rendered = artifact.render_pear_artifact(parsed, {density: "chat"});
+    assert.equal(rendered.querySelectorAll(".pear-artifact-copy .katex").length, 2);
+    assert.equal(rendered.querySelectorAll(".pear-artifact-copy .katex-display").length, 1);
+    assert.equal(rendered.querySelectorAll(".pear-artifact-shape-label .katex").length, 1);
+    assert.equal(rendered.querySelectorAll(".pear-artifact-media-caption .katex").length, 1);
+    assert.equal(rendered.textContent.includes("$$"), false);
+    assert.equal(rendered.textContent.includes("```"), false);
+
+    rendered.querySelector('[aria-label="Next step"]').click();
+    assert.equal(
+        rendered.querySelector('[data-pear-artifact-target="a"] annotation').textContent,
+        "x_{t+1}",
+    );
+});
+
+run_test("rejects the coordinate-free free layout", () => {
+    const document = valid_document();
+    document.blocks[1].root.layout = "free";
+    assert.equal(artifact.parse_pear_artifact(JSON.stringify(document)), undefined);
+});
+
 run_test("rejects unresolved connectors and duplicate ids", () => {
     const missing = valid_document();
     missing.blocks[1].root.children[2].to = "missing";

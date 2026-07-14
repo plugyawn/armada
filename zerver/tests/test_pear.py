@@ -101,6 +101,7 @@ from zerver.lib.pear import (
     parse_pear_checklist,
     parse_pear_interruption_event,
     parse_pear_steering_event,
+    pear_distinct_transcript_tool_events,
     pear_normalize_token_usage,
     pear_session_record_kind,
     pear_session_record_url,
@@ -1739,6 +1740,96 @@ class PearSessionDefaultsTest(TestCase):
                     "*✦*",
                 ]
             ),
+        )
+
+    def test_build_worker_progress_message_coalesces_dynamic_tool_result(self) -> None:
+        events = [
+            {
+                "kind": "tool",
+                "status": "running",
+                "title": "pear_artifact",
+                "item_id": "tool-1",
+                "metadata": {"tool_name": "pear_artifact"},
+            },
+            {
+                "kind": "tool",
+                "status": "done",
+                "title": "Artifact ready.",
+                "item_id": "tool-1",
+                "metadata": {
+                    "tool_name": "pear_artifact",
+                    "human_tool_result": True,
+                },
+            },
+            {
+                "kind": "tool",
+                "status": "done",
+                "title": "pear_artifact",
+                "item_id": "tool-1",
+                "metadata": {"tool_name": "pear_artifact"},
+            },
+        ]
+
+        self.assertEqual(len(pear_distinct_transcript_tool_events(events)), 1)
+        self.assertEqual(
+            build_pear_worker_progress_message(
+                task="draw",
+                transcript_events=events,
+                tool_results=[],
+            ),
+            "```spoiler Ran 1 tool\n- · Artifact ready.\n```\n\n*✦*",
+        )
+
+    def test_distinct_transcript_tool_events_count_actions_not_updates(self) -> None:
+        events = [
+            {
+                "kind": "command",
+                "status": "running",
+                "title": "read core skill",
+                "item_id": "command-1",
+            },
+            {
+                "kind": "command",
+                "status": "done",
+                "title": "read core skill",
+                "item_id": "command-1",
+            },
+            {
+                "kind": "command",
+                "status": "done",
+                "title": "read native guide",
+                "item_id": "command-2",
+            },
+            {
+                "kind": "tool",
+                "status": "running",
+                "title": "pear_artifact",
+                "item_id": "tool-1",
+            },
+            {
+                "kind": "tool",
+                "status": "done",
+                "title": "Artifact ready.",
+                "item_id": "tool-1",
+                "metadata": {"human_tool_result": True},
+            },
+            {
+                "kind": "tool",
+                "status": "done",
+                "title": "pear_artifact",
+                "item_id": "tool-1",
+            },
+        ]
+
+        distinct_events = pear_distinct_transcript_tool_events(events)
+        self.assertEqual(len(distinct_events), 3)
+        self.assertEqual(
+            [event["title"] for event in distinct_events],
+            [
+                "read core skill",
+                "read native guide",
+                "Artifact ready.",
+            ],
         )
 
     def test_build_worker_progress_message_collapses_streaming_deltas_by_item(self) -> None:
@@ -6018,6 +6109,7 @@ class PearInteractiveTurnTest(TestCase):
             "item/tool/call",
             {
                 "tool": "pear_artifact",
+                "callId": "artifact-call-1",
                 "namespace": None,
                 "arguments": {
                     "version": 1,
@@ -6032,6 +6124,8 @@ class PearInteractiveTurnTest(TestCase):
         self.assertEqual(json.loads(runner.pending_artifacts[0])["version"], 1)
         assert event is not None
         self.assertEqual(event["title"], "Artifact ready.")
+        self.assertEqual(event["item_id"], "artifact-call-1")
+        self.assertIs(event["metadata"]["human_tool_result"], True)
 
     def test_artifact_dynamic_tool_returns_actionable_validation_error(self) -> None:
         runner = self.make_runner()

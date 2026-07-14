@@ -886,6 +886,7 @@ class StaticRuntimeContractTest(unittest.TestCase):
         update = (REPO_ROOT / "tools/pear_deploy/update_remote.sh").read_text()
         verify = (REPO_ROOT / "tools/pear_deploy/verify_remote.sh").read_text()
         bootstrap = (REPO_ROOT / "tools/pear_deploy/bootstrap_remote.sh").read_text()
+        visual_runtime = (REPO_ROOT / "tools/pear_deploy/provision_visual_runtime.sh").read_text()
         helper_runtime = (REPO_ROOT / "tools/pear_deploy/workspace_helper_runtime.py").read_text()
         backend_workflow = (REPO_ROOT / ".github/workflows/pear-backend.yml").read_text()
         self.assertIn("--production-assets", run_dev)
@@ -1032,6 +1033,11 @@ class StaticRuntimeContractTest(unittest.TestCase):
             self.assertIn(suite, update)
             self.assertIn(suite, backend_workflow)
         self.assertIn("tools.pear_deploy.test_production_runtime", backend_workflow)
+        self.assertIn("-type d ! -perm -0005", visual_runtime)
+        self.assertIn("-type f ! -perm -0004", visual_runtime)
+        self.assertIn("-perm /022", visual_runtime)
+        self.assertIn("-exec chmod a+rx,go-w {} +", visual_runtime)
+        self.assertIn("-exec chmod a+r,go-w {} +", visual_runtime)
 
     def test_verification_password_file_is_fail_closed(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:

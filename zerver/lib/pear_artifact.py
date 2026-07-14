@@ -211,7 +211,7 @@ def _iter_nodes(node: dict[str, Any], *, depth: int = 1) -> Iterable[tuple[dict[
             yield from _iter_nodes(child, depth=depth + 1)
 
 
-def _validate_scene(root: dict[str, Any]) -> None:
+def _validate_scene(root: dict[str, Any]) -> int:
     nodes = list(_iter_nodes(root))
     if len(nodes) > PEAR_ARTIFACT_NODE_LIMIT:
         raise PearArtifactError(f"scene exceeds {PEAR_ARTIFACT_NODE_LIMIT} nodes")
@@ -234,12 +234,7 @@ def _validate_scene(root: dict[str, Any]) -> None:
 
     ids: set[str] = set()
     connector_refs: list[tuple[str, str]] = []
-    total_text = sum(
-        len(value)
-        for node, _depth in _iter_nodes(root)
-        for key in ("text", "label", "ariaLabel")
-        if isinstance((value := node.get(key)), str)
-    )
+    total_text = 0
     node_schema = PEAR_ARTIFACT_SCHEMA["$defs"]["node"]
     allowed_properties_by_type = node_schema["x-pear-type-properties"]
     for node, _depth in nodes:
@@ -315,9 +310,10 @@ def _validate_scene(root: dict[str, Any]) -> None:
     for start, end in connector_refs:
         if start not in ids or end not in ids:
             raise PearArtifactError(f"connector references missing node: {start} -> {end}")
+    return total_text
 
 
-def _validate_scene_steps(block: dict[str, Any]) -> None:
+def _validate_scene_steps(block: dict[str, Any], scene_text: int) -> None:
     steps = block.get("steps")
     if not isinstance(steps, list):
         return
@@ -328,7 +324,7 @@ def _validate_scene_steps(block: dict[str, Any]) -> None:
         for node, _depth in _iter_nodes(root)
         if isinstance((node_id := node.get("id")), str)
     }
-    total_text = 0
+    total_text = scene_text
     for step_index, step in enumerate(steps):
         assert isinstance(step, dict)
         label = step.get("label")
@@ -431,8 +427,8 @@ def canonicalize_pear_artifact(
         raise PearArtifactError(f"artifact exceeds {PEAR_ARTIFACT_MEDIA_BLOCK_LIMIT} media blocks")
     for block in decoded["blocks"]:
         if block["type"] == "scene":
-            _validate_scene(block["root"])
-            _validate_scene_steps(block)
+            scene_text = _validate_scene(block["root"])
+            _validate_scene_steps(block, scene_text)
         elif block["type"] == "media":
             _validate_media(block, allow_unresolved_media=allow_unresolved_media)
     return decoded, encoded

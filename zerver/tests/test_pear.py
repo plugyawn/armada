@@ -2226,6 +2226,20 @@ class PearSessionDefaultsTest(TestCase):
                 },
                 {
                     "kind": "command",
+                    "status": "running",
+                    "title": "render visual",
+                    "body": "",
+                    "item_id": "cmd-1",
+                },
+                {
+                    "kind": "assistant",
+                    "status": "done",
+                    "title": "Assistant",
+                    "body": "The first poster needs a tighter composition.",
+                    "item_id": "msg-retry",
+                },
+                {
+                    "kind": "command",
                     "status": "done",
                     "title": "render visual",
                     "body": "",
@@ -2245,8 +2259,12 @@ class PearSessionDefaultsTest(TestCase):
         self.assertIn("motion clarifies projection", completed_message)
         self.assertIn("Watch the ambient vector", completed_message)
         self.assertIn("render visual", completed_message)
+        self.assertEqual(completed_message.count("render visual"), 1)
+        self.assertEqual(completed_message.count("```spoiler Ran 1 tool"), 1)
+        self.assertNotIn("✦", completed_message)
         self.assertNotIn("inspect the helper", completed_message)
         self.assertNotIn("checking the renderer", completed_message)
+        self.assertNotIn("first poster", completed_message)
 
     def test_worker_completed_message_preserves_final_answer_after_long_tool_details(self) -> None:
         transcript_events = [

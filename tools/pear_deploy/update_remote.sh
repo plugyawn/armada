@@ -359,6 +359,8 @@ verify_existing_remote_caddy_auth() {
 
 verify_remote_quiescence() {
     local phase="$1"
+    local services="${2:-${PEAR_DEPLOY_SERVICES[*]}}"
+    local queues="${3:-${PEAR_DEPLOY_QUEUES[*]}}"
 
     echo "$phase: Pear run health"
     if ! ssh_zulip "$REMOTE_PATH/tools/pear-health-report --max-active-runs 0 --max-stale-active-runs 0 --max-orphan-active-markers 0"; then
@@ -366,48 +368,78 @@ verify_remote_quiescence() {
     fi
 
     echo "$phase: service health"
-    if ! ssh_root "systemctl is-active ${PEAR_DEPLOY_SERVICES[*]}"; then
+    if ! ssh_root "systemctl is-active $services"; then
         fail "$phase failed: one or more deploy-managed services are inactive"
     fi
 
     echo "$phase: queue quiescence"
     if ! ssh_root "rabbitmqctl list_queues name messages_ready messages_unacknowledged consumers" |
-        validate_pear_deploy_queue_snapshot; then
+        validate_pear_deploy_queue_snapshot "$queues"; then
         fail "$phase failed: one or more deploy-managed queues are busy, missing, or unconsumed"
     fi
 }
 
 wait_for_remote_drain() {
     local attempt
+    local worker_services="${1:-${PEAR_DEPLOY_WORKER_SERVICES[*]}}"
+    local queues="${2:-${PEAR_DEPLOY_QUEUES[*]}}"
     echo "Maintenance drain: waiting for Pear runs and queues to become idle..."
     for attempt in $(seq 1 60); do
-        if ssh_root "systemctl is-active ${PEAR_DEPLOY_WORKER_SERVICES[*]}" >/dev/null 2>&1 &&
+        if ssh_root "systemctl is-active $worker_services" >/dev/null 2>&1 &&
             ssh_zulip "$REMOTE_PATH/tools/pear-health-report --max-active-runs 0 --max-stale-active-runs 0 --max-orphan-active-markers 0" >/dev/null 2>&1 &&
             ssh_root "rabbitmqctl list_queues name messages_ready messages_unacknowledged consumers" 2>/dev/null |
-                validate_pear_deploy_queue_snapshot >/dev/null; then
+                validate_pear_deploy_queue_snapshot "$queues" >/dev/null; then
             echo "Maintenance drain: Pear runs and queues are idle."
             return 0
         fi
         sleep 2
     done
 
-    ssh_root "systemctl is-active ${PEAR_DEPLOY_WORKER_SERVICES[*]}" || true
+    ssh_root "systemctl is-active $worker_services" || true
     ssh_zulip "$REMOTE_PATH/tools/pear-health-report --max-active-runs 0 --max-stale-active-runs 0 --max-orphan-active-markers 0" || true
     ssh_root "rabbitmqctl list_queues name messages_ready messages_unacknowledged consumers" |
-        validate_pear_deploy_queue_snapshot || true
+        validate_pear_deploy_queue_snapshot "$queues" || true
     fail "maintenance drain did not become idle within 120 seconds"
 }
 
 verify_remote_stopped_quiescence() {
+    local queues="${1:-${PEAR_DEPLOY_QUEUES[*]}}"
     echo "Stopped-state gate: Pear run health"
     if ! ssh_zulip "$REMOTE_PATH/tools/pear-health-report --max-active-runs 0 --max-stale-active-runs 0 --max-orphan-active-markers 0"; then
         fail "stopped-state gate failed: Pear has active, stale, or orphaned work"
     fi
     echo "Stopped-state gate: queue emptiness"
     if ! ssh_root "rabbitmqctl list_queues name messages_ready messages_unacknowledged consumers" |
-        validate_pear_deploy_queue_empty_snapshot; then
+        validate_pear_deploy_queue_empty_snapshot "$queues"; then
         fail "stopped-state gate failed: one or more deploy-managed queues are busy or missing"
     fi
+}
+
+configure_predeploy_runtime_expectations() {
+    local index
+    local service
+    local queue
+    local unit_path
+
+    PREDEPLOY_WORKER_SERVICES=()
+    PREDEPLOY_QUEUES=()
+    for index in "${!PEAR_DEPLOY_WORKER_SERVICES[@]}"; do
+        service="${PEAR_DEPLOY_WORKER_SERVICES[$index]}"
+        queue="${PEAR_DEPLOY_QUEUES[$index]}"
+        if ssh_root "systemctl cat $service >/dev/null 2>&1"; then
+            PREDEPLOY_WORKER_SERVICES+=("$service")
+            PREDEPLOY_QUEUES+=("$queue")
+            continue
+        fi
+
+        unit_path="tools/pear_deploy/runtime/$service.service"
+        if git -C "$REPO_ROOT" cat-file -e "$PREV_SHA:$unit_path" 2>/dev/null ||
+            ! git -C "$REPO_ROOT" cat-file -e "$LOCAL_SHA:$unit_path" 2>/dev/null; then
+            fail "pre-deploy service $service is missing and is not newly introduced by this deploy"
+        fi
+        echo "Preflight: newly introduced service $service and queue $queue are absent as expected before cutover."
+    done
+    PREDEPLOY_SERVICES=("${PREDEPLOY_WORKER_SERVICES[@]}" pear-zulip-dev)
 }
 
 verify_local_cutover_source() {
@@ -1112,6 +1144,8 @@ if ! git -C "$REPO_ROOT" merge-base --is-ancestor "$PREV_SHA" "$LOCAL_SHA"; then
     fail "remote HEAD $PREV_SHA is not an ancestor of local HEAD $LOCAL_SHA"
 fi
 
+configure_predeploy_runtime_expectations
+
 REMOTE_AUTH_READY=false
 if ssh_root "test -e $REMOTE_AUTH_ENV"; then
     if remote_auth_env_valid; then
@@ -1200,7 +1234,10 @@ fi
 
 run_local_compat
 
-verify_remote_quiescence "Preflight quiescence"
+verify_remote_quiescence \
+    "Preflight quiescence" \
+    "${PREDEPLOY_SERVICES[*]}" \
+    "${PREDEPLOY_QUEUES[*]}"
 preflight_remote_workspace_helper
 preflight_remote_visual_runtime
 verify_remote_disk_capacity
@@ -1227,11 +1264,11 @@ REMOTE_TRUSTED_RUNTIME="$(stage_remote_pear_deploy_bundle "$REPO_ROOT" "$LOCAL_S
 echo "Stopping app ingress before the final drain..."
 SERVICE_RESTART_REQUIRED=true
 ssh_root "systemctl stop pear-zulip-dev"
-wait_for_remote_drain
+wait_for_remote_drain "${PREDEPLOY_WORKER_SERVICES[*]}" "${PREDEPLOY_QUEUES[*]}"
 
 echo "Stopping queue workers after the drain..."
-ssh_root "systemctl stop ${PEAR_DEPLOY_WORKER_SERVICES[*]}"
-verify_remote_stopped_quiescence
+ssh_root "systemctl stop ${PREDEPLOY_WORKER_SERVICES[*]}"
+verify_remote_stopped_quiescence "${PREDEPLOY_QUEUES[*]}"
 verify_local_cutover_source
 verify_remote_cutover_source
 

@@ -994,10 +994,10 @@ class StaticRuntimeContractTest(unittest.TestCase):
         )
         self.assertLess(
             update.rindex("wait_for_remote_drain"),
-            update.rindex("systemctl stop ${PEAR_DEPLOY_WORKER_SERVICES[*]}"),
+            update.rindex("systemctl stop ${PREDEPLOY_WORKER_SERVICES[*]}"),
         )
         self.assertLess(
-            update.rindex("systemctl stop ${PEAR_DEPLOY_WORKER_SERVICES[*]}"),
+            update.rindex("systemctl stop ${PREDEPLOY_WORKER_SERVICES[*]}"),
             update.index("Snapshotting the drained remote tree"),
         )
         self.assertLess(
@@ -1259,6 +1259,26 @@ sys.stdout.write(status)
             "'embedded_bots 0 0 1' "
             "'thumbnail 0 0 1' | "
             "validate_pear_deploy_queue_snapshot"
+        )
+        result = subprocess.run(
+            ["bash", "-c", script],
+            cwd=REPO_ROOT,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_queue_validator_accepts_an_explicit_predeploy_subset(self) -> None:
+        script = (
+            "source tools/pear_deploy/deploy_common.sh; "
+            "printf '%s\\n' "
+            "'pear_worker 0 0 1' "
+            "'pear_monitor_worker 0 0 1' "
+            "'embedded_bots 0 0 1' "
+            "'thumbnail 0 0 1' | "
+            "validate_pear_deploy_queue_snapshot "
+            "'pear_worker pear_monitor_worker embedded_bots thumbnail'"
         )
         result = subprocess.run(
             ["bash", "-c", script],

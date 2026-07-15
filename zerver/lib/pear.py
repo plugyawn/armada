@@ -1055,6 +1055,11 @@ def pear_transcript_tool_group_title(
     )
     failed_count = sum(1 for event in events if event.get("status", "") in {"failed", "error"})
 
+    if failed_count and completed_count and not running_count:
+        return (
+            f"Ran {tool_count} {pear_pluralize_tool(tool_count)} · "
+            f"{failed_count} {'retry' if failed_count == 1 else 'retries'}"
+        )
     if failed_count:
         return f"{failed_count} failed {pear_pluralize_tool(failed_count)}"
     if running_count and completed_count:
@@ -1072,13 +1077,26 @@ def pear_spoiler_block(title: str, body: str) -> str:
 
 def pear_transcript_tool_group_block(
     events: Sequence[PearWorkerTranscriptEvent],
+    *,
+    hide_failed_details: bool = False,
 ) -> str:
     distinct_events = pear_distinct_transcript_tool_events(events)
     if not distinct_events:
         return ""
+    detail_events = (
+        [
+            event
+            for event in distinct_events
+            if event.get("status", "") not in {"failed", "error"}
+        ]
+        if hide_failed_details
+        else distinct_events
+    )
+    if not detail_events:
+        detail_events = distinct_events
     return pear_spoiler_block(
         pear_transcript_tool_group_title(distinct_events),
-        "\n".join(pear_transcript_tool_detail_line(event) for event in distinct_events),
+        "\n".join(pear_transcript_tool_detail_line(event) for event in detail_events),
     )
 
 
@@ -1258,7 +1276,10 @@ def pear_visible_transcript_blocks(
         ]
     if assistant_mode == "disclosure_last" and all_tool_events:
         block_keys = [key for key in block_keys if not key.startswith("tool-group:")]
-        tool_block = pear_transcript_tool_group_block(all_tool_events)
+        tool_block = pear_transcript_tool_group_block(
+            all_tool_events,
+            hide_failed_details=True,
+        )
         if tool_block:
             tool_key = "tool-group:completed-artifact"
             block_by_key[tool_key] = tool_block

@@ -30,6 +30,12 @@
 			# makes Zulip's dual session/API upload routes reinterpret it as an
 			# invalid API credential and reject otherwise authenticated images.
 			header_up -Authorization
+			# Authenticated deployment probes may carry a distinct Zulip API
+			# credential in this private bridge header. Promote it only after the
+			# outer basicauth handler has accepted the request, and never forward
+			# the bridge header itself.
+			header_up Authorization {http.request.header.X-Pear-Upstream-Authorization}
+			header_up -X-Pear-Upstream-Authorization
 		}
 	}
 }

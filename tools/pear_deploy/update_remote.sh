@@ -1470,6 +1470,8 @@ runtime_smoke_args=(
     "$runtime_smoke"
     --use-existing-server
     --site "https://$FQDN"
+    --caddy-auth-user "$CADDY_BASICAUTH_USER"
+    --caddy-auth-password-file "$CADDY_BASICAUTH_PASSWORD_FILE"
     --smoke-timeout "$RUNTIME_SMOKE_TIMEOUT"
     --evidence-json "$RUNTIME_SMOKE_EVIDENCE"
 )

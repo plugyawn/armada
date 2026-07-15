@@ -1204,6 +1204,7 @@ def pear_visible_transcript_blocks(
     assistant_keys: list[str] = []
     anonymous_index = 0
     tool_events: list[PearWorkerTranscriptEvent] = []
+    all_tool_events: list[PearWorkerTranscriptEvent] = []
 
     def flush_tool_events() -> None:
         nonlocal tool_events
@@ -1221,6 +1222,7 @@ def pear_visible_transcript_blocks(
             continue
         if pear_transcript_event_is_tool_detail(event):
             tool_events.append(event)
+            all_tool_events.append(event)
             continue
 
         block = pear_visible_transcript_event_block(event, limit=block_limit).strip()
@@ -1242,6 +1244,7 @@ def pear_visible_transcript_blocks(
         if event.get("kind") == "assistant":
             assistant_keys.append(key)
     flush_tool_events()
+    retained_assistant_keys: set[str] = set()
     if assistant_mode != "all" and assistant_keys:
         retained_assistant_keys = {assistant_keys[-1]}
         if assistant_mode == "disclosure_last":
@@ -1253,6 +1256,17 @@ def pear_visible_transcript_blocks(
         block_keys = [
             key for key in block_keys if key not in assistant_keys or key in retained_assistant_keys
         ]
+    if assistant_mode == "disclosure_last" and all_tool_events:
+        block_keys = [key for key in block_keys if not key.startswith("tool-group:")]
+        tool_block = pear_transcript_tool_group_block(all_tool_events)
+        if tool_block:
+            tool_key = "tool-group:completed-artifact"
+            block_by_key[tool_key] = tool_block
+            final_assistant_key = assistant_keys[-1] if assistant_keys else None
+            if final_assistant_key in block_keys and len(retained_assistant_keys) > 1:
+                block_keys.insert(block_keys.index(final_assistant_key), tool_key)
+            else:
+                block_keys.append(tool_key)
     return [block_by_key[key] for key in block_keys]
 
 

@@ -25,16 +25,15 @@
 	}
 
 	handle {
+		# Replace the accepted outer credential with the optional inner Zulip
+		# API credential before entering reverse_proxy. Keeping the copy and the
+		# bridge-header deletion in separate handlers avoids Caddy's delete-first
+		# request-header transformation ordering.
+		request_header Authorization {http.request.header.X-Pear-Upstream-Authorization}
 		reverse_proxy 127.0.0.1:9991 {
-			# The outer Basic Auth credential is only for Caddy. Forwarding it
-			# makes Zulip's dual session/API upload routes reinterpret it as an
-			# invalid API credential and reject otherwise authenticated images.
-			header_up -Authorization
 			# Authenticated deployment probes may carry a distinct Zulip API
-			# credential in this private bridge header. Promote it only after the
-			# outer basicauth handler has accepted the request, and never forward
-			# the bridge header itself.
-			header_up Authorization {http.request.header.X-Pear-Upstream-Authorization}
+			# credential in this private bridge header. Never forward the bridge
+			# header itself after promoting its value to Authorization above.
 			header_up -X-Pear-Upstream-Authorization
 		}
 	}

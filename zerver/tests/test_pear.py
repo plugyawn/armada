@@ -2240,6 +2240,13 @@ class PearSessionDefaultsTest(TestCase):
                 },
                 {
                     "kind": "command",
+                    "status": "failed",
+                    "title": "inspect first poster",
+                    "body": "",
+                    "item_id": "cmd-preview",
+                },
+                {
+                    "kind": "command",
                     "status": "done",
                     "title": "render visual",
                     "body": "",
@@ -2260,7 +2267,7 @@ class PearSessionDefaultsTest(TestCase):
         self.assertIn("Watch the ambient vector", completed_message)
         self.assertIn("render visual", completed_message)
         self.assertEqual(completed_message.count("render visual"), 1)
-        self.assertEqual(completed_message.count("```spoiler Ran 1 tool"), 1)
+        self.assertEqual(completed_message.count("```spoiler Ran 2 tools · 1 retry"), 1)
         self.assertNotIn("✦", completed_message)
         self.assertNotIn("inspect the helper", completed_message)
         self.assertNotIn("checking the renderer", completed_message)

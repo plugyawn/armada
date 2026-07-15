@@ -5,13 +5,13 @@ import re
 import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from re import IGNORECASE, MULTILINE, compile, finditer, search, sub
+from re import IGNORECASE, MULTILINE, compile, finditer, sub
 from typing import Any, Final, Literal, NotRequired, Protocol, TypedDict
 
 from django.core.cache import cache
 
 from zerver.lib.exceptions import JsonableError
-from zerver.lib.pear_constants import PEAR_ARTIFACT_PATTERN, PEAR_SERVER_CONTRACT_VERSION
+from zerver.lib.pear_constants import PEAR_SERVER_CONTRACT_VERSION
 
 PEAR_AGENT_NAME: Final = "Pear"
 PEAR_BOT_SHORT_NAME: Final = "pear"
@@ -42,35 +42,6 @@ PEAR_OFFICIAL_AGENT_RUNTIME_LABEL: Final = "Codex app-server"
 PEAR_AGENT_RUNTIME_PACKAGES: Final = ("openai-agents", "openai-codex")
 PEAR_OFFICIAL_CODEX_SDK_PACKAGES: Final = ("@openai/codex-sdk", "openai-codex")
 PEAR_CODEX_MCP_TOOLS: Final = ("codex", "codex-reply")
-PEAR_TOPIC_STATE_TOOLS: Final = (
-    "Repo",
-    "Runtime",
-    "Branch",
-    "PR",
-    "Diff",
-    "Verification",
-    "Screenshot",
-    "Session",
-    "Doc",
-    "Ticket",
-    "Issue",
-    "Reviewers",
-)
-PEAR_TOPIC_STATE_TOOL_NAMES: Final = (
-    "pear_record_repo",
-    "pear_record_runtime",
-    "pear_record_branch",
-    "pear_record_pr",
-    "pear_record_diff",
-    "pear_record_verification",
-    "pear_record_screenshot",
-    "pear_record_session",
-    "pear_record_doc",
-    "pear_record_ticket",
-    "pear_record_issue",
-    "pear_record_reviewers",
-)
-
 PEAR_REASONING_EFFORTS: Final[tuple[str, ...]] = ("low", "medium", "high", "xhigh", "max", "ultra")
 PEAR_URL_RE: Final = r"https?://[^\s<>]+"
 PEAR_STEER_PROMPT: Final = "Steering update:"
@@ -114,16 +85,6 @@ PEAR_LIVE_RUN_CACHE_KEY_PREFIX: Final = "pear:live-run:"
 PEAR_LIVE_RUN_CACHE_TTL_SECONDS: Final = 3600
 PEAR_MARKDOWN_IMAGE_PATTERN: Final = r"!\[([^\]\n]*)\]\((\S+?)(?:\s+\"[^\"]*\")?\)"
 PEAR_CHECKLIST_PATTERN: Final = r"^\s*[-*]\s+\[([ xX~])\]\s+(.+?)\s*$"
-# PEAR_ARTIFACT_PATTERN is imported from zerver.lib.pear_constants (vendored
-# from pear/registry.py) so the artifact vocabulary cannot drift per fork.
-PEAR_RETIRED_VISIBLE_ARTIFACT_PATTERN: Final = (
-    r"^\s*(?:[-*]\s*)?"
-    r"(Routine disabled|Disabled routine|Routine off|Routine|Routines|"
-    r"Routine cadence|Cadence|Schedule|Watch cadence|"
-    r"Memory forgotten|Forgotten memory|Memory off|Memory|Memories|"
-    r"Done|Definition of done|Success criteria|Ambient|Response policy|"
-    r"Followups|Follow-up mode):"
-)
 PEAR_TRANSCRIPT_TOOL_DETAIL_KINDS: Final = frozenset({"command", "file_change", "tool"})
 PEAR_TRIVIAL_ACKNOWLEDGMENT_MESSAGES: Final = frozenset(
     {
@@ -160,56 +121,7 @@ class PearRunCancelled(Exception):
     pass
 
 
-PearArtifactKind = Literal[
-    "repository",
-    "runtime",
-    "branch",
-    "commit",
-    "pull_request",
-    "diff",
-    "verification",
-    "screenshot",
-    "session_record",
-    "document",
-    "ticket",
-    "reviewers",
-]
 PearInterruptionKind = Literal["pause", "resume"]
-PEAR_ARTIFACT_KIND_BY_LABEL: Final[dict[str, PearArtifactKind]] = {
-    "repo": "repository",
-    "repository": "repository",
-    "runtime": "runtime",
-    "branch": "branch",
-    "commit": "commit",
-    "sha": "commit",
-    "pr": "pull_request",
-    "pull request": "pull_request",
-    "diff": "diff",
-    "test": "verification",
-    "tests": "verification",
-    "verification": "verification",
-    "screenshot": "screenshot",
-    "session": "session_record",
-    "session record": "session_record",
-    "pear session": "session_record",
-    "codex session": "session_record",
-    "doc": "document",
-    "docs": "document",
-    "issue": "ticket",
-    "ticket": "ticket",
-    "reviewer": "reviewers",
-    "reviewers": "reviewers",
-}
-
-
-def pear_is_retired_visible_artifact_line(text: str) -> bool:
-    return bool(
-        search(
-            PEAR_RETIRED_VISIBLE_ARTIFACT_PATTERN,
-            text.strip(),
-            MULTILINE | IGNORECASE,
-        )
-    )
 
 
 @dataclass(frozen=True)
@@ -252,21 +164,12 @@ class PearSessionPayload(TypedDict):
     agent_runtime_packages: list[str]
     official_codex_sdk_packages: list[str]
     codex_mcp_tools: list[str]
-    pear_topic_state_tools: list[str]
-    pear_topic_state_tool_names: list[str]
     server_contract_version: int
 
 
 class PearChecklistItem(TypedDict):
     status: PearChecklistStatus
     text: str
-
-
-class PearArtifact(TypedDict):
-    kind: PearArtifactKind
-    label: str
-    value: str
-    message_id: int
 
 
 class PearSteeringEvent(TypedDict):
@@ -340,14 +243,6 @@ class PearActiveSessionSummary(TypedDict):
     pending_count: int
     in_progress_count: int
     done_count: int
-    artifact_count: int
-    latest_artifact_message_id: int | None
-    latest_verification: str | None
-    session_record_count: int
-    latest_session_record_message_id: int | None
-    latest_session_record: str | None
-    latest_session_record_kind: str | None
-    latest_session_record_url: str | None
     latest_codex_thread_id: str | None
     response_policy: PearResponsePolicy
     steering_count: int
@@ -362,8 +257,8 @@ class PearActiveSessionSummary(TypedDict):
     worker_can_run: bool
     worker_blocked_reason: str | None
     recent_messages: list[PearRecentMessage]
+    routing_messages: list[PearRecentMessage]
     checklist: list[PearChecklistItem]
-    artifacts: list[PearArtifact]
     steering_events: list[PearSteeringEvent]
     interruption_events: list[PearInterruptionEvent]
     workspace_context: PearWorkspaceContext
@@ -468,6 +363,7 @@ class PearWorkerRunResult(TypedDict):
     should_post: bool
     worker_can_run: bool
     content: str | None
+    codex_thread_id: str
     tool_count: int
     tool_results: list[PearWorkerToolResult]
 
@@ -613,6 +509,7 @@ class PearAddressingIntentClassifier(Protocol):
         *,
         content: str,
         active_session: PearActiveSessionSummary | None,
+        active_run: bool,
         message: dict[str, Any],
         bot_handler: Any,
     ) -> PearAmbientDecision: ...
@@ -664,7 +561,7 @@ def build_pear_fix_bug_message(summary: str = "") -> str:
             "Expected behavior: ",
             "Useful files: ",
             "How to verify: ",
-            "Workspace context: use the latest Pear workspace artifacts in this topic, or ask if repo/branch/runtime is missing.",
+            "Workspace context: use the typed workspace context, or ask if repo/branch/runtime is missing.",
         ]
     )
 
@@ -696,7 +593,7 @@ def build_pear_handoff_message(audience: str = "") -> str:
             audience_line,
             "Goal and scope: ",
             "Current state: ",
-            "Key files and artifacts: ",
+            "Key files and links: ",
             "Open decisions: ",
             "Next steps: ",
             "Checks still needed: ",
@@ -714,10 +611,10 @@ def build_pear_catch_up_message(since: str = "") -> str:
             since_line,
             "Summarize changes: ",
             "Decisions made: ",
-            "Artifacts to inspect: ",
+            "Files or links to inspect: ",
             "Current blockers: ",
             "Next actions: ",
-            "Use the active topic context and latest Pear workspace artifacts.",
+            "Use the active topic and typed workspace context.",
         ]
     )
 
@@ -730,13 +627,13 @@ def build_pear_triage_message(request: str = "") -> str:
             f"{PEAR_AGENT_MENTION} {PEAR_TRIAGE_PROMPT}",
             "",
             request_line,
-            "Possible duplicate or related work: check this topic's artifacts, documents, linked PRs, and linked issues.",
+            "Possible duplicate or related work: check this topic, documents, linked PRs, and linked issues.",
             "Answer if already known: summarize the settled answer or decision from this topic.",
-            "Suggested owner or reviewer: infer from Reviewers, PR, Ticket, or Issue artifacts when possible.",
+            "Suggested owner or reviewer: use recent speakers, explicit mentions, and linked PR or issue metadata when available.",
             "Suggested scope: classify as bug, feature, verification, docs, or follow-up work.",
             "Priority and risk: ",
             "Next action: ",
-            "Durable output: include Ticket, Issue, Reviewers, Doc, or Verification artifact lines only when they are concrete.",
+            "Output: answer normally and cite concrete links or paths when available.",
         ]
     )
 
@@ -749,10 +646,10 @@ def build_pear_find_answer_message(question: str = "") -> str:
             f"{PEAR_AGENT_MENTION} {PEAR_FIND_ANSWER_PROMPT}",
             "",
             question_line,
-            "Search scope: use this topic first, then durable Pear artifacts, linked docs, tickets, PRs, and repo files when workspace context is available.",
-            "Evidence to cite: include message links, Doc, Ticket, Issue, PR, file paths, or commands only when inspected.",
+            "Search scope: use this topic first, then linked docs, tickets, PRs, and repo files when workspace context is available.",
+            "Evidence to cite: include message links, URLs, file paths, or commands only when inspected.",
             "Answer policy: if the evidence is incomplete, say what is missing instead of guessing.",
-            "Durable output: include Doc, Ticket, Issue, PR, or Verification artifact lines only when they point to concrete evidence.",
+            "Output: answer normally; do not encode evidence as label-prefixed state lines.",
         ]
     )
 
@@ -766,7 +663,7 @@ def build_pear_review_message(scope: str = "") -> str:
             "",
             scope_line,
             "Review focus: correctness, regressions, test coverage, and integration risk.",
-            "Diff or files to inspect: use the latest Pear workspace artifacts unless specified here.",
+            "Diff or files to inspect: use the typed workspace context unless specified here.",
             "Risk areas: ",
             "Expected output: prioritized findings with file paths, then residual risk.",
             "Verification to consider: ",
@@ -801,7 +698,7 @@ def build_pear_checkpoint_message(focus: str = "") -> str:
             "",
             focus_line,
             "Post: current branch, diff summary, changed files, verification run, blockers, and next step.",
-            "If code changed, include Diff and Verification artifact lines in the reply.",
+            "If code changed, summarize the exact diff and verification in the reply.",
             "Continue policy: wait for confirmation unless this topic explicitly says to keep going.",
         ]
     )
@@ -832,7 +729,7 @@ def build_pear_save_work_message(scope: str = "") -> str:
             "",
             scope_line,
             "Persist: preserve the current work as a branch, draft PR, patch, or explicit diff summary that this Zulip topic can recover from.",
-            "Before continuing: post Branch, PR, Diff, or Doc artifact lines for the saved state.",
+            "Before continuing: report the exact saved branch, PR, diff, or document in normal prose.",
             "Latest check to include: the verification that proves the saved state is usable, or explain the blocker.",
             "Continue policy: keep going only after the work is recoverable from this topic.",
         ]
@@ -862,11 +759,11 @@ def build_pear_draft_artifact_message(artifact: str = "") -> str:
             f"{PEAR_AGENT_MENTION} {PEAR_DRAFT_ARTIFACT_PROMPT}",
             "",
             artifact_line,
-            "Source context: use this Zulip topic, the latest Pear artifacts, and current workspace context.",
+            "Source context: use this Zulip topic and the typed workspace context.",
             "Audience: ",
             "Must include: scope, decisions, open questions, owners, and next action.",
-            "Posting policy: post the draft here, or create/update the artifact if tool access is available.",
-            "Durable output: include a Doc, Ticket, or Issue artifact line when a URL or path exists.",
+            "Posting policy: use an available native artifact tool when a structured UI object helps; otherwise post the draft normally.",
+            "Do not encode artifact state as label-prefixed prose.",
         ]
     )
 
@@ -1845,11 +1742,7 @@ def build_pear_access_ack_message(
         worker_access = active_session["worker_blocked_reason"]
     else:
         worker_access = "unknown until a Pear request starts"
-    artifact_count = active_session["artifact_count"] if active_session is not None else 0
     response_policy = active_session["response_policy"] if active_session is not None else "unknown"
-    latest_verification = (
-        active_session["latest_verification"] or "none" if active_session is not None else "none"
-    )
     topic_message_count = active_session["topic_message_count"] if active_session is not None else 0
     recent_message_count = (
         len(active_session["recent_messages"]) if active_session is not None else 0
@@ -1865,25 +1758,17 @@ def build_pear_access_ack_message(
             "",
             "Pear can read the durable topic context, including the request, "
             "checklist, recent topic transcript, steering replies, pause/resume controls, "
-            "the topic workspace, Codex-native memories and skills, and artifact "
-            "lines such as Repo, Runtime, Branch, PR, Diff, Verification, "
-            "Screenshot, Doc, Ticket, Issue, Reviewers, and Session.",
+            "the topic workspace, and Codex-native memories and skills.",
             "When the server worker is enabled, Pear runs the configured Codex "
             "runtime with the server's explicit workdir, sandbox, approval "
             "policy, and model settings.",
-            "zulip-terminal can act on posted artifacts: open links, copy values, "
-            "check out branches, open compares, create draft PRs, mark PRs "
-            "ready, post PR status, and request reviewers.",
-            "",
             f"Loaded transcript: {recent_message_count} recent message(s) from {topic_message_count} topic message(s).",
             f"Visible senders: {pear_access_participants(active_session)}",
             pear_access_workspace_line(active_session),
             f"Codex thread: {codex_thread_id}",
             f"Worker state: {worker_state}",
             f"Worker access: {worker_access}",
-            f"Artifacts seen: {artifact_count}",
             f"Response policy: {response_policy}",
-            f"Latest verification: {latest_verification}",
         ]
     )
 
@@ -1951,25 +1836,6 @@ def is_pear_trivial_acknowledgment_message(content: str) -> bool:
     return normalized in PEAR_TRIVIAL_ACKNOWLEDGMENT_MESSAGES
 
 
-def pear_session_record_url(value: str | None) -> str | None:
-    if value is None:
-        return None
-    match = search(PEAR_URL_RE, value)
-    if match is None:
-        return None
-    return match.group(0).rstrip(".,);]")
-
-
-def pear_session_record_kind(value: str | None) -> str | None:
-    if value is None:
-        return None
-    if pear_session_record_url(value) is not None:
-        return "url"
-    if value.lower().startswith("codex thread "):
-        return "codex_thread"
-    return "text"
-
-
 def pear_worker_task_for_message(
     content: str,
     active_session: PearActiveSessionSummary | None = None,
@@ -1997,7 +1863,6 @@ def pear_worker_should_start(
         or is_pear_access_request_message(content)
         or PEAR_PAUSE_PROMPT in content
         or parse_pear_checklist(content)
-        or parse_pear_artifacts(content, message_id=0)
     ):
         return False
     if is_pear_request_message(content):
@@ -2315,7 +2180,7 @@ def send_pear_worker_typing_notification(
 def pear_worker_summary_from_tool_results(
     tool_results: Sequence[PearWorkerToolResult],
 ) -> str:
-    for preferred_label in ("Result", "Verification", "Diff", "PR", "Session"):
+    for preferred_label in ("Result", "Error", "Verification"):
         for result in tool_results:
             if result["label"] == preferred_label and result["value"].strip():
                 return result["value"].strip()
@@ -2344,18 +2209,6 @@ def pear_worker_event_tool_results(
     ]
 
 
-def pear_codex_thread_id_from_tool_results(
-    tool_results: Sequence[PearWorkerToolResult],
-) -> str:
-    for result in tool_results:
-        if result["label"] != "Session":
-            continue
-        value = result["value"].strip()
-        if value.startswith("Codex thread "):
-            return value[len("Codex thread ") :].strip()
-    return ""
-
-
 class PearWorkerRuntime:
     def __init__(self, tool_runner: PearWorkerToolRunner | None = None) -> None:
         self.tool_runner = tool_runner
@@ -2374,6 +2227,7 @@ class PearWorkerRuntime:
                 "should_post": True,
                 "worker_can_run": False,
                 "content": build_pear_worker_blocked_message(active_session),
+                "codex_thread_id": self.codex_thread_id(),
                 "tool_count": 0,
                 "tool_results": [],
             }
@@ -2394,6 +2248,7 @@ class PearWorkerRuntime:
                 task=task,
                 tool_results=tool_results,
             ),
+            "codex_thread_id": self.codex_thread_id(),
             "tool_count": len(tool_results),
             "tool_results": tool_results,
         }
@@ -2458,6 +2313,15 @@ class PearWorkerRuntime:
         if callable(runtime_value):
             return str(runtime_value())
         return self.tool_runner.__class__.__name__
+
+    def codex_thread_id(self) -> str:
+        if self.tool_runner is None:
+            return ""
+        codex_thread_id = getattr(self.tool_runner, "codex_thread_id", None)
+        if not callable(codex_thread_id):
+            return ""
+        value = codex_thread_id()
+        return value.strip() if isinstance(value, str) else ""
 
 
 def pear_message_topic(message: dict[str, Any]) -> str:
@@ -2701,26 +2565,6 @@ def parse_pear_checklist(content: str) -> list[PearChecklistItem]:
     return checklist
 
 
-def parse_pear_artifacts(content: str, message_id: int) -> list[PearArtifact]:
-    artifacts: list[PearArtifact] = []
-    for match in finditer(PEAR_ARTIFACT_PATTERN, content, MULTILINE | IGNORECASE):
-        raw_label = match.group(1).strip()
-        value = match.group(2).strip()
-        if not value:
-            continue
-        label = raw_label.lower()
-        kind = PEAR_ARTIFACT_KIND_BY_LABEL[label]
-        artifacts.append(
-            {
-                "kind": kind,
-                "label": raw_label,
-                "value": value,
-                "message_id": message_id,
-            }
-        )
-    return artifacts
-
-
 def is_pear_steering_template_message(content: str) -> bool:
     return PEAR_STEER_PROMPT in content
 
@@ -2799,7 +2643,7 @@ def parse_pear_steering_event(
         not explicitly_addressed or not is_pear_steering_template_message(content)
     ):
         return None
-    if parse_pear_checklist(content) or parse_pear_artifacts(content, message_id):
+    if parse_pear_checklist(content):
         return None
     if (
         is_pear_interruption_template_message(content)
@@ -2889,17 +2733,15 @@ def build_pear_active_session_summary(
     checklist: list[PearChecklistItem],
     request_count: int = 0,
     latest_request_message_id: int | None = None,
-    artifacts: list[PearArtifact] | None = None,
-    latest_verification: str | None = None,
     latest_codex_thread_id: str | None = None,
     steering_events: list[PearSteeringEvent] | None = None,
     interruption_events: list[PearInterruptionEvent] | None = None,
     recent_messages: list[PearRecentMessage] | None = None,
+    routing_messages: list[PearRecentMessage] | None = None,
     workspace_context: PearWorkspaceContext | None = None,
     is_paused: bool = False,
     response_policy: str | None = None,
 ) -> PearActiveSessionSummary:
-    artifact_list = list(artifacts or [])
     normalized_response_policy = normalize_pear_response_policy(response_policy)
     steering_event_list = list(steering_events or [])
     interruption_event_list = list(interruption_events or [])
@@ -2931,19 +2773,6 @@ def build_pear_active_session_summary(
         worker_blocked_reason = None
     worker_can_run = worker_state in ("ready", "waiting_for_request")
 
-    if latest_verification is None:
-        latest_verification = next(
-            (artifact["value"] for artifact in artifact_list if artifact["kind"] == "verification"),
-            None,
-        )
-    session_record_artifacts = [
-        artifact for artifact in artifact_list if artifact["kind"] == "session_record"
-    ]
-    latest_session_record = session_record_artifacts[0] if session_record_artifacts else None
-    latest_session_record_value = (
-        latest_session_record["value"] if latest_session_record is not None else None
-    )
-
     return {
         "state": state,
         "stream": pear_session["stream"],
@@ -2957,16 +2786,6 @@ def build_pear_active_session_summary(
         "pending_count": len([item for item in checklist if item["status"] == "pending"]),
         "in_progress_count": len([item for item in checklist if item["status"] == "in_progress"]),
         "done_count": len([item for item in checklist if item["status"] == "done"]),
-        "artifact_count": len(artifact_list),
-        "latest_artifact_message_id": artifact_list[0]["message_id"] if artifact_list else None,
-        "latest_verification": latest_verification,
-        "session_record_count": len(session_record_artifacts),
-        "latest_session_record_message_id": latest_session_record["message_id"]
-        if latest_session_record is not None
-        else None,
-        "latest_session_record": latest_session_record_value,
-        "latest_session_record_kind": pear_session_record_kind(latest_session_record_value),
-        "latest_session_record_url": pear_session_record_url(latest_session_record_value),
         "latest_codex_thread_id": latest_codex_thread_id,
         "response_policy": normalized_response_policy,
         "steering_count": len(steering_event_list),
@@ -2991,8 +2810,8 @@ def build_pear_active_session_summary(
         "worker_can_run": worker_can_run,
         "worker_blocked_reason": worker_blocked_reason,
         "recent_messages": list(recent_messages or []),
+        "routing_messages": list(routing_messages or recent_messages or []),
         "checklist": checklist,
-        "artifacts": artifact_list,
         "steering_events": steering_event_list,
         "interruption_events": interruption_event_list,
         "workspace_context": dict(workspace_context or {}),
@@ -3018,13 +2837,11 @@ def build_pear_active_session_summary_from_messages(
     latest_request_message_id: int | None = None
     request_count = 0
     checklist: list[PearChecklistItem] = []
-    artifacts: list[PearArtifact] = []
     steering_events: list[PearSteeringEvent] = []
     interruption_events: list[PearInterruptionEvent] = []
     normalized_messages = [normalize_pear_message(message) for message in messages]
     sorted_messages = sorted(normalized_messages, key=lambda message: message[0], reverse=True)
     for message_id, content, _sender_is_bot, _sender_name in sorted_messages:
-        artifacts.extend(parse_pear_artifacts(content, message_id))
         if is_pear_task_request_message(content):
             request_count += 1
             if latest_request_message_id is None:
@@ -3079,13 +2896,13 @@ def build_pear_active_session_summary_from_messages(
         latest_request_message_id=latest_request_message_id,
         latest_message_id=latest_message_id,
         checklist=checklist,
-        artifacts=artifacts,
         latest_codex_thread_id=latest_codex_thread_id,
         steering_events=list(reversed(steering_events)),
         interruption_events=list(reversed(interruption_events)),
         recent_messages=build_pear_recent_messages(
             sorted_messages if prompt_messages is None else list(prompt_messages)
         ),
+        routing_messages=build_pear_recent_messages(sorted_messages),
         workspace_context=workspace_context,
         is_paused=is_paused,
         response_policy=response_policy,
@@ -3341,6 +3158,7 @@ class PearEmbeddedBotHandler:
         *,
         content: str,
         active_session: PearActiveSessionSummary | None,
+        active_run: bool,
         message: dict[str, Any],
         bot_handler: Any,
     ) -> PearAmbientDecision:
@@ -3356,6 +3174,7 @@ class PearEmbeddedBotHandler:
             return self.addressing_intent_classifier(
                 content=content,
                 active_session=active_session,
+                active_run=active_run,
                 message=message,
                 bot_handler=bot_handler,
             )
@@ -3546,8 +3365,27 @@ class PearEmbeddedBotHandler:
             ambient_decision = self.route_ambient_message(
                 content=raw_content,
                 active_session=active_session,
+                active_run=active_run_message_id is not None,
                 message=message,
                 bot_handler=bot_handler,
+            )
+            requested_action = ambient_decision["action"]
+            if (
+                ambient_decision["addressee"] == "pear"
+                and requested_action != "ignore"
+                and not ambient_decision["duplicate"]
+            ):
+                ambient_decision["action"] = "steer" if active_run_message_id is not None else "run"
+            logger.info(
+                "Pear ambient router decision: message_id=%s stream=%r topic=%r "
+                "addressee=%s requested_action=%s effective_action=%s duplicate=%s",
+                message_id,
+                stream,
+                topic,
+                ambient_decision["addressee"],
+                requested_action,
+                ambient_decision["action"],
+                ambient_decision["duplicate"],
             )
             explicitly_addressed = (
                 ambient_decision["addressee"] == "pear"
@@ -4196,7 +4034,6 @@ class PearWorkerTurn:
                     latest_request_message_id=self.message_id,
                     latest_message_id=None,
                     checklist=[],
-                    artifacts=[],
                 )
             else:
                 loaded_active_session = None
@@ -4253,16 +4090,7 @@ class PearWorkerTurn:
             )
             self.signal_typing("start")
             if self.active_session["worker_can_run"]:
-                initial_tool_results: list[PearWorkerToolResult] = [
-                    {
-                        "label": "Runtime",
-                        "value": runtime_label,
-                    },
-                    {
-                        "label": "Verification",
-                        "value": "Pear worker accepted this request and started the agent runtime.",
-                    },
-                ]
+                initial_tool_results: list[PearWorkerToolResult] = []
                 progress_content = build_pear_worker_progress_message(
                     task=self.task,
                     tool_results=initial_tool_results,
@@ -4313,9 +4141,7 @@ class PearWorkerTurn:
             )
 
             self.worker_result = self.run_runtime_segment(self.task, segment_index=0)
-            self.codex_thread_id = pear_codex_thread_id_from_tool_results(
-                self.worker_result["tool_results"]
-            )
+            self.codex_thread_id = self.worker_result["codex_thread_id"]
             while (
                 self.worker_result["worker_can_run"]
                 and callable(self.steering_events_after)
@@ -4369,10 +4195,7 @@ class PearWorkerTurn:
                     steering_task,
                     segment_index=self.steering_segment_count,
                 )
-                self.codex_thread_id = (
-                    pear_codex_thread_id_from_tool_results(self.worker_result["tool_results"])
-                    or self.codex_thread_id
-                )
+                self.codex_thread_id = self.worker_result["codex_thread_id"] or self.codex_thread_id
 
             self.result_summary = pear_worker_summary_from_tool_results(
                 self.worker_result["tool_results"]
@@ -4645,7 +4468,5 @@ def get_pear_session_payload(
         "agent_runtime_packages": list(PEAR_AGENT_RUNTIME_PACKAGES),
         "official_codex_sdk_packages": list(PEAR_OFFICIAL_CODEX_SDK_PACKAGES),
         "codex_mcp_tools": list(PEAR_CODEX_MCP_TOOLS),
-        "pear_topic_state_tools": list(PEAR_TOPIC_STATE_TOOLS),
-        "pear_topic_state_tool_names": list(PEAR_TOPIC_STATE_TOOL_NAMES),
         "server_contract_version": PEAR_SERVER_CONTRACT_VERSION,
     }

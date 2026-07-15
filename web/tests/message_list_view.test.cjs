@@ -858,50 +858,6 @@ run_test("pear_tool_block_marker_detection", () => {
     );
 });
 
-run_test("pear_artifact_reference_detection", () => {
-    assert.deepEqual(
-        message_list_view.extract_pear_artifact_reference_for_testing("Diff: 2 files"),
-        {
-            label: "Diff",
-            glyph: "✦",
-            class_name: "pear-artifact-diff",
-            title: "Diff: 2 files",
-        },
-    );
-    assert.deepEqual(
-        message_list_view.extract_pear_artifact_reference_for_testing("Docs: README.md"),
-        {
-            label: "Docs",
-            glyph: "✧",
-            class_name: "pear-artifact-doc",
-            title: "Docs: README.md",
-        },
-    );
-    assert.deepEqual(
-        message_list_view.extract_pear_artifact_reference_for_testing("Commit: a3f92c1"),
-        {
-            label: "Commit",
-            glyph: "✶",
-            class_name: "pear-artifact-commit",
-            title: "Commit: a3f92c1",
-        },
-    );
-    assert.deepEqual(
-        message_list_view.extract_pear_artifact_reference_for_testing("SHA: a3f92c1"),
-        {
-            label: "SHA",
-            glyph: "✶",
-            class_name: "pear-artifact-commit",
-            title: "SHA: a3f92c1",
-        },
-    );
-    assert.equal(message_list_view.extract_pear_artifact_reference_for_testing("Doc: "), undefined);
-    assert.equal(
-        message_list_view.extract_pear_artifact_reference_for_testing("Summary: done"),
-        undefined,
-    );
-});
-
 test("pear_stale_thinking_row_refreshes_without_removed_active_id", () => {
     new MessageListView({id: 1}, true, true);
     const message_id = 1003;
@@ -910,6 +866,7 @@ test("pear_stale_thinking_row_refreshes_without_removed_active_id", () => {
             message: {
                 id: message_id,
                 content: "<p><em>Thinking</em> <em>✦</em></p>",
+                submessages: [],
             },
         },
     ]);
@@ -965,10 +922,7 @@ run_test("pear result refresh recovers missed artifact submessages", () => {
         true,
     );
     assert.deepEqual(existing.submessages, [existing.submessages[0], artifact]);
-    assert.equal(
-        message_list_view.merge_pear_result_submessages(existing, [artifact]),
-        false,
-    );
+    assert.equal(message_list_view.merge_pear_result_submessages(existing, [artifact]), false);
     assert.equal(existing.submessages.length, 2);
 });
 

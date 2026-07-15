@@ -787,7 +787,7 @@ class PearSessionEndpointTest(ZulipTestCase):
             pear_config["selected_bot_user_id"],
         )
 
-    def test_pear_followup_gate_requires_existing_ambient_topic_context(self) -> None:
+    def test_pear_followup_gate_defaults_new_topics_to_ambient(self) -> None:
         owner = self.example_user("iago")
         pear_bot = self.create_test_bot(
             "pear",
@@ -800,7 +800,7 @@ class PearSessionEndpointTest(ZulipTestCase):
 
         with self.settings(
             EMBEDDED_BOTS_ENABLED=True,
-            PEAR_ADDRESSING_ROUTER_RUNTIME="codex-exec",
+            PEAR_ADDRESSING_ROUTER_RUNTIME="gemini-interactions",
         ):
             missing_context_event = get_pear_followup_service_bot_event(
                 realm_id=owner.realm_id,
@@ -814,27 +814,27 @@ class PearSessionEndpointTest(ZulipTestCase):
             PearTopicContext.objects.create(
                 realm=owner.realm,
                 stream_name=PEAR_DEFAULT_STREAM,
-                topic_name="ambient-context",
-                response_policy="ambient",
+                topic_name="quiet-context",
+                response_policy="mentions_only",
             )
-            ambient_context_event = get_pear_followup_service_bot_event(
+            quiet_context_event = get_pear_followup_service_bot_event(
                 realm_id=owner.realm_id,
                 recipient_id=123,
                 recipient_type=Recipient.STREAM,
                 stream_name=PEAR_DEFAULT_STREAM,
-                topic_name="ambient-context",
+                topic_name="quiet-context",
                 content="can someone check the failing test?",
                 mentioned_user_ids=set(),
             )
 
-        self.assertIsNone(missing_context_event)
         self.assertEqual(
-            ambient_context_event,
+            missing_context_event,
             {
                 "trigger": "pear_followup",
                 "user_profile_id": pear_bot.id,
             },
         )
+        self.assertIsNone(quiet_context_event)
 
     def test_post_pear_first_run_creates_sandbox_once(self) -> None:
         owner = self.example_user("iago")
@@ -1448,8 +1448,8 @@ class PearSessionEndpointTest(ZulipTestCase):
                     runtime.run_tools(active_session, task="edit the control plane")
                 )
 
-            self.assertEqual(tool_results[0], {"label": "Runtime", "value": "disabled"})
-            self.assertIn("outside the Pear topic workspace root", tool_results[1]["value"])
+            self.assertEqual(tool_results[0]["label"], "Error")
+            self.assertIn("outside the Pear topic workspace root", tool_results[0]["value"])
 
     def test_os_user_topic_context_uses_independent_repository_clone(self) -> None:
         owner = self.example_user("hamlet")
@@ -3348,7 +3348,7 @@ class PearSessionEndpointTest(ZulipTestCase):
         self.assertTrue(active_session["worker_can_run"])
         self.assertIsNone(active_session["worker_blocked_reason"])
 
-    def test_worker_loader_uses_prior_codex_thread_without_visible_artifact(self) -> None:
+    def test_worker_loader_uses_prior_run_as_thread_ingestion_cursor(self) -> None:
         owner = self.example_user("hamlet")
         pear_bot = self.create_test_bot(
             "pear",
@@ -3408,8 +3408,6 @@ class PearSessionEndpointTest(ZulipTestCase):
         )
 
         self.assertEqual(active_session["latest_codex_thread_id"], "thread-first")
-        self.assertEqual(active_session["session_record_count"], 0)
-        self.assertIsNone(active_session["latest_session_record"])
         self.assertEqual(
             [message["content"] for message in active_session["recent_messages"]],
             [
@@ -3417,6 +3415,18 @@ class PearSessionEndpointTest(ZulipTestCase):
             ],
         )
         self.assertEqual(active_session["recent_messages"][0]["sender"], berry.full_name)
+        self.assertEqual(
+            [
+                message["content"]
+                for message in active_session["routing_messages"]
+                if message["message_id"] != second_message_id
+            ],
+            [
+                "agent, Choose a random 15 digit number.",
+                "I picked a number and retained it in the Codex thread.",
+                "The number should still be in the Codex thread.",
+            ],
+        )
 
     def test_worker_loader_preserves_empty_topic_history(self) -> None:
         owner = self.example_user("hamlet")

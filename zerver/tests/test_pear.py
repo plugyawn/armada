@@ -1,5 +1,4 @@
 import json
-import subprocess
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from types import SimpleNamespace
@@ -48,8 +47,6 @@ from zerver.lib.pear import (
     PEAR_STEERING_APPLIED_MARKDOWN,
     PEAR_STEERING_QUEUED_MARKDOWN,
     PEAR_TOPIC_PREFIX,
-    PEAR_TOPIC_STATE_TOOL_NAMES,
-    PEAR_TOPIC_STATE_TOOLS,
     PEAR_TRIGGER_MESSAGE_KEY,
     PEAR_VERIFY_CHANGES_PROMPT,
     PEAR_WORKER_RUNS_STORAGE_KEY,
@@ -97,14 +94,11 @@ from zerver.lib.pear import (
     is_pear_request_message,
     is_pear_thread_request_message,
     load_pear_worker_run_records,
-    parse_pear_artifacts,
     parse_pear_checklist,
     parse_pear_interruption_event,
     parse_pear_steering_event,
     pear_distinct_transcript_tool_events,
     pear_normalize_token_usage,
-    pear_session_record_kind,
-    pear_session_record_url,
     pear_turn_collaboration_mode,
     pear_worker_already_started,
     pear_worker_event_tool_results,
@@ -124,10 +118,8 @@ from zerver.lib.pear_agent import (
     build_pear_addressing_router_prompt,
     build_pear_codex_developer_instructions,
     build_pear_codex_turn_prompt,
-    ensure_pear_runtime_result,
-    merge_pear_tool_results,
     parse_pear_addressing_json_output,
-    pear_tool_results_from_text,
+    pear_worker_results_from_final_text,
 )
 from zerver.lib.pear_worker import (
     PEAR_WORKER_QUEUE_NAME,
@@ -276,21 +268,7 @@ class PearSessionDefaultsTest(TestCase):
         self.assertIn("message 456", log_output)
         self.assertIn("database connection dropped", log_output)
 
-    def test_session_record_helpers_classify_openable_sessions(self) -> None:
-        self.assertEqual(
-            pear_session_record_url("Open https://codex.example/session/thread-123."),
-            "https://codex.example/session/thread-123",
-        )
-        self.assertEqual(
-            pear_session_record_kind("Open https://codex.example/session/thread-123"),
-            "url",
-        )
-        self.assertEqual(
-            pear_session_record_kind("Codex thread thread-123"),
-            "codex_thread",
-        )
-        self.assertEqual(pear_session_record_kind("local transcript saved"), "text")
-        self.assertIsNone(pear_session_record_kind(None))
+    def test_prompt_constants(self) -> None:
         self.assertEqual(PEAR_STATUS_CHECK_PROMPT, "Status check:")
         self.assertEqual(PEAR_CATCH_UP_PROMPT, "Catch up:")
         self.assertEqual(PEAR_FIND_ANSWER_PROMPT, "Find answer:")
@@ -343,24 +321,8 @@ class PearSessionDefaultsTest(TestCase):
         self.assertIn("Expected behavior: ", fix_message)
         self.assertIn("How to verify: ", fix_message)
         self.assertIn(
-            "Workspace context: use the latest Pear workspace artifacts",
+            "Workspace context: use the typed workspace context",
             fix_message,
-        )
-        self.assertFalse(parse_pear_artifacts(fix_message, message_id=1))
-
-    def test_parse_pear_artifacts_recognizes_commit_and_document_labels(self) -> None:
-        artifacts = parse_pear_artifacts(
-            "Commit: abc1234\nSHA: deadbeef\nUnknown: ignored\nDoc: README.md refreshed",
-            message_id=21,
-        )
-
-        self.assertEqual(
-            [(artifact["kind"], artifact["value"]) for artifact in artifacts],
-            [
-                ("commit", "abc1234"),
-                ("commit", "deadbeef"),
-                ("document", "README.md refreshed"),
-            ],
         )
 
     def test_build_status_check_message(self) -> None:
@@ -373,7 +335,6 @@ class PearSessionDefaultsTest(TestCase):
         self.assertIn("Blocked or needs decision: ", status_message)
         self.assertIn("Next concrete step: ", status_message)
         self.assertIn("Checks to run: ", status_message)
-        self.assertFalse(parse_pear_artifacts(status_message, message_id=1))
 
     def test_build_handoff_message(self) -> None:
         handoff_message = build_pear_handoff_message("next developer")
@@ -382,11 +343,10 @@ class PearSessionDefaultsTest(TestCase):
         self.assertIn("Audience: next developer", handoff_message)
         self.assertIn("Goal and scope: ", handoff_message)
         self.assertIn("Current state: ", handoff_message)
-        self.assertIn("Key files and artifacts: ", handoff_message)
+        self.assertIn("Key files and links: ", handoff_message)
         self.assertIn("Open decisions: ", handoff_message)
         self.assertIn("Next steps: ", handoff_message)
         self.assertIn("Checks still needed: ", handoff_message)
-        self.assertFalse(parse_pear_artifacts(handoff_message, message_id=1))
 
     def test_build_catch_up_message(self) -> None:
         catch_up_message = build_pear_catch_up_message("yesterday")
@@ -395,11 +355,10 @@ class PearSessionDefaultsTest(TestCase):
         self.assertIn("Since: yesterday", catch_up_message)
         self.assertIn("Summarize changes: ", catch_up_message)
         self.assertIn("Decisions made: ", catch_up_message)
-        self.assertIn("Artifacts to inspect: ", catch_up_message)
+        self.assertIn("Files or links to inspect: ", catch_up_message)
         self.assertIn("Current blockers: ", catch_up_message)
         self.assertIn("Next actions: ", catch_up_message)
-        self.assertIn("Use the active topic context", catch_up_message)
-        self.assertFalse(parse_pear_artifacts(catch_up_message, message_id=1))
+        self.assertIn("Use the active topic and typed workspace context", catch_up_message)
 
     def test_build_triage_message(self) -> None:
         triage_message = build_pear_triage_message("checkout failures")
@@ -412,8 +371,7 @@ class PearSessionDefaultsTest(TestCase):
         self.assertIn("Suggested scope:", triage_message)
         self.assertIn("Priority and risk: ", triage_message)
         self.assertIn("Next action: ", triage_message)
-        self.assertIn("Durable output:", triage_message)
-        self.assertFalse(parse_pear_artifacts(triage_message, message_id=1))
+        self.assertIn("Output: answer normally", triage_message)
 
     def test_build_find_answer_message(self) -> None:
         find_answer_message = build_pear_find_answer_message("Where is auth configured?")
@@ -423,8 +381,7 @@ class PearSessionDefaultsTest(TestCase):
         self.assertIn("Search scope:", find_answer_message)
         self.assertIn("Evidence to cite:", find_answer_message)
         self.assertIn("Answer policy:", find_answer_message)
-        self.assertIn("Durable output:", find_answer_message)
-        self.assertFalse(parse_pear_artifacts(find_answer_message, message_id=1))
+        self.assertIn("do not encode evidence as label-prefixed state lines", find_answer_message)
 
     def test_build_review_message(self) -> None:
         review_message = build_pear_review_message("current branch")
@@ -432,13 +389,10 @@ class PearSessionDefaultsTest(TestCase):
         self.assertIn("@**Pear** Review changes:", review_message)
         self.assertIn("Scope: current branch", review_message)
         self.assertIn("Review focus: correctness", review_message)
-        self.assertIn(
-            "Diff or files to inspect: use the latest Pear workspace artifacts", review_message
-        )
+        self.assertIn("Diff or files to inspect: use the typed workspace context", review_message)
         self.assertIn("Risk areas: ", review_message)
         self.assertIn("Expected output: prioritized findings", review_message)
         self.assertIn("Verification to consider: ", review_message)
-        self.assertFalse(parse_pear_artifacts(review_message, message_id=1))
 
     def test_build_plan_message(self) -> None:
         plan_message = build_pear_plan_message("refactor checkout flow")
@@ -451,7 +405,6 @@ class PearSessionDefaultsTest(TestCase):
         self.assertIn("Risks and unknowns: ", plan_message)
         self.assertIn("Verification plan: ", plan_message)
         self.assertIn("Do not edit files yet", plan_message)
-        self.assertFalse(parse_pear_artifacts(plan_message, message_id=1))
 
     def test_build_checkpoint_message(self) -> None:
         checkpoint_message = build_pear_checkpoint_message("checkout regression")
@@ -459,9 +412,8 @@ class PearSessionDefaultsTest(TestCase):
         self.assertIn("@**Pear** Checkpoint:", checkpoint_message)
         self.assertIn("Focus: checkout regression", checkpoint_message)
         self.assertIn("current branch, diff summary", checkpoint_message)
-        self.assertIn("Verification artifact lines", checkpoint_message)
+        self.assertIn("summarize the exact diff and verification", checkpoint_message)
         self.assertIn("wait for confirmation", checkpoint_message)
-        self.assertFalse(parse_pear_artifacts(checkpoint_message, message_id=1))
 
     def test_build_apply_plan_message(self) -> None:
         apply_plan_message = build_pear_apply_plan_message("checkout regression")
@@ -471,7 +423,6 @@ class PearSessionDefaultsTest(TestCase):
         self.assertIn("latest Implementation plan", apply_plan_message)
         self.assertIn("make the scoped edits now", apply_plan_message)
         self.assertIn("planned verification", apply_plan_message)
-        self.assertFalse(parse_pear_artifacts(apply_plan_message, message_id=1))
 
     def test_build_save_work_message(self) -> None:
         save_work_message = build_pear_save_work_message("checkout regression")
@@ -479,9 +430,8 @@ class PearSessionDefaultsTest(TestCase):
         self.assertIn("@**Pear** Save work:", save_work_message)
         self.assertIn("Scope: checkout regression", save_work_message)
         self.assertIn("branch, draft PR, patch", save_work_message)
-        self.assertIn("Branch, PR, Diff, or Doc", save_work_message)
+        self.assertIn("report the exact saved branch, PR, diff, or document", save_work_message)
         self.assertIn("recoverable from this topic", save_work_message)
-        self.assertFalse(parse_pear_artifacts(save_work_message, message_id=1))
 
     def test_build_verify_changes_message(self) -> None:
         verify_message = build_pear_verify_changes_message("checkout regression")
@@ -491,7 +441,6 @@ class PearSessionDefaultsTest(TestCase):
         self.assertIn("Checks to run: use the planned verification", verify_message)
         self.assertIn("Fix policy: if a check fails", verify_message)
         self.assertIn("Evidence to post: commands run", verify_message)
-        self.assertFalse(parse_pear_artifacts(verify_message, message_id=1))
 
     def test_build_draft_artifact_message(self) -> None:
         artifact_message = build_pear_draft_artifact_message("issue for flaky tests")
@@ -500,8 +449,8 @@ class PearSessionDefaultsTest(TestCase):
         self.assertIn("Artifact: issue for flaky tests", artifact_message)
         self.assertIn("Source context: use this Zulip topic", artifact_message)
         self.assertIn("Must include: scope, decisions", artifact_message)
-        self.assertIn("Doc, Ticket, or Issue artifact line", artifact_message)
-        self.assertFalse(parse_pear_artifacts(artifact_message, message_id=1))
+        self.assertIn("available native artifact tool", artifact_message)
+        self.assertIn("Do not encode artifact state as label-prefixed prose", artifact_message)
 
     def test_build_access_message(self) -> None:
         access_message = build_pear_access_message()
@@ -541,7 +490,7 @@ class PearSessionDefaultsTest(TestCase):
         self.assertIn("frontend > checkout/regression", access_ack)
         self.assertIn("durable topic context", access_ack)
         self.assertIn("configured Codex runtime", access_ack)
-        self.assertIn("zulip-terminal can act on posted artifacts", access_ack)
+        self.assertIn("Codex-native memories and skills", access_ack)
         self.assertIn("Loaded transcript: 5 recent message(s) from 5 topic message(s)", access_ack)
         self.assertIn("Visible senders: Ada, Pear, Grace", access_ack)
         self.assertIn(
@@ -551,9 +500,10 @@ class PearSessionDefaultsTest(TestCase):
         self.assertIn("on checkout/regression (abc1234)", access_ack)
         self.assertIn("Codex thread: codex-thread-7", access_ack)
         self.assertIn("Worker state: ready", access_ack)
-        self.assertIn("Artifacts seen: 4", access_ack)
+        self.assertIn("Worker access: ready", access_ack)
         self.assertIn("Response policy: ambient", access_ack)
-        self.assertIn("pytest zerver/tests/test_pear.py", access_ack)
+        self.assertNotIn("Artifacts seen:", access_ack)
+        self.assertNotIn("pytest zerver/tests/test_pear.py", access_ack)
 
     def test_build_steer_message_with_empty_instruction(self) -> None:
         steer_message = build_pear_steer_message()
@@ -655,14 +605,6 @@ class PearSessionDefaultsTest(TestCase):
             list(PEAR_OFFICIAL_CODEX_SDK_PACKAGES),
         )
         self.assertEqual(payload["codex_mcp_tools"], list(PEAR_CODEX_MCP_TOOLS))
-        self.assertEqual(
-            payload["pear_topic_state_tools"],
-            list(PEAR_TOPIC_STATE_TOOLS),
-        )
-        self.assertEqual(
-            payload["pear_topic_state_tool_names"],
-            list(PEAR_TOPIC_STATE_TOOL_NAMES),
-        )
         self.assertEqual(
             payload["server_contract_version"],
             PEAR_SERVER_CONTRACT_VERSION,
@@ -878,103 +820,6 @@ class PearSessionDefaultsTest(TestCase):
             ],
         )
 
-    def test_parse_pear_artifacts(self) -> None:
-        artifacts = parse_pear_artifacts(
-            "\n".join(
-                [
-                    "Branch: pear/runtime-artifacts",
-                    "Repo: /workspace/pear (origin git@github.com:example/pear.git)",
-                    "Runtime: codex-agents-mcp cwd=/workspace/pear",
-                    "- PR: https://github.com/example/pear/pull/7",
-                    "Session: Codex thread thread-123",
-                    "* Verification: pytest zerver/tests/test_pear.py",
-                    "Reviewers: alice, example/team-reviewers",
-                    "Screenshot: https://example.com/screenshot.png",
-                    "Routine: Watch PR status for https://github.com/example/pear/pull/7",
-                    "Memory: Prefer small focused PRs",
-                    "Done: Tests pass and draft PR is posted",
-                    "Ambient: mentions only",
-                    "Routine cadence: manual",
-                    "Docs: pear/ROADMAP.md",
-                    "Issue: https://github.com/example/pear/issues/12",
-                    "Ticket: PAIR-42",
-                ]
-            ),
-            message_id=81,
-        )
-
-        self.assertEqual(
-            artifacts,
-            [
-                {
-                    "kind": "branch",
-                    "label": "Branch",
-                    "value": "pear/runtime-artifacts",
-                    "message_id": 81,
-                },
-                {
-                    "kind": "repository",
-                    "label": "Repo",
-                    "value": "/workspace/pear (origin git@github.com:example/pear.git)",
-                    "message_id": 81,
-                },
-                {
-                    "kind": "runtime",
-                    "label": "Runtime",
-                    "value": "codex-agents-mcp cwd=/workspace/pear",
-                    "message_id": 81,
-                },
-                {
-                    "kind": "pull_request",
-                    "label": "PR",
-                    "value": "https://github.com/example/pear/pull/7",
-                    "message_id": 81,
-                },
-                {
-                    "kind": "session_record",
-                    "label": "Session",
-                    "value": "Codex thread thread-123",
-                    "message_id": 81,
-                },
-                {
-                    "kind": "verification",
-                    "label": "Verification",
-                    "value": "pytest zerver/tests/test_pear.py",
-                    "message_id": 81,
-                },
-                {
-                    "kind": "reviewers",
-                    "label": "Reviewers",
-                    "value": "alice, example/team-reviewers",
-                    "message_id": 81,
-                },
-                {
-                    "kind": "screenshot",
-                    "label": "Screenshot",
-                    "value": "https://example.com/screenshot.png",
-                    "message_id": 81,
-                },
-                {
-                    "kind": "document",
-                    "label": "Docs",
-                    "value": "pear/ROADMAP.md",
-                    "message_id": 81,
-                },
-                {
-                    "kind": "ticket",
-                    "label": "Issue",
-                    "value": "https://github.com/example/pear/issues/12",
-                    "message_id": 81,
-                },
-                {
-                    "kind": "ticket",
-                    "label": "Ticket",
-                    "value": "PAIR-42",
-                    "message_id": 81,
-                },
-            ],
-        )
-
     def test_parse_pear_steering_event(self) -> None:
         self.assertEqual(
             parse_pear_steering_event(
@@ -1112,17 +957,8 @@ class PearSessionDefaultsTest(TestCase):
         self.assertEqual(summary["request_count"], 0)
         self.assertIsNone(summary["latest_request_message_id"])
         self.assertEqual(summary["done_count"], 1)
-        self.assertEqual(summary["artifact_count"], 0)
-        self.assertIsNone(summary["latest_artifact_message_id"])
-        self.assertIsNone(summary["latest_verification"])
-        self.assertEqual(summary["session_record_count"], 0)
-        self.assertIsNone(summary["latest_session_record_message_id"])
-        self.assertIsNone(summary["latest_session_record"])
-        self.assertIsNone(summary["latest_session_record_kind"])
-        self.assertIsNone(summary["latest_session_record_url"])
         self.assertIsNone(summary["latest_codex_thread_id"])
         self.assertEqual(summary["response_policy"], "ambient")
-        self.assertEqual(summary["artifacts"], [])
         self.assertEqual(summary["steering_count"], 0)
         self.assertIsNone(summary["latest_steering_message_id"])
         self.assertIsNone(summary["latest_steering_instruction"])
@@ -1189,22 +1025,16 @@ class PearSessionDefaultsTest(TestCase):
         self.assertEqual(summary["topic_message_count"], 10)
         self.assertEqual(summary["done_count"], 1)
         self.assertEqual(summary["in_progress_count"], 1)
-        self.assertEqual(summary["artifact_count"], 3)
-        self.assertEqual(summary["latest_artifact_message_id"], 13)
-        self.assertEqual(
-            summary["latest_verification"],
-            "pytest zerver/tests/test_pear.py",
-        )
-        self.assertEqual(summary["session_record_count"], 1)
-        self.assertEqual(summary["latest_session_record_message_id"], 13)
-        self.assertEqual(summary["latest_session_record"], "Codex thread thread-123")
-        self.assertEqual(summary["latest_session_record_kind"], "codex_thread")
-        self.assertIsNone(summary["latest_session_record_url"])
         self.assertIsNone(summary["latest_codex_thread_id"])
         self.assertEqual(summary["response_policy"], "ambient")
-        self.assertEqual(summary["artifacts"][0]["kind"], "branch")
-        self.assertEqual(summary["artifacts"][1]["kind"], "session_record")
-        self.assertEqual(summary["artifacts"][2]["kind"], "verification")
+        assistant_message = next(
+            message for message in summary["recent_messages"] if message["message_id"] == 13
+        )
+        self.assertIn("Branch: pear/runtime-artifacts", assistant_message["content"])
+        self.assertIn(
+            "Verification: pytest zerver/tests/test_pear.py",
+            assistant_message["content"],
+        )
         self.assertEqual(summary["steering_count"], 2)
         self.assertEqual(summary["latest_steering_message_id"], 14)
         self.assertEqual(summary["latest_steering_instruction"], "keep the fix minimal")
@@ -1321,7 +1151,6 @@ class PearSessionDefaultsTest(TestCase):
         self.assertEqual(summary["latest_request_message_id"], 13)
         self.assertEqual(summary["request_count"], 1)
         self.assertIsNone(summary["latest_message_id"])
-        self.assertEqual(summary["artifact_count"], 0)
         self.assertEqual(summary["steering_count"], 0)
         self.assertEqual(summary["interruption_count"], 0)
         self.assertEqual(summary["worker_state"], "ready")
@@ -2078,10 +1907,6 @@ class PearSessionDefaultsTest(TestCase):
             task="fix the checkout test",
             tool_results=[
                 {
-                    "label": "Runtime",
-                    "value": "disabled",
-                },
-                {
                     "label": "Error",
                     "value": "Pear worker agent runtime is disabled.",
                 },
@@ -2105,10 +1930,6 @@ class PearSessionDefaultsTest(TestCase):
                 {
                     "label": "Result",
                     "value": "Hi. Ready when you are.",
-                },
-                {
-                    "label": "Session",
-                    "value": "Codex thread 123",
                 },
             ],
         )
@@ -2140,10 +1961,6 @@ class PearSessionDefaultsTest(TestCase):
                 {
                     "label": "Result",
                     "value": "Tokenmaxxer.",
-                },
-                {
-                    "label": "Runtime",
-                    "value": "codex-exec cwd=/home/vagrant/zulip",
                 },
             ],
         )
@@ -2472,10 +2289,7 @@ class PearSessionDefaultsTest(TestCase):
         self.assertNotIn("Ticket: <ticket URL, ID, or path>", prompt)
         self.assertNotIn("Issue: <issue URL, ID, or path>", prompt)
         self.assertNotIn("Reviewers: <reviewer handles or teams>", prompt)
-        self.assertIn(
-            "Recent artifacts:\n- Verification: pytest zerver/tests/test_pear.py",
-            prompt,
-        )
+        self.assertNotIn("Recent artifacts:", prompt)
         self.assertNotIn("Recent artifacts:\n- Memory", prompt)
         self.assertNotIn("Recent artifacts:\n- Routine", prompt)
         self.assertNotIn("Recent artifacts:\n- Done", prompt)
@@ -2510,6 +2324,9 @@ class PearSessionDefaultsTest(TestCase):
         self.assertEqual(instructions, build_pear_codex_developer_instructions())
         self.assertNotIn("Memory: <channel-scoped note Pear should remember>", instructions)
         self.assertNotIn("Routine: <standing follow-up", instructions)
+        self.assertNotIn("Repo: <repository path or remote>", instructions)
+        self.assertNotIn("Include artifact lines", instructions)
+        self.assertIn("Pear never parses your wording into hidden state", instructions)
         self.assertIn("README.md", instructions)
         self.assertNotIn(instructions, build_pear_codex_turn_prompt(active_session_a, "fix"))
         self.assertNotIn(instructions, build_pear_codex_turn_prompt(active_session_b, "fix"))
@@ -2577,16 +2394,15 @@ class PearSessionDefaultsTest(TestCase):
                 {"version": 1, "skills": ["workspace-editing"]},
             )
 
-    def test_agent_text_results_parse_artifact_lines(self) -> None:
-        results = pear_tool_results_from_text(
-            "\n".join(
-                [
-                    "Verification: pytest zerver/tests/test_pear.py",
-                    "Diff: updated Pear runtime",
-                    "Memory: Prefer small focused PRs",
-                    "Routine cadence: manual",
-                ]
-            ),
+    def test_agent_text_results_preserve_final_prose_as_one_result(self) -> None:
+        final_text = "\n".join(
+            [
+                "Verification: pytest zerver/tests/test_pear.py",
+                "Diff: updated Pear runtime",
+            ]
+        )
+        results = pear_worker_results_from_final_text(
+            final_text,
             output_limit=200,
         )
 
@@ -2594,89 +2410,9 @@ class PearSessionDefaultsTest(TestCase):
             results,
             [
                 {
-                    "label": "Verification",
-                    "value": "pytest zerver/tests/test_pear.py",
+                    "label": "Result",
+                    "value": final_text,
                 },
-                {
-                    "label": "Diff",
-                    "value": "updated Pear runtime",
-                },
-            ],
-        )
-
-    def test_ensure_runtime_result_keeps_authoritative_runtime(self) -> None:
-        results = ensure_pear_runtime_result(
-            [
-                {"label": "Runtime", "value": "model-provided-runtime"},
-                {"label": "Verification", "value": "pytest zerver/tests/test_pear.py"},
-            ],
-            "codex-agents-mcp cwd=/workspace sandbox=workspace-write",
-        )
-
-        self.assertEqual(
-            results,
-            [
-                {
-                    "label": "Runtime",
-                    "value": "codex-agents-mcp cwd=/workspace sandbox=workspace-write",
-                },
-                {"label": "Runtime", "value": "model-provided-runtime"},
-                {"label": "Verification", "value": "pytest zerver/tests/test_pear.py"},
-            ],
-        )
-
-    def test_topic_state_tool_lists_only_message_layer_labels(self) -> None:
-        self.assertEqual(
-            list(PEAR_TOPIC_STATE_TOOLS),
-            [
-                "Repo",
-                "Runtime",
-                "Branch",
-                "PR",
-                "Diff",
-                "Verification",
-                "Screenshot",
-                "Session",
-                "Doc",
-                "Ticket",
-                "Issue",
-                "Reviewers",
-            ],
-        )
-        self.assertEqual(
-            list(PEAR_TOPIC_STATE_TOOL_NAMES),
-            [
-                "pear_record_repo",
-                "pear_record_runtime",
-                "pear_record_branch",
-                "pear_record_pr",
-                "pear_record_diff",
-                "pear_record_verification",
-                "pear_record_screenshot",
-                "pear_record_session",
-                "pear_record_doc",
-                "pear_record_ticket",
-                "pear_record_issue",
-                "pear_record_reviewers",
-            ],
-        )
-
-    def test_merge_pear_tool_results_deduplicates_artifacts(self) -> None:
-        self.assertEqual(
-            merge_pear_tool_results(
-                [
-                    {"label": "Repo", "value": "zulip/zulip"},
-                    {"label": "Verification", "value": "Codex completed"},
-                ],
-                [
-                    {"label": "Repo", "value": "zulip/zulip"},
-                    {"label": "Diff", "value": "updated worker"},
-                ],
-            ),
-            [
-                {"label": "Repo", "value": "zulip/zulip"},
-                {"label": "Verification", "value": "Codex completed"},
-                {"label": "Diff", "value": "updated worker"},
             ],
         )
 
@@ -2793,6 +2529,7 @@ class PearSessionDefaultsTest(TestCase):
             classifier(
                 content="hey pear, can you check this?",
                 active_session=active_session,
+                active_run=False,
                 message={
                     "display_recipient": PEAR_DEFAULT_STREAM,
                     "topic": PEAR_DEFAULT_TOPIC,
@@ -2811,6 +2548,7 @@ class PearSessionDefaultsTest(TestCase):
         request_payload = json.loads(request.data.decode())
         self.assertEqual(kwargs["timeout"], 7)
         self.assertEqual(request.full_url, "https://example.test/interactions")
+        self.assertEqual(request.headers["Api-revision"], "2026-05-20")
         self.assertEqual(request_payload["model"], "gemini-3.1-flash-lite")
         self.assertIs(request_payload["store"], False)
         self.assertEqual(request_payload["generation_config"]["temperature"], 0)
@@ -3056,11 +2794,8 @@ class PearSessionDefaultsTest(TestCase):
             ],
         )
         self.assertEqual(streamed_events[3]["metadata"]["usage"]["cache_percent"], 60.0)
-        self.assertIn({"label": "Verification", "value": "app-server ok"}, results)
-        self.assertIn(
-            {"label": "Session", "value": "Codex thread thread-app"},
-            results,
-        )
+        self.assertIn({"label": "Result", "value": "Verification: app-server ok"}, results)
+        self.assertEqual(runner.codex_thread_id(), "thread-app")
 
     def test_codex_app_server_tool_runner_starts_new_thread_without_session_id(
         self,
@@ -3159,6 +2894,7 @@ class PearSessionDefaultsTest(TestCase):
         )
 
         first_results = list(runner(first_session, "fix the first topic"))
+        first_thread_id = runner.codex_thread_id()
         second_results = list(runner(second_session, "fix the second topic"))
 
         self.assertEqual(len(calls), 1)
@@ -3174,14 +2910,10 @@ class PearSessionDefaultsTest(TestCase):
                 "turn/start",
             ],
         )
-        self.assertIn(
-            {"label": "Session", "value": "Codex thread thread-first"},
-            first_results,
-        )
-        self.assertIn(
-            {"label": "Session", "value": "Codex thread thread-second"},
-            second_results,
-        )
+        self.assertNotEqual(first_results, [])
+        self.assertNotEqual(second_results, [])
+        self.assertEqual(first_thread_id, "thread-first")
+        self.assertEqual(runner.codex_thread_id(), "thread-second")
 
     def test_disabled_agent_runner_reports_configuration_gap(self) -> None:
         payload = get_pear_session_payload()
@@ -3197,7 +2929,6 @@ class PearSessionDefaultsTest(TestCase):
         self.assertEqual(
             results,
             [
-                {"label": "Runtime", "value": "disabled"},
                 {"label": "Error", "value": "disabled by admin"},
             ],
         )
@@ -3227,7 +2958,6 @@ class PearSessionDefaultsTest(TestCase):
         )
         seen_tasks: list[str] = []
         sent_replies: list[str] = []
-        updated_replies: list[str] = []
         classifier_calls: list[str] = []
 
         def active_session_loader(message, bot_handler):
@@ -3237,13 +2967,14 @@ class PearSessionDefaultsTest(TestCase):
             *,
             content: str,
             active_session,
+            active_run: bool,
             message,
             bot_handler,
         ) -> PearAmbientDecision:
-            classifier_calls.append(content)
+            classifier_calls.append(f"{content}:{active_run}")
             return {
                 "addressee": "pear",
-                "action": "run",
+                "action": "steer",
                 "presentation": "diff",
                 "duplicate": False,
             }
@@ -3306,7 +3037,10 @@ class PearSessionDefaultsTest(TestCase):
             addressing_intent_classifier=addressing_intent_classifier,
         ).handle_message(message, FakeBotHandler())
 
-        self.assertEqual(classifier_calls, ["Fold in the failing terminal UI test too."])
+        self.assertEqual(
+            classifier_calls,
+            ["Fold in the failing terminal UI test too.:False"],
+        )
         self.assertEqual(run_store.starts, [(204, PEAR_DEFAULT_STREAM, PEAR_DEFAULT_TOPIC)])
         self.assertEqual(seen_tasks, ["Fold in the failing terminal UI test too."])
         self.assertEqual(len(sent_replies), 2)
@@ -3982,6 +3716,7 @@ class PearSessionDefaultsTest(TestCase):
             *,
             content: str,
             active_session,
+            active_run: bool,
             message,
             bot_handler,
         ) -> PearAmbientDecision:
@@ -4079,6 +3814,7 @@ class PearSessionDefaultsTest(TestCase):
             *,
             content: str,
             active_session,
+            active_run: bool,
             message,
             bot_handler,
         ) -> PearAmbientDecision:
@@ -4155,6 +3891,7 @@ class PearSessionDefaultsTest(TestCase):
             *,
             content: str,
             active_session,
+            active_run: bool,
             message,
             bot_handler,
         ) -> PearAmbientDecision:
@@ -4274,8 +4011,9 @@ class PearSessionDefaultsTest(TestCase):
         self.assertIn("I can work from this Zulip topic", sent_replies[0])
         self.assertIn("durable topic context", sent_replies[0])
         self.assertIn("configured Codex runtime", sent_replies[0])
-        self.assertIn("zulip-terminal can act on posted artifacts", sent_replies[0])
+        self.assertIn("Codex-native memories and skills", sent_replies[0])
         self.assertIn("Worker state:", sent_replies[0])
+        self.assertNotIn("posted artifacts", sent_replies[0])
         self.assertNotIn("Status: working...", sent_replies[0])
 
     def test_embedded_bot_worker_uses_loaded_topic_history(self) -> None:
@@ -4911,6 +4649,7 @@ class PearSessionDefaultsTest(TestCase):
                     "should_post": False,
                     "worker_can_run": True,
                     "content": None,
+                    "codex_thread_id": "",
                     "tool_count": 0,
                     "tool_results": [],
                 }
@@ -5033,6 +4772,7 @@ class PearSessionDefaultsTest(TestCase):
                     "should_post": False,
                     "worker_can_run": True,
                     "content": None,
+                    "codex_thread_id": "",
                     "tool_count": 0,
                     "tool_results": [],
                 }
@@ -5800,21 +5540,24 @@ class PearSessionDefaultsTest(TestCase):
             def update_message(self, message: dict[str, object]) -> None:
                 updated_messages.append(message)
 
-        def tool_runner(
-            active_session, task: str, *, event_callback=None, **kwargs
-        ) -> list[dict[str, str]]:
-            tool_seen_tasks.append(task)
-            tool_seen_threads.append(active_session["latest_codex_thread_id"])
-            if len(tool_seen_tasks) == 1:
-                return [
-                    {"label": "Session", "value": "Codex thread thread-1"},
-                    {"label": "Result", "value": "first result"},
-                    {
-                        "label": "Artifact",
-                        "value": '{"blocks":[{"body":"first visual","type":"copy"}],"version":1}',
-                    },
-                ]
-            return [{"label": "Result", "value": "steered result"}]
+        class FakeToolRunner:
+            def __call__(
+                self, active_session, task: str, *, event_callback=None, **kwargs
+            ) -> list[dict[str, str]]:
+                tool_seen_tasks.append(task)
+                tool_seen_threads.append(active_session["latest_codex_thread_id"])
+                if len(tool_seen_tasks) == 1:
+                    return [
+                        {"label": "Result", "value": "first result"},
+                        {
+                            "label": "Artifact",
+                            "value": '{"blocks":[{"body":"first visual","type":"copy"}],"version":1}',
+                        },
+                    ]
+                return [{"label": "Result", "value": "steered result"}]
+
+            def codex_thread_id(self) -> str:
+                return "thread-1"
 
         def attach_artifact(
             bot_handler: object,
@@ -5847,7 +5590,7 @@ class PearSessionDefaultsTest(TestCase):
 
         with patch("zerver.lib.pear.attach_pear_artifact_to_message", side_effect=attach_artifact):
             PearEmbeddedBotHandler(
-                worker_runtime=PearWorkerRuntime(tool_runner),
+                worker_runtime=PearWorkerRuntime(FakeToolRunner()),
                 worker_run_store=FakeRunStore(),
             ).run_worker_turn(
                 message,

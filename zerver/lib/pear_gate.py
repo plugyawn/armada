@@ -49,9 +49,7 @@ def get_selected_pear_bot_user_id_for_realm(realm_id: int) -> int | None:
             (
                 service
                 for service in pear_services
-                if bot_configs.get(service.user_profile_id, {}).get(
-                    PEAR_SELECTED_BOT_CONFIG_KEY
-                )
+                if bot_configs.get(service.user_profile_id, {}).get(PEAR_SELECTED_BOT_CONFIG_KEY)
                 == PEAR_SELECTED_BOT_CONFIG_VALUE
             ),
             pear_services[0],
@@ -85,7 +83,10 @@ def pear_followup_topic_context_allows_candidate(
         .first()
     )
     if context is None:
-        return False
+        # Ambient is the product default. A topic row is created only after
+        # Pear has state worth persisting, so a missing row must not make a
+        # brand-new topic silently mentions-only.
+        return True
     if context["is_paused"]:
         return False
     return normalize_pear_response_policy(str(context["response_policy"])) == "ambient"
@@ -116,7 +117,6 @@ def get_pear_followup_service_bot_event(
         is_pear_control_template_message,
         is_pear_plain_mention_alias_message,
         is_pear_request_message,
-        parse_pear_artifacts,
         parse_pear_checklist,
     )
 
@@ -137,7 +137,6 @@ def get_pear_followup_service_bot_event(
         (is_pear_request_message(content) and not has_plain_pear_alias)
         or is_pear_control_template_message(content)
         or parse_pear_checklist(content)
-        or parse_pear_artifacts(content, message_id=0)
     ):
         return None
 

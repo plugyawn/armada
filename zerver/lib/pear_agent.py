@@ -21,8 +21,6 @@ from zerver.lib.pear import (
     PearWorkerToolResult,
     PearWorkerTranscriptCallback,
     PearWorkerTranscriptEvent,
-    parse_pear_artifacts,
-    pear_is_retired_visible_artifact_line,
     pear_normalize_token_usage,
 )
 from zerver.lib.pear_artifact import (
@@ -38,6 +36,7 @@ logger = logging.getLogger(__name__)
 PearAgentRuntime = Literal["disabled", "codex-app-server"]
 PearSubprocessPopen = Callable[..., subprocess.Popen[str]]
 PearUrlOpen = Callable[..., Any]
+PEAR_GEMINI_INTERACTIONS_API_REVISION = "2026-05-20"
 
 
 @dataclass(frozen=True)
@@ -113,6 +112,7 @@ def build_pear_addressing_router_prompt(
     *,
     content: str,
     active_session: PearActiveSessionSummary | None,
+    active_run: bool = False,
     stream: str = "",
     topic: str = "",
     message_id: int | None = None,
@@ -121,12 +121,14 @@ def build_pear_addressing_router_prompt(
         session_lines = [
             "- active_session: none",
             "- worker_state: unknown",
+            f"- active_run: {'yes' if active_run else 'no'}",
             "- response_policy: ambient",
         ]
     else:
         session_lines = [
             f"- active_session: {active_session['state']}",
             f"- worker_state: {active_session['worker_state']}",
+            f"- active_run: {'yes' if active_run else 'no'}",
             f"- worker_can_run: {active_session['worker_can_run']}",
             f"- response_policy: {active_session['response_policy']}",
             f"- request_count: {active_session['request_count']}",
@@ -137,7 +139,7 @@ def build_pear_addressing_router_prompt(
     recent_messages = (
         [
             message
-            for message in active_session["recent_messages"]
+            for message in active_session.get("routing_messages", active_session["recent_messages"])
             if message_id is None or message["message_id"] != message_id
         ][-6:]
         if active_session is not None
@@ -159,7 +161,7 @@ def build_pear_addressing_router_prompt(
             "Return only the JSON object required by the response schema.",
             "",
             "addressee: pear only when the request is for Pear, Codex, the agent, or the assistant; other for a named/recent human; general for team chatter; uncertain otherwise.",
-            "action: ignore for chatter, ambiguity, acknowledgements, duplicates, and messages for humans; steer only when an active run exists and this changes or continues it; run only for a concrete request when no run is active.",
+            "action: ignore for chatter, ambiguity, acknowledgements, duplicates, and messages for humans; when active_run=yes, steer if this changes or continues Pear's current work; when active_run=no, run for a concrete request or a correction/follow-up to Pear's latest reply.",
             "presentation: choose the likely final UI shape: compact, prose, status, explainer, or diff.",
             "duplicate: true only when the new message repeats a recent request without adding information.",
             "When uncertain, use addressee=uncertain and action=ignore.",
@@ -256,6 +258,7 @@ class PearGeminiInteractionsAddressingIntentClassifier:
         *,
         content: str,
         active_session: PearActiveSessionSummary | None,
+        active_run: bool,
         message: dict[str, Any],
         bot_handler: Any,
     ) -> PearAmbientDecision:
@@ -267,6 +270,7 @@ class PearGeminiInteractionsAddressingIntentClassifier:
         prompt = build_pear_addressing_router_prompt(
             content=content,
             active_session=active_session,
+            active_run=active_run,
             stream=stream,
             topic=topic,
             message_id=message.get("id") if isinstance(message.get("id"), int) else None,
@@ -310,6 +314,7 @@ class PearGeminiInteractionsAddressingIntentClassifier:
             headers={
                 "x-goog-api-key": self.api_key,
                 "Content-Type": "application/json",
+                "Api-Revision": PEAR_GEMINI_INTERACTIONS_API_REVISION,
             },
             method="POST",
         )
@@ -369,18 +374,8 @@ def build_pear_codex_developer_instructions() -> str:
             "Do not claim you cannot see recent topic history when the transcript below contains the answer.",
             "Final response requirements:",
             "- Keep the response concise and suitable for posting back into the Zulip topic.",
-            "- Include artifact lines using these exact prefixes where applicable:",
-            "  Repo: <repository path or remote>",
-            "  Runtime: <agent runtime context>",
-            "  Verification: <command or check result>",
-            "  Diff: <local diff or summary>",
-            "  Branch: <branch name>",
-            "  PR: <pull request URL>",
-            "  Session: <session record URL or Codex thread reference>",
-            "  Ticket: <ticket URL, ID, or path>",
-            "  Issue: <issue URL, ID, or path>",
-            "  Reviewers: <reviewer handles or teams>",
-            "  Doc: <document or thread reference>",
+            "- Report evidence in ordinary prose; Pear never parses your wording into hidden state.",
+            "- Use registered native tools for structured UI artifacts when they materially help.",
         ]
     )
 
@@ -409,7 +404,6 @@ def build_pear_codex_turn_prompt(active_session: PearActiveSessionSummary, task:
         )
 
     steering = active_session["latest_steering_instruction"] or "None"
-    latest_verification = active_session["latest_verification"] or "None"
     workspace_context = active_session.get("workspace_context", {})
     workspace_lines = [
         f"- repository: {workspace_context.get('repository') or 'unknown'}",
@@ -423,10 +417,6 @@ def build_pear_codex_turn_prompt(active_session: PearActiveSessionSummary, task:
         "- servers and watchers: never start a long-lived process (http.server, watch loops, dev servers) in the foreground — it blocks your turn from ever finishing. Run it detached (nohup ... >/dev/null 2>&1 &) and verify with a follow-up probe.",
         "- math: write math in Zulip's dialect — $$...$$ for inline math and ```math fenced blocks for display equations; \\[ \\] and \\( \\) do not render here.",
         "- checklists: your plan tool is the working checklist — its steps render live in the topic rail, so keep it current instead of duplicating it in chat or a workspace document.",
-    ]
-    artifacts = active_session["artifacts"][:5]
-    artifact_lines = [f"- {artifact['label']}: {artifact['value']}" for artifact in artifacts] or [
-        "- None"
     ]
     recent_human_participants = list(
         dict.fromkeys(
@@ -446,7 +436,6 @@ def build_pear_codex_turn_prompt(active_session: PearActiveSessionSummary, task:
             f"Zulip topic: {active_session['topic']}",
             f"Session state: {active_session['state']}",
             f"Latest steering: {steering}",
-            f"Latest verification: {latest_verification}",
             "",
             "Workspace context:",
             *workspace_lines,
@@ -456,42 +445,15 @@ def build_pear_codex_turn_prompt(active_session: PearActiveSessionSummary, task:
             "",
             "Recent Zulip topic transcript, oldest to newest:",
             *initial_transcript_lines,
-            "",
-            "Recent artifacts:",
-            *artifact_lines,
         ]
     )
 
 
-def pear_tool_results_from_text(
+def pear_worker_results_from_final_text(
     text: str,
     *,
     output_limit: int,
 ) -> list[PearWorkerToolResult]:
-    artifacts = parse_pear_artifacts(text, message_id=0)
-    if artifacts:
-        prose = "\n".join(
-            line
-            for line in text.splitlines()
-            if not parse_pear_artifacts(line, message_id=0)
-            and not pear_is_retired_visible_artifact_line(line)
-        ).strip()
-        results: list[PearWorkerToolResult] = []
-        if prose:
-            results.append(
-                {
-                    "label": "Result",
-                    "value": trim_pear_agent_text(prose, limit=output_limit),
-                }
-            )
-        results.extend(
-            {
-                "label": artifact["label"],
-                "value": trim_pear_agent_text(artifact["value"], limit=output_limit),
-            }
-            for artifact in artifacts
-        )
-        return results
     if not text.strip():
         return [
             {
@@ -534,33 +496,6 @@ def build_pear_runtime_value(
     if process_isolation is not None:
         parts.append(f"isolation={process_isolation.label()}")
     return " ".join(parts)
-
-
-def ensure_pear_runtime_result(
-    results: list[PearWorkerToolResult],
-    runtime_value: str,
-) -> list[PearWorkerToolResult]:
-    if any(
-        result["label"].lower() == "runtime" and result["value"] == runtime_value
-        for result in results
-    ):
-        return results
-    return [{"label": "Runtime", "value": runtime_value}, *results]
-
-
-def merge_pear_tool_results(
-    *result_groups: Sequence[PearWorkerToolResult],
-) -> list[PearWorkerToolResult]:
-    merged: list[PearWorkerToolResult] = []
-    seen: set[tuple[str, str]] = set()
-    for result_group in result_groups:
-        for result in result_group:
-            key = (result["label"], result["value"])
-            if key in seen:
-                continue
-            seen.add(key)
-            merged.append(result)
-    return merged
 
 
 def pear_codex_item_text(item: dict[str, Any]) -> str:
@@ -1062,29 +997,6 @@ class PearCodexAppServerTranscriptTranslator:
         )
 
 
-def append_pear_codex_thread_artifact(
-    results: list[PearWorkerToolResult], thread_id: str | None
-) -> list[PearWorkerToolResult]:
-    if thread_id is None:
-        return results
-    thread_value = f"Codex thread {thread_id}"
-    if any(
-        result["label"]
-        in {
-            "Session",
-            "Session record",
-            "Pear session",
-            "Codex session",
-            "Doc",
-            "Docs",
-        }
-        and result["value"] == thread_value
-        for result in results
-    ):
-        return results
-    return [*results, {"label": "Session", "value": thread_value}]
-
-
 class PearDisabledAgentRunner:
     def __init__(self, reason: str) -> None:
         self.reason = reason
@@ -1099,10 +1011,6 @@ class PearDisabledAgentRunner:
         event_callback: PearWorkerTranscriptCallback | None = None,
     ) -> Sequence[PearWorkerToolResult]:
         return [
-            {
-                "label": "Runtime",
-                "value": build_pear_runtime_value("disabled"),
-            },
             {
                 "label": "Error",
                 "value": self.reason,
@@ -1684,32 +1592,20 @@ class PearCodexAppServerToolRunner:
             if turn_id is not None:
                 self.active_turn_id = turn_id
             try:
-                final_text, command_count, file_change_count, tool_call_count = self.wait_for_turn(
-                    thread_id=thread_id,
-                    turn_id=turn_id,
-                    event_callback=event_callback,
+                final_text, _command_count, _file_change_count, _tool_call_count = (
+                    self.wait_for_turn(
+                        thread_id=thread_id,
+                        turn_id=turn_id,
+                        event_callback=event_callback,
+                    )
                 )
             finally:
                 self.current_user_input_provider = None
-            results = pear_tool_results_from_text(final_text, output_limit=self.output_limit)
+            results = pear_worker_results_from_final_text(
+                final_text, output_limit=self.output_limit
+            )
             results.extend(artifact_tool_result(encoded) for encoded in self.pending_artifacts)
-            summary_parts = []
-            if command_count:
-                summary_parts.append(f"{command_count} command event(s)")
-            if file_change_count:
-                summary_parts.append(f"{file_change_count} file change event(s)")
-            if tool_call_count:
-                summary_parts.append(f"{tool_call_count} tool call event(s)")
-            if summary_parts:
-                results.insert(
-                    0,
-                    {
-                        "label": "Verification",
-                        "value": f"Codex app-server completed with {', '.join(summary_parts)}.",
-                    },
-                )
-            results = ensure_pear_runtime_result(results, self.runtime_value())
-            return append_pear_codex_thread_artifact(results, thread_id)
+            return results
 
     def consume_background_response(self, message: dict[str, Any]) -> bool:
         """Swallow responses to fire-and-forget requests (steer/interrupt):
@@ -1776,6 +1672,9 @@ class PearCodexAppServerToolRunner:
             return
         if process.poll() is None:
             process.terminate()
+
+    def codex_thread_id(self) -> str:
+        return self.loaded_thread_id or ""
 
     def runtime_value(self) -> str:
         return build_pear_runtime_value(

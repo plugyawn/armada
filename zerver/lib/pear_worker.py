@@ -291,13 +291,13 @@ def reap_stale_pear_worker_runs(
     return reaped_count
 
 
-def latest_pear_codex_thread_id_for_topic(
+def latest_pear_codex_run_for_topic(
     user_profile: UserProfile,
     *,
     stream: str,
     topic: str,
     before_message_id: int,
-) -> str | None:
+) -> PearWorkerRun | None:
     runs = PearWorkerRun.objects.filter(
         bot_profile=user_profile,
         stream_name=stream,
@@ -306,13 +306,7 @@ def latest_pear_codex_thread_id_for_topic(
     ).exclude(codex_thread_id="")
     if before_message_id > 0:
         runs = runs.filter(trigger_message_id__lt=before_message_id)
-    run = runs.order_by("-date_updated", "-id").first()
-    if run is None:
-        return None
-    thread_id = run.codex_thread_id.strip()
-    if not thread_id:
-        return None
-    return thread_id
+    return runs.order_by("-trigger_message_id", "-id").first()
 
 
 def pear_default_worker_model() -> str:
@@ -3090,11 +3084,41 @@ def load_pear_active_session_from_zulip(
             (trigger_message_id, str(message.get("content", "")), False, trigger_sender_name)
         )
         message_count = max(message_count, len(message_rows))
-    latest_codex_thread_id = latest_pear_codex_thread_id_for_topic(
+    latest_codex_run = latest_pear_codex_run_for_topic(
         user_profile,
         stream=pear_session["stream"],
         topic=pear_session["topic"],
         before_message_id=trigger_message_id,
+    )
+    latest_codex_thread_id = (
+        latest_codex_run.codex_thread_id.strip() if latest_codex_run is not None else None
+    )
+    if not latest_codex_thread_id:
+        latest_codex_run = None
+        latest_codex_thread_id = None
+    prompt_message_query = message_query
+    if trigger_message_id > 0:
+        # The current request is already the Codex turn input. Repeating it in
+        # the transcript wastes context and teaches the engine a duplicated
+        # conversation shape.
+        prompt_message_query = prompt_message_query.filter(id__lt=trigger_message_id)
+    if latest_codex_run is not None:
+        # Codex owns the durable thread, including every prior request and its
+        # own replies. Pear transports only Zulip messages that arrived since
+        # the run which last carried this thread; this is a message boundary,
+        # not a second context cache.
+        prompt_message_query = prompt_message_query.filter(
+            id__gt=latest_codex_run.trigger_message_id
+        )
+    prompt_message_rows = list(
+        prompt_message_query.exclude(sender=user_profile)
+        .order_by("-id")
+        .values_list(
+            "id",
+            "content",
+            "sender__is_bot",
+            "sender__full_name",
+        )[:30]
     )
     workspace_context = build_pear_workspace_context(
         user_profile,
@@ -3106,6 +3130,7 @@ def load_pear_active_session_from_zulip(
         source="server",
         stream_exists=True,
         messages=message_rows,
+        prompt_messages=prompt_message_rows,
         topic_message_count=message_count,
         latest_codex_thread_id=latest_codex_thread_id,
         workspace_context=workspace_context,

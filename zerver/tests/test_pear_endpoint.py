@@ -3375,6 +3375,20 @@ class PearSessionEndpointTest(ZulipTestCase):
             status=PearWorkerRun.DONE,
             codex_thread_id="thread-first",
         )
+        self.send_stream_message(
+            pear_bot,
+            PEAR_DEFAULT_STREAM,
+            "I picked a number and retained it in the Codex thread.",
+            topic_name=PEAR_DEFAULT_TOPIC,
+        )
+        berry = self.example_user("othello")
+        self.subscribe(berry, PEAR_DEFAULT_STREAM)
+        self.send_stream_message(
+            berry,
+            PEAR_DEFAULT_STREAM,
+            "The number should still be in the Codex thread.",
+            topic_name=PEAR_DEFAULT_TOPIC,
+        )
         second_message_id = self.send_stream_message(
             owner,
             PEAR_DEFAULT_STREAM,
@@ -3399,11 +3413,10 @@ class PearSessionEndpointTest(ZulipTestCase):
         self.assertEqual(
             [message["content"] for message in active_session["recent_messages"]],
             [
-                "agent, Choose a random 15 digit number.",
-                "agent, what was the number you picked?",
+                "The number should still be in the Codex thread.",
             ],
         )
-        self.assertEqual(active_session["recent_messages"][0]["sender"], owner.full_name)
+        self.assertEqual(active_session["recent_messages"][0]["sender"], berry.full_name)
 
     def test_worker_loader_preserves_empty_topic_history(self) -> None:
         owner = self.example_user("hamlet")
@@ -3452,13 +3465,12 @@ class PearSessionEndpointTest(ZulipTestCase):
         self.assertEqual(active_session["topic"], "")
         self.assertEqual(
             [message["sender"] for message in active_session["recent_messages"]],
-            [berry.full_name, owner.full_name],
+            [berry.full_name],
         )
         self.assertEqual(
             [message["content"] for message in active_session["recent_messages"]],
             [
                 "hello pear. what is occupancy?",
-                "pear, did you hear what berry said?",
             ],
         )
 

@@ -124,7 +124,6 @@ PEAR_RETIRED_VISIBLE_ARTIFACT_PATTERN: Final = (
     r"Done|Definition of done|Success criteria|Ambient|Response policy|"
     r"Followups|Follow-up mode):"
 )
-PEAR_VISIBLE_ARTIFACT_FALLBACK_PATTERN: Final = r"^\s*(?:[-*]\s*)?(Result):[ \t]*([^\r\n]*?)[ \t]*$"
 PEAR_TRANSCRIPT_TOOL_DETAIL_KINDS: Final = frozenset({"command", "file_change", "tool"})
 PEAR_TRIVIAL_ACKNOWLEDGMENT_MESSAGES: Final = frozenset(
     {
@@ -1077,26 +1076,13 @@ def pear_spoiler_block(title: str, body: str) -> str:
 
 def pear_transcript_tool_group_block(
     events: Sequence[PearWorkerTranscriptEvent],
-    *,
-    hide_failed_details: bool = False,
 ) -> str:
     distinct_events = pear_distinct_transcript_tool_events(events)
     if not distinct_events:
         return ""
-    detail_events = (
-        [
-            event
-            for event in distinct_events
-            if event.get("status", "") not in {"failed", "error"}
-        ]
-        if hide_failed_details
-        else distinct_events
-    )
-    if not detail_events:
-        detail_events = distinct_events
     return pear_spoiler_block(
         pear_transcript_tool_group_title(distinct_events),
-        "\n".join(pear_transcript_tool_detail_line(event) for event in detail_events),
+        "\n".join(pear_transcript_tool_detail_line(event) for event in distinct_events),
     )
 
 
@@ -1116,29 +1102,6 @@ def pear_transcript_event_from_tool_result(
     }
 
 
-def pear_visible_assistant_artifact_fallback_text(
-    text: str,
-    *,
-    limit: int | None = PEAR_PERSISTENT_MESSAGE_LIMIT,
-) -> str:
-    fallback_by_label: dict[str, str] = {}
-    for match in finditer(
-        PEAR_VISIBLE_ARTIFACT_FALLBACK_PATTERN,
-        text,
-        MULTILINE | IGNORECASE,
-    ):
-        label = str(match.group(1)).strip().lower()
-        value = str(match.group(2)).strip()
-        if value:
-            fallback_by_label[label] = value
-    if "result" in fallback_by_label:
-        value = normalize_pear_visible_markdown(fallback_by_label["result"])
-        if limit is None:
-            return value
-        return trim_pear_text(value, limit=limit)
-    return ""
-
-
 def normalize_pear_visible_markdown(text: str) -> str:
     def replacement(match: Any) -> str:
         label = str(match.group(1)).strip() or "image"
@@ -1153,37 +1116,10 @@ def pear_visible_assistant_text(
     *,
     limit: int | None = PEAR_PERSISTENT_MESSAGE_LIMIT,
 ) -> str:
-    visible_lines: list[str] = []
-    previous_blank = False
-    for line in text.splitlines():
-        stripped = line.strip()
-        if not stripped:
-            if visible_lines and not previous_blank:
-                visible_lines.append("")
-            previous_blank = True
-            continue
-        if (
-            search(PEAR_ARTIFACT_PATTERN, stripped, MULTILINE | IGNORECASE)
-            or search(
-                PEAR_VISIBLE_ARTIFACT_FALLBACK_PATTERN,
-                stripped,
-                MULTILINE | IGNORECASE,
-            )
-            or pear_is_retired_visible_artifact_line(stripped)
-        ):
-            previous_blank = True
-            continue
-        visible_lines.append(line.rstrip())
-        previous_blank = False
-
-    while visible_lines and visible_lines[-1] == "":
-        visible_lines.pop()
-    visible_text = normalize_pear_visible_markdown("\n".join(visible_lines).strip())
+    visible_text = normalize_pear_visible_markdown(text.strip())
     if limit is not None:
         visible_text = trim_pear_text(visible_text, limit=limit)
-    if visible_text:
-        return visible_text
-    return pear_visible_assistant_artifact_fallback_text(text, limit=limit)
+    return visible_text
 
 
 def pear_visible_transcript_event_block(
@@ -1215,7 +1151,7 @@ def pear_visible_transcript_blocks(
     *,
     include_transient_status: bool = True,
     block_limit: int | None = PEAR_PERSISTENT_MESSAGE_LIMIT,
-    assistant_mode: Literal["all", "latest", "disclosure_last"] = "all",
+    collapse_tool_groups: bool = False,
 ) -> list[str]:
     block_by_key: dict[str, str] = {}
     block_keys: list[str] = []
@@ -1262,29 +1198,14 @@ def pear_visible_transcript_blocks(
         if event.get("kind") == "assistant":
             assistant_keys.append(key)
     flush_tool_events()
-    retained_assistant_keys: set[str] = set()
-    if assistant_mode != "all" and assistant_keys:
-        retained_assistant_keys = {assistant_keys[-1]}
-        if assistant_mode == "disclosure_last":
-            for key in assistant_keys:
-                assistant_text = block_by_key[key].lower()
-                if "artifact" in assistant_text and "skill" in assistant_text:
-                    retained_assistant_keys.add(key)
-                    break
-        block_keys = [
-            key for key in block_keys if key not in assistant_keys or key in retained_assistant_keys
-        ]
-    if assistant_mode == "disclosure_last" and all_tool_events:
+    if collapse_tool_groups and all_tool_events:
         block_keys = [key for key in block_keys if not key.startswith("tool-group:")]
-        tool_block = pear_transcript_tool_group_block(
-            all_tool_events,
-            hide_failed_details=True,
-        )
+        tool_block = pear_transcript_tool_group_block(all_tool_events)
         if tool_block:
             tool_key = "tool-group:completed-artifact"
             block_by_key[tool_key] = tool_block
             final_assistant_key = assistant_keys[-1] if assistant_keys else None
-            if final_assistant_key in block_keys and len(retained_assistant_keys) > 1:
+            if final_assistant_key in block_keys:
                 block_keys.insert(block_keys.index(final_assistant_key), tool_key)
             else:
                 block_keys.append(tool_key)
@@ -1755,23 +1676,18 @@ def build_pear_live_transcript_message(
     transcript_blocks = pear_visible_transcript_blocks(
         transcript_events,
         include_transient_status=status in {"queued", "running"},
-        assistant_mode=(
-            "disclosure_last"
-            if status not in {"queued", "running"}
-            and pear_tool_results_include_artifact(tool_results)
-            else "latest"
-            if status in {"queued", "running"}
-            else "all"
+        collapse_tool_groups=(
+            status not in {"queued", "running"} and pear_tool_results_include_artifact(tool_results)
         ),
     )
     if transcript_blocks:
         if status not in {"queued", "running"}:
             result_text = pear_result_tool_text(tool_results)
-            if result_text and result_text not in transcript_blocks:
+            if result_text and not any(result_text in block for block in transcript_blocks):
                 transcript_blocks.append(result_text)
         visible_response = pear_join_visible_transcript_blocks(
             transcript_blocks,
-            preserve_recent=status not in {"queued", "running"},
+            preserve_recent=True,
         )
         if status in {"queued", "running"}:
             return pear_append_active_marker(visible_response)
@@ -2243,13 +2159,11 @@ def build_pear_worker_completed_message_chunks(
         transcript_events,
         include_transient_status=False,
         block_limit=None,
-        assistant_mode=(
-            "disclosure_last" if pear_tool_results_include_artifact(tool_results) else "all"
-        ),
+        collapse_tool_groups=pear_tool_results_include_artifact(tool_results),
     )
     if transcript_blocks:
         result_text = pear_result_tool_text(tool_results, limit=None)
-        if result_text and result_text not in transcript_blocks:
+        if result_text and not any(result_text in block for block in transcript_blocks):
             transcript_blocks.append(result_text)
         return split_pear_persistent_message("\n\n".join(transcript_blocks))
 
@@ -3091,6 +3005,7 @@ def build_pear_active_session_summary_from_messages(
     source: PearActiveSessionSource,
     stream_exists: bool,
     messages: Sequence[PearMessage],
+    prompt_messages: Sequence[PearMessage] | None = None,
     topic_message_count: int | None = None,
     latest_codex_thread_id: str | None = None,
     workspace_context: PearWorkspaceContext | None = None,
@@ -3168,7 +3083,9 @@ def build_pear_active_session_summary_from_messages(
         latest_codex_thread_id=latest_codex_thread_id,
         steering_events=list(reversed(steering_events)),
         interruption_events=list(reversed(interruption_events)),
-        recent_messages=build_pear_recent_messages(sorted_messages),
+        recent_messages=build_pear_recent_messages(
+            sorted_messages if prompt_messages is None else list(prompt_messages)
+        ),
         workspace_context=workspace_context,
         is_paused=is_paused,
         response_policy=response_policy,

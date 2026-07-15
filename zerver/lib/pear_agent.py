@@ -386,6 +386,28 @@ def build_pear_codex_developer_instructions() -> str:
 
 
 def build_pear_codex_turn_prompt(active_session: PearActiveSessionSummary, task: str) -> str:
+    task_text = task.strip() or "Continue the topic Codex thread."
+    recent_messages = active_session.get("recent_messages", [])
+    recent_transcript_lines = [
+        (
+            f"- #{message['message_id']} {message['sender']} "
+            f"({'bot' if message['sender_is_bot'] else 'human'}): {message['content']}"
+        )
+        for message in recent_messages[-30:]
+    ]
+    if active_session.get("latest_codex_thread_id"):
+        if not recent_transcript_lines:
+            return task_text
+        return "\n".join(
+            [
+                "New Zulip messages since your previous turn:",
+                *recent_transcript_lines,
+                "",
+                "Current request:",
+                task_text,
+            ]
+        )
+
     steering = active_session["latest_steering_instruction"] or "None"
     latest_verification = active_session["latest_verification"] or "None"
     workspace_context = active_session.get("workspace_context", {})
@@ -406,7 +428,6 @@ def build_pear_codex_turn_prompt(active_session: PearActiveSessionSummary, task:
     artifact_lines = [f"- {artifact['label']}: {artifact['value']}" for artifact in artifacts] or [
         "- None"
     ]
-    recent_messages = active_session.get("recent_messages", [])
     recent_human_participants = list(
         dict.fromkeys(
             message["sender"] for message in recent_messages if message["sender_is_bot"] is not True
@@ -415,16 +436,12 @@ def build_pear_codex_turn_prompt(active_session: PearActiveSessionSummary, task:
     recent_participant_lines = [
         f"- {participant}" for participant in recent_human_participants
     ] or ["- None visible in the provided transcript"]
-    recent_transcript_lines = [
-        (
-            f"- #{message['message_id']} {message['sender']} "
-            f"({'bot' if message['sender_is_bot'] else 'human'}): {message['content']}"
-        )
-        for message in recent_messages[-30:]
-    ] or ["- No recent topic transcript was provided."]
+    initial_transcript_lines = recent_transcript_lines or [
+        "- No recent topic transcript was provided."
+    ]
     return "\n".join(
         [
-            f"Task: {task.strip() or 'Continue the topic Codex thread.'}",
+            f"Task: {task_text}",
             f"Zulip stream: {active_session['stream']}",
             f"Zulip topic: {active_session['topic']}",
             f"Session state: {active_session['state']}",
@@ -438,7 +455,7 @@ def build_pear_codex_turn_prompt(active_session: PearActiveSessionSummary, task:
             *recent_participant_lines,
             "",
             "Recent Zulip topic transcript, oldest to newest:",
-            *recent_transcript_lines,
+            *initial_transcript_lines,
             "",
             "Recent artifacts:",
             *artifact_lines,

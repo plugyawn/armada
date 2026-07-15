@@ -232,12 +232,6 @@ function format_count(value: number | undefined): string {
     return value === undefined ? "0" : value.toLocaleString();
 }
 
-function format_tokens_per_second(tokens: number, seconds: number): string {
-    const rate = tokens / seconds;
-    const display_rate = rate < 10 ? rate.toFixed(1) : Math.round(rate).toLocaleString();
-    return `${display_rate} tok/s`;
-}
-
 function active_runtime_run(runs: PearRuntimeRun[]): PearRuntimeRun | undefined {
     return (
         runs.find((run) => run.status === "running" || run.status === "queued") ??
@@ -332,13 +326,6 @@ export function build_runtime_usage_rows(
             label: $t({defaultMessage: "time"}),
             value: `${usage.duration_seconds.toFixed(usage.duration_seconds < 10 ? 1 : 0)}s`,
         });
-        const speed_tokens = usage.output_tokens ?? usage.total_tokens;
-        if (speed_tokens !== undefined && usage.duration_seconds > 0) {
-            rows.push({
-                label: $t({defaultMessage: "speed"}),
-                value: format_tokens_per_second(speed_tokens, usage.duration_seconds),
-            });
-        }
     }
     if (usage.reasoning_output_tokens !== undefined && usage.reasoning_output_tokens > 0) {
         rows.push({

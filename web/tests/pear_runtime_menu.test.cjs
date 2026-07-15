@@ -287,7 +287,6 @@ run_test("build_runtime_usage_rows", () => {
             {label: "translated: cache", value: "66.6%"},
             {label: "translated: tokens", value: "1,290"},
             {label: "translated: time", value: "2.5s"},
-            {label: "translated: speed", value: "100 tok/s"},
             {label: "translated: reasoning", value: "40"},
         ],
     );
@@ -300,7 +299,6 @@ run_test("build_runtime_usage_rows", () => {
         [
             {label: "translated: tokens", value: "9"},
             {label: "translated: time", value: "2.0s"},
-            {label: "translated: speed", value: "4.5 tok/s"},
         ],
     );
 });

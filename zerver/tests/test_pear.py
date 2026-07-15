@@ -1607,11 +1607,14 @@ class PearSessionDefaultsTest(TestCase):
             tool_results=[],
         )
 
-        self.assertEqual(progress_message, "Partial answer *✦*")
+        self.assertEqual(
+            progress_message,
+            "I’ll inspect the helper and repository first.\n\nPartial answer *✦*",
+        )
         self.assertNotIn("Thinking", progress_message)
         self.assertNotIn("Status:", progress_message)
 
-    def test_build_worker_progress_message_keeps_only_latest_assistant_text(self) -> None:
+    def test_build_worker_progress_message_preserves_visible_assistant_text(self) -> None:
         progress_message = build_pear_worker_progress_message(
             task="answer quickly",
             transcript_events=[
@@ -1641,9 +1644,8 @@ class PearSessionDefaultsTest(TestCase):
 
         self.assertEqual(
             progress_message,
-            "The answer is almost ready. *✦*",
+            "I'll check the repo first.\n\nThe answer is almost ready. *✦*",
         )
-        self.assertNotIn("I'll check the repo first.", progress_message)
         self.assertNotIn("private chain of thought", progress_message)
         self.assertNotIn("Status:", progress_message)
 
@@ -1699,13 +1701,12 @@ class PearSessionDefaultsTest(TestCase):
             progress_message,
             "\n\n".join(
                 [
+                    "I'll check the repo state.",
                     "```spoiler Ran 1 tool\n- · `/bin/bash -lc pwd`\n```",
-                    "Status checked. *✦*",
+                    "Result: Status checked. *✦*",
                 ]
             ),
         )
-        self.assertNotIn("I'll check the repo state.", progress_message)
-        self.assertNotIn("Result: Status checked.", progress_message)
 
     def test_build_worker_progress_message_collapses_running_tool_group(self) -> None:
         progress_message = build_pear_worker_progress_message(
@@ -2089,7 +2090,7 @@ class PearSessionDefaultsTest(TestCase):
 
         self.assertEqual(completed_message, "Pear worker agent runtime is disabled.")
 
-    def test_worker_completed_message_suppresses_duplicate_result_artifact(self) -> None:
+    def test_worker_completed_message_preserves_prose_without_duplicate_result(self) -> None:
         completed_message = build_pear_worker_completed_message(
             task="hi",
             transcript_events=[
@@ -2112,12 +2113,11 @@ class PearSessionDefaultsTest(TestCase):
             ],
         )
 
-        self.assertTrue(completed_message.startswith("Hi. Ready when you are."))
-        self.assertNotIn("Repo: /home/vagrant/zulip\nHi. Ready when you are.", completed_message)
+        self.assertEqual(completed_message, "Repo: /home/vagrant/zulip\nHi. Ready when you are.")
         self.assertNotIn("Result: Hi. Ready when you are.", completed_message)
         self.assertNotIn("Session: Codex thread 123", completed_message)
 
-    def test_worker_completed_message_shows_answer_before_artifact_details(self) -> None:
+    def test_worker_completed_message_preserves_multiline_answer(self) -> None:
         completed_message = build_pear_worker_completed_message(
             task='choose between A, B, D, and "Tokenmaxxer"',
             transcript_events=[
@@ -2148,8 +2148,18 @@ class PearSessionDefaultsTest(TestCase):
             ],
         )
 
-        self.assertTrue(completed_message.startswith("Tokenmaxxer."))
-        self.assertNotIn("Repo: /Users/progyan/codack/zulip\nRuntime:", completed_message)
+        self.assertEqual(
+            completed_message,
+            "\n".join(
+                [
+                    "Repo: /Users/progyan/codack/zulip",
+                    "Runtime: Codex/Pear in Zulip topic `devel > topic`",
+                    "Verification: Not run; choice-only request.",
+                    "",
+                    "Tokenmaxxer.",
+                ]
+            ),
+        )
         self.assertNotIn("Result: Tokenmaxxer.", completed_message)
         self.assertNotIn('Task: choose between A, B, D, and "Tokenmaxxer"', completed_message)
         self.assertNotIn("Runtime: codex-exec cwd=/home/vagrant/zulip", completed_message)
@@ -2197,16 +2207,19 @@ class PearSessionDefaultsTest(TestCase):
                     "```spoiler Ran 1 tool\n"
                     "- · `/bin/bash -lc 'pwd && git status --short --branch'`\n"
                     "```",
-                    "Status checked; ready for the next concrete task.",
+                    "\n".join(
+                        [
+                            "Repo: `/home/vagrant/zulip`",
+                            "Verification: `git status --short --branch` completed successfully",
+                            "Result: Status checked; ready for the next concrete task.",
+                        ]
+                    ),
                 ]
             ),
         )
         self.assertNotIn("*✦*", completed_message)
-        self.assertNotIn("Repo:", completed_message)
-        self.assertNotIn("Verification:", completed_message)
-        self.assertNotIn("Result:", completed_message)
 
-    def test_worker_completed_artifact_message_hides_production_diary(self) -> None:
+    def test_worker_completed_artifact_message_preserves_commentary_and_failed_tools(self) -> None:
         completed_message = build_pear_worker_completed_message(
             task="explain the projection",
             transcript_events=[
@@ -2264,14 +2277,14 @@ class PearSessionDefaultsTest(TestCase):
         )
 
         self.assertIn("motion clarifies projection", completed_message)
+        self.assertIn("checking the renderer", completed_message)
+        self.assertIn("first poster", completed_message)
         self.assertIn("Watch the ambient vector", completed_message)
         self.assertIn("render visual", completed_message)
         self.assertEqual(completed_message.count("render visual"), 1)
         self.assertEqual(completed_message.count("```spoiler Ran 2 tools · 1 retry"), 1)
+        self.assertIn("inspect first poster", completed_message)
         self.assertNotIn("✦", completed_message)
-        self.assertNotIn("inspect the helper", completed_message)
-        self.assertNotIn("checking the renderer", completed_message)
-        self.assertNotIn("first poster", completed_message)
 
     def test_worker_completed_message_preserves_final_answer_after_long_tool_details(self) -> None:
         transcript_events = [
@@ -2500,6 +2513,38 @@ class PearSessionDefaultsTest(TestCase):
         self.assertIn("README.md", instructions)
         self.assertNotIn(instructions, build_pear_codex_turn_prompt(active_session_a, "fix"))
         self.assertNotIn(instructions, build_pear_codex_turn_prompt(active_session_b, "fix"))
+
+    def test_resumed_codex_prompt_contains_only_unseen_messages_and_current_request(self) -> None:
+        active_session = build_pear_active_session_summary_from_messages(
+            pear_session=get_pear_session_payload(),
+            source="server",
+            stream_exists=True,
+            messages=[(20, "a new human observation", False, "berry")],
+            latest_codex_thread_id="thread-existing",
+        )
+
+        prompt = build_pear_codex_turn_prompt(active_session, "continue from that observation")
+
+        self.assertEqual(
+            prompt,
+            "\n".join(
+                [
+                    "New Zulip messages since your previous turn:",
+                    "- #20 berry (human): a new human observation",
+                    "",
+                    "Current request:",
+                    "continue from that observation",
+                ]
+            ),
+        )
+        self.assertNotIn("Workspace context:", prompt)
+        self.assertNotIn("Recent artifacts:", prompt)
+
+        active_session["recent_messages"] = []
+        self.assertEqual(
+            build_pear_codex_turn_prompt(active_session, "a direct follow-up"),
+            "a direct follow-up",
+        )
 
     def test_codex_skills_are_provisioned_into_codex_home(self) -> None:
         with TemporaryDirectory() as source_root, TemporaryDirectory() as codex_home:

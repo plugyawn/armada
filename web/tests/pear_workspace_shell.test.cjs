@@ -292,7 +292,12 @@ run_test("README and Files rooms share one editor and restore the last working f
     assert.equal(test.controller.getDebugState().activePath, "README.md");
     assert.equal(test.root.querySelector(".pear-workspace-shell").dataset.room, "readme");
     assert.equal(test.editors.length, 1, "room changes keep the editor session warm");
-    assert.equal(test.editors[0].opens.at(-1).preferredMode, "rich");
+    assert.equal(test.editors[0].opens.at(-1).preferredMode, "source");
+    assert.equal(
+        new URL(window.location.href).searchParams.get("pear_mode"),
+        "source",
+        "README first-open keeps the fast Source path authoritative",
+    );
 
     test.controller.setRoom("files");
     await Promise.resolve();
@@ -302,6 +307,30 @@ run_test("README and Files rooms share one editor and restore the last working f
 
     await test.controller.destroy();
     test.root.remove();
+});
+
+run_test("README room defaults to Source but honors an explicit Rich URL mode", async () => {
+    window.history.replaceState(
+        {},
+        "",
+        "/?pear_view=readme&pear_workspace=workspace-readme-mode&pear_mode=rich",
+    );
+    const test = harness("workspace-readme-mode", "readme");
+    const readme = entry("README.md");
+    const current = descriptor("workspace-readme-mode", 1, {
+        default_path: readme.path,
+        default_entry: readme,
+    });
+    test.send_descriptor(current);
+    test.send_tree(0, current.root, [readme]);
+    await Promise.resolve();
+
+    assert.equal(test.controller.getDebugState().activePath, readme.path);
+    assert.equal(test.editors[0].opens.at(-1).preferredMode, "rich");
+
+    await test.controller.destroy();
+    test.root.remove();
+    window.history.replaceState({}, "", "/");
 });
 
 run_test("README room offers an intentional empty state", async () => {

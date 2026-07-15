@@ -601,10 +601,7 @@ export function create_pear_workspace_shell(
     });
 
     const open_entry = async (entry: PearWorkspaceEntry): Promise<void> => {
-        const requested_mode =
-            room === "readme" && entry.path.toLowerCase() === "readme.md"
-                ? "rich"
-                : location_mode_request;
+        const requested_mode = location_mode_request;
         location_mode_request = undefined;
         await editor.open(entry, requested_mode);
         if (!destroyed && active_path === entry.path && requested_mode !== undefined) {
@@ -950,7 +947,7 @@ export function create_pear_workspace_shell(
                 : undefined;
         const entry = cached_readme ?? default_readme;
         if (entry !== undefined) {
-            location_mode_request = "rich";
+            location_mode_request ??= "source";
             activate_entry(entry, false, "none");
             return;
         }
@@ -959,7 +956,7 @@ export function create_pear_workspace_shell(
             sync_location("replace");
             return;
         }
-        location_mode_request = "rich";
+        location_mode_request ??= "source";
         reveal_path("README.md", true);
     };
 
@@ -1198,6 +1195,9 @@ export function create_pear_workspace_shell(
         const location = read_pear_workspace_location();
         const restored_active = active_tab();
         if (room === "readme") {
+            if (location.view === "readme" && location.workspaceId === options.workspaceId) {
+                location_mode_request = location.mode;
+            }
             open_readme();
         } else if (
             location.view === "files" &&

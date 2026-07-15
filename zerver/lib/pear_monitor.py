@@ -205,18 +205,22 @@ def pear_monitor_run_recipe_command(
     so worker secrets never leak into agent-authored shell. The chdir
     happens inside the wrapped shell: isolation worktrees are mode-700,
     so a subprocess cwd= would EACCES before sudo ever runs."""
+    if process_isolation is None:
+        raise OSError(
+            "executable monitor recipes require the topic's isolated OS user; "
+            "static artifacts remain available without process isolation"
+        )
     wrapped = f"cd {shlex.quote(workdir)} && ({command})"
     argv = pear_isolated_command(["/usr/bin/env", "bash", "-c", wrapped], process_isolation)
     env = {
         "PATH": "/usr/local/bin:/usr/bin:/bin",
-        "HOME": process_isolation.home if process_isolation is not None else str(Path.home()),
+        "HOME": process_isolation.home,
         "LANG": "C.UTF-8",
     }
     completed = subprocess.run(
         argv,
         env=env,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        capture_output=True,
         text=True,
         timeout=PEAR_MONITOR_RECIPE_TIMEOUT_SECONDS,
         check=False,
@@ -358,9 +362,9 @@ def pear_run_due_monitor_ticks() -> int:
     """One scheduler pass; returns how many monitors ticked. Runs on the
     worker's tick thread — model-free by construction."""
     from zerver.lib.pear_worker import (
-        pear_topic_context_is_paused,
         pear_topic_process_isolation,
         pear_worker_workdir_for_topic,
+        pear_workspace_is_paused,
     )
 
     now = timezone_now()
@@ -377,7 +381,7 @@ def pear_run_due_monitor_ticks() -> int:
     ticked = 0
     for monitor in due:
         try:
-            if pear_topic_context_is_paused(
+            if pear_workspace_is_paused(
                 monitor.bot_profile, stream=monitor.stream_name, topic=monitor.topic_name
             ):
                 monitor.next_due_at = now + timedelta(seconds=monitor.cadence_seconds)

@@ -49,7 +49,9 @@ PEAR_DEPLOY_RUNTIME_CONFIG_PATHS=(
     /etc/systemd/system/caddy.service.d/pear-basic-auth.conf
     /usr/local/bin/pear-run-zulip-dev
     /usr/local/lib/pear-workspace-io
+    /usr/local/lib/pear-rebaseline-schema
     /etc/systemd/system/pear-zulip-dev.service
+    /etc/systemd/system/pear-addressing.service
     /home/zulipdev/pear.env
     /home/zulipdev/pear-deployed-sha
     /var/lib/pear
@@ -65,6 +67,8 @@ PEAR_DEPLOY_TRUSTED_BUNDLE_PATHS=(
     tools/pear_deploy/runtime/caddy-pear-basic-auth.conf
     tools/pear_deploy/runtime/pear-run-zulip-dev
     tools/pear_deploy/runtime/pear-zulip-dev.service
+    tools/pear_deploy/runtime/pear-addressing.service
+    tools/pear_deploy/rebaseline_pear_schema.py
     zerver/lib/pear_workspace_io.py
 )
 
@@ -74,6 +78,7 @@ PEAR_WORKSPACE_HELPER_PATH="/usr/local/lib/pear-workspace-io"
 PEAR_DEPLOY_SERVICES=(
     pear-worker
     pear-monitor-worker
+    pear-addressing
     pear-embedded-bots
     pear-thumbnail
     pear-zulip-dev
@@ -82,6 +87,7 @@ PEAR_DEPLOY_SERVICES=(
 PEAR_DEPLOY_WORKER_SERVICES=(
     pear-worker
     pear-monitor-worker
+    pear-addressing
     pear-embedded-bots
     pear-thumbnail
 )
@@ -89,6 +95,7 @@ PEAR_DEPLOY_WORKER_SERVICES=(
 PEAR_DEPLOY_QUEUES=(
     pear_worker
     pear_monitor_worker
+    pear_addressing
     embedded_bots
     thumbnail
 )

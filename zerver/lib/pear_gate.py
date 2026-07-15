@@ -71,10 +71,10 @@ def pear_followup_topic_context_allows_candidate(
     topic_name: str,
 ) -> bool:
     from zerver.lib.pear import normalize_pear_response_policy
-    from zerver.models.bots import PearTopicContext
+    from zerver.models.bots import PearWorkspaceNode
 
-    context = (
-        PearTopicContext.objects.filter(
+    workspace = (
+        PearWorkspaceNode.objects.filter(
             realm_id=realm_id,
             stream_name=stream_name,
             topic_name=topic_name,
@@ -82,14 +82,14 @@ def pear_followup_topic_context_allows_candidate(
         .values("is_paused", "response_policy")
         .first()
     )
-    if context is None:
+    if workspace is None:
         # Ambient is the product default. A topic row is created only after
         # Pear has state worth persisting, so a missing row must not make a
         # brand-new topic silently mentions-only.
         return True
-    if context["is_paused"]:
+    if workspace["is_paused"]:
         return False
-    return normalize_pear_response_policy(str(context["response_policy"])) == "ambient"
+    return normalize_pear_response_policy(str(workspace["response_policy"])) == "ambient"
 
 
 def get_pear_followup_service_bot_event(
@@ -114,10 +114,8 @@ def get_pear_followup_service_bot_event(
 
     from zerver.lib.pear import (
         PEAR_FOLLOWUP_TRIGGER,
-        is_pear_control_template_message,
         is_pear_plain_mention_alias_message,
         is_pear_request_message,
-        parse_pear_checklist,
     )
 
     selected_pear_bot_user_id = get_selected_pear_bot_user_id_for_realm(realm_id)
@@ -133,11 +131,7 @@ def get_pear_followup_service_bot_event(
         }
 
     has_plain_pear_alias = is_pear_plain_mention_alias_message(content)
-    if (
-        (is_pear_request_message(content) and not has_plain_pear_alias)
-        or is_pear_control_template_message(content)
-        or parse_pear_checklist(content)
-    ):
+    if is_pear_request_message(content) and not has_plain_pear_alias:
         return None
 
     if has_plain_pear_alias:

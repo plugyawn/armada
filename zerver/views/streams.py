@@ -963,10 +963,10 @@ def add_subscriptions_backend(
     result["already_subscribed"] = dict(result["already_subscribed"])
 
     if clean_pear_repository_url:
-        from zerver.lib.pear_worker import configure_pear_channel_repository_context
+        from zerver.lib.pear_worker import configure_pear_channel_repository_workspace
 
         try:
-            configure_pear_channel_repository_context(
+            configure_pear_channel_repository_workspace(
                 user_profile,
                 stream=created_streams[0].name,
                 repository_url=clean_pear_repository_url,

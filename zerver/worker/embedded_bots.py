@@ -12,6 +12,7 @@ from zerver.lib.bot_lib import (
     do_flag_service_bots_messages_as_processed,
     get_bot_handler,
 )
+from zerver.lib.queue import queue_json_publish_rollback_unsafe
 from zerver.models import UserProfile
 from zerver.models.bots import get_bot_services
 from zerver.models.users import get_user_profile_by_id
@@ -36,19 +37,10 @@ class EmbeddedBotWorker(QueueProcessingWorker):
         services = get_bot_services(user_profile_id)
         for service in services:
             service_message = dict(message)
-            bot_handler = get_bot_handler(str(service.name))
-            if bot_handler is None:
-                logging.error(
-                    "Error: User %s has bot with invalid embedded bot service %s",
-                    user_profile_id,
-                    service.name,
-                )
-                continue
             try:
-                if hasattr(bot_handler, "initialize"):
-                    bot_handler.initialize(self.get_bot_api_client(user_profile))
                 if service.name == "pear":
                     from zerver.lib.pear import PEAR_TRIGGER_MESSAGE_KEY
+                    from zerver.lib.pear_worker import PEAR_ADDRESSING_QUEUE_NAME
 
                     service_message[PEAR_TRIGGER_MESSAGE_KEY] = event["trigger"]
                 if event["trigger"] == "mention":
@@ -59,6 +51,25 @@ class EmbeddedBotWorker(QueueProcessingWorker):
                     assert service_message["content"] is not None
                     if service.name == "pear":
                         service_message["pear_explicit_mention"] = True
+                if service.name == "pear":
+                    queue_json_publish_rollback_unsafe(
+                        PEAR_ADDRESSING_QUEUE_NAME,
+                        {
+                            "user_profile_id": user_profile_id,
+                            "message": service_message,
+                        },
+                    )
+                    continue
+                bot_handler = get_bot_handler(str(service.name))
+                if bot_handler is None:
+                    logging.error(
+                        "Error: User %s has bot with invalid embedded bot service %s",
+                        user_profile_id,
+                        service.name,
+                    )
+                    continue
+                if hasattr(bot_handler, "initialize"):
+                    bot_handler.initialize(self.get_bot_api_client(user_profile))
                 bot_handler.handle_message(
                     message=service_message,
                     bot_handler=self.get_bot_api_client(user_profile),

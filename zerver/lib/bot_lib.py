@@ -33,12 +33,10 @@ def get_bot_handler(service_name: str) -> Any:
             PearDatabaseWorkerRunStore,
             PearQueueWorkerDispatcher,
             build_pear_addressing_intent_classifier_from_settings,
-            build_pear_worker_runtime_from_settings,
             load_pear_active_session_from_zulip,
         )
 
         return PearEmbeddedBotHandler(
-            worker_runtime=build_pear_worker_runtime_from_settings(),
             active_session_loader=load_pear_active_session_from_zulip,
             worker_run_store=PearDatabaseWorkerRunStore(),
             worker_dispatcher=PearQueueWorkerDispatcher(),

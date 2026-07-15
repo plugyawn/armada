@@ -50,7 +50,7 @@ from zerver.lib.message import (
     truncate_topic,
 )
 from zerver.lib.message_cache import update_message_cache
-from zerver.lib.pear_worker import maybe_refactor_pear_topic_context_on_move
+from zerver.lib.pear_worker import maybe_refactor_pear_workspace_on_move
 from zerver.lib.queue import queue_event_on_commit
 from zerver.lib.stream_subscription import get_active_subscriptions_for_stream_id
 from zerver.lib.stream_topic import StreamTopicTarget
@@ -1438,7 +1438,7 @@ def do_update_message(
 
     pear_context_refactor = None
     if message_edit_request.is_nontrivial_move:
-        pear_context_refactor = maybe_refactor_pear_topic_context_on_move(
+        pear_context_refactor = maybe_refactor_pear_workspace_on_move(
             user_profile,
             old_stream=stream_being_edited,
             old_topic=orig_topic_name,

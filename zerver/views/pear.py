@@ -39,6 +39,7 @@ from zerver.lib.pear import (
     build_pear_config_payload,
     get_pear_live_run_state,
     get_pear_session_payload,
+    is_pear_task_request_message,
     normalize_pear_response_policy,
     pear_normalize_token_usage,
     pear_token_usage_summary,
@@ -57,16 +58,14 @@ from zerver.lib.pear_monitor import (
 )
 from zerver.lib.pear_worker import (
     PearQueueWorkerDispatcher,
-    ensure_pear_child_topic_context,
-    ensure_pear_topic_context,
+    ensure_pear_child_workspace_node,
+    ensure_pear_workspace_node,
     pear_default_worker_reasoning_effort,
     pear_git_status_delta,
     pear_logical_repository_label,
     pear_logical_worktree_label,
     pear_pinned_repository_value,
     pear_repo_artifact_value_is_durable,
-    pear_topic_context_is_paused,
-    pear_topic_context_response_policy,
     pear_topic_isolation_user_exists,
     pear_topic_isolation_username_for_realm,
     pear_topic_os_user_isolation_enabled,
@@ -74,9 +73,10 @@ from zerver.lib.pear_worker import (
     pear_worker_reasoning_effort_for_topic,
     pear_worker_sandbox_for_topic,
     pear_worker_workdir_for_topic,
+    pear_workspace_is_paused,
     pear_workspace_node_default_branch,
-    set_pear_topic_context_paused,
-    set_pear_topic_context_response_policy,
+    pear_workspace_response_policy,
+    set_pear_workspace_paused,
 )
 from zerver.lib.pear_workspace_map import pear_workspace_topics_for_stream
 from zerver.lib.response import json_success
@@ -92,7 +92,6 @@ from zerver.lib.typed_endpoint import (
 from zerver.lib.url_encoding import topic_narrow_url
 from zerver.models.bots import (
     PearMonitor,
-    PearTopicContext,
     PearWorkerRun,
     PearWorkerRunEvent,
     PearWorkspaceNode,
@@ -133,14 +132,13 @@ def pear_codex_login_available(codex_bin: str) -> bool:
         completed = subprocess.run(
             [codex_bin, "login", "status"],
             check=False,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            capture_output=True,
             text=True,
             timeout=10,
         )
     except (FileNotFoundError, OSError, subprocess.TimeoutExpired):
         return False
-    output = "\n".join((completed.stdout, completed.stderr))
+    output = f"{completed.stdout}\n{completed.stderr}"
     return completed.returncode == 0 and "Logged in" in output
 
 
@@ -401,20 +399,20 @@ def build_pear_git_context(
     )
 
 
-def pear_context_isolation_username(
-    context: PearTopicContext | None,
+def pear_workspace_isolation_username(
+    workspace_node: PearWorkspaceNode | None,
     *,
     stream_name: str,
     topic_name: str,
     workdir: str,
 ) -> str | None:
     if (
-        context is not None
+        workspace_node is not None
         and pear_topic_os_user_isolation_enabled()
         and pear_repo_artifact_value_is_durable(workdir)
     ):
         username = pear_topic_isolation_username_for_realm(
-            context.realm_id,
+            workspace_node.realm_id,
             stream=stream_name,
             topic=topic_name,
         )
@@ -424,14 +422,14 @@ def pear_context_isolation_username(
     return None
 
 
-def pear_topic_context_for_request(
+def pear_workspace_for_request(
     user_profile: UserProfile,
     *,
     stream_name: str,
     topic_name: str,
-) -> PearTopicContext | None:
+) -> PearWorkspaceNode | None:
     return (
-        PearTopicContext.objects.select_related("parent_context", "workspace_node__project")
+        PearWorkspaceNode.objects.select_related("parent_node__project", "project")
         .filter(
             realm=user_profile.realm,
             stream_name=stream_name,
@@ -441,8 +439,8 @@ def pear_topic_context_for_request(
     )
 
 
-def serialize_pear_topic_context(
-    context: PearTopicContext | None,
+def serialize_pear_workspace_context(
+    workspace_node: PearWorkspaceNode | None,
     *,
     stream_name: str,
     topic_name: str,
@@ -452,32 +450,46 @@ def serialize_pear_topic_context(
     default_model = str(runtime_config.get("model") or "")
     default_reasoning_effort = str(runtime_config.get("reasoning_effort") or "medium")
     selected_model = (
-        context.model.strip() if context is not None and context.model.strip() else default_model
+        workspace_node.model.strip()
+        if workspace_node is not None and workspace_node.model.strip()
+        else default_model
     )
-    parent_context = (
-        context.parent_context
-        if context is not None and context.parent_context_id is not None
+    parent_node = (
+        workspace_node.parent_node
+        if workspace_node is not None and workspace_node.parent_node_id is not None
         else None
     )
     selected_reasoning_effort = (
-        context.reasoning_effort.strip()
-        if context is not None and context.reasoning_effort.strip()
+        workspace_node.reasoning_effort.strip()
+        if workspace_node is not None and workspace_node.reasoning_effort.strip()
         else (
-            parent_context.reasoning_effort.strip()
-            if parent_context is not None and parent_context.reasoning_effort.strip()
+            parent_node.reasoning_effort.strip()
+            if parent_node is not None and parent_node.reasoning_effort.strip()
             else default_reasoning_effort
         )
     )
     selected_response_policy = normalize_pear_response_policy(
-        context.response_policy if context is not None else None
+        workspace_node.response_policy if workspace_node is not None else None
     )
-    workdir = context.workdir.strip() if context is not None and context.workdir.strip() else ""
-    context_github_repo = context.github_repo.strip() if context is not None else ""
-    parent_github_repo = parent_context.github_repo.strip() if parent_context is not None else ""
+    workdir = (
+        workspace_node.workdir.strip()
+        if workspace_node is not None and workspace_node.workdir.strip()
+        else ""
+    )
+    workspace_repo = (
+        workspace_node.project.repository_url.strip()
+        if workspace_node is not None and workspace_node.project_id is not None
+        else ""
+    )
+    parent_repo = (
+        parent_node.project.repository_url.strip()
+        if parent_node is not None and parent_node.project_id is not None
+        else ""
+    )
     github_repo = next(
         (
             repo_value
-            for repo_value in (context_github_repo, parent_github_repo)
+            for repo_value in (workspace_repo, parent_repo)
             if pear_repo_artifact_value_is_durable(repo_value)
         ),
         "",
@@ -486,8 +498,8 @@ def serialize_pear_topic_context(
         (
             repo_value
             for repo_value in (
-                pear_pinned_repository_value(context_github_repo),
-                pear_pinned_repository_value(parent_github_repo),
+                pear_pinned_repository_value(workspace_repo),
+                pear_pinned_repository_value(parent_repo),
             )
             if repo_value
         ),
@@ -495,18 +507,13 @@ def serialize_pear_topic_context(
     )
     repo_label = pear_logical_repository_label(
         stream=stream_name,
-        context_repo=context_github_repo,
-        parent_repo=parent_github_repo,
+        context_repo=workspace_repo,
+        parent_repo=parent_repo,
     )
     worktree_label = pear_logical_worktree_label(
         stream=stream_name,
         topic=topic_name,
         fallback=Path(workdir).name,
-    )
-    workspace_node = (
-        context.workspace_node
-        if context is not None and context.workspace_node_id is not None
-        else None
     )
     project = (
         workspace_node.project
@@ -518,8 +525,8 @@ def serialize_pear_topic_context(
         if workspace_node is not None and workspace_node.branch_name.strip()
         else pear_workspace_node_default_branch()
     )
-    isolation_username = pear_context_isolation_username(
-        context,
+    isolation_username = pear_workspace_isolation_username(
+        workspace_node,
         stream_name=stream_name,
         topic_name=topic_name,
         workdir=workdir,
@@ -566,8 +573,10 @@ def serialize_pear_topic_context(
         "repo_title": pinned_repo or workdir,
         "worktree_label": worktree_label,
         "workdir": workdir,
-        "is_paused": bool(context is not None and context.is_paused),
-        "parent_context_id": context.parent_context_id if context is not None else None,
+        "is_paused": bool(workspace_node is not None and workspace_node.is_paused),
+        "parent_workspace_id": workspace_node.parent_node_id
+        if workspace_node is not None
+        else None,
     }
     if include_git:
         payload["git"] = build_pear_git_context(
@@ -1177,7 +1186,7 @@ def get_pear_topic_context_backend(
     ] = True,
 ) -> HttpResponse:
     access_stream_by_name(user_profile, stream_name)
-    context = pear_topic_context_for_request(
+    workspace_node = pear_workspace_for_request(
         user_profile,
         stream_name=stream_name,
         topic_name=topic_name,
@@ -1185,8 +1194,8 @@ def get_pear_topic_context_backend(
     return json_success(
         request,
         data={
-            "pear_topic_context": serialize_pear_topic_context(
-                context,
+            "pear_topic_context": serialize_pear_workspace_context(
+                workspace_node,
                 stream_name=stream_name,
                 topic_name=topic_name,
                 include_git=bool(include_git),
@@ -1230,19 +1239,21 @@ def post_pear_topic_context_backend(
     clean_reasoning_effort = (
         clean_pear_reasoning_effort(reasoning_effort) if reasoning_effort is not None else None
     )
-    clean_response_policy = (
-        normalize_pear_response_policy(response_policy) if response_policy is not None else None
-    )
-    context = ensure_pear_topic_context(user_profile, stream=stream_name, topic=topic_name)
-    previous_model = (
-        context.model.strip() if context.model.strip() else str(settings.PEAR_WORKER_MODEL or "")
+    if response_policy is not None and response_policy not in {"ambient", "mentions_only"}:
+        raise JsonableError(_("Invalid Pear response policy."))
+    clean_response_policy = response_policy
+    workspace_node = ensure_pear_workspace_node(user_profile, stream=stream_name, topic=topic_name)
+    previous_model = pear_worker_model_for_topic(
+        user_profile,
+        stream=stream_name,
+        topic=topic_name,
     )
     previous_reasoning_effort = pear_worker_reasoning_effort_for_topic(
         user_profile,
         stream=stream_name,
         topic=topic_name,
     )
-    previous_response_policy = pear_topic_context_response_policy(
+    previous_response_policy = pear_workspace_response_policy(
         user_profile,
         stream=stream_name,
         topic=topic_name,
@@ -1254,41 +1265,25 @@ def post_pear_topic_context_backend(
     response_policy_changed = (
         clean_response_policy is not None and previous_response_policy != clean_response_policy
     )
-    if model_changed and clean_model is not None:
-        context.model = clean_model
-        context.date_updated = timezone_now()
-        context.save(update_fields=["model", "date_updated"])
-        if context.workspace_node_id is not None:
-            context.workspace_node.model = clean_model
-            context.workspace_node.date_updated = context.date_updated
-            context.workspace_node.save(update_fields=["model", "date_updated"])
-    elif clean_model is not None and not context.model:
-        context.model = clean_model
-        context.date_updated = timezone_now()
-        context.save(update_fields=["model", "date_updated"])
-        if context.workspace_node_id is not None:
-            context.workspace_node.model = clean_model
-            context.workspace_node.date_updated = context.date_updated
-            context.workspace_node.save(update_fields=["model", "date_updated"])
-
-    if clean_reasoning_effort is not None:
-        if reasoning_effort_changed or not context.reasoning_effort:
-            context.reasoning_effort = clean_reasoning_effort
-            context.date_updated = timezone_now()
-            context.save(update_fields=["reasoning_effort", "date_updated"])
-            if context.workspace_node_id is not None:
-                context.workspace_node.reasoning_effort = clean_reasoning_effort
-                context.workspace_node.date_updated = context.date_updated
-                context.workspace_node.save(update_fields=["reasoning_effort", "date_updated"])
-
-    if clean_response_policy is not None:
-        set_pear_topic_context_response_policy(
-            user_profile,
-            stream=stream_name,
-            topic=topic_name,
-            response_policy=clean_response_policy,
-        )
-        context.refresh_from_db(fields=["response_policy", "date_updated"])
+    update_fields: list[str] = []
+    if clean_model is not None and workspace_node.model != clean_model:
+        workspace_node.model = clean_model
+        update_fields.append("model")
+    if (
+        clean_reasoning_effort is not None
+        and workspace_node.reasoning_effort != clean_reasoning_effort
+    ):
+        workspace_node.reasoning_effort = clean_reasoning_effort
+        update_fields.append("reasoning_effort")
+    if (
+        clean_response_policy is not None
+        and workspace_node.response_policy != clean_response_policy
+    ):
+        workspace_node.response_policy = clean_response_policy
+        update_fields.append("response_policy")
+    if update_fields:
+        workspace_node.date_updated = timezone_now()
+        workspace_node.save(update_fields=[*update_fields, "date_updated"])
 
     changed = model_changed or reasoning_effort_changed or response_policy_changed
     # Runtime changes deliberately post no message: the topic header shows
@@ -1300,8 +1295,8 @@ def post_pear_topic_context_backend(
         request,
         data={
             "changed": changed,
-            "pear_topic_context": serialize_pear_topic_context(
-                context,
+            "pear_topic_context": serialize_pear_workspace_context(
+                workspace_node,
                 stream_name=stream_name,
                 topic_name=topic_name,
                 include_git=bool(include_git),
@@ -1334,7 +1329,6 @@ def get_pear_active_session_backend(
             stream_exists=False,
             topic_message_count=0,
             latest_message_id=None,
-            checklist=[],
         )
     else:
         assert stream.recipient_id is not None
@@ -1352,22 +1346,74 @@ def get_pear_active_session_backend(
                 "sender__full_name",
             )[:PEAR_ACTIVE_SESSION_MESSAGE_LIMIT]
         )
-        active_session = build_pear_active_session_summary_from_messages(
+        message_summary = build_pear_active_session_summary_from_messages(
             pear_session=pear_session,
             source="server",
             stream_exists=True,
             messages=message_rows,
             topic_message_count=message_count,
-            is_paused=pear_topic_context_is_paused(
+            is_paused=pear_workspace_is_paused(
                 user_profile,
                 stream=pear_session["stream"],
                 topic=pear_session["topic"],
             ),
-            response_policy=pear_topic_context_response_policy(
+            response_policy=pear_workspace_response_policy(
                 user_profile,
                 stream=pear_session["stream"],
                 topic=pear_session["topic"],
             ),
+        )
+        topic_runs = PearWorkerRun.objects.filter(
+            realm=user_profile.realm,
+            session_kind=PearWorkerRun.SHARED,
+            stream_name=pear_session["stream"],
+            topic_name=pear_session["topic"],
+        )
+        latest_run = topic_runs.order_by("-trigger_message_id", "-id").first()
+        latest_thread_run = (
+            topic_runs.exclude(codex_thread_id="").order_by("-trigger_message_id", "-id").first()
+        )
+
+        # Once routing has accepted a request, PearWorkerRun is the durable
+        # source of truth. The message check only covers the short interval
+        # before an explicit @Pear request has been claimed by the queue.
+        latest_persisted_trigger_id = latest_run.trigger_message_id if latest_run else 0
+        pending_explicit_request_ids = [
+            message_id
+            for message_id, content, _sender_is_bot, _sender_name in message_rows
+            if message_id > latest_persisted_trigger_id and is_pear_task_request_message(content)
+        ]
+        latest_request_message_id = max(
+            [
+                *pending_explicit_request_ids,
+                *([latest_persisted_trigger_id] if latest_run else []),
+            ],
+            default=None,
+        )
+        latest_result_message_id = latest_run.result_message_id if latest_run else None
+        if (
+            latest_result_message_id is not None
+            and latest_request_message_id is not None
+            and latest_result_message_id < latest_request_message_id
+        ):
+            latest_result_message_id = None
+
+        active_session = build_pear_active_session_summary(
+            pear_session=pear_session,
+            source="server",
+            stream_exists=True,
+            topic_message_count=message_count,
+            request_count=topic_runs.count() + len(pending_explicit_request_ids),
+            latest_request_message_id=latest_request_message_id,
+            latest_message_id=latest_result_message_id,
+            latest_codex_thread_id=(
+                latest_thread_run.codex_thread_id if latest_thread_run is not None else None
+            ),
+            recent_messages=message_summary["recent_messages"],
+            routing_messages=message_summary["routing_messages"],
+            workspace_context=message_summary["workspace_context"],
+            is_paused=message_summary["is_paused"],
+            response_policy=message_summary["response_policy"],
         )
 
     return json_success(
@@ -1418,7 +1464,7 @@ def get_pear_runs_backend(
     )
     topic_runs: list[PearWorkerRun]
     workspace_node: PearWorkspaceNode | None = None
-    topic_context_record: PearTopicContext | None = None
+    topic_workspace: PearWorkspaceNode | None = None
     if workspace_id is not None:
         workspace_node = PearWorkspaceNode.objects.filter(
             realm=user_profile.realm,
@@ -1435,17 +1481,12 @@ def get_pear_runs_backend(
         )
     elif stream_name is not None and topic_name is not None:
         access_stream_by_name(user_profile, stream_name)
-        topic_context_record = pear_topic_context_for_request(
+        topic_workspace = pear_workspace_for_request(
             user_profile,
             stream_name=stream_name,
             topic_name=topic_name,
         )
-        workspace_node = (
-            topic_context_record.workspace_node
-            if topic_context_record is not None
-            and topic_context_record.workspace_node_id is not None
-            else None
-        )
+        workspace_node = topic_workspace
         shared_run_filter = Q(
             session_kind=PearWorkerRun.SHARED,
             stream_name=stream_name,
@@ -1488,10 +1529,10 @@ def get_pear_runs_backend(
     summary_events_by_run_id = pear_worker_run_summary_events(runs)
     topic_context = None
     if bool(include_context) and stream_name is not None and topic_name is not None:
-        topic_context = serialize_pear_topic_context(
-            topic_context_record
-            if topic_context_record is not None
-            else pear_topic_context_for_request(
+        topic_context = serialize_pear_workspace_context(
+            topic_workspace
+            if topic_workspace is not None
+            else pear_workspace_for_request(
                 user_profile,
                 stream_name=stream_name,
                 topic_name=topic_name,
@@ -1561,7 +1602,7 @@ def update_pear_run_control_event(
     elif event_type in {"pause", "resume"}:
         control_stream = run.source_stream_name if run.session_kind == PearWorkerRun.SIDE else ""
         control_topic = run.source_topic_name if run.session_kind == PearWorkerRun.SIDE else ""
-        set_pear_topic_context_paused(
+        set_pear_workspace_paused(
             run.bot_profile,
             stream=control_stream or run.stream_name,
             topic=control_topic or run.topic_name,
@@ -1610,7 +1651,7 @@ def post_pear_run_not_for_pear_backend(
             "Cancelled after Not for Pear feedback.",
         )
 
-    with transaction.atomic():
+    with transaction.atomic(savepoint=False):
         run = PearWorkerRun.objects.select_for_update().get(id=visible_run.id)
         feedback_exists = run.events.filter(event_type="routing_feedback").exists()
         if not feedback_exists:
@@ -1717,7 +1758,7 @@ def post_pear_side_backend(
 
     side_context_stream = "direct messages"
     side_context_topic = f"side/{dm_message_id}"
-    side_context = ensure_pear_child_topic_context(
+    side_workspace = ensure_pear_child_workspace_node(
         pear_bot.user_profile,
         stream=side_context_stream,
         topic=side_context_topic,
@@ -1732,7 +1773,7 @@ def post_pear_side_backend(
         trigger_message_id=dm_message_id,
         stream_name=side_context_stream,
         topic_name=side_context_topic,
-        workspace_node=side_context.workspace_node,
+        workspace_node=side_workspace,
         session_kind=PearWorkerRun.SIDE,
         source_stream_name=stream_name or "",
         source_topic_name=topic_name or "",

@@ -23,7 +23,7 @@ from zerver.lib.cache import (
 from zerver.lib.exceptions import JsonableError
 from zerver.lib.mention import silent_mention_syntax_for_user, silent_mention_syntax_for_user_group
 from zerver.lib.message import get_last_message_id
-from zerver.lib.pear_worker import maybe_refactor_pear_stream_contexts_on_rename
+from zerver.lib.pear_worker import maybe_refactor_pear_stream_workspaces_on_rename
 from zerver.lib.queue import queue_event_on_commit
 from zerver.lib.stream_color import pick_colors
 from zerver.lib.stream_subscription import (
@@ -1499,7 +1499,7 @@ def do_rename_stream(stream: Stream, new_name: str, user_profile: UserProfile) -
     old_name = stream.name
     stream.name = new_name
     stream.save(update_fields=["name"])
-    pear_context_refactor_message = maybe_refactor_pear_stream_contexts_on_rename(
+    pear_context_refactor_message = maybe_refactor_pear_stream_workspaces_on_rename(
         user_profile,
         old_stream_name=old_name,
         new_stream_name=new_name,

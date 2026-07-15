@@ -918,12 +918,16 @@ class StaticRuntimeContractTest(unittest.TestCase):
         self.assertEqual(caddyfile.count("precompressed gzip"), 2)
         self.assertIn("handle {", caddyfile)
         self.assertIn("reverse_proxy 127.0.0.1:9991", caddyfile)
-        self.assertIn("header_up -Authorization", caddyfile)
         self.assertIn(
-            "header_up Authorization {http.request.header.X-Pear-Upstream-Authorization}",
+            "request_header Authorization {http.request.header.X-Pear-Upstream-Authorization}",
             caddyfile,
         )
         self.assertIn("header_up -X-Pear-Upstream-Authorization", caddyfile)
+        self.assertNotIn("header_up Authorization", caddyfile)
+        self.assertLess(
+            caddyfile.index("request_header Authorization"),
+            caddyfile.index("reverse_proxy 127.0.0.1:9991"),
+        )
         self.assertIn('--caddy-auth-user "$CADDY_BASICAUTH_USER"', update)
         self.assertIn('--caddy-auth-password-file "$CADDY_BASICAUTH_PASSWORD_FILE"', update)
         self.assertIn("/etc/pear/caddy-basic-auth.env", caddy_drop_in)

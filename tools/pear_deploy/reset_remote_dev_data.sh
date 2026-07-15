@@ -100,7 +100,7 @@ State:  $STATE_PATH
 Roster: $ROSTER_STATUS
 
 This command will delete hosted dev conversation history, Pear worker runs,
-topic contexts, sessions, drafts, scheduled messages, extra generated users,
+workspace runtime state, sessions, drafts, scheduled messages, extra generated users,
 all topic worktrees and project caches under /srv/pear-workspaces, and the
 per-topic isolation OS users.
 Re-run with --yes to reset the remote dev data.
@@ -184,7 +184,7 @@ from django.test import RequestFactory
 from zerver.actions.user_settings import do_change_full_name, do_change_user_delivery_email
 from zerver.actions.users import do_change_user_role, do_deactivate_user
 from zerver.models import DirectMessageGroup, Draft, Message, Realm, Stream, UserProfile
-from zerver.models.bots import PearTopicContext, PearWorkerRun, Service
+from zerver.models.bots import PearWorkerRun, Service
 from zerver.models.scheduled_jobs import ScheduledMessage
 from zerver.models.user_topics import UserTopic
 from zerver.models.users import get_user_by_delivery_email
@@ -195,7 +195,6 @@ realm = Realm.objects.get(string_id="zulip")
 # Keep generated channels/settings useful, but remove all generated conversation history.
 Message.objects.all().delete()
 PearWorkerRun.objects.all().delete()
-PearTopicContext.objects.all().delete()
 DirectMessageGroup.objects.all().delete()
 Draft.objects.all().delete()
 ScheduledMessage.objects.all().delete()

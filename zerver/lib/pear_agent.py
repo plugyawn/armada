@@ -133,7 +133,6 @@ def build_pear_addressing_router_prompt(
             f"- response_policy: {active_session['response_policy']}",
             f"- request_count: {active_session['request_count']}",
             f"- latest_request_message_id: {active_session['latest_request_message_id'] or 'None'}",
-            f"- latest_steering: {active_session['latest_steering_instruction'] or 'None'}",
         ]
 
     recent_messages = (
@@ -161,9 +160,9 @@ def build_pear_addressing_router_prompt(
             "Return only the JSON object required by the response schema.",
             "",
             "addressee: pear only when the request is for Pear, Codex, the agent, or the assistant; other for a named/recent human; general for team chatter; uncertain otherwise.",
-            "action: ignore for chatter, ambiguity, acknowledgements, duplicates, and messages for humans; when active_run=yes, steer if this changes or continues Pear's current work; when active_run=no, run for a concrete request or a correction/follow-up to Pear's latest reply.",
+            "action: ignore for chatter, ambiguity, acknowledgements, and messages for humans; when active_run=yes, steer if this changes or continues Pear's current work; when active_run=no, run for a concrete request or a correction/follow-up to Pear's latest reply.",
             "presentation: choose the likely final UI shape: compact, prose, status, explainer, or diff.",
-            "duplicate: true only when the new message repeats a recent request without adding information.",
+            "Treat a repeated concrete request as intentional. Exact transport duplicates are handled outside this model.",
             "When uncertain, use addressee=uncertain and action=ignore.",
             "",
             f"Stream: {stream or 'unknown'}",
@@ -185,7 +184,6 @@ def parse_pear_addressing_json_output(output: str) -> PearAmbientDecision:
         "addressee": "uncertain",
         "action": "ignore",
         "presentation": "compact",
-        "duplicate": False,
     }
     start = output.find("{")
     end = output.rfind("}")
@@ -197,22 +195,21 @@ def parse_pear_addressing_json_output(output: str) -> PearAmbientDecision:
         return ignored
     if not isinstance(parsed, dict):
         return ignored
+    if set(parsed) != {"addressee", "action", "presentation"}:
+        return ignored
     addressee = parsed.get("addressee")
     action = parsed.get("action")
     presentation = parsed.get("presentation")
-    duplicate = parsed.get("duplicate")
     if (
         addressee not in {"pear", "other", "general", "uncertain"}
         or action not in {"ignore", "steer", "run"}
         or presentation not in {"compact", "prose", "status", "explainer", "diff"}
-        or not isinstance(duplicate, bool)
     ):
         return ignored
     return {
         "addressee": cast(PearAmbientAddressee, addressee),
         "action": cast(PearAmbientAction, action),
         "presentation": cast(PearResponsePresentation, presentation),
-        "duplicate": duplicate,
     }
 
 
@@ -227,9 +224,11 @@ def pear_gemini_interaction_output_text(payload: dict[str, Any]) -> str:
         content = step.get("content")
         if not isinstance(content, list):
             continue
-        for part in content:
-            if isinstance(part, dict) and part.get("type") == "text":
-                text_parts.append(str(part.get("text", "")))
+        text_parts.extend(
+            str(part.get("text", ""))
+            for part in content
+            if isinstance(part, dict) and part.get("type") == "text"
+        )
     return "".join(text_parts)
 
 
@@ -297,9 +296,8 @@ class PearGeminiInteractionsAddressingIntentClassifier:
                             "type": "string",
                             "enum": ["compact", "prose", "status", "explainer", "diff"],
                         },
-                        "duplicate": {"type": "boolean"},
                     },
-                    "required": ["addressee", "action", "presentation", "duplicate"],
+                    "required": ["addressee", "action", "presentation"],
                     "additionalProperties": False,
                 },
             },
@@ -348,36 +346,7 @@ class PearGeminiInteractionsAddressingIntentClassifier:
 
 
 def build_pear_codex_developer_instructions() -> str:
-    return "\n".join(
-        [
-            "You are Pear, a Codex-powered pair-programming agent working from a Zulip topic.",
-            "Use the repository and tools available in this runtime to make concrete progress.",
-            (
-                "Treat the runtime cwd as the isolated topic worktree; the Pear/Zulip "
-                "server checkout is not the user's target repo unless the topic context "
-                "explicitly pins it."
-            ),
-            (
-                "README.md and other workspace files are ordinary project content; inspect "
-                "or edit them only when the task calls for it, never as hidden Pear state."
-            ),
-            "Use Codex-native skills from CODEX_HOME/skills when a relevant SKILL.md applies.",
-            (
-                "Track multi-step work with your plan tool and update step statuses as "
-                "you go — the plan renders live for the people in the topic."
-            ),
-            "Keep changes focused on the user's request and verify them before finishing.",
-            "For casual, conversational, choice-only, or answer-only requests, respond directly.",
-            "Do not run repository/session checks just to make a casual reply sound grounded.",
-            "Use tools only when the request needs workspace facts, code changes, external lookup, or verification.",
-            "Resolve references like 'above', 'that', 'what did I ask', and 'who is here' from the recent Zulip transcript below.",
-            "Do not claim you cannot see recent topic history when the transcript below contains the answer.",
-            "Final response requirements:",
-            "- Keep the response concise and suitable for posting back into the Zulip topic.",
-            "- Report evidence in ordinary prose; Pear never parses your wording into hidden state.",
-            "- Use registered native tools for structured UI artifacts when they materially help.",
-        ]
-    )
+    return "You are Pear, a Codex-powered pair-programming agent working from a Zulip topic.\nUse the repository and tools available in this runtime to make concrete progress.\nTreat the runtime cwd as the isolated topic worktree; the Pear/Zulip server checkout is not the user's target repo unless the topic context explicitly pins it.\nREADME.md and other workspace files are ordinary project content; inspect or edit them only when the task calls for it, never as hidden Pear state.\nUse Codex-native skills from CODEX_HOME/skills when a relevant SKILL.md applies.\nTrack multi-step work with your plan tool and update step statuses as you go — the plan renders live for the people in the topic.\nKeep changes focused on the user's request and verify them before finishing.\nFor casual, conversational, choice-only, or answer-only requests, respond directly.\nDo not run repository/session checks just to make a casual reply sound grounded.\nUse tools only when the request needs workspace facts, code changes, external lookup, or verification.\nResolve references like 'above', 'that', 'what did I ask', and 'who is here' from the recent Zulip transcript below.\nDo not claim you cannot see recent topic history when the transcript below contains the answer.\nFinal response requirements:\n- Keep the response concise and suitable for posting back into the Zulip topic.\n- Report evidence in ordinary prose; Pear never parses your wording into hidden state.\n- Use registered native tools for structured UI artifacts when they materially help."
 
 
 def build_pear_codex_turn_prompt(active_session: PearActiveSessionSummary, task: str) -> str:
@@ -403,7 +372,6 @@ def build_pear_codex_turn_prompt(active_session: PearActiveSessionSummary, task:
             ]
         )
 
-    steering = active_session["latest_steering_instruction"] or "None"
     workspace_context = active_session.get("workspace_context", {})
     workspace_lines = [
         f"- repository: {workspace_context.get('repository') or 'unknown'}",
@@ -435,7 +403,6 @@ def build_pear_codex_turn_prompt(active_session: PearActiveSessionSummary, task:
             f"Zulip stream: {active_session['stream']}",
             f"Zulip topic: {active_session['topic']}",
             f"Session state: {active_session['state']}",
-            f"Latest steering: {steering}",
             "",
             "Workspace context:",
             *workspace_lines,
@@ -1006,7 +973,6 @@ class PearDisabledAgentRunner:
         active_session: PearActiveSessionSummary,
         task: str,
         *,
-        collaboration_mode: str | None = None,
         user_input_provider: PearUserInputProvider | None = None,
         event_callback: PearWorkerTranscriptCallback | None = None,
     ) -> Sequence[PearWorkerToolResult]:
@@ -1064,6 +1030,19 @@ class PearCodexAppServerToolRunner:
         self.current_user_input_provider: PearUserInputProvider | None = None
         self.pending_artifacts: list[str] = []
         self.translator = PearCodexAppServerTranscriptTranslator()
+
+    def configure_turn(self, *, model: str, reasoning_effort: str) -> None:
+        """Keep one app-server per worktree; model and effort belong to the turn."""
+        self.model = model
+        self.reasoning_effort = reasoning_effort
+
+    def warm(self, active_session: PearActiveSessionSummary) -> None:
+        latest_thread_id = active_session.get("latest_codex_thread_id")
+        if not isinstance(latest_thread_id, str) or not latest_thread_id.strip():
+            return
+        with self.lock:
+            self.ensure_started()
+            self.ensure_thread(active_session, event_callback=None)
 
     def config_args(self) -> list[str]:
         args: list[str] = []
@@ -1260,7 +1239,7 @@ class PearCodexAppServerToolRunner:
             "item/fileChange/requestApproval",
         }:
             decision = "acceptForSession" if isolated else "decline"
-            subject = params.get("command") or params.get("reason") or method
+            request_detail = params.get("command") or params.get("reason") or method
             event: PearWorkerTranscriptEvent = {
                 "kind": "status",
                 "status": "done",
@@ -1269,7 +1248,7 @@ class PearCodexAppServerToolRunner:
                     if isolated
                     else "Declined an escalation request."
                 ),
-                "body": trim_pear_agent_text(str(subject), limit=300),
+                "body": trim_pear_agent_text(str(request_detail), limit=300),
                 "metadata": {"method": method, "decision": decision},
             }
             return {"decision": decision}, None, event
@@ -1443,9 +1422,7 @@ class PearCodexAppServerToolRunner:
             params["developerInstructions"] = build_pear_codex_developer_instructions()
         return {key: value for key, value in params.items() if value is not None}
 
-    def turn_params(
-        self, thread_id: str, prompt: str, *, collaboration_mode: str | None = None
-    ) -> dict[str, Any]:
+    def turn_params(self, thread_id: str, prompt: str) -> dict[str, Any]:
         params: dict[str, Any] = {
             "threadId": thread_id,
             "input": [{"type": "text", "text": prompt}],
@@ -1456,8 +1433,6 @@ class PearCodexAppServerToolRunner:
             "model": self.model,
             "personality": "pragmatic",
         }
-        if collaboration_mode is not None:
-            params["collaborationMode"] = {"mode": collaboration_mode}
         return {key: value for key, value in params.items() if value is not None}
 
     def ensure_thread(
@@ -1573,7 +1548,6 @@ class PearCodexAppServerToolRunner:
         task: str,
         *,
         event_callback: PearWorkerTranscriptCallback | None = None,
-        collaboration_mode: str | None = None,
         user_input_provider: PearUserInputProvider | None = None,
     ) -> Sequence[PearWorkerToolResult]:
         with self.lock:
@@ -1585,7 +1559,7 @@ class PearCodexAppServerToolRunner:
             prompt = build_pear_codex_turn_prompt(active_session, task)
             result = self.request(
                 "turn/start",
-                self.turn_params(thread_id, prompt, collaboration_mode=collaboration_mode),
+                self.turn_params(thread_id, prompt),
                 event_callback=event_callback,
             )
             turn_id = pear_app_server_turn_id_from_result(result)

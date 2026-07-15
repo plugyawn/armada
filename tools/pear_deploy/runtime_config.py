@@ -26,6 +26,14 @@ RUNTIME_FILES = {
         Path("/etc/systemd/system/pear-zulip-dev.service"),
         0o644,
     ),
+    Path("tools/pear_deploy/runtime/pear-addressing.service"): (
+        Path("/etc/systemd/system/pear-addressing.service"),
+        0o644,
+    ),
+    Path("tools/pear_deploy/rebaseline_pear_schema.py"): (
+        Path("/usr/local/lib/pear-rebaseline-schema"),
+        0o755,
+    ),
 }
 PEAR_ENV_PATH = Path("/home/zulipdev/pear.env")
 PRODUCTION_ASSET_ENV = "ZULIP_DEV_PRODUCTION_ASSETS"

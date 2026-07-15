@@ -4,7 +4,6 @@ from zerver.models.bots import BotConfigData as BotConfigData
 from zerver.models.bots import BotStorageData as BotStorageData
 from zerver.models.bots import PearMonitor as PearMonitor
 from zerver.models.bots import PearProject as PearProject
-from zerver.models.bots import PearTopicContext as PearTopicContext
 from zerver.models.bots import PearWorkerRun as PearWorkerRun
 from zerver.models.bots import PearWorkerRunEvent as PearWorkerRunEvent
 from zerver.models.bots import (

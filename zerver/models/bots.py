@@ -216,9 +216,7 @@ class PearMonitor(models.Model):
     title = models.CharField(max_length=60, blank=True)
     anchor_message_id = models.IntegerField(null=True, db_index=True)
     ask = models.TextField()
-    # Keep the physical column backward-compatible with the pre-artifact
-    # release so a guarded code rollback remains operational after migrations.
-    artifact_spec = models.JSONField(default=dict, db_column="block_spec")
+    artifact_spec = models.JSONField(default=dict)
     recipe = models.JSONField(default=dict)
     cadence_seconds = models.PositiveIntegerField(default=20)
     codex_thread_id = models.TextField(blank=True)
@@ -346,11 +344,8 @@ class PearWorkspaceNode(models.Model):
     date_updated = models.DateTimeField(default=timezone_now)
 
     class Meta:
+        unique_together = ("realm", "stream_name", "topic_name")
         indexes = [
-            models.Index(
-                fields=["realm", "stream_name", "topic_name"],
-                name="zerver_pear_ws_location",
-            ),
             models.Index(
                 fields=["project", "date_updated"],
                 name="zerver_pear_ws_project_upd",
@@ -412,44 +407,5 @@ class PearWorkspaceEntryMutationReceipt(models.Model):
             models.Index(
                 fields=["workspace_node", "state", "date_updated"],
                 name="zerver_pear_ws_mut_state",
-            ),
-        ]
-
-
-class PearTopicContext(models.Model):
-    realm = models.ForeignKey("zerver.Realm", on_delete=CASCADE)
-    stream_name = models.CharField(max_length=60)
-    topic_name = models.CharField(max_length=MAX_TOPIC_NAME_LENGTH)
-    parent_context = models.ForeignKey(
-        "self",
-        null=True,
-        on_delete=SET_NULL,
-        related_name="child_contexts",
-    )
-    model = models.TextField(blank=True)
-    reasoning_effort = models.CharField(max_length=16, blank=True)
-    response_policy = models.CharField(max_length=16, default="ambient")
-    github_repo = models.TextField(blank=True)
-    workdir = models.TextField(blank=True)
-    workspace_node = models.ForeignKey(
-        PearWorkspaceNode,
-        null=True,
-        on_delete=SET_NULL,
-        related_name="legacy_topic_contexts",
-    )
-    is_paused = models.BooleanField(default=False)
-    date_created = models.DateTimeField(default=timezone_now, db_index=True)
-    date_updated = models.DateTimeField(default=timezone_now)
-
-    class Meta:
-        unique_together = ("realm", "stream_name", "topic_name")
-        indexes = [
-            models.Index(
-                fields=["realm", "stream_name", "topic_name"],
-                name="zerver_pear_topic_context",
-            ),
-            models.Index(
-                fields=["realm", "date_updated"],
-                name="zerver_pear_topic_updated",
             ),
         ]

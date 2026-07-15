@@ -20,13 +20,11 @@ REMOTE_AUTH_ENV="/etc/pear/caddy-basic-auth.env"
 WORKSPACE_HELPER_RUNTIME="$SCRIPT_DIR/workspace_helper_runtime.py"
 PEAR_BUILD_SWAP_BYTES=$((8 * 1024 * 1024 * 1024))
 YES=false
-RUN_TESTS=true
-RUN_MIGRATE=true
-RUN_COMPAT=true
-RUN_RUNTIME_SMOKE=false
 RUNTIME_SMOKE_ADMIN_EMAIL=""
 RUNTIME_SMOKE_TIMEOUT=150
 RUNTIME_SMOKE_EVIDENCE=""
+PEAR_SCHEMA_REBASELINE_REQUIRED=false
+PEAR_SCHEMA_REBASELINED=false
 STATE_PATH="$DEFAULT_STATE_PATH"
 
 for env_file in "$PEAR_ROOT/env.local" "$REPO_ROOT/.env.local"; do
@@ -101,14 +99,8 @@ require --yes.
 
 Options:
   --yes             Snapshot, stage/build assets, cut over, migrate, verify, record SHA.
-  --skip-tests      Skip test-backend verification.
-  --skip-migrate    Skip manage.py migrate zerver --noinput.
-  --skip-compat     Skip the local contract compatibility checker.
-  --run-runtime-smoke
-                   Run an opt-in live Pear runtime smoke after queue health.
-                   This posts a real @Pear request and spends a real Codex turn.
   --runtime-smoke-admin-email EMAIL
-                   Admin/devlogin email for --run-runtime-smoke.
+                   Admin/devlogin email for the required live runtime smoke.
   --runtime-smoke-timeout SECONDS
                    Runtime smoke timeout in seconds (default: 150).
   --runtime-smoke-evidence PATH
@@ -126,22 +118,6 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         --yes)
             YES=true
-            shift
-            ;;
-        --skip-tests)
-            RUN_TESTS=false
-            shift
-            ;;
-        --skip-migrate)
-            RUN_MIGRATE=false
-            shift
-            ;;
-        --skip-compat)
-            RUN_COMPAT=false
-            shift
-            ;;
-        --run-runtime-smoke)
-            RUN_RUNTIME_SMOKE=true
             shift
             ;;
         --runtime-smoke-admin-email)
@@ -246,6 +222,10 @@ ssh_zulip_clean() {
     local wrapped
     wrapped="$(printf '%q' "cd $REMOTE_PATH && $command")"
     ssh_root "sudo -Hu zulipdev bash -lc $wrapped"
+}
+
+detect_remote_pear_schema_state() {
+    ssh_zulip "$REMOTE_PATH/.venv/bin/python3 $REMOTE_PATH/manage.py shell -c 'from django.db import connection; cursor = connection.cursor(); cursor.execute(\"SELECT name FROM django_migrations WHERE app = %s AND name LIKE %s\", [\"zerver\", \"08%pear%\"]); names = {row[0] for row in cursor.fetchall()}; current = \"0805_pear_runtime\"; print(\"mixed\" if current in names and len(names) > 1 else \"current\" if current in names else \"legacy\" if names else \"empty\")'"
 }
 
 preflight_remote_workspace_helper() {
@@ -900,6 +880,7 @@ rollback_on_error() {
             "$REMOTE_PATH" \
             "$REMOTE_GIT_COMMON_DIR" \
             "$REMOTE_PEAR_SKILLS_DIR" \
+            "$PEAR_SCHEMA_REBASELINED" \
             "${#PEAR_DEPLOY_RUNTIME_CONFIG_PATHS[@]}" \
             "${PEAR_DEPLOY_RUNTIME_CONFIG_PATHS[@]}" \
             "${#PEAR_DEPLOY_RSYNC_EXCLUDES[@]}" \
@@ -909,8 +890,9 @@ SNAPSHOT_DIR="$1"
 REMOTE_PATH="$2"
 REMOTE_GIT_COMMON_DIR="$3"
 REMOTE_PEAR_SKILLS_DIR="$4"
-RUNTIME_CONFIG_COUNT="$5"
-shift 5
+PEAR_SCHEMA_REBASELINED="$5"
+RUNTIME_CONFIG_COUNT="$6"
+shift 6
 RUNTIME_CONFIG_PATHS=("${@:1:RUNTIME_CONFIG_COUNT}")
 shift "$RUNTIME_CONFIG_COUNT"
 RSYNC_EXCLUDE_COUNT="$1"
@@ -921,7 +903,14 @@ if [[ "${#RSYNC_EXCLUDES[@]}" -ne "$RSYNC_EXCLUDE_COUNT" ]]; then
     exit 1
 fi
 
+REBASELINE_HELPER=""
+if [[ "$PEAR_SCHEMA_REBASELINED" == true ]]; then
+    REBASELINE_HELPER="$(mktemp /tmp/pear-rebaseline-schema.XXXXXX)"
+    install -m 755 /usr/local/lib/pear-rebaseline-schema "$REBASELINE_HELPER"
+fi
+
 systemctl stop caddy pear-worker pear-monitor-worker pear-embedded-bots pear-thumbnail pear-zulip-dev
+systemctl stop pear-addressing 2>/dev/null || true
 
 rsync -a --delete \
     "${RSYNC_EXCLUDES[@]}" \
@@ -963,8 +952,17 @@ if [[ -s "$SNAPSHOT_DIR/runtime-config.paths" ]]; then
     tar -C / -xpf "$SNAPSHOT_DIR/runtime-config.tar"
 fi
 
+if [[ "$PEAR_SCHEMA_REBASELINED" == true ]]; then
+    sudo -Hu zulipdev bash -lc "cd '$REMOTE_PATH' && set -a && . /home/zulipdev/pear.env && set +a && '$REMOTE_PATH/.venv/bin/python3' '$REBASELINE_HELPER' reset --repo-root '$REMOTE_PATH' --yes && '$REMOTE_PATH/.venv/bin/python3' '$REMOTE_PATH/manage.py' migrate zerver --noinput"
+    rm -f "$REBASELINE_HELPER"
+fi
+
 systemctl daemon-reload
-systemctl restart caddy pear-worker pear-monitor-worker pear-embedded-bots pear-thumbnail pear-zulip-dev
+ROLLBACK_SERVICES=(caddy pear-worker pear-monitor-worker pear-embedded-bots pear-thumbnail pear-zulip-dev)
+if systemctl cat pear-addressing >/dev/null 2>&1; then
+    ROLLBACK_SERVICES+=(pear-addressing)
+fi
+systemctl restart "${ROLLBACK_SERVICES[@]}"
 REMOTE
         local rollback_status=$?
         set -e
@@ -1137,6 +1135,25 @@ fi
 echo "Preflight: local Caddy verification password file is a current-user-owned mode-0600 regular non-symlink file."
 
 echo "Preflight: remote tracked/untracked source tree is clean and not ahead of local pear-main."
+REMOTE_PEAR_SCHEMA_STATE="$(detect_remote_pear_schema_state | tail -n 1)"
+case "$REMOTE_PEAR_SCHEMA_STATE" in
+    legacy)
+        PEAR_SCHEMA_REBASELINE_REQUIRED=true
+        echo "Preflight: legacy Pear migration chain will be rebaselined; disposable Pear state will be removed."
+        ;;
+    current)
+        echo "Preflight: Pear database already uses the current migration baseline."
+        ;;
+    empty)
+        echo "Preflight: Pear database has no applied Pear migration; normal migrate will create it."
+        ;;
+    mixed)
+        fail "remote database contains both legacy and current Pear migration baselines"
+        ;;
+    *)
+        fail "could not classify remote Pear migration baseline: $REMOTE_PEAR_SCHEMA_STATE"
+        ;;
+esac
 classify_production_asset_requirement
 if [[ "$ASSET_BUILD_REQUIRED" == true ]]; then
     ASSET_SOURCE_SHA="$LOCAL_SHA"
@@ -1161,6 +1178,7 @@ if [[ "$PREV_SHA" != "$LOCAL_SHA" ]]; then
         zerver/lib/pear_workspace_io.py \
         zerver/lib/pear_workspace_resources.py \
         zerver/worker/pear_worker.py \
+        zerver/worker/pear_addressing.py \
         zerver/views/pear.py \
         zerver/views/pear_workspace.py \
         zerver/views/users.py \
@@ -1180,11 +1198,7 @@ else
     echo "Deploy delta: remote already has this HEAD."
 fi
 
-if [[ "$RUN_COMPAT" == true ]]; then
-    run_local_compat
-else
-    echo "Skipping compat check by request."
-fi
+run_local_compat
 
 verify_remote_quiescence "Preflight quiescence"
 preflight_remote_workspace_helper
@@ -1356,13 +1370,16 @@ ssh_root python3 "$REMOTE_TRUSTED_RUNTIME/tools/pear_deploy/runtime_config.py" v
     --repo-root "$REMOTE_TRUSTED_RUNTIME" \
     --fqdn "$FQDN"
 ssh_root "systemctl daemon-reload"
+ssh_root "systemctl enable ${PEAR_DEPLOY_SERVICES[*]}"
 
-if [[ "$RUN_MIGRATE" == true ]]; then
-    echo "Applying zerver migrations..."
-    ssh_zulip "$REMOTE_PATH/.venv/bin/python3 $REMOTE_PATH/manage.py migrate zerver --noinput"
-else
-    echo "Skipping migration by request."
+if [[ "$PEAR_SCHEMA_REBASELINE_REQUIRED" == true ]]; then
+    echo "Rebaselining disposable Pear schema onto the squashed migration..."
+    ssh_zulip "$REMOTE_PATH/.venv/bin/python3 /usr/local/lib/pear-rebaseline-schema reset --repo-root $REMOTE_PATH --yes"
+    PEAR_SCHEMA_REBASELINED=true
 fi
+
+echo "Applying zerver migrations..."
+ssh_zulip "$REMOTE_PATH/.venv/bin/python3 $REMOTE_PATH/manage.py migrate zerver --noinput"
 
 echo "Restarting Pear services..."
 ssh_root "systemctl restart caddy ${PEAR_DEPLOY_SERVICES[*]}"
@@ -1391,47 +1408,39 @@ if [[ "$AUTHENTICATED_SITE_CODE" != "200" ]]; then
 fi
 verify_remote_production_assets
 
-if [[ "$RUN_TESTS" == true ]]; then
-    echo "Running Pear backend tests on the box..."
-    ssh_zulip_clean "./tools/test-backend \
-        zerver.tests.test_pear \
-        zerver.tests.test_pear_artifact \
-        zerver.tests.test_pear_generated_vector \
-        zerver.tests.test_pear_endpoint \
-        zerver.tests.test_pear_workspace_io \
-        zerver.tests.test_pear_workspace_index \
-        zerver.tests.test_pear_workspace_resources \
-        zerver.tests.test_submessage"
-else
-    echo "Skipping test-backend by request."
-fi
+echo "Running Pear backend tests on the box..."
+ssh_zulip_clean "./tools/test-backend \
+    zerver.tests.test_pear \
+    zerver.tests.test_pear_artifact \
+    zerver.tests.test_pear_generated_vector \
+    zerver.tests.test_pear_endpoint \
+    zerver.tests.test_pear_workspace_io \
+    zerver.tests.test_pear_workspace_index \
+    zerver.tests.test_pear_workspace_resources \
+    zerver.tests.test_submessage"
 
 verify_remote_quiescence "Post-deploy quiescence"
 verify_remote_deployed_source_clean
 
-if [[ "$RUN_RUNTIME_SMOKE" == true ]]; then
-    runtime_smoke="$REPO_ROOT/../tools/pear_dev_smoke.py"
-    if [[ ! -f "$runtime_smoke" ]]; then
-        fail "runtime smoke helper not found: $runtime_smoke"
-    fi
-    if [[ -z "$RUNTIME_SMOKE_EVIDENCE" ]]; then
-        RUNTIME_SMOKE_EVIDENCE="$REPO_ROOT/../var/pear-deploy-runtime-smoke-result.json"
-    fi
-    runtime_smoke_args=(
-        "$runtime_smoke"
-        --use-existing-server
-        --site "https://$FQDN"
-        --smoke-timeout "$RUNTIME_SMOKE_TIMEOUT"
-        --evidence-json "$RUNTIME_SMOKE_EVIDENCE"
-    )
-    if [[ -n "$RUNTIME_SMOKE_ADMIN_EMAIL" ]]; then
-        runtime_smoke_args+=(--admin-email "$RUNTIME_SMOKE_ADMIN_EMAIL")
-    fi
-    echo "Running opt-in Pear runtime smoke..."
-    (cd "$REPO_ROOT/.." && python3 "${runtime_smoke_args[@]}")
-else
-    echo "Skipping opt-in Pear runtime smoke. Pass --run-runtime-smoke to post a real @Pear smoke request."
+runtime_smoke="$REPO_ROOT/../tools/pear_dev_smoke.py"
+if [[ ! -f "$runtime_smoke" ]]; then
+    fail "runtime smoke helper not found: $runtime_smoke"
 fi
+if [[ -z "$RUNTIME_SMOKE_EVIDENCE" ]]; then
+    RUNTIME_SMOKE_EVIDENCE="$REPO_ROOT/../var/pear-deploy-runtime-smoke-result.json"
+fi
+runtime_smoke_args=(
+    "$runtime_smoke"
+    --use-existing-server
+    --site "https://$FQDN"
+    --smoke-timeout "$RUNTIME_SMOKE_TIMEOUT"
+    --evidence-json "$RUNTIME_SMOKE_EVIDENCE"
+)
+if [[ -n "$RUNTIME_SMOKE_ADMIN_EMAIL" ]]; then
+    runtime_smoke_args+=(--admin-email "$RUNTIME_SMOKE_ADMIN_EMAIL")
+fi
+echo "Running required Pear runtime smoke..."
+(cd "$REPO_ROOT/.." && python3 "${runtime_smoke_args[@]}")
 
 echo "Migration tail:"
 ssh_zulip "$REMOTE_PATH/.venv/bin/python3 $REMOTE_PATH/manage.py showmigrations zerver | tail"
@@ -1441,6 +1450,9 @@ ssh_root "systemctl --no-pager --full status ${PEAR_DEPLOY_SERVICES[*]}" | sed -
 
 echo "pear-worker log tail:"
 ssh_root 'journalctl -u pear-worker -n 40 --no-pager'
+
+echo "pear-addressing log tail:"
+ssh_root 'journalctl -u pear-addressing -n 40 --no-pager'
 
 echo "pear-zulip-dev recent log tail:"
 ssh_root 'journalctl -u pear-zulip-dev -n 80 --no-pager'

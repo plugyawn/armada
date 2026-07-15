@@ -178,7 +178,7 @@ type PearRunEvent = z.infer<typeof pear_run_event_schema>;
 type PearRun = z.infer<typeof pear_run_schema>;
 type PearRunsResponse = z.infer<typeof pear_runs_response_schema>;
 type PearGitContext = z.infer<typeof pear_git_context_schema>;
-type PearTopicContext = z.infer<typeof pear_topic_context_schema>;
+type PearWorkspaceContext = z.infer<typeof pear_topic_context_schema>;
 type PearGitCommit = z.infer<typeof pear_git_commit_schema>;
 
 type PearWorkbenchView = "diff" | "history" | "side";
@@ -186,16 +186,14 @@ type PearDisplayTopicContext = NonNullable<ReturnType<typeof display_topic_conte
 
 let initialized = false;
 let refresh_timer: number | undefined;
-let live_refresh_timer: number | undefined;
 let live_refresh_in_flight = false;
-let live_refresh_backoff_until = 0;
 let last_error = "";
 // When an error auto-opens the workbench, closing it sets this so the 5s
 // poll's still-present error can't re-force the popover open on the next
 // render. Reset whenever a successful fetch clears last_error.
 let error_dismissed = false;
 let last_runs: PearRun[] = [];
-let last_topic_context: PearTopicContext | null | undefined;
+let last_topic_context: PearWorkspaceContext | null | undefined;
 let resize_render_frame_id: number | undefined;
 let last_render_state_key = "";
 let last_context_refresh_key = "";
@@ -206,17 +204,14 @@ const work_panel_open_by_context = new Map<string, boolean>();
 const contexts_with_active_run = new Set<string>();
 const workbench_view_by_context = new Map<string, PearWorkbenchView>();
 const side_request_by_context = new Map<string, string>();
-const topic_context_by_context = new Map<string, PearTopicContext>();
+const topic_context_by_context = new Map<string, PearWorkspaceContext>();
 let workbench_anchor_element: HTMLElement | undefined;
 let workbench_anchor_context_key = "";
 type WorkbenchAnchorKind = "context" | "git";
 let workbench_anchor_kind: WorkbenchAnchorKind | undefined;
 let last_observed_context_key = "";
-const LIVE_REFRESH_INTERVAL_MS = 500;
-const LIVE_REFRESH_RATE_LIMIT_BACKOFF_MS = 1500;
-// Idle keepalive only: message/update_message events drive refreshes the
-// moment anything happens in the topic (notify_topic_message_activity),
-// so the blind poll just covers dropped events.
+// Message/update_message events carry live run changes. This low-frequency
+// reconciliation covers reconnects or dropped events; it is not a live poll.
 const FULL_REFRESH_INTERVAL_MS = 30_000;
 const EVENT_REFRESH_DEBOUNCE_MS = 250;
 const CONTEXT_REFRESH_INTERVAL_MS = 60_000;
@@ -292,7 +287,7 @@ function status_marker(status: string): string {
 export const status_marker_for_testing = status_marker;
 export const status_label_for_testing = status_label;
 
-function next_effort_for_model(topic_context: PearTopicContext, model: string): string {
+function next_effort_for_model(topic_context: PearWorkspaceContext, model: string): string {
     const efforts = model_reasoning_efforts(topic_context, model);
     if (efforts.some((choice) => choice.effort === topic_context.reasoning_effort)) {
         return topic_context.reasoning_effort;
@@ -318,7 +313,7 @@ export function panel_runtime_label_for_testing(options: {
 }
 
 function full_reasoning_effort_label(
-    topic_context: PearTopicContext,
+    topic_context: PearWorkspaceContext,
     effort = topic_context.reasoning_effort,
 ): string {
     return first_nonempty(
@@ -328,7 +323,7 @@ function full_reasoning_effort_label(
     );
 }
 
-function display_model_label(topic_context: PearTopicContext): string {
+function display_model_label(topic_context: PearWorkspaceContext): string {
     const catalog_entry = topic_context.model_catalog?.find(
         (entry) => entry.slug === topic_context.model,
     );
@@ -389,10 +384,10 @@ function current_context_key(): string {
 }
 
 function topic_context_matches(
-    topic_context: PearTopicContext | null | undefined,
+    topic_context: PearWorkspaceContext | null | undefined,
     stream: string | undefined,
     topic: string | undefined,
-): topic_context is PearTopicContext {
+): topic_context is PearWorkspaceContext {
     return (
         stream !== undefined &&
         topic !== undefined &&
@@ -404,16 +399,16 @@ function topic_context_matches(
 function cached_topic_context(
     stream: string | undefined,
     topic: string | undefined,
-): PearTopicContext | undefined {
+): PearWorkspaceContext | undefined {
     return topic_context_by_context.get(context_key(stream, topic));
 }
 
 export function topic_context_for_display_for_testing(options: {
     stream: string | undefined;
     topic: string | undefined;
-    render_topic_context: PearTopicContext | null | undefined;
-    cached_topic_context: PearTopicContext | undefined;
-}): PearTopicContext | undefined {
+    render_topic_context: PearWorkspaceContext | null | undefined;
+    cached_topic_context: PearWorkspaceContext | undefined;
+}): PearWorkspaceContext | undefined {
     if (topic_context_matches(options.render_topic_context, options.stream, options.topic)) {
         return options.render_topic_context;
     }
@@ -423,8 +418,8 @@ export function topic_context_for_display_for_testing(options: {
 function display_source_topic_context(
     stream: string | undefined,
     topic: string | undefined,
-    topic_context: PearTopicContext | null | undefined = last_topic_context,
-): PearTopicContext | undefined {
+    topic_context: PearWorkspaceContext | null | undefined = last_topic_context,
+): PearWorkspaceContext | undefined {
     return topic_context_for_display_for_testing({
         stream,
         topic,
@@ -714,8 +709,8 @@ function display_run(run: PearRun): PearRun & {
     };
 }
 
-function display_topic_context(topic_context: PearTopicContext | undefined | null):
-    | (PearTopicContext & {
+function display_topic_context(topic_context: PearWorkspaceContext | undefined | null):
+    | (PearWorkspaceContext & {
           has_changed_files: boolean;
           has_recent_commits: boolean;
           changed_label: string;
@@ -1306,10 +1301,6 @@ function active_display_run(runs: PearRun[]): ReturnType<typeof display_run> | u
     return active_run === undefined ? undefined : display_run(active_run);
 }
 
-function run_is_active(run: {status: string} | undefined): boolean {
-    return run?.status === "running" || run?.status === "queued";
-}
-
 function has_active_run(runs: {status: string}[]): boolean {
     return runs.some((run) => run.status === "running" || run.status === "queued");
 }
@@ -1393,7 +1384,7 @@ function record_context_refresh(stream: string | undefined, topic: string | unde
     last_context_refresh_at = Date.now();
 }
 
-function remember_topic_context(topic_context: PearTopicContext | null | undefined): void {
+function remember_topic_context(topic_context: PearWorkspaceContext | null | undefined): void {
     if (topic_context === undefined || topic_context === null) {
         return;
     }
@@ -1435,7 +1426,7 @@ function notify_topic_context_listeners(): void {
 export function shared_topic_context(
     stream: string | undefined,
     topic: string | undefined,
-): PearTopicContext | undefined {
+): PearWorkspaceContext | undefined {
     return cached_topic_context(stream, topic);
 }
 
@@ -1472,13 +1463,6 @@ export function handle_narrow_activated(): void {
     refresh({force_context: true});
 }
 
-function clear_live_refresh(): void {
-    if (live_refresh_timer !== undefined) {
-        window.clearTimeout(live_refresh_timer);
-        live_refresh_timer = undefined;
-    }
-}
-
 let event_refresh_timer: number | undefined;
 
 export function should_event_refresh_for_testing(options: {
@@ -1513,21 +1497,6 @@ export function notify_topic_message_activity(stream_name: string, topic_name: s
     }, EVENT_REFRESH_DEBOUNCE_MS);
 }
 
-function schedule_live_refresh(active_run: {status: string} | undefined): void {
-    if (!initialized || !run_is_active(active_run)) {
-        clear_live_refresh();
-        return;
-    }
-    if (live_refresh_timer !== undefined || live_refresh_in_flight) {
-        return;
-    }
-    const delay = Math.max(LIVE_REFRESH_INTERVAL_MS, live_refresh_backoff_until - Date.now());
-    live_refresh_timer = window.setTimeout(() => {
-        live_refresh_timer = undefined;
-        refresh({live: true});
-    }, delay);
-}
-
 function render_state_key(render_state: object): string {
     return JSON.stringify(render_state);
 }
@@ -1535,10 +1504,10 @@ function render_state_key(render_state: object): string {
 export function topic_context_after_refresh_for_testing(options: {
     include_context: boolean;
     live: boolean;
-    response_topic_context: PearTopicContext | null | undefined;
-    last_topic_context: PearTopicContext | null | undefined;
-    cached_topic_context?: PearTopicContext | null | undefined;
-}): PearTopicContext | null | undefined {
+    response_topic_context: PearWorkspaceContext | null | undefined;
+    last_topic_context: PearWorkspaceContext | null | undefined;
+    cached_topic_context?: PearWorkspaceContext | null | undefined;
+}): PearWorkspaceContext | null | undefined {
     if (options.response_topic_context !== undefined && options.response_topic_context !== null) {
         return options.response_topic_context;
     }
@@ -1553,14 +1522,6 @@ export function render_state_changed_for_testing(
     render_state: object,
 ): boolean {
     return previous_key !== render_state_key(render_state);
-}
-
-function pear_rate_limit_backoff_ms(xhr: JQuery.jqXHR): number {
-    const retry_after = Number(xhr.getResponseHeader("retry-after"));
-    if (Number.isFinite(retry_after) && retry_after > 0) {
-        return Math.max(LIVE_REFRESH_RATE_LIMIT_BACKOFF_MS, Math.ceil(retry_after * 1000));
-    }
-    return LIVE_REFRESH_RATE_LIMIT_BACKOFF_MS;
 }
 
 let last_workspace_rail_signature = "";
@@ -1630,7 +1591,7 @@ function pear_rail_run_entries(runs: PearRun[]): PearRailRunEntry[] {
 }
 
 function render_workspace_rail(
-    topic_context: PearTopicContext | undefined,
+    topic_context: PearWorkspaceContext | undefined,
     runs: PearRun[] = last_runs,
 ): void {
     const $rail = $("#pear-workspace-rail");
@@ -1685,7 +1646,7 @@ function render_workspace_rail(
 
 function render(
     runs: PearRun[] = last_runs,
-    topic_context: PearTopicContext | null | undefined = last_topic_context,
+    topic_context: PearWorkspaceContext | null | undefined = last_topic_context,
 ): void {
     last_runs = runs;
     const {stream, topic} = current_context();
@@ -1831,7 +1792,6 @@ function render(
     }
     $panel.toggleClass("pear-panel-collapsed", !panel_open);
     set_workbench_popover_open(workbench_open);
-    schedule_live_refresh(active_run);
     notify_topic_context_listeners();
 }
 
@@ -1839,9 +1799,8 @@ export function polling_paused_for_testing(options: {
     hidden: boolean;
     force_context: boolean;
 }): boolean {
-    // Skip timer-driven polls on a hidden tab (they otherwise keep spending the
-    // 500ms/5s /json/pear/runs rate budget in the background); explicit forced
-    // refreshes still run, and a visibilitychange listener catches up on return.
+    // Skip reconciliation on a hidden tab; an explicit forced refresh still
+    // runs, and a visibilitychange listener catches up on return.
     return options.hidden && !options.force_context;
 }
 
@@ -1854,9 +1813,6 @@ export function refresh(options: {force_context?: boolean; live?: boolean} = {})
             force_context: options.force_context === true,
         })
     ) {
-        return;
-    }
-    if (!live && has_active_run(last_runs) && live_refresh_backoff_until > Date.now()) {
         return;
     }
     if (live && live_refresh_in_flight) {
@@ -1882,9 +1838,6 @@ export function refresh(options: {force_context?: boolean; live?: boolean} = {})
         url: "/json/pear/runs",
         data,
         success(raw_data) {
-            if (live) {
-                live_refresh_backoff_until = 0;
-            }
             if (!is_pear_runs_response(raw_data)) {
                 last_error = $t({defaultMessage: "Pear returned an invalid runs payload."});
                 render();
@@ -1916,18 +1869,19 @@ export function refresh(options: {force_context?: boolean; live?: boolean} = {})
             if (xhr.readyState === 0) {
                 return;
             }
-            if ((live || has_active_run(last_runs)) && xhr.status === 429) {
-                live_refresh_backoff_until = Date.now() + pear_rate_limit_backoff_ms(xhr);
-                return;
-            }
-            last_error = $t({defaultMessage: "Pear status is unavailable."});
+            last_error =
+                xhr.status === 429
+                    ? $t({
+                          defaultMessage:
+                              "Pear status is rate limited; waiting for the next event.",
+                      })
+                    : $t({defaultMessage: "Pear status is unavailable."});
             blueslip.warn(`Failed to fetch Pear runs: ${xhr.responseText}`);
             render();
         },
         complete() {
             if (live) {
                 live_refresh_in_flight = false;
-                schedule_live_refresh(active_display_run(last_runs));
             }
         },
     });
@@ -1948,9 +1902,9 @@ function post_run_action(run_id: string, action: string): void {
 }
 
 export function optimistic_topic_context_for_testing(
-    topic_context: PearTopicContext,
+    topic_context: PearWorkspaceContext,
     options: {model?: string; reasoning_effort?: string},
-): PearTopicContext {
+): PearWorkspaceContext {
     const model = options.model ?? topic_context.model;
     const reasoning_effort =
         options.reasoning_effort ??
@@ -2112,6 +2066,5 @@ export function stop(): void {
     $(window).off("scroll.pear_panel");
     $(document).off("click.pear_panel");
     $(document).off("visibilitychange.pear_panel");
-    clear_live_refresh();
     live_refresh_in_flight = false;
 }

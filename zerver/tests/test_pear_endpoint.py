@@ -26,7 +26,6 @@ from zerver.lib.pear import (
     PEAR_OFFICIAL_AGENT_RUNTIME_LABEL,
     PEAR_OFFICIAL_CODEX_SDK_PACKAGES,
     PEAR_RUNS_ENDPOINT,
-    PEAR_SESSION_CHECKLIST,
     PEAR_SESSION_ENDPOINT,
     PEAR_SIDE_ENDPOINT,
     PEAR_TOPIC_CONTEXT_ENDPOINT,
@@ -34,9 +33,11 @@ from zerver.lib.pear import (
     get_pear_session_payload,
     write_pear_live_run_state,
 )
+from zerver.lib.pear_agent import PearProcessIsolation
 from zerver.lib.pear_gate import (
     get_pear_followup_service_bot_event,
     get_selected_pear_bot_user_id_for_realm,
+    invalidate_pear_selected_bot_cache,
     pear_selected_bot_cache_key,
 )
 from zerver.lib.pear_monitor import (
@@ -46,6 +47,7 @@ from zerver.lib.pear_monitor import (
     pear_apply_monitor_setup_result,
     pear_monitor_apply_tick,
     pear_monitor_bind_data,
+    pear_monitor_run_recipe_command,
     pear_monitor_spec_relative_path,
     pear_validate_monitor_spec,
 )
@@ -54,13 +56,13 @@ from zerver.lib.pear_worker import (
     build_pear_worker_runtime_from_settings,
     build_pear_workspace_context,
     clone_or_update_pear_repository_workdir,
-    configure_pear_channel_repository_context,
-    ensure_pear_topic_context,
+    configure_pear_channel_repository_workspace,
     ensure_pear_topic_workdir,
+    ensure_pear_workspace_node,
     invalidate_pear_git_status_delta,
     load_pear_active_session_from_zulip,
-    maybe_refactor_pear_stream_contexts_on_rename,
-    maybe_refactor_pear_topic_context_on_move,
+    maybe_refactor_pear_stream_workspaces_on_rename,
+    maybe_refactor_pear_workspace_on_move,
     pear_expected_topic_workdir,
     pear_git_current_branch_name,
     pear_git_output,
@@ -86,7 +88,6 @@ from zerver.models import Message, Recipient, Subscription, UserProfile
 from zerver.models.bots import (
     PearMonitor,
     PearProject,
-    PearTopicContext,
     PearWorkerRun,
     PearWorkerRunEvent,
     PearWorkspaceNode,
@@ -95,10 +96,10 @@ from zerver.models.streams import get_stream
 from zerver.views.pear import (
     build_pear_git_context,
     extract_pear_codex_model_catalog,
-    pear_context_isolation_username,
     pear_worker_run_summary_events,
-    serialize_pear_topic_context,
+    pear_workspace_isolation_username,
     serialize_pear_worker_run,
+    serialize_pear_workspace_context,
 )
 
 
@@ -139,9 +140,7 @@ class PearSessionEndpointTest(ZulipTestCase):
         self.assertEqual(pear_session["agent_name"], "Pear")
         self.assertEqual(pear_session["stream"], PEAR_DEFAULT_STREAM)
         self.assertEqual(pear_session["topic"], PEAR_DEFAULT_TOPIC)
-        self.assertEqual(pear_session["checklist"], list(PEAR_SESSION_CHECKLIST))
         self.assertIn("@**Pear**", pear_session["seed_message"])
-        self.assertIn("Steering update:", pear_session["steer_message"])
         self.assertIn("Fix bug:", pear_session["fix_bug_message"])
         self.assertIn("Status check:", pear_session["status_check_message"])
         self.assertIn("Handoff summary:", pear_session["handoff_message"])
@@ -155,9 +154,6 @@ class PearSessionEndpointTest(ZulipTestCase):
         self.assertIn("Save work:", pear_session["save_work_message"])
         self.assertIn("Verify changes:", pear_session["verify_changes_message"])
         self.assertIn("Draft artifact:", pear_session["draft_artifact_message"])
-        self.assertIn("What can you access", pear_session["access_message"])
-        self.assertIn("Pause session:", pear_session["pause_message"])
-        self.assertIn("Resume session:", pear_session["resume_message"])
         self.assertEqual(
             pear_session["official_agent_runtime"],
             PEAR_OFFICIAL_AGENT_RUNTIME,
@@ -419,6 +415,7 @@ class PearSessionEndpointTest(ZulipTestCase):
             bot_type=UserProfile.EMBEDDED_BOT,
             service_name=PEAR_EMBEDDED_BOT_SERVICE,
         )
+        self.addCleanup(invalidate_pear_selected_bot_cache, user.realm_id)
         run = PearWorkerRun.objects.create(
             realm=user.realm,
             bot_profile=pear_bot,
@@ -669,7 +666,7 @@ class PearSessionEndpointTest(ZulipTestCase):
         self.subscribe(owner, PEAR_DEFAULT_STREAM)
         self.login_user(owner)
 
-        with patch("zerver.views.pear.ensure_pear_topic_context") as ensure_context:
+        with patch("zerver.views.pear.ensure_pear_workspace_node") as ensure_context:
             result = self.client_get(
                 f"/json{PEAR_RUNS_ENDPOINT}",
                 {
@@ -811,7 +808,7 @@ class PearSessionEndpointTest(ZulipTestCase):
                 content="can someone check the failing test?",
                 mentioned_user_ids=set(),
             )
-            PearTopicContext.objects.create(
+            PearWorkspaceNode.objects.create(
                 realm=owner.realm,
                 stream_name=PEAR_DEFAULT_STREAM,
                 topic_name="quiet-context",
@@ -1042,7 +1039,7 @@ class PearSessionEndpointTest(ZulipTestCase):
             self.assertEqual(context_payload["workdir"], "")
             self.assertFalse(context_payload["git"]["available"])
             self.assertFalse(
-                PearTopicContext.objects.filter(
+                PearWorkspaceNode.objects.filter(
                     realm=owner.realm,
                     stream_name=PEAR_DEFAULT_STREAM,
                     topic_name=PEAR_DEFAULT_TOPIC,
@@ -1086,7 +1083,7 @@ class PearSessionEndpointTest(ZulipTestCase):
         self.assertEqual(runs_payload["reasoning_effort"], "medium")
         build_git_context.assert_not_called()
 
-    def test_ensure_pear_topic_context_does_not_create_readme(self) -> None:
+    def test_ensure_pear_workspace_node_does_not_create_readme(self) -> None:
         owner = self.example_user("hamlet")
         topic_name = "isolated topic"
 
@@ -1101,7 +1098,7 @@ class PearSessionEndpointTest(ZulipTestCase):
                 return_value="main",
             ),
         ):
-            context = ensure_pear_topic_context(
+            context = ensure_pear_workspace_node(
                 owner,
                 stream=PEAR_DEFAULT_STREAM,
                 topic=topic_name,
@@ -1113,12 +1110,14 @@ class PearSessionEndpointTest(ZulipTestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             self.assertEqual(pear_read_text_path(Path(temp_dir) / "missing.md"), "")
 
-        with patch(
-            "zerver.lib.pear_worker.Path.read_text",
-            side_effect=PermissionError,
+        with (
+            patch(
+                "zerver.lib.pear_worker.Path.read_text",
+                side_effect=PermissionError,
+            ),
+            self.assertRaises(OSError),
         ):
-            with self.assertRaises(OSError):
-                pear_read_text_path(Path("/unreadable/README.md"))
+            pear_read_text_path(Path("/unreadable/README.md"))
 
     def test_existing_base_workdir_topic_context_is_repaired(self) -> None:
         owner = self.example_user("hamlet")
@@ -1127,7 +1126,7 @@ class PearSessionEndpointTest(ZulipTestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             base_workdir = str(Path(temp_dir) / "base")
             topic_root = str(Path(temp_dir) / "topics")
-            PearTopicContext.objects.create(
+            PearWorkspaceNode.objects.create(
                 realm=owner.realm,
                 stream_name=PEAR_DEFAULT_STREAM,
                 topic_name=PEAR_DEFAULT_TOPIC,
@@ -1138,7 +1137,7 @@ class PearSessionEndpointTest(ZulipTestCase):
                 PEAR_WORKER_WORKDIR=base_workdir,
                 PEAR_TOPIC_WORKDIR_ROOT=topic_root,
             ):
-                context = ensure_pear_topic_context(
+                context = ensure_pear_workspace_node(
                     owner,
                     stream=PEAR_DEFAULT_STREAM,
                     topic=PEAR_DEFAULT_TOPIC,
@@ -1179,7 +1178,7 @@ class PearSessionEndpointTest(ZulipTestCase):
                 PEAR_WORKER_WORKDIR=str(base_workdir),
                 PEAR_TOPIC_WORKDIR_ROOT=topic_root,
             ):
-                context = ensure_pear_topic_context(
+                context = ensure_pear_workspace_node(
                     owner,
                     stream=PEAR_DEFAULT_STREAM,
                     topic=topic,
@@ -1196,12 +1195,10 @@ class PearSessionEndpointTest(ZulipTestCase):
             # A fresh topic workspace works on a branch named for its
             # topic, so sibling topics never fight over the base branch.
             self.assertEqual(actual_branch, topic)
-            assert context.workspace_node is not None
-            context.workspace_node.refresh_from_db()
-            self.assertEqual(context.workspace_node.stream_name, PEAR_DEFAULT_STREAM)
-            self.assertEqual(context.workspace_node.topic_name, topic)
-            self.assertEqual(context.workspace_node.workdir, context.workdir)
-            self.assertEqual(context.workspace_node.branch_name, actual_branch)
+            context.refresh_from_db()
+            self.assertEqual(context.stream_name, PEAR_DEFAULT_STREAM)
+            self.assertEqual(context.topic_name, topic)
+            self.assertEqual(context.branch_name, actual_branch)
             self.assertEqual(
                 subprocess.run(
                     ["git", "-C", context.workdir, "rev-parse", "--is-inside-work-tree"],
@@ -1228,21 +1225,20 @@ class PearSessionEndpointTest(ZulipTestCase):
                 PEAR_WORKER_WORKDIR=str(base_workdir),
                 PEAR_TOPIC_WORKDIR_ROOT=str(Path(temp_dir) / "topics"),
             ):
-                context = ensure_pear_topic_context(
+                context = ensure_pear_workspace_node(
                     owner,
                     stream=PEAR_DEFAULT_STREAM,
                     topic=PEAR_DEFAULT_TOPIC,
                 )
-                payload = serialize_pear_topic_context(
+                payload = serialize_pear_workspace_context(
                     context,
                     stream_name=PEAR_DEFAULT_STREAM,
                     topic_name=PEAR_DEFAULT_TOPIC,
                 )
 
-        assert context.workspace_node is not None
-        self.assertEqual(payload["workspace_id"], context.workspace_node_id)
-        self.assertEqual(payload["workspace_uuid"], str(context.workspace_node.uuid))
-        self.assertEqual(payload["branch"], context.workspace_node.branch_name)
+        self.assertEqual(payload["workspace_id"], context.id)
+        self.assertEqual(payload["workspace_uuid"], str(context.uuid))
+        self.assertEqual(payload["branch"], context.branch_name)
         # Fresh workspaces work on the topic-derived branch, so clients can
         # collapse the redundant branch chip in the topic header.
         self.assertEqual(payload["branch"], pear_topic_branch_name(PEAR_DEFAULT_TOPIC))
@@ -1251,13 +1247,13 @@ class PearSessionEndpointTest(ZulipTestCase):
         self.assertEqual(payload["head"], "")
 
         # A legacy or custom branch is surprising and must stay visible.
-        context.workspace_node.branch_name = "master"
-        context.workspace_node.save(update_fields=["branch_name"])
+        context.branch_name = "master"
+        context.save(update_fields=["branch_name"])
         with (
             tempfile.TemporaryDirectory() as temp_dir,
             self.settings(PEAR_TOPIC_WORKDIR_ROOT=temp_dir),
         ):
-            legacy_payload = serialize_pear_topic_context(
+            legacy_payload = serialize_pear_workspace_context(
                 context,
                 stream_name=PEAR_DEFAULT_STREAM,
                 topic_name=PEAR_DEFAULT_TOPIC,
@@ -1267,14 +1263,14 @@ class PearSessionEndpointTest(ZulipTestCase):
 
         # The empty topic ("general chat") derives the trunk default, so
         # its branch is also recognized as default rather than surprising.
-        context.workspace_node.branch_name = "main"
-        context.workspace_node.topic_name = ""
-        context.workspace_node.save(update_fields=["branch_name", "topic_name"])
+        context.branch_name = "main"
+        context.topic_name = ""
+        context.save(update_fields=["branch_name", "topic_name"])
         with (
             tempfile.TemporaryDirectory() as temp_dir,
             self.settings(PEAR_TOPIC_WORKDIR_ROOT=temp_dir),
         ):
-            trunk_payload = serialize_pear_topic_context(
+            trunk_payload = serialize_pear_workspace_context(
                 context,
                 stream_name=PEAR_DEFAULT_STREAM,
                 topic_name="",
@@ -1340,14 +1336,14 @@ class PearSessionEndpointTest(ZulipTestCase):
                 topic=PEAR_DEFAULT_TOPIC,
             )
             run = PearWorkerRun.objects.get(trigger_message_id=9876)
-            context = PearTopicContext.objects.get(
+            context = PearWorkspaceNode.objects.get(
                 realm=owner.realm,
                 stream_name=PEAR_DEFAULT_STREAM,
                 topic_name=PEAR_DEFAULT_TOPIC,
             )
 
         self.assertTrue(started)
-        self.assertEqual(run.workspace_node_id, context.workspace_node_id)
+        self.assertEqual(run.workspace_node_id, context.id)
 
     def test_topic_worker_sandbox_downgrades_full_access_to_workspace_write(self) -> None:
         owner = self.example_user("hamlet")
@@ -1364,7 +1360,7 @@ class PearSessionEndpointTest(ZulipTestCase):
                 PEAR_TOPIC_ISOLATION_BACKEND="codex-sandbox",
                 PEAR_WORKER_SANDBOX="danger-full-access",
             ):
-                context = ensure_pear_topic_context(
+                context = ensure_pear_workspace_node(
                     owner,
                     stream=PEAR_DEFAULT_STREAM,
                     topic="isolated topic",
@@ -1401,7 +1397,7 @@ class PearSessionEndpointTest(ZulipTestCase):
                 PEAR_TOPIC_ISOLATION_BACKEND="os-user",
                 PEAR_WORKER_SANDBOX="workspace-write",
             ):
-                context = ensure_pear_topic_context(
+                context = ensure_pear_workspace_node(
                     owner,
                     stream=PEAR_DEFAULT_STREAM,
                     topic="isolated topic",
@@ -1473,7 +1469,7 @@ class PearSessionEndpointTest(ZulipTestCase):
                 side_effect=fake_clone,
             ),
         ):
-            channel_context = configure_pear_channel_repository_context(
+            channel_context = configure_pear_channel_repository_workspace(
                 owner,
                 stream="megatron-lm",
                 repository_url=repository_url,
@@ -1484,7 +1480,7 @@ class PearSessionEndpointTest(ZulipTestCase):
             )
             project.default_base_ref = "dev"
             project.save(update_fields=["default_base_ref", "date_updated"])
-            topic_context = ensure_pear_topic_context(
+            topic_context = ensure_pear_workspace_node(
                 owner,
                 stream="megatron-lm",
                 topic="optimizer work",
@@ -1518,7 +1514,7 @@ class PearSessionEndpointTest(ZulipTestCase):
             )
             calls = []
 
-            def fake_run(command, **kwargs):
+            def fake_run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
                 calls.append((command, kwargs))
                 return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
 
@@ -1623,7 +1619,7 @@ class PearSessionEndpointTest(ZulipTestCase):
                 PEAR_WORKER_WORKDIR=str(base_workdir),
                 PEAR_TOPIC_WORKDIR_ROOT=str(unsafe_topic_root),
             ):
-                context = ensure_pear_topic_context(
+                context = ensure_pear_workspace_node(
                     owner,
                     stream=PEAR_DEFAULT_STREAM,
                     topic="outside-root",
@@ -1777,15 +1773,8 @@ class PearSessionEndpointTest(ZulipTestCase):
 
     def test_pear_git_status_delta_uses_cache_until_invalidated(self) -> None:
         invalidate_pear_git_status_delta()
-        clean_status = "\n".join(
-            [
-                "# branch.oid 1234567890abcdef",
-                "# branch.head topic-a",
-                "# branch.upstream origin/topic-a",
-                "# branch.ab +2 -1",
-            ]
-        )
-        dirty_status = "\n".join([clean_status, "1 .M N... 100644 100644 100644 a b file.txt"])
+        clean_status = "# branch.oid 1234567890abcdef\n# branch.head topic-a\n# branch.upstream origin/topic-a\n# branch.ab +2 -1"
+        dirty_status = f"{clean_status}\n1 .M N... 100644 100644 100644 a b file.txt"
 
         # Each refresh issues three git commands (status, log -1,
         # rev-list --count); the commit-info calls return "" here.
@@ -1810,18 +1799,7 @@ class PearSessionEndpointTest(ZulipTestCase):
 
     def test_pear_git_status_delta_reports_structured_changed_files(self) -> None:
         invalidate_pear_git_status_delta()
-        status_output = "\n".join(
-            [
-                "# branch.oid 1234567890abcdef",
-                "# branch.head topic-a",
-                "1 .M N... 100644 100644 100644 a b modified.txt",
-                "1 A. N... 000000 100644 100644 a b added.txt",
-                "1 D. N... 100644 000000 000000 a b deleted.txt",
-                "2 R. N... 100644 100644 100644 a b R100 renamed.txt\told-name.txt",
-                "u UU N... 100644 100644 100644 100644 a b c conflicted.txt",
-                "? untracked.txt",
-            ]
-        )
+        status_output = "# branch.oid 1234567890abcdef\n# branch.head topic-a\n1 .M N... 100644 100644 100644 a b modified.txt\n1 A. N... 000000 100644 100644 a b added.txt\n1 D. N... 100644 000000 000000 a b deleted.txt\n2 R. N... 100644 100644 100644 a b R100 renamed.txt\told-name.txt\nu UU N... 100644 100644 100644 100644 a b c conflicted.txt\n? untracked.txt"
 
         with patch(
             "zerver.lib.pear_worker.pear_git_output",
@@ -1845,13 +1823,8 @@ class PearSessionEndpointTest(ZulipTestCase):
 
     def test_pear_git_status_delta_runs_bounded_git_commands(self) -> None:
         invalidate_pear_git_status_delta()
-        status_output = "\n".join(
-            [
-                "# branch.oid 1234567890abcdef",
-                "# branch.head topic-a",
-                "# branch.ab +0 -0",
-                "? new.txt",
-            ]
+        status_output = (
+            "# branch.oid 1234567890abcdef\n# branch.head topic-a\n# branch.ab +0 -0\n? new.txt"
         )
         completed = subprocess.CompletedProcess(
             ["git"],
@@ -1859,8 +1832,12 @@ class PearSessionEndpointTest(ZulipTestCase):
             stdout=status_output,
             stderr="",
         )
-        with patch("zerver.lib.pear_worker.subprocess.run", return_value=completed) as run_mock:
-            delta = pear_git_status_delta("/repo", topic="topic-b")
+        with (
+            tempfile.TemporaryDirectory() as workdir,
+            patch("zerver.lib.pear_worker.subprocess.run", return_value=completed) as run_mock,
+        ):
+            Path(workdir, ".git").touch()
+            delta = pear_git_status_delta(workdir, topic="topic-b")
 
         # Exactly one porcelain status plus the two commit-info commands
         # per (cached) refresh — never N+1 per file or per commit.
@@ -1875,21 +1852,19 @@ class PearSessionEndpointTest(ZulipTestCase):
 
     def test_pear_git_status_delta_skips_commit_reads_on_unborn_head(self) -> None:
         invalidate_pear_git_status_delta()
-        status_output = "\n".join(
-            [
-                "# branch.oid (initial)",
-                "# branch.head topic-a",
-                "? new.txt",
-            ]
-        )
+        status_output = "# branch.oid (initial)\n# branch.head topic-a\n? new.txt"
         completed = subprocess.CompletedProcess(
             ["git"],
             0,
             stdout=status_output,
             stderr="",
         )
-        with patch("zerver.lib.pear_worker.subprocess.run", return_value=completed) as run_mock:
-            delta = pear_git_status_delta("/repo", topic="topic-a")
+        with (
+            tempfile.TemporaryDirectory() as workdir,
+            patch("zerver.lib.pear_worker.subprocess.run", return_value=completed) as run_mock,
+        ):
+            Path(workdir, ".git").touch()
+            delta = pear_git_status_delta(workdir, topic="topic-a")
 
         # A freshly initialized workspace has no HEAD yet; running the
         # commit-info commands would make git fail (and warn) on every
@@ -1908,13 +1883,36 @@ class PearSessionEndpointTest(ZulipTestCase):
             stderr="fatal: not a git repository",
         )
 
-        with patch("zerver.lib.pear_worker.subprocess.run", return_value=completed):
-            with self.assertLogs("zerver.lib.pear_worker", level="WARNING") as logs:
-                self.assertEqual(pear_git_output("/repo", ["status"]), "")
+        with tempfile.TemporaryDirectory() as workdir:
+            Path(workdir, ".git").touch()
+            with (
+                patch("zerver.lib.pear_worker.subprocess.run", return_value=completed),
+                self.assertLogs("zerver.lib.pear_worker", level="WARNING") as logs,
+            ):
+                self.assertEqual(pear_git_output(workdir, ["status"]), "")
 
         log_output = "\n".join(logs.output)
         self.assertIn("status 128", log_output)
         self.assertIn("fatal: not a git repository", log_output)
+
+    def test_pear_git_output_skips_missing_workdir_without_warning(self) -> None:
+        with (
+            tempfile.TemporaryDirectory() as parent,
+            patch("zerver.lib.pear_worker.subprocess.run") as run_mock,
+        ):
+            missing_workdir = str(Path(parent) / "removed-topic-worktree")
+            self.assertEqual(pear_git_output(missing_workdir, ["status"]), "")
+
+        run_mock.assert_not_called()
+
+    def test_pear_git_output_skips_uninitialized_workdir_without_warning(self) -> None:
+        with (
+            tempfile.TemporaryDirectory() as workdir,
+            patch("zerver.lib.pear_worker.subprocess.run") as run_mock,
+        ):
+            self.assertEqual(pear_git_output(workdir, ["status"]), "")
+
+        run_mock.assert_not_called()
 
     def test_workspace_context_reports_local_topic_repo_without_external_pin(self) -> None:
         owner = self.example_user("hamlet")
@@ -1946,7 +1944,7 @@ class PearSessionEndpointTest(ZulipTestCase):
                 check=True,
                 timeout=10,
             )
-            context = PearTopicContext.objects.create(
+            context = PearWorkspaceNode.objects.create(
                 realm=owner.realm,
                 stream_name=PEAR_DEFAULT_STREAM,
                 topic_name=PEAR_DEFAULT_TOPIC,
@@ -1965,7 +1963,7 @@ class PearSessionEndpointTest(ZulipTestCase):
             self.assertEqual(workspace_context["worktree"], PEAR_DEFAULT_TOPIC)
             self.assertEqual(workspace_context["branch"], expected_branch)
             self.assertEqual(workspace_context["head"], "")
-            topic_payload = serialize_pear_topic_context(
+            topic_payload = serialize_pear_workspace_context(
                 context,
                 stream_name=PEAR_DEFAULT_STREAM,
                 topic_name=PEAR_DEFAULT_TOPIC,
@@ -1974,8 +1972,17 @@ class PearSessionEndpointTest(ZulipTestCase):
             self.assertEqual(topic_payload["repo_label"], PEAR_DEFAULT_STREAM)
             self.assertEqual(topic_payload["worktree_label"], PEAR_DEFAULT_TOPIC)
 
-            context.github_repo = "zulip/zulip"
-            context.save(update_fields=["github_repo", "date_updated"])
+            project, _created = PearProject.objects.update_or_create(
+                realm=owner.realm,
+                stream=get_stream(PEAR_DEFAULT_STREAM, owner.realm),
+                defaults={
+                    "repository_url": "zulip/zulip",
+                    "repo_cache_path": str(workdir),
+                    "clone_status": PearProject.READY,
+                },
+            )
+            context.project = project
+            context.save(update_fields=["project", "date_updated"])
 
             workspace_context = build_pear_workspace_context(
                 owner,
@@ -2001,7 +2008,7 @@ class PearSessionEndpointTest(ZulipTestCase):
                 PEAR_WORKER_WORKDIR=str(base_workdir),
                 PEAR_TOPIC_WORKDIR_ROOT=topic_root,
             ):
-                context = ensure_pear_topic_context(
+                context = ensure_pear_workspace_node(
                     owner,
                     stream=PEAR_DEFAULT_STREAM,
                     topic="clean-topic",
@@ -2033,13 +2040,14 @@ class PearSessionEndpointTest(ZulipTestCase):
             )
 
             result_dict = self.assert_json_success(result)
-            context = PearTopicContext.objects.get(
+            context = PearWorkspaceNode.objects.get(
                 realm=owner.realm,
                 stream_name="megatron-lm",
                 topic_name="",
             )
 
-            self.assertEqual(context.github_repo, repository_url)
+            assert context.project is not None
+            self.assertEqual(context.project.repository_url, repository_url)
             self.assertTrue(context.workdir.startswith(temp_dir))
             project = PearProject.objects.get(
                 realm=owner.realm,
@@ -2068,7 +2076,7 @@ class PearSessionEndpointTest(ZulipTestCase):
                 side_effect=fake_clone,
             ),
         ):
-            channel_context = configure_pear_channel_repository_context(
+            channel_context = configure_pear_channel_repository_workspace(
                 owner,
                 stream="megatron-lm",
                 repository_url=repository_url,
@@ -2079,20 +2087,20 @@ class PearSessionEndpointTest(ZulipTestCase):
             )
             project.default_base_ref = "dev"
             project.save(update_fields=["default_base_ref", "date_updated"])
-            topic_context = ensure_pear_topic_context(
+            topic_context = ensure_pear_workspace_node(
                 owner,
                 stream="megatron-lm",
                 topic="optimizer work",
             )
 
-            self.assertEqual(topic_context.parent_context_id, channel_context.id)
-            self.assertEqual(channel_context.github_repo, repository_url)
+            self.assertEqual(topic_context.parent_node_id, channel_context.id)
+            assert channel_context.project is not None
+            self.assertEqual(channel_context.project.repository_url, repository_url)
             self.assertNotEqual(topic_context.workdir, channel_context.workdir)
             self.assertTrue(Path(topic_context.workdir).exists())
-            assert topic_context.workspace_node is not None
-            assert topic_context.workspace_node.project is not None
-            self.assertEqual(topic_context.workspace_node.project.repository_url, repository_url)
-            self.assertEqual(topic_context.workspace_node.branch_name, "dev")
+            assert topic_context.project is not None
+            self.assertEqual(topic_context.project.repository_url, repository_url)
+            self.assertEqual(topic_context.branch_name, "dev")
 
     def test_topic_context_does_not_clone_local_parent_workspace_path(self) -> None:
         owner = self.example_user("hamlet")
@@ -2107,23 +2115,22 @@ class PearSessionEndpointTest(ZulipTestCase):
         ):
             parent_path = Path(temp_dir) / "devel-base"
             parent_path.mkdir()
-            PearTopicContext.objects.create(
+            PearWorkspaceNode.objects.create(
                 realm=owner.realm,
                 stream_name="devel",
                 topic_name="",
-                github_repo=str(parent_path),
                 workdir=str(parent_path),
             )
 
-            topic_context = ensure_pear_topic_context(
+            topic_context = ensure_pear_workspace_node(
                 owner,
                 stream="devel",
                 topic="general chat",
             )
 
             clone.assert_not_called()
-            self.assertIsNotNone(topic_context.parent_context)
-            self.assertEqual(topic_context.parent_context.stream_name, "devel")
+            self.assertIsNotNone(topic_context.parent_node)
+            self.assertEqual(topic_context.parent_node.stream_name, "devel")
             self.assertTrue(Path(topic_context.workdir).is_dir())
 
     def test_context_isolation_username_waits_for_existing_os_user(self) -> None:
@@ -2137,7 +2144,7 @@ class PearSessionEndpointTest(ZulipTestCase):
             ),
         ):
             workdir = Path(temp_dir) / "devel-general-chat"
-            context = PearTopicContext.objects.create(
+            context = PearWorkspaceNode.objects.create(
                 realm=owner.realm,
                 stream_name="devel",
                 topic_name="general chat",
@@ -2151,7 +2158,7 @@ class PearSessionEndpointTest(ZulipTestCase):
 
             with patch("zerver.lib.pear_worker.pwd.getpwnam", side_effect=KeyError):
                 self.assertIsNone(
-                    pear_context_isolation_username(
+                    pear_workspace_isolation_username(
                         context,
                         stream_name="devel",
                         topic_name="general chat",
@@ -2164,7 +2171,7 @@ class PearSessionEndpointTest(ZulipTestCase):
                 return_value=SimpleNamespace(pw_name=expected_username),
             ):
                 self.assertEqual(
-                    pear_context_isolation_username(
+                    pear_workspace_isolation_username(
                         context,
                         stream_name="devel",
                         topic_name="general chat",
@@ -2196,13 +2203,13 @@ class PearSessionEndpointTest(ZulipTestCase):
                 PEAR_WORKER_WORKDIR=str(base_workdir),
                 PEAR_TOPIC_WORKDIR_ROOT=topic_root,
             ):
-                context = ensure_pear_topic_context(
+                context = ensure_pear_workspace_node(
                     owner,
                     stream=PEAR_DEFAULT_STREAM,
                     topic="old topic",
                 )
                 old_workdir = context.workdir
-                old_workspace_node_id = context.workspace_node_id
+                old_workspace_node_id = context.id
                 old_branch = subprocess.run(
                     ["git", "-C", context.workdir, "branch", "--show-current"],
                     check=True,
@@ -2217,7 +2224,7 @@ class PearSessionEndpointTest(ZulipTestCase):
                     trigger_message_id=3001,
                     stream_name=PEAR_DEFAULT_STREAM,
                     topic_name="old topic",
-                    workspace_node=context.workspace_node,
+                    workspace_node=context,
                     status=PearWorkerRun.DONE,
                     codex_thread_id="thread-1",
                 )
@@ -2234,7 +2241,7 @@ class PearSessionEndpointTest(ZulipTestCase):
                     status=PearWorkerRun.DONE,
                 )
 
-                result = maybe_refactor_pear_topic_context_on_move(
+                result = maybe_refactor_pear_workspace_on_move(
                     owner,
                     old_stream=stream,
                     old_topic="old topic",
@@ -2254,7 +2261,7 @@ class PearSessionEndpointTest(ZulipTestCase):
             self.assertNotIn(topic_root, result.message)
             self.assertEqual(context.topic_name, "new topic")
             self.assertEqual(context.workdir, old_workdir)
-            self.assertEqual(context.workspace_node_id, old_workspace_node_id)
+            self.assertEqual(context.id, old_workspace_node_id)
             self.assertTrue(context.workdir.startswith(topic_root))
             self.assertTrue(Path(context.workdir).exists())
             branch = subprocess.run(
@@ -2265,14 +2272,13 @@ class PearSessionEndpointTest(ZulipTestCase):
                 timeout=10,
             ).stdout.strip()
             self.assertEqual(branch, old_branch)
-            assert context.workspace_node is not None
-            self.assertEqual(context.workspace_node.topic_name, "new topic")
-            self.assertEqual(context.workspace_node.branch_name, old_branch)
+            self.assertEqual(context.topic_name, "new topic")
+            self.assertEqual(context.branch_name, old_branch)
             self.assertEqual(run.topic_name, "old topic")
-            self.assertEqual(run.workspace_node_id, context.workspace_node_id)
+            self.assertEqual(run.workspace_node_id, context.id)
             self.assertEqual(side_run.source_topic_name, "old topic")
             self.assertFalse(
-                PearTopicContext.objects.filter(
+                PearWorkspaceNode.objects.filter(
                     realm=owner.realm,
                     stream_name=PEAR_DEFAULT_STREAM,
                     topic_name="old topic",
@@ -2289,14 +2295,14 @@ class PearSessionEndpointTest(ZulipTestCase):
                 PEAR_TOPIC_WORKDIR_ROOT=str(Path(temp_dir) / "topics"),
             ),
         ):
-            context = ensure_pear_topic_context(
+            context = ensure_pear_workspace_node(
                 owner,
                 stream=PEAR_DEFAULT_STREAM,
                 topic="old topic",
             )
             old_workdir = context.workdir
 
-            result = maybe_refactor_pear_topic_context_on_move(
+            result = maybe_refactor_pear_workspace_on_move(
                 owner,
                 old_stream=stream,
                 old_topic="old topic",
@@ -2322,18 +2328,17 @@ class PearSessionEndpointTest(ZulipTestCase):
             bot_type=UserProfile.EMBEDDED_BOT,
             service_name=PEAR_EMBEDDED_BOT_SERVICE,
         )
-        PearTopicContext.objects.create(
+        PearWorkspaceNode.objects.create(
             realm=owner.realm,
             stream_name="old-repo",
             topic_name="",
-            github_repo="https://github.com/example/old-repo.git",
-            workdir="/tmp/old-repo",
+            workdir="/tmp/old-repo",  # noqa: S108
         )
-        PearTopicContext.objects.create(
+        PearWorkspaceNode.objects.create(
             realm=owner.realm,
             stream_name="old-repo",
             topic_name="feature",
-            workdir="/tmp/old-repo-feature",
+            workdir="/tmp/old-repo-feature",  # noqa: S108
         )
         run = PearWorkerRun.objects.create(
             realm=owner.realm,
@@ -2357,7 +2362,7 @@ class PearSessionEndpointTest(ZulipTestCase):
             status=PearWorkerRun.DONE,
         )
 
-        message = maybe_refactor_pear_stream_contexts_on_rename(
+        message = maybe_refactor_pear_stream_workspaces_on_rename(
             owner,
             old_stream_name="old-repo",
             new_stream_name="new-repo",
@@ -2366,14 +2371,14 @@ class PearSessionEndpointTest(ZulipTestCase):
         assert message is not None
         self.assertIn("Pear channel context renamed", message)
         self.assertEqual(
-            PearTopicContext.objects.filter(
+            PearWorkspaceNode.objects.filter(
                 realm=owner.realm,
                 stream_name="new-repo",
             ).count(),
             2,
         )
         self.assertFalse(
-            PearTopicContext.objects.filter(
+            PearWorkspaceNode.objects.filter(
                 realm=owner.realm,
                 stream_name="old-repo",
             ).exists()
@@ -2853,7 +2858,7 @@ class PearSessionEndpointTest(ZulipTestCase):
             service_name=PEAR_EMBEDDED_BOT_SERVICE,
         )
         bot_handler = SimpleNamespace(user_profile=pear_bot)
-        context = ensure_pear_topic_context(
+        context = ensure_pear_workspace_node(
             pear_bot,
             stream=PEAR_DEFAULT_STREAM,
             topic="topic-a",
@@ -2900,7 +2905,7 @@ class PearSessionEndpointTest(ZulipTestCase):
     def test_active_session_reflects_database_pause_flag(self) -> None:
         user = self.example_user("hamlet")
         self.subscribe(user, PEAR_DEFAULT_STREAM)
-        context = ensure_pear_topic_context(
+        context = ensure_pear_workspace_node(
             user,
             stream=PEAR_DEFAULT_STREAM,
             topic=PEAR_DEFAULT_TOPIC,
@@ -2929,7 +2934,7 @@ class PearSessionEndpointTest(ZulipTestCase):
             bot_type=UserProfile.EMBEDDED_BOT,
             service_name=PEAR_EMBEDDED_BOT_SERVICE,
         )
-        context = ensure_pear_topic_context(
+        context = ensure_pear_workspace_node(
             pear_bot,
             stream=PEAR_DEFAULT_STREAM,
             topic="topic-a",
@@ -3067,9 +3072,9 @@ class PearSessionEndpointTest(ZulipTestCase):
                 bot_handler,
                 stream=PEAR_DEFAULT_STREAM,
                 topic=PEAR_DEFAULT_TOPIC,
-                response_policy="on",
+                response_policy="ambient",
             )
-            context = PearTopicContext.objects.get(
+            context = PearWorkspaceNode.objects.get(
                 realm=owner.realm,
                 stream_name=PEAR_DEFAULT_STREAM,
                 topic_name=PEAR_DEFAULT_TOPIC,
@@ -3217,7 +3222,7 @@ class PearSessionEndpointTest(ZulipTestCase):
 
             result_dict = self.assert_json_success(result)
             active_session_dict = self.assert_json_success(active_session_result)
-            context = PearTopicContext.objects.get(
+            context = PearWorkspaceNode.objects.get(
                 realm=owner.realm,
                 stream_name=PEAR_DEFAULT_STREAM,
                 topic_name=PEAR_DEFAULT_TOPIC,
@@ -3259,7 +3264,7 @@ class PearSessionEndpointTest(ZulipTestCase):
                 intentionally_undocumented=True,
             )
             self.assert_json_success(model_result)
-            parent_context = PearTopicContext.objects.get(
+            parent_context = PearWorkspaceNode.objects.get(
                 realm=owner.realm,
                 stream_name=PEAR_DEFAULT_STREAM,
                 topic_name=PEAR_DEFAULT_TOPIC,
@@ -3278,7 +3283,7 @@ class PearSessionEndpointTest(ZulipTestCase):
 
             result_dict = self.assert_json_success(side_result)
             run = PearWorkerRun.objects.get(id=result_dict["pear_run"]["id"])
-            side_context = PearTopicContext.objects.get(
+            side_context = PearWorkspaceNode.objects.get(
                 realm=owner.realm,
                 stream_name="direct messages",
                 topic_name=run.topic_name,
@@ -3287,7 +3292,7 @@ class PearSessionEndpointTest(ZulipTestCase):
             self.assertEqual(run.source_stream_name, PEAR_DEFAULT_STREAM)
             self.assertEqual(run.source_topic_name, PEAR_DEFAULT_TOPIC)
             self.assertTrue(run.topic_name.startswith("side/"))
-            self.assertEqual(side_context.parent_context_id, parent_context.id)
+            self.assertEqual(side_context.parent_node_id, parent_context.id)
             self.assertEqual(run.model, "gpt-5.5-mini")
             self.assertEqual(
                 pear_worker_reasoning_effort_for_topic(
@@ -3347,6 +3352,57 @@ class PearSessionEndpointTest(ZulipTestCase):
         self.assertEqual(active_session["worker_state"], "ready")
         self.assertTrue(active_session["worker_can_run"])
         self.assertIsNone(active_session["worker_blocked_reason"])
+
+    def test_get_pear_active_session_uses_ambient_run_state(self) -> None:
+        user = self.example_user("hamlet")
+        pear_bot = self.create_test_bot(
+            "pear",
+            user,
+            full_name="Pear",
+            bot_type=UserProfile.EMBEDDED_BOT,
+            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+        )
+        self.addCleanup(invalidate_pear_selected_bot_cache, user.realm_id)
+        self.subscribe(user, PEAR_DEFAULT_STREAM)
+        self.subscribe(pear_bot, PEAR_DEFAULT_STREAM)
+        request_message_id = self.send_stream_message(
+            user,
+            PEAR_DEFAULT_STREAM,
+            "In one sentence, explain what a hash map is.",
+            topic_name=PEAR_DEFAULT_TOPIC,
+        )
+        result_message_id = self.send_stream_message(
+            pear_bot,
+            PEAR_DEFAULT_STREAM,
+            "A hash map stores key-value pairs for fast lookup.",
+            topic_name=PEAR_DEFAULT_TOPIC,
+        )
+        PearWorkerRun.objects.create(
+            realm=user.realm,
+            bot_profile=pear_bot,
+            requesting_user=user,
+            trigger_message_id=request_message_id,
+            stream_name=PEAR_DEFAULT_STREAM,
+            topic_name=PEAR_DEFAULT_TOPIC,
+            status=PearWorkerRun.DONE,
+            codex_thread_id="thread-ambient",
+            ambient_triggered=True,
+            result_message_id=result_message_id,
+        )
+        self.login_user(user)
+
+        result = self.client_get(
+            f"/json{PEAR_ACTIVE_SESSION_ENDPOINT}",
+            intentionally_undocumented=True,
+        )
+
+        result_dict = self.assert_json_success(result)
+        active_session = result_dict["active_session"]
+        self.assertEqual(active_session["state"], "active")
+        self.assertEqual(active_session["request_count"], 1)
+        self.assertEqual(active_session["latest_request_message_id"], request_message_id)
+        self.assertEqual(active_session["latest_message_id"], result_message_id)
+        self.assertEqual(active_session["latest_codex_thread_id"], "thread-ambient")
 
     def test_worker_loader_uses_prior_run_as_thread_ingestion_cursor(self) -> None:
         owner = self.example_user("hamlet")
@@ -3506,12 +3562,13 @@ class PearSessionEndpointTest(ZulipTestCase):
                     topic="",
                 ).startswith(temp_dir)
             )
-            context = PearTopicContext.objects.get(
+            context = PearWorkspaceNode.objects.get(
                 realm=owner.realm,
                 stream_name=PEAR_DEFAULT_STREAM,
                 topic_name="",
             )
-            self.assertEqual(context.github_repo, "")
+            assert context.project is not None
+            self.assertEqual(context.project.repository_url, "")
 
             PearWorkerRun.objects.create(
                 realm=owner.realm,
@@ -3572,37 +3629,25 @@ class PearSessionEndpointTest(ZulipTestCase):
     def test_get_pear_active_session_from_topic_messages(self) -> None:
         user = self.example_user("hamlet")
         self.subscribe(user, PEAR_DEFAULT_STREAM)
-        request_message_id = self.send_stream_message(
+        self.send_stream_message(
             user,
             PEAR_DEFAULT_STREAM,
             "@**Pear** fix checkout latency.",
             topic_name=PEAR_DEFAULT_TOPIC,
         )
-        first_message_id = self.send_stream_message(
+        self.send_stream_message(
             user,
             PEAR_DEFAULT_STREAM,
             "- [ ] Confirm repo, branch, and target runtime.",
             topic_name=PEAR_DEFAULT_TOPIC,
         )
-        latest_message_id = self.send_stream_message(
-            user,
-            PEAR_DEFAULT_STREAM,
-            "\n".join(
-                [
-                    "- [x] Confirm repo, branch, and target runtime.",
-                    "- [~] State the first concrete edit before changing files.",
-                    "- [ ] Keep progress visible in this topic.",
-                ]
-            ),
-            topic_name=PEAR_DEFAULT_TOPIC,
-        )
-        steering_message_id = self.send_stream_message(
+        self.send_stream_message(
             user,
             PEAR_DEFAULT_STREAM,
             "Fold in the terminal status popup too.",
             topic_name=PEAR_DEFAULT_TOPIC,
         )
-        pause_message_id = self.send_stream_message(
+        latest_request_message_id = self.send_stream_message(
             user,
             PEAR_DEFAULT_STREAM,
             "@**Pear** Pause session:\n\nReason: waiting for CI",
@@ -3617,32 +3662,17 @@ class PearSessionEndpointTest(ZulipTestCase):
 
         result_dict = self.assert_json_success(result)
         active_session = result_dict["active_session"]
-        self.assertEqual(active_session["state"], "paused")
+        self.assertEqual(active_session["state"], "requested")
         self.assertEqual(active_session["source"], "server")
         self.assertEqual(active_session["stream"], PEAR_DEFAULT_STREAM)
         self.assertEqual(active_session["topic"], PEAR_DEFAULT_TOPIC)
-        self.assertEqual(active_session["topic_message_count"], 5)
-        self.assertEqual(active_session["request_count"], 1)
-        self.assertEqual(active_session["latest_request_message_id"], request_message_id)
-        self.assertEqual(active_session["latest_message_id"], latest_message_id)
-        self.assertNotEqual(active_session["latest_message_id"], first_message_id)
-        self.assertEqual(active_session["done_count"], 1)
-        self.assertEqual(active_session["in_progress_count"], 1)
-        self.assertEqual(active_session["pending_count"], 1)
-        self.assertEqual(active_session["steering_count"], 1)
-        self.assertEqual(active_session["latest_steering_message_id"], steering_message_id)
-        self.assertEqual(
-            active_session["latest_steering_instruction"],
-            "Fold in the terminal status popup too.",
-        )
-        self.assertTrue(active_session["is_paused"])
-        self.assertEqual(active_session["interruption_count"], 1)
-        self.assertEqual(active_session["latest_interruption_kind"], "pause")
-        self.assertEqual(active_session["latest_interruption_message_id"], pause_message_id)
-        self.assertEqual(active_session["latest_interruption_instruction"], "waiting for CI")
-        self.assertEqual(active_session["worker_state"], "blocked_paused")
-        self.assertFalse(active_session["worker_can_run"])
-        self.assertIn("paused", active_session["worker_blocked_reason"])
+        self.assertEqual(active_session["topic_message_count"], 4)
+        self.assertEqual(active_session["request_count"], 2)
+        self.assertEqual(active_session["latest_request_message_id"], latest_request_message_id)
+        self.assertIsNone(active_session["latest_message_id"])
+        self.assertFalse(active_session["is_paused"])
+        self.assertEqual(active_session["worker_state"], "ready")
+        self.assertTrue(active_session["worker_can_run"])
 
 
 class PearWorkspacePathTest(ZulipTestCase):
@@ -4099,9 +4129,22 @@ class PearMonitorTest(ZulipTestCase):
         owner = self.example_user("hamlet")
         pear_bot = self.create_pear_bot(owner)
         monitor = self.create_live_monitor(owner, pear_bot)
+        process_isolation = PearProcessIsolation(
+            username="pear-test",
+            home="/tmp/pear-test",  # noqa: S108
+            codex_home="/tmp/pear-test/.codex",  # noqa: S108
+        )
 
         with tempfile.TemporaryDirectory() as temp_dir:
-            pear_monitor_apply_tick(monitor, workdir=temp_dir, process_isolation=None)
+            with patch(
+                "zerver.lib.pear_monitor.pear_monitor_run_recipe_command",
+                return_value="value=0.5",
+            ):
+                pear_monitor_apply_tick(
+                    monitor,
+                    workdir=temp_dir,
+                    process_isolation=process_isolation,
+                )
             monitor.refresh_from_db()
             self.assertEqual(monitor.version, 1)
             self.assertEqual(monitor.last_sample["data"]["loss"], 0.5)
@@ -4114,13 +4157,45 @@ class PearMonitorTest(ZulipTestCase):
                 "bindings": {},
             }
             monitor.save(update_fields=["recipe"])
-            for _ in range(PEAR_MONITOR_FAILURE_LIMIT):
-                pear_monitor_apply_tick(monitor, workdir=temp_dir, process_isolation=None)
-                monitor.refresh_from_db()
+            with patch(
+                "zerver.lib.pear_monitor.pear_monitor_run_recipe_command",
+                side_effect=OSError("recipe exited 1: failed"),
+            ):
+                for _ in range(PEAR_MONITOR_FAILURE_LIMIT):
+                    pear_monitor_apply_tick(
+                        monitor,
+                        workdir=temp_dir,
+                        process_isolation=process_isolation,
+                    )
+                    monitor.refresh_from_db()
             self.assertEqual(monitor.status, PearMonitor.ERROR)
             self.assertIn("recipe exited", monitor.last_error)
             # The sample from the good ticks is preserved on error.
             self.assertEqual(monitor.version, 1)
+
+    def test_executable_monitor_recipe_requires_process_isolation(self) -> None:
+        with self.assertRaisesRegex(OSError, "require the topic's isolated OS user"):
+            pear_monitor_run_recipe_command(
+                "echo 1",
+                workdir="/tmp",  # noqa: S108
+                process_isolation=None,
+            )
+        isolation = PearProcessIsolation(
+            username="pear-test",
+            home="/home/pear-test",
+            codex_home="/home/pear-test/.codex",
+        )
+        with patch("zerver.lib.pear_monitor.subprocess.run") as run:
+            run.return_value = SimpleNamespace(returncode=0, stdout="1\n", stderr="")
+            self.assertEqual(
+                pear_monitor_run_recipe_command(
+                    "echo 1",
+                    workdir="/tmp/topic",  # noqa: S108
+                    process_isolation=isolation,
+                ),
+                "1\n",
+            )
+        self.assertEqual(run.call_args.args[0][:6], ["sudo", "-n", "-H", "-u", "pear-test", "env"])
 
     def test_apply_monitor_setup_result(self) -> None:
         owner = self.example_user("hamlet")

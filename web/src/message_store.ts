@@ -242,6 +242,21 @@ export type Message = (
 
 export function update_message_cache(message_data: ProcessedMessage): void {
     // You should only call this from message_helper (or in tests).
+    // Submessages are append-only and arrive on a separate event stream.
+    // A message fetch that started before a submessage event can finish after
+    // it; replacing the singleton with that older payload would make the
+    // widget or artifact disappear until another full fetch. Preserve every
+    // locally known submessage while installing the fresh message payload.
+    const existing_message = stored_messages.get(message_data.message.id)?.message;
+    if (existing_message !== undefined && existing_message.submessages.length > 0) {
+        const incoming_ids = new Set(message_data.message.submessages.map((item) => item.id));
+        for (const submessage of existing_message.submessages) {
+            if (!incoming_ids.has(submessage.id)) {
+                message_data.message.submessages.push(submessage);
+            }
+        }
+        message_data.message.submessages.sort((left, right) => left.id - right.id);
+    }
     stored_messages.set(message_data.message.id, message_data);
 }
 

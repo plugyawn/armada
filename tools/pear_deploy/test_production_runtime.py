@@ -242,7 +242,9 @@ class RuntimeConfigTest(unittest.TestCase):
         ).read_text(encoding="utf-8")
 
         self.assertIn("EnvironmentFile=/etc/pear/caddy-basic-auth.env", service_override)
-        self.assertIn("ExecStart=/usr/bin/caddy run --config /etc/caddy/Caddyfile", service_override)
+        self.assertIn(
+            "ExecStart=/usr/bin/caddy run --config /etc/caddy/Caddyfile", service_override
+        )
         self.assertNotIn("--environ", service_override)
 
     def make_args(self, root: Path, **overrides: object) -> argparse.Namespace:
@@ -1253,6 +1255,7 @@ sys.stdout.write(status)
             "printf '%s\\n' "
             "'pear_worker 0 0 1' "
             "'pear_monitor_worker 0 0 1' "
+            "'pear_addressing 0 0 1' "
             "'embedded_bots 0 0 1' "
             "'thumbnail 0 0 1' | "
             "validate_pear_deploy_queue_snapshot"

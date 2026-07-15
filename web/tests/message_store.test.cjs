@@ -300,6 +300,33 @@ test("reify_message_id", () => {
     });
 });
 
+test("late message payload preserves append-only submessages", () => {
+    const artifact = {
+        id: 12,
+        message_id: 600,
+        sender_id: 25,
+        msg_type: "pear_artifact",
+        content: '{"version":1,"blocks":[]}',
+    };
+    const widget = {
+        id: 11,
+        message_id: 600,
+        sender_id: 25,
+        msg_type: "widget",
+        content: "{}",
+    };
+    message_store.update_message_cache({
+        type: "server_message",
+        message: {id: 600, submessages: [artifact]},
+    });
+
+    const late_message = {id: 600, submessages: [widget]};
+    message_store.update_message_cache({type: "server_message", message: late_message});
+
+    assert.equal(message_store.get(600), late_message);
+    assert.deepEqual(late_message.submessages, [widget, artifact]);
+});
+
 test("update_booleans", () => {
     // First, test fields that we do actually want to update.
     const message = {

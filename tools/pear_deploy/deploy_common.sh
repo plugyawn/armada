@@ -126,7 +126,7 @@ filter_deploy_untracked_source_files() {
 
 _validate_pear_deploy_queue_snapshot() {
     local require_consumers="$1"
-    local expected_queues="${PEAR_DEPLOY_QUEUES[*]}"
+    local expected_queues="${2:-${PEAR_DEPLOY_QUEUES[*]}}"
     awk -v expected_queues="$expected_queues" -v require_consumers="$require_consumers" '
 BEGIN {
     expected_count = split(expected_queues, expected, " ")
@@ -160,11 +160,11 @@ END {
 }
 
 validate_pear_deploy_queue_snapshot() {
-    _validate_pear_deploy_queue_snapshot true
+    _validate_pear_deploy_queue_snapshot true "${1:-${PEAR_DEPLOY_QUEUES[*]}}"
 }
 
 validate_pear_deploy_queue_empty_snapshot() {
-    _validate_pear_deploy_queue_snapshot false
+    _validate_pear_deploy_queue_snapshot false "${1:-${PEAR_DEPLOY_QUEUES[*]}}"
 }
 
 stage_remote_pear_deploy_bundle() {

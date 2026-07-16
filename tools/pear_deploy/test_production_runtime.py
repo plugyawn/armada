@@ -906,6 +906,7 @@ class StaticRuntimeContractTest(unittest.TestCase):
         self.assertIn("verify_remote_deployed_source_clean", update)
         self.assertIn("install_remote_gemini_config", update)
         self.assertIn("PEAR_GEMINI_INTERACTIONS_API_KEY", update)
+        self.assertIn("zerver.tests.test_pear_presentation", update)
         self.assertNotIn("--max-orphan-active-markers", update)
         self.assertNotIn("--max-orphan-active-markers", verify)
         self.assertIn("classify_production_asset_requirement", update)

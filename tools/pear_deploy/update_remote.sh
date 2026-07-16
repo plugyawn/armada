@@ -1332,6 +1332,7 @@ ssh_zulip_clean "./tools/test-backend \
     zerver.tests.test_pear_artifact \
     zerver.tests.test_pear_generated_vector \
     zerver.tests.test_pear_endpoint \
+    zerver.tests.test_pear_presentation \
     zerver.tests.test_pear_workspace_io \
     zerver.tests.test_pear_workspace_index \
     zerver.tests.test_pear_workspace_resources \

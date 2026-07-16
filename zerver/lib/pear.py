@@ -1569,7 +1569,9 @@ def normalize_pear_response_policy(value: str | None) -> PearResponsePolicy:
         return PEAR_DEFAULT_RESPONSE_POLICY
     if value == "ambient":
         return "ambient"
-    return "mentions_only"
+    if value == "mentions_only":
+        return "mentions_only"
+    raise ValueError(f"Invalid Pear response policy: {value!r}")
 
 
 def clean_pear_task_text(content: str = "") -> str:

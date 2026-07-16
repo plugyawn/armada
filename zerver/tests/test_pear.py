@@ -85,6 +85,7 @@ from zerver.lib.pear import (
     is_pear_request_message,
     is_pear_thread_request_message,
     load_pear_worker_run_records,
+    normalize_pear_response_policy,
     pear_distinct_transcript_tool_events,
     pear_normalize_token_usage,
     pear_worker_already_started,
@@ -186,6 +187,13 @@ class PearSessionDefaultsTest(TestCase):
         self.assertEqual(PEAR_BOT_SHORT_NAME, "pear")
         self.assertEqual(PEAR_EMBEDDED_BOT_SERVICE, "pear")
         self.assertEqual(PEAR_FIX_BUG_PROMPT, "Fix bug:")
+
+    def test_response_policy_normalization_is_strict(self) -> None:
+        self.assertEqual(normalize_pear_response_policy(None), "ambient")
+        self.assertEqual(normalize_pear_response_policy("ambient"), "ambient")
+        self.assertEqual(normalize_pear_response_policy("mentions_only"), "mentions_only")
+        with self.assertRaisesRegex(ValueError, "Invalid Pear response policy"):
+            normalize_pear_response_policy("ambien")
 
     def test_structured_artifacts_never_enter_run_telemetry_or_summary(self) -> None:
         raw = '{"version":1,"blocks":[{"type":"copy","body":"private detail"}]}'

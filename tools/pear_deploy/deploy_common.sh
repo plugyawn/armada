@@ -47,6 +47,7 @@ PEAR_DEPLOY_RUNTIME_CONFIG_PATHS=(
     /etc/caddy/Caddyfile
     /etc/pear/caddy-basic-auth.env
     /etc/systemd/system/caddy.service.d/pear-basic-auth.conf
+    /etc/sysctl.d/90-pear-codex-userns.conf
     /usr/local/bin/pear-run-zulip-dev
     /usr/local/lib/pear-workspace-io
     /etc/systemd/system/pear-zulip-dev.service
@@ -57,6 +58,7 @@ PEAR_DEPLOY_RUNTIME_CONFIG_PATHS=(
 )
 
 PEAR_DEPLOY_TRUSTED_BUNDLE_PATHS=(
+    tools/pear_deploy/codex_sandbox_runtime.sh
     tools/pear_deploy/deployment_record.py
     tools/pear_deploy/freeze_asset_build.py
     tools/pear_deploy/production_assets.py

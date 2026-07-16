@@ -222,6 +222,11 @@ fi
 echo "Staging privileged deployment tooling from the pinned local commit..."
 REMOTE_TRUSTED_RUNTIME="$(stage_remote_pear_deploy_bundle "$REPO_ROOT" "$LOCAL_SHA")"
 
+echo "Installing and verifying the host Codex sandbox runtime..."
+ssh_root bash \
+    "$REMOTE_TRUSTED_RUNTIME/tools/pear_deploy/codex_sandbox_runtime.sh" \
+    --install
+
 echo "Installing and verifying the committed isolated Workspace helper..."
 ssh_root 'install -d -m 755 -o root -g root /usr/local/lib'
 ssh_root python3 "$REMOTE_TRUSTED_RUNTIME/tools/pear_deploy/workspace_helper_runtime.py" install \

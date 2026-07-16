@@ -157,3 +157,19 @@ test("stale hydration cannot overwrite a newer push event", () => {
     assert.equal(pear_run_state.get_run_view(90).status, "done");
     assert.ok(!pear_run_state.is_active_run_result_message(90));
 });
+
+test("typed live content state hides only the initial placeholder", () => {
+    pear_run_state.remember_runs([
+        {
+            id: 12,
+            status: "running",
+            ambient_triggered: false,
+            result_message_id: 120,
+            live: {has_visible_assistant_text: false},
+        },
+    ]);
+    assert.equal(pear_run_state.get_run_view(120).has_visible_assistant_text, false);
+
+    pear_run_state.mark_message_has_visible_assistant_text(120);
+    assert.equal(pear_run_state.get_run_view(120).has_visible_assistant_text, true);
+});

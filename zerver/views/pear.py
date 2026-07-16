@@ -20,6 +20,7 @@ from zerver.actions.streams import bulk_add_subscriptions
 from zerver.decorator import require_realm_admin
 from zerver.lib.bot_config import get_bot_configs, set_bot_config
 from zerver.lib.exceptions import JsonableError
+from zerver.lib.markdown import render_message_markdown
 from zerver.lib.pear import (
     PEAR_AGENT_NAME,
     PEAR_BOT_SHORT_NAME,
@@ -41,6 +42,7 @@ from zerver.lib.pear import (
     get_pear_session_payload,
     is_pear_task_request_message,
     normalize_pear_response_policy,
+    normalize_pear_visible_markdown,
     pear_normalize_token_usage,
     pear_token_usage_summary,
     trim_pear_text,
@@ -92,6 +94,7 @@ from zerver.lib.typed_endpoint import (
     typed_endpoint_without_parameters,
 )
 from zerver.lib.url_encoding import topic_narrow_url
+from zerver.models import Message
 from zerver.models.bots import (
     PearMonitor,
     PearWorkerRun,
@@ -1608,6 +1611,7 @@ def serialize_pear_run_trace_event(event: PearWorkerRunEvent) -> dict[str, objec
                 "kind": "assistant",
                 "title": "Codex",
                 "body": body,
+                "status": str(payload.get("status") or "done"),
                 "date_created": datetime_to_timestamp(event.date_created),
             }
         if kind == "plan":
@@ -1627,6 +1631,7 @@ def serialize_pear_run_trace_event(event: PearWorkerRunEvent) -> dict[str, objec
                 "id": event.id,
                 "kind": str(kind),
                 "title": str(title or event.summary),
+                "status": str(payload.get("status") or "done"),
                 "date_created": datetime_to_timestamp(event.date_created),
             }
         return None
@@ -1643,8 +1648,47 @@ def serialize_pear_run_trace_event(event: PearWorkerRunEvent) -> dict[str, objec
         "id": event.id,
         "kind": event.event_type,
         "title": trim_pear_text(title, limit=500),
+        "status": "failed" if event.event_type == "failed" else "done",
         "date_created": datetime_to_timestamp(event.date_created),
     }
+
+
+def pear_run_trace_markdown(trace: list[dict[str, object]]) -> str:
+    """Rebuild the former visible work log without exposing hidden reasoning or raw output."""
+    blocks: list[str] = []
+    tool_events: list[dict[str, object]] = []
+
+    def flush_tools() -> None:
+        if not tool_events:
+            return
+        failures = sum(event.get("status") in {"failed", "error"} for event in tool_events)
+        count = len(tool_events)
+        title = f"Ran {count} {'tool' if count == 1 else 'tools'}"
+        if failures:
+            title += f" · {failures} {'retry' if failures == 1 else 'retries'}"
+        rows: list[str] = []
+        for event in tool_events:
+            status = str(event.get("status") or "done")
+            glyph = "✷" if status in {"failed", "error"} else "·"
+            event_title = " ".join(str(event.get("title") or "tool").split())
+            event_title = trim_pear_text(event_title.replace("`", "'"), limit=220)
+            rows.append(f"- {glyph} `{event_title}`")
+        tool_body = "\n".join(rows)
+        blocks.append(f"```spoiler {title}\n{tool_body}\n```")
+        tool_events.clear()
+
+    for event in trace:
+        kind = str(event.get("kind") or "")
+        if kind in {"command", "file_change", "tool"}:
+            tool_events.append(event)
+            continue
+        if kind == "assistant":
+            flush_tools()
+            body = event.get("body")
+            if isinstance(body, str) and body.strip():
+                blocks.append(normalize_pear_visible_markdown(body.strip()))
+    flush_tools()
+    return "\n\n".join(blocks)
 
 
 def _pear_trace_plan(payload: dict[str, object]) -> list[dict[str, str]] | None:
@@ -1701,11 +1745,24 @@ def get_pear_run_trace_backend(
         for event in reversed(candidates[:requested_limit])
         if (serialized := serialize_pear_run_trace_event(event)) is not None
     ]
+    trace_markdown = pear_run_trace_markdown(trace)
+    trace_message = Message()
+    trace_message.sender = run.bot_profile
+    trace_message.realm = user_profile.realm
+    trace_message.content = trace_markdown
+    rendered_trace = render_message_markdown(
+        trace_message,
+        trace_markdown,
+        realm=user_profile.realm,
+        acting_user=user_profile,
+        no_previews=True,
+    ).rendered_content
     return json_success(
         request,
         data={
             "run_id": run.id,
             "trace": trace,
+            "rendered": rendered_trace,
             "has_more": len(candidates) > requested_limit,
             "next_before_event_id": candidates[requested_limit - 1].id
             if len(candidates) > requested_limit

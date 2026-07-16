@@ -48,7 +48,7 @@ function test(label, f) {
     run_test(label, ({override, mock_template}) => {
         sender_is_bot = () => false;
         $("document-stub").set_find_results(
-            ".pear-liveness-active .pear-thinking-glyph, .message_row.pear-active-message .pear-tool-row-active.pear-thinking-glyph",
+            ".pear-liveness-active .pear-thinking-glyph, .message_row.pear-active-message .pear-live-plan-current .pear-thinking-glyph, .message_row.pear-active-message .pear-tool-row-active.pear-thinking-glyph",
             [],
         );
         pear_run_state.clear_for_testing();

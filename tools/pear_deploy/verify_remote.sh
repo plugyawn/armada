@@ -164,7 +164,10 @@ dig +short "$FQDN" A || true
 
 echo
 echo "Public HTTPS app:"
-HTTPS_CODE="$(curl -sS --max-time 10 -o /dev/null -w '%{http_code}' "https://$FQDN/devlogin" || true)"
+HTTPS_CODE="$(
+    curl -sS --location --max-redirs 3 --max-time 10 \
+        -o /dev/null -w '%{http_code}' "https://$FQDN/devlogin" || true
+)"
 if [[ "$HTTPS_CODE" != "200" ]]; then
     echo "Expected public HTTPS devlogin to return 200, got ${HTTPS_CODE:-none}" >&2
     exit 1

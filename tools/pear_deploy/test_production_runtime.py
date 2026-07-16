@@ -953,6 +953,7 @@ class StaticRuntimeContractTest(unittest.TestCase):
             update.index('DEPLOYED_AT="$(date'),
         )
         self.assertIn("validate_local_caddy_auth_pair", update)
+        self.assertIn("Path(sys.argv[1]).resolve(strict=True)", update)
         self.assertIn("curl --config -", common)
         self.assertNotIn("curl --user", common)
         self.assertIn('"$app_status" != "200"', common)

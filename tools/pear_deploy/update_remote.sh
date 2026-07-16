@@ -1158,6 +1158,14 @@ else
     echo "Preflight: remote Caddy auth is absent; validated a local bcrypt hash file for stdin-only bootstrap."
 fi
 validate_local_auth_verification
+CADDY_BASICAUTH_PASSWORD_FILE="$(
+    python3 - "$CADDY_BASICAUTH_PASSWORD_FILE" <<'PY'
+import sys
+from pathlib import Path
+
+print(Path(sys.argv[1]).resolve(strict=True))
+PY
+)"
 if [[ "$REMOTE_AUTH_READY" == true ]]; then
     REMOTE_CADDY_BASICAUTH_USER="$(remote_auth_username)"
     if [[ "$REMOTE_CADDY_BASICAUTH_USER" != "$CADDY_BASICAUTH_USER" ]]; then

@@ -49,7 +49,6 @@ PEAR_DEPLOY_RUNTIME_CONFIG_PATHS=(
     /etc/systemd/system/caddy.service.d/pear-basic-auth.conf
     /usr/local/bin/pear-run-zulip-dev
     /usr/local/lib/pear-workspace-io
-    /usr/local/lib/pear-rebaseline-schema
     /etc/systemd/system/pear-zulip-dev.service
     /etc/systemd/system/pear-addressing.service
     /home/zulipdev/pear.env
@@ -68,7 +67,6 @@ PEAR_DEPLOY_TRUSTED_BUNDLE_PATHS=(
     tools/pear_deploy/runtime/pear-run-zulip-dev
     tools/pear_deploy/runtime/pear-zulip-dev.service
     tools/pear_deploy/runtime/pear-addressing.service
-    tools/pear_deploy/rebaseline_pear_schema.py
     zerver/lib/pear_workspace_io.py
 )
 

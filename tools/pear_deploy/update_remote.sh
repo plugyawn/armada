@@ -23,8 +23,6 @@ YES=false
 RUNTIME_SMOKE_ADMIN_EMAIL=""
 RUNTIME_SMOKE_TIMEOUT=150
 RUNTIME_SMOKE_EVIDENCE=""
-PEAR_SCHEMA_REBASELINE_REQUIRED=false
-PEAR_SCHEMA_REBASELINED=false
 STATE_PATH="$DEFAULT_STATE_PATH"
 
 for env_file in "$PEAR_ROOT/env.local" "$REPO_ROOT/.env.local"; do
@@ -225,7 +223,7 @@ ssh_zulip_clean() {
 }
 
 detect_remote_pear_schema_state() {
-    ssh_zulip "$REMOTE_PATH/.venv/bin/python3 $REMOTE_PATH/manage.py shell -c 'from django.db import connection; cursor = connection.cursor(); cursor.execute(\"SELECT name FROM django_migrations WHERE app = %s AND name LIKE %s\", [\"zerver\", \"08%pear%\"]); names = {row[0] for row in cursor.fetchall()}; current = \"0805_pear_runtime\"; print(\"mixed\" if current in names and len(names) > 1 else \"current\" if current in names else \"legacy\" if names else \"empty\")'"
+    ssh_zulip "$REMOTE_PATH/.venv/bin/python3 $REMOTE_PATH/manage.py shell -c 'from django.db import connection; cursor = connection.cursor(); cursor.execute(\"SELECT name FROM django_migrations WHERE app = %s AND name LIKE %s\", [\"zerver\", \"08%pear%\"]); names = {row[0] for row in cursor.fetchall()}; current = {\"0805_pear_runtime\"}; print(\"current\" if names == current else \"empty\" if not names else \"unexpected\")'"
 }
 
 preflight_remote_workspace_helper() {
@@ -239,6 +237,13 @@ preflight_remote_workspace_helper() {
 preflight_remote_visual_runtime() {
     echo "Preflight: verifying the out-of-process scientific visual runtime..."
     ssh_root bash -s -- --check <"$SCRIPT_DIR/provision_visual_runtime.sh"
+}
+
+preflight_remote_codex_sandbox() {
+    echo "Preflight: verifying the host Codex sandbox runtime..."
+    if ! ssh_root "command -v bwrap >/dev/null && bwrap --version"; then
+        fail "remote host is missing Bubblewrap; rerun bootstrap package provisioning"
+    fi
 }
 
 install_and_verify_remote_workspace_helper() {
@@ -912,7 +917,6 @@ rollback_on_error() {
             "$REMOTE_PATH" \
             "$REMOTE_GIT_COMMON_DIR" \
             "$REMOTE_PEAR_SKILLS_DIR" \
-            "$PEAR_SCHEMA_REBASELINED" \
             "${#PEAR_DEPLOY_RUNTIME_CONFIG_PATHS[@]}" \
             "${PEAR_DEPLOY_RUNTIME_CONFIG_PATHS[@]}" \
             "${#PEAR_DEPLOY_RSYNC_EXCLUDES[@]}" \
@@ -922,9 +926,8 @@ SNAPSHOT_DIR="$1"
 REMOTE_PATH="$2"
 REMOTE_GIT_COMMON_DIR="$3"
 REMOTE_PEAR_SKILLS_DIR="$4"
-PEAR_SCHEMA_REBASELINED="$5"
-RUNTIME_CONFIG_COUNT="$6"
-shift 6
+RUNTIME_CONFIG_COUNT="$5"
+shift 5
 RUNTIME_CONFIG_PATHS=("${@:1:RUNTIME_CONFIG_COUNT}")
 shift "$RUNTIME_CONFIG_COUNT"
 RSYNC_EXCLUDE_COUNT="$1"
@@ -933,12 +936,6 @@ RSYNC_EXCLUDES=("$@")
 if [[ "${#RSYNC_EXCLUDES[@]}" -ne "$RSYNC_EXCLUDE_COUNT" ]]; then
     echo "invalid rollback rsync exclude argument count" >&2
     exit 1
-fi
-
-REBASELINE_HELPER=""
-if [[ "$PEAR_SCHEMA_REBASELINED" == true ]]; then
-    REBASELINE_HELPER="$(mktemp /tmp/pear-rebaseline-schema.XXXXXX)"
-    install -m 755 /usr/local/lib/pear-rebaseline-schema "$REBASELINE_HELPER"
 fi
 
 systemctl stop caddy pear-worker pear-monitor-worker pear-embedded-bots pear-thumbnail pear-zulip-dev
@@ -982,11 +979,6 @@ for runtime_path in "${RUNTIME_CONFIG_PATHS[@]}"; do
 done
 if [[ -s "$SNAPSHOT_DIR/runtime-config.paths" ]]; then
     tar -C / -xpf "$SNAPSHOT_DIR/runtime-config.tar"
-fi
-
-if [[ "$PEAR_SCHEMA_REBASELINED" == true ]]; then
-    sudo -Hu zulipdev bash -lc "cd '$REMOTE_PATH' && set -a && . /home/zulipdev/pear.env && set +a && '$REMOTE_PATH/.venv/bin/python3' '$REBASELINE_HELPER' reset --repo-root '$REMOTE_PATH' --yes && '$REMOTE_PATH/.venv/bin/python3' '$REMOTE_PATH/manage.py' migrate zerver --noinput"
-    rm -f "$REBASELINE_HELPER"
 fi
 
 systemctl daemon-reload
@@ -1171,18 +1163,14 @@ echo "Preflight: local Caddy verification password file is a current-user-owned 
 echo "Preflight: remote tracked/untracked source tree is clean and not ahead of local pear-main."
 REMOTE_PEAR_SCHEMA_STATE="$(detect_remote_pear_schema_state | tail -n 1)"
 case "$REMOTE_PEAR_SCHEMA_STATE" in
-    legacy)
-        PEAR_SCHEMA_REBASELINE_REQUIRED=true
-        echo "Preflight: legacy Pear migration chain will be rebaselined; disposable Pear state will be removed."
-        ;;
     current)
         echo "Preflight: Pear database already uses the current migration baseline."
         ;;
     empty)
         echo "Preflight: Pear database has no applied Pear migration; normal migrate will create it."
         ;;
-    mixed)
-        fail "remote database contains both legacy and current Pear migration baselines"
+    unexpected)
+        fail "remote database contains a superseded or mixed Pear migration baseline"
         ;;
     *)
         fail "could not classify remote Pear migration baseline: $REMOTE_PEAR_SCHEMA_STATE"
@@ -1240,6 +1228,7 @@ verify_remote_quiescence \
     "${PREDEPLOY_QUEUES[*]}"
 preflight_remote_workspace_helper
 preflight_remote_visual_runtime
+preflight_remote_codex_sandbox
 verify_remote_disk_capacity
 
 if [[ "$YES" != true ]]; then
@@ -1408,12 +1397,6 @@ ssh_root python3 "$REMOTE_TRUSTED_RUNTIME/tools/pear_deploy/runtime_config.py" v
     --fqdn "$FQDN"
 ssh_root "systemctl daemon-reload"
 ssh_root "systemctl enable ${PEAR_DEPLOY_SERVICES[*]}"
-
-if [[ "$PEAR_SCHEMA_REBASELINE_REQUIRED" == true ]]; then
-    echo "Rebaselining disposable Pear schema onto the squashed migration..."
-    ssh_zulip "$REMOTE_PATH/.venv/bin/python3 /usr/local/lib/pear-rebaseline-schema reset --repo-root $REMOTE_PATH --yes"
-    PEAR_SCHEMA_REBASELINED=true
-fi
 
 echo "Applying zerver migrations..."
 ssh_zulip "$REMOTE_PATH/.venv/bin/python3 $REMOTE_PATH/manage.py migrate zerver --noinput"

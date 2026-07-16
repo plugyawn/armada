@@ -188,7 +188,7 @@ chmod 711 /home/zulipdev
 install -d -m 750 -o zulipdev -g zulipdev /home/zulipdev/zulip
 
 apt-get update
-apt-get install -y ca-certificates caddy curl git gnupg nodejs npm python3 python3-venv rsync ufw
+apt-get install -y bubblewrap ca-certificates caddy curl git gnupg nodejs npm python3 python3-venv rsync ufw
 
 ufw allow OpenSSH
 ufw allow 80/tcp

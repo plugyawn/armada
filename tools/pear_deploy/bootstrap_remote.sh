@@ -83,7 +83,7 @@ for env_file in "$REPO_ROOT/../env.local" "$REPO_ROOT/.env.local"; do
         set +a
     fi
 done
-PEAR_GEMINI_API_KEY="${PEAR_ADDRESSING_ROUTER_GEMINI_API_KEY:-${GEMINI_API_KEY:-${GEMINI_KEY:-${GOOGLE_API_KEY:-${GOOGLE_GENAI_API_KEY:-}}}}}"
+PEAR_GEMINI_API_KEY="${PEAR_GEMINI_INTERACTIONS_API_KEY:-${GEMINI_API_KEY:-${GEMINI_KEY:-${GOOGLE_API_KEY:-${GOOGLE_GENAI_API_KEY:-}}}}}"
 ssh_root() {
     ssh -F "$SSH_CONFIG" pear-staging-root "$@"
 }
@@ -295,6 +295,8 @@ PEAR_WORKER_MAX_ACTIVE_RUNS_PER_REALM=6
 PEAR_ADDRESSING_ROUTER_RUNTIME=gemini-interactions
 PEAR_ADDRESSING_ROUTER_GEMINI_MODEL=gemini-3.1-flash-lite
 PEAR_ADDRESSING_ROUTER_GEMINI_THINKING_LEVEL=minimal
+PEAR_PRESENTATION_GEMINI_MODEL=gemini-3.1-flash-lite
+PEAR_PRESENTATION_GEMINI_THINKING_LEVEL=minimal
 EOF
 chown zulipdev:zulipdev /home/zulipdev/pear.env
 chmod 600 /home/zulipdev/pear.env
@@ -526,11 +528,11 @@ ssh -F "$SSH_CONFIG" pear-staging-root "$runtime_command"
 ssh_root "systemctl daemon-reload && systemctl enable caddy ${PEAR_DEPLOY_SERVICES[*]} && systemctl restart caddy ${PEAR_DEPLOY_SERVICES[*]}"
 
 if [[ -n "$PEAR_GEMINI_API_KEY" ]]; then
-    echo "Copying Gemini addressing-router key to the server without printing it..."
-    printf 'PEAR_ADDRESSING_ROUTER_GEMINI_API_KEY=%s\n' "$PEAR_GEMINI_API_KEY" |
+    echo "Copying Gemini Interactions key to the server without printing it..."
+    printf 'PEAR_GEMINI_INTERACTIONS_API_KEY=%s\n' "$PEAR_GEMINI_API_KEY" |
         ssh_root 'cat >>/home/zulipdev/pear.env && chown zulipdev:zulipdev /home/zulipdev/pear.env && chmod 600 /home/zulipdev/pear.env'
 else
-    echo "WARNING: No Gemini key found in local env; ambient addressing will fail closed." >&2
+    echo "WARNING: No Gemini key found in local env; addressing and live summaries will fail closed." >&2
 fi
 
 echo "Ensuring Pear embedded bot is configured..."

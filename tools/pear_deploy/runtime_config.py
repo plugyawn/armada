@@ -26,6 +26,10 @@ RUNTIME_FILES = {
         Path("/etc/systemd/system/pear-addressing.service"),
         0o644,
     ),
+    Path("tools/pear_deploy/runtime/pear-presentation.service"): (
+        Path("/etc/systemd/system/pear-presentation.service"),
+        0o644,
+    ),
 }
 CADDY_SOURCE_PATH = Path("tools/pear_deploy/runtime/Caddyfile")
 CADDY_FQDN_TOKEN = b"{$PEAR_CADDY_FQDN}"

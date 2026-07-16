@@ -3078,6 +3078,19 @@ class PearSessionEndpointTest(ZulipTestCase):
                 "kind": "command",
                 "title": "Read repository files",
                 "body": "secret raw command output",
+                "item_id": "command-1",
+                "status": "running",
+            },
+        )
+        PearWorkerRunEvent.objects.create(
+            run=run,
+            event_type="transcript",
+            summary="Read files",
+            payload={
+                "kind": "command",
+                "title": "Read repository files",
+                "item_id": "command-1",
+                "status": "done",
             },
         )
         PearWorkerRunEvent.objects.create(
@@ -3100,6 +3113,7 @@ class PearSessionEndpointTest(ZulipTestCase):
         self.assertNotIn("private chain of thought", trace_text)
         self.assertNotIn("secret raw command output", trace_text)
         self.assertIn("spoiler-block", trace_payload["rendered"])
+        self.assertEqual(trace_payload["rendered"].count("Read repository files"), 1)
         self.assertIn("I’m checking the relevant files.", trace_payload["rendered"])
         self.assertNotIn("private chain of thought", trace_payload["rendered"])
         self.assertNotIn("secret raw command output", trace_payload["rendered"])
@@ -3119,7 +3133,15 @@ class PearSessionEndpointTest(ZulipTestCase):
         second_page = self.assert_json_success(second_page_result)
         self.assertEqual(len(second_page["trace"]), 1)
         self.assertEqual(second_page["trace"][0]["kind"], "command")
-        self.assertFalse(second_page["has_more"])
+        self.assertTrue(second_page["has_more"])
+        third_page_result = self.client_get(
+            f"/json/pear/runs/{run.id}/trace?limit=1&before_event_id={second_page['next_before_event_id']}",
+            intentionally_undocumented=True,
+        )
+        third_page = self.assert_json_success(third_page_result)
+        self.assertEqual(len(third_page["trace"]), 1)
+        self.assertEqual(third_page["trace"][0]["kind"], "command")
+        self.assertFalse(third_page["has_more"])
 
         with (
             patch("zerver.views.pear.mark_pear_run_attended") as mark_attended,

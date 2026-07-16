@@ -269,6 +269,9 @@ class RuntimeConfigTest(unittest.TestCase):
                 stat.S_IMODE((root / "usr/local/bin/pear-run-zulip-dev").stat().st_mode),
                 0o755,
             )
+            installed_caddy = (root / "etc/caddy/Caddyfile").read_text()
+            self.assertTrue(installed_caddy.startswith("pear.example.com {\n"))
+            self.assertNotIn("PEAR_CADDY_FQDN", installed_caddy)
 
     def test_install_rejects_symlinked_legacy_auth_before_mutation(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:

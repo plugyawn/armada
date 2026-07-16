@@ -27,6 +27,8 @@ RUNTIME_FILES = {
         0o644,
     ),
 }
+CADDY_SOURCE_PATH = Path("tools/pear_deploy/runtime/Caddyfile")
+CADDY_FQDN_TOKEN = b"{$PEAR_CADDY_FQDN}"
 LEGACY_RUNTIME_FILES = (
     Path("/etc/pear/caddy-basic-auth.env"),
     Path("/etc/systemd/system/caddy.service.d/pear-basic-auth.conf"),
@@ -242,10 +244,19 @@ def upsert_pear_env(path: Path) -> None:
     )
 
 
-def copy_runtime_files(repo_root: Path, root_prefix: Path) -> None:
+def render_runtime_payload(source_relative: Path, payload: bytes, fqdn: str) -> bytes:
+    if source_relative != CADDY_SOURCE_PATH:
+        return payload
+    if payload.count(CADDY_FQDN_TOKEN) != 1:
+        raise RuntimeConfigError("Caddy source must contain exactly one FQDN token")
+    return payload.replace(CADDY_FQDN_TOKEN, validate_fqdn(fqdn).encode("ascii"))
+
+
+def copy_runtime_files(repo_root: Path, root_prefix: Path, fqdn: str) -> None:
     for source_relative, (destination_absolute, mode) in RUNTIME_FILES.items():
         source = repo_root / source_relative
         payload, _ = _read_regular_file_nofollow(source)
+        payload = render_runtime_payload(source_relative, payload, fqdn)
         destination = rooted(root_prefix, destination_absolute)
         atomic_write(destination, payload, mode)
 
@@ -274,11 +285,12 @@ def verify_legacy_runtime_files_absent(root_prefix: Path) -> None:
             raise RuntimeConfigError(f"retired Caddy authentication file still exists: {path}")
 
 
-def verify_runtime_files(repo_root: Path, root_prefix: Path) -> None:
+def verify_runtime_files(repo_root: Path, root_prefix: Path, fqdn: str) -> None:
     for source_relative, (destination_absolute, mode) in RUNTIME_FILES.items():
         source = repo_root / source_relative
         destination = rooted(root_prefix, destination_absolute)
         source_payload, _ = _read_regular_file_nofollow(source)
+        source_payload = render_runtime_payload(source_relative, source_payload, fqdn)
         required_owner = 0 if os.geteuid() == 0 else None
         destination_payload, _ = _read_regular_file_nofollow(
             destination,
@@ -311,15 +323,13 @@ def verify_pear_env(path: Path) -> None:
 
 
 def validate_caddy(caddyfile: Path, fqdn: str) -> None:
-    environment = os.environ.copy()
-    environment["PEAR_CADDY_FQDN"] = validate_fqdn(fqdn)
+    validate_fqdn(fqdn)
     try:
         result = subprocess.run(
             ["caddy", "validate", "--config", str(caddyfile), "--adapter", "caddyfile"],
             check=False,
             capture_output=True,
             text=True,
-            env=environment,
         )
     except FileNotFoundError as exc:
         raise RuntimeConfigError("caddy executable is missing") from exc
@@ -332,7 +342,7 @@ def install(args: argparse.Namespace) -> None:
     repo_root = args.repo_root.resolve()
     root_prefix = args.root_prefix.resolve()
     validate_legacy_runtime_files(root_prefix)
-    copy_runtime_files(repo_root, root_prefix)
+    copy_runtime_files(repo_root, root_prefix, args.fqdn)
     remove_legacy_runtime_files(root_prefix)
     pear_env_path = rooted(root_prefix, PEAR_ENV_PATH)
     upsert_pear_env(pear_env_path)
@@ -342,7 +352,7 @@ def install(args: argparse.Namespace) -> None:
 def verify(args: argparse.Namespace) -> None:
     repo_root = args.repo_root.resolve()
     root_prefix = args.root_prefix.resolve()
-    verify_runtime_files(repo_root, root_prefix)
+    verify_runtime_files(repo_root, root_prefix, args.fqdn)
     verify_legacy_runtime_files_absent(root_prefix)
     verify_pear_env(rooted(root_prefix, PEAR_ENV_PATH))
     if not args.skip_caddy_validate:

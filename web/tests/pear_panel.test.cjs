@@ -3,6 +3,7 @@
 const assert = require("node:assert/strict");
 
 const render_pear_panel = require("../templates/pear_panel.hbs");
+const render_pear_workspace_rail = require("../templates/pear_workspace_rail.hbs");
 
 const {zrequire} = require("./lib/namespace.cjs");
 const {run_test} = require("./lib/test.cjs");
@@ -37,7 +38,7 @@ run_test("render_state_changed_for_testing", () => {
     );
 });
 
-run_test("rail plan does not leak a completed plan into a plan-less active run", () => {
+run_test("rail plan uses Working instead of leaking an older completed plan", () => {
     const steps = pear_panel.pear_rail_plan_steps_for_testing([
         {id: 2, status: "running", plan: null},
         {
@@ -47,7 +48,14 @@ run_test("rail plan does not leak a completed plan into a plan-less active run",
         },
     ]);
 
-    assert.deepEqual(steps, []);
+    assert.deepEqual(steps, [
+        {
+            step: "translated: Working",
+            status_glyph: "",
+            status_class: "pear-rail-plan-active",
+            glyph_class: "pear-thinking-glyph-animated",
+        },
+    ]);
 });
 
 run_test("rail plan renders only the active run checklist", () => {
@@ -69,10 +77,74 @@ run_test("rail plan renders only the active run checklist", () => {
     ]);
 
     assert.deepEqual(steps, [
-        {step: "Inspect", status_glyph: "✓", status_class: "pear-rail-plan-done"},
-        {step: "Implement", status_glyph: "▸", status_class: "pear-rail-plan-active"},
-        {step: "Verify", status_glyph: "·", status_class: "pear-rail-plan-pending"},
+        {
+            step: "Inspect",
+            status_glyph: "✓",
+            status_class: "pear-rail-plan-done",
+            glyph_class: "",
+        },
+        {
+            step: "Implement",
+            status_glyph: "",
+            status_class: "pear-rail-plan-active",
+            glyph_class: "pear-thinking-glyph-animated",
+        },
+        {
+            step: "Verify",
+            status_glyph: "○",
+            status_class: "pear-rail-plan-pending",
+            glyph_class: "",
+        },
     ]);
+});
+
+run_test("rail plan keeps a bounded window around the active step", () => {
+    const steps = pear_panel.pear_rail_plan_steps_for_testing([
+        {
+            id: 2,
+            status: "running",
+            plan: [
+                {step: "One", status: "completed"},
+                {step: "Two", status: "completed"},
+                {step: "Three", status: "completed"},
+                {step: "Four", status: "in_progress"},
+                {step: "Five", status: "pending"},
+                {step: "Six", status: "pending"},
+            ],
+        },
+    ]);
+
+    assert.deepEqual(
+        steps.map((entry) => entry.step),
+        ["Two", "Three", "Four", "Five"],
+    );
+});
+
+run_test("workspace rail keeps a plan visible before workspace context arrives", () => {
+    const html = render_pear_workspace_rail({
+        has_workspace: false,
+        has_plan: true,
+        plan_steps: [
+            {
+                step: "Working",
+                status_glyph: "",
+                status_class: "pear-rail-plan-active",
+                glyph_class: "pear-thinking-glyph-animated",
+            },
+        ],
+        has_runs: false,
+        has_overview: true,
+        overview: "Reading the renderer state",
+        show_workspace_line: false,
+    });
+
+    assert.ok(html.includes("pear-rail-plan"));
+    assert.ok(html.includes("pear-thinking-glyph-animated"));
+    assert.ok(html.includes("Working"));
+    assert.ok(html.includes("pear-rail-overview"));
+    assert.ok(html.includes("Reading the renderer state"));
+    assert.ok(!html.includes("pear-workspace-rail-card"));
+    assert.ok(!html.includes("pear-rail-plan-title"));
 });
 
 run_test("status_marker_for_testing", () => {

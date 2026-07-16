@@ -203,7 +203,7 @@
                 border-radius: var(--pear-radius-px);
                 background: var(--pear-surface-2);
                 color: var(--pear-ink-2);
-                font-family: var(--pear-font-ui);
+                font-family: var(--pear-font-pixel);
                 font-size: 0.78em;
                 font-weight: 600;
                 line-height: 1.25;
@@ -267,6 +267,10 @@
             .pear-run-footer-ticker .pear-run-elapsed {
                 color: var(--pear-ink-3);
                 font-variant-numeric: tabular-nums;
+            }
+
+            .pear-run-footer-ticker .pear-run-footer-status {
+                color: var(--pear-interaction);
             }
 
             .pear-live-progress {
@@ -342,9 +346,10 @@
                 overflow: hidden;
                 margin: 1px 8px 3px 17px;
                 color: var(--pear-ink-1);
-                font-family: var(--pear-font-ui);
-                font-size: 0.78em;
-                font-weight: 500;
+                font-family: var(--pear-font-pixel);
+                /* stylelint-disable-next-line declaration-property-unit-disallowed-list */
+                font-size: 11px;
+                font-weight: 400;
                 line-height: 1.4;
                 text-overflow: ellipsis;
                 white-space: nowrap;
@@ -370,21 +375,21 @@
                 border: 0;
                 background: transparent;
                 padding: 0;
-                color: var(--pear-accent-ink);
-                font-family: var(--pear-font-ui);
+                color: var(--pear-interaction);
+                font-family: var(--pear-font-pixel);
                 font-size: 12px;
                 font-weight: 600;
                 cursor: pointer;
 
                 &::before {
                     margin-right: 0.32em;
-                    content: "↥";
+                    content: "⌃";
                     font-family: var(--pear-font-pixel);
                     font-weight: 400;
                 }
 
                 &[aria-expanded="true"]::before {
-                    content: "↧";
+                    content: "⌄";
                 }
 
                 &:hover {
@@ -396,20 +401,33 @@
                 display: grid;
                 flex-basis: 100%;
                 gap: 5px;
-                max-height: 22rem;
+                max-height: min(22rem, 55vh);
                 overflow: auto;
+                overscroll-behavior: contain;
                 margin-top: var(--pear-space-2);
                 padding: var(--pear-space-3) var(--pear-space-2)
                     var(--pear-space-2);
                 border-top: 1px solid var(--pear-hairline);
+                background: var(--color-background-pear-message-content);
                 color: var(--pear-ink-2);
                 font-family: var(--pear-font-ui);
                 font-size: 13px;
                 line-height: 1.5;
+                scrollbar-gutter: stable;
+                /* Keep Zulip's expanded-topic reveal geometry, but bind the
+                   middle/outer layers to this message surface. The stock
+                   sidebar variables assume the page background and became a
+                   black tunnel when applied verbatim inside a Pear row. */
                 box-shadow:
-                    0 -0.2em 0.75em 0 var(--color-left-sidebar-inner-box-shadow),
-                    0 -2.5em 1em 0 var(--color-left-sidebar-middle-box-shadow),
-                    0 -4em 1em 0 var(--color-left-sidebar-outer-box-shadow);
+                    0 -0.2em 0.75em 0
+                        color-mix(in srgb, var(--pear-ink-1) 14%, transparent),
+                    0 -2.5em 1em 0 var(--color-background-pear-message-content),
+                    0 -4em 1em 0
+                        color-mix(
+                            in srgb,
+                            var(--pear-interaction) 8%,
+                            transparent
+                        );
                 animation: pear-trace-reveal 180ms var(--pear-ease) both;
 
                 > p {

@@ -1303,13 +1303,11 @@
 
 @keyframes pear-stream-chunk-in {
     from {
-        opacity: 0.28;
-        filter: blur(0.35px);
+        opacity: 0.38;
     }
 
     to {
         opacity: 1;
-        filter: blur(0);
     }
 }
 
@@ -1960,12 +1958,6 @@
     border: 1px solid var(--pear-hairline);
     border-radius: var(--pear-radius-card);
     background: var(--pear-surface-1);
-}
-
-.pear-rail-plan-title {
-    display: block;
-    margin-bottom: var(--pear-space-1);
-    color: var(--pear-ink-3);
     font-family: var(--pear-font-pixel);
     /* stylelint-disable-next-line declaration-property-unit-disallowed-list */
     font-size: 11px;
@@ -1982,8 +1974,6 @@
     align-items: baseline;
     gap: var(--pear-space-2);
     padding: 1px 0;
-    /* 13px at 14px em */
-    font-size: 0.9286em;
     line-height: 1.5;
 }
 
@@ -2007,6 +1997,10 @@
     font-weight: 500;
 }
 
+.pear-rail-plan-active .pear-rail-plan-glyph {
+    color: var(--pear-interaction);
+}
+
 .pear-rail-plan-pending .pear-rail-plan-text,
 .pear-rail-plan-pending .pear-rail-plan-glyph {
     color: var(--pear-ink-3);
@@ -2018,6 +2012,16 @@
     color: var(--pear-ink-2);
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+.pear-rail-overview {
+    overflow: hidden;
+    margin: var(--pear-space-1) 0 0 1.8em;
+    color: var(--pear-ink-2);
+    line-height: 1.4;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    animation: pear-live-overview-in 160ms ease-out both;
 }
 
 /* Native Pear artifacts. Authors provide structure and meaning; every visual

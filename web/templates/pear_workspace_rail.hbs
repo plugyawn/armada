@@ -1,47 +1,69 @@
-<button type="button" class="pear-workspace-rail-card pear-panel-open-action">
-    <span class="pear-rail-line">
-        <span class="pear-ui-glyph pear-rail-glyph" aria-hidden="true">◉</span>
-        <span
-            class="pear-rail-repo"
-            title="{{repo_label}}"
-        >{{repo_label}}</span>
-        <span
-            class="pear-rail-status pear-rail-status-{{status_class}}"
-        >{{status_label}}</span>
-    </span>
-    <span class="pear-rail-line pear-rail-line-meta">
-        <i
-            class="zulip-icon zulip-icon-git-branch pear-rail-branch-icon"
-            aria-hidden="true"
-        ></i>
-        <span
-            class="pear-rail-branch"
-            title="{{branch_label}}"
-        >{{branch_label}}</span>
-        {{#if head_short}}
-            <span class="pear-rail-head">{{head_short}}</span>
-        {{/if}}
-    </span>
-</button>
+{{#if has_workspace}}
+    <button
+        type="button"
+        class="pear-workspace-rail-card pear-panel-open-action"
+    >
+        <span class="pear-rail-line">
+            <span
+                class="pear-ui-glyph pear-rail-glyph"
+                aria-hidden="true"
+            >◉</span>
+            <span
+                class="pear-rail-repo"
+                title="{{repo_label}}"
+            >{{repo_label}}</span>
+            <span
+                class="pear-rail-status pear-rail-status-{{status_class}}"
+            >{{status_label}}</span>
+        </span>
+        <span class="pear-rail-line pear-rail-line-meta">
+            <i
+                class="zulip-icon zulip-icon-git-branch pear-rail-branch-icon"
+                aria-hidden="true"
+            ></i>
+            <span
+                class="pear-rail-branch"
+                title="{{branch_label}}"
+            >{{branch_label}}</span>
+            {{#if head_short}}
+                <span class="pear-rail-head">{{head_short}}</span>
+            {{/if}}
+        </span>
+    </button>
+{{/if}}
 {{#if has_plan}}
     <div class="pear-rail-plan">
-        <span class="pear-rail-plan-title">{{t "Plan" }}</span>
         <ul class="pear-rail-plan-steps">
             {{#each plan_steps}}
                 <li class="pear-rail-plan-step {{status_class}}">
-                    <span class="pear-rail-plan-glyph" aria-hidden="true">{{status_glyph}}</span>
+                    <span
+                        class="pear-rail-plan-glyph {{glyph_class}}"
+                        aria-hidden="true"
+                    >{{status_glyph}}</span>
                     <span class="pear-rail-plan-text">{{step}}</span>
                 </li>
             {{/each}}
         </ul>
+        {{#if has_overview}}
+            <div
+                class="pear-rail-overview"
+                title="{{overview}}"
+            >{{overview}}</div>
+        {{/if}}
     </div>
 {{/if}}
 {{#if has_runs}}
     <ul class="pear-rail-runs">
         {{#each runs}}
             <li>
-                <button type="button" class="pear-rail-run pear-panel-open-action">
-                    <span class="pear-rail-run-glyph {{#if failed}}pear-rail-run-failed{{/if}}" aria-hidden="true">{{glyph}}</span>
+                <button
+                    type="button"
+                    class="pear-rail-run pear-panel-open-action"
+                >
+                    <span
+                        class="pear-rail-run-glyph {{failed_class}}"
+                        aria-hidden="true"
+                    >{{glyph}}</span>
                     <span class="pear-rail-run-meta">{{label}}</span>
                     <span class="pear-rail-run-when">{{when}}</span>
                 </button>
@@ -52,6 +74,6 @@
 {{#if show_workspace_line}}
     <button type="button" class="pear-rail-workspace-line">
         <span class="pear-ui-glyph" aria-hidden="true">⌘</span>
-        <span>{{t "Workspace" }}</span>
+        <span>{{t "Workspace"}}</span>
     </button>
 {{/if}}

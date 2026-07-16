@@ -1541,27 +1541,74 @@ function pear_rail_duration_label(duration_seconds: number): string {
     return `${Math.floor(total_seconds / 60)}m ${total_seconds % 60}s`;
 }
 
-type PearRailRunEntry = {glyph: string; failed: boolean; label: string; when: string};
+type PearRailRunEntry = {glyph: string; failed_class: string; label: string; when: string};
 
-type PearRailPlanStep = {step: string; status_glyph: string; status_class: string};
+type PearRailPlanStep = {
+    step: string;
+    status_glyph: string;
+    status_class: string;
+    glyph_class: string;
+};
 
 export function pear_rail_plan_steps_for_testing(runs: PearRun[]): PearRailPlanStep[] {
     // Plans are run-scoped. While a new run is active, never fall back to a
-    // completed checklist from an earlier turn; a plan-less run renders as
-    // "Working" in the live message instead.
-    const source =
-        runs.find((run) => run.status === "running" || run.status === "queued") ?? runs[0];
-    if (source === undefined || (source.plan ?? []).length === 0) {
+    // completed checklist from an earlier turn. Keep the rail resident from
+    // the first queued event with the same quiet Working state used by chat.
+    const active_source = runs.find((run) => run.status === "running" || run.status === "queued");
+    const source = active_source ?? runs[0];
+    if (source === undefined) {
         return [];
     }
-    return (source.plan ?? []).map((entry) => {
+    if ((source.plan ?? []).length === 0) {
+        return active_source === undefined
+            ? []
+            : [
+                  {
+                      step: $t({defaultMessage: "Working"}),
+                      status_glyph: "",
+                      status_class: "pear-rail-plan-active",
+                      glyph_class: "pear-thinking-glyph-animated",
+                  },
+              ];
+    }
+    const plan = source.plan ?? [];
+    let current_index = plan.findIndex((entry) => entry.status === "in_progress");
+    if (current_index === -1) {
+        current_index = plan.findIndex((entry) => entry.status === "pending");
+    }
+    if (current_index === -1) {
+        current_index = plan.length - 1;
+    }
+    const visible_indices = [
+        current_index - 2,
+        current_index - 1,
+        current_index,
+        current_index + 1,
+    ].filter((index) => index >= 0 && index < plan.length);
+    return visible_indices.map((index) => {
+        const entry = plan[index]!;
         if (entry.status === "completed" || entry.status === "done") {
-            return {step: entry.step, status_glyph: "✓", status_class: "pear-rail-plan-done"};
+            return {
+                step: entry.step,
+                status_glyph: "✓",
+                status_class: "pear-rail-plan-done",
+                glyph_class: "",
+            };
         }
-        if (entry.status === "in_progress") {
-            return {step: entry.step, status_glyph: "▸", status_class: "pear-rail-plan-active"};
+        if (index === current_index) {
+            return {
+                step: entry.step,
+                status_glyph: "",
+                status_class: "pear-rail-plan-active",
+                glyph_class: "pear-thinking-glyph-animated",
+            };
         }
-        return {step: entry.step, status_glyph: "·", status_class: "pear-rail-plan-pending"};
+        return {
+            step: entry.step,
+            status_glyph: "○",
+            status_class: "pear-rail-plan-pending",
+            glyph_class: "",
+        };
     });
 }
 
@@ -1589,7 +1636,7 @@ function pear_rail_run_entries(runs: PearRun[]): PearRailRunEntry[] {
                 : "";
         return {
             glyph: failed ? "✗" : "✓",
-            failed,
+            failed_class: failed ? "pear-rail-run-failed" : "",
             label: first_nonempty(parts.join(" · "), run.status),
             when,
         };
@@ -1604,7 +1651,9 @@ function render_workspace_rail(
     if ($rail.length === 0) {
         return;
     }
-    if (topic_context === undefined || topic_context.workdir === "") {
+    const plan_steps = pear_rail_plan_steps_for_testing(runs);
+    const has_workspace = topic_context !== undefined && topic_context.workdir !== "";
+    if (!has_workspace && plan_steps.length === 0) {
         if (last_workspace_rail_signature !== "") {
             last_workspace_rail_signature = "";
             $rail.attr("hidden", "hidden");
@@ -1612,27 +1661,29 @@ function render_workspace_rail(
         }
         return;
     }
-    const git = topic_context.git;
+    const git = topic_context?.git;
     const repo_label = first_nonempty(
-        topic_context.repo_label?.trim(),
-        topic_context.repo_title?.trim(),
-        topic_context.github_repo.trim(),
-        topic_context.worktree_label?.trim(),
-        topic_context.topic,
+        topic_context?.repo_label?.trim(),
+        topic_context?.repo_title?.trim(),
+        topic_context?.github_repo.trim(),
+        topic_context?.worktree_label?.trim(),
+        topic_context?.topic,
     );
     const branch_label = first_nonempty(
-        git.branch?.trim(),
-        topic_context.branch?.trim(),
-        topic_context.topic,
+        git?.branch?.trim(),
+        topic_context?.branch?.trim(),
+        topic_context?.topic,
     );
-    const dirty = git.dirty === true;
-    const changed_count = git.changed_count ?? 0;
+    const dirty = git?.dirty === true;
+    const changed_count = git?.changed_count ?? 0;
     const run_entries = pear_rail_run_entries(runs);
-    const plan_steps = pear_rail_plan_steps_for_testing(runs);
+    const active_run = runs.find((run) => run.status === "running" || run.status === "queued");
+    const overview = active_run?.overview?.trim() ?? "";
     const args = {
+        has_workspace,
         repo_label,
         branch_label,
-        head_short: git.head_short?.trim() ?? "",
+        head_short: git?.head_short?.trim() ?? "",
         status_class: dirty ? "dirty" : "clean",
         status_label: dirty
             ? $t({defaultMessage: "{changed_count} changed"}, {changed_count})
@@ -1641,7 +1692,9 @@ function render_workspace_rail(
         has_runs: run_entries.length > 0,
         plan_steps,
         has_plan: plan_steps.length > 0,
-        show_workspace_line: true,
+        overview,
+        has_overview: overview !== "",
+        show_workspace_line: has_workspace,
     };
     const signature = JSON.stringify(args);
     if (signature === last_workspace_rail_signature) {

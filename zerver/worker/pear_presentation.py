@@ -33,7 +33,7 @@ class PearPresentationWorker(QueueProcessingWorker):
         self.client = PearGeminiInteractionsClient(
             api_key=settings.PEAR_GEMINI_INTERACTIONS_API_KEY,
             timeout_seconds=3,
-            output_limit=1000,
+            output_limit=48,
             url=settings.PEAR_GEMINI_INTERACTIONS_URL,
         )
 
@@ -80,6 +80,8 @@ class PearPresentationWorker(QueueProcessingWorker):
             logger.warning("Pear presentation update failed", exc_info=True)
             return
         if not overview:
+            return
+        if previous is not None and previous.summary == overview:
             return
         with transaction.atomic(savepoint=False):
             run = PearWorkerRun.objects.select_for_update().get(id=run.id)

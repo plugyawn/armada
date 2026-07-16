@@ -6,10 +6,12 @@ from django.core.cache import cache
 
 from zerver.lib.pear import PEAR_DEFAULT_STREAM, PEAR_DEFAULT_TOPIC, PEAR_EMBEDDED_BOT_SERVICE
 from zerver.lib.pear_presentation import (
+    PEAR_PRESENTATION_OVERVIEW_MAX_CHARS,
     build_pear_presentation_input,
     parse_pear_presentation_output,
 )
 from zerver.lib.pear_worker import (
+    PEAR_PRESENTATION_CADENCE_SECONDS,
     PEAR_PRESENTATION_QUEUE_NAME,
     mark_pear_run_attended,
     maybe_enqueue_pear_run_presentation,
@@ -71,17 +73,23 @@ class PearPresentationTest(ZulipTestCase):
         self.assertNotIn("hidden", input_text)
         self.assertNotIn("raw", input_text)
         self.assertLessEqual(len(input_text), 3000)
-        self.assertEqual(json.loads(input_text)["plan"][0]["step"], "Inspect")
+        self.assertEqual(json.loads(input_text)["current_step"], "Inspect")
         self.assertEqual(
-            parse_pear_presentation_output('{"overview":"Waiting for tests."}'),
-            "Waiting for tests.",
+            parse_pear_presentation_output(json.dumps({"overview": "  Waiting   for tests.\n"})),
+            "Waiting for tests",
         )
         self.assertEqual(
             parse_pear_presentation_output('{"overview":"fine","title":"Invented"}'),
             "",
         )
+        clipped = parse_pear_presentation_output(
+            json.dumps({"overview": "Compiling " + "a very long document " * 10})
+        )
+        self.assertLessEqual(len(clipped), PEAR_PRESENTATION_OVERVIEW_MAX_CHARS)
+        self.assertTrue(clipped.endswith("…"))
 
     def test_presentation_queue_is_attended_and_cadence_gated(self) -> None:
+        self.assertEqual(PEAR_PRESENTATION_CADENCE_SECONDS, 5)
         cache.clear()
         with patch("zerver.lib.pear_worker.queue_json_publish_rollback_unsafe") as publish:
             self.assertFalse(maybe_enqueue_pear_run_presentation(17, 30))
@@ -119,9 +127,16 @@ class PearPresentationTest(ZulipTestCase):
 
         with patch("zerver.worker.pear_presentation.send_pear_run_event") as send_event:
             worker.consume({"run_id": run.id, "source_event_id": source_event.id})
+            repeated_source_event = PearWorkerRunEvent.objects.create(
+                run=run,
+                event_type="transcript",
+                summary="Read files again",
+                payload={"kind": "command", "title": "Reading four files"},
+            )
+            worker.consume({"run_id": run.id, "source_event_id": repeated_source_event.id})
 
         presentation = PearWorkerRunEvent.objects.get(run=run, event_type="presentation")
-        self.assertEqual(presentation.payload["overview"], "Reading four files.")
+        self.assertEqual(presentation.payload["overview"], "Reading four files")
         self.assertEqual(presentation.payload["source_event_id"], source_event.id)
         send_event.assert_called_once_with(run, presentation)
 

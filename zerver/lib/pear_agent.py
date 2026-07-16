@@ -269,7 +269,10 @@ class PearGeminiInteractionsClient:
                 "mime_type": "application/json",
                 "schema": response_schema,
             },
-            "generation_config": {"temperature": 0},
+            "generation_config": {
+                "temperature": 0,
+                "max_output_tokens": self.output_limit,
+            },
         }
         if thinking_level:
             payload["generation_config"]["thinking_level"] = thinking_level.strip()

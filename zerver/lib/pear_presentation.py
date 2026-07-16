@@ -5,6 +5,8 @@ from zerver.lib.pear import trim_pear_text
 from zerver.lib.pear_agent import PearGeminiInteractionsClient
 from zerver.models.bots import PearWorkerRun, PearWorkerRunEvent
 
+PEAR_PRESENTATION_OVERVIEW_MAX_CHARS = 72
+
 
 def pear_presentation_plan(run: PearWorkerRun) -> list[dict[str, str]] | None:
     for event in run.events.filter(event_type="transcript", payload__kind="plan").order_by("-id")[
@@ -50,20 +52,16 @@ def build_pear_presentation_input(
     plan: list[dict[str, str]],
     events: list[PearWorkerRunEvent],
 ) -> str:
-    bounded_plan = [
-        {
-            "step": trim_pear_text(str(item["step"]), limit=120),
-            "status": trim_pear_text(str(item.get("status", "pending")), limit=24),
-        }
-        for item in plan[:8]
-        if item.get("step")
-    ]
+    current_step = next(
+        (item for item in plan if item.get("status") == "in_progress"),
+        next((item for item in plan if item.get("status") == "pending"), plan[-1]),
+    )
     event_lines = [line for event in events if (line := pear_presentation_event_line(event))]
-    bounded_event_lines = [trim_pear_text(line, limit=160) for line in event_lines[-8:]]
+    bounded_event_lines = [trim_pear_text(line, limit=120) for line in event_lines[-4:]]
     return json.dumps(
         {
-            "plan": bounded_plan,
-            "visible_events": bounded_event_lines,
+            "current_step": trim_pear_text(str(current_step["step"]), limit=120),
+            "recent_events": bounded_event_lines,
         },
         ensure_ascii=False,
     )
@@ -79,7 +77,14 @@ def parse_pear_presentation_output(output: str) -> str:
     overview = payload.get("overview")
     if not isinstance(overview, str):
         return ""
-    return trim_pear_text(overview.strip(), limit=180)
+    overview = " ".join(overview.split()).rstrip(".!?")
+    words = overview.split()
+    if len(words) > 8:
+        overview = f"{' '.join(words[:8])}…"
+    if len(overview) <= PEAR_PRESENTATION_OVERVIEW_MAX_CHARS:
+        return overview
+    clipped = overview[: PEAR_PRESENTATION_OVERVIEW_MAX_CHARS - 1].rsplit(" ", 1)[0]
+    return f"{clipped or overview[: PEAR_PRESENTATION_OVERVIEW_MAX_CHARS - 1]}…"
 
 
 def request_pear_presentation_overview(
@@ -93,12 +98,19 @@ def request_pear_presentation_overview(
         model=model,
         input_text=input_text,
         system_instruction=(
-            "Summarize only the supplied visible run events into one factual present-tense "
-            "sentence. Do not invent reasoning, intent, completion, titles, or tool details."
+            "Write one live activity label from only the supplied current step and recent events. "
+            "Use 3 to 8 words, begin with a present-progressive verb, and omit the subject and "
+            "final punctuation. Example: 'Compiling the three-page manifold PDF'. Never invent "
+            "reasoning, intent, progress, completion, or tool details."
         ),
         response_schema={
             "type": "object",
-            "properties": {"overview": {"type": "string"}},
+            "properties": {
+                "overview": {
+                    "type": "string",
+                    "description": "A factual 3 to 8 word live activity label.",
+                }
+            },
             "required": ["overview"],
             "additionalProperties": False,
         },

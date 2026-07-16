@@ -1303,7 +1303,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-    .pear-live-plan-current,
+    .pear-live-plan-current .pear-live-plan-glyph,
     .pear-live-overview {
         animation: none;
     }

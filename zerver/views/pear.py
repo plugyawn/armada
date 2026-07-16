@@ -856,7 +856,7 @@ def serialize_pear_worker_run_overview(
         payload = event.payload
         overview = payload.get("overview") if isinstance(payload, dict) else None
         if isinstance(overview, str) and overview.strip():
-            return trim_pear_text(overview.strip(), limit=180)
+            return trim_pear_text(" ".join(overview.split()), limit=72)
     return None
 
 

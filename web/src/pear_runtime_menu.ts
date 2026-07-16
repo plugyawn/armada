@@ -524,7 +524,7 @@ function update_runtime_button_label(): void {
 
 function apply_shared_topic_context(): boolean {
     // The panel owns the topic-context/runs store (#36): read from it
-    // rather than running a second polling loop against the same
+    // rather than creating a second fetch authority for the same
     // endpoint. Returns whether a cached context was applied.
     const {stream, topic} = current_narrow();
     if (stream === undefined || topic === undefined) {
@@ -846,7 +846,7 @@ export function initialize(): void {
     update_runtime_button_label();
     fetch_topic_context();
     window.addEventListener("hashchange", fetch_topic_context);
-    // The panel's store is the single fetch/poll authority; re-read it
+    // The panel's store is the single fetch authority; re-read it
     // whenever it changes instead of running a second interval against
     // the same endpoint. Read-only: a fetch here could recurse through
     // the store notification.

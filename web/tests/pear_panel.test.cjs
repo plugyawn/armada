@@ -866,14 +866,14 @@ run_test("workbench_open_for_testing", () => {
     );
 });
 
-run_test("polling_paused_for_testing", () => {
-    // Hidden tab pauses background polls...
-    assert.equal(pear_panel.polling_paused_for_testing({hidden: true, force_context: false}), true);
+run_test("refresh_paused_for_testing", () => {
+    // Hidden tabs skip event/reconnect reconciliation...
+    assert.equal(pear_panel.refresh_paused_for_testing({hidden: true, force_context: false}), true);
     // ...but an explicit forced refresh still runs even while hidden.
-    assert.equal(pear_panel.polling_paused_for_testing({hidden: true, force_context: true}), false);
+    assert.equal(pear_panel.refresh_paused_for_testing({hidden: true, force_context: true}), false);
     // Visible tab never pauses.
     assert.equal(
-        pear_panel.polling_paused_for_testing({hidden: false, force_context: false}),
+        pear_panel.refresh_paused_for_testing({hidden: false, force_context: false}),
         false,
     );
 });

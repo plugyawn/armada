@@ -185,11 +185,10 @@ type PearWorkbenchView = "diff" | "history" | "side";
 type PearDisplayTopicContext = NonNullable<ReturnType<typeof display_topic_context>>;
 
 let initialized = false;
-let refresh_timer: number | undefined;
 let live_refresh_in_flight = false;
 let last_error = "";
-// When an error auto-opens the workbench, closing it sets this so the 5s
-// poll's still-present error can't re-force the popover open on the next
+// When an error auto-opens the workbench, closing it sets this so a later
+// refresh carrying the same error cannot re-force the popover open on the next
 // render. Reset whenever a successful fetch clears last_error.
 let error_dismissed = false;
 let last_runs: PearRun[] = [];
@@ -210,9 +209,8 @@ let workbench_anchor_context_key = "";
 type WorkbenchAnchorKind = "context" | "git";
 let workbench_anchor_kind: WorkbenchAnchorKind | undefined;
 let last_observed_context_key = "";
-// Message/update_message events carry live run changes. This low-frequency
-// reconciliation covers reconnects or dropped events; it is not a live poll.
-const FULL_REFRESH_INTERVAL_MS = 30_000;
+// Message/update_message events carry live run changes. Visibility and narrow
+// activation provide reconnect reconciliation without steady-state polling.
 const EVENT_REFRESH_DEBOUNCE_MS = 250;
 const CONTEXT_REFRESH_INTERVAL_MS = 60_000;
 const WORKBENCH_MIN_VIEWPORT_WIDTH_PX = 320;
@@ -453,7 +451,7 @@ export function workbench_open_for_testing(options: {
         return false;
     }
     // An error only auto-opens the workbench until the user closes it; after
-    // that a still-present error must not re-force it open on the next poll.
+    // that a still-present error must not re-force it open on the next refresh.
     return options.manually_open || (options.has_error && !options.error_dismissed);
 }
 
@@ -640,7 +638,7 @@ function close_work_details(): void {
         work_panel_open_by_context.set(key, false);
     }
     // A close gesture must also dismiss an error-forced open, otherwise the
-    // next poll re-opens the popover and the user can never close it.
+    // next refresh reopens the popover and the user can never close it.
     error_dismissed = true;
     const anchor_element = workbench_anchor_element;
     workbench_anchor_element = undefined;
@@ -1410,7 +1408,7 @@ function remember_topic_context(topic_context: PearWorkspaceContext | null | und
 
 // The panel owns the single topic-context/runs store; the runtime menu
 // (and any future consumer) reads from it and subscribes to changes
-// instead of running its own polling loop against the same endpoint.
+// instead of creating another fetch authority for the same endpoint.
 const topic_context_listeners = new Set<() => void>();
 
 export function on_topic_context_changed(listener: () => void): void {
@@ -1795,7 +1793,7 @@ function render(
     notify_topic_context_listeners();
 }
 
-export function polling_paused_for_testing(options: {
+export function refresh_paused_for_testing(options: {
     hidden: boolean;
     force_context: boolean;
 }): boolean {
@@ -1808,7 +1806,7 @@ export function refresh(options: {force_context?: boolean; live?: boolean} = {})
     const live = options.live === true;
     if (
         typeof document !== "undefined" &&
-        polling_paused_for_testing({
+        refresh_paused_for_testing({
             hidden: document.hidden,
             force_context: options.force_context === true,
         })
@@ -2054,13 +2052,12 @@ export function initialize(): void {
         }
     });
     refresh();
-    refresh_timer = window.setInterval(refresh, FULL_REFRESH_INTERVAL_MS);
 }
 
 export function stop(): void {
-    if (refresh_timer !== undefined) {
-        window.clearInterval(refresh_timer);
-        refresh_timer = undefined;
+    if (event_refresh_timer !== undefined) {
+        window.clearTimeout(event_refresh_timer);
+        event_refresh_timer = undefined;
     }
     $(window).off("resize.pear_panel");
     $(window).off("scroll.pear_panel");

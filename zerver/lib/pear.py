@@ -68,6 +68,7 @@ PEAR_QUESTION_POLL_SECONDS: Final = 2.0
 
 PEAR_MAX_STEERING_SEGMENTS: Final = 4
 PEAR_WORKING_MESSAGE: Final = "Working…"
+PEAR_NO_VISIBLE_RESPONSE_MESSAGE: Final = "Pear worker completed without a visible response."
 PEAR_PERSISTENT_ASSISTANT_FLUSH_INTERVAL_SECONDS: Final = 0.2
 PEAR_TYPING_REFRESH_INTERVAL_SECONDS: Final = 10.0
 PEAR_LIVE_RUN_CACHE_KEY_PREFIX: Final = "pear:live-run:"
@@ -1129,7 +1130,7 @@ def pear_visible_response_text(
     if status == "cancelled":
         return "Pear worker cancelled."
     if status == "done":
-        return "Pear worker completed without a visible response."
+        return PEAR_NO_VISIBLE_RESPONSE_MESSAGE
     return ""
 
 

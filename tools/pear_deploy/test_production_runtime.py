@@ -985,6 +985,7 @@ class StaticRuntimeContractTest(unittest.TestCase):
         self.assertIn("install_and_verify_remote_workspace_helper", update)
         self.assertIn("preflight_remote_codex_sandbox", update)
         self.assertIn("codex_sandbox_runtime.sh", update)
+        self.assertIn('bash -s -- --check <"$SCRIPT_DIR/codex_sandbox_runtime.sh"', update)
         self.assertIn("install_and_verify_remote_codex_sandbox", update)
         self.assertIn("codex_sandbox_runtime.sh", verify)
         self.assertIn("bubblewrap ca-certificates", bootstrap)

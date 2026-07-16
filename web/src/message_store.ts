@@ -248,14 +248,17 @@ export function update_message_cache(message_data: ProcessedMessage): void {
     // widget or artifact disappear until another full fetch. Preserve every
     // locally known submessage while installing the fresh message payload.
     const existing_message = stored_messages.get(message_data.message.id)?.message;
-    if (existing_message !== undefined && existing_message.submessages.length > 0) {
-        const incoming_ids = new Set(message_data.message.submessages.map((item) => item.id));
-        for (const submessage of existing_message.submessages) {
+    const existing_submessages = existing_message?.submessages ?? [];
+    const incoming_submessages = message_data.message.submessages ?? [];
+    if (existing_submessages.length > 0) {
+        message_data.message.submessages = incoming_submessages;
+        const incoming_ids = new Set(incoming_submessages.map((item) => item.id));
+        for (const submessage of existing_submessages) {
             if (!incoming_ids.has(submessage.id)) {
-                message_data.message.submessages.push(submessage);
+                incoming_submessages.push(submessage);
             }
         }
-        message_data.message.submessages.sort((left, right) => left.id - right.id);
+        incoming_submessages.sort((left, right) => left.id - right.id);
     }
     stored_messages.set(message_data.message.id, message_data);
 }

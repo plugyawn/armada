@@ -67,48 +67,93 @@ test("done run clears active result message immediately", () => {
     }
 });
 
-test("active result message self-expires without another panel refresh", () => {
-    const changes = [];
-    const unsubscribe = pear_run_state.on_active_run_result_messages_changed((change) =>
-        changes.push(change),
-    );
-    try {
-        pear_run_state.set_active_run_result_messages([{status: "running", result_message_id: 5}]);
-
-        clock.tick(14_999);
-        assert.ok(pear_run_state.is_active_run_result_message(5));
-
-        clock.tick(1);
-        assert.ok(!pear_run_state.is_active_run_result_message(5));
-        assert.deepEqual(
-            changes.map((change) => change.removed_message_ids),
-            [[], [5]],
-        );
-    } finally {
-        unsubscribe();
-    }
-});
-
-test("active result message refresh prevents stale expiry", () => {
+test("quiet active result message remains active until a terminal event", () => {
     pear_run_state.set_active_run_result_messages([{status: "running", result_message_id: 6}]);
-    clock.tick(10_000);
-    pear_run_state.set_active_run_result_messages([{status: "running", result_message_id: 6}]);
-
-    clock.tick(5_000);
+    clock.tick(60_000);
     assert.ok(pear_run_state.is_active_run_result_message(6));
+    pear_run_state.apply_pear_run_event({
+        version: 1,
+        sequence: 10,
+        run_id: 2,
+        event_type: "done",
+        status: "done",
+        result_message_id: 6,
+        stream: "devel",
+        topic: "speed",
+        current_activity: "Completed",
+        tool_count: 3,
+        plan: null,
+        overview: null,
+        usage: {total_tokens: 1200},
+        duration_seconds: 12.5,
+        trace_available: true,
+        run_date_created: 100,
+        date_created: 110,
+    });
+    assert.ok(!pear_run_state.is_active_run_result_message(6));
+    assert.deepEqual(pear_run_state.get_run_footer(6), {
+        status: "done",
+        duration_seconds: 12.5,
+        total_tokens: 1200,
+        tool_count: 3,
+    });
 });
 
-test("expiry fires exactly TTL after the last refresh", () => {
-    pear_run_state.set_active_run_result_messages([{status: "running", result_message_id: 7}]);
-    clock.tick(10_000);
-    pear_run_state.set_active_run_result_messages([{status: "running", result_message_id: 7}]);
+test("stale hydration cannot overwrite a newer push event", () => {
+    pear_run_state.remember_runs([
+        {
+            id: 9,
+            status: "running",
+            ambient_triggered: false,
+            result_message_id: 90,
+            stream: "devel",
+            topic: "speed",
+            date_created: 90,
+            date_updated: 100,
+        },
+    ]);
+    pear_run_state.set_active_run_result_messages([
+        {
+            id: 9,
+            status: "running",
+            ambient_triggered: false,
+            result_message_id: 90,
+            date_updated: 100,
+        },
+    ]);
+    pear_run_state.apply_pear_run_event({
+        version: 1,
+        sequence: 20,
+        run_id: 9,
+        event_type: "done",
+        status: "done",
+        result_message_id: 90,
+        stream: "devel",
+        topic: "speed",
+        current_activity: "Completed",
+        tool_count: 1,
+        plan: null,
+        overview: null,
+        usage: {total_tokens: 100},
+        duration_seconds: 2,
+        trace_available: true,
+        run_date_created: 90,
+        date_created: 110,
+    });
 
-    // The timer armed at t=0 fires at t=15s, sees fresh data, and must
-    // re-arm for the remaining 10s — not another full TTL, which would
-    // drift expiry to t=30s.
-    clock.tick(14_999);
-    assert.ok(pear_run_state.is_active_run_result_message(7));
-    clock.tick(1);
-    assert.ok(!pear_run_state.is_active_run_result_message(7));
-    assert.equal(pear_run_state.active_result_message_expiry_delay_for_testing(Date.now()), 0);
+    const stale_run = {
+        id: 9,
+        status: "running",
+        ambient_triggered: false,
+        result_message_id: 90,
+        stream: "devel",
+        topic: "speed",
+        date_created: 90,
+        date_updated: 105,
+    };
+    pear_run_state.remember_runs([stale_run]);
+    pear_run_state.set_active_run_result_messages([stale_run]);
+
+    assert.equal(pear_run_state.get_run_view(90).status, "done");
+    assert.ok(!pear_run_state.is_active_run_result_message(90));
 });

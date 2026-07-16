@@ -9,6 +9,7 @@ import * as channel from "./channel.ts";
 import {$t} from "./i18n.ts";
 import * as narrow_state from "./narrow_state.ts";
 import * as pear_panel from "./pear_panel.ts";
+import * as pear_run_state from "./pear_run_state.ts";
 import {model_reasoning_efforts, context_key as narrow_context_key} from "./pear_runtime_shared.ts";
 import * as popover_menus from "./popover_menus.ts";
 import {parse_html} from "./ui_util.ts";
@@ -448,7 +449,7 @@ function render_popover_content(instance: tippy.Instance): void {
     if (refocus_selector !== undefined) {
         instance.popper.querySelector<HTMLElement>(refocus_selector)?.focus({preventScroll: true});
     }
-    $(document).trigger("pear_liveness_markers_changed");
+    pear_run_state.notify_liveness_markers_changed();
 }
 
 function rerender_popover_if_open(): void {
@@ -519,7 +520,7 @@ function update_runtime_button_label(): void {
                 runtime_status.is_active ? " pear-thinking-glyph" : ""
             }`,
         );
-    $(document).trigger("pear_liveness_markers_changed");
+    pear_run_state.notify_liveness_markers_changed();
 }
 
 function apply_shared_topic_context(): boolean {

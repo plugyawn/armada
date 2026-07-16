@@ -255,6 +255,7 @@
                the micro ticker. */
             .pear-run-footer {
                 display: flex;
+                flex-wrap: wrap;
                 align-items: baseline;
                 gap: var(--pear-space-2);
                 margin-top: var(--pear-space-3);
@@ -278,6 +279,87 @@
             .pear-run-footer-ticker .pear-run-elapsed {
                 color: var(--pear-ink-3);
                 font-variant-numeric: tabular-nums;
+            }
+
+            .pear-live-progress {
+                position: relative;
+                display: grid;
+                gap: 2px;
+                margin: 0 0 var(--pear-space-3);
+                padding: 5px 8px 6px;
+                border-left: 1px solid var(--pear-accent-ink);
+                background: linear-gradient(
+                    90deg,
+                    color-mix(in srgb, var(--pear-accent-ink) 9%, transparent),
+                    transparent 72%
+                );
+                font-family: var(--pear-font-pixel);
+                /* stylelint-disable-next-line declaration-property-unit-disallowed-list */
+                font-size: 12px;
+                line-height: 1.35;
+                -webkit-font-smoothing: none;
+            }
+
+            .pear-live-plan-step {
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
+
+            .pear-live-plan-context {
+                color: var(--pear-ink-3);
+                opacity: 0.56;
+            }
+
+            .pear-live-plan-current {
+                color: var(--color-text-message-default);
+                text-shadow: 0 0 12px
+                    color-mix(in srgb, var(--pear-accent-ink) 32%, transparent);
+                animation: pear-live-current-breathe 2.4s ease-in-out infinite;
+            }
+
+            .pear-live-overview {
+                margin: 2px 0 3px 14px;
+                color: var(--pear-ink-2);
+                font-family: var(--pear-font-mono);
+                /* stylelint-disable-next-line declaration-property-unit-disallowed-list */
+                font-size: 11px;
+                line-height: 1.45;
+                animation: pear-live-overview-in 180ms ease-out both;
+            }
+
+            .pear-run-trace-toggle {
+                margin-left: auto;
+                border: 0;
+                background: transparent;
+                padding: 0;
+                color: var(--pear-accent-ink);
+                font: inherit;
+                cursor: pointer;
+
+                &:hover {
+                    color: var(--pear-ink-1);
+                }
+            }
+
+            .pear-run-trace {
+                display: grid;
+                flex-basis: 100%;
+                gap: 5px;
+                max-height: 22rem;
+                overflow: auto;
+                padding: 7px 0 2px 10px;
+                border-left: 1px solid var(--pear-hairline);
+                color: var(--pear-ink-2);
+                font-family: var(--pear-font-mono);
+                /* stylelint-disable-next-line declaration-property-unit-disallowed-list */
+                font-size: 11px;
+                line-height: 1.45;
+                white-space: pre-wrap;
+            }
+
+            .pear-run-trace[hidden] {
+                display: none;
             }
 
             .pear-tool-spoiler-block:has(.spoiler-content-open)
@@ -482,22 +564,6 @@
         &.pear-active-message {
             .message_content:not(.status-message) {
                 overflow: visible;
-            }
-
-            .message_content > p:last-child > .pear-thinking-glyph,
-            .spoiler-header .pear-thinking-glyph,
-            .spoiler-content li > .pear-thinking-glyph {
-                display: inline-block;
-                min-width: 1.35em;
-                margin-left: 0.15em;
-                color: var(--color-text-message-default);
-                font-size: var(--base-font-size-px);
-                font-style: normal;
-                line-height: 1;
-                text-align: center;
-                vertical-align: -0.02em;
-                white-space: nowrap;
-                font-family: var(--pear-font-mono);
             }
         }
     }

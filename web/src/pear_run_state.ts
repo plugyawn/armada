@@ -3,8 +3,14 @@ type PearRunForActiveMessage = {
     status: string;
     ambient_triggered: boolean;
     result_message_id?: number | null | undefined;
+    stream?: string | undefined;
+    topic?: string | undefined;
+    current_activity?: string | undefined;
+    plan?: PearRunPlanStep[] | null | undefined;
+    overview?: string | null | undefined;
     tool_count?: number | undefined;
     date_created?: number | undefined;
+    date_updated?: number | undefined;
     usage?:
         | {
               total_tokens?: number | undefined;
@@ -23,6 +29,60 @@ type PearRunForActiveMessage = {
 export type PearRunOperation = {
     kind: string;
     label: string;
+};
+
+export type PearRunPlanStep = {
+    step: string;
+    status: string;
+};
+
+export type PearRunLiveView = {
+    id: number;
+    status: string;
+    result_message_id?: number | null | undefined;
+    stream?: string | undefined;
+    topic?: string | undefined;
+    current_activity?: string | undefined;
+    plan?: PearRunPlanStep[] | null | undefined;
+    overview?: string | null | undefined;
+    trace_available?: boolean | undefined;
+    tool_count?: number | undefined;
+    date_created?: number | undefined;
+    updated_at?: number | undefined;
+    usage?:
+        | {
+              total_tokens?: number | undefined;
+              duration_seconds?: number | null | undefined;
+          }
+        | null
+        | undefined;
+};
+
+export type PearRunPushEvent = {
+    version: 1;
+    sequence: number;
+    run_id: number;
+    event_type: string;
+    status: string;
+    result_message_id: number | null;
+    stream: string;
+    topic: string;
+    current_activity: string;
+    tool_count: number;
+    plan: PearRunPlanStep[] | null;
+    overview: string | null;
+    usage: {
+        input_tokens?: number | undefined;
+        cached_input_tokens?: number | undefined;
+        output_tokens?: number | undefined;
+        reasoning_output_tokens?: number | undefined;
+        total_tokens?: number | undefined;
+        cache_percent?: number | undefined;
+    } | null;
+    duration_seconds: number | null;
+    trace_available: boolean;
+    run_date_created: number;
+    date_created: number;
 };
 
 type PearActiveResultMessageChange = {
@@ -45,8 +105,7 @@ let active_run_topic: string | undefined;
 const active_run_topic_listeners = new Set<() => void>();
 
 // Completed runs' stats, keyed by result message, for the run footer.
-// Cumulative across topic switches — footers are historical facts, so
-// they never expire with the active-set TTL.
+// Cumulative across topic switches because footers are historical facts.
 const settled_run_footers = new Map<number, PearRunFooter>();
 const ambient_run_ids_by_result_message = new Map<number, number>();
 // Active runs' start times (seconds), for the live elapsed counter.
@@ -54,14 +113,21 @@ const active_run_started_at = new Map<number, number>();
 // A long engine operation (compaction, …) currently animating in the
 // active run's footer, keyed by result message.
 const active_run_operations = new Map<number, PearRunOperation>();
+const run_views_by_id = new Map<number, PearRunLiveView>();
+const run_ids_by_result_message = new Map<number, number>();
+const latest_sequence_by_run_id = new Map<number, number>();
+const run_state_listeners = new Set<(run: PearRunLiveView) => void>();
 const active_result_message_change_listeners = new Set<
     (change: PearActiveResultMessageChange) => void
 >();
-let active_result_message_ids_refreshed_at = 0;
-let active_result_message_expiry_timer: ReturnType<typeof setTimeout> | undefined;
+export const PEAR_LIVENESS_MARKERS_CHANGED_EVENT = "pear:liveness-markers-changed";
 
-const ACTIVE_RESULT_MESSAGE_TTL_MS = 15_000;
-
+export function notify_liveness_markers_changed(): void {
+    if (typeof document === "undefined" || typeof document.dispatchEvent !== "function") {
+        return;
+    }
+    document.dispatchEvent(new Event(PEAR_LIVENESS_MARKERS_CHANGED_EVENT));
+}
 function is_active_status(status: string): boolean {
     return status === "queued" || status === "running";
 }
@@ -114,38 +180,6 @@ function notify_active_result_message_change_listeners(
     }
 }
 
-function clear_active_result_message_expiry_timer(): void {
-    if (active_result_message_expiry_timer === undefined) {
-        return;
-    }
-    clearTimeout(active_result_message_expiry_timer);
-    active_result_message_expiry_timer = undefined;
-}
-
-function schedule_active_result_message_expiry(): void {
-    if (active_result_message_ids.size === 0) {
-        clear_active_result_message_expiry_timer();
-        return;
-    }
-    if (active_result_message_expiry_timer !== undefined) {
-        return;
-    }
-    // Arm for the time remaining until refreshed_at + TTL, not a full TTL:
-    // a timer armed before the latest refresh would otherwise fire early,
-    // see fresh data, and re-arm for another full TTL — drifting expiry to
-    // anywhere in (TTL, 2*TTL] after the last refresh.
-    active_result_message_expiry_timer = setTimeout(() => {
-        active_result_message_expiry_timer = undefined;
-        if (!expire_stale_active_run_result_messages()) {
-            schedule_active_result_message_expiry();
-        }
-    }, active_result_message_expiry_delay_for_testing(Date.now()));
-}
-
-export function active_result_message_expiry_delay_for_testing(now: number): number {
-    return Math.max(active_result_message_ids_refreshed_at + ACTIVE_RESULT_MESSAGE_TTL_MS - now, 0);
-}
-
 export function set_active_run_result_messages(
     runs: PearRunForActiveMessage[],
     options: {force_reconcile?: boolean} = {},
@@ -153,7 +187,9 @@ export function set_active_run_result_messages(
     const next_active_result_message_ids = new Set<number>();
     const footer_changed_message_ids: number[] = [];
     for (const run of runs) {
-        const result_message_id = run.result_message_id;
+        const latest_view = run_views_by_id.get(run.id);
+        const result_message_id = latest_view?.result_message_id ?? run.result_message_id;
+        const status = latest_view?.status ?? run.status;
         if (
             typeof result_message_id !== "number" ||
             !Number.isInteger(result_message_id) ||
@@ -166,7 +202,7 @@ export function set_active_run_result_messages(
         } else {
             ambient_run_ids_by_result_message.delete(result_message_id);
         }
-        if (is_active_status(run.status)) {
+        if (is_active_status(status)) {
             next_active_result_message_ids.add(result_message_id);
             if (typeof run.date_created === "number") {
                 active_run_started_at.set(result_message_id, run.date_created);
@@ -184,19 +220,17 @@ export function set_active_run_result_messages(
                 }
                 footer_changed_message_ids.push(result_message_id);
             }
-        } else if (is_settled_status(run.status)) {
+        } else if (is_settled_status(status)) {
             active_run_started_at.delete(result_message_id);
             active_run_operations.delete(result_message_id);
-            const footer = footer_from_run(run);
+            const footer = footer_from_run({...run, ...latest_view, status});
             if (!footers_equal(settled_run_footers.get(result_message_id), footer)) {
                 settled_run_footers.set(result_message_id, footer);
                 footer_changed_message_ids.push(result_message_id);
             }
         }
     }
-    active_result_message_ids_refreshed_at = Date.now();
     if (sets_equal(active_result_message_ids, next_active_result_message_ids)) {
-        schedule_active_result_message_expiry();
         if (options.force_reconcile === true || footer_changed_message_ids.length > 0) {
             notify_active_result_message_change_listeners({
                 removed_message_ids: [],
@@ -210,25 +244,129 @@ export function set_active_run_result_messages(
     for (const message_id of next_active_result_message_ids) {
         active_result_message_ids.add(message_id);
     }
-    schedule_active_result_message_expiry();
     notify_active_result_message_change_listeners({
         removed_message_ids,
         footer_changed_message_ids,
     });
 }
 
-export function expire_stale_active_run_result_messages(): boolean {
-    if (active_result_message_ids.size === 0) {
-        return false;
+export function remember_runs(runs: PearRunForActiveMessage[]): void {
+    for (const run of runs) {
+        const hydrated_view: PearRunLiveView = {
+            id: run.id,
+            status: run.status,
+            result_message_id: run.result_message_id,
+            stream: run.stream,
+            topic: run.topic,
+            current_activity: run.current_activity,
+            plan: run.plan,
+            overview: run.overview,
+            trace_available: true,
+            tool_count: run.tool_count,
+            date_created: run.date_created,
+            updated_at: run.date_updated,
+            usage: run.usage,
+        };
+        const previous = run_views_by_id.get(run.id);
+        const view =
+            previous?.updated_at !== undefined &&
+            previous.updated_at > (hydrated_view.updated_at ?? Number.NEGATIVE_INFINITY)
+                ? previous
+                : hydrated_view;
+        run_views_by_id.set(run.id, view);
+        if (
+            typeof previous?.result_message_id === "number" &&
+            previous.result_message_id !== view.result_message_id &&
+            run_ids_by_result_message.get(previous.result_message_id) === run.id
+        ) {
+            run_ids_by_result_message.delete(previous.result_message_id);
+        }
+        if (typeof view.result_message_id === "number") {
+            run_ids_by_result_message.set(view.result_message_id, run.id);
+        }
+        if (is_active_status(run.status)) {
+            for (const listener of run_state_listeners) {
+                listener(view);
+            }
+        }
     }
-    if (Date.now() - active_result_message_ids_refreshed_at < ACTIVE_RESULT_MESSAGE_TTL_MS) {
-        return false;
+}
+
+export function apply_pear_run_event(event: PearRunPushEvent): void {
+    if (
+        event.version !== 1 ||
+        event.sequence <= (latest_sequence_by_run_id.get(event.run_id) ?? 0)
+    ) {
+        return;
     }
-    const removed_message_ids = [...active_result_message_ids];
-    active_result_message_ids.clear();
-    clear_active_result_message_expiry_timer();
-    notify_active_result_message_change_listeners({removed_message_ids});
-    return true;
+    latest_sequence_by_run_id.set(event.run_id, event.sequence);
+    const previous = run_views_by_id.get(event.run_id);
+    const view: PearRunLiveView = {
+        ...previous,
+        id: event.run_id,
+        status: event.status,
+        result_message_id: event.result_message_id,
+        stream: event.stream,
+        topic: event.topic,
+        current_activity: event.current_activity,
+        plan: event.plan ?? previous?.plan,
+        overview: event.overview ?? previous?.overview,
+        trace_available: event.trace_available || previous?.trace_available,
+        tool_count: event.tool_count,
+        date_created: event.run_date_created,
+        updated_at: event.date_created,
+        usage: {
+            ...previous?.usage,
+            ...event.usage,
+            duration_seconds: event.duration_seconds ?? previous?.usage?.duration_seconds,
+        },
+    };
+    run_views_by_id.set(event.run_id, view);
+    const message_id = event.result_message_id;
+    if (
+        typeof previous?.result_message_id === "number" &&
+        previous.result_message_id !== message_id &&
+        run_ids_by_result_message.get(previous.result_message_id) === event.run_id
+    ) {
+        run_ids_by_result_message.delete(previous.result_message_id);
+    }
+    if (message_id !== null) {
+        run_ids_by_result_message.set(message_id, event.run_id);
+        if (is_active_status(event.status)) {
+            active_result_message_ids.add(message_id);
+            active_run_started_at.set(message_id, event.run_date_created);
+        } else {
+            active_result_message_ids.delete(message_id);
+            active_run_started_at.delete(message_id);
+            active_run_operations.delete(message_id);
+            settled_run_footers.set(message_id, {
+                status: event.status,
+                duration_seconds: view.usage?.duration_seconds ?? null,
+                total_tokens: view.usage?.total_tokens ?? null,
+                tool_count: event.tool_count,
+            });
+        }
+        notify_active_result_message_change_listeners({
+            removed_message_ids: is_active_status(event.status) ? [] : [message_id],
+            footer_changed_message_ids: [message_id],
+        });
+    }
+    for (const listener of run_state_listeners) {
+        listener(view);
+    }
+}
+
+export function get_run_view(message_id: number | undefined): PearRunLiveView | undefined {
+    if (message_id === undefined) {
+        return undefined;
+    }
+    const run_id = run_ids_by_result_message.get(message_id);
+    return run_id === undefined ? undefined : run_views_by_id.get(run_id);
+}
+
+export function on_run_state_changed(listener: (run: PearRunLiveView) => void): () => void {
+    run_state_listeners.add(listener);
+    return () => run_state_listeners.delete(listener);
 }
 
 export function is_active_run_result_message(message_id: number | undefined): boolean {
@@ -304,9 +442,11 @@ export function clear_for_testing(): void {
     settled_run_footers.clear();
     ambient_run_ids_by_result_message.clear();
     active_run_started_at.clear();
+    active_run_operations.clear();
+    run_views_by_id.clear();
+    run_ids_by_result_message.clear();
+    latest_sequence_by_run_id.clear();
     active_run_stream = undefined;
     active_run_topic = undefined;
-    active_result_message_ids_refreshed_at = 0;
-    clear_active_result_message_expiry_timer();
     notify_active_result_message_change_listeners({removed_message_ids: []});
 }

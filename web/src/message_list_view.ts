@@ -2272,9 +2272,13 @@ export class MessageListView {
 
         rendered_markdown.update_elements($content);
         enhance_pear_tool_rows($row);
-        maybe_render_pear_thinking_glyph($row);
         maybe_render_pear_run_footer($row);
         render_pear_live_progress($row);
+        // Live progress owns the current-step glyph, so it must exist before
+        // the animation decorator scans the row. Streaming edits take this
+        // path repeatedly; reversing these calls leaves the freshly replaced
+        // glyph frozen until some unrelated liveness event arrives.
+        maybe_render_pear_thinking_glyph($row);
 
         const id = rows.id($row);
         message_edit.maybe_show_edit($row, id);
@@ -2933,9 +2937,9 @@ export class MessageListView {
                     rendered_markdown.update_elements($(node));
                 }
                 enhance_pear_tool_rows($row);
-                maybe_render_pear_thinking_glyph($row);
                 maybe_render_pear_run_footer($row);
                 render_pear_live_progress($row);
+                maybe_render_pear_thinking_glyph($row);
                 submessage.render_submessage({
                     $row,
                     message_id: rows.id($row),

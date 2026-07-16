@@ -252,6 +252,7 @@ function message_is_pear_message(message: Message, is_hidden: boolean): boolean 
 function pear_thinking_markers($scope: JQuery<HTMLElement | Document> = $(document)): JQuery {
     const selectors = [
         ".pear-liveness-active .pear-thinking-glyph",
+        ".pear-rail-plan-active .pear-thinking-glyph",
         ".message_row.pear-active-message .pear-live-plan-current .pear-thinking-glyph",
         ".message_row.pear-active-message .pear-tool-row-active.pear-thinking-glyph",
     ];

@@ -53,7 +53,7 @@ run_test("rail plan uses Working instead of leaking an older completed plan", ()
             step: "translated: Working",
             status_glyph: "",
             status_class: "pear-rail-plan-active",
-            glyph_class: "pear-thinking-glyph-animated",
+            glyph_class: "pear-thinking-glyph",
         },
     ]);
 });
@@ -87,7 +87,7 @@ run_test("rail plan renders only the active run checklist", () => {
             step: "Implement",
             status_glyph: "",
             status_class: "pear-rail-plan-active",
-            glyph_class: "pear-thinking-glyph-animated",
+            glyph_class: "pear-thinking-glyph",
         },
         {
             step: "Verify",
@@ -129,7 +129,7 @@ run_test("workspace rail keeps a plan visible before workspace context arrives",
                 step: "Working",
                 status_glyph: "",
                 status_class: "pear-rail-plan-active",
-                glyph_class: "pear-thinking-glyph-animated",
+                glyph_class: "pear-thinking-glyph",
             },
         ],
         has_runs: false,
@@ -139,7 +139,7 @@ run_test("workspace rail keeps a plan visible before workspace context arrives",
     });
 
     assert.ok(html.includes("pear-rail-plan"));
-    assert.ok(html.includes("pear-thinking-glyph-animated"));
+    assert.ok(html.includes("pear-thinking-glyph"));
     assert.ok(html.includes("Working"));
     assert.ok(html.includes("pear-rail-overview"));
     assert.ok(html.includes("Reading the renderer state"));

@@ -42,8 +42,6 @@ from zerver.lib.pear import (
     PEAR_SESSION_ENDPOINT,
     PEAR_SIDE_ENDPOINT,
     PEAR_STATUS_CHECK_PROMPT,
-    PEAR_STEERING_APPLIED_MARKDOWN,
-    PEAR_STEERING_QUEUED_MARKDOWN,
     PEAR_TOPIC_PREFIX,
     PEAR_TRIGGER_MESSAGE_KEY,
     PEAR_VERIFY_CHANGES_PROMPT,
@@ -2864,7 +2862,6 @@ class PearSessionDefaultsTest(TestCase):
             ],
         )
         sent_replies: list[str] = []
-        updated_messages: list[dict[str, object]] = []
         recorded_events: list[tuple[int, str, str, dict[str, object]]] = []
         metadata_updates: list[tuple[int, dict[str, object]]] = []
 
@@ -2885,19 +2882,6 @@ class PearSessionDefaultsTest(TestCase):
             ) -> int:
                 self.active_checks.append((stream, topic))
                 return 101
-
-            def active_worker_run_status_message(
-                self,
-                bot_handler,
-                *,
-                stream: str,
-                topic: str,
-            ) -> dict[str, object]:
-                self.active_checks.append((stream, topic))
-                return {
-                    "message_id": 401,
-                    "content": "I’m checking the failing test.",
-                }
 
             def start(
                 self,
@@ -2948,7 +2932,7 @@ class PearSessionDefaultsTest(TestCase):
                 return {"id": 400 + len(sent_replies)}
 
             def update_message(self, message: dict[str, object]) -> None:
-                updated_messages.append(message)
+                raise AssertionError("typed steering must not rewrite the live message")
 
         run_store = FakeRunStore()
         message = {
@@ -2968,23 +2952,9 @@ class PearSessionDefaultsTest(TestCase):
         self.assertEqual(run_store.starts, [])
         self.assertEqual(
             run_store.active_checks,
-            [
-                (PEAR_DEFAULT_STREAM, PEAR_DEFAULT_TOPIC),
-                (PEAR_DEFAULT_STREAM, PEAR_DEFAULT_TOPIC),
-            ],
+            [(PEAR_DEFAULT_STREAM, PEAR_DEFAULT_TOPIC)],
         )
         self.assertEqual(sent_replies, [])
-        self.assertEqual(
-            updated_messages,
-            [
-                {
-                    "message_id": 401,
-                    "content": (
-                        "I’m checking the failing test.\n\n" + PEAR_STEERING_QUEUED_MARKDOWN
-                    ),
-                }
-            ],
-        )
         self.assertEqual(recorded_events[0][0], 101)
         self.assertEqual(recorded_events[0][1], "steering")
         self.assertEqual(recorded_events[0][2], "can i interrupt? You can stop")
@@ -2999,9 +2969,7 @@ class PearSessionDefaultsTest(TestCase):
         )
         self.assertEqual(metadata_updates, [])
 
-    def test_embedded_bot_handler_records_steering_without_reply_when_status_edit_fails(
-        self,
-    ) -> None:
+    def test_embedded_bot_handler_records_steering_without_reply(self) -> None:
         payload = get_pear_session_payload()
         loaded_session = build_pear_active_session_summary_from_messages(
             pear_session=payload,
@@ -3027,15 +2995,6 @@ class PearSessionDefaultsTest(TestCase):
                 topic: str,
             ) -> int:
                 return 101
-
-            def active_worker_run_status_message(
-                self,
-                bot_handler,
-                *,
-                stream: str,
-                topic: str,
-            ) -> None:
-                return None
 
             def record_event(
                 self,
@@ -5436,13 +5395,6 @@ class PearSessionDefaultsTest(TestCase):
         )
         self.assertEqual(tool_seen_threads, [None, "thread-1"])
         self.assertEqual([result["label"] for result in attached_artifacts], ["Artifact"])
-        self.assertTrue(
-            any(
-                PEAR_STEERING_APPLIED_MARKDOWN in str(message["content"])
-                for message in updated_messages
-            )
-        )
-        self.assertNotIn(PEAR_STEERING_APPLIED_MARKDOWN, str(updated_messages[-1]["content"]))
         self.assertEqual(updated_messages[-1]["content"], "steered result")
         self.assertIn(
             (

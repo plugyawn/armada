@@ -181,7 +181,7 @@ class PearSessionEndpointTest(ZulipTestCase):
 
         send_event.assert_called_once()
         event = send_event.call_args.args[1]
-        check_pear_run_event("event", event)
+        check_pear_run_event("event", {**event, "id": 1})
         self.assertEqual(event["run_id"], run.id)
         self.assertEqual(event["sequence"], run_event.id)
         self.assertEqual(event["current_activity"], "Running tests")

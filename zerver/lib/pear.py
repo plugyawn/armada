@@ -5,7 +5,7 @@ import re
 import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from re import IGNORECASE, MULTILINE, compile, sub
+from re import IGNORECASE, compile, sub
 from typing import Any, Final, Literal, NotRequired, Protocol, TypedDict
 
 from django.core.cache import cache
@@ -67,11 +67,8 @@ PEAR_QUESTION_TIMEOUT_SECONDS: Final = 600
 PEAR_QUESTION_POLL_SECONDS: Final = 2.0
 
 PEAR_MAX_STEERING_SEGMENTS: Final = 4
-PEAR_ACTIVE_MARKDOWN_PREFIX: Final = "*✦*"
-PEAR_ACTIVE_THINKING_MARKDOWN: Final = f"*Thinking* {PEAR_ACTIVE_MARKDOWN_PREFIX}"
-PEAR_VOLATILE_ASSISTANT_FLUSH_INTERVAL_SECONDS: Final = 0.033
+PEAR_WORKING_MESSAGE: Final = "Working…"
 PEAR_PERSISTENT_ASSISTANT_FLUSH_INTERVAL_SECONDS: Final = 0.2
-PEAR_BACKGROUND_TRANSCRIPT_FLUSH_INTERVAL_SECONDS: Final = 0.5
 PEAR_TYPING_REFRESH_INTERVAL_SECONDS: Final = 10.0
 PEAR_LIVE_RUN_CACHE_KEY_PREFIX: Final = "pear:live-run:"
 PEAR_LIVE_RUN_CACHE_TTL_SECONDS: Final = 3600
@@ -148,7 +145,6 @@ class PearLiveRunOperation(TypedDict):
 
 class PearLiveRunState(TypedDict):
     status: str
-    content: str
     updated_at: float
     operation: NotRequired[PearLiveRunOperation | None]
 
@@ -694,63 +690,6 @@ def pear_transcript_status_label(status: str) -> str:
     return status or "working..."
 
 
-def pear_transcript_checkbox(status: str) -> str:
-    if status in {"done", "completed"}:
-        return "[x]"
-    return "[ ]"
-
-
-def pear_transcript_tool_mark(status: str) -> str:
-    if status in {"done", "completed"}:
-        return "·"
-    if status in {"failed", "error"}:
-        return "✷"
-    if status in {"running", "in_progress"}:
-        return "✦"
-    return "⋅"
-
-
-def pear_pluralize_tool(count: int) -> str:
-    return "tool" if count == 1 else "tools"
-
-
-def pear_transcript_event_summary(event: PearWorkerTranscriptEvent) -> str:
-    kind = event.get("kind", "")
-    status = event.get("status", "")
-    title = event.get("title", "").strip()
-    body = event.get("body", "").strip()
-    if kind == "plan":
-        return ""
-    if kind == "session":
-        return f"- {pear_transcript_checkbox(status)} Session: {title or body}"
-    if kind == "command":
-        label = "Ran" if status in {"done", "completed"} else "Running"
-        if status in {"failed", "error"}:
-            label = "Failed"
-        return f"- {pear_transcript_checkbox(status)} {label}: `{trim_pear_text(title or body, limit=160)}`"
-    if kind == "file_change":
-        return (
-            f"- {pear_transcript_checkbox(status)} File: {trim_pear_text(title or body, limit=160)}"
-        )
-    if kind == "tool":
-        label = "Tool"
-        if status in {"running", "in_progress"}:
-            label = "Tool running"
-        elif status in {"failed", "error"}:
-            label = "Tool failed"
-        return f"- {pear_transcript_checkbox(status)} {label}: {trim_pear_text(title or body, limit=160)}"
-    if kind == "reasoning":
-        return f"- {pear_transcript_checkbox(status)} Thinking: {trim_pear_text(title or body, limit=160)}"
-    if kind == "error":
-        error_text = trim_pear_text(body or title, limit=2000)
-        if title and body and title != body:
-            return f"{title}\n\nError: {error_text}"
-        return error_text or "Pear worker failed."
-    if kind == "status":
-        return f"- {pear_transcript_checkbox(status)} {trim_pear_text(title or body, limit=180)}"
-    return f"- {pear_transcript_checkbox(status)} {trim_pear_text(title or body, limit=180)}"
-
-
 def pear_transcript_event_key(
     event: PearWorkerTranscriptEvent,
     *,
@@ -811,83 +750,6 @@ def pear_distinct_transcript_tool_events(
     return [event_by_key[key] for key in event_keys]
 
 
-def pear_transcript_tool_detail_line(event: PearWorkerTranscriptEvent) -> str:
-    kind = event.get("kind", "")
-    status = event.get("status", "")
-    title = event.get("title", "").strip()
-    body = event.get("body", "").strip()
-    mark = pear_transcript_tool_mark(status)
-    event_label = trim_pear_text(title or body, limit=220)
-
-    if kind == "command":
-        return f"- {mark} `{event_label or 'command'}`"
-    if kind == "file_change":
-        return f"- {mark} {event_label or 'file change'}"
-    if kind == "tool":
-        return f"- {mark} {event_label or 'tool'}"
-    if kind == "error":
-        return f"- {mark} Error: {event_label or 'Pear worker failed.'}"
-    return pear_transcript_event_summary(event)
-
-
-def pear_transcript_tool_group_title(
-    events: Sequence[PearWorkerTranscriptEvent],
-) -> str:
-    tool_count = len(events)
-    completed_count = sum(1 for event in events if event.get("status", "") in {"done", "completed"})
-    running_count = sum(
-        1 for event in events if event.get("status", "") in {"running", "in_progress"}
-    )
-    failed_count = sum(1 for event in events if event.get("status", "") in {"failed", "error"})
-
-    if failed_count and completed_count and not running_count:
-        return (
-            f"Ran {tool_count} {pear_pluralize_tool(tool_count)} · "
-            f"{failed_count} {'retry' if failed_count == 1 else 'retries'}"
-        )
-    if failed_count:
-        return f"{failed_count} failed {pear_pluralize_tool(failed_count)}"
-    if running_count and completed_count:
-        return f"Ran {completed_count}/{tool_count} {pear_pluralize_tool(tool_count)} ✦"
-    if running_count:
-        return f"Running {tool_count} {pear_pluralize_tool(tool_count)} ✦"
-    return f"Ran {tool_count} {pear_pluralize_tool(tool_count)}"
-
-
-def pear_spoiler_block(title: str, body: str) -> str:
-    safe_title = title.replace("`", "'").replace("~", "-").strip() or "Details"
-    safe_body = body.replace("```", "` ` `").strip()
-    return f"```spoiler {safe_title}\n{safe_body}\n```"
-
-
-def pear_transcript_tool_group_block(
-    events: Sequence[PearWorkerTranscriptEvent],
-) -> str:
-    distinct_events = pear_distinct_transcript_tool_events(events)
-    if not distinct_events:
-        return ""
-    return pear_spoiler_block(
-        pear_transcript_tool_group_title(distinct_events),
-        "\n".join(pear_transcript_tool_detail_line(event) for event in distinct_events),
-    )
-
-
-def pear_transcript_event_from_tool_result(
-    result: PearWorkerToolResult,
-) -> PearWorkerTranscriptEvent:
-    label = result["label"].strip()
-    value = result["value"].strip()
-    kind = "verification" if label.lower() == "verification" else "status"
-    if label.lower() == "session":
-        kind = "session"
-    return {
-        "kind": kind,
-        "status": "done",
-        "title": label,
-        "body": value,
-    }
-
-
 def normalize_pear_visible_markdown(text: str) -> str:
     def replacement(match: Any) -> str:
         label = str(match.group(1)).strip() or "image"
@@ -906,102 +768,6 @@ def pear_visible_assistant_text(
     if limit is not None:
         visible_text = trim_pear_text(visible_text, limit=limit)
     return visible_text
-
-
-def pear_visible_transcript_event_block(
-    event: PearWorkerTranscriptEvent,
-    *,
-    limit: int | None = PEAR_PERSISTENT_MESSAGE_LIMIT,
-) -> str:
-    kind = event.get("kind", "")
-    if kind in {"reasoning", "session", "status", "usage"}:
-        return ""
-    if kind == "steering":
-        return PEAR_STEERING_APPLIED_MARKDOWN
-    if kind == "assistant":
-        body = event.get("body", "")
-        if not body.strip():
-            return ""
-        return pear_visible_assistant_text(body, limit=limit)
-    if kind == "plan":
-        # The plan is run-scoped process state, not prose: it renders
-        # in dedicated UI (the rail's plan card, from the run payload),
-        # never into the durable message record — matching how the
-        # codex TUI keeps its checklist out of the final answer.
-        return ""
-    return pear_transcript_event_summary(event)
-
-
-def pear_visible_transcript_blocks(
-    transcript_events: Sequence[PearWorkerTranscriptEvent],
-    *,
-    include_transient_status: bool = True,
-    block_limit: int | None = PEAR_PERSISTENT_MESSAGE_LIMIT,
-    collapse_tool_groups: bool = False,
-) -> list[str]:
-    block_by_key: dict[str, str] = {}
-    block_keys: list[str] = []
-    assistant_keys: list[str] = []
-    anonymous_index = 0
-    tool_events: list[PearWorkerTranscriptEvent] = []
-    all_tool_events: list[PearWorkerTranscriptEvent] = []
-
-    def flush_tool_events() -> None:
-        nonlocal tool_events
-        if not tool_events:
-            return
-        block = pear_transcript_tool_group_block(tool_events)
-        if block:
-            key = f"tool-group:{len(block_keys)}"
-            block_keys.append(key)
-            block_by_key[key] = block
-        tool_events = []
-
-    for event in transcript_events:
-        if not include_transient_status and event.get("kind") == "steering":
-            continue
-        if pear_transcript_event_is_tool_detail(event):
-            tool_events.append(event)
-            all_tool_events.append(event)
-            continue
-
-        block = pear_visible_transcript_event_block(event, limit=block_limit).strip()
-        if not block:
-            if not isinstance(event.get("item_id"), str):
-                anonymous_index += 1
-            continue
-        flush_tool_events()
-        key = pear_transcript_event_key(event, anonymous_index=anonymous_index)
-        if key.startswith("event:"):
-            anonymous_index += 1
-        if key in block_by_key:
-            block_by_key[key] = block
-            continue
-        if block_keys and block_by_key[block_keys[-1]] == block:
-            continue
-        block_keys.append(key)
-        block_by_key[key] = block
-        if event.get("kind") == "assistant":
-            assistant_keys.append(key)
-    flush_tool_events()
-    if collapse_tool_groups and all_tool_events:
-        block_keys = [key for key in block_keys if not key.startswith("tool-group:")]
-        tool_block = pear_transcript_tool_group_block(all_tool_events)
-        if tool_block:
-            tool_key = "tool-group:completed-artifact"
-            block_by_key[tool_key] = tool_block
-            final_assistant_key = assistant_keys[-1] if assistant_keys else None
-            if final_assistant_key in block_keys:
-                block_keys.insert(block_keys.index(final_assistant_key), tool_key)
-            else:
-                block_keys.append(tool_key)
-    return [block_by_key[key] for key in block_keys]
-
-
-def pear_tool_results_include_artifact(
-    tool_results: Sequence[PearWorkerToolResult],
-) -> bool:
-    return any(result["label"].strip().lower() == "artifact" for result in tool_results)
 
 
 PEAR_IMAGE_EMBED_LIMIT: Final = 3
@@ -1217,23 +983,6 @@ def pear_embed_workspace_images(
     return content
 
 
-def pear_append_active_marker(text: str) -> str:
-    text = text.rstrip()
-    if not text:
-        return PEAR_ACTIVE_THINKING_MARKDOWN
-    if text.endswith(PEAR_ACTIVE_MARKDOWN_PREFIX):
-        return text
-    # A streaming snapshot can end inside an unclosed code fence;
-    # appending the marker there would glue a ✦ into the code (or
-    # math) source. Skip the marker for that tick - the tool chips
-    # still carry liveness.
-    if len(re.findall(r"^\s{0,3}(?:```|~~~)", text, MULTILINE)) % 2 == 1:
-        return text
-    if text.endswith("```"):
-        return f"{text}\n\n{PEAR_ACTIVE_MARKDOWN_PREFIX}"
-    return f"{text} {PEAR_ACTIVE_MARKDOWN_PREFIX}"
-
-
 PEAR_STEERING_QUEUED_MARKDOWN: Final = "*Steering queued.*"
 PEAR_STEERING_APPLIED_MARKDOWN: Final = "*Steering applied.*"
 PEAR_LEGACY_STEERING_QUEUED_MARKDOWN: Final = "_Steering queued._"
@@ -1248,17 +997,10 @@ PEAR_STEERING_STATUS_MARKDOWN: Final = frozenset(
 )
 
 
-def pear_without_active_marker(text: str) -> str:
-    text = text.rstrip()
-    if text.endswith(PEAR_ACTIVE_MARKDOWN_PREFIX):
-        return text[: -len(PEAR_ACTIVE_MARKDOWN_PREFIX)].rstrip()
-    return text
-
-
 def pear_without_steering_status(text: str) -> str:
     lines = []
     for line in text.splitlines():
-        clean_line = pear_without_active_marker(line).strip()
+        clean_line = line.strip()
         if clean_line in PEAR_STEERING_STATUS_MARKDOWN:
             continue
         lines.append(line.rstrip())
@@ -1266,10 +1008,10 @@ def pear_without_steering_status(text: str) -> str:
 
 
 def pear_with_steering_status(content: str, status_markdown: str) -> str:
-    base_content = pear_without_active_marker(pear_without_steering_status(content))
+    base_content = pear_without_steering_status(content)
     if base_content:
-        return pear_append_active_marker(f"{base_content}\n\n{status_markdown}")
-    return pear_append_active_marker(status_markdown)
+        return f"{base_content}\n\n{status_markdown}"
+    return status_markdown
 
 
 def pear_result_tool_text(
@@ -1405,7 +1147,9 @@ def pear_visible_response_text(
     assistant_texts: Sequence[str],
     tool_results: Sequence[PearWorkerToolResult],
 ) -> str:
-    assistant_text = trim_pear_text("\n\n".join(assistant_texts).strip(), limit=5000)
+    assistant_text = (
+        trim_pear_text(assistant_texts[-1].strip(), limit=5000) if assistant_texts else ""
+    )
     if assistant_text:
         return assistant_text
     result_text = pear_result_tool_text(tool_results)
@@ -1423,35 +1167,6 @@ def pear_visible_response_text(
     return ""
 
 
-def pear_join_visible_transcript_blocks(
-    blocks: Sequence[str],
-    *,
-    preserve_recent: bool,
-    limit: int = 5000,
-) -> str:
-    clean_blocks = [block.strip() for block in blocks if block.strip()]
-    text = "\n\n".join(clean_blocks)
-    if len(text) <= limit:
-        return text
-    if not preserve_recent:
-        return trim_pear_text(text, limit=limit)
-
-    omitted_marker = "[earlier progress details truncated]"
-    selected_reversed: list[str] = []
-    for block in reversed(clean_blocks):
-        candidate_blocks = [omitted_marker, block, *reversed(selected_reversed)]
-        candidate = "\n\n".join(candidate_blocks)
-        if len(candidate) <= limit:
-            selected_reversed.append(block)
-            continue
-        if not selected_reversed:
-            available = max(limit - len(omitted_marker) - 2, 120)
-            selected_reversed.append(trim_pear_text(block, limit=available))
-        break
-
-    return "\n\n".join([omitted_marker, *reversed(selected_reversed)])
-
-
 def build_pear_live_transcript_message(
     *,
     task: str,
@@ -1459,25 +1174,6 @@ def build_pear_live_transcript_message(
     transcript_events: Sequence[PearWorkerTranscriptEvent] = (),
     tool_results: Sequence[PearWorkerToolResult] = (),
 ) -> str:
-    transcript_blocks = pear_visible_transcript_blocks(
-        transcript_events,
-        include_transient_status=status in {"queued", "running"},
-        collapse_tool_groups=(
-            status not in {"queued", "running"} and pear_tool_results_include_artifact(tool_results)
-        ),
-    )
-    if transcript_blocks:
-        if status not in {"queued", "running"}:
-            result_text = pear_result_tool_text(tool_results)
-            if result_text and not any(result_text in block for block in transcript_blocks):
-                transcript_blocks.append(result_text)
-        visible_response = pear_join_visible_transcript_blocks(
-            transcript_blocks,
-            preserve_recent=True,
-        )
-        if status in {"queued", "running"}:
-            return pear_append_active_marker(visible_response)
-        return visible_response
     assistant_texts = pear_visible_assistant_texts(transcript_events)
     visible_response = pear_visible_response_text(
         status=status,
@@ -1485,9 +1181,7 @@ def build_pear_live_transcript_message(
         tool_results=tool_results,
     )
     if status in {"queued", "running"}:
-        if visible_response:
-            return pear_append_active_marker(visible_response)
-        return PEAR_ACTIVE_THINKING_MARKDOWN
+        return visible_response or PEAR_WORKING_MESSAGE
     lines = [visible_response]
     return "\n".join(line for line in lines if line)
 
@@ -1500,12 +1194,10 @@ def write_pear_live_run_state(
     trigger_message_id: int,
     *,
     status: PearWorkerRunStatus,
-    content: str,
     operation: PearLiveRunOperation | None = None,
 ) -> None:
     state: PearLiveRunState = {
         "status": status,
-        "content": content,
         "updated_at": time.time(),
         "operation": operation,
     }
@@ -1521,9 +1213,8 @@ def get_pear_live_run_state(trigger_message_id: int) -> PearLiveRunState | None:
     if not isinstance(state, dict):
         return None
     status = state.get("status")
-    content = state.get("content")
     updated_at = state.get("updated_at")
-    if not isinstance(status, str) or not isinstance(content, str):
+    if not isinstance(status, str):
         return None
     if not isinstance(updated_at, int | float):
         return None
@@ -1536,7 +1227,6 @@ def get_pear_live_run_state(trigger_message_id: int) -> PearLiveRunState | None:
             operation = {"kind": kind, "label": label}
     return {
         "status": status,
-        "content": content,
         "updated_at": float(updated_at),
         "operation": operation,
     }
@@ -1761,29 +1451,15 @@ def build_pear_worker_completed_message_chunks(
     tool_results: Sequence[PearWorkerToolResult],
     transcript_events: Sequence[PearWorkerTranscriptEvent] = (),
 ) -> list[str]:
-    transcript_blocks = pear_visible_transcript_blocks(
-        transcript_events,
-        include_transient_status=False,
-        block_limit=None,
-        collapse_tool_groups=pear_tool_results_include_artifact(tool_results),
-    )
-    if transcript_blocks:
-        result_text = pear_result_tool_text(tool_results, limit=None)
-        if result_text and not any(result_text in block for block in transcript_blocks):
-            transcript_blocks.append(result_text)
-        return split_pear_persistent_message("\n\n".join(transcript_blocks))
-
     result_text = pear_result_tool_text(tool_results, limit=None)
     if result_text:
         return split_pear_persistent_message(result_text)
-
-    return [
-        build_pear_worker_completed_message(
-            task=task,
-            tool_results=tool_results,
-            transcript_events=transcript_events,
-        )
-    ]
+    completed_message = build_pear_worker_completed_message(
+        task=task,
+        tool_results=tool_results,
+        transcript_events=transcript_events,
+    )
+    return split_pear_persistent_message(completed_message)
 
 
 PEAR_MATH_CODE_SEGMENT_PATTERN = re.compile(
@@ -3220,12 +2896,12 @@ class PearWorkerTurn:
         self.started_progress_posted = False
         self.result_message_id = progress_message_id
         self.transcript_events: list[PearWorkerTranscriptEvent] = []
+        self.current_assistant_item_id: str | None = None
+        self.current_assistant_text = ""
         self.live_operation: PearLiveRunOperation | None = None
         self.task = pear_worker_task_line(content)
         self.last_transcript_flush_at = 0.0
-        self.last_volatile_transcript_flush_at = 0.0
         self.assistant_persistent_flush_seen = False
-        self.assistant_volatile_flush_seen = False
         self.steering_events_after: Any = None
         self.last_steering_event_id = 0
         self.steering_segment_count = 0
@@ -3270,7 +2946,7 @@ class PearWorkerTurn:
         *,
         tool_results: Sequence[PearWorkerToolResult] = (),
         force: bool = False,
-        flush_interval: float = PEAR_BACKGROUND_TRANSCRIPT_FLUSH_INTERVAL_SECONDS,
+        flush_interval: float = PEAR_PERSISTENT_ASSISTANT_FLUSH_INTERVAL_SECONDS,
     ) -> bool:
         target_message_id = self.result_message_id or self.progress_message_id
         if target_message_id is None:
@@ -3278,12 +2954,17 @@ class PearWorkerTurn:
         current_time = time.monotonic()
         if not force and current_time - self.last_transcript_flush_at < flush_interval:
             return False
-        content_to_update = build_pear_live_transcript_message(
-            task=self.task,
-            status=status,
-            transcript_events=self.transcript_events,
-            tool_results=tool_results,
-        )
+        if status in {"queued", "running"}:
+            content_to_update = pear_visible_assistant_text(self.current_assistant_text)
+            if not content_to_update:
+                content_to_update = "Working…"
+        else:
+            content_to_update = build_pear_live_transcript_message(
+                task=self.task,
+                status=status,
+                transcript_events=self.transcript_events,
+                tool_results=tool_results,
+            )
         updated = update_pear_worker_status_message(
             self.bot_handler,
             progress_message_id=target_message_id,
@@ -3295,31 +2976,15 @@ class PearWorkerTurn:
             self.last_transcript_flush_at = current_time
         return updated
 
-    def update_volatile_transcript(
+    def update_volatile_run_state(
         self,
         status: PearWorkerRunStatus,
-        *,
-        tool_results: Sequence[PearWorkerToolResult] = (),
-        force: bool = False,
-        flush_interval: float = PEAR_VOLATILE_ASSISTANT_FLUSH_INTERVAL_SECONDS,
-    ) -> bool:
-        current_time = time.monotonic()
-        if not force and current_time - self.last_volatile_transcript_flush_at < flush_interval:
-            return False
-        content_to_update = build_pear_live_transcript_message(
-            task=self.task,
-            status=status,
-            transcript_events=self.transcript_events,
-            tool_results=tool_results,
-        )
+    ) -> None:
         write_pear_live_run_state(
             self.message_id,
             status=status,
-            content=content_to_update,
             operation=self.live_operation,
         )
-        self.last_volatile_transcript_flush_at = current_time
-        return True
 
     def request_user_answers(self, questions: list[dict[str, Any]]) -> dict[str, list[str]] | None:
         """The engine asked the humans something (request_user_input,
@@ -3357,7 +3022,7 @@ class PearWorkerTurn:
                 "body": trim_pear_text(str(questions[0].get("question") or ""), limit=300),
             }
         )
-        self.update_volatile_transcript("running", force=True)
+        self.update_volatile_run_state("running")
 
         deadline = time.monotonic() + PEAR_QUESTION_TIMEOUT_SECONDS
         last_heartbeat = time.monotonic()
@@ -3394,7 +3059,7 @@ class PearWorkerTurn:
                     "title": "No answer arrived; continuing with defaults.",
                 }
             )
-            self.update_volatile_transcript("running", force=True)
+            self.update_volatile_run_state("running")
             return None
         self.transcript_events.append(
             {
@@ -3404,7 +3069,7 @@ class PearWorkerTurn:
                 "body": trim_pear_text(answer_text, limit=300),
             }
         )
-        self.update_volatile_transcript("running", force=True)
+        self.update_volatile_run_state("running")
         return {
             str(question.get("id") or index): [answer_text]
             for index, question in enumerate(questions)
@@ -3448,13 +3113,12 @@ class PearWorkerTurn:
                 "body": latest_steering,
             }
         )
-        self.update_volatile_transcript("running", force=True)
+        self.update_volatile_run_state("running")
         self.update_live_transcript("running", force=True)
 
     def handle_transcript_event(self, event: PearWorkerTranscriptEvent) -> None:
         self.raise_if_cancel_requested()
         self.signal_typing("start", force=False)
-        self.transcript_events.append(event)
         title = event.get("title", "").strip()
         body = event.get("body", "").strip()
         summary = title or body or "Codex event."
@@ -3476,6 +3140,20 @@ class PearWorkerTurn:
             and isinstance(metadata, dict)
             and metadata.get("streaming") is True
         )
+        if streaming_assistant:
+            item_id = event.get("item_id")
+            if not isinstance(item_id, str):
+                item_id = ""
+            if item_id != self.current_assistant_item_id:
+                self.current_assistant_item_id = item_id
+                self.current_assistant_text = ""
+            self.current_assistant_text += body
+        else:
+            self.transcript_events.append(event)
+            if event_kind == "assistant":
+                item_id = event.get("item_id")
+                self.current_assistant_item_id = item_id if isinstance(item_id, str) else None
+                self.current_assistant_text = body
         if not streaming_assistant:
             self.handler.record_worker_event(
                 self.bot_handler,
@@ -3513,12 +3191,6 @@ class PearWorkerTurn:
             "tool",
         }
         if event_kind == "assistant":
-            if self.update_volatile_transcript(
-                "running",
-                force=not self.assistant_volatile_flush_seen,
-                flush_interval=PEAR_VOLATILE_ASSISTANT_FLUSH_INTERVAL_SECONDS,
-            ):
-                self.assistant_volatile_flush_seen = True
             if self.update_live_transcript(
                 "running",
                 force=not self.assistant_persistent_flush_seen,
@@ -3526,8 +3198,8 @@ class PearWorkerTurn:
             ):
                 self.assistant_persistent_flush_seen = True
         else:
-            self.update_volatile_transcript("running", force=sparse_event)
-            self.update_live_transcript("running", force=sparse_event)
+            if sparse_event:
+                self.update_volatile_run_state("running")
         if event_kind in {"assistant", "command", "file_change", "plan", "tool"}:
             self.maybe_apply_same_turn_steering()
 
@@ -3669,11 +3341,7 @@ class PearWorkerTurn:
                     tool_results=initial_tool_results,
                     transcript_events=self.transcript_events,
                 )
-                self.update_volatile_transcript(
-                    "running",
-                    tool_results=initial_tool_results,
-                    force=True,
-                )
+                self.update_volatile_run_state("running")
                 progress_updated = self.update_live_transcript(
                     "running",
                     tool_results=initial_tool_results,
@@ -3761,7 +3429,7 @@ class PearWorkerTurn:
                         "body": latest_steering,
                     }
                 )
-                self.update_volatile_transcript("running", force=True)
+                self.update_volatile_run_state("running")
                 self.update_live_transcript("running", force=True)
                 self.worker_result = self.run_runtime_segment(
                     steering_task,
@@ -3773,16 +3441,11 @@ class PearWorkerTurn:
                 self.worker_result["tool_results"]
             )
             if self.worker_result["should_post"] and self.worker_result["content"] is not None:
-                content_to_post = self.worker_result["content"]
-                content_chunks = split_pear_persistent_message(content_to_post)
-                if self.started_progress_posted or self.transcript_events:
-                    content_chunks = build_pear_worker_completed_message_chunks(
-                        task=self.task,
-                        tool_results=self.worker_result["tool_results"],
-                        transcript_events=self.transcript_events,
-                    )
-                    content_to_post = content_chunks[0] if content_chunks else ""
-                content_to_post = self.embed_result_images(content_to_post)
+                content_chunks = [
+                    self.embed_result_images(chunk)
+                    for chunk in split_pear_persistent_message(self.worker_result["content"])
+                ]
+                content_to_post = content_chunks[0]
                 result_updated = update_pear_worker_status_message(
                     self.bot_handler,
                     progress_message_id=self.result_message_id or self.progress_message_id,
@@ -3806,7 +3469,6 @@ class PearWorkerTurn:
                 write_pear_live_run_state(
                     self.message_id,
                     status="done",
-                    content=content_to_post,
                 )
                 if isinstance(result, dict) and isinstance(result.get("id"), int):
                     self.result_message_id = result["id"]
@@ -3847,7 +3509,6 @@ class PearWorkerTurn:
                 write_pear_live_run_state(
                     self.message_id,
                     status="done",
-                    content=content_to_post,
                 )
                 if result_updated:
                     self.result_message_id = target_message_id
@@ -3930,7 +3591,6 @@ class PearWorkerTurn:
             write_pear_live_run_state(
                 self.message_id,
                 status="cancelled",
-                content=cancelled_message,
             )
             update_pear_worker_status_message(
                 self.bot_handler,
@@ -3976,7 +3636,6 @@ class PearWorkerTurn:
             write_pear_live_run_state(
                 self.message_id,
                 status="failed",
-                content=failure_message,
             )
             if not update_pear_worker_status_message(
                 self.bot_handler,

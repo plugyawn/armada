@@ -101,6 +101,7 @@ from zerver.views.pear import (
     get_pear_config_backend,
     get_pear_monitors_backend,
     get_pear_run_backend,
+    get_pear_run_trace_backend,
     get_pear_runs_backend,
     get_pear_session_backend,
     get_pear_topic_context_backend,
@@ -108,6 +109,7 @@ from zerver.views.pear import (
     post_pear_config_backend,
     post_pear_first_run_backend,
     post_pear_monitors_backend,
+    post_pear_run_attention_backend,
     post_pear_run_cancel_backend,
     post_pear_run_not_for_pear_backend,
     post_pear_run_pause_backend,
@@ -493,6 +495,14 @@ v1_api_and_json_patterns = [
     rest_path(
         "pear/runs/<int:run_id>",
         GET=(get_pear_run_backend, {"intentionally_undocumented"}),
+    ),
+    rest_path(
+        "pear/runs/<int:run_id>/trace",
+        GET=(get_pear_run_trace_backend, {"intentionally_undocumented"}),
+    ),
+    rest_path(
+        "pear/runs/<int:run_id>/attention",
+        POST=(post_pear_run_attention_backend, {"intentionally_undocumented"}),
     ),
     rest_path(
         "pear/runs/<int:run_id>/cancel",

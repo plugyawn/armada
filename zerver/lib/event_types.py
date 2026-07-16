@@ -1279,3 +1279,40 @@ class UserTopicEvent(BaseEvent):
 class WebReloadClientEvent(BaseEvent):
     type: Literal["web_reload_client"]
     immediate: bool
+
+
+class PearRunPlanStep(BaseModel):
+    step: str
+    status: str
+
+
+class PearRunUsage(BaseModel):
+    input_tokens: int | None = None
+    cached_input_tokens: int | None = None
+    output_tokens: int | None = None
+    reasoning_output_tokens: int | None = None
+    total_tokens: int | None = None
+    cache_percent: float | None = None
+
+
+class PearRunEvent(BaseEvent):
+    type: Literal["pear_run"]
+    version: Literal[1]
+    sequence: int
+    run_id: int
+    event_type: str
+    status: str
+    trigger_message_id: int
+    result_message_id: int | None
+    stream: str
+    topic: str
+    summary: str
+    current_activity: str
+    tool_count: int
+    plan: list[PearRunPlanStep] | None
+    overview: str | None
+    usage: PearRunUsage | None
+    duration_seconds: float | None
+    trace_available: bool
+    run_date_created: float
+    date_created: float

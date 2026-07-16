@@ -60,6 +60,8 @@ from zerver.lib.pear_worker import (
     PearQueueWorkerDispatcher,
     ensure_pear_child_workspace_node,
     ensure_pear_workspace_node,
+    mark_pear_run_attended,
+    maybe_enqueue_pear_run_presentation,
     pear_default_worker_reasoning_effort,
     pear_git_status_delta,
     pear_logical_repository_label,
@@ -104,6 +106,8 @@ PEAR_ACTIVE_SESSION_MESSAGE_LIMIT = 50
 PEAR_RUN_LIST_LIMIT = 20
 PEAR_RUN_IDS_FILTER_LIMIT = 20
 PEAR_RUN_EVENT_LIMIT = 40
+PEAR_RUN_TRACE_LIMIT = 50
+PEAR_RUN_TRACE_MAX_LIMIT = 100
 PEAR_MODEL_SLUG_LIMIT = 100
 PEAR_MODEL_CATALOG_CACHE_SECONDS = 300
 
@@ -706,9 +710,8 @@ def pear_worker_run_summary_events(
 ) -> dict[int, list[PearWorkerRunEvent]]:
     """Load all event data used by run cards in one query.
 
-    The run-list endpoint is polled while work is active, so summary
-    serialization must not issue per-run event queries.  Detail serialization
-    can still use the model managers when no batch was supplied.
+    Run-list hydration must not issue per-run event queries. Detail
+    serialization can still use the model managers when no batch was supplied.
     """
     events_by_run_id = {run.id: [] for run in runs}
     if not events_by_run_id:
@@ -728,23 +731,21 @@ def pear_worker_run_summary_events(
         .filter(summary_rank__lte=20)
         .only("id", "run_id", "event_type", "payload", "date_created")
     )
-    newest_plan_candidates = (
-        PearWorkerRunEvent.objects.filter(
-            run_id__in=events_by_run_id,
-            event_type="transcript",
-        )
+    newest_display_candidates = (
+        PearWorkerRunEvent.objects.filter(run_id__in=events_by_run_id)
+        .filter(Q(event_type="presentation") | Q(event_type="transcript", payload__kind="plan"))
         .annotate(
             summary_rank=Window(
                 expression=RowNumber(),
-                partition_by=(F("run_id"),),
+                partition_by=(F("run_id"), F("event_type")),
                 order_by=(F("date_created").desc(), F("id").desc()),
             )
         )
-        .filter(summary_rank__lte=30)
+        .filter(summary_rank=1)
         .only("id", "run_id", "event_type", "payload", "date_created")
     )
     unique_events: dict[int, PearWorkerRunEvent] = {}
-    for event in [*newest_usage_candidates, *newest_plan_candidates]:
+    for event in [*newest_usage_candidates, *newest_display_candidates]:
         unique_events[event.id] = event
     for event in sorted(
         unique_events.values(),
@@ -803,9 +804,11 @@ def serialize_pear_worker_run_plan(
     like the usage lookup.
     """
     events = (
-        [event for event in summary_events if event.event_type == "transcript"][:30]
+        [event for event in summary_events if event.event_type == "transcript"]
         if summary_events is not None
-        else run.events.filter(event_type="transcript").order_by("-date_created", "-id")[:30]
+        else run.events.filter(event_type="transcript", payload__kind="plan").order_by(
+            "-date_created", "-id"
+        )[:1]
     )
     for event in events:
         payload = event.payload
@@ -838,6 +841,23 @@ def serialize_pear_worker_run_tool_count(
         if isinstance(payload, dict) and isinstance(payload.get("tool_count"), int):
             tool_count += payload["tool_count"]
     return tool_count
+
+
+def serialize_pear_worker_run_overview(
+    run: PearWorkerRun,
+    summary_events: list[PearWorkerRunEvent] | None = None,
+) -> str | None:
+    events = (
+        [event for event in summary_events if event.event_type == "presentation"]
+        if summary_events is not None
+        else run.events.filter(event_type="presentation").order_by("-date_created", "-id")[:1]
+    )
+    for event in events:
+        payload = event.payload
+        overview = payload.get("overview") if isinstance(payload, dict) else None
+        if isinstance(overview, str) and overview.strip():
+            return trim_pear_text(overview.strip(), limit=180)
+    return None
 
 
 def serialize_pear_worker_run(
@@ -888,6 +908,7 @@ def serialize_pear_worker_run(
         "usage": serialize_pear_worker_run_usage(run, summary_events),
         "tool_count": serialize_pear_worker_run_tool_count(run, summary_events),
         "plan": serialize_pear_worker_run_plan(run, summary_events),
+        "overview": serialize_pear_worker_run_overview(run, summary_events),
         "live": live_state,
     }
     if include_events:
@@ -1572,6 +1593,141 @@ def get_pear_run_backend(
             "runtime_config": build_pear_runtime_config_payload(),
         },
     )
+
+
+def serialize_pear_run_trace_event(event: PearWorkerRunEvent) -> dict[str, object] | None:
+    payload = event.payload if isinstance(event.payload, dict) else {}
+    if event.event_type == "transcript":
+        kind = payload.get("kind")
+        if kind == "assistant":
+            body = payload.get("body")
+            if not isinstance(body, str) or not body.strip():
+                return None
+            return {
+                "id": event.id,
+                "kind": "assistant",
+                "title": "Codex",
+                "body": body,
+                "date_created": datetime_to_timestamp(event.date_created),
+            }
+        if kind == "plan":
+            plan = _pear_trace_plan(payload)
+            if plan is None:
+                return None
+            return {
+                "id": event.id,
+                "kind": "plan",
+                "title": "Plan updated",
+                "plan": plan,
+                "date_created": datetime_to_timestamp(event.date_created),
+            }
+        if kind in {"command", "file_change", "status", "tool"}:
+            title = payload.get("title")
+            return {
+                "id": event.id,
+                "kind": str(kind),
+                "title": str(title or event.summary),
+                "date_created": datetime_to_timestamp(event.date_created),
+            }
+        return None
+    if event.event_type == "tool_results":
+        count = payload.get("tool_count")
+        title = f"Ran {count} tools" if isinstance(count, int) else "Tools completed"
+    elif event.event_type == "steering_applied":
+        title = event.summary or "Steering applied"
+    elif event.event_type in {"cancelled", "done", "failed", "running"}:
+        title = event.summary or event.event_type.capitalize()
+    else:
+        return None
+    return {
+        "id": event.id,
+        "kind": event.event_type,
+        "title": trim_pear_text(title, limit=500),
+        "date_created": datetime_to_timestamp(event.date_created),
+    }
+
+
+def _pear_trace_plan(payload: dict[str, object]) -> list[dict[str, str]] | None:
+    metadata = payload.get("metadata")
+    steps = metadata.get("steps") if isinstance(metadata, dict) else None
+    if not isinstance(steps, list):
+        return None
+    plan = [
+        {"step": str(step["step"]), "status": str(step.get("status", "pending"))}
+        for step in steps
+        if isinstance(step, dict) and step.get("step")
+    ]
+    return plan or None
+
+
+@typed_endpoint
+def get_pear_run_trace_backend(
+    request: HttpRequest,
+    user_profile: UserProfile,
+    run_id: int,
+    *,
+    before_event_id: Annotated[
+        int | None,
+        ApiParamConfig("before_event_id", documentation_status=INTENTIONALLY_UNDOCUMENTED),
+    ] = None,
+    limit: Annotated[
+        int,
+        ApiParamConfig("limit", documentation_status=INTENTIONALLY_UNDOCUMENTED),
+    ] = PEAR_RUN_TRACE_LIMIT,
+) -> HttpResponse:
+    run = get_visible_pear_worker_run(user_profile, run_id)
+    requested_limit = max(1, min(limit, PEAR_RUN_TRACE_MAX_LIMIT))
+    events = run.events.filter(
+        Q(
+            event_type="transcript",
+            payload__kind__in=["assistant", "plan", "command", "file_change", "status", "tool"],
+        )
+        | Q(
+            event_type__in=[
+                "tool_results",
+                "steering_applied",
+                "cancelled",
+                "done",
+                "failed",
+                "running",
+            ]
+        )
+    ).order_by("-id")
+    if before_event_id is not None:
+        events = events.filter(id__lt=before_event_id)
+    candidates = list(events[: requested_limit + 1])
+    trace = [
+        serialized
+        for event in reversed(candidates[:requested_limit])
+        if (serialized := serialize_pear_run_trace_event(event)) is not None
+    ]
+    return json_success(
+        request,
+        data={
+            "run_id": run.id,
+            "trace": trace,
+            "has_more": len(candidates) > requested_limit,
+            "next_before_event_id": candidates[requested_limit - 1].id
+            if len(candidates) > requested_limit
+            else None,
+        },
+    )
+
+
+@typed_endpoint_without_parameters
+def post_pear_run_attention_backend(
+    request: HttpRequest,
+    user_profile: UserProfile,
+    run_id: int,
+) -> HttpResponse:
+    run = get_visible_pear_worker_run(user_profile, run_id)
+    if run.status not in {PearWorkerRun.QUEUED, PearWorkerRun.RUNNING}:
+        return json_success(request, data={"attended": False})
+    mark_pear_run_attended(run.id)
+    latest_event_id = run.events.order_by("-id").values_list("id", flat=True).first()
+    if latest_event_id is not None:
+        maybe_enqueue_pear_run_presentation(run.id, latest_event_id)
+    return json_success(request, data={"attended": True})
 
 
 def update_pear_run_control_event(

@@ -232,79 +232,47 @@ def pear_gemini_interaction_output_text(payload: dict[str, Any]) -> str:
     return "".join(text_parts)
 
 
-class PearGeminiInteractionsAddressingIntentClassifier:
+class PearGeminiInteractionsClient:
     def __init__(
         self,
         *,
         api_key: str | None,
-        model: str,
         timeout_seconds: int,
         output_limit: int,
         url: str,
-        thinking_level: str | None = "minimal",
         urlopen: PearUrlOpen | None = None,
     ) -> None:
         self.api_key = (api_key or "").strip()
-        self.model = model
         self.timeout_seconds = timeout_seconds
         self.output_limit = output_limit
         self.url = url
-        self.thinking_level = thinking_level.strip() if thinking_level else None
         self.urlopen = urlopen or urllib.request.urlopen
 
-    def __call__(
+    def interact(
         self,
         *,
-        content: str,
-        active_session: PearActiveSessionSummary | None,
-        active_run: bool,
-        message: dict[str, Any],
-        bot_handler: Any,
-    ) -> PearAmbientDecision:
+        model: str,
+        input_text: str,
+        system_instruction: str,
+        response_schema: dict[str, Any],
+        thinking_level: str | None,
+    ) -> str:
         if not self.api_key:
-            raise PearAgentRuntimeError("Gemini addressing router API key is not configured.")
-
-        stream = str(message.get("display_recipient") or "")
-        topic = str(message.get("topic") or message.get("subject") or "")
-        prompt = build_pear_addressing_router_prompt(
-            content=content,
-            active_session=active_session,
-            active_run=active_run,
-            stream=stream,
-            topic=topic,
-            message_id=message.get("id") if isinstance(message.get("id"), int) else None,
-        )
+            raise PearAgentRuntimeError("Gemini Interactions API key is not configured.")
         payload: dict[str, Any] = {
-            "model": self.model,
+            "model": model,
             "store": False,
-            "input": prompt,
-            "system_instruction": (
-                "Return only the structured JSON object required by the response schema."
-            ),
+            "input": input_text,
+            "system_instruction": system_instruction,
             "response_format": {
                 "type": "text",
                 "mime_type": "application/json",
-                "schema": {
-                    "type": "object",
-                    "properties": {
-                        "addressee": {
-                            "type": "string",
-                            "enum": ["pear", "other", "general", "uncertain"],
-                        },
-                        "action": {"type": "string", "enum": ["ignore", "steer", "run"]},
-                        "presentation": {
-                            "type": "string",
-                            "enum": ["compact", "prose", "status", "explainer", "diff"],
-                        },
-                    },
-                    "required": ["addressee", "action", "presentation"],
-                    "additionalProperties": False,
-                },
+                "schema": response_schema,
             },
             "generation_config": {"temperature": 0},
         }
-        if self.thinking_level:
-            payload["generation_config"]["thinking_level"] = self.thinking_level
+        if thinking_level:
+            payload["generation_config"]["thinking_level"] = thinking_level.strip()
 
         request = urllib.request.Request(
             self.url,
@@ -323,26 +291,90 @@ class PearGeminiInteractionsAddressingIntentClassifier:
         except urllib.error.HTTPError as error:
             raw_error = error.read().decode(errors="replace")
             raise PearAgentRuntimeError(
-                "Gemini addressing router failed with HTTP "
+                "Gemini Interactions API failed with HTTP "
                 f"{error.code}: {trim_pear_agent_text(raw_error, limit=self.output_limit)}"
             ) from error
         except (TimeoutError, urllib.error.URLError) as error:
-            raise PearAgentRuntimeError(f"Gemini addressing router failed: {error}") from error
+            raise PearAgentRuntimeError(f"Gemini Interactions API failed: {error}") from error
 
         if status != 200:
             raise PearAgentRuntimeError(
-                "Gemini addressing router failed with HTTP "
+                "Gemini Interactions API failed with HTTP "
                 f"{status}: {trim_pear_agent_text(raw_response, limit=self.output_limit)}"
             )
         try:
             parsed = json.loads(raw_response)
         except json.JSONDecodeError as error:
-            raise PearAgentRuntimeError(
-                "Gemini addressing router returned invalid JSON."
-            ) from error
+            raise PearAgentRuntimeError("Gemini Interactions API returned invalid JSON.") from error
         if not isinstance(parsed, dict):
-            return parse_pear_addressing_json_output("")
-        return parse_pear_addressing_json_output(pear_gemini_interaction_output_text(parsed))
+            return ""
+        return pear_gemini_interaction_output_text(parsed)
+
+
+class PearGeminiInteractionsAddressingIntentClassifier:
+    def __init__(
+        self,
+        *,
+        api_key: str | None,
+        model: str,
+        timeout_seconds: int,
+        output_limit: int,
+        url: str,
+        thinking_level: str | None = "minimal",
+        urlopen: PearUrlOpen | None = None,
+    ) -> None:
+        self.model = model
+        self.thinking_level = thinking_level
+        self.client = PearGeminiInteractionsClient(
+            api_key=api_key,
+            timeout_seconds=timeout_seconds,
+            output_limit=output_limit,
+            url=url,
+            urlopen=urlopen,
+        )
+
+    def __call__(
+        self,
+        *,
+        content: str,
+        active_session: PearActiveSessionSummary | None,
+        active_run: bool,
+        message: dict[str, Any],
+        bot_handler: Any,
+    ) -> PearAmbientDecision:
+        stream = str(message.get("display_recipient") or "")
+        topic = str(message.get("topic") or message.get("subject") or "")
+        prompt = build_pear_addressing_router_prompt(
+            content=content,
+            active_session=active_session,
+            active_run=active_run,
+            stream=stream,
+            topic=topic,
+            message_id=message.get("id") if isinstance(message.get("id"), int) else None,
+        )
+        output = self.client.interact(
+            model=self.model,
+            input_text=prompt,
+            system_instruction="Return only the structured JSON object required by the response schema.",
+            response_schema={
+                "type": "object",
+                "properties": {
+                    "addressee": {
+                        "type": "string",
+                        "enum": ["pear", "other", "general", "uncertain"],
+                    },
+                    "action": {"type": "string", "enum": ["ignore", "steer", "run"]},
+                    "presentation": {
+                        "type": "string",
+                        "enum": ["compact", "prose", "status", "explainer", "diff"],
+                    },
+                },
+                "required": ["addressee", "action", "presentation"],
+                "additionalProperties": False,
+            },
+            thinking_level=self.thinking_level,
+        )
+        return parse_pear_addressing_json_output(output)
 
 
 def build_pear_codex_developer_instructions() -> str:
@@ -685,9 +717,6 @@ def pear_transcript_events_from_codex_json_event(
 
 
 class PearCodexJsonTranscriptTranslator:
-    def __init__(self) -> None:
-        self.assistant_text_by_item_id: dict[str, str] = {}
-
     def events_from_json_event(self, event: dict[str, Any]) -> list[PearWorkerTranscriptEvent]:
         event_type = event.get("type")
         if isinstance(event_type, str) and "delta" in event_type:
@@ -695,28 +724,18 @@ class PearCodexJsonTranscriptTranslator:
             if not delta_text:
                 return []
             item_id = pear_codex_event_item_id(event)
-            body = self.assistant_text_by_item_id.get(item_id, "") + delta_text
-            self.assistant_text_by_item_id[item_id] = body
             return [
                 {
                     "kind": "assistant",
                     "status": "running",
                     "title": "Codex",
-                    "body": body[-4000:],
+                    "body": delta_text,
                     "item_id": item_id,
-                    "metadata": {"streaming": True},
+                    "metadata": {"streaming": True, "delta": True},
                 }
             ]
 
-        transcript_events = pear_transcript_events_from_codex_json_event(event)
-        for transcript_event in transcript_events:
-            if transcript_event.get("kind") != "assistant":
-                continue
-            transcript_item_id = transcript_event.get("item_id")
-            transcript_body = transcript_event.get("body")
-            if isinstance(transcript_item_id, str) and isinstance(transcript_body, str):
-                self.assistant_text_by_item_id[transcript_item_id] = transcript_body
-        return transcript_events
+        return pear_transcript_events_from_codex_json_event(event)
 
 
 PEAR_APP_SERVER_ITEM_TYPE_MAP: dict[str, str] = {

@@ -12,9 +12,7 @@ from unittest.mock import Mock, patch
 
 from zerver.lib.exceptions import JsonableError
 from zerver.lib.pear import (
-    PEAR_ACTIVE_MARKDOWN_PREFIX,
     PEAR_ACTIVE_SESSION_ENDPOINT,
-    PEAR_ACTIVE_THINKING_MARKDOWN,
     PEAR_AGENT_MENTION,
     PEAR_AGENT_RUNTIME_PACKAGES,
     PEAR_APPLY_PLAN_PROMPT,
@@ -50,6 +48,7 @@ from zerver.lib.pear import (
     PEAR_TRIGGER_MESSAGE_KEY,
     PEAR_VERIFY_CHANGES_PROMPT,
     PEAR_WORKER_RUNS_STORAGE_KEY,
+    PEAR_WORKING_MESSAGE,
     PearActiveSessionSummary,
     PearAmbientDecision,
     PearEmbeddedBotHandler,
@@ -153,8 +152,8 @@ class PearComputedSettingsEnvTest(TestCase):
     def test_pear_env_override_table_uses_gemini_key_aliases(self) -> None:
         with patch.dict("os.environ", {"GOOGLE_GENAI_API_KEY": "gemini-key"}, clear=True):
             api_key = pear_computed_settings._PEAR_ENV_OVERRIDES[
-                "PEAR_ADDRESSING_ROUTER_GEMINI_API_KEY"
-            ]("PEAR_ADDRESSING_ROUTER_GEMINI_API_KEY")
+                "PEAR_GEMINI_INTERACTIONS_API_KEY"
+            ]("PEAR_GEMINI_INTERACTIONS_API_KEY")
 
         self.assertEqual(api_key, "gemini-key")
 
@@ -432,14 +431,14 @@ class PearSessionDefaultsTest(TestCase):
     def test_build_ack_message(self) -> None:
         ack_message = build_pear_ack_message("debug the flaky parser test")
 
-        self.assertEqual(ack_message, PEAR_ACTIVE_THINKING_MARKDOWN)
+        self.assertEqual(ack_message, PEAR_WORKING_MESSAGE)
         self.assertNotIn("Open the Pear panel", ack_message)
         self.assertNotIn("Confirm repo, branch, and target runtime", ack_message)
 
     def test_build_ack_message_strips_pear_mention(self) -> None:
         ack_message = build_pear_ack_message("@**Pear** debug the flaky parser test")
 
-        self.assertEqual(ack_message, PEAR_ACTIVE_THINKING_MARKDOWN)
+        self.assertEqual(ack_message, PEAR_WORKING_MESSAGE)
         self.assertNotIn("Task: @**Pear**", ack_message)
 
     def test_session_payload(self) -> None:
@@ -1177,14 +1176,14 @@ class PearSessionDefaultsTest(TestCase):
             ],
         )
 
-        self.assertEqual(progress_message, PEAR_ACTIVE_THINKING_MARKDOWN)
+        self.assertEqual(progress_message, PEAR_WORKING_MESSAGE)
         self.assertNotIn("Status: working...", progress_message)
         self.assertNotIn("Task: fix the checkout test", progress_message)
         self.assertNotIn("Status: queued", progress_message)
         self.assertNotIn("Confirm repo, branch, and target runtime.", progress_message)
         self.assertNotIn("Verification: pytest zerver/tests/test_pear.py", progress_message)
 
-    def test_build_worker_progress_message_suffixes_streaming_answer(self) -> None:
+    def test_build_worker_progress_message_shows_only_current_paragraph(self) -> None:
         progress_message = build_pear_worker_progress_message(
             task="answer quickly",
             transcript_events=[
@@ -1205,10 +1204,7 @@ class PearSessionDefaultsTest(TestCase):
             tool_results=[],
         )
 
-        self.assertEqual(
-            progress_message,
-            "I’ll inspect the helper and repository first.\n\nPartial answer *✦*",
-        )
+        self.assertEqual(progress_message, "Partial answer")
         self.assertNotIn("Thinking", progress_message)
         self.assertNotIn("Status:", progress_message)
 
@@ -1240,14 +1236,11 @@ class PearSessionDefaultsTest(TestCase):
             tool_results=[],
         )
 
-        self.assertEqual(
-            progress_message,
-            "I'll check the repo first.\n\nThe answer is almost ready. *✦*",
-        )
+        self.assertEqual(progress_message, "The answer is almost ready.")
         self.assertNotIn("private chain of thought", progress_message)
         self.assertNotIn("Status:", progress_message)
 
-    def test_build_worker_progress_message_renders_codex_blocks(self) -> None:
+    def test_build_worker_progress_message_ignores_tool_transcript(self) -> None:
         progress_message = build_pear_worker_progress_message(
             task="check status",
             transcript_events=[
@@ -1295,10 +1288,7 @@ class PearSessionDefaultsTest(TestCase):
             tool_results=[],
         )
 
-        self.assertEqual(
-            progress_message,
-            "I'll check the repo state.\n\n```spoiler Ran 1 tool\n- · `/bin/bash -lc pwd`\n```\n\nResult: Status checked. *✦*",
-        )
+        self.assertEqual(progress_message, "Result: Status checked.")
 
     def test_build_worker_progress_message_collapses_running_tool_group(self) -> None:
         progress_message = build_pear_worker_progress_message(
@@ -1329,10 +1319,7 @@ class PearSessionDefaultsTest(TestCase):
             tool_results=[],
         )
 
-        self.assertEqual(
-            progress_message,
-            "I'll run the checks.\n\n```spoiler Ran 1/2 tools ✦\n- · `/bin/bash -lc pwd`\n- ✦ `/bin/bash -lc pytest`\n```\n\n*✦*",
-        )
+        self.assertEqual(progress_message, "I'll run the checks.")
 
     def test_build_worker_progress_message_coalesces_dynamic_tool_result(self) -> None:
         events = [
@@ -1369,7 +1356,7 @@ class PearSessionDefaultsTest(TestCase):
                 transcript_events=events,
                 tool_results=[],
             ),
-            "```spoiler Ran 1 tool\n- · Artifact ready.\n```\n\n*✦*",
+            PEAR_WORKING_MESSAGE,
         )
 
     def test_distinct_transcript_tool_events_count_actions_not_updates(self) -> None:
@@ -1446,7 +1433,7 @@ class PearSessionDefaultsTest(TestCase):
             tool_results=[],
         )
 
-        self.assertEqual(progress_message, "Partial answer *✦*")
+        self.assertEqual(progress_message, "Partial answer")
 
     def test_build_worker_message_normalizes_markdown_image_syntax(self) -> None:
         progress_message = build_pear_worker_progress_message(
@@ -1476,7 +1463,7 @@ class PearSessionDefaultsTest(TestCase):
 
         self.assertEqual(
             progress_message,
-            "[Pikachu](https://img.pokemondb.net/artwork/large/pikachu.jpg)\n\n[Bulbasaur](https://img.pokemondb.net/artwork/large/bulbasaur.jpg) *✦*",
+            "[Pikachu](https://img.pokemondb.net/artwork/large/pikachu.jpg)\n\n[Bulbasaur](https://img.pokemondb.net/artwork/large/bulbasaur.jpg)",
         )
         self.assertEqual(
             completed_message,
@@ -1523,7 +1510,7 @@ class PearSessionDefaultsTest(TestCase):
         self.assertEqual(seen_worker_states, ["ready"])
         self.assertEqual(seen_tasks, ["fix the checkout test"])
         self.assertIsNotNone(result["content"])
-        self.assertEqual(result["content"], PEAR_ACTIVE_THINKING_MARKDOWN)
+        self.assertEqual(result["content"], PEAR_WORKING_MESSAGE)
 
     def test_worker_runtime_close_delegates_to_tool_runner(self) -> None:
         class CloseableToolRunner:
@@ -1777,7 +1764,7 @@ class PearSessionDefaultsTest(TestCase):
         self.assertNotIn('Task: choose between A, B, D, and "Tokenmaxxer"', completed_message)
         self.assertNotIn("Runtime: codex-exec cwd=/home/vagrant/zulip", completed_message)
 
-    def test_worker_completed_message_keeps_intermediate_blocks_before_final_answer(self) -> None:
+    def test_worker_completed_message_keeps_only_final_answer(self) -> None:
         completed_message = build_pear_worker_completed_message(
             task="what's up",
             transcript_events=[
@@ -1808,11 +1795,10 @@ class PearSessionDefaultsTest(TestCase):
 
         self.assertEqual(
             completed_message,
-            "I'll check the repo state.\n\n```spoiler Ran 1 tool\n- · `/bin/bash -lc 'pwd && git status --short --branch'`\n```\n\nRepo: `/home/vagrant/zulip`\nVerification: `git status --short --branch` completed successfully\nResult: Status checked; ready for the next concrete task.",
+            "Repo: `/home/vagrant/zulip`\nVerification: `git status --short --branch` completed successfully\nResult: Status checked; ready for the next concrete task.",
         )
-        self.assertNotIn("*✦*", completed_message)
 
-    def test_worker_completed_artifact_message_preserves_commentary_and_failed_tools(self) -> None:
+    def test_worker_completed_artifact_message_does_not_replay_work_trace(self) -> None:
         completed_message = build_pear_worker_completed_message(
             task="explain the projection",
             transcript_events=[
@@ -1869,15 +1855,10 @@ class PearSessionDefaultsTest(TestCase):
             tool_results=[{"label": "Artifact", "value": '{"version":1}'}],
         )
 
-        self.assertIn("motion clarifies projection", completed_message)
-        self.assertIn("checking the renderer", completed_message)
-        self.assertIn("first poster", completed_message)
-        self.assertIn("Watch the ambient vector", completed_message)
-        self.assertIn("render visual", completed_message)
-        self.assertEqual(completed_message.count("render visual"), 1)
-        self.assertEqual(completed_message.count("```spoiler Ran 2 tools · 1 retry"), 1)
-        self.assertIn("inspect first poster", completed_message)
-        self.assertNotIn("✦", completed_message)
+        self.assertEqual(
+            completed_message,
+            "Watch the ambient vector rotate into the tangent space.",
+        )
 
     def test_worker_completed_message_preserves_final_answer_after_long_tool_details(self) -> None:
         transcript_events = [
@@ -1914,9 +1895,8 @@ class PearSessionDefaultsTest(TestCase):
         )
 
         self.assertLessEqual(len(completed_message), 5000)
-        self.assertIn("[earlier progress details truncated]", completed_message)
+        self.assertNotIn("I'll inspect the runtime state first.", completed_message)
         self.assertIn("Final answer: the context bug is fixed.", completed_message)
-        self.assertNotIn("*✦*", completed_message)
 
     def test_worker_completed_message_chunks_preserve_long_final_answer(self) -> None:
         long_answer = "\n\n".join(
@@ -1942,7 +1922,6 @@ class PearSessionDefaultsTest(TestCase):
         joined = "\n\n".join(chunks)
         self.assertIn("Paragraph 0:", joined)
         self.assertIn("Paragraph 11:", joined)
-        self.assertNotIn("[earlier progress details truncated]", joined)
         self.assertNotIn("[truncated]", joined)
 
     def test_split_pear_persistent_message_splits_oversized_single_line(self) -> None:
@@ -2702,10 +2681,10 @@ class PearSessionDefaultsTest(TestCase):
             "@**Pear** debug the flaky parser test",
         )
 
-        self.assertEqual(sent_replies[0], PEAR_ACTIVE_THINKING_MARKDOWN)
+        self.assertEqual(sent_replies[0], PEAR_WORKING_MESSAGE)
         self.assertNotIn("Confirm repo, branch, and target runtime", sent_replies[0])
         self.assertEqual(len(sent_replies), 2)
-        self.assertEqual(sent_replies[1], PEAR_ACTIVE_THINKING_MARKDOWN)
+        self.assertEqual(sent_replies[1], PEAR_WORKING_MESSAGE)
 
     def test_embedded_bot_handler_runs_active_topic_followup(self) -> None:
         payload = get_pear_session_payload()
@@ -2807,9 +2786,9 @@ class PearSessionDefaultsTest(TestCase):
         self.assertEqual(run_store.starts, [(204, PEAR_DEFAULT_STREAM, PEAR_DEFAULT_TOPIC)])
         self.assertEqual(seen_tasks, ["Fold in the failing terminal UI test too."])
         self.assertEqual(len(sent_replies), 2)
-        self.assertEqual(sent_replies[0], PEAR_ACTIVE_THINKING_MARKDOWN)
+        self.assertEqual(sent_replies[0], PEAR_WORKING_MESSAGE)
         self.assertNotIn("Confirm repo, branch, and target runtime", sent_replies[0])
-        self.assertEqual(sent_replies[1], PEAR_ACTIVE_THINKING_MARKDOWN)
+        self.assertEqual(sent_replies[1], PEAR_WORKING_MESSAGE)
 
     def test_embedded_bot_handler_silences_untagged_followup_without_router(self) -> None:
         payload = get_pear_session_payload()
@@ -3001,10 +2980,7 @@ class PearSessionDefaultsTest(TestCase):
                 {
                     "message_id": 401,
                     "content": (
-                        "I’m checking the failing test.\n\n"
-                        + PEAR_STEERING_QUEUED_MARKDOWN
-                        + " "
-                        + PEAR_ACTIVE_MARKDOWN_PREFIX
+                        "I’m checking the failing test.\n\n" + PEAR_STEERING_QUEUED_MARKDOWN
                     ),
                 }
             ],
@@ -3033,7 +3009,7 @@ class PearSessionDefaultsTest(TestCase):
             stream_exists=True,
             messages=[
                 (10, "@Pear fix the checkout test", False),
-                (11, PEAR_ACTIVE_THINKING_MARKDOWN, True),
+                (11, PEAR_WORKING_MESSAGE, True),
             ],
         )
         sent_replies: list[str] = []
@@ -3188,8 +3164,8 @@ class PearSessionDefaultsTest(TestCase):
             ],
         )
         self.assertEqual(len(sent_replies), 2)
-        self.assertEqual(sent_replies[0], PEAR_ACTIVE_THINKING_MARKDOWN)
-        self.assertEqual(sent_replies[1], PEAR_ACTIVE_THINKING_MARKDOWN)
+        self.assertEqual(sent_replies[0], PEAR_WORKING_MESSAGE)
+        self.assertEqual(sent_replies[1], PEAR_WORKING_MESSAGE)
 
     def test_embedded_bot_handler_honors_mentions_only_followup_policy(self) -> None:
         payload = get_pear_session_payload()
@@ -3282,7 +3258,7 @@ class PearSessionDefaultsTest(TestCase):
         self.assertEqual(run_store.starts, [205])
         self.assertEqual(seen_tasks, ["continue with the terminal UI test"])
         self.assertEqual(len(sent_replies), 2)
-        self.assertEqual(sent_replies[1], PEAR_ACTIVE_THINKING_MARKDOWN)
+        self.assertEqual(sent_replies[1], PEAR_WORKING_MESSAGE)
 
     def test_embedded_bot_handler_treats_stripped_work_mention_as_request(self) -> None:
         payload = get_pear_session_payload()
@@ -3364,9 +3340,9 @@ class PearSessionDefaultsTest(TestCase):
         self.assertEqual(run_store.starts, [trigger_message_id])
         self.assertEqual(seen_tasks, ["debug the flaky parser test"])
         self.assertEqual(len(sent_replies), 2)
-        self.assertEqual(sent_replies[0], PEAR_ACTIVE_THINKING_MARKDOWN)
+        self.assertEqual(sent_replies[0], PEAR_WORKING_MESSAGE)
         self.assertNotIn("steering update", sent_replies[0])
-        self.assertEqual(sent_replies[1], PEAR_ACTIVE_THINKING_MARKDOWN)
+        self.assertEqual(sent_replies[1], PEAR_WORKING_MESSAGE)
 
     def test_embedded_bot_handler_starts_worker_for_explicit_generic_chat(self) -> None:
         payload = get_pear_session_payload()
@@ -3446,8 +3422,8 @@ class PearSessionDefaultsTest(TestCase):
         self.assertEqual(run_store.starts, [207])
         self.assertEqual(seen_tasks, ["hey tell me something"])
         self.assertEqual(len(sent_replies), 2)
-        self.assertEqual(sent_replies[0], PEAR_ACTIVE_THINKING_MARKDOWN)
-        self.assertEqual(sent_replies[1], PEAR_ACTIVE_THINKING_MARKDOWN)
+        self.assertEqual(sent_replies[0], PEAR_WORKING_MESSAGE)
+        self.assertEqual(sent_replies[1], PEAR_WORKING_MESSAGE)
         self.assertNotIn("Confirm repo, branch, and target runtime", sent_replies[0])
 
     def test_embedded_bot_handler_starts_worker_for_router_addressed_message(self) -> None:
@@ -3550,8 +3526,8 @@ class PearSessionDefaultsTest(TestCase):
         self.assertIn((208, {"ambient_triggered": True}), run_store.metadata)
         self.assertEqual(seen_tasks, ["hey agent, can you check the failing parser test?"])
         self.assertEqual(len(sent_replies), 2)
-        self.assertEqual(sent_replies[0], PEAR_ACTIVE_THINKING_MARKDOWN)
-        self.assertEqual(sent_replies[1], PEAR_ACTIVE_THINKING_MARKDOWN)
+        self.assertEqual(sent_replies[0], PEAR_WORKING_MESSAGE)
+        self.assertEqual(sent_replies[1], PEAR_WORKING_MESSAGE)
 
     def test_embedded_bot_handler_silences_router_rejected_followup(self) -> None:
         payload = get_pear_session_payload()
@@ -3997,13 +3973,13 @@ class PearSessionDefaultsTest(TestCase):
 
         self.assertEqual(len(sent_replies), 2)
         self.assertEqual(len(updated_replies), 3)
-        self.assertEqual(sent_replies[0], PEAR_ACTIVE_THINKING_MARKDOWN)
-        self.assertEqual(updated_replies[0], PEAR_ACTIVE_THINKING_MARKDOWN)
+        self.assertEqual(sent_replies[0], PEAR_WORKING_MESSAGE)
+        self.assertEqual(updated_replies[0], PEAR_WORKING_MESSAGE)
         self.assertEqual(
             updated_replies[1],
             "Pear worker completed without a visible response.",
         )
-        self.assertEqual(sent_replies[1], PEAR_ACTIVE_THINKING_MARKDOWN)
+        self.assertEqual(sent_replies[1], PEAR_WORKING_MESSAGE)
         self.assertEqual(
             updated_replies[2],
             "Pear worker is not starting.\n\n"
@@ -4107,7 +4083,7 @@ class PearSessionDefaultsTest(TestCase):
         )
         self.assertEqual(len(sent_replies), 1)
         self.assertEqual(len(updated_replies), 2)
-        self.assertEqual(updated_replies[0], PEAR_ACTIVE_THINKING_MARKDOWN)
+        self.assertEqual(updated_replies[0], PEAR_WORKING_MESSAGE)
         self.assertEqual(
             updated_replies[1],
             "Pear worker completed without a visible response.",
@@ -4158,7 +4134,7 @@ class PearSessionDefaultsTest(TestCase):
             FakeBotHandler(),
         )
 
-        self.assertEqual(sent_replies, [PEAR_ACTIVE_THINKING_MARKDOWN])
+        self.assertEqual(sent_replies, [PEAR_WORKING_MESSAGE])
         self.assertEqual(
             updated_replies,
             [
@@ -4353,7 +4329,7 @@ class PearSessionDefaultsTest(TestCase):
         self.assertEqual(len(updated_messages), 2)
         self.assertEqual(updated_messages[0]["message_id"], 501)
         self.assertIs(updated_messages[0]["rendering_only"], True)
-        self.assertEqual(updated_messages[0]["content"], PEAR_ACTIVE_THINKING_MARKDOWN)
+        self.assertEqual(updated_messages[0]["content"], PEAR_WORKING_MESSAGE)
         self.assertEqual(tool_seen_statuses, [updated_messages[0]["content"]])
         self.assertEqual(updated_messages[1]["message_id"], 501)
         self.assertNotIn("rendering_only", updated_messages[1])
@@ -4538,7 +4514,7 @@ class PearSessionDefaultsTest(TestCase):
             progress_message_id=502,
         )
 
-        self.assertEqual(updated_messages[0]["content"], PEAR_ACTIVE_THINKING_MARKDOWN)
+        self.assertEqual(updated_messages[0]["content"], PEAR_WORKING_MESSAGE)
         self.assertIs(updated_messages[0]["rendering_only"], True)
         self.assertEqual(
             updated_messages[-1]["content"],
@@ -4550,10 +4526,7 @@ class PearSessionDefaultsTest(TestCase):
         self.assertIsNotNone(live_state)
         assert live_state is not None
         self.assertEqual(live_state["status"], "done")
-        self.assertEqual(
-            live_state["content"],
-            "Pear worker completed without a visible response.",
-        )
+        self.assertNotIn("content", live_state)
 
     def test_run_worker_turn_chunks_non_posting_transcript_result(self) -> None:
         sent_replies: list[str] = []
@@ -4665,8 +4638,10 @@ class PearSessionDefaultsTest(TestCase):
         all_persisted_text = "\n\n".join([str(updated_messages[-1]["content"]), *sent_replies])
         self.assertIn("Section 0:", all_persisted_text)
         self.assertIn("Section 11:", all_persisted_text)
-        self.assertNotIn("[earlier progress details truncated]", all_persisted_text)
+        self.assertEqual(all_persisted_text.count("Section 0:"), 1)
+        self.assertEqual(all_persisted_text.count("Section 11:"), 1)
         self.assertNotIn("[truncated]", all_persisted_text)
+        self.assertLessEqual(len(str(updated_messages[-1]["content"])), 5000)
         self.assertTrue(all(len(reply) <= 5000 for reply in sent_replies))
 
     def test_run_worker_turn_posts_continuation_messages_for_long_result(self) -> None:
@@ -4736,7 +4711,6 @@ class PearSessionDefaultsTest(TestCase):
         all_persisted_text = "\n\n".join([str(updated_messages[-1]["content"]), *sent_replies])
         self.assertIn("Section 0:", all_persisted_text)
         self.assertIn("Section 11:", all_persisted_text)
-        self.assertNotIn("[earlier progress details truncated]", all_persisted_text)
         self.assertNotIn("[truncated]", all_persisted_text)
         self.assertTrue(all(len(reply) <= 5000 for reply in sent_replies))
 
@@ -4810,7 +4784,7 @@ class PearSessionDefaultsTest(TestCase):
                     "kind": "assistant",
                     "status": "running",
                     "title": "Codex",
-                    "body": "AB",
+                    "body": "B",
                     "item_id": "assistant-1",
                     "metadata": {"streaming": True},
                 }
@@ -4851,8 +4825,8 @@ class PearSessionDefaultsTest(TestCase):
         self.assertEqual(
             [message["content"] for message in updated_messages],
             [
-                PEAR_ACTIVE_THINKING_MARKDOWN,
-                f"A {PEAR_ACTIVE_MARKDOWN_PREFIX}",
+                PEAR_WORKING_MESSAGE,
+                "A",
                 "AB",
             ],
         )
@@ -4870,9 +4844,9 @@ class PearSessionDefaultsTest(TestCase):
         self.assertIsNotNone(live_state)
         assert live_state is not None
         self.assertEqual(live_state["status"], "done")
-        self.assertEqual(live_state["content"], "AB")
+        self.assertNotIn("content", live_state)
 
-    def test_run_worker_turn_marks_live_message_active_and_settles_clean(self) -> None:
+    def test_run_worker_turn_uses_typed_state_instead_of_content_markers(self) -> None:
         updated_messages: list[dict[str, object]] = []
 
         class FakeRunStore:
@@ -4970,13 +4944,9 @@ class PearSessionDefaultsTest(TestCase):
 
         updated_contents = [str(message["content"]) for message in updated_messages]
         self.assertTrue(updated_contents)
-        # Every in-flight edit carries the active marker so the web client
-        # can animate the ✦ liveness glyph on the streaming message; the
-        # final settled content must shed it.
-        self.assertTrue(
-            all(PEAR_ACTIVE_MARKDOWN_PREFIX in content for content in updated_contents[:-1])
-        )
-        self.assertNotIn(PEAR_ACTIVE_MARKDOWN_PREFIX, updated_contents[-1])
+        self.assertEqual(updated_contents[0], PEAR_WORKING_MESSAGE)
+        self.assertEqual(updated_contents[-1], "done")
+        self.assertTrue(all("✦" not in content for content in updated_contents))
 
     def test_run_worker_turn_cancels_runtime_when_cancel_requested(self) -> None:
         updated_messages: list[dict[str, object]] = []
@@ -5538,7 +5508,7 @@ class PearSessionDefaultsTest(TestCase):
         )
 
         self.assertEqual(len(sent_replies), 1)
-        self.assertEqual(sent_replies[0], PEAR_ACTIVE_THINKING_MARKDOWN)
+        self.assertEqual(sent_replies[0], PEAR_WORKING_MESSAGE)
 
     def test_embedded_bot_records_failed_worker_run(self) -> None:
         sent_replies: list[str] = []

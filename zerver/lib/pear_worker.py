@@ -16,6 +16,7 @@ from typing import Any
 from urllib.parse import urlparse
 
 from django.conf import settings
+from django.core.cache import cache
 from django.db import IntegrityError, transaction
 from django.db.models import F, Q
 from django.utils.timezone import now as timezone_now
@@ -57,6 +58,9 @@ from zerver.models.users import UserProfile
 PEAR_WORKER_QUEUE_NAME = "pear_worker"
 PEAR_MONITOR_WORKER_QUEUE_NAME = "pear_monitor_worker"
 PEAR_ADDRESSING_QUEUE_NAME = "pear_addressing"
+PEAR_PRESENTATION_QUEUE_NAME = "pear_presentation"
+PEAR_RUN_ATTENTION_TTL_SECONDS = 15
+PEAR_PRESENTATION_CADENCE_SECONDS = 3
 PEAR_WORKER_TOPIC_HISTORY_LIMIT = 200
 PEAR_WORKER_RUN_ACTIVE_STATUSES = frozenset(
     (PearWorkerRun.QUEUED, PearWorkerRun.RUNNING, PearWorkerRun.DONE)
@@ -76,6 +80,40 @@ PEAR_RUN_LEGAL_TRANSITIONS: dict[PearWorkerRunStatus, frozenset[PearWorkerRunSta
     PearWorkerRun.DONE: frozenset(),
     PearWorkerRun.CANCELLED: frozenset(),
 }
+
+
+def pear_run_attention_cache_key(run_id: int) -> str:
+    return f"pear:run-attention:{run_id}"
+
+
+def pear_run_presentation_gate_cache_key(run_id: int) -> str:
+    return f"pear:run-presentation-gate:{run_id}"
+
+
+def mark_pear_run_attended(run_id: int) -> None:
+    cache.set(pear_run_attention_cache_key(run_id), True, PEAR_RUN_ATTENTION_TTL_SECONDS)
+
+
+def pear_run_is_attended(run_id: int) -> bool:
+    return cache.get(pear_run_attention_cache_key(run_id)) is True
+
+
+def maybe_enqueue_pear_run_presentation(run_id: int, source_event_id: int) -> bool:
+    if not pear_run_is_attended(run_id):
+        return False
+    if not cache.add(
+        pear_run_presentation_gate_cache_key(run_id),
+        True,
+        PEAR_PRESENTATION_CADENCE_SECONDS,
+    ):
+        return False
+    queue_json_publish_rollback_unsafe(
+        PEAR_PRESENTATION_QUEUE_NAME,
+        {"run_id": run_id, "source_event_id": source_event_id},
+    )
+    return True
+
+
 PEAR_REPOSITORY_CLONE_TIMEOUT_SECONDS = 180
 PEAR_GIT_STATUS_DELTA_TTL_SECONDS = 3
 pear_git_status_delta_cache: dict[
@@ -166,9 +204,7 @@ def set_pear_workspace_response_policy(
 
 
 def settle_orphaned_pear_run_message(run: PearWorkerRun) -> None:
-    """Best-effort: rewrite an interrupted run's progress message so it
-    stops carrying the live ✦ marker (which reads as an active run to
-    clients and to the deploy health gate)."""
+    """Best-effort: settle an interrupted run's visible progress message."""
     message_id = run.result_message_id
     if message_id is None:
         return
@@ -202,9 +238,8 @@ def reap_stale_pear_worker_runs(
 
     With assume_orphaned=True (worker startup), age is ignored: the pear
     queue is single-consumer, so at boot no run can legitimately be
-    RUNNING — a restart mid-turn otherwise leaves a zombie record and a
-    marker-bearing message that block the deploy health gate for the
-    full staleness window.
+    RUNNING — a restart mid-turn otherwise leaves a zombie record that
+    blocks the deploy health gate for the full staleness window.
     """
     current_time = timezone_now()
     cutoff = current_time - timedelta(seconds=pear_worker_stale_after_seconds())
@@ -1971,11 +2006,11 @@ def build_pear_addressing_intent_classifier_from_settings() -> (
     runtime = settings.PEAR_ADDRESSING_ROUTER_RUNTIME
     if runtime == "gemini-interactions":
         return PearGeminiInteractionsAddressingIntentClassifier(
-            api_key=settings.PEAR_ADDRESSING_ROUTER_GEMINI_API_KEY,
+            api_key=settings.PEAR_GEMINI_INTERACTIONS_API_KEY,
             model=settings.PEAR_ADDRESSING_ROUTER_GEMINI_MODEL,
             timeout_seconds=4,
             output_limit=1000,
-            url=settings.PEAR_ADDRESSING_ROUTER_GEMINI_URL,
+            url=settings.PEAR_GEMINI_INTERACTIONS_URL,
             thinking_level=settings.PEAR_ADDRESSING_ROUTER_GEMINI_THINKING_LEVEL,
         )
     return None
@@ -2839,7 +2874,7 @@ class PearDatabaseWorkerRunStore:
         summary: str,
         payload: dict[str, Any],
     ) -> None:
-        PearWorkerRunEvent.objects.create(
+        run_event = PearWorkerRunEvent.objects.create(
             run=run,
             event_type=event_type,
             summary=summary,
@@ -2858,6 +2893,11 @@ class PearDatabaseWorkerRunStore:
             run.heartbeat_at = current_time
             run.date_updated = current_time
             run.save(update_fields=["heartbeat_at", "date_updated"])
+        from zerver.actions.pear import send_pear_run_event
+
+        send_pear_run_event(run, run_event)
+        if event_type in {"steering_applied", "tool_results", "transcript"}:
+            maybe_enqueue_pear_run_presentation(run.id, run_event.id)
 
     def _runtime_label(self) -> str:
         return str(settings.PEAR_WORKER_AGENT_RUNTIME or "")

@@ -802,10 +802,12 @@ PEAR_WORKER_MAX_ACTIVE_RUNS_PER_REALM = 3
 PEAR_WORKSPACE_INDEX_LOCAL_MAX_ENTRIES = 32
 PEAR_WORKSPACE_INDEX_LOCAL_MAX_PATHS = 250_000
 PEAR_ADDRESSING_ROUTER_RUNTIME: Literal["disabled", "gemini-interactions"] = "disabled"
-PEAR_ADDRESSING_ROUTER_GEMINI_API_KEY = ""
+PEAR_GEMINI_INTERACTIONS_API_KEY = ""
+PEAR_GEMINI_INTERACTIONS_URL = "https://generativelanguage.googleapis.com/v1beta/interactions"
 PEAR_ADDRESSING_ROUTER_GEMINI_MODEL = "gemini-3.1-flash-lite"
 PEAR_ADDRESSING_ROUTER_GEMINI_THINKING_LEVEL: str | None = "minimal"
-PEAR_ADDRESSING_ROUTER_GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/interactions"
+PEAR_PRESENTATION_GEMINI_MODEL = "gemini-3.1-flash-lite"
+PEAR_PRESENTATION_GEMINI_THINKING_LEVEL: str | None = "minimal"
 
 # Price per token for input and output tokens, and maximum cost. Units
 # are arbitrarily, but typically will be USD.

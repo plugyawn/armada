@@ -138,8 +138,7 @@ def pear_bot_event_services_are_definitive(services: object) -> bool:
 
 def pear_bot_event_services_include_pear(services: object) -> bool:
     return isinstance(services, list) and any(
-        isinstance(service, dict)
-        and service.get("service_name") == PEAR_EMBEDDED_BOT_SERVICE
+        isinstance(service, dict) and service.get("service_name") == PEAR_EMBEDDED_BOT_SERVICE
         for service in services
     )
 
@@ -2105,6 +2104,10 @@ def apply_event(
         logging.warning("Got a web_reload_client event during apply_events")
     elif event["type"] == "restart":
         # The Tornado process restarted.  This has no effect; we ignore it.
+        pass
+    elif event["type"] == "pear_run":
+        # Pear run deltas update a dedicated client-side reducer; they do not
+        # mutate the initial-state payload assembled by this module.
         pass
     elif event["type"] == "device":
         if event["op"] == "add":

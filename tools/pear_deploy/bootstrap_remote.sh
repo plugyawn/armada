@@ -84,16 +84,6 @@ for env_file in "$REPO_ROOT/../env.local" "$REPO_ROOT/.env.local"; do
     fi
 done
 PEAR_GEMINI_API_KEY="${PEAR_ADDRESSING_ROUTER_GEMINI_API_KEY:-${GEMINI_API_KEY:-${GEMINI_KEY:-${GOOGLE_API_KEY:-${GOOGLE_GENAI_API_KEY:-}}}}}"
-CADDY_BASICAUTH_USER="${PEAR_CADDY_BASICAUTH_USER:-}"
-CADDY_BASICAUTH_HASH_FILE="${PEAR_CADDY_BASICAUTH_HASH_FILE:-}"
-CADDY_BASICAUTH_PASSWORD_FILE="${PEAR_CADDY_BASICAUTH_PASSWORD_FILE:-}"
-if ! validate_local_caddy_auth_pair \
-    "$CADDY_BASICAUTH_USER" \
-    "$CADDY_BASICAUTH_HASH_FILE" \
-    "$CADDY_BASICAUTH_PASSWORD_FILE"; then
-    fail "bootstrap requires matching mode-0600 Caddy bcrypt-hash and verification-password files"
-fi
-
 ssh_root() {
     ssh -F "$SSH_CONFIG" pear-staging-root "$@"
 }
@@ -525,16 +515,14 @@ ssh_root 'rm -rf \
     find /home/zulipdev/zulip/locale -type f -name '"'"'*.mo'"'"' -delete'
 ssh_root 'sudo -Hu zulipdev bash -lc "cd /home/zulipdev/zulip && ZULIP_DEV_PRODUCTION_ASSETS=1 ./tools/update-prod-static && .venv/bin/python3 tools/pear_deploy/production_assets.py --repo-root ."'
 
-echo "Installing fail-closed Caddy and production-assets service config..."
+echo "Installing public Caddy and production-assets service config..."
 printf -v runtime_command '%q ' \
     python3 \
     "$REMOTE_TRUSTED_RUNTIME/tools/pear_deploy/runtime_config.py" \
     install \
     --repo-root "$REMOTE_TRUSTED_RUNTIME" \
-    --fqdn "$FQDN" \
-    --bootstrap-auth-user "$CADDY_BASICAUTH_USER" \
-    --bootstrap-auth-stdin
-ssh -F "$SSH_CONFIG" pear-staging-root "$runtime_command" <"$CADDY_BASICAUTH_HASH_FILE"
+    --fqdn "$FQDN"
+ssh -F "$SSH_CONFIG" pear-staging-root "$runtime_command"
 ssh_root "systemctl daemon-reload && systemctl enable caddy ${PEAR_DEPLOY_SERVICES[*]} && systemctl restart caddy ${PEAR_DEPLOY_SERVICES[*]}"
 
 if [[ -n "$PEAR_GEMINI_API_KEY" ]]; then
@@ -610,7 +598,7 @@ ssh_root 'install -d -m 755 -o root -g root /var/lib/pear'
     printf 'pear_skills_tree=%s\n' "$LOCAL_PEAR_SKILLS_TREE"
     printf 'workspace_helper_sha256=%s\n' "$LOCAL_WORKSPACE_HELPER_SHA"
     printf 'asset_mode=production-hashed\n'
-    printf 'caddy_auth=basic-auth-required\n'
+    printf 'caddy_auth=public-devlogin\n'
     printf 'deployed_at=%s\n' "$DEPLOYED_AT"
 } | ssh_root python3 \
     "$REMOTE_TRUSTED_RUNTIME/tools/pear_deploy/deployment_record.py" \
@@ -621,4 +609,4 @@ ssh_root "systemctl --no-pager --full status caddy ${PEAR_DEPLOY_SERVICES[*]}" |
 
 echo
 echo "Done. Verify with:"
-echo "  tools/pear_deploy/verify_remote.sh --auth-password-file <mode-0600-password-file> $STATE_PATH"
+echo "  tools/pear_deploy/verify_remote.sh $STATE_PATH"

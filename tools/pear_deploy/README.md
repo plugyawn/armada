@@ -7,7 +7,7 @@ The deployment is intentionally a normal VM, not a tunnel:
 
 - DigitalOcean hosts an Ubuntu droplet.
 - GoDaddy points `pear.backpropaganda.net` at that droplet.
-- Caddy terminates HTTPS behind a mandatory HTTP basic-auth wall.
+- Caddy terminates public HTTPS without an outer username/password prompt.
 - The current local checkout is synced to `/home/zulipdev/zulip`.
 - `tools/run-dev --production-assets` serves prebuilt, content-hashed assets
   with `DEVELOPMENT=True` and `DEBUG=False`; webpack/HMR and web-process
@@ -27,34 +27,22 @@ The scripts load exported environment variables and also load
 - Gemini ambient router: `PEAR_ADDRESSING_ROUTER_GEMINI_API_KEY`,
   `GEMINI_API_KEY`, `GEMINI_KEY`, `GOOGLE_API_KEY`, or
   `GOOGLE_GENAI_API_KEY`
-- Caddy login name: `PEAR_CADDY_BASICAUTH_USER`
-- Caddy bcrypt hash file: `PEAR_CADDY_BASICAUTH_HASH_FILE`. The file must
-  contain exactly one hash emitted by `caddy hash-password`, must be a readable
-  regular non-symlink file, and is streamed to the box only on stdin. The hash
-  is never accepted as a plaintext environment value or command argument.
 
 Do not commit `env.local`, `output/pear-staging/`, or `.codex/auth.json`.
 
-## Access boundary (required)
+## Access boundary
 
-The box runs Zulip's development server, so `/devlogin` and the dev
-API-key endpoints must never be internet-reachable without an HTTP basic-auth
-wall. Before the first bootstrap, create the hash file without committing it:
+The hosted scratch instance intentionally exposes Zulip's passwordless
+`/devlogin` page directly through public HTTPS. There is no outer Caddy
+username/password prompt. Anyone who discovers the URL can choose a listed
+development user, including an administrator, and the development API-key
+endpoint is also reachable.
 
-```bash
-umask 077
-caddy hash-password > /absolute/private/path/pear-caddy.bcrypt
-export PEAR_CADDY_BASICAUTH_USER=pear
-export PEAR_CADDY_BASICAUTH_HASH_FILE=/absolute/private/path/pear-caddy.bcrypt
-```
-
-Bootstrap and update fail closed when `/etc/pear/caddy-basic-auth.env` is
-absent or invalid. A guarded update can create that root-owned mode-0600 file
-from the local hash file; subsequent updates reuse the remote file. The
-checked-in Caddyfile, Caddy systemd drop-in, Zulip wrapper/unit, and `pear.env`
-are installed and verified by `runtime_config.py`. To also limit who can drive
-the agent, set `PEAR_WORKER_TRUSTED_USER_IDS` in `pear.env` to a comma-separated
-list of trusted user ids.
+Keep only disposable scratch data on this instance. `PEAR_WORKER_TRUSTED_USER_IDS`
+can limit which selected Zulip identities may start runs, but it is not an
+authentication boundary while passwordless devlogin is public. Restore a real
+identity provider or an outer access layer before storing sensitive data or
+treating the site as private.
 
 ## Create or refresh the droplet and DNS
 
@@ -79,7 +67,7 @@ tools/pear_deploy/bootstrap_remote.sh
 This installs base packages, syncs this checkout, provisions Zulip,
 installs the same Codex CLI version as this Mac when possible, copies Codex
 auth, builds and validates production assets, creates/selects the embedded
-`Pear` bot in the dev realm, installs authenticated Caddy/systemd config, and
+`Pear` bot in the dev realm, installs public Caddy/systemd config, and
 starts:
 
 - `pear-zulip-dev.service`

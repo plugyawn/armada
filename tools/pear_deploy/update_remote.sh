@@ -16,7 +16,6 @@ REMOTE_PEAR_DIR="/home/zulipdev/pear"
 REMOTE_PEAR_SKILLS_DIR="$REMOTE_PEAR_DIR/skills"
 DEPLOY_RECORD_PATH="/var/lib/pear/deployed-sha"
 SNAPSHOT_ROOT="/home/zulipdev/pear-deploy-snapshots"
-REMOTE_AUTH_ENV="/etc/pear/caddy-basic-auth.env"
 WORKSPACE_HELPER_RUNTIME="$SCRIPT_DIR/workspace_helper_runtime.py"
 PEAR_BUILD_SWAP_BYTES=$((8 * 1024 * 1024 * 1024))
 YES=false
@@ -33,9 +32,6 @@ for env_file in "$PEAR_ROOT/env.local" "$REPO_ROOT/.env.local"; do
         set +a
     fi
 done
-CADDY_BASICAUTH_USER="${PEAR_CADDY_BASICAUTH_USER:-}"
-CADDY_BASICAUTH_HASH_FILE="${PEAR_CADDY_BASICAUTH_HASH_FILE:-}"
-CADDY_BASICAUTH_PASSWORD_FILE="${PEAR_CADDY_BASICAUTH_PASSWORD_FILE:-}"
 
 fail() {
     echo "ERROR: $*" >&2
@@ -103,10 +99,6 @@ Options:
                    Runtime smoke timeout in seconds (default: 150).
   --runtime-smoke-evidence PATH
                    Write runtime smoke JSON evidence to PATH.
-  --auth-password-file PATH
-                   Read the Caddy verification password from a local mode-0600
-                   regular non-symlink file. The password is sent to curl only
-                   through an stdin config and is never placed in argv or logs.
   --state PATH      Use a specific pear_do.py state file.
   -h, --help        Show this help.
 EOF
@@ -140,14 +132,6 @@ while [[ $# -gt 0 ]]; do
                 exit 2
             fi
             RUNTIME_SMOKE_EVIDENCE="$2"
-            shift 2
-            ;;
-        --auth-password-file)
-            if [[ $# -lt 2 ]]; then
-                echo "Missing value for --auth-password-file" >&2
-                exit 2
-            fi
-            CADDY_BASICAUTH_PASSWORD_FILE="$2"
             shift 2
             ;;
         --state)
@@ -268,22 +252,6 @@ install_and_verify_remote_workspace_helper() {
         --smoke-existing-isolation-user
 }
 
-validate_local_auth_bootstrap() {
-    if ! validate_local_caddy_auth_pair \
-        "$CADDY_BASICAUTH_USER" \
-        "$CADDY_BASICAUTH_HASH_FILE" \
-        "$CADDY_BASICAUTH_PASSWORD_FILE"; then
-        fail "Caddy bootstrap hash/password inputs are invalid or do not match"
-    fi
-}
-
-validate_local_auth_verification() {
-    if ! validate_local_caddy_verification_auth \
-        "$CADDY_BASICAUTH_USER" "$CADDY_BASICAUTH_PASSWORD_FILE"; then
-        fail "Caddy verification requires the configured username and a valid local mode-0600 password file"
-    fi
-}
-
 install_remote_runtime_config() {
     local remote_command
     local command=(
@@ -293,80 +261,8 @@ install_remote_runtime_config() {
         --repo-root "$REMOTE_TRUSTED_RUNTIME"
         --fqdn "$FQDN"
     )
-    if [[ "$REMOTE_AUTH_READY" != true ]]; then
-        command+=(--bootstrap-auth-user "$CADDY_BASICAUTH_USER" --bootstrap-auth-stdin)
-        printf -v remote_command '%q ' "${command[@]}"
-        # The bcrypt hash is sent only on stdin. It is never expanded into an
-        # environment variable, command argument, or log message.
-        ssh -F "$SSH_CONFIG" pear-staging-root "$remote_command" <"$CADDY_BASICAUTH_HASH_FILE"
-    else
-        printf -v remote_command '%q ' "${command[@]}"
-        ssh_root "$remote_command"
-    fi
-}
-
-remote_auth_env_valid() {
-    ssh_root python3 - "$REMOTE_AUTH_ENV" "$FQDN" <<'PY'
-import re
-import stat
-import sys
-from pathlib import Path
-
-path = Path(sys.argv[1])
-fqdn = sys.argv[2].lower()
-try:
-    lines = path.read_text(encoding="utf-8").splitlines()
-except (OSError, UnicodeError):
-    raise SystemExit(1)
-path_stat = path.stat()
-if stat.S_IMODE(path_stat.st_mode) != 0o600 or path_stat.st_uid != 0 or path_stat.st_gid != 0:
-    raise SystemExit(1)
-values = {}
-for line in lines:
-    key, separator, value = line.partition("=")
-    if not separator or key in values:
-        raise SystemExit(1)
-    values[key] = value
-if set(values) != {
-    "PEAR_CADDY_FQDN",
-    "PEAR_CADDY_BASICAUTH_USER",
-    "PEAR_CADDY_BASICAUTH_HASH",
-}:
-    raise SystemExit(1)
-if values["PEAR_CADDY_FQDN"] != fqdn:
-    raise SystemExit(1)
-if re.fullmatch(r"[A-Za-z0-9._@-]{1,128}", values["PEAR_CADDY_BASICAUTH_USER"]) is None:
-    raise SystemExit(1)
-if re.fullmatch(r"\$2[aby]\$[0-9]{2}\$[./A-Za-z0-9]{53}", values["PEAR_CADDY_BASICAUTH_HASH"]) is None:
-    raise SystemExit(1)
-PY
-}
-
-remote_auth_username() {
-    ssh_root python3 - "$REMOTE_AUTH_ENV" <<'PY'
-import sys
-from pathlib import Path
-
-for line in Path(sys.argv[1]).read_text(encoding="utf-8").splitlines():
-    key, separator, value = line.partition("=")
-    if separator and key == "PEAR_CADDY_BASICAUTH_USER":
-        print(value)
-        raise SystemExit(0)
-raise SystemExit(1)
-PY
-}
-
-verify_existing_remote_caddy_auth() {
-    local status
-    status="$(caddy_authenticated_curl \
-        "$CADDY_BASICAUTH_USER" \
-        "$CADDY_BASICAUTH_PASSWORD_FILE" \
-        --silent --show-error --max-time 10 --output /dev/null \
-        --write-out '%{http_code}' --url "https://$FQDN/devlogin" || true)"
-    if [[ "$status" != "200" && "$status" != "301" && "$status" != "302" && "$status" != "303" ]]; then
-        fail "installed Caddy rejected the supplied verification credential before snapshot (HTTP ${status:-none})"
-    fi
-    echo "Preflight: installed Caddy accepted the supplied verification credential through HTTPS."
+    printf -v remote_command '%q ' "${command[@]}"
+    ssh_root "$remote_command"
 }
 
 verify_remote_quiescence() {
@@ -843,12 +739,10 @@ verify_remote_production_assets() {
 
     if ! verify_caddy_https_runtime \
         "$FQDN" \
-        "$CADDY_BASICAUTH_USER" \
-        "$CADDY_BASICAUTH_PASSWORD_FILE" \
         "${assets[0]}" \
         "${assets[1]}" \
         "${assets[2]}"; then
-        fail "authenticated Caddy production-runtime verification failed"
+        fail "public Caddy production-runtime verification failed"
     fi
 
     if ssh_root "pgrep -af '[t]ools/webpack|[t]ornado\.autoreload'"; then
@@ -1145,36 +1039,6 @@ fi
 
 configure_predeploy_runtime_expectations
 
-REMOTE_AUTH_READY=false
-if ssh_root "test -e $REMOTE_AUTH_ENV"; then
-    if remote_auth_env_valid; then
-        REMOTE_AUTH_READY=true
-        echo "Preflight: remote Caddy basic-auth environment is present, valid, and mode 0600."
-    else
-        fail "remote Caddy basic-auth environment exists but is invalid"
-    fi
-else
-    validate_local_auth_bootstrap
-    echo "Preflight: remote Caddy auth is absent; validated a local bcrypt hash file for stdin-only bootstrap."
-fi
-validate_local_auth_verification
-CADDY_BASICAUTH_PASSWORD_FILE="$(
-    python3 - "$CADDY_BASICAUTH_PASSWORD_FILE" <<'PY'
-import sys
-from pathlib import Path
-
-print(Path(sys.argv[1]).resolve(strict=True))
-PY
-)"
-if [[ "$REMOTE_AUTH_READY" == true ]]; then
-    REMOTE_CADDY_BASICAUTH_USER="$(remote_auth_username)"
-    if [[ "$REMOTE_CADDY_BASICAUTH_USER" != "$CADDY_BASICAUTH_USER" ]]; then
-        fail "local Caddy verification username does not match the installed remote username"
-    fi
-    verify_existing_remote_caddy_auth
-fi
-echo "Preflight: local Caddy verification password file is a current-user-owned mode-0600 regular non-symlink file."
-
 echo "Preflight: remote tracked/untracked source tree is clean and not ahead of local pear-main."
 REMOTE_PEAR_SCHEMA_STATE="$(detect_remote_pear_schema_state | tail -n 1)"
 case "$REMOTE_PEAR_SCHEMA_STATE" in
@@ -1406,7 +1270,7 @@ ssh -F "$SSH_CONFIG" pear-staging "git config --global --add safe.directory $REM
 install_and_verify_remote_workspace_helper
 install_and_verify_remote_codex_sandbox
 
-echo "Installing authenticated Caddy and production-assets service configuration..."
+echo "Installing public Caddy and production-assets service configuration..."
 install_remote_runtime_config
 ssh_root python3 "$REMOTE_TRUSTED_RUNTIME/tools/pear_deploy/runtime_config.py" verify \
     --repo-root "$REMOTE_TRUSTED_RUNTIME" \
@@ -1421,26 +1285,19 @@ echo "Restarting Pear services..."
 ssh_root "systemctl restart caddy ${PEAR_DEPLOY_SERVICES[*]}"
 SERVICE_RESTART_REQUIRED=false
 
-echo "Waiting for the Caddy auth wall and authenticated app route to serve..."
+echo "Waiting for the public Caddy app route to serve..."
 SITE_CODE=""
-AUTHENTICATED_SITE_CODE=""
 for _ in $(seq 1 60); do
-    SITE_CODE="$(curl -sS --max-time 10 -o /dev/null -w '%{http_code}' "https://$FQDN/devlogin" || true)"
-    AUTHENTICATED_SITE_CODE="$(caddy_authenticated_curl \
-        "$CADDY_BASICAUTH_USER" \
-        "$CADDY_BASICAUTH_PASSWORD_FILE" \
+    SITE_CODE="$(curl \
         --silent --show-error --location --max-redirs 3 --max-time 10 --output /dev/null \
         --write-out '%{http_code}' --url "https://$FQDN/devlogin" || true)"
-    if [[ "$SITE_CODE" == "401" && "$AUTHENTICATED_SITE_CODE" == "200" ]]; then
+    if [[ "$SITE_CODE" == "200" ]]; then
         break
     fi
     sleep 5
 done
-if [[ "$SITE_CODE" != "401" ]]; then
-    fail "Caddy basic-auth wall did not become healthy; last HTTP code: ${SITE_CODE:-none}"
-fi
-if [[ "$AUTHENTICATED_SITE_CODE" != "200" ]]; then
-    fail "authenticated app route through Caddy did not become healthy; last HTTP code: ${AUTHENTICATED_SITE_CODE:-none}"
+if [[ "$SITE_CODE" != "200" ]]; then
+    fail "public app route through Caddy did not become healthy; last HTTP code: ${SITE_CODE:-none}"
 fi
 verify_remote_production_assets
 
@@ -1469,8 +1326,6 @@ runtime_smoke_args=(
     "$runtime_smoke"
     --use-existing-server
     --site "https://$FQDN"
-    --caddy-auth-user "$CADDY_BASICAUTH_USER"
-    --caddy-auth-password-file "$CADDY_BASICAUTH_PASSWORD_FILE"
     --smoke-timeout "$RUNTIME_SMOKE_TIMEOUT"
     --evidence-json "$RUNTIME_SMOKE_EVIDENCE"
 )
@@ -1510,7 +1365,7 @@ ssh_root 'install -d -m 755 -o root -g root /var/lib/pear'
     printf 'workspace_helper_sha256=%s\n' "$LOCAL_WORKSPACE_HELPER_SHA"
     printf 'asset_mode=production-hashed\n'
     printf 'asset_source_zulip_sha=%s\n' "$ASSET_SOURCE_SHA"
-    printf 'caddy_auth=basic-auth-required\n'
+    printf 'caddy_auth=public-devlogin\n'
     printf 'deployed_at=%s\n' "$DEPLOYED_AT"
 } | ssh_root python3 \
     "$REMOTE_TRUSTED_RUNTIME/tools/pear_deploy/deployment_record.py" \

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import os
 import pwd
 import re
@@ -11,13 +12,8 @@ import subprocess
 import sys
 from pathlib import Path
 
-AUTH_ENV_PATH = Path("/etc/pear/caddy-basic-auth.env")
 RUNTIME_FILES = {
     Path("tools/pear_deploy/runtime/Caddyfile"): (Path("/etc/caddy/Caddyfile"), 0o644),
-    Path("tools/pear_deploy/runtime/caddy-pear-basic-auth.conf"): (
-        Path("/etc/systemd/system/caddy.service.d/pear-basic-auth.conf"),
-        0o644,
-    ),
     Path("tools/pear_deploy/runtime/pear-run-zulip-dev"): (
         Path("/usr/local/bin/pear-run-zulip-dev"),
         0o755,
@@ -31,6 +27,10 @@ RUNTIME_FILES = {
         0o644,
     ),
 }
+LEGACY_RUNTIME_FILES = (
+    Path("/etc/pear/caddy-basic-auth.env"),
+    Path("/etc/systemd/system/caddy.service.d/pear-basic-auth.conf"),
+)
 PEAR_ENV_PATH = Path("/home/zulipdev/pear.env")
 PRODUCTION_ASSET_ENV = "ZULIP_DEV_PRODUCTION_ASSETS"
 MAX_RUNTIME_FILE_BYTES = 1024 * 1024
@@ -38,8 +38,6 @@ MAX_RUNTIME_FILE_BYTES = 1024 * 1024
 FQDN_RE = re.compile(
     r"(?=.{1,253}\Z)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\Z"
 )
-USERNAME_RE = re.compile(r"[A-Za-z0-9._@-]{1,128}\Z")
-BCRYPT_RE = re.compile(r"\$2[aby]\$[0-9]{2}\$[./A-Za-z0-9]{53}\Z")
 
 
 class RuntimeConfigError(RuntimeError):
@@ -56,18 +54,6 @@ def validate_fqdn(value: str) -> str:
     value = value.lower()
     if FQDN_RE.fullmatch(value) is None:
         raise RuntimeConfigError("invalid Caddy FQDN")
-    return value
-
-
-def validate_username(value: str) -> str:
-    if USERNAME_RE.fullmatch(value) is None:
-        raise RuntimeConfigError("invalid Caddy basic-auth username")
-    return value
-
-
-def validate_bcrypt(value: str) -> str:
-    if BCRYPT_RE.fullmatch(value) is None:
-        raise RuntimeConfigError("Caddy password hash must be one bcrypt hash")
     return value
 
 
@@ -122,41 +108,6 @@ def _read_regular_file_nofollow(
         ):
             raise RuntimeConfigError(f"runtime file changed while reading: {path}")
         return payload, final_stat
-
-
-def parse_auth_env(path: Path) -> dict[str, str]:
-    required_owner = 0 if os.geteuid() == 0 else None
-    payload, _ = _read_regular_file_nofollow(
-        path,
-        required_mode=0o600,
-        required_uid=required_owner,
-        required_gid=required_owner,
-    )
-    try:
-        lines = payload.decode("utf-8").splitlines()
-    except UnicodeDecodeError as exc:
-        raise RuntimeConfigError("invalid Caddy auth environment encoding") from exc
-
-    values: dict[str, str] = {}
-    for line in lines:
-        if not line or line.startswith("#"):
-            continue
-        key, separator, value = line.partition("=")
-        if not separator or key in values:
-            raise RuntimeConfigError("invalid Caddy auth environment")
-        values[key] = value
-
-    required = {
-        "PEAR_CADDY_FQDN",
-        "PEAR_CADDY_BASICAUTH_USER",
-        "PEAR_CADDY_BASICAUTH_HASH",
-    }
-    if set(values) != required:
-        raise RuntimeConfigError("Caddy auth environment must contain exactly the required keys")
-    values["PEAR_CADDY_FQDN"] = validate_fqdn(values["PEAR_CADDY_FQDN"])
-    values["PEAR_CADDY_BASICAUTH_USER"] = validate_username(values["PEAR_CADDY_BASICAUTH_USER"])
-    values["PEAR_CADDY_BASICAUTH_HASH"] = validate_bcrypt(values["PEAR_CADDY_BASICAUTH_HASH"])
-    return values
 
 
 def atomic_write(
@@ -265,23 +216,6 @@ def atomic_write(
             os.close(directory_fd)
 
 
-def write_auth_env(path: Path, fqdn: str, username: str, password_hash: str) -> None:
-    values = {
-        "PEAR_CADDY_FQDN": validate_fqdn(fqdn),
-        "PEAR_CADDY_BASICAUTH_USER": validate_username(username),
-        "PEAR_CADDY_BASICAUTH_HASH": validate_bcrypt(password_hash),
-    }
-    content = "".join(f"{key}={value}\n" for key, value in values.items()).encode()
-    atomic_write(path, content, 0o600)
-
-
-def read_hash_from_stdin() -> str:
-    lines = sys.stdin.read().splitlines()
-    if len(lines) != 1:
-        raise RuntimeConfigError("Caddy hash input must contain exactly one line")
-    return validate_bcrypt(lines[0])
-
-
 def upsert_pear_env(path: Path) -> None:
     try:
         payload, old_stat = _read_regular_file_nofollow(path, required_mode=0o600)
@@ -314,6 +248,30 @@ def copy_runtime_files(repo_root: Path, root_prefix: Path) -> None:
         payload, _ = _read_regular_file_nofollow(source)
         destination = rooted(root_prefix, destination_absolute)
         atomic_write(destination, payload, mode)
+
+
+def validate_legacy_runtime_files(root_prefix: Path) -> None:
+    for absolute_path in LEGACY_RUNTIME_FILES:
+        path = rooted(root_prefix, absolute_path)
+        try:
+            path_stat = path.lstat()
+        except FileNotFoundError:
+            continue
+        if stat.S_ISLNK(path_stat.st_mode) or not stat.S_ISREG(path_stat.st_mode):
+            raise RuntimeConfigError(f"legacy runtime path must be a regular non-symlink: {path}")
+
+
+def remove_legacy_runtime_files(root_prefix: Path) -> None:
+    for absolute_path in LEGACY_RUNTIME_FILES:
+        with contextlib.suppress(FileNotFoundError):
+            rooted(root_prefix, absolute_path).unlink()
+
+
+def verify_legacy_runtime_files_absent(root_prefix: Path) -> None:
+    for absolute_path in LEGACY_RUNTIME_FILES:
+        path = rooted(root_prefix, absolute_path)
+        if path.exists() or path.is_symlink():
+            raise RuntimeConfigError(f"retired Caddy authentication file still exists: {path}")
 
 
 def verify_runtime_files(repo_root: Path, root_prefix: Path) -> None:
@@ -352,9 +310,9 @@ def verify_pear_env(path: Path) -> None:
         )
 
 
-def validate_caddy(caddyfile: Path, auth: dict[str, str]) -> None:
+def validate_caddy(caddyfile: Path, fqdn: str) -> None:
     environment = os.environ.copy()
-    environment.update(auth)
+    environment["PEAR_CADDY_FQDN"] = validate_fqdn(fqdn)
     try:
         result = subprocess.run(
             ["caddy", "validate", "--config", str(caddyfile), "--adapter", "caddyfile"],
@@ -366,38 +324,16 @@ def validate_caddy(caddyfile: Path, auth: dict[str, str]) -> None:
     except FileNotFoundError as exc:
         raise RuntimeConfigError("caddy executable is missing") from exc
     if result.returncode != 0:
-        output = (result.stdout + result.stderr).replace(
-            auth["PEAR_CADDY_BASICAUTH_HASH"], "<redacted>"
-        )
+        output = result.stdout + result.stderr
         raise RuntimeConfigError(f"Caddy config validation failed: {output.strip()}")
 
 
 def install(args: argparse.Namespace) -> None:
     repo_root = args.repo_root.resolve()
     root_prefix = args.root_prefix.resolve()
-    auth_path = rooted(root_prefix, AUTH_ENV_PATH)
-    if auth_path.exists():
-        auth = parse_auth_env(auth_path)
-        if auth["PEAR_CADDY_FQDN"] != validate_fqdn(args.fqdn):
-            write_auth_env(
-                auth_path,
-                args.fqdn,
-                auth["PEAR_CADDY_BASICAUTH_USER"],
-                auth["PEAR_CADDY_BASICAUTH_HASH"],
-            )
-    else:
-        if not args.bootstrap_auth_user or not args.bootstrap_auth_stdin:
-            raise RuntimeConfigError(
-                "Caddy auth is absent; bootstrap requires a username and bcrypt hash on stdin"
-            )
-        write_auth_env(
-            auth_path,
-            args.fqdn,
-            args.bootstrap_auth_user,
-            read_hash_from_stdin(),
-        )
-
+    validate_legacy_runtime_files(root_prefix)
     copy_runtime_files(repo_root, root_prefix)
+    remove_legacy_runtime_files(root_prefix)
     pear_env_path = rooted(root_prefix, PEAR_ENV_PATH)
     upsert_pear_env(pear_env_path)
     verify(args)
@@ -407,12 +343,10 @@ def verify(args: argparse.Namespace) -> None:
     repo_root = args.repo_root.resolve()
     root_prefix = args.root_prefix.resolve()
     verify_runtime_files(repo_root, root_prefix)
-    auth = parse_auth_env(rooted(root_prefix, AUTH_ENV_PATH))
-    if auth["PEAR_CADDY_FQDN"] != validate_fqdn(args.fqdn):
-        raise RuntimeConfigError("Caddy auth environment FQDN does not match deployment target")
+    verify_legacy_runtime_files_absent(root_prefix)
     verify_pear_env(rooted(root_prefix, PEAR_ENV_PATH))
     if not args.skip_caddy_validate:
-        validate_caddy(rooted(root_prefix, Path("/etc/caddy/Caddyfile")), auth)
+        validate_caddy(rooted(root_prefix, Path("/etc/caddy/Caddyfile")), args.fqdn)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -425,8 +359,6 @@ def build_parser() -> argparse.ArgumentParser:
         command_parser.add_argument("--fqdn", required=True)
         command_parser.add_argument("--skip-caddy-validate", action="store_true")
         if command == "install":
-            command_parser.add_argument("--bootstrap-auth-user")
-            command_parser.add_argument("--bootstrap-auth-stdin", action="store_true")
             command_parser.set_defaults(handler=install)
         else:
             command_parser.set_defaults(handler=verify)

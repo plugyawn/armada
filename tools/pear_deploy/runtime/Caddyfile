@@ -1,11 +1,6 @@
 {$PEAR_CADDY_FQDN} {
 	encode zstd gzip
 
-	# The deployed Debian Caddy 2.6 runtime names this directive basicauth.
-	basicauth {
-		{$PEAR_CADDY_BASICAUTH_USER} {$PEAR_CADDY_BASICAUTH_HASH}
-	}
-
 	handle_path /static/webpack-bundles/* {
 		root * /home/zulipdev/zulip/prod-static/serve/webpack-bundles
 		header Cache-Control "public, max-age=31536000, immutable"
@@ -24,22 +19,7 @@
 		}
 	}
 
-	@pear_upstream_authorization header X-Pear-Upstream-Authorization *
-	handle @pear_upstream_authorization {
-		# Deployment probes carry a distinct Zulip API credential through this
-		# private bridge header. Promote it only after Caddy has consumed the
-		# outer Basic Auth credential.
-		request_header Authorization {http.request.header.X-Pear-Upstream-Authorization}
-		request_header -X-Pear-Upstream-Authorization
-		reverse_proxy 127.0.0.1:9991
-	}
-
 	handle {
-		# Browser requests have no inner API credential. Consume the outer Caddy
-		# credential here so Zulip session-authenticated endpoints such as
-		# /user_uploads do not misread it as Zulip API Basic Auth.
-		request_header -Authorization
-		request_header -X-Pear-Upstream-Authorization
 		reverse_proxy 127.0.0.1:9991
 	}
 }

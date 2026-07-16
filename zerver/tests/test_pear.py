@@ -4051,7 +4051,7 @@ class PearSessionDefaultsTest(TestCase):
 
     def test_embedded_bot_settles_ack_when_worker_start_claim_fails(self) -> None:
         sent_replies: list[str] = []
-        updated_replies: list[str] = []
+        updated_replies: list[dict[str, object]] = []
 
         class FakeRunStore:
             def start(
@@ -4070,9 +4070,7 @@ class PearSessionDefaultsTest(TestCase):
                 return {"id": 311}
 
             def update_message(self, message: dict[str, object]) -> None:
-                content = message.get("content")
-                assert isinstance(content, str)
-                updated_replies.append(content)
+                updated_replies.append(message)
 
         class FailingDispatcher:
             def dispatch(self, *args: object, **kwargs: object) -> None:
@@ -4098,8 +4096,14 @@ class PearSessionDefaultsTest(TestCase):
         self.assertEqual(
             updated_replies,
             [
-                "Pear worker is not starting.\n\n"
-                "Reason: This request was already handled or is no longer claimable."
+                {
+                    "message_id": 311,
+                    "content": (
+                        "Pear worker is not starting.\n\n"
+                        "Reason: This request was already handled or is no longer claimable."
+                    ),
+                    "rendering_only": True,
+                }
             ],
         )
 
@@ -4292,7 +4296,7 @@ class PearSessionDefaultsTest(TestCase):
         self.assertEqual(updated_messages[0]["content"], PEAR_WORKING_MESSAGE)
         self.assertEqual(tool_seen_statuses, [updated_messages[0]["content"]])
         self.assertEqual(updated_messages[1]["message_id"], 501)
-        self.assertNotIn("rendering_only", updated_messages[1])
+        self.assertIs(updated_messages[1]["rendering_only"], True)
         self.assertEqual(
             updated_messages[1]["content"],
             PEAR_NO_VISIBLE_RESPONSE_MESSAGE,
@@ -4415,6 +4419,8 @@ class PearSessionDefaultsTest(TestCase):
                 raise AssertionError("progress message should be edited in place")
 
             def update_message(self, message: dict[str, object]) -> None:
+                if message.get("rendering_only") is not True:
+                    raise JsonableError("edit window is closed")
                 updated_messages.append(message)
 
         class NonPostingRuntime(PearWorkerRuntime):
@@ -4480,7 +4486,7 @@ class PearSessionDefaultsTest(TestCase):
             updated_messages[-1]["content"],
             PEAR_NO_VISIBLE_RESPONSE_MESSAGE,
         )
-        self.assertNotIn("rendering_only", updated_messages[-1])
+        self.assertIs(updated_messages[-1]["rendering_only"], True)
         self.assertIn(("result_updated", "Settled worker progress message."), recorded_events)
         live_state = get_pear_live_run_state(trigger_message_id)
         self.assertIsNotNone(live_state)
@@ -4720,6 +4726,8 @@ class PearSessionDefaultsTest(TestCase):
                 raise AssertionError("progress message should be edited in place")
 
             def update_message(self, message: dict[str, object]) -> None:
+                if message.get("rendering_only") is not True:
+                    raise JsonableError("edit window is closed")
                 updated_messages.append(message)
 
         def tool_runner(
@@ -4792,7 +4800,7 @@ class PearSessionDefaultsTest(TestCase):
         )
         self.assertEqual(
             [message.get("rendering_only") for message in updated_messages],
-            [True, True, None],
+            [True, True, True],
         )
         self.assertFalse(
             any(
@@ -4843,8 +4851,6 @@ class PearSessionDefaultsTest(TestCase):
                 pass
 
         class FakeBotHandler:
-            user_profile = object()
-
             def send_reply(
                 self,
                 message: dict[str, object],
@@ -5036,6 +5042,7 @@ class PearSessionDefaultsTest(TestCase):
             metadata_updates,
         )
         self.assertEqual(updated_messages[-1]["message_id"], 502)
+        self.assertIs(updated_messages[-1]["rendering_only"], True)
         self.assertIn("Pear worker cancelled.", str(updated_messages[-1]["content"]))
         live_state = get_pear_live_run_state(trigger_message_id)
         self.assertIsNotNone(live_state)

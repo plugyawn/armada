@@ -908,8 +908,8 @@ function position_graph_nodes(
         host.style.setProperty("--pear-artifact-graph-rows", String(columns));
         for (const [row, rank_nodes] of nodes_by_rank.entries()) {
             for (const {node} of rank_nodes) {
-                node.style.gridColumn = "1";
-                node.style.gridRow = String(row + 1);
+                node.style.setProperty("--pear-artifact-grid-column", "1");
+                node.style.setProperty("--pear-artifact-grid-row", String(row + 1));
                 node.style.setProperty("--pear-artifact-order", String(row));
             }
         }
@@ -920,11 +920,13 @@ function position_graph_nodes(
     host.style.setProperty("--pear-artifact-graph-rows", String(rows));
     for (const [column, rank_nodes] of nodes_by_rank.entries()) {
         for (const [index, {node}] of rank_nodes.entries()) {
-            node.style.gridColumn = String(column + 1);
-            node.style.gridRow =
+            node.style.setProperty("--pear-artifact-grid-column", String(column + 1));
+            node.style.setProperty(
+                "--pear-artifact-grid-row",
                 rank_nodes.length === 1
                     ? `1 / span ${rows}`
-                    : String(Math.round((index * (rows - 1)) / (rank_nodes.length - 1)) + 1);
+                    : String(Math.round((index * (rows - 1)) / (rank_nodes.length - 1)) + 1),
+            );
             node.style.setProperty("--pear-artifact-order", String(column * rows + index));
         }
     }

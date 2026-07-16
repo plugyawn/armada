@@ -1667,11 +1667,11 @@ def get_pear_run_trace_backend(
     run_id: int,
     *,
     before_event_id: Annotated[
-        int | None,
+        Json[int] | None,
         ApiParamConfig("before_event_id", documentation_status=INTENTIONALLY_UNDOCUMENTED),
     ] = None,
     limit: Annotated[
-        int,
+        Json[int],
         ApiParamConfig("limit", documentation_status=INTENTIONALLY_UNDOCUMENTED),
     ] = PEAR_RUN_TRACE_LIMIT,
 ) -> HttpResponse:

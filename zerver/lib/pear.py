@@ -298,11 +298,6 @@ class PearWorkerRunRecord(TypedDict):
     error: str | None
 
 
-class PearWorkerStatusMessage(TypedDict):
-    message_id: int
-    content: str
-
-
 PEAR_PERSISTENT_MESSAGE_LIMIT: Final = 5000
 
 
@@ -983,37 +978,6 @@ def pear_embed_workspace_images(
     return content
 
 
-PEAR_STEERING_QUEUED_MARKDOWN: Final = "*Steering queued.*"
-PEAR_STEERING_APPLIED_MARKDOWN: Final = "*Steering applied.*"
-PEAR_LEGACY_STEERING_QUEUED_MARKDOWN: Final = "_Steering queued._"
-PEAR_LEGACY_STEERING_APPLIED_MARKDOWN: Final = "_Steering applied._"
-PEAR_STEERING_STATUS_MARKDOWN: Final = frozenset(
-    (
-        PEAR_STEERING_QUEUED_MARKDOWN,
-        PEAR_STEERING_APPLIED_MARKDOWN,
-        PEAR_LEGACY_STEERING_QUEUED_MARKDOWN,
-        PEAR_LEGACY_STEERING_APPLIED_MARKDOWN,
-    )
-)
-
-
-def pear_without_steering_status(text: str) -> str:
-    lines = []
-    for line in text.splitlines():
-        clean_line = line.strip()
-        if clean_line in PEAR_STEERING_STATUS_MARKDOWN:
-            continue
-        lines.append(line.rstrip())
-    return "\n".join(lines).rstrip()
-
-
-def pear_with_steering_status(content: str, status_markdown: str) -> str:
-    base_content = pear_without_steering_status(content)
-    if base_content:
-        return f"{base_content}\n\n{status_markdown}"
-    return status_markdown
-
-
 def pear_result_tool_text(
     tool_results: Sequence[PearWorkerToolResult],
     *,
@@ -1112,6 +1076,8 @@ def attach_pear_artifact_to_message(
 
 def pear_visible_assistant_texts(
     transcript_events: Sequence[PearWorkerTranscriptEvent],
+    *,
+    limit: int | None = PEAR_PERSISTENT_MESSAGE_LIMIT,
 ) -> list[str]:
     visible_text_by_key: dict[str, str] = {}
     visible_text_keys: list[str] = []
@@ -1122,7 +1088,7 @@ def pear_visible_assistant_texts(
         body = event.get("body", "")
         if not body.strip():
             continue
-        visible_text = pear_visible_assistant_text(body)
+        visible_text = pear_visible_assistant_text(body, limit=limit)
         if not visible_text:
             continue
         item_id = event.get("item_id")
@@ -1174,6 +1140,13 @@ def build_pear_live_transcript_message(
     transcript_events: Sequence[PearWorkerTranscriptEvent] = (),
     tool_results: Sequence[PearWorkerToolResult] = (),
 ) -> str:
+    if status == "failed":
+        for event in reversed(transcript_events):
+            if event.get("kind") != "error":
+                continue
+            error = trim_pear_text(event.get("body", "").strip(), limit=4500)
+            if error:
+                return f"Pear worker failed.\n\nError: {error}"
     assistant_texts = pear_visible_assistant_texts(transcript_events)
     visible_response = pear_visible_response_text(
         status=status,
@@ -1454,6 +1427,9 @@ def build_pear_worker_completed_message_chunks(
     result_text = pear_result_tool_text(tool_results, limit=None)
     if result_text:
         return split_pear_persistent_message(result_text)
+    assistant_texts = pear_visible_assistant_texts(transcript_events, limit=None)
+    if assistant_texts:
+        return split_pear_persistent_message(assistant_texts[-1])
     completed_message = build_pear_worker_completed_message(
         task=task,
         tool_results=tool_results,
@@ -1659,10 +1635,8 @@ class PearWorkerRuntime:
         return {
             "should_post": True,
             "worker_can_run": True,
-            "content": build_pear_worker_progress_message(
-                task=task,
-                tool_results=tool_results,
-            ),
+            "content": pear_result_tool_text(tool_results, limit=None)
+            or build_pear_worker_completed_message(task=task, tool_results=tool_results),
             "codex_thread_id": self.codex_thread_id(),
             "tool_count": len(tool_results),
             "tool_results": tool_results,
@@ -2368,54 +2342,6 @@ class PearEmbeddedBotHandler:
         )
         return message_id if isinstance(message_id, int) and message_id > 0 else None
 
-    def active_worker_run_status_message(
-        self,
-        bot_handler: Any,
-        *,
-        stream: str,
-        topic: str,
-    ) -> PearWorkerStatusMessage | None:
-        active_status_message = getattr(
-            self.worker_run_store,
-            "active_worker_run_status_message",
-            None,
-        )
-        if not callable(active_status_message):
-            return None
-        status_message = active_status_message(
-            bot_handler,
-            stream=stream,
-            topic=topic,
-        )
-        if not isinstance(status_message, dict):
-            return None
-        message_id = status_message.get("message_id")
-        content = status_message.get("content")
-        if not isinstance(message_id, int) or message_id <= 0 or not isinstance(content, str):
-            return None
-        return {"message_id": message_id, "content": content}
-
-    def update_active_worker_steering_status(
-        self,
-        bot_handler: Any,
-        *,
-        stream: str,
-        topic: str,
-        status_markdown: str,
-    ) -> bool:
-        status_message = self.active_worker_run_status_message(
-            bot_handler,
-            stream=stream,
-            topic=topic,
-        )
-        if status_message is None:
-            return False
-        return update_pear_worker_status_message(
-            bot_handler,
-            progress_message_id=status_message["message_id"],
-            content=pear_with_steering_status(status_message["content"], status_markdown),
-        )
-
     def route_ambient_message(
         self,
         *,
@@ -2748,12 +2674,6 @@ class PearEmbeddedBotHandler:
                 "steering",
                 summary=trim_pear_text(steering_event["instruction"], limit=500),
                 payload=steering_payload,
-            )
-            self.update_active_worker_steering_status(
-                bot_handler,
-                stream=stream,
-                topic=topic,
-                status_markdown=PEAR_STEERING_QUEUED_MARKDOWN,
             )
             return
         result = bot_handler.send_reply(

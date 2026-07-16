@@ -51,7 +51,7 @@ from zerver.lib.pear_skills import reconcile_pear_codex_skills
 from zerver.lib.queue import queue_json_publish_rollback_unsafe
 from zerver.lib.streams import access_stream_by_name
 from zerver.lib.topic import messages_for_topic
-from zerver.models import Message, Stream
+from zerver.models import Stream
 from zerver.models.bots import PearProject, PearWorkerRun, PearWorkerRunEvent, PearWorkspaceNode
 from zerver.models.users import UserProfile
 
@@ -2051,45 +2051,6 @@ class PearDatabaseWorkerRunStore:
         if run is None:
             return None
         return run.trigger_message_id
-
-    def active_worker_run_status_message(
-        self,
-        bot_handler: Any,
-        *,
-        stream: str,
-        topic: str,
-    ) -> dict[str, object] | None:
-        if not stream:
-            return None
-
-        user_profile = bot_handler.user_profile
-        assert isinstance(user_profile, UserProfile)
-        reap_stale_pear_worker_runs(
-            realm=user_profile.realm,
-            bot_profile=user_profile,
-            stream=stream,
-            topic=topic,
-        )
-
-        run = (
-            PearWorkerRun.objects.filter(
-                realm=user_profile.realm,
-                bot_profile=user_profile,
-                stream_name=stream,
-                topic_name=topic,
-                status__in=PEAR_WORKER_RUN_BUSY_STATUSES,
-            )
-            .exclude(result_message_id=None)
-            .order_by("-date_updated", "-id")
-            .first()
-        )
-        if run is None or run.result_message_id is None:
-            return None
-        message = Message.objects.filter(id=run.result_message_id).first()
-        return {
-            "message_id": run.result_message_id,
-            "content": message.content if message is not None else "",
-        }
 
     def register_progress_message(
         self,

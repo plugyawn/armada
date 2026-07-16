@@ -31,6 +31,7 @@ from zerver.lib.pear import (
     PEAR_FIX_BUG_PROMPT,
     PEAR_FOLLOWUP_TRIGGER,
     PEAR_HANDOFF_PROMPT,
+    PEAR_NO_VISIBLE_RESPONSE_MESSAGE,
     PEAR_OFFICIAL_AGENT_RUNTIME,
     PEAR_OFFICIAL_AGENT_RUNTIME_LABEL,
     PEAR_OFFICIAL_CODEX_SDK_PACKAGES,
@@ -1508,7 +1509,7 @@ class PearSessionDefaultsTest(TestCase):
         self.assertEqual(seen_worker_states, ["ready"])
         self.assertEqual(seen_tasks, ["fix the checkout test"])
         self.assertIsNotNone(result["content"])
-        self.assertEqual(result["content"], PEAR_WORKING_MESSAGE)
+        self.assertEqual(result["content"], PEAR_NO_VISIBLE_RESPONSE_MESSAGE)
 
     def test_worker_runtime_close_delegates_to_tool_runner(self) -> None:
         class CloseableToolRunner:
@@ -1694,7 +1695,7 @@ class PearSessionDefaultsTest(TestCase):
             ],
         )
 
-        self.assertEqual(completed_message, "Pear worker completed without a visible response.")
+        self.assertEqual(completed_message, PEAR_NO_VISIBLE_RESPONSE_MESSAGE)
         self.assertNotIn("Status: done", completed_message)
         self.assertNotIn("Status: working...", completed_message)
         self.assertNotIn("Verification: pytest zerver/tests/test_pear.py", completed_message)
@@ -2682,7 +2683,7 @@ class PearSessionDefaultsTest(TestCase):
         self.assertEqual(sent_replies[0], PEAR_WORKING_MESSAGE)
         self.assertNotIn("Confirm repo, branch, and target runtime", sent_replies[0])
         self.assertEqual(len(sent_replies), 2)
-        self.assertEqual(sent_replies[1], PEAR_WORKING_MESSAGE)
+        self.assertEqual(sent_replies[1], PEAR_NO_VISIBLE_RESPONSE_MESSAGE)
 
     def test_embedded_bot_handler_runs_active_topic_followup(self) -> None:
         payload = get_pear_session_payload()
@@ -2786,7 +2787,7 @@ class PearSessionDefaultsTest(TestCase):
         self.assertEqual(len(sent_replies), 2)
         self.assertEqual(sent_replies[0], PEAR_WORKING_MESSAGE)
         self.assertNotIn("Confirm repo, branch, and target runtime", sent_replies[0])
-        self.assertEqual(sent_replies[1], PEAR_WORKING_MESSAGE)
+        self.assertEqual(sent_replies[1], PEAR_NO_VISIBLE_RESPONSE_MESSAGE)
 
     def test_embedded_bot_handler_silences_untagged_followup_without_router(self) -> None:
         payload = get_pear_session_payload()
@@ -3124,7 +3125,7 @@ class PearSessionDefaultsTest(TestCase):
         )
         self.assertEqual(len(sent_replies), 2)
         self.assertEqual(sent_replies[0], PEAR_WORKING_MESSAGE)
-        self.assertEqual(sent_replies[1], PEAR_WORKING_MESSAGE)
+        self.assertEqual(sent_replies[1], PEAR_NO_VISIBLE_RESPONSE_MESSAGE)
 
     def test_embedded_bot_handler_honors_mentions_only_followup_policy(self) -> None:
         payload = get_pear_session_payload()
@@ -3217,7 +3218,7 @@ class PearSessionDefaultsTest(TestCase):
         self.assertEqual(run_store.starts, [205])
         self.assertEqual(seen_tasks, ["continue with the terminal UI test"])
         self.assertEqual(len(sent_replies), 2)
-        self.assertEqual(sent_replies[1], PEAR_WORKING_MESSAGE)
+        self.assertEqual(sent_replies[1], PEAR_NO_VISIBLE_RESPONSE_MESSAGE)
 
     def test_embedded_bot_handler_treats_stripped_work_mention_as_request(self) -> None:
         payload = get_pear_session_payload()
@@ -3301,7 +3302,7 @@ class PearSessionDefaultsTest(TestCase):
         self.assertEqual(len(sent_replies), 2)
         self.assertEqual(sent_replies[0], PEAR_WORKING_MESSAGE)
         self.assertNotIn("steering update", sent_replies[0])
-        self.assertEqual(sent_replies[1], PEAR_WORKING_MESSAGE)
+        self.assertEqual(sent_replies[1], PEAR_NO_VISIBLE_RESPONSE_MESSAGE)
 
     def test_embedded_bot_handler_starts_worker_for_explicit_generic_chat(self) -> None:
         payload = get_pear_session_payload()
@@ -3382,7 +3383,7 @@ class PearSessionDefaultsTest(TestCase):
         self.assertEqual(seen_tasks, ["hey tell me something"])
         self.assertEqual(len(sent_replies), 2)
         self.assertEqual(sent_replies[0], PEAR_WORKING_MESSAGE)
-        self.assertEqual(sent_replies[1], PEAR_WORKING_MESSAGE)
+        self.assertEqual(sent_replies[1], PEAR_NO_VISIBLE_RESPONSE_MESSAGE)
         self.assertNotIn("Confirm repo, branch, and target runtime", sent_replies[0])
 
     def test_embedded_bot_handler_starts_worker_for_router_addressed_message(self) -> None:
@@ -3486,7 +3487,7 @@ class PearSessionDefaultsTest(TestCase):
         self.assertEqual(seen_tasks, ["hey agent, can you check the failing parser test?"])
         self.assertEqual(len(sent_replies), 2)
         self.assertEqual(sent_replies[0], PEAR_WORKING_MESSAGE)
-        self.assertEqual(sent_replies[1], PEAR_WORKING_MESSAGE)
+        self.assertEqual(sent_replies[1], PEAR_NO_VISIBLE_RESPONSE_MESSAGE)
 
     def test_embedded_bot_handler_silences_router_rejected_followup(self) -> None:
         payload = get_pear_session_payload()
@@ -3936,7 +3937,7 @@ class PearSessionDefaultsTest(TestCase):
         self.assertEqual(updated_replies[0], PEAR_WORKING_MESSAGE)
         self.assertEqual(
             updated_replies[1],
-            "Pear worker completed without a visible response.",
+            PEAR_NO_VISIBLE_RESPONSE_MESSAGE,
         )
         self.assertEqual(sent_replies[1], PEAR_WORKING_MESSAGE)
         self.assertEqual(
@@ -4045,7 +4046,7 @@ class PearSessionDefaultsTest(TestCase):
         self.assertEqual(updated_replies[0], PEAR_WORKING_MESSAGE)
         self.assertEqual(
             updated_replies[1],
-            "Pear worker completed without a visible response.",
+            PEAR_NO_VISIBLE_RESPONSE_MESSAGE,
         )
 
     def test_embedded_bot_settles_ack_when_worker_start_claim_fails(self) -> None:
@@ -4294,7 +4295,7 @@ class PearSessionDefaultsTest(TestCase):
         self.assertNotIn("rendering_only", updated_messages[1])
         self.assertEqual(
             updated_messages[1]["content"],
-            "Pear worker completed without a visible response.",
+            PEAR_NO_VISIBLE_RESPONSE_MESSAGE,
         )
         self.assertNotIn("Status: working...", updated_messages[1]["content"])
         self.assertEqual(
@@ -4477,7 +4478,7 @@ class PearSessionDefaultsTest(TestCase):
         self.assertIs(updated_messages[0]["rendering_only"], True)
         self.assertEqual(
             updated_messages[-1]["content"],
-            "Pear worker completed without a visible response.",
+            PEAR_NO_VISIBLE_RESPONSE_MESSAGE,
         )
         self.assertNotIn("rendering_only", updated_messages[-1])
         self.assertIn(("result_updated", "Settled worker progress message."), recorded_events)

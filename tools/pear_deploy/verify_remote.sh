@@ -175,7 +175,8 @@ echo "remote_untracked_source=clean"
 
 echo
 echo "Codex sandbox runtime:"
-ssh -F "$SSH_CONFIG" pear-staging-root 'command -v bwrap >/dev/null && bwrap --version'
+ssh -F "$SSH_CONFIG" pear-staging-root \
+    bash "$REMOTE_TRUSTED_RUNTIME/tools/pear_deploy/codex_sandbox_runtime.sh" --check
 
 echo
 echo "DNS:"

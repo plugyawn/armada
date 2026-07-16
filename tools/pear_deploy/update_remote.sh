@@ -241,9 +241,18 @@ preflight_remote_visual_runtime() {
 
 preflight_remote_codex_sandbox() {
     echo "Preflight: verifying the host Codex sandbox runtime..."
-    if ! ssh_root "command -v bwrap >/dev/null && bwrap --version"; then
-        fail "remote host is missing Bubblewrap; rerun bootstrap package provisioning"
+    if ! ssh_root bash \
+        "$REMOTE_TRUSTED_RUNTIME/tools/pear_deploy/codex_sandbox_runtime.sh" \
+        --check; then
+        fail "remote Codex sandbox cannot create a Bubblewrap user namespace; rerun bootstrap sandbox provisioning"
     fi
+}
+
+install_and_verify_remote_codex_sandbox() {
+    echo "Installing and verifying the host Codex sandbox runtime..."
+    ssh_root bash \
+        "$REMOTE_TRUSTED_RUNTIME/tools/pear_deploy/codex_sandbox_runtime.sh" \
+        --install
 }
 
 install_and_verify_remote_workspace_helper() {
@@ -1389,6 +1398,7 @@ fi
 ssh -F "$SSH_CONFIG" pear-staging "git config --global --add safe.directory $REMOTE_PATH"
 
 install_and_verify_remote_workspace_helper
+install_and_verify_remote_codex_sandbox
 
 echo "Installing authenticated Caddy and production-assets service configuration..."
 install_remote_runtime_config

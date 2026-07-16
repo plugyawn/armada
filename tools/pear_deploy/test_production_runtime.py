@@ -888,6 +888,9 @@ class StaticRuntimeContractTest(unittest.TestCase):
         update = (REPO_ROOT / "tools/pear_deploy/update_remote.sh").read_text()
         verify = (REPO_ROOT / "tools/pear_deploy/verify_remote.sh").read_text()
         bootstrap = (REPO_ROOT / "tools/pear_deploy/bootstrap_remote.sh").read_text()
+        codex_sandbox_runtime = (
+            REPO_ROOT / "tools/pear_deploy/codex_sandbox_runtime.sh"
+        ).read_text()
         visual_runtime = (REPO_ROOT / "tools/pear_deploy/provision_visual_runtime.sh").read_text()
         helper_runtime = (REPO_ROOT / "tools/pear_deploy/workspace_helper_runtime.py").read_text()
         backend_workflow = (REPO_ROOT / ".github/workflows/pear-backend.yml").read_text()
@@ -981,9 +984,16 @@ class StaticRuntimeContractTest(unittest.TestCase):
         self.assertIn("preflight_remote_workspace_helper", update)
         self.assertIn("install_and_verify_remote_workspace_helper", update)
         self.assertIn("preflight_remote_codex_sandbox", update)
-        self.assertIn("command -v bwrap", update)
-        self.assertIn("command -v bwrap", verify)
+        self.assertIn("codex_sandbox_runtime.sh", update)
+        self.assertIn("install_and_verify_remote_codex_sandbox", update)
+        self.assertIn("codex_sandbox_runtime.sh", verify)
         self.assertIn("bubblewrap ca-certificates", bootstrap)
+        self.assertIn("codex_sandbox_runtime.sh", bootstrap)
+        self.assertIn("kernel.unprivileged_userns_clone", codex_sandbox_runtime)
+        self.assertIn(
+            "kernel.apparmor_restrict_unprivileged_userns", codex_sandbox_runtime
+        )
+        self.assertIn("runuser -u \"$TEST_USER\" -- bwrap", codex_sandbox_runtime)
         self.assertIn("workspace_helper_sha256=", update)
         self.assertIn('workspace_helper_runtime.py" verify', verify)
         self.assertIn("os.replace(", helper_runtime)

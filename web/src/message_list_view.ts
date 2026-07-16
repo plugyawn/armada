@@ -610,7 +610,7 @@ function render_pear_live_progress($row: JQuery): void {
         const working = document.createElementNS("http://www.w3.org/1999/xhtml", "div");
         working.setAttribute("class", "pear-live-plan-step pear-live-plan-current");
         const glyph = document.createElementNS("http://www.w3.org/1999/xhtml", "span");
-        glyph.setAttribute("class", "pear-live-plan-glyph");
+        glyph.setAttribute("class", "pear-live-plan-glyph pear-thinking-glyph");
         glyph.setAttribute("aria-hidden", "true");
         glyph.textContent = "·";
         const label = document.createElementNS("http://www.w3.org/1999/xhtml", "span");
@@ -647,6 +647,9 @@ function render_pear_live_progress($row: JQuery): void {
             const glyph = step.status === "completed" ? "✓" : index === current_index ? "·" : "○";
             const glyph_element = document.createElementNS("http://www.w3.org/1999/xhtml", "span");
             glyph_element.setAttribute("class", "pear-live-plan-glyph");
+            if (index === current_index) {
+                glyph_element.classList.add("pear-thinking-glyph");
+            }
             glyph_element.setAttribute("aria-hidden", "true");
             glyph_element.textContent = glyph;
             const label = document.createElementNS("http://www.w3.org/1999/xhtml", "span");

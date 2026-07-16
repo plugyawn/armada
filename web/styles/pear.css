@@ -1279,14 +1279,13 @@
     }
 }
 
-@keyframes pear-live-current-breathe {
-    0%,
-    100% {
-        opacity: 0.78;
+@keyframes pear-live-current-shimmer {
+    from {
+        background-position: 120% 0;
     }
 
-    50% {
-        opacity: 1;
+    to {
+        background-position: -120% 0;
     }
 }
 
@@ -1303,9 +1302,14 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-    .pear-live-plan-current .pear-live-plan-glyph,
+    .pear-live-plan-current .pear-live-plan-label,
     .pear-live-overview {
         animation: none;
+    }
+
+    .pear-live-plan-current .pear-live-plan-label {
+        background: none;
+        color: var(--pear-ink-1);
     }
 }
 

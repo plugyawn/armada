@@ -322,15 +322,33 @@
             .pear-live-plan-current {
                 background: linear-gradient(
                     90deg,
-                    color-mix(in srgb, var(--pear-accent-ink) 10%, transparent),
+                    color-mix(in srgb, var(--pear-accent-ink) 16%, transparent),
                     transparent 76%
                 );
-                box-shadow: inset 1px 0 var(--pear-accent-ink);
+                box-shadow: inset 2px 0 var(--pear-accent-ink);
                 color: var(--color-text-message-default);
             }
 
-            .pear-live-plan-current .pear-live-plan-glyph {
-                animation: pear-live-current-breathe 2.4s ease-in-out infinite;
+            .pear-live-plan-current .pear-live-plan-label {
+                background: linear-gradient(
+                    100deg,
+                    var(--pear-ink-1) 0%,
+                    var(--pear-ink-1) 40%,
+                    color-mix(
+                            in srgb,
+                            var(--pear-surface-0) 92%,
+                            var(--pear-ink-1)
+                        )
+                        50%,
+                    var(--pear-ink-1) 60%,
+                    var(--pear-ink-1) 100%
+                );
+                background-position: 120% 0;
+                background-size: 240% 100%;
+                background-clip: text;
+                color: transparent;
+                font-weight: 600;
+                animation: pear-live-current-shimmer 2s linear infinite;
             }
 
             .pear-live-overview {

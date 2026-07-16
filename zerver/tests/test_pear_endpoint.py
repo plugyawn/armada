@@ -139,12 +139,16 @@ class PearSessionEndpointTest(ZulipTestCase):
             bot_type=UserProfile.EMBEDDED_BOT,
             service_name=PEAR_EMBEDDED_BOT_SERVICE,
         )
-        trigger_message_id = self.send_stream_message(
-            owner,
-            PEAR_DEFAULT_STREAM,
-            topic_name=PEAR_DEFAULT_TOPIC,
-            content="@**Pear** check the repository",
-        )
+        # This test exercises the typed browser event contract directly.  Do
+        # not also wake the embedded bot worker when creating its fixture
+        # message; that is a separate integration boundary with its own tests.
+        with patch("zerver.worker.embedded_bots.queue_json_publish_rollback_unsafe"):
+            trigger_message_id = self.send_stream_message(
+                owner,
+                PEAR_DEFAULT_STREAM,
+                topic_name=PEAR_DEFAULT_TOPIC,
+                content="@**Pear** check the repository",
+            )
         run = PearWorkerRun.objects.create(
             realm=owner.realm,
             bot_profile=pear_bot,

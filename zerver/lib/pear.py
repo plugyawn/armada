@@ -2697,6 +2697,7 @@ class PearEmbeddedBotHandler:
                     bot_handler,
                     progress_message_id=progress_message_id,
                     content=stale_ack_message,
+                    rendering_only=True,
                 )
                 return
             if ambient_decision is not None:
@@ -3371,6 +3372,7 @@ class PearWorkerTurn:
                     self.bot_handler,
                     progress_message_id=self.result_message_id or self.progress_message_id,
                     content=content_to_post,
+                    rendering_only=True,
                 )
                 result = None
                 if not result_updated:
@@ -3418,6 +3420,7 @@ class PearWorkerTurn:
                     self.bot_handler,
                     progress_message_id=target_message_id,
                     content=content_to_post,
+                    rendering_only=True,
                 )
                 if result_updated:
                     for continuation_content in content_chunks[1:]:
@@ -3517,6 +3520,7 @@ class PearWorkerTurn:
                 self.bot_handler,
                 progress_message_id=self.result_message_id or self.progress_message_id,
                 content=cancelled_message,
+                rendering_only=True,
             )
         except Exception as error:
             self.handler.worker_run_store.record(
@@ -3562,6 +3566,7 @@ class PearWorkerTurn:
                 self.bot_handler,
                 progress_message_id=self.result_message_id or self.progress_message_id,
                 content=failure_message,
+                rendering_only=True,
             ):
                 self.bot_handler.send_reply(self.message, failure_message)
         finally:

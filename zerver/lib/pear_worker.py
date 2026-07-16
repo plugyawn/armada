@@ -218,6 +218,7 @@ def settle_orphaned_pear_run_message(run: PearWorkerRun) -> None:
             bot_handler,
             progress_message_id=message_id,
             content="Run interrupted by a service restart.",
+            rendering_only=True,
         )
     except Exception:
         logging.getLogger(__name__).warning(

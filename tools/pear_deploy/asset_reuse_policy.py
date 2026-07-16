@@ -26,10 +26,15 @@ BACKEND_ONLY_PATTERNS = (
     "tools/pear-health-report",
     "tools/pear_deploy/README.md",
     "tools/pear_deploy/asset_reuse_policy.py",
+    "tools/pear_deploy/bootstrap_remote.sh",
+    "tools/pear_deploy/deploy_common.sh",
     "tools/pear_deploy/deployment_capacity.py",
     "tools/pear_deploy/runtime/Caddyfile",
+    "tools/pear_deploy/runtime/caddy-pear-basic-auth.conf",
+    "tools/pear_deploy/runtime_config.py",
     "tools/pear_deploy/test_production_runtime.py",
     "tools/pear_deploy/update_remote.sh",
+    "tools/pear_deploy/verify_remote.sh",
 )
 
 

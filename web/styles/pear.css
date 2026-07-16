@@ -2639,7 +2639,7 @@
 }
 
 @container (width < 36rem) {
-    .pear-artifact-scene {
+    .pear-artifact-scene[data-aspect] {
         aspect-ratio: auto;
     }
 

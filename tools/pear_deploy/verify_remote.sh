@@ -18,9 +18,6 @@ for env_file in "$PEAR_ROOT/env.local" "$REPO_ROOT/.env.local"; do
         set +a
     fi
 done
-CADDY_BASICAUTH_USER="${PEAR_CADDY_BASICAUTH_USER:-}"
-CADDY_BASICAUTH_PASSWORD_FILE="${PEAR_CADDY_BASICAUTH_PASSWORD_FILE:-}"
-
 usage() {
     cat <<EOF
 Usage: tools/pear_deploy/verify_remote.sh [options] [state.json]
@@ -28,9 +25,6 @@ Usage: tools/pear_deploy/verify_remote.sh [options] [state.json]
 Read-only verification for the hosted Pear/Zulip dev server.
 
 Options:
-  --auth-password-file PATH
-                Read the Caddy verification password from a local mode-0600
-                regular non-symlink file; curl receives it via stdin config.
   --state PATH  Use a specific pear_do.py state file.
   -h, --help    Show this help.
 EOF
@@ -44,14 +38,6 @@ while [[ $# -gt 0 ]]; do
                 exit 2
             fi
             STATE_PATH="$2"
-            shift 2
-            ;;
-        --auth-password-file)
-            if [[ $# -lt 2 ]]; then
-                echo "Missing value for --auth-password-file" >&2
-                exit 2
-            fi
-            CADDY_BASICAUTH_PASSWORD_FILE="$2"
             shift 2
             ;;
         -h | --help)
@@ -73,12 +59,6 @@ done
 if [[ ! -f "$STATE_PATH" ]]; then
     echo "Missing state file: $STATE_PATH" >&2
     echo "Run: python3 tools/pear_deploy/pear_do.py create" >&2
-    exit 1
-fi
-
-if ! validate_local_caddy_verification_auth \
-    "$CADDY_BASICAUTH_USER" "$CADDY_BASICAUTH_PASSWORD_FILE"; then
-    echo "Caddy verification requires the configured username and a valid local mode-0600 password file" >&2
     exit 1
 fi
 
@@ -183,13 +163,13 @@ echo "DNS:"
 dig +short "$FQDN" A || true
 
 echo
-echo "HTTPS auth wall:"
+echo "Public HTTPS app:"
 HTTPS_CODE="$(curl -sS --max-time 10 -o /dev/null -w '%{http_code}' "https://$FQDN/devlogin" || true)"
-if [[ "$HTTPS_CODE" != "401" ]]; then
-    echo "Expected unauthenticated HTTPS to return 401, got ${HTTPS_CODE:-none}" >&2
+if [[ "$HTTPS_CODE" != "200" ]]; then
+    echo "Expected public HTTPS devlogin to return 200, got ${HTTPS_CODE:-none}" >&2
     exit 1
 fi
-echo "unauthenticated_https=401"
+echo "public_devlogin_https=200"
 
 echo
 echo "Production runtime config and assets:"
@@ -211,8 +191,6 @@ if [[ "${#ASSETS[@]}" -ne 3 || -z "${ASSETS[0]}" || -z "${ASSETS[1]}" || -z "${A
 fi
 verify_caddy_https_runtime \
     "$FQDN" \
-    "$CADDY_BASICAUTH_USER" \
-    "$CADDY_BASICAUTH_PASSWORD_FILE" \
     "${ASSETS[0]}" \
     "${ASSETS[1]}" \
     "${ASSETS[2]}"

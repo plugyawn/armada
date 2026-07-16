@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import argparse
 import hashlib
-import io
 import json
 import os
 import stat
@@ -31,11 +30,10 @@ from tools.pear_deploy.production_assets import (
     validate_production_assets,
 )
 from tools.pear_deploy.runtime_config import (
-    AUTH_ENV_PATH,
+    LEGACY_RUNTIME_FILES,
     PEAR_ENV_PATH,
     RuntimeConfigError,
     install,
-    parse_auth_env,
 )
 from tools.pear_deploy.workspace_helper_runtime import (
     HELPER_MODE,
@@ -47,8 +45,6 @@ from tools.pear_deploy.workspace_helper_runtime import (
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-TEST_HASH = "$2b$12$" + "A" * 53
-MATCHING_TEST_HASH = "$2b$04$fRycSErhIEsfAHfYRqtIDuSu8dmFES90MoaYCROKQo7yj7HaG2d3i"
 
 
 class AssetReusePolicyTest(unittest.TestCase):
@@ -236,49 +232,32 @@ class ProductionAssetsTest(unittest.TestCase):
 
 
 class RuntimeConfigTest(unittest.TestCase):
-    def test_caddy_runtime_avoids_logging_the_auth_environment(self) -> None:
-        service_override = (
-            REPO_ROOT / "tools/pear_deploy/runtime/caddy-pear-basic-auth.conf"
-        ).read_text(encoding="utf-8")
-
-        self.assertIn("EnvironmentFile=/etc/pear/caddy-basic-auth.env", service_override)
-        self.assertIn(
-            "ExecStart=/usr/bin/caddy run --config /etc/caddy/Caddyfile", service_override
-        )
-        self.assertNotIn("--environ", service_override)
-
     def make_args(self, root: Path, **overrides: object) -> argparse.Namespace:
         values: dict[str, object] = {
             "repo_root": REPO_ROOT,
             "root_prefix": root,
             "fqdn": "pear.example.com",
             "skip_caddy_validate": True,
-            "bootstrap_auth_user": "pear-user",
-            "bootstrap_auth_stdin": False,
         }
         values.update(overrides)
         return argparse.Namespace(**values)
 
-    def test_install_requires_auth_and_preserves_pear_env(self) -> None:
+    def test_install_removes_legacy_auth_and_preserves_pear_env(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             root = Path(temporary_directory)
             pear_env = root / PEAR_ENV_PATH.relative_to("/")
             pear_env.parent.mkdir(parents=True)
             pear_env.write_text("EXTERNAL_HOST=pear.example.com\nKEEP=value\n")
             pear_env.chmod(0o600)
-            auth_env = root / AUTH_ENV_PATH.relative_to("/")
-            auth_env.parent.mkdir(parents=True)
-            auth_env.write_text(
-                "PEAR_CADDY_FQDN=pear.example.com\n"
-                "PEAR_CADDY_BASICAUTH_USER=pear-user\n"
-                f"PEAR_CADDY_BASICAUTH_HASH={TEST_HASH}\n"
-            )
-            auth_env.chmod(0o600)
+            for absolute_path in LEGACY_RUNTIME_FILES:
+                legacy_path = root / absolute_path.relative_to("/")
+                legacy_path.parent.mkdir(parents=True, exist_ok=True)
+                legacy_path.write_text("retired\n", encoding="utf-8")
 
             install(self.make_args(root))
 
-            self.assertEqual(stat.S_IMODE(auth_env.stat().st_mode), 0o600)
-            self.assertEqual(parse_auth_env(auth_env)["PEAR_CADDY_BASICAUTH_HASH"], TEST_HASH)
+            for absolute_path in LEGACY_RUNTIME_FILES:
+                self.assertFalse((root / absolute_path.relative_to("/")).exists())
             pear_env_text = pear_env.read_text()
             self.assertIn("KEEP=value", pear_env_text)
             self.assertEqual(pear_env_text.count("ZULIP_DEV_PRODUCTION_ASSETS=1"), 1)
@@ -291,29 +270,24 @@ class RuntimeConfigTest(unittest.TestCase):
                 0o755,
             )
 
-    def test_install_fails_when_auth_is_absent(self) -> None:
+    def test_install_rejects_symlinked_legacy_auth_before_mutation(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             root = Path(temporary_directory)
             pear_env = root / PEAR_ENV_PATH.relative_to("/")
             pear_env.parent.mkdir(parents=True)
-            pear_env.write_text("EXTERNAL_HOST=pear.example.com\n")
+            pear_env.write_text("EXTERNAL_HOST=pear.example.com\n", encoding="utf-8")
             pear_env.chmod(0o600)
-            with self.assertRaisesRegex(RuntimeConfigError, "auth is absent"):
+            victim = root / "victim"
+            victim.write_text("keep\n", encoding="utf-8")
+            legacy = root / LEGACY_RUNTIME_FILES[0].relative_to("/")
+            legacy.parent.mkdir(parents=True)
+            legacy.symlink_to(victim)
+
+            with self.assertRaisesRegex(RuntimeConfigError, "regular non-symlink"):
                 install(self.make_args(root))
 
-    def test_install_bootstraps_hash_from_stdin(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary_directory:
-            root = Path(temporary_directory)
-            pear_env = root / PEAR_ENV_PATH.relative_to("/")
-            pear_env.parent.mkdir(parents=True)
-            pear_env.write_text("EXTERNAL_HOST=pear.example.com\n")
-            pear_env.chmod(0o600)
-            args = self.make_args(root, bootstrap_auth_stdin=True)
-            with patch("sys.stdin", io.StringIO(TEST_HASH + "\n")):
-                install(args)
-            auth_env = root / AUTH_ENV_PATH.relative_to("/")
-            self.assertEqual(stat.S_IMODE(auth_env.stat().st_mode), 0o600)
-            self.assertEqual(parse_auth_env(auth_env)["PEAR_CADDY_BASICAUTH_HASH"], TEST_HASH)
+            self.assertEqual(victim.read_text(encoding="utf-8"), "keep\n")
+            self.assertFalse((root / "etc/caddy/Caddyfile").exists())
 
     def test_install_rejects_symlinked_pear_env_and_runtime_destination(self) -> None:
         for hostile_target in ("pear-env", "runtime-file"):
@@ -335,16 +309,6 @@ class RuntimeConfigTest(unittest.TestCase):
                     caddyfile = root / "etc/caddy/Caddyfile"
                     caddyfile.parent.mkdir(parents=True)
                     caddyfile.symlink_to(victim)
-                auth_env = root / AUTH_ENV_PATH.relative_to("/")
-                auth_env.parent.mkdir(parents=True)
-                auth_env.write_text(
-                    "PEAR_CADDY_FQDN=pear.example.com\n"
-                    "PEAR_CADDY_BASICAUTH_USER=pear-user\n"
-                    f"PEAR_CADDY_BASICAUTH_HASH={TEST_HASH}\n",
-                    encoding="utf-8",
-                )
-                auth_env.chmod(0o600)
-
                 with self.assertRaisesRegex(
                     RuntimeConfigError, "regular non-symlink|regular single-link"
                 ):
@@ -876,15 +840,12 @@ class DeploymentRecordTest(unittest.TestCase):
 
 
 class StaticRuntimeContractTest(unittest.TestCase):
-    def test_runtime_has_no_open_caddy_or_dev_asset_fallback(self) -> None:
+    def test_runtime_has_public_caddy_and_no_dev_asset_fallback(self) -> None:
         run_dev = (REPO_ROOT / "tools/run-dev").read_text()
         wrapper = (REPO_ROOT / "tools/pear_deploy/runtime/pear-run-zulip-dev").read_text()
         reset = (REPO_ROOT / "tools/pear_deploy/reset_remote_dev_data.sh").read_text()
         common = (REPO_ROOT / "tools/pear_deploy/deploy_common.sh").read_text()
         caddyfile = (REPO_ROOT / "tools/pear_deploy/runtime/Caddyfile").read_text()
-        caddy_drop_in = (
-            REPO_ROOT / "tools/pear_deploy/runtime/caddy-pear-basic-auth.conf"
-        ).read_text()
         update = (REPO_ROOT / "tools/pear_deploy/update_remote.sh").read_text()
         verify = (REPO_ROOT / "tools/pear_deploy/verify_remote.sh").read_text()
         bootstrap = (REPO_ROOT / "tools/pear_deploy/bootstrap_remote.sh").read_text()
@@ -909,8 +870,8 @@ class StaticRuntimeContractTest(unittest.TestCase):
         self.assertIn("webpack-stats-production.json", common)
         self.assertIn("staticfiles.json", common)
         self.assertIn("--exclude '*.mo'", common)
-        self.assertIn("basicauth", caddyfile)
-        self.assertIn("{$PEAR_CADDY_BASICAUTH_HASH}", caddyfile)
+        self.assertNotIn("basicauth", caddyfile)
+        self.assertNotIn("PEAR_CADDY_BASICAUTH", caddyfile)
         self.assertIn("handle_path /static/webpack-bundles/*", caddyfile)
         self.assertIn("root * /home/zulipdev/zulip/prod-static/serve/webpack-bundles", caddyfile)
         self.assertIn('header Cache-Control "public, max-age=31536000, immutable"', caddyfile)
@@ -919,24 +880,13 @@ class StaticRuntimeContractTest(unittest.TestCase):
         self.assertIn('header Cache-Control "no-cache"', caddyfile)
         self.assertEqual(caddyfile.count('header X-Content-Type-Options "nosniff"'), 2)
         self.assertEqual(caddyfile.count("precompressed gzip"), 2)
-        self.assertIn(
-            "@pear_upstream_authorization header X-Pear-Upstream-Authorization *", caddyfile
-        )
-        self.assertIn("handle @pear_upstream_authorization {", caddyfile)
         self.assertIn("handle {", caddyfile)
-        self.assertEqual(caddyfile.count("reverse_proxy 127.0.0.1:9991"), 2)
-        self.assertIn(
-            "request_header Authorization {http.request.header.X-Pear-Upstream-Authorization}",
-            caddyfile,
-        )
-        self.assertIn("request_header -Authorization", caddyfile)
-        self.assertEqual(caddyfile.count("request_header -X-Pear-Upstream-Authorization"), 2)
+        self.assertEqual(caddyfile.count("reverse_proxy 127.0.0.1:9991"), 1)
+        self.assertNotIn("X-Pear-Upstream-Authorization", caddyfile)
         self.assertNotIn("header_up Authorization", caddyfile)
-        self.assertIn('--caddy-auth-user "$CADDY_BASICAUTH_USER"', update)
-        self.assertIn('--caddy-auth-password-file "$CADDY_BASICAUTH_PASSWORD_FILE"', update)
-        self.assertIn("/etc/pear/caddy-basic-auth.env", caddy_drop_in)
-        self.assertIn("ExecStart=/usr/bin/caddy run --config /etc/caddy/Caddyfile", caddy_drop_in)
-        self.assertNotIn("--environ", caddy_drop_in)
+        for script in (common, update, verify, bootstrap):
+            self.assertNotIn("CADDY_BASICAUTH", script)
+            self.assertNotIn("auth-password-file", script)
         self.assertNotIn("127.0.0.1:9991", update)
         self.assertNotIn("127.0.0.1:9991", verify)
         self.assertIn("verify_caddy_https_runtime", update)
@@ -953,25 +903,18 @@ class StaticRuntimeContractTest(unittest.TestCase):
             update.rindex("verify_remote_deployed_source_clean"),
             update.index('DEPLOYED_AT="$(date'),
         )
-        self.assertIn("validate_local_caddy_auth_pair", update)
-        self.assertIn("Path(sys.argv[1]).resolve(strict=True)", update)
-        self.assertIn("curl --config -", common)
+        self.assertNotIn("validate_local_caddy_auth_pair", update)
+        self.assertNotIn("curl --config -", common)
         self.assertNotIn("curl --user", common)
         self.assertIn('"$app_status" != "200"', common)
         self.assertIn("--location --max-redirs 3", common)
-        self.assertIn('"$status" != "301"', update)
-        self.assertIn('"$AUTHENTICATED_SITE_CODE" == "200"', update)
+        self.assertIn('"$SITE_CODE" == "200"', update)
 
         disk_preflight = "verify_remote_disk_capacity"
         self.assertLess(update.rindex(disk_preflight), update.index('if [[ "$YES" != true ]]'))
         self.assertLess(
             update.rindex(disk_preflight), update.index("Snapshotting the drained remote tree")
         )
-        self.assertLess(
-            update.rindex("verify_existing_remote_caddy_auth"),
-            update.index("Snapshotting the drained remote tree"),
-        )
-
         helper_path = "/usr/local/lib/pear-workspace-io"
         runtime_paths_start = common.index("PEAR_DEPLOY_RUNTIME_CONFIG_PATHS=(")
         runtime_paths_end = common.index("\n)", runtime_paths_start)
@@ -1072,118 +1015,9 @@ class StaticRuntimeContractTest(unittest.TestCase):
         self.assertIn("-exec chmod a+rx,go-w {} +", visual_runtime)
         self.assertIn("-exec chmod a+r,go-w {} +", visual_runtime)
 
-    def test_verification_password_file_is_fail_closed(self) -> None:
+    def test_public_caddy_probe_checks_app_and_asset_headers(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             root = Path(temporary_directory)
-            password_file = root / "password"
-            password_file.write_text("dummy-secret\n", encoding="utf-8")
-            password_file.chmod(0o600)
-            command = [
-                "bash",
-                "-c",
-                'source "$1"; validate_local_caddy_verification_auth pear-user "$2"',
-                "bash",
-                str(REPO_ROOT / "tools/pear_deploy/deploy_common.sh"),
-                str(password_file),
-            ]
-            valid = subprocess.run(command, check=False, capture_output=True, text=True)
-            self.assertEqual(valid.returncode, 0, valid.stderr)
-
-            password_file.chmod(0o644)
-            permissive = subprocess.run(command, check=False, capture_output=True, text=True)
-            self.assertNotEqual(permissive.returncode, 0)
-            self.assertIn("mode 0600", permissive.stderr)
-
-            password_file.chmod(0o600)
-            symlink = root / "password-link"
-            symlink.symlink_to(password_file)
-            symlink_command = [*command[:-1], str(symlink)]
-            linked = subprocess.run(symlink_command, check=False, capture_output=True, text=True)
-            self.assertNotEqual(linked.returncode, 0)
-            self.assertIn("non-symlink", linked.stderr)
-
-    def test_bootstrap_hash_must_match_verification_password(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary_directory:
-            root = Path(temporary_directory)
-            hash_file = root / "password.hash"
-            hash_file.write_text(MATCHING_TEST_HASH + "\n", encoding="ascii")
-            hash_file.chmod(0o600)
-            password_file = root / "password"
-            password_file.write_text("dummy-secret\n", encoding="utf-8")
-            password_file.chmod(0o600)
-            command = [
-                "bash",
-                "-c",
-                'source "$1"; validate_local_caddy_auth_pair pear-user "$2" "$3"',
-                "bash",
-                str(REPO_ROOT / "tools/pear_deploy/deploy_common.sh"),
-                str(hash_file),
-                str(password_file),
-            ]
-            matching = subprocess.run(command, check=False, capture_output=True, text=True)
-            self.assertEqual(matching.returncode, 0, matching.stderr)
-
-            htpasswd_log = root / "htpasswd-argv.json"
-            fake_htpasswd = root / "fake-htpasswd"
-            fake_htpasswd.write_text(
-                """#!/usr/bin/env python3
-import json
-import os
-import sys
-from pathlib import Path
-
-if sys.stdin.read() != "dummy-secret\\n":
-    raise SystemExit("password was not supplied on stdin")
-Path(os.environ["FAKE_HTPASSWD_LOG"]).write_text(json.dumps(sys.argv[1:]), encoding="utf-8")
-""",
-                encoding="utf-8",
-            )
-            fake_htpasswd.chmod(0o755)
-            mocked = subprocess.run(
-                command,
-                check=False,
-                capture_output=True,
-                text=True,
-                env={
-                    **os.environ,
-                    "PEAR_DEPLOY_HTPASSWD": str(fake_htpasswd),
-                    "FAKE_HTPASSWD_LOG": str(htpasswd_log),
-                },
-            )
-            self.assertEqual(mocked.returncode, 0, mocked.stderr)
-            self.assertNotIn("dummy-secret", htpasswd_log.read_text(encoding="utf-8"))
-
-            password_file.write_text("wrong-secret\n", encoding="utf-8")
-            mismatch = subprocess.run(command, check=False, capture_output=True, text=True)
-            self.assertNotEqual(mismatch.returncode, 0)
-            self.assertIn("does not match", mismatch.stderr)
-
-            password_file.write_text("dummy-secret\n", encoding="utf-8")
-            hash_file.chmod(0o644)
-            permissive_hash = subprocess.run(command, check=False, capture_output=True, text=True)
-            self.assertNotEqual(permissive_hash.returncode, 0)
-            self.assertIn("mode 0600", permissive_hash.stderr)
-
-            hash_file.chmod(0o600)
-            missing_tool = subprocess.run(
-                command,
-                check=False,
-                capture_output=True,
-                text=True,
-                env={
-                    **os.environ,
-                    "PEAR_DEPLOY_HTPASSWD": str(root / "missing-htpasswd"),
-                },
-            )
-            self.assertNotEqual(missing_tool.returncode, 0)
-            self.assertIn("htpasswd is required", missing_tool.stderr)
-
-    def test_authenticated_caddy_probe_keeps_password_out_of_argv(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary_directory:
-            root = Path(temporary_directory)
-            password_file = root / "password"
-            password_file.write_text("dummy-secret\n", encoding="utf-8")
-            password_file.chmod(0o600)
             curl_log = root / "curl-argv.json"
             fake_bin = root / "bin"
             fake_bin.mkdir()
@@ -1196,10 +1030,6 @@ import sys
 from pathlib import Path
 
 arguments = sys.argv[1:]
-authenticated = "--config" in arguments
-config = sys.stdin.read() if authenticated else ""
-if authenticated and config != 'user = "pear-user:dummy-secret"\\n':
-    raise SystemExit("unexpected stdin curl config")
 Path(os.environ["FAKE_CURL_LOG"]).write_text(json.dumps(arguments), encoding="utf-8")
 
 url = arguments[arguments.index("--url") + 1]
@@ -1207,11 +1037,11 @@ headers_path = None
 if "--dump-header" in arguments:
     headers_path = Path(arguments[arguments.index("--dump-header") + 1])
 
-status = "200" if authenticated else "401"
-if authenticated and url.endswith("/devlogin"):
+status = "200"
+if url.endswith("/devlogin"):
     status = os.environ.get("FAKE_CURL_APP_STATUS", status)
 headers = []
-if authenticated and "/static/webpack-bundles/" in url:
+if "/static/webpack-bundles/" in url:
     headers.extend(
         [
             "Cache-Control: public, max-age=31536000, immutable",
@@ -1235,7 +1065,7 @@ sys.stdout.write(status)
             fake_curl.chmod(0o755)
             script = (
                 'source "$1"; verify_caddy_https_runtime '
-                'pear.example.test pear-user "$2" '
+                "pear.example.test "
                 "app.0123456789abcdef.js app.fedcba9876543210.css "
                 "images/logo.2222222222222222.svg"
             )
@@ -1250,14 +1080,13 @@ sys.stdout.write(status)
                 script,
                 "bash",
                 str(REPO_ROOT / "tools/pear_deploy/deploy_common.sh"),
-                str(password_file),
             ]
             valid = subprocess.run(
                 command, check=False, capture_output=True, text=True, env=environment
             )
             self.assertEqual(valid.returncode, 0, valid.stderr)
             self.assertIn("static_cache=valid", valid.stdout)
-            self.assertNotIn("dummy-secret", curl_log.read_text(encoding="utf-8"))
+            self.assertNotIn("--config", curl_log.read_text(encoding="utf-8"))
 
             redirect = subprocess.run(
                 command,
@@ -1268,7 +1097,7 @@ sys.stdout.write(status)
             )
             self.assertNotEqual(redirect.returncode, 0)
             self.assertEqual(redirect.stderr.count("; retrying"), 3)
-            self.assertIn("app check returned HTTP 301", redirect.stderr)
+            self.assertIn("public Caddy app check returned HTTP 301", redirect.stderr)
 
             missing_header = subprocess.run(
                 command,

@@ -24,7 +24,7 @@ The scripts load exported environment variables and also load
   `DIGITAL_OCEAN_API`
 - GoDaddy key: `GODADDY_API_KEY` or `GODADDY_API_PROD_KEY`
 - GoDaddy secret: `GODADDY_API_SECRET` or `GODADDY_API_PROD_SECRET`
-- Gemini ambient router: `PEAR_ADDRESSING_ROUTER_GEMINI_API_KEY`,
+- Gemini Interactions client: `PEAR_GEMINI_INTERACTIONS_API_KEY`,
   `GEMINI_API_KEY`, `GEMINI_KEY`, `GOOGLE_API_KEY`, or
   `GOOGLE_GENAI_API_KEY`
 

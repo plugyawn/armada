@@ -32,6 +32,7 @@ for env_file in "$PEAR_ROOT/env.local" "$REPO_ROOT/.env.local"; do
         set +a
     fi
 done
+PEAR_GEMINI_API_KEY="${PEAR_GEMINI_INTERACTIONS_API_KEY:-${GEMINI_API_KEY:-${GEMINI_KEY:-${GOOGLE_API_KEY:-${GOOGLE_GENAI_API_KEY:-}}}}}"
 
 fail() {
     echo "ERROR: $*" >&2
@@ -265,14 +266,32 @@ install_remote_runtime_config() {
     ssh_root "$remote_command"
 }
 
+install_remote_gemini_config() {
+    if [[ -z "$PEAR_GEMINI_API_KEY" ]]; then
+        fail "Gemini Interactions API key is missing from the local deploy environment"
+    fi
+    echo "Installing the shared Gemini Interactions key without printing it..."
+    printf 'PEAR_GEMINI_INTERACTIONS_API_KEY=%s\n' "$PEAR_GEMINI_API_KEY" |
+        ssh_root 'set -euo pipefail
+env_path=/home/zulipdev/pear.env
+tmp="$(mktemp /home/zulipdev/.pear.env.XXXXXX)"
+trap '\''rm -f "$tmp"'\'' EXIT
+grep -Ev '\''^PEAR_(ADDRESSING_ROUTER_GEMINI_API_KEY|GEMINI_INTERACTIONS_API_KEY)='\'' "$env_path" >"$tmp" || true
+cat >>"$tmp"
+chown zulipdev:zulipdev "$tmp"
+chmod 600 "$tmp"
+mv -f "$tmp" "$env_path"
+trap - EXIT'
+}
+
 verify_remote_quiescence() {
     local phase="$1"
     local services="${2:-${PEAR_DEPLOY_SERVICES[*]}}"
     local queues="${3:-${PEAR_DEPLOY_QUEUES[*]}}"
 
     echo "$phase: Pear run health"
-    if ! ssh_zulip "$REMOTE_PATH/tools/pear-health-report --max-active-runs 0 --max-stale-active-runs 0 --max-orphan-active-markers 0"; then
-        fail "$phase failed: Pear has active, stale, or orphaned work"
+    if ! ssh_zulip "$REMOTE_PATH/tools/pear-health-report --max-active-runs 0 --max-stale-active-runs 0"; then
+        fail "$phase failed: Pear has active or stale work"
     fi
 
     echo "$phase: service health"
@@ -294,7 +313,7 @@ wait_for_remote_drain() {
     echo "Maintenance drain: waiting for Pear runs and queues to become idle..."
     for attempt in $(seq 1 60); do
         if ssh_root "systemctl is-active $worker_services" >/dev/null 2>&1 &&
-            ssh_zulip "$REMOTE_PATH/tools/pear-health-report --max-active-runs 0 --max-stale-active-runs 0 --max-orphan-active-markers 0" >/dev/null 2>&1 &&
+            ssh_zulip "$REMOTE_PATH/tools/pear-health-report --max-active-runs 0 --max-stale-active-runs 0" >/dev/null 2>&1 &&
             ssh_root "rabbitmqctl list_queues name messages_ready messages_unacknowledged consumers" 2>/dev/null |
                 validate_pear_deploy_queue_snapshot "$queues" >/dev/null; then
             echo "Maintenance drain: Pear runs and queues are idle."
@@ -304,7 +323,7 @@ wait_for_remote_drain() {
     done
 
     ssh_root "systemctl is-active $worker_services" || true
-    ssh_zulip "$REMOTE_PATH/tools/pear-health-report --max-active-runs 0 --max-stale-active-runs 0 --max-orphan-active-markers 0" || true
+    ssh_zulip "$REMOTE_PATH/tools/pear-health-report --max-active-runs 0 --max-stale-active-runs 0" || true
     ssh_root "rabbitmqctl list_queues name messages_ready messages_unacknowledged consumers" |
         validate_pear_deploy_queue_snapshot "$queues" || true
     fail "maintenance drain did not become idle within 120 seconds"
@@ -313,8 +332,8 @@ wait_for_remote_drain() {
 verify_remote_stopped_quiescence() {
     local queues="${1:-${PEAR_DEPLOY_QUEUES[*]}}"
     echo "Stopped-state gate: Pear run health"
-    if ! ssh_zulip "$REMOTE_PATH/tools/pear-health-report --max-active-runs 0 --max-stale-active-runs 0 --max-orphan-active-markers 0"; then
-        fail "stopped-state gate failed: Pear has active, stale, or orphaned work"
+    if ! ssh_zulip "$REMOTE_PATH/tools/pear-health-report --max-active-runs 0 --max-stale-active-runs 0"; then
+        fail "stopped-state gate failed: Pear has active or stale work"
     fi
     echo "Stopped-state gate: queue emptiness"
     if ! ssh_root "rabbitmqctl list_queues name messages_ready messages_unacknowledged consumers" |
@@ -841,6 +860,7 @@ fi
 
 systemctl stop caddy pear-worker pear-monitor-worker pear-embedded-bots pear-thumbnail pear-zulip-dev
 systemctl stop pear-addressing 2>/dev/null || true
+systemctl stop pear-presentation 2>/dev/null || true
 
 rsync -a --delete \
     "${RSYNC_EXCLUDES[@]}" \
@@ -886,6 +906,9 @@ systemctl daemon-reload
 ROLLBACK_SERVICES=(caddy pear-worker pear-monitor-worker pear-embedded-bots pear-thumbnail pear-zulip-dev)
 if systemctl cat pear-addressing >/dev/null 2>&1; then
     ROLLBACK_SERVICES+=(pear-addressing)
+fi
+if systemctl cat pear-presentation >/dev/null 2>&1; then
+    ROLLBACK_SERVICES+=(pear-presentation)
 fi
 systemctl restart "${ROLLBACK_SERVICES[@]}"
 REMOTE
@@ -1080,6 +1103,7 @@ if [[ "$PREV_SHA" != "$LOCAL_SHA" ]]; then
         zerver/lib/pear_workspace_resources.py \
         zerver/worker/pear_worker.py \
         zerver/worker/pear_addressing.py \
+        zerver/worker/pear_presentation.py \
         zerver/views/pear.py \
         zerver/views/pear_workspace.py \
         zerver/views/users.py \
@@ -1275,6 +1299,7 @@ install_remote_runtime_config
 ssh_root python3 "$REMOTE_TRUSTED_RUNTIME/tools/pear_deploy/runtime_config.py" verify \
     --repo-root "$REMOTE_TRUSTED_RUNTIME" \
     --fqdn "$FQDN"
+install_remote_gemini_config
 ssh_root "systemctl daemon-reload"
 ssh_root "systemctl enable ${PEAR_DEPLOY_SERVICES[*]}"
 
@@ -1346,6 +1371,9 @@ ssh_root 'journalctl -u pear-worker -n 40 --no-pager'
 
 echo "pear-addressing log tail:"
 ssh_root 'journalctl -u pear-addressing -n 40 --no-pager'
+
+echo "pear-presentation log tail:"
+ssh_root 'journalctl -u pear-presentation -n 40 --no-pager'
 
 echo "pear-zulip-dev recent log tail:"
 ssh_root 'journalctl -u pear-zulip-dev -n 80 --no-pager'

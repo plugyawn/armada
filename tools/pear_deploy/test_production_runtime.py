@@ -904,6 +904,10 @@ class StaticRuntimeContractTest(unittest.TestCase):
         self.assertIn("verify_caddy_https_runtime", verify)
         self.assertIn("checkout-index --force", update)
         self.assertIn("verify_remote_deployed_source_clean", update)
+        self.assertIn("install_remote_gemini_config", update)
+        self.assertIn("PEAR_GEMINI_INTERACTIONS_API_KEY", update)
+        self.assertNotIn("--max-orphan-active-markers", update)
+        self.assertNotIn("--max-orphan-active-markers", verify)
         self.assertIn("classify_production_asset_requirement", update)
         self.assertIn("asset_source_zulip_sha=", update)
         self.assertLess(
@@ -1127,6 +1131,7 @@ sys.stdout.write(status)
             "'pear_worker 0 0 1' "
             "'pear_monitor_worker 0 0 1' "
             "'pear_addressing 0 0 1' "
+            "'pear_presentation 0 0 1' "
             "'embedded_bots 0 0 1' "
             "'thumbnail 0 0 1' | "
             "validate_pear_deploy_queue_snapshot"

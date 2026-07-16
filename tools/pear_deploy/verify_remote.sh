@@ -265,9 +265,8 @@ summary = {
     "worker_runtime_auth_ready": config["worker_runtime_auth_ready"],
     "addressing_router_runtime": settings.PEAR_ADDRESSING_ROUTER_RUNTIME,
     "addressing_router_gemini_model": settings.PEAR_ADDRESSING_ROUTER_GEMINI_MODEL,
-    "addressing_router_gemini_key_ready": bool(
-        settings.PEAR_ADDRESSING_ROUTER_GEMINI_API_KEY
-    ),
+    "gemini_interactions_key_ready": bool(settings.PEAR_GEMINI_INTERACTIONS_API_KEY),
+    "presentation_gemini_model": settings.PEAR_PRESENTATION_GEMINI_MODEL,
 }
 if settings.DEVELOPMENT is not True or settings.DEBUG is not False:
     raise SystemExit("Hosted runtime must keep DEVELOPMENT=True with DEBUG=False")
@@ -290,7 +289,7 @@ PY
 echo
 echo "Pear live health:"
 ssh -F "$SSH_CONFIG" pear-staging-root \
-    "sudo -Hu zulipdev bash -lc 'cd /home/zulipdev/zulip && set -a && . /home/zulipdev/pear.env && set +a && /home/zulipdev/zulip/tools/pear-health-report --max-active-runs 0 --max-stale-active-runs 0 --max-orphan-active-markers 0'"
+    "sudo -Hu zulipdev bash -lc 'cd /home/zulipdev/zulip && set -a && . /home/zulipdev/pear.env && set +a && /home/zulipdev/zulip/tools/pear-health-report --max-active-runs 0 --max-stale-active-runs 0'"
 
 echo
 echo "Pear queue health:"

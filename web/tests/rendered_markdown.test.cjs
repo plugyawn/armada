@@ -793,6 +793,7 @@ run_test("spoiler-header", () => {
         '<span class="spoiler-button" aria-expanded="false"><span class="spoiler-arrow"></span></span>';
     $header.html(label);
     $header.set_find_results("p", $.create("p"));
+    $header.set_find_results(".spoiler-button", $.create("empty-spoiler-button", {elements: []}));
     rm.update_elements($content);
     assert.equal(label, $header.html());
     assert.equal(appended.innerHTML, toggle_button_html);
@@ -813,6 +814,10 @@ run_test("spoiler-header-empty-fill", () => {
         '<span class="spoiler-button" aria-expanded="false"><span class="spoiler-arrow"></span></span>';
     $header.empty();
     $header.set_find_results("p", $.create("p"));
+    $header.set_find_results(
+        ".spoiler-button",
+        $.create("empty-spoiler-button-for-empty-header", {elements: []}),
+    );
     rm.update_elements($content);
     assert.equal(appended[0].innerHTML, "<p>");
     assert.equal(appended[0].textContent, $t({defaultMessage: "Spoiler"}));

@@ -41,6 +41,8 @@ import * as navbar_alerts from "./navbar_alerts.ts";
 import * as navigation_views from "./navigation_views.ts";
 import * as onboarding_steps from "./onboarding_steps.ts";
 import * as overlays from "./overlays.ts";
+import * as pear_panel from "./pear_panel.ts";
+import * as pear_run_state from "./pear_run_state.ts";
 import * as peer_data from "./peer_data.ts";
 import * as people from "./people.ts";
 import * as pm_list from "./pm_list.ts";
@@ -80,12 +82,7 @@ import * as settings_streams from "./settings_streams.ts";
 import * as sidebar_ui from "./sidebar_ui.ts";
 import * as starred_messages from "./starred_messages.ts";
 import * as starred_messages_ui from "./starred_messages_ui.ts";
-import {
-    add_pear_bot_user_id,
-    current_user,
-    realm,
-    remove_pear_bot_user_id,
-} from "./state_data.ts";
+import {add_pear_bot_user_id, current_user, realm, remove_pear_bot_user_id} from "./state_data.ts";
 import * as stream_data from "./stream_data.ts";
 import * as stream_events from "./stream_events.ts";
 import * as stream_list from "./stream_list.ts";
@@ -116,7 +113,8 @@ function event_services_are_definitive(services) {
     return (
         Array.isArray(services) &&
         services.some(
-            (service) => typeof service === "object" && service !== null && "service_name" in service,
+            (service) =>
+                typeof service === "object" && service !== null && "service_name" in service,
         )
     );
 }
@@ -186,6 +184,11 @@ export function dispatch_normal_event(event) {
                     blueslip.error("Unexpected event type channel_folder/" + event.op);
                     break;
             }
+            break;
+
+        case "pear_run":
+            pear_run_state.apply_pear_run_event(event);
+            pear_panel.handle_pear_run_event(event);
             break;
 
         case "custom_profile_fields":

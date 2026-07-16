@@ -11,7 +11,6 @@ const $ = require("./lib/zjquery.cjs");
 set_global("document", "document-stub");
 
 let sender_is_bot = () => false;
-let channel_get_handler = () => undefined;
 
 // timerender calls setInterval when imported
 mock_esm("../src/timerender", {
@@ -33,12 +32,6 @@ mock_esm("../src/people", {
     maybe_get_user_by_id: noop,
 });
 
-mock_esm("../src/channel", {
-    get(opts) {
-        return channel_get_handler(opts);
-    },
-});
-
 const {Filter} = zrequire("../src/filter");
 const message_list_view = zrequire("../src/message_list_view");
 const {MessageListView} = message_list_view;
@@ -54,18 +47,8 @@ let next_timestamp = 1500000000;
 function test(label, f) {
     run_test(label, ({override, mock_template}) => {
         sender_is_bot = () => false;
-        channel_get_handler = () => undefined;
         $("document-stub").set_find_results(
-            ".message_row.pear-active-message .message_content > p:last-of-type > .pear-thinking-glyph, .message_row.pear-active-message .spoiler-header .pear-thinking-glyph, .message_row.pear-active-message .spoiler-content li > .pear-thinking-glyph",
-            [],
-        );
-        $("document-stub").set_find_results(".pear-liveness-active .pear-thinking-glyph", []);
-        $("document-stub").set_find_results(
-            ".pear-liveness-active .pear-thinking-glyph, .message_row.pear-active-message .message_content > p:last-of-type > .pear-thinking-glyph, .message_row.pear-active-message .spoiler-header .pear-thinking-glyph, .message_row.pear-active-message .spoiler-content li > .pear-thinking-glyph",
-            [],
-        );
-        $("document-stub").set_find_results(
-            ".message_row.pear-active-message .message_content > p:last-of-type, .message_row.pear-active-message .spoiler-header p, .message_row.pear-active-message .spoiler-content li",
+            ".pear-liveness-active .pear-thinking-glyph, .message_row.pear-active-message .pear-tool-row-active.pear-thinking-glyph",
             [],
         );
         pear_run_state.clear_for_testing();
@@ -652,7 +635,7 @@ test("pear_message_vars", () => {
         }),
     );
     assert.equal(result.is_pear_message, true);
-    assert.equal(result.is_pear_active_message, true);
+    assert.equal(result.is_pear_active_message, false);
     // Ambient voice: Pear rows never include sender chrome.
     assert.equal(result.include_sender, false);
 
@@ -664,7 +647,7 @@ test("pear_message_vars", () => {
         }),
     );
     assert.equal(result.is_pear_message, true);
-    assert.equal(result.is_pear_active_message, true);
+    assert.equal(result.is_pear_active_message, false);
     // Ambient voice: Pear rows never include sender chrome.
     assert.equal(result.include_sender, false);
 
@@ -690,7 +673,7 @@ test("pear_message_vars", () => {
         }),
     );
     assert.equal(result.is_pear_message, true);
-    assert.equal(result.is_pear_active_message, true);
+    assert.equal(result.is_pear_active_message, false);
     // Ambient voice: Pear rows never include sender chrome.
     assert.equal(result.include_sender, false);
 
@@ -729,7 +712,7 @@ test("pear_message_vars", () => {
         }),
     );
     assert.equal(result.is_pear_message, true);
-    assert.equal(result.is_pear_active_message, true);
+    assert.equal(result.is_pear_active_message, false);
     // Ambient voice: Pear rows never include sender chrome.
     assert.equal(result.include_sender, false);
     assert.equal(result.edited, false);
@@ -856,74 +839,6 @@ run_test("pear_tool_block_marker_detection", () => {
             is_active: false,
         },
     );
-});
-
-test("pear_stale_thinking_row_refreshes_without_removed_active_id", () => {
-    new MessageListView({id: 1}, true, true);
-    const message_id = 1003;
-    message_store.set_messages_for_tests([
-        {
-            message: {
-                id: message_id,
-                content: "<p><em>Thinking</em> <em>✦</em></p>",
-                submessages: [],
-            },
-        },
-    ]);
-    const $row = $.create(".pear-stale-row");
-    $row.attr("data-message-id", String(message_id));
-    $.reset_selector(".message_row.pear-message");
-    $.set_results(".message_row.pear-message", [$row[0]]);
-
-    let channel_get_calls = 0;
-    let channel_get_opts;
-    channel_get_handler = (opts) => {
-        channel_get_calls += 1;
-        channel_get_opts = opts;
-    };
-
-    pear_run_state.set_active_run_result_messages([], {force_reconcile: true});
-    pear_run_state.set_active_run_result_messages([], {force_reconcile: true});
-
-    assert.equal(channel_get_calls, 1);
-    assert.equal(channel_get_opts.url, "/json/messages");
-    assert.deepEqual(channel_get_opts.data, {
-        message_ids: JSON.stringify([message_id]),
-        allow_empty_topic_name: true,
-    });
-});
-
-run_test("pear result refresh recovers missed artifact submessages", () => {
-    const existing = {
-        id: 1004,
-        submessages: [
-            {
-                id: 11,
-                message_id: 1004,
-                sender_id: 25,
-                msg_type: "widget",
-                content: "{}",
-            },
-        ],
-    };
-    const artifact = {
-        id: 12,
-        message_id: 1004,
-        sender_id: 25,
-        msg_type: "pear_artifact",
-        content: '{"version":1,"blocks":[]}',
-    };
-
-    assert.equal(
-        message_list_view.merge_pear_result_submessages(existing, [
-            existing.submessages[0],
-            artifact,
-        ]),
-        true,
-    );
-    assert.deepEqual(existing.submessages, [existing.submessages[0], artifact]);
-    assert.equal(message_list_view.merge_pear_result_submessages(existing, [artifact]), false);
-    assert.equal(existing.submessages.length, 2);
 });
 
 test("merge_message_groups", ({mock_template}) => {

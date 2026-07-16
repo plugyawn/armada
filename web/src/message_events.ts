@@ -35,7 +35,6 @@ import {
 } from "./message_store.ts";
 import * as message_view from "./message_view.ts";
 import * as narrow_state from "./narrow_state.ts";
-import * as pear_panel from "./pear_panel.ts";
 import * as pm_list from "./pm_list.ts";
 import * as recent_senders from "./recent_senders.ts";
 import * as recent_view_ui from "./recent_view_ui.ts";
@@ -326,14 +325,6 @@ export function insert_new_messages(opts: InsertNewMessagesOpts): Message[] {
 
     const any_untracked_unread_messages = unread.process_loaded_messages(messages, false);
     direct_message_group_data.process_loaded_messages(messages);
-
-    // Wake the Pear panel for its topic the moment a message lands there,
-    // instead of waiting for its keepalive poll.
-    for (const message of messages) {
-        if (message.type === "stream" && typeof message.display_recipient === "string") {
-            pear_panel.notify_topic_message_activity(message.display_recipient, message.topic);
-        }
-    }
 
     let need_user_to_scroll = false;
     for (const list of message_lists.all_rendered_message_lists()) {
@@ -1006,15 +997,6 @@ export function update_messages(events: UpdateMessageEvent[]): void {
         // We need to do this after we rerender the message list, to
         // produce correct results.
         compose_fade.update_message_list();
-    }
-
-    // Wake the Pear panel for topics whose messages changed (the worker
-    // streams its transcript through message edits), instead of waiting
-    // for the panel's keepalive poll.
-    for (const message of messages_to_rerender) {
-        if (message.type === "stream" && typeof message.display_recipient === "string") {
-            pear_panel.notify_topic_message_activity(message.display_recipient, message.topic);
-        }
     }
 
     unread_ui.update_unread_counts();

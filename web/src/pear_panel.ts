@@ -49,7 +49,6 @@ const pear_usage_schema = z.object({
 
 const pear_live_run_schema = z.object({
     status: z.string(),
-    content: z.string(),
     updated_at: z.number(),
     operation: z.nullish(z.object({kind: z.string(), label: z.string()})),
 });
@@ -58,6 +57,8 @@ const pear_run_schema = z.object({
     id: z.number(),
     trigger_message_id: z.number(),
     result_message_id: z.nullish(z.number()),
+    stream: z.optional(z.string()),
+    topic: z.optional(z.string()),
     status: z.string(),
     session_kind: z.string(),
     source_stream: z.string(),
@@ -73,7 +74,9 @@ const pear_run_schema = z.object({
     usage: z.nullish(pear_usage_schema),
     tool_count: z.optional(z.number()),
     date_created: z.optional(z.number()),
+    date_updated: z.optional(z.number()),
     plan: z.nullish(z.array(z.object({step: z.string(), status: z.string()}))),
+    overview: z.nullish(z.string()),
     live: z.nullish(pear_live_run_schema),
     events: z.optional(z.array(pear_run_event_schema)),
 });
@@ -209,9 +212,6 @@ let workbench_anchor_context_key = "";
 type WorkbenchAnchorKind = "context" | "git";
 let workbench_anchor_kind: WorkbenchAnchorKind | undefined;
 let last_observed_context_key = "";
-// Message/update_message events carry live run changes. Visibility and narrow
-// activation provide reconnect reconciliation without steady-state polling.
-const EVENT_REFRESH_DEBOUNCE_MS = 250;
 const CONTEXT_REFRESH_INTERVAL_MS = 60_000;
 const WORKBENCH_MIN_VIEWPORT_WIDTH_PX = 320;
 const WORKBENCH_POPOVER_MARGIN_PX = 8;
@@ -1432,6 +1432,48 @@ export function shared_runs(): PearRun[] {
     return last_runs;
 }
 
+export function handle_pear_run_event(event: {
+    run_id: number;
+    status: string;
+    result_message_id: number | null;
+    stream: string;
+    topic: string;
+    current_activity: string;
+    tool_count: number;
+    plan: {step: string; status: string}[] | null;
+    overview: string | null;
+    usage: z.infer<typeof pear_usage_schema> | null;
+    duration_seconds: number | null;
+}): void {
+    const {stream, topic} = current_context();
+    if (stream !== event.stream || topic !== event.topic) {
+        return;
+    }
+    const run_index = last_runs.findIndex((run) => run.id === event.run_id);
+    if (run_index === -1) {
+        // One reconciliation fetch establishes immutable run metadata for a
+        // newly observed run; subsequent progress arrives only as pear_run.
+        refresh({live: true});
+        return;
+    }
+    const run = last_runs[run_index]!;
+    last_runs[run_index] = {
+        ...run,
+        status: event.status,
+        result_message_id: event.result_message_id,
+        current_activity: event.current_activity,
+        tool_count: event.tool_count,
+        plan: event.plan ?? run.plan,
+        overview: event.overview ?? run.overview,
+        usage: {
+            ...run.usage,
+            ...event.usage,
+            duration_seconds: event.duration_seconds ?? run.usage?.duration_seconds,
+        },
+    };
+    render(last_runs, last_topic_context);
+}
+
 export function remember_saved_topic_context(raw_topic_context: unknown): void {
     // Called by the runtime menu when a model/effort save succeeds, so
     // the header pill and panel reflect the change immediately instead
@@ -1459,40 +1501,6 @@ export function handle_narrow_activated(): void {
     // (and active-run chrome) in the new header until the fetch below returns.
     render([], cached_context);
     refresh({force_context: true});
-}
-
-let event_refresh_timer: number | undefined;
-
-export function should_event_refresh_for_testing(options: {
-    initialized: boolean;
-    same_context: boolean;
-    hidden: boolean;
-    timer_pending: boolean;
-}): boolean {
-    return options.initialized && options.same_context && !options.hidden && !options.timer_pending;
-}
-
-export function notify_topic_message_activity(stream_name: string, topic_name: string): void {
-    // A message arrived or changed in some topic; when it is the panel's
-    // topic, fold the event burst from streaming edits into one refresh.
-    if (!initialized) {
-        return;
-    }
-    const {stream, topic} = current_context();
-    if (
-        !should_event_refresh_for_testing({
-            initialized,
-            same_context: stream === stream_name && topic === topic_name,
-            hidden: typeof document !== "undefined" && document.hidden,
-            timer_pending: event_refresh_timer !== undefined,
-        })
-    ) {
-        return;
-    }
-    event_refresh_timer = window.setTimeout(() => {
-        event_refresh_timer = undefined;
-        refresh({live: true});
-    }, EVENT_REFRESH_DEBOUNCE_MS);
 }
 
 function render_state_key(render_state: object): string {
@@ -1682,6 +1690,7 @@ function render(
         error_dismissed,
     });
     const panel_open = workbench_open;
+    pear_run_state.remember_runs(runs);
     pear_run_state.set_active_run_result_messages(runs, {
         force_reconcile: active_run === undefined,
     });
@@ -1785,7 +1794,7 @@ function render(
                 }
             }
         }
-        $(document).trigger("pear_liveness_markers_changed");
+        pear_run_state.notify_liveness_markers_changed();
         last_render_state_key = next_render_state_key;
     }
     $panel.toggleClass("pear-panel-collapsed", !panel_open);
@@ -2055,10 +2064,6 @@ export function initialize(): void {
 }
 
 export function stop(): void {
-    if (event_refresh_timer !== undefined) {
-        window.clearTimeout(event_refresh_timer);
-        event_refresh_timer = undefined;
-    }
     $(window).off("resize.pear_panel");
     $(window).off("scroll.pear_panel");
     $(document).off("click.pear_panel");

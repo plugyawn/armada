@@ -19,7 +19,16 @@
 		}
 	}
 
+	@zulip_api path /api/*
+	handle @zulip_api {
+		reverse_proxy 127.0.0.1:9991
+	}
+
 	handle {
+		# Browsers may keep sending the retired outer Basic credential until the
+		# origin's authentication cache is cleared. Zulip API clients only use
+		# /api/*, so remove that stale header from every browser/application route.
+		request_header -Authorization
 		reverse_proxy 127.0.0.1:9991
 	}
 }

@@ -889,8 +889,10 @@ class StaticRuntimeContractTest(unittest.TestCase):
         self.assertIn('header Cache-Control "no-cache"', caddyfile)
         self.assertEqual(caddyfile.count('header X-Content-Type-Options "nosniff"'), 2)
         self.assertEqual(caddyfile.count("precompressed gzip"), 2)
+        self.assertIn("@zulip_api path /api/*", caddyfile)
+        self.assertIn("request_header -Authorization", caddyfile)
         self.assertIn("handle {", caddyfile)
-        self.assertEqual(caddyfile.count("reverse_proxy 127.0.0.1:9991"), 1)
+        self.assertEqual(caddyfile.count("reverse_proxy 127.0.0.1:9991"), 2)
         self.assertNotIn("X-Pear-Upstream-Authorization", caddyfile)
         self.assertNotIn("header_up Authorization", caddyfile)
         for script in (common, update, verify, bootstrap):

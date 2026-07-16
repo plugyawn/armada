@@ -7,4 +7,4 @@ CI when the shipped copy drifts from the registry.
 
 from typing import Final
 
-PEAR_SERVER_CONTRACT_VERSION: Final = 45
+PEAR_SERVER_CONTRACT_VERSION: Final = 46

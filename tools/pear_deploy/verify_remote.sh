@@ -174,6 +174,10 @@ fi
 echo "remote_untracked_source=clean"
 
 echo
+echo "Codex sandbox runtime:"
+ssh -F "$SSH_CONFIG" pear-staging-root 'command -v bwrap >/dev/null && bwrap --version'
+
+echo
 echo "DNS:"
 dig +short "$FQDN" A || true
 

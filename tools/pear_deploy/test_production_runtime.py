@@ -919,18 +919,19 @@ class StaticRuntimeContractTest(unittest.TestCase):
         self.assertIn('header Cache-Control "no-cache"', caddyfile)
         self.assertEqual(caddyfile.count('header X-Content-Type-Options "nosniff"'), 2)
         self.assertEqual(caddyfile.count("precompressed gzip"), 2)
+        self.assertIn(
+            "@pear_upstream_authorization header X-Pear-Upstream-Authorization *", caddyfile
+        )
+        self.assertIn("handle @pear_upstream_authorization {", caddyfile)
         self.assertIn("handle {", caddyfile)
-        self.assertIn("reverse_proxy 127.0.0.1:9991", caddyfile)
+        self.assertEqual(caddyfile.count("reverse_proxy 127.0.0.1:9991"), 2)
         self.assertIn(
             "request_header Authorization {http.request.header.X-Pear-Upstream-Authorization}",
             caddyfile,
         )
-        self.assertIn("header_up -X-Pear-Upstream-Authorization", caddyfile)
+        self.assertIn("request_header -Authorization", caddyfile)
+        self.assertEqual(caddyfile.count("request_header -X-Pear-Upstream-Authorization"), 2)
         self.assertNotIn("header_up Authorization", caddyfile)
-        self.assertLess(
-            caddyfile.index("request_header Authorization"),
-            caddyfile.index("reverse_proxy 127.0.0.1:9991"),
-        )
         self.assertIn('--caddy-auth-user "$CADDY_BASICAUTH_USER"', update)
         self.assertIn('--caddy-auth-password-file "$CADDY_BASICAUTH_PASSWORD_FILE"', update)
         self.assertIn("/etc/pear/caddy-basic-auth.env", caddy_drop_in)
@@ -992,10 +993,8 @@ class StaticRuntimeContractTest(unittest.TestCase):
         self.assertIn("bubblewrap ca-certificates", bootstrap)
         self.assertIn("codex_sandbox_runtime.sh", bootstrap)
         self.assertIn("kernel.unprivileged_userns_clone", codex_sandbox_runtime)
-        self.assertIn(
-            "kernel.apparmor_restrict_unprivileged_userns", codex_sandbox_runtime
-        )
-        self.assertIn("runuser -u \"$TEST_USER\" -- bwrap", codex_sandbox_runtime)
+        self.assertIn("kernel.apparmor_restrict_unprivileged_userns", codex_sandbox_runtime)
+        self.assertIn('runuser -u "$TEST_USER" -- bwrap', codex_sandbox_runtime)
         self.assertIn("workspace_helper_sha256=", update)
         self.assertIn('workspace_helper_runtime.py" verify', verify)
         self.assertIn("os.replace(", helper_runtime)

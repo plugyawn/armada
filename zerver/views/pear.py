@@ -1627,13 +1627,17 @@ def serialize_pear_run_trace_event(event: PearWorkerRunEvent) -> dict[str, objec
             }
         if kind in {"command", "file_change", "status", "tool"}:
             title = payload.get("title")
-            return {
+            serialized: dict[str, object] = {
                 "id": event.id,
                 "kind": str(kind),
                 "title": str(title or event.summary),
                 "status": str(payload.get("status") or "done"),
                 "date_created": datetime_to_timestamp(event.date_created),
             }
+            item_id = payload.get("item_id")
+            if isinstance(item_id, str) and item_id:
+                serialized["item_id"] = item_id
+            return serialized
         return None
     if event.event_type == "tool_results":
         count = payload.get("tool_count")
@@ -1661,13 +1665,27 @@ def pear_run_trace_markdown(trace: list[dict[str, object]]) -> str:
     def flush_tools() -> None:
         if not tool_events:
             return
-        failures = sum(event.get("status") in {"failed", "error"} for event in tool_events)
-        count = len(tool_events)
+        visible_events: list[dict[str, object]] = []
+        visible_by_item_id: dict[str, dict[str, object]] = {}
+        for event in tool_events:
+            item_id = event.get("item_id")
+            existing = visible_by_item_id.get(item_id) if isinstance(item_id, str) else None
+            if existing is None:
+                visible_event = dict(event)
+                visible_events.append(visible_event)
+                if isinstance(item_id, str):
+                    visible_by_item_id[item_id] = visible_event
+                continue
+            # Codex emits lifecycle updates for one item. Keep its stable
+            # first title and latest typed terminal status as one visible row.
+            existing["status"] = event.get("status") or existing.get("status")
+        failures = sum(event.get("status") in {"failed", "error"} for event in visible_events)
+        count = len(visible_events)
         title = f"Ran {count} {'tool' if count == 1 else 'tools'}"
         if failures:
             title += f" · {failures} {'retry' if failures == 1 else 'retries'}"
         rows: list[str] = []
-        for event in tool_events:
+        for event in visible_events:
             status = str(event.get("status") or "done")
             glyph = "✷" if status in {"failed", "error"} else "·"
             event_title = " ".join(str(event.get("title") or "tool").split())

@@ -241,9 +241,7 @@ preflight_remote_visual_runtime() {
 
 preflight_remote_codex_sandbox() {
     echo "Preflight: verifying the host Codex sandbox runtime..."
-    if ! ssh_root bash \
-        "$REMOTE_TRUSTED_RUNTIME/tools/pear_deploy/codex_sandbox_runtime.sh" \
-        --check; then
+    if ! ssh_root bash -s -- --check <"$SCRIPT_DIR/codex_sandbox_runtime.sh"; then
         fail "remote Codex sandbox cannot create a Bubblewrap user namespace; rerun bootstrap sandbox provisioning"
     fi
 }

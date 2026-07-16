@@ -924,6 +924,7 @@ class StaticRuntimeContractTest(unittest.TestCase):
         self.assertNotIn("curl --user", common)
         self.assertIn('"$app_status" != "200"', common)
         self.assertIn("--location --max-redirs 3", common)
+        self.assertIn("--location --max-redirs 3", verify)
         self.assertIn('"$SITE_CODE" == "200"', update)
 
         disk_preflight = "verify_remote_disk_capacity"

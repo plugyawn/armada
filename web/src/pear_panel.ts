@@ -1567,7 +1567,7 @@ export function pear_rail_plan_steps_for_testing(runs: PearRun[]): PearRailPlanS
                       step: $t({defaultMessage: "Working"}),
                       status_glyph: "",
                       status_class: "pear-rail-plan-active",
-                      glyph_class: "pear-thinking-glyph-animated",
+                      glyph_class: "pear-thinking-glyph",
                   },
               ];
     }
@@ -1600,7 +1600,7 @@ export function pear_rail_plan_steps_for_testing(runs: PearRun[]): PearRailPlanS
                 step: entry.step,
                 status_glyph: "",
                 status_class: "pear-rail-plan-active",
-                glyph_class: "pear-thinking-glyph-animated",
+                glyph_class: "pear-thinking-glyph",
             };
         }
         return {

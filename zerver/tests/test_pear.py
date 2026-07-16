@@ -2294,6 +2294,7 @@ class PearSessionDefaultsTest(TestCase):
         self.assertEqual(request_payload["model"], "gemini-3.1-flash-lite")
         self.assertIs(request_payload["store"], False)
         self.assertEqual(request_payload["generation_config"]["temperature"], 0)
+        self.assertEqual(request_payload["generation_config"]["max_output_tokens"], 200)
         self.assertEqual(request_payload["generation_config"]["thinking_level"], "minimal")
         self.assertEqual(request_payload["response_format"]["mime_type"], "application/json")
         self.assertEqual(
@@ -4742,7 +4743,7 @@ class PearSessionDefaultsTest(TestCase):
                     "kind": "assistant",
                     "status": "running",
                     "title": "Codex",
-                    "body": "A",
+                    "body": "The PDF",
                     "item_id": "assistant-1",
                     "metadata": {"streaming": True},
                 }
@@ -4752,12 +4753,12 @@ class PearSessionDefaultsTest(TestCase):
                     "kind": "assistant",
                     "status": "running",
                     "title": "Codex",
-                    "body": "B",
+                    "body": " compiled",
                     "item_id": "assistant-1",
                     "metadata": {"streaming": True},
                 }
             )
-            return [{"label": "Result", "value": "AB"}]
+            return [{"label": "Result", "value": "The PDF compiled"}]
 
         payload = get_pear_session_payload()
         active_session = build_pear_active_session_summary_from_messages(
@@ -4794,8 +4795,8 @@ class PearSessionDefaultsTest(TestCase):
             [message["content"] for message in updated_messages],
             [
                 PEAR_WORKING_MESSAGE,
-                "A",
-                "AB",
+                "The PDF",
+                "The PDF compiled",
             ],
         )
         self.assertEqual(

@@ -3042,8 +3042,6 @@ class PearWorkerTurn:
         self.raise_if_cancel_requested()
         self.signal_typing("start", force=False)
         title = event.get("title", "").strip()
-        body = event.get("body", "").strip()
-        summary = title or body or "Codex event."
         event_kind = event.get("kind")
         metadata = event.get("metadata")
         if isinstance(metadata, dict) and isinstance(metadata.get("operation"), str):
@@ -3062,6 +3060,9 @@ class PearWorkerTurn:
             and isinstance(metadata, dict)
             and metadata.get("streaming") is True
         )
+        raw_body = event.get("body", "")
+        body = raw_body if streaming_assistant else raw_body.strip()
+        summary = title or body.strip() or "Codex event."
         if streaming_assistant:
             item_id = event.get("item_id")
             if not isinstance(item_id, str):

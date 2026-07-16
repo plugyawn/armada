@@ -609,7 +609,14 @@ function render_pear_live_progress($row: JQuery): void {
     if (plan.length === 0) {
         const working = document.createElementNS("http://www.w3.org/1999/xhtml", "div");
         working.setAttribute("class", "pear-live-plan-step pear-live-plan-current");
-        working.textContent = $t({defaultMessage: "Working"});
+        const glyph = document.createElementNS("http://www.w3.org/1999/xhtml", "span");
+        glyph.setAttribute("class", "pear-live-plan-glyph");
+        glyph.setAttribute("aria-hidden", "true");
+        glyph.textContent = "·";
+        const label = document.createElementNS("http://www.w3.org/1999/xhtml", "span");
+        label.setAttribute("class", "pear-live-plan-label");
+        label.textContent = $t({defaultMessage: "Working"});
+        working.append(glyph, label);
         progress.append(working);
     } else {
         let current_index = plan.findIndex((step) => step.status === "in_progress");
@@ -634,16 +641,30 @@ function render_pear_live_progress($row: JQuery): void {
                     ? "pear-live-plan-step pear-live-plan-current"
                     : "pear-live-plan-step pear-live-plan-context",
             );
+            if (index === current_index) {
+                step_element.setAttribute("aria-current", "step");
+            }
             const glyph = step.status === "completed" ? "✓" : index === current_index ? "·" : "○";
-            step_element.textContent = `${glyph} ${step.step}`;
+            const glyph_element = document.createElementNS("http://www.w3.org/1999/xhtml", "span");
+            glyph_element.setAttribute("class", "pear-live-plan-glyph");
+            glyph_element.setAttribute("aria-hidden", "true");
+            glyph_element.textContent = glyph;
+            const label = document.createElementNS("http://www.w3.org/1999/xhtml", "span");
+            label.setAttribute("class", "pear-live-plan-label");
+            label.textContent = step.step;
+            step_element.append(glyph_element, label);
             progress.append(step_element);
             if (index === current_index && run.overview) {
                 const overview = document.createElementNS("http://www.w3.org/1999/xhtml", "div");
                 overview.setAttribute("class", "pear-live-overview");
+                overview.setAttribute("title", run.overview);
                 overview.textContent = run.overview;
                 progress.append(overview);
             }
         }
+    }
+    if (existing?.outerHTML === progress.outerHTML) {
+        return;
     }
     existing?.replaceWith(progress);
     if (existing === null) {

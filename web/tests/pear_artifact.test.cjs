@@ -86,6 +86,14 @@ mock_jquery($);
 
 const artifact = zrequire("pear_artifact");
 
+function graph_column(node) {
+    return node.style.getPropertyValue("--pear-artifact-grid-column");
+}
+
+function graph_row(node) {
+    return node.style.getPropertyValue("--pear-artifact-grid-row");
+}
+
 function valid_document() {
     return {
         version: 1,
@@ -257,8 +265,8 @@ run_test("renders native semantic nodes without exposing source JSON or adopting
     assert.equal(rendered.textContent.includes('"version"'), false);
     assert.equal(rendered.querySelectorAll("script, iframe, foreignObject").length, 0);
     assert.equal(rendered.querySelectorAll(".pear-artifact-connectors line").length, 1);
-    assert.equal(rendered.querySelector('[data-pear-artifact-node="a"]').style.gridColumn, "1");
-    assert.equal(rendered.querySelector('[data-pear-artifact-node="b"]').style.gridColumn, "2");
+    assert.equal(graph_column(rendered.querySelector('[data-pear-artifact-node="a"]')), "1");
+    assert.equal(graph_column(rendered.querySelector('[data-pear-artifact-node="b"]')), "2");
     assert.equal(
         rendered.querySelector(".pear-artifact-connectors line").dataset.state,
         "selected",
@@ -406,13 +414,13 @@ run_test("lays out undirected graph branches by topological distance", () => {
     const parsed = artifact.parse_pear_artifact(JSON.stringify(document));
     assert.ok(parsed);
     const rendered = artifact.render_pear_artifact(parsed, {density: "chat"});
-    assert.equal(rendered.querySelector('[data-pear-artifact-node="a"]').style.gridColumn, "1");
-    assert.equal(rendered.querySelector('[data-pear-artifact-node="b"]').style.gridColumn, "2");
-    assert.equal(rendered.querySelector('[data-pear-artifact-node="c"]').style.gridColumn, "2");
-    assert.equal(rendered.querySelector('[data-pear-artifact-node="d"]').style.gridColumn, "3");
+    assert.equal(graph_column(rendered.querySelector('[data-pear-artifact-node="a"]')), "1");
+    assert.equal(graph_column(rendered.querySelector('[data-pear-artifact-node="b"]')), "2");
+    assert.equal(graph_column(rendered.querySelector('[data-pear-artifact-node="c"]')), "2");
+    assert.equal(graph_column(rendered.querySelector('[data-pear-artifact-node="d"]')), "3");
     assert.notEqual(
-        rendered.querySelector('[data-pear-artifact-node="b"]').style.gridRow,
-        rendered.querySelector('[data-pear-artifact-node="c"]').style.gridRow,
+        graph_row(rendered.querySelector('[data-pear-artifact-node="b"]')),
+        graph_row(rendered.querySelector('[data-pear-artifact-node="c"]')),
     );
 });
 
@@ -434,8 +442,8 @@ run_test("stacks dense explanatory chains instead of squeezing them into one row
     assert.equal(graph.dataset.graphDirection, "vertical");
     assert.equal(graph.style.getPropertyValue("--pear-artifact-graph-columns"), "1");
     assert.equal(graph.style.getPropertyValue("--pear-artifact-graph-rows"), "4");
-    assert.equal(rendered.querySelector('[data-pear-artifact-node="a"]').style.gridRow, "1");
-    assert.equal(rendered.querySelector('[data-pear-artifact-node="d"]').style.gridRow, "4");
+    assert.equal(graph_row(rendered.querySelector('[data-pear-artifact-node="a"]')), "1");
+    assert.equal(graph_row(rendered.querySelector('[data-pear-artifact-node="d"]')), "4");
 });
 
 run_test("falls back to distance layout for directed cycles", () => {
@@ -451,9 +459,9 @@ run_test("falls back to distance layout for directed cycles", () => {
     const parsed = artifact.parse_pear_artifact(JSON.stringify(document));
     assert.ok(parsed);
     const rendered = artifact.render_pear_artifact(parsed, {density: "chat"});
-    assert.equal(rendered.querySelector('[data-pear-artifact-node="a"]').style.gridColumn, "1");
-    assert.equal(rendered.querySelector('[data-pear-artifact-node="b"]').style.gridColumn, "2");
-    assert.equal(rendered.querySelector('[data-pear-artifact-node="c"]').style.gridColumn, "2");
+    assert.equal(graph_column(rendered.querySelector('[data-pear-artifact-node="a"]')), "1");
+    assert.equal(graph_column(rendered.querySelector('[data-pear-artifact-node="b"]')), "2");
+    assert.equal(graph_column(rendered.querySelector('[data-pear-artifact-node="c"]')), "2");
 });
 
 run_test("orders graph layers to reduce connector crossings", () => {
@@ -473,8 +481,8 @@ run_test("orders graph layers to reduce connector crossings", () => {
     const parsed = artifact.parse_pear_artifact(JSON.stringify(document));
     assert.ok(parsed);
     const rendered = artifact.render_pear_artifact(parsed, {density: "chat"});
-    assert.equal(rendered.querySelector('[data-pear-artifact-node="e"]').style.gridRow, "1");
-    assert.equal(rendered.querySelector('[data-pear-artifact-node="d"]').style.gridRow, "2");
+    assert.equal(graph_row(rendered.querySelector('[data-pear-artifact-node="e"]')), "1");
+    assert.equal(graph_row(rendered.querySelector('[data-pear-artifact-node="d"]')), "2");
 });
 
 run_test("renders bounded repeat data and keeps interactions local", () => {

@@ -1440,10 +1440,12 @@ _PEAR_ENV_OVERRIDES: Final[dict[str, Callable[[str], object]]] = {
     "PEAR_WORKSPACE_INDEX_LOCAL_MAX_ENTRIES": _pear_parse_int,
     "PEAR_WORKSPACE_INDEX_LOCAL_MAX_PATHS": _pear_parse_int,
     "PEAR_ADDRESSING_ROUTER_RUNTIME": _pear_parse_string,
-    "PEAR_ADDRESSING_ROUTER_GEMINI_API_KEY": _pear_parse_gemini_api_key,
+    "PEAR_GEMINI_INTERACTIONS_API_KEY": _pear_parse_gemini_api_key,
+    "PEAR_GEMINI_INTERACTIONS_URL": _pear_parse_string,
     "PEAR_ADDRESSING_ROUTER_GEMINI_MODEL": _pear_parse_string,
     "PEAR_ADDRESSING_ROUTER_GEMINI_THINKING_LEVEL": _pear_parse_optional_string,
-    "PEAR_ADDRESSING_ROUTER_GEMINI_URL": _pear_parse_string,
+    "PEAR_PRESENTATION_GEMINI_MODEL": _pear_parse_string,
+    "PEAR_PRESENTATION_GEMINI_THINKING_LEVEL": _pear_parse_optional_string,
 }
 
 

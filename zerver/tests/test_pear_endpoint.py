@@ -9,6 +9,8 @@ import orjson
 from django.core.cache import cache
 from django.utils.timezone import now as timezone_now
 
+from zerver.actions.pear import send_pear_run_event
+from zerver.lib.event_schema import check_pear_run_event
 from zerver.lib.events import fetch_initial_state_data
 from zerver.lib.pear import (
     PEAR_ACTIVE_SESSION_ENDPOINT,
@@ -126,6 +128,61 @@ class PearSessionEndpointTest(ZulipTestCase):
             check=True,
             timeout=10,
         )
+
+    def test_pear_run_push_event_is_typed_and_visibility_scoped(self) -> None:
+        owner = self.example_user("hamlet")
+        self.subscribe(owner, PEAR_DEFAULT_STREAM)
+        pear_bot = self.create_test_bot(
+            "pear-push",
+            owner,
+            full_name="Pear",
+            bot_type=UserProfile.EMBEDDED_BOT,
+            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+        )
+        trigger_message_id = self.send_stream_message(
+            owner,
+            PEAR_DEFAULT_STREAM,
+            topic_name=PEAR_DEFAULT_TOPIC,
+            content="@**Pear** check the repository",
+        )
+        run = PearWorkerRun.objects.create(
+            realm=owner.realm,
+            bot_profile=pear_bot,
+            requesting_user=owner,
+            trigger_message_id=trigger_message_id,
+            result_message_id=trigger_message_id,
+            status=PearWorkerRun.RUNNING,
+            stream_name=PEAR_DEFAULT_STREAM,
+            topic_name=PEAR_DEFAULT_TOPIC,
+            current_activity="Running tests",
+            tool_count=2,
+        )
+        run_event = PearWorkerRunEvent.objects.create(
+            run=run,
+            event_type="transcript",
+            summary="Plan updated",
+            payload={
+                "kind": "plan",
+                "metadata": {
+                    "steps": [
+                        {"step": "Inspect", "status": "completed"},
+                        {"step": "Verify", "status": "in_progress"},
+                    ]
+                },
+            },
+        )
+
+        with patch("zerver.actions.pear.send_event_on_commit") as send_event:
+            send_pear_run_event(run, run_event)
+
+        send_event.assert_called_once()
+        event = send_event.call_args.args[1]
+        check_pear_run_event("event", event)
+        self.assertEqual(event["run_id"], run.id)
+        self.assertEqual(event["sequence"], run_event.id)
+        self.assertEqual(event["current_activity"], "Running tests")
+        self.assertEqual(event["plan"][1], {"step": "Verify", "status": "in_progress"})
+        self.assertIn(owner.id, send_event.call_args.args[2])
 
     def test_get_pear_session(self) -> None:
         self.login("hamlet")
@@ -446,7 +503,6 @@ class PearSessionEndpointTest(ZulipTestCase):
         write_pear_live_run_state(
             run.trigger_message_id,
             status="running",
-            content="Streaming answer",
         )
 
         serialized_run = serialize_pear_worker_run(run)
@@ -462,7 +518,6 @@ class PearSessionEndpointTest(ZulipTestCase):
         self.assertIsNotNone(live)
         assert live is not None
         self.assertEqual(live["status"], "running")
-        self.assertEqual(live["content"], "Streaming answer")
         self.assertIsInstance(live["updated_at"], float)
         # No tool_results events yet.
         self.assertEqual(serialized_run["tool_count"], 0)
@@ -561,7 +616,6 @@ class PearSessionEndpointTest(ZulipTestCase):
         write_pear_live_run_state(
             run.trigger_message_id,
             status=PearWorkerRun.RUNNING,
-            content="Thinking",
         )
 
         serialized_run = serialize_pear_worker_run(run)
@@ -595,6 +649,11 @@ class PearSessionEndpointTest(ZulipTestCase):
                 event_type="usage",
                 payload={"usage": {"input_tokens": index + 1, "total_tokens": index + 1}},
             )
+            PearWorkerRunEvent.objects.create(
+                run=run,
+                event_type="presentation",
+                payload={"overview": f"Visible overview {index}."},
+            )
 
         with self.assert_database_query_count(2):
             events_by_run_id = pear_worker_run_summary_events(runs)
@@ -608,6 +667,10 @@ class PearSessionEndpointTest(ZulipTestCase):
         self.assertEqual(
             [item["usage"]["input_tokens"] for item in serialized],  # type: ignore[index]
             [1, 2, 3, 4, 5],
+        )
+        self.assertEqual(
+            [item["overview"] for item in serialized],
+            [f"Visible overview {index}." for index in range(5)],
         )
 
     def test_get_pear_runs_includes_requested_run_ids_outside_topic_window(self) -> None:
@@ -2974,6 +3037,99 @@ class PearSessionEndpointTest(ZulipTestCase):
         run.refresh_from_db()
         self.assertEqual(run.status, PearWorkerRun.CANCELLED)
         self.assertIsNotNone(run.cancel_requested_at)
+
+    def test_run_trace_is_safe_and_attention_is_bounded_to_active_runs(self) -> None:
+        owner = self.example_user("hamlet")
+        self.subscribe(owner, PEAR_DEFAULT_STREAM)
+        pear_bot = self.create_test_bot(
+            "pear-trace",
+            owner,
+            full_name="Pear",
+            bot_type=UserProfile.EMBEDDED_BOT,
+            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+        )
+        run = PearWorkerRun.objects.create(
+            realm=owner.realm,
+            bot_profile=pear_bot,
+            requesting_user=owner,
+            trigger_message_id=919,
+            result_message_id=920,
+            stream_name=PEAR_DEFAULT_STREAM,
+            topic_name="topic-a",
+            status=PearWorkerRun.RUNNING,
+        )
+        PearWorkerRunEvent.objects.create(
+            run=run,
+            event_type="transcript",
+            summary="Hidden reasoning",
+            payload={"kind": "reasoning", "body": "private chain of thought"},
+        )
+        PearWorkerRunEvent.objects.create(
+            run=run,
+            event_type="transcript",
+            summary="Reading files",
+            payload={
+                "kind": "command",
+                "title": "Read repository files",
+                "body": "secret raw command output",
+            },
+        )
+        PearWorkerRunEvent.objects.create(
+            run=run,
+            event_type="transcript",
+            summary="Codex",
+            payload={"kind": "assistant", "body": "I’m checking the relevant files."},
+        )
+        self.login_user(owner)
+
+        trace_result = self.client_get(
+            f"/json/pear/runs/{run.id}/trace",
+            intentionally_undocumented=True,
+        )
+        trace = self.assert_json_success(trace_result)["trace"]
+        trace_text = orjson.dumps(trace).decode()
+        self.assertIn("Read repository files", trace_text)
+        self.assertIn("I’m checking the relevant files.", trace_text)
+        self.assertNotIn("private chain of thought", trace_text)
+        self.assertNotIn("secret raw command output", trace_text)
+
+        first_page_result = self.client_get(
+            f"/json/pear/runs/{run.id}/trace?limit=1",
+            intentionally_undocumented=True,
+        )
+        first_page = self.assert_json_success(first_page_result)
+        self.assertEqual(len(first_page["trace"]), 1)
+        self.assertEqual(first_page["trace"][0]["kind"], "assistant")
+        self.assertTrue(first_page["has_more"])
+        second_page_result = self.client_get(
+            f"/json/pear/runs/{run.id}/trace?limit=1&before_event_id={first_page['next_before_event_id']}",
+            intentionally_undocumented=True,
+        )
+        second_page = self.assert_json_success(second_page_result)
+        self.assertEqual(len(second_page["trace"]), 1)
+        self.assertEqual(second_page["trace"][0]["kind"], "command")
+        self.assertFalse(second_page["has_more"])
+
+        with (
+            patch("zerver.views.pear.mark_pear_run_attended") as mark_attended,
+            patch("zerver.views.pear.maybe_enqueue_pear_run_presentation") as enqueue,
+        ):
+            attention_result = self.client_post(
+                f"/json/pear/runs/{run.id}/attention",
+                intentionally_undocumented=True,
+            )
+
+        self.assertTrue(self.assert_json_success(attention_result)["attended"])
+        mark_attended.assert_called_once_with(run.id)
+        enqueue.assert_called_once()
+
+        run.status = PearWorkerRun.DONE
+        run.save(update_fields=["status"])
+        settled_result = self.client_post(
+            f"/json/pear/runs/{run.id}/attention",
+            intentionally_undocumented=True,
+        )
+        self.assertFalse(self.assert_json_success(settled_result)["attended"])
 
     def test_not_for_pear_feedback_is_ambient_only_and_idempotent(self) -> None:
         owner = self.example_user("hamlet")

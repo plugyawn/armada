@@ -2,10 +2,10 @@
 
 const assert = require("node:assert/strict");
 
+const render_pear_panel = require("../templates/pear_panel.hbs");
+
 const {zrequire} = require("./lib/namespace.cjs");
 const {run_test} = require("./lib/test.cjs");
-
-const render_pear_panel = require("../templates/pear_panel.hbs");
 
 const pear_panel = zrequire("pear_panel");
 
@@ -35,6 +35,44 @@ run_test("render_state_changed_for_testing", () => {
     assert.ok(
         pear_panel.render_state_changed_for_testing(JSON.stringify(first_state), changed_state),
     );
+});
+
+run_test("rail plan does not leak a completed plan into a plan-less active run", () => {
+    const steps = pear_panel.pear_rail_plan_steps_for_testing([
+        {id: 2, status: "running", plan: null},
+        {
+            id: 1,
+            status: "done",
+            plan: [{step: "Old task", status: "completed"}],
+        },
+    ]);
+
+    assert.deepEqual(steps, []);
+});
+
+run_test("rail plan renders only the active run checklist", () => {
+    const steps = pear_panel.pear_rail_plan_steps_for_testing([
+        {
+            id: 2,
+            status: "running",
+            plan: [
+                {step: "Inspect", status: "completed"},
+                {step: "Implement", status: "in_progress"},
+                {step: "Verify", status: "pending"},
+            ],
+        },
+        {
+            id: 1,
+            status: "done",
+            plan: [{step: "Old task", status: "completed"}],
+        },
+    ]);
+
+    assert.deepEqual(steps, [
+        {step: "Inspect", status_glyph: "✓", status_class: "pear-rail-plan-done"},
+        {step: "Implement", status_glyph: "▸", status_class: "pear-rail-plan-active"},
+        {step: "Verify", status_glyph: "·", status_class: "pear-rail-plan-pending"},
+    ]);
 });
 
 run_test("status_marker_for_testing", () => {

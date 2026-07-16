@@ -1544,14 +1544,13 @@ type PearRailRunEntry = {glyph: string; failed: boolean; label: string; when: st
 
 type PearRailPlanStep = {step: string; status_glyph: string; status_class: string};
 
-function pear_rail_plan_steps(runs: PearRun[]): PearRailPlanStep[] {
-    // Active run's plan wins; otherwise the newest settled plan keeps
-    // answering "what was the shape of the last piece of work".
-    const with_plan = runs.filter((run) => (run.plan ?? []).length > 0);
+export function pear_rail_plan_steps_for_testing(runs: PearRun[]): PearRailPlanStep[] {
+    // Plans are run-scoped. While a new run is active, never fall back to a
+    // completed checklist from an earlier turn; a plan-less run renders as
+    // "Working" in the live message instead.
     const source =
-        with_plan.find((run) => run.status === "running" || run.status === "queued") ??
-        with_plan[0];
-    if (source === undefined) {
+        runs.find((run) => run.status === "running" || run.status === "queued") ?? runs[0];
+    if (source === undefined || (source.plan ?? []).length === 0) {
         return [];
     }
     return (source.plan ?? []).map((entry) => {
@@ -1627,6 +1626,8 @@ function render_workspace_rail(
     );
     const dirty = git.dirty === true;
     const changed_count = git.changed_count ?? 0;
+    const run_entries = pear_rail_run_entries(runs);
+    const plan_steps = pear_rail_plan_steps_for_testing(runs);
     const args = {
         repo_label,
         branch_label,
@@ -1635,10 +1636,10 @@ function render_workspace_rail(
         status_label: dirty
             ? $t({defaultMessage: "{changed_count} changed"}, {changed_count})
             : $t({defaultMessage: "clean"}),
-        runs: pear_rail_run_entries(runs),
-        has_runs: pear_rail_run_entries(runs).length > 0,
-        plan_steps: pear_rail_plan_steps(runs),
-        has_plan: pear_rail_plan_steps(runs).length > 0,
+        runs: run_entries,
+        has_runs: run_entries.length > 0,
+        plan_steps,
+        has_plan: plan_steps.length > 0,
         show_workspace_line: true,
     };
     const signature = JSON.stringify(args);

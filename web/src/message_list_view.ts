@@ -252,10 +252,14 @@ function message_is_pear_message(message: Message, is_hidden: boolean): boolean 
 function pear_thinking_markers($scope: JQuery<HTMLElement | Document> = $(document)): JQuery {
     const selectors = [
         ".pear-liveness-active .pear-thinking-glyph",
+        ".message_row.pear-active-message .pear-live-plan-current .pear-thinking-glyph",
         ".message_row.pear-active-message .pear-tool-row-active.pear-thinking-glyph",
     ];
     if ($scope.hasClass("pear-active-message")) {
-        selectors.push(".pear-tool-row-active.pear-thinking-glyph");
+        selectors.push(
+            ".pear-live-plan-current .pear-thinking-glyph",
+            ".pear-tool-row-active.pear-thinking-glyph",
+        );
     }
     if ($scope.hasClass("pear-liveness-active")) {
         selectors.push(".pear-thinking-glyph");
@@ -549,6 +553,36 @@ function pear_source_fingerprint(html: string): string {
     return `${hash}:${html.length}`;
 }
 
+function extend_pear_streamed_text(current: HTMLElement, incoming: HTMLElement): boolean {
+    if (current.tagName !== incoming.tagName || current.closest(".pear-active-message") === null) {
+        return false;
+    }
+    for (const chunk of current.querySelectorAll(":scope > .pear-stream-chunk")) {
+        chunk.replaceWith(document.createTextNode(chunk.textContent ?? ""));
+    }
+    current.normalize();
+    if (current.children.length > 0 || incoming.children.length > 0) {
+        return false;
+    }
+    const current_text = current.textContent ?? "";
+    const incoming_text = incoming.textContent ?? "";
+    if (current_text === incoming_text || !incoming_text.startsWith(current_text)) {
+        return false;
+    }
+    const suffix = incoming_text.slice(current_text.length);
+    const chunk = document.createElementNS("http://www.w3.org/1999/xhtml", "span");
+    chunk.setAttribute("class", "pear-stream-chunk");
+    chunk.textContent = suffix;
+    current.append(chunk);
+    window.setTimeout(() => {
+        if (chunk.isConnected) {
+            chunk.replaceWith(document.createTextNode(chunk.textContent ?? ""));
+            current.normalize();
+        }
+    }, 180);
+    return true;
+}
+
 function pear_morph_content(old_content: HTMLElement, new_content: HTMLElement): HTMLElement[] {
     const footer = old_content.querySelector(":scope > .pear-run-footer");
     const progress = old_content.querySelector(":scope > .pear-live-progress");
@@ -563,6 +597,15 @@ function pear_morph_content(old_content: HTMLElement, new_content: HTMLElement):
         const current = old_children[old_index];
         if (current instanceof HTMLElement && current.getAttribute("data-pear-source") === source) {
             // Unchanged: the enhanced, possibly animated node stays.
+            old_index += 1;
+            continue;
+        }
+        if (
+            current instanceof HTMLElement &&
+            incoming instanceof HTMLElement &&
+            extend_pear_streamed_text(current, incoming)
+        ) {
+            current.setAttribute("data-pear-source", source);
             old_index += 1;
             continue;
         }
@@ -599,8 +642,15 @@ function render_pear_live_progress($row: JQuery): void {
     const existing = content.querySelector(":scope > .pear-live-progress");
     if (run === undefined || (run.status !== "queued" && run.status !== "running")) {
         existing?.remove();
+        content.classList.remove("pear-live-placeholder");
+        for (const child of content.querySelectorAll(":scope > .pear-live-thought")) {
+            child.classList.remove("pear-live-thought");
+        }
         return;
     }
+
+    const is_placeholder = run.has_visible_assistant_text === false;
+    content.classList.toggle("pear-live-placeholder", is_placeholder);
 
     const progress = document.createElementNS("http://www.w3.org/1999/xhtml", "section");
     progress.setAttribute("class", "pear-live-progress");
@@ -618,6 +668,13 @@ function render_pear_live_progress($row: JQuery): void {
         label.textContent = $t({defaultMessage: "Working"});
         working.append(glyph, label);
         progress.append(working);
+        if (run.overview) {
+            const overview = document.createElementNS("http://www.w3.org/1999/xhtml", "div");
+            overview.setAttribute("class", "pear-live-overview");
+            overview.setAttribute("title", run.overview);
+            overview.textContent = run.overview;
+            progress.append(overview);
+        }
     } else {
         let current_index = plan.findIndex((step) => step.status === "in_progress");
         if (current_index === -1) {
@@ -641,6 +698,9 @@ function render_pear_live_progress($row: JQuery): void {
                     ? "pear-live-plan-step pear-live-plan-current"
                     : "pear-live-plan-step pear-live-plan-context",
             );
+            if (step.status === "completed") {
+                step_element.classList.add("pear-live-plan-completed");
+            }
             if (index === current_index) {
                 step_element.setAttribute("aria-current", "step");
             }
@@ -673,9 +733,19 @@ function render_pear_live_progress($row: JQuery): void {
     if (existing === null) {
         content.prepend(progress);
     }
+    for (const child of content.children) {
+        if (
+            child !== progress &&
+            !child.classList.contains("pear-live-progress") &&
+            !child.classList.contains("pear-run-footer")
+        ) {
+            child.classList.toggle("pear-live-thought", !is_placeholder);
+        }
+    }
 }
 
 const pear_trace_response_schema = z.object({
+    rendered: z.string(),
     trace: z.array(
         z.object({
             id: z.number(),
@@ -694,24 +764,17 @@ function load_pear_run_trace(run_id: number, host: HTMLElement, button: HTMLElem
         url: `/json/pear/runs/${run_id}/trace`,
         data: {limit: 100},
         success(raw_data) {
-            const {trace} = pear_trace_response_schema.parse(raw_data);
-            host.replaceChildren();
-            for (const event of trace) {
-                const item = document.createElementNS("http://www.w3.org/1999/xhtml", "div");
-                item.setAttribute("class", `pear-run-trace-item pear-run-trace-${event.kind}`);
-                if (event.body !== undefined) {
-                    item.textContent = event.body;
-                } else if (event.plan !== undefined) {
-                    item.textContent = event.plan
-                        .map((step) => `${step.status === "completed" ? "✓" : "·"} ${step.step}`)
-                        .join("\n");
-                } else {
-                    item.textContent = event.title;
-                }
-                host.append(item);
+            const {rendered} = pear_trace_response_schema.parse(raw_data);
+            host.replaceChildren(ui_util.parse_html(rendered));
+            host.classList.add("rendered_markdown");
+            rendered_markdown.update_elements($(host));
+            const row = host.closest(".message_row");
+            if (row instanceof HTMLElement) {
+                enhance_pear_tool_rows($(row));
             }
             host.hidden = false;
             button.removeAttribute("disabled");
+            button.setAttribute("aria-expanded", "true");
             button.textContent = $t({defaultMessage: "Hide work"});
             button.dataset["loaded"] = "true";
         },
@@ -720,6 +783,29 @@ function load_pear_run_trace(run_id: number, host: HTMLElement, button: HTMLElem
             button.textContent = $t({defaultMessage: "Could not load work"});
         },
     });
+}
+
+function append_pear_run_trace_disclosure(footer: HTMLElement, run_id: number): void {
+    const trace = document.createElementNS("http://www.w3.org/1999/xhtml", "div");
+    trace.setAttribute("class", "pear-run-trace");
+    trace.hidden = true;
+    const disclosure = document.createElementNS("http://www.w3.org/1999/xhtml", "button");
+    disclosure.setAttribute("class", "pear-run-trace-toggle");
+    disclosure.setAttribute("type", "button");
+    disclosure.setAttribute("aria-expanded", "false");
+    disclosure.textContent = $t({defaultMessage: "Show work"});
+    disclosure.addEventListener("click", () => {
+        // A live run keeps producing events after the first reveal. Refresh
+        // whenever the user reopens the trace; hiding remains immediate.
+        if (disclosure.dataset["loaded"] !== "true" || trace.hidden) {
+            load_pear_run_trace(run_id, trace, disclosure);
+            return;
+        }
+        trace.hidden = true;
+        disclosure.setAttribute("aria-expanded", "false");
+        disclosure.textContent = $t({defaultMessage: "Show work"});
+    });
+    footer.append(trace, disclosure);
 }
 
 let pear_run_elapsed_timer: ReturnType<typeof setInterval> | undefined;
@@ -776,12 +862,15 @@ function maybe_render_pear_run_footer($row: JQuery): void {
     // sets it at render and the event-driven sweep maintains it afterwards.
     if ($row.hasClass("pear-active-message")) {
         const operation = pear_run_state.get_active_run_operation(message_id);
+        const run = pear_run_state.get_run_view(message_id);
         const operation_signature =
             operation === undefined ? "" : `${operation.kind}|${operation.label}`;
+        const trace_available = run?.trace_available === true;
         if (
             existing instanceof HTMLElement &&
             existing.classList.contains("pear-run-footer-ticker") &&
-            (existing.getAttribute("data-pear-op") ?? "") === operation_signature
+            (existing.getAttribute("data-pear-op") ?? "") === operation_signature &&
+            (existing.querySelector(":scope > .pear-run-trace-toggle") !== null) === trace_available
         ) {
             // Hydration can add the run start time after the first push event;
             // backfill the timestamp when it arrives.
@@ -801,7 +890,6 @@ function maybe_render_pear_run_footer($row: JQuery): void {
         existing?.remove();
         const ticker = document.createElementNS("http://www.w3.org/1999/xhtml", "div");
         ticker.setAttribute("class", "pear-run-footer pear-run-footer-ticker");
-        ticker.setAttribute("aria-hidden", "true");
         ticker.setAttribute("data-pear-op", operation_signature);
         if (operation === undefined) {
             const spinner = document.createElementNS("http://www.w3.org/1999/xhtml", "span");
@@ -828,6 +916,9 @@ function maybe_render_pear_run_footer($row: JQuery): void {
             elapsed.setAttribute("data-pear-run-started", `${started_at}`);
         }
         ticker.append(elapsed);
+        if (trace_available && run !== undefined) {
+            append_pear_run_trace_disclosure(ticker, run.id);
+        }
         content.append(ticker);
         update_pear_run_elapsed_labels();
         ensure_pear_run_elapsed_timer();
@@ -866,24 +957,7 @@ function maybe_render_pear_run_footer($row: JQuery): void {
     footer_element.append(status);
     const run = pear_run_state.get_run_view(message_id);
     if (run?.trace_available === true) {
-        const disclosure = document.createElementNS("http://www.w3.org/1999/xhtml", "button");
-        disclosure.setAttribute("class", "pear-run-trace-toggle");
-        disclosure.setAttribute("type", "button");
-        disclosure.textContent = $t({defaultMessage: "Show work"});
-        const trace = document.createElementNS("http://www.w3.org/1999/xhtml", "div");
-        trace.setAttribute("class", "pear-run-trace");
-        trace.hidden = true;
-        disclosure.addEventListener("click", () => {
-            if (disclosure.dataset["loaded"] !== "true") {
-                load_pear_run_trace(run.id, trace, disclosure);
-                return;
-            }
-            trace.hidden = !trace.hidden;
-            disclosure.textContent = trace.hidden
-                ? $t({defaultMessage: "Show work"})
-                : $t({defaultMessage: "Hide work"});
-        });
-        footer_element.append(disclosure, trace);
+        append_pear_run_trace_disclosure(footer_element, run.id);
     }
     content.append(footer_element);
 }
@@ -962,7 +1036,11 @@ pear_run_state.on_run_state_changed((run) => {
 
 let pear_attention_run: pear_run_state.PearRunLiveView | undefined;
 let pear_attention_last_posted_at = 0;
-const PEAR_ATTENTION_HEARTBEAT_MS = 3000;
+let pear_attention_backoff_until = 0;
+let pear_attention_backoff_ms = 0;
+let pear_attention_request_in_flight = false;
+const PEAR_ATTENTION_HEARTBEAT_MS = 5000;
+const PEAR_ATTENTION_MAX_BACKOFF_MS = 60000;
 
 function pear_run_is_currently_visible(run: pear_run_state.PearRunLiveView): boolean {
     return (
@@ -983,17 +1061,36 @@ function post_pear_attention_if_visible(): void {
         return;
     }
     const now = Date.now();
-    if (now - pear_attention_last_posted_at < PEAR_ATTENTION_HEARTBEAT_MS) {
+    if (
+        pear_attention_request_in_flight ||
+        now < pear_attention_backoff_until ||
+        now - pear_attention_last_posted_at < PEAR_ATTENTION_HEARTBEAT_MS
+    ) {
         return;
     }
     pear_attention_last_posted_at = now;
+    pear_attention_request_in_flight = true;
     void channel.post({
         url: `/json/pear/runs/${run.id}/attention`,
         data: {},
+        success() {
+            pear_attention_backoff_ms = 0;
+            pear_attention_backoff_until = 0;
+        },
         error(xhr) {
+            if (xhr.status === 429) {
+                pear_attention_backoff_ms = Math.min(
+                    Math.max(pear_attention_backoff_ms * 2, PEAR_ATTENTION_HEARTBEAT_MS),
+                    PEAR_ATTENTION_MAX_BACKOFF_MS,
+                );
+                pear_attention_backoff_until = Date.now() + pear_attention_backoff_ms;
+            }
             if (xhr.readyState !== 0) {
                 blueslip.warn("Could not update Pear viewer attention.");
             }
+        },
+        complete() {
+            pear_attention_request_in_flight = false;
         },
     });
 }
@@ -2177,6 +2274,7 @@ export class MessageListView {
         enhance_pear_tool_rows($row);
         maybe_render_pear_thinking_glyph($row);
         maybe_render_pear_run_footer($row);
+        render_pear_live_progress($row);
 
         const id = rows.id($row);
         message_edit.maybe_show_edit($row, id);
@@ -2786,6 +2884,13 @@ export class MessageListView {
         if (message_content_edited && !message_container.is_pear_message) {
             $rendered_msg.addClass("fade-in-message");
         }
+        if (
+            message_content_edited &&
+            message_container.is_pear_message &&
+            message_container.is_pear_active_message
+        ) {
+            pear_run_state.mark_message_has_visible_assistant_text(message_container.msg.id);
+        }
         if (message_container.is_pear_message && $row.length === 1) {
             // Streaming ticks arrive every second or two; replacing the
             // whole row each time restarts every CSS animation in it
@@ -2830,6 +2935,7 @@ export class MessageListView {
                 enhance_pear_tool_rows($row);
                 maybe_render_pear_thinking_glyph($row);
                 maybe_render_pear_run_footer($row);
+                render_pear_live_progress($row);
                 submessage.render_submessage({
                     $row,
                     message_id: rows.id($row),

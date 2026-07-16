@@ -507,6 +507,7 @@ class PearSessionEndpointTest(ZulipTestCase):
         write_pear_live_run_state(
             run.trigger_message_id,
             status="running",
+            has_visible_assistant_text=True,
         )
 
         serialized_run = serialize_pear_worker_run(run)
@@ -523,6 +524,7 @@ class PearSessionEndpointTest(ZulipTestCase):
         assert live is not None
         self.assertEqual(live["status"], "running")
         self.assertIsInstance(live["updated_at"], float)
+        self.assertIs(live["has_visible_assistant_text"], True)
         # No tool_results events yet.
         self.assertEqual(serialized_run["tool_count"], 0)
 
@@ -3090,12 +3092,17 @@ class PearSessionEndpointTest(ZulipTestCase):
             f"/json/pear/runs/{run.id}/trace",
             intentionally_undocumented=True,
         )
-        trace = self.assert_json_success(trace_result)["trace"]
+        trace_payload = self.assert_json_success(trace_result)
+        trace = trace_payload["trace"]
         trace_text = orjson.dumps(trace).decode()
         self.assertIn("Read repository files", trace_text)
         self.assertIn("I’m checking the relevant files.", trace_text)
         self.assertNotIn("private chain of thought", trace_text)
         self.assertNotIn("secret raw command output", trace_text)
+        self.assertIn("spoiler-block", trace_payload["rendered"])
+        self.assertIn("I’m checking the relevant files.", trace_payload["rendered"])
+        self.assertNotIn("private chain of thought", trace_payload["rendered"])
+        self.assertNotIn("secret raw command output", trace_payload["rendered"])
 
         first_page_result = self.client_get(
             f"/json/pear/runs/{run.id}/trace?limit=1",

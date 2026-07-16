@@ -148,6 +148,7 @@ class PearLiveRunState(TypedDict):
     status: str
     updated_at: float
     operation: NotRequired[PearLiveRunOperation | None]
+    has_visible_assistant_text: NotRequired[bool]
 
 
 class PearRecentMessage(TypedDict):
@@ -1169,11 +1170,13 @@ def write_pear_live_run_state(
     *,
     status: PearWorkerRunStatus,
     operation: PearLiveRunOperation | None = None,
+    has_visible_assistant_text: bool = False,
 ) -> None:
     state: PearLiveRunState = {
         "status": status,
         "updated_at": time.time(),
         "operation": operation,
+        "has_visible_assistant_text": has_visible_assistant_text,
     }
     cache.set(
         pear_live_run_cache_key(trigger_message_id),
@@ -1203,6 +1206,7 @@ def get_pear_live_run_state(trigger_message_id: int) -> PearLiveRunState | None:
         "status": status,
         "updated_at": float(updated_at),
         "operation": operation,
+        "has_visible_assistant_text": state.get("has_visible_assistant_text") is True,
     }
 
 
@@ -2896,6 +2900,7 @@ class PearWorkerTurn:
         if updated:
             self.result_message_id = target_message_id
             self.last_transcript_flush_at = current_time
+            self.update_volatile_run_state(status)
         return updated
 
     def update_volatile_run_state(
@@ -2906,6 +2911,7 @@ class PearWorkerTurn:
             self.message_id,
             status=status,
             operation=self.live_operation,
+            has_visible_assistant_text=bool(self.current_assistant_text.strip()),
         )
 
     def request_user_answers(self, questions: list[dict[str, Any]]) -> dict[str, list[str]] | None:

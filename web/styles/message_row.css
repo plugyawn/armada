@@ -60,10 +60,9 @@
 
         /* The agent is ambient — part of the branch, not a chat
            participant. Its rows never include sender chrome (portrait,
-           name, badge); message_list_view renders every Pear message
-           as a continuation row, and the tinted block plus the pixel
-           voice carry the identity. Code samples keep Geist Mono via
-           the rendered_markdown code rules. */
+           name, badge); the room's proportional face carries prose,
+           while Geist Pixel is reserved for compact machine-state chrome.
+           Code samples keep Geist Mono via the rendered_markdown rules. */
 
         .message_edit_notice,
         .edit-notifications {
@@ -89,19 +88,11 @@
             max-width: min(100%, calc(var(--base-font-size-px) * 48));
             padding-right: 0.35em;
             overflow-wrap: anywhere;
-            font-family: var(--pear-font-pixel);
-            /* 15px at the 16px base: the pixel face's tall x-height
-               makes it read level with the room's prose one step
-               down, and tracking the base keeps that parity at any
-               font-size setting. */
-            font-size: calc(var(--base-font-size-px) * 0.9375);
+            font-family: var(--pear-font-ui);
+            font-size: var(--base-font-size-px);
 
-            /* Pixel glyphs sit on a hard grid; they need more air
-               between lines than the outline faces do. The :not()
-               mirrors (and outranks) the .messagebox-content rule
-               that pins prose to the body line-height. */
             &:not(.status-message) {
-                line-height: 1.8;
+                line-height: 1.55;
                 /* Symmetric air inside the tinted block: the stock
                    rule pads only the top and leaves the bottom to the
                    last paragraph's margin, which reads lopsided on a
@@ -212,13 +203,10 @@
                 border-radius: var(--pear-radius-px);
                 background: var(--pear-surface-2);
                 color: var(--pear-ink-2);
-                font-family: var(--pear-font-pixel);
-                /* Pinned px by design; see the pixel-type rule in the
-                   design spec. */
-                /* stylelint-disable-next-line declaration-property-unit-disallowed-list */
-                font-size: 12px;
-                font-weight: 400;
-                line-height: 1.2;
+                font-family: var(--pear-font-ui);
+                font-size: 0.78em;
+                font-weight: 600;
+                line-height: 1.25;
                 transition: background-color var(--pear-dur-1) var(--pear-ease);
             }
 
@@ -304,7 +292,8 @@
             }
 
             .pear-live-plan-glyph {
-                color: var(--pear-accent-ink);
+                color: var(--pear-interaction);
+                font-family: var(--pear-font-pixel);
                 text-align: center;
             }
 
@@ -319,13 +308,11 @@
                 opacity: 0.56;
             }
 
+            .pear-live-plan-completed .pear-live-plan-glyph {
+                color: var(--pear-accent-ink);
+            }
+
             .pear-live-plan-current {
-                background: linear-gradient(
-                    90deg,
-                    color-mix(in srgb, var(--pear-accent-ink) 16%, transparent),
-                    transparent 76%
-                );
-                box-shadow: inset 2px 0 var(--pear-accent-ink);
                 color: var(--color-text-message-default);
             }
 
@@ -354,14 +341,28 @@
             .pear-live-overview {
                 overflow: hidden;
                 margin: 1px 8px 3px 17px;
-                color: var(--pear-ink-2);
-                font-family: var(--pear-font-mono);
-                /* stylelint-disable-next-line declaration-property-unit-disallowed-list */
-                font-size: 11px;
-                line-height: 1.35;
+                color: var(--pear-ink-1);
+                font-family: var(--pear-font-ui);
+                font-size: 0.78em;
+                font-weight: 500;
+                line-height: 1.4;
                 text-overflow: ellipsis;
                 white-space: nowrap;
                 animation: pear-live-overview-in 160ms ease-out both;
+            }
+
+            &.pear-live-placeholder
+                > :not(.pear-live-progress, .pear-run-footer) {
+                display: none;
+            }
+
+            > .pear-live-thought {
+                color: var(--pear-ink-2);
+                font-family: var(--pear-font-ui);
+            }
+
+            .pear-stream-chunk {
+                animation: pear-stream-chunk-in 180ms ease-out both;
             }
 
             .pear-run-trace-toggle {
@@ -370,8 +371,21 @@
                 background: transparent;
                 padding: 0;
                 color: var(--pear-accent-ink);
-                font: inherit;
+                font-family: var(--pear-font-ui);
+                font-size: 12px;
+                font-weight: 600;
                 cursor: pointer;
+
+                &::before {
+                    margin-right: 0.32em;
+                    content: "↥";
+                    font-family: var(--pear-font-pixel);
+                    font-weight: 400;
+                }
+
+                &[aria-expanded="true"]::before {
+                    content: "↧";
+                }
 
                 &:hover {
                     color: var(--pear-ink-1);
@@ -384,14 +398,23 @@
                 gap: 5px;
                 max-height: 22rem;
                 overflow: auto;
-                padding: 7px 0 2px 10px;
-                border-left: 1px solid var(--pear-hairline);
+                margin-top: var(--pear-space-2);
+                padding: var(--pear-space-3) var(--pear-space-2)
+                    var(--pear-space-2);
+                border-top: 1px solid var(--pear-hairline);
                 color: var(--pear-ink-2);
-                font-family: var(--pear-font-mono);
-                /* stylelint-disable-next-line declaration-property-unit-disallowed-list */
-                font-size: 11px;
-                line-height: 1.45;
-                white-space: pre-wrap;
+                font-family: var(--pear-font-ui);
+                font-size: 13px;
+                line-height: 1.5;
+                box-shadow:
+                    0 -0.2em 0.75em 0 var(--color-left-sidebar-inner-box-shadow),
+                    0 -2.5em 1em 0 var(--color-left-sidebar-middle-box-shadow),
+                    0 -4em 1em 0 var(--color-left-sidebar-outer-box-shadow);
+                animation: pear-trace-reveal 180ms var(--pear-ease) both;
+
+                > p {
+                    margin-block: 0 var(--pear-space-3);
+                }
             }
 
             .pear-run-trace[hidden] {
@@ -533,7 +556,7 @@
                     overflow: hidden;
                     text-overflow: ellipsis;
                     white-space: nowrap;
-                    font-family: var(--pear-font-mono);
+                    font-family: var(--pear-font-ui);
                     /* 11.5px at the default 14px base font size. */
                     font-size: calc(11.5 / 14 * var(--base-font-size-px));
                     line-height: 1.25;

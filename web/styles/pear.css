@@ -1301,9 +1301,35 @@
     }
 }
 
+@keyframes pear-stream-chunk-in {
+    from {
+        opacity: 0.28;
+        filter: blur(0.35px);
+    }
+
+    to {
+        opacity: 1;
+        filter: blur(0);
+    }
+}
+
+@keyframes pear-trace-reveal {
+    from {
+        opacity: 0;
+        transform: translateY(5px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
 @media (prefers-reduced-motion: reduce) {
     .pear-live-plan-current .pear-live-plan-label,
-    .pear-live-overview {
+    .pear-live-overview,
+    .pear-stream-chunk,
+    .pear-run-trace {
         animation: none;
     }
 

@@ -21,6 +21,7 @@ type PearRunForActiveMessage = {
     live?:
         | {
               operation?: {kind: string; label: string} | null | undefined;
+              has_visible_assistant_text?: boolean | undefined;
           }
         | null
         | undefined;
@@ -45,6 +46,7 @@ export type PearRunLiveView = {
     current_activity?: string | undefined;
     plan?: PearRunPlanStep[] | null | undefined;
     overview?: string | null | undefined;
+    has_visible_assistant_text?: boolean | undefined;
     trace_available?: boolean | undefined;
     tool_count?: number | undefined;
     date_created?: number | undefined;
@@ -261,6 +263,7 @@ export function remember_runs(runs: PearRunForActiveMessage[]): void {
             current_activity: run.current_activity,
             plan: run.plan,
             overview: run.overview,
+            has_visible_assistant_text: run.live?.has_visible_assistant_text,
             trace_available: true,
             tool_count: run.tool_count,
             date_created: run.date_created,
@@ -311,6 +314,7 @@ export function apply_pear_run_event(event: PearRunPushEvent): void {
         current_activity: event.current_activity,
         plan: event.plan ?? previous?.plan,
         overview: event.overview ?? previous?.overview,
+        has_visible_assistant_text: previous?.has_visible_assistant_text,
         trace_available: event.trace_available || previous?.trace_available,
         tool_count: event.tool_count,
         date_created: event.run_date_created,
@@ -353,6 +357,17 @@ export function apply_pear_run_event(event: PearRunPushEvent): void {
     }
     for (const listener of run_state_listeners) {
         listener(view);
+    }
+}
+
+export function mark_message_has_visible_assistant_text(message_id: number): void {
+    const run_id = run_ids_by_result_message.get(message_id);
+    if (run_id === undefined) {
+        return;
+    }
+    const view = run_views_by_id.get(run_id);
+    if (view !== undefined) {
+        view.has_visible_assistant_text = true;
     }
 }
 

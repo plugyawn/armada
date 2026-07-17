@@ -102,6 +102,7 @@ export type PearRunFooter = {
     duration_seconds: number | null;
     total_tokens: number | null;
     tool_count: number;
+    overview: string | null;
 };
 
 const active_result_message_ids = new Set<number>();
@@ -115,6 +116,10 @@ const active_run_topic_listeners = new Set<() => void>();
 // Completed runs' stats, keyed by result message, for the run footer.
 // Cumulative across topic switches because footers are historical facts.
 const settled_run_footers = new Map<number, PearRunFooter>();
+// Overview copy is step-bound and can be cleared when Codex advances its
+// plan. Retain only the last non-empty server-authored line so a settled run
+// can close with useful context without inventing client copy.
+const last_overview_by_run_id = new Map<number, string>();
 const ambient_run_ids_by_result_message = new Map<number, number>();
 // Active runs' start times (seconds), for the live elapsed counter.
 const active_run_started_at = new Map<number, number>();
@@ -150,7 +155,15 @@ function footer_from_run(run: PearRunForActiveMessage): PearRunFooter {
         duration_seconds: run.usage?.duration_seconds ?? null,
         total_tokens: run.usage?.total_tokens ?? null,
         tool_count: run.tool_count ?? 0,
+        overview: last_overview_by_run_id.get(run.id) ?? null,
     };
+}
+
+function remember_overview(run_id: number, overview: string | null | undefined): void {
+    const normalized = overview?.trim() ?? "";
+    if (normalized !== "") {
+        last_overview_by_run_id.set(run_id, normalized);
+    }
 }
 
 function footers_equal(left: PearRunFooter | undefined, right: PearRunFooter): boolean {
@@ -158,7 +171,8 @@ function footers_equal(left: PearRunFooter | undefined, right: PearRunFooter): b
         left?.status === right.status &&
         left.duration_seconds === right.duration_seconds &&
         left.total_tokens === right.total_tokens &&
-        left.tool_count === right.tool_count
+        left.tool_count === right.tool_count &&
+        left.overview === right.overview
     );
 }
 
@@ -350,6 +364,7 @@ export function remember_runs(runs: PearRunForActiveMessage[]): void {
                 ? hydrated_view.live_updated_at
                 : previous?.live_updated_at,
         };
+        remember_overview(run.id, view.overview);
         run_views_by_id.set(run.id, view);
         if (
             typeof previous?.result_message_id === "number" &&
@@ -419,6 +434,7 @@ export function apply_pear_run_event(event: PearRunPushEvent): void {
             duration_seconds: event.duration_seconds ?? previous?.usage?.duration_seconds,
         },
     };
+    remember_overview(event.run_id, event.overview);
     run_views_by_id.set(event.run_id, view);
     const message_id = event.result_message_id;
     if (
@@ -451,6 +467,7 @@ export function apply_pear_run_event(event: PearRunPushEvent): void {
                 duration_seconds: view.usage?.duration_seconds ?? null,
                 total_tokens: view.usage?.total_tokens ?? null,
                 tool_count: event.tool_count,
+                overview: last_overview_by_run_id.get(event.run_id) ?? null,
             });
         }
         replace_active_result_message_ids(active_result_message_union());
@@ -553,6 +570,7 @@ export function clear_for_testing(): void {
     active_result_message_ids.clear();
     active_result_message_ids_by_context.clear();
     settled_run_footers.clear();
+    last_overview_by_run_id.clear();
     ambient_run_ids_by_result_message.clear();
     active_run_started_at.clear();
     active_run_operations.clear();

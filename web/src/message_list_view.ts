@@ -783,6 +783,18 @@ function render_pear_live_progress($row: JQuery): void {
     // a plan or reports visible assistant text. This is an equality check on
     // the dedicated placeholder, not an inference from arbitrary prose.
     const has_server_placeholder = pear_live_source_is_server_placeholder(content);
+    const had_server_placeholder_marker = row.dataset["pearWorkingPlaceholder"] === "true";
+    if (has_server_placeholder) {
+        row.dataset["pearWorkingPlaceholder"] = "true";
+    } else {
+        delete row.dataset["pearWorkingPlaceholder"];
+    }
+    if (had_server_placeholder_marker !== has_server_placeholder) {
+        // The panel owns the one-shot reconciliation budget. Notify it only
+        // when an exact protocol sentinel appears or disappears; animation
+        // frames and arbitrary prose never reset the watchdog.
+        pear_run_state.notify_liveness_markers_changed();
+    }
     if (!run_is_active && !has_server_placeholder) {
         pear_live_announcement_signatures.delete(message_id);
         existing?.remove();
@@ -1199,7 +1211,7 @@ function maybe_render_pear_run_footer($row: JQuery): void {
         return;
     }
     const line = pear_run_footer_line(footer);
-    const signature = `${line.text}|${line.glyph}`;
+    const signature = `${line.text}|${line.glyph}|${footer.overview ?? ""}`;
     if (
         existing instanceof HTMLElement &&
         !existing.classList.contains("pear-run-footer-ticker") &&
@@ -1229,6 +1241,17 @@ function maybe_render_pear_run_footer($row: JQuery): void {
     const run = pear_run_state.get_run_view(message_id);
     if (run?.trace_available === true) {
         append_pear_run_trace_disclosure(footer_element, run.id);
+    }
+    if (footer.overview !== null) {
+        const overview = document.createElementNS("http://www.w3.org/1999/xhtml", "span");
+        overview.setAttribute("class", "pear-run-settled-overview pear-live-overview");
+        overview.setAttribute("data-pear-generated", "true");
+        overview.setAttribute(
+            "aria-label",
+            $t({defaultMessage: "Last activity summary: {overview}"}, {overview: footer.overview}),
+        );
+        overview.textContent = footer.overview;
+        footer_element.append(overview);
     }
     content.append(footer_element);
 }

@@ -22,6 +22,7 @@ type PearRunForActiveMessage = {
         | {
               operation?: {kind: string; label: string} | null | undefined;
               has_visible_assistant_text?: boolean | undefined;
+              updated_at: number;
           }
         | null
         | undefined;
@@ -47,6 +48,7 @@ export type PearRunLiveView = {
     plan?: PearRunPlanStep[] | null | undefined;
     overview?: string | null | undefined;
     has_visible_assistant_text?: boolean | undefined;
+    live_updated_at?: number | undefined;
     trace_available?: boolean | undefined;
     tool_count?: number | undefined;
     date_created?: number | undefined;
@@ -264,6 +266,7 @@ export function remember_runs(runs: PearRunForActiveMessage[]): void {
             plan: run.plan,
             overview: run.overview,
             has_visible_assistant_text: run.live?.has_visible_assistant_text,
+            live_updated_at: run.live?.updated_at,
             trace_available: true,
             tool_count: run.tool_count,
             date_created: run.date_created,
@@ -271,11 +274,27 @@ export function remember_runs(runs: PearRunForActiveMessage[]): void {
             usage: run.usage,
         };
         const previous = run_views_by_id.get(run.id);
-        const view =
+        const base_view =
             previous?.updated_at !== undefined &&
             previous.updated_at > (hydrated_view.updated_at ?? Number.NEGATIVE_INFINITY)
                 ? previous
                 : hydrated_view;
+        const hydrated_live_is_newer =
+            hydrated_view.live_updated_at !== undefined &&
+            hydrated_view.live_updated_at >=
+                (previous?.live_updated_at ?? Number.NEGATIVE_INFINITY);
+        // Volatile worker state and durable run events have independent
+        // clocks.  A newer push must not prevent the next authoritative live
+        // snapshot from revealing the first real assistant text.
+        const view: PearRunLiveView = {
+            ...base_view,
+            has_visible_assistant_text: hydrated_live_is_newer
+                ? hydrated_view.has_visible_assistant_text
+                : previous?.has_visible_assistant_text,
+            live_updated_at: hydrated_live_is_newer
+                ? hydrated_view.live_updated_at
+                : previous?.live_updated_at,
+        };
         run_views_by_id.set(run.id, view);
         if (
             typeof previous?.result_message_id === "number" &&
@@ -357,17 +376,6 @@ export function apply_pear_run_event(event: PearRunPushEvent): void {
     }
     for (const listener of run_state_listeners) {
         listener(view);
-    }
-}
-
-export function mark_message_has_visible_assistant_text(message_id: number): void {
-    const run_id = run_ids_by_result_message.get(message_id);
-    if (run_id === undefined) {
-        return;
-    }
-    const view = run_views_by_id.get(run_id);
-    if (view !== undefined) {
-        view.has_visible_assistant_text = true;
     }
 }
 

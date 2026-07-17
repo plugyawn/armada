@@ -286,6 +286,19 @@
                 -webkit-font-smoothing: none;
             }
 
+            .pear-live-progress-planless {
+                min-height: 24px;
+                padding-block: 3px 5px;
+                /* stylelint-disable-next-line declaration-property-unit-disallowed-list */
+                font-size: 13px;
+
+                .pear-live-plan-step {
+                    grid-template-columns: 16px minmax(0, 1fr);
+                    min-height: 22px;
+                    align-items: center;
+                }
+            }
+
             .pear-live-plan-step {
                 display: grid;
                 grid-template-columns: 14px minmax(0, 1fr);

@@ -95,6 +95,12 @@ run_test("pear_run_footer_line", () => {
     assert.equal(bare.failed, true);
 });
 
+run_test("pear live placeholder waits for typed assistant text", () => {
+    assert.equal(message_list_view.pear_live_is_placeholder_for_testing(undefined), true);
+    assert.equal(message_list_view.pear_live_is_placeholder_for_testing(false), true);
+    assert.equal(message_list_view.pear_live_is_placeholder_for_testing(true), false);
+});
+
 test("msg_edited_and_moved_vars", () => {
     // This is a test to verify that when the stream or topic is changed
     // (and the content is not), the message says "MOVED" rather than "EDITED."

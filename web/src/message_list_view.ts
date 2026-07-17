@@ -629,6 +629,12 @@ function pear_morph_content(old_content: HTMLElement, new_content: HTMLElement):
     return adopted;
 }
 
+export function pear_live_is_placeholder_for_testing(
+    has_visible_assistant_text: boolean | undefined,
+): boolean {
+    return has_visible_assistant_text !== true;
+}
+
 function render_pear_live_progress($row: JQuery): void {
     const row = $row[0];
     if (!(row instanceof HTMLElement)) {
@@ -650,7 +656,11 @@ function render_pear_live_progress($row: JQuery): void {
         return;
     }
 
-    const is_placeholder = run.has_visible_assistant_text === false;
+    // This flag comes from the worker's typed live state.  An absent value is
+    // still the pre-prose state: message edits include the worker's own
+    // placeholder update and are therefore not evidence that Codex has
+    // emitted user-visible text.
+    const is_placeholder = pear_live_is_placeholder_for_testing(run.has_visible_assistant_text);
     content.classList.toggle("pear-live-placeholder", is_placeholder);
 
     const progress = document.createElementNS("http://www.w3.org/1999/xhtml", "section");
@@ -658,6 +668,7 @@ function render_pear_live_progress($row: JQuery): void {
     progress.setAttribute("aria-label", $t({defaultMessage: "Pear work in progress"}));
     const plan = run.plan ?? [];
     if (plan.length === 0) {
+        progress.classList.add("pear-live-progress-planless");
         const working = document.createElementNS("http://www.w3.org/1999/xhtml", "div");
         working.setAttribute("class", "pear-live-plan-step pear-live-plan-current");
         const glyph = document.createElementNS("http://www.w3.org/1999/xhtml", "span");
@@ -2888,13 +2899,6 @@ export class MessageListView {
         const $rendered_msg = $(this._get_message_template(message_container));
         if (message_content_edited && !message_container.is_pear_message) {
             $rendered_msg.addClass("fade-in-message");
-        }
-        if (
-            message_content_edited &&
-            message_container.is_pear_message &&
-            message_container.is_pear_active_message
-        ) {
-            pear_run_state.mark_message_has_visible_assistant_text(message_container.msg.id);
         }
         if (message_container.is_pear_message && $row.length === 1) {
             // Streaming ticks arrive every second or two; replacing the

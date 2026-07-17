@@ -68,12 +68,18 @@ class PearPresentationTest(ZulipTestCase):
             events=events,  # type: ignore[arg-type]
         )
 
-        self.assertIn("Reading four files", input_text)
-        self.assertIn("I’m comparing the two edits.", input_text)
+        presentation_input = json.loads(input_text)
+        self.assertEqual(
+            presentation_input["recent_events"],
+            [
+                {"kind": "command", "text": "Reading four files"},
+                {"kind": "assistant_update", "text": "I’m comparing the two edits."},
+            ],
+        )
         self.assertNotIn("hidden", input_text)
         self.assertNotIn("raw", input_text)
         self.assertLessEqual(len(input_text), 3000)
-        self.assertEqual(json.loads(input_text)["current_step"], "Inspect")
+        self.assertEqual(presentation_input["current_step"], "Inspect")
         self.assertEqual(
             parse_pear_presentation_output(json.dumps({"overview": "  Waiting   for tests.\n"})),
             "Waiting for tests",
@@ -87,6 +93,14 @@ class PearPresentationTest(ZulipTestCase):
         )
         self.assertLessEqual(len(clipped), PEAR_PRESENTATION_OVERVIEW_MAX_CHARS)
         self.assertTrue(clipped.endswith("…"))
+        self.assertEqual(
+            parse_pear_presentation_output(
+                json.dumps(
+                    {"overview": "Counting tracked TypeScript files and comparing their totals"}
+                )
+            ),
+            "Counting tracked TypeScript files and comparing…",
+        )
 
     def test_presentation_queue_is_attended_and_cadence_gated(self) -> None:
         self.assertEqual(PEAR_PRESENTATION_CADENCE_SECONDS, 5)
@@ -127,6 +141,15 @@ class PearPresentationTest(ZulipTestCase):
 
         with patch("zerver.worker.pear_presentation.send_pear_run_event") as send_event:
             worker.consume({"run_id": run.id, "source_event_id": source_event.id})
+            presentation_request = worker.client.interact.call_args.kwargs
+            self.assertIn(
+                "Never repeat or paraphrase current_step",
+                presentation_request["system_instruction"],
+            )
+            self.assertEqual(
+                json.loads(presentation_request["input_text"])["recent_events"],
+                [{"kind": "command", "text": "Reading four files"}],
+            )
             repeated_source_event = PearWorkerRunEvent.objects.create(
                 run=run,
                 event_type="transcript",

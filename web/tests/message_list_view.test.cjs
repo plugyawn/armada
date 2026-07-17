@@ -99,12 +99,14 @@ run_test("pear live placeholder waits for typed assistant text", () => {
     assert.equal(message_list_view.pear_live_is_placeholder_for_testing(undefined), true);
     assert.equal(message_list_view.pear_live_is_placeholder_for_testing(false), true);
     assert.equal(message_list_view.pear_live_is_placeholder_for_testing(true), false);
+    assert.equal(message_list_view.pear_live_is_placeholder_for_testing(true, true), true);
 });
 
 run_test("planless progress gives way to typed assistant text", () => {
     assert.equal(message_list_view.pear_live_should_show_progress_for_testing(0, undefined), true);
     assert.equal(message_list_view.pear_live_should_show_progress_for_testing(0, false), true);
     assert.equal(message_list_view.pear_live_should_show_progress_for_testing(0, true), false);
+    assert.equal(message_list_view.pear_live_should_show_progress_for_testing(0, true, true), true);
     assert.equal(message_list_view.pear_live_should_show_progress_for_testing(1, true), true);
 });
 

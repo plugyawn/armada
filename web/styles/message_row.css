@@ -395,6 +395,10 @@
                 }
             }
 
+            .pear-run-settled-overview {
+                flex-basis: 100%;
+            }
+
             &.pear-live-placeholder
                 > :not(.pear-live-progress, .pear-run-footer) {
                 display: none;

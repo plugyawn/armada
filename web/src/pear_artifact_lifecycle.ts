@@ -1,6 +1,73 @@
 export type PearArtifactDensity = "chat" | "wall";
 export type PearArtifactLifecycle = "preparing" | "rendering" | "failed";
 
+type PearArtifactHostCleanup = () => void;
+
+const mounted_artifact_hosts = new Map<HTMLElement, PearArtifactHostCleanup>();
+let disconnect_observer: MutationObserver | undefined;
+
+function host_element(host: JQuery | HTMLElement): HTMLElement | undefined {
+    return host instanceof HTMLElement ? host : host[0];
+}
+
+function stop_disconnect_observer_when_idle(): void {
+    if (mounted_artifact_hosts.size === 0) {
+        disconnect_observer?.disconnect();
+        disconnect_observer = undefined;
+    }
+}
+
+function watch_for_disconnected_hosts(): void {
+    if (
+        disconnect_observer !== undefined ||
+        mounted_artifact_hosts.size === 0 ||
+        typeof MutationObserver === "undefined"
+    ) {
+        return;
+    }
+    disconnect_observer = new MutationObserver(() => {
+        for (const host of mounted_artifact_hosts.keys()) {
+            if (!host.isConnected) {
+                unmount_pear_artifact(host);
+            }
+        }
+    });
+    disconnect_observer.observe(document.documentElement, {childList: true, subtree: true});
+}
+
+export function unmount_pear_artifact(host: JQuery | HTMLElement): void {
+    const element = host_element(host);
+    if (element === undefined) {
+        return;
+    }
+    const cleanup = mounted_artifact_hosts.get(element);
+    mounted_artifact_hosts.delete(element);
+    try {
+        cleanup?.();
+    } finally {
+        element.replaceChildren();
+        stop_disconnect_observer_when_idle();
+    }
+}
+
+export function replace_pear_artifact_host(
+    host: JQuery | HTMLElement,
+    content: HTMLElement,
+    cleanup?: PearArtifactHostCleanup,
+): void {
+    const element = host_element(host);
+    if (element === undefined) {
+        cleanup?.();
+        return;
+    }
+    unmount_pear_artifact(element);
+    element.append(content);
+    if (cleanup !== undefined) {
+        mounted_artifact_hosts.set(element, cleanup);
+        watch_for_disconnected_hosts();
+    }
+}
+
 export function mount_pear_artifact_lifecycle(
     $host: JQuery,
     density: PearArtifactDensity,
@@ -27,6 +94,5 @@ export function mount_pear_artifact_lifecycle(
     text.className = "pear-artifact-lifecycle-label";
     text.textContent = label;
     shell.append(cells, text);
-    $host.empty();
-    $host[0]?.append(shell);
+    replace_pear_artifact_host($host, shell);
 }

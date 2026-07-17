@@ -14,6 +14,8 @@ const dom = new JSDOM("<!doctype html><html><body><div id='host'></div></body></
 const {window} = dom;
 let frame_count = 0;
 let reduced_motion = false;
+let copied_text = "";
+let fullscreen_count = 0;
 const motion_listeners = new Set();
 const motion_query = {
     get matches() {
@@ -78,9 +80,19 @@ for (const [name, value] of Object.entries({
     IntersectionObserver: TestIntersectionObserver,
     ResizeObserver: TestResizeObserver,
     CSS: {escape: (value) => value.replaceAll('"', '\\"')},
+    navigator: {
+        clipboard: {
+            async writeText(value) {
+                copied_text = value;
+            },
+        },
+    },
 })) {
     set_global(name, value);
 }
+window.HTMLElement.prototype.requestFullscreen = async () => {
+    fullscreen_count += 1;
+};
 const $ = jQueryFactory(window);
 mock_jquery($);
 
@@ -210,8 +222,15 @@ run_test("renders bounded KaTeX in artifact prose, captions, and scene labels", 
     assert.equal(rendered.querySelectorAll(".pear-artifact-copy .katex-display").length, 1);
     assert.equal(rendered.querySelectorAll(".pear-artifact-shape-label .katex").length, 1);
     assert.equal(rendered.querySelectorAll(".pear-artifact-media-caption .katex").length, 1);
-    assert.equal(rendered.textContent.includes("$$"), false);
-    assert.equal(rendered.textContent.includes("```"), false);
+    const visible_artifact_text = [
+        ...rendered.querySelectorAll(
+            ".pear-artifact-copy, .pear-artifact-shape-label, .pear-artifact-media-caption",
+        ),
+    ]
+        .map((node) => node.textContent)
+        .join(" ");
+    assert.equal(visible_artifact_text.includes("$$"), false);
+    assert.equal(visible_artifact_text.includes("```"), false);
 
     rendered.querySelector('[aria-label="Next step"]').click();
     assert.equal(
@@ -261,10 +280,15 @@ run_test("renders native semantic nodes without exposing source JSON or adopting
     assert.equal(rendered.dataset.density, "chat");
     assert.equal(rendered.querySelector(".pear-artifact-title").textContent, "Newton's laws");
     assert.equal(rendered.querySelectorAll(".pear-artifact-shape").length, 2);
-    assert.equal(rendered.querySelectorAll(".pear-artifact-action").length, 1);
-    assert.equal(rendered.textContent.includes('"version"'), false);
+    assert.ok(
+        [...rendered.querySelectorAll(".pear-artifact-action")].some(
+            (control) => control.textContent === "Explain",
+        ),
+    );
+    assert.equal(rendered.querySelector(".pear-artifact-raw-json").hidden, true);
     assert.equal(rendered.querySelectorAll("script, iframe, foreignObject").length, 0);
     assert.equal(rendered.querySelectorAll(".pear-artifact-connectors line").length, 1);
+    assert.equal(rendered.querySelector(".pear-artifact-scene").getAttribute("role"), "img");
     assert.equal(graph_column(rendered.querySelector('[data-pear-artifact-node="a"]')), "1");
     assert.equal(graph_column(rendered.querySelector('[data-pear-artifact-node="b"]')), "2");
     assert.equal(
@@ -281,6 +305,54 @@ run_test("renders native semantic nodes without exposing source JSON or adopting
             .dataset.state,
         "selected",
     );
+});
+
+run_test("offers one shared utility surface for copy, media, and raw JSON", async () => {
+    copied_text = "";
+    fullscreen_count = 0;
+    const document = {
+        version: 1,
+        blocks: [
+            {type: "copy", body: "A compact explanation."},
+            {type: "log", label: "Trace", lines: ["one", "two"]},
+            {
+                type: "media",
+                kind: "image",
+                src: "/user_uploads/1/ab/diagram.png",
+                alt: "A diagram.",
+            },
+        ],
+    };
+    const parsed = artifact.parse_pear_artifact(JSON.stringify(document));
+    assert.ok(parsed);
+    const rendered = artifact.render_pear_artifact(parsed, {density: "chat"});
+    assert.equal(rendered.querySelectorAll(".pear-artifact-actions").length, 1);
+
+    const copy_text = rendered.querySelector('[aria-label="Copy text block 1"]');
+    copy_text.click();
+    await Promise.resolve();
+    assert.equal(copied_text, "A compact explanation.");
+    assert.equal(copy_text.textContent, "copied ✓");
+
+    rendered.querySelector('[aria-label="Copy log block 2"]').click();
+    await Promise.resolve();
+    assert.equal(copied_text, "one\ntwo");
+
+    await rendered.querySelector('[aria-label="Expand media 1"]').click();
+    await Promise.resolve();
+    assert.equal(fullscreen_count, 1);
+    assert.equal(
+        rendered.querySelector('[aria-label="Download media 1"]').getAttribute("href"),
+        "/user_uploads/1/ab/diagram.png",
+    );
+
+    const raw_toggle = rendered.querySelector('[aria-label="View raw artifact JSON"]');
+    const raw = rendered.querySelector(".pear-artifact-raw-json");
+    assert.equal(raw.textContent, "");
+    raw_toggle.click();
+    assert.equal(raw.hidden, false);
+    assert.equal(raw_toggle.getAttribute("aria-expanded"), "true");
+    assert.match(raw.textContent, /"version": 1/);
 });
 
 run_test("plays cumulative semantic scene steps with local controls", () => {
@@ -319,12 +391,25 @@ run_test("plays cumulative semantic scene steps with local controls", () => {
         rendered.querySelector(".pear-artifact-scene").getAttribute("aria-describedby"),
         rendered.querySelector(".pear-artifact-step-announcement").id,
     );
+    assert.equal(rendered.querySelector(".pear-artifact-scene").getAttribute("role"), "group");
+    const track = rendered.querySelector(".pear-artifact-step-track");
+    assert.equal(track.getAttribute("role"), "slider");
+    assert.equal(track.getAttribute("aria-valuemin"), "1");
+    assert.equal(track.getAttribute("aria-valuemax"), "2");
+    assert.equal(track.getAttribute("aria-valuenow"), "1");
+    assert.equal(track.getAttribute("aria-valuetext"), "Start at A");
 
     rendered.querySelector('[aria-label="Next step"]').click();
     assert.equal(a.dataset.state, "success");
     assert.equal(b.dataset.state, "running");
     assert.equal(b.textContent, "B  1");
     assert.equal(edge().dataset.state, "selected");
+    assert.equal(status.textContent, "2/2  Relax A to B");
+    assert.equal(track.getAttribute("aria-valuenow"), "2");
+
+    track.dispatchEvent(new window.KeyboardEvent("keydown", {key: "Home", bubbles: true}));
+    assert.equal(status.textContent, "1/2  Start at A");
+    track.dispatchEvent(new window.KeyboardEvent("keydown", {key: "End", bubbles: true}));
     assert.equal(status.textContent, "2/2  Relax A to B");
 
     rendered.querySelector('[aria-label="Previous step"]').click();
@@ -393,10 +478,39 @@ run_test("owns autoplay and connector observers across remounts", () => {
     assert.equal(first.querySelector(".is-play").dataset.playing, "false");
 
     reduced_motion = true;
+    for (const listener of motion_listeners) {
+        listener();
+    }
     const latest_intersection = intersection_observers.at(-1);
     latest_intersection.set_visible(true);
     assert.equal(host.querySelector(".is-play").dataset.playing, "false");
+    assert.equal(host.querySelector(".pear-artifact-step-fill").style.transition, "none");
     reduced_motion = false;
+});
+
+run_test("uses intrinsic minimum geometry when an aspect was not authored", () => {
+    const scene_document = valid_document();
+    delete scene_document.blocks[1].aspect;
+    const parsed_scene = artifact.parse_pear_artifact(JSON.stringify(scene_document));
+    assert.ok(parsed_scene);
+    const rendered_scene = artifact.render_pear_artifact(parsed_scene, {density: "chat"});
+    assert.equal(rendered_scene.querySelector(".pear-artifact-scene").dataset.aspect, undefined);
+
+    const media_document = {
+        version: 1,
+        blocks: [
+            {
+                type: "media",
+                kind: "image",
+                src: "/user_uploads/1/ab/diagram.png",
+                alt: "Diagram without authored dimensions.",
+            },
+        ],
+    };
+    const parsed_media = artifact.parse_pear_artifact(JSON.stringify(media_document));
+    assert.ok(parsed_media);
+    const rendered_media = artifact.render_pear_artifact(parsed_media, {density: "chat"});
+    assert.equal(rendered_media.querySelector(".pear-artifact-media").dataset.aspect, undefined);
 });
 
 run_test("lays out undirected graph branches by topological distance", () => {

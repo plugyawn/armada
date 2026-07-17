@@ -17,7 +17,7 @@ import {$t} from "./i18n.ts";
 import * as narrow_state from "./narrow_state.ts";
 import type {PearArtifactDocument, PearArtifactModule} from "./pear_artifact.ts";
 import {send_pear_artifact_action} from "./pear_artifact_actions.ts";
-import {mount_pear_artifact_lifecycle} from "./pear_artifact_lifecycle.ts";
+import {mount_pear_artifact_lifecycle, unmount_pear_artifact} from "./pear_artifact_lifecycle.ts";
 
 const monitor_schema = z.object({
     id: z.number(),
@@ -52,6 +52,53 @@ let artifact_module: PearArtifactModule | undefined;
 let artifact_module_promise: Promise<PearArtifactModule> | undefined;
 const last_valid_artifacts = new Map<number, PearArtifactDocument>();
 const rendered_versions = new Map<number, number>();
+
+type CachedMonitorArtifact = {
+    version: number;
+    document_value: PearArtifactDocument | undefined;
+};
+
+class PearWallArtifactCache {
+    readonly #entries = new Map<number, CachedMonitorArtifact>();
+
+    resolve(monitor: PearMonitorPayload, module: PearArtifactModule): CachedMonitorArtifact {
+        const cached = this.#entries.get(monitor.id);
+        if (cached?.version === monitor.version) {
+            return cached;
+        }
+        const base_data = monitor.artifact_spec["data"];
+        const raw_document = {
+            ...monitor.artifact_spec,
+            data: {
+                ...(typeof base_data === "object" && base_data !== null && !Array.isArray(base_data)
+                    ? base_data
+                    : {}),
+                ...monitor.data,
+            },
+        };
+        const serialized_document = JSON.stringify(raw_document);
+        const entry = {
+            version: monitor.version,
+            document_value: module.parse_pear_artifact(serialized_document),
+        };
+        this.#entries.set(monitor.id, entry);
+        return entry;
+    }
+
+    retain(monitor_ids: ReadonlySet<number>): void {
+        for (const monitor_id of this.#entries.keys()) {
+            if (!monitor_ids.has(monitor_id)) {
+                this.#entries.delete(monitor_id);
+            }
+        }
+    }
+
+    clear(): void {
+        this.#entries.clear();
+    }
+}
+
+const parsed_artifacts = new PearWallArtifactCache();
 
 function wall_context(): {stream: string; topic: string} | undefined {
     const stream = narrow_state.stream_name();
@@ -141,8 +188,12 @@ async function settle_artifact_module(): Promise<void> {
     }
 }
 
-function mount_monitor_artifact($host: JQuery, document_value: PearArtifactDocument): void {
-    artifact_module?.mount_pear_artifact($host, document_value, {
+function mount_monitor_artifact(
+    $host: JQuery,
+    document_value: PearArtifactDocument,
+    module: PearArtifactModule | undefined = artifact_module,
+): void {
+    module?.mount_pear_artifact($host, document_value, {
         density: "wall",
         onAction(action, button) {
             const target = wall_context();
@@ -165,14 +216,26 @@ function mount_monitor_artifact($host: JQuery, document_value: PearArtifactDocum
     });
 }
 
-function render_artifacts($wall: JQuery): void {
-    const renderable = monitors.filter(
+export function render_artifacts(
+    $wall: JQuery,
+    render_monitors: PearMonitorPayload[] = monitors,
+    module: PearArtifactModule | undefined = artifact_module,
+): void {
+    const monitor_ids = new Set(render_monitors.map((monitor) => monitor.id));
+    parsed_artifacts.retain(monitor_ids);
+    for (const monitor_id of last_valid_artifacts.keys()) {
+        if (!monitor_ids.has(monitor_id)) {
+            last_valid_artifacts.delete(monitor_id);
+            rendered_versions.delete(monitor_id);
+        }
+    }
+    const renderable = render_monitors.filter(
         (monitor) => monitor.status === "live" || monitor.status === "paused",
     );
     if (renderable.length === 0) {
         return;
     }
-    if (artifact_module === undefined) {
+    if (module === undefined) {
         for (const monitor of renderable) {
             const $host = $wall.find(
                 `.pear-wall-block[data-monitor-id="${monitor.id}"] [data-pear-artifact-host]`,
@@ -192,53 +255,45 @@ function render_artifacts($wall: JQuery): void {
         const $host = $wall.find(
             `.pear-wall-block[data-monitor-id="${monitor.id}"] [data-pear-artifact-host]`,
         );
-        const base_data = monitor.artifact_spec["data"];
-        const raw_document = {
-            ...monitor.artifact_spec,
-            data: {
-                ...(typeof base_data === "object" && base_data !== null && !Array.isArray(base_data)
-                    ? base_data
-                    : {}),
-                ...monitor.data,
-            },
-        };
-        const parsed = artifact_module.parse_pear_artifact(JSON.stringify(raw_document));
-        if (parsed === undefined) {
-            const last_valid = last_valid_artifacts.get(monitor.id);
-            if (last_valid !== undefined && $host.children(".pear-artifact").length === 0) {
-                mount_monitor_artifact($host, last_valid);
-            }
-            const existing = $host.children(".pear-artifact")[0];
-            if (last_valid !== undefined && existing !== undefined) {
-                existing.dataset["lifecycle"] = "stale";
-                existing.removeAttribute("aria-busy");
-                existing.setAttribute("aria-label", "Showing the last valid artifact update");
-            } else {
-                mount_pear_artifact_lifecycle($host, "wall", "failed", "artifact update rejected");
-            }
-            continue;
-        }
-        last_valid_artifacts.set(monitor.id, parsed);
-        if (
-            rendered_versions.get(monitor.id) === monitor.version &&
-            $host.children('.pear-artifact[data-lifecycle="ready"]').length > 0
-        ) {
-            continue;
+        const cached = parsed_artifacts.resolve(monitor, module);
+        mount_cached_monitor_artifact($host, monitor, cached.document_value, module);
+    }
+}
+
+function mount_cached_monitor_artifact(
+    $host: JQuery,
+    monitor: PearMonitorPayload,
+    parsed: PearArtifactDocument | undefined,
+    module: PearArtifactModule,
+): void {
+    if (parsed === undefined) {
+        const last_valid = last_valid_artifacts.get(monitor.id);
+        if (last_valid !== undefined && $host.children(".pear-artifact").length === 0) {
+            mount_monitor_artifact($host, last_valid, module);
         }
         const existing = $host.children(".pear-artifact")[0];
-        existing?.setAttribute("data-lifecycle", "updating");
-        existing?.setAttribute("aria-busy", "true");
-        mount_monitor_artifact($host, parsed);
-        $host.attr("data-pear-artifact-version", String(monitor.version));
-        rendered_versions.set(monitor.id, monitor.version);
-    }
-
-    for (const monitor_id of last_valid_artifacts.keys()) {
-        if (!monitors.some((monitor) => monitor.id === monitor_id)) {
-            last_valid_artifacts.delete(monitor_id);
-            rendered_versions.delete(monitor_id);
+        if (last_valid !== undefined && existing !== undefined) {
+            existing.dataset["lifecycle"] = "stale";
+            existing.removeAttribute("aria-busy");
+            existing.setAttribute("aria-label", "Showing the last valid artifact update");
+        } else {
+            mount_pear_artifact_lifecycle($host, "wall", "failed", "artifact update rejected");
         }
+        return;
     }
+    last_valid_artifacts.set(monitor.id, parsed);
+    if (
+        rendered_versions.get(monitor.id) === monitor.version &&
+        $host.children('.pear-artifact[data-lifecycle="ready"]').length > 0
+    ) {
+        return;
+    }
+    const existing = $host.children(".pear-artifact")[0];
+    existing?.setAttribute("data-lifecycle", "updating");
+    existing?.setAttribute("aria-busy", "true");
+    mount_monitor_artifact($host, parsed, module);
+    $host.attr("data-pear-artifact-version", String(monitor.version));
+    rendered_versions.set(monitor.id, monitor.version);
 }
 
 function render(): void {
@@ -248,6 +303,9 @@ function render(): void {
     }
     const context = wall_context();
     if (context === undefined) {
+        for (const host of $wall.find<HTMLElement>("[data-pear-artifact-host]")) {
+            unmount_pear_artifact(host);
+        }
         $wall.attr("hidden", "hidden");
         return;
     }
@@ -265,6 +323,9 @@ function render(): void {
     const input_value = $input.val() ?? "";
     const input_focused = $input.is(":focus");
 
+    for (const host of $wall.find<HTMLElement>("[data-pear-artifact-host]")) {
+        unmount_pear_artifact(host);
+    }
     $wall.html(render_pear_wall(template_context));
 
     render_artifacts($wall);
@@ -311,6 +372,7 @@ export function refresh(): void {
         last_context_key = context_key;
         monitors = [];
         last_valid_artifacts.clear();
+        parsed_artifacts.clear();
         rendered_versions.clear();
         last_render_signature = "";
         render();

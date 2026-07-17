@@ -1,6 +1,7 @@
 import katex from "katex";
 
 import {PEAR_ARTIFACT_SCHEMA} from "./pear_artifact_contract_generated.ts";
+import {replace_pear_artifact_host} from "./pear_artifact_lifecycle.ts";
 
 export const PEAR_ARTIFACT_SUBMESSAGE_TYPE = "pear_artifact";
 
@@ -68,6 +69,18 @@ function has_type(value: unknown, expected: string): boolean {
     }
 }
 
+const compiled_schema_patterns = new WeakMap<JsonSchema, RegExp>();
+
+function schema_pattern(schema: JsonSchema, pattern: string): RegExp {
+    const cached = compiled_schema_patterns.get(schema);
+    if (cached !== undefined) {
+        return cached;
+    }
+    const compiled = new RegExp(pattern, "u");
+    compiled_schema_patterns.set(schema, compiled);
+    return compiled;
+}
+
 function validates(schema: JsonSchema, value: unknown, root: JsonSchema): boolean {
     const reference = schema["$ref"];
     if (typeof reference === "string") {
@@ -112,7 +125,7 @@ function validates(schema: JsonSchema, value: unknown, root: JsonSchema): boolea
         ) {
             return false;
         }
-        if (typeof pattern === "string" && !new RegExp(pattern, "u").test(value)) {
+        if (typeof pattern === "string" && !schema_pattern(schema, pattern).test(value)) {
             return false;
         }
     }
@@ -934,6 +947,7 @@ function position_graph_nodes(
 
 let connector_instance = 0;
 let scene_step_instance = 0;
+let raw_document_instance = 0;
 const artifact_lifecycles = new WeakMap<HTMLElement, AbortController>();
 
 function render_mark(node: JsonObject, data: JsonObject): HTMLElement {
@@ -1027,6 +1041,7 @@ function render_scene_node(
     node: JsonObject,
     data: JsonObject,
     connectors: Connector[],
+    controller: AbortController,
 ): HTMLElement | undefined {
     const repeat = node["repeat"];
     if (is_json_object(repeat)) {
@@ -1039,7 +1054,12 @@ function render_scene_node(
         const template = {...node};
         delete template["repeat"];
         for (const [index, item] of items.slice(0, limit).entries()) {
-            const rendered = render_scene_node(template, {...data, item, index}, connectors);
+            const rendered = render_scene_node(
+                template,
+                {...data, item, index},
+                connectors,
+                controller,
+            );
             if (rendered !== undefined) {
                 rendered.dataset["repeatIndex"] = String(index);
                 repeated.append(rendered);
@@ -1088,13 +1108,17 @@ function render_scene_node(
         const activate = (): void => {
             host.setAttribute("aria-pressed", String(host.getAttribute("aria-pressed") !== "true"));
         };
-        host.addEventListener("click", activate);
-        host.addEventListener("keydown", (event) => {
-            if (event.key === "Enter" || event.key === " ") {
-                event.preventDefault();
-                activate();
-            }
-        });
+        host.addEventListener("click", activate, {signal: controller.signal});
+        host.addEventListener(
+            "keydown",
+            (event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    activate();
+                }
+            },
+            {signal: controller.signal},
+        );
     }
     switch (type) {
         case "group": {
@@ -1109,7 +1133,7 @@ function render_scene_node(
             if (Array.isArray(children)) {
                 for (const child of children) {
                     if (is_json_object(child)) {
-                        const rendered = render_scene_node(child, data, connectors);
+                        const rendered = render_scene_node(child, data, connectors, controller);
                         if (rendered !== undefined) {
                             host.append(rendered);
                         }
@@ -1194,12 +1218,16 @@ function render_scene_node(
                     button.dataset["action"] = action;
                 }
                 button.setAttribute("aria-pressed", String(Boolean(node["value"])));
-                button.addEventListener("click", () => {
-                    button.setAttribute(
-                        "aria-pressed",
-                        String(button.getAttribute("aria-pressed") !== "true"),
-                    );
-                });
+                button.addEventListener(
+                    "click",
+                    () => {
+                        button.setAttribute(
+                            "aria-pressed",
+                            String(button.getAttribute("aria-pressed") !== "true"),
+                        );
+                    },
+                    {signal: controller.signal},
+                );
                 host.append(button);
             } else if (control === "range") {
                 const label_node = element("label", "pear-artifact-control-label", label);
@@ -1223,16 +1251,20 @@ function render_scene_node(
                 if (action !== "") {
                     button.dataset["action"] = action;
                 }
-                button.addEventListener("click", () => {
-                    if (control === "stepper") {
-                        const step = Number(node["step"] ?? 1);
-                        const maximum = Number(node["max"] ?? Infinity);
-                        value = Math.min(maximum, value + step);
-                        button.textContent = render_label();
-                    } else {
-                        button.dataset["activated"] = "true";
-                    }
-                });
+                button.addEventListener(
+                    "click",
+                    () => {
+                        if (control === "stepper") {
+                            const step = Number(node["step"] ?? 1);
+                            const maximum = Number(node["max"] ?? Infinity);
+                            value = Math.min(maximum, value + step);
+                            button.textContent = render_label();
+                        } else {
+                            button.dataset["activated"] = "true";
+                        }
+                    },
+                    {signal: controller.signal},
+                );
                 host.append(button);
             }
 
@@ -1497,6 +1529,12 @@ function mount_scene_steps(
     announcement.setAttribute("aria-atomic", "true");
     scene.setAttribute("aria-describedby", announcement_id);
     const track = element("div", "pear-artifact-step-track");
+    track.tabIndex = 0;
+    track.setAttribute("role", "slider");
+    track.setAttribute("aria-label", "Scene step");
+    track.setAttribute("aria-orientation", "horizontal");
+    track.setAttribute("aria-valuemin", "1");
+    track.setAttribute("aria-valuemax", String(steps.length));
     const fill = element("span", "pear-artifact-step-fill");
     track.append(fill);
     meta.append(status, track, announcement);
@@ -1606,6 +1644,8 @@ function mount_scene_steps(
             "--pear-artifact-step-progress",
             String((current_index + 1) / steps.length),
         );
+        track.setAttribute("aria-valuenow", String(current_index + 1));
+        track.setAttribute("aria-valuetext", step_label);
         previous.disabled = current_index === 0;
         next.disabled = current_index === steps.length - 1;
     };
@@ -1653,28 +1693,50 @@ function mount_scene_steps(
             schedule_next();
         }
     };
-    previous.addEventListener("click", () => {
+    const select_step = (index: number): void => {
         wants_autoplay = false;
         set_playing(false);
-        apply_step(current_index - 1);
+        apply_step(index);
+    };
+    previous.addEventListener("click", () => select_step(current_index - 1), {
+        signal,
     });
-    next.addEventListener("click", () => {
-        wants_autoplay = false;
-        set_playing(false);
-        apply_step(current_index + 1);
-    });
-    play.addEventListener("click", () => {
-        if (playing) {
-            wants_autoplay = false;
-            set_playing(false);
-            return;
-        }
-        if (current_index === steps.length - 1) {
-            apply_step(0);
-        }
-        wants_autoplay = true;
-        set_playing(true, true);
-    });
+    next.addEventListener("click", () => select_step(current_index + 1), {signal});
+    track.addEventListener(
+        "keydown",
+        (event) => {
+            if (event.key === "ArrowLeft" || event.key === "ArrowDown") {
+                event.preventDefault();
+                select_step(current_index - 1);
+            } else if (event.key === "ArrowRight" || event.key === "ArrowUp") {
+                event.preventDefault();
+                select_step(current_index + 1);
+            } else if (event.key === "Home") {
+                event.preventDefault();
+                select_step(0);
+            } else if (event.key === "End") {
+                event.preventDefault();
+                select_step(steps.length - 1);
+            }
+        },
+        {signal},
+    );
+    play.addEventListener(
+        "click",
+        () => {
+            if (playing) {
+                wants_autoplay = false;
+                set_playing(false);
+                return;
+            }
+            if (current_index === steps.length - 1) {
+                apply_step(0);
+            }
+            wants_autoplay = true;
+            set_playing(true, true);
+        },
+        {signal},
+    );
     apply_step(0);
     let visibility_observer: IntersectionObserver | undefined;
     if (typeof IntersectionObserver !== "undefined") {
@@ -1699,12 +1761,21 @@ function mount_scene_steps(
             set_playing(true);
         }
     };
+    const sync_reduced_motion = (): void => {
+        const transition = motion_query?.matches ? "none" : "";
+        fill.style.transition = transition;
+        for (const node of scene.querySelectorAll<HTMLElement>("[data-transition]")) {
+            node.style.transition = transition;
+        }
+    };
     const handle_motion_change = (): void => {
+        sync_reduced_motion();
         if (motion_query?.matches) {
             wants_autoplay = false;
             set_playing(false);
         }
     };
+    sync_reduced_motion();
     document.addEventListener("visibilitychange", handle_visibility_change);
     motion_query?.addEventListener("change", handle_motion_change);
     signal.addEventListener(
@@ -1733,13 +1804,13 @@ function render_scene(
 ): HTMLElement {
     const frame = element("div", "pear-artifact-scene-frame");
     const scene = element("div", "pear-artifact-scene");
-    scene.dataset["aspect"] = scalar_text(block["aspect"] ?? "wide");
-    scene.setAttribute("role", "img");
-    scene.setAttribute("aria-label", scalar_text(block["label"]));
+    if (typeof block["aspect"] === "string") {
+        scene.dataset["aspect"] = block["aspect"];
+    }
     const connectors: Connector[] = [];
     const raw_root = block["root"];
     const root = is_json_object(raw_root)
-        ? render_scene_node(raw_root, data, connectors)
+        ? render_scene_node(raw_root, data, connectors, controller)
         : undefined;
     if (root !== undefined) {
         scene.append(root);
@@ -1761,12 +1832,24 @@ function render_scene(
     if (timeline !== undefined) {
         frame.append(timeline);
     }
+    scene.setAttribute(
+        "role",
+        timeline !== undefined ||
+            scene.querySelector(
+                '[data-interaction]:not([data-interaction="none"]), button, input',
+            ) !== null
+            ? "group"
+            : "img",
+    );
+    scene.setAttribute("aria-label", scalar_text(block["label"]));
     return frame;
 }
 
 function render_media(block: PearArtifactBlock, controller: AbortController): HTMLElement {
     const figure = element("figure", "pear-artifact-media");
-    figure.dataset["aspect"] = scalar_text(block["aspect"] ?? "wide");
+    if (typeof block["aspect"] === "string") {
+        figure.dataset["aspect"] = block["aspect"];
+    }
     figure.dataset["status"] = "loading";
     const frame = element("div", "pear-artifact-media-frame");
     const status = element("div", "pear-artifact-media-status", "Loading visual…");
@@ -1851,15 +1934,22 @@ function render_media(block: PearArtifactBlock, controller: AbortController): HT
         reduced_motion_query?.addEventListener("change", update_playback, {
             signal: controller.signal,
         });
-        const observer = new IntersectionObserver((entries) => {
-            is_visible = entries.some((entry) => entry.isIntersecting);
-            update_playback();
-        });
-        observer.observe(video);
+        const observer =
+            typeof IntersectionObserver === "undefined"
+                ? undefined
+                : new IntersectionObserver((entries) => {
+                      if (!video.isConnected) {
+                          controller.abort();
+                          return;
+                      }
+                      is_visible = entries.some((entry) => entry.isIntersecting);
+                      update_playback();
+                  });
+        observer?.observe(video);
         controller.signal.addEventListener(
             "abort",
             () => {
-                observer.disconnect();
+                observer?.disconnect();
                 video.pause();
             },
             {once: true},
@@ -1981,13 +2071,7 @@ function render_block(
         case "log": {
             host.append(element("div", "pear-artifact-label", scalar_text(block["label"])));
             const pre = element("pre", "pear-artifact-log");
-            const lines = data_value(data, block["bind"]);
-            const rendered_lines = Array.isArray(lines)
-                ? lines
-                : Array.isArray(block["lines"])
-                  ? block["lines"]
-                  : [];
-            pre.textContent = rendered_lines.map((line) => scalar_text(line)).join("\n");
+            pre.textContent = artifact_log_text(block, data);
             host.append(pre);
 
             break;
@@ -2016,6 +2100,128 @@ function render_block(
         host.dataset["state"] = block["state"];
     }
     return host;
+}
+
+function artifact_log_text(block: PearArtifactBlock, data: JsonObject): string {
+    const bound_lines = data_value(data, block["bind"]);
+    const lines = Array.isArray(bound_lines)
+        ? bound_lines
+        : Array.isArray(block["lines"])
+          ? block["lines"]
+          : [];
+    return lines.map((line) => scalar_text(line)).join("\n");
+}
+
+function utility_button(
+    label: string,
+    aria_label: string,
+    controller: AbortController,
+    action: (button: HTMLButtonElement) => void | Promise<void>,
+): HTMLButtonElement {
+    const button = element("button", "pear-artifact-action", label);
+    button.type = "button";
+    button.setAttribute("aria-label", aria_label);
+    button.addEventListener(
+        "click",
+        () => {
+            void (async () => {
+                try {
+                    await action(button);
+                } catch {
+                    button.textContent = "unavailable";
+                }
+            })();
+        },
+        {signal: controller.signal},
+    );
+    return button;
+}
+
+async function copy_artifact_text(text: string, button: HTMLButtonElement): Promise<void> {
+    try {
+        await navigator.clipboard.writeText(text);
+        button.textContent = "copied ✓";
+    } catch {
+        button.textContent = "copy unavailable";
+    }
+}
+
+function render_artifact_utilities(
+    article: HTMLElement,
+    body: HTMLElement,
+    document_value: PearArtifactDocument,
+    data: JsonObject,
+    controller: AbortController,
+): HTMLElement[] {
+    const controls: HTMLElement[] = [];
+    for (const [index, block] of document_value.blocks.entries()) {
+        if (block.type !== "copy" && block.type !== "log") {
+            continue;
+        }
+        const text =
+            block.type === "copy" ? scalar_text(block["body"]) : artifact_log_text(block, data);
+        const kind = block.type === "copy" ? "text" : "log";
+        controls.push(
+            utility_button("copy", `Copy ${kind} block ${index + 1}`, controller, (button) =>
+                copy_artifact_text(text, button),
+            ),
+        );
+    }
+
+    const media_blocks = document_value.blocks.filter((block) => block.type === "media");
+    const media_hosts = article.querySelectorAll<HTMLElement>(".pear-artifact-media");
+    for (const [index, block] of media_blocks.entries()) {
+        const media_host = media_hosts[index];
+        const media_frame = media_host?.querySelector<HTMLElement>(".pear-artifact-media-frame");
+        if (media_frame?.requestFullscreen !== undefined) {
+            controls.push(
+                utility_button("expand", `Expand media ${index + 1}`, controller, async () => {
+                    await media_frame.requestFullscreen();
+                }),
+            );
+        }
+        const download_source = themed_media_value(block, "src");
+        if (download_source !== "") {
+            const download = document.createElement("a");
+            download.className = "pear-artifact-action";
+            download.textContent = "download";
+            download.download = "";
+            download.href = download_source;
+            download.setAttribute("aria-label", `Download media ${index + 1}`);
+            download.addEventListener(
+                "click",
+                () => {
+                    download.href = themed_media_value(block, "src");
+                },
+                {signal: controller.signal},
+            );
+            controls.push(download);
+        }
+    }
+
+    const raw = element("pre", "pear-artifact-log pear-artifact-raw-json");
+    const raw_id = `pear-artifact-raw-${raw_document_instance}`;
+    raw_document_instance += 1;
+    raw.id = raw_id;
+    raw.hidden = true;
+    body.append(raw);
+    const raw_toggle = utility_button(
+        "view raw",
+        "View raw artifact JSON",
+        controller,
+        (button) => {
+            raw.hidden = !raw.hidden;
+            if (!raw.hidden && raw.textContent === "") {
+                raw.textContent = JSON.stringify(document_value, undefined, 2);
+            }
+            button.setAttribute("aria-expanded", String(!raw.hidden));
+            button.textContent = raw.hidden ? "view raw" : "hide raw";
+        },
+    );
+    raw_toggle.setAttribute("aria-controls", raw_id);
+    raw_toggle.setAttribute("aria-expanded", "false");
+    controls.push(raw_toggle);
+    return controls;
 }
 
 function authored_node_count(document_value: PearArtifactDocument): number {
@@ -2064,20 +2270,32 @@ export function render_pear_artifact(
     const data = document_value.data ?? {};
     body.append(...document_value.blocks.map((block) => render_block(block, data, controller)));
     article.append(body);
+    const utility_controls = render_artifact_utilities(
+        article,
+        body,
+        document_value,
+        data,
+        controller,
+    );
     const document_actions = document_value.actions ?? [];
-    if (document_actions.length > 0 || options.onPin) {
+    if (document_actions.length > 0 || options.onPin || utility_controls.length > 0) {
         const actions = element("footer", "pear-artifact-actions");
         for (const action of document_actions) {
             const button = element("button", "pear-artifact-action", action.label);
             button.type = "button";
-            button.addEventListener("click", () => options.onAction?.(action, button));
+            button.addEventListener("click", () => options.onAction?.(action, button), {
+                signal: controller.signal,
+            });
             actions.append(button);
         }
+        actions.append(...utility_controls);
         if (options.onPin) {
             const spacer = element("span", "pear-artifact-action-spacer");
             const pin = element("button", "pear-artifact-pin", "↗ pin to wall");
             pin.type = "button";
-            pin.addEventListener("click", () => options.onPin?.(pin));
+            pin.addEventListener("click", () => options.onPin?.(pin), {
+                signal: controller.signal,
+            });
             actions.append(spacer, pin);
         }
         article.append(actions);
@@ -2097,11 +2315,10 @@ export function mount_pear_artifact(
     options: PearArtifactRenderOptions,
 ): HTMLElement {
     const artifact = render_pear_artifact(document_value, options);
-    for (const previous of $host.children(".pear-artifact")) {
-        artifact_lifecycles.get(previous)?.abort();
-        artifact_lifecycles.delete(previous);
-    }
-    $host.empty();
-    $host[0]?.append(artifact);
+    const controller = artifact_lifecycles.get(artifact);
+    replace_pear_artifact_host($host, artifact, () => {
+        controller?.abort();
+        artifact_lifecycles.delete(artifact);
+    });
     return artifact;
 }

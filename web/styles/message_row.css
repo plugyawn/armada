@@ -294,7 +294,7 @@
                 font-family: var(--pear-font-pixel);
                 font-synthesis: none;
                 /* stylelint-disable-next-line declaration-property-unit-disallowed-list */
-                font-size: 12px;
+                font-size: 13px;
                 line-height: 1.35;
                 -webkit-font-smoothing: none;
             }
@@ -303,7 +303,7 @@
                 min-height: 30px;
                 padding-block: 4px 6px;
                 /* stylelint-disable-next-line declaration-property-unit-disallowed-list */
-                font-size: 16px;
+                font-size: 17px;
 
                 .pear-live-plan-step {
                     grid-template-columns: 20px minmax(0, 1fr);
@@ -381,7 +381,7 @@
                 color: var(--pear-ink-1);
                 font-family: var(--pear-font-pixel);
                 /* stylelint-disable-next-line declaration-property-unit-disallowed-list */
-                font-size: 12px;
+                font-size: 13px;
                 font-weight: 400;
                 line-height: 1.4;
                 text-overflow: ellipsis;

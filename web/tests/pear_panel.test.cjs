@@ -177,6 +177,29 @@ run_test("workspace rail keeps a plan visible before workspace context arrives",
     assert.ok(!html.includes("pear-rail-plan-title"));
 });
 
+run_test("workspace rail uses explicit booleans for numeric message ids", () => {
+    const html = render_pear_workspace_rail({
+        has_workspace: false,
+        has_plan: false,
+        has_runs: true,
+        runs: [
+            {
+                glyph: "✓",
+                failed_class: "",
+                label: "8s",
+                when: "now",
+                has_result_message_id: true,
+                result_message_id: 903,
+            },
+        ],
+        has_overview: false,
+        show_workspace_line: false,
+    });
+
+    assert.ok(html.includes('data-message-id="903"'));
+    assert.ok(!html.includes("pear-panel-open-action"));
+});
+
 run_test("status_marker_for_testing", () => {
     assert.equal(pear_panel.status_marker_for_testing("running"), "·");
     assert.equal(pear_panel.status_marker_for_testing("queued"), "·");

@@ -53,8 +53,21 @@ class PearPresentationTest(ZulipTestCase):
             ),
             SimpleNamespace(
                 event_type="transcript",
+                summary="Old command",
+                payload={"kind": "command", "title": "Reading stale files", "body": "raw"},
+            ),
+            SimpleNamespace(
+                event_type="transcript",
+                summary="Plan updated",
+                payload={
+                    "kind": "plan",
+                    "metadata": {"steps": [{"step": "Inspect", "status": "in_progress"}]},
+                },
+            ),
+            SimpleNamespace(
+                event_type="transcript",
                 summary="Command",
-                payload={"kind": "command", "title": "Reading four files", "body": "raw"},
+                payload={"kind": "command", "title": "Reading four files"},
             ),
             SimpleNamespace(
                 event_type="transcript",
@@ -78,6 +91,7 @@ class PearPresentationTest(ZulipTestCase):
         )
         self.assertNotIn("hidden", input_text)
         self.assertNotIn("raw", input_text)
+        self.assertNotIn("stale", input_text)
         self.assertLessEqual(len(input_text), 3000)
         self.assertEqual(presentation_input["current_step"], "Inspect")
         self.assertEqual(
@@ -161,7 +175,51 @@ class PearPresentationTest(ZulipTestCase):
         presentation = PearWorkerRunEvent.objects.get(run=run, event_type="presentation")
         self.assertEqual(presentation.payload["overview"], "Reading four files")
         self.assertEqual(presentation.payload["source_event_id"], source_event.id)
+        self.assertEqual(presentation.payload["current_step"], "Inspect")
         send_event.assert_called_once_with(run, presentation)
+
+    def test_worker_drops_overview_if_plan_advances_during_request(self) -> None:
+        run = self.create_run()
+        PearWorkerRunEvent.objects.create(
+            run=run,
+            event_type="transcript",
+            summary="Plan updated",
+            payload={
+                "kind": "plan",
+                "metadata": {"steps": [{"step": "Inspect", "status": "in_progress"}]},
+            },
+        )
+        source_event = PearWorkerRunEvent.objects.create(
+            run=run,
+            event_type="transcript",
+            summary="Read files",
+            payload={"kind": "command", "title": "Reading four files"},
+        )
+        mark_pear_run_attended(run.id)
+        worker = object.__new__(PearPresentationWorker)
+        worker.client = Mock()
+        worker.client.api_key = "test-key"
+
+        def advance_plan(**kwargs: object) -> str:
+            PearWorkerRunEvent.objects.create(
+                run=run,
+                event_type="transcript",
+                summary="Plan updated",
+                payload={
+                    "kind": "plan",
+                    "metadata": {"steps": [{"step": "Summarize", "status": "in_progress"}]},
+                },
+            )
+            return '{"overview":"Reading four files."}'
+
+        worker.client.interact.side_effect = advance_plan
+        with patch("zerver.worker.pear_presentation.send_pear_run_event") as send_event:
+            worker.consume({"run_id": run.id, "source_event_id": source_event.id})
+
+        self.assertFalse(
+            PearWorkerRunEvent.objects.filter(run=run, event_type="presentation").exists()
+        )
+        send_event.assert_not_called()
 
     def test_worker_drops_overview_if_run_finishes_during_request(self) -> None:
         run = self.create_run()

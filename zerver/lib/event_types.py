@@ -1311,6 +1311,7 @@ class PearRunEvent(BaseEvent):
     tool_count: int
     plan: list[PearRunPlanStep] | None
     overview: str | None
+    has_visible_assistant_text: bool | None
     usage: PearRunUsage | None
     duration_seconds: float | None
     trace_available: bool

@@ -75,6 +75,7 @@ export type PearRunPushEvent = {
     tool_count: number;
     plan: PearRunPlanStep[] | null;
     overview: string | null;
+    has_visible_assistant_text: boolean | null;
     usage: {
         input_tokens?: number | undefined;
         cached_input_tokens?: number | undefined;
@@ -332,8 +333,13 @@ export function apply_pear_run_event(event: PearRunPushEvent): void {
         topic: event.topic,
         current_activity: event.current_activity,
         plan: event.plan ?? previous?.plan,
-        overview: event.overview ?? previous?.overview,
-        has_visible_assistant_text: previous?.has_visible_assistant_text,
+        overview: event.overview ?? (event.plan === null ? previous?.overview : null),
+        has_visible_assistant_text:
+            event.has_visible_assistant_text ?? previous?.has_visible_assistant_text,
+        live_updated_at:
+            event.has_visible_assistant_text === null
+                ? previous?.live_updated_at
+                : event.date_created,
         trace_available: event.trace_available || previous?.trace_available,
         tool_count: event.tool_count,
         date_created: event.run_date_created,

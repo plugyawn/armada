@@ -4809,6 +4809,10 @@ class PearSessionDefaultsTest(TestCase):
                 for event_type, summary in recorded_events
             )
         )
+        self.assertEqual(
+            [event_type for event_type, _summary in recorded_events].count("assistant_visible"),
+            1,
+        )
         live_state = get_pear_live_run_state(trigger_message_id)
         self.assertIsNotNone(live_state)
         assert live_state is not None

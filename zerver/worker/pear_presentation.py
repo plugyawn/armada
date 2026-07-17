@@ -10,6 +10,7 @@ from zerver.actions.pear import send_pear_run_event
 from zerver.lib.pear_agent import PearAgentRuntimeError, PearGeminiInteractionsClient
 from zerver.lib.pear_presentation import (
     build_pear_presentation_input,
+    pear_presentation_current_step,
     pear_presentation_plan,
     request_pear_presentation_overview,
 )
@@ -55,6 +56,7 @@ class PearPresentationWorker(QueueProcessingWorker):
         plan = pear_presentation_plan(run)
         if plan is None:
             return
+        current_step = pear_presentation_current_step(plan)
         previous = run.events.filter(event_type="presentation").order_by("-id").first()
         previous_payload = previous.payload if previous is not None else {}
         previous_source_id = (
@@ -90,10 +92,17 @@ class PearPresentationWorker(QueueProcessingWorker):
                 PearWorkerRun.RUNNING,
             } or not pear_run_is_attended(run.id):
                 return
+            latest_plan = pear_presentation_plan(run)
+            if latest_plan is None or pear_presentation_current_step(latest_plan) != current_step:
+                return
             presentation_event = PearWorkerRunEvent.objects.create(
                 run=run,
                 event_type="presentation",
                 summary=overview,
-                payload={"overview": overview, "source_event_id": source_event_id},
+                payload={
+                    "overview": overview,
+                    "source_event_id": source_event_id,
+                    "current_step": current_step,
+                },
             )
         send_pear_run_event(run, presentation_event)

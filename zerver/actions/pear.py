@@ -81,6 +81,9 @@ def send_pear_run_event(run: PearWorkerRun, run_event: PearWorkerRunEvent) -> No
         "tool_count": run.tool_count,
         "plan": _pear_run_plan(payload),
         "overview": overview if isinstance(overview, str) else None,
+        "has_visible_assistant_text": (
+            True if run_event.event_type == "assistant_visible" else None
+        ),
         "usage": _pear_run_usage(payload),
         "duration_seconds": duration_seconds,
         "trace_available": run_event.event_type

@@ -58,6 +58,7 @@ from zerver.lib.pear_monitor import (
     pear_create_monitor_from_spec,
     serialize_pear_monitor,
 )
+from zerver.lib.pear_presentation import pear_presentation_current_step
 from zerver.lib.pear_worker import (
     PearQueueWorkerDispatcher,
     ensure_pear_child_workspace_node,
@@ -849,7 +850,14 @@ def serialize_pear_worker_run_tool_count(
 def serialize_pear_worker_run_overview(
     run: PearWorkerRun,
     summary_events: list[PearWorkerRunEvent] | None = None,
+    *,
+    plan: list[dict[str, str]] | None = None,
 ) -> str | None:
+    if plan is None:
+        plan = serialize_pear_worker_run_plan(run, summary_events)
+    if plan is None:
+        return None
+    current_step = pear_presentation_current_step(plan)
     events = (
         [event for event in summary_events if event.event_type == "presentation"]
         if summary_events is not None
@@ -858,7 +866,8 @@ def serialize_pear_worker_run_overview(
     for event in events:
         payload = event.payload
         overview = payload.get("overview") if isinstance(payload, dict) else None
-        if isinstance(overview, str) and overview.strip():
+        overview_step = payload.get("current_step") if isinstance(payload, dict) else None
+        if isinstance(overview, str) and overview.strip() and overview_step == current_step:
             return trim_pear_text(" ".join(overview.split()), limit=72)
     return None
 
@@ -869,6 +878,7 @@ def serialize_pear_worker_run(
     include_events: bool = False,
     summary_events: list[PearWorkerRunEvent] | None = None,
 ) -> dict[str, object]:
+    plan = serialize_pear_worker_run_plan(run, summary_events)
     live_state = get_pear_live_run_state(run.trigger_message_id)
     if (
         run.status not in {PearWorkerRun.QUEUED, PearWorkerRun.RUNNING}
@@ -910,8 +920,8 @@ def serialize_pear_worker_run(
         else None,
         "usage": serialize_pear_worker_run_usage(run, summary_events),
         "tool_count": serialize_pear_worker_run_tool_count(run, summary_events),
-        "plan": serialize_pear_worker_run_plan(run, summary_events),
-        "overview": serialize_pear_worker_run_overview(run, summary_events),
+        "plan": plan,
+        "overview": serialize_pear_worker_run_overview(run, summary_events, plan=plan),
         "live": live_state,
     }
     if include_events:

@@ -84,6 +84,7 @@ test("quiet active result message remains active until a terminal event", () => 
         tool_count: 3,
         plan: null,
         overview: null,
+        has_visible_assistant_text: null,
         usage: {total_tokens: 1200},
         duration_seconds: 12.5,
         trace_available: true,
@@ -134,6 +135,7 @@ test("stale hydration cannot overwrite a newer push event", () => {
         tool_count: 1,
         plan: null,
         overview: null,
+        has_visible_assistant_text: null,
         usage: {total_tokens: 100},
         duration_seconds: 2,
         trace_available: true,
@@ -158,7 +160,7 @@ test("stale hydration cannot overwrite a newer push event", () => {
     assert.ok(!pear_run_state.is_active_run_result_message(90));
 });
 
-test("typed live content state is owned by server snapshots", () => {
+test("typed assistant-visible push retires the placeholder immediately", () => {
     pear_run_state.remember_runs([
         {
             id: 12,
@@ -175,21 +177,23 @@ test("typed live content state is owned by server snapshots", () => {
         version: 1,
         sequence: 20,
         run_id: 12,
-        event_type: "transcript",
+        event_type: "assistant_visible",
         status: "running",
         result_message_id: 120,
         stream: "devel",
         topic: "speed",
-        current_activity: "Ran command",
+        current_activity: "Assistant response started",
         tool_count: 1,
         plan: null,
         overview: null,
+        has_visible_assistant_text: true,
         usage: null,
         duration_seconds: null,
         trace_available: true,
         run_date_created: 90,
         date_created: 200,
     });
+    assert.equal(pear_run_state.get_run_view(120).has_visible_assistant_text, true);
 
     pear_run_state.remember_runs([
         {
@@ -198,9 +202,45 @@ test("typed live content state is owned by server snapshots", () => {
             ambient_triggered: false,
             result_message_id: 120,
             date_updated: 150,
-            live: {has_visible_assistant_text: true, updated_at: 2},
+            live: {has_visible_assistant_text: false, updated_at: 199},
         },
     ]);
     assert.equal(pear_run_state.get_run_view(120).has_visible_assistant_text, true);
     assert.equal(pear_run_state.get_run_view(120).updated_at, 200);
+});
+
+test("plan updates clear overview copy from the previous step", () => {
+    pear_run_state.remember_runs([
+        {
+            id: 13,
+            status: "running",
+            ambient_triggered: false,
+            result_message_id: 130,
+            plan: [{step: "Inspect", status: "in_progress"}],
+            overview: "Reading four files",
+            date_updated: 100,
+        },
+    ]);
+    pear_run_state.apply_pear_run_event({
+        version: 1,
+        sequence: 21,
+        run_id: 13,
+        event_type: "transcript",
+        status: "running",
+        result_message_id: 130,
+        stream: "devel",
+        topic: "speed",
+        current_activity: "Plan updated",
+        tool_count: 1,
+        plan: [{step: "Summarize", status: "in_progress"}],
+        overview: null,
+        has_visible_assistant_text: null,
+        usage: null,
+        duration_seconds: null,
+        trace_available: true,
+        run_date_created: 90,
+        date_created: 201,
+    });
+
+    assert.equal(pear_run_state.get_run_view(130).overview, null);
 });

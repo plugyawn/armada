@@ -3120,12 +3120,26 @@ class PearWorkerTurn:
             "tool",
         }
         if event_kind == "assistant":
+            first_visible_flush = not self.assistant_persistent_flush_seen
             if self.update_live_transcript(
                 "running",
                 force=not self.assistant_persistent_flush_seen,
                 flush_interval=PEAR_PERSISTENT_ASSISTANT_FLUSH_INTERVAL_SECONDS,
             ):
                 self.assistant_persistent_flush_seen = True
+                if first_visible_flush:
+                    # Streaming assistant deltas deliberately stay out of the
+                    # durable transcript event log. Emit one typed boundary
+                    # when the first real prose reaches the message so every
+                    # client can retire the initial Working placeholder at
+                    # the same instant, without inspecting rendered words.
+                    self.handler.record_worker_event(
+                        self.bot_handler,
+                        self.message_id,
+                        "assistant_visible",
+                        summary="Assistant response started.",
+                        payload={},
+                    )
         else:
             if sparse_event:
                 self.update_volatile_run_state("running")

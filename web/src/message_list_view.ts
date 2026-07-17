@@ -635,6 +635,13 @@ export function pear_live_is_placeholder_for_testing(
     return has_visible_assistant_text !== true;
 }
 
+export function pear_live_should_show_progress_for_testing(
+    plan_length: number,
+    has_visible_assistant_text: boolean | undefined,
+): boolean {
+    return plan_length > 0 || pear_live_is_placeholder_for_testing(has_visible_assistant_text);
+}
+
 function render_pear_live_progress($row: JQuery): void {
     const row = $row[0];
     if (!(row instanceof HTMLElement)) {
@@ -667,6 +674,15 @@ function render_pear_live_progress($row: JQuery): void {
     progress.setAttribute("class", "pear-live-progress");
     progress.setAttribute("aria-label", $t({defaultMessage: "Pear work in progress"}));
     const plan = run.plan ?? [];
+    if (!pear_live_should_show_progress_for_testing(plan.length, run.has_visible_assistant_text)) {
+        existing?.remove();
+        for (const child of content.children) {
+            if (!child.classList.contains("pear-run-footer")) {
+                child.classList.add("pear-live-thought");
+            }
+        }
+        return;
+    }
     if (plan.length === 0) {
         progress.classList.add("pear-live-progress-planless");
         const working = document.createElementNS("http://www.w3.org/1999/xhtml", "div");

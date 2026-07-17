@@ -430,6 +430,7 @@ class PearSessionDefaultsTest(TestCase):
     def test_build_ack_message(self) -> None:
         ack_message = build_pear_ack_message("debug the flaky parser test")
 
+        self.assertEqual(PEAR_WORKING_MESSAGE, "· Working")
         self.assertEqual(ack_message, PEAR_WORKING_MESSAGE)
         self.assertNotIn("Open the Pear panel", ack_message)
         self.assertNotIn("Confirm repo, branch, and target runtime", ack_message)

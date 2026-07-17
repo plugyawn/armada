@@ -43,7 +43,7 @@ import {
 } from "./pear_live_dom.ts";
 import * as pear_panel from "./pear_panel.ts";
 import * as pear_run_state from "./pear_run_state.ts";
-import {windowed_plan_indices} from "./pear_runtime_shared.ts";
+import {active_plan_presentation} from "./pear_runtime_shared.ts";
 import * as people from "./people.ts";
 import * as popovers from "./popovers.ts";
 import * as reactions from "./reactions.ts";
@@ -663,8 +663,9 @@ function extend_pear_streamed_text(current: HTMLElement, incoming: HTMLElement):
 function pear_morph_content(old_content: HTMLElement, new_content: HTMLElement): HTMLElement[] {
     const footer = old_content.querySelector(":scope > .pear-run-footer");
     const progress = old_content.querySelector(":scope > .pear-live-progress");
+    const trace_reveal = old_content.querySelector(":scope > .pear-run-trace-reveal");
     const old_children = [...old_content.children].filter(
-        (child) => child !== footer && child !== progress,
+        (child) => child !== footer && child !== progress && child !== trace_reveal,
     );
     const new_children = [...new_content.children];
     const adopted: HTMLElement[] = [];
@@ -761,7 +762,8 @@ function pear_live_source_is_server_placeholder(content: HTMLElement): boolean {
         if (
             child instanceof HTMLElement &&
             (child.classList.contains("pear-live-progress") ||
-                child.classList.contains("pear-run-footer"))
+                child.classList.contains("pear-run-footer") ||
+                child.classList.contains("pear-run-trace-reveal"))
         ) {
             continue;
         }
@@ -778,7 +780,7 @@ function append_pear_live_overview(
     if (!overview) {
         return;
     }
-    const element = document.createElementNS("http://www.w3.org/1999/xhtml", "div");
+    const element = document.createElementNS("http://www.w3.org/1999/xhtml", "span");
     element.setAttribute("class", "pear-live-overview");
     element.setAttribute("title", overview);
     element.setAttribute("data-pear-generated", "true");
@@ -825,6 +827,7 @@ function render_pear_live_progress($row: JQuery): void {
     if (!run_is_active && !has_server_placeholder) {
         pear_live_announcement_signatures.delete(message_id);
         existing?.remove();
+        place_existing_pear_run_trace(content);
         content.classList.remove("pear-live-placeholder");
         for (const child of content.querySelectorAll(":scope > .pear-live-thought")) {
             child.classList.remove("pear-live-thought");
@@ -850,6 +853,7 @@ function render_pear_live_progress($row: JQuery): void {
     const progress = document.createElementNS("http://www.w3.org/1999/xhtml", "section");
     progress.setAttribute("class", "pear-live-progress");
     const plan = run?.plan ?? [];
+    const presentation = active_plan_presentation(plan);
     const progress_signature = pear_live_progress_signature(plan, run?.overview);
     progress.setAttribute("data-pear-progress-signature", progress_signature);
     if (
@@ -860,6 +864,7 @@ function render_pear_live_progress($row: JQuery): void {
         )
     ) {
         existing?.remove();
+        place_existing_pear_run_trace(content);
         for (const child of content.children) {
             if (!child.classList.contains("pear-run-footer")) {
                 child.classList.add("pear-live-thought");
@@ -867,7 +872,7 @@ function render_pear_live_progress($row: JQuery): void {
         }
         return;
     }
-    if (plan.length === 0) {
+    if (presentation.kind === "working") {
         mark_pear_live_step_for_announcement(
             progress,
             message_id,
@@ -875,7 +880,7 @@ function render_pear_live_progress($row: JQuery): void {
             $t({defaultMessage: "Pear is working"}),
         );
         progress.classList.add("pear-live-progress-planless");
-        const working = document.createElementNS("http://www.w3.org/1999/xhtml", "div");
+        const working = document.createElementNS("http://www.w3.org/1999/xhtml", "span");
         working.setAttribute("class", "pear-live-plan-step pear-live-plan-current");
         const glyph = document.createElementNS("http://www.w3.org/1999/xhtml", "span");
         glyph.setAttribute("class", "pear-live-plan-glyph pear-thinking-glyph");
@@ -892,25 +897,18 @@ function render_pear_live_progress($row: JQuery): void {
             pear_live_overview_key(message_id, "working", run?.overview ?? ""),
         );
     } else {
-        let current_index = plan.findIndex((step) => step.status === "in_progress");
-        if (current_index === -1) {
-            current_index = plan.findIndex((step) => step.status === "pending");
-        }
-        if (current_index === -1) {
-            current_index = plan.length - 1;
-        }
         mark_pear_live_step_for_announcement(
             progress,
             message_id,
-            `${current_index}:${plan[current_index]!.step}`,
+            presentation.current_key,
             $t(
                 {defaultMessage: "Pear work in progress: {step}"},
-                {step: plan[current_index]!.step},
+                {step: plan[presentation.current_index]!.step},
             ),
         );
-        for (const index of windowed_plan_indices(plan.length, current_index)) {
-            if (index === "ellipsis") {
-                const ellipsis = document.createElementNS("http://www.w3.org/1999/xhtml", "div");
+        for (const row of presentation.rows) {
+            if (row.kind === "ellipsis") {
+                const ellipsis = document.createElementNS("http://www.w3.org/1999/xhtml", "span");
                 ellipsis.setAttribute(
                     "class",
                     "pear-live-plan-step pear-live-plan-context pear-live-plan-ellipsis",
@@ -920,43 +918,47 @@ function render_pear_live_progress($row: JQuery): void {
                 progress.append(ellipsis);
                 continue;
             }
-            const step = plan[index]!;
-            const step_element = document.createElementNS("http://www.w3.org/1999/xhtml", "div");
+            const step_element = document.createElementNS("http://www.w3.org/1999/xhtml", "span");
             step_element.setAttribute(
                 "class",
-                index === current_index
+                row.is_current
                     ? "pear-live-plan-step pear-live-plan-current"
                     : "pear-live-plan-step pear-live-plan-context",
             );
-            if (step.status === "completed") {
+            if (row.status === "completed") {
                 step_element.classList.add("pear-live-plan-completed");
             }
-            if (index === current_index) {
+            if (row.is_current) {
                 step_element.setAttribute("aria-current", "step");
             }
-            const glyph = step.status === "completed" ? "✓" : index === current_index ? "·" : "○";
+            const glyph = row.status === "completed" ? "✓" : row.is_current ? "·" : "○";
             const glyph_element = document.createElementNS("http://www.w3.org/1999/xhtml", "span");
             glyph_element.setAttribute("class", "pear-live-plan-glyph");
-            if (index === current_index) {
+            if (row.is_current && row.status !== "completed") {
                 glyph_element.classList.add("pear-thinking-glyph");
             }
             glyph_element.setAttribute("aria-hidden", "true");
             glyph_element.textContent = glyph;
             const label = document.createElementNS("http://www.w3.org/1999/xhtml", "span");
             label.setAttribute("class", "pear-live-plan-label");
-            label.textContent = step.step;
+            label.textContent = row.step;
             step_element.append(glyph_element, label);
             progress.append(step_element);
-            if (index === current_index) {
+            if (row.is_current) {
                 append_pear_live_overview(
                     progress,
                     run?.overview,
-                    pear_live_overview_key(message_id, step.step, run?.overview ?? ""),
+                    pear_live_overview_key(message_id, row.step, run?.overview ?? ""),
                 );
             }
         }
     }
     if (pear_live_progress_matches(existing, progress_signature)) {
+        if (run?.trace_available === true && existing instanceof HTMLElement) {
+            const trace_state = ensure_pear_run_trace(content, run.id);
+            ensure_pear_live_trace_disclosure(existing, trace_state);
+            existing.after(trace_state.reveal);
+        }
         return;
     }
     if (existing !== null) {
@@ -966,11 +968,17 @@ function render_pear_live_progress($row: JQuery): void {
     if (existing === null) {
         content.prepend(progress);
     }
+    if (run?.trace_available === true) {
+        const trace_state = ensure_pear_run_trace(content, run.id);
+        ensure_pear_live_trace_disclosure(progress, trace_state);
+        progress.after(trace_state.reveal);
+    }
     for (const child of content.children) {
         if (
             child !== progress &&
             !child.classList.contains("pear-live-progress") &&
-            !child.classList.contains("pear-run-footer")
+            !child.classList.contains("pear-run-footer") &&
+            !child.classList.contains("pear-run-trace-reveal")
         ) {
             child.classList.toggle("pear-live-thought", !is_placeholder);
         }
@@ -990,16 +998,86 @@ const pear_trace_response_schema = z.object({
     ),
 });
 
+export function pear_trace_rendered_for_testing(raw_data: unknown): string | undefined {
+    const result = pear_trace_response_schema.safeParse(raw_data);
+    return result.success ? result.data.rendered : undefined;
+}
+
+export function pear_trace_should_load_on_open_for_testing(
+    loaded: boolean,
+    dirty: boolean,
+    failed: boolean,
+): boolean {
+    return !loaded || dirty || failed;
+}
+
+export function pear_trace_event_should_load_for_testing(expanded: boolean): boolean {
+    return expanded;
+}
+
+export function pear_trace_should_follow_tail_for_testing(
+    scroll_height: number,
+    scroll_top: number,
+    client_height: number,
+): boolean {
+    return scroll_height - scroll_top - client_height <= 24;
+}
+
 type PearTraceRequestState = {
     run_id: number;
+    reveal: HTMLElement;
     host: HTMLElement;
-    button: HTMLElement;
+    status: HTMLElement;
     in_flight: boolean;
     dirty: boolean;
+    loaded: boolean;
+    expanded: boolean;
+    follow_tail: boolean;
 };
 
 const pear_trace_request_states = new WeakMap<HTMLElement, PearTraceRequestState>();
+const pear_trace_trigger_controllers = new WeakMap<HTMLElement, AbortController>();
+const pear_trace_surface_controllers = new WeakMap<HTMLElement, AbortController>();
 let next_pear_trace_host_id = 0;
+
+export function pear_trace_trigger_label_for_testing(
+    expanded: boolean,
+    loaded: boolean,
+    request_state: string | undefined,
+): string {
+    if (expanded) {
+        if (request_state === "loading") {
+            return $t({defaultMessage: "Hide work while loading"});
+        }
+        if (request_state === "failed") {
+            return $t({defaultMessage: "Hide failed work"});
+        }
+        return $t({defaultMessage: "Hide work"});
+    }
+    if (request_state === "failed") {
+        return $t({defaultMessage: "Retry loading work"});
+    }
+    return loaded ? $t({defaultMessage: "Show work"}) : $t({defaultMessage: "Load work"});
+}
+
+function update_pear_run_trace_triggers(state: PearTraceRequestState): void {
+    const content = state.reveal.parentElement;
+    if (content === null) {
+        return;
+    }
+    const label = pear_trace_trigger_label_for_testing(
+        state.expanded,
+        state.loaded,
+        state.reveal.dataset["state"],
+    );
+    for (const trigger of content.querySelectorAll<HTMLElement>(
+        `[aria-controls="${state.host.id}"]`,
+    )) {
+        trigger.setAttribute("aria-expanded", String(state.expanded));
+        trigger.setAttribute("aria-label", label);
+        trigger.setAttribute("title", label);
+    }
+}
 
 function load_pear_run_trace(state: PearTraceRequestState): void {
     if (state.in_flight) {
@@ -1008,103 +1086,283 @@ function load_pear_run_trace(state: PearTraceRequestState): void {
     }
     state.in_flight = true;
     state.dirty = false;
-    const {run_id, host, button} = state;
-    const was_near_bottom = host.scrollHeight - host.scrollTop - host.clientHeight < 32;
-    const previous_scroll_top = host.scrollTop;
-    host.setAttribute("aria-busy", "true");
-    button.setAttribute("disabled", "true");
-    button.textContent = $t({defaultMessage: "Loading work…"});
+    const {run_id, reveal, host, status} = state;
+    const first_load = !state.loaded;
+    reveal.setAttribute("aria-busy", "true");
+    reveal.dataset["state"] = "loading";
+    if (first_load) {
+        host.textContent = $t({defaultMessage: "Loading work…"});
+        status.textContent = $t({defaultMessage: "Loading work"});
+    }
+    update_pear_run_trace_triggers(state);
     void channel.get({
         url: `/json/pear/runs/${run_id}/trace`,
         data: {limit: 100},
         success(raw_data) {
-            const {rendered} = pear_trace_response_schema.parse(raw_data);
-            host.replaceChildren(ui_util.parse_html(rendered));
-            host.classList.add("rendered_markdown");
-            rendered_markdown.update_elements($(host));
-            const row = host.closest(".message_row");
-            if (row instanceof HTMLElement) {
-                enhance_pear_tool_rows($(row));
-            }
-            if (was_near_bottom) {
-                host.scrollTop = host.scrollHeight;
-            } else {
-                host.scrollTop = Math.max(
-                    0,
-                    Math.min(previous_scroll_top, host.scrollHeight - host.clientHeight),
-                );
-            }
-            host.hidden = false;
-            host.removeAttribute("aria-busy");
-            button.removeAttribute("disabled");
-            button.setAttribute("aria-expanded", "true");
-            button.textContent = $t({defaultMessage: "Hide work"});
-            button.dataset["loaded"] = "true";
-            state.in_flight = false;
-            if (state.dirty && !host.hidden) {
-                load_pear_run_trace(state);
+            try {
+                const previous_scroll_top = host.scrollTop;
+                const follow_tail = state.follow_tail;
+                const rendered = pear_trace_rendered_for_testing(raw_data);
+                if (rendered === undefined) {
+                    fail_pear_run_trace(state);
+                    return;
+                }
+                host.replaceChildren(ui_util.parse_html(rendered));
+                host.classList.add("rendered_markdown");
+                rendered_markdown.update_elements($(host));
+                const row = host.closest(".message_row");
+                if (row instanceof HTMLElement) {
+                    enhance_pear_tool_rows($(row));
+                }
+                if (follow_tail) {
+                    host.scrollTop = host.scrollHeight;
+                } else {
+                    host.scrollTop = Math.min(
+                        previous_scroll_top,
+                        Math.max(0, host.scrollHeight - host.clientHeight),
+                    );
+                }
+                state.loaded = true;
+                reveal.removeAttribute("aria-busy");
+                reveal.dataset["state"] = "ready";
+                state.in_flight = false;
+                status.textContent = first_load ? $t({defaultMessage: "Work loaded"}) : "";
+                update_pear_run_trace_triggers(state);
+                if (state.dirty && state.expanded) {
+                    load_pear_run_trace(state);
+                }
+            } catch {
+                fail_pear_run_trace(state);
             }
         },
         error() {
-            host.removeAttribute("aria-busy");
-            button.removeAttribute("disabled");
-            button.textContent = $t({defaultMessage: "Retry work"});
-            delete button.dataset["loaded"];
-            state.in_flight = false;
-            if (state.dirty && !host.hidden) {
-                load_pear_run_trace(state);
-            }
+            fail_pear_run_trace(state);
         },
     });
 }
 
-function append_pear_run_trace_disclosure(footer: HTMLElement, run_id: number): void {
+function fail_pear_run_trace(state: PearTraceRequestState): void {
+    state.reveal.removeAttribute("aria-busy");
+    state.reveal.dataset["state"] = "failed";
+    const error = $t({defaultMessage: "Could not load work. Close and reopen to retry."});
+    state.host.textContent = error;
+    state.status.textContent = error;
+    state.loaded = false;
+    state.in_flight = false;
+    state.dirty = false;
+    update_pear_run_trace_triggers(state);
+}
+
+function set_pear_run_trace_expanded(state: PearTraceRequestState, expanded: boolean): void {
+    state.expanded = expanded;
+    state.reveal.dataset["expanded"] = String(expanded);
+    state.reveal.setAttribute("aria-hidden", String(!expanded));
+    state.reveal.toggleAttribute("inert", !expanded);
+    update_pear_run_trace_triggers(state);
+}
+
+function toggle_pear_run_trace(state: PearTraceRequestState): void {
+    if (state.expanded) {
+        set_pear_run_trace_expanded(state, false);
+        return;
+    }
+    set_pear_run_trace_expanded(state, true);
+    if (
+        pear_trace_should_load_on_open_for_testing(
+            state.loaded,
+            state.dirty,
+            state.reveal.dataset["state"] === "failed",
+        )
+    ) {
+        load_pear_run_trace(state);
+    }
+}
+
+function ensure_pear_run_trace(content: HTMLElement, run_id: number): PearTraceRequestState {
+    const existing = content.querySelector<HTMLElement>(
+        `:scope > .pear-run-trace-reveal[data-pear-run-id="${run_id}"]`,
+    );
+    if (existing !== null) {
+        const host = existing.querySelector<HTMLElement>(":scope > .pear-run-trace");
+        if (host !== null) {
+            const state = pear_trace_request_states.get(host);
+            if (state !== undefined) {
+                return state;
+            }
+        }
+    }
+    for (const stale of content.querySelectorAll(":scope > .pear-run-trace-reveal")) {
+        stale.remove();
+    }
+    const reveal = document.createElementNS("http://www.w3.org/1999/xhtml", "div");
+    reveal.setAttribute("class", "pear-run-trace-reveal");
+    reveal.setAttribute("data-pear-run-id", `${run_id}`);
+    reveal.setAttribute("data-expanded", "false");
+    reveal.setAttribute("aria-hidden", "true");
+    reveal.setAttribute("aria-label", $t({defaultMessage: "Pear work trace"}));
+    reveal.setAttribute("role", "region");
+    reveal.setAttribute("inert", "");
+    const trace_status = document.createElementNS("http://www.w3.org/1999/xhtml", "span");
+    trace_status.setAttribute("class", "pear-run-trace-status");
+    trace_status.setAttribute("aria-live", "polite");
+    trace_status.setAttribute("role", "status");
     const trace = document.createElementNS("http://www.w3.org/1999/xhtml", "div");
     trace.setAttribute("class", "pear-run-trace");
     trace.setAttribute("data-pear-run-id", `${run_id}`);
     next_pear_trace_host_id += 1;
     trace.id = `pear-run-trace-${run_id}-${next_pear_trace_host_id}`;
-    trace.hidden = true;
+    reveal.append(trace_status, trace);
+    const state: PearTraceRequestState = {
+        run_id,
+        reveal,
+        host: trace,
+        status: trace_status,
+        in_flight: false,
+        dirty: false,
+        loaded: false,
+        expanded: false,
+        follow_tail: true,
+    };
+    trace.addEventListener("scroll", () => {
+        state.follow_tail = pear_trace_should_follow_tail_for_testing(
+            trace.scrollHeight,
+            trace.scrollTop,
+            trace.clientHeight,
+        );
+    });
+    pear_trace_request_states.set(trace, state);
+    return state;
+}
+
+function wire_pear_run_trace_trigger(trigger: HTMLElement, state: PearTraceRequestState): void {
+    if (
+        trigger.dataset["pearTraceRunId"] === `${state.run_id}` &&
+        trigger.getAttribute("aria-controls") === state.host.id
+    ) {
+        trigger.setAttribute("aria-expanded", String(state.expanded));
+        return;
+    }
+    pear_trace_trigger_controllers.get(trigger)?.abort();
+    const controller = new AbortController();
+    pear_trace_trigger_controllers.set(trigger, controller);
+    trigger.dataset["pearTraceRunId"] = `${state.run_id}`;
+    trigger.classList.add("pear-run-trace-trigger");
+    trigger.setAttribute("aria-controls", state.host.id);
+    trigger.setAttribute("aria-expanded", String(state.expanded));
+    const label = pear_trace_trigger_label_for_testing(
+        state.expanded,
+        state.loaded,
+        state.reveal.dataset["state"],
+    );
+    trigger.setAttribute("aria-label", label);
+    trigger.setAttribute("title", label);
+    trigger.addEventListener(
+        "click",
+        () => {
+            toggle_pear_run_trace(state);
+        },
+        {
+            signal: controller.signal,
+        },
+    );
+}
+
+function append_pear_run_trace_toggle(footer: HTMLElement, state: PearTraceRequestState): void {
     const disclosure = document.createElementNS("http://www.w3.org/1999/xhtml", "button");
     disclosure.setAttribute("class", "pear-run-trace-toggle");
     disclosure.setAttribute("type", "button");
-    disclosure.setAttribute("aria-expanded", "false");
-    disclosure.setAttribute("aria-controls", trace.id);
-    disclosure.textContent = $t({defaultMessage: "Show work"});
-    const state: PearTraceRequestState = {
-        run_id,
-        host: trace,
-        button: disclosure,
-        in_flight: false,
-        dirty: false,
-    };
-    pear_trace_request_states.set(trace, state);
-    disclosure.addEventListener("click", () => {
-        // A live run keeps producing events after the first reveal. Refresh
-        // whenever the user reopens the trace; hiding remains immediate.
-        if (disclosure.dataset["loaded"] !== "true" || trace.hidden) {
-            load_pear_run_trace(state);
-            return;
-        }
-        trace.hidden = true;
-        disclosure.setAttribute("aria-expanded", "false");
-        disclosure.textContent = $t({defaultMessage: "Show work"});
-    });
-    footer.append(trace, disclosure);
+    disclosure.setAttribute("title", $t({defaultMessage: "Show work"}));
+    wire_pear_run_trace_trigger(disclosure, state);
+    footer.append(disclosure);
+}
+
+function ensure_pear_live_trace_disclosure(
+    progress: HTMLElement,
+    state: PearTraceRequestState,
+): void {
+    let disclosure = progress.querySelector<HTMLElement>(":scope > .pear-live-progress-disclosure");
+    if (disclosure === null) {
+        disclosure = document.createElementNS("http://www.w3.org/1999/xhtml", "button");
+        disclosure.setAttribute("class", "pear-live-progress-disclosure");
+        disclosure.setAttribute("type", "button");
+        progress.append(disclosure);
+    }
+    wire_pear_run_trace_trigger(disclosure, state);
+    if (
+        progress.dataset["pearTraceSurfaceRunId"] === `${state.run_id}` &&
+        progress.dataset["pearTraceSurfaceHostId"] === state.host.id
+    ) {
+        return;
+    }
+    pear_trace_surface_controllers.get(progress)?.abort();
+    const controller = new AbortController();
+    pear_trace_surface_controllers.set(progress, controller);
+    progress.dataset["pearTraceSurfaceRunId"] = `${state.run_id}`;
+    progress.dataset["pearTraceSurfaceHostId"] = state.host.id;
+    progress.addEventListener(
+        "click",
+        (event) => {
+            if (event.target === disclosure) {
+                return;
+            }
+            const selection = window.getSelection();
+            if (selection !== null && !selection.isCollapsed) {
+                return;
+            }
+            toggle_pear_run_trace(state);
+        },
+        {signal: controller.signal},
+    );
+}
+
+function remove_pear_run_trace(content: HTMLElement): void {
+    for (const reveal of content.querySelectorAll(":scope > .pear-run-trace-reveal")) {
+        reveal.remove();
+    }
+}
+
+function place_pear_run_trace(content: HTMLElement, state: PearTraceRequestState): void {
+    const progress = content.querySelector<HTMLElement>(":scope > .pear-live-progress");
+    if (progress !== null) {
+        progress.after(state.reveal);
+        return;
+    }
+    const footer = content.querySelector<HTMLElement>(":scope > .pear-run-footer");
+    if (footer !== null) {
+        footer.before(state.reveal);
+        return;
+    }
+    content.append(state.reveal);
+}
+
+function place_existing_pear_run_trace(content: HTMLElement): void {
+    const trace = content.querySelector<HTMLElement>(
+        ":scope > .pear-run-trace-reveal > .pear-run-trace",
+    );
+    if (trace === null) {
+        return;
+    }
+    const state = pear_trace_request_states.get(trace);
+    if (state !== undefined) {
+        place_pear_run_trace(content, state);
+    }
 }
 
 function refresh_open_pear_run_traces(run_id: number): void {
-    const traces = document.querySelectorAll<HTMLElement>(
-        `.pear-run-trace[data-pear-run-id="${run_id}"]`,
+    const reveals = document.querySelectorAll<HTMLElement>(
+        `.pear-run-trace-reveal[data-pear-run-id="${run_id}"]`,
     );
-    for (const trace of traces) {
-        if (trace.hidden) {
+    for (const reveal of reveals) {
+        const trace = reveal.querySelector<HTMLElement>(":scope > .pear-run-trace");
+        if (trace === null) {
             continue;
         }
         const state = pear_trace_request_states.get(trace);
         if (state !== undefined) {
             state.dirty = true;
-            load_pear_run_trace(state);
+            if (pear_trace_event_should_load_for_testing(state.expanded)) {
+                load_pear_run_trace(state);
+            }
         }
     }
 }
@@ -1188,6 +1446,9 @@ function maybe_render_pear_run_footer($row: JQuery): void {
             }
             return;
         }
+        if (!trace_available) {
+            remove_pear_run_trace(content);
+        }
         existing?.remove();
         const ticker = document.createElementNS("http://www.w3.org/1999/xhtml", "div");
         ticker.setAttribute("class", "pear-run-footer pear-run-footer-ticker");
@@ -1218,9 +1479,14 @@ function maybe_render_pear_run_footer($row: JQuery): void {
         }
         ticker.append(elapsed);
         if (trace_available && run !== undefined) {
-            append_pear_run_trace_disclosure(ticker, run.id);
+            const trace_state = ensure_pear_run_trace(content, run.id);
+            append_pear_run_trace_toggle(ticker, trace_state);
         }
         content.append(ticker);
+        if (trace_available && run !== undefined) {
+            const trace_state = ensure_pear_run_trace(content, run.id);
+            place_pear_run_trace(content, trace_state);
+        }
         update_pear_run_elapsed_labels();
         ensure_pear_run_elapsed_timer();
         return;
@@ -1228,10 +1494,12 @@ function maybe_render_pear_run_footer($row: JQuery): void {
     const footer = pear_run_state.get_run_footer(message_id);
     if (footer === undefined) {
         existing?.remove();
+        remove_pear_run_trace(content);
         return;
     }
     const line = pear_run_footer_line(footer);
-    const signature = `${line.text}|${line.glyph}|${footer.overview ?? ""}`;
+    const run = pear_run_state.get_run_view(message_id);
+    const signature = `${line.text}|${line.glyph}|${footer.overview ?? ""}|${run?.trace_available === true ? run.id : ""}`;
     if (
         existing instanceof HTMLElement &&
         !existing.classList.contains("pear-run-footer-ticker") &&
@@ -1258,9 +1526,11 @@ function maybe_render_pear_run_footer($row: JQuery): void {
     );
     status.textContent = line.glyph;
     footer_element.append(status);
-    const run = pear_run_state.get_run_view(message_id);
     if (run?.trace_available === true) {
-        append_pear_run_trace_disclosure(footer_element, run.id);
+        const trace_state = ensure_pear_run_trace(content, run.id);
+        append_pear_run_trace_toggle(footer_element, trace_state);
+    } else {
+        remove_pear_run_trace(content);
     }
     if (footer.overview !== null) {
         const overview = document.createElementNS("http://www.w3.org/1999/xhtml", "span");
@@ -1274,6 +1544,10 @@ function maybe_render_pear_run_footer($row: JQuery): void {
         footer_element.append(overview);
     }
     content.append(footer_element);
+    if (run?.trace_available === true) {
+        const trace_state = ensure_pear_run_trace(content, run.id);
+        place_pear_run_trace(content, trace_state);
+    }
 }
 
 if (typeof document !== "undefined" && typeof document.addEventListener === "function") {

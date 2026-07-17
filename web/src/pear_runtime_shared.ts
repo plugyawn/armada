@@ -1,7 +1,6 @@
-// Helpers shared by pear_panel.ts and pear_runtime_menu.ts. Both modules
-// render the same runtime facts (model, reasoning effort, topic context
-// keys); these previously existed as byte-identical copies in each file
-// and drifted independently.
+// Deterministic presentation helpers shared by Pear runtime surfaces. Keep
+// model options, topic keys, and Codex plan projection here so chat, the rail,
+// and the runtime menu do not grow parallel interpretations of the same state.
 
 export type PearReasoningEffortOption = {
     effort: string;
@@ -79,4 +78,78 @@ export function windowed_plan_indices(length: number, current_index: number): Pe
         result.push("ellipsis");
     }
     return result;
+}
+
+export type PearPlanSourceStep = {
+    step: string;
+    status: string;
+};
+
+export type PearActivePlanRow =
+    | {
+          kind: "ellipsis";
+      }
+    | {
+          kind: "step";
+          index: number;
+          step: string;
+          status: "completed" | "current" | "pending";
+          is_current: boolean;
+      };
+
+export type PearActivePlanPresentation =
+    | {
+          kind: "working";
+          current_key: "working";
+          rows: [];
+      }
+    | {
+          kind: "plan";
+          current_key: string;
+          current_index: number;
+          rows: PearActivePlanRow[];
+      };
+
+// Codex owns the plan and its statuses. This helper only projects a bounded,
+// deterministic window for the two places that display that plan; it never
+// generates, renames, or summarizes a step.
+export function active_plan_presentation(
+    plan: readonly PearPlanSourceStep[],
+): PearActivePlanPresentation {
+    if (plan.length === 0) {
+        return {kind: "working", current_key: "working", rows: []};
+    }
+    let current_index = plan.findIndex((step) => step.status === "in_progress");
+    if (current_index === -1) {
+        current_index = plan.findIndex((step) => step.status === "pending");
+    }
+    if (current_index === -1) {
+        current_index = plan.length - 1;
+    }
+    const rows: PearActivePlanRow[] = windowed_plan_indices(plan.length, current_index).map(
+        (index) => {
+            if (index === "ellipsis") {
+                return {kind: "ellipsis"};
+            }
+            const source = plan[index]!;
+            const is_completed = source.status === "completed" || source.status === "done";
+            return {
+                kind: "step",
+                index,
+                step: source.step,
+                status: is_completed
+                    ? "completed"
+                    : index === current_index
+                      ? "current"
+                      : "pending",
+                is_current: index === current_index,
+            };
+        },
+    );
+    return {
+        kind: "plan",
+        current_key: `${current_index}:${plan[current_index]!.step}`,
+        current_index,
+        rows,
+    };
 }

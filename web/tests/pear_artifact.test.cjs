@@ -284,11 +284,11 @@ run_test("renders native semantic nodes without exposing source JSON or adopting
     assert.equal(rendered.dataset.density, "chat");
     assert.equal(rendered.querySelector(".pear-artifact-title").textContent, "Newton's laws");
     assert.equal(rendered.querySelectorAll(".pear-artifact-shape").length, 2);
-    assert.ok(
-        [...rendered.querySelectorAll(".pear-artifact-action")].some(
-            (control) => control.textContent === "Explain",
-        ),
+    const authored_action = [...rendered.querySelectorAll(".pear-artifact-action")].find(
+        (control) => control.textContent === "Explain",
     );
+    assert.ok(authored_action);
+    assert.equal(authored_action.classList.contains("pear-artifact-utility"), false);
     assert.equal(rendered.querySelector(".pear-artifact-raw-json").hidden, true);
     assert.equal(rendered.querySelectorAll("script, iframe, foreignObject").length, 0);
     assert.equal(rendered.querySelectorAll(".pear-artifact-connectors line").length, 1);
@@ -331,6 +331,7 @@ run_test("offers one shared utility surface for copy, media, and raw JSON", asyn
     assert.ok(parsed);
     const rendered = artifact.render_pear_artifact(parsed, {density: "chat"});
     assert.equal(rendered.querySelectorAll(".pear-artifact-actions").length, 1);
+    assert.equal(rendered.querySelectorAll(".pear-artifact-utility").length, 5);
 
     const copy_text = rendered.querySelector('[aria-label="Copy text block 1"]');
     copy_text.click();

@@ -1,6 +1,7 @@
 import $ from "jquery";
 
 import * as compose_actions from "./compose_actions.ts";
+import * as compose_recipient from "./compose_recipient.ts";
 import * as compose_state from "./compose_state.ts";
 import * as compose_ui from "./compose_ui.ts";
 import * as compose_validate from "./compose_validate.ts";
@@ -47,6 +48,10 @@ export function is_followup_enabled(): boolean {
 export function clear(): void {
     followup_enabled = false;
     update_controls();
+    // Pear mode owns the placeholder only while enabled. Hand it back to the
+    // canonical compose recipient logic immediately on exit instead of
+    // leaving "Ask Pear in this topic" behind until the next recipient edit.
+    compose_recipient.update_compose_area_placeholder_text();
 }
 
 export function enable(): void {

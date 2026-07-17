@@ -34,8 +34,10 @@ import type {MessageViewportInfo} from "./message_viewport.ts";
 import * as muted_users from "./muted_users.ts";
 import * as narrow_state from "./narrow_state.ts";
 import {page_params} from "./page_params.ts";
+import {unmount_pear_artifact} from "./pear_artifact_lifecycle.ts";
 import * as pear_panel from "./pear_panel.ts";
 import * as pear_run_state from "./pear_run_state.ts";
+import {windowed_plan_indices} from "./pear_runtime_shared.ts";
 import * as people from "./people.ts";
 import * as popovers from "./popovers.ts";
 import * as reactions from "./reactions.ts";
@@ -143,6 +145,16 @@ type RenderingPlan = {
     rerender_groups: MessageGroup[];
     append_messages: MessageContainer[];
 };
+
+function unmount_pear_artifacts_in(root: JQuery | HTMLElement): void {
+    const element = root instanceof HTMLElement ? root : root[0];
+    if (element === undefined) {
+        return;
+    }
+    for (const host of element.querySelectorAll<HTMLElement>("[data-pear-artifact-host]")) {
+        unmount_pear_artifact(host);
+    }
+}
 
 const pear_thinking_glyphs = [
     "·",
@@ -437,13 +449,63 @@ function enhance_pear_tool_rows($row: JQuery): void {
     });
 }
 
-function mark_pear_thinking_markers($scope: JQuery<HTMLElement | Document>): Set<Element> {
+let pear_thinking_marker_observer: IntersectionObserver | undefined;
+let active_pear_thinking_markers = new Set<Element>();
+const observed_pear_thinking_markers = new Set<Element>();
+
+function set_pear_thinking_marker_animated(marker: Element, animated: boolean): void {
+    marker.classList.toggle("pear-thinking-glyph-animated", animated);
+    if (animated) {
+        marker.textContent = "";
+    } else {
+        marker.textContent = PEAR_ACTIVE_VISIBLE_GLYPH;
+    }
+}
+
+export function pear_thinking_glyph_should_animate_for_testing(options: {
+    active: boolean;
+    intersecting: boolean;
+    observer_supported: boolean;
+}): boolean {
+    return options.active && (!options.observer_supported || options.intersecting);
+}
+
+function ensure_pear_thinking_marker_observer(): IntersectionObserver | undefined {
+    if (pear_thinking_marker_observer !== undefined) {
+        return pear_thinking_marker_observer;
+    }
+    if (typeof IntersectionObserver === "undefined") {
+        return undefined;
+    }
+    pear_thinking_marker_observer = new IntersectionObserver((entries) => {
+        for (const entry of entries) {
+            set_pear_thinking_marker_animated(
+                entry.target,
+                pear_thinking_glyph_should_animate_for_testing({
+                    active: active_pear_thinking_markers.has(entry.target),
+                    intersecting: entry.isIntersecting,
+                    observer_supported: true,
+                }),
+            );
+        }
+    });
+    return pear_thinking_marker_observer;
+}
+
+function mark_pear_thinking_markers(
+    $scope: JQuery<HTMLElement | Document>,
+    options: {observe_visibility?: boolean} = {},
+): Set<Element> {
     const active_markers = new Set<Element>();
+    const observer =
+        options.observe_visibility === false ? undefined : ensure_pear_thinking_marker_observer();
     pear_thinking_markers($scope).each((_index, marker) => {
         active_markers.add(marker);
-        if (!marker.classList.contains("pear-thinking-glyph-animated")) {
-            marker.textContent = "";
-            marker.classList.add("pear-thinking-glyph-animated");
+        if (observer === undefined) {
+            set_pear_thinking_marker_animated(marker, true);
+        } else {
+            observer.observe(marker);
+            observed_pear_thinking_markers.add(marker);
         }
     });
     return active_markers;
@@ -456,15 +518,22 @@ function update_pear_thinking_glyphs(): void {
     // not doubled next to a static glyph. Typed terminal events own
     // deactivation; there is no client-side liveness timeout.
     const active_markers = mark_pear_thinking_markers($(document));
-    // Markers that stopped matching (their row or container is no longer
-    // active) return to the resting glyph instead of a frozen mid-cycle frame.
-    $(".pear-thinking-glyph-animated").each((_index, marker) => {
+    active_pear_thinking_markers = active_markers;
+    // Markers that stopped matching (including inactive markers which were
+    // offscreen and therefore never received the animated class) return to
+    // the resting glyph and leave the observer entirely.
+    for (const marker of observed_pear_thinking_markers) {
         if (active_markers.has(marker)) {
-            return;
+            continue;
         }
-        marker.classList.remove("pear-thinking-glyph-animated");
-        marker.textContent = PEAR_ACTIVE_VISIBLE_GLYPH;
-    });
+        pear_thinking_marker_observer?.unobserve(marker);
+        observed_pear_thinking_markers.delete(marker);
+        set_pear_thinking_marker_animated(marker, false);
+    }
+    if (observed_pear_thinking_markers.size === 0) {
+        pear_thinking_marker_observer?.disconnect();
+        pear_thinking_marker_observer = undefined;
+    }
 }
 
 function maybe_render_pear_thinking_glyph($row: JQuery): void {
@@ -474,7 +543,7 @@ function maybe_render_pear_thinking_glyph($row: JQuery): void {
     // _rerender_message post-processes the freshly built row while it is
     // still detached from the document. Mark its tool glyphs locally; the
     // document-wide sweep still owns deactivation.
-    mark_pear_thinking_markers($row);
+    mark_pear_thinking_markers($row, {observe_visibility: false});
 }
 
 function pear_run_footer_duration_label(duration_seconds: number): string {
@@ -654,6 +723,32 @@ export function pear_live_is_server_placeholder_for_testing(source_text: string)
     return source_text.trim() === PEAR_WORKING_PLACEHOLDER;
 }
 
+const pear_live_announcement_signatures = new Map<number, string>();
+
+export function pear_live_announcement_changed_for_testing(
+    previous_signature: string | undefined,
+    next_signature: string,
+): boolean {
+    return previous_signature !== next_signature;
+}
+
+function mark_pear_live_step_for_announcement(
+    progress: HTMLElement,
+    message_id: number,
+    signature: string,
+    label: string,
+): void {
+    const previous_signature = pear_live_announcement_signatures.get(message_id);
+    if (!pear_live_announcement_changed_for_testing(previous_signature, signature)) {
+        return;
+    }
+    pear_live_announcement_signatures.set(message_id, signature);
+    progress.setAttribute("role", "status");
+    progress.setAttribute("aria-live", "polite");
+    progress.setAttribute("aria-atomic", "true");
+    progress.setAttribute("aria-label", label);
+}
+
 function pear_live_source_is_server_placeholder(content: HTMLElement): boolean {
     let source_text = "";
     for (const child of content.childNodes) {
@@ -689,6 +784,7 @@ function render_pear_live_progress($row: JQuery): void {
     // the dedicated placeholder, not an inference from arbitrary prose.
     const has_server_placeholder = pear_live_source_is_server_placeholder(content);
     if (!run_is_active && !has_server_placeholder) {
+        pear_live_announcement_signatures.delete(message_id);
         existing?.remove();
         content.classList.remove("pear-live-placeholder");
         for (const child of content.querySelectorAll(":scope > .pear-live-thought")) {
@@ -714,7 +810,6 @@ function render_pear_live_progress($row: JQuery): void {
 
     const progress = document.createElementNS("http://www.w3.org/1999/xhtml", "section");
     progress.setAttribute("class", "pear-live-progress");
-    progress.setAttribute("aria-label", $t({defaultMessage: "Pear work in progress"}));
     const plan = run?.plan ?? [];
     if (
         !pear_live_should_show_progress_for_testing(
@@ -732,6 +827,12 @@ function render_pear_live_progress($row: JQuery): void {
         return;
     }
     if (plan.length === 0) {
+        mark_pear_live_step_for_announcement(
+            progress,
+            message_id,
+            "working",
+            $t({defaultMessage: "Pear is working"}),
+        );
         progress.classList.add("pear-live-progress-planless");
         const working = document.createElementNS("http://www.w3.org/1999/xhtml", "div");
         working.setAttribute("class", "pear-live-plan-step pear-live-plan-current");
@@ -748,6 +849,11 @@ function render_pear_live_progress($row: JQuery): void {
             const overview = document.createElementNS("http://www.w3.org/1999/xhtml", "div");
             overview.setAttribute("class", "pear-live-overview");
             overview.setAttribute("title", run.overview);
+            overview.setAttribute("data-pear-generated", "true");
+            overview.setAttribute(
+                "aria-label",
+                $t({defaultMessage: "Activity summary: {overview}"}, {overview: run.overview}),
+            );
             overview.textContent = run.overview;
             progress.append(overview);
         }
@@ -759,13 +865,27 @@ function render_pear_live_progress($row: JQuery): void {
         if (current_index === -1) {
             current_index = plan.length - 1;
         }
-        const visible_indices = [
-            current_index - 2,
-            current_index - 1,
-            current_index,
-            current_index + 1,
-        ].filter((index) => index >= 0 && index < plan.length);
-        for (const index of visible_indices) {
+        mark_pear_live_step_for_announcement(
+            progress,
+            message_id,
+            `${current_index}:${plan[current_index]!.step}`,
+            $t(
+                {defaultMessage: "Pear work in progress: {step}"},
+                {step: plan[current_index]!.step},
+            ),
+        );
+        for (const index of windowed_plan_indices(plan.length, current_index)) {
+            if (index === "ellipsis") {
+                const ellipsis = document.createElementNS("http://www.w3.org/1999/xhtml", "div");
+                ellipsis.setAttribute(
+                    "class",
+                    "pear-live-plan-step pear-live-plan-context pear-live-plan-ellipsis",
+                );
+                ellipsis.setAttribute("aria-hidden", "true");
+                ellipsis.textContent = "…";
+                progress.append(ellipsis);
+                continue;
+            }
             const step = plan[index]!;
             const step_element = document.createElementNS("http://www.w3.org/1999/xhtml", "div");
             step_element.setAttribute(
@@ -797,6 +917,11 @@ function render_pear_live_progress($row: JQuery): void {
                 const overview = document.createElementNS("http://www.w3.org/1999/xhtml", "div");
                 overview.setAttribute("class", "pear-live-overview");
                 overview.setAttribute("title", run.overview);
+                overview.setAttribute("data-pear-generated", "true");
+                overview.setAttribute(
+                    "aria-label",
+                    $t({defaultMessage: "Activity summary: {overview}"}, {overview: run.overview}),
+                );
                 overview.textContent = run.overview;
                 progress.append(overview);
             }
@@ -833,7 +958,28 @@ const pear_trace_response_schema = z.object({
     ),
 });
 
-function load_pear_run_trace(run_id: number, host: HTMLElement, button: HTMLElement): void {
+type PearTraceRequestState = {
+    run_id: number;
+    host: HTMLElement;
+    button: HTMLElement;
+    in_flight: boolean;
+    dirty: boolean;
+};
+
+const pear_trace_request_states = new WeakMap<HTMLElement, PearTraceRequestState>();
+let next_pear_trace_host_id = 0;
+
+function load_pear_run_trace(state: PearTraceRequestState): void {
+    if (state.in_flight) {
+        state.dirty = true;
+        return;
+    }
+    state.in_flight = true;
+    state.dirty = false;
+    const {run_id, host, button} = state;
+    const was_near_bottom = host.scrollHeight - host.scrollTop - host.clientHeight < 32;
+    const previous_scroll_top = host.scrollTop;
+    host.setAttribute("aria-busy", "true");
     button.setAttribute("disabled", "true");
     button.textContent = $t({defaultMessage: "Loading work…"});
     void channel.get({
@@ -848,15 +994,34 @@ function load_pear_run_trace(run_id: number, host: HTMLElement, button: HTMLElem
             if (row instanceof HTMLElement) {
                 enhance_pear_tool_rows($(row));
             }
+            if (was_near_bottom) {
+                host.scrollTop = host.scrollHeight;
+            } else {
+                host.scrollTop = Math.max(
+                    0,
+                    Math.min(previous_scroll_top, host.scrollHeight - host.clientHeight),
+                );
+            }
             host.hidden = false;
+            host.removeAttribute("aria-busy");
             button.removeAttribute("disabled");
             button.setAttribute("aria-expanded", "true");
             button.textContent = $t({defaultMessage: "Hide work"});
             button.dataset["loaded"] = "true";
+            state.in_flight = false;
+            if (state.dirty && !host.hidden) {
+                load_pear_run_trace(state);
+            }
         },
         error() {
+            host.removeAttribute("aria-busy");
             button.removeAttribute("disabled");
-            button.textContent = $t({defaultMessage: "Could not load work"});
+            button.textContent = $t({defaultMessage: "Retry work"});
+            delete button.dataset["loaded"];
+            state.in_flight = false;
+            if (state.dirty && !host.hidden) {
+                load_pear_run_trace(state);
+            }
         },
     });
 }
@@ -864,17 +1029,29 @@ function load_pear_run_trace(run_id: number, host: HTMLElement, button: HTMLElem
 function append_pear_run_trace_disclosure(footer: HTMLElement, run_id: number): void {
     const trace = document.createElementNS("http://www.w3.org/1999/xhtml", "div");
     trace.setAttribute("class", "pear-run-trace");
+    trace.setAttribute("data-pear-run-id", `${run_id}`);
+    next_pear_trace_host_id += 1;
+    trace.id = `pear-run-trace-${run_id}-${next_pear_trace_host_id}`;
     trace.hidden = true;
     const disclosure = document.createElementNS("http://www.w3.org/1999/xhtml", "button");
     disclosure.setAttribute("class", "pear-run-trace-toggle");
     disclosure.setAttribute("type", "button");
     disclosure.setAttribute("aria-expanded", "false");
+    disclosure.setAttribute("aria-controls", trace.id);
     disclosure.textContent = $t({defaultMessage: "Show work"});
+    const state: PearTraceRequestState = {
+        run_id,
+        host: trace,
+        button: disclosure,
+        in_flight: false,
+        dirty: false,
+    };
+    pear_trace_request_states.set(trace, state);
     disclosure.addEventListener("click", () => {
         // A live run keeps producing events after the first reveal. Refresh
         // whenever the user reopens the trace; hiding remains immediate.
         if (disclosure.dataset["loaded"] !== "true" || trace.hidden) {
-            load_pear_run_trace(run_id, trace, disclosure);
+            load_pear_run_trace(state);
             return;
         }
         trace.hidden = true;
@@ -882,6 +1059,22 @@ function append_pear_run_trace_disclosure(footer: HTMLElement, run_id: number): 
         disclosure.textContent = $t({defaultMessage: "Show work"});
     });
     footer.append(trace, disclosure);
+}
+
+function refresh_open_pear_run_traces(run_id: number): void {
+    const traces = document.querySelectorAll<HTMLElement>(
+        `.pear-run-trace[data-pear-run-id="${run_id}"]`,
+    );
+    for (const trace of traces) {
+        if (trace.hidden) {
+            continue;
+        }
+        const state = pear_trace_request_states.get(trace);
+        if (state !== undefined) {
+            state.dirty = true;
+            load_pear_run_trace(state);
+        }
+    }
 }
 
 let pear_run_elapsed_timer: ReturnType<typeof setInterval> | undefined;
@@ -1017,6 +1210,8 @@ function maybe_render_pear_run_footer($row: JQuery): void {
     existing?.remove();
     const footer_element = document.createElementNS("http://www.w3.org/1999/xhtml", "div");
     footer_element.setAttribute("class", "pear-run-footer");
+    footer_element.setAttribute("role", "status");
+    footer_element.setAttribute("aria-live", "polite");
     footer_element.setAttribute("data-pear-footer-signature", signature);
     if (line.text !== "") {
         const meta = document.createElementNS("http://www.w3.org/1999/xhtml", "span");
@@ -1041,7 +1236,7 @@ function maybe_render_pear_run_footer($row: JQuery): void {
 if (typeof document !== "undefined" && typeof document.addEventListener === "function") {
     document.addEventListener(
         pear_run_state.PEAR_LIVENESS_MARKERS_CHANGED_EVENT,
-        update_pear_thinking_glyphs,
+        schedule_pear_presence_render,
     );
 }
 
@@ -1077,6 +1272,32 @@ function update_rendered_pear_active_messages(): void {
     update_pear_thinking_glyphs();
 }
 
+let pear_presence_render_frame: number | undefined;
+const pending_pear_footer_message_ids = new Set<number>();
+
+function flush_pear_presence_render(): void {
+    const footer_message_ids = [...pending_pear_footer_message_ids];
+    pending_pear_footer_message_ids.clear();
+    if (footer_message_ids.length > 0) {
+        rerender_pear_result_messages(footer_message_ids);
+    }
+    update_rendered_pear_active_messages();
+}
+
+function schedule_pear_presence_render(): void {
+    if (pear_presence_render_frame !== undefined) {
+        return;
+    }
+    if (typeof requestAnimationFrame !== "function") {
+        flush_pear_presence_render();
+        return;
+    }
+    pear_presence_render_frame = requestAnimationFrame(() => {
+        pear_presence_render_frame = undefined;
+        flush_pear_presence_render();
+    });
+}
+
 function rerender_pear_result_messages(message_ids: number[]): void {
     const messages_to_render = [];
     for (const id of message_ids) {
@@ -1091,22 +1312,28 @@ function rerender_pear_result_messages(message_ids: number[]): void {
 }
 
 pear_run_state.on_active_run_result_messages_changed((change) => {
-    update_rendered_pear_active_messages();
     // Footer stats can arrive (or grow) after the settle rerender; a
     // rerender re-runs the row post-processing that draws them.
     const footer_changed_message_ids = (change.footer_changed_message_ids ?? []).filter(
         (message_id) => !change.removed_message_ids.includes(message_id),
     );
     if (footer_changed_message_ids.length > 0) {
-        rerender_pear_result_messages(footer_changed_message_ids);
+        for (const message_id of footer_changed_message_ids) {
+            pending_pear_footer_message_ids.add(message_id);
+        }
     }
+    schedule_pear_presence_render();
 });
 
 pear_run_state.on_run_state_changed((run) => {
     if (typeof run.result_message_id !== "number") {
         return;
     }
-    update_rendered_pear_active_messages();
+    if (run.status !== "running" && run.status !== "queued") {
+        pear_live_announcement_signatures.delete(run.result_message_id);
+    }
+    schedule_pear_presence_render();
+    refresh_open_pear_run_traces(run.id);
     remember_pear_attention_candidate(run);
 });
 
@@ -2530,6 +2757,7 @@ export class MessageListView {
                 // Not adding to new_dom_elements it is only used for autoscroll
 
                 this._post_process($dom_messages);
+                unmount_pear_artifacts_in($old_message_group);
                 $old_message_group.replaceWith($rendered_groups);
                 condense.condense_and_collapse($dom_messages);
             }
@@ -3020,6 +3248,7 @@ export class MessageListView {
             }
         }
         this._post_process($rendered_msg);
+        unmount_pear_artifacts_in($row);
         $row.replaceWith($rendered_msg);
 
         message_list_hover.reapply_hover_on_row_replace($row, $rendered_msg, message_container.msg);

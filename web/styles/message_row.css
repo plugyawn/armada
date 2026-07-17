@@ -338,6 +338,13 @@
                 opacity: 0.56;
             }
 
+            .pear-live-plan-ellipsis {
+                display: block;
+                min-height: 8px;
+                padding-left: 5px;
+                line-height: 0.6;
+            }
+
             .pear-live-plan-completed .pear-live-plan-glyph {
                 color: var(--pear-accent-ink);
             }
@@ -380,6 +387,12 @@
                 text-overflow: ellipsis;
                 white-space: nowrap;
                 animation: pear-live-overview-in 160ms ease-out both;
+
+                &::before {
+                    margin-right: 0.4em;
+                    color: var(--pear-interaction);
+                    content: "∙";
+                }
             }
 
             &.pear-live-placeholder

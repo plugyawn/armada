@@ -67,6 +67,44 @@ test("done run clears active result message immediately", () => {
     }
 });
 
+test("topic reconciliation preserves active messages in other rendered topics", () => {
+    pear_run_state.set_active_run_result_messages(
+        [
+            {
+                id: 51,
+                status: "running",
+                ambient_triggered: false,
+                result_message_id: 501,
+                stream: "devel",
+                topic: "alpha",
+            },
+        ],
+        {stream: "devel", topic: "alpha"},
+    );
+    pear_run_state.set_active_run_result_messages(
+        [
+            {
+                id: 52,
+                status: "running",
+                ambient_triggered: false,
+                result_message_id: 502,
+                stream: "devel",
+                topic: "beta",
+            },
+        ],
+        {stream: "devel", topic: "beta"},
+    );
+
+    pear_run_state.set_active_run_result_messages([], {
+        stream: "devel",
+        topic: "alpha",
+        force_reconcile: true,
+    });
+
+    assert.ok(!pear_run_state.is_active_run_result_message(501));
+    assert.ok(pear_run_state.is_active_run_result_message(502));
+});
+
 test("quiet active result message remains active until a terminal event", () => {
     pear_run_state.set_active_run_result_messages([{status: "running", result_message_id: 6}]);
     clock.tick(60_000);

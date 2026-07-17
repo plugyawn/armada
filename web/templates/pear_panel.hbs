@@ -48,67 +48,11 @@
     </div>
     {{/if}}
 
-    {{#if show_topic_control}}
-    {{#unless show_workbench}}
-    <section class="pear-topic-control" aria-label="{{t 'Pear context' }}">
-        <div class="pear-topic-control-heading">
-            <div class="pear-topic-control-title">
-                <span class="pear-topic-control-title-text">{{t "Context" }}</span>
-            </div>
-            {{#unless show_workbench}}
-            <button type="button" class="pear-panel-open-action pear-topic-open-action pear-icon-button icon-button icon-button-square icon-button-neutral tippy-zulip-delayed-tooltip" aria-label="{{t 'Open Pear work details' }}" data-tippy-content="{{t 'Open Pear work details' }}" data-pear-workbench-view="history">
-                <i class="zulip-icon zulip-icon-more-vertical" aria-hidden="true"></i>
-            </button>
-            {{/unless}}
-        </div>
-        <div class="pear-topic-control-row">
-            {{#if show_runtime_trigger}}
-            <button type="button" class="pear-runtime-menu-trigger pear-runtime-panel-trigger pear-topic-runtime-trigger tippy-zulip-delayed-tooltip" aria-label="{{t 'Pear runtime' }}" data-tippy-content="{{t 'Pear runtime' }}">
-                <span class="pear-ui-glyph pear-runtime-menu-glyph" aria-hidden="true">·</span>
-                <span class="pear-topic-runtime-name">{{t "Model" }}</span>
-                <span class="pear-runtime-menu-label">{{#if topic_context}}{{topic_context.panel_runtime_label}}{{/if}}</span>
-            </button>
-            {{/if}}
-        </div>
-        {{#if topic_context}}
-            <button type="button" class="pear-panel-open-action pear-topic-context-row" aria-label="{{t 'Open Pear workspace details' }}" data-pear-workbench-view="{{#if topic_context.has_workbench_diff}}diff{{else}}history{{/if}}">
-                <span class="pear-topic-context-label">{{t "Repo" }}</span>
-                <span class="pear-topic-context-main" title="{{topic_context.panel_repo_label}}">{{topic_context.panel_repo_label}}</span>
-                {{#if topic_context.panel_git_status_label}}
-                    <span class="pear-topic-context-status pear-topic-context-status-{{topic_context.panel_git_status_class}}">{{topic_context.panel_git_status_label}}</span>
-                {{/if}}
-            </button>
-            <button type="button" class="pear-panel-open-action pear-topic-context-row pear-topic-context-row-secondary" aria-label="{{t 'Open Pear worktree details' }}" data-pear-workbench-view="history">
-                <span class="pear-topic-context-label">{{t "Worktree" }}</span>
-                <span class="pear-topic-context-main" title="{{topic_context.panel_worktree_label}}">{{topic_context.panel_worktree_label}}</span>
-                {{#if topic_context.panel_git_ref_label}}
-                    <span class="pear-topic-context-ref" title="{{topic_context.panel_git_ref_label}}">{{topic_context.panel_git_ref_label}}</span>
-                {{/if}}
-            </button>
-        {{else if has_topic}}
-            <button type="button" class="pear-panel-open-action pear-topic-context-row pear-topic-context-row-secondary" aria-label="{{t 'Open Pear work details' }}" data-pear-workbench-view="history">
-                <span class="pear-topic-context-label">{{t "Topic" }}</span>
-                <span class="pear-topic-context-main" title="{{context_label}}">{{context_label}}</span>
-            </button>
-        {{else}}
-            <div class="pear-topic-context-row pear-topic-context-row-secondary" aria-label="{{t 'Pear channel context' }}">
-                <span class="pear-topic-context-label">{{t "Channel" }}</span>
-                <span class="pear-topic-context-main" title="{{context_label}}">{{context_label}}</span>
-            </div>
-            <div class="pear-topic-context-row pear-topic-context-row-secondary" aria-label="{{t 'Pear topic context' }}">
-                <span class="pear-topic-context-label">{{t "Worktree" }}</span>
-                <span class="pear-topic-context-main">{{t "Select a topic" }}</span>
-            </div>
-        {{/if}}
-    </section>
-    {{/unless}}
-    {{/if}}
-
     {{#if show_workbench}}
     {{#if has_topic}}
         {{#if topic_context}}
             <section class="pear-context-section">
-                <div class="pear-workbench" role="dialog" aria-label="{{t 'Pear work details' }}">
+                <div class="pear-workbench" role="dialog" aria-modal="true" aria-label="{{t 'Pear work details' }}" tabindex="-1">
                     <div class="pear-workbench-header">
                         <div class="pear-workbench-context-strip">
                             <div class="pear-workbench-context-item pear-workbench-context-repo">
@@ -140,19 +84,19 @@
                         <div class="pear-workbench-scope-note">{{topic_context.workbench_scope_note}}</div>
                         <div class="pear-workbench-context-row">
                             <div class="pear-workbench-tabs" role="tablist" aria-label="{{t 'Pear work views' }}">
-                                <button type="button" role="tab" aria-selected="{{#if topic_context.workbench_diff_selected}}true{{else}}false{{/if}}" class="pear-workbench-tab {{#if topic_context.workbench_diff_selected}}pear-workbench-tab-selected{{/if}}" data-pear-workbench-view="diff" {{#if topic_context.workbench_diff_disabled}}disabled{{/if}}>
+                                <button type="button" id="pear-workbench-tab-diff" role="tab" aria-controls="pear-workbench-panel" aria-selected="{{#if topic_context.workbench_diff_selected}}true{{else}}false{{/if}}" tabindex="{{#if topic_context.workbench_diff_selected}}0{{else}}-1{{/if}}" class="pear-workbench-tab {{#if topic_context.workbench_diff_selected}}pear-workbench-tab-selected{{/if}}" data-pear-workbench-view="diff" {{#if topic_context.workbench_diff_disabled}}disabled{{/if}}>
                                     {{topic_context.diff_tab_label}}
                                 </button>
-                                <button type="button" role="tab" aria-selected="{{#if topic_context.workbench_history_selected}}true{{else}}false{{/if}}" class="pear-workbench-tab {{#if topic_context.workbench_history_selected}}pear-workbench-tab-selected{{/if}}" data-pear-workbench-view="history" {{#if topic_context.workbench_history_disabled}}disabled{{/if}}>
+                                <button type="button" id="pear-workbench-tab-history" role="tab" aria-controls="pear-workbench-panel" aria-selected="{{#if topic_context.workbench_history_selected}}true{{else}}false{{/if}}" tabindex="{{#if topic_context.workbench_history_selected}}0{{else}}-1{{/if}}" class="pear-workbench-tab {{#if topic_context.workbench_history_selected}}pear-workbench-tab-selected{{/if}}" data-pear-workbench-view="history" {{#if topic_context.workbench_history_disabled}}disabled{{/if}}>
                                     {{topic_context.history_tab_label}}
                                 </button>
-                                <button type="button" role="tab" aria-selected="{{#if topic_context.workbench_side_selected}}true{{else}}false{{/if}}" class="pear-workbench-tab {{#if topic_context.workbench_side_selected}}pear-workbench-tab-selected{{/if}}" data-pear-workbench-view="side">
+                                <button type="button" id="pear-workbench-tab-side" role="tab" aria-controls="pear-workbench-panel" aria-selected="{{#if topic_context.workbench_side_selected}}true{{else}}false{{/if}}" tabindex="{{#if topic_context.workbench_side_selected}}0{{else}}-1{{/if}}" class="pear-workbench-tab {{#if topic_context.workbench_side_selected}}pear-workbench-tab-selected{{/if}}" data-pear-workbench-view="side">
                                     {{topic_context.side_tab_label}}
                                 </button>
                             </div>
                         </div>
                     </div>
-                    <div class="pear-workbench-body pear-workbench-view-{{topic_context.workbench_view}}">
+                    <div id="pear-workbench-panel" class="pear-workbench-body pear-workbench-view-{{topic_context.workbench_view}}" role="tabpanel" aria-labelledby="pear-workbench-tab-{{topic_context.workbench_view}}">
                         {{#if topic_context.workbench_diff_selected}}
                             {{#if topic_context.has_workbench_diff}}
                                 {{#unless topic_context.has_changed_files}}
@@ -212,7 +156,7 @@
                         {{/if}}
                     </div>
                     <div class="pear-side-body pear-workbench-side-footer">
-                        <textarea id="pear-side-request" class="pear-side-request" rows="1" placeholder="{{t 'Whisper to Pear' }}"></textarea>
+                        <textarea id="pear-side-request" class="pear-side-request" rows="1" aria-label="{{t 'Whisper to Pear' }}" placeholder="{{t 'Whisper to Pear' }}"></textarea>
                         <button type="button" id="pear-side-start" class="pear-side-start tippy-zulip-delayed-tooltip" aria-label="{{t 'Send whisper' }}" data-tippy-content="{{t 'Send whisper' }}" {{#unless has_topic}}disabled{{/unless}}>
                             <span class="pear-ui-glyph" aria-hidden="true">›</span>
                         </button>

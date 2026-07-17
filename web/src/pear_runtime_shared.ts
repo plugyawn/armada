@@ -59,3 +59,24 @@ export function compact_reasoning_effort(effort: string | undefined): string {
     }
     return effort.at(0)?.toLowerCase() ?? "";
 }
+
+export type PearWindowedIndex = number | "ellipsis";
+
+export function windowed_plan_indices(length: number, current_index: number): PearWindowedIndex[] {
+    if (length <= 0 || current_index < 0 || current_index >= length) {
+        return [];
+    }
+    const first = Math.max(0, current_index - 1);
+    const last = Math.min(length - 1, current_index + 1);
+    const result: PearWindowedIndex[] = [];
+    if (first > 0) {
+        result.push("ellipsis");
+    }
+    for (let index = first; index <= last; index += 1) {
+        result.push(index);
+    }
+    if (last < length - 1) {
+        result.push("ellipsis");
+    }
+    return result;
+}

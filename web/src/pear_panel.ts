@@ -9,12 +9,14 @@ import * as blueslip from "./blueslip.ts";
 import * as browser_history from "./browser_history.ts";
 import * as channel from "./channel.ts";
 import {$t} from "./i18n.ts";
+import * as message_lists from "./message_lists.ts";
 import * as narrow_state from "./narrow_state.ts";
 import * as pear_run_state from "./pear_run_state.ts";
 import {
     compact_reasoning_effort,
     context_key,
     model_reasoning_efforts,
+    windowed_plan_indices,
 } from "./pear_runtime_shared.ts";
 import * as pear_workspace from "./pear_workspace.ts";
 import * as pear_workspace_marks from "./pear_workspace_marks.ts";
@@ -191,14 +193,12 @@ type PearDisplayTopicContext = NonNullable<ReturnType<typeof display_topic_conte
 
 let initialized = false;
 let last_error = "";
-// When an error auto-opens the workbench, closing it sets this so a later
-// refresh carrying the same error cannot re-force the popover open on the next
-// render. Reset whenever a successful fetch clears last_error.
-let error_dismissed = false;
 let last_runs: PearRun[] = [];
 let last_topic_context: PearWorkspaceContext | null | undefined;
 let resize_render_frame_id: number | undefined;
+let live_render_frame_id: number | undefined;
 let last_render_state_key = "";
+let last_auxiliary_render_key = "";
 let last_context_refresh_key = "";
 let last_context_refresh_at = 0;
 const work_panel_open_by_context = new Map<string, boolean>();
@@ -223,6 +223,10 @@ let last_observed_context_key = "";
 const CONTEXT_REFRESH_INTERVAL_MS = 60_000;
 const WORKBENCH_MIN_VIEWPORT_WIDTH_PX = 320;
 const WORKBENCH_POPOVER_MARGIN_PX = 8;
+const RUN_LIVENESS_RECONCILIATION_MS = 20_000;
+let liveness_reconciliation_timer: ReturnType<typeof setTimeout> | undefined;
+let liveness_reconciliation_run_id: number | undefined;
+let liveness_reconciliation_attempted = false;
 
 function first_nonempty(...values: (string | undefined)[]): string {
     return values.find((value) => value !== undefined && value !== "") ?? "";
@@ -458,22 +462,9 @@ export function workbench_open_for_testing(options: {
     if (options.context_key_value === "") {
         return false;
     }
-    // An error only auto-opens the workbench until the user closes it; after
-    // that a still-present error must not re-force it open on the next refresh.
-    return options.manually_open || (options.has_error && !options.error_dismissed);
-}
-
-export function work_panel_open_for_testing(options: {
-    context_key_value: string;
-    manually_open: boolean;
-    active_run_status: string | undefined;
-    has_error: boolean;
-    error_dismissed: boolean;
-}): boolean {
-    if (options.context_key_value === "") {
-        return false;
-    }
-    return options.manually_open || (options.has_error && !options.error_dismissed);
+    // Status fetch failures are quiet inline workbench errors. They must not
+    // seize focus by force-opening a dialog the user did not request.
+    return options.manually_open;
 }
 
 function panel_has_active_status_for_testing(status: string | undefined): boolean {
@@ -619,9 +610,30 @@ export function open_work_details(
     const workbench = document.querySelector<HTMLElement>("#pear-panel .pear-workbench");
     if (workbench !== null) {
         position_workbench_popover();
+        if (!workbench.contains(document.activeElement)) {
+            workbench.focus({preventScroll: true});
+        }
         return;
     }
     refresh({force_context: true});
+}
+
+function select_workbench_view(view: PearWorkbenchView): void {
+    const key = current_context_key();
+    if (key === "") {
+        return;
+    }
+    workbench_view_by_context.set(key, view);
+    work_panel_open_by_context.set(key, true);
+    render();
+}
+
+function workbench_focusable_elements(workbench: HTMLElement): HTMLElement[] {
+    return [
+        ...workbench.querySelectorAll<HTMLElement>(
+            'button:not(:disabled), textarea:not(:disabled), [href], [tabindex]:not([tabindex="-1"])',
+        ),
+    ].filter((element) => !element.hasAttribute("hidden"));
 }
 
 export function open_work_details_for_artifact_label(label: string): void {
@@ -632,22 +644,18 @@ export function open_work_details_for_artifact_label(label: string): void {
     open_work_details(workbench_view_for_artifact_label(label));
 }
 
-function close_work_details(): void {
+function close_work_details(options: {restore_focus?: boolean} = {}): void {
     const key = current_context_key();
     // Mirror the workbench-open predicate: when nothing could be visible,
     // skip the close-and-render so the document-level outside-click handler
     // doesn't re-render the panel on every stray click in the app.
     const manually_open = key !== "" && (work_panel_open_by_context.get(key) ?? false);
-    const error_forced_open = last_error !== "" && !error_dismissed;
-    if (!manually_open && !error_forced_open && workbench_anchor_element === undefined) {
+    if (!manually_open && workbench_anchor_element === undefined) {
         return;
     }
     if (key !== "") {
         work_panel_open_by_context.set(key, false);
     }
-    // A close gesture must also dismiss an error-forced open, otherwise the
-    // next refresh reopens the popover and the user can never close it.
-    error_dismissed = true;
     const anchor_element = workbench_anchor_element;
     workbench_anchor_element = undefined;
     workbench_anchor_context_key = "";
@@ -656,8 +664,8 @@ function close_work_details(): void {
     // Closing removes the popover from the DOM; if focus fell back to the
     // body, return it to the control that opened the workbench.
     if (
+        options.restore_focus !== false &&
         anchor_element !== undefined &&
-        document.activeElement === document.body &&
         document.contains(anchor_element)
     ) {
         anchor_element.focus();
@@ -1484,7 +1492,79 @@ export function handle_pear_run_event(event: {
             duration_seconds: event.duration_seconds ?? run.usage?.duration_seconds,
         },
     };
-    render(last_runs, last_topic_context);
+    note_live_run_event(event.run_id);
+    schedule_live_render();
+}
+
+export function run_needs_liveness_reconciliation_for_testing(options: {
+    status: string;
+    attempted: boolean;
+}): boolean {
+    return (options.status === "running" || options.status === "queued") && !options.attempted;
+}
+
+function clear_liveness_reconciliation_timer(): void {
+    if (liveness_reconciliation_timer !== undefined) {
+        clearTimeout(liveness_reconciliation_timer);
+        liveness_reconciliation_timer = undefined;
+    }
+}
+
+function note_live_run_event(run_id: number): void {
+    if (liveness_reconciliation_run_id !== run_id) {
+        return;
+    }
+    clear_liveness_reconciliation_timer();
+    liveness_reconciliation_attempted = false;
+}
+
+function arm_liveness_reconciliation(run: PearRun | undefined): void {
+    // A new run owns a fresh one-shot budget. Reset before consulting the
+    // previous run's attempted flag or the new run could remain unguarded.
+    if (run !== undefined && liveness_reconciliation_run_id !== run.id) {
+        clear_liveness_reconciliation_timer();
+        liveness_reconciliation_run_id = run.id;
+        liveness_reconciliation_attempted = false;
+    }
+    if (
+        run === undefined ||
+        !run_needs_liveness_reconciliation_for_testing({
+            status: run.status,
+            attempted: liveness_reconciliation_attempted,
+        })
+    ) {
+        if (run === undefined || (run.status !== "running" && run.status !== "queued")) {
+            clear_liveness_reconciliation_timer();
+            liveness_reconciliation_run_id = undefined;
+            liveness_reconciliation_attempted = false;
+        }
+        return;
+    }
+    if (liveness_reconciliation_timer !== undefined) {
+        return;
+    }
+    liveness_reconciliation_timer = setTimeout(() => {
+        liveness_reconciliation_timer = undefined;
+        liveness_reconciliation_attempted = true;
+        // Server truth decides whether the run is still live. This is one
+        // bounded reconciliation per quiet event gap, never a polling loop and
+        // never a client-authored terminal transition.
+        refresh({live: true});
+    }, RUN_LIVENESS_RECONCILIATION_MS);
+}
+
+function schedule_live_render(): void {
+    if (live_render_frame_id !== undefined) {
+        return;
+    }
+    if (typeof requestAnimationFrame !== "function") {
+        render(last_runs, last_topic_context);
+        return;
+    }
+    live_render_frame_id = requestAnimationFrame(() => {
+        live_render_frame_id = undefined;
+        render(last_runs, last_topic_context);
+    });
 }
 
 function merge_refresh_options(
@@ -1623,13 +1703,21 @@ function pear_rail_duration_label(duration_seconds: number): string {
     return `${Math.floor(total_seconds / 60)}m ${total_seconds % 60}s`;
 }
 
-type PearRailRunEntry = {glyph: string; failed_class: string; label: string; when: string};
+type PearRailRunEntry = {
+    glyph: string;
+    failed_class: string;
+    label: string;
+    when: string;
+    result_message_id: number | undefined;
+};
 
 type PearRailPlanStep = {
     step: string;
     status_glyph: string;
     status_class: string;
     glyph_class: string;
+    is_ellipsis?: boolean;
+    is_current?: boolean;
 };
 
 export function pear_rail_plan_steps_for_testing(runs: PearRun[]): PearRailPlanStep[] {
@@ -1650,6 +1738,7 @@ export function pear_rail_plan_steps_for_testing(runs: PearRun[]): PearRailPlanS
                       status_glyph: "",
                       status_class: "pear-rail-plan-active",
                       glyph_class: "pear-thinking-glyph",
+                      is_current: true,
                   },
               ];
     }
@@ -1661,13 +1750,16 @@ export function pear_rail_plan_steps_for_testing(runs: PearRun[]): PearRailPlanS
     if (current_index === -1) {
         current_index = plan.length - 1;
     }
-    const visible_indices = [
-        current_index - 2,
-        current_index - 1,
-        current_index,
-        current_index + 1,
-    ].filter((index) => index >= 0 && index < plan.length);
-    return visible_indices.map((index) => {
+    return windowed_plan_indices(plan.length, current_index).map((index) => {
+        if (index === "ellipsis") {
+            return {
+                step: "…",
+                status_glyph: "",
+                status_class: "pear-rail-plan-ellipsis",
+                glyph_class: "",
+                is_ellipsis: true,
+            };
+        }
         const entry = plan[index]!;
         if (entry.status === "completed" || entry.status === "done") {
             return {
@@ -1683,6 +1775,7 @@ export function pear_rail_plan_steps_for_testing(runs: PearRun[]): PearRailPlanS
                 status_glyph: "",
                 status_class: "pear-rail-plan-active",
                 glyph_class: "pear-thinking-glyph",
+                is_current: true,
             };
         }
         return {
@@ -1721,6 +1814,7 @@ function pear_rail_run_entries(runs: PearRun[]): PearRailRunEntry[] {
             failed_class: failed ? "pear-rail-run-failed" : "",
             label: first_nonempty(parts.join(" · "), run.status),
             when,
+            result_message_id: run.result_message_id ?? undefined,
         };
     });
 }
@@ -1761,6 +1855,25 @@ function render_workspace_rail(
     const run_entries = pear_rail_run_entries(runs);
     const active_run = runs.find((run) => run.status === "running" || run.status === "queued");
     const overview = active_run?.overview?.trim() ?? "";
+    const active_meta_parts: string[] = [];
+    if (active_run !== undefined) {
+        const duration = active_run.usage?.duration_seconds;
+        if (typeof duration === "number" && duration > 0) {
+            active_meta_parts.push(pear_rail_duration_label(duration));
+        } else if (typeof active_run.date_created === "number") {
+            active_meta_parts.push(
+                pear_rail_duration_label(Date.now() / 1000 - active_run.date_created),
+            );
+        }
+        if ((active_run.tool_count ?? 0) > 0) {
+            active_meta_parts.push(
+                $t(
+                    {defaultMessage: "{tool_count, plural, one {# tool} other {# tools}}"},
+                    {tool_count: active_run.tool_count ?? 0},
+                ),
+            );
+        }
+    }
     const args = {
         has_workspace,
         repo_label,
@@ -1776,6 +1889,8 @@ function render_workspace_rail(
         has_plan: plan_steps.length > 0,
         overview,
         has_overview: overview !== "",
+        plan_meta: active_meta_parts.join(" · "),
+        has_plan_meta: active_meta_parts.length > 0,
         show_workspace_line: has_workspace,
     };
     const signature = JSON.stringify(args);
@@ -1801,6 +1916,7 @@ function render(
         : undefined;
     last_topic_context = source_topic_context ?? topic_context;
     const active_run = active_display_run(runs);
+    arm_liveness_reconciliation(active_run);
     if (has_topic && active_run === undefined && contexts_with_active_run.has(next_context_key)) {
         // The run just ended; make sure the "Pear is working…" typing
         // line dies with it even if the worker's typing-stop event was
@@ -1824,26 +1940,47 @@ function render(
         context_key_value: next_context_key,
         manually_open: viewport_allows_workbench && manual_workbench_open,
         has_error: viewport_allows_workbench && last_error !== "",
-        error_dismissed,
+        error_dismissed: true,
     });
     const panel_open = workbench_open;
     pear_run_state.remember_runs(runs);
-    pear_run_state.set_active_run_result_messages(runs, {
-        force_reconcile: active_run === undefined,
-    });
+    if (has_topic) {
+        pear_run_state.set_active_run_result_messages(runs, {
+            force_reconcile: active_run === undefined,
+            stream,
+            topic,
+        });
+    }
     pear_run_state.set_active_run_topic(
         active_run === undefined ? undefined : stream,
         active_run === undefined ? undefined : topic,
     );
     const panel_status = active_run?.status ?? "idle";
     const display_context = has_topic ? display_topic_context(source_topic_context) : undefined;
-    render_topic_header_controls({
+    const auxiliary_render_key = JSON.stringify({
         stream,
         topic,
         topic_context: display_context,
-        active_run_status: active_run?.status,
+        runs: runs.map((run) => ({
+            id: run.id,
+            status: run.status,
+            plan: run.plan,
+            overview: run.overview,
+            tool_count: run.tool_count,
+            result_message_id: run.result_message_id,
+            usage: run.usage,
+        })),
     });
-    render_workspace_rail(display_context, runs);
+    if (last_auxiliary_render_key !== auxiliary_render_key) {
+        render_topic_header_controls({
+            stream,
+            topic,
+            topic_context: display_context,
+            active_run_status: active_run?.status,
+        });
+        render_workspace_rail(display_context, runs);
+        last_auxiliary_render_key = auxiliary_render_key;
+    }
     pear_workspace.refresh_if_open_on_settle(active_run !== undefined);
     const panel_header_state = panel_header_state_for_testing(active_run, {
         has_topic,
@@ -1872,7 +2009,6 @@ function render(
         show_workbench: workbench_open,
         panel_can_close: workbench_open,
         has_panel_menu: panel_header_state.has_panel_menu,
-        show_topic_control: has_stream && !workbench_open,
         show_runtime_trigger: panel_header_state.show_runtime_trigger,
         show_panel_header: panel_header_state.show_panel_header,
         panel_header_quiet:
@@ -1987,7 +2123,8 @@ export function refresh(options: RefreshOptions = {}): void {
         data["stream"] = stream;
         data["topic"] = topic;
     }
-    const request_generation = ++next_refresh_generation;
+    next_refresh_generation += 1;
+    const request_generation = next_refresh_generation;
     refresh_requests_by_context.set(request_context_key, {
         generation: request_generation,
         pending: undefined,
@@ -2016,7 +2153,6 @@ export function refresh(options: RefreshOptions = {}): void {
                 pear_runs: reconcile_run_snapshots(raw_data.pear_runs),
             };
             last_error = "";
-            error_dismissed = false;
             const had_active_run = has_active_run(last_runs);
             const has_active_run_after_refresh = has_active_run(data.pear_runs);
             const previous_topic_context = display_source_topic_context(stream, topic);
@@ -2142,22 +2278,34 @@ export function initialize(): void {
     }
     initialized = true;
     // A freshly built workspace-pane shell needs its header cluster
-    // filled right away, not on the next refresh tick.
-    document.addEventListener("pear:pane-shell-rendered", () => {
-        refresh_topic_header_controls();
+    // and rail filled right away, even when the topic/run signatures are
+    // unchanged from the DOM shell that Zulip just replaced.
+    $(document).on("pear:pane-shell-rendered.pear_panel", () => {
+        last_auxiliary_render_key = "";
+        last_workspace_rail_signature = "";
+        schedule_live_render();
     });
-    $("body").on("click", "#pear-panel-refresh", () => {
+    $("body").on("click.pear_panel", "#pear-panel-refresh", () => {
         refresh({force_context: true});
     });
-    $("body").on("click", ".pear-panel-close-action", () => {
+    $("body").on("click.pear_panel", ".pear-panel-close-action", () => {
         close_work_details();
     });
-    $("body").on("click", ".pear-rail-workspace-line", (e) => {
+    $("body").on("click.pear_panel", ".pear-rail-workspace-line", (e) => {
         e.preventDefault();
         e.stopPropagation();
         pear_workspace.set_tab("files");
     });
-    $("body").on("click", ".pear-panel-open-action", (e) => {
+    $("body").on("click.pear_panel", ".pear-rail-run", (e) => {
+        const message_id = Number.parseInt($(e.currentTarget).attr("data-message-id") ?? "", 10);
+        if (!Number.isInteger(message_id)) {
+            return;
+        }
+        e.preventDefault();
+        e.stopPropagation();
+        message_lists.current?.select_id(message_id, {then_scroll: true});
+    });
+    $("body").on("click.pear_panel", ".pear-panel-open-action", (e) => {
         e.preventDefault();
         e.stopPropagation();
         const requested_view = $(e.currentTarget).attr("data-pear-workbench-view");
@@ -2169,16 +2317,67 @@ export function initialize(): void {
         );
     });
     $(document).on("keydown.pear_panel", (e) => {
-        // Give keyboard users inside the workbench an exit; clicks outside
-        // already close it. Scoped to the panel so global Escape handling
-        // (compose, overlays) is unaffected.
-        if (e.key !== "Escape") {
+        const workbench = $(e.target).closest(".pear-workbench")[0];
+        if (!(workbench instanceof HTMLElement)) {
             return;
         }
-        if ($(e.target).closest("#pear-panel").length === 0) {
+        if (e.key === "Escape") {
+            const open_actions = $(e.target).closest<HTMLDetailsElement>("details[open]")[0];
+            if (open_actions instanceof HTMLDetailsElement) {
+                open_actions.open = false;
+                open_actions.querySelector<HTMLElement>("summary")?.focus();
+                e.preventDefault();
+                return;
+            }
+            close_work_details();
+            e.preventDefault();
             return;
         }
-        close_work_details();
+        const tab = $(e.target).closest<HTMLButtonElement>('[role="tab"]')[0];
+        if (
+            tab instanceof HTMLButtonElement &&
+            ["ArrowLeft", "ArrowRight", "Home", "End"].includes(e.key)
+        ) {
+            const tabs = [
+                ...workbench.querySelectorAll<HTMLButtonElement>('[role="tab"]:not(:disabled)'),
+            ];
+            const current_index = tabs.indexOf(tab);
+            const next_index =
+                e.key === "Home"
+                    ? 0
+                    : e.key === "End"
+                      ? tabs.length - 1
+                      : (current_index + (e.key === "ArrowRight" ? 1 : -1) + tabs.length) %
+                        tabs.length;
+            const next_tab = tabs[next_index];
+            const view = next_tab?.dataset["pearWorkbenchView"];
+            if (view === "diff" || view === "history" || view === "side") {
+                select_workbench_view(view);
+                document
+                    .querySelector<HTMLElement>(
+                        `#pear-panel .pear-workbench-tab[data-pear-workbench-view="${view}"]`,
+                    )
+                    ?.focus({preventScroll: true});
+            }
+            e.preventDefault();
+            return;
+        }
+        if (e.key !== "Tab") {
+            return;
+        }
+        const focusable = workbench_focusable_elements(workbench);
+        const first = focusable[0];
+        const last = focusable.at(-1);
+        if (first === undefined || last === undefined) {
+            e.preventDefault();
+            workbench.focus({preventScroll: true});
+        } else if (e.shiftKey && document.activeElement === first) {
+            e.preventDefault();
+            last.focus({preventScroll: true});
+        } else if (!e.shiftKey && document.activeElement === last) {
+            e.preventDefault();
+            first.focus({preventScroll: true});
+        }
     });
     $(document).on("click.pear_panel", (e) => {
         // Ignore clicks inside the workbench itself.  Using a target check here
@@ -2188,21 +2387,16 @@ export function initialize(): void {
         if ($(e.target).closest("#pear-panel").length > 0) {
             return;
         }
-        close_work_details();
+        close_work_details({restore_focus: false});
     });
-    $("body").on("click", ".pear-workbench-tab", function () {
+    $("body").on("click.pear_panel", ".pear-workbench-tab", function () {
         const view = $(this).attr("data-pear-workbench-view");
         if (view !== "diff" && view !== "history" && view !== "side") {
             return;
         }
-        const key = current_context_key();
-        if (key !== "") {
-            workbench_view_by_context.set(key, view);
-            work_panel_open_by_context.set(key, true);
-        }
-        render();
+        select_workbench_view(view);
     });
-    $("body").on("click", ".pear-run-action", function () {
+    $("body").on("click.pear_panel", ".pear-run-action", function () {
         const $button = $(this);
         const run_id = $button.attr("data-run-id");
         const action = $button.attr("data-action");
@@ -2211,7 +2405,7 @@ export function initialize(): void {
         }
         post_run_action(run_id, action);
     });
-    $("body").on("click", "#pear-side-start", () => {
+    $("body").on("click.pear_panel", "#pear-side-start", () => {
         start_side_session();
     });
     $(window).on("resize.pear_panel", () => {
@@ -2240,5 +2434,18 @@ export function stop(): void {
     $(window).off("scroll.pear_panel");
     $(document).off("click.pear_panel");
     $(document).off("visibilitychange.pear_panel");
+    $(document).off("keydown.pear_panel");
+    $(document).off("pear:pane-shell-rendered.pear_panel");
+    $("body").off(".pear_panel");
+    clear_liveness_reconciliation_timer();
+    if (live_render_frame_id !== undefined) {
+        cancelAnimationFrame(live_render_frame_id);
+        live_render_frame_id = undefined;
+    }
+    if (resize_render_frame_id !== undefined) {
+        cancelAnimationFrame(resize_render_frame_id);
+        resize_render_frame_id = undefined;
+    }
     refresh_requests_by_context.clear();
+    initialized = false;
 }

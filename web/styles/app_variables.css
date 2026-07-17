@@ -894,7 +894,11 @@
     --pear-cat-5: light-dark(hsl(50deg 65% 32%), hsl(50deg 60% 62%));
     --pear-cat-6: light-dark(hsl(100deg 40% 32%), hsl(100deg 35% 62%));
     --pear-diff-add: var(--pear-a400);
-    --pear-diff-add-fill: hsl(140deg 44% 56% / 10%);
+    --pear-diff-add-fill: color-mix(
+        in srgb,
+        var(--pear-diff-add) 10%,
+        transparent
+    );
     --pear-diff-del: var(--pear-danger);
     --pear-diff-del-fill: var(--pear-danger-fill);
 

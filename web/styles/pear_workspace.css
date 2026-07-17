@@ -6,32 +6,22 @@
 }
 
 .pear-workspace-shell {
-    --pear-workspace-border: color-mix(in srgb, currentcolor 14%, transparent);
-    --pear-workspace-muted: color-mix(in srgb, currentcolor 58%, transparent);
-    --pear-workspace-hover: color-mix(in srgb, currentcolor 7%, transparent);
-    --pear-workspace-selected: color-mix(
-        in srgb,
-        var(--color-outline-focus) 18%,
-        transparent
-    );
-    --pear-workspace-focus: var(--color-outline-focus);
+    --pear-workspace-border: var(--pear-hairline);
+    --pear-workspace-muted: var(--pear-ink-2);
+    --pear-workspace-hover: var(--pear-surface-2);
+    --pear-workspace-selected: var(--pear-interaction-fill);
+    --pear-workspace-focus: var(--pear-interaction);
     --pear-workspace-row-height: 28px;
-    --pear-workspace-editor-surface: var(
-        --pear-surface-0,
-        var(--color-background, Canvas)
-    );
-    --pear-workspace-editor-gutter: var(
-        --pear-surface-1,
-        var(--color-background, Canvas)
-    );
+    --pear-workspace-editor-surface: var(--pear-surface-0);
+    --pear-workspace-editor-gutter: var(--pear-surface-1);
 
     box-sizing: border-box;
     display: grid;
     grid-template-rows: auto minmax(0, 1fr);
     block-size: 100%;
     min-block-size: 0;
-    color: var(--color-text-default, inherit);
-    background: var(--color-background, Canvas);
+    color: var(--pear-ink-1);
+    background: var(--pear-surface-0);
     font-family: var(--pear-font-ui, "Hanken Grotesk VF", sans-serif);
     font-size: 14px;
 }
@@ -50,7 +40,12 @@
 
 .pear-workspace-shell button,
 .pear-workspace-shell a {
-    border-radius: 2px;
+    border-radius: var(--pear-radius-px);
+    transition:
+        border-color var(--pear-dur-1) var(--pear-ease),
+        background-color var(--pear-dur-1) var(--pear-ease),
+        color var(--pear-dur-1) var(--pear-ease),
+        opacity var(--pear-dur-1) var(--pear-ease);
 }
 
 .pear-workspace-shell button:focus-visible,
@@ -67,9 +62,9 @@
     inset-block-start: 0;
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: var(--pear-space-2);
     min-block-size: 40px;
-    padding: 6px 12px;
+    padding: var(--pear-space-1) var(--pear-space-3);
     border-block-end: 1px solid var(--pear-workspace-border);
     background: inherit;
 }
@@ -79,7 +74,7 @@
     flex: 1;
     min-inline-size: 0;
     align-items: baseline;
-    gap: 10px;
+    gap: var(--pear-space-2);
 }
 
 .pear-workspace-shell__identity strong {
@@ -105,7 +100,7 @@
 .pear-workspace-shell__document-actions a,
 .pear-workspace-shell [data-role="conflict"] button {
     min-block-size: 28px;
-    padding: 4px 9px;
+    padding: var(--pear-space-1) var(--pear-space-2);
     border: 1px solid var(--pear-workspace-border);
     color: inherit;
     background: transparent;
@@ -124,7 +119,7 @@
     display: grid;
     min-block-size: 0;
     grid-template-columns:
-        var(--pear-workspace-explorer-width, 270px) 5px
+        var(--pear-workspace-explorer-width, 272px) var(--pear-space-1)
         minmax(0, 1fr);
 }
 
@@ -133,21 +128,20 @@
     min-inline-size: 0;
     min-block-size: 0;
     grid-template-rows: auto auto minmax(0, 1fr);
-    background: color-mix(
-        in srgb,
-        var(--color-background, Canvas) 96%,
-        currentcolor
-    );
+    background: var(--pear-surface-1);
 }
 
 .pear-workspace-shell__splitter {
     position: relative;
     z-index: 2;
-    min-inline-size: 5px;
+    min-inline-size: var(--pear-space-1);
     border-inline: 1px solid transparent;
     background: var(--pear-workspace-border);
     cursor: col-resize;
     touch-action: none;
+    transition:
+        border-color var(--pear-dur-1) var(--pear-ease),
+        background-color var(--pear-dur-1) var(--pear-ease);
 }
 
 .pear-workspace-shell__splitter:hover,
@@ -159,17 +153,17 @@
 }
 
 .pear-workspace-shell [data-role="search-form"] {
-    padding: 9px;
+    padding: var(--pear-space-2);
     border-block-end: 1px solid var(--pear-workspace-border);
 }
 
 .pear-workspace-shell [data-role="search-input"] {
     inline-size: 100%;
     block-size: 32px;
-    padding-inline: 9px;
+    padding-inline: var(--pear-space-2);
     border: 1px solid var(--pear-workspace-border);
-    border-radius: 6px;
-    background: var(--color-background, Canvas);
+    border-radius: var(--pear-radius-chip);
+    background: var(--pear-surface-0);
 }
 
 .pear-workspace-shell [data-role="search-results"] {
@@ -182,8 +176,8 @@
     display: block;
     overflow: hidden;
     inline-size: 100%;
-    min-block-size: 30px;
-    padding: 5px 9px;
+    min-block-size: 32px;
+    padding: var(--pear-space-1) var(--pear-space-2);
     border: 0;
     border-radius: 0;
     background: transparent;
@@ -199,7 +193,7 @@
 .pear-workspace-shell__tree {
     overflow: auto;
     min-block-size: 0;
-    padding-block: 6px;
+    padding-block: var(--pear-space-2);
 }
 
 .pear-workspace-tree-row {
@@ -207,10 +201,17 @@
     min-block-size: var(--pear-workspace-row-height);
     grid-template-columns: 16px minmax(0, 1fr) auto;
     align-items: center;
-    gap: 4px;
-    padding-inline: calc(7px + var(--pear-tree-depth, 0) * 14px) 7px;
-    border-radius: 4px;
+    gap: var(--pear-space-1);
+    padding-inline: calc(
+            var(--pear-space-2) + var(--pear-tree-depth, 0) *
+                var(--pear-space-4)
+        )
+        var(--pear-space-2);
+    border-radius: var(--pear-radius-chip);
     cursor: default;
+    transition:
+        background-color var(--pear-dur-1) var(--pear-ease),
+        color var(--pear-dur-1) var(--pear-ease);
     user-select: none;
 }
 
@@ -220,7 +221,7 @@
 
 .pear-workspace-tree-row[aria-selected="true"] {
     background: var(--pear-workspace-selected);
-    font-weight: 570;
+    font-weight: 600;
 }
 
 .pear-workspace-tree-row__disclosure {
@@ -235,16 +236,16 @@
 }
 
 .pear-workspace-tree-row [data-action="load-more"] {
-    padding-inline: 4px;
+    padding-inline: var(--pear-space-1);
     color: var(--pear-workspace-focus);
     font-size: 12px;
     cursor: pointer;
 }
 
 .pear-workspace-shell__tree > button {
-    inline-size: calc(100% - 12px);
-    margin: 3px 6px;
-    padding: 5px;
+    inline-size: calc(100% - var(--pear-space-4));
+    margin: var(--pear-space-1) var(--pear-space-2);
+    padding: var(--pear-space-1);
     border: 1px solid transparent;
     color: var(--pear-workspace-muted);
     background: transparent;
@@ -261,12 +262,12 @@
     min-inline-size: 0;
     min-block-size: 0;
     grid-template-rows: auto auto auto auto minmax(0, 1fr) auto;
-    background: var(--color-background, Canvas);
+    background: var(--pear-surface-0);
 }
 
 .pear-workspace-shell [data-role="tabs"] {
     display: flex;
-    min-block-size: 34px;
+    min-block-size: 32px;
     overflow-x: auto;
     border-block-end: 1px solid var(--pear-workspace-border);
     scrollbar-width: thin;
@@ -282,7 +283,7 @@
 .pear-workspace-file-tab {
     flex: 1 1 auto;
     max-inline-size: 220px;
-    padding: 6px 12px;
+    padding: var(--pear-space-1) var(--pear-space-3);
     overflow: hidden;
     border: 0;
     border-radius: 0;
@@ -320,11 +321,11 @@
     z-index: 3;
     inset-block-start: 0;
     display: flex;
-    min-block-size: 42px;
+    min-block-size: 40px;
     align-items: center;
     justify-content: space-between;
     gap: 12px;
-    padding: 6px 12px;
+    padding: var(--pear-space-1) var(--pear-space-3);
     border-block-end: 1px solid var(--pear-workspace-border);
     background: inherit;
 }
@@ -347,7 +348,7 @@
 }
 
 .pear-workspace-shell [data-role="breadcrumb"] button:hover {
-    color: var(--color-text-default, inherit);
+    color: var(--pear-ink-1);
     text-decoration: underline;
 }
 
@@ -355,7 +356,7 @@
     display: flex;
     flex: 0 0 auto;
     align-items: center;
-    gap: 5px;
+    gap: var(--pear-space-1);
 }
 
 .pear-workspace-shell__mode-feedback {
@@ -388,9 +389,9 @@
     min-inline-size: 190px;
     padding: 4px;
     border: 1px solid var(--pear-workspace-border);
-    border-radius: 2px;
-    box-shadow: 0 10px 28px color-mix(in srgb, hsl(0deg 0% 0%) 18%, transparent);
-    background: var(--color-background, Canvas);
+    border-radius: var(--pear-radius-px);
+    box-shadow: var(--pear-shadow-pop);
+    background: var(--pear-surface-2);
 }
 
 .pear-workspace-file-menu[hidden] {
@@ -412,7 +413,7 @@
     display: grid;
     overflow: auto;
     padding: 24px;
-    background: color-mix(in srgb, hsl(0deg 0% 0%) 42%, transparent);
+    background: color-mix(in srgb, var(--pear-ink-1) 42%, transparent);
     place-items: center;
 }
 
@@ -421,9 +422,9 @@
     max-block-size: min(760px, calc(100vh - 48px));
     overflow: auto;
     border: 1px solid var(--pear-workspace-border);
-    border-radius: 10px;
-    box-shadow: 0 18px 56px color-mix(in srgb, hsl(0deg 0% 0%) 28%, transparent);
-    background: var(--color-background, Canvas);
+    border-radius: var(--pear-radius-card);
+    box-shadow: var(--pear-shadow-pop);
+    background: var(--pear-surface-1);
 }
 
 .pear-workspace-file-dialog > header,
@@ -431,7 +432,7 @@
     display: flex;
     align-items: center;
     gap: 8px;
-    padding: 12px 14px;
+    padding: var(--pear-space-3) var(--pear-space-4);
 }
 
 .pear-workspace-file-dialog > header {
@@ -456,12 +457,12 @@
 
 .pear-workspace-file-dialog__body form {
     display: grid;
-    gap: 14px;
+    gap: var(--pear-space-4);
 }
 
 .pear-workspace-file-dialog__body label {
     display: grid;
-    gap: 6px;
+    gap: var(--pear-space-2);
 }
 
 .pear-workspace-file-dialog__check {
@@ -471,17 +472,17 @@
 
 .pear-workspace-file-dialog__body input[type="text"],
 .pear-workspace-file-dialog__body input:not([type]) {
-    min-block-size: 34px;
+    min-block-size: 32px;
     inline-size: 100%;
-    padding: 6px 8px;
+    padding: var(--pear-space-1) var(--pear-space-2);
     border: 1px solid var(--pear-workspace-border);
-    border-radius: 6px;
+    border-radius: var(--pear-radius-chip);
     background: transparent;
 }
 
 .pear-workspace-file-dialog button {
-    min-block-size: 30px;
-    padding: 5px 10px;
+    min-block-size: 32px;
+    padding: var(--pear-space-1) var(--pear-space-2);
     border: 1px solid var(--pear-workspace-border);
     color: inherit;
     background: transparent;
@@ -501,10 +502,10 @@
 
 .pear-workspace-file-dialog__error {
     margin: 0 16px 12px;
-    padding: 8px 10px;
-    border: 1px solid color-mix(in srgb, var(--red-500) 48%, transparent);
-    border-radius: 6px;
-    background: color-mix(in srgb, var(--red-500) 10%, transparent);
+    padding: var(--pear-space-2);
+    border: 1px solid color-mix(in srgb, var(--pear-danger) 48%, transparent);
+    border-radius: var(--pear-radius-chip);
+    background: var(--pear-danger-fill);
 }
 
 .pear-workspace-file-dialog__error[hidden] {
@@ -513,7 +514,7 @@
 
 .pear-workspace-file-dialog [data-role="history-body"] ol {
     display: grid;
-    gap: 10px;
+    gap: var(--pear-space-2);
     margin: 0;
     padding: 0;
     list-style: none;
@@ -521,8 +522,8 @@
 
 .pear-workspace-file-dialog [data-role="history-body"] li {
     display: grid;
-    gap: 3px;
-    padding-block-end: 10px;
+    gap: var(--pear-space-1);
+    padding-block-end: var(--pear-space-2);
     border-block-end: 1px solid var(--pear-workspace-border);
 }
 
@@ -554,8 +555,8 @@
     gap: 8px;
     padding: 8px 12px;
     border-block-end: 1px solid
-        color-mix(in srgb, var(--orange-500) 50%, transparent);
-    background: color-mix(in srgb, var(--orange-500) 13%, transparent);
+        color-mix(in srgb, var(--pear-warn) 50%, transparent);
+    background: var(--pear-warn-fill);
 }
 
 .pear-workspace-shell [data-role="conflict"][hidden] {
@@ -575,7 +576,7 @@
 
 .pear-workspace-shell__editor > .cm-editor {
     block-size: 100%;
-    color: var(--pear-ink-1, var(--color-text-default, inherit));
+    color: var(--pear-ink-1);
     background: var(--pear-workspace-editor-surface);
     font-family: var(--pear-font-mono, "Geist Mono VF", monospace);
     font-size: 13px;
@@ -613,7 +614,7 @@
 
 .pear-workspace-shell__editor .cm-cursor,
 .pear-workspace-shell__editor .cm-dropCursor {
-    border-inline-start-color: var(--pear-interaction, currentcolor);
+    border-inline-start-color: var(--pear-interaction);
 }
 
 .pear-workspace-shell__editor .cm-foldPlaceholder {
@@ -722,13 +723,17 @@
     .ProseMirror
     blockquote {
     padding: 0.1em 0 0.1em 1em;
-    border-inline-start: 3px solid var(--pear-workspace-border);
+    border-inline-start: 1px solid var(--pear-workspace-border);
     color: var(--pear-workspace-muted);
 }
 
 .pear-workspace-shell .pear-workspace-rich-editor .milkdown .ProseMirror a {
-    color: var(--pear-interaction, currentcolor);
-    text-decoration-color: color-mix(in srgb, currentcolor 55%, transparent);
+    color: var(--pear-interaction);
+    text-decoration-color: color-mix(
+        in srgb,
+        var(--pear-interaction) 55%,
+        transparent
+    );
 }
 
 .pear-workspace-shell .pear-workspace-rich-editor .milkdown .ProseMirror code,
@@ -768,7 +773,7 @@
 .pear-workspace-shell .pear-workspace-rich-editor .milkdown .ProseMirror th,
 .pear-workspace-shell .pear-workspace-rich-editor .milkdown .ProseMirror td {
     min-inline-size: 90px;
-    padding: 7px 9px;
+    padding: var(--pear-space-2);
     border: 1px solid var(--pear-workspace-border);
     text-align: start;
     vertical-align: top;
@@ -804,7 +809,7 @@
 .pear-workspace-shell__nontext img {
     max-inline-size: 100%;
     max-block-size: min(72vh, 900px);
-    border-radius: 6px;
+    border-radius: var(--pear-radius-card);
     object-fit: contain;
 }
 
@@ -812,8 +817,8 @@
     position: sticky;
     z-index: 3;
     inset-block-end: 0;
-    min-block-size: 25px;
-    padding: 5px 10px;
+    min-block-size: 24px;
+    padding: var(--pear-space-1) var(--pear-space-2);
     border-block-start: 1px solid var(--pear-workspace-border);
     background: inherit;
     text-align: end;
@@ -824,7 +829,7 @@
     min-block-size: 100%;
     place-content: center;
     justify-items: center;
-    gap: 10px;
+    gap: var(--pear-space-2);
     padding: 40px;
     color: var(--pear-workspace-muted);
     text-align: center;
@@ -841,15 +846,15 @@
 }
 
 .pear-workspace-readme-empty strong {
-    color: var(--color-text-default, inherit);
+    color: var(--pear-ink-1);
     font-size: 20px;
     font-weight: 600;
 }
 
 .pear-workspace-readme-empty button {
-    min-block-size: 30px;
+    min-block-size: 32px;
     margin-block-start: 8px;
-    padding: 5px 10px;
+    padding: var(--pear-space-1) var(--pear-space-2);
     border: 1px solid var(--pear-workspace-focus);
     background: transparent;
     cursor: pointer;
@@ -917,7 +922,7 @@
     inset: 0 0 auto;
     min-block-size: 38px;
     justify-content: flex-end;
-    padding: 5px 12px;
+    padding: var(--pear-space-1) var(--pear-space-3);
     border-block-end: 1px solid var(--pear-workspace-border);
     background: var(--pear-workspace-editor-surface);
 }
@@ -926,7 +931,7 @@
     .pear-workspace-shell__document-actions
     button {
     min-block-size: 24px;
-    padding: 2px 7px;
+    padding: var(--pear-space-1) var(--pear-space-2);
     border-color: transparent;
     font-family: var(--pear-font-pixel, "Geist Pixel", monospace);
     font-size: 11px;
@@ -972,7 +977,7 @@
         z-index: 5;
         inset: 0;
         display: none;
-        background: color-mix(in srgb, hsl(0deg 0% 0%) 22%, transparent);
+        background: color-mix(in srgb, var(--pear-ink-1) 22%, transparent);
         content: "";
     }
 
@@ -987,8 +992,7 @@
         display: none;
         inline-size: min(88vw, 320px);
         border-inline-end: 1px solid var(--pear-workspace-border);
-        box-shadow: 10px 0 24px
-            color-mix(in srgb, hsl(0deg 0% 0%) 20%, transparent);
+        box-shadow: var(--pear-shadow-pop);
     }
 
     .pear-workspace-shell--explorer-open .pear-workspace-shell__explorer {
@@ -1015,7 +1019,7 @@
     }
 
     .pear-workspace-file-dialog-overlay {
-        padding: 10px;
+        padding: var(--pear-space-2);
         place-items: end center;
     }
 

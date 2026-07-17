@@ -1,8 +1,9 @@
 from typing import Any
 
 from zerver.lib.message import event_recipient_ids_for_action_on_messages
-from zerver.models import Message
-from zerver.models.bots import PearWorkerRun, PearWorkerRunEvent
+from zerver.lib.stream_subscription import get_user_ids_for_streams
+from zerver.models import Message, Stream
+from zerver.models.bots import PearWorkerRun, PearWorkerRunEvent, PearWorkspaceNode
 from zerver.tornado.django_api import send_event_on_commit
 
 
@@ -102,3 +103,24 @@ def send_pear_run_event(run: PearWorkerRun, run_event: PearWorkerRunEvent) -> No
         "date_created": run_event.date_created.timestamp(),
     }
     send_event_on_commit(run.realm, event, list(recipient_ids))
+
+
+def send_pear_workspace_changed_event(node: PearWorkspaceNode, revision: int) -> None:
+    """Notify subscribers after a new authoritative Workspace revision exists."""
+    stream = Stream.objects.filter(
+        realm=node.realm,
+        name__iexact=node.stream_name,
+        deactivated=False,
+    ).first()
+    if stream is None:
+        return
+    recipient_ids = get_user_ids_for_streams({stream.id})[stream.id]
+    send_event_on_commit(
+        node.realm,
+        {
+            "type": "pear_workspace_changed",
+            "workspace_id": str(node.uuid),
+            "revision": revision,
+        },
+        sorted(recipient_ids),
+    )

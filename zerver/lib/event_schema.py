@@ -56,6 +56,7 @@ from zerver.lib.event_types import (
     NightLogoData,
     OnboardingStepsEvent,
     PearRunEvent,
+    PearWorkspaceChangedEvent,
     PersonAvatarFields,
     PersonBotOwnerId,
     PersonCustomProfileField,
@@ -245,6 +246,7 @@ check_user_group_remove_subgroups = make_checker(UserGroupRemoveSubgroupsEvent)
 check_user_topic = make_checker(UserTopicEvent)
 check_web_reload_client_event = make_checker(WebReloadClientEvent)
 check_pear_run_event = make_checker(PearRunEvent)
+check_pear_workspace_changed_event = make_checker(PearWorkspaceChangedEvent)
 
 
 # Now for the slightly more tricky bits.  All the following functions

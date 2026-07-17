@@ -1425,6 +1425,15 @@ def get_workspace_snapshot(
             head=head,
             dirty_count=dirty_count,
         )
+        previous_revision = latest.get("revision") if isinstance(latest, dict) else None
+        if (
+            isinstance(previous_revision, int)
+            and not isinstance(previous_revision, bool)
+            and snapshot.revision > previous_revision
+        ):
+            from zerver.actions.pear import send_pear_workspace_changed_event
+
+            send_pear_workspace_changed_event(node, snapshot.revision)
         _record_latest_snapshot(snapshot)
     except BaseException as error:
         _finish_snapshot_build(build_key, build, error=error)

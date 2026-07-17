@@ -69,6 +69,7 @@ PEAR_WORKER_RUN_BUSY_STATUSES = frozenset((PearWorkerRun.QUEUED, PearWorkerRun.R
 PEAR_WORKER_RUN_TERMINAL_STATUSES = frozenset((PearWorkerRun.DONE, PearWorkerRun.CANCELLED))
 PEAR_WORKER_MAX_CLAIM_ATTEMPTS = 2
 PEAR_WORKER_HEARTBEAT_INTERVAL_SECONDS = 15
+PEAR_WORKER_STALE_HEARTBEAT_MISSES = 4
 PEAR_RUN_LEGAL_TRANSITIONS: dict[PearWorkerRunStatus, frozenset[PearWorkerRunStatus]] = {
     PearWorkerRun.QUEUED: frozenset(
         (PearWorkerRun.RUNNING, PearWorkerRun.FAILED, PearWorkerRun.CANCELLED)
@@ -96,6 +97,22 @@ def mark_pear_run_attended(run_id: int) -> None:
 
 def pear_run_is_attended(run_id: int) -> bool:
     return cache.get(pear_run_attention_cache_key(run_id)) is True
+
+
+def refresh_pear_workspace_after_terminal_run(workspace_node_id: int) -> None:
+    """Observe direct runtime writes once a run can no longer mutate its worktree."""
+    try:
+        workspace_node = PearWorkspaceNode.objects.get(id=workspace_node_id)
+        from zerver.lib.pear_workspace_resources import refresh_workspace_snapshot
+
+        refresh_workspace_snapshot(workspace_node)
+    except Exception:
+        # Run settlement is authoritative even if the secondary Workspace
+        # observer fails. A later explicit refresh still repairs the revision.
+        logger.exception(
+            "Could not refresh Pear Workspace %s after a terminal run",
+            workspace_node_id,
+        )
 
 
 def maybe_enqueue_pear_run_presentation(run_id: int, source_event_id: int) -> bool:
@@ -131,7 +148,7 @@ class PearTopicRenameRefactorResult:
 
 
 def pear_worker_stale_after_seconds() -> int:
-    return settings.PEAR_WORKER_TIMEOUT_SECONDS + 300
+    return PEAR_WORKER_HEARTBEAT_INTERVAL_SECONDS * PEAR_WORKER_STALE_HEARTBEAT_MISSES
 
 
 def pear_worker_run_is_stale(run: PearWorkerRun, *, current_time: datetime) -> bool:
@@ -313,6 +330,27 @@ def reap_stale_pear_worker_runs(
     for run in settled_runs:
         settle_orphaned_pear_run_message(run)
     return reaped_count
+
+
+def maintain_pear_worker_run_liveness(
+    *,
+    active_run_id: int | None,
+    session_kinds: Sequence[str],
+) -> int:
+    """Renew the local run's lease, then settle abandoned leases.
+
+    The worker's Codex RPC can be silent for minutes, so transcript events
+    cannot be the only heartbeat source. Renewing the process-local active
+    run before the stale pass protects a legitimate silent turn while rows
+    whose worker disappeared settle after a bounded number of missed beats.
+    """
+    if active_run_id is not None:
+        current_time = timezone_now()
+        PearWorkerRun.objects.filter(
+            id=active_run_id,
+            status=PearWorkerRun.RUNNING,
+        ).update(heartbeat_at=current_time, date_updated=current_time)
+    return reap_stale_pear_worker_runs(session_kinds=session_kinds)
 
 
 def latest_pear_codex_run_for_topic(
@@ -2823,6 +2861,15 @@ class PearDatabaseWorkerRunStore:
         )
         if run.workdir:
             invalidate_pear_git_status_delta(run.workdir)
+        if (
+            not same_status
+            and status in (PearWorkerRun.DONE, PearWorkerRun.FAILED, PearWorkerRun.CANCELLED)
+            and run.workspace_node_id is not None
+        ):
+            workspace_node_id = run.workspace_node_id
+            transaction.on_commit(
+                lambda: refresh_pear_workspace_after_terminal_run(workspace_node_id)
+            )
         return True
 
     def _record_transition_rejected(

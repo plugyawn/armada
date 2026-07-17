@@ -1,9 +1,11 @@
 # Documented in https://zulip.readthedocs.io/en/latest/subsystems/queuing.html
 import logging
+import threading
 import time
 from collections import OrderedDict
 from typing import Any
 
+from django.db import close_old_connections, reset_queries
 from typing_extensions import override
 
 from zerver.lib.bot_lib import EmbeddedBotHandler
@@ -17,9 +19,11 @@ from zerver.lib.pear import (
 from zerver.lib.pear_agent import PearProcessIsolation
 from zerver.lib.pear_monitor import pear_apply_monitor_setup_result
 from zerver.lib.pear_worker import (
+    PEAR_WORKER_HEARTBEAT_INTERVAL_SECONDS,
     PearDatabaseWorkerRunStore,
     build_pear_worker_runtime_from_settings,
     load_pear_active_session_from_zulip,
+    maintain_pear_worker_run_liveness,
     pear_topic_process_isolation,
     pear_worker_model_for_topic,
     pear_worker_process_isolation_error,
@@ -28,6 +32,7 @@ from zerver.lib.pear_worker import (
     pear_worker_workdir_for_topic,
     reap_stale_pear_worker_runs,
 )
+from zerver.models.bots import PearWorkerRun
 from zerver.models.users import get_user_profile_by_id
 from zerver.worker.base import QueueProcessingWorker, assign_queue
 
@@ -135,9 +140,46 @@ class PearWorker(QueueProcessingWorker):
         # our kinds was orphaned by a restart mid-turn. Reap them so
         # zombies never block the deploy health gate.
         reap_stale_pear_worker_runs(assume_orphaned=True, session_kinds=self.OWNED_SESSION_KINDS)
+        self.active_run_id: int | None = None
+        self.run_liveness_stop = threading.Event()
+        self.run_liveness_thread = threading.Thread(
+            target=self.run_liveness_loop,
+            name=f"{self.queue_name}-run-liveness",
+            daemon=True,
+        )
+        self.run_liveness_thread.start()
+
+    def run_liveness_pass(self) -> int:
+        return maintain_pear_worker_run_liveness(
+            active_run_id=self.active_run_id,
+            session_kinds=self.OWNED_SESSION_KINDS,
+        )
+
+    def run_liveness_loop(self) -> None:  # nocoverage
+        close_old_connections()
+        try:
+            while not self.run_liveness_stop.wait(PEAR_WORKER_HEARTBEAT_INTERVAL_SECONDS):
+                try:
+                    self.run_liveness_pass()
+                except Exception:
+                    logger.exception("Pear run liveness pass failed.")
+                finally:
+                    reset_queries()
+                    close_old_connections()
+        finally:
+            close_old_connections()
+
+    def stop_liveness_loop(self) -> None:
+        if not hasattr(self, "run_liveness_stop") or not hasattr(self, "run_liveness_thread"):
+            return
+        self.run_liveness_stop.set()
+        self.run_liveness_thread.join(timeout=PEAR_WORKER_HEARTBEAT_INTERVAL_SECONDS)
+        if self.run_liveness_thread.is_alive():
+            logger.warning("Pear run liveness thread did not stop before worker shutdown.")
 
     @override
     def stop(self) -> None:  # nocoverage
+        self.stop_liveness_loop()
         try:
             close_pear_worker_runtimes()
         finally:
@@ -145,6 +187,13 @@ class PearWorker(QueueProcessingWorker):
 
     @override
     def consume(self, event: dict[str, Any]) -> None:
+        self.active_run_id = None
+        try:
+            self._consume(event)
+        finally:
+            self.active_run_id = None
+
+    def _consume(self, event: dict[str, Any]) -> None:
         user_profile = get_user_profile_by_id(event["user_profile_id"])
         bot_handler = EmbeddedBotHandler(user_profile)
         message = event["message"]
@@ -219,6 +268,17 @@ class PearWorker(QueueProcessingWorker):
             topic=topic,
         ):
             return
+        self.active_run_id = (
+            # claim_for_run just committed the row protected by this model's
+            # (bot_profile, trigger_message_id) uniqueness constraint.
+            PearWorkerRun.objects.filter(
+                bot_profile=user_profile,
+                trigger_message_id=message_id,
+                status=PearWorkerRun.RUNNING,
+            )
+            .values_list("id", flat=True)
+            .get()
+        )
         model = pear_worker_model_for_topic(
             user_profile, stream=context_stream, topic=context_topic
         )

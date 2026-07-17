@@ -3287,6 +3287,7 @@ class PearSessionEndpointTest(ZulipTestCase):
 
     def test_worker_event_push_and_presentation_respect_commit_order(self) -> None:
         owner = self.example_user("hamlet")
+        self.subscribe(owner, PEAR_DEFAULT_STREAM)
         pear_bot = self.create_test_bot(
             "pear-commit-order",
             owner,
@@ -3294,11 +3295,20 @@ class PearSessionEndpointTest(ZulipTestCase):
             bot_type=UserProfile.EMBEDDED_BOT,
             service_name=PEAR_EMBEDDED_BOT_SERVICE,
         )
+        # Give the run a real visibility-scoped trigger message.  The push
+        # helper intentionally drops events whose trigger no longer exists.
+        with patch("zerver.worker.embedded_bots.queue_json_publish_rollback_unsafe"):
+            trigger_message_id = self.send_stream_message(
+                owner,
+                PEAR_DEFAULT_STREAM,
+                topic_name="topic-a",
+                content="@**Pear** inspect commit ordering",
+            )
         run = PearWorkerRun.objects.create(
             realm=owner.realm,
             bot_profile=pear_bot,
             requesting_user=owner,
-            trigger_message_id=918,
+            trigger_message_id=trigger_message_id,
             stream_name=PEAR_DEFAULT_STREAM,
             topic_name="topic-a",
             status=PearWorkerRun.RUNNING,

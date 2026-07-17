@@ -89,6 +89,7 @@ function harness() {
         options.root.replaceChildren(host);
         const fake = {
             text: options.text,
+            initialSelection: options.selection,
             readOnly: options.readOnly,
             destroyed: false,
             dirty(selection) {
@@ -132,6 +133,7 @@ function harness() {
                 options.root.replaceChildren(host);
                 const fake = {
                     revision: options.editRevision,
+                    cursorLine: 0,
                     markdown: options.markdown,
                     initialSelection: options.selection,
                     initialScrollTop: options.scrollTop,
@@ -172,6 +174,12 @@ function harness() {
                     setReadOnly() {},
                     getViewState: () => ({selection: {anchor: 1, head: 1}, scrollTop: 3}),
                     getSelectionContext: () => ({selectedText: "rich selection"}),
+                    getCursorLine() {
+                        return this.cursorLine;
+                    },
+                    setCursorLine(line) {
+                        this.cursorLine = line;
+                    },
                     getEditRevision() {
                         return this.revision;
                     },
@@ -391,7 +399,7 @@ run_test("each document save is single-flight and a newer edit stays dirty", asy
     test.root.remove();
 });
 
-run_test("a delayed A save cannot replace active B metadata after navigation", async () => {
+run_test("a delayed A save keeps active B mounted while its authority is reconciled", async () => {
     const test = harness();
     await open_text(test, "A.md");
     const source_a = test.source_editors[0];
@@ -415,11 +423,67 @@ run_test("a delayed A save cannot replace active B metadata after navigation", a
         }),
     );
     const snapshot = test.controller.getSnapshot();
-    assert.equal(snapshot.surface.kind, "error");
+    assert.equal(snapshot.surface.kind, "text");
     assert.equal(snapshot.surface.entry.path, "B.md");
-    assert.equal(snapshot.activeDocument, undefined);
-    assert.equal(snapshot.mountedAdapter, undefined);
-    assert.match(snapshot.surface.message, /another file saved/);
+    assert.equal(snapshot.activeDocument.path, "B.md");
+    assert.equal(snapshot.activeDocument.currentText, "B content");
+    assert.equal(snapshot.activeDocument.authority, "stale");
+    assert.equal(snapshot.mountedAdapter, "source");
+    await test.controller.destroy();
+    test.root.remove();
+});
+
+run_test("a dirty background tab resumes autosave after revision reconciliation", async () => {
+    const test = harness();
+    await open_text(test, "A.md");
+    const source_a = test.source_editors[0];
+    source_a.text = "A edit";
+    source_a.dirty();
+    test.run_next(test.deferred);
+    test.run_next(test.autosaves);
+
+    await test.controller.open(entry("B.md"));
+    test.gets[1].callbacks.success(file("B.md", {content: "B content"}));
+    await Promise.resolve();
+    await Promise.resolve();
+    const source_b = test.source_editors[1];
+    source_b.text = "B edit";
+    source_b.dirty();
+    test.run_next(test.deferred);
+    assert.equal(test.autosaves.length, 1);
+
+    test.puts[0].callbacks.success(
+        file("A.md", {
+            workspace_revision: 2,
+            entry_id: "entry:A.md:v2",
+            content: "A edit",
+            version: "b".repeat(64),
+        }),
+    );
+    assert.equal(test.autosaves[0].cancelled, true);
+    const reconciliation = test.controller.reconcileEntry(
+        entry("B.md", {entry_id: "entry:B.md:v2"}),
+        2,
+    );
+    assert.equal(test.gets.length, 3);
+    test.gets[2].callbacks.success(
+        file("B.md", {
+            workspace_revision: 2,
+            entry_id: "entry:B.md:v2",
+            content: "B content",
+            version: "c".repeat(64),
+        }),
+    );
+    assert.equal(await reconciliation, "current");
+    assert.equal(test.controller.getSnapshot().activeDocument.currentText, "B edit");
+    assert.equal(test.controller.getSnapshot().activeDocument.authority, "current");
+    assert.equal(test.autosaves.length, 2, "reconciliation must re-arm the dirty tab");
+    test.run_next(test.autosaves);
+    test.run_next(test.autosaves);
+    assert.equal(test.puts.length, 2);
+    assert.equal(test.puts[1].request.entryId, "entry:B.md:v2");
+    assert.equal(test.puts[1].request.content, "B edit");
+
     await test.controller.destroy();
     test.root.remove();
 });
@@ -755,6 +819,29 @@ run_test("Rich loads only on demand and shares the document save session", async
     test.root.remove();
 });
 
+run_test("Source and Rich switches preserve the cursor at line granularity", async () => {
+    const test = harness();
+    await test.controller.open(entry("README.md"));
+    test.gets[0].callbacks.success(
+        file("README.md", {content: "first\nsecond\nthird\n", size: 19}),
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+    test.source_editors[0].getViewState = () => ({
+        selection: {anchor: 13, head: 13},
+        scrollTop: 7,
+    });
+
+    assert.equal(await test.controller.switchMode("rich"), true);
+    assert.equal(test.rich_editors[0].cursorLine, 2);
+    test.rich_editors[0].cursorLine = 1;
+    assert.equal(await test.controller.switchMode("source"), true);
+    assert.deepEqual(test.source_editors.at(-1).initialSelection, {anchor: 6, head: 6});
+
+    await test.controller.destroy();
+    test.root.remove();
+});
+
 run_test("explicit Rich save consumes one serialization callback for the revision", async () => {
     const test = harness();
     await open_text(test);
@@ -769,6 +856,31 @@ run_test("explicit Rich save consumes one serialization callback for the revisio
     const snapshot = test.controller.getSnapshot();
     assert.equal(snapshot.activeDocument.serialization.state, "idle");
     assert.equal(snapshot.store.ignoredStaleResponses, 0);
+    await test.controller.destroy();
+    test.root.remove();
+});
+
+run_test("Rich revision drift has a lossless one-click Source recovery", async () => {
+    const test = harness();
+    await open_text(test);
+    assert.equal(await test.controller.switchMode("rich"), true);
+    const rich = test.rich_editors[0];
+    rich.markdown = "# recovered\n";
+    rich.revision += 2;
+    rich.dirty();
+
+    let snapshot = test.controller.getSnapshot();
+    assert.equal(snapshot.surface.kind, "error");
+    assert.equal(snapshot.surface.action, "source");
+    assert.equal(await test.controller.switchMode("source"), true);
+
+    snapshot = test.controller.getSnapshot();
+    assert.equal(snapshot.surface.kind, "text");
+    assert.equal(snapshot.activeDocument.editorMode, "source");
+    assert.equal(snapshot.activeDocument.currentText, "# recovered\n");
+    assert.equal(snapshot.activeDocument.editRevision, rich.revision);
+    assert.equal(snapshot.mountedAdapter, "source");
+    assert.equal(test.source_editors.at(-1).text, "# recovered\n");
     await test.controller.destroy();
     test.root.remove();
 });
@@ -869,7 +981,7 @@ run_test(
     },
 );
 
-run_test("an external workspace revision clears cached IDs and the mounted adapter", async () => {
+run_test("an external workspace revision preserves the mounted save session", async () => {
     const test = harness();
     await open_text(test);
     const source = test.source_editors[0];
@@ -883,10 +995,12 @@ run_test("an external workspace revision clears cached IDs and the mounted adapt
         writable: true,
     });
     let snapshot = test.controller.getSnapshot();
-    assert.equal(snapshot.activeDocument, undefined);
-    assert.equal(snapshot.mountedAdapter, undefined);
-    assert.equal(snapshot.store.workspaces.get("workspace-a").documents.size, 0);
-    assert.match(snapshot.surface.message, /Workspace changed/);
+    assert.equal(snapshot.activeDocument.currentText, "stale local edit");
+    assert.equal(snapshot.activeDocument.authority, "stale");
+    assert.equal(snapshot.activeDocument.state, "saving");
+    assert.equal(snapshot.mountedAdapter, "source");
+    assert.equal(snapshot.store.workspaces.get("workspace-a").documents.size, 1);
+    assert.match(snapshot.notice, /validating open files/);
     test.puts[0].callbacks.success(
         file("README.md", {
             workspace_revision: 2,
@@ -896,9 +1010,12 @@ run_test("an external workspace revision clears cached IDs and the mounted adapt
         }),
     );
     snapshot = test.controller.getSnapshot();
-    assert.equal(snapshot.activeDocument, undefined);
-    assert.equal(snapshot.store.workspaces.get("workspace-a").documents.size, 0);
-    assert.match(snapshot.surface.message, /Workspace changed/);
+    assert.equal(snapshot.activeDocument.currentText, "stale local edit");
+    assert.equal(snapshot.activeDocument.authority, "current");
+    assert.equal(snapshot.activeDocument.state, "clean");
+    assert.equal(snapshot.activeDocument.entryId, "entry:README.md:v2");
+    assert.equal(snapshot.store.workspaces.get("workspace-a").documents.size, 1);
+    assert.equal(snapshot.mountedAdapter, "source");
     await test.controller.destroy();
     test.root.remove();
 });

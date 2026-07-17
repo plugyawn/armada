@@ -7,13 +7,16 @@ export type PearWorkspaceShellTab = {
     preview: boolean;
     dirty: boolean;
     workspaceRevision: number;
+    previousPath?: string;
 };
 
 export type PearWorkspaceShellSurfaceElements = {
     editorRoot: HTMLElement;
     nontextRoot: HTMLElement;
     conflictRoot: HTMLElement;
+    conflictRemote: HTMLElement;
     status: HTMLElement;
+    statusActions: HTMLElement;
     sourceButton: HTMLButtonElement;
     richButton: HTMLButtonElement;
     modeFeedback: HTMLElement;
@@ -148,6 +151,7 @@ export function render_pear_workspace_surface(options: {
     const surface = snapshot?.surface;
     const document_session = snapshot?.activeDocument;
     elements.conflictRoot.hidden = document_session?.state !== "conflict";
+    elements.conflictRemote.textContent = document_session?.conflict?.remoteText ?? "";
     elements.sourceButton.hidden = surface?.kind !== "text";
     elements.richButton.hidden = surface?.kind !== "text" || !surface.file.rich_mode_eligible;
     elements.sourceButton.setAttribute(
@@ -160,6 +164,25 @@ export function render_pear_workspace_surface(options: {
     );
     const rich_issue = snapshot?.richModeIssue;
     const rich_loading = snapshot?.richModeLoading ?? false;
+    elements.editorRoot.setAttribute("aria-busy", String(rich_loading));
+    const existing_loading = elements.editorRoot.querySelector<HTMLElement>(
+        ":scope > .pear-workspace-rich-loading",
+    );
+    if (!rich_loading) {
+        existing_loading?.remove();
+    }
+    if (rich_loading && elements.editorRoot.childElementCount === 0) {
+        const loading = document.createElement("div");
+        loading.className = "pear-workspace-rich-loading";
+        loading.setAttribute("role", "status");
+        loading.setAttribute("aria-label", "Loading Rich editor");
+        for (let index = 0; index < 3; index += 1) {
+            const line = document.createElement("span");
+            line.setAttribute("aria-hidden", "true");
+            loading.append(line);
+        }
+        elements.editorRoot.append(loading);
+    }
     if (elements.richButton.disabled !== rich_loading) {
         elements.richButton.disabled = rich_loading;
     }
@@ -234,7 +257,13 @@ export function render_pear_workspace_surface(options: {
             break;
         }
         case "error": {
-            elements.nontextRoot.textContent = surface.message;
+            const message = document.createElement("span");
+            message.textContent = surface.message;
+            const action = document.createElement("button");
+            action.type = "button";
+            action.dataset["action"] = surface.action === "source" ? "mode-source" : "retry-file";
+            action.textContent = surface.action === "source" ? "Switch to Source" : "Retry";
+            elements.nontextRoot.append(message, action);
 
             break;
         }
@@ -263,7 +292,10 @@ export function render_pear_workspace_surface(options: {
                 break;
             }
             case "error": {
-                elements.status.textContent = document_session.error ?? "Workspace editor error";
+                elements.status.textContent =
+                    document_session.error === "too_large"
+                        ? "This edit is larger than the workspace file limit. Shorten it before retrying."
+                        : (document_session.error ?? "Workspace editor error");
 
                 break;
             }
@@ -300,6 +332,7 @@ export function render_pear_workspace_surface(options: {
                 }
         }
     }
+    elements.statusActions.hidden = document_session?.state !== "error";
     render_links(elements, options.workspaceId, options.activeTab, snapshot, options.rawUrl);
 }
 

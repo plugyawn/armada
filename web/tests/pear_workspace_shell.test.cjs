@@ -33,6 +33,7 @@ for (const [name, value] of Object.entries({
 }
 
 const workspace_shell = zrequire("pear_workspace_shell");
+const workspace_events = zrequire("pear_workspace_events");
 
 function entry(path, kind = "file", overrides = {}) {
     return {
@@ -115,6 +116,9 @@ function harness(workspace_id, initial_room = "files") {
             },
             closes: 0,
             modes: [],
+            reconciliations: [],
+            detachedPaths: [],
+            discards: 0,
             activateWorkspace(id, revision, limits, preferences) {
                 this.activations.push({id, revision, limits, preferences});
             },
@@ -139,6 +143,20 @@ function harness(workspace_id, initial_room = "files") {
                 return true;
             },
             async save() {},
+            async reconcileEntry(opened_entry, revision, previous_path) {
+                this.reconciliations.push({
+                    entry: opened_entry,
+                    revision,
+                    previousPath: previous_path,
+                });
+                return "missing";
+            },
+            detachPath(path) {
+                this.detachedPaths.push(path);
+            },
+            discardChanges() {
+                this.discards += 1;
+            },
             async resolveConflict() {},
             getSnapshot() {
                 return this.snapshot;
@@ -387,6 +405,15 @@ run_test("Rich failures are explained beside a retryable mode control", async ()
         stable_label_node,
         "source keystroke updates preserve unchanged mode-control DOM",
     );
+
+    const editor_root = test.root.querySelector("[data-role='editor']");
+    editor_root.replaceChildren();
+    test.editors[0].update({richModeLoading: true});
+    assert.equal(editor_root.getAttribute("aria-busy"), "true");
+    assert.ok(editor_root.querySelector(":scope > .pear-workspace-rich-loading") !== null);
+    test.editors[0].update({richModeLoading: false});
+    assert.equal(editor_root.getAttribute("aria-busy"), "false");
+    assert.equal(editor_root.querySelector(":scope > .pear-workspace-rich-loading"), null);
 
     test.editors[0].update({
         richModeIssue: {
@@ -648,9 +675,14 @@ run_test("file tabs, mobile drawer, and Escape preserve focus and unsaved work",
     assert.equal(document.activeElement.dataset.tabPath, "B.md");
 
     const explorer_toggle = test.root.querySelector("[data-action='toggle-explorer']");
+    const focus_before_drawer = document.activeElement;
     test.click(explorer_toggle);
     assert.equal(explorer_toggle.getAttribute("aria-expanded"), "true");
-    assert.equal(document.activeElement, test.root.querySelector("[data-role='search-input']"));
+    assert.equal(
+        document.activeElement,
+        focus_before_drawer,
+        "opening the drawer must not steal focus",
+    );
     document.activeElement.dispatchEvent(
         new window.KeyboardEvent("keydown", {
             key: "Tab",
@@ -874,6 +906,40 @@ run_test("a save revision blocks stale tab IDs until refresh and path rebind", a
     test.root.remove();
 });
 
+run_test("a pushed Workspace revision refreshes only its mounted shell once", async () => {
+    const test = harness("workspace-push");
+    const first = descriptor("workspace-push", 1);
+    test.send_descriptor(first);
+    test.send_tree(0, first.root, []);
+
+    workspace_events.apply_pear_workspace_changed_event({
+        type: "pear_workspace_changed",
+        workspace_id: "another-workspace",
+        revision: 2,
+    });
+    assert.equal(test.refreshes.length, 0);
+
+    const event = {
+        type: "pear_workspace_changed",
+        workspace_id: "workspace-push",
+        revision: 2,
+    };
+    workspace_events.apply_pear_workspace_changed_event(event);
+    workspace_events.apply_pear_workspace_changed_event(event);
+    assert.equal(test.refreshes.length, 1, "duplicate revision events must not restart refresh");
+    assert.equal(test.file_controllers[0].contexts.at(-1).authorityStale, true);
+
+    const second = descriptor("workspace-push", 2);
+    test.refreshes[0].callbacks.success({changed: true, workspace: second});
+    assert.equal(test.controller.getDebugState().descriptor.workspace_revision, 2);
+    assert.equal(test.file_controllers[0].contexts.at(-1).authorityStale, false);
+
+    await test.controller.destroy();
+    workspace_events.apply_pear_workspace_changed_event({...event, revision: 3});
+    assert.equal(test.refreshes.length, 1, "destroy must unsubscribe the shell");
+    test.root.remove();
+});
+
 run_test("Refresh retries an initial descriptor failure without remounting", async () => {
     const test = harness("workspace-descriptor-retry");
     test.descriptors[0].callbacks.error({
@@ -1030,8 +1096,15 @@ run_test("file mutations reconcile tabs and force revision-safe descriptor rebin
             removed_entries: 3,
         },
     });
-    assert.deepEqual(test.controller.getDebugState().tabs, []);
-    assert.equal(test.controller.getDebugState().activePath, undefined);
+    assert.deepEqual(
+        test.controller.getDebugState().tabs.map((tab) => [tab.path, tab.entry.status]),
+        [
+            ["archive/A.md", "deleted"],
+            ["archive/B.md", "deleted"],
+        ],
+    );
+    assert.deepEqual(test.editors[0].detachedPaths, ["archive/A.md", "archive/B.md"]);
+    assert.equal(test.controller.getDebugState().activePath, "archive/B.md");
     assert.equal(test.refreshes.length, 3);
     const third = descriptor("workspace-mutations", 3);
     test.refreshes[2].callbacks.success({changed: true, workspace: third});
@@ -1053,7 +1126,11 @@ run_test("file mutations reconcile tabs and force revision-safe descriptor rebin
     });
     assert.deepEqual(
         test.controller.getDebugState().tabs.map((tab) => [tab.path, tab.workspaceRevision]),
-        [["New.md", 4]],
+        [
+            ["archive/A.md", 3],
+            ["archive/B.md", 3],
+            ["New.md", 4],
+        ],
     );
     assert.equal(test.refreshes.length, 4);
     const fourth = descriptor("workspace-mutations", 4);

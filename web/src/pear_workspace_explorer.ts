@@ -158,9 +158,9 @@ export function create_pear_workspace_explorer(
             !directory.complete &&
             !directory.loading
         ) {
-            const more = document.createElement("span");
+            const more = document.createElement("button");
+            more.type = "button";
             more.dataset["action"] = "load-more";
-            more.setAttribute("role", "button");
             more.setAttribute("aria-label", `Load more files in ${entry.name}`);
             more.textContent = "More";
             element.append(more);

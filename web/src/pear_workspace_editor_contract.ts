@@ -31,7 +31,12 @@ export type PearWorkspaceEditorSurface =
           maxBytes: number;
           rawAvailable: boolean;
       }
-    | {kind: "error"; entry: PearWorkspaceEntry | undefined; message: string};
+    | {
+          kind: "error";
+          entry: PearWorkspaceEntry | undefined;
+          message: string;
+          action?: "retry" | "source";
+      };
 
 export type PearWorkspaceEditorSnapshot = {
     surface: PearWorkspaceEditorSurface;
@@ -118,9 +123,16 @@ export type PearWorkspaceEditorController = {
         preferences?: PearWorkspaceEditorPreferences,
     ) => void;
     open: (entry: PearWorkspaceEntry, preferredMode?: "rich" | "source") => Promise<void>;
+    reconcileEntry: (
+        entry: PearWorkspaceEntry,
+        workspaceRevision: number,
+        previousPath?: string,
+    ) => Promise<"conflict" | "current" | "error" | "missing">;
+    detachPath: (path: string) => void;
     closeActive: () => Promise<boolean>;
     switchMode: (mode: "rich" | "source") => Promise<boolean>;
     save: () => Promise<void>;
+    discardChanges: () => Promise<void>;
     resolveConflict: (resolution: "overwrite" | "reload") => Promise<void>;
     getSnapshot: () => PearWorkspaceEditorSnapshot;
     getSelectionContext: () => PearWorkspaceEditorSelectionContext | undefined;

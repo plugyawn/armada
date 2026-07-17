@@ -77,6 +77,12 @@ function get_document(state, workspace_id, path, request_generation) {
     return document;
 }
 
+function get_document_by_identity(state, id) {
+    const document = workspace_store.get_pear_workspace_document(state, id);
+    assert.ok(document !== undefined);
+    return document;
+}
+
 function loaded_store(workspace_id = "workspace-a", path = "README.md") {
     let state = workspace_store.create_pear_workspace_store();
     state = activate(state, workspace_id);
@@ -279,7 +285,7 @@ run_test("stale save callbacks cannot consume the single in-flight save", () => 
     assert.equal(state.ignoredStaleResponses, 1);
 });
 
-run_test("a revision advance invalidates every session except the saved identity", () => {
+run_test("a revision advance preserves sessions and marks unresolved identities stale", () => {
     const loaded = loaded_store("workspace-a", "A.md");
     let {state} = loaded;
     const a_id = identity("workspace-a", "A.md", loaded.request_generation);
@@ -298,28 +304,23 @@ run_test("a revision advance invalidates every session except the saved identity
         newVersion: "version-2",
         workspaceRevision: 2,
     });
-    const generation_before_invalidation = workspace_store.get_pear_workspace(
-        state,
-        "workspace-a",
-    ).requestGeneration;
-
     state = reduce(state, {
-        type: "invalidate_workspace_revision",
+        type: "advance_workspace_revision",
         workspaceId: "workspace-a",
-        workspaceRevision: 2,
-        preservedEntryId: "entry:A.md:v2",
+        workspaceRevision: 3,
+        currentEntryIds: ["entry:A.md:v2"],
     });
     const workspace = workspace_store.get_pear_workspace(state, "workspace-a");
-    assert.deepEqual([...workspace.documents.keys()], ["entry:A.md:v2"]);
-    assert.equal(workspace.activeEntryId, undefined);
+    assert.deepEqual([...workspace.documents.keys()], ["entry:B.md", "entry:A.md:v2"]);
+    assert.equal(workspace.activeEntryId, "entry:B.md");
     assert.equal(workspace.pendingDocumentRequest, undefined);
-    assert.equal(workspace.requestGeneration, generation_before_invalidation + 1);
     assert.equal(
-        workspace_store.get_pear_workspace_document(
-            state,
-            identity("workspace-a", "B.md", b_open.request_generation),
-        ),
-        undefined,
+        get_document(state, "workspace-a", "B.md", b_open.request_generation).authority,
+        "stale",
+    );
+    assert.equal(
+        [...workspace.documents.values()].find((document) => document.path === "A.md").authority,
+        "current",
     );
 });
 
@@ -335,18 +336,176 @@ run_test("workspace mode preference is restored without creating a document sess
     assert.equal(workspace.documents.size, 0);
 });
 
-run_test("an external revision advance can invalidate every cached document", () => {
-    const loaded = loaded_store("workspace-a", "A.md");
-    let state = activate(loaded.state, "workspace-a", 2);
+run_test(
+    "an external revision advance keeps the active buffer while withholding save authority",
+    () => {
+        const loaded = loaded_store("workspace-a", "A.md");
+        let state = activate(loaded.state, "workspace-a", 2);
+        state = reduce(state, {
+            type: "advance_workspace_revision",
+            workspaceId: "workspace-a",
+            workspaceRevision: 2,
+        });
+        const workspace = workspace_store.get_pear_workspace(state, "workspace-a");
+        assert.equal(workspace.activeEntryId, "entry:A.md");
+        assert.equal(workspace.documents.size, 1);
+        assert.equal(workspace.pendingDocumentRequest, undefined);
+        assert.equal(
+            get_document(state, "workspace-a", "A.md", loaded.request_generation).authority,
+            "stale",
+        );
+    },
+);
+
+run_test("a rename rebind preserves a dirty buffer under the new identity", () => {
+    const loaded = loaded_store("workspace-a", "notes.md");
+    let {state} = loaded;
+    const old_id = identity("workspace-a", "notes.md", loaded.request_generation);
+    state = source_edit(state, old_id, "local edit\n");
     state = reduce(state, {
-        type: "invalidate_workspace_revision",
+        type: "advance_workspace_revision",
         workspaceId: "workspace-a",
         workspaceRevision: 2,
     });
-    const workspace = workspace_store.get_pear_workspace(state, "workspace-a");
-    assert.equal(workspace.activeEntryId, undefined);
-    assert.equal(workspace.documents.size, 0);
-    assert.equal(workspace.pendingDocumentRequest, undefined);
+    state = reduce(state, {
+        type: "rebind_document",
+        ...old_id,
+        newEntryId: "entry:renamed.md:v2",
+        newPath: "renamed.md",
+        newVersion: "version-2",
+        remoteText: "initial\n",
+        workspaceRevision: 2,
+    });
+
+    const rebound = get_document_by_identity(state, {
+        workspaceId: "workspace-a",
+        entryId: "entry:renamed.md:v2",
+        path: "renamed.md",
+        requestGeneration: loaded.request_generation,
+    });
+    assert.equal(rebound.entryId, "entry:renamed.md:v2");
+    assert.equal(rebound.currentText, "local edit\n");
+    assert.equal(rebound.savedText, "initial\n");
+    assert.equal(rebound.state, "dirty");
+    assert.equal(rebound.authority, "current");
+    assert.equal(
+        workspace_store.get_pear_workspace(state, "workspace-a").activeEntryId,
+        "entry:renamed.md:v2",
+    );
+});
+
+run_test("a clean external replacement adopts the authoritative file", () => {
+    const loaded = loaded_store();
+    let {state} = loaded;
+    const id = identity("workspace-a", "README.md", loaded.request_generation);
+    state = reduce(state, {
+        type: "advance_workspace_revision",
+        workspaceId: "workspace-a",
+        workspaceRevision: 2,
+    });
+    state = reduce(state, {
+        type: "rebind_document",
+        ...id,
+        newEntryId: "entry:README.md:v2",
+        newPath: "README.md",
+        newVersion: "version-2",
+        remoteText: "remote edit\n",
+        workspaceRevision: 2,
+    });
+
+    const rebound = get_document_by_identity(state, {
+        workspaceId: "workspace-a",
+        entryId: "entry:README.md:v2",
+        path: "README.md",
+        requestGeneration: loaded.request_generation,
+    });
+    assert.equal(rebound.currentText, "remote edit\n");
+    assert.equal(rebound.savedText, "remote edit\n");
+    assert.equal(rebound.state, "clean");
+    assert.equal(rebound.authority, "current");
+});
+
+run_test("a dirty external replacement becomes an inspectable conflict", () => {
+    const loaded = loaded_store();
+    let {state} = loaded;
+    const id = identity("workspace-a", "README.md", loaded.request_generation);
+    state = source_edit(state, id, "local edit\n");
+    state = reduce(state, {
+        type: "advance_workspace_revision",
+        workspaceId: "workspace-a",
+        workspaceRevision: 2,
+    });
+    state = reduce(state, {
+        type: "rebind_document",
+        ...id,
+        newEntryId: "entry:README.md:v2",
+        newPath: "README.md",
+        newVersion: "version-2",
+        remoteText: "remote edit\n",
+        workspaceRevision: 2,
+    });
+
+    const rebound = get_document_by_identity(state, {
+        workspaceId: "workspace-a",
+        entryId: "entry:README.md:v2",
+        path: "README.md",
+        requestGeneration: loaded.request_generation,
+    });
+    assert.equal(rebound.currentText, "local edit\n");
+    assert.equal(rebound.state, "conflict");
+    assert.equal(rebound.authority, "current");
+    assert.deepEqual(rebound.conflict, {
+        remoteText: "remote edit\n",
+        remoteVersion: "version-2",
+        remoteEntryId: "entry:README.md:v2",
+        remoteWorkspaceRevision: 2,
+    });
+});
+
+run_test("deleting an open file detaches but never destroys its local buffer", () => {
+    const loaded = loaded_store();
+    let {state} = loaded;
+    const id = identity("workspace-a", "README.md", loaded.request_generation);
+    state = source_edit(state, id, "scratch buffer\n");
+    state = reduce(state, {type: "detach_document", ...id});
+    state = reduce(state, {
+        type: "advance_workspace_revision",
+        workspaceId: "workspace-a",
+        workspaceRevision: 2,
+    });
+    state = reduce(state, {type: "save_started", ...id});
+
+    const detached = get_document(state, "workspace-a", "README.md", loaded.request_generation);
+    assert.equal(detached.currentText, "scratch buffer\n");
+    assert.equal(detached.authority, "detached");
+    assert.equal(detached.saveInFlight, undefined);
+    assert.match(detached.error, /deleted outside the editor/);
+});
+
+run_test("saving another file cannot turn a detached buffer into stale authority", () => {
+    const loaded = loaded_store();
+    let {state} = loaded;
+    const detached_id = identity("workspace-a", "README.md", loaded.request_generation);
+    state = source_edit(state, detached_id, "scratch buffer\n");
+    state = reduce(state, {type: "detach_document", ...detached_id});
+
+    const opened = open_document(state, "workspace-a", "notes.md");
+    state = load_document(opened.state, "workspace-a", "notes.md", opened.request_generation);
+    const notes_id = identity("workspace-a", "notes.md", opened.request_generation);
+    state = source_edit(state, notes_id, "saved notes\n");
+    state = reduce(state, {type: "save_started", ...notes_id});
+    state = reduce(state, {
+        type: "save_succeeded",
+        ...notes_id,
+        editRevision: 1,
+        newEntryId: "entry:notes.md:v2",
+        newVersion: "version-2",
+        workspaceRevision: 2,
+    });
+
+    const detached = get_document(state, "workspace-a", "README.md", loaded.request_generation);
+    assert.equal(detached.authority, "detached");
+    assert.equal(detached.currentText, "scratch buffer\n");
 });
 
 run_test("conflict Overwrite keeps the latest edit and adopts only the remote base", () => {
@@ -692,8 +851,10 @@ run_test("2,000 seeded save schedules never cross workspace or document authorit
         const navigate = next() % 3 !== 0;
         let other_identity;
         let other_before;
+        let other_same_workspace = false;
         if (navigate) {
             const other_workspace = next() % 2 === 0 ? workspace_id : `${workspace_id}-other`;
+            other_same_workspace = other_workspace === workspace_id;
             const other_path = path === "README.md" ? "notes/A.md" : "README.md";
             state = activate(state, other_workspace);
             const opened = open_document(state, other_workspace, other_path);
@@ -723,11 +884,17 @@ run_test("2,000 seeded save schedules never cross workspace or document authorit
 
         assert.deepEqual(save, immutable_save, `seed ${seed}: PUT snapshot mutated`);
         if (other_identity !== undefined) {
+            const other_after = workspace_store.get_pear_workspace_document(state, other_identity);
             assert.deepEqual(
-                workspace_store.get_pear_workspace_document(state, other_identity),
+                other_same_workspace && valid_callback
+                    ? {...other_after, authority: other_before.authority}
+                    : other_after,
                 other_before,
-                `seed ${seed}: callback changed another document`,
+                `seed ${seed}: callback crossed document authority`,
             );
+            if (other_same_workspace && valid_callback) {
+                assert.equal(other_after.authority, "stale");
+            }
         }
         const original_workspace = workspace_store.get_pear_workspace(state, workspace_id);
         assert.ok(original_workspace !== undefined);

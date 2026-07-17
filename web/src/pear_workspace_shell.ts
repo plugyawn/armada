@@ -10,6 +10,7 @@ import type {
     PearWorkspaceEditorSnapshot,
 } from "./pear_workspace_editor.ts";
 import {create_pear_workspace_editor} from "./pear_workspace_editor.ts";
+import {on_pear_workspace_changed} from "./pear_workspace_events.ts";
 import type {PearWorkspaceExplorerController} from "./pear_workspace_explorer.ts";
 import {create_pear_workspace_explorer} from "./pear_workspace_explorer.ts";
 import type {
@@ -229,7 +230,9 @@ export function create_pear_workspace_shell(
     const editor_root = required_element(options.root, "[data-role='editor']");
     const nontext_root = required_element(options.root, "[data-role='nontext']");
     const conflict_root = required_element(options.root, "[data-role='conflict']");
+    const conflict_remote = required_element(options.root, "[data-role='conflict-remote']");
     const status = required_element(options.root, "[data-role='status']");
+    const status_actions = required_element(options.root, "[data-role='status-actions']");
     const source_button = required_typed_element(
         options.root,
         "[data-action='mode-source']",
@@ -423,9 +426,7 @@ export function create_pear_workspace_shell(
     const set_mobile_explorer_open = (open: boolean, restore_focus: boolean): void => {
         mobile_explorer_open = open;
         set_pear_workspace_mobile_explorer_open(options.root, explorer_toggle, open);
-        if (open) {
-            search_input.focus();
-        } else if (restore_focus && !destroyed) {
+        if (!open && restore_focus && !destroyed) {
             explorer_toggle.focus();
         }
     };
@@ -539,7 +540,9 @@ export function create_pear_workspace_shell(
                 editorRoot: editor_root,
                 nontextRoot: nontext_root,
                 conflictRoot: conflict_root,
+                conflictRemote: conflict_remote,
                 status,
+                statusActions: status_actions,
                 sourceButton: source_button,
                 richButton: rich_button,
                 modeFeedback: mode_feedback,
@@ -1083,6 +1086,7 @@ export function create_pear_workspace_shell(
                 if (!path_is_entry_or_child(tab.path, source_path)) {
                     continue;
                 }
+                tab.previousPath = tab.path;
                 const next_path = renamed_path(tab.path, source_path, destination_path);
                 tab.path = next_path;
                 if (tab.entry.path === source_path && event.mutation.entry?.kind === "file") {
@@ -1101,13 +1105,13 @@ export function create_pear_workspace_shell(
             }
         } else if (event.operation === "delete" && event.sourcePath !== undefined) {
             const source_path = event.sourcePath;
-            for (let index = tabs.length - 1; index >= 0; index -= 1) {
-                if (path_is_entry_or_child(tabs[index]!.path, source_path)) {
-                    tabs.splice(index, 1);
+            for (const tab of tabs) {
+                if (!path_is_entry_or_child(tab.path, source_path)) {
+                    continue;
                 }
-            }
-            if (active_path !== undefined && path_is_entry_or_child(active_path, source_path)) {
-                active_path = tabs.at(-1)?.path;
+                editor.detachPath(tab.path);
+                tab.entry = {...tab.entry, status: "deleted"};
+                tab.workspaceRevision = event.mutation.workspace_revision;
             }
         }
         render_tabs();
@@ -1122,35 +1126,65 @@ export function create_pear_workspace_shell(
         if (descriptor === undefined || rebind_requests.has(tab.path)) {
             return;
         }
+        const requested_path = tab.path;
+        const previous_path = tab.previousPath ?? requested_path;
         status.textContent = `Refreshing ${tab.entry.name}…`;
-        const request = dependencies.search(descriptor.uuid, tab.path, 100, {
+        const request = dependencies.search(descriptor.uuid, requested_path, 100, {
             success(response) {
-                rebind_requests.delete(tab.path);
+                rebind_requests.delete(requested_path);
                 if (
                     destroyed ||
                     authority_stale ||
-                    response.workspace_revision !== descriptor?.workspace_revision
+                    response.workspace_revision !== descriptor?.workspace_revision ||
+                    tab.path !== requested_path
                 ) {
                     return;
                 }
                 const rebound = response.entries.find(
-                    (entry) => entry.path === tab.path && entry.kind === "file",
+                    (entry) => entry.path === requested_path && entry.kind === "file",
                 );
                 if (rebound === undefined || tree === undefined) {
-                    status.textContent = `${tab.path} is no longer in this workspace`;
+                    editor.detachPath(previous_path);
+                    tab.entry = {...tab.entry, status: "deleted"};
+                    tab.workspaceRevision = response.workspace_revision;
+                    delete tab.previousPath;
+                    render_tabs();
+                    render_surface();
+                    status.textContent = `${requested_path} was deleted; its local buffer is preserved`;
                     return;
                 }
                 tree = reveal_pear_workspace_search_result(tree, response, rebound.entry_id);
-                tab.entry = rebound;
-                tab.workspaceRevision = response.workspace_revision;
-                render_tree();
-                render_tabs();
-                if (active_path === tab.path) {
-                    activate_entry(rebound, !tab.preview, "replace");
-                }
+                const had_session = [...editor.getSnapshot().store.workspaces.values()].some(
+                    (workspace) =>
+                        [...workspace.documents.values()].some(
+                            (document) => document.path === previous_path,
+                        ),
+                );
+                const finish_reconciliation = async (): Promise<void> => {
+                    const outcome = await editor.reconcileEntry(
+                        rebound,
+                        response.workspace_revision,
+                        previous_path,
+                    );
+                    if (destroyed || tab.path !== requested_path) {
+                        return;
+                    }
+                    tab.entry = rebound;
+                    tab.workspaceRevision = response.workspace_revision;
+                    delete tab.previousPath;
+                    render_tree();
+                    render_tabs();
+                    render_surface();
+                    if (active_path === tab.path && (!had_session || outcome === "missing")) {
+                        activate_entry(rebound, !tab.preview, "replace");
+                    } else if (outcome === "error") {
+                        status.textContent = `Could not validate ${requested_path}. Retry refresh.`;
+                    }
+                };
+                void finish_reconciliation();
             },
             error(error) {
-                rebind_requests.delete(tab.path);
+                rebind_requests.delete(requested_path);
                 record_api_error(error);
                 if (!authority_stale) {
                     status.textContent = error_message(error);
@@ -1158,7 +1192,7 @@ export function create_pear_workspace_shell(
             },
         });
         if (request !== undefined) {
-            rebind_requests.set(tab.path, request);
+            rebind_requests.set(requested_path, request);
         }
     };
 
@@ -1194,7 +1228,16 @@ export function create_pear_workspace_shell(
         load_directory(tree.rootId, true);
         const location = read_pear_workspace_location();
         const restored_active = active_tab();
-        if (room === "readme") {
+        const active_document = editor.getSnapshot().activeDocument;
+        const active_requires_rebind =
+            restored_active !== undefined &&
+            active_document !== undefined &&
+            active_document.authority !== "current" &&
+            (active_document.path === restored_active.path ||
+                active_document.path === restored_active.previousPath);
+        if (active_requires_rebind) {
+            resolve_tab_path(restored_active);
+        } else if (room === "readme") {
             if (location.view === "readme" && location.workspaceId === options.workspaceId) {
                 location_mode_request = location.mode;
             }
@@ -1225,6 +1268,11 @@ export function create_pear_workspace_shell(
         } else if (active_path === undefined && next.default_entry?.kind === "file") {
             activate_entry(next.default_entry, false, "replace");
         }
+        for (const tab of tabs) {
+            if (tab !== restored_active && tab.workspaceRevision < next.workspace_revision) {
+                resolve_tab_path(tab);
+            }
+        }
         if (pending_reveal !== undefined && next.workspace_revision >= pending_reveal.revision) {
             const {path} = pending_reveal;
             pending_reveal = undefined;
@@ -1254,7 +1302,14 @@ export function create_pear_workspace_shell(
                 descriptor_request = undefined;
                 if (response.uuid !== options.workspaceId) {
                     status.textContent = "Workspace returned the wrong identity. Retry refresh.";
+                } else if (
+                    required_workspace_revision !== undefined &&
+                    response.workspace_revision < required_workspace_revision
+                ) {
+                    authority_stale = true;
+                    status.textContent = `Workspace has not reached revision ${required_workspace_revision}; retry refresh`;
                 } else {
+                    required_workspace_revision = undefined;
                     apply_descriptor(response);
                 }
                 ready_resolve?.();
@@ -1317,6 +1372,25 @@ export function create_pear_workspace_shell(
         });
         refresh_request = request;
     };
+
+    const unsubscribe_workspace_changed = on_pear_workspace_changed((event) => {
+        if (
+            destroyed ||
+            event.workspace_id !== options.workspaceId ||
+            event.revision <=
+                Math.max(descriptor?.workspace_revision ?? 0, required_workspace_revision ?? 0)
+        ) {
+            return;
+        }
+        required_workspace_revision = Math.max(
+            required_workspace_revision ?? event.revision,
+            event.revision,
+        );
+        authority_stale = true;
+        update_files_context();
+        status.textContent = "Workspace changed; refreshing file identities…";
+        refresh_workspace();
+    });
 
     files = dependencies.createFiles({
         menuButton: file_menu_button,
@@ -1492,6 +1566,24 @@ export function create_pear_workspace_shell(
 
                 break;
             }
+            case "save-retry": {
+                void editor.save();
+
+                break;
+            }
+            case "discard-changes": {
+                void editor.discardChanges();
+
+                break;
+            }
+            case "retry-file": {
+                const tab = active_tab();
+                if (tab !== undefined) {
+                    activate_entry(tab.entry, !tab.preview, "replace");
+                }
+
+                break;
+            }
             // No default
         }
         const close_tab_path_value =
@@ -1514,6 +1606,16 @@ export function create_pear_workspace_shell(
     const on_root_keydown = (event: KeyboardEvent): void => {
         const target = event.target;
         if (!(target instanceof Element)) {
+            return;
+        }
+        if (
+            event.key.toLocaleLowerCase() === "s" &&
+            (event.ctrlKey || event.metaKey) &&
+            !event.altKey
+        ) {
+            event.preventDefault();
+            event.stopPropagation();
+            void editor.save();
             return;
         }
         const tab_button = target.closest<HTMLButtonElement>("[data-tab-path]");
@@ -1716,6 +1818,7 @@ export function create_pear_workspace_shell(
             document.removeEventListener("pointerup", on_explorer_resize_end);
             document.removeEventListener("pointercancel", on_explorer_resize_end);
             window.removeEventListener("popstate", on_popstate);
+            unsubscribe_workspace_changed();
             finish_explorer_resize();
             if (quick_open_timer !== undefined) {
                 clearTimeout(quick_open_timer);

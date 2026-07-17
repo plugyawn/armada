@@ -52,6 +52,7 @@ const muted_users_ui = mock_esm("../src/muted_users_ui");
 const narrow_title = mock_esm("../src/narrow_title");
 const navbar_alerts = mock_esm("../src/navbar_alerts");
 const pm_list = mock_esm("../src/pm_list");
+const pear_workspace_events = mock_esm("../src/pear_workspace_events");
 const reactions = mock_esm("../src/reactions", {
     generate_clean_reactions() {},
 });
@@ -167,6 +168,19 @@ const server_events_dispatch = zrequire("server_events_dispatch");
 function dispatch(ev) {
     server_events_dispatch.dispatch_normal_event(ev);
 }
+
+run_test("pear_workspace_changed reaches the Workspace event reducer", ({override}) => {
+    const stub = make_stub();
+    override(pear_workspace_events, "apply_pear_workspace_changed_event", stub.f);
+    const event = {
+        type: "pear_workspace_changed",
+        workspace_id: "workspace-a",
+        revision: 7,
+    };
+    dispatch(event);
+    assert.equal(stub.num_calls, 1);
+    assert.equal(stub.get_args("event").event, event);
+});
 
 const me = {
     email: "me@example.com",

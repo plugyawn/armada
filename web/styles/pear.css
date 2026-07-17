@@ -1746,7 +1746,7 @@
     background: var(--pear-surface-1);
     font-family: var(--pear-font-pixel);
     /* stylelint-disable-next-line declaration-property-unit-disallowed-list */
-    font-size: 11px;
+    font-size: 12px;
 }
 
 .pear-rail-plan-steps {
@@ -1780,6 +1780,7 @@
 
 .pear-rail-plan-active .pear-rail-plan-text {
     color: var(--pear-ink-1);
+    font-size: 13px;
     font-weight: 500;
 }
 
@@ -1809,6 +1810,7 @@
     overflow: hidden;
     margin: var(--pear-space-1) 0 0 1.8em;
     color: var(--pear-ink-2);
+    font-size: 12px;
     line-height: 1.4;
     text-overflow: ellipsis;
     white-space: nowrap;

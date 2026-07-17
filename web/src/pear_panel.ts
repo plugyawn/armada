@@ -11,6 +11,7 @@ import * as channel from "./channel.ts";
 import {$t} from "./i18n.ts";
 import * as message_lists from "./message_lists.ts";
 import * as narrow_state from "./narrow_state.ts";
+import {pear_live_overview_key, preserve_unchanged_pear_overview} from "./pear_live_dom.ts";
 import * as pear_run_state from "./pear_run_state.ts";
 import {
     compact_reasoning_effort,
@@ -1889,6 +1890,7 @@ function render_workspace_rail(
     const active_runs = runs.filter((run) => run.status === "running" || run.status === "queued");
     const active_run = active_runs[0];
     const overview = active_run?.overview?.trim() ?? "";
+    const current_step = plan_steps.find((step) => step.is_current)?.step ?? "";
     const active_meta_parts: string[] = [];
     if (active_run !== undefined) {
         const duration = active_run.usage?.duration_seconds;
@@ -1931,6 +1933,10 @@ function render_workspace_rail(
         plan_steps,
         has_plan: plan_steps.length > 0,
         overview,
+        overview_key:
+            active_run === undefined
+                ? ""
+                : pear_live_overview_key(active_run.id, current_step, overview),
         has_overview: overview !== "",
         plan_meta: active_meta_parts.join(" · "),
         has_plan_meta: active_meta_parts.length > 0,
@@ -1941,7 +1947,15 @@ function render_workspace_rail(
         return;
     }
     last_workspace_rail_signature = signature;
-    $rail.html(render_pear_workspace_rail(args));
+    const rail = $rail[0];
+    if (!(rail instanceof HTMLElement)) {
+        return;
+    }
+    const template = document.createElement("template");
+    template.innerHTML = render_pear_workspace_rail(args);
+    preserve_unchanged_pear_overview(rail, template.content);
+    $rail.empty();
+    rail.append(template.content);
     $rail.removeAttr("hidden");
 }
 

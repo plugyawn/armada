@@ -35,6 +35,12 @@ import * as muted_users from "./muted_users.ts";
 import * as narrow_state from "./narrow_state.ts";
 import {page_params} from "./page_params.ts";
 import {unmount_pear_artifact} from "./pear_artifact_lifecycle.ts";
+import {
+    pear_live_overview_key,
+    pear_live_progress_matches,
+    pear_live_progress_signature,
+    preserve_unchanged_pear_overview,
+} from "./pear_live_dom.ts";
 import * as pear_panel from "./pear_panel.ts";
 import * as pear_run_state from "./pear_run_state.ts";
 import {windowed_plan_indices} from "./pear_runtime_shared.ts";
@@ -764,6 +770,27 @@ function pear_live_source_is_server_placeholder(content: HTMLElement): boolean {
     return pear_live_is_server_placeholder_for_testing(source_text);
 }
 
+function append_pear_live_overview(
+    progress: HTMLElement,
+    overview: string | null | undefined,
+    overview_key: string,
+): void {
+    if (!overview) {
+        return;
+    }
+    const element = document.createElementNS("http://www.w3.org/1999/xhtml", "div");
+    element.setAttribute("class", "pear-live-overview");
+    element.setAttribute("title", overview);
+    element.setAttribute("data-pear-generated", "true");
+    element.setAttribute("data-pear-overview-key", overview_key);
+    element.setAttribute(
+        "aria-label",
+        $t({defaultMessage: "Activity summary: {overview}"}, {overview}),
+    );
+    element.textContent = overview;
+    progress.append(element);
+}
+
 function render_pear_live_progress($row: JQuery): void {
     const row = $row[0];
     if (!(row instanceof HTMLElement)) {
@@ -823,6 +850,8 @@ function render_pear_live_progress($row: JQuery): void {
     const progress = document.createElementNS("http://www.w3.org/1999/xhtml", "section");
     progress.setAttribute("class", "pear-live-progress");
     const plan = run?.plan ?? [];
+    const progress_signature = pear_live_progress_signature(plan, run?.overview);
+    progress.setAttribute("data-pear-progress-signature", progress_signature);
     if (
         !pear_live_should_show_progress_for_testing(
             plan.length,
@@ -857,18 +886,11 @@ function render_pear_live_progress($row: JQuery): void {
         label.textContent = $t({defaultMessage: "Working"});
         working.append(glyph, label);
         progress.append(working);
-        if (run?.overview) {
-            const overview = document.createElementNS("http://www.w3.org/1999/xhtml", "div");
-            overview.setAttribute("class", "pear-live-overview");
-            overview.setAttribute("title", run.overview);
-            overview.setAttribute("data-pear-generated", "true");
-            overview.setAttribute(
-                "aria-label",
-                $t({defaultMessage: "Activity summary: {overview}"}, {overview: run.overview}),
-            );
-            overview.textContent = run.overview;
-            progress.append(overview);
-        }
+        append_pear_live_overview(
+            progress,
+            run?.overview,
+            pear_live_overview_key(message_id, "working", run?.overview ?? ""),
+        );
     } else {
         let current_index = plan.findIndex((step) => step.status === "in_progress");
         if (current_index === -1) {
@@ -925,22 +947,20 @@ function render_pear_live_progress($row: JQuery): void {
             label.textContent = step.step;
             step_element.append(glyph_element, label);
             progress.append(step_element);
-            if (index === current_index && run?.overview) {
-                const overview = document.createElementNS("http://www.w3.org/1999/xhtml", "div");
-                overview.setAttribute("class", "pear-live-overview");
-                overview.setAttribute("title", run.overview);
-                overview.setAttribute("data-pear-generated", "true");
-                overview.setAttribute(
-                    "aria-label",
-                    $t({defaultMessage: "Activity summary: {overview}"}, {overview: run.overview}),
+            if (index === current_index) {
+                append_pear_live_overview(
+                    progress,
+                    run?.overview,
+                    pear_live_overview_key(message_id, step.step, run?.overview ?? ""),
                 );
-                overview.textContent = run.overview;
-                progress.append(overview);
             }
         }
     }
-    if (existing?.outerHTML === progress.outerHTML) {
+    if (pear_live_progress_matches(existing, progress_signature)) {
         return;
+    }
+    if (existing !== null) {
+        preserve_unchanged_pear_overview(existing, progress);
     }
     existing?.replaceWith(progress);
     if (existing === null) {

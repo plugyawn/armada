@@ -165,6 +165,7 @@ run_test("workspace rail keeps a plan visible before workspace context arrives",
         has_runs: false,
         has_overview: true,
         overview: "Reading the renderer state",
+        overview_key: '[2,"Working","Reading the renderer state"]',
         show_workspace_line: false,
     });
 

@@ -25,6 +25,11 @@ export type PearArtifactDocument = {
 export type PearArtifactRenderOptions = {
     density: "chat" | "wall";
     onAction?: (action: PearArtifactAction, button: HTMLButtonElement) => void;
+    onGeometryChange?: (
+        artifact: HTMLElement,
+        previous_height: number,
+        next_height: number,
+    ) => void;
     onPin?: (button: HTMLButtonElement) => void;
 };
 
@@ -1698,25 +1703,46 @@ function mount_scene_steps(
         set_playing(false);
         apply_step(index);
     };
-    previous.addEventListener("click", () => select_step(current_index - 1), {
-        signal,
-    });
-    next.addEventListener("click", () => select_step(current_index + 1), {signal});
+    previous.addEventListener(
+        "click",
+        () => {
+            select_step(current_index - 1);
+        },
+        {signal},
+    );
+    next.addEventListener(
+        "click",
+        () => {
+            select_step(current_index + 1);
+        },
+        {signal},
+    );
     track.addEventListener(
         "keydown",
         (event) => {
-            if (event.key === "ArrowLeft" || event.key === "ArrowDown") {
-                event.preventDefault();
-                select_step(current_index - 1);
-            } else if (event.key === "ArrowRight" || event.key === "ArrowUp") {
-                event.preventDefault();
-                select_step(current_index + 1);
-            } else if (event.key === "Home") {
-                event.preventDefault();
-                select_step(0);
-            } else if (event.key === "End") {
-                event.preventDefault();
-                select_step(steps.length - 1);
+            switch (event.key) {
+                case "ArrowDown":
+                case "ArrowLeft": {
+                    event.preventDefault();
+                    select_step(current_index - 1);
+                    break;
+                }
+                case "ArrowRight":
+                case "ArrowUp": {
+                    event.preventDefault();
+                    select_step(current_index + 1);
+                    break;
+                }
+                case "Home": {
+                    event.preventDefault();
+                    select_step(0);
+                    break;
+                }
+                case "End": {
+                    event.preventDefault();
+                    select_step(steps.length - 1);
+                    break;
+                }
             }
         },
         {signal},
@@ -2162,8 +2188,13 @@ function render_artifact_utilities(
             block.type === "copy" ? scalar_text(block["body"]) : artifact_log_text(block, data);
         const kind = block.type === "copy" ? "text" : "log";
         controls.push(
-            utility_button("copy", `Copy ${kind} block ${index + 1}`, controller, (button) =>
-                copy_artifact_text(text, button),
+            utility_button(
+                "copy",
+                `Copy ${kind} block ${index + 1}`,
+                controller,
+                async (button) => {
+                    await copy_artifact_text(text, button);
+                },
             ),
         );
     }
@@ -2320,5 +2351,31 @@ export function mount_pear_artifact(
         controller?.abort();
         artifact_lifecycles.delete(artifact);
     });
+    if (
+        controller !== undefined &&
+        options.onGeometryChange !== undefined &&
+        typeof ResizeObserver !== "undefined"
+    ) {
+        let previous_height: number | undefined;
+        const observer = new ResizeObserver((entries) => {
+            const entry = entries.find(({target}) => target === artifact);
+            if (entry === undefined) {
+                return;
+            }
+            const next_height = entry.contentRect.height;
+            if (previous_height !== undefined && previous_height !== next_height) {
+                options.onGeometryChange?.(artifact, previous_height, next_height);
+            }
+            previous_height = next_height;
+        });
+        observer.observe(artifact);
+        controller.signal.addEventListener(
+            "abort",
+            () => {
+                observer.disconnect();
+            },
+            {once: true},
+        );
+    }
     return artifact;
 }

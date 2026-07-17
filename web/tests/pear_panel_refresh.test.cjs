@@ -21,6 +21,85 @@ mock_esm("../src/narrow_state", {
 const pear_panel = zrequire("pear_panel");
 const pear_run_state = zrequire("pear_run_state");
 
+run_test("transient status errors never force the workbench open", () => {
+    assert.equal(
+        pear_panel.workbench_open_for_testing({
+            context_key_value: "devel\\ntopic-a",
+            manually_open: false,
+            has_error: true,
+            error_dismissed: false,
+        }),
+        false,
+    );
+    assert.equal(
+        pear_panel.workbench_open_for_testing({
+            context_key_value: "devel\\ntopic-a",
+            manually_open: true,
+            has_error: false,
+            error_dismissed: false,
+        }),
+        true,
+    );
+});
+
+run_test("liveness reconciliation is active-only and one-shot", () => {
+    assert.equal(
+        pear_panel.run_needs_liveness_reconciliation_for_testing({
+            status: "running",
+            attempted: false,
+        }),
+        true,
+    );
+    assert.equal(
+        pear_panel.run_needs_liveness_reconciliation_for_testing({
+            status: "running",
+            attempted: true,
+        }),
+        false,
+    );
+    assert.equal(
+        pear_panel.run_needs_liveness_reconciliation_for_testing({
+            status: "done",
+            attempted: false,
+        }),
+        false,
+    );
+});
+
+run_test("plan rail keeps current context and marks hidden steps", () => {
+    const steps = pear_panel.pear_rail_plan_steps_for_testing([
+        {
+            id: 1,
+            status: "running",
+            plan: [
+                {step: "one", status: "completed"},
+                {step: "two", status: "completed"},
+                {step: "three", status: "in_progress"},
+                {step: "four", status: "pending"},
+                {step: "five", status: "pending"},
+            ],
+        },
+    ]);
+    assert.deepEqual(
+        steps.map((step) => [step.step, step.status_class, step.is_current === true]),
+        [
+            ["…", "pear-rail-plan-ellipsis", false],
+            ["two", "pear-rail-plan-done", false],
+            ["three", "pear-rail-plan-active", true],
+            ["four", "pear-rail-plan-pending", false],
+            ["…", "pear-rail-plan-ellipsis", false],
+        ],
+    );
+});
+
+run_test("planless active rail exposes one current Working step", () => {
+    const steps = pear_panel.pear_rail_plan_steps_for_testing([{id: 1, status: "queued"}]);
+    assert.deepEqual(
+        steps.map((step) => [step.step, step.status_class, step.is_current]),
+        [["translated: Working", "pear-rail-plan-active", true]],
+    );
+});
+
 run_test("stale narrow callbacks cannot replace runs or surface errors", () => {
     requests.length = 0;
     stream = "devel";

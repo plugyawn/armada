@@ -102,6 +102,24 @@ run_test("pear live placeholder waits for typed assistant text", () => {
     assert.equal(message_list_view.pear_live_is_placeholder_for_testing(true, true), true);
 });
 
+run_test("pear live announcements change only with the Codex plan step", () => {
+    assert.equal(
+        message_list_view.pear_live_announcement_changed_for_testing(undefined, "working"),
+        true,
+    );
+    assert.equal(
+        message_list_view.pear_live_announcement_changed_for_testing("working", "working"),
+        false,
+    );
+    assert.equal(
+        message_list_view.pear_live_announcement_changed_for_testing(
+            "1:Inspect files",
+            "2:Run tests",
+        ),
+        true,
+    );
+});
+
 run_test("planless progress gives way to typed assistant text", () => {
     assert.equal(message_list_view.pear_live_should_show_progress_for_testing(0, undefined), true);
     assert.equal(message_list_view.pear_live_should_show_progress_for_testing(0, false), true);
@@ -120,6 +138,33 @@ run_test("server Working sentinel hydrates without semantic text matching", () =
     assert.equal(
         message_list_view.pear_live_is_server_placeholder_for_testing("· Working now"),
         false,
+    );
+});
+
+run_test("thinking glyph animation is gated by visibility when supported", () => {
+    assert.equal(
+        message_list_view.pear_thinking_glyph_should_animate_for_testing({
+            active: true,
+            intersecting: false,
+            observer_supported: true,
+        }),
+        false,
+    );
+    assert.equal(
+        message_list_view.pear_thinking_glyph_should_animate_for_testing({
+            active: true,
+            intersecting: true,
+            observer_supported: true,
+        }),
+        true,
+    );
+    assert.equal(
+        message_list_view.pear_thinking_glyph_should_animate_for_testing({
+            active: true,
+            intersecting: false,
+            observer_supported: false,
+        }),
+        true,
     );
 });
 

@@ -125,183 +125,6 @@
     opacity: 1;
 }
 
-.pear-topic-control {
-    display: flex;
-    min-width: 0;
-    flex-direction: column;
-    gap: 0;
-    margin-right: var(--width-simplebar-scroll-hover);
-}
-
-.pear-topic-control-heading {
-    display: grid;
-    min-height: var(--line-height-sidebar-row-prominent);
-    align-items: center;
-    gap: 2px;
-    grid-template-columns: minmax(0, 1fr) auto;
-    border-radius: var(--pear-radius-chip);
-}
-
-.pear-topic-control-title {
-    display: block;
-    min-width: 0;
-    padding-left: calc(var(--right-sidebar-header-icon-toggle-width) + 6px);
-    color: var(--color-text-sidebar-heading);
-}
-
-.pear-topic-control-title-text {
-    margin: 0;
-    padding: 3px 5px 2px 0;
-    font-size: 0.92em;
-    font-weight: var(--font-weight-sidebar-heading);
-    letter-spacing: var(--letter-spacing-sidebar-heading);
-    opacity: var(--opacity-sidebar-heading);
-    text-transform: uppercase;
-    white-space: nowrap;
-}
-
-.pear-topic-control-row {
-    display: grid;
-    min-width: 0;
-    align-items: center;
-    grid-template-columns: minmax(0, 1fr);
-}
-
-.pear-topic-runtime-trigger,
-.pear-topic-context-row {
-    width: 100%;
-    min-width: 0;
-    border: 0;
-    border-radius: var(--pear-radius-chip);
-    background: transparent;
-    color: var(--color-text-sidebar-row);
-    cursor: pointer;
-    font-family: inherit;
-    text-align: left;
-}
-
-.pear-topic-runtime-trigger:hover,
-.pear-topic-runtime-trigger:focus-visible,
-.pear-topic-context-row:hover,
-.pear-topic-context-row:focus-visible,
-.pear-topic-open-action:hover,
-.pear-topic-open-action:focus-visible {
-    background-color: var(--color-buddy-list-highlighted-user);
-    box-shadow: inset 0 0 0 1px var(--color-shadow-sidebar-row-hover);
-    color: var(--color-text-sidebar-row);
-    outline: none;
-}
-
-.pear-topic-runtime-trigger:focus-visible,
-.pear-topic-context-row:focus-visible,
-.pear-topic-open-action:focus-visible {
-    outline: 2px solid var(--color-outline-focus);
-    outline-offset: -2px;
-}
-
-.pear-topic-runtime-trigger {
-    display: grid;
-    min-height: var(--line-height-sidebar-row);
-    align-items: center;
-    gap: 5px;
-    grid-template-columns: var(--right-sidebar-header-icon-toggle-width) minmax(
-            0,
-            1fr
-        );
-    line-height: var(--line-height-sidebar-row);
-    margin-bottom: 1px;
-    padding: 0 6px 0 0;
-}
-
-.pear-topic-runtime-name {
-    display: none;
-}
-
-.pear-topic-open-action {
-    width: var(--right-sidebar-vdots-width);
-    height: var(--line-height-sidebar-row);
-    border: 0;
-    background: transparent;
-    color: var(--color-vdots-visible);
-}
-
-.pear-topic-context-row {
-    display: grid;
-    min-height: var(--line-height-sidebar-row);
-    align-items: baseline;
-    gap: 5px;
-    grid-template-columns:
-        var(--right-sidebar-header-icon-toggle-width) minmax(42px, auto)
-        minmax(0, 1fr) auto;
-    line-height: var(--line-height-sidebar-row);
-    padding: 0 6px 0 0;
-}
-
-.pear-topic-context-row-secondary {
-    color: var(--color-text-sidebar-heading);
-}
-
-.pear-topic-context-label {
-    grid-column: 2;
-    color: var(--color-text-sidebar-heading);
-    font-size: 0.92em;
-    font-weight: var(--font-weight-sidebar-heading);
-    opacity: var(--opacity-sidebar-heading);
-}
-
-.pear-topic-context-main,
-.pear-topic-context-ref,
-.pear-topic-context-status {
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.pear-topic-context-main {
-    color: var(--color-text-sidebar-row);
-    font-weight: var(--font-weight-sidebar-row);
-}
-
-.pear-topic-context-ref {
-    color: var(--color-text-sidebar-heading);
-    font-family: inherit;
-    font-size: 0.92em;
-    opacity: var(--opacity-sidebar-heading);
-}
-
-.pear-topic-context-status {
-    align-self: center;
-    font-family: inherit;
-    font-size: 0.82em;
-    font-weight: var(--font-weight-sidebar-row);
-    line-height: 15px;
-}
-
-.pear-topic-context-status-clean {
-    background: transparent;
-    color: var(--color-text-success-text-action-button);
-}
-
-.pear-topic-context-status-dirty {
-    background: transparent;
-    color: color-mix(
-        in srgb,
-        var(--color-text-warning-text-action-button) 58%,
-        var(--color-text-sidebar-row)
-    );
-}
-
-.pear-topic-context-status-unavailable {
-    background: transparent;
-    color: var(--color-text-sidebar-heading);
-    opacity: var(--opacity-sidebar-heading);
-}
-
-#pear-panel.pear-workbench-popover-open .pear-topic-control {
-    display: none;
-}
-
 .pear-icon-button,
 .pear-run-actions-summary {
     width: 22px;
@@ -743,21 +566,13 @@
 }
 
 .pear-workbench-summary-added {
-    border-color: color-mix(
-        in srgb,
-        var(--color-text-success-text-action-button) 52%,
-        transparent
-    );
-    color: var(--color-text-success-text-action-button);
+    border-color: color-mix(in srgb, var(--pear-diff-add) 52%, transparent);
+    color: var(--pear-diff-add);
 }
 
 .pear-workbench-summary-deleted {
-    border-color: color-mix(
-        in srgb,
-        var(--color-text-danger-text-action-button) 52%,
-        transparent
-    );
-    color: var(--color-text-danger-text-action-button);
+    border-color: color-mix(in srgb, var(--pear-diff-del) 52%, transparent);
+    color: var(--pear-diff-del);
 }
 
 .pear-file-status,
@@ -810,12 +625,8 @@
 
 .pear-commit-ref {
     border-radius: var(--pear-radius-chip);
-    background: color-mix(
-        in srgb,
-        var(--color-text-success-text-action-button) 12%,
-        transparent
-    );
-    color: var(--color-text-success-text-action-button);
+    background: var(--pear-accent-fill);
+    color: var(--pear-accent-ink);
     font-weight: 600;
     line-height: 13px;
     padding: 0 4px;
@@ -823,17 +634,17 @@
 
 .pear-file-added .pear-file-status,
 .pear-file-untracked .pear-file-status {
-    color: light-dark(hsl(142deg 50% 32%), hsl(142deg 58% 72%));
+    color: var(--pear-diff-add);
 }
 
 .pear-file-deleted .pear-file-status {
-    color: light-dark(hsl(3deg 58% 42%), hsl(3deg 75% 75%));
+    color: var(--pear-diff-del);
 }
 
 .pear-file-modified .pear-file-status,
 .pear-file-renamed .pear-file-status,
 .pear-file-changed .pear-file-status {
-    color: light-dark(hsl(38deg 60% 34%), hsl(38deg 78% 76%));
+    color: var(--pear-warn);
 }
 
 .pear-file-more,
@@ -846,7 +657,7 @@
 }
 
 .pear-file-more {
-    padding: 6px 8px;
+    padding: var(--pear-space-2);
 }
 
 .pear-empty-state,
@@ -1461,31 +1272,19 @@
         width: 100%;
         height: 2px;
         overflow: hidden;
-        border-radius: 999px;
-        background: color-mix(
-            in srgb,
-            var(--color-border-sidebar-subheader) 58%,
-            transparent
-        );
+        border-radius: var(--pear-radius-px);
+        background: var(--pear-hairline);
     }
 
     .pear-runtime-meter-fill {
         display: block;
         height: 100%;
-        border-radius: 999px;
-        background: color-mix(
-            in srgb,
-            var(--color-text-success-text-action-button) 45%,
-            transparent
-        );
+        border-radius: var(--pear-radius-px);
+        background: var(--pear-accent);
     }
 
     .pear-runtime-meter-hot .pear-runtime-meter-fill {
-        background: color-mix(
-            in srgb,
-            var(--color-text-warning-text-action-button) 82%,
-            transparent
-        );
+        background: var(--pear-warn);
     }
 
     .pear-runtime-usage {
@@ -1526,9 +1325,6 @@
    hovers and state flips read as engineered motion, not an abrupt swap.
    Sub-150ms color transitions are gentle enough to keep under
    prefers-reduced-motion. */
-.pear-topic-runtime-trigger,
-.pear-topic-context-row,
-.pear-topic-open-action,
 .pear-icon-button,
 .pear-workbench-close,
 .pear-workbench-tab,
@@ -2006,6 +1802,11 @@
     color: var(--pear-ink-3);
 }
 
+.pear-rail-plan-ellipsis {
+    min-height: 8px;
+    opacity: 0.45;
+}
+
 .pear-rail-plan-text {
     overflow: hidden;
     min-width: 0;
@@ -2022,6 +1823,16 @@
     text-overflow: ellipsis;
     white-space: nowrap;
     animation: pear-live-overview-in 160ms ease-out both;
+}
+
+.pear-rail-plan-meta {
+    min-height: 14px;
+    margin: 2px 0 0 17px;
+    color: var(--pear-ink-3);
+    font-family: var(--pear-font-pixel);
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.2;
 }
 
 /* Native Pear artifacts. Authors provide structure and meaning; every visual

@@ -108,6 +108,19 @@ run_test("planless progress gives way to typed assistant text", () => {
     assert.equal(message_list_view.pear_live_should_show_progress_for_testing(1, true), true);
 });
 
+run_test("server Working sentinel hydrates without semantic text matching", () => {
+    assert.equal(message_list_view.pear_live_is_server_placeholder_for_testing("· Working"), true);
+    assert.equal(
+        message_list_view.pear_live_is_server_placeholder_for_testing("  · Working\n"),
+        true,
+    );
+    assert.equal(message_list_view.pear_live_is_server_placeholder_for_testing("Working"), false);
+    assert.equal(
+        message_list_view.pear_live_is_server_placeholder_for_testing("· Working now"),
+        false,
+    );
+});
+
 test("msg_edited_and_moved_vars", () => {
     // This is a test to verify that when the stream or topic is changed
     // (and the content is not), the message says "MOVED" rather than "EDITED."

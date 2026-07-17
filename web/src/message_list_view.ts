@@ -642,6 +642,27 @@ export function pear_live_should_show_progress_for_testing(
     return plan_length > 0 || pear_live_is_placeholder_for_testing(has_visible_assistant_text);
 }
 
+const PEAR_WORKING_PLACEHOLDER = "· Working";
+
+export function pear_live_is_server_placeholder_for_testing(source_text: string): boolean {
+    return source_text.trim() === PEAR_WORKING_PLACEHOLDER;
+}
+
+function pear_live_source_is_server_placeholder(content: HTMLElement): boolean {
+    let source_text = "";
+    for (const child of content.childNodes) {
+        if (
+            child instanceof HTMLElement &&
+            (child.classList.contains("pear-live-progress") ||
+                child.classList.contains("pear-run-footer"))
+        ) {
+            continue;
+        }
+        source_text += child.textContent ?? "";
+    }
+    return pear_live_is_server_placeholder_for_testing(source_text);
+}
+
 function render_pear_live_progress($row: JQuery): void {
     const row = $row[0];
     if (!(row instanceof HTMLElement)) {
@@ -654,7 +675,15 @@ function render_pear_live_progress($row: JQuery): void {
     const message_id = rows.id($row);
     const run = pear_run_state.get_run_view(message_id);
     const existing = content.querySelector(":scope > .pear-live-progress");
-    if (run === undefined || (run.status !== "queued" && run.status !== "running")) {
+    const run_is_active = run?.status === "queued" || run?.status === "running";
+    // Sending the result message and publishing its typed run event are two
+    // ordered network events.  Hydrate the server's exact protocol sentinel
+    // immediately so it can never paint as ordinary message prose while the
+    // second event is in flight.  This is an equality check on the dedicated
+    // placeholder, not an inference from arbitrary assistant text.
+    const has_unbound_server_placeholder =
+        run === undefined && pear_live_source_is_server_placeholder(content);
+    if (!run_is_active && !has_unbound_server_placeholder) {
         existing?.remove();
         content.classList.remove("pear-live-placeholder");
         for (const child of content.querySelectorAll(":scope > .pear-live-thought")) {
@@ -662,19 +691,23 @@ function render_pear_live_progress($row: JQuery): void {
         }
         return;
     }
+    if (has_unbound_server_placeholder) {
+        row.classList.add("pear-active-message");
+    }
 
     // This flag comes from the worker's typed live state.  An absent value is
     // still the pre-prose state: message edits include the worker's own
     // placeholder update and are therefore not evidence that Codex has
     // emitted user-visible text.
-    const is_placeholder = pear_live_is_placeholder_for_testing(run.has_visible_assistant_text);
+    const is_placeholder =
+        run === undefined || pear_live_is_placeholder_for_testing(run.has_visible_assistant_text);
     content.classList.toggle("pear-live-placeholder", is_placeholder);
 
     const progress = document.createElementNS("http://www.w3.org/1999/xhtml", "section");
     progress.setAttribute("class", "pear-live-progress");
     progress.setAttribute("aria-label", $t({defaultMessage: "Pear work in progress"}));
-    const plan = run.plan ?? [];
-    if (!pear_live_should_show_progress_for_testing(plan.length, run.has_visible_assistant_text)) {
+    const plan = run?.plan ?? [];
+    if (!pear_live_should_show_progress_for_testing(plan.length, run?.has_visible_assistant_text)) {
         existing?.remove();
         for (const child of content.children) {
             if (!child.classList.contains("pear-run-footer")) {
@@ -696,7 +729,7 @@ function render_pear_live_progress($row: JQuery): void {
         label.textContent = $t({defaultMessage: "Working"});
         working.append(glyph, label);
         progress.append(working);
-        if (run.overview) {
+        if (run?.overview) {
             const overview = document.createElementNS("http://www.w3.org/1999/xhtml", "div");
             overview.setAttribute("class", "pear-live-overview");
             overview.setAttribute("title", run.overview);
@@ -745,7 +778,7 @@ function render_pear_live_progress($row: JQuery): void {
             label.textContent = step.step;
             step_element.append(glyph_element, label);
             progress.append(step_element);
-            if (index === current_index && run.overview) {
+            if (index === current_index && run?.overview) {
                 const overview = document.createElementNS("http://www.w3.org/1999/xhtml", "div");
                 overview.setAttribute("class", "pear-live-overview");
                 overview.setAttribute("title", run.overview);

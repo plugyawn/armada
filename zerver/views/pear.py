@@ -8,7 +8,7 @@ from typing import Annotated, Any
 
 from django.conf import settings
 from django.db import transaction
-from django.db.models import F, Q, Window
+from django.db.models import F, Max, Q, Window
 from django.db.models.functions import RowNumber
 from django.http import HttpRequest, HttpResponse
 from django.utils.timezone import now as timezone_now
@@ -16,6 +16,7 @@ from django.utils.translation import gettext as _
 from pydantic import Json
 
 from zerver.actions.message_send import internal_send_private_message, internal_send_stream_message
+from zerver.actions.pear import send_pear_run_event
 from zerver.actions.streams import bulk_add_subscriptions
 from zerver.decorator import require_realm_admin
 from zerver.lib.bot_config import get_bot_configs, set_bot_config
@@ -60,6 +61,7 @@ from zerver.lib.pear_monitor import (
 )
 from zerver.lib.pear_presentation import pear_presentation_current_step
 from zerver.lib.pear_worker import (
+    PearDatabaseWorkerRunStore,
     PearQueueWorkerDispatcher,
     ensure_pear_child_workspace_node,
     ensure_pear_workspace_node,
@@ -924,6 +926,9 @@ def serialize_pear_worker_run(
         "overview": serialize_pear_worker_run_overview(run, summary_events, plan=plan),
         "live": live_state,
     }
+    snapshot_sequence = getattr(run, "snapshot_sequence", None)
+    if isinstance(snapshot_sequence, int):
+        payload["snapshot_sequence"] = snapshot_sequence
     if include_events:
         payload["events"] = [
             serialize_pear_worker_run_event(event)
@@ -1559,7 +1564,22 @@ def get_pear_runs_backend(
         )
 
     runs_by_id = {run.id: run for run in [*topic_runs, *requested_runs]}
-    runs = sorted(runs_by_id.values(), key=lambda run: (run.date_created, run.id), reverse=True)
+    # Refetch the selected rows with their latest event id in one SQL
+    # snapshot. This is the authoritative watermark used by the browser to
+    # reject an older HTTP response after a newer push event has landed.
+    snapshot_runs_by_id = {
+        run.id: run
+        for run in PearWorkerRun.objects.select_related(
+            "bot_profile", "requesting_user", "workspace_node"
+        )
+        .filter(id__in=runs_by_id)
+        .annotate(snapshot_sequence=Max("events__id"))
+    }
+    runs = sorted(
+        snapshot_runs_by_id.values(),
+        key=lambda run: (run.date_created, run.id),
+        reverse=True,
+    )
     summary_events_by_run_id = pear_worker_run_summary_events(runs)
     topic_context = None
     if bool(include_context) and stream_name is not None and topic_name is not None:
@@ -1821,43 +1841,37 @@ def update_pear_run_control_event(
     event_type: str,
     summary: str,
 ) -> PearWorkerRun:
-    run = get_visible_pear_worker_run(user_profile, run_id)
-    if event_type == "cancel" and run.status in {PearWorkerRun.QUEUED, PearWorkerRun.RUNNING}:
-        timestamp = timezone_now()
-        run.cancel_requested_at = timestamp
-        run.status = PearWorkerRun.CANCELLED
-        run.current_activity = "Cancelled from the Pear panel."
-        run.summary = "Cancelled."
-        run.date_updated = timestamp
-        run.date_finished = timestamp
-        run.save(
-            update_fields=[
-                "cancel_requested_at",
-                "status",
-                "current_activity",
-                "summary",
-                "date_updated",
-                "date_finished",
-            ]
+    visible_run = get_visible_pear_worker_run(user_profile, run_id)
+    with transaction.atomic(savepoint=False):
+        run = PearWorkerRun.objects.select_for_update().get(id=visible_run.id)
+        if event_type == "cancel" and run.status in {
+            PearWorkerRun.QUEUED,
+            PearWorkerRun.RUNNING,
+        }:
+            PearDatabaseWorkerRunStore().cancel_locked_run(run, summary="Cancelled.")
+        elif event_type in {"pause", "resume"}:
+            control_stream = (
+                run.source_stream_name if run.session_kind == PearWorkerRun.SIDE else ""
+            )
+            control_topic = run.source_topic_name if run.session_kind == PearWorkerRun.SIDE else ""
+            set_pear_workspace_paused(
+                run.bot_profile,
+                stream=control_stream or run.stream_name,
+                topic=control_topic or run.topic_name,
+                is_paused=event_type == "pause",
+            )
+            run.current_activity = summary
+            run.date_updated = timezone_now()
+            run.save(update_fields=["current_activity", "date_updated"])
+        run_event = PearWorkerRunEvent.objects.create(
+            run=run,
+            event_type=event_type,
+            summary=summary,
+            payload={"user_id": user_profile.id},
         )
-    elif event_type in {"pause", "resume"}:
-        control_stream = run.source_stream_name if run.session_kind == PearWorkerRun.SIDE else ""
-        control_topic = run.source_topic_name if run.session_kind == PearWorkerRun.SIDE else ""
-        set_pear_workspace_paused(
-            run.bot_profile,
-            stream=control_stream or run.stream_name,
-            topic=control_topic or run.topic_name,
-            is_paused=event_type == "pause",
-        )
-        run.current_activity = summary
-        run.date_updated = timezone_now()
-        run.save(update_fields=["current_activity", "date_updated"])
-    PearWorkerRunEvent.objects.create(
-        run=run,
-        event_type=event_type,
-        summary=summary,
-        payload={"user_id": user_profile.id},
-    )
+        # Capture this exact transition's payload now; the action helper
+        # defers delivery with send_event_on_commit.
+        send_pear_run_event(run, run_event)
     return run
 
 

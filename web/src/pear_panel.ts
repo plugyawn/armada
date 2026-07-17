@@ -56,6 +56,7 @@ const pear_live_run_schema = z.object({
 
 const pear_run_schema = z.object({
     id: z.number(),
+    snapshot_sequence: z.optional(z.number()),
     trigger_message_id: z.number(),
     result_message_id: z.nullish(z.number()),
     stream: z.optional(z.string()),
@@ -189,7 +190,6 @@ type PearWorkbenchView = "diff" | "history" | "side";
 type PearDisplayTopicContext = NonNullable<ReturnType<typeof display_topic_context>>;
 
 let initialized = false;
-let live_refresh_in_flight = false;
 let last_error = "";
 // When an error auto-opens the workbench, closing it sets this so a later
 // refresh carrying the same error cannot re-force the popover open on the next
@@ -208,6 +208,13 @@ const contexts_with_active_run = new Set<string>();
 const workbench_view_by_context = new Map<string, PearWorkbenchView>();
 const side_request_by_context = new Map<string, string>();
 const topic_context_by_context = new Map<string, PearWorkspaceContext>();
+type RefreshOptions = {force_context?: boolean; live?: boolean};
+type RefreshRequest = {
+    generation: number;
+    pending: RefreshOptions | undefined;
+};
+const refresh_requests_by_context = new Map<string, RefreshRequest>();
+let next_refresh_generation = 0;
 let workbench_anchor_element: HTMLElement | undefined;
 let workbench_anchor_context_key = "";
 type WorkbenchAnchorKind = "context" | "git";
@@ -1434,6 +1441,7 @@ export function shared_runs(): PearRun[] {
 }
 
 export function handle_pear_run_event(event: {
+    sequence: number;
     run_id: number;
     status: string;
     result_message_id: number | null;
@@ -1449,6 +1457,9 @@ export function handle_pear_run_event(event: {
 }): void {
     const {stream, topic} = current_context();
     if (stream !== event.stream || topic !== event.topic) {
+        return;
+    }
+    if (!pear_run_state.event_is_latest(event.run_id, event.sequence)) {
         return;
     }
     const run_index = last_runs.findIndex((run) => run.id === event.run_id);
@@ -1474,6 +1485,76 @@ export function handle_pear_run_event(event: {
         },
     };
     render(last_runs, last_topic_context);
+}
+
+function merge_refresh_options(
+    current: RefreshOptions | undefined,
+    incoming: RefreshOptions,
+): RefreshOptions {
+    if (current === undefined) {
+        return {...incoming};
+    }
+    return {
+        force_context: current.force_context === true || incoming.force_context === true,
+        // A normal explicit refresh must not be weakened into the cheaper
+        // live-reconciliation shape when requests are coalesced.
+        live: current.live === true && incoming.live === true,
+    };
+}
+
+function refresh_request_is_current(options: {
+    request_context_key: string;
+    current_context_key: string;
+    request_generation: number;
+    latest_generation: number | undefined;
+}): boolean {
+    return (
+        options.request_context_key === options.current_context_key &&
+        options.request_generation === options.latest_generation
+    );
+}
+
+export function reconcile_run_snapshot_for_testing(
+    run: PearRun,
+    previous: PearRun | undefined,
+): PearRun {
+    if (pear_run_state.snapshot_is_current(run.id, run.snapshot_sequence)) {
+        return run;
+    }
+    const view = pear_run_state.get_run_view_by_id(run.id);
+    if (view === undefined) {
+        return previous ?? run;
+    }
+    const base = previous ?? run;
+    return {
+        ...base,
+        status: view.status,
+        result_message_id:
+            view.result_message_id !== undefined ? view.result_message_id : base.result_message_id,
+        stream: view.stream ?? base.stream,
+        topic: view.topic ?? base.topic,
+        current_activity: view.current_activity ?? base.current_activity,
+        plan: view.plan !== undefined ? view.plan : base.plan,
+        overview: view.overview !== undefined ? view.overview : base.overview,
+        tool_count: view.tool_count ?? base.tool_count,
+        date_created: view.date_created ?? base.date_created,
+        date_updated: view.updated_at ?? base.date_updated,
+        usage: {...base.usage, ...view.usage},
+        live:
+            view.live_updated_at === undefined
+                ? base.live
+                : {
+                      status: view.status,
+                      updated_at: view.live_updated_at,
+                      operation: base.live?.operation,
+                      has_visible_assistant_text: view.has_visible_assistant_text,
+                  },
+    };
+}
+
+function reconcile_run_snapshots(runs: PearRun[]): PearRun[] {
+    const previous_by_id = new Map(last_runs.map((run) => [run.id, run]));
+    return runs.map((run) => reconcile_run_snapshot_for_testing(run, previous_by_id.get(run.id)));
 }
 
 export function remember_saved_topic_context(raw_topic_context: unknown): void {
@@ -1867,7 +1948,16 @@ export function refresh_paused_for_testing(options: {
     return options.hidden && !options.force_context;
 }
 
-export function refresh(options: {force_context?: boolean; live?: boolean} = {}): void {
+export function set_refresh_state_for_testing(options: {runs: PearRun[]; error?: string}): void {
+    last_runs = options.runs;
+    last_error = options.error ?? "";
+}
+
+export function refresh_state_for_testing(): {run_ids: number[]; error: string} {
+    return {run_ids: last_runs.map((run) => run.id), error: last_error};
+}
+
+export function refresh(options: RefreshOptions = {}): void {
     const live = options.live === true;
     if (
         typeof document !== "undefined" &&
@@ -1878,7 +1968,10 @@ export function refresh(options: {force_context?: boolean; live?: boolean} = {})
     ) {
         return;
     }
-    if (live && live_refresh_in_flight) {
+    const request_context_key = current_context_key();
+    const existing_request = refresh_requests_by_context.get(request_context_key);
+    if (existing_request !== undefined) {
+        existing_request.pending = merge_refresh_options(existing_request.pending, options);
         return;
     }
     const {stream, topic} = current_context();
@@ -1894,19 +1987,34 @@ export function refresh(options: {force_context?: boolean; live?: boolean} = {})
         data["stream"] = stream;
         data["topic"] = topic;
     }
-    if (live) {
-        live_refresh_in_flight = true;
-    }
+    const request_generation = ++next_refresh_generation;
+    refresh_requests_by_context.set(request_context_key, {
+        generation: request_generation,
+        pending: undefined,
+    });
+    const request_is_current = (): boolean =>
+        refresh_request_is_current({
+            request_context_key,
+            current_context_key: current_context_key(),
+            request_generation,
+            latest_generation: refresh_requests_by_context.get(request_context_key)?.generation,
+        });
     void channel.get({
         url: "/json/pear/runs",
         data,
         success(raw_data) {
+            if (!request_is_current()) {
+                return;
+            }
             if (!is_pear_runs_response(raw_data)) {
                 last_error = $t({defaultMessage: "Pear returned an invalid runs payload."});
                 render();
                 return;
             }
-            const data = raw_data;
+            const data = {
+                ...raw_data,
+                pear_runs: reconcile_run_snapshots(raw_data.pear_runs),
+            };
             last_error = "";
             error_dismissed = false;
             const had_active_run = has_active_run(last_runs);
@@ -1929,6 +2037,9 @@ export function refresh(options: {force_context?: boolean; live?: boolean} = {})
             }
         },
         error(xhr) {
+            if (!request_is_current()) {
+                return;
+            }
             if (xhr.readyState === 0) {
                 return;
             }
@@ -1943,8 +2054,13 @@ export function refresh(options: {force_context?: boolean; live?: boolean} = {})
             render();
         },
         complete() {
-            if (live) {
-                live_refresh_in_flight = false;
+            const request = refresh_requests_by_context.get(request_context_key);
+            if (request?.generation !== request_generation) {
+                return;
+            }
+            refresh_requests_by_context.delete(request_context_key);
+            if (request.pending !== undefined && current_context_key() === request_context_key) {
+                refresh(request.pending);
             }
         },
     });
@@ -2124,5 +2240,5 @@ export function stop(): void {
     $(window).off("scroll.pear_panel");
     $(document).off("click.pear_panel");
     $(document).off("visibilitychange.pear_panel");
-    live_refresh_in_flight = false;
+    refresh_requests_by_context.clear();
 }

@@ -159,12 +159,14 @@ def set_pear_workspace_paused(
 ) -> None:
     if not stream:
         return
-    workspace_node = ensure_pear_workspace_node(user_profile, stream=stream, topic=topic)
-    if workspace_node.is_paused == is_paused:
-        return
-    workspace_node.is_paused = is_paused
-    workspace_node.date_updated = timezone_now()
-    workspace_node.save(update_fields=["is_paused", "date_updated"])
+    with transaction.atomic(savepoint=False):
+        workspace_node = ensure_pear_workspace_node(user_profile, stream=stream, topic=topic)
+        workspace_node = PearWorkspaceNode.objects.select_for_update().get(id=workspace_node.id)
+        if workspace_node.is_paused == is_paused:
+            return
+        workspace_node.is_paused = is_paused
+        workspace_node.date_updated = timezone_now()
+        workspace_node.save(update_fields=["is_paused", "date_updated"])
 
 
 def pear_workspace_response_policy(
@@ -2738,6 +2740,24 @@ class PearDatabaseWorkerRunStore:
             allow_requeue=allow_requeue,
         )
 
+    def cancel_locked_run(self, run: PearWorkerRun, *, summary: str) -> bool:
+        """Cancel a row already locked by the caller through the shared state machine."""
+        if not self._transition(
+            run,
+            PearWorkerRun.CANCELLED,
+            stream=run.stream_name,
+            topic=run.topic_name,
+            result_message_id=run.result_message_id,
+            error=None,
+            allow_requeue=False,
+        ):
+            return False
+        run.cancel_requested_at = run.date_updated
+        run.current_activity = "Cancelled from the Pear panel."
+        run.summary = summary
+        run.save(update_fields=["cancel_requested_at", "current_activity", "summary"])
+        return True
+
     def _transition(
         self,
         run: PearWorkerRun,
@@ -2836,30 +2856,38 @@ class PearDatabaseWorkerRunStore:
         summary: str,
         payload: dict[str, Any],
     ) -> None:
-        run_event = PearWorkerRunEvent.objects.create(
-            run=run,
-            event_type=event_type,
-            summary=summary,
-            payload=payload,
-        )
-        event_tool_count = payload.get("tool_count")
-        if event_type == "tool_results" and isinstance(event_tool_count, int):
-            PearWorkerRun.objects.filter(id=run.id).update(
-                tool_count=F("tool_count") + event_tool_count
+        # Keep the durable event and every run field represented by its push
+        # payload in one commit. The runs endpoint can then expose the event id
+        # as an authoritative snapshot watermark.
+        with transaction.atomic(savepoint=False):
+            run_event = PearWorkerRunEvent.objects.create(
+                run=run,
+                event_type=event_type,
+                summary=summary,
+                payload=payload,
             )
-            run.tool_count += event_tool_count
-        if run.workdir:
-            invalidate_pear_git_status_delta(run.workdir)
-        current_time = timezone_now()
-        if self._heartbeat_due(run, current_time=current_time):
-            run.heartbeat_at = current_time
-            run.date_updated = current_time
-            run.save(update_fields=["heartbeat_at", "date_updated"])
-        from zerver.actions.pear import send_pear_run_event
+            event_tool_count = payload.get("tool_count")
+            if event_type == "tool_results" and isinstance(event_tool_count, int):
+                PearWorkerRun.objects.filter(id=run.id).update(
+                    tool_count=F("tool_count") + event_tool_count
+                )
+                run.tool_count += event_tool_count
+            if run.workdir:
+                invalidate_pear_git_status_delta(run.workdir)
+            current_time = timezone_now()
+            if self._heartbeat_due(run, current_time=current_time):
+                run.heartbeat_at = current_time
+                run.date_updated = current_time
+                run.save(update_fields=["heartbeat_at", "date_updated"])
+            from zerver.actions.pear import send_pear_run_event
 
-        send_pear_run_event(run, run_event)
-        if event_type in {"steering_applied", "tool_results", "transcript"}:
-            maybe_enqueue_pear_run_presentation(run.id, run_event.id)
+            # This helper builds the payload from the current row now, then
+            # uses send_event_on_commit for delivery after durability.
+            send_pear_run_event(run, run_event)
+            if event_type in {"steering_applied", "tool_results", "transcript"}:
+                transaction.on_commit(
+                    lambda: maybe_enqueue_pear_run_presentation(run.id, run_event.id)
+                )
 
     def _runtime_label(self) -> str:
         return str(settings.PEAR_WORKER_AGENT_RUNTIME or "")

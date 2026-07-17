@@ -772,6 +772,53 @@ class PearSessionEndpointTest(ZulipTestCase):
         self.assertNotIn(topic_runs[0].id, run_ids)
         self.assertIsNone(result_dict["pear_topic_context"])
 
+    def test_get_pear_runs_carries_authoritative_event_watermark(self) -> None:
+        owner = self.example_user("hamlet")
+        self.subscribe(owner, PEAR_DEFAULT_STREAM)
+        pear_bot = self.create_test_bot(
+            "pear-watermark",
+            owner,
+            full_name="Pear",
+            bot_type=UserProfile.EMBEDDED_BOT,
+            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+        )
+        run = PearWorkerRun.objects.create(
+            realm=owner.realm,
+            bot_profile=pear_bot,
+            requesting_user=owner,
+            trigger_message_id=251,
+            stream_name=PEAR_DEFAULT_STREAM,
+            topic_name=PEAR_DEFAULT_TOPIC,
+            status=PearWorkerRun.RUNNING,
+        )
+        first_event = PearWorkerRunEvent.objects.create(
+            run=run,
+            event_type="running",
+            summary="Started.",
+            payload={},
+        )
+        latest_event = PearWorkerRunEvent.objects.create(
+            run=run,
+            event_type="transcript",
+            summary="Working.",
+            payload={},
+        )
+        self.assertGreater(latest_event.id, first_event.id)
+        self.login_user(owner)
+
+        result = self.client_get(
+            f"/json{PEAR_RUNS_ENDPOINT}",
+            {
+                "stream": PEAR_DEFAULT_STREAM,
+                "topic": PEAR_DEFAULT_TOPIC,
+            },
+            intentionally_undocumented=True,
+        )
+
+        serialized_run = self.assert_json_success(result)["pear_runs"][0]
+        self.assertEqual(serialized_run["id"], run.id)
+        self.assertEqual(serialized_run["snapshot_sequence"], latest_event.id)
+
     def test_get_pear_runs_defaults_to_cheap_without_topic_context(self) -> None:
         owner = self.example_user("hamlet")
         self.subscribe(owner, PEAR_DEFAULT_STREAM)
@@ -3061,30 +3108,81 @@ class PearSessionEndpointTest(ZulipTestCase):
         )
         self.login_user(owner)
 
-        pause_result = self.client_post(
-            f"/json/pear/runs/{run.id}/pause",
-            intentionally_undocumented=True,
-        )
-        self.assert_json_success(pause_result)
-        context.refresh_from_db()
-        self.assertTrue(context.is_paused)
+        with (
+            self.captureOnCommitCallbacks(execute=True),
+            patch("zerver.views.pear.send_pear_run_event") as send_run_event,
+        ):
+            pause_result = self.client_post(
+                f"/json/pear/runs/{run.id}/pause",
+                intentionally_undocumented=True,
+            )
+            self.assert_json_success(pause_result)
+            context.refresh_from_db()
+            self.assertTrue(context.is_paused)
 
-        resume_result = self.client_post(
-            f"/json/pear/runs/{run.id}/resume",
-            intentionally_undocumented=True,
-        )
-        self.assert_json_success(resume_result)
-        context.refresh_from_db()
-        self.assertFalse(context.is_paused)
+            resume_result = self.client_post(
+                f"/json/pear/runs/{run.id}/resume",
+                intentionally_undocumented=True,
+            )
+            self.assert_json_success(resume_result)
+            context.refresh_from_db()
+            self.assertFalse(context.is_paused)
 
-        cancel_result = self.client_post(
-            f"/json/pear/runs/{run.id}/cancel",
-            intentionally_undocumented=True,
+            cancel_result = self.client_post(
+                f"/json/pear/runs/{run.id}/cancel",
+                intentionally_undocumented=True,
+            )
+            self.assert_json_success(cancel_result)
+
+        self.assertEqual(
+            [call.args[1].event_type for call in send_run_event.call_args_list],
+            ["pause", "resume", "cancel"],
         )
-        self.assert_json_success(cancel_result)
         run.refresh_from_db()
         self.assertEqual(run.status, PearWorkerRun.CANCELLED)
         self.assertIsNotNone(run.cancel_requested_at)
+
+    def test_worker_event_push_and_presentation_respect_commit_order(self) -> None:
+        owner = self.example_user("hamlet")
+        pear_bot = self.create_test_bot(
+            "pear-commit-order",
+            owner,
+            full_name="Pear",
+            bot_type=UserProfile.EMBEDDED_BOT,
+            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+        )
+        run = PearWorkerRun.objects.create(
+            realm=owner.realm,
+            bot_profile=pear_bot,
+            requesting_user=owner,
+            trigger_message_id=918,
+            stream_name=PEAR_DEFAULT_STREAM,
+            topic_name="topic-a",
+            status=PearWorkerRun.RUNNING,
+        )
+        store = PearDatabaseWorkerRunStore()
+
+        with (
+            patch("zerver.actions.pear.send_event_on_commit") as send_event_on_commit,
+            patch("zerver.lib.pear_worker.maybe_enqueue_pear_run_presentation") as enqueue,
+            self.captureOnCommitCallbacks(execute=False) as callbacks,
+        ):
+            store.record_event(
+                SimpleNamespace(user_profile=pear_bot),
+                run.trigger_message_id,
+                "transcript",
+                summary="Read files.",
+                payload={},
+            )
+            # Push delivery is registered through the transaction-aware
+            # action helper while its payload still reflects this event.
+            send_event_on_commit.assert_called_once()
+            enqueue.assert_not_called()
+
+        self.assertEqual(len(callbacks), 1)
+        for callback in callbacks:
+            callback()
+        enqueue.assert_called_once()
 
     def test_run_trace_is_safe_and_attention_is_bounded_to_active_runs(self) -> None:
         owner = self.example_user("hamlet")

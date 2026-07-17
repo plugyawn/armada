@@ -5,7 +5,7 @@ from zerver.lib.pear import trim_pear_text
 from zerver.lib.pear_agent import PearGeminiInteractionsClient
 from zerver.models.bots import PearWorkerRun, PearWorkerRunEvent
 
-PEAR_PRESENTATION_OVERVIEW_MAX_CHARS = 72
+PEAR_PRESENTATION_OVERVIEW_MAX_CHARS = 48
 
 
 def pear_presentation_plan(run: PearWorkerRun) -> list[dict[str, str]] | None:
@@ -29,21 +29,28 @@ def pear_presentation_plan(run: PearWorkerRun) -> list[dict[str, str]] | None:
     return None
 
 
-def pear_presentation_event_line(event: PearWorkerRunEvent) -> str | None:
+def pear_presentation_event(event: PearWorkerRunEvent) -> dict[str, str] | None:
     payload = event.payload if isinstance(event.payload, dict) else {}
     if event.event_type == "transcript":
         kind = payload.get("kind")
         if kind == "assistant":
             body = payload.get("body")
-            return trim_pear_text(str(body), limit=800) if isinstance(body, str) else None
+            return (
+                {"kind": "assistant_update", "text": trim_pear_text(body, limit=120)}
+                if isinstance(body, str) and body.strip()
+                else None
+            )
         if kind in {"command", "file_change", "status", "tool"}:
-            return str(payload.get("title") or event.summary)
+            return {"kind": str(kind), "text": str(payload.get("title") or event.summary)}
         return None
     if event.event_type == "tool_results":
         count = payload.get("tool_count")
-        return f"Completed {count} tools." if isinstance(count, int) else "Tools completed."
+        return {
+            "kind": "tool_result",
+            "text": f"Completed {count} tools." if isinstance(count, int) else "Tools completed.",
+        }
     if event.event_type == "steering_applied":
-        return f"Steering applied: {event.summary}"
+        return {"kind": "steering", "text": f"Steering applied: {event.summary}"}
     return None
 
 
@@ -56,12 +63,15 @@ def build_pear_presentation_input(
         (item for item in plan if item.get("status") == "in_progress"),
         next((item for item in plan if item.get("status") == "pending"), plan[-1]),
     )
-    event_lines = [line for event in events if (line := pear_presentation_event_line(event))]
-    bounded_event_lines = [trim_pear_text(line, limit=120) for line in event_lines[-4:]]
+    event_items = [item for event in events if (item := pear_presentation_event(event))]
+    bounded_events = [
+        {"kind": item["kind"], "text": trim_pear_text(item["text"], limit=120)}
+        for item in event_items[-4:]
+    ]
     return json.dumps(
         {
             "current_step": trim_pear_text(str(current_step["step"]), limit=120),
-            "recent_events": bounded_event_lines,
+            "recent_events": bounded_events,
         },
         ensure_ascii=False,
     )
@@ -79,8 +89,8 @@ def parse_pear_presentation_output(output: str) -> str:
         return ""
     overview = " ".join(overview.split()).rstrip(".!?")
     words = overview.split()
-    if len(words) > 8:
-        overview = f"{' '.join(words[:8])}…"
+    if len(words) > 6:
+        overview = f"{' '.join(words[:6])}…"
     if len(overview) <= PEAR_PRESENTATION_OVERVIEW_MAX_CHARS:
         return overview
     clipped = overview[: PEAR_PRESENTATION_OVERVIEW_MAX_CHARS - 1].rsplit(" ", 1)[0]
@@ -98,17 +108,24 @@ def request_pear_presentation_overview(
         model=model,
         input_text=input_text,
         system_instruction=(
-            "Write one live activity label from only the supplied current step and recent events. "
-            "Use 3 to 8 words, begin with a present-progressive verb, and omit the subject and "
-            "final punctuation. Example: 'Compiling the three-page manifold PDF'. Never invent "
-            "reasoning, intent, progress, completion, or tool details."
+            "The current step is already visible in the UI. Write only a compact drill-down of "
+            "what is concretely happening now, using the newest supplied event. Prefer structured "
+            "command, file_change, tool, or tool_result events over assistant_update prose. Never "
+            "repeat or paraphrase current_step. Use 2 to 6 words, begin with a present-progressive "
+            "verb, omit the subject and final punctuation, and return an empty overview when the "
+            "events add no concrete detail. Good: 'Counting tracked TypeScript files'. Bad: "
+            "'Inspecting the largest TypeScript files'. Never invent reasoning, intent, progress, "
+            "completion, or tool details."
         ),
         response_schema={
             "type": "object",
             "properties": {
                 "overview": {
                     "type": "string",
-                    "description": "A factual 3 to 8 word live activity label.",
+                    "description": (
+                        "A factual 2 to 6 word current-operation label, or empty when no event "
+                        "adds detail beyond the visible plan step."
+                    ),
                 }
             },
             "required": ["overview"],

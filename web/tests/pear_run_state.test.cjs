@@ -158,18 +158,49 @@ test("stale hydration cannot overwrite a newer push event", () => {
     assert.ok(!pear_run_state.is_active_run_result_message(90));
 });
 
-test("typed live content state hides only the initial placeholder", () => {
+test("typed live content state is owned by server snapshots", () => {
     pear_run_state.remember_runs([
         {
             id: 12,
             status: "running",
             ambient_triggered: false,
             result_message_id: 120,
-            live: {has_visible_assistant_text: false},
+            date_updated: 100,
+            live: {has_visible_assistant_text: false, updated_at: 1},
         },
     ]);
     assert.equal(pear_run_state.get_run_view(120).has_visible_assistant_text, false);
 
-    pear_run_state.mark_message_has_visible_assistant_text(120);
+    pear_run_state.apply_pear_run_event({
+        version: 1,
+        sequence: 20,
+        run_id: 12,
+        event_type: "transcript",
+        status: "running",
+        result_message_id: 120,
+        stream: "devel",
+        topic: "speed",
+        current_activity: "Ran command",
+        tool_count: 1,
+        plan: null,
+        overview: null,
+        usage: null,
+        duration_seconds: null,
+        trace_available: true,
+        run_date_created: 90,
+        date_created: 200,
+    });
+
+    pear_run_state.remember_runs([
+        {
+            id: 12,
+            status: "running",
+            ambient_triggered: false,
+            result_message_id: 120,
+            date_updated: 150,
+            live: {has_visible_assistant_text: true, updated_at: 2},
+        },
+    ]);
     assert.equal(pear_run_state.get_run_view(120).has_visible_assistant_text, true);
+    assert.equal(pear_run_state.get_run_view(120).updated_at, 200);
 });

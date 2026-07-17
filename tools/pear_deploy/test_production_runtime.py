@@ -1167,6 +1167,40 @@ sys.stdout.write(status)
         )
         self.assertEqual(result.returncode, 0, result.stderr)
 
+    def test_queue_readiness_validator_allows_fresh_work(self) -> None:
+        script = (
+            "source tools/pear_deploy/deploy_common.sh; "
+            "printf '%s\\n' "
+            "'pear_worker 2 1 1' "
+            "'pear_monitor_worker 0 3 2' | "
+            "validate_pear_deploy_queue_ready_snapshot "
+            "'pear_worker pear_monitor_worker'"
+        )
+        result = subprocess.run(
+            ["bash", "-c", script],
+            cwd=REPO_ROOT,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_queue_readiness_validator_requires_consumers(self) -> None:
+        script = (
+            "source tools/pear_deploy/deploy_common.sh; "
+            "printf '%s\\n' 'pear_worker 1 0 0' | "
+            "validate_pear_deploy_queue_ready_snapshot 'pear_worker'"
+        )
+        result = subprocess.run(
+            ["bash", "-c", script],
+            cwd=REPO_ROOT,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("queue has no active consumer: pear_worker", result.stderr)
+
     def test_untracked_output_allowlist_uses_exact_file_names(self) -> None:
         script = (
             "source tools/pear_deploy/deploy_common.sh; "

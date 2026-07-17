@@ -120,6 +120,34 @@ run_test("rail plan keeps a bounded window around the active step", () => {
     );
 });
 
+run_test("rail plan never leaves terminal work animated", () => {
+    const steps = pear_panel.pear_rail_plan_steps_for_testing([
+        {
+            id: 2,
+            status: "done",
+            plan: [
+                {step: "Inspect", status: "completed"},
+                {step: "Report", status: "in_progress"},
+            ],
+        },
+    ]);
+
+    assert.deepEqual(steps, [
+        {
+            step: "Inspect",
+            status_glyph: "✓",
+            status_class: "pear-rail-plan-done",
+            glyph_class: "",
+        },
+        {
+            step: "Report",
+            status_glyph: "○",
+            status_class: "pear-rail-plan-pending",
+            glyph_class: "",
+        },
+    ]);
+});
+
 run_test("workspace rail keeps a plan visible before workspace context arrives", () => {
     const html = render_pear_workspace_rail({
         has_workspace: false,

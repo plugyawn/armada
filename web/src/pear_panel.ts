@@ -1595,7 +1595,7 @@ export function pear_rail_plan_steps_for_testing(runs: PearRun[]): PearRailPlanS
                 glyph_class: "",
             };
         }
-        if (index === current_index) {
+        if (active_source !== undefined && index === current_index) {
             return {
                 step: entry.step,
                 status_glyph: "",

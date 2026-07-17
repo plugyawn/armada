@@ -164,6 +164,39 @@ run_test(
     },
 );
 
+run_test("pear trace rewires stale controls and keeps row clicks intentional", () => {
+    assert.equal(
+        message_list_view.pear_trace_trigger_is_current_for_testing(
+            "156",
+            "pear-run-trace-156-1",
+            156,
+            "pear-run-trace-156-2",
+        ),
+        false,
+    );
+    assert.equal(
+        message_list_view.pear_trace_trigger_is_current_for_testing(
+            "156",
+            "pear-run-trace-156-2",
+            156,
+            "pear-run-trace-156-2",
+        ),
+        true,
+    );
+    assert.equal(
+        message_list_view.pear_trace_surface_click_should_toggle_for_testing(false, true),
+        true,
+    );
+    assert.equal(
+        message_list_view.pear_trace_surface_click_should_toggle_for_testing(true, true),
+        false,
+    );
+    assert.equal(
+        message_list_view.pear_trace_surface_click_should_toggle_for_testing(false, false),
+        false,
+    );
+});
+
 run_test("planless progress gives way to typed assistant text", () => {
     assert.equal(message_list_view.pear_live_should_show_progress_for_testing(0, undefined), true);
     assert.equal(message_list_view.pear_live_should_show_progress_for_testing(0, false), true);

@@ -1060,6 +1060,22 @@ export function pear_trace_trigger_label_for_testing(
     return loaded ? $t({defaultMessage: "Show work"}) : $t({defaultMessage: "Load work"});
 }
 
+export function pear_trace_trigger_is_current_for_testing(
+    trigger_run_id: string | undefined,
+    controls: string | null,
+    run_id: number,
+    host_id: string,
+): boolean {
+    return trigger_run_id === `${run_id}` && controls === host_id;
+}
+
+export function pear_trace_surface_click_should_toggle_for_testing(
+    clicked_disclosure: boolean,
+    selection_is_collapsed: boolean,
+): boolean {
+    return !clicked_disclosure && selection_is_collapsed;
+}
+
 function update_pear_run_trace_triggers(state: PearTraceRequestState): void {
     const content = state.reveal.parentElement;
     if (content === null) {
@@ -1236,8 +1252,12 @@ function ensure_pear_run_trace(content: HTMLElement, run_id: number): PearTraceR
 
 function wire_pear_run_trace_trigger(trigger: HTMLElement, state: PearTraceRequestState): void {
     if (
-        trigger.dataset["pearTraceRunId"] === `${state.run_id}` &&
-        trigger.getAttribute("aria-controls") === state.host.id
+        pear_trace_trigger_is_current_for_testing(
+            trigger.dataset["pearTraceRunId"],
+            trigger.getAttribute("aria-controls"),
+            state.run_id,
+            state.host.id,
+        )
     ) {
         trigger.setAttribute("aria-expanded", String(state.expanded));
         return;
@@ -1258,7 +1278,9 @@ function wire_pear_run_trace_trigger(trigger: HTMLElement, state: PearTraceReque
     trigger.setAttribute("title", label);
     trigger.addEventListener(
         "click",
-        () => {
+        (event) => {
+            event.preventDefault();
+            event.stopPropagation();
             toggle_pear_run_trace(state);
         },
         {
@@ -1302,13 +1324,17 @@ function ensure_pear_live_trace_disclosure(
     progress.addEventListener(
         "click",
         (event) => {
-            if (event.target === disclosure) {
-                return;
-            }
             const selection = window.getSelection();
-            if (selection !== null && !selection.isCollapsed) {
+            if (
+                !pear_trace_surface_click_should_toggle_for_testing(
+                    event.target === disclosure,
+                    selection?.isCollapsed ?? true,
+                )
+            ) {
                 return;
             }
+            event.preventDefault();
+            event.stopPropagation();
             toggle_pear_run_trace(state);
         },
         {signal: controller.signal},
@@ -1444,6 +1470,16 @@ function maybe_render_pear_run_footer($row: JQuery): void {
                 update_pear_run_elapsed_labels();
                 ensure_pear_run_elapsed_timer();
             }
+            if (trace_available && run !== undefined) {
+                const trace_state = ensure_pear_run_trace(content, run.id);
+                const toggle = existing.querySelector<HTMLElement>(
+                    ":scope > .pear-run-trace-toggle",
+                );
+                if (toggle !== null) {
+                    wire_pear_run_trace_trigger(toggle, trace_state);
+                }
+                place_pear_run_trace(content, trace_state);
+            }
             return;
         }
         if (!trace_available) {
@@ -1505,6 +1541,14 @@ function maybe_render_pear_run_footer($row: JQuery): void {
         !existing.classList.contains("pear-run-footer-ticker") &&
         existing.getAttribute("data-pear-footer-signature") === signature
     ) {
+        if (run?.trace_available === true) {
+            const trace_state = ensure_pear_run_trace(content, run.id);
+            const toggle = existing.querySelector<HTMLElement>(":scope > .pear-run-trace-toggle");
+            if (toggle !== null) {
+                wire_pear_run_trace_trigger(toggle, trace_state);
+            }
+            place_pear_run_trace(content, trace_state);
+        }
         return;
     }
     existing?.remove();

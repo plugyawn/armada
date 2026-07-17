@@ -183,10 +183,10 @@
             }
 
             .pear-tool-spoiler-block {
-                width: fit-content;
-                min-width: min(12rem, 100%);
-                max-width: min(100%, 38rem);
-                /* Even air on both sides of a tool chip — the old em
+                width: 100%;
+                min-width: 0;
+                max-width: 100%;
+                /* Even air on both sides of the tool disclosure — the old em
                    pair resolved to 10.8px above and 6px below through
                    two font-size contexts. */
                 margin: var(--pear-space-3) 0;
@@ -196,18 +196,22 @@
             }
 
             .pear-tool-spoiler-block .spoiler-header {
-                width: fit-content;
+                width: 100%;
                 max-width: 100%;
                 min-height: 23px;
                 gap: 6px;
                 padding: 3px 8px;
                 border: 1px solid var(--pear-hairline);
                 border-radius: var(--pear-radius-px);
-                background: var(--pear-surface-2);
-                color: var(--pear-ink-2);
+                background: color-mix(
+                    in srgb,
+                    var(--color-background-pear-message-content) 82%,
+                    var(--color-text-message-default) 18%
+                );
+                color: var(--color-text-message-default);
                 font-family: var(--pear-font-pixel);
                 font-synthesis: none;
-                font-size: 0.78em;
+                font-size: 1em;
                 font-weight: 400;
                 line-height: 1.25;
                 transition: background-color var(--pear-dur-1) var(--pear-ease);
@@ -236,8 +240,12 @@
             }
 
             .pear-tool-spoiler-block .spoiler-header:hover {
-                background: var(--pear-surface-3);
-                color: var(--pear-ink-1);
+                background: color-mix(
+                    in srgb,
+                    var(--color-background-pear-message-content) 76%,
+                    var(--color-text-message-default) 24%
+                );
+                color: var(--color-text-message-default);
             }
 
             /* The run footer: one quiet meta line that closes a
@@ -479,7 +487,7 @@
             }
 
             .pear-tool-spoiler-block:has(.spoiler-content-open) {
-                width: min(100%, 38rem);
+                width: 100%;
                 border: 1px solid
                     color-mix(
                         in srgb,

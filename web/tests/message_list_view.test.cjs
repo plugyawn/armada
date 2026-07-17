@@ -767,6 +767,14 @@ run_test("pear_tool_spoiler_title_detection", () => {
     assert.equal(message_list_view.is_pear_tool_spoiler_title_for_testing("Ran 1 tool"), true);
     assert.equal(message_list_view.is_pear_tool_spoiler_title_for_testing("Ran 7 tools"), true);
     assert.equal(
+        message_list_view.is_pear_tool_spoiler_title_for_testing("Ran 11 tools · 1 retry"),
+        true,
+    );
+    assert.equal(
+        message_list_view.is_pear_tool_spoiler_title_for_testing("Ran 12 tools · 2 retries"),
+        true,
+    );
+    assert.equal(
         message_list_view.is_pear_tool_spoiler_title_for_testing("Running 2/4 tools ✦"),
         true,
     );

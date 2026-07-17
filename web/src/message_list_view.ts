@@ -270,8 +270,9 @@ function pear_thinking_markers($scope: JQuery<HTMLElement | Document> = $(docume
 
 function is_pear_tool_spoiler_title(title: string): boolean {
     return (
-        /^(?:Ran|Running)\s+\d+(?:\/\d+)?\s+tools?(?:\s+✦)?$/.test(title) ||
-        /^\d+\s+failed\s+tools?$/.test(title)
+        /^(?:Ran|Running)\s+\d+(?:\/\d+)?\s+tools?(?:\s+✦)?(?:\s+·\s+\d+\s+retr(?:y|ies))?$/.test(
+            title,
+        ) || /^\d+\s+failed\s+tools?$/.test(title)
     );
 }
 

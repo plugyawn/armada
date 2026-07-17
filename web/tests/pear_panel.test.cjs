@@ -54,6 +54,7 @@ run_test("rail plan uses Working instead of leaking an older completed plan", ()
             status_glyph: "",
             status_class: "pear-rail-plan-active",
             glyph_class: "pear-thinking-glyph",
+            is_current: true,
         },
     ]);
 });
@@ -88,6 +89,7 @@ run_test("rail plan renders only the active run checklist", () => {
             status_glyph: "",
             status_class: "pear-rail-plan-active",
             glyph_class: "pear-thinking-glyph",
+            is_current: true,
         },
         {
             step: "Verify",
@@ -116,7 +118,7 @@ run_test("rail plan keeps a bounded window around the active step", () => {
 
     assert.deepEqual(
         steps.map((entry) => entry.step),
-        ["Two", "Three", "Four", "Five"],
+        ["…", "Three", "Four", "Five", "…"],
     );
 });
 
@@ -240,99 +242,22 @@ run_test("template renders active status as visible text glyph phrase", () => {
     assert.doesNotMatch(html, /pear-run-status-compact/);
 });
 
-run_test("template renders idle topic shell as compact runtime entry point", () => {
+run_test("template does not duplicate idle topic chrome", () => {
     const html = render_pear_panel({
         panel_open: true,
         show_panel_header: false,
-        show_topic_control: true,
-        show_runtime_trigger: true,
         show_workbench: false,
         has_topic: true,
         has_panel_menu: false,
         panel_can_close: false,
         active_run: undefined,
-        context_label: "devel > general chat",
-        topic_context: {
-            panel_repo_label: "zulip/zulip",
-            panel_worktree_label: "devel-general-chat",
-            panel_git_status_label: "clean",
-            panel_git_status_class: "clean",
-            panel_git_ref_label: "main / a3f92c1",
-            panel_runtime_label: "gpt-5.5 / xh",
-        },
     });
 
     assert.match(html, /pear-panel-inner/);
-    assert.doesNotMatch(html, /pear-panel-header-idle/);
-    assert.match(html, /pear-topic-control/);
-    assert.match(html, /pear-topic-control-heading/);
-    assert.match(html, /pear-topic-control-title-text">translated: Context<\/span>/);
-    assert.match(html, /pear-runtime-menu-trigger/);
-    assert.match(html, /pear-topic-runtime-name/);
-    assert.match(html, /<span class="pear-topic-runtime-name">translated: Model<\/span>/);
-    assert.match(html, /<span class="pear-runtime-menu-label">gpt-5.5 \/ xh<\/span>/);
-    assert.doesNotMatch(html, /<span class="pear-runtime-menu-label">translated: Pear<\/span>/);
-    assert.match(html, /pear-topic-context-label">translated: Repo<\/span>/);
-    assert.match(html, /pear-topic-context-main" title="zulip\/zulip">zulip\/zulip<\/span>/);
-    assert.match(html, /pear-topic-context-status-clean">clean<\/span>/);
-    assert.match(
-        html,
-        /pear-topic-context-main" title="devel-general-chat">devel-general-chat<\/span>/,
-    );
-    assert.match(html, /pear-topic-context-ref" title="main \/ a3f92c1">main \/ a3f92c1<\/span>/);
-    assert.doesNotMatch(
-        html,
-        /<span class="pear-runtime-menu-label">translated: Pear runtime<\/span>/,
-    );
+    assert.doesNotMatch(html, /pear-topic-control/);
+    assert.doesNotMatch(html, /pear-runtime-menu-trigger/);
     assert.doesNotMatch(html, /pear-run-actions/);
     assert.doesNotMatch(html, /class="pear-workbench(?:\s|")/);
-});
-
-run_test("template renders topic shell while runtime context is loading", () => {
-    const html = render_pear_panel({
-        panel_open: true,
-        show_panel_header: false,
-        show_topic_control: true,
-        show_runtime_trigger: true,
-        show_workbench: false,
-        has_topic: true,
-        has_panel_menu: false,
-        panel_can_close: false,
-        active_run: undefined,
-        context_label: "devel > general chat",
-        topic_context: undefined,
-    });
-
-    assert.match(html, /pear-topic-control/);
-    assert.match(html, /pear-topic-control-heading/);
-    assert.match(html, /pear-runtime-menu-trigger/);
-    assert.match(html, /pear-topic-control-title-text">translated: Context<\/span>/);
-    assert.match(html, /<span class="pear-topic-runtime-name">translated: Model<\/span>/);
-    assert.match(html, /<span class="pear-runtime-menu-label"><\/span>/);
-});
-
-run_test("template renders channel shell when no topic is selected", () => {
-    const html = render_pear_panel({
-        panel_open: true,
-        show_panel_header: false,
-        show_topic_control: true,
-        show_runtime_trigger: false,
-        show_workbench: false,
-        has_topic: false,
-        has_panel_menu: false,
-        panel_can_close: false,
-        active_run: undefined,
-        context_label: "devel",
-        topic_context: undefined,
-    });
-
-    assert.match(html, /pear-topic-control/);
-    assert.match(html, /pear-topic-control-title-text">translated: Context<\/span>/);
-    assert.doesNotMatch(html, /pear-runtime-menu-trigger/);
-    assert.match(html, /pear-topic-context-label">translated: Channel<\/span>/);
-    assert.match(html, /pear-topic-context-main" title="devel">devel<\/span>/);
-    assert.match(html, /pear-topic-context-label">translated: Worktree<\/span>/);
-    assert.match(html, /pear-topic-context-main">translated: Select a topic<\/span>/);
 });
 
 run_test("template renders workbench without active run", () => {
@@ -871,100 +796,11 @@ run_test("workbench_viewport_allows_popover_for_testing", () => {
     assert.equal(pear_panel.workbench_viewport_allows_popover_for_testing(1440), true);
 });
 
-run_test("work_panel_open_for_testing", () => {
-    assert.equal(
-        pear_panel.work_panel_open_for_testing({
-            context_key_value: "",
-            manually_open: true,
-            active_run_status: "running",
-            has_error: true,
-        }),
-        false,
-    );
-    assert.equal(
-        pear_panel.work_panel_open_for_testing({
-            context_key_value: "devel\u0000pear",
-            manually_open: false,
-            active_run_status: "done",
-            has_error: false,
-        }),
-        false,
-    );
-    assert.equal(
-        pear_panel.work_panel_open_for_testing({
-            context_key_value: "devel\u0000pear",
-            manually_open: true,
-            active_run_status: "done",
-            has_error: false,
-        }),
-        true,
-    );
-    assert.equal(
-        pear_panel.work_panel_open_for_testing({
-            context_key_value: "devel\u0000pear",
-            manually_open: false,
-            active_run_status: "running",
-            has_error: false,
-        }),
-        false,
-    );
-    assert.equal(
-        pear_panel.work_panel_open_for_testing({
-            context_key_value: "devel\u0000pear",
-            manually_open: false,
-            active_run_status: "queued",
-            has_error: false,
-        }),
-        false,
-    );
-    assert.equal(
-        pear_panel.work_panel_open_for_testing({
-            context_key_value: "devel\u0000pear",
-            manually_open: false,
-            active_run_status: "paused",
-            has_error: false,
-        }),
-        false,
-    );
-    assert.equal(
-        pear_panel.work_panel_open_for_testing({
-            context_key_value: "devel\u0000pear",
-            manually_open: false,
-            active_run_status: "failed",
-            has_error: false,
-        }),
-        false,
-    );
-    assert.equal(
-        pear_panel.work_panel_open_for_testing({
-            context_key_value: "devel\u0000pear",
-            manually_open: false,
-            active_run_status: undefined,
-            has_error: true,
-            error_dismissed: false,
-        }),
-        true,
-    );
-    // A dismissed error must not force the panel open (the "undismissable on
-    // error" regression: the 5s poll's still-present error kept re-opening it).
-    assert.equal(
-        pear_panel.work_panel_open_for_testing({
-            context_key_value: "devel pear",
-            manually_open: false,
-            active_run_status: undefined,
-            has_error: true,
-            error_dismissed: true,
-        }),
-        false,
-    );
-});
-
 run_test("workbench_open_for_testing", () => {
     assert.equal(
         pear_panel.workbench_open_for_testing({
             context_key_value: "",
             manually_open: true,
-            has_error: true,
         }),
         false,
     );
@@ -972,7 +808,6 @@ run_test("workbench_open_for_testing", () => {
         pear_panel.workbench_open_for_testing({
             context_key_value: "devel\u0000pear",
             manually_open: false,
-            has_error: false,
         }),
         false,
     );
@@ -980,7 +815,6 @@ run_test("workbench_open_for_testing", () => {
         pear_panel.workbench_open_for_testing({
             context_key_value: "devel\u0000pear",
             manually_open: true,
-            has_error: false,
         }),
         true,
     );
@@ -988,17 +822,6 @@ run_test("workbench_open_for_testing", () => {
         pear_panel.workbench_open_for_testing({
             context_key_value: "devel\u0000pear",
             manually_open: false,
-            has_error: true,
-            error_dismissed: false,
-        }),
-        true,
-    );
-    assert.equal(
-        pear_panel.workbench_open_for_testing({
-            context_key_value: "devel pear",
-            manually_open: false,
-            has_error: true,
-            error_dismissed: true,
         }),
         false,
     );

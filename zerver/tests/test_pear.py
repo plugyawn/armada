@@ -4744,6 +4744,16 @@ class PearSessionDefaultsTest(TestCase):
                     "kind": "assistant",
                     "status": "running",
                     "title": "Codex",
+                    "body": " ",
+                    "item_id": "assistant-1",
+                    "metadata": {"streaming": True},
+                }
+            )
+            event_callback(
+                {
+                    "kind": "assistant",
+                    "status": "running",
+                    "title": "Codex",
                     "body": "The PDF",
                     "item_id": "assistant-1",
                     "metadata": {"streaming": True},
@@ -4795,6 +4805,7 @@ class PearSessionDefaultsTest(TestCase):
         self.assertEqual(
             [message["content"] for message in updated_messages],
             [
+                PEAR_WORKING_MESSAGE,
                 PEAR_WORKING_MESSAGE,
                 "The PDF",
                 "The PDF compiled",

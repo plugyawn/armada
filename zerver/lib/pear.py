@@ -2831,6 +2831,7 @@ class PearWorkerTurn:
         self.task = pear_worker_task_line(content)
         self.last_transcript_flush_at = 0.0
         self.assistant_persistent_flush_seen = False
+        self.assistant_visible_event_seen = False
         self.steering_events_after: Any = None
         self.last_steering_event_id = 0
         self.steering_segment_count = 0
@@ -3123,14 +3124,20 @@ class PearWorkerTurn:
             "tool",
         }
         if event_kind == "assistant":
-            first_visible_flush = not self.assistant_persistent_flush_seen
+            has_visible_assistant_text = bool(
+                pear_visible_assistant_text(self.current_assistant_text).strip()
+            )
+            force_flush = not self.assistant_persistent_flush_seen or (
+                has_visible_assistant_text and not self.assistant_visible_event_seen
+            )
             if self.update_live_transcript(
                 "running",
-                force=not self.assistant_persistent_flush_seen,
+                force=force_flush,
                 flush_interval=PEAR_PERSISTENT_ASSISTANT_FLUSH_INTERVAL_SECONDS,
             ):
                 self.assistant_persistent_flush_seen = True
-                if first_visible_flush:
+                if has_visible_assistant_text and not self.assistant_visible_event_seen:
+                    self.assistant_visible_event_seen = True
                     # Streaming assistant deltas deliberately stay out of the
                     # durable transcript event log. Emit one typed boundary
                     # when the first real prose reaches the message so every

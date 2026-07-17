@@ -120,6 +120,50 @@ run_test("pear live announcements change only with the Codex plan step", () => {
     );
 });
 
+run_test("pear trace refreshes when reopened after collapsed events", () => {
+    assert.equal(
+        message_list_view.pear_trace_should_load_on_open_for_testing(true, true, false),
+        true,
+    );
+    assert.equal(
+        message_list_view.pear_trace_should_load_on_open_for_testing(true, false, false),
+        false,
+    );
+    assert.equal(message_list_view.pear_trace_event_should_load_for_testing(false), false);
+    assert.equal(message_list_view.pear_trace_event_should_load_for_testing(true), true);
+});
+
+run_test("pear trace rejects malformed payloads and follows only the live tail", () => {
+    assert.equal(message_list_view.pear_trace_rendered_for_testing({trace: []}), undefined);
+    assert.equal(
+        message_list_view.pear_trace_rendered_for_testing({rendered: "<p>Ready</p>", trace: []}),
+        "<p>Ready</p>",
+    );
+    assert.equal(message_list_view.pear_trace_should_follow_tail_for_testing(1000, 480, 500), true);
+    assert.equal(
+        message_list_view.pear_trace_should_follow_tail_for_testing(1000, 300, 500),
+        false,
+    );
+});
+
+run_test(
+    "pear trace disclosure labels loading and failure separately from live plan status",
+    () => {
+        assert.equal(
+            message_list_view.pear_trace_trigger_label_for_testing(true, false, "loading"),
+            "translated: Hide work while loading",
+        );
+        assert.equal(
+            message_list_view.pear_trace_trigger_label_for_testing(true, false, "failed"),
+            "translated: Hide failed work",
+        );
+        assert.equal(
+            message_list_view.pear_trace_trigger_label_for_testing(false, false, "failed"),
+            "translated: Retry loading work",
+        );
+    },
+);
+
 run_test("planless progress gives way to typed assistant text", () => {
     assert.equal(message_list_view.pear_live_should_show_progress_for_testing(0, undefined), true);
     assert.equal(message_list_view.pear_live_should_show_progress_for_testing(0, false), true);

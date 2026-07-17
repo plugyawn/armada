@@ -294,7 +294,7 @@
                 font-family: var(--pear-font-pixel);
                 font-synthesis: none;
                 /* stylelint-disable-next-line declaration-property-unit-disallowed-list */
-                font-size: 13px;
+                font-size: 14px;
                 line-height: 1.35;
                 -webkit-font-smoothing: none;
             }
@@ -302,13 +302,16 @@
             .pear-live-progress-planless {
                 min-height: 30px;
                 padding-block: 4px 6px;
-                /* stylelint-disable-next-line declaration-property-unit-disallowed-list */
-                font-size: 17px;
 
                 .pear-live-plan-step {
                     grid-template-columns: 20px minmax(0, 1fr);
                     min-height: 26px;
                     align-items: center;
+                }
+
+                .pear-live-plan-current {
+                    /* stylelint-disable-next-line declaration-property-unit-disallowed-list */
+                    font-size: 17px;
                 }
             }
 
@@ -335,7 +338,6 @@
 
             .pear-live-plan-context {
                 color: var(--pear-ink-3);
-                opacity: 0.56;
             }
 
             .pear-live-plan-ellipsis {
@@ -351,6 +353,7 @@
 
             .pear-live-plan-current {
                 color: var(--color-text-message-default);
+                font-size: 15px;
             }
 
             .pear-live-plan-current .pear-live-plan-label {
@@ -381,7 +384,7 @@
                 color: var(--pear-ink-1);
                 font-family: var(--pear-font-pixel);
                 /* stylelint-disable-next-line declaration-property-unit-disallowed-list */
-                font-size: 13px;
+                font-size: 14px;
                 font-weight: 400;
                 line-height: 1.4;
                 text-overflow: ellipsis;
@@ -400,7 +403,11 @@
             }
 
             &.pear-live-placeholder
-                > :not(.pear-live-progress, .pear-run-footer) {
+                > :not(
+                    .pear-live-progress,
+                    .pear-run-footer,
+                    .pear-run-trace-reveal
+                ) {
                 display: none;
             }
 
@@ -413,11 +420,84 @@
                 animation: pear-stream-chunk-in 180ms ease-out both;
             }
 
-            .pear-run-trace-toggle {
-                margin-left: auto;
+            .pear-live-progress:has(> .pear-live-progress-disclosure) {
+                z-index: 1;
+                padding-right: 28px;
+                border-radius: var(--pear-radius-px);
+                transition:
+                    background-color var(--pear-dur-1) var(--pear-ease),
+                    box-shadow var(--pear-dur-1) var(--pear-ease);
+
+                &:hover,
+                &:has(> .pear-live-progress-disclosure:focus-visible),
+                &:has(> .pear-live-progress-disclosure[aria-expanded="true"]) {
+                    background: color-mix(
+                        in srgb,
+                        var(--pear-interaction) 4%,
+                        transparent
+                    );
+                    box-shadow:
+                        0 0.2em 0.75em 0
+                            color-mix(
+                                in srgb,
+                                var(--pear-interaction) 12%,
+                                transparent
+                            ),
+                        0 1.65em 1em 0
+                            var(--color-background-pear-message-content),
+                        0 2.8em 1em 0
+                            var(--color-left-sidebar-outer-box-shadow-hover);
+                }
+            }
+
+            .pear-live-progress-disclosure {
+                position: absolute;
+                z-index: 2;
+                top: 0;
+                right: 0;
+                bottom: 0;
+                width: 28px;
+                appearance: none;
                 border: 0;
+                border-radius: var(--pear-radius-px);
                 background: transparent;
                 padding: 0;
+                color: var(--pear-interaction);
+                cursor: pointer;
+                font-family: var(--pear-font-pixel);
+
+                &::after {
+                    position: absolute;
+                    top: 50%;
+                    right: 8px;
+                    content: "⌄";
+                    font-size: 13px;
+                    opacity: 0.52;
+                    transform: translateY(-50%);
+                    transition: opacity var(--pear-dur-1) var(--pear-ease);
+                }
+
+                &[aria-expanded="true"]::after {
+                    content: "⌃";
+                    opacity: 0.9;
+                }
+
+                &:focus-visible {
+                    outline: none;
+                    box-shadow: inset 0 0 0 2px var(--pear-interaction);
+                }
+            }
+
+            .pear-run-trace-toggle {
+                display: inline-grid;
+                width: 24px;
+                height: 24px;
+                margin-left: auto;
+                border: 0;
+                border-radius: var(--pear-radius-chip);
+                background: var(--pear-interaction-fill);
+                padding: 0;
+                place-items: center;
                 color: var(--pear-interaction);
                 font-family: var(--pear-font-pixel);
                 font-size: 13px;
@@ -426,7 +506,6 @@
                 cursor: pointer;
 
                 &::before {
-                    margin-right: 0.32em;
                     content: "⌃";
                     font-family: var(--pear-font-pixel);
                     font-weight: 400;
@@ -437,51 +516,73 @@
                 }
 
                 &:hover {
+                    background: var(--pear-interaction-fill-strong);
                     color: var(--pear-ink-1);
                 }
             }
 
+            &:has(> .pear-live-progress > .pear-live-progress-disclosure)
+                > .pear-run-footer
+                .pear-run-trace-toggle {
+                display: none;
+            }
+
+            .pear-run-trace-reveal {
+                position: relative;
+                display: grid;
+                min-width: 0;
+                grid-template-rows: 0fr;
+                opacity: 0;
+                transition:
+                    grid-template-rows 180ms var(--pear-ease),
+                    opacity 120ms var(--pear-ease);
+
+                &[data-expanded="true"] {
+                    grid-template-rows: 1fr;
+                    opacity: 1;
+                }
+            }
+
+            .pear-run-trace-status {
+                position: absolute;
+                width: 1px;
+                height: 1px;
+                overflow: hidden;
+                clip-path: inset(50%);
+                white-space: nowrap;
+            }
+
             .pear-run-trace {
                 display: grid;
-                flex-basis: 100%;
-                gap: 5px;
-                max-height: min(22rem, 55vh);
+                min-width: 0;
+                min-height: 0;
+                gap: var(--pear-space-2);
+                max-height: min(36rem, 65vh);
                 overflow: auto;
                 overscroll-behavior: contain;
-                margin-top: var(--pear-space-2);
-                padding: var(--pear-space-3) var(--pear-space-2)
-                    var(--pear-space-2);
-                border-top: 1px solid var(--pear-hairline);
-                background: var(--color-background-pear-message-content);
+                padding-inline: var(--pear-space-2);
                 color: var(--pear-ink-2);
                 font-family: var(--pear-font-pixel);
                 font-synthesis: none;
-                font-size: 13px;
+                font-size: 14px;
                 line-height: 1.5;
                 scrollbar-gutter: stable;
-                /* Keep Zulip's expanded-topic reveal geometry, but bind the
-                   middle/outer layers to this message surface. The stock
-                   sidebar variables assume the page background and became a
-                   black tunnel when applied verbatim inside a Pear row. */
-                box-shadow:
-                    0 -0.2em 0.75em 0
-                        color-mix(in srgb, var(--pear-ink-1) 14%, transparent),
-                    0 -2.5em 1em 0 var(--color-background-pear-message-content),
-                    0 -4em 1em 0
-                        color-mix(
-                            in srgb,
-                            var(--pear-interaction) 8%,
-                            transparent
-                        );
-                animation: pear-trace-reveal 180ms var(--pear-ease) both;
+
+                &::before {
+                    height: 1px;
+                    background: linear-gradient(
+                        90deg,
+                        transparent,
+                        var(--pear-hairline) 8%,
+                        var(--pear-hairline) 92%,
+                        transparent
+                    );
+                    content: "";
+                }
 
                 > p {
                     margin-block: 0 var(--pear-space-3);
                 }
-            }
-
-            .pear-run-trace[hidden] {
-                display: none;
             }
 
             .pear-tool-spoiler-block:has(.spoiler-content-open)

@@ -2144,7 +2144,7 @@ function utility_button(
     controller: AbortController,
     action: (button: HTMLButtonElement) => void | Promise<void>,
 ): HTMLButtonElement {
-    const button = element("button", "pear-artifact-action", label);
+    const button = element("button", "pear-artifact-action pear-artifact-utility", label);
     button.type = "button";
     button.setAttribute("aria-label", aria_label);
     button.addEventListener(
@@ -2214,7 +2214,7 @@ function render_artifact_utilities(
         const download_source = themed_media_value(block, "src");
         if (download_source !== "") {
             const download = document.createElement("a");
-            download.className = "pear-artifact-action";
+            download.className = "pear-artifact-action pear-artifact-utility";
             download.textContent = "download";
             download.download = "";
             download.href = download_source;

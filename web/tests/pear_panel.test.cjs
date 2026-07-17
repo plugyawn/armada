@@ -122,7 +122,7 @@ run_test("rail plan keeps a bounded window around the active step", () => {
     );
 });
 
-run_test("rail plan never leaves terminal work animated", () => {
+run_test("rail plan disappears when no Codex run is active", () => {
     const steps = pear_panel.pear_rail_plan_steps_for_testing([
         {
             id: 2,
@@ -134,20 +134,28 @@ run_test("rail plan never leaves terminal work animated", () => {
         },
     ]);
 
-    assert.deepEqual(steps, [
+    assert.deepEqual(steps, []);
+});
+
+run_test("rail keeps the last completed Codex step current while the run finalizes", () => {
+    const steps = pear_panel.pear_rail_plan_steps_for_testing([
         {
-            step: "Inspect",
-            status_glyph: "✓",
-            status_class: "pear-rail-plan-done",
-            glyph_class: "",
-        },
-        {
-            step: "Report",
-            status_glyph: "○",
-            status_class: "pear-rail-plan-pending",
-            glyph_class: "",
+            id: 3,
+            status: "running",
+            plan: [
+                {step: "Inspect", status: "completed"},
+                {step: "Report", status: "completed"},
+            ],
         },
     ]);
+
+    assert.deepEqual(steps.at(-1), {
+        step: "Report",
+        status_glyph: "✓",
+        status_class: "pear-rail-plan-active",
+        glyph_class: "",
+        is_current: true,
+    });
 });
 
 run_test("workspace rail keeps a plan visible before workspace context arrives", () => {
@@ -163,17 +171,13 @@ run_test("workspace rail keeps a plan visible before workspace context arrives",
             },
         ],
         has_runs: false,
-        has_overview: true,
-        overview: "Reading the renderer state",
-        overview_key: '[2,"Working","Reading the renderer state"]',
         show_workspace_line: false,
     });
 
     assert.ok(html.includes("pear-rail-plan"));
     assert.ok(html.includes("pear-thinking-glyph"));
     assert.ok(html.includes("Working"));
-    assert.ok(html.includes("pear-rail-overview"));
-    assert.ok(html.includes("Reading the renderer state"));
+    assert.ok(!html.includes("pear-rail-overview"));
     assert.ok(!html.includes("pear-workspace-rail-card"));
     assert.ok(!html.includes("pear-rail-plan-title"));
 });
@@ -193,7 +197,6 @@ run_test("workspace rail uses explicit booleans for numeric message ids", () => 
                 result_message_id: 903,
             },
         ],
-        has_overview: false,
         show_workspace_line: false,
     });
 

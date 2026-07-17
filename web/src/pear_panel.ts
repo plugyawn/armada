@@ -11,13 +11,12 @@ import * as channel from "./channel.ts";
 import {$t} from "./i18n.ts";
 import * as message_lists from "./message_lists.ts";
 import * as narrow_state from "./narrow_state.ts";
-import {pear_live_overview_key, preserve_unchanged_pear_overview} from "./pear_live_dom.ts";
 import * as pear_run_state from "./pear_run_state.ts";
 import {
+    active_plan_presentation,
     compact_reasoning_effort,
     context_key,
     model_reasoning_efforts,
-    windowed_plan_indices,
 } from "./pear_runtime_shared.ts";
 import * as pear_workspace from "./pear_workspace.ts";
 import * as pear_workspace_marks from "./pear_workspace_marks.ts";
@@ -1757,33 +1756,23 @@ export function pear_rail_plan_steps_for_testing(runs: PearRun[]): PearRailPlanS
     // completed checklist from an earlier turn. Keep the rail resident from
     // the first queued event with the same quiet Working state used by chat.
     const active_source = runs.find((run) => run.status === "running" || run.status === "queued");
-    const source = active_source ?? runs[0];
-    if (source === undefined) {
+    if (active_source === undefined) {
         return [];
     }
-    if ((source.plan ?? []).length === 0) {
-        return active_source === undefined
-            ? []
-            : [
-                  {
-                      step: $t({defaultMessage: "Working"}),
-                      status_glyph: "",
-                      status_class: "pear-rail-plan-active",
-                      glyph_class: "pear-thinking-glyph",
-                      is_current: true,
-                  },
-              ];
+    const presentation = active_plan_presentation(active_source.plan ?? []);
+    if (presentation.kind === "working") {
+        return [
+            {
+                step: $t({defaultMessage: "Working"}),
+                status_glyph: "",
+                status_class: "pear-rail-plan-active",
+                glyph_class: "pear-thinking-glyph",
+                is_current: true,
+            },
+        ];
     }
-    const plan = source.plan ?? [];
-    let current_index = plan.findIndex((entry) => entry.status === "in_progress");
-    if (current_index === -1) {
-        current_index = plan.findIndex((entry) => entry.status === "pending");
-    }
-    if (current_index === -1) {
-        current_index = plan.length - 1;
-    }
-    return windowed_plan_indices(plan.length, current_index).map((index) => {
-        if (index === "ellipsis") {
+    return presentation.rows.map((row) => {
+        if (row.kind === "ellipsis") {
             return {
                 step: "…",
                 status_glyph: "",
@@ -1792,26 +1781,25 @@ export function pear_rail_plan_steps_for_testing(runs: PearRun[]): PearRailPlanS
                 is_ellipsis: true,
             };
         }
-        const entry = plan[index]!;
-        if (entry.status === "completed" || entry.status === "done") {
+        if (row.is_current) {
             return {
-                step: entry.step,
+                step: row.step,
+                status_glyph: row.status === "completed" ? "✓" : "",
+                status_class: "pear-rail-plan-active",
+                glyph_class: row.status === "completed" ? "" : "pear-thinking-glyph",
+                is_current: true,
+            };
+        }
+        if (row.status === "completed") {
+            return {
+                step: row.step,
                 status_glyph: "✓",
                 status_class: "pear-rail-plan-done",
                 glyph_class: "",
             };
         }
-        if (active_source !== undefined && index === current_index) {
-            return {
-                step: entry.step,
-                status_glyph: "",
-                status_class: "pear-rail-plan-active",
-                glyph_class: "pear-thinking-glyph",
-                is_current: true,
-            };
-        }
         return {
-            step: entry.step,
+            step: row.step,
             status_glyph: "○",
             status_class: "pear-rail-plan-pending",
             glyph_class: "",
@@ -1889,8 +1877,6 @@ function render_workspace_rail(
     const run_entries = pear_rail_run_entries(runs);
     const active_runs = runs.filter((run) => run.status === "running" || run.status === "queued");
     const active_run = active_runs[0];
-    const overview = active_run?.overview?.trim() ?? "";
-    const current_step = plan_steps.find((step) => step.is_current)?.step ?? "";
     const active_meta_parts: string[] = [];
     if (active_run !== undefined) {
         const duration = active_run.usage?.duration_seconds;
@@ -1932,12 +1918,6 @@ function render_workspace_rail(
         has_runs: run_entries.length > 0,
         plan_steps,
         has_plan: plan_steps.length > 0,
-        overview,
-        overview_key:
-            active_run === undefined
-                ? ""
-                : pear_live_overview_key(active_run.id, current_step, overview),
-        has_overview: overview !== "",
         plan_meta: active_meta_parts.join(" · "),
         has_plan_meta: active_meta_parts.length > 0,
         show_workspace_line: has_workspace,
@@ -1953,7 +1933,6 @@ function render_workspace_rail(
     }
     const template = document.createElement("template");
     template.innerHTML = render_pear_workspace_rail(args);
-    preserve_unchanged_pear_overview(rail, template.content);
     $rail.empty();
     rail.append(template.content);
     $rail.removeAttr("hidden");

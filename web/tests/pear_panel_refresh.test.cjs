@@ -26,8 +26,6 @@ run_test("transient status errors never force the workbench open", () => {
         pear_panel.workbench_open_for_testing({
             context_key_value: "devel\\ntopic-a",
             manually_open: false,
-            has_error: true,
-            error_dismissed: false,
         }),
         false,
     );
@@ -35,34 +33,90 @@ run_test("transient status errors never force the workbench open", () => {
         pear_panel.workbench_open_for_testing({
             context_key_value: "devel\\ntopic-a",
             manually_open: true,
-            has_error: false,
-            error_dismissed: false,
         }),
         true,
     );
 });
 
-run_test("liveness reconciliation is active-only and one-shot", () => {
+run_test("liveness reconciliation covers active runs and exact unbound placeholders", () => {
     assert.equal(
-        pear_panel.run_needs_liveness_reconciliation_for_testing({
-            status: "running",
+        pear_panel.liveness_reconciliation_owner_for_testing({
+            run_id: 7,
+            run_status: "running",
+            placeholder_message_id: 70,
+        }),
+        "run:7",
+    );
+    assert.equal(
+        pear_panel.liveness_reconciliation_owner_for_testing({
+            placeholder_message_id: 70,
+        }),
+        "placeholder:70",
+    );
+    assert.equal(
+        pear_panel.liveness_reconciliation_owner_for_testing({
+            run_id: 7,
+            run_status: "done",
+        }),
+        undefined,
+    );
+    assert.equal(
+        pear_panel.liveness_reconciliation_needs_timer_for_testing({
+            owner: "placeholder:70",
             attempted: false,
+            timer_armed: false,
         }),
         true,
     );
     assert.equal(
-        pear_panel.run_needs_liveness_reconciliation_for_testing({
-            status: "running",
+        pear_panel.liveness_reconciliation_needs_timer_for_testing({
+            owner: "placeholder:70",
             attempted: true,
+            timer_armed: false,
         }),
         false,
     );
     assert.equal(
-        pear_panel.run_needs_liveness_reconciliation_for_testing({
-            status: "done",
+        pear_panel.liveness_reconciliation_needs_timer_for_testing({
+            owner: "run:7",
             attempted: false,
+            timer_armed: true,
         }),
         false,
+    );
+});
+
+run_test("rail queue depth excludes the currently displayed active run", () => {
+    assert.equal(
+        pear_panel.pear_rail_queue_depth_for_testing([
+            {status: "running"},
+            {status: "queued"},
+            {status: "queued"},
+            {status: "done"},
+        ]),
+        2,
+    );
+    assert.equal(pear_panel.pear_rail_queue_depth_for_testing([{status: "running"}]), 0);
+});
+
+run_test("dismissed status errors stay quiet until server truth changes", () => {
+    assert.equal(
+        pear_panel.visible_panel_error_for_testing("Pear status is unavailable.", undefined),
+        "Pear status is unavailable.",
+    );
+    assert.equal(
+        pear_panel.visible_panel_error_for_testing(
+            "Pear status is unavailable.",
+            "Pear status is unavailable.",
+        ),
+        "",
+    );
+    assert.equal(
+        pear_panel.visible_panel_error_for_testing(
+            "Pear returned an invalid runs payload.",
+            "Pear status is unavailable.",
+        ),
+        "Pear returned an invalid runs payload.",
     );
 });
 

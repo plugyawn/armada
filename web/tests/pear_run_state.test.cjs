@@ -135,6 +135,68 @@ test("quiet active result message remains active until a terminal event", () => 
         duration_seconds: 12.5,
         total_tokens: 1200,
         tool_count: 3,
+        overview: null,
+    });
+});
+
+test("settled footer retains the last non-empty step-bound overview", () => {
+    pear_run_state.remember_runs([
+        {
+            id: 3,
+            status: "running",
+            ambient_triggered: false,
+            result_message_id: 7,
+            overview: "Comparing two edits",
+            date_updated: 100,
+        },
+    ]);
+    pear_run_state.apply_pear_run_event({
+        version: 1,
+        sequence: 11,
+        run_id: 3,
+        event_type: "plan",
+        status: "running",
+        result_message_id: 7,
+        stream: "devel",
+        topic: "speed",
+        current_activity: "Next step",
+        tool_count: 2,
+        plan: [{step: "Summarize", status: "in_progress"}],
+        overview: null,
+        has_visible_assistant_text: true,
+        usage: null,
+        duration_seconds: null,
+        trace_available: true,
+        run_date_created: 90,
+        date_created: 105,
+    });
+    pear_run_state.apply_pear_run_event({
+        version: 1,
+        sequence: 12,
+        run_id: 3,
+        event_type: "done",
+        status: "done",
+        result_message_id: 7,
+        stream: "devel",
+        topic: "speed",
+        current_activity: "Completed",
+        tool_count: 2,
+        plan: null,
+        overview: null,
+        has_visible_assistant_text: null,
+        usage: {total_tokens: 500},
+        duration_seconds: 5,
+        trace_available: true,
+        run_date_created: 90,
+        date_created: 110,
+    });
+
+    assert.deepEqual(pear_run_state.get_run_footer(7), {
+        status: "done",
+        duration_seconds: 5,
+        total_tokens: 500,
+        tool_count: 2,
+        overview: "Comparing two edits",
     });
 });
 

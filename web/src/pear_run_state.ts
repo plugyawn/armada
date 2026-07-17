@@ -1,5 +1,6 @@
 type PearRunForActiveMessage = {
     id: number;
+    snapshot_sequence?: number | undefined;
     status: string;
     ambient_triggered: boolean;
     result_message_id?: number | null | undefined;
@@ -40,6 +41,7 @@ export type PearRunPlanStep = {
 
 export type PearRunLiveView = {
     id: number;
+    snapshot_sequence?: number | undefined;
     status: string;
     result_message_id?: number | null | undefined;
     stream?: string | undefined;
@@ -257,8 +259,13 @@ export function set_active_run_result_messages(
 
 export function remember_runs(runs: PearRunForActiveMessage[]): void {
     for (const run of runs) {
+        const latest_event_sequence = latest_sequence_by_run_id.get(run.id) ?? 0;
+        const snapshot_is_current =
+            latest_event_sequence === 0 ||
+            (run.snapshot_sequence !== undefined && run.snapshot_sequence >= latest_event_sequence);
         const hydrated_view: PearRunLiveView = {
             id: run.id,
+            snapshot_sequence: run.snapshot_sequence,
             status: run.status,
             result_message_id: run.result_message_id,
             stream: run.stream,
@@ -275,6 +282,15 @@ export function remember_runs(runs: PearRunForActiveMessage[]): void {
             usage: run.usage,
         };
         const previous = run_views_by_id.get(run.id);
+        if (!snapshot_is_current && previous !== undefined) {
+            // The response began before a push event already applied by the
+            // synchronous event reducer. Keep the event-owned state; the
+            // snapshot's immutable metadata is not represented in this view.
+            continue;
+        }
+        if (run.snapshot_sequence !== undefined && run.snapshot_sequence > latest_event_sequence) {
+            latest_sequence_by_run_id.set(run.id, run.snapshot_sequence);
+        }
         const base_view =
             previous?.updated_at !== undefined &&
             previous.updated_at > (hydrated_view.updated_at ?? Number.NEGATIVE_INFINITY)
@@ -313,6 +329,21 @@ export function remember_runs(runs: PearRunForActiveMessage[]): void {
             }
         }
     }
+}
+
+export function snapshot_is_current(
+    run_id: number,
+    snapshot_sequence: number | undefined,
+): boolean {
+    const latest_event_sequence = latest_sequence_by_run_id.get(run_id) ?? 0;
+    return (
+        latest_event_sequence === 0 ||
+        (snapshot_sequence !== undefined && snapshot_sequence >= latest_event_sequence)
+    );
+}
+
+export function event_is_latest(run_id: number, sequence: number): boolean {
+    return sequence === (latest_sequence_by_run_id.get(run_id) ?? 0);
 }
 
 export function apply_pear_run_event(event: PearRunPushEvent): void {
@@ -391,6 +422,10 @@ export function get_run_view(message_id: number | undefined): PearRunLiveView | 
     }
     const run_id = run_ids_by_result_message.get(message_id);
     return run_id === undefined ? undefined : run_views_by_id.get(run_id);
+}
+
+export function get_run_view_by_id(run_id: number): PearRunLiveView | undefined {
+    return run_views_by_id.get(run_id);
 }
 
 export function on_run_state_changed(listener: (run: PearRunLiveView) => void): () => void {

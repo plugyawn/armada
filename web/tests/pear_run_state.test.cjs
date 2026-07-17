@@ -104,6 +104,7 @@ test("stale hydration cannot overwrite a newer push event", () => {
     pear_run_state.remember_runs([
         {
             id: 9,
+            snapshot_sequence: 10,
             status: "running",
             ambient_triggered: false,
             result_message_id: 90,
@@ -145,6 +146,7 @@ test("stale hydration cannot overwrite a newer push event", () => {
 
     const stale_run = {
         id: 9,
+        snapshot_sequence: 19,
         status: "running",
         ambient_triggered: false,
         result_message_id: 90,
@@ -158,6 +160,47 @@ test("stale hydration cannot overwrite a newer push event", () => {
 
     assert.equal(pear_run_state.get_run_view(90).status, "done");
     assert.ok(!pear_run_state.is_active_run_result_message(90));
+});
+
+test("authoritative snapshot advances the event watermark", () => {
+    pear_run_state.remember_runs([
+        {
+            id: 10,
+            snapshot_sequence: 30,
+            status: "done",
+            ambient_triggered: false,
+            result_message_id: 100,
+            stream: "devel",
+            topic: "speed",
+            current_activity: "Completed",
+            date_updated: 300,
+        },
+    ]);
+
+    pear_run_state.apply_pear_run_event({
+        version: 1,
+        sequence: 29,
+        run_id: 10,
+        event_type: "running",
+        status: "running",
+        result_message_id: 100,
+        stream: "devel",
+        topic: "speed",
+        current_activity: "Stale progress",
+        tool_count: 0,
+        plan: null,
+        overview: null,
+        has_visible_assistant_text: null,
+        usage: null,
+        duration_seconds: null,
+        trace_available: false,
+        run_date_created: 100,
+        date_created: 290,
+    });
+
+    assert.equal(pear_run_state.get_run_view(100).status, "done");
+    assert.ok(pear_run_state.event_is_latest(10, 30));
+    assert.ok(!pear_run_state.event_is_latest(10, 29));
 });
 
 test("typed assistant-visible push retires the placeholder immediately", () => {

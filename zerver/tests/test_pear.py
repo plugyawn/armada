@@ -4813,7 +4813,7 @@ class PearSessionDefaultsTest(TestCase):
         )
         self.assertEqual(
             [message.get("rendering_only") for message in updated_messages],
-            [True, True, True],
+            [True, True, True, True],
         )
         self.assertFalse(
             any(

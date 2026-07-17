@@ -232,11 +232,11 @@
             }
 
             .pear-tool-header-glyph.pear-tool-row-active {
-                color: var(--color-text-warning-text-action-button);
+                color: var(--pear-warn);
             }
 
             .pear-tool-header-glyph.pear-tool-row-blocked {
-                color: var(--color-text-danger-text-action-button);
+                color: var(--pear-danger);
             }
 
             .pear-tool-spoiler-block .spoiler-header:hover {
@@ -639,11 +639,11 @@
                 }
 
                 li > .pear-tool-row-active {
-                    color: var(--color-text-warning-text-action-button);
+                    color: var(--pear-warn);
                 }
 
                 li > .pear-tool-row-blocked {
-                    color: var(--color-text-danger-text-action-button);
+                    color: var(--pear-danger);
                 }
 
                 li > .pear-tool-row-pending {

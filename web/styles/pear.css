@@ -127,8 +127,12 @@
 
 .pear-icon-button,
 .pear-run-actions-summary {
+    display: flex;
+    align-items: center;
+    justify-content: center;
     width: 22px;
     height: 22px;
+    list-style: none;
     padding: 3px;
     /* 14px at the default 14px base font size. */
     font-size: calc(14 / 14 * var(--base-font-size-px));
@@ -180,11 +184,11 @@
 }
 
 .pear-run-status-active .pear-run-status-glyph {
-    color: var(--color-text-success-text-action-button);
+    color: var(--pear-accent-ink);
 }
 
 .pear-run-status-blocked .pear-run-status-glyph {
-    color: var(--color-text-danger-text-action-button);
+    color: var(--pear-danger);
 }
 
 .pear-context-section {
@@ -355,7 +359,7 @@
 }
 
 .pear-workbench-status-clean {
-    color: var(--color-text-success-text-action-button);
+    color: var(--pear-accent-ink);
 }
 
 .pear-workbench-status-dirty {
@@ -363,7 +367,7 @@
     background: transparent;
     color: color-mix(
         in srgb,
-        var(--color-text-warning-text-action-button) 44%,
+        var(--pear-warn) 44%,
         var(--color-text-default) 56%
     );
     /* 12px at the default 14px base font size. */
@@ -567,11 +571,13 @@
 
 .pear-workbench-summary-added {
     border-color: color-mix(in srgb, var(--pear-diff-add) 52%, transparent);
+    background: var(--pear-diff-add-fill);
     color: var(--pear-diff-add);
 }
 
 .pear-workbench-summary-deleted {
     border-color: color-mix(in srgb, var(--pear-diff-del) 52%, transparent);
+    background: var(--pear-diff-del-fill);
     color: var(--pear-diff-del);
 }
 
@@ -677,18 +683,9 @@
 }
 
 .pear-workbench-empty-blocked {
-    border: 1px solid
-        color-mix(
-            in srgb,
-            var(--color-text-danger-text-action-button) 34%,
-            transparent
-        );
+    border: 1px solid color-mix(in srgb, var(--pear-danger) 34%, transparent);
     border-radius: var(--pear-radius-card);
-    background: color-mix(
-        in srgb,
-        var(--color-text-danger-text-action-button) 7%,
-        transparent
-    );
+    background: color-mix(in srgb, var(--pear-danger) 7%, transparent);
     padding: 7px 9px;
     opacity: 1;
 }
@@ -703,7 +700,7 @@
 
 .pear-workbench-empty-blocked .pear-workbench-empty-glyph,
 .pear-panel-error-glyph {
-    color: var(--color-text-danger-text-action-button);
+    color: var(--pear-danger);
 }
 
 .pear-workbench-empty.pear-liveness-active .pear-thinking-glyph,
@@ -712,7 +709,7 @@
 }
 
 .pear-panel-error {
-    color: var(--color-text-danger-text-action-button);
+    color: var(--pear-danger);
 }
 
 .pear-run-actions {
@@ -725,13 +722,6 @@
 
 .pear-panel-run-actions {
     margin-right: 0;
-}
-
-.pear-run-actions-summary {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    list-style: none;
 }
 
 .pear-run-actions-summary::-webkit-details-marker {
@@ -780,7 +770,7 @@
 }
 
 .pear-run-action-danger {
-    color: var(--color-text-danger-text-action-button);
+    color: var(--pear-danger);
 }
 
 .pear-side-body {
@@ -937,15 +927,15 @@
 }
 
 .pear-runtime-status-active {
-    color: var(--color-text-success-text-action-button);
+    color: var(--pear-accent-ink);
 }
 
 .pear-runtime-status-paused {
-    color: var(--color-text-warning-text-action-button);
+    color: var(--pear-warn);
 }
 
 .pear-runtime-status-blocked {
-    color: var(--color-text-danger-text-action-button);
+    color: var(--pear-danger);
 }
 
 .pear-runtime-status-idle {
@@ -1211,7 +1201,7 @@
 
     .pear-runtime-choice-check {
         width: 16px;
-        color: var(--color-text-success-text-action-button);
+        color: var(--pear-accent-ink);
         /* 13px at the default 14px base font size. */
         font-size: calc(13 / 14 * var(--base-font-size-px));
         line-height: 1;

@@ -1317,3 +1317,9 @@ class PearRunEvent(BaseEvent):
     trace_available: bool
     run_date_created: float
     date_created: float
+
+
+class PearWorkspaceChangedEvent(BaseEvent):
+    type: Literal["pear_workspace_changed"]
+    workspace_id: str
+    revision: int

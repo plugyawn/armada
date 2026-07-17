@@ -2830,6 +2830,7 @@ class PearWorkerTurn:
         self.live_operation: PearLiveRunOperation | None = None
         self.task = pear_worker_task_line(content)
         self.last_transcript_flush_at = 0.0
+        self.last_persisted_transcript_source: str | None = None
         self.assistant_persistent_flush_seen = False
         self.assistant_visible_event_seen = False
         self.steering_events_after: Any = None
@@ -2895,6 +2896,10 @@ class PearWorkerTurn:
                 transcript_events=self.transcript_events,
                 tool_results=tool_results,
             )
+        if content_to_update == self.last_persisted_transcript_source:
+            self.last_transcript_flush_at = current_time
+            self.update_volatile_run_state(status)
+            return True
         updated = update_pear_worker_status_message(
             self.bot_handler,
             progress_message_id=target_message_id,
@@ -2904,6 +2909,7 @@ class PearWorkerTurn:
         if updated:
             self.result_message_id = target_message_id
             self.last_transcript_flush_at = current_time
+            self.last_persisted_transcript_source = content_to_update
             self.update_volatile_run_state(status)
         return updated
 

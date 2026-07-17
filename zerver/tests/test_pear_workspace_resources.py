@@ -11,6 +11,7 @@ from unittest.mock import patch
 from uuid import UUID
 
 import orjson
+from django.core.cache import cache
 
 from zerver.lib.pear_workspace_index import WorkspaceIndex, WorkspacePath
 from zerver.lib.pear_workspace_io import (
@@ -1885,6 +1886,45 @@ class PearWorkspaceResourcePayloadTest(ZulipTestCase):
         self.assertEqual(enumerate_count, 1)
         self.assertEqual(len(results), 2)
         self.assertIs(results[0], results[1])
+
+    def test_new_authoritative_revision_emits_one_workspace_event(self) -> None:
+        node = SimpleNamespace(
+            uuid=UUID(int=84),
+            content_revision=1,
+            branch_name="main",
+        )
+        cache.set(
+            f"pear:workspace-index-fingerprint:v1:{node.uuid}",
+            {"revision": 1, "fingerprint": "a" * 64},
+            timeout=60,
+        )
+
+        def advance_revision(unused_node: object, revision: int) -> bool:
+            self.assertEqual(revision, 1)
+            node.content_revision = 2
+            return True
+
+        with (
+            patch(
+                "zerver.lib.pear_workspace_resources._enumerate_workspace",
+                return_value=(
+                    (WorkspacePath("README.md"),),
+                    "b" * 64,
+                    "main",
+                    "a" * 40,
+                    0,
+                ),
+            ),
+            patch(
+                "zerver.lib.pear_workspace_resources._advance_revision_if_current",
+                side_effect=advance_revision,
+            ),
+            patch("zerver.actions.pear.send_pear_workspace_changed_event") as send_event,
+        ):
+            snapshot = get_workspace_snapshot(node, force=True)  # type: ignore[arg-type]
+
+        self.assertEqual(snapshot.revision, 2)
+        send_event.assert_called_once_with(node, 2)
 
     def test_snapshot_ids_do_not_embed_absolute_paths(self) -> None:
         paths = (WorkspacePath("README.md"), WorkspacePath("src/main.py"))

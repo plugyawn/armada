@@ -1685,6 +1685,39 @@ class PearSessionDefaultsTest(TestCase):
         finally:
             pear_worker_module.close_pear_worker_runtimes()
 
+    def test_pear_worker_liveness_loop_runs_until_stopped_and_closes_connections(self) -> None:
+        worker = object.__new__(pear_worker_module.PearWorker)
+        worker.run_liveness_stop = Mock()
+        worker.run_liveness_stop.wait.side_effect = [False, True]
+
+        with (
+            patch.object(worker, "run_liveness_pass") as run_liveness_pass,
+            patch.object(pear_worker_module, "close_old_connections") as close_connections,
+            patch.object(pear_worker_module, "reset_queries") as reset_queries,
+        ):
+            worker.run_liveness_loop()
+
+        worker.run_liveness_stop.wait.assert_any_call(
+            pear_worker_module.PEAR_WORKER_HEARTBEAT_INTERVAL_SECONDS
+        )
+        run_liveness_pass.assert_called_once_with()
+        reset_queries.assert_called_once_with()
+        self.assertGreaterEqual(close_connections.call_count, 2)
+
+    def test_pear_worker_liveness_stop_is_bounded_and_reports_a_stuck_thread(self) -> None:
+        worker = object.__new__(pear_worker_module.PearWorker)
+        worker.run_liveness_stop = Mock()
+        worker.run_liveness_thread = Mock()
+        worker.run_liveness_thread.is_alive.return_value = True
+
+        with self.assertLogs("zerver.worker.pear_worker", level="WARNING"):
+            worker.stop_liveness_loop()
+
+        worker.run_liveness_stop.set.assert_called_once_with()
+        worker.run_liveness_thread.join.assert_called_once_with(
+            timeout=pear_worker_module.PEAR_WORKER_HEARTBEAT_INTERVAL_SECONDS
+        )
+
     def test_worker_completed_message_uses_distinct_status_line(self) -> None:
         completed_message = build_pear_worker_completed_message(
             task="fix the checkout test",
@@ -4682,7 +4715,7 @@ class PearSessionDefaultsTest(TestCase):
         self.assertNotIn("[truncated]", all_persisted_text)
         self.assertTrue(all(len(reply) <= 5000 for reply in sent_replies))
 
-    def test_run_worker_turn_keeps_streaming_deltas_transient(self) -> None:
+    def test_run_worker_turn_keeps_streaming_deltas_transient_and_skips_noop_edits(self) -> None:
         updated_messages: list[dict[str, object]] = []
         recorded_events: list[tuple[str, str]] = []
 
@@ -4806,14 +4839,13 @@ class PearSessionDefaultsTest(TestCase):
             [message["content"] for message in updated_messages],
             [
                 PEAR_WORKING_MESSAGE,
-                PEAR_WORKING_MESSAGE,
                 "The PDF",
                 "The PDF compiled",
             ],
         )
         self.assertEqual(
             [message.get("rendering_only") for message in updated_messages],
-            [True, True, True, True],
+            [True, True, True],
         )
         self.assertFalse(
             any(

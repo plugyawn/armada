@@ -2105,9 +2105,9 @@ def apply_event(
     elif event["type"] == "restart":
         # The Tornado process restarted.  This has no effect; we ignore it.
         pass
-    elif event["type"] == "pear_run":
-        # Pear run deltas update a dedicated client-side reducer; they do not
-        # mutate the initial-state payload assembled by this module.
+    elif event["type"] in {"pear_run", "pear_workspace_changed"}:
+        # Pear deltas update dedicated client-side reducers; they do not mutate
+        # the initial-state payload assembled by this module.
         pass
     elif event["type"] == "device":
         if event["op"] == "add":

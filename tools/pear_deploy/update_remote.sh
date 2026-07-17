@@ -342,6 +342,28 @@ verify_remote_stopped_quiescence() {
     fi
 }
 
+verify_remote_readiness() {
+    local phase="$1"
+    local services="${2:-${PEAR_DEPLOY_SERVICES[*]}}"
+    local queues="${3:-${PEAR_DEPLOY_QUEUES[*]}}"
+
+    echo "$phase: Pear stale-run health"
+    if ! ssh_zulip "$REMOTE_PATH/tools/pear-health-report --allow-active-runs --max-stale-active-runs 0"; then
+        fail "$phase failed: Pear has stale work"
+    fi
+
+    echo "$phase: service health"
+    if ! ssh_root "systemctl is-active $services"; then
+        fail "$phase failed: one or more deploy-managed services are inactive"
+    fi
+
+    echo "$phase: queue readiness"
+    if ! ssh_root "rabbitmqctl list_queues name messages_ready messages_unacknowledged consumers" |
+        validate_pear_deploy_queue_ready_snapshot "$queues"; then
+        fail "$phase failed: one or more deploy-managed queues are missing or unconsumed"
+    fi
+}
+
 configure_predeploy_runtime_expectations() {
     local index
     local service
@@ -1338,7 +1360,11 @@ ssh_zulip_clean "./tools/test-backend \
     zerver.tests.test_pear_workspace_resources \
     zerver.tests.test_submessage"
 
-verify_remote_quiescence "Post-deploy quiescence"
+# Ingress is live again at this point. New ambient runs are ordinary traffic,
+# not evidence of an unsafe cutover; only the pre-cutover drain must be empty.
+# The post-cutover gate therefore requires healthy consumers and no stale work
+# while allowing fresh messages and runs to be in flight.
+verify_remote_readiness "Post-deploy readiness"
 verify_remote_deployed_source_clean
 
 runtime_smoke="$REPO_ROOT/../tools/pear_dev_smoke.py"

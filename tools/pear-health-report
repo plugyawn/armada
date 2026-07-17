@@ -107,7 +107,13 @@ def render_report(report: PearHealthReport) -> str:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Report live Pear worker health.")
-    parser.add_argument("--max-active-runs", type=int, default=0)
+    active_run_limit = parser.add_mutually_exclusive_group()
+    active_run_limit.add_argument("--max-active-runs", type=int, default=0)
+    active_run_limit.add_argument(
+        "--allow-active-runs",
+        action="store_true",
+        help="Report active runs without treating fresh work as unhealthy.",
+    )
     parser.add_argument("--max-stale-active-runs", type=int, default=0)
     parser.add_argument("--stale-run-age-seconds", type=int)
     parser.add_argument("--sample-limit", type=int, default=5)
@@ -130,7 +136,7 @@ def main() -> int:
         json.dumps(asdict(report), indent=2, sort_keys=True) if args.json else render_report(report)
     )
     violations = []
-    if report.active_run_count > args.max_active_runs:
+    if not args.allow_active_runs and report.active_run_count > args.max_active_runs:
         violations.append(
             f"active_run_count={report.active_run_count} exceeds {args.max_active_runs}"
         )

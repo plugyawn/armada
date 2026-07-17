@@ -130,8 +130,9 @@ filter_deploy_untracked_source_files() {
 
 _validate_pear_deploy_queue_snapshot() {
     local require_consumers="$1"
-    local expected_queues="${2:-${PEAR_DEPLOY_QUEUES[*]}}"
-    awk -v expected_queues="$expected_queues" -v require_consumers="$require_consumers" '
+    local require_quiescence="$2"
+    local expected_queues="${3:-${PEAR_DEPLOY_QUEUES[*]}}"
+    awk -v expected_queues="$expected_queues" -v require_consumers="$require_consumers" -v require_quiescence="$require_quiescence" '
 BEGIN {
     expected_count = split(expected_queues, expected, " ")
     for (i = 1; i <= expected_count; i += 1) {
@@ -146,8 +147,12 @@ $1 in required {
         bad = 1
         next
     }
-    if ($2 != 0 || $3 != 0 || (require_consumers == "true" && $4 < 1)) {
+    if (require_quiescence == "true" && ($2 != 0 || $3 != 0)) {
         print "queue is not quiescent: " $1 > "/dev/stderr"
+        bad = 1
+    }
+    if (require_consumers == "true" && $4 < 1) {
+        print "queue has no active consumer: " $1 > "/dev/stderr"
         bad = 1
     }
 }
@@ -164,11 +169,15 @@ END {
 }
 
 validate_pear_deploy_queue_snapshot() {
-    _validate_pear_deploy_queue_snapshot true "${1:-${PEAR_DEPLOY_QUEUES[*]}}"
+    _validate_pear_deploy_queue_snapshot true true "${1:-${PEAR_DEPLOY_QUEUES[*]}}"
 }
 
 validate_pear_deploy_queue_empty_snapshot() {
-    _validate_pear_deploy_queue_snapshot false "${1:-${PEAR_DEPLOY_QUEUES[*]}}"
+    _validate_pear_deploy_queue_snapshot false true "${1:-${PEAR_DEPLOY_QUEUES[*]}}"
+}
+
+validate_pear_deploy_queue_ready_snapshot() {
+    _validate_pear_deploy_queue_snapshot true false "${1:-${PEAR_DEPLOY_QUEUES[*]}}"
 }
 
 stage_remote_pear_deploy_bundle() {

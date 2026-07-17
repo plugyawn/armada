@@ -63,6 +63,10 @@ class TestResizeObserver {
     disconnect() {
         this.disconnected = true;
     }
+
+    set_height(height) {
+        this.callback([{target: this.target, contentRect: {height}}]);
+    }
 }
 for (const [name, value] of Object.entries({
     window,
@@ -486,6 +490,28 @@ run_test("owns autoplay and connector observers across remounts", () => {
     assert.equal(host.querySelector(".is-play").dataset.playing, "false");
     assert.equal(host.querySelector(".pear-artifact-step-fill").style.transition, "none");
     reduced_motion = false;
+});
+
+run_test("reports mounted geometry changes and stops observing on unmount", () => {
+    const parsed = artifact.parse_pear_artifact(JSON.stringify(valid_document()));
+    assert.ok(parsed);
+    const host = window.document.querySelector("#host");
+    const changes = [];
+    const rendered = artifact.mount_pear_artifact($(host), parsed, {
+        density: "chat",
+        onGeometryChange(element, previous_height, next_height) {
+            changes.push({element, previous_height, next_height});
+        },
+    });
+    const observer = resize_observers.find(({target}) => target === rendered);
+    assert.ok(observer);
+    observer.set_height(240);
+    observer.set_height(240);
+    observer.set_height(320);
+    assert.deepEqual(changes, [{element: rendered, previous_height: 240, next_height: 320}]);
+
+    artifact.mount_pear_artifact($(host), parsed, {density: "chat"});
+    assert.equal(observer.disconnected, true);
 });
 
 run_test("uses intrinsic minimum geometry when an aspect was not authored", () => {

@@ -7,6 +7,7 @@ import type {MessageList} from "./message_list.ts";
 import * as message_lists from "./message_lists.ts";
 import * as message_store from "./message_store.ts";
 import type {Message} from "./message_store.ts";
+import * as message_viewport from "./message_viewport.ts";
 import {mount_pear_artifact_lifecycle} from "./pear_artifact_lifecycle.ts";
 import {any_widget_data_schema} from "./widget_schema.ts";
 import type {WidgetOutboundData} from "./widget_schema.ts";
@@ -203,6 +204,37 @@ async function load_and_render_pear_artifact(
         }
         mount_pear_artifact_lifecycle($host, "chat", "failed", label);
     };
+    let anchor_row = message_lists.current?.selected_row()[0];
+    let anchor_top = anchor_row?.getBoundingClientRect().top;
+    const preserve_message_anchor = (rendered_artifact: HTMLElement): void => {
+        const selected_row = message_lists.current?.selected_row()[0];
+        if (!selected_row?.isConnected) {
+            anchor_row = undefined;
+            anchor_top = undefined;
+            return;
+        }
+        const artifact_precedes_selection = Boolean(
+            // compareDocumentPosition is the DOM's authoritative ordering API.
+            // eslint-disable-next-line no-bitwise
+            rendered_artifact.compareDocumentPosition(selected_row) &
+                Node.DOCUMENT_POSITION_FOLLOWING,
+        );
+        if (
+            !artifact_precedes_selection ||
+            selected_row !== anchor_row ||
+            anchor_top === undefined
+        ) {
+            anchor_row = selected_row;
+            anchor_top = selected_row.getBoundingClientRect().top;
+            return;
+        }
+        const current_top = selected_row.getBoundingClientRect().top;
+        const delta = current_top - anchor_top;
+        if (Math.abs(delta) >= 0.5) {
+            message_viewport.scrollTop(message_viewport.scrollTop() + delta);
+        }
+        anchor_top = selected_row.getBoundingClientRect().top;
+    };
     try {
         const pear_artifact = await import("./pear_artifact.ts");
         if (!is_current()) {
@@ -224,8 +256,11 @@ async function load_and_render_pear_artifact(
             show_failure("artifact could not be rendered");
             return;
         }
-        pear_artifact.mount_pear_artifact($host, document_value, {
+        const rendered_artifact = pear_artifact.mount_pear_artifact($host, document_value, {
             density: "chat",
+            onGeometryChange(artifact_element) {
+                preserve_message_anchor(artifact_element);
+            },
             onAction(action, button) {
                 if (message.type !== "stream" || button.disabled) {
                     return;
@@ -315,6 +350,7 @@ async function load_and_render_pear_artifact(
                 })();
             },
         });
+        preserve_message_anchor(rendered_artifact);
     } catch (error) {
         blueslip.error("Could not load the Pear artifact renderer", undefined, error);
         show_failure("artifact renderer unavailable");

@@ -67,7 +67,10 @@ PEAR_QUESTION_TIMEOUT_SECONDS: Final = 600
 PEAR_QUESTION_POLL_SECONDS: Final = 2.0
 
 PEAR_MAX_STEERING_SEGMENTS: Final = 4
-PEAR_WORKING_MESSAGE: Final = "Working…"
+# This is visible only during the short message-event/run-event handoff before
+# the client mounts the animated live-progress chrome. Keep it visually
+# identical to that chrome instead of flashing a second placeholder design.
+PEAR_WORKING_MESSAGE: Final = "· Working"
 PEAR_NO_VISIBLE_RESPONSE_MESSAGE: Final = "Pear worker completed without a visible response."
 PEAR_PERSISTENT_ASSISTANT_FLUSH_INTERVAL_SECONDS: Final = 0.2
 PEAR_TYPING_REFRESH_INTERVAL_SECONDS: Final = 10.0
@@ -2883,7 +2886,7 @@ class PearWorkerTurn:
         if status in {"queued", "running"}:
             content_to_update = pear_visible_assistant_text(self.current_assistant_text)
             if not content_to_update:
-                content_to_update = "Working…"
+                content_to_update = PEAR_WORKING_MESSAGE
         else:
             content_to_update = build_pear_live_transcript_message(
                 task=self.task,

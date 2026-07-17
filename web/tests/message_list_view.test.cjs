@@ -101,6 +101,13 @@ run_test("pear live placeholder waits for typed assistant text", () => {
     assert.equal(message_list_view.pear_live_is_placeholder_for_testing(true), false);
 });
 
+run_test("planless progress gives way to typed assistant text", () => {
+    assert.equal(message_list_view.pear_live_should_show_progress_for_testing(0, undefined), true);
+    assert.equal(message_list_view.pear_live_should_show_progress_for_testing(0, false), true);
+    assert.equal(message_list_view.pear_live_should_show_progress_for_testing(0, true), false);
+    assert.equal(message_list_view.pear_live_should_show_progress_for_testing(1, true), true);
+});
+
 test("msg_edited_and_moved_vars", () => {
     // This is a test to verify that when the stream or topic is changed
     // (and the content is not), the message says "MOVED" rather than "EDITED."

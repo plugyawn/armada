@@ -186,6 +186,11 @@ class PearSessionEndpointTest(ZulipTestCase):
         self.assertEqual(event["sequence"], run_event.id)
         self.assertEqual(event["current_activity"], "Running tests")
         self.assertEqual(event["plan"][1], {"step": "Verify", "status": "in_progress"})
+        self.assertIsNone(event["has_visible_assistant_text"])
+        check_pear_run_event(
+            "event",
+            {**event, "id": 2, "has_visible_assistant_text": True},
+        )
         self.assertIn(owner.id, send_event.call_args.args[2])
 
     def test_get_pear_session(self) -> None:
@@ -597,6 +602,32 @@ class PearSessionEndpointTest(ZulipTestCase):
                 {"step": "Verify", "status": "pending"},
             ],
         )
+        PearWorkerRunEvent.objects.create(
+            run=run,
+            event_type="presentation",
+            summary="Committing focused fix",
+            payload={
+                "overview": "Committing focused fix",
+                "current_step": "Commit fix",
+            },
+        )
+        self.assertEqual(serialize_pear_worker_run(run)["overview"], "Committing focused fix")
+        PearWorkerRunEvent.objects.create(
+            run=run,
+            event_type="transcript",
+            summary="Plan advanced",
+            payload={
+                "kind": "plan",
+                "metadata": {
+                    "steps": [
+                        {"step": "Check branch", "status": "completed"},
+                        {"step": "Commit fix", "status": "completed"},
+                        {"step": "Verify", "status": "in_progress"},
+                    ]
+                },
+            },
+        )
+        self.assertIsNone(serialize_pear_worker_run(run)["overview"])
 
     def test_serialize_pear_worker_run_hides_stale_active_live_state(self) -> None:
         user = self.example_user("hamlet")
@@ -657,8 +688,19 @@ class PearSessionEndpointTest(ZulipTestCase):
             )
             PearWorkerRunEvent.objects.create(
                 run=run,
+                event_type="transcript",
+                payload={
+                    "kind": "plan",
+                    "metadata": {"steps": [{"step": f"Step {index}", "status": "in_progress"}]},
+                },
+            )
+            PearWorkerRunEvent.objects.create(
+                run=run,
                 event_type="presentation",
-                payload={"overview": f"Visible overview {index}."},
+                payload={
+                    "overview": f"Visible overview {index}.",
+                    "current_step": f"Step {index}",
+                },
             )
 
         with self.assert_database_query_count(2):

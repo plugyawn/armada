@@ -1443,6 +1443,7 @@ export function handle_pear_run_event(event: {
     tool_count: number;
     plan: {step: string; status: string}[] | null;
     overview: string | null;
+    has_visible_assistant_text: boolean | null;
     usage: z.infer<typeof pear_usage_schema> | null;
     duration_seconds: number | null;
 }): void {
@@ -1465,7 +1466,7 @@ export function handle_pear_run_event(event: {
         current_activity: event.current_activity,
         tool_count: event.tool_count,
         plan: event.plan ?? run.plan,
-        overview: event.overview ?? run.overview,
+        overview: event.overview ?? (event.plan === null ? run.overview : null),
         usage: {
             ...run.usage,
             ...event.usage,

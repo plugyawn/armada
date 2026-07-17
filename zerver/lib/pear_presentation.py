@@ -29,6 +29,14 @@ def pear_presentation_plan(run: PearWorkerRun) -> list[dict[str, str]] | None:
     return None
 
 
+def pear_presentation_current_step(plan: list[dict[str, str]]) -> str:
+    current_step = next(
+        (item for item in plan if item.get("status") == "in_progress"),
+        next((item for item in plan if item.get("status") == "pending"), plan[-1]),
+    )
+    return trim_pear_text(str(current_step["step"]), limit=120)
+
+
 def pear_presentation_event(event: PearWorkerRunEvent) -> dict[str, str] | None:
     payload = event.payload if isinstance(event.payload, dict) else {}
     if event.event_type == "transcript":
@@ -59,18 +67,31 @@ def build_pear_presentation_input(
     plan: list[dict[str, str]],
     events: list[PearWorkerRunEvent],
 ) -> str:
-    current_step = next(
-        (item for item in plan if item.get("status") == "in_progress"),
-        next((item for item in plan if item.get("status") == "pending"), plan[-1]),
+    # A plan update changes the visible headline immediately. Events from the
+    # previous step must not leak underneath it while the new step has not yet
+    # done anything concrete.
+    latest_plan_index = max(
+        (
+            index
+            for index, event in enumerate(events)
+            if event.event_type == "transcript"
+            and isinstance(event.payload, dict)
+            and event.payload.get("kind") == "plan"
+        ),
+        default=-1,
     )
-    event_items = [item for event in events if (item := pear_presentation_event(event))]
+    event_items = [
+        item
+        for event in events[latest_plan_index + 1 :]
+        if (item := pear_presentation_event(event))
+    ]
     bounded_events = [
         {"kind": item["kind"], "text": trim_pear_text(item["text"], limit=120)}
         for item in event_items[-4:]
     ]
     return json.dumps(
         {
-            "current_step": trim_pear_text(str(current_step["step"]), limit=120),
+            "current_step": pear_presentation_current_step(plan),
             "recent_events": bounded_events,
         },
         ensure_ascii=False,

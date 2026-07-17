@@ -58,11 +58,9 @@
     &.pear-message {
         background-color: var(--color-background-pear-message-content);
 
-        /* The agent is ambient — part of the branch, not a chat
-           participant. Its rows never include sender chrome (portrait,
-           name, badge); the room's proportional face carries prose,
-           while Geist Pixel is reserved for compact machine-state chrome.
-           Code samples keep Geist Mono via the rendered_markdown rules. */
+        /* Pear has one authored voice across prose and live state. User
+           messages stay in the room's proportional face; agent output uses
+           Geist Pixel, with Geist Mono reserved only for actual code blocks. */
 
         .message_edit_notice,
         .edit-notifications {
@@ -88,7 +86,8 @@
             max-width: min(100%, calc(var(--base-font-size-px) * 48));
             padding-right: 0.35em;
             overflow-wrap: anywhere;
-            font-family: var(--pear-font-ui);
+            font-family: var(--pear-font-pixel);
+            font-synthesis: none;
             font-size: var(--base-font-size-px);
 
             &:not(.status-message) {
@@ -121,6 +120,8 @@
                     var(--color-background-pear-message-content) 76%,
                     var(--color-text-message-default) 24%
                 );
+                font-family: inherit;
+                font-synthesis: none;
                 font-size: 0.9em;
             }
 
@@ -160,8 +161,9 @@
                     var(--color-text-message-default) 18%
                 );
                 color: var(--color-text-message-default);
-                font-family: var(--pear-font-mono);
-                font-weight: 600;
+                font-family: var(--pear-font-pixel);
+                font-synthesis: none;
+                font-weight: 400;
             }
 
             .spoiler-header:hover {
@@ -204,8 +206,9 @@
                 background: var(--pear-surface-2);
                 color: var(--pear-ink-2);
                 font-family: var(--pear-font-pixel);
+                font-synthesis: none;
                 font-size: 0.78em;
-                font-weight: 600;
+                font-weight: 400;
                 line-height: 1.25;
                 transition: background-color var(--pear-dur-1) var(--pear-ease);
             }
@@ -378,7 +381,7 @@
 
             > .pear-live-thought {
                 color: var(--pear-ink-2);
-                font-family: var(--pear-font-ui);
+                font-family: var(--pear-font-pixel);
             }
 
             .pear-stream-chunk {
@@ -426,7 +429,8 @@
                 border-top: 1px solid var(--pear-hairline);
                 background: var(--color-background-pear-message-content);
                 color: var(--pear-ink-2);
-                font-family: var(--pear-font-ui);
+                font-family: var(--pear-font-pixel);
+                font-synthesis: none;
                 font-size: 13px;
                 line-height: 1.5;
                 scrollbar-gutter: stable;
@@ -511,7 +515,7 @@
 
             .pear-tool-spoiler-block .spoiler-header-text {
                 color: var(--color-text-item);
-                font-weight: 600;
+                font-weight: 400;
             }
 
             .pear-tool-spoiler-block .spoiler-content {
@@ -590,7 +594,8 @@
                     overflow: hidden;
                     text-overflow: ellipsis;
                     white-space: nowrap;
-                    font-family: var(--pear-font-ui);
+                    font-family: var(--pear-font-pixel);
+                    font-synthesis: none;
                     /* 11.5px at the default 14px base font size. */
                     font-size: calc(11.5 / 14 * var(--base-font-size-px));
                     line-height: 1.25;

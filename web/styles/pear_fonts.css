@@ -18,7 +18,8 @@
     font-display: swap;
 }
 
-/* The Pear voice: pixel labels and identifiers only, pinned px sizes. */
+/* The Pear voice, including agent prose. Chrome uses pinned pixel sizes;
+   prose uses the responsive text-pixel-prose scale. */
 @font-face {
     font-family: "Geist Pixel";
     src: url("../fonts/pear/GeistPixel.woff2") format("woff2");

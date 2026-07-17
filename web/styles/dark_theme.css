@@ -219,18 +219,8 @@
         background-color: hsl(0deg 0% 0% / 20%);
     }
 
-    /* Search highlight used in both topics and rendered_markdown */
-    .highlight {
-        background-color: hsl(51deg 100% 23%);
-    }
-
     .searching-for-more-topics img {
         filter: invert(100%);
-    }
-
-    .simplebar-track .simplebar-scrollbar::before {
-        background-color: hsl(0deg 0% 100%);
-        box-shadow: 0 0 0 1px hsl(0deg 0% 0% / 33%);
     }
 
     .collapse-settings-button:hover {

@@ -3318,7 +3318,7 @@ class PearSessionEndpointTest(ZulipTestCase):
         with (
             patch("zerver.actions.pear.send_event_on_commit") as send_event_on_commit,
             patch("zerver.lib.pear_worker.maybe_enqueue_pear_run_presentation") as enqueue,
-            self.captureOnCommitCallbacks(execute=False) as callbacks,
+            self.captureOnCommitCallbacks(execute=True) as callbacks,
         ):
             store.record_event(
                 SimpleNamespace(user_profile=pear_bot),
@@ -3333,8 +3333,6 @@ class PearSessionEndpointTest(ZulipTestCase):
             enqueue.assert_not_called()
 
         self.assertEqual(len(callbacks), 1)
-        for callback in callbacks:
-            callback()
         enqueue.assert_called_once()
 
     def test_run_trace_is_safe_and_attention_is_bounded_to_active_runs(self) -> None:

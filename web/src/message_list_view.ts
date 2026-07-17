@@ -1514,13 +1514,15 @@ function maybe_render_pear_run_footer($row: JQuery): void {
             elapsed.setAttribute("data-pear-run-started", `${started_at}`);
         }
         ticker.append(elapsed);
-        if (trace_available && run !== undefined) {
-            const trace_state = ensure_pear_run_trace(content, run.id);
+        const trace_state =
+            trace_available && run !== undefined
+                ? ensure_pear_run_trace(content, run.id)
+                : undefined;
+        if (trace_state !== undefined) {
             append_pear_run_trace_toggle(ticker, trace_state);
         }
         content.append(ticker);
-        if (trace_available && run !== undefined) {
-            const trace_state = ensure_pear_run_trace(content, run.id);
+        if (trace_state !== undefined) {
             place_pear_run_trace(content, trace_state);
         }
         update_pear_run_elapsed_labels();
@@ -1570,8 +1572,9 @@ function maybe_render_pear_run_footer($row: JQuery): void {
     );
     status.textContent = line.glyph;
     footer_element.append(status);
-    if (run?.trace_available === true) {
-        const trace_state = ensure_pear_run_trace(content, run.id);
+    const trace_state =
+        run?.trace_available === true ? ensure_pear_run_trace(content, run.id) : undefined;
+    if (trace_state !== undefined) {
         append_pear_run_trace_toggle(footer_element, trace_state);
     } else {
         remove_pear_run_trace(content);
@@ -1588,8 +1591,7 @@ function maybe_render_pear_run_footer($row: JQuery): void {
         footer_element.append(overview);
     }
     content.append(footer_element);
-    if (run?.trace_available === true) {
-        const trace_state = ensure_pear_run_trace(content, run.id);
+    if (trace_state !== undefined) {
         place_pear_run_trace(content, trace_state);
     }
 }

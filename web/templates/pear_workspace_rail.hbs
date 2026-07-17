@@ -66,8 +66,8 @@
             <li>
                 <button
                   type="button"
-                  class="pear-rail-run {{#unless result_message_id}}pear-panel-open-action{{/unless}}"
-                  {{#if result_message_id}}data-message-id="{{result_message_id}}"{{/if}}
+                  class="pear-rail-run {{#unless has_result_message_id}}pear-panel-open-action{{/unless}}"
+                  {{#if has_result_message_id}}data-message-id="{{result_message_id}}"{{/if}}
                   >
                     <span
                       class="pear-rail-run-glyph {{failed_class}}"

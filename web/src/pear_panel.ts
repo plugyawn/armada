@@ -1738,6 +1738,7 @@ type PearRailRunEntry = {
     failed_class: string;
     label: string;
     when: string;
+    has_result_message_id: boolean;
     result_message_id: number | undefined;
 };
 
@@ -1839,12 +1840,14 @@ function pear_rail_run_entries(runs: PearRun[]): PearRailRunEntry[] {
             typeof run.date_created === "number"
                 ? timerender.relative_time_string_from_date(new Date(run.date_created * 1000), true)
                 : "";
+        const result_message_id = run.result_message_id ?? undefined;
         return {
             glyph: failed ? "✗" : "✓",
             failed_class: failed ? "pear-rail-run-failed" : "",
             label: first_nonempty(parts.join(" · "), run.status),
             when,
-            result_message_id: run.result_message_id ?? undefined,
+            has_result_message_id: result_message_id !== undefined,
+            result_message_id,
         };
     });
 }

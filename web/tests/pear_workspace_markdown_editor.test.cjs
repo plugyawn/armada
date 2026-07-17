@@ -455,6 +455,34 @@ run_test(
     },
 );
 
+run_test("maps Rich selections to rendered line numbers in both directions", async () => {
+    const markdown_editor = await editor_module;
+    const root = document.createElement("div");
+    document.body.append(root);
+    const result = await with_timeout(
+        markdown_editor.create_pear_workspace_markdown_editor({
+            root,
+            markdown: "# First\n\nSecond paragraph.\n\nThird paragraph.\n",
+            editRevision: 1,
+            onDirty() {},
+            onSerialized() {},
+        }),
+        "Rich line mapping",
+    );
+    assert.equal(result.ok, true);
+    const {editor} = result;
+
+    editor.setCursorLine(2);
+    assert.equal(editor.getCursorLine(), 2);
+    editor.setCursorLine(1);
+    assert.equal(editor.getCursorLine(), 1);
+    editor.setCursorLine(999);
+    assert.equal(editor.getCursorLine(), 2, "line mapping clamps to the rendered document");
+
+    await editor.destroy();
+    root.remove();
+});
+
 run_test("remote hydration clears undo history across the document boundary", async () => {
     const markdown_editor = await editor_module;
     idle_callbacks.clear();

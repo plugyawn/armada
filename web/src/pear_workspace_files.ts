@@ -989,11 +989,7 @@ export function create_pear_workspace_files(
             const next_identity = context_identity(next_context);
             if (next_identity !== current_context_identity) {
                 current_context_identity = next_identity;
-                if (mutation_busy) {
-                    guard.cancel("mutation");
-                    mutation_busy = false;
-                }
-                if (dialog !== undefined) {
+                if (dialog !== undefined && !mutation_busy) {
                     close_dialog(false);
                 }
             }

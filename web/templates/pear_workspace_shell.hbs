@@ -1,203 +1,218 @@
 <section
-    class="pear-workspace-shell"
-    aria-label="Workspace"
-    data-room="files"
-    data-readme-state="unknown"
->
+  class="pear-workspace-shell"
+  aria-label="Workspace"
+  data-room="files"
+  data-readme-state="unknown"
+  >
     <header class="pear-workspace-shell__header">
         <div class="pear-workspace-shell__identity">
             <strong data-role="workspace-title">Files</strong>
             <span data-role="workspace-meta"></span>
         </div>
         <button
-            type="button"
-            data-action="toggle-explorer"
-            class="pear-workspace-shell__explorer-toggle"
-            aria-controls="pear-workspace-explorer"
-            aria-expanded="false"
-        >Files</button>
+          type="button"
+          data-action="toggle-explorer"
+          class="pear-workspace-shell__explorer-toggle"
+          aria-controls="pear-workspace-explorer"
+          aria-expanded="false"
+          >Files</button>
         <button
-            type="button"
-            data-action="refresh"
-            aria-label="Refresh workspace"
-        >Refresh</button>
+          type="button"
+          data-action="refresh"
+          aria-label="Refresh workspace"
+          >Refresh</button>
     </header>
     <div class="pear-workspace-shell__body">
         <aside
-            id="pear-workspace-explorer"
-            class="pear-workspace-shell__explorer"
-            aria-label="Workspace explorer"
-        >
+          id="pear-workspace-explorer"
+          class="pear-workspace-shell__explorer"
+          aria-label="Workspace explorer"
+          >
             <form data-role="search-form" role="search">
                 <input
-                    data-role="search-input"
-                    type="search"
-                    autocomplete="off"
-                    aria-label="Search files"
-                    placeholder="Filter files"
-                />
+                  data-role="search-input"
+                  type="search"
+                  autocomplete="off"
+                  aria-label="Search files"
+                  placeholder="Filter files"
+                  />
             </form>
             <div
-                data-role="search-results"
-                role="listbox"
-                aria-label="Workspace search results"
-                hidden
-            ></div>
+              data-role="search-results"
+              role="listbox"
+              aria-label="Workspace search results"
+              hidden
+              >
+            </div>
             <div
-                class="pear-workspace-shell__tree"
-                data-role="tree"
-                role="tree"
-                aria-label="Workspace files"
-            ></div>
+              class="pear-workspace-shell__tree"
+              data-role="tree"
+              role="tree"
+              aria-label="Workspace files"
+              >
+            </div>
         </aside>
         <div
-            class="pear-workspace-shell__splitter"
-            data-role="explorer-splitter"
-            role="separator"
-            aria-label="Resize file explorer"
-            aria-orientation="vertical"
-            aria-valuemin="180"
-            aria-valuemax="480"
-            tabindex="0"
-        ></div>
+          class="pear-workspace-shell__splitter"
+          data-role="explorer-splitter"
+          role="separator"
+          aria-label="Resize file explorer"
+          aria-orientation="vertical"
+          aria-valuemin="180"
+          aria-valuemax="480"
+          tabindex="0"
+          >
+        </div>
         <main
-            id="pear-workspace-document-panel"
-            class="pear-workspace-shell__document"
-            aria-label="Workspace document"
-            role="tabpanel"
-            tabindex="-1"
-        >
+          id="pear-workspace-document-panel"
+          class="pear-workspace-shell__document"
+          aria-label="Workspace document"
+          role="tabpanel"
+          tabindex="-1"
+          >
             <div data-role="tabs" role="tablist" aria-label="Open files"></div>
             <header class="pear-workspace-shell__document-header">
                 <nav data-role="breadcrumb" aria-label="File path"></nav>
                 <div class="pear-workspace-shell__document-actions">
                     <span
-                        id="pear-workspace-mode-feedback"
-                        class="pear-workspace-shell__mode-feedback"
-                        data-role="mode-feedback"
-                        role="status"
-                        aria-live="polite"
-                        aria-atomic="true"
-                        hidden
-                    ></span>
+                      id="pear-workspace-mode-feedback"
+                      class="pear-workspace-shell__mode-feedback"
+                      data-role="mode-feedback"
+                      role="status"
+                      aria-live="polite"
+                      aria-atomic="true"
+                      hidden
+                      >
+                    </span>
                     <div class="pear-workspace-file-menu-wrap">
                         <button
-                            type="button"
-                            data-role="file-menu-button"
-                            aria-haspopup="menu"
-                            aria-expanded="false"
-                        >File</button>
+                          type="button"
+                          data-role="file-menu-button"
+                          aria-haspopup="menu"
+                          aria-expanded="false"
+                          >File</button>
                         <div
-                            data-role="file-menu"
-                            class="pear-workspace-file-menu"
-                            role="menu"
-                            aria-label="File actions"
-                            hidden
-                        >
+                          data-role="file-menu"
+                          class="pear-workspace-file-menu"
+                          role="menu"
+                          aria-label="File actions"
+                          hidden
+                          >
                             <button
-                                type="button"
-                                role="menuitem"
-                                data-file-action="create-file"
-                            >New file</button>
+                              type="button"
+                              role="menuitem"
+                              data-file-action="create-file"
+                              >New file</button>
                             <button
-                                type="button"
-                                role="menuitem"
-                                data-file-action="create-folder"
-                            >New folder</button>
+                              type="button"
+                              role="menuitem"
+                              data-file-action="create-folder"
+                              >New folder</button>
                             <button
-                                type="button"
-                                role="menuitem"
-                                data-file-action="create-readme"
-                                hidden
-                            >Create README</button>
+                              type="button"
+                              role="menuitem"
+                              data-file-action="create-readme"
+                              hidden
+                              >Create README</button>
                             <button
-                                type="button"
-                                role="menuitem"
-                                data-file-action="rename"
-                            >Rename / Move</button>
+                              type="button"
+                              role="menuitem"
+                              data-file-action="rename"
+                              >Rename / Move</button>
                             <button
-                                type="button"
-                                role="menuitem"
-                                data-file-action="delete"
-                            >Delete</button>
+                              type="button"
+                              role="menuitem"
+                              data-file-action="delete"
+                              >Delete</button>
                             <button
-                                type="button"
-                                role="menuitem"
-                                data-file-action="copy-path"
-                            >Copy path</button>
+                              type="button"
+                              role="menuitem"
+                              data-file-action="copy-path"
+                              >Copy path</button>
                             <button
-                                type="button"
-                                role="menuitem"
-                                data-file-action="reveal"
-                            >Reveal in explorer</button>
+                              type="button"
+                              role="menuitem"
+                              data-file-action="reveal"
+                              >Reveal in explorer</button>
                             <button
-                                type="button"
-                                role="menuitem"
-                                data-file-action="history"
-                            >History</button>
+                              type="button"
+                              role="menuitem"
+                              data-file-action="history"
+                              >History</button>
                         </div>
                     </div>
                     <button type="button" data-action="ask-pear" hidden>Ask Pear</button>
                     <button
-                        type="button"
-                        data-action="mode-source"
-                        aria-describedby="pear-workspace-mode-feedback"
-                    >Source</button>
+                      type="button"
+                      data-action="mode-source"
+                      aria-describedby="pear-workspace-mode-feedback"
+                      >Source</button>
                     <button
-                        type="button"
-                        data-action="mode-rich"
-                        aria-describedby="pear-workspace-mode-feedback"
-                    >Rich</button>
+                      type="button"
+                      data-action="mode-rich"
+                      aria-describedby="pear-workspace-mode-feedback"
+                      >Rich</button>
                     <a
-                        data-role="raw-link"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                    >Raw</a>
+                      data-role="raw-link"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      >Raw</a>
                     <a data-role="download-link">Download</a>
                 </div>
             </header>
             <div data-role="conflict" role="alert" hidden>
                 <span>This file changed outside the editor.</span>
+                <details>
+                    <summary>View disk version</summary>
+                    <pre data-role="conflict-remote"></pre>
+                </details>
                 <button
-                    type="button"
-                    data-action="conflict-reload"
-                >Reload</button>
+                  type="button"
+                  data-action="conflict-reload"
+                  >Reload</button>
                 <button
-                    type="button"
-                    data-action="conflict-overwrite"
-                >Overwrite</button>
+                  type="button"
+                  data-action="conflict-overwrite"
+                  >Overwrite</button>
             </div>
             <div
-                class="pear-workspace-readme-empty"
-                data-role="readme-empty"
-                hidden
-            >
+              class="pear-workspace-readme-empty"
+              data-role="readme-empty"
+              hidden
+              >
                 <span
-                    class="pear-workspace-readme-empty__glyph"
-                    aria-hidden="true"
-                >README</span>
+                  class="pear-workspace-readme-empty__glyph"
+                  aria-hidden="true"
+                  >README</span>
                 <strong>No README yet</strong>
                 <span>Create the durable context layer for this topic.</span>
                 <button type="button" data-action="create-readme">Create README</button>
             </div>
             <div class="pear-workspace-shell__surface">
                 <div
-                    data-role="editor"
-                    class="pear-workspace-shell__editor"
-                ></div>
+                  data-role="editor"
+                  class="pear-workspace-shell__editor"
+                  >
+                </div>
                 <div
-                    data-role="nontext"
-                    class="pear-workspace-shell__nontext"
-                    hidden
-                ></div>
+                  data-role="nontext"
+                  class="pear-workspace-shell__nontext"
+                  hidden
+                  >
+                </div>
             </div>
             <footer
-                data-role="status"
-                class="pear-workspace-shell__status"
-                role="status"
-                aria-live="polite"
-                aria-atomic="true"
-            >Loading workspace…</footer>
+              class="pear-workspace-shell__status"
+              role="status"
+              aria-live="polite"
+              aria-atomic="true"
+              >
+                <span data-role="status">Loading workspace…</span>
+                <span data-role="status-actions" hidden>
+                    <button type="button" data-action="save-retry">Retry save</button>
+                    <button type="button" data-action="discard-changes">Discard changes</button>
+                </span>
+            </footer>
         </main>
     </div>
     <div data-role="file-dialog-layer"></div>

@@ -95,6 +95,33 @@ function is_valid_rebound_entry_id(entry_id: string, previous_entry_id: string):
     return entry_id.trim().length > 0 && entry_id !== previous_entry_id;
 }
 
+function line_at_offset(text: string, offset: number): number {
+    let line = 0;
+    const limit = Math.max(0, Math.min(Math.trunc(offset), text.length));
+    for (const match of text.matchAll(/\n/g)) {
+        if (match.index >= limit) {
+            break;
+        }
+        line += 1;
+    }
+    return line;
+}
+
+function offset_at_line(text: string, line: number): number {
+    const target_line = Math.max(0, Math.trunc(line));
+    if (target_line === 0) {
+        return 0;
+    }
+    let current_line = 0;
+    for (const match of text.matchAll(/\n/g)) {
+        current_line += 1;
+        if (current_line === target_line) {
+            return match.index + 1;
+        }
+    }
+    return text.length;
+}
+
 export function create_pear_workspace_editor(
     options: PearWorkspaceEditorOptions,
 ): PearWorkspaceEditorController {
@@ -116,6 +143,7 @@ export function create_pear_workspace_editor(
     let notice: string | undefined;
     let source_flush: PearWorkspaceScheduledWork | undefined;
     const autosaves = new Map<string, PearWorkspaceScheduledWork>();
+    const reconciliation_requests = new Set<{abort: () => void}>();
     const file_metadata = new Map<string, PearWorkspaceFile>();
     const restored_views = new Map<string, PearWorkspaceEditorPreferences["documents"][string]>();
 
@@ -142,6 +170,22 @@ export function create_pear_workspace_editor(
         }
         return {
             workspaceId: store.activeWorkspaceId,
+            entryId: document.entryId,
+            path: document.path,
+            requestGeneration: document.requestGeneration,
+        };
+    };
+
+    const identity_for_path = (path: string): PearWorkspaceDocumentIdentity | undefined => {
+        const workspace = current_workspace();
+        const document = [...(workspace?.documents.values() ?? [])].find(
+            (candidate) => candidate.path === path,
+        );
+        if (workspace === undefined || document === undefined) {
+            return undefined;
+        }
+        return {
+            workspaceId: workspace.workspaceId,
             entryId: document.entryId,
             path: document.path,
             requestGeneration: document.requestGeneration,
@@ -396,9 +440,15 @@ export function create_pear_workspace_editor(
         if (document === undefined || !file.rich_mode_eligible) {
             return false;
         }
+        let source_cursor_line: number | undefined;
         if (mounted?.kind === "source" && same_identity(mounted.identity, identity)) {
             flush_source_now(identity);
             const source_view = mounted.editor.getViewState();
+            const latest_source = get_pear_workspace_document(store, identity);
+            source_cursor_line = line_at_offset(
+                latest_source?.currentText ?? document.currentText,
+                source_view.selection.head,
+            );
             dispatch({type: "source_view_changed", ...identity, ...source_view});
         }
         await destroy_mounted();
@@ -458,6 +508,7 @@ export function create_pear_workspace_editor(
                         entry: active_entry,
                         message:
                             "Rich editor revision drifted; switch to Source before continuing.",
+                        action: "source",
                     };
                     emit();
                     finish_pear_workspace_metric("workspace_dirty_feedback");
@@ -512,6 +563,10 @@ export function create_pear_workspace_editor(
         dispatch({type: "set_editor_mode", ...identity, mode: "rich"});
         rich_mode_issue = undefined;
         notice = workspace_writable ? undefined : "Read-only workspace";
+        if (source_cursor_line !== undefined) {
+            result.editor.setCursorLine(source_cursor_line);
+            dispatch({type: "rich_view_changed", ...identity, ...result.editor.getViewState()});
+        }
         mounted = {kind: "rich", identity, editor: result.editor};
         emit();
         return true;
@@ -670,19 +725,12 @@ export function create_pear_workspace_editor(
                     file_metadata.set(file.entry_id, file);
                     const workspace = get_pear_workspace(store, save.workspaceId);
                     const saved_is_active = workspace?.activeEntryId === file.entry_id;
-                    dispatch({
-                        type: "invalidate_workspace_revision",
-                        workspaceId: save.workspaceId,
-                        workspaceRevision: file.workspace_revision,
-                        preservedEntryId: file.entry_id,
-                    });
                     for (const [key, work] of autosaves) {
                         if (key !== work_key(next_identity)) {
                             work.cancel();
                             autosaves.delete(key);
                         }
                     }
-                    file_metadata.clear();
                     file_metadata.set(file.entry_id, file);
                     if (saved_is_active) {
                         active_file = file;
@@ -702,16 +750,6 @@ export function create_pear_workspace_editor(
                         if (surface.kind === "text") {
                             surface = {kind: "text", entry: active_entry, file};
                         }
-                    } else {
-                        request_guard.cancel("file");
-                        active_file = undefined;
-                        surface = {
-                            kind: "error",
-                            entry: active_entry,
-                            message:
-                                "Workspace changed after another file saved. Refresh this file before editing.",
-                        };
-                        void destroy_mounted();
                     }
                     options.onSaved?.({
                         oldEntryId: old_entry_id,
@@ -981,6 +1019,106 @@ export function create_pear_workspace_editor(
         request_guard.attach("file", request_generation, request);
     };
 
+    const reconcile_entry = async (
+        entry: PearWorkspaceEntry,
+        workspace_revision: number,
+        previous_path: string = entry.path,
+    ): Promise<"conflict" | "current" | "error" | "missing"> => {
+        if (destroyed || entry.kind !== "file") {
+            return "missing";
+        }
+        const old_identity = identity_for_path(previous_path);
+        const workspace = current_workspace();
+        if (old_identity === undefined || workspace?.workspaceRevision !== workspace_revision) {
+            return "missing";
+        }
+        const current = get_pear_workspace_document(store, old_identity);
+        if (
+            current?.authority === "current" &&
+            current.entryId === entry.entry_id &&
+            current.path === entry.path
+        ) {
+            return current.state === "conflict" ? "conflict" : "current";
+        }
+        return new Promise((resolve) => {
+            const request = dependencies.getFile(workspace.workspaceId, entry.entry_id, {
+                success(file) {
+                    if (request !== undefined) {
+                        reconciliation_requests.delete(request);
+                    }
+                    const latest = current_workspace();
+                    const still_owned = get_pear_workspace_document(store, old_identity);
+                    if (
+                        destroyed ||
+                        latest?.workspaceRevision !== workspace_revision ||
+                        still_owned === undefined ||
+                        file.workspace_uuid !== workspace.workspaceId ||
+                        file.workspace_revision !== workspace_revision ||
+                        file.entry_id !== entry.entry_id ||
+                        file.path !== entry.path
+                    ) {
+                        resolve("error");
+                        return;
+                    }
+                    dispatch({
+                        type: "rebind_document",
+                        ...old_identity,
+                        newEntryId: file.entry_id,
+                        newPath: file.path,
+                        newVersion: file.version,
+                        remoteText: file.content,
+                        workspaceRevision: file.workspace_revision,
+                    });
+                    const rebound_identity: PearWorkspaceDocumentIdentity = {
+                        ...old_identity,
+                        entryId: file.entry_id,
+                        path: file.path,
+                    };
+                    const rebound = get_pear_workspace_document(store, rebound_identity);
+                    if (rebound === undefined) {
+                        resolve("error");
+                        return;
+                    }
+                    file_metadata.delete(old_identity.entryId);
+                    file_metadata.set(file.entry_id, file);
+                    if (mounted !== undefined && same_identity(mounted.identity, old_identity)) {
+                        mounted.identity = rebound_identity;
+                    }
+                    if (active_identity()?.entryId === rebound_identity.entryId) {
+                        active_file = file;
+                        active_entry = {
+                            ...entry,
+                            size: file.size,
+                        };
+                        surface = {kind: "text", entry: active_entry, file};
+                        if (rebound.state !== "conflict") {
+                            void hydrate_after_reload(old_identity);
+                        }
+                    }
+                    notice =
+                        rebound.state === "conflict"
+                            ? "This file changed outside the editor. Review both versions before saving."
+                            : undefined;
+                    emit();
+                    if (rebound.authority === "current" && rebound.state === "dirty") {
+                        schedule_autosave(rebound_identity);
+                    }
+                    resolve(rebound.state === "conflict" ? "conflict" : "current");
+                },
+                error(error) {
+                    if (request !== undefined) {
+                        reconciliation_requests.delete(request);
+                    }
+                    record_pear_workspace_error(error.kind === "server" ? error.status : undefined);
+                    resolve("error");
+                },
+            });
+            if (request !== undefined) {
+                reconciliation_requests.add(request);
+            }
+        });
+    };
+
     return {
         activateWorkspace(workspace_id, workspace_revision, limits, preferences): void {
             if (destroyed) {
@@ -999,9 +1137,8 @@ export function create_pear_workspace_editor(
                 previous_workspace !== undefined &&
                 workspace_revision > previous_workspace.workspaceRevision
             ) {
-                open_generation += 1;
                 dispatch({
-                    type: "invalidate_workspace_revision",
+                    type: "advance_workspace_revision",
                     workspaceId: workspace_id,
                     workspaceRevision: workspace_revision,
                 });
@@ -1011,14 +1148,7 @@ export function create_pear_workspace_editor(
                     work.cancel();
                 }
                 autosaves.clear();
-                file_metadata.clear();
-                active_file = undefined;
-                surface = {
-                    kind: "error",
-                    entry: active_entry,
-                    message: "Workspace changed; refresh the selected file before editing.",
-                };
-                void destroy_mounted();
+                notice = "Workspace updated; validating open files…";
             }
             if (preferences !== undefined) {
                 restored_views.clear();
@@ -1034,6 +1164,20 @@ export function create_pear_workspace_editor(
             emit();
         },
         open,
+        reconcileEntry: reconcile_entry,
+        detachPath(path): void {
+            const identity = identity_for_path(path);
+            if (identity === undefined) {
+                return;
+            }
+            clear_autosave(identity);
+            dispatch({type: "detach_document", ...identity});
+            if (active_identity()?.entryId === identity.entryId) {
+                notice =
+                    "This file was deleted outside the editor. Your local buffer is preserved.";
+            }
+            emit();
+        },
         async closeActive(): Promise<boolean> {
             const identity = active_identity();
             const document = active_document();
@@ -1062,11 +1206,13 @@ export function create_pear_workspace_editor(
         async switchMode(mode): Promise<boolean> {
             const identity = active_identity();
             const document = active_document();
+            const recovering_rich_drift =
+                mode === "source" && surface.kind === "error" && surface.action === "source";
             if (
                 identity === undefined ||
                 document === undefined ||
                 active_file === undefined ||
-                surface.kind !== "text"
+                (surface.kind !== "text" && !recovering_rich_drift)
             ) {
                 return false;
             }
@@ -1076,12 +1222,40 @@ export function create_pear_workspace_editor(
             if (mode === "rich") {
                 return mount_rich(identity, active_file);
             }
-            if (!(await flush_rich(identity))) {
+            if (recovering_rich_drift && mounted?.kind === "rich") {
+                const recovered = await mounted.editor.flush();
+                if (recovered.status !== "serialized") {
+                    notice =
+                        "Rich content could not be recovered. Retry or copy it before leaving Rich mode.";
+                    emit();
+                    return false;
+                }
+                dispatch({
+                    type: "rich_recovered",
+                    ...identity,
+                    editRevision: recovered.editRevision,
+                    text: recovered.markdown,
+                });
+                surface = {kind: "text", entry: active_entry!, file: active_file};
+            } else if (!(await flush_rich(identity))) {
                 return false;
             }
             if (mounted?.kind === "rich") {
                 const view = mounted.editor.getViewState();
                 dispatch({type: "rich_view_changed", ...identity, ...view});
+                const latest = get_pear_workspace_document(store, identity);
+                if (latest !== undefined) {
+                    const offset = offset_at_line(
+                        latest.currentText,
+                        mounted.editor.getCursorLine(),
+                    );
+                    dispatch({
+                        type: "source_view_changed",
+                        ...identity,
+                        selection: {anchor: offset, head: offset},
+                        scrollTop: latest.sourceView.scrollTop,
+                    });
+                }
             }
             dispatch({type: "set_editor_mode", ...identity, mode: "source"});
             await mount_source(identity, active_file);
@@ -1092,6 +1266,15 @@ export function create_pear_workspace_editor(
             if (identity !== undefined) {
                 await start_save(identity);
             }
+        },
+        async discardChanges(): Promise<void> {
+            const identity = active_identity();
+            if (identity === undefined) {
+                return;
+            }
+            clear_autosave(identity);
+            dispatch({type: "discard_changes", ...identity});
+            await hydrate_after_reload(identity);
         },
         async resolveConflict(resolution): Promise<void> {
             const identity = active_identity();
@@ -1170,6 +1353,10 @@ export function create_pear_workspace_editor(
             destroyed = true;
             open_generation += 1;
             request_guard.cancelAll();
+            for (const request of reconciliation_requests) {
+                request.abort();
+            }
+            reconciliation_requests.clear();
             clear_source_flush();
             for (const work of autosaves.values()) {
                 work.cancel();

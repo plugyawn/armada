@@ -43,6 +43,7 @@ import * as onboarding_steps from "./onboarding_steps.ts";
 import * as overlays from "./overlays.ts";
 import * as pear_panel from "./pear_panel.ts";
 import * as pear_run_state from "./pear_run_state.ts";
+import * as pear_workspace_events from "./pear_workspace_events.ts";
 import * as peer_data from "./peer_data.ts";
 import * as people from "./people.ts";
 import * as pm_list from "./pm_list.ts";
@@ -189,6 +190,10 @@ export function dispatch_normal_event(event) {
         case "pear_run":
             pear_run_state.apply_pear_run_event(event);
             pear_panel.handle_pear_run_event(event);
+            break;
+
+        case "pear_workspace_changed":
+            pear_workspace_events.apply_pear_workspace_changed_event(event);
             break;
 
         case "custom_profile_fields":

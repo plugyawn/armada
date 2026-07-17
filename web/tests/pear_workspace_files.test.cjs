@@ -288,52 +288,66 @@ run_test("README creation is offered only after a complete absence is known", ()
         workspaceRevision: 1,
     });
     test.set_context({active_entry: undefined, readme_state: "present"});
-    assert.equal(test.mutations[0].aborted, true);
+    assert.equal(test.mutations[0].aborted, false);
     assert.equal(test.action("create-readme").hidden, true);
+    const created = entry("README.md", "file", {entry_id: "r2:README.md"});
+    test.mutations[0].callbacks.success(mutation_receipt("create", 2, "README.md", created));
+    assert.equal(test.mutation_events.length, 1, "selection changes cannot discard a receipt");
     test.controller.destroy();
     test.root.remove();
 });
 
-run_test("rename races are aborted and recursive deletion requires explicit confirmation", () => {
-    const test = harness();
-    const file = entry("draft.md");
-    test.set_context({active_entry: file, selected_entry: file});
-    test.open_action("rename");
-    let form = test.dialog_layer.querySelector("form");
-    form.querySelector("input[name='path']").value = "done.md";
-    form.dispatchEvent(new window.SubmitEvent("submit", {bubbles: true, cancelable: true}));
-    test.set_context({revision: 2, active_entry: entry("other.md")});
-    assert.equal(test.mutations[0].aborted, true);
-    test.mutations[0].callbacks.success(
-        mutation_receipt("rename", 2, "done.md", entry("done.md"), file.entry_id),
-    );
-    assert.equal(test.mutation_events.length, 0, "late rename response is ignored");
+run_test(
+    "rename receipts survive selection changes and recursive delete requires confirmation",
+    () => {
+        const test = harness();
+        const file = entry("draft.md");
+        test.set_context({active_entry: file, selected_entry: file});
+        test.open_action("rename");
+        let form = test.dialog_layer.querySelector("form");
+        form.querySelector("input[name='path']").value = "done.md";
+        form.dispatchEvent(new window.SubmitEvent("submit", {bubbles: true, cancelable: true}));
+        test.set_context({revision: 2, active_entry: entry("other.md")});
+        assert.equal(test.mutations[0].aborted, false);
+        test.mutations[0].callbacks.success(
+            mutation_receipt("rename", 2, "done.md", entry("done.md"), file.entry_id),
+        );
+        assert.equal(
+            test.mutation_events.length,
+            1,
+            "late rename receipt must still refresh authority",
+        );
 
-    const folder = entry("scratch", "directory", {has_children: true, entry_id: "r2:scratch"});
-    test.set_context({revision: 2, active_entry: undefined, selected_entry: folder});
-    test.open_action("delete");
-    form = test.dialog_layer.querySelector("form");
-    const submit = form.querySelector("button[type='submit']");
-    const recursive = form.querySelector("input[name='recursive']");
-    const irreversible = form.querySelector("input[name='irreversible']");
-    assert.equal(submit.disabled, true);
-    recursive.checked = true;
-    recursive.dispatchEvent(new window.Event("change", {bubbles: true}));
-    assert.equal(submit.disabled, true, "recursive deletion still requires irreversible consent");
-    irreversible.checked = true;
-    irreversible.dispatchEvent(new window.Event("change", {bubbles: true}));
-    assert.equal(submit.disabled, false);
-    form.dispatchEvent(new window.SubmitEvent("submit", {bubbles: true, cancelable: true}));
-    assert.deepEqual(test.mutations[1].request, {
-        entryId: folder.entry_id,
-        expectedPath: "scratch",
-        workspaceRevision: 2,
-        recursive: true,
-        confirmIrreversible: true,
-    });
-    test.controller.destroy();
-    test.root.remove();
-});
+        const folder = entry("scratch", "directory", {has_children: true, entry_id: "r2:scratch"});
+        test.set_context({revision: 2, active_entry: undefined, selected_entry: folder});
+        test.open_action("delete");
+        form = test.dialog_layer.querySelector("form");
+        const submit = form.querySelector("button[type='submit']");
+        const recursive = form.querySelector("input[name='recursive']");
+        const irreversible = form.querySelector("input[name='irreversible']");
+        assert.equal(submit.disabled, true);
+        recursive.checked = true;
+        recursive.dispatchEvent(new window.Event("change", {bubbles: true}));
+        assert.equal(
+            submit.disabled,
+            true,
+            "recursive deletion still requires irreversible consent",
+        );
+        irreversible.checked = true;
+        irreversible.dispatchEvent(new window.Event("change", {bubbles: true}));
+        assert.equal(submit.disabled, false);
+        form.dispatchEvent(new window.SubmitEvent("submit", {bubbles: true, cancelable: true}));
+        assert.deepEqual(test.mutations[1].request, {
+            entryId: folder.entry_id,
+            expectedPath: "scratch",
+            workspaceRevision: 2,
+            recursive: true,
+            confirmIrreversible: true,
+        });
+        test.controller.destroy();
+        test.root.remove();
+    },
+);
 
 run_test("copy, reveal, and paginated history stay bound to the active identity", async () => {
     const copied = [];

@@ -4,6 +4,8 @@ export type PearWorkspaceRichEligibility = "source_only" | "supported" | "unchec
 
 export type PearWorkspaceDocumentState = "clean" | "conflict" | "dirty" | "error" | "saving";
 
+export type PearWorkspaceDocumentAuthority = "current" | "detached" | "stale";
+
 export type PearWorkspaceSourceSelection = {
     anchor: number;
     head: number;
@@ -56,6 +58,7 @@ export type PearWorkspaceDocumentSession = {
     saveInFlight: PearWorkspaceSaveSnapshot | undefined;
     conflict: PearWorkspaceConflict | undefined;
     error: string | undefined;
+    authority: PearWorkspaceDocumentAuthority;
     sourceView: {
         selection: PearWorkspaceSourceSelection;
         scrollTop: number;
@@ -109,11 +112,21 @@ export type PearWorkspaceStoreAction =
       }
     | ({type: "deactivate_document"} & PearWorkspaceDocumentIdentity)
     | {
-          type: "invalidate_workspace_revision";
+          type: "advance_workspace_revision";
           workspaceId: string;
           workspaceRevision: number;
-          preservedEntryId?: string;
+          currentEntryIds?: string[];
       }
+    | ({
+          type: "rebind_document";
+          newEntryId: string;
+          newPath: string;
+          newVersion: string;
+          remoteText: string;
+          workspaceRevision: number;
+      } & PearWorkspaceDocumentIdentity)
+    | ({type: "detach_document"} & PearWorkspaceDocumentIdentity)
+    | ({type: "discard_changes"} & PearWorkspaceDocumentIdentity)
     | {
           type: "set_workspace_mode_preference";
           workspaceId: string;
@@ -142,6 +155,11 @@ export type PearWorkspaceStoreAction =
           text: string;
       } & PearWorkspaceDocumentIdentity)
     | ({type: "rich_edited"} & PearWorkspaceDocumentIdentity)
+    | ({
+          type: "rich_recovered";
+          editRevision: number;
+          text: string;
+      } & PearWorkspaceDocumentIdentity)
     | ({
           type: "serialization_requested";
       } & PearWorkspaceDocumentIdentity)
@@ -359,10 +377,10 @@ export function reduce_pear_workspace_store(
                   }
                 : {
                       ...existing,
-                      workspaceRevision: Math.max(
-                          existing.workspaceRevision,
-                          action.workspaceRevision,
-                      ),
+                      // Revision advances are explicit state transitions. Keeping
+                      // them out of activation lets the caller mark every
+                      // revision-bound document identity stale atomically.
+                      workspaceRevision: existing.workspaceRevision,
                   };
         return {
             ...with_workspace(next_state, workspace),
@@ -401,30 +419,32 @@ export function reduce_pear_workspace_store(
         });
     }
 
-    if (action.type === "invalidate_workspace_revision") {
+    if (action.type === "advance_workspace_revision") {
         const workspace = state.workspaces.get(action.workspaceId);
-        const preserved =
-            action.preservedEntryId === undefined
-                ? undefined
-                : workspace?.documents.get(action.preservedEntryId);
-        if (
-            workspace?.workspaceRevision !== action.workspaceRevision ||
-            (action.preservedEntryId !== undefined && preserved === undefined)
-        ) {
+        if (workspace === undefined || action.workspaceRevision < workspace.workspaceRevision) {
             return ignore_stale_response(state);
         }
-        const documents = new Map<string, PearWorkspaceDocumentSession>();
-        if (action.preservedEntryId !== undefined && preserved !== undefined) {
-            documents.set(action.preservedEntryId, preserved);
+        if (action.workspaceRevision === workspace.workspaceRevision) {
+            return state;
         }
+        const current_entry_ids = new Set(action.currentEntryIds);
+        const documents = new Map(
+            [...workspace.documents].map(([entry_id, document]) => [
+                entry_id,
+                {
+                    ...document,
+                    authority:
+                        document.authority === "detached"
+                            ? "detached"
+                            : current_entry_ids.has(entry_id)
+                              ? "current"
+                              : "stale",
+                } satisfies PearWorkspaceDocumentSession,
+            ]),
+        );
         return with_workspace(state, {
             ...workspace,
-            requestGeneration: workspace.requestGeneration + 1,
-            activeEntryId:
-                action.preservedEntryId !== undefined &&
-                workspace.activeEntryId === action.preservedEntryId
-                    ? action.preservedEntryId
-                    : undefined,
+            workspaceRevision: action.workspaceRevision,
             pendingDocumentRequest: undefined,
             documents,
         });
@@ -473,6 +493,7 @@ export function reduce_pear_workspace_store(
             saveInFlight: undefined,
             conflict: undefined,
             error: undefined,
+            authority: "current",
             sourceView: existing?.sourceView ?? {
                 selection: {anchor: 0, head: 0},
                 scrollTop: 0,
@@ -497,6 +518,7 @@ export function reduce_pear_workspace_store(
     if (
         action.type === "source_changed" ||
         action.type === "rich_edited" ||
+        action.type === "rich_recovered" ||
         action.type === "set_editor_mode" ||
         action.type === "set_rich_eligibility" ||
         action.type === "source_view_changed" ||
@@ -510,6 +532,92 @@ export function reduce_pear_workspace_store(
     }
 
     const {workspace, document} = active_match ?? any_match!;
+
+    if (action.type === "rebind_document") {
+        if (
+            action.workspaceRevision !== workspace.workspaceRevision ||
+            document.saveInFlight !== undefined
+        ) {
+            return ignore_stale_response(state);
+        }
+        const remote_changed = action.remoteText !== document.savedText;
+        const has_local_changes = document.currentText !== document.savedText;
+        const next_document: PearWorkspaceDocumentSession = {
+            ...document,
+            entryId: action.newEntryId,
+            path: action.newPath,
+            baseVersion: action.newVersion,
+            authority: "current",
+            ...(remote_changed && has_local_changes
+                ? {
+                      conflict: {
+                          remoteText: action.remoteText,
+                          remoteVersion: action.newVersion,
+                          remoteEntryId: action.newEntryId,
+                          remoteWorkspaceRevision: action.workspaceRevision,
+                      },
+                      state: "conflict" as const,
+                      error: undefined,
+                  }
+                : remote_changed
+                  ? {
+                        savedText: action.remoteText,
+                        currentText: action.remoteText,
+                        serializedRevision: document.editRevision,
+                        acknowledgedRevision: document.editRevision,
+                        serialization: {
+                            state: "idle" as const,
+                            requestedRevision: undefined,
+                            error: undefined,
+                        },
+                        conflict: undefined,
+                        state: "clean" as const,
+                        error: undefined,
+                    }
+                  : {conflict: undefined}),
+        };
+        return with_document(
+            state,
+            {
+                ...workspace,
+                activeEntryId:
+                    workspace.activeEntryId === document.entryId
+                        ? action.newEntryId
+                        : workspace.activeEntryId,
+            },
+            remote_changed && has_local_changes
+                ? next_document
+                : acknowledge_noop_edit(next_document),
+            document.entryId,
+        );
+    }
+
+    if (action.type === "detach_document") {
+        if (document.saveInFlight !== undefined) {
+            return ignore_stale_response(state);
+        }
+        return with_document(state, workspace, {
+            ...document,
+            authority: "detached",
+            error: undefined,
+        });
+    }
+
+    if (action.type === "discard_changes") {
+        if (document.saveInFlight !== undefined || document.conflict !== undefined) {
+            return state;
+        }
+        return with_document(state, workspace, {
+            ...document,
+            currentText: document.savedText,
+            editRevision: document.editRevision + 1,
+            serializedRevision: document.editRevision + 1,
+            acknowledgedRevision: document.editRevision + 1,
+            serialization: {state: "idle", requestedRevision: undefined, error: undefined},
+            state: "clean",
+            error: undefined,
+        });
+    }
 
     if (action.type === "set_editor_mode") {
         if (
@@ -601,6 +709,24 @@ export function reduce_pear_workspace_store(
         });
     }
 
+    if (action.type === "rich_recovered") {
+        if (document.editorMode !== "rich" || action.editRevision < document.editRevision) {
+            return ignore_stale_response(state);
+        }
+        return with_document(
+            state,
+            workspace,
+            acknowledge_noop_edit({
+                ...document,
+                currentText: action.text,
+                editRevision: action.editRevision,
+                serializedRevision: action.editRevision,
+                serialization: {state: "idle", requestedRevision: undefined, error: undefined},
+                error: undefined,
+            }),
+        );
+    }
+
     if (action.type === "serialization_requested") {
         if (document.serializedRevision === document.editRevision) {
             return state;
@@ -685,6 +811,16 @@ export function reduce_pear_workspace_store(
     }
 
     if (action.type === "save_started") {
+        if (document.authority !== "current") {
+            return with_document(state, workspace, {
+                ...document,
+                state: "error",
+                error:
+                    document.authority === "detached"
+                        ? "This file was deleted outside the editor. Your local buffer is still available."
+                        : "Workspace changed; validating this file before saving.",
+            });
+        }
         if (new TextEncoder().encode(document.currentText).length > document.maxBytes) {
             return with_document(state, workspace, {
                 ...document,
@@ -732,12 +868,24 @@ export function reduce_pear_workspace_store(
             acknowledgedRevision: action.editRevision,
             saveInFlight: undefined,
             error: document.serialization.state === "error" ? document.error : undefined,
+            authority: "current" as const,
         };
+        const documents = new Map(
+            [...workspace.documents].map(([entry_id, cached]) => [
+                entry_id,
+                entry_id === document.entryId
+                    ? cached
+                    : cached.authority === "detached"
+                      ? cached
+                      : ({...cached, authority: "stale"} satisfies PearWorkspaceDocumentSession),
+            ]),
+        );
         return with_document(
             state,
             {
                 ...workspace,
                 workspaceRevision: action.workspaceRevision,
+                documents,
                 activeEntryId:
                     workspace.activeEntryId === document.entryId
                         ? action.newEntryId

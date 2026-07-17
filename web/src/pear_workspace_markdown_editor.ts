@@ -109,6 +109,8 @@ export type PearWorkspaceMarkdownEditor = {
     setReadOnly: (read_only: boolean) => void;
     getViewState: () => PearWorkspaceRichViewState;
     getSelectionContext: () => PearWorkspaceRichSelectionContext;
+    getCursorLine: () => number;
+    setCursorLine: (line: number) => void;
     getEditRevision: () => number;
     getStats: () => PearWorkspaceMarkdownEditorStats;
     focus: () => void;
@@ -737,6 +739,38 @@ export async function create_pear_workspace_markdown_editor(
             .setMeta(transaction_origin_key, "hydrate" satisfies TransactionOrigin);
         view.dispatch(transaction);
     };
+    const rendered_line_at_position = (position: number): number => {
+        const document_size = view.state.doc.content.size;
+        const prefix = view.state.doc.textBetween(0, clamp_position(position, document_size), "\n");
+        return prefix.split("\n").length - 1;
+    };
+    const set_cursor_line = (line: number): void => {
+        if (destroyed) {
+            throw new Error("Cannot set selection on a destroyed Rich Markdown editor.");
+        }
+        const document_size = view.state.doc.content.size;
+        const target_line = Math.max(
+            0,
+            Math.min(Math.trunc(line), rendered_line_at_position(document_size)),
+        );
+        let low = 0;
+        let high = document_size;
+        while (low < high) {
+            const middle = Math.floor((low + high) / 2);
+            if (rendered_line_at_position(middle) < target_line) {
+                low = middle + 1;
+            } else {
+                high = middle;
+            }
+        }
+        const selection = TextSelection.near(view.state.doc.resolve(low), 1);
+        view.dispatch(
+            view.state.tr
+                .setSelection(selection)
+                .setMeta(transaction_origin_key, "hydrate" satisfies TransactionOrigin)
+                .setMeta("addToHistory", false),
+        );
+    };
     apply_selection(options.selection);
     view.dom.scrollTop = Math.max(0, options.scrollTop ?? 0);
     options.root.replaceChildren(host);
@@ -927,6 +961,8 @@ export async function create_pear_workspace_markdown_editor(
                 const {from, to} = view.state.selection;
                 return {selectedText: view.state.doc.textBetween(from, to, "\n")};
             },
+            getCursorLine: () => rendered_line_at_position(view.state.selection.head),
+            setCursorLine: set_cursor_line,
             getEditRevision: () => current_revision,
             getStats: () => ({serializations: serialization_count}),
             focus() {

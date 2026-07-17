@@ -632,15 +632,20 @@ function pear_morph_content(old_content: HTMLElement, new_content: HTMLElement):
 
 export function pear_live_is_placeholder_for_testing(
     has_visible_assistant_text: boolean | undefined,
+    has_server_placeholder = false,
 ): boolean {
-    return has_visible_assistant_text !== true;
+    return has_server_placeholder || has_visible_assistant_text !== true;
 }
 
 export function pear_live_should_show_progress_for_testing(
     plan_length: number,
     has_visible_assistant_text: boolean | undefined,
+    has_server_placeholder = false,
 ): boolean {
-    return plan_length > 0 || pear_live_is_placeholder_for_testing(has_visible_assistant_text);
+    return (
+        plan_length > 0 ||
+        pear_live_is_placeholder_for_testing(has_visible_assistant_text, has_server_placeholder)
+    );
 }
 
 const PEAR_WORKING_PLACEHOLDER = "· Working";
@@ -677,14 +682,13 @@ function render_pear_live_progress($row: JQuery): void {
     const run = pear_run_state.get_run_view(message_id);
     const existing = content.querySelector(":scope > .pear-live-progress");
     const run_is_active = run?.status === "queued" || run?.status === "running";
-    // Sending the result message and publishing its typed run event are two
-    // ordered network events.  Hydrate the server's exact protocol sentinel
-    // immediately so it can never paint as ordinary message prose while the
-    // second event is in flight.  This is an equality check on the dedicated
-    // placeholder, not an inference from arbitrary assistant text.
-    const has_unbound_server_placeholder =
-        run === undefined && pear_live_source_is_server_placeholder(content);
-    if (!run_is_active && !has_unbound_server_placeholder) {
+    // Message edits and typed run events travel independently. Honor the
+    // server's exact protocol sentinel at every transition so it can never
+    // paint as a second prose row, even when a newer typed event already has
+    // a plan or reports visible assistant text. This is an equality check on
+    // the dedicated placeholder, not an inference from arbitrary prose.
+    const has_server_placeholder = pear_live_source_is_server_placeholder(content);
+    if (!run_is_active && !has_server_placeholder) {
         existing?.remove();
         content.classList.remove("pear-live-placeholder");
         for (const child of content.querySelectorAll(":scope > .pear-live-thought")) {
@@ -692,7 +696,7 @@ function render_pear_live_progress($row: JQuery): void {
         }
         return;
     }
-    if (has_unbound_server_placeholder) {
+    if (has_server_placeholder) {
         row.classList.add("pear-active-message");
     }
 
@@ -701,14 +705,24 @@ function render_pear_live_progress($row: JQuery): void {
     // placeholder update and are therefore not evidence that Codex has
     // emitted user-visible text.
     const is_placeholder =
-        run === undefined || pear_live_is_placeholder_for_testing(run.has_visible_assistant_text);
+        run === undefined ||
+        pear_live_is_placeholder_for_testing(
+            run.has_visible_assistant_text,
+            has_server_placeholder,
+        );
     content.classList.toggle("pear-live-placeholder", is_placeholder);
 
     const progress = document.createElementNS("http://www.w3.org/1999/xhtml", "section");
     progress.setAttribute("class", "pear-live-progress");
     progress.setAttribute("aria-label", $t({defaultMessage: "Pear work in progress"}));
     const plan = run?.plan ?? [];
-    if (!pear_live_should_show_progress_for_testing(plan.length, run?.has_visible_assistant_text)) {
+    if (
+        !pear_live_should_show_progress_for_testing(
+            plan.length,
+            run?.has_visible_assistant_text,
+            has_server_placeholder,
+        )
+    ) {
         existing?.remove();
         for (const child of content.children) {
             if (!child.classList.contains("pear-run-footer")) {

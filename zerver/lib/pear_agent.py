@@ -4,7 +4,6 @@ import os
 import queue
 import subprocess
 import threading
-import time
 import urllib.error
 import urllib.request
 from collections.abc import Callable, Sequence
@@ -1187,14 +1186,9 @@ class PearCodexAppServerToolRunner:
         event_callback: PearWorkerTranscriptCallback | None = None,
         timeout_seconds: int | None = None,
     ) -> Any:
-        deadline = time.monotonic() + (timeout_seconds or self.timeout_seconds)
+        idle_timeout_seconds = self.timeout_seconds if timeout_seconds is None else timeout_seconds
         while True:
-            timeout = max(deadline - time.monotonic(), 0)
-            if timeout == 0:
-                raise PearAgentRuntimeError(
-                    f"Codex app-server timed out after {timeout_seconds or self.timeout_seconds} seconds."
-                )
-            message = self.next_message(timeout)
+            message = self.next_message(idle_timeout_seconds)
             if message is None:
                 raise PearAgentRuntimeError("Codex app-server stopped unexpectedly.")
             if self.handle_server_request(message, event_callback=event_callback):
@@ -1218,7 +1212,7 @@ class PearCodexAppServerToolRunner:
             return self.messages.get(timeout=timeout)
         except queue.Empty as error:
             raise PearAgentRuntimeError(
-                f"Codex app-server timed out after {self.timeout_seconds} seconds."
+                f"Codex app-server produced no activity for {timeout:g} seconds."
             ) from error
 
     def handle_server_request(
@@ -1513,14 +1507,8 @@ class PearCodexAppServerToolRunner:
         command_count = 0
         file_change_count = 0
         tool_call_count = 0
-        deadline = time.monotonic() + self.timeout_seconds
         while True:
-            timeout = max(deadline - time.monotonic(), 0)
-            if timeout == 0:
-                raise PearAgentRuntimeError(
-                    f"Codex app-server timed out after {self.timeout_seconds} seconds."
-                )
-            message = self.next_message(timeout)
+            message = self.next_message(self.timeout_seconds)
             if message is None:
                 raise PearAgentRuntimeError("Codex app-server stopped unexpectedly.")
             if self.handle_server_request(message, event_callback=event_callback):

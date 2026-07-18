@@ -44,6 +44,7 @@ from zerver.tornado.event_queue import (
     get_client_info_for_message_event,
     mark_clients_to_reload,
     process_message_event,
+    reload_clients_immediately_after_restart,
     send_web_reload_client_events,
 )
 from zerver.tornado.exceptions import BadEventQueueIdError
@@ -1254,6 +1255,14 @@ class ClientDescriptorsTest(ZulipTestCase):
 
 
 class ReloadWebClientsTest(ZulipTestCase):
+    @override_settings(DEVELOPMENT=False, PEAR_WORKER_AGENT_RUNTIME="disabled")
+    def test_standard_production_restarts_stagger_client_reloads(self) -> None:
+        self.assertFalse(reload_clients_immediately_after_restart())
+
+    @override_settings(DEVELOPMENT=False, PEAR_WORKER_AGENT_RUNTIME="codex-app-server")
+    def test_pear_restarts_reload_clients_immediately(self) -> None:
+        self.assertTrue(reload_clients_immediately_after_restart())
+
     def test_web_reload_clients(self) -> None:
         hamlet = self.example_user("hamlet")
         realm = hamlet.realm

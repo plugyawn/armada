@@ -2168,15 +2168,30 @@ function artifact_log_text(block: PearArtifactBlock, data: JsonObject): string {
     return lines.map((line) => scalar_text(line)).join("\n");
 }
 
+function set_utility_control_presentation(
+    control: HTMLElement,
+    icon: string,
+    aria_label: string,
+): void {
+    const glyph = element("i", `zulip-icon zulip-icon-${icon}`);
+    glyph.setAttribute("aria-hidden", "true");
+    control.replaceChildren(glyph);
+    control.setAttribute("aria-label", aria_label);
+    control.setAttribute("data-tippy-content", aria_label);
+}
+
 function utility_button(
-    label: string,
+    icon: string,
     aria_label: string,
     controller: AbortController,
     action: (button: HTMLButtonElement) => void | Promise<void>,
 ): HTMLButtonElement {
-    const button = element("button", "pear-artifact-action pear-artifact-utility", label);
+    const button = element(
+        "button",
+        "pear-artifact-action pear-artifact-utility tippy-zulip-tooltip",
+    );
     button.type = "button";
-    button.setAttribute("aria-label", aria_label);
+    set_utility_control_presentation(button, icon, aria_label);
     button.addEventListener(
         "click",
         () => {
@@ -2184,7 +2199,7 @@ function utility_button(
                 try {
                     await action(button);
                 } catch {
-                    button.textContent = "unavailable";
+                    set_utility_control_presentation(button, "circle-x", "Unavailable");
                 }
             })();
         },
@@ -2196,9 +2211,9 @@ function utility_button(
 async function copy_artifact_text(text: string, button: HTMLButtonElement): Promise<void> {
     try {
         await navigator.clipboard.writeText(text);
-        button.textContent = "copied ✓";
+        set_utility_control_presentation(button, "check", "Copied");
     } catch {
-        button.textContent = "copy unavailable";
+        set_utility_control_presentation(button, "circle-x", "Copy unavailable");
     }
 }
 
@@ -2236,19 +2251,23 @@ function render_artifact_utilities(
         const media_frame = media_host?.querySelector<HTMLElement>(".pear-artifact-media-frame");
         if (media_frame?.requestFullscreen !== undefined) {
             controls.push(
-                utility_button("expand", `Expand media ${index + 1}`, controller, async () => {
-                    await media_frame.requestFullscreen();
-                }),
+                utility_button(
+                    "expand-both-diagonals",
+                    `Expand media ${index + 1}`,
+                    controller,
+                    async () => {
+                        await media_frame.requestFullscreen();
+                    },
+                ),
             );
         }
         const download_source = themed_media_value(block, "src");
         if (download_source !== "") {
             const download = document.createElement("a");
-            download.className = "pear-artifact-action pear-artifact-utility";
-            download.textContent = "download";
+            download.className = "pear-artifact-action pear-artifact-utility tippy-zulip-tooltip";
             download.download = "";
             download.href = download_source;
-            download.setAttribute("aria-label", `Download media ${index + 1}`);
+            set_utility_control_presentation(download, "download", `Download media ${index + 1}`);
             download.addEventListener(
                 "click",
                 () => {
@@ -2266,19 +2285,18 @@ function render_artifact_utilities(
     raw.id = raw_id;
     raw.hidden = true;
     body.append(raw);
-    const raw_toggle = utility_button(
-        "view raw",
-        "View raw artifact JSON",
-        controller,
-        (button) => {
-            raw.hidden = !raw.hidden;
-            if (!raw.hidden && raw.textContent === "") {
-                raw.textContent = JSON.stringify(document_value, undefined, 2);
-            }
-            button.setAttribute("aria-expanded", String(!raw.hidden));
-            button.textContent = raw.hidden ? "view raw" : "hide raw";
-        },
-    );
+    const raw_toggle = utility_button("code", "View raw artifact JSON", controller, (button) => {
+        raw.hidden = !raw.hidden;
+        if (!raw.hidden && raw.textContent === "") {
+            raw.textContent = JSON.stringify(document_value, undefined, 2);
+        }
+        button.setAttribute("aria-expanded", String(!raw.hidden));
+        set_utility_control_presentation(
+            button,
+            "code",
+            raw.hidden ? "View raw artifact JSON" : "Hide raw artifact JSON",
+        );
+    });
     raw_toggle.setAttribute("aria-controls", raw_id);
     raw_toggle.setAttribute("aria-expanded", "false");
     controls.push(raw_toggle);

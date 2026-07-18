@@ -332,31 +332,45 @@ run_test("offers one shared utility surface for copy, media, and raw JSON", asyn
     const rendered = artifact.render_pear_artifact(parsed, {density: "chat"});
     assert.equal(rendered.querySelectorAll(".pear-artifact-actions").length, 1);
     assert.equal(rendered.querySelectorAll(".pear-artifact-utility").length, 5);
+    for (const utility of rendered.querySelectorAll(".pear-artifact-utility")) {
+        assert.equal(utility.textContent, "");
+        assert.equal(utility.querySelectorAll(".zulip-icon").length, 1);
+        assert.equal(
+            utility.getAttribute("data-tippy-content"),
+            utility.getAttribute("aria-label"),
+        );
+    }
 
     const copy_text = rendered.querySelector('[aria-label="Copy text block 1"]');
+    assert.ok(copy_text.querySelector(".zulip-icon-copy"));
     copy_text.click();
     await Promise.resolve();
     assert.equal(copied_text, "A compact explanation.");
-    assert.equal(copy_text.textContent, "copied ✓");
+    assert.equal(copy_text.getAttribute("aria-label"), "Copied");
+    assert.ok(copy_text.querySelector(".zulip-icon-check"));
 
     rendered.querySelector('[aria-label="Copy log block 2"]').click();
     await Promise.resolve();
     assert.equal(copied_text, "one\ntwo");
 
-    await rendered.querySelector('[aria-label="Expand media 1"]').click();
+    const expand = rendered.querySelector('[aria-label="Expand media 1"]');
+    assert.ok(expand.querySelector(".zulip-icon-expand-both-diagonals"));
+    await expand.click();
     await Promise.resolve();
     assert.equal(fullscreen_count, 1);
-    assert.equal(
-        rendered.querySelector('[aria-label="Download media 1"]').getAttribute("href"),
-        "/user_uploads/1/ab/diagram.png",
-    );
+    const download = rendered.querySelector('[aria-label="Download media 1"]');
+    assert.equal(download.getAttribute("href"), "/user_uploads/1/ab/diagram.png");
+    assert.ok(download.querySelector(".zulip-icon-download"));
 
     const raw_toggle = rendered.querySelector('[aria-label="View raw artifact JSON"]');
+    assert.ok(raw_toggle.querySelector(".zulip-icon-code"));
     const raw = rendered.querySelector(".pear-artifact-raw-json");
     assert.equal(raw.textContent, "");
     raw_toggle.click();
     assert.equal(raw.hidden, false);
     assert.equal(raw_toggle.getAttribute("aria-expanded"), "true");
+    assert.equal(raw_toggle.getAttribute("aria-label"), "Hide raw artifact JSON");
+    assert.equal(raw_toggle.textContent, "");
     assert.match(raw.textContent, /"version": 1/);
 });
 

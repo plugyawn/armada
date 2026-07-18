@@ -422,31 +422,59 @@
 
             .pear-live-progress:has(> .pear-live-progress-disclosure) {
                 z-index: 1;
+                isolation: isolate;
                 padding-right: 28px;
                 border-radius: var(--pear-radius-px);
                 transition:
                     background-color var(--pear-dur-1) var(--pear-ease),
                     box-shadow var(--pear-dur-1) var(--pear-ease);
 
+                &::before {
+                    position: absolute;
+                    z-index: -1;
+                    inset: -5px -7px;
+                    border-radius: calc(var(--pear-radius-px) + 5px);
+                    background: radial-gradient(
+                        ellipse at center,
+                        color-mix(
+                                in srgb,
+                                var(--pear-interaction) 9%,
+                                transparent
+                            )
+                            0%,
+                        transparent 72%
+                    );
+                    content: "";
+                    opacity: 0;
+                    pointer-events: none;
+                    transition: opacity var(--pear-dur-1) var(--pear-ease);
+                }
+
                 &:hover,
                 &:has(> .pear-live-progress-disclosure:focus-visible),
                 &:has(> .pear-live-progress-disclosure[aria-expanded="true"]) {
                     background: color-mix(
                         in srgb,
-                        var(--pear-interaction) 4%,
+                        var(--pear-interaction) 3%,
                         transparent
                     );
                     box-shadow:
-                        0 0.2em 0.75em 0
+                        inset 2px 0 0
                             color-mix(
                                 in srgb,
-                                var(--pear-interaction) 12%,
+                                var(--pear-interaction) 46%,
                                 transparent
                             ),
-                        0 1.65em 1em 0
-                            var(--color-background-pear-message-content),
-                        0 2.8em 1em 0
-                            var(--color-left-sidebar-outer-box-shadow-hover);
+                        0 0 0 1px
+                            color-mix(
+                                in srgb,
+                                var(--pear-interaction) 10%,
+                                transparent
+                            );
+
+                    &::before {
+                        opacity: 1;
+                    }
                 }
             }
 
@@ -506,13 +534,18 @@
                 cursor: pointer;
 
                 &::before {
-                    content: "⌃";
-                    font-family: var(--pear-font-pixel);
-                    font-weight: 400;
+                    box-sizing: border-box;
+                    width: 7px;
+                    height: 7px;
+                    border-top: 1.5px solid currentcolor;
+                    border-left: 1.5px solid currentcolor;
+                    content: "";
+                    transform: translateY(2px) rotate(45deg);
+                    transform-origin: center;
                 }
 
                 &[aria-expanded="true"]::before {
-                    content: "⌄";
+                    transform: translateY(-2px) rotate(225deg);
                 }
 
                 &:hover {
@@ -557,16 +590,12 @@
                 min-width: 0;
                 min-height: 0;
                 gap: var(--pear-space-2);
-                max-height: min(36rem, 65vh);
-                overflow: auto;
-                overscroll-behavior: contain;
                 padding-inline: var(--pear-space-2);
                 color: var(--pear-ink-2);
                 font-family: var(--pear-font-pixel);
                 font-synthesis: none;
                 font-size: 14px;
                 line-height: 1.5;
-                scrollbar-gutter: stable;
 
                 &::before {
                     height: 1px;

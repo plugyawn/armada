@@ -1880,6 +1880,22 @@ function render_media(block: PearArtifactBlock, controller: AbortController): HT
     const frame = element("div", "pear-artifact-media-frame");
     const status = element("div", "pear-artifact-media-status", "Loading visual…");
     status.setAttribute("role", "status");
+    const set_intrinsic_geometry = (width: number, height: number): void => {
+        if (
+            figure.dataset["aspect"] !== undefined ||
+            !Number.isFinite(width) ||
+            !Number.isFinite(height) ||
+            width <= 0 ||
+            height <= 0
+        ) {
+            return;
+        }
+        const ratio = width / height;
+        const aspect =
+            ratio < 0.85 ? "tall" : ratio < 1.2 ? "square" : ratio < 1.6 ? "standard" : "wide";
+        figure.dataset["intrinsicAspect"] = aspect;
+        frame.style.setProperty("--pear-artifact-media-ratio", `${ratio}`);
+    };
     const set_ready = (): void => {
         figure.dataset["status"] = "ready";
         status.textContent = "";
@@ -1903,7 +1919,14 @@ function render_media(block: PearArtifactBlock, controller: AbortController): HT
                 image.src = source;
             }
         };
-        image.addEventListener("load", set_ready, {signal: controller.signal});
+        image.addEventListener(
+            "load",
+            () => {
+                set_intrinsic_geometry(image.naturalWidth, image.naturalHeight);
+                set_ready();
+            },
+            {signal: controller.signal},
+        );
         image.addEventListener("error", set_failed, {signal: controller.signal});
         watch_theme(controller, update_source);
         update_source();
@@ -1954,7 +1977,14 @@ function render_media(block: PearArtifactBlock, controller: AbortController): HT
             }
             update_playback();
         };
-        video.addEventListener("loadeddata", set_ready, {signal: controller.signal});
+        video.addEventListener(
+            "loadeddata",
+            () => {
+                set_intrinsic_geometry(video.videoWidth, video.videoHeight);
+                set_ready();
+            },
+            {signal: controller.signal},
+        );
         video.addEventListener("error", set_failed, {signal: controller.signal});
         video.addEventListener("ended", () => (has_played = true), {signal: controller.signal});
         reduced_motion_query?.addEventListener("change", update_playback, {

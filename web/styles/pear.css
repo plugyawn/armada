@@ -2081,6 +2081,29 @@
     .pear-artifact-media[data-aspect="tall"] & {
         aspect-ratio: 3 / 4;
     }
+
+    .pear-artifact-media[data-intrinsic-aspect] & {
+        width: 100%;
+        min-height: 0;
+        margin-inline: auto;
+        aspect-ratio: var(--pear-artifact-media-ratio);
+    }
+
+    .pear-artifact-media[data-intrinsic-aspect="tall"] & {
+        max-width: min(100%, 45vh, 420px);
+    }
+
+    .pear-artifact-media[data-intrinsic-aspect="square"] & {
+        max-width: min(100%, 60vh, 560px);
+    }
+
+    .pear-artifact-media[data-intrinsic-aspect="standard"] & {
+        max-width: min(100%, 86vh, 800px);
+    }
+
+    .pear-artifact-media[data-intrinsic-aspect="wide"] & {
+        max-width: min(100%, 110vh, 920px);
+    }
 }
 
 .pear-artifact-media-content {

@@ -3,6 +3,7 @@
 # ruff: noqa: ANN001, ANN002, ANN003, ANN202, ANN204, S108
 
 import json
+import queue
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from types import SimpleNamespace
@@ -96,6 +97,7 @@ from zerver.lib.pear import (
     update_pear_worker_status_message,
 )
 from zerver.lib.pear_agent import (
+    PearAgentRuntimeError,
     PearCodexAppServerToolRunner,
     PearCodexAppServerTranscriptTranslator,
     PearDisabledAgentRunner,
@@ -5757,6 +5759,58 @@ class PearAppServerProtocolCitizenTest(TestCase):
         self.assertTrue(runner.consume_background_response({"id": 41, "error": {"code": 1}}))
         self.assertFalse(runner.consume_background_response({"id": 41, "error": {"code": 1}}))
         self.assertFalse(runner.consume_background_response({"id": 7, "result": {}}))
+
+    def test_response_timeout_is_renewed_by_protocol_activity(self) -> None:
+        runner = self.make_runner(isolated=True)
+        messages = [
+            {"method": "thread/status/changed", "params": {}},
+            {"method": "account/updated", "params": {}},
+            {"id": 7, "result": {"ok": True}},
+        ]
+
+        with patch.object(runner, "next_message", side_effect=messages) as next_message:
+            self.assertEqual(
+                runner.wait_for_response(7, timeout_seconds=2),
+                {"ok": True},
+            )
+
+        self.assertEqual(
+            [record.args for record in next_message.call_args_list],
+            [(2,), (2,), (2,)],
+        )
+
+    def test_turn_timeout_is_renewed_by_protocol_activity(self) -> None:
+        runner = self.make_runner(isolated=True)
+        messages = [
+            {"method": "thread/status/changed", "params": {}},
+            {
+                "method": "turn/completed",
+                "params": {"threadId": "thread-1", "turn": {"id": "turn-1"}},
+            },
+        ]
+
+        with patch.object(runner, "next_message", side_effect=messages) as next_message:
+            self.assertEqual(
+                runner.wait_for_turn(
+                    thread_id="thread-1",
+                    turn_id="turn-1",
+                    event_callback=None,
+                ),
+                ("", 0, 0, 0),
+            )
+
+        self.assertEqual([record.args for record in next_message.call_args_list], [(5,), (5,)])
+
+    def test_timeout_reports_the_actual_inactivity_window(self) -> None:
+        runner = self.make_runner(isolated=True)
+        with (
+            patch.object(runner.messages, "get", side_effect=queue.Empty),
+            self.assertRaisesRegex(
+                PearAgentRuntimeError,
+                "Codex app-server produced no activity for 2 seconds",
+            ),
+        ):
+            runner.wait_for_response(7, timeout_seconds=2)
 
 
 class PearInteractiveTurnTest(TestCase):

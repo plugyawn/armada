@@ -789,6 +789,8 @@ PEAR_WORKER_FAST_MODE = True
 PEAR_WORKER_REASONING_EFFORT: Literal["low", "medium", "high", "xhigh", "max", "ultra"] = "medium"
 PEAR_WORKER_SANDBOX: Literal["read-only", "workspace-write", "danger-full-access"] = "read-only"
 PEAR_WORKER_APPROVAL_POLICY: Literal["untrusted", "on-request", "never"] = "on-request"
+# Maximum silence between Codex app-server protocol messages. Active turns
+# renew this window whenever the app-server produces another message.
 PEAR_WORKER_TIMEOUT_SECONDS = 1800
 PEAR_WORKER_OUTPUT_LIMIT = 50000
 PEAR_WORKER_CODEX_EPHEMERAL = False

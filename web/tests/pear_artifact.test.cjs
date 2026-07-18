@@ -537,7 +537,17 @@ run_test("uses intrinsic minimum geometry when an aspect was not authored", () =
     const parsed_media = artifact.parse_pear_artifact(JSON.stringify(media_document));
     assert.ok(parsed_media);
     const rendered_media = artifact.render_pear_artifact(parsed_media, {density: "chat"});
-    assert.equal(rendered_media.querySelector(".pear-artifact-media").dataset.aspect, undefined);
+    const media = rendered_media.querySelector(".pear-artifact-media");
+    const image = media.querySelector(".pear-artifact-media-content");
+    const frame = media.querySelector(".pear-artifact-media-frame");
+    assert.equal(media.dataset.aspect, undefined);
+    Object.defineProperties(image, {
+        naturalWidth: {value: 1000},
+        naturalHeight: {value: 700},
+    });
+    image.dispatchEvent(new window.Event("load"));
+    assert.equal(media.dataset.intrinsicAspect, "standard");
+    assert.equal(frame.style.getPropertyValue("--pear-artifact-media-ratio"), `${1000 / 700}`);
 });
 
 run_test("lays out undirected graph branches by topological distance", () => {

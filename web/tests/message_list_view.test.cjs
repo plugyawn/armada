@@ -1907,3 +1907,14 @@ run_test("pear thinking frames stay in lockstep with the CSS engine", () => {
     // The 100% keyframe repeats frame 0 to close the loop.
     assert.deepEqual(css_frames, [...js_frames, js_frames[0]]);
 });
+
+run_test("pear work trace expands in the message scroll flow", () => {
+    const fs = require("node:fs");
+    const path = require("node:path");
+    const css = fs.readFileSync(path.resolve(__dirname, "../styles/message_row.css"), "utf8");
+    const trace_block = /\.pear-run-trace \{([^]*?)\n\s*\}\n\n\s*\.pear-tool-spoiler-block/.exec(
+        css,
+    );
+    assert.ok(trace_block, "pear-run-trace styles must exist in message_row.css");
+    assert.doesNotMatch(trace_block[1], /max-height|overflow|scrollbar-gutter/);
+});

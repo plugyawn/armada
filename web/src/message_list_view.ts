@@ -1082,7 +1082,7 @@ export function pear_trace_trigger_label_for_testing(
             return $t({defaultMessage: "Hide work while loading"});
         }
         if (request_state === "failed") {
-            return $t({defaultMessage: "Hide failed work"});
+            return $t({defaultMessage: "Retry loading work"});
         }
         return $t({defaultMessage: "Hide work"});
     }
@@ -1090,6 +1090,16 @@ export function pear_trace_trigger_label_for_testing(
         return $t({defaultMessage: "Retry loading work"});
     }
     return loaded ? $t({defaultMessage: "Show work"}) : $t({defaultMessage: "Load work"});
+}
+
+export function pear_trace_toggle_action_for_testing(
+    expanded: boolean,
+    request_failed: boolean,
+): "expand" | "collapse" | "retry" {
+    if (!expanded) {
+        return "expand";
+    }
+    return request_failed ? "retry" : "collapse";
 }
 
 export function pear_trace_trigger_is_current_for_testing(
@@ -1181,14 +1191,30 @@ function load_pear_run_trace(state: PearTraceRequestState): void {
 }
 
 function fail_pear_run_trace(state: PearTraceRequestState): void {
+    const had_loaded_trace = state.loaded;
     state.reveal.removeAttribute("aria-busy");
     state.reveal.dataset["state"] = "failed";
-    const error = $t({defaultMessage: "Could not load work. Close and reopen to retry."});
-    state.host.textContent = error;
+    const error = had_loaded_trace
+        ? $t({defaultMessage: "Could not refresh work. Retry available."})
+        : $t({defaultMessage: "Could not load work."});
+    if (!had_loaded_trace) {
+        const error_row = document.createElementNS("http://www.w3.org/1999/xhtml", "div");
+        error_row.setAttribute("class", "pear-run-trace-error");
+        const error_text = document.createElementNS("http://www.w3.org/1999/xhtml", "span");
+        error_text.textContent = error;
+        const retry = document.createElementNS("http://www.w3.org/1999/xhtml", "button");
+        retry.setAttribute("class", "pear-run-trace-retry");
+        retry.setAttribute("type", "button");
+        retry.textContent = $t({defaultMessage: "Retry"});
+        retry.addEventListener("click", () => {
+            load_pear_run_trace(state);
+        });
+        error_row.append(error_text, retry);
+        state.host.replaceChildren(error_row);
+    }
     state.status.textContent = error;
-    state.loaded = false;
     state.in_flight = false;
-    state.dirty = false;
+    state.dirty = had_loaded_trace;
     update_pear_run_trace_triggers(state);
 }
 
@@ -1201,7 +1227,15 @@ function set_pear_run_trace_expanded(state: PearTraceRequestState, expanded: boo
 }
 
 function toggle_pear_run_trace(state: PearTraceRequestState): void {
-    if (state.expanded) {
+    const action = pear_trace_toggle_action_for_testing(
+        state.expanded,
+        state.reveal.dataset["state"] === "failed",
+    );
+    if (action === "retry") {
+        load_pear_run_trace(state);
+        return;
+    }
+    if (action === "collapse") {
         set_pear_run_trace_expanded(state, false);
         return;
     }

@@ -139,9 +139,9 @@
     );
 }
 
-/* Pear selection is a quiet adaptive wash. A hard rail reads like an active
-   run marker, while a full-grid outline creates a false bottom seam below
-   tall artifacts and pinned controls. */
+/* Pear selection is a quiet adaptive wash. A rail reads like active-run
+   state, while a full-grid outline creates a false bottom seam below tall
+   artifacts and pinned controls. */
 .selected_message .messagebox-content {
     border-radius: 0;
     outline: 0;
@@ -154,12 +154,6 @@
         ),
         transparent 5rem
     );
-    box-shadow: inset 1px 0
-        color-mix(
-            in srgb,
-            var(--color-selected-message-outline) 48%,
-            transparent
-        );
 }
 
 /* Search matches keep a warm cast (distinct from violet selection

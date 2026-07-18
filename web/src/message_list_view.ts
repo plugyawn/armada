@@ -1015,14 +1015,6 @@ export function pear_trace_event_should_load_for_testing(expanded: boolean): boo
     return expanded;
 }
 
-export function pear_trace_should_follow_tail_for_testing(
-    scroll_height: number,
-    scroll_top: number,
-    client_height: number,
-): boolean {
-    return scroll_height - scroll_top - client_height <= 24;
-}
-
 type PearTraceRequestState = {
     run_id: number;
     reveal: HTMLElement;
@@ -1032,8 +1024,48 @@ type PearTraceRequestState = {
     dirty: boolean;
     loaded: boolean;
     expanded: boolean;
-    follow_tail: boolean;
 };
+
+function pear_trace_block_signature(element: Element): string {
+    return `${element.tagName}:${(element.textContent ?? "").replaceAll(/\s+/g, " ").trim()}`;
+}
+
+export function pear_trace_duplicate_tail_count_for_testing(
+    trace_blocks: readonly string[],
+    message_blocks: readonly string[],
+): number {
+    let count = 0;
+    while (
+        count < trace_blocks.length &&
+        count < message_blocks.length &&
+        trace_blocks[trace_blocks.length - 1 - count] ===
+            message_blocks[message_blocks.length - 1 - count]
+    ) {
+        count += 1;
+    }
+    return count;
+}
+
+function remove_pear_run_trace_duplicate_tail(state: PearTraceRequestState): void {
+    const content = state.reveal.parentElement;
+    if (content === null) {
+        return;
+    }
+    const trace_blocks = [...state.host.children];
+    const message_blocks = [...content.children].filter(
+        (child) =>
+            child !== state.reveal &&
+            !child.classList.contains("pear-live-progress") &&
+            !child.classList.contains("pear-run-footer"),
+    );
+    const duplicate_count = pear_trace_duplicate_tail_count_for_testing(
+        trace_blocks.map((element) => pear_trace_block_signature(element)),
+        message_blocks.map((element) => pear_trace_block_signature(element)),
+    );
+    for (let index = 0; index < duplicate_count; index += 1) {
+        trace_blocks[trace_blocks.length - 1 - index]!.remove();
+    }
+}
 
 const pear_trace_request_states = new WeakMap<HTMLElement, PearTraceRequestState>();
 const pear_trace_trigger_controllers = new WeakMap<HTMLElement, AbortController>();
@@ -1116,8 +1148,6 @@ function load_pear_run_trace(state: PearTraceRequestState): void {
         data: {limit: 100},
         success(raw_data) {
             try {
-                const previous_scroll_top = host.scrollTop;
-                const follow_tail = state.follow_tail;
                 const rendered = pear_trace_rendered_for_testing(raw_data);
                 if (rendered === undefined) {
                     fail_pear_run_trace(state);
@@ -1126,17 +1156,10 @@ function load_pear_run_trace(state: PearTraceRequestState): void {
                 host.replaceChildren(ui_util.parse_html(rendered));
                 host.classList.add("rendered_markdown");
                 rendered_markdown.update_elements($(host));
+                remove_pear_run_trace_duplicate_tail(state);
                 const row = host.closest(".message_row");
                 if (row instanceof HTMLElement) {
                     enhance_pear_tool_rows($(row));
-                }
-                if (follow_tail) {
-                    host.scrollTop = host.scrollHeight;
-                } else {
-                    host.scrollTop = Math.min(
-                        previous_scroll_top,
-                        Math.max(0, host.scrollHeight - host.clientHeight),
-                    );
                 }
                 state.loaded = true;
                 reveal.removeAttribute("aria-busy");
@@ -1237,15 +1260,7 @@ function ensure_pear_run_trace(content: HTMLElement, run_id: number): PearTraceR
         dirty: false,
         loaded: false,
         expanded: false,
-        follow_tail: true,
     };
-    trace.addEventListener("scroll", () => {
-        state.follow_tail = pear_trace_should_follow_tail_for_testing(
-            trace.scrollHeight,
-            trace.scrollTop,
-            trace.clientHeight,
-        );
-    });
     pear_trace_request_states.set(trace, state);
     return state;
 }

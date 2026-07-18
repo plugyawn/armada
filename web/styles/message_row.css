@@ -196,6 +196,7 @@
             }
 
             .pear-tool-spoiler-block .spoiler-header {
+                box-sizing: border-box;
                 width: 100%;
                 max-width: 100%;
                 min-height: 23px;
@@ -421,7 +422,6 @@
             }
 
             .pear-live-progress:has(> .pear-live-progress-disclosure) {
-                z-index: 1;
                 isolation: isolate;
                 padding-right: 28px;
                 border-radius: var(--pear-radius-px);
@@ -432,17 +432,17 @@
                 &::before {
                     position: absolute;
                     z-index: -1;
-                    inset: -5px -7px;
-                    border-radius: calc(var(--pear-radius-px) + 5px);
+                    inset: -7px -9px;
+                    border-radius: calc(var(--pear-radius-px) + 7px);
                     background: radial-gradient(
-                        ellipse at center,
+                        ellipse at 32% 50%,
                         color-mix(
                                 in srgb,
-                                var(--pear-interaction) 9%,
+                                var(--pear-interaction) 8%,
                                 transparent
                             )
                             0%,
-                        transparent 72%
+                        transparent 76%
                     );
                     content: "";
                     opacity: 0;
@@ -455,20 +455,20 @@
                 &:has(> .pear-live-progress-disclosure[aria-expanded="true"]) {
                     background: color-mix(
                         in srgb,
-                        var(--pear-interaction) 3%,
+                        var(--pear-interaction) 4%,
                         transparent
                     );
                     box-shadow:
-                        inset 2px 0 0
+                        inset 0 0 0 1px
                             color-mix(
                                 in srgb,
-                                var(--pear-interaction) 46%,
+                                var(--pear-interaction) 14%,
                                 transparent
                             ),
-                        0 0 0 1px
+                        0 0 18px 1px
                             color-mix(
                                 in srgb,
-                                var(--pear-interaction) 10%,
+                                var(--pear-interaction) 6%,
                                 transparent
                             );
 
@@ -495,19 +495,27 @@
                 font-family: var(--pear-font-pixel);
 
                 &::after {
+                    box-sizing: border-box;
                     position: absolute;
                     top: 50%;
-                    right: 8px;
-                    content: "⌄";
-                    font-size: 13px;
+                    right: 9px;
+                    width: 7px;
+                    height: 7px;
+                    margin-top: -4px;
+                    border-top: 1.5px solid currentcolor;
+                    border-left: 1.5px solid currentcolor;
+                    content: "";
                     opacity: 0.52;
-                    transform: translateY(-50%);
-                    transition: opacity var(--pear-dur-1) var(--pear-ease);
+                    transform: translateY(-1px) rotate(45deg);
+                    transform-origin: center;
+                    transition:
+                        opacity var(--pear-dur-1) var(--pear-ease),
+                        transform var(--pear-dur-1) var(--pear-ease);
                 }
 
                 &[aria-expanded="true"]::after {
-                    content: "⌃";
                     opacity: 0.9;
+                    transform: translateY(2px) rotate(225deg);
                 }
 
                 &:focus-visible {
@@ -610,7 +618,11 @@
                 }
 
                 > p {
-                    margin-block: 0 var(--pear-space-3);
+                    margin: 0;
+                }
+
+                > .pear-tool-spoiler-block {
+                    margin: 0;
                 }
             }
 

@@ -1936,3 +1936,17 @@ run_test("pear work trace expands in the message scroll flow", () => {
     assert.match(trace_block[1], /> p \{\s*margin: 0;/);
     assert.match(trace_block[1], /> \.pear-tool-spoiler-block \{\s*margin: 0;/);
 });
+
+run_test("pear live progress glow stays feathered inside its surface", () => {
+    const fs = require("node:fs");
+    const path = require("node:path");
+    const css = fs.readFileSync(path.resolve(__dirname, "../styles/message_row.css"), "utf8");
+    const progress_block =
+        /\.pear-live-progress:has\(> \.pear-live-progress-disclosure\) \{([^]*?)\n\s*\.pear-live-progress-disclosure \{/.exec(
+            css,
+        );
+    assert.ok(progress_block, "live progress disclosure styles must exist in message_row.css");
+    assert.match(progress_block[1], /&::before \{[^]*?inset: 0;/);
+    assert.doesNotMatch(progress_block[1], /inset:\s*-\d/);
+    assert.doesNotMatch(progress_block[1], /0 0 18px 1px/);
+});

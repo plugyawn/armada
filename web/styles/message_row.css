@@ -634,6 +634,36 @@
                 > .pear-tool-spoiler-block {
                     margin: 0;
                 }
+
+                > .pear-run-trace-error {
+                    display: flex;
+                    align-items: center;
+                    justify-content: space-between;
+                    gap: var(--pear-space-2);
+                    min-width: 0;
+                }
+
+                .pear-run-trace-retry {
+                    min-height: 24px;
+                    flex: none;
+                    border: 1px solid var(--pear-hairline);
+                    border-radius: var(--pear-radius-chip);
+                    background: transparent;
+                    padding: 2px 8px;
+                    color: var(--pear-interaction);
+                    font: inherit;
+                    cursor: pointer;
+
+                    &:hover {
+                        background: var(--pear-interaction-fill);
+                        color: var(--pear-ink-1);
+                    }
+
+                    &:focus-visible {
+                        outline: none;
+                        box-shadow: inset 0 0 0 2px var(--pear-interaction);
+                    }
+                }
             }
 
             .pear-tool-spoiler-block:has(.spoiler-content-open)

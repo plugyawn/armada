@@ -171,7 +171,7 @@ run_test(
         );
         assert.equal(
             message_list_view.pear_trace_trigger_label_for_testing(true, false, "failed"),
-            "translated: Hide failed work",
+            "translated: Retry loading work",
         );
         assert.equal(
             message_list_view.pear_trace_trigger_label_for_testing(false, false, "failed"),
@@ -179,6 +179,12 @@ run_test(
         );
     },
 );
+
+run_test("pear trace retries failed open requests without a collapse round trip", () => {
+    assert.equal(message_list_view.pear_trace_toggle_action_for_testing(false, false), "expand");
+    assert.equal(message_list_view.pear_trace_toggle_action_for_testing(true, false), "collapse");
+    assert.equal(message_list_view.pear_trace_toggle_action_for_testing(true, true), "retry");
+});
 
 run_test("pear trace rewires stale controls and keeps row clicks intentional", () => {
     assert.equal(

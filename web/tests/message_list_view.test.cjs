@@ -133,16 +133,32 @@ run_test("pear trace refreshes when reopened after collapsed events", () => {
     assert.equal(message_list_view.pear_trace_event_should_load_for_testing(true), true);
 });
 
-run_test("pear trace rejects malformed payloads and follows only the live tail", () => {
+run_test("pear trace rejects malformed payloads and removes the visible answer tail", () => {
     assert.equal(message_list_view.pear_trace_rendered_for_testing({trace: []}), undefined);
     assert.equal(
         message_list_view.pear_trace_rendered_for_testing({rendered: "<p>Ready</p>", trace: []}),
         "<p>Ready</p>",
     );
-    assert.equal(message_list_view.pear_trace_should_follow_tail_for_testing(1000, 480, 500), true);
     assert.equal(
-        message_list_view.pear_trace_should_follow_tail_for_testing(1000, 300, 500),
-        false,
+        message_list_view.pear_trace_duplicate_tail_count_for_testing(
+            ["P:Earlier update", "DIV:Ran 2 tools", "P:Current answer"],
+            ["P:Current answer"],
+        ),
+        1,
+    );
+    assert.equal(
+        message_list_view.pear_trace_duplicate_tail_count_for_testing(
+            ["P:Earlier update", "P:Answer line one", "P:Answer line two"],
+            ["P:Answer line one", "P:Answer line two"],
+        ),
+        2,
+    );
+    assert.equal(
+        message_list_view.pear_trace_duplicate_tail_count_for_testing(
+            ["P:Earlier update"],
+            ["P:Current answer"],
+        ),
+        0,
     );
 });
 
@@ -1917,4 +1933,6 @@ run_test("pear work trace expands in the message scroll flow", () => {
     );
     assert.ok(trace_block, "pear-run-trace styles must exist in message_row.css");
     assert.doesNotMatch(trace_block[1], /max-height|overflow|scrollbar-gutter/);
+    assert.match(trace_block[1], /> p \{\s*margin: 0;/);
+    assert.match(trace_block[1], /> \.pear-tool-spoiler-block \{\s*margin: 0;/);
 });

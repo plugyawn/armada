@@ -2959,8 +2959,11 @@
 }
 
 .pear-artifact-utility {
-    min-height: 26px;
-    padding: 1px var(--pear-space-2);
+    display: inline-grid;
+    width: 28px;
+    min-height: 28px;
+    place-items: center;
+    padding: 0;
     border-color: color-mix(
         in srgb,
         var(--pear-interaction) 28%,
@@ -2971,11 +2974,17 @@
         var(--pear-interaction-fill) 72%,
         transparent
     );
-    font-family: var(--pear-font-pixel);
-    font-size: 12px;
-    font-synthesis: none;
-    font-weight: 400;
+    font-size: 16px;
     line-height: 1;
+
+    &[aria-expanded="true"] {
+        background: var(--pear-interaction-fill-strong);
+    }
+
+    .zulip-icon {
+        display: block;
+        line-height: 1;
+    }
 }
 
 .pear-artifact-action-spacer {

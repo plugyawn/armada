@@ -2959,6 +2959,7 @@
 }
 
 .pear-artifact-utility {
+    box-sizing: border-box;
     display: inline-grid;
     width: 28px;
     min-height: 28px;

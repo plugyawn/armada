@@ -1031,6 +1031,7 @@ class PearCodexAppServerToolRunner:
         self.model = model
         self.sandbox = sandbox
         self.approval_policy = approval_policy
+        # This is a maximum silence window, not a total turn-duration cap.
         self.timeout_seconds = timeout_seconds
         self.output_limit = output_limit
         self.service_tier = service_tier

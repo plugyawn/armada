@@ -776,6 +776,15 @@ def send_web_reload_client_events(immediate: bool = False, count: int | None = N
     return len(queue_ids)
 
 
+def reload_clients_immediately_after_restart() -> bool:
+    # Normal Zulip production deployments stagger browser reloads to protect
+    # large installations from a synchronized reconnect.  Pear deployments
+    # are intentionally small pre-release instances, where leaving an open tab
+    # on a superseded hashed bundle is both more disruptive and more confusing.
+    # The existing immediate reload path preserves compose and scroll state.
+    return settings.DEVELOPMENT or settings.PEAR_WORKER_AGENT_RUNTIME != "disabled"
+
+
 async def setup_event_queue(
     server: tornado.httpserver.HTTPServer, port: int, send_reloads: bool = True
 ) -> None:
@@ -792,7 +801,7 @@ async def setup_event_queue(
 
     send_restart_events()
     if send_reloads:
-        send_web_reload_client_events(immediate=settings.DEVELOPMENT)
+        send_web_reload_client_events(immediate=reload_clients_immediately_after_restart())
 
 
 def fetch_events(

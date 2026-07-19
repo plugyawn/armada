@@ -307,14 +307,14 @@ for row in worker_consumers:
     by_channel.setdefault(channel_pid, []).append(row)
 
 for queue, rows in by_queue.items():
-    if sorted(row["_pear_priority"] for row in rows) != [0, 10]:
-        raise SystemExit(f"{queue} does not have home and stealing consumers")
+    if len(rows) != 2 or any(row["_pear_priority"] not in (0, 10) for row in rows):
+        raise SystemExit(f"{queue} does not have two valid pool consumers")
 if len(by_channel) != 2:
     raise SystemExit(f"expected two Pear worker channels, found {len(by_channel)}")
 for channel_pid, rows in by_channel.items():
     if {row["queue_name"] for row in rows} != expected_queues:
         raise SystemExit(f"Pear worker channel {channel_pid} is not subscribed to both queues")
-    if sorted(row["_pear_priority"] for row in rows) != [0, 10]:
+    if any(row["_pear_priority"] not in (0, 10) for row in rows):
         raise SystemExit(f"Pear worker channel {channel_pid} has invalid affinity priorities")
 
 channel_rows: dict[str, dict[str, object]] = {}

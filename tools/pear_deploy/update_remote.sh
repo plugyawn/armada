@@ -1485,6 +1485,12 @@ if [[ "$SITE_CODE" != "200" ]]; then
 fi
 verify_remote_production_assets
 
+echo "Preparing pinned Node dependencies for the backend test database..."
+if ! ssh_zulip_clean "test -x node_modules/jdenticon/bin/jdenticon.js"; then
+    ssh_zulip_clean "/usr/local/bin/corepack pnpm install --frozen-lockfile --prefer-offline"
+fi
+ssh_zulip_clean "test -x node_modules/jdenticon/bin/jdenticon.js"
+
 echo "Running Pear backend tests on the box..."
 ssh_zulip_clean "./tools/test-backend \
     zerver.tests.test_pear \

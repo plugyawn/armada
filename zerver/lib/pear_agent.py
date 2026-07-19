@@ -943,6 +943,7 @@ class PearCodexAppServerTranscriptTranslator:
         self.last_rate_limit_key: tuple[object, ...] | None = None
         self.reported_unknown_methods: set[str] = set()
         self.thread_descriptors: dict[str, dict[str, Any]] = {}
+        self.latest_direct_assistant_body: dict[str, str] = {}
 
     def collaboration_thread_events(
         self, method: str, params: dict[str, Any], item: dict[str, Any]
@@ -1016,12 +1017,15 @@ class PearCodexAppServerTranscriptTranslator:
                 events.append(pear_thread_session_event(descriptor, codex_method=method))
             message = raw_state.get("message")
             if isinstance(message, str) and message.strip():
+                normalized_message = trim_pear_agent_text(message, limit=4000)
+                if self.latest_direct_assistant_body.get(thread_id) == normalized_message:
+                    continue
                 events.append(
                     {
                         "kind": "error" if status_type == "failed" else "assistant",
                         "status": "failed" if status_type == "failed" else "done",
                         "title": "Agent failed." if status_type == "failed" else "Agent reply",
-                        "body": trim_pear_agent_text(message, limit=4000),
+                        "body": normalized_message,
                         "metadata": {
                             "codex_method": method,
                             "codex_thread_id": thread_id,
@@ -1306,6 +1310,18 @@ class PearCodexAppServerTranscriptTranslator:
             method=method,
             params=params,
         )
+        thread_id = params.get("threadId")
+        if (
+            method == "item/completed"
+            and isinstance(thread_id, str)
+            and thread_id in self.thread_descriptors
+        ):
+            for event in item_events:
+                body = event.get("body")
+                if event.get("kind") == "assistant" and isinstance(body, str) and body.strip():
+                    self.latest_direct_assistant_body[thread_id] = trim_pear_agent_text(
+                        body, limit=4000
+                    )
         return [*collaboration_events, *item_events]
 
 

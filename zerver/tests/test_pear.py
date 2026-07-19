@@ -6446,6 +6446,47 @@ class PearAppServerProtocolCitizenTest(TestCase):
         self.assertEqual(child_reply["metadata"]["codex_thread_id"], "child-1")
         self.assertEqual(waited["title"], "Waited for agents")
 
+        direct_reply = translator.events_from_message(
+            {
+                "method": "item/completed",
+                "params": {
+                    "threadId": "child-1",
+                    "turnId": "child-turn-1",
+                    "item": {
+                        "id": "child-message-1",
+                        "type": "agentMessage",
+                        "text": "A newer direct reply",
+                    },
+                },
+            }
+        )
+        self.assertEqual(direct_reply[0]["body"], "A newer direct reply")
+
+        [deduped_wait] = translator.events_from_message(
+            {
+                "method": "item/completed",
+                "params": {
+                    "threadId": "root-1",
+                    "turnId": "turn-1",
+                    "item": {
+                        "id": "collab-2b",
+                        "type": "collabAgentToolCall",
+                        "tool": "wait",
+                        "senderThreadId": "root-1",
+                        "receiverThreadIds": ["child-1"],
+                        "agentsStates": {
+                            "child-1": {
+                                "status": "completed",
+                                "message": "A newer direct reply",
+                            }
+                        },
+                        "status": "completed",
+                    },
+                },
+            }
+        )
+        self.assertEqual(deduped_wait["title"], "Waited for agents")
+
         failed_session, child_error, _waited = translator.events_from_message(
             {
                 "method": "item/completed",

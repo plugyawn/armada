@@ -1525,25 +1525,41 @@ class PearCodexAppServerToolRunner:
 
     def context_for_params_locked(self, params: dict[str, Any]) -> PearAppServerTurnContext | None:
         turn_id = params.get("turnId")
+        turn_context = None
         if isinstance(turn_id, str):
-            context = self.turn_contexts_by_turn_id.get(turn_id)
-            if context is not None:
-                return context
+            turn_context = self.turn_contexts_by_turn_id.get(turn_id)
         thread_id = params.get("threadId")
+        thread_context = None
         if isinstance(thread_id, str):
-            return self.context_for_thread_locked(thread_id)
-        return next(
-            (context for context in self.turn_contexts_by_thread_id.values() if context.is_main),
-            None,
-        )
+            thread_context = self.context_for_thread_locked(thread_id)
+        if (
+            turn_context is not None
+            and thread_context is not None
+            and turn_context is not thread_context
+        ):
+            # Never let one request combine the ownership of two live turns.
+            return None
+        context = turn_context or thread_context
+        if context is not None:
+            return context
+        active_contexts = list(self.turn_contexts_by_thread_id.values())
+        # Older app-server methods can omit ownership fields. That fallback is
+        # safe only when there is exactly one possible turn; choosing the main
+        # context during a concurrent /btw turn would cross-contaminate input,
+        # artifacts, callbacks, and accounting.
+        return active_contexts[0] if len(active_contexts) == 1 else None
 
-    def dispatch_message(self, message: dict[str, Any]) -> None:
-        server_request = (
+    @staticmethod
+    def is_server_request(message: dict[str, Any]) -> bool:
+        return (
             "id" in message
             and "method" in message
             and "result" not in message
             and "error" not in message
         )
+
+    def dispatch_message(self, message: dict[str, Any]) -> None:
+        server_request = self.is_server_request(message)
         server_request_context: PearAppServerTurnContext | None = None
         if server_request:
             raw_params = message.get("params")
@@ -2518,6 +2534,14 @@ class PearCodexAppServerToolRunner:
                 if event_callback is not None:
                     for event in events:
                         event_callback(event)
+                if self.is_server_request(message):
+                    # Server-request events are human-facing results for an
+                    # interaction that the app-server also reports through its
+                    # normal item lifecycle. The legacy synchronous path below
+                    # returns early after handle_server_request for the same
+                    # reason: keep the event visible without double-accounting
+                    # it as a completed command/file/tool action.
+                    continue
             else:
                 message = self.next_message(self.timeout_seconds)
                 if message is None:

@@ -1065,6 +1065,7 @@ def do_update_message(
         event["propagate_mode"] = message_edit_request.propagate_mode
 
     users_losing_access = UserProfile.objects.none()
+    users_losing_usermessages = UserProfile.objects.none()
     user_ids_gaining_usermessages: list[int] = []
     if message_edit_request.is_stream_edited:
         new_stream = message_edit_request.target_stream

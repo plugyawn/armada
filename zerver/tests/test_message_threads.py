@@ -1,4 +1,5 @@
 import orjson
+from django.test import override_settings
 
 from zerver.actions.message_edit import maybe_delete_previous_resolve_topic_notification
 from zerver.lib.bot_lib import EmbeddedBotHandler
@@ -419,6 +420,7 @@ class MessageThreadTest(ZulipTestCase):
             user_profile=hamlet,
             full_name="History Bot",
             bot_type=UserProfile.EMBEDDED_BOT,
+            service_name="helloworld",
         )
         stream_name = "protected-thread-bot-join"
         self.make_stream(
@@ -454,6 +456,7 @@ class MessageThreadTest(ZulipTestCase):
             root_message_id,
         )
 
+    @override_settings(RESOLVE_TOPIC_UNDO_GRACE_PERIOD_SECONDS=60)
     def test_resolve_notification_undo_ignores_newer_reply(self) -> None:
         hamlet = self.example_user("hamlet")
         stream_name, _root_message_id = self._thread_message([hamlet])
@@ -667,7 +670,12 @@ class MessageThreadTest(ZulipTestCase):
 
     def test_embedded_service_bot_can_reply_in_direct_message_thread(self) -> None:
         hamlet = self.example_user("hamlet")
-        bot = self.create_test_bot(short_name="dmthreadbot", user_profile=hamlet)
+        bot = self.create_test_bot(
+            short_name="dmthreadbot",
+            user_profile=hamlet,
+            bot_type=UserProfile.EMBEDDED_BOT,
+            service_name="helloworld",
+        )
         root_message_id = self.send_personal_message(hamlet, bot, "direct root")
         self.assertFalse(
             UserMessage.objects.filter(

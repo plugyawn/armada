@@ -1295,51 +1295,11 @@ fi
 if [[ "$PREV_SHA" != "$LOCAL_SHA" ]]; then
     echo
     echo "Deploy delta:"
-    git -C "$REPO_ROOT" diff --stat "$PREV_SHA..$LOCAL_SHA" -- \
-        zproject/default_settings.py \
-        zproject/urls.py \
-        zerver/actions/message_threads.py \
-        zerver/actions/message_edit.py \
-        zerver/actions/message_send.py \
-        zerver/lib/bot_lib.py \
-        zerver/lib/event_schema.py \
-        zerver/lib/event_types.py \
-        zerver/lib/message_cache.py \
-        zerver/lib/message_threads.py \
-        zerver/lib/pear.py \
-        zerver/lib/pear_gate.py \
-        zerver/lib/pear_agent.py \
-        zerver/lib/pear_agent_threads.py \
-        zerver/lib/pear_artifact.py \
-        zerver/lib/pear_artifact_contract.py \
-        zerver/lib/pear_worker.py \
-        zerver/lib/pear_workspace_index.py \
-        zerver/lib/pear_workspace_io.py \
-        zerver/lib/pear_workspace_resources.py \
-        zerver/worker/pear_worker.py \
-        zerver/worker/pear_addressing.py \
-        zerver/worker/pear_presentation.py \
-        zerver/views/pear.py \
-        zerver/views/pear_workspace.py \
-        zerver/views/message_threads.py \
-        zerver/views/users.py \
-        zerver/models/__init__.py \
-        zerver/models/bots.py \
-        zerver/models/messages.py \
-        zerver/openapi/zulip.yaml \
-        zerver/migrations \
-        zerver/tests/test_service_bot_system.py \
-        zerver/tests/test_pear.py \
-        zerver/tests/test_pear_artifact.py \
-        zerver/tests/test_pear_generated_vector.py \
-        zerver/tests/test_pear_endpoint.py \
-        zerver/tests/test_message_threads.py \
-        web/src \
-        web/styles \
-        web/templates \
-        web/tests \
-        tools/pear-health-report \
-        tools/pear_deploy || true
+    # The rsync below deploys the complete tracked checkout, so the review
+    # surface must show the complete tracked delta as well.  A hand-maintained
+    # path allowlist can silently omit a newly touched lifecycle file from the
+    # operator's preflight even though rsync will still install it.
+    git -C "$REPO_ROOT" diff --stat "$PREV_SHA..$LOCAL_SHA" || true
 else
     echo "Deploy delta: remote already has this HEAD."
 fi

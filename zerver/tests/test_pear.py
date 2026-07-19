@@ -7040,6 +7040,19 @@ class PearAppServerProtocolCitizenTest(TestCase):
         runner.bind_turn_context(root_context, "root-turn-1")
         runner.register_turn_context(side_context)
         runner.bind_turn_context(side_context, "side-turn-1")
+        with runner.state_lock:
+            self.assertIsNone(runner.context_for_params_locked({}))
+            self.assertIs(
+                runner.context_for_params_locked({"threadId": "root-1", "turnId": "root-turn-1"}),
+                root_context,
+            )
+            self.assertIs(
+                runner.context_for_params_locked({"threadId": "side-1", "turnId": "side-turn-1"}),
+                side_context,
+            )
+            self.assertIsNone(
+                runner.context_for_params_locked({"threadId": "root-1", "turnId": "side-turn-1"})
+            )
         results: dict[str, tuple[str, int, int, int]] = {}
 
         def wait(name: str, context: PearAppServerTurnContext) -> None:
@@ -7152,6 +7165,18 @@ class PearAppServerProtocolCitizenTest(TestCase):
         )
         self.assertEqual(root_questions[0][0]["id"], "root-question")
         self.assertEqual(side_questions[0][0]["id"], "side-question")
+        root_tool_events = [event for event in root_events if event.get("kind") == "tool"]
+        side_tool_events = [event for event in side_events if event.get("kind") == "tool"]
+        self.assertEqual([event.get("title") for event in root_tool_events], ["Artifact ready."])
+        self.assertEqual([event.get("title") for event in side_tool_events], ["Artifact ready."])
+        self.assertEqual(
+            [event.get("metadata", {}).get("codex_thread_id") for event in root_tool_events],
+            ["root-1"],
+        )
+        self.assertEqual(
+            [event.get("metadata", {}).get("codex_thread_id") for event in side_tool_events],
+            ["side-1"],
+        )
         self.assertNotIn("Side-only answer", [event.get("body") for event in root_events])
         self.assertNotIn("Root-only answer", [event.get("body") for event in side_events])
 

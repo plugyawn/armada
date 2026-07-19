@@ -1,5 +1,6 @@
 import os
 from collections.abc import Callable, Mapping
+from copy import deepcopy
 from typing import Any
 from unittest.mock import MagicMock, patch
 
@@ -183,6 +184,30 @@ class OpenAPIToolsTest(ZulipTestCase):
                         "application/json"
                     ]["schema"]
                 )
+
+    def test_get_messages_accepts_thread_metadata(self) -> None:
+        content = deepcopy(get_openapi_fixture("/messages", "get")[0]["value"])
+        root_message, reply_message = content["messages"][:2]
+        root_message["reply_summary"] = {
+            "reply_count": 1,
+            "last_reply_at": reply_message["timestamp"],
+            "unread_reply_count": 1,
+            "last_sender": {
+                "user_id": reply_message["sender_id"],
+                "full_name": reply_message["sender_full_name"],
+                "avatar_url": reply_message["avatar_url"],
+            },
+            "participants": [
+                {
+                    "user_id": reply_message["sender_id"],
+                    "full_name": reply_message["sender_full_name"],
+                    "avatar_url": reply_message["avatar_url"],
+                }
+            ],
+        }
+        reply_message["thread_root_message_id"] = root_message["id"]
+
+        self.assertTrue(validate_against_openapi_schema(content, "/messages", "get", "200"))
 
     def test_live_reload(self) -> None:
         # Force the reload by making the last update date < the file's last

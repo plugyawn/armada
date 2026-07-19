@@ -32,7 +32,6 @@ from zerver.lib.pear import (
     PEAR_REASONING_EFFORTS,
     PEAR_SELECTED_BOT_CONFIG_KEY,
     PEAR_SELECTED_BOT_CONFIG_VALUE,
-    PEAR_SIDE_ENDPOINT,
     PearConfigPayload,
     PearEmbeddedBotHandler,
     PearTokenUsage,
@@ -68,7 +67,6 @@ from zerver.lib.pear_presentation import pear_presentation_current_step
 from zerver.lib.pear_worker import (
     PearDatabaseWorkerRunStore,
     PearQueueWorkerDispatcher,
-    ensure_pear_child_workspace_node,
     ensure_pear_workspace_node,
     mark_pear_run_attended,
     maybe_enqueue_pear_run_presentation,
@@ -2026,156 +2024,6 @@ def post_pear_run_resume_backend(
     )
 
 
-@typed_endpoint
-def post_pear_side_backend(
-    request: HttpRequest,
-    user_profile: UserProfile,
-    *,
-    side_request: Annotated[
-        str,
-        ApiParamConfig("request", documentation_status=INTENTIONALLY_UNDOCUMENTED),
-    ],
-    stream_name: Annotated[
-        str | None,
-        ApiParamConfig("stream", documentation_status=INTENTIONALLY_UNDOCUMENTED),
-    ] = None,
-    topic_name: Annotated[
-        str | None,
-        ApiParamConfig("topic", documentation_status=INTENTIONALLY_UNDOCUMENTED),
-    ] = None,
-    source_message_id: Annotated[
-        Json[int] | None,
-        ApiParamConfig("message_id", documentation_status=INTENTIONALLY_UNDOCUMENTED),
-    ] = None,
-) -> HttpResponse:
-    side_request = side_request.strip()
-    if not side_request:
-        raise JsonableError(_("Pear side request cannot be empty."))
-    if stream_name is not None:
-        access_stream_by_name(user_profile, stream_name)
-
-    pear_bot = get_selected_pear_bot(user_profile)
-    if pear_bot is None:
-        raise JsonableError(_("Pear bot is not configured."))
-
-    source_label = (
-        f"{stream_name} > {topic_name}"
-        if stream_name is not None and topic_name is not None
-        else "current Zulip context"
-    )
-    dm_intro = "\n".join(
-        [
-            "Pear side session started.",
-            "",
-            f"Source: {source_label}",
-            f"Task: {side_request}",
-        ]
-    )
-    dm_message_id = internal_send_private_message(
-        pear_bot.user_profile,
-        user_profile,
-        dm_intro,
-        disable_external_notifications=True,
-    )
-    if dm_message_id is None:
-        raise JsonableError(_("Pear could not open a side DM."))
-
-    side_context_stream = "direct messages"
-    side_context_topic = f"side/{dm_message_id}"
-    side_workspace = ensure_pear_child_workspace_node(
-        pear_bot.user_profile,
-        stream=side_context_stream,
-        topic=side_context_topic,
-        parent_stream=stream_name or "",
-        parent_topic=topic_name or "",
-    )
-
-    run = PearWorkerRun.objects.create(
-        realm=user_profile.realm,
-        bot_profile=pear_bot.user_profile,
-        requesting_user=user_profile,
-        trigger_message_id=dm_message_id,
-        stream_name=side_context_stream,
-        topic_name=side_context_topic,
-        workspace_node=side_workspace,
-        session_kind=PearWorkerRun.SIDE,
-        source_stream_name=stream_name or "",
-        source_topic_name=topic_name or "",
-        source_message_id=source_message_id,
-        status=PearWorkerRun.QUEUED,
-        summary="Queued side session.",
-        current_activity=side_request,
-        runtime_label=str(settings.PEAR_WORKER_AGENT_RUNTIME or ""),
-        model=pear_worker_model_for_topic(
-            pear_bot.user_profile,
-            stream=side_context_stream,
-            topic=side_context_topic,
-        ),
-        sandbox=pear_worker_sandbox_for_topic(
-            pear_bot.user_profile,
-            stream=side_context_stream,
-            topic=side_context_topic,
-        ),
-        approval_policy=str(settings.PEAR_WORKER_APPROVAL_POLICY or ""),
-        workdir=pear_worker_workdir_for_topic(
-            pear_bot.user_profile,
-            stream=side_context_stream,
-            topic=side_context_topic,
-        ),
-    )
-    PearWorkerRunEvent.objects.create(
-        run=run,
-        event_type="queued",
-        summary="Queued private Pear side session.",
-        payload={
-            "source_stream": stream_name,
-            "source_topic": topic_name,
-            "source_message_id": source_message_id,
-        },
-    )
-
-    worker_message = {
-        "id": dm_message_id,
-        "type": "private",
-        "display_recipient": [
-            {
-                "id": user_profile.id,
-                "email": user_profile.email,
-                "full_name": user_profile.full_name,
-            }
-        ],
-        "sender_id": user_profile.id,
-        "sender_email": user_profile.email,
-        "content": side_request,
-    }
-    PearQueueWorkerDispatcher().dispatch(
-        PearEmbeddedBotHandler(),
-        SimpleNamespace(user_profile=pear_bot.user_profile),
-        worker_message,
-        content=side_request,
-        active_session=None,
-        message_id=dm_message_id,
-        stream=side_context_stream,
-        topic=side_context_topic,
-        requesting_user_id=user_profile.id,
-        session_kind=PearWorkerRun.SIDE,
-        source_stream=stream_name or "",
-        source_topic=topic_name or "",
-        source_message_id=source_message_id,
-        progress_message_id=dm_message_id,
-    )
-
-    return json_success(
-        request,
-        data={
-            "pear_run": serialize_pear_worker_run(run, include_events=True),
-            "dm_message_id": dm_message_id,
-            "dm_narrow_url": f"/#narrow/dm/{pear_bot.user_profile_id}",
-            "side_endpoint": PEAR_SIDE_ENDPOINT,
-        },
-    )
-
-
 def _dispatch_pear_monitor_run(
     user_profile: UserProfile,
     pear_bot: Service,
@@ -2261,7 +2109,7 @@ def _dispatch_pear_monitor_run(
         "content": task,
     }
     PearQueueWorkerDispatcher().dispatch(
-        PearEmbeddedBotHandler(),
+        PearEmbeddedBotHandler(worker_run_store=PearDatabaseWorkerRunStore()),
         SimpleNamespace(user_profile=pear_bot.user_profile),
         worker_message,
         content=task,

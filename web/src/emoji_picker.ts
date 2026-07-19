@@ -18,6 +18,7 @@ import * as emoji from "./emoji.ts";
 import type {EmojiDict} from "./emoji.ts";
 import {$t} from "./i18n.ts";
 import * as keydown_util from "./keydown_util.ts";
+import * as message_lists from "./message_lists.ts";
 import * as message_store from "./message_store.ts";
 import {page_params} from "./page_params.ts";
 import * as popover_menus from "./popover_menus.ts";
@@ -1003,21 +1004,23 @@ function register_click_handlers(): void {
         session_manager.start_picker_for_compose_icon(this);
     });
 
-    $("#main_div").on(
-        "click",
-        ".emoji-message-control-button-container",
-        function (this: HTMLElement, e): void {
-            e.stopPropagation();
+    message_lists
+        .get_rendered_message_interaction_root()
+        .on(
+            "click",
+            ".emoji-message-control-button-container",
+            function (this: HTMLElement, e): void {
+                e.stopPropagation();
 
-            if (page_params.is_spectator) {
-                spectators.login_to_access();
-                return;
-            }
+                if (page_params.is_spectator) {
+                    spectators.login_to_access();
+                    return;
+                }
 
-            const message_id = rows.get_message_id(this);
-            start_picker_for_message_reaction(this, message_id);
-        },
-    );
+                const message_id = rows.get_message_id(this);
+                start_picker_for_message_reaction(this, message_id);
+            },
+        );
 
     $("body").on("click", ".emoji-popover-tab-item", function (this: HTMLElement, e): void {
         e.stopPropagation();

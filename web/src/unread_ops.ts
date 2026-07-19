@@ -15,9 +15,11 @@ import * as feedback_widget from "./feedback_widget.ts";
 import {Filter} from "./filter.ts";
 import {$t, $t_html} from "./i18n.ts";
 import * as message_flags from "./message_flags.ts";
+import type {MessageList} from "./message_list.ts";
 import * as message_lists from "./message_lists.ts";
 import type {Message} from "./message_store.ts";
 import * as message_store from "./message_store.ts";
+import * as message_thread_hooks from "./message_thread_hooks.ts";
 import * as message_viewport from "./message_viewport.ts";
 import * as modals from "./modals.ts";
 import * as overlays from "./overlays.ts";
@@ -196,6 +198,7 @@ function bulk_update_read_flags_for_narrow(
         num_after?: number;
     } = {},
     caller_modal_id?: string,
+    on_complete?: () => void,
 ): void {
     const terms_with_integer_channel_id = narrow.map((term) => {
         if (term.operator === "channel") {
@@ -240,6 +243,7 @@ function bulk_update_read_flags_for_narrow(
                         num_after: FOLLOWUP_BATCH_SIZE,
                     },
                     caller_modal_id,
+                    on_complete,
                 );
             } else {
                 show_read_flag_update_success_banner(operation, messages_read_till_now);
@@ -261,6 +265,7 @@ function bulk_update_read_flags_for_narrow(
                 if (caller_modal_id) {
                     modals.close_if_open(caller_modal_id);
                 }
+                on_complete?.();
 
                 // We just marked all the messages in this narrow as read.
                 // Hide the unread banner and resume reading if possible.
@@ -314,6 +319,7 @@ function bulk_update_read_flags_for_narrow(
                             num_after,
                         },
                         caller_modal_id,
+                        on_complete,
                     );
                 }, milliseconds_to_wait);
             } else {
@@ -365,13 +371,16 @@ function process_newly_read_message(
     recent_view_ui.update_topic_unread_count(message);
 }
 
-export function mark_as_unread_from_here(message_id: number): void {
-    assert(message_lists.current !== undefined);
-    const current_filter = message_lists.current.data.filter;
+export function mark_as_unread_from_here(
+    message_id: number,
+    message_list: MessageList = message_lists.current!,
+): void {
+    assert(message_list !== undefined);
+    const current_filter = message_list.data.filter;
     const narrow = current_filter.get_stringified_narrow_for_server_query();
-    message_lists.current.prevent_reading();
+    message_list.prevent_reading();
 
-    const has_found_newest = message_lists.current.data.fetch_status.has_found_newest();
+    const has_found_newest = message_list.data.fetch_status.has_found_newest();
     const may_contain_multiple_conversations = current_filter.may_contain_multiple_conversations();
 
     // If we are certain we have all messages below the current point,
@@ -385,7 +394,7 @@ export function mark_as_unread_from_here(message_id: number): void {
     const likely_offline = watchdog.suspects_user_is_offline();
     const prefer_local_ids = has_found_newest || watchdog.suspects_user_is_offline();
 
-    const locally_available_matching_message_ids = message_lists.current
+    const locally_available_matching_message_ids = message_list
         .all_messages()
         .filter((msg) => msg.id >= message_id && !msg.unread)
         .map((msg) => msg.id);
@@ -810,6 +819,11 @@ export function mark_topic_as_read(stream_id: number, topic: string): void {
             {operator: "topic", operand: topic},
         ],
         "add",
+        {},
+        undefined,
+        () => {
+            message_thread_hooks.handle_topic_marked_read(stream_id, topic);
+        },
     );
 }
 

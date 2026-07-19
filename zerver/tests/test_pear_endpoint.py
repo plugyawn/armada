@@ -1,5 +1,6 @@
 import subprocess
 import tempfile
+import threading
 from datetime import timedelta
 from pathlib import Path
 from types import SimpleNamespace
@@ -12,8 +13,10 @@ from django.db import transaction
 from django.utils.timezone import now as timezone_now
 
 from zerver.actions.pear import send_pear_run_event, send_pear_workspace_changed_event
+from zerver.lib.bot_lib import EmbeddedBotHandler
 from zerver.lib.event_schema import check_pear_run_event, check_pear_workspace_changed_event
 from zerver.lib.events import fetch_initial_state_data
+from zerver.lib.message_cache import MessageDict
 from zerver.lib.pear import (
     PEAR_ACTIVE_SESSION_ENDPOINT,
     PEAR_AGENT_RUNTIME_PACKAGES,
@@ -31,9 +34,10 @@ from zerver.lib.pear import (
     PEAR_OFFICIAL_CODEX_SDK_PACKAGES,
     PEAR_RUNS_ENDPOINT,
     PEAR_SESSION_ENDPOINT,
-    PEAR_SIDE_ENDPOINT,
     PEAR_TOPIC_CONTEXT_ENDPOINT,
+    PEAR_WORKING_MESSAGE,
     PearWorkerLeaseLostError,
+    PearWorkerRuntime,
     build_pear_active_session_summary_from_messages,
     get_pear_session_payload,
     write_pear_live_run_state,
@@ -65,6 +69,7 @@ from zerver.lib.pear_worker import (
     ensure_pear_topic_workdir,
     ensure_pear_workspace_node,
     invalidate_pear_git_status_delta,
+    latest_pear_codex_run_for_topic,
     load_pear_active_session_from_zulip,
     maintain_pear_worker_run_liveness,
     maybe_refactor_pear_stream_workspaces_on_rename,
@@ -109,6 +114,7 @@ from zerver.views.pear import (
     serialize_pear_workspace_context,
     update_pear_run_control_event,
 )
+from zerver.worker import pear_worker as pear_worker_module
 
 
 class PearSessionEndpointTest(ZulipTestCase):
@@ -1764,6 +1770,410 @@ class PearSessionEndpointTest(ZulipTestCase):
 
         self.assertTrue(started)
         self.assertEqual(run.workspace_node_id, context.id)
+
+    def test_worker_run_store_starts_side_run_beside_active_shared_run(self) -> None:
+        owner = self.example_user("hamlet")
+        pear_bot = self.create_test_bot(
+            "pear",
+            owner,
+            full_name="Pear",
+            bot_type=UserProfile.EMBEDDED_BOT,
+            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+        )
+        self.subscribe(owner, PEAR_DEFAULT_STREAM)
+        self.subscribe(pear_bot, PEAR_DEFAULT_STREAM)
+        store = PearDatabaseWorkerRunStore()
+        bot_handler = SimpleNamespace(user_profile=pear_bot)
+
+        with (
+            tempfile.TemporaryDirectory() as temp_dir,
+            self.settings(
+                PEAR_TOPIC_WORKDIR_ROOT=temp_dir,
+                PEAR_WORKER_MAX_ACTIVE_RUNS_PER_REALM=4,
+                PEAR_WORKER_MAX_ACTIVE_RUNS_PER_TOPIC=1,
+            ),
+        ):
+            self.assertTrue(
+                store.start(
+                    bot_handler,
+                    9876,
+                    stream=PEAR_DEFAULT_STREAM,
+                    topic=PEAR_DEFAULT_TOPIC,
+                )
+            )
+            self.assertIsNone(
+                store.side_start_blocked_reason(
+                    bot_handler,
+                    9877,
+                    stream=PEAR_DEFAULT_STREAM,
+                    topic=PEAR_DEFAULT_TOPIC,
+                    requesting_user_id=owner.id,
+                )
+            )
+            self.assertTrue(
+                store.start_side(
+                    bot_handler,
+                    9877,
+                    stream=PEAR_DEFAULT_STREAM,
+                    topic=PEAR_DEFAULT_TOPIC,
+                    requesting_user_id=owner.id,
+                    source_message_id=9876,
+                )
+            )
+
+        shared_run = PearWorkerRun.objects.get(trigger_message_id=9876)
+        side_run = PearWorkerRun.objects.get(trigger_message_id=9877)
+        self.assertEqual(side_run.session_kind, PearWorkerRun.SIDE)
+        self.assertEqual(side_run.workspace_node_id, shared_run.workspace_node_id)
+        self.assertEqual(side_run.workdir, shared_run.workdir)
+        self.assertEqual(side_run.source_stream_name, PEAR_DEFAULT_STREAM)
+        self.assertEqual(side_run.source_topic_name, PEAR_DEFAULT_TOPIC)
+        self.assertEqual(side_run.source_message_id, 9876)
+        self.assertEqual(
+            store.active_worker_run_message_id(
+                bot_handler,
+                stream=PEAR_DEFAULT_STREAM,
+                topic=PEAR_DEFAULT_TOPIC,
+            ),
+            9876,
+        )
+
+    def test_shared_run_redelivery_reuses_queued_run_and_progress_message(self) -> None:
+        owner = self.example_user("hamlet")
+        pear_bot = self.create_test_bot(
+            "pear",
+            owner,
+            full_name="Pear",
+            bot_type=UserProfile.EMBEDDED_BOT,
+            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+        )
+        self.subscribe(owner, PEAR_DEFAULT_STREAM)
+        self.subscribe(pear_bot, PEAR_DEFAULT_STREAM)
+        trigger_message_id = self.send_stream_message(
+            owner,
+            PEAR_DEFAULT_STREAM,
+            topic_name="shared-redelivery",
+            content="@Pear inspect this",
+        )
+        trigger_message = Message.objects.get(id=trigger_message_id)
+        message = MessageDict.wide_dict(trigger_message)
+        store = PearDatabaseWorkerRunStore()
+        bot_handler = EmbeddedBotHandler(pear_bot)
+
+        self.assertTrue(
+            store.start(
+                bot_handler,
+                trigger_message_id,
+                stream=PEAR_DEFAULT_STREAM,
+                topic="shared-redelivery",
+            )
+        )
+        self.assertIsNone(
+            store.start_blocked_reason(
+                bot_handler,
+                trigger_message_id,
+                stream=PEAR_DEFAULT_STREAM,
+                topic="shared-redelivery",
+                requesting_user_id=owner.id,
+            )
+        )
+        # Redelivery after the durable row commit must republish this same run.
+        self.assertTrue(
+            store.start(
+                bot_handler,
+                trigger_message_id,
+                stream=PEAR_DEFAULT_STREAM,
+                topic="shared-redelivery",
+            )
+        )
+        progress_message_id = store.ensure_progress_message(
+            bot_handler,
+            trigger_message_id,
+            message=message,
+            stream=PEAR_DEFAULT_STREAM,
+            topic="shared-redelivery",
+            content=PEAR_WORKING_MESSAGE,
+        )
+        self.assertIsNotNone(progress_message_id)
+
+        # Redelivery after progress registration reuses the ordinary Message.
+        self.assertTrue(
+            store.start(
+                bot_handler,
+                trigger_message_id,
+                stream=PEAR_DEFAULT_STREAM,
+                topic="shared-redelivery",
+            )
+        )
+        self.assertEqual(
+            store.ensure_progress_message(
+                bot_handler,
+                trigger_message_id,
+                message=message,
+                stream=PEAR_DEFAULT_STREAM,
+                topic="shared-redelivery",
+                content=PEAR_WORKING_MESSAGE,
+            ),
+            progress_message_id,
+        )
+        self.assertEqual(
+            Message.objects.filter(
+                sender=pear_bot,
+                subject="shared-redelivery",
+                content=PEAR_WORKING_MESSAGE,
+            ).count(),
+            1,
+        )
+
+    def test_side_run_redelivery_reuses_queued_run_and_progress_message(self) -> None:
+        owner = self.example_user("hamlet")
+        pear_bot = self.create_test_bot(
+            "pear",
+            owner,
+            full_name="Pear",
+            bot_type=UserProfile.EMBEDDED_BOT,
+            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+        )
+        self.subscribe(owner, PEAR_DEFAULT_STREAM)
+        self.subscribe(pear_bot, PEAR_DEFAULT_STREAM)
+        root_message_id = self.send_stream_message(
+            owner,
+            PEAR_DEFAULT_STREAM,
+            topic_name="side-redelivery",
+            content="Root request",
+        )
+        trigger_message_id = self.send_stream_message(
+            owner,
+            PEAR_DEFAULT_STREAM,
+            topic_name="side-redelivery",
+            content="@Pear side question",
+        )
+        Message.objects.filter(id=trigger_message_id).update(thread_root_id=root_message_id)
+        trigger_message = Message.objects.get(id=trigger_message_id)
+        message = MessageDict.wide_dict(trigger_message)
+        store = PearDatabaseWorkerRunStore()
+        bot_handler = EmbeddedBotHandler(pear_bot)
+        self.assertTrue(
+            store.start_side(
+                bot_handler,
+                trigger_message_id,
+                stream=PEAR_DEFAULT_STREAM,
+                topic="side-redelivery",
+                requesting_user_id=owner.id,
+                source_message_id=root_message_id,
+            )
+        )
+        self.assertIsNone(
+            store.side_start_blocked_reason(
+                bot_handler,
+                trigger_message_id,
+                stream=PEAR_DEFAULT_STREAM,
+                topic="side-redelivery",
+                requesting_user_id=owner.id,
+            )
+        )
+        self.assertTrue(
+            store.start_side(
+                bot_handler,
+                trigger_message_id,
+                stream=PEAR_DEFAULT_STREAM,
+                topic="side-redelivery",
+                requesting_user_id=owner.id,
+                source_message_id=root_message_id,
+            )
+        )
+        queued_side_run = pear_worker_module.PearWorker.next_queued_side_run(
+            object.__new__(pear_worker_module.PearWorker),
+            bot_profile_id=pear_bot.id,
+            stream=PEAR_DEFAULT_STREAM,
+            topic="side-redelivery",
+        )
+        self.assertIsNotNone(queued_side_run)
+        assert queued_side_run is not None
+        self.assertIsNone(queued_side_run.result_message_id)
+        progress_message_id = store.ensure_progress_message(
+            bot_handler,
+            trigger_message_id,
+            message=message,
+            stream=PEAR_DEFAULT_STREAM,
+            topic="side-redelivery",
+            content=PEAR_WORKING_MESSAGE,
+        )
+        self.assertIsNotNone(progress_message_id)
+
+        self.assertTrue(
+            store.start_side(
+                bot_handler,
+                trigger_message_id,
+                stream=PEAR_DEFAULT_STREAM,
+                topic="side-redelivery",
+                requesting_user_id=owner.id,
+                source_message_id=root_message_id,
+            )
+        )
+        self.assertEqual(
+            store.ensure_progress_message(
+                bot_handler,
+                trigger_message_id,
+                message=message,
+                stream=PEAR_DEFAULT_STREAM,
+                topic="side-redelivery",
+                content=PEAR_WORKING_MESSAGE,
+            ),
+            progress_message_id,
+        )
+        self.assertEqual(
+            Message.objects.filter(
+                sender=pear_bot,
+                subject="side-redelivery",
+                content=PEAR_WORKING_MESSAGE,
+            ).count(),
+            1,
+        )
+
+    def test_side_parent_resolution_never_borrows_an_unrelated_topic_run(self) -> None:
+        owner = self.example_user("hamlet")
+        pear_bot = self.create_test_bot(
+            "pear",
+            owner,
+            full_name="Pear",
+            bot_type=UserProfile.EMBEDDED_BOT,
+            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+        )
+        workspace_node = PearWorkspaceNode.objects.create(
+            realm=owner.realm,
+            stream_name=PEAR_DEFAULT_STREAM,
+            topic_name="exact-side-parent",
+        )
+        parent_run = PearWorkerRun.objects.create(
+            realm=owner.realm,
+            bot_profile=pear_bot,
+            requesting_user=owner,
+            trigger_message_id=9201,
+            result_message_id=9202,
+            stream_name=PEAR_DEFAULT_STREAM,
+            topic_name="exact-side-parent",
+            workspace_node=workspace_node,
+            status=PearWorkerRun.DONE,
+            codex_thread_id="thread-parent",
+            source_stream_name=PEAR_DEFAULT_STREAM,
+            source_topic_name="exact-side-parent",
+            source_message_id=9198,
+        )
+
+        self.assertIsNone(
+            latest_pear_codex_run_for_topic(
+                pear_bot,
+                stream=PEAR_DEFAULT_STREAM,
+                topic="exact-side-parent",
+                before_message_id=9300,
+                source_message_id=9199,
+            )
+        )
+        self.assertEqual(
+            latest_pear_codex_run_for_topic(
+                pear_bot,
+                stream=PEAR_DEFAULT_STREAM,
+                topic="exact-side-parent",
+                before_message_id=9300,
+                source_message_id=parent_run.trigger_message_id,
+            ),
+            parent_run,
+        )
+        self.assertEqual(
+            latest_pear_codex_run_for_topic(
+                pear_bot,
+                stream=PEAR_DEFAULT_STREAM,
+                topic="exact-side-parent",
+                before_message_id=9300,
+                source_message_id=parent_run.source_message_id,
+            ),
+            parent_run,
+        )
+        self.assertEqual(
+            latest_pear_codex_run_for_topic(
+                pear_bot,
+                stream=PEAR_DEFAULT_STREAM,
+                topic="exact-side-parent",
+                before_message_id=9300,
+                source_message_id=parent_run.result_message_id,
+            ),
+            parent_run,
+        )
+
+    def test_side_pump_settles_result_when_queued_trigger_was_deleted(self) -> None:
+        owner = self.example_user("hamlet")
+        pear_bot = self.create_test_bot(
+            "pear-missing-side-trigger",
+            owner,
+            full_name="Pear",
+            bot_type=UserProfile.EMBEDDED_BOT,
+            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+        )
+        self.subscribe(owner, PEAR_DEFAULT_STREAM)
+        self.subscribe(pear_bot, PEAR_DEFAULT_STREAM)
+        root_message_id = self.send_stream_message(
+            pear_bot,
+            PEAR_DEFAULT_STREAM,
+            "The parent answer.",
+            topic_name=PEAR_DEFAULT_TOPIC,
+        )
+        trigger_message_id = self.send_stream_message(
+            owner,
+            PEAR_DEFAULT_STREAM,
+            "@Pear what does that mean?",
+            topic_name=PEAR_DEFAULT_TOPIC,
+        )
+        result_message_id = self.send_stream_message(
+            pear_bot,
+            PEAR_DEFAULT_STREAM,
+            PEAR_WORKING_MESSAGE,
+            topic_name=PEAR_DEFAULT_TOPIC,
+        )
+        Message.objects.filter(id__in=[trigger_message_id, result_message_id]).update(
+            thread_root_id=root_message_id
+        )
+        run = PearWorkerRun.objects.create(
+            realm=owner.realm,
+            bot_profile=pear_bot,
+            requesting_user=owner,
+            trigger_message_id=trigger_message_id,
+            result_message_id=result_message_id,
+            stream_name=PEAR_DEFAULT_STREAM,
+            topic_name=PEAR_DEFAULT_TOPIC,
+            session_kind=PearWorkerRun.SIDE,
+            source_stream_name=PEAR_DEFAULT_STREAM,
+            source_topic_name=PEAR_DEFAULT_TOPIC,
+            source_message_id=root_message_id,
+            status=PearWorkerRun.QUEUED,
+        )
+        Message.objects.filter(id=trigger_message_id).delete()
+        stop = threading.Event()
+        stop.set()
+
+        pear_worker_module.PearWorker.run_side_pump(
+            object.__new__(pear_worker_module.PearWorker),
+            stop=stop,
+            runtime=PearWorkerRuntime(),
+            bot_profile_id=pear_bot.id,
+            stream=PEAR_DEFAULT_STREAM,
+            topic=PEAR_DEFAULT_TOPIC,
+        )
+
+        run.refresh_from_db()
+        result_message = Message.objects.get(id=result_message_id)
+        self.assertEqual(run.status, PearWorkerRun.FAILED)
+        self.assertEqual(
+            run.error,
+            f"Pear side run trigger message {trigger_message_id} no longer exists.",
+        )
+        self.assertEqual(
+            result_message.content,
+            "This side conversation could not start because its request message was deleted.",
+        )
+        self.assertNotEqual(result_message.content, PEAR_WORKING_MESSAGE)
+        failure_event = PearWorkerRunEvent.objects.get(run=run, event_type="failed")
+        self.assertEqual(failure_event.payload["reason"], "missing_trigger_message")
 
     def test_topic_worker_sandbox_downgrades_full_access_to_workspace_write(self) -> None:
         owner = self.example_user("hamlet")
@@ -4781,80 +5191,6 @@ class PearSessionEndpointTest(ZulipTestCase):
         self.assertEqual(context.response_policy, "mentions_only")
         self.assertEqual(active_session_dict["active_session"]["response_policy"], "mentions_only")
 
-    def test_side_session_uses_child_context_workdir_and_parent_model(self) -> None:
-        owner = self.example_user("hamlet")
-        pear_bot = self.create_test_bot(
-            "pear",
-            owner,
-            full_name="Pear",
-            bot_type=UserProfile.EMBEDDED_BOT,
-            service_name=PEAR_EMBEDDED_BOT_SERVICE,
-        )
-        self.subscribe(owner, PEAR_DEFAULT_STREAM)
-        self.subscribe(pear_bot, PEAR_DEFAULT_STREAM)
-        self.login_user(owner)
-
-        with (
-            tempfile.TemporaryDirectory() as temp_dir,
-            self.settings(
-                PEAR_WORKER_MODEL="gpt-5.5",
-                PEAR_TOPIC_WORKDIR_ROOT=temp_dir,
-            ),
-        ):
-            model_result = self.client_post(
-                f"/json{PEAR_TOPIC_CONTEXT_ENDPOINT}",
-                {
-                    "stream": PEAR_DEFAULT_STREAM,
-                    "topic": PEAR_DEFAULT_TOPIC,
-                    "model": "gpt-5.5-mini",
-                    "reasoning_effort": "xhigh",
-                },
-                intentionally_undocumented=True,
-            )
-            self.assert_json_success(model_result)
-            parent_context = PearWorkspaceNode.objects.get(
-                realm=owner.realm,
-                stream_name=PEAR_DEFAULT_STREAM,
-                topic_name=PEAR_DEFAULT_TOPIC,
-            )
-
-            with patch("zerver.views.pear.PearQueueWorkerDispatcher.dispatch") as dispatch_mock:
-                side_result = self.client_post(
-                    f"/json{PEAR_SIDE_ENDPOINT}",
-                    {
-                        "stream": PEAR_DEFAULT_STREAM,
-                        "topic": PEAR_DEFAULT_TOPIC,
-                        "request": "check this privately",
-                    },
-                    intentionally_undocumented=True,
-                )
-
-            result_dict = self.assert_json_success(side_result)
-            run = PearWorkerRun.objects.get(id=result_dict["pear_run"]["id"])
-            side_context = PearWorkspaceNode.objects.get(
-                realm=owner.realm,
-                stream_name="direct messages",
-                topic_name=run.topic_name,
-            )
-
-            self.assertEqual(run.source_stream_name, PEAR_DEFAULT_STREAM)
-            self.assertEqual(run.source_topic_name, PEAR_DEFAULT_TOPIC)
-            self.assertTrue(run.topic_name.startswith("side/"))
-            self.assertEqual(side_context.parent_node_id, parent_context.id)
-            self.assertEqual(run.model, "gpt-5.5-mini")
-            self.assertEqual(
-                pear_worker_reasoning_effort_for_topic(
-                    pear_bot,
-                    stream="direct messages",
-                    topic=run.topic_name,
-                ),
-                "xhigh",
-            )
-            self.assertEqual(run.workdir, side_context.workdir)
-            self.assertNotEqual(run.workdir, parent_context.workdir)
-            self.assertTrue(run.workdir.startswith(temp_dir))
-            self.assertEqual(dispatch_mock.call_args.kwargs["topic"], run.topic_name)
-
     def test_get_pear_active_session_without_stream(self) -> None:
         self.login("hamlet")
 
@@ -5030,6 +5366,160 @@ class PearSessionEndpointTest(ZulipTestCase):
                 "I picked a number and retained it in the Codex thread.",
                 "The number should still be in the Codex thread.",
             ],
+        )
+
+    def test_worker_loader_keeps_child_replies_out_of_parent_prompt_delta(self) -> None:
+        owner = self.example_user("hamlet")
+        berry = self.example_user("othello")
+        pear_bot = self.create_test_bot(
+            "pear",
+            owner,
+            full_name="Pear",
+            bot_type=UserProfile.EMBEDDED_BOT,
+            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+        )
+        for user in (owner, berry, pear_bot):
+            self.subscribe(user, PEAR_DEFAULT_STREAM)
+        first_message_id = self.send_stream_message(
+            owner,
+            PEAR_DEFAULT_STREAM,
+            "@Pear inspect the parser",
+            topic_name=PEAR_DEFAULT_TOPIC,
+        )
+        PearWorkerRun.objects.create(
+            realm=owner.realm,
+            bot_profile=pear_bot,
+            requesting_user=owner,
+            trigger_message_id=first_message_id,
+            stream_name=PEAR_DEFAULT_STREAM,
+            topic_name=PEAR_DEFAULT_TOPIC,
+            status=PearWorkerRun.DONE,
+            codex_thread_id="thread-first",
+        )
+        parent_message_id = self.send_stream_message(
+            berry,
+            PEAR_DEFAULT_STREAM,
+            "The shared parser fixture changed.",
+            topic_name=PEAR_DEFAULT_TOPIC,
+        )
+        child_message_id = self.send_stream_message(
+            owner,
+            PEAR_DEFAULT_STREAM,
+            "@Pear /btw what does that mean?",
+            topic_name=PEAR_DEFAULT_TOPIC,
+        )
+        Message.objects.filter(id=child_message_id).update(thread_root_id=parent_message_id)
+        trigger_message_id = self.send_stream_message(
+            owner,
+            PEAR_DEFAULT_STREAM,
+            "@Pear continue the parent task",
+            topic_name=PEAR_DEFAULT_TOPIC,
+        )
+
+        active_session = load_pear_active_session_from_zulip(
+            {
+                "id": trigger_message_id,
+                "type": "stream",
+                "display_recipient": PEAR_DEFAULT_STREAM,
+                "topic": PEAR_DEFAULT_TOPIC,
+                "content": "@Pear continue the parent task",
+            },
+            SimpleNamespace(user_profile=pear_bot),
+        )
+
+        self.assertEqual(active_session["latest_codex_thread_id"], "thread-first")
+        self.assertEqual(
+            [message["content"] for message in active_session["recent_messages"]],
+            ["The shared parser fixture changed."],
+        )
+        self.assertIn(
+            "@Pear /btw what does that mean?",
+            [message["content"] for message in active_session["routing_messages"]],
+        )
+
+    def test_worker_loader_uses_replied_to_message_to_select_side_parent(self) -> None:
+        owner = self.example_user("hamlet")
+        pear_bot = self.create_test_bot(
+            "pear",
+            owner,
+            full_name="Pear",
+            bot_type=UserProfile.EMBEDDED_BOT,
+            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+        )
+        self.subscribe(owner, PEAR_DEFAULT_STREAM)
+        self.subscribe(pear_bot, PEAR_DEFAULT_STREAM)
+        old_trigger_message_id = self.send_stream_message(
+            owner,
+            PEAR_DEFAULT_STREAM,
+            "@Pear explain the parser",
+            topic_name=PEAR_DEFAULT_TOPIC,
+        )
+        old_result_message_id = self.send_stream_message(
+            pear_bot,
+            PEAR_DEFAULT_STREAM,
+            "The parser has two phases.",
+            topic_name=PEAR_DEFAULT_TOPIC,
+        )
+        PearWorkerRun.objects.create(
+            realm=owner.realm,
+            bot_profile=pear_bot,
+            requesting_user=owner,
+            trigger_message_id=old_trigger_message_id,
+            result_message_id=old_result_message_id,
+            stream_name=PEAR_DEFAULT_STREAM,
+            topic_name=PEAR_DEFAULT_TOPIC,
+            session_kind=PearWorkerRun.SHARED,
+            status=PearWorkerRun.DONE,
+            codex_thread_id="thread-old",
+        )
+        new_trigger_message_id = self.send_stream_message(
+            owner,
+            PEAR_DEFAULT_STREAM,
+            "@Pear inspect the renderer",
+            topic_name=PEAR_DEFAULT_TOPIC,
+        )
+        new_result_message_id = self.send_stream_message(
+            pear_bot,
+            PEAR_DEFAULT_STREAM,
+            "The renderer is healthy.",
+            topic_name=PEAR_DEFAULT_TOPIC,
+        )
+        PearWorkerRun.objects.create(
+            realm=owner.realm,
+            bot_profile=pear_bot,
+            requesting_user=owner,
+            trigger_message_id=new_trigger_message_id,
+            result_message_id=new_result_message_id,
+            stream_name=PEAR_DEFAULT_STREAM,
+            topic_name=PEAR_DEFAULT_TOPIC,
+            session_kind=PearWorkerRun.SHARED,
+            status=PearWorkerRun.DONE,
+            codex_thread_id="thread-new",
+        )
+        side_trigger_message_id = self.send_stream_message(
+            owner,
+            PEAR_DEFAULT_STREAM,
+            "@Pear what do you mean by two phases?",
+            topic_name=PEAR_DEFAULT_TOPIC,
+        )
+
+        active_session = load_pear_active_session_from_zulip(
+            {
+                "id": side_trigger_message_id,
+                "type": "stream",
+                "display_recipient": PEAR_DEFAULT_STREAM,
+                "topic": PEAR_DEFAULT_TOPIC,
+                "content": "@Pear what do you mean by two phases?",
+                "sender_full_name": owner.full_name,
+                "thread_root_message_id": old_result_message_id,
+            },
+            SimpleNamespace(user_profile=pear_bot),
+        )
+
+        self.assertEqual(active_session["latest_codex_thread_id"], "thread-old")
+        self.assertEqual(
+            active_session["latest_codex_trigger_message_id"],
+            old_trigger_message_id,
         )
 
     def test_worker_loader_preserves_empty_topic_history(self) -> None:

@@ -106,6 +106,130 @@ function test(label, f) {
     });
 }
 
+test("thread reply index tracks insert, update, delete, reify, and clear", () => {
+    const reply = (id, thread_root_message_id) => ({
+        id,
+        thread_root_message_id,
+        submessages: [],
+        locally_echoed: false,
+    });
+    message_store.update_message_cache({type: "server_message", message: reply(9, 100)});
+    message_store.update_message_cache({type: "server_message", message: reply(3, 100)});
+    message_store.update_message_cache({type: "server_message", message: reply(7, 200)});
+    assert.deepEqual(
+        message_store.get_thread_replies(100).map((message) => message.id),
+        [3, 9],
+    );
+
+    message_store.update_message_cache({type: "server_message", message: reply(3, 200)});
+    assert.deepEqual(
+        message_store.get_thread_replies(100).map((message) => message.id),
+        [9],
+    );
+    assert.deepEqual(
+        message_store.get_thread_replies(200).map((message) => message.id),
+        [3, 7],
+    );
+
+    message_store.remove([7]);
+    message_store.reify_message_id({old_id: 3, new_id: 11});
+    assert.deepEqual(
+        message_store.get_thread_replies(200).map((message) => message.id),
+        [11],
+    );
+    message_store.clear_for_testing();
+    assert.deepEqual(message_store.get_thread_replies(200), []);
+});
+
+test("thread reply lookups stay isolated across many roots", () => {
+    for (let root_id = 1; root_id <= 500; root_id += 1) {
+        message_store.update_message_cache({
+            type: "server_message",
+            message: {id: root_id * 10, thread_root_message_id: root_id, submessages: []},
+        });
+    }
+    assert.deepEqual(
+        message_store.get_thread_replies(417).map((message) => message.id),
+        [4170],
+    );
+});
+
+test("thread summary fetches cannot overwrite newer add or delete events", () => {
+    const root = {
+        id: 901,
+        reply_summary: {
+            reply_count: 2,
+            unread_reply_count: 2,
+            last_reply_at: 20,
+            participants: [],
+        },
+        submessages: [],
+    };
+    message_store.update_message_cache({type: "server_message", message: root});
+
+    const before_add = message_store.capture_thread_summary_fetch_generation();
+    message_store.mark_thread_reply_lifecycle([root.id]);
+    message_helper.process_new_server_message(
+        {
+            id: root.id,
+            reply_summary: {
+                reply_count: 2,
+                unread_reply_count: 2,
+                last_reply_at: 20,
+                participants: [],
+            },
+        },
+        {thread_summary_fetch_generation: before_add},
+    );
+    assert.equal(root.reply_summary.reply_count, 2);
+
+    const after_add = message_store.capture_thread_summary_fetch_generation();
+    message_helper.process_new_server_message(
+        {
+            id: root.id,
+            reply_summary: {
+                reply_count: 3,
+                unread_reply_count: 3,
+                last_reply_at: 30,
+                participants: [],
+            },
+        },
+        {thread_summary_fetch_generation: after_add},
+    );
+    assert.equal(root.reply_summary.reply_count, 3);
+
+    const before_delete = message_store.capture_thread_summary_fetch_generation();
+    message_store.mark_thread_reply_lifecycle([root.id]);
+    message_helper.process_new_server_message(
+        {
+            id: root.id,
+            reply_summary: {
+                reply_count: 3,
+                unread_reply_count: 3,
+                last_reply_at: 30,
+                participants: [],
+            },
+        },
+        {thread_summary_fetch_generation: before_delete},
+    );
+    assert.equal(root.reply_summary.reply_count, 3);
+
+    const after_delete = message_store.capture_thread_summary_fetch_generation();
+    message_helper.process_new_server_message(
+        {
+            id: root.id,
+            reply_summary: {
+                reply_count: 1,
+                unread_reply_count: 1,
+                last_reply_at: 10,
+                participants: [],
+            },
+        },
+        {thread_summary_fetch_generation: after_delete},
+    );
+    assert.equal(root.reply_summary.reply_count, 1);
+});
+
 test("process_new_message", () => {
     let message = {
         sender_email: "me@example.com",

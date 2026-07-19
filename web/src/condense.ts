@@ -299,13 +299,15 @@ export function condense_and_collapse(elems: JQuery): void {
 }
 
 export function initialize(): void {
-    $("#message_feed_container").on("click", ".message_expander", function (this: HTMLElement, e) {
+    const $message_interaction_root = message_lists.get_rendered_message_interaction_root();
+    $message_interaction_root.on("click", ".message_expander", function (this: HTMLElement, e) {
         // Expanding a message can mean either uncollapsing or
         // uncondensing it.
         const $row = $(this).closest(".message_row");
         const id = rows.id($row);
-        assert(message_lists.current !== undefined);
-        const message = message_lists.current.get(id);
+        const message_list = message_lists.get_message_list_for_row($row) ?? message_lists.current;
+        assert(message_list !== undefined);
+        const message = message_list.get(id);
         assert(message !== undefined);
         const $content = $row.find(".message_content");
         if (message.collapsed) {
@@ -317,21 +319,26 @@ export function initialize(): void {
             uncondense_row($row);
         }
         // Select and scroll to the message so that it is in the view.
-        message_lists.current.select_id(message.id, {then_scroll: true});
+        message_list.select_id(message.id, {
+            then_scroll: message_list.view.manages_primary_viewport,
+        });
         e.stopPropagation();
         e.preventDefault();
     });
 
-    $("#message_feed_container").on("click", ".message_condenser", function (this: HTMLElement, e) {
+    $message_interaction_root.on("click", ".message_condenser", function (this: HTMLElement, e) {
         const $row = $(this).closest(".message_row");
         const id = rows.id($row);
-        assert(message_lists.current !== undefined);
-        const message = message_lists.current.get(id);
+        const message_list = message_lists.get_message_list_for_row($row) ?? message_lists.current;
+        assert(message_list !== undefined);
+        const message = message_list.get(id);
         assert(message !== undefined);
         message.condensed = true;
         condense_row($row);
         // Select and scroll to the message so that it is in the view.
-        message_lists.current.select_id(message.id, {then_scroll: true});
+        message_list.select_id(message.id, {
+            then_scroll: message_list.view.manages_primary_viewport,
+        });
         e.stopPropagation();
         e.preventDefault();
     });

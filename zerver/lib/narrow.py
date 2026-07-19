@@ -8,7 +8,18 @@ from django.conf import settings
 from django.contrib.auth.models import AnonymousUser
 from django.core.exceptions import ValidationError
 from django.db import connection
-from django.db.models import Exists, F, Func, OuterRef, Q, QuerySet, TextField
+from django.db.models import (
+    Case,
+    Exists,
+    F,
+    Func,
+    IntegerField,
+    OuterRef,
+    Q,
+    QuerySet,
+    TextField,
+    When,
+)
 from django.db.models.expressions import RawSQL
 from django.utils.translation import gettext as _
 from psycopg2.sql import SQL, Composable, Identifier
@@ -22,6 +33,7 @@ from zerver.lib.message import (
     access_web_public_message,
     get_first_visible_message_id,
 )
+from zerver.lib.message_threads import THREAD_ROOT_ACCESS_ALIAS, annotate_thread_root_access
 from zerver.lib.narrow_predicate import channel_operators, channels_operators
 from zerver.lib.recipient_users import recipient_for_user_profiles
 from zerver.lib.streams import (
@@ -102,6 +114,7 @@ class NarrowParameter(BaseModel):
         operators_supporting_id = [
             *channel_operators,
             "id",
+            "thread",
             "sender",
             "group-pm-with",
             "dm-including",
@@ -144,6 +157,7 @@ def is_spectator_compatible(narrow: Iterable[NarrowParameter]) -> bool:
         "search",
         "near",
         "id",
+        "thread",
         "with",
     ]
     for element in narrow:
@@ -280,6 +294,7 @@ class NarrowBuilder:
             "sender": self.by_sender,
             "near": self.by_near,
             "id": self.by_id,
+            "thread": self.by_thread,
             "search": self.by_search,
             "dm": self.by_dm,
             # "pm-with:" is a legacy alias for "dm:"
@@ -505,6 +520,29 @@ class NarrowBuilder:
             raise BadNarrowOperatorError("Invalid message ID")
         cond = Q(id=int(operand))
         return query.filter(maybe_negate(cond))
+
+    def by_thread(
+        self, query: QuerySet[Message], operand: int | str, maybe_negate: ConditionTransform
+    ) -> QuerySet[Message]:
+        if not str(operand).isdigit() or int(operand) > Message.MAX_POSSIBLE_MESSAGE_ID:
+            raise BadNarrowOperatorError("Invalid message thread ID")
+
+        message_id = int(operand)
+        try:
+            if self.user_profile is not None:
+                root = access_message(
+                    self.user_profile,
+                    message_id,
+                    is_modifying_message=False,
+                )
+            else:
+                root = access_web_public_message(self.realm, message_id)
+        except (JsonableError, MissingAuthenticationError):
+            raise BadNarrowOperatorError("Invalid message thread ID")
+
+        if root.thread_root_id is not None:
+            raise BadNarrowOperatorError("Invalid message thread ID")
+        return query.filter(maybe_negate(Q(thread_root_id=root.id)))
 
     def by_dm(
         self,
@@ -796,6 +834,11 @@ def ok_to_include_history(
                 and user_profile.can_access_public_streams()
             ):
                 include_history = True
+            elif term.operator == "thread" and not term.negated:
+                # ``by_thread`` validates access to the root before applying
+                # the direct-root filter, so this is safe for public channel
+                # history and for direct messages the user can access.
+                include_history = True
         # Disable historical messages if the user is narrowing on anything
         # that's a property on the UserMessage table.  There cannot be
         # historical messages in these cases anyway.
@@ -1084,6 +1127,56 @@ def add_narrow_conditions(
     return (query, is_search, builder.is_dm_narrow)
 
 
+def narrow_includes_thread_replies(
+    narrow: list[NarrowParameter] | None,
+    *,
+    is_search: bool,
+) -> bool:
+    if is_search:
+        return True
+    if narrow is None:
+        return False
+
+    for term in narrow:
+        if not term.negated and term.operator in {"thread", "id", "near"}:
+            return True
+        if (
+            not term.negated
+            and term.operator == "is"
+            and term.operand
+            in {
+                "alerted",
+                "mentioned",
+                "starred",
+                "unread",
+            }
+        ):
+            return True
+    return False
+
+
+def filter_message_history_for_thread_visibility(
+    query: QuerySet[Message],
+    narrow: list[NarrowParameter] | None,
+    *,
+    user_profile: UserProfile | None,
+    exclude_thread_replies: bool,
+    is_search: bool,
+) -> QuerySet[Message]:
+    """Apply a caller's root-only presentation preference to message history.
+
+    Replies remain ordinary messages and are returned by default.  Capable
+    clients may request a root-only ordinary feed, while explicit retrievals
+    that can target a reply continue to return replies.
+    """
+    if not exclude_thread_replies or narrow_includes_thread_replies(narrow, is_search=is_search):
+        return query
+    if user_profile is None:
+        return query.filter(thread_root__isnull=True)
+    query = annotate_thread_root_access(query, user_profile)
+    return query.filter(Q(thread_root__isnull=True) | Q(**{THREAD_ROOT_ACCESS_ALIAS: False}))
+
+
 def capture_find_first_unread_anchor_query_for_testing(query: QuerySet[Any]) -> None:
     pass
 
@@ -1094,6 +1187,9 @@ def find_first_unread_anchor(
     query: QuerySet[Message],
     is_dm_narrow: bool,
     need_user_message: bool,
+    *,
+    exclude_thread_replies: bool = False,
+    collapse_thread_replies_to_root: bool = False,
 ) -> int:
     # For anonymous web users, all messages are treated as read, and so
     # always return LARGER_THAN_MAX_MESSAGE_ID.
@@ -1121,6 +1217,14 @@ def find_first_unread_anchor(
             is_web_public_query=False,
             realm=user_profile.realm,
         )
+        if not collapse_thread_replies_to_root:
+            query = filter_message_history_for_thread_visibility(
+                query,
+                narrow,
+                user_profile=user_profile,
+                exclude_thread_replies=exclude_thread_replies,
+                is_search=_is_search,
+            )
 
     query = query.filter(user_flags__andz=UserMessage.flags.read.mask)  # type: ignore[misc] # get_base_query_for_search adds the user_flags annotation
 
@@ -1134,7 +1238,28 @@ def find_first_unread_anchor(
         muting_conditions = exclude_muting_conditions(user_profile, narrow)
         query = query.filter(muting_conditions)
 
-    values_query = query.order_by("id").values_list("id", flat=True)
+    if collapse_thread_replies_to_root:
+        # A root-only feed presents a thread as one aggregate.  Its first
+        # unread position is therefore the direct root's position even when
+        # the unread UserMessage belongs to a child.  A child whose protected
+        # root is inaccessible remains a standalone row and anchors itself.
+        query = annotate_thread_root_access(query, user_profile)
+        values_query = (
+            query.annotate(
+                thread_feed_anchor=Case(
+                    When(
+                        Q(thread_root__isnull=False) & Q(**{THREAD_ROOT_ACCESS_ALIAS: True}),
+                        then=F("thread_root_id"),
+                    ),
+                    default=F("id"),
+                    output_field=IntegerField(),
+                )
+            )
+            .order_by("thread_feed_anchor")
+            .values_list("thread_feed_anchor", flat=True)
+        )
+    else:
+        values_query = query.order_by("id").values_list("id", flat=True)
     capture_find_first_unread_anchor_query_for_testing(values_query)
     anchor = values_query.first()
     if anchor is None:
@@ -1413,6 +1538,7 @@ def fetch_messages(
     num_before: int,
     num_after: int,
     client_requested_message_ids: list[int] | None = None,
+    exclude_thread_replies: bool = False,
 ) -> FetchedMessages:
     if access_narrow(user_profile, narrow, is_web_public_query, realm) is False:
         # If user is requesting messages from a narrow they don't have
@@ -1459,6 +1585,21 @@ def fetch_messages(
         is_web_public_query=is_web_public_query,
     )
 
+    collapse_thread_replies_to_root = bool(
+        client_requested_message_ids is None
+        and exclude_thread_replies
+        and not narrow_includes_thread_replies(narrow, is_search=is_search)
+    )
+    first_unread_query = query
+    if client_requested_message_ids is None:
+        query = filter_message_history_for_thread_visibility(
+            query,
+            narrow,
+            user_profile=user_profile,
+            exclude_thread_replies=exclude_thread_replies,
+            is_search=is_search,
+        )
+
     if anchor_info is None:
         anchor_info = DEFAULT_ANCHOR_INFO
     anchored_to_left = False
@@ -1497,9 +1638,11 @@ def fetch_messages(
             anchor_value = find_first_unread_anchor(
                 user_profile,
                 narrow,
-                query,
+                first_unread_query if collapse_thread_replies_to_root else query,
                 is_dm_narrow,
                 need_user_message,
+                exclude_thread_replies=exclude_thread_replies,
+                collapse_thread_replies_to_root=collapse_thread_replies_to_root,
             )
 
         assert isinstance(anchor_value, int)

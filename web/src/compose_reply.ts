@@ -17,6 +17,7 @@ import * as message_fetch_raw_content from "./message_fetch_raw_content.ts";
 import * as message_lists from "./message_lists.ts";
 import * as message_store from "./message_store.ts";
 import {type Message} from "./message_store.ts";
+import type {ThreadComposeTarget} from "./message_thread_hooks.ts";
 import * as narrow_state from "./narrow_state.ts";
 import * as people from "./people.ts";
 import * as recent_view_ui from "./recent_view_ui.ts";
@@ -35,6 +36,7 @@ type QuoteMessageOpts = {
     trigger?: string;
     forward_message?: boolean;
     highlighted_message_ids?: number[];
+    thread_compose_target?: ThreadComposeTarget | undefined;
 };
 
 type ReplaceContentOpts = {
@@ -236,7 +238,6 @@ function get_quote_target_for_single_message(opts: {
     message: Message;
     quote_content: string | undefined;
 } {
-    assert(message_lists.current !== undefined);
     let message_id;
     let quote_content;
     if (opts.message_id) {
@@ -257,10 +258,11 @@ function get_quote_target_for_single_message(opts: {
             quote_content = get_message_selection();
         } else {
             // Else we pick the currently focused message.
+            assert(message_lists.current !== undefined);
             message_id = message_lists.current.selected_id();
         }
     }
-    const message = message_lists.current.get(message_id);
+    const message = message_store.get(message_id);
     assert(message !== undefined);
     // If we don't have quote_content yet (either because there was no valid
     // in-message selection, or because the caller only supplied a message_id),
@@ -272,14 +274,18 @@ function get_quote_target_for_single_message(opts: {
     return {message_id, message, quote_content};
 }
 
-function get_textarea_to_quote(forward_message?: boolean): JQuery<HTMLTextAreaElement> {
+function get_textarea_to_quote(
+    forward_message?: boolean,
+    thread_compose_target?: ThreadComposeTarget,
+): JQuery<HTMLTextAreaElement> {
     // If the last compose type textarea focused on is still in the DOM, we add
     // the quote in that textarea, else we default to the compose box.
     const last_focused_compose_type_input = compose_state.get_last_focused_compose_type_input();
-    const $textarea =
-        last_focused_compose_type_input?.isConnected && forward_message
-            ? $(last_focused_compose_type_input)
-            : $<HTMLTextAreaElement>("textarea#compose-textarea");
+    const $textarea = thread_compose_target
+        ? $(thread_compose_target.textarea)
+        : last_focused_compose_type_input?.isConnected && forward_message
+          ? $(last_focused_compose_type_input)
+          : $<HTMLTextAreaElement>("textarea#compose-textarea");
     return $textarea;
 }
 
@@ -303,8 +309,12 @@ function setup_compose_to_forward_single_message(message: Message, opts: QuoteMe
 }
 
 function setup_compose_to_quote_single_message(message_id: number, opts: QuoteMessageOpts): void {
-    const $textarea = get_textarea_to_quote(opts.forward_message);
-    if ($textarea.attr("id") === "compose-textarea" && !compose_state.has_message_content()) {
+    const $textarea = get_textarea_to_quote(opts.forward_message, opts.thread_compose_target);
+    if (
+        opts.thread_compose_target === undefined &&
+        $textarea.attr("id") === "compose-textarea" &&
+        !compose_state.has_message_content()
+    ) {
         // Whether or not the compose box is open, it's empty, so
         // we start a new message replying to the quoted message.
         respond_to_message({
@@ -318,6 +328,7 @@ function setup_compose_to_quote_single_message(message_id: number, opts: QuoteMe
     }
 
     compose_ui.insert_syntax_and_focus(quoting_placeholder, $textarea, "block");
+    opts.thread_compose_target?.notify_content_changed();
 }
 
 // Default to channel message when we can't determine
@@ -510,11 +521,13 @@ function replace_quoting_placeholder_with(info: {
     content: string;
     should_focus_recipient: boolean;
     forward_message: boolean | undefined;
+    thread_compose_target?: ThreadComposeTarget | undefined;
 }): void {
-    const {content, should_focus_recipient, forward_message} = info;
-    const $textarea = get_textarea_to_quote(forward_message);
+    const {content, should_focus_recipient, forward_message, thread_compose_target} = info;
+    const $textarea = get_textarea_to_quote(forward_message, thread_compose_target);
     compose_ui.replace_syntax(quoting_placeholder, content, $textarea, should_focus_recipient);
     compose_ui.autosize_textarea($textarea);
+    thread_compose_target?.notify_content_changed();
 
     if (!forward_message) {
         return;
@@ -563,6 +576,7 @@ function quote_single_message(opts: QuoteMessageOpts): void {
             content,
             should_focus_recipient: opts.forward_message === true,
             forward_message: opts.forward_message,
+            thread_compose_target: opts.thread_compose_target,
         });
         return;
     }
@@ -579,6 +593,7 @@ function quote_single_message(opts: QuoteMessageOpts): void {
                 content,
                 should_focus_recipient: opts.forward_message === true,
                 forward_message: opts.forward_message,
+                thread_compose_target: opts.thread_compose_target,
             });
         },
         // We set a timeout here to trigger usage of the fallback markdown via the
@@ -603,6 +618,7 @@ function quote_single_message(opts: QuoteMessageOpts): void {
                 content,
                 should_focus_recipient: opts.forward_message === true,
                 forward_message: opts.forward_message,
+                thread_compose_target: opts.thread_compose_target,
             });
         },
     });
@@ -710,6 +726,7 @@ function quote_multiple_messages(opts: QuoteMessageOpts): void {
                 content: content_string,
                 should_focus_recipient,
                 forward_message: opts.forward_message,
+                thread_compose_target: opts.thread_compose_target,
             });
         },
     );

@@ -1695,19 +1695,35 @@ export function exit_preview_mode($container: JQuery): void {
     $container.find(".markdown_preview").show();
 }
 
+export type PreviewRenderTracker = {
+    render_count: number;
+};
+
+export function create_preview_render_tracker(): PreviewRenderTracker {
+    return {render_count: 0};
+}
+
 export function render_and_show_preview(
     $preview_container: JQuery,
     $preview_spinner: JQuery,
     $preview_content_box: JQuery,
     content: string,
     show_spinner = true,
+    tracker?: PreviewRenderTracker,
 ): void {
     if (prevent_next_spinner) {
         show_spinner = false;
     }
 
-    const preview_render_count = compose_state.get_preview_render_count() + 1;
-    compose_state.set_preview_render_count(preview_render_count);
+    const preview_render_count =
+        tracker === undefined
+            ? compose_state.get_preview_render_count() + 1
+            : tracker.render_count + 1;
+    if (tracker === undefined) {
+        compose_state.set_preview_render_count(preview_render_count);
+    } else {
+        tracker.render_count = preview_render_count;
+    }
 
     function show_preview(rendered_content: string, raw_content?: string): void {
         // content is passed to check for status messages ("/me ...")
@@ -1764,7 +1780,8 @@ export function render_and_show_preview(
             data: {content},
             success(response_data) {
                 if (
-                    preview_render_count !== compose_state.get_preview_render_count() ||
+                    preview_render_count !==
+                        (tracker?.render_count ?? compose_state.get_preview_render_count()) ||
                     !$preview_container.hasClass("preview_mode")
                 ) {
                     // The user is no longer in preview mode or the compose

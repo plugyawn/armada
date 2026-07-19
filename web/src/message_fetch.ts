@@ -16,7 +16,9 @@ import type {MessageList} from "./message_list.ts";
 import type {MessageListData} from "./message_list_data.ts";
 import * as message_list_data_cache from "./message_list_data_cache.ts";
 import * as message_lists from "./message_lists.ts";
-import {raw_message_schema} from "./message_store.ts";
+import {capture_thread_summary_fetch_generation, raw_message_schema} from "./message_store.ts";
+import * as message_store from "./message_store.ts";
+import type {Message, RawMessage} from "./message_store.ts";
 import * as message_util from "./message_util.ts";
 import * as message_viewport from "./message_viewport.ts";
 import * as narrow_banner from "./narrow_banner.ts";
@@ -48,8 +50,9 @@ export const message_fetch_response_schema = z.object({
 });
 
 type MessageFetchResponse = z.infer<typeof message_fetch_response_schema>;
+type MessageIdsResponse = z.infer<typeof message_ids_response_schema>;
 
-type MessageFetchOptions = {
+export type MessageFetchOptions = {
     anchor: string | number;
     anchor_date?: string | undefined;
     num_before: number;
@@ -59,6 +62,8 @@ type MessageFetchOptions = {
     msg_list_data: MessageListData;
     msg_list?: MessageList | undefined;
     validate_filter_topic_post_fetch?: boolean | undefined;
+    on_error?: ((xhr: JQuery.jqXHR) => void) | undefined;
+    suppress_connection_error?: boolean | undefined;
 };
 
 type MessageFetchAPIParams = {
@@ -66,9 +71,17 @@ type MessageFetchAPIParams = {
     num_before: number;
     num_after: number;
     client_gravatar: boolean;
+    exclude_thread_replies: boolean;
     narrow?: string;
     allow_empty_topic_name: boolean;
     anchor_date?: string;
+};
+
+export type MessageIdsFetchOptions = {
+    message_ids: number[];
+    cont: (messages: Message[]) => void;
+    on_error?: ((xhr: JQuery.jqXHR) => void) | undefined;
+    suppress_connection_error?: boolean | undefined;
 };
 
 let first_messages_fetch = true;
@@ -154,18 +167,32 @@ export function fetch_more_if_required_for_current_msg_list(
     }
 }
 
-function process_result(data: MessageFetchResponse, opts: MessageFetchOptions): void {
-    const raw_messages = data.messages;
-
-    const messages = raw_messages.map((raw_message) =>
-        message_helper.process_new_server_message(raw_message),
+function process_raw_messages(
+    raw_messages: RawMessage[],
+    thread_summary_fetch_generation: number,
+): Message[] {
+    return raw_messages.map((raw_message) =>
+        message_helper.process_new_server_message(raw_message, {thread_summary_fetch_generation}),
     );
-    const has_found_oldest = opts.msg_list?.data.fetch_status.has_found_oldest() ?? false;
-    const has_found_newest = opts.msg_list?.data.fetch_status.has_found_newest() ?? false;
+}
 
+function process_loaded_message_side_effects(messages: Message[]): void {
     // In some rare situations, we expect to discover new unread
     // messages not tracked in unread.ts during this fetching process.
     message_util.do_unread_count_updates(messages, true);
+    direct_message_group_data.process_loaded_messages(messages);
+    stream_list.update_streams_sidebar_for_messages(messages);
+}
+
+function finish_processing_result(
+    data: MessageFetchResponse,
+    opts: MessageFetchOptions,
+    messages: Message[],
+): void {
+    const has_found_oldest = opts.msg_list?.data.fetch_status.has_found_oldest() ?? false;
+    const has_found_newest = opts.msg_list?.data.fetch_status.has_found_newest() ?? false;
+
+    process_loaded_message_side_effects(messages);
 
     const is_contiguous_history = true;
     if (messages.length > 0) {
@@ -180,9 +207,6 @@ function process_result(data: MessageFetchResponse, opts: MessageFetchOptions): 
             opts.msg_list_data.add_messages(messages, is_contiguous_history);
         }
     }
-
-    direct_message_group_data.process_loaded_messages(messages);
-    stream_list.update_streams_sidebar_for_messages(messages);
 
     if (
         message_lists.current !== undefined &&
@@ -210,7 +234,53 @@ function process_result(data: MessageFetchResponse, opts: MessageFetchOptions): 
     }
 }
 
-function get_messages_success(data: MessageFetchResponse, opts: MessageFetchOptions): void {
+function process_result(
+    data: MessageFetchResponse,
+    opts: MessageFetchOptions,
+    thread_summary_fetch_generation: number,
+    after_process: () => void,
+): void {
+    const missing_root_ids = [
+        ...new Set(
+            data.messages.flatMap((raw_message) => {
+                const root_id = raw_message.thread_root_message_id;
+                return root_id !== undefined && message_store.get(root_id) === undefined
+                    ? [root_id]
+                    : [];
+            }),
+        ),
+    ];
+    function finish(): void {
+        const messages = process_raw_messages(data.messages, thread_summary_fetch_generation);
+        finish_processing_result(data, opts, messages);
+        after_process();
+    }
+    if (missing_root_ids.length === 0) {
+        finish();
+        return;
+    }
+
+    // A batch of unread, mentioned, or search results can contain many child
+    // messages whose roots are outside the fetched narrow. Hydrate those
+    // ordinary root Messages in one exact-ID request before rendering any of
+    // the rows; isolated live row insertion retains its single-root fallback.
+    load_messages_by_ids({
+        message_ids: missing_root_ids,
+        suppress_connection_error: true,
+        cont: finish,
+        on_error() {
+            // The result batch is still useful if root hydration fails. Its
+            // child rows retain the existing on-demand root fallback.
+            finish();
+        },
+    });
+}
+
+function get_messages_success(
+    data: MessageFetchResponse,
+    opts: MessageFetchOptions,
+    thread_summary_fetch_generation: number,
+): void {
     const update_loading_indicator =
         message_lists.current !== undefined && opts.msg_list === message_lists.current;
     const msg_list_data = opts.msg_list_data;
@@ -266,17 +336,17 @@ function get_messages_success(data: MessageFetchResponse, opts: MessageFetchOpti
         return;
     }
 
-    process_result(data, opts);
-
-    if (current_fetch_found_newest && opts.msg_list === message_lists.current) {
-        // Now that we've confirmed we have the newest messages in
-        // this view, re-check whether the visible messages should
-        // be marked as read. Without this, a fetch that completes
-        // after narrow activation (with no subsequent scroll, focus
-        // change, or new-message event) would leave messages unread
-        // even though the user is looking at the bottom of the view.
-        unread_ops.process_visible();
-    }
+    process_result(data, opts, thread_summary_fetch_generation, () => {
+        if (current_fetch_found_newest && opts.msg_list === message_lists.current) {
+            // Now that we've confirmed we have the newest messages in
+            // this view, re-check whether the visible messages should be
+            // marked as read. Without this, a fetch that completes
+            // after narrow activation (with no subsequent scroll, focus
+            // change, or new-message event) would leave messages unread
+            // even though the user is looking at the bottom of the view.
+            unread_ops.process_visible();
+        }
+    });
 }
 
 // This function modifies the narrow data to use integer IDs instead of
@@ -387,6 +457,7 @@ export function get_parameters_for_message_fetch_api(
         num_before: opts.num_before,
         num_after: opts.num_after,
         client_gravatar: true,
+        exclude_thread_replies: true,
         allow_empty_topic_name: true,
     };
     const msg_list_data = opts.msg_list_data;
@@ -410,13 +481,57 @@ export function get_parameters_for_message_fetch_api(
     return data;
 }
 
-// We keep track of the load messages timeout at a module level
-// to prevent multiple load messages requests from the error codepath
-// from stacking up by cancelling the previous timeout.
-let load_messages_timeout: ReturnType<typeof setTimeout> | undefined;
+// A primary feed and one or more secondary MessageListViews can fetch at the
+// same time. Retry ownership therefore belongs to MessageListData, not to the
+// module: one list must never cancel another list's reconnect timer.
+const load_messages_timeouts = new WeakMap<MessageListData, ReturnType<typeof setTimeout>>();
+
+export function cancel_retries_for_message_list_data(msg_list_data: MessageListData): void {
+    const timeout = load_messages_timeouts.get(msg_list_data);
+    if (timeout !== undefined) {
+        clearTimeout(timeout);
+        load_messages_timeouts.delete(msg_list_data);
+    }
+}
+
+export function load_messages_by_ids(opts: MessageIdsFetchOptions): void {
+    const message_ids = [...new Set(opts.message_ids)].filter((message_id) =>
+        Number.isSafeInteger(message_id),
+    );
+    if (message_ids.length === 0) {
+        opts.cont([]);
+        return;
+    }
+    const thread_summary_fetch_generation = capture_thread_summary_fetch_generation();
+    void channel.get({
+        url: "/json/messages",
+        data: {
+            message_ids: JSON.stringify(message_ids),
+            client_gravatar: true,
+            exclude_thread_replies: true,
+            allow_empty_topic_name: true,
+        },
+        success(raw_data) {
+            if (!opts.suppress_connection_error) {
+                popup_banners.close_connection_error_popup_banner("message_fetch");
+            }
+            const data: MessageIdsResponse = message_ids_response_schema.parse(raw_data);
+            const messages = process_raw_messages(data.messages, thread_summary_fetch_generation);
+            process_loaded_message_side_effects(messages);
+            opts.cont(messages);
+        },
+        error(xhr) {
+            if (xhr.status === 400 && !opts.suppress_connection_error) {
+                popup_banners.close_connection_error_popup_banner("message_fetch");
+            }
+            opts.on_error?.(xhr);
+        },
+    });
+}
 
 export function load_messages(opts: MessageFetchOptions, attempt = 1): void {
     const data = get_parameters_for_message_fetch_api(opts);
+    const thread_summary_fetch_generation = capture_thread_summary_fetch_generation();
     let update_loading_indicator =
         message_lists.current !== undefined && opts.msg_list === message_lists.current;
     if (opts.num_before > 0) {
@@ -433,20 +548,30 @@ export function load_messages(opts: MessageFetchOptions, attempt = 1): void {
         });
     }
 
-    if (load_messages_timeout !== undefined) {
-        clearTimeout(load_messages_timeout);
+    const existing_timeout = load_messages_timeouts.get(opts.msg_list_data);
+    if (existing_timeout !== undefined) {
+        clearTimeout(existing_timeout);
+        load_messages_timeouts.delete(opts.msg_list_data);
     }
 
     void channel.get({
         url: "/json/messages",
         data,
         success(raw_data) {
-            popup_banners.close_connection_error_popup_banner("message_fetch");
+            load_messages_timeouts.delete(opts.msg_list_data);
+            if (!opts.suppress_connection_error) {
+                popup_banners.close_connection_error_popup_banner("message_fetch");
+            }
             const data = message_fetch_response_schema.parse(raw_data);
-            get_messages_success(data, opts);
+            get_messages_success(data, opts, thread_summary_fetch_generation);
         },
         error(xhr) {
-            if (xhr.status === 400) {
+            load_messages_timeouts.delete(opts.msg_list_data);
+            if (opts.on_error !== undefined) {
+                opts.on_error(xhr);
+                return;
+            }
+            if (xhr.status === 400 && !opts.suppress_connection_error) {
                 // Even though the request failed, we did reach the
                 // server, and can hide the connection error notice.
                 popup_banners.close_connection_error_popup_banner("message_fetch");
@@ -455,6 +580,7 @@ export function load_messages(opts: MessageFetchOptions, attempt = 1): void {
             if (
                 opts.msg_list !== undefined &&
                 opts.msg_list !== message_lists.current &&
+                !message_lists.rendered_message_lists.has(opts.msg_list.id) &&
                 !opts.msg_list.is_combined_feed_view
             ) {
                 // This fetch was for a narrow, and we unnarrowed
@@ -502,9 +628,11 @@ export function load_messages(opts: MessageFetchOptions, attempt = 1): void {
                 },
             });
 
-            load_messages_timeout = setTimeout(() => {
+            const timeout = setTimeout(() => {
+                load_messages_timeouts.delete(opts.msg_list_data);
                 load_messages(opts, attempt + 1);
             }, delay_secs * 1000);
+            load_messages_timeouts.set(opts.msg_list_data, timeout);
         },
     });
 }

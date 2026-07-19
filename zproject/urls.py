@@ -87,10 +87,6 @@ from zerver.views.message_flags import (
 from zerver.views.message_report import report_message_backend
 from zerver.views.message_send import render_message_backend, send_message_backend, zcommand_backend
 from zerver.views.message_summary import get_messages_summary
-from zerver.views.message_threads import (
-    get_message_thread_backend,
-    post_message_thread_reply_backend,
-)
 from zerver.views.muted_users import mute_user, unmute_user
 from zerver.views.navigation_views import (
     add_navigation_view,
@@ -118,7 +114,6 @@ from zerver.views.pear import (
     post_pear_run_not_for_pear_backend,
     post_pear_run_pause_backend,
     post_pear_run_resume_backend,
-    post_pear_side_backend,
     post_pear_topic_context_backend,
     update_pear_monitor_backend,
 )
@@ -525,10 +520,6 @@ v1_api_and_json_patterns = [
         POST=(post_pear_run_resume_backend, {"intentionally_undocumented"}),
     ),
     rest_path(
-        "pear/side",
-        POST=(post_pear_side_backend, {"intentionally_undocumented"}),
-    ),
-    rest_path(
         "pear/monitors",
         GET=(get_pear_monitors_backend, {"intentionally_undocumented"}),
         POST=(post_pear_monitors_backend, {"intentionally_undocumented"}),
@@ -588,11 +579,6 @@ v1_api_and_json_patterns = [
     rest_path("messages/flags", POST=update_message_flags),
     rest_path("messages/flags/narrow", POST=update_message_flags_for_narrow),
     rest_path("messages/<int:message_id>/history", GET=get_message_edit_history),
-    rest_path(
-        "messages/<int:message_id>/thread",
-        GET=(get_message_thread_backend, {"intentionally_undocumented"}),
-        POST=(post_message_thread_reply_backend, {"intentionally_undocumented"}),
-    ),
     rest_path("messages/matches_narrow", GET=messages_in_narrow_backend),
     rest_path("users/me/subscriptions/properties", POST=update_subscription_properties_backend),
     rest_path("users/me/subscriptions/<int:stream_id>", PATCH=update_subscriptions_property),

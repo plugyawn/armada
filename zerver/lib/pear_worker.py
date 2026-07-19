@@ -286,8 +286,8 @@ def set_pear_workspace_response_policy(
     workspace_node.save(update_fields=["response_policy", "date_updated"])
 
 
-def settle_orphaned_pear_run_message(run: PearWorkerRun) -> None:
-    """Best-effort: settle an interrupted run's visible progress message."""
+def settle_pear_run_result_message(run: PearWorkerRun, *, content: str) -> None:
+    """Best-effort settlement through the run's canonical result Message."""
     message_id = run.result_message_id
     if message_id is None:
         return
@@ -300,13 +300,21 @@ def settle_orphaned_pear_run_message(run: PearWorkerRun) -> None:
         update_pear_worker_status_message(
             bot_handler,
             progress_message_id=message_id,
-            content="Run interrupted by a service restart.",
+            content=content,
             rendering_only=True,
         )
     except Exception:
         logging.getLogger(__name__).warning(
-            "Failed to settle orphaned Pear run message %s.", message_id, exc_info=True
+            "Failed to settle Pear run result message %s.", message_id, exc_info=True
         )
+
+
+def settle_orphaned_pear_run_message(run: PearWorkerRun) -> None:
+    """Best-effort: settle an interrupted run's visible progress message."""
+    settle_pear_run_result_message(
+        run,
+        content="Run interrupted by a service restart.",
+    )
 
 
 def reap_stale_pear_worker_runs(
@@ -427,6 +435,7 @@ def latest_pear_codex_run_for_topic(
     stream: str,
     topic: str,
     before_message_id: int,
+    source_message_id: int | None = None,
 ) -> PearWorkerRun | None:
     stream, topic = pear_topic_scope(stream, topic)
     workspace = PearWorkspaceNode.objects.filter(
@@ -444,6 +453,16 @@ def latest_pear_codex_run_for_topic(
         # Legacy runs created before workspace identity was attached remain
         # discoverable by their labels during the scratch-pad cutover.
         runs = runs.filter(stream_name__iexact=stream, topic_name__iexact=topic)
+    if source_message_id is not None and source_message_id > 0:
+        return (
+            runs.filter(
+                Q(trigger_message_id=source_message_id)
+                | Q(result_message_id=source_message_id)
+                | Q(source_message_id=source_message_id)
+            )
+            .order_by("-trigger_message_id", "-id")
+            .first()
+        )
     if before_message_id > 0:
         runs = runs.filter(trigger_message_id__lt=before_message_id)
     return runs.order_by("-trigger_message_id", "-id").first()
@@ -1234,29 +1253,6 @@ def ensure_pear_workspace_node(
         workspace_node.date_updated = timezone_now()
         workspace_node.save(update_fields=["branch_name", "date_updated"])
     return workspace_node
-
-
-def ensure_pear_child_workspace_node(
-    user_profile: UserProfile,
-    *,
-    stream: str,
-    topic: str,
-    parent_stream: str,
-    parent_topic: str,
-) -> PearWorkspaceNode:
-    parent_node = None
-    if parent_stream and parent_topic is not None:
-        parent_node = ensure_pear_workspace_node(
-            user_profile,
-            stream=parent_stream,
-            topic=parent_topic,
-        )
-    return ensure_pear_workspace_node(
-        user_profile,
-        stream=stream,
-        topic=topic,
-        parent_node=parent_node,
-    )
 
 
 def pear_ensure_workdir_git_identity(path: Path) -> None:
@@ -2342,6 +2338,7 @@ class PearDatabaseWorkerRunStore:
                 bot_profile=user_profile,
                 stream_name__iexact=stream,
                 topic_name__iexact=topic,
+                session_kind=PearWorkerRun.SHARED,
                 status__in=PEAR_WORKER_RUN_BUSY_STATUSES,
             )
             .order_by("-date_updated", "-id")
@@ -2396,6 +2393,60 @@ class PearDatabaseWorkerRunStore:
                 payload={"result_message_id": progress_message_id},
             )
 
+    def ensure_progress_message(
+        self,
+        bot_handler: Any,
+        message_id: int,
+        *,
+        message: dict[str, Any],
+        stream: str,
+        topic: str,
+        content: str,
+    ) -> int | None:
+        """Create and bind the run's ordinary result Message atomically.
+
+        A redelivered trigger reuses the already-bound Message. If a side
+        pump claimed the row first, that worker owns creation and this path
+        returns its binding (which may still be pending) rather than racing it.
+        """
+        if message_id <= 0:
+            return None
+        stream, topic = pear_topic_scope(stream, topic)
+        user_profile = bot_handler.user_profile
+        assert isinstance(user_profile, UserProfile)
+
+        with transaction.atomic(savepoint=False):
+            run = (
+                PearWorkerRun.objects.select_for_update()
+                .filter(
+                    bot_profile=user_profile,
+                    trigger_message_id=message_id,
+                    stream_name__iexact=stream,
+                    topic_name__iexact=topic,
+                    status__in=PEAR_WORKER_RUN_BUSY_STATUSES,
+                )
+                .first()
+            )
+            if run is None or run.result_message_id is not None:
+                return run.result_message_id if run is not None else None
+            if run.status != PearWorkerRun.QUEUED:
+                return None
+
+            result = bot_handler.send_reply(message, content)
+            progress_message_id = result.get("id") if isinstance(result, dict) else None
+            if not isinstance(progress_message_id, int):
+                raise RuntimeError("Pear progress message send returned no message id.")
+            run.result_message_id = progress_message_id
+            run.date_updated = timezone_now()
+            run.save(update_fields=["result_message_id", "date_updated"])
+            self._record_event(
+                run,
+                "progress_registered",
+                summary="Registered started-progress message.",
+                payload={"result_message_id": progress_message_id},
+            )
+            return progress_message_id
+
     def start_blocked_reason(
         self,
         bot_handler: Any,
@@ -2433,6 +2484,17 @@ class PearDatabaseWorkerRunStore:
         if pear_workspace_is_paused(user_profile, stream=stream, topic=topic):
             return "Pear session is paused until a resume control is posted."
 
+        queued_run = PearWorkerRun.objects.filter(
+            bot_profile=user_profile,
+            trigger_message_id=message_id,
+            session_kind=PearWorkerRun.SHARED,
+            stream_name__iexact=stream,
+            topic_name__iexact=topic,
+            status=PearWorkerRun.QUEUED,
+        ).first()
+        if queued_run is not None:
+            return None
+
         topic_limit = settings.PEAR_WORKER_MAX_ACTIVE_RUNS_PER_TOPIC
         realm_limit = settings.PEAR_WORKER_MAX_ACTIVE_RUNS_PER_REALM
         busy_runs = PearWorkerRun.objects.filter(
@@ -2454,6 +2516,59 @@ class PearDatabaseWorkerRunStore:
             return "Pear already has the maximum number of active worker runs in this realm."
         return None
 
+    def side_start_blocked_reason(
+        self,
+        bot_handler: Any,
+        message_id: int,
+        *,
+        stream: str,
+        topic: str,
+        requesting_user_id: int | None,
+    ) -> str | None:
+        """Apply run admission without treating a native /btw as a main turn."""
+        if not stream:
+            return "Pear Codex runs currently require a channel topic."
+        if message_id <= 0 or requesting_user_id is None:
+            return None
+        stream, topic = pear_topic_scope(stream, topic)
+
+        user_profile = bot_handler.user_profile
+        assert isinstance(user_profile, UserProfile)
+        reap_stale_pear_worker_runs(realm=user_profile.realm)
+        try:
+            requesting_user = UserProfile.objects.get(
+                id=requesting_user_id,
+                realm=user_profile.realm,
+            )
+        except UserProfile.DoesNotExist:
+            return "Pear could not identify the requesting user."
+        trusted_user_ids = set(settings.PEAR_WORKER_TRUSTED_USER_IDS)
+        if (
+            trusted_user_ids
+            and not requesting_user.is_realm_admin
+            and requesting_user.id not in trusted_user_ids
+        ):
+            return "This user is not allowed to start Pear worker runs."
+        if pear_workspace_is_paused(user_profile, stream=stream, topic=topic):
+            return "Pear session is paused until a resume control is posted."
+        if PearWorkerRun.objects.filter(
+            bot_profile=user_profile,
+            trigger_message_id=message_id,
+            session_kind=PearWorkerRun.SIDE,
+            stream_name__iexact=stream,
+            topic_name__iexact=topic,
+            status=PearWorkerRun.QUEUED,
+        ).exists():
+            return None
+        realm_limit = settings.PEAR_WORKER_MAX_ACTIVE_RUNS_PER_REALM
+        busy_runs = PearWorkerRun.objects.filter(
+            realm=user_profile.realm,
+            status__in=PEAR_WORKER_RUN_BUSY_STATUSES,
+        )
+        if realm_limit > 0 and busy_runs.count() >= realm_limit:
+            return "Pear already has the maximum number of active worker runs in this realm."
+        return None
+
     def start(
         self,
         bot_handler: Any,
@@ -2461,6 +2576,7 @@ class PearDatabaseWorkerRunStore:
         *,
         stream: str,
         topic: str,
+        source_message_id: int | None = None,
     ) -> bool:
         if not stream:
             return False
@@ -2485,6 +2601,13 @@ class PearDatabaseWorkerRunStore:
                     .filter(bot_profile=user_profile, trigger_message_id=message_id)
                     .first()
                 )
+                if run is not None and run.status == PearWorkerRun.QUEUED:
+                    return (
+                        run.session_kind == PearWorkerRun.SHARED
+                        and run.stream_name.casefold() == stream.casefold()
+                        and run.topic_name.casefold() == topic.casefold()
+                        and run.source_message_id == source_message_id
+                    )
                 if run is not None and run.status in PEAR_WORKER_RUN_ACTIVE_STATUSES:
                     return False
                 if self._shared_topic_run_limit_reached(
@@ -2507,6 +2630,9 @@ class PearDatabaseWorkerRunStore:
                         stream_name=stream,
                         topic_name=topic,
                         workspace_node=workspace_node,
+                        source_stream_name=stream if source_message_id is not None else "",
+                        source_topic_name=topic if source_message_id is not None else "",
+                        source_message_id=source_message_id,
                         status=PearWorkerRun.QUEUED,
                         runtime_label=self._runtime_label(),
                         model=self._model_label(user_profile, stream=stream, topic=topic),
@@ -2535,11 +2661,135 @@ class PearDatabaseWorkerRunStore:
                     allow_requeue=True,
                 ):
                     return False
+                run.session_kind = PearWorkerRun.SHARED
+                run.source_stream_name = stream if source_message_id is not None else ""
+                run.source_topic_name = topic if source_message_id is not None else ""
+                run.source_message_id = source_message_id
+                run.save(
+                    update_fields=[
+                        "session_kind",
+                        "source_stream_name",
+                        "source_topic_name",
+                        "source_message_id",
+                    ]
+                )
                 self._record_event(
                     run,
                     "queued",
                     summary="Re-queued Pear worker run.",
                     payload={"stream": stream, "topic": topic},
+                )
+                return True
+        except IntegrityError:
+            return False
+
+    def start_side(
+        self,
+        bot_handler: Any,
+        message_id: int,
+        *,
+        stream: str,
+        topic: str,
+        requesting_user_id: int | None,
+        source_message_id: int,
+    ) -> bool:
+        """Create telemetry for an ordinary threaded Message's native /btw turn."""
+        if not stream or message_id <= 0 or source_message_id <= 0:
+            return False
+        stream, topic = pear_topic_scope(stream, topic)
+        user_profile = bot_handler.user_profile
+        assert isinstance(user_profile, UserProfile)
+        requesting_user = None
+        if requesting_user_id is not None:
+            requesting_user = UserProfile.objects.filter(
+                id=requesting_user_id,
+                realm=user_profile.realm,
+            ).first()
+        try:
+            with transaction.atomic(savepoint=False):
+                self._lock_realm(user_profile)
+                workspace_node = self._workspace_node_for_topic(
+                    user_profile,
+                    stream=stream,
+                    topic=topic,
+                )
+                workspace_node = self._lock_workspace_node(workspace_node)
+                run = (
+                    PearWorkerRun.objects.select_for_update()
+                    .filter(bot_profile=user_profile, trigger_message_id=message_id)
+                    .first()
+                )
+                if run is not None and run.status == PearWorkerRun.QUEUED:
+                    return (
+                        run.session_kind == PearWorkerRun.SIDE
+                        and run.stream_name.casefold() == stream.casefold()
+                        and run.topic_name.casefold() == topic.casefold()
+                        and run.source_message_id == source_message_id
+                    )
+                if run is not None and run.status in PEAR_WORKER_RUN_ACTIVE_STATUSES:
+                    return False
+                if self._realm_run_limit_reached(
+                    user_profile,
+                    exclude_run_id=run.id if run is not None else None,
+                ):
+                    return False
+                if run is None:
+                    run = PearWorkerRun.objects.create(
+                        realm=user_profile.realm,
+                        bot_profile=user_profile,
+                        requesting_user=requesting_user,
+                        trigger_message_id=message_id,
+                        stream_name=stream,
+                        topic_name=topic,
+                        workspace_node=workspace_node,
+                        session_kind=PearWorkerRun.SIDE,
+                        source_stream_name=stream,
+                        source_topic_name=topic,
+                        source_message_id=source_message_id,
+                        status=PearWorkerRun.QUEUED,
+                        summary="Queued threaded side conversation.",
+                        runtime_label=self._runtime_label(),
+                        model=self._model_label(user_profile, stream=stream, topic=topic),
+                        sandbox=self._sandbox_label(user_profile, stream=stream, topic=topic),
+                        approval_policy=self._approval_policy_label(),
+                        workdir=self._workdir_label(user_profile, stream=stream, topic=topic),
+                    )
+                else:
+                    if not self._update_run(
+                        run,
+                        "queued",
+                        stream=stream,
+                        topic=topic,
+                        result_message_id=None,
+                        error=None,
+                        allow_requeue=True,
+                    ):
+                        return False
+                    run.requesting_user = requesting_user
+                    run.workspace_node = workspace_node
+                    run.session_kind = PearWorkerRun.SIDE
+                    run.source_stream_name = stream
+                    run.source_topic_name = topic
+                    run.source_message_id = source_message_id
+                    run.save(
+                        update_fields=[
+                            "requesting_user",
+                            "workspace_node",
+                            "session_kind",
+                            "source_stream_name",
+                            "source_topic_name",
+                            "source_message_id",
+                        ]
+                    )
+                self._record_event(
+                    run,
+                    "queued",
+                    summary="Queued native Codex side conversation.",
+                    payload={
+                        "stream": stream,
+                        "topic": topic,
+                        "source_message_id": source_message_id,
+                    },
                 )
                 return True
         except IntegrityError:
@@ -2776,6 +3026,49 @@ class PearDatabaseWorkerRunStore:
                 return False
         except IntegrityError:
             return False
+
+    def fail_unreconstructable_side_run(self, run_id: int, *, error: str) -> None:
+        """Settle a queued /btw whose ordinary trigger Message was deleted."""
+        settled_run: PearWorkerRun | None = None
+        with transaction.atomic(savepoint=False):
+            run = (
+                PearWorkerRun.objects.select_for_update()
+                .filter(
+                    id=run_id,
+                    session_kind=PearWorkerRun.SIDE,
+                    status=PearWorkerRun.QUEUED,
+                )
+                .first()
+            )
+            if run is None:
+                return
+            if not self._transition(
+                run,
+                PearWorkerRun.FAILED,
+                stream=run.stream_name,
+                topic=run.topic_name,
+                result_message_id=run.result_message_id,
+                error=error,
+                allow_requeue=False,
+            ):
+                return
+            self._record_event(
+                run,
+                "failed",
+                summary=error,
+                payload={"reason": "missing_trigger_message"},
+                require_running_lease=False,
+            )
+            settled_run = run
+        # Message edits use their normal action/event lifecycle and must not
+        # run while the durable run row is locked. The result is an ordinary
+        # threaded Message, so settle that exact entity rather than inventing
+        # pump-specific presentation state.
+        assert settled_run is not None
+        settle_pear_run_result_message(
+            settled_run,
+            content="This side conversation could not start because its request message was deleted.",
+        )
 
     def record(
         self,
@@ -3556,6 +3849,12 @@ def load_pear_active_session_from_zulip(
         stream=pear_session["stream"],
         topic=pear_session["topic"],
         before_message_id=trigger_message_id,
+        source_message_id=(
+            message["thread_root_message_id"]
+            if isinstance(message.get("thread_root_message_id"), int)
+            and not isinstance(message.get("thread_root_message_id"), bool)
+            else None
+        ),
     )
     latest_codex_thread_id = (
         latest_codex_run.codex_thread_id.strip() if latest_codex_run is not None else None
@@ -3563,7 +3862,12 @@ def load_pear_active_session_from_zulip(
     if not latest_codex_thread_id:
         latest_codex_run = None
         latest_codex_thread_id = None
-    prompt_message_query = message_query
+    # An exact-parent thread reply becomes a native /btw fork; an unrelated
+    # child thread starts its own shared Codex thread. Replaying either child
+    # conversation through a later topic-level turn would cross those context
+    # boundaries. Keep children in routing/topic counts, but out of the parent
+    # prompt delta.
+    prompt_message_query = message_query.filter(thread_root__isnull=True)
     if trigger_message_id > 0:
         # The current request is already the Codex turn input. Repeating it in
         # the transcript wastes context and teaches the engine a duplicated

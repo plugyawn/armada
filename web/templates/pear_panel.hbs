@@ -90,9 +90,6 @@
                                 <button type="button" id="pear-workbench-tab-history" role="tab" aria-controls="pear-workbench-panel" aria-selected="{{#if topic_context.workbench_history_selected}}true{{else}}false{{/if}}" tabindex="{{#if topic_context.workbench_history_selected}}0{{else}}-1{{/if}}" class="pear-workbench-tab {{#if topic_context.workbench_history_selected}}pear-workbench-tab-selected{{/if}}" data-pear-workbench-view="history" {{#if topic_context.workbench_history_disabled}}disabled{{/if}}>
                                     {{topic_context.history_tab_label}}
                                 </button>
-                                <button type="button" id="pear-workbench-tab-side" role="tab" aria-controls="pear-workbench-panel" aria-selected="{{#if topic_context.workbench_side_selected}}true{{else}}false{{/if}}" tabindex="{{#if topic_context.workbench_side_selected}}0{{else}}-1{{/if}}" class="pear-workbench-tab {{#if topic_context.workbench_side_selected}}pear-workbench-tab-selected{{/if}}" data-pear-workbench-view="side">
-                                    {{topic_context.side_tab_label}}
-                                </button>
                             </div>
                         </div>
                     </div>
@@ -148,18 +145,6 @@
                                 </div>
                             {{/if}}
                         {{/if}}
-                        {{#if topic_context.workbench_side_selected}}
-                            <div class="pear-workbench-empty">
-                                <span class="pear-ui-glyph pear-workbench-empty-glyph" aria-hidden="true">·</span>
-                                <span>{{t "Whispers go only to Pear — nothing is posted in the topic." }}</span>
-                            </div>
-                        {{/if}}
-                    </div>
-                    <div class="pear-side-body pear-workbench-side-footer">
-                        <textarea id="pear-side-request" class="pear-side-request" rows="1" aria-label="{{t 'Whisper to Pear' }}" placeholder="{{t 'Whisper to Pear' }}"></textarea>
-                        <button type="button" id="pear-side-start" class="pear-side-start tippy-zulip-delayed-tooltip" aria-label="{{t 'Send whisper' }}" data-tippy-content="{{t 'Send whisper' }}" {{#unless has_topic}}disabled{{/unless}}>
-                            <span class="pear-ui-glyph" aria-hidden="true">›</span>
-                        </button>
                     </div>
                 </div>
             </section>

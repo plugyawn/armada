@@ -38,6 +38,7 @@ const draft_schema = z.intersection(
         content: z.string(),
         updatedAt: z.number(),
         is_sending_saving: z._default(z.boolean(), false),
+        thread_root_message_id: z.optional(z.number()),
         // `drafts_version` is 0 for drafts that aren't auto-restored
         // and 1 for drafts created since that change, to avoid a flood
         // of old drafts showing up when this feature was introduced.
@@ -67,6 +68,7 @@ const possibly_buggy_draft_schema = z.intersection(
         content: z.string(),
         updatedAt: z.number(),
         is_sending_saving: z._default(z.boolean(), false),
+        thread_root_message_id: z.optional(z.number()),
         drafts_version: z._default(z.number(), 0),
     }),
     z.discriminatedUnion("type", [
@@ -263,6 +265,73 @@ export const draft_model = (function () {
     };
 })();
 
+export type MessageThreadDraftRecipient =
+    | {type: "stream"; stream_id: number; topic: string}
+    | {type: "private"; user_ids: number[]};
+
+export function get_message_thread_draft(
+    thread_root_message_id: number,
+): (LocalStorageDraftWithId & {thread_root_message_id: number}) | undefined {
+    const match = Object.entries(draft_model.get())
+        .filter(
+            ([, draft]) =>
+                draft.thread_root_message_id === thread_root_message_id && !draft.is_sending_saving,
+        )
+        .toSorted(([, left], [, right]) => right.updatedAt - left.updatedAt)[0];
+    if (match === undefined) {
+        return undefined;
+    }
+    const [id, draft] = match;
+    return {...draft, id, thread_root_message_id};
+}
+
+export function update_message_thread_draft({
+    draft_id,
+    thread_root_message_id,
+    recipient,
+    content,
+    is_sending_saving = false,
+}: {
+    draft_id?: string | undefined;
+    thread_root_message_id: number;
+    recipient: MessageThreadDraftRecipient;
+    content: string;
+    is_sending_saving?: boolean | undefined;
+}): string | undefined {
+    if (content === "") {
+        if (draft_id !== undefined) {
+            draft_model.deleteDrafts([draft_id]);
+        }
+        return undefined;
+    }
+
+    const common = {
+        content,
+        updatedAt: getTimestamp(),
+        is_sending_saving,
+        drafts_version: CURRENT_DRAFT_VERSION,
+        thread_root_message_id,
+    };
+    const draft: LocalStorageDraft =
+        recipient.type === "stream"
+            ? {
+                  ...common,
+                  type: "stream",
+                  stream_id: recipient.stream_id,
+                  topic: recipient.topic,
+              }
+            : {
+                  ...common,
+                  type: "private",
+                  private_message_recipient_ids: recipient.user_ids,
+              };
+    if (draft_id !== undefined && draft_model.getDraft(draft_id) !== false) {
+        draft_model.editDraft(draft_id, draft);
+        return draft_id;
+    }
+    return draft_model.addDraft(draft);
+}
+
 export let update_compose_draft_count = (): void => {
     const $count_container = $(".compose-drafts-count-container");
     const $count_ele = $count_container.find(".compose-drafts-count");
@@ -376,11 +445,13 @@ type ComposeArguments =
           stream_id: number | undefined;
           topic: string;
           content: string;
+          thread_root_message_id?: number | undefined;
       }
     | {
           type: "private";
           private_message_recipient_ids: number[];
           content: string;
+          thread_root_message_id?: number | undefined;
       };
 
 export function restore_message(draft: LocalStorageDraft): ComposeArguments {
@@ -395,6 +466,9 @@ export function restore_message(draft: LocalStorageDraft): ComposeArguments {
             stream_id: draft.stream_id,
             topic: draft.topic,
             content: draft.content,
+            ...(draft.thread_root_message_id === undefined
+                ? {}
+                : {thread_root_message_id: draft.thread_root_message_id}),
         };
     }
 
@@ -406,6 +480,9 @@ export function restore_message(draft: LocalStorageDraft): ComposeArguments {
         type: "private",
         private_message_recipient_ids: sorted_recipient_ids,
         content: draft.content,
+        ...(draft.thread_root_message_id === undefined
+            ? {}
+            : {thread_root_message_id: draft.thread_root_message_id}),
     };
 }
 
@@ -421,8 +498,7 @@ function draft_notify(): void {
     });
     const visible = instances.filter(
         (instance) =>
-            instance.reference instanceof HTMLElement &&
-            instance.reference.offsetParent !== null,
+            instance.reference instanceof HTMLElement && instance.reference.offsetParent !== null,
     );
     const chosen = visible.at(0) ?? instances.at(0);
     chosen?.show();
@@ -555,6 +631,9 @@ export function filter_drafts_by_compose_box_and_recipient(
     const stream_id = stream_name ? stream_data.get_stream_id(stream_name) : undefined;
     const narrow_drafts_ids = [];
     for (const [id, draft] of Object.entries(drafts)) {
+        if (draft.thread_root_message_id !== undefined) {
+            continue;
+        }
         // Match by stream and topic.
         if (
             stream_id &&

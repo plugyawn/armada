@@ -63,6 +63,7 @@ export function handle_keyboard(key: string): void {
 export function toggle_user_group_info_popover(
     element: tippy.ReferenceElement,
     message_id: number | undefined,
+    message_list = message_lists.current,
 ): void {
     if (is_open()) {
         hide();
@@ -92,8 +93,8 @@ export function toggle_user_group_info_popover(
             },
             onCreate(instance) {
                 if (message_id) {
-                    assert(message_lists.current !== undefined);
-                    message_lists.current.select_id(message_id);
+                    assert(message_list !== undefined);
+                    message_list.select_id(message_id);
                 }
                 user_group_popover_instance = instance;
                 const subgroups = user_groups.convert_name_to_display_name_for_groups(
@@ -146,27 +147,31 @@ export function toggle_user_group_info_popover(
 }
 
 export function register_click_handlers(): void {
-    $("#main_div").on("click", ".user-group-mention", function (this: HTMLElement, e) {
-        e.stopPropagation();
-        if (mouse_drag.is_drag(e)) {
-            return;
-        }
+    message_lists
+        .get_rendered_message_interaction_root()
+        .on("click", ".user-group-mention", function (this: HTMLElement, e) {
+            e.stopPropagation();
+            if (mouse_drag.is_drag(e)) {
+                return;
+            }
 
-        const $elt = $(this);
-        const $row = $elt.closest(".message_row");
-        const message_id = rows.id($row);
+            const $elt = $(this);
+            const $row = $elt.closest(".message_row");
+            const message_id = rows.id($row);
 
-        assert(message_lists.current !== undefined);
-        const message = message_lists.current.get(message_id);
-        assert(message !== undefined);
+            const message_list =
+                message_lists.get_message_list_for_row($row) ?? message_lists.current;
+            assert(message_list !== undefined);
+            const message = message_list.get(message_id);
+            assert(message !== undefined);
 
-        try {
-            toggle_user_group_info_popover(this, message.id);
-        } catch {
-            // This user group has likely been deleted.
-            blueslip.info("Unable to find user group in message" + message.sender_id);
-        }
-    });
+            try {
+                toggle_user_group_info_popover(this, message.id, message_list);
+            } catch {
+                // This user group has likely been deleted.
+                blueslip.info("Unable to find user group in message" + message.sender_id);
+            }
+        });
 
     // Show the user_group_popover when pill clicked in subscriber settings.
     $("body").on(

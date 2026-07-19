@@ -8,6 +8,11 @@ import * as ui_util from "./ui_util.ts";
 
 export let current: MessageList | undefined;
 export const rendered_message_lists = new Map<number, MessageList>();
+export const rendered_message_interaction_root_selector = ".app-main";
+
+export function get_rendered_message_interaction_root(): JQuery {
+    return $(rendered_message_interaction_root_selector);
+}
 
 export function set_current(msg_list: MessageList | undefined): void {
     // NOTE: Strictly used for mocking in node tests.
@@ -80,6 +85,14 @@ export function non_rendered_data(): MessageListData[] {
 
 export function add_rendered_message_list(msg_list: MessageList): void {
     rendered_message_lists.set(msg_list.id, msg_list);
+}
+
+export function get_message_list_for_row($row: JQuery): MessageList | undefined {
+    const message_list_id = Number($row.closest(".message-list").attr("data-message-list-id"));
+    if (!Number.isInteger(message_list_id)) {
+        return undefined;
+    }
+    return rendered_message_lists.get(message_list_id);
 }
 
 export function all_rendered_row_for_message_id(message_id: number): JQuery {

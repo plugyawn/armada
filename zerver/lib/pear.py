@@ -33,7 +33,6 @@ PEAR_CONFIG_ENDPOINT: Final = "/pear/config"
 PEAR_FIRST_RUN_ENDPOINT: Final = "/pear/first-run"
 PEAR_TOPIC_CONTEXT_ENDPOINT: Final = "/pear/topic-context"
 PEAR_RUNS_ENDPOINT: Final = "/pear/runs"
-PEAR_SIDE_ENDPOINT: Final = "/pear/side"
 PEAR_FIRST_RUN_STREAM: Final = "pear-sandbox"
 PEAR_FIRST_RUN_TOPIC: Final = "first run"
 PEAR_FIRST_RUN_STARTER_MESSAGE: Final = (
@@ -62,8 +61,6 @@ PEAR_VERIFY_CHANGES_PROMPT: Final = "Verify changes:"
 PEAR_DRAFT_ARTIFACT_PROMPT: Final = "Draft artifact:"
 PEAR_SELECTED_BOT_CONFIG_KEY: Final = "pear_selected"
 PEAR_SELECTED_BOT_CONFIG_VALUE: Final = "true"
-PEAR_WORKER_RUNS_STORAGE_KEY: Final = "pear_worker_runs"
-PEAR_WORKER_RUNS_STORAGE_LIMIT: Final = 50
 PEAR_QUESTION_TIMEOUT_SECONDS: Final = 600
 PEAR_QUESTION_POLL_SECONDS: Final = 2.0
 
@@ -306,15 +303,6 @@ class PearWorkerRunResult(TypedDict):
     tool_results: list[PearWorkerToolResult]
 
 
-class PearWorkerRunRecord(TypedDict):
-    trigger_message_id: int
-    status: PearWorkerRunStatus
-    stream: str
-    topic: str
-    result_message_id: int | None
-    error: str | None
-
-
 PEAR_PERSISTENT_MESSAGE_LIMIT: Final = 5000
 
 
@@ -400,6 +388,7 @@ class PearWorkerRunStore(Protocol):
         *,
         stream: str,
         topic: str,
+        source_message_id: int | None = None,
     ) -> bool: ...
 
     def record(
@@ -1760,6 +1749,61 @@ class PearWorkerRuntime:
             "tool_results": tool_results,
         }
 
+    def run_side(
+        self,
+        *,
+        active_session: PearActiveSessionSummary,
+        task: str = "",
+        conversation_key: str | None = None,
+        event_callback: PearWorkerTranscriptCallback | None = None,
+        user_input_provider: PearUserInputProvider | None = None,
+    ) -> PearWorkerRunResult:
+        if not active_session["worker_can_run"]:
+            return {
+                "should_post": True,
+                "worker_can_run": False,
+                "content": build_pear_worker_blocked_message(active_session),
+                "codex_thread_id": self.codex_thread_id(),
+                "tool_count": 0,
+                "tool_results": [],
+            }
+        if self.tool_runner is None:
+            tool_results: list[PearWorkerToolResult] = [
+                {
+                    "label": "Error",
+                    "value": "Pear cannot start a side conversation without Codex app-server.",
+                }
+            ]
+        else:
+            run_side = getattr(self.tool_runner, "run_side", None)
+            if not callable(run_side):
+                tool_results = [
+                    {
+                        "label": "Error",
+                        "value": "Pear's configured runtime does not support native side conversations.",
+                    }
+                ]
+            else:
+                kwargs: dict[str, Any] = {
+                    "conversation_key": conversation_key,
+                    "event_callback": event_callback,
+                }
+                if user_input_provider is not None:
+                    kwargs["user_input_provider"] = user_input_provider
+                tool_results = list(run_side(active_session, task, **kwargs))
+        return {
+            "should_post": True,
+            "worker_can_run": True,
+            "content": pear_result_tool_text(tool_results, limit=None)
+            or build_pear_worker_completed_message(task=task, tool_results=tool_results),
+            # A /btw fork is ephemeral. The durable identity remains its
+            # parent Codex thread; Pear never advertises a discarded fork as a
+            # resumable conversation.
+            "codex_thread_id": self.codex_thread_id(),
+            "tool_count": len(tool_results),
+            "tool_results": tool_results,
+        }
+
     def run_tools(
         self,
         active_session: PearActiveSessionSummary,
@@ -1883,200 +1927,6 @@ def build_trigger_pear_active_session(
         messages=[(pear_message_id(message), content, False)],
         topic_message_count=1,
     )
-
-
-def build_pear_worker_run_record(
-    *,
-    trigger_message_id: int,
-    status: PearWorkerRunStatus,
-    stream: str,
-    topic: str,
-    result_message_id: int | None = None,
-    error: str | None = None,
-) -> PearWorkerRunRecord:
-    return {
-        "trigger_message_id": trigger_message_id,
-        "status": status,
-        "stream": stream,
-        "topic": topic,
-        "result_message_id": result_message_id,
-        "error": error,
-    }
-
-
-def normalize_pear_worker_run_record(value: object) -> PearWorkerRunRecord | None:
-    if isinstance(value, int):
-        return build_pear_worker_run_record(
-            trigger_message_id=value,
-            status="done",
-            stream="",
-            topic="",
-        )
-    if not isinstance(value, dict):
-        return None
-    message_id = value.get("trigger_message_id")
-    status = value.get("status")
-    if not isinstance(message_id, int) or status not in {"queued", "running", "done", "failed"}:
-        return None
-    stream = value.get("stream", "")
-    topic = value.get("topic", "")
-    result_message_id = value.get("result_message_id")
-    error = value.get("error")
-    return build_pear_worker_run_record(
-        trigger_message_id=message_id,
-        status=status,
-        stream=stream if isinstance(stream, str) else "",
-        topic=topic if isinstance(topic, str) else "",
-        result_message_id=result_message_id if isinstance(result_message_id, int) else None,
-        error=error if isinstance(error, str) else None,
-    )
-
-
-def load_pear_worker_run_records(bot_handler: Any) -> list[PearWorkerRunRecord]:
-    storage = getattr(bot_handler, "storage", None)
-    if storage is None or not storage.contains(PEAR_WORKER_RUNS_STORAGE_KEY):
-        return []
-    stored_value = storage.get(PEAR_WORKER_RUNS_STORAGE_KEY)
-    if not isinstance(stored_value, list):
-        return []
-    records = []
-    for value in stored_value:
-        record = normalize_pear_worker_run_record(value)
-        if record is not None:
-            records.append(record)
-    return records
-
-
-def pear_worker_run_for_message(
-    bot_handler: Any,
-    message_id: int,
-) -> PearWorkerRunRecord | None:
-    for record in reversed(load_pear_worker_run_records(bot_handler)):
-        if record["trigger_message_id"] == message_id:
-            return record
-    return None
-
-
-def pear_worker_already_started(bot_handler: Any, message_id: int) -> bool:
-    if message_id <= 0:
-        return False
-    record = pear_worker_run_for_message(bot_handler, message_id)
-    return record is not None and record["status"] in {"queued", "running", "done"}
-
-
-def record_pear_worker_run(
-    bot_handler: Any,
-    message_id: int,
-    status: PearWorkerRunStatus,
-    *,
-    stream: str,
-    topic: str,
-    result_message_id: int | None = None,
-    error: str | None = None,
-) -> None:
-    if message_id <= 0:
-        return
-    storage = getattr(bot_handler, "storage", None)
-    if storage is None:
-        return
-    records = [
-        record
-        for record in load_pear_worker_run_records(bot_handler)
-        if record["trigger_message_id"] != message_id
-    ]
-    records.append(
-        build_pear_worker_run_record(
-            trigger_message_id=message_id,
-            status=status,
-            stream=stream,
-            topic=topic,
-            result_message_id=result_message_id,
-            error=error,
-        )
-    )
-    storage.put(
-        PEAR_WORKER_RUNS_STORAGE_KEY,
-        records[-PEAR_WORKER_RUNS_STORAGE_LIMIT:],
-    )
-
-
-class PearStorageWorkerRunStore:
-    def start(
-        self,
-        bot_handler: Any,
-        message_id: int,
-        *,
-        stream: str,
-        topic: str,
-    ) -> bool:
-        if pear_worker_already_started(bot_handler, message_id):
-            return False
-        record_pear_worker_run(
-            bot_handler,
-            message_id,
-            "queued",
-            stream=stream,
-            topic=topic,
-        )
-        return True
-
-    def record(
-        self,
-        bot_handler: Any,
-        message_id: int,
-        status: PearWorkerRunStatus,
-        *,
-        stream: str,
-        topic: str,
-        result_message_id: int | None = None,
-        error: str | None = None,
-    ) -> None:
-        record_pear_worker_run(
-            bot_handler,
-            message_id,
-            status,
-            stream=stream,
-            topic=topic,
-            result_message_id=result_message_id,
-            error=error,
-        )
-
-
-class PearInlineWorkerDispatcher:
-    def dispatch(
-        self,
-        pear_handler: Any,
-        bot_handler: Any,
-        message: dict[str, Any],
-        *,
-        content: str,
-        active_session: PearActiveSessionSummary | None,
-        message_id: int,
-        stream: str,
-        topic: str,
-        requesting_user_id: int | None = None,
-        session_kind: str = "shared",
-        source_stream: str = "",
-        source_topic: str = "",
-        source_message_id: int | None = None,
-        progress_message_id: int | None = None,
-    ) -> None:
-        pear_handler.run_worker_turn(
-            message,
-            bot_handler,
-            content=content,
-            active_session=active_session,
-            message_id=message_id,
-            stream=stream,
-            topic=topic,
-            post_started_progress=False,
-            requesting_user_id=requesting_user_id,
-            session_kind=session_kind,
-            source_stream=source_stream,
-            source_topic=source_topic,
-            source_message_id=source_message_id,
-            progress_message_id=progress_message_id,
-        )
 
 
 def build_pear_explicit_steering_event(
@@ -2408,16 +2258,17 @@ def build_pear_config_payload(
 class PearEmbeddedBotHandler:
     def __init__(
         self,
+        *,
+        worker_run_store: PearWorkerRunStore,
         worker_runtime: PearWorkerRuntime | None = None,
         active_session_loader: PearWorkerActiveSessionLoader | None = None,
-        worker_run_store: PearWorkerRunStore | None = None,
         worker_dispatcher: PearWorkerDispatcher | None = None,
         addressing_intent_classifier: PearAddressingIntentClassifier | None = None,
     ) -> None:
         self.worker_runtime = worker_runtime or PearWorkerRuntime()
         self.active_session_loader = active_session_loader
-        self.worker_run_store = worker_run_store or PearStorageWorkerRunStore()
-        self.worker_dispatcher = worker_dispatcher or PearInlineWorkerDispatcher()
+        self.worker_run_store = worker_run_store
+        self.worker_dispatcher = worker_dispatcher
         self.addressing_intent_classifier = addressing_intent_classifier
         self.addressing_failure_notices: dict[tuple[int, str, str], float] = {}
 
@@ -2458,6 +2309,33 @@ class PearEmbeddedBotHandler:
             )
             if isinstance(reason, str) and reason.strip():
                 return reason.strip()
+        return None
+
+    def side_worker_start_blocked_reason(
+        self,
+        bot_handler: Any,
+        message_id: int,
+        *,
+        stream: str,
+        topic: str,
+        requesting_user_id: int | None,
+    ) -> str | None:
+        start_blocked_reason = getattr(
+            self.worker_run_store,
+            "side_start_blocked_reason",
+            None,
+        )
+        if not callable(start_blocked_reason):
+            return "Pear's run store does not support native side conversations."
+        reason = start_blocked_reason(
+            bot_handler,
+            message_id,
+            stream=stream,
+            topic=topic,
+            requesting_user_id=requesting_user_id,
+        )
+        if isinstance(reason, str) and reason.strip():
+            return reason.strip()
         return None
 
     def active_worker_run_message_id(
@@ -2645,6 +2523,51 @@ class PearEmbeddedBotHandler:
                 progress_message_id=progress_message_id,
             )
 
+    def ensure_worker_progress_message(
+        self,
+        bot_handler: Any,
+        message: dict[str, Any],
+        *,
+        message_id: int,
+        stream: str,
+        topic: str,
+        content: str,
+    ) -> int | None:
+        """Reuse or create the one ordinary Message representing this run.
+
+        The database-backed store performs message creation and result binding
+        in one transaction. Lightweight injected stores retain the same
+        behavior through the existing send/register operations.
+        """
+        ensure_progress_message = getattr(
+            self.worker_run_store,
+            "ensure_progress_message",
+            None,
+        )
+        if callable(ensure_progress_message):
+            progress_message_id = ensure_progress_message(
+                bot_handler,
+                message_id,
+                message=message,
+                stream=stream,
+                topic=topic,
+                content=content,
+            )
+            return progress_message_id if isinstance(progress_message_id, int) else None
+
+        result = bot_handler.send_reply(message, content)
+        progress_message_id = None
+        if isinstance(result, dict) and isinstance(result.get("id"), int):
+            progress_message_id = result["id"]
+        self.register_worker_progress_message(
+            bot_handler,
+            message_id,
+            stream=stream,
+            topic=topic,
+            progress_message_id=progress_message_id,
+        )
+        return progress_message_id
+
     def warm_worker_topic(
         self,
         bot_handler: Any,
@@ -2666,7 +2589,17 @@ class PearEmbeddedBotHandler:
             )
 
     def handle_message(self, message: dict[str, Any], bot_handler: Any) -> None:
+        if self.worker_dispatcher is None:
+            raise RuntimeError("Pear message routing requires an injected worker dispatcher")
         raw_content = str(message.get("content", "")).strip()
+        raw_thread_root_message_id = message.get("thread_root_message_id")
+        thread_root_message_id = (
+            raw_thread_root_message_id
+            if isinstance(raw_thread_root_message_id, int)
+            and not isinstance(raw_thread_root_message_id, bool)
+            and raw_thread_root_message_id > 0
+            else None
+        )
         explicitly_addressed = bool(
             message.get(PEAR_EXPLICIT_MENTION_MESSAGE_KEY)
         ) or is_pear_request_message(raw_content)
@@ -2779,10 +2712,24 @@ class PearEmbeddedBotHandler:
             explicitly_addressed=explicitly_addressed,
             response_policy=db_response_policy,
         )
+        threaded_explicit_request = thread_root_message_id is not None and explicitly_addressed
+        should_start_side = bool(
+            threaded_explicit_request
+            and active_session is not None
+            and active_session.get("latest_codex_thread_id")
+        )
+        if threaded_explicit_request:
+            # A reply addressed to Pear is a sibling inquiry against the
+            # exact parent Codex context, not steering for another topic run.
+            # With no exact parent, normal shared-run admission either starts
+            # a fresh thread or explains why the topic is currently busy.
+            should_start_worker = True
         should_steer_active_run = (
             explicitly_addressed
             and active_run_message_id is not None
+            and active_run_message_id != message_id
             and steering_event is not None
+            and not threaded_explicit_request
         )
         if should_steer_active_run:
             should_start_worker = False
@@ -2797,12 +2744,22 @@ class PearEmbeddedBotHandler:
             response = build_pear_ack_message(content)
 
         if should_start_worker:
-            blocked_reason = self.worker_start_blocked_reason(
-                bot_handler,
-                message_id,
-                stream=stream,
-                topic=topic,
-                requesting_user_id=requesting_user_id,
+            blocked_reason = (
+                self.side_worker_start_blocked_reason(
+                    bot_handler,
+                    message_id,
+                    stream=stream,
+                    topic=topic,
+                    requesting_user_id=requesting_user_id,
+                )
+                if should_start_side
+                else self.worker_start_blocked_reason(
+                    bot_handler,
+                    message_id,
+                    stream=stream,
+                    topic=topic,
+                    requesting_user_id=requesting_user_id,
+                )
             )
             if blocked_reason is not None:
                 response = build_pear_worker_start_blocked_message(blocked_reason)
@@ -2826,27 +2783,45 @@ class PearEmbeddedBotHandler:
                 payload=steering_payload,
             )
             return
-        result = bot_handler.send_reply(
-            message, normalize_pear_task_markers(normalize_pear_math_delimiters(response))
-        )
-        progress_message_id = None
-        if isinstance(result, dict) and isinstance(result.get("id"), int):
-            progress_message_id = result["id"]
         if should_start_worker:
-            if not self.worker_run_store.start(
-                bot_handler,
-                message_id,
-                stream=stream,
-                topic=topic,
-            ):
+            started = False
+            if should_start_side:
+                start_side = getattr(self.worker_run_store, "start_side", None)
+                if callable(start_side):
+                    assert thread_root_message_id is not None
+                    started = bool(
+                        start_side(
+                            bot_handler,
+                            message_id,
+                            stream=stream,
+                            topic=topic,
+                            requesting_user_id=requesting_user_id,
+                            source_message_id=thread_root_message_id,
+                        )
+                    )
+            else:
+                if threaded_explicit_request:
+                    started = self.worker_run_store.start(
+                        bot_handler,
+                        message_id,
+                        stream=stream,
+                        topic=topic,
+                        source_message_id=thread_root_message_id,
+                    )
+                else:
+                    started = self.worker_run_store.start(
+                        bot_handler,
+                        message_id,
+                        stream=stream,
+                        topic=topic,
+                    )
+            if not started:
                 stale_ack_message = build_pear_worker_start_blocked_message(
                     "This request was already handled or is no longer claimable."
                 )
-                update_pear_worker_status_message(
-                    bot_handler,
-                    progress_message_id=progress_message_id,
-                    content=stale_ack_message,
-                    rendering_only=True,
+                bot_handler.send_reply(
+                    message,
+                    normalize_pear_task_markers(normalize_pear_math_delimiters(stale_ack_message)),
                 )
                 return
             if ambient_decision is not None:
@@ -2862,12 +2837,13 @@ class PearEmbeddedBotHandler:
                     message_id,
                     ambient_triggered=True,
                 )
-            self.register_worker_progress_message(
+            progress_message_id = self.ensure_worker_progress_message(
                 bot_handler,
-                message_id,
+                message,
+                message_id=message_id,
                 stream=stream,
                 topic=topic,
-                progress_message_id=progress_message_id,
+                content=normalize_pear_task_markers(normalize_pear_math_delimiters(response)),
             )
             self.worker_dispatcher.dispatch(
                 self,
@@ -2879,8 +2855,17 @@ class PearEmbeddedBotHandler:
                 stream=stream,
                 topic=topic,
                 requesting_user_id=requesting_user_id,
+                session_kind="side" if should_start_side else "shared",
+                source_stream=stream if threaded_explicit_request else "",
+                source_topic=topic if threaded_explicit_request else "",
+                source_message_id=(thread_root_message_id if threaded_explicit_request else None),
                 progress_message_id=progress_message_id,
             )
+            return
+
+        bot_handler.send_reply(
+            message, normalize_pear_task_markers(normalize_pear_math_delimiters(response))
+        )
 
     def run_worker_turn(
         self,
@@ -3228,6 +3213,7 @@ class PearWorkerTurn:
             isinstance(event_thread_id, str)
             and bool(root_thread_id)
             and event_thread_id != root_thread_id
+            and self.session_kind != "side"
         )
         if child_thread_event:
             # Native child-thread activity is durable and live, but it must
@@ -3361,11 +3347,21 @@ class PearWorkerTurn:
     def run_runtime_segment(self, segment_task: str, *, segment_index: int) -> dict[str, Any]:
         self.raise_if_cancel_requested()
         segment_event_start = len(self.transcript_events)
-        segment_result = self.handler.worker_runtime.run(
-            active_session=self.active_session,
-            task=segment_task,
-            event_callback=self.handle_transcript_event,
+        run_runtime = (
+            self.handler.worker_runtime.run_side
+            if self.session_kind == "side"
+            else self.handler.worker_runtime.run
         )
+        runtime_kwargs: dict[str, Any] = {
+            "active_session": self.active_session,
+            "task": segment_task,
+            "event_callback": self.handle_transcript_event,
+        }
+        if self.session_kind == "side":
+            if self.source_message_id is None:
+                raise RuntimeError("Pear side conversation has no durable message root.")
+            runtime_kwargs["conversation_key"] = str(self.source_message_id)
+        segment_result = run_runtime(**runtime_kwargs)
         self.raise_if_cancel_requested()
         self.artifact_tool_results.extend(
             result for result in segment_result["tool_results"] if result["label"] == "Artifact"
@@ -3540,6 +3536,7 @@ class PearWorkerTurn:
             self.codex_thread_id = self.worker_result["codex_thread_id"]
             while (
                 self.worker_result["worker_can_run"]
+                and self.session_kind == "shared"
                 and callable(self.steering_events_after)
                 and self.steering_segment_count < PEAR_MAX_STEERING_SEGMENTS
             ):
@@ -3703,9 +3700,11 @@ class PearWorkerTurn:
             )
         except PearWorkerLeaseLostError:
             # A newer fenced attempt owns both the durable run and its result
-            # message. Stop this app-server generation without writing a
-            # competing failure/cancel/result update.
-            self.handler.worker_runtime.close()
+            # message. A shared turn owns the app-server generation, but a
+            # native /btw is only one forked turn inside it; losing the side
+            # lease must not tear down its still-live parent runtime.
+            if self.session_kind != "side":
+                self.handler.worker_runtime.close()
             return
         except PearRunCancelledError as error:
             self.transcript_events.append(
@@ -3794,7 +3793,8 @@ class PearWorkerTurn:
                         error=str(error),
                     )
             except PearWorkerLeaseLostError:
-                self.handler.worker_runtime.close()
+                if self.session_kind != "side":
+                    self.handler.worker_runtime.close()
                 return
             write_pear_live_run_state(
                 self.message_id,

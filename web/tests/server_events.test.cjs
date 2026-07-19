@@ -46,6 +46,8 @@ const message_events = mock_esm("../src/message_events", {
         throw new Error("update error");
     },
 });
+const message_threads = mock_esm("../src/message_threads");
+message_threads.handle_reconnect = noop;
 
 const server_events = zrequire("server_events");
 
@@ -92,15 +94,36 @@ run_test("message_event", ({override}) => {
     };
 
     let inserted;
+    let inserted_messages;
+    let thread_messages;
     override(message_events, "insert_new_messages", (message_data) => {
         const messages = message_data.raw_messages;
         assert.equal(messages[0].content, event.message.content);
         inserted = true;
+        inserted_messages = messages;
         return messages;
+    });
+    override(message_threads, "handle_added_messages", (messages) => {
+        thread_messages = messages;
     });
 
     server_events._get_events_success([event]);
     assert.ok(inserted);
+    assert.equal(thread_messages, inserted_messages);
+});
+
+run_test("successful reconnect refreshes thread summaries", ({override}) => {
+    let request;
+    channel.get = (options) => {
+        request = options;
+    };
+    let reconnect_count = 0;
+    override(message_threads, "handle_reconnect", () => {
+        reconnect_count += 1;
+    });
+    server_events.restart_get_events({dont_block: true});
+    request.success({events: []});
+    assert.equal(reconnect_count, 1);
 });
 
 // Start blueslip tests here

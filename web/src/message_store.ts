@@ -44,6 +44,7 @@ export const message_thread_participant_schema = z.object({
 
 export const message_thread_reply_summary_schema = z.object({
     reply_count: z.number(),
+    unread_reply_count: z.number(),
     last_reply_at: z.number(),
     last_sender: z.nullable(message_thread_participant_schema),
     participants: z.array(message_thread_participant_schema),
@@ -107,6 +108,7 @@ export const raw_message_schema = z.intersection(
             is_me_message: z.boolean(),
             is_pear_message: z.optional(z.boolean()),
             reply_summary: z.optional(message_thread_reply_summary_schema),
+            thread_root_message_id: z.optional(z.number()),
             last_edit_timestamp: z.optional(z.number()),
             last_moved_timestamp: z.optional(z.number()),
             reactions: z.array(message_reaction_schema),
@@ -260,6 +262,78 @@ export type Message = (
           }
     );
 
+const thread_reply_ids_by_root_id = new Map<number, number[]>();
+let thread_reply_event_generation = 0;
+const latest_thread_reply_event_generation_by_root_id = new Map<number, number>();
+
+export function capture_thread_summary_fetch_generation(): number {
+    return thread_reply_event_generation;
+}
+
+export function mark_thread_reply_lifecycle(root_message_ids: Iterable<number>): void {
+    const ids = [...new Set(root_message_ids)];
+    if (ids.length === 0) {
+        return;
+    }
+    thread_reply_event_generation += 1;
+    for (const root_message_id of ids) {
+        latest_thread_reply_event_generation_by_root_id.set(
+            root_message_id,
+            thread_reply_event_generation,
+        );
+    }
+}
+
+export function can_apply_thread_summary_from_fetch(
+    root_message_id: number,
+    fetch_generation: number,
+): boolean {
+    return (
+        (latest_thread_reply_event_generation_by_root_id.get(root_message_id) ?? 0) <=
+        fetch_generation
+    );
+}
+
+function remove_thread_reply_from_index(message: Message): void {
+    const root_id = message.thread_root_message_id;
+    if (root_id === undefined) {
+        return;
+    }
+    const ids = thread_reply_ids_by_root_id.get(root_id);
+    if (ids === undefined) {
+        return;
+    }
+    const index = ids.indexOf(message.id);
+    if (index !== -1) {
+        ids.splice(index, 1);
+    }
+    if (ids.length === 0) {
+        thread_reply_ids_by_root_id.delete(root_id);
+    }
+}
+
+function add_thread_reply_to_index(message: Message): void {
+    const root_id = message.thread_root_message_id;
+    if (root_id === undefined) {
+        return;
+    }
+    const ids = thread_reply_ids_by_root_id.get(root_id) ?? [];
+    let low = 0;
+    let high = ids.length;
+    while (low < high) {
+        const middle = Math.floor((low + high) / 2);
+        if (ids[middle]! < message.id) {
+            low = middle + 1;
+        } else {
+            high = middle;
+        }
+    }
+    if (ids[low] !== message.id) {
+        ids.splice(low, 0, message.id);
+    }
+    thread_reply_ids_by_root_id.set(root_id, ids);
+}
+
 export function update_message_cache(message_data: ProcessedMessage): void {
     // You should only call this from message_helper (or in tests).
     // Submessages are append-only and arrive on a separate event stream.
@@ -280,7 +354,11 @@ export function update_message_cache(message_data: ProcessedMessage): void {
         }
         incoming_submessages.sort((left, right) => left.id - right.id);
     }
+    if (existing_message !== undefined) {
+        remove_thread_reply_from_index(existing_message);
+    }
     stored_messages.set(message_data.message.id, message_data);
+    add_thread_reply_to_index(message_data.message);
 }
 
 export function get_cached_message(message_id: number): ProcessedMessage | undefined {
@@ -291,6 +369,9 @@ export function get_cached_message(message_id: number): ProcessedMessage | undef
 
 export function clear_for_testing(): void {
     stored_messages.clear();
+    thread_reply_ids_by_root_id.clear();
+    thread_reply_event_generation = 0;
+    latest_thread_reply_event_generation_by_root_id.clear();
 }
 
 // This can return a LocalMessage, but unless anything needs that,
@@ -302,10 +383,25 @@ export function get(message_id: number): Message | undefined {
     return stored_messages.get(message_id)?.message;
 }
 
+export function get_thread_replies(thread_root_message_id: number): Message[] {
+    return (thread_reply_ids_by_root_id.get(thread_root_message_id) ?? []).flatMap((message_id) => {
+        const message = stored_messages.get(message_id)?.message;
+        return message === undefined ? [] : [message];
+    });
+}
+
+export function get_thread_roots(): Message[] {
+    return [...stored_messages.values()].flatMap(({message}) =>
+        message.thread_root_message_id === undefined && message.reply_summary !== undefined
+            ? [message]
+            : [],
+    );
+}
+
 export function set_messages_for_tests(messages: ProcessedMessage[]): void {
-    stored_messages.clear();
+    clear_for_testing();
     for (const message of messages) {
-        stored_messages.set(message.message.id, message);
+        update_message_cache(message);
     }
 }
 
@@ -469,6 +565,7 @@ export function reify_message_id({old_id, new_id}: {old_id: number; new_id: numb
     const message_data = stored_messages.get(old_id);
     if (message_data !== undefined) {
         const server_message: Message & Partial<LocalMessage> = message_data.message;
+        remove_thread_reply_from_index(server_message);
         if (message_data.type === "local_message") {
             // Important: Messages are managed as singletons, so
             // MessageListData objects may already have pointers to
@@ -488,6 +585,7 @@ export function reify_message_id({old_id, new_id}: {old_id: number; new_id: numb
         server_message.locally_echoed = false;
         stored_messages.set(new_id, {type: "server_message", message: server_message});
         stored_messages.delete(old_id);
+        add_thread_reply_to_index(server_message);
     }
 }
 
@@ -497,6 +595,10 @@ export function update_message_content(message: Message, new_content: string): v
 
 export function remove(message_ids: number[]): void {
     for (const message_id of message_ids) {
+        const message = stored_messages.get(message_id)?.message;
+        if (message !== undefined) {
+            remove_thread_reply_from_index(message);
+        }
         stored_messages.delete(message_id);
     }
 }

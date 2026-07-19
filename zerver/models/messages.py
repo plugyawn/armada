@@ -7,7 +7,7 @@ from bitfield.types import Bit, BitHandler
 from django.contrib.postgres.indexes import GinIndex
 from django.contrib.postgres.search import SearchVectorField
 from django.db import models
-from django.db.models import CASCADE, SET_NULL, F, Q, QuerySet
+from django.db.models import CASCADE, Case, F, IntegerField, Q, QuerySet, Value, When
 from django.db.models.functions import Upper
 from django.db.models.signals import post_delete, post_save
 from django.utils.timezone import now as timezone_now
@@ -162,6 +162,11 @@ class ArchivedMessage(AbstractMessage):
     """
 
     archive_transaction = models.ForeignKey(ArchiveTransaction, on_delete=CASCADE)
+    # Archived messages cannot use a database foreign key here because a
+    # retention transaction may archive a reply separately from its root.
+    # Keeping the live root ID preserves the native Message relationship for
+    # lossless restore without creating a second thread entity.
+    thread_root_message_id = models.IntegerField(null=True)
 
 
 class Message(AbstractMessage):
@@ -178,6 +183,18 @@ class Message(AbstractMessage):
     MAX_POSSIBLE_MESSAGE_ID = 2147483647
 
     search_tsvector = SearchVectorField(null=True)
+
+    # Replies are ordinary messages.  This nullable direct-root reference is
+    # the only durable distinction between a top-level message and a reply.
+    # Nested reply trees are rejected by the send path.
+    thread_root = models.ForeignKey(
+        "self",
+        null=True,
+        on_delete=CASCADE,
+        related_name="thread_replies",
+        db_column="thread_root_message_id",
+        db_index=False,
+    )
 
     DEFAULT_SELECT_RELATED = ["sender", "realm", "recipient", "sending_client"]
 
@@ -264,6 +281,11 @@ class Message(AbstractMessage):
                 name="zerver_message_realm_id",
             ),
             models.Index(
+                "thread_root",
+                "id",
+                name="zerver_message_thread_root_id",
+            ),
+            models.Index(
                 # Potentially useful for migrations that rewrite
                 # message edit history. Originally added for
                 # 0680_rename_general_chat_to_empty_string_topic,
@@ -315,6 +337,22 @@ class Message(AbstractMessage):
 
 
 def get_context_for_message(message: Message) -> QuerySet[Message]:
+    if message.thread_root_id is not None:
+        return (
+            Message.objects.filter(
+                Q(id=message.thread_root_id)
+                | Q(thread_root_id=message.thread_root_id, id__lt=message.id),
+            )
+            .annotate(
+                thread_context_priority=Case(
+                    When(id=message.thread_root_id, then=Value(1)),
+                    default=Value(0),
+                    output_field=IntegerField(),
+                )
+            )
+            .order_by("-thread_context_priority", "-id")[:10]
+        )
+
     return Message.objects.filter(
         # Uses index: zerver_message_realm_recipient_upper_subject
         realm_id=message.realm_id,
@@ -323,46 +361,11 @@ def get_context_for_message(message: Message) -> QuerySet[Message]:
         is_channel_message=True,
         id__lt=message.id,
         date_sent__gt=message.date_sent - timedelta(minutes=15),
+        thread_root__isnull=True,
     ).order_by("-id")[:10]
 
 
 post_save.connect(flush_message, sender=Message)
-
-
-class MessageThread(models.Model):
-    message = models.OneToOneField(
-        Message,
-        on_delete=CASCADE,
-        primary_key=True,
-        related_name="thread_summary",
-    )
-    reply_count = models.PositiveIntegerField(default=0)
-    last_reply_at = models.DateTimeField(null=True)
-    last_reply_sender = models.ForeignKey(
-        UserProfile,
-        null=True,
-        on_delete=SET_NULL,
-        related_name="+",
-    )
-    # Most-recent unique reply authors, newest first. The action layer keeps
-    # this list bounded so message-list hydration never needs reply bodies.
-    participant_user_ids = models.JSONField(default=list)
-
-
-class MessageThreadReply(models.Model):
-    thread = models.ForeignKey(MessageThread, on_delete=CASCADE, related_name="replies")
-    sender = models.ForeignKey(UserProfile, on_delete=CASCADE)
-    content = models.TextField()
-    rendered_content = models.TextField()
-    date_sent = models.DateTimeField(default=timezone_now)
-
-    class Meta:
-        indexes = [
-            models.Index(
-                fields=["thread", "id"],
-                name="zerver_thread_reply_page",
-            ),
-        ]
 
 
 class AbstractSubMessage(models.Model):

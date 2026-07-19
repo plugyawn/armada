@@ -1,0 +1,57 @@
+type TraceEnhancer = (root: HTMLElement) => void;
+
+export type ThreadComposeTarget = {
+    textarea: HTMLTextAreaElement;
+    notify_content_changed: () => void;
+};
+
+type MessageThreadHooks = {
+    destroy_for_message: (message_id: number) => void;
+    handle_topic_marked_read: (stream_id: number, topic: string) => void;
+    get_compose_target: (message_id: number) => ThreadComposeTarget | undefined;
+    open_for_draft: (thread_root_message_id: number) => void;
+    render_for_message_row: (
+        row: HTMLElement,
+        message_id: number,
+        enhance_trace: TraceEnhancer,
+    ) => void;
+};
+
+let hooks: MessageThreadHooks | undefined;
+
+export function register(message_thread_hooks: MessageThreadHooks): void {
+    hooks = message_thread_hooks;
+}
+
+export function destroy_for_message(message_id: number): void {
+    hooks?.destroy_for_message(message_id);
+}
+
+export function handle_topic_marked_read(stream_id: number, topic: string): void {
+    hooks?.handle_topic_marked_read(stream_id, topic);
+}
+
+export function get_compose_target(message_id: number): ThreadComposeTarget | undefined {
+    return hooks?.get_compose_target(message_id);
+}
+
+export function focus_composer(message_id: number): boolean {
+    const target = get_compose_target(message_id);
+    if (target === undefined) {
+        return false;
+    }
+    target.textarea.focus();
+    return true;
+}
+
+export function open_for_draft(thread_root_message_id: number): void {
+    hooks?.open_for_draft(thread_root_message_id);
+}
+
+export function render_for_message_row(
+    row: HTMLElement,
+    message_id: number,
+    enhance_trace: TraceEnhancer,
+): void {
+    hooks?.render_for_message_row(row, message_id, enhance_trace);
+}

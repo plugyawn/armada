@@ -28,7 +28,7 @@ import * as message_lists from "./message_lists.ts";
 import * as message_reminder from "./message_reminder.ts";
 import * as message_store from "./message_store.ts";
 import type {Message} from "./message_store.ts";
-import * as message_threads from "./message_threads.ts";
+import * as message_thread_hooks from "./message_thread_hooks.ts";
 import * as message_viewport from "./message_viewport.ts";
 import type {MessageViewportInfo} from "./message_viewport.ts";
 import * as muted_users from "./muted_users.ts";
@@ -146,6 +146,15 @@ export type MessageGroup = {
       }
 );
 
+export type MessageListViewOptions = {
+    mount?: HTMLElement | JQuery;
+    role?: "feed" | "list";
+    aria_label?: string;
+    manages_primary_viewport?: boolean;
+    show_recipient_headers?: boolean;
+    show_thread_previews?: boolean;
+};
+
 type RenderingPlan = {
     append_groups: MessageGroup[];
     prepend_groups: MessageGroup[];
@@ -172,7 +181,9 @@ function destroy_message_threads_in(root: JQuery | HTMLElement): void {
         ? [element]
         : [...element.querySelectorAll<HTMLElement>(".message_row")];
     for (const row of message_rows) {
-        message_threads.destroy_for_message(rows.id($(row)));
+        if (row.closest("#message-thread-pane") === null) {
+            message_thread_hooks.destroy_for_message(rows.id($(row)));
+        }
     }
 }
 
@@ -474,7 +485,15 @@ function render_message_threads($row: JQuery): void {
     if (!(row instanceof HTMLElement)) {
         return;
     }
-    message_threads.render_for_message_row(row, rows.id($row), (trace_root) => {
+    if (message_lists.get_message_list_for_row($row)?.view.show_thread_previews === false) {
+        const host = row.querySelector<HTMLElement>(".message-thread-host");
+        host?.replaceChildren();
+        if (host !== null && host !== undefined) {
+            host.hidden = true;
+        }
+        return;
+    }
+    message_thread_hooks.render_for_message_row(row, rows.id($row), (trace_root) => {
         enhance_pear_tool_rows($(trace_root));
     });
 }
@@ -2097,6 +2116,11 @@ export class MessageListView {
     list: MessageList;
     // The jQuery element for the rendered list element.
     $list: JQuery;
+    // Secondary message lists share the canonical renderer without taking
+    // ownership of the primary message viewport or its recipient headers.
+    manages_primary_viewport: boolean;
+    show_recipient_headers: boolean;
+    show_thread_previews: boolean;
     // TODO: Access this via .list.data.
     collapse_messages: boolean;
 
@@ -2138,10 +2162,17 @@ export class MessageListView {
     // trigger a re-render
     _RENDER_THRESHOLD = 50;
 
-    constructor(list: MessageList, collapse_messages: boolean, is_node_test = false) {
+    constructor(
+        list: MessageList,
+        collapse_messages: boolean,
+        is_node_test = false,
+        options: MessageListViewOptions = {},
+    ) {
         this.list = list;
-        this._add_message_list_to_DOM();
-        this.$list = $(`.message-list[data-message-list-id="${this.list.id}"]`);
+        this.manages_primary_viewport = options.manages_primary_viewport ?? true;
+        this.show_recipient_headers = options.show_recipient_headers ?? true;
+        this.show_thread_previews = options.show_thread_previews ?? true;
+        this.$list = this._add_message_list_to_DOM(options);
         this.collapse_messages = collapse_messages;
         this._rows = new Map();
         this.message_containers = new Map();
@@ -2155,10 +2186,27 @@ export class MessageListView {
         this.sticky_recipient_message_id = undefined;
     }
 
-    _add_message_list_to_DOM(): void {
-        $("#message-lists-container").append(
-            $(render_message_list({message_list_id: this.list.id})),
+    _add_message_list_to_DOM(options: MessageListViewOptions): JQuery {
+        const role = options.role ?? "list";
+        const $list = $(
+            render_message_list({
+                message_list_id: this.list.id,
+                role,
+                aria_label:
+                    options.aria_label ??
+                    (role === "feed"
+                        ? $t({defaultMessage: "Replies"})
+                        : $t({defaultMessage: "Messages"})),
+            }),
         );
+        const $mount =
+            options.mount === undefined
+                ? $("#message-lists-container")
+                : options.mount instanceof HTMLElement
+                  ? $(options.mount)
+                  : options.mount;
+        $mount.append($list);
+        return $list;
     }
 
     _get_message_edited_and_moved_vars(message: Message): {
@@ -2962,6 +3010,7 @@ export class MessageListView {
                 message_groups,
                 use_match_properties,
                 message_list_id: this.list.id,
+                show_recipient_headers: this.show_recipient_headers,
             }),
         );
     }
@@ -3008,7 +3057,9 @@ export class MessageListView {
             return undefined;
         }
 
-        capture_user_message_editing_state();
+        if (this.manages_primary_viewport) {
+            capture_user_message_editing_state();
+        }
 
         const list = this.list; // for convenience
         let orig_scrolltop_offset: number | undefined;
@@ -3017,14 +3068,19 @@ export class MessageListView {
         // the bottom message is not visible), then we will respect
         // the user's current position after rendering, rather
         // than auto-scrolling.
-        const started_scrolled_up = message_viewport.is_scrolled_up();
+        const started_scrolled_up =
+            this.manages_primary_viewport && message_viewport.is_scrolled_up();
 
         for (const message of messages) {
             message.url = hash_util.by_conversation_and_time_url(message);
         }
 
         const save_scroll_position = (): void => {
-            if (orig_scrolltop_offset === undefined && this.selected_row().length > 0) {
+            if (
+                this.manages_primary_viewport &&
+                orig_scrolltop_offset === undefined &&
+                this.selected_row().length > 0
+            ) {
                 orig_scrolltop_offset = this.selected_row().get_offset_to_window().top;
             }
         };
@@ -3145,7 +3201,9 @@ export class MessageListView {
             // additional fetches (from bottom_whitespace ending up in
             // the view).  During debugging, we found that this adding
             // this next line seems to prevent the Chrome bug from firing.
-            message_viewport.scrollTop();
+            if (this.manages_primary_viewport) {
+                message_viewport.scrollTop();
+            }
 
             this.$list.append($rendered_groups);
             condense.condense_and_collapse($dom_messages);
@@ -3153,11 +3211,15 @@ export class MessageListView {
 
         // After all the messages are rendered, resize any message edit textarea if required.
         autosize.update(this.$list.find(".message_edit_content"));
-        maybe_restore_focus_to_message_edit_form();
+        if (this.manages_primary_viewport) {
+            maybe_restore_focus_to_message_edit_form();
+        }
 
         restore_scroll_position();
 
-        list.update_trailing_bookend();
+        if (this.manages_primary_viewport) {
+            list.update_trailing_bookend();
+        }
         if (list === message_lists.current) {
             pear_panel.refresh_topic_header_controls();
         }
@@ -3418,7 +3480,7 @@ export class MessageListView {
         let old_offset;
         const $selected_row = this.selected_row();
         const selected_in_view = $selected_row.length > 0;
-        if (selected_in_view) {
+        if (this.manages_primary_viewport && selected_in_view) {
             old_offset = $selected_row.get_offset_to_window().top;
         }
         if (discard_rendering_state) {
@@ -3479,6 +3541,10 @@ export class MessageListView {
         // method should only be called with rerender_messages as the
         // rerendered header may need to be updated for the "sticky_header"
         // class.
+        if (!this.show_recipient_headers) {
+            return;
+        }
+
         const $header = $(`#${CSS.escape(group.message_group_id)}`).find(".message_header");
 
         // TODO: It's possible that we no longer need this populate
@@ -3646,7 +3712,9 @@ export class MessageListView {
         // this.render is never called in this code path, we use
         // `_rerender_message` instead which is optimized for this use
         // case.
-        capture_user_message_editing_state();
+        if (this.manages_primary_viewport) {
+            capture_user_message_editing_state();
+        }
 
         // We need to destroy all the tippy instances from the DOM before re-rendering to
         // prevent the appearance of tooltips whose reference has been removed.
@@ -3780,7 +3848,9 @@ export class MessageListView {
     }
 
     clear_table(): void {
-        capture_user_message_editing_state();
+        if (this.manages_primary_viewport) {
+            capture_user_message_editing_state();
+        }
         // We do not want to call .empty() because that also clears
         // jQuery data.  This does mean, however, that we need to be
         // mindful of memory leaks.

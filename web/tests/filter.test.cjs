@@ -1136,6 +1136,22 @@ test("canonicalization", () => {
     assert.equal(term.operator, "search");
     assert.equal(term.operand, 'abc "xyz"');
 
+    term = Filter.canonicalize_term({operator: "thread", operand: 42});
+    assert.equal(term.operator, "thread");
+    assert.equal(term.operand, 42);
+
+    term = Filter.convert_suggestion_to_term({operator: "thread", operand: "42"});
+    assert.equal(term.operator, "thread");
+    assert.equal(term.operand, 42);
+    assert.equal(
+        Filter.convert_suggestion_to_term({operator: "thread", operand: "4.2"}),
+        undefined,
+    );
+    assert.equal(
+        Filter.convert_suggestion_to_term({operator: "thread", operand: "not-an-id"}),
+        undefined,
+    );
+
     term = Filter.canonicalize_term({operator: "has", operand: "attachments"});
     assert.equal(term.operator, "has");
     assert.equal(term.operand, "attachment");
@@ -1669,6 +1685,72 @@ test("predicate_edge_cases", () => {
     filter.predicate();
     predicate = filter.predicate(); // get cached version
     assert.ok(predicate({type: stream_message, stream_id, topic: "Mars"}));
+});
+
+test("thread predicates preserve the message lineage boundary", () => {
+    const root_message = {
+        id: 42,
+        type: stream_message,
+        stream_id: foo_stream_id,
+        topic: "bar",
+    };
+    const matching_child = {...root_message, id: 43, thread_root_message_id: 42};
+    const other_child = {...root_message, id: 44, thread_root_message_id: 99};
+
+    const timeline_filter = new Filter([]);
+    assert.ok(timeline_filter.predicate()(root_message));
+    assert.ok(!timeline_filter.predicate()(matching_child));
+
+    const channel_filter = new Filter([{operator: "channel", operand: foo_stream_id.toString()}]);
+    assert.ok(channel_filter.predicate()(root_message));
+    assert.ok(!channel_filter.predicate()(matching_child));
+
+    // Explicit server-driven narrows admit children. The server evaluates the
+    // expensive search/near terms; the client must not discard their results.
+    const search_filter = new Filter([{operator: "search", operand: "bar"}]);
+    assert.ok(search_filter.predicate()(root_message));
+    assert.ok(search_filter.predicate()(matching_child));
+
+    const near_filter = new Filter([{operator: "near", operand: "42"}]);
+    assert.ok(near_filter.predicate()(root_message));
+    assert.ok(near_filter.predicate()(matching_child));
+
+    const child_id_filter = new Filter([{operator: "id", operand: "43"}]);
+    assert.ok(!child_id_filter.predicate()(root_message));
+    assert.ok(child_id_filter.predicate()(matching_child));
+
+    for (const operand of ["alerted", "mentioned", "starred", "unread"]) {
+        const explicit_filter = new Filter([{operator: "is", operand}]);
+        assert.ok(explicit_filter.predicate()({...matching_child, [operand]: true}));
+    }
+
+    const thread_filter = new Filter([{operator: "thread", operand: 42}]);
+    assert.ok(!thread_filter.predicate()(root_message));
+    assert.ok(thread_filter.predicate()(matching_child));
+    assert.ok(!thread_filter.predicate()(other_child));
+
+    // Negated reply-aware terms do not opt a normal feed into receiving child
+    // Messages. This matches the backend projection: top-level rows still
+    // satisfy `-thread`, while hidden child rows remain out of the feed.
+    const negated_thread_filter = new Filter([{operator: "thread", operand: 42, negated: true}]);
+    assert.ok(negated_thread_filter.predicate()(root_message));
+    assert.ok(!negated_thread_filter.predicate()(matching_child));
+    assert.ok(!negated_thread_filter.predicate()(other_child));
+
+    const negated_unread_filter = new Filter([{operator: "is", operand: "unread", negated: true}]);
+    assert.ok(negated_unread_filter.predicate()({...root_message, unread: false}));
+    assert.ok(!negated_unread_filter.predicate()({...matching_child, unread: false}));
+
+    const thread_search_filter = new Filter([
+        {operator: "thread", operand: 42},
+        {operator: "search", operand: "bar"},
+    ]);
+    assert.ok(!thread_search_filter.predicate()(root_message));
+    assert.ok(thread_search_filter.predicate()(matching_child));
+    assert.ok(!thread_search_filter.predicate()(other_child));
+    assert.ok(thread_filter.contains_no_partial_conversations());
+    assert.ok(thread_filter.is_conversation_view());
+    assert.ok(!thread_filter.may_contain_multiple_conversations());
 });
 
 test("parse", () => {

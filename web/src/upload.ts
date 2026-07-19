@@ -115,7 +115,7 @@ function show_folder_upload_error(config: Config): void {
     );
 }
 
-type Config = ({mode: "compose"} | {mode: "edit"; row: number}) & {
+export type Config = ({mode: "compose"} | {mode: "edit"; row: number} | {mode: "instance"}) & {
     textarea: () => JQuery<HTMLTextAreaElement>;
     send_button: () => JQuery;
     banner_container: () => JQuery;
@@ -200,6 +200,40 @@ export function edit_config(row: number): Config {
         },
         markdown_preview_hide_button: () =>
             $(`#edit_form_${CSS.escape(`${row}`)} .undo_markdown_preview`),
+    };
+}
+
+export function instance_config($root: JQuery, instance_key: string): Config {
+    const root_selector = `[data-compose-editor="${CSS.escape(instance_key)}"]`;
+    return {
+        mode: "instance",
+        textarea: () => $root.find<HTMLTextAreaElement>("textarea.message-textarea").expectOne(),
+        send_button: () => $root.find(".compose-editor-submit"),
+        banner_container: () => $root.find(".compose-editor-banners"),
+        upload_banner_identifier: (file_id) =>
+            `${root_selector} .compose-editor-banners .upload_banner.file_${CSS.escape(file_id)}`,
+        upload_banner: (file_id) =>
+            $root.find(`.compose-editor-banners .upload_banner.file_${CSS.escape(file_id)}`),
+        upload_banner_cancel_button: (file_id) =>
+            $root.find(
+                `.compose-editor-banners .upload_banner.file_${CSS.escape(
+                    file_id,
+                )} .upload_banner_cancel_button`,
+            ),
+        upload_banner_hide_button: (file_id) =>
+            $root.find(
+                `.compose-editor-banners .upload_banner.file_${CSS.escape(
+                    file_id,
+                )} .main-view-banner-close-button`,
+            ),
+        upload_banner_message: (file_id) =>
+            $root.find(
+                `.compose-editor-banners .upload_banner.file_${CSS.escape(file_id)} .upload_msg`,
+            ),
+        file_input_identifier: () => `${root_selector} input.file_input`,
+        source: () => "compose-editor-file-input",
+        drag_drop_container: () => $root,
+        markdown_preview_hide_button: () => $root.find(".undo_markdown_preview"),
     };
 }
 
@@ -752,7 +786,10 @@ export function setup_upload(config: Config): Uppy<Meta, TusBody> {
     return uppy;
 }
 
-export function deactivate_upload(config: Config): void {
+export function deactivate_upload(
+    config: Config,
+    instance_upload_object?: Uppy<Meta, TusBody>,
+): void {
     // Remove event listeners added for handling uploads.
     $(config.file_input_identifier()).off("change");
     config.banner_container().off("click");
@@ -764,6 +801,8 @@ export function deactivate_upload(config: Config): void {
         uppy = upload_objects_by_message_edit_row.get(config.row);
     } else if (config.mode === "compose") {
         uppy = compose_upload_object;
+    } else {
+        uppy = instance_upload_object;
     }
 
     if (!uppy) {

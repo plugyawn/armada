@@ -6,6 +6,7 @@ import * as channel from "./channel.ts";
 import * as echo from "./echo.ts";
 import * as loading from "./loading.ts";
 import * as message_events from "./message_events.ts";
+import * as message_threads from "./message_threads.ts";
 import {page_params} from "./page_params.ts";
 import * as popup_banners from "./popup_banners.ts";
 import * as reload from "./reload.ts";
@@ -122,11 +123,12 @@ function get_events_success(events) {
                 // But in any case, insert_new_messages handles multiple
                 // messages, only one of which was sent by this client,
                 // correctly.
-                message_events.insert_new_messages({
+                const inserted_messages = message_events.insert_new_messages({
                     type: "server_message",
                     raw_messages,
                     sent_by_this_client,
                 });
+                message_threads.handle_added_messages(inserted_messages);
             }
         } catch (error) {
             blueslip.error("Failed to insert new messages", undefined, error);
@@ -136,6 +138,7 @@ function get_events_success(events) {
     if (update_message_events.length > 0) {
         try {
             message_events.update_messages(update_message_events);
+            message_threads.handle_updated_messages(update_message_events);
         } catch (error) {
             blueslip.error("Failed to update messages", undefined, error);
         }
@@ -191,6 +194,7 @@ function get_events({dont_block = false} = {}) {
         data: get_events_params,
         timeout: event_queue_longpoll_timeout_seconds * 1000,
         success(data) {
+            const was_reconnecting = get_events_params.dont_block || get_events_failures > 0;
             watchdog.set_suspect_offline(false);
             try {
                 get_events_xhr = undefined;
@@ -198,6 +202,9 @@ function get_events({dont_block = false} = {}) {
                 popup_banners.close_connection_error_popup_banner("server_events");
 
                 get_events_success(data.events);
+                if (was_reconnecting) {
+                    message_threads.handle_reconnect();
+                }
                 mark_first_events_response_received();
             } catch (error) {
                 blueslip.error("Failed to handle get_events success", undefined, error);

@@ -48,6 +48,7 @@ export const narrow_canonical_operator_schema = z.enum([
     "near",
     "search",
     "sender",
+    "thread",
     "topic",
     "with",
 ]);
@@ -131,6 +132,11 @@ export const narrow_canonical_term_schema = z.discriminatedUnion("operator", [
     }),
     z.object({
         operator: z.literal("sender"),
+        operand: z.number(),
+        negated: z.optional(z.boolean()),
+    }),
+    z.object({
+        operator: z.literal("thread"),
         operand: z.number(),
         negated: z.optional(z.boolean()),
     }),
@@ -741,7 +747,7 @@ export function set_realm_billing(params: StateData["realm_billing"]): void {
 }
 
 export function set_pear_bot_user_ids(user_ids: number[]): void {
-    pear_bot_user_ids = [...new Set(user_ids)].sort((a, b) => a - b);
+    pear_bot_user_ids = [...new Set(user_ids)].toSorted((a, b) => a - b);
 }
 
 export function add_pear_bot_user_id(user_id: number): void {

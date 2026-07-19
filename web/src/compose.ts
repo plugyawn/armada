@@ -10,61 +10,24 @@ import render_wildcard_mention_not_allowed_error from "../templates/compose_bann
 
 import * as channel from "./channel.ts";
 import * as compose_banner from "./compose_banner.ts";
+import * as compose_controller from "./compose_controller.ts";
 import * as compose_notifications from "./compose_notifications.ts";
 import * as compose_pear from "./compose_pear.ts";
+import * as compose_send from "./compose_send.ts";
 import * as compose_state from "./compose_state.ts";
 import * as compose_ui from "./compose_ui.ts";
 import * as compose_validate from "./compose_validate.ts";
 import * as drafts from "./drafts.ts";
-import * as echo from "./echo.ts";
 import type {PostMessageAPIData} from "./echo.ts";
-import {$t} from "./i18n.ts";
-import * as message_events from "./message_events.ts";
 import type {LocalMessage} from "./message_helper.ts";
-import * as message_viewport from "./message_viewport.ts";
 import * as onboarding_steps from "./onboarding_steps.ts";
-import * as pear_panel from "./pear_panel.ts";
-import * as reload from "./reload.ts";
 import * as scheduled_messages from "./scheduled_messages.ts";
-import * as sent_messages from "./sent_messages.ts";
-import * as server_events_state from "./server_events_state.ts";
-import {current_user} from "./state_data.ts";
-import * as transmit from "./transmit.ts";
 import * as typing from "./typing.ts";
 import {user_settings} from "./user_settings.ts";
-import * as util from "./util.ts";
-import * as zcommand from "./zcommand.ts";
 
 // Docs: https://zulip.readthedocs.io/en/latest/subsystems/sending-messages.html
 
-// This is similar to transmit.SendMessageData but not quite the same.
-// We might want to try to consolidate them at some point.
-export type SendMessageData = {
-    sender_id: number;
-    queue_id: string | null;
-    to: string;
-    content: string;
-    resend?: boolean;
-    locally_echoed?: boolean;
-    pear_followup?: string;
-    draft_id: string;
-} & (
-    | {
-          type: "stream";
-          stream_id: number;
-          topic: string;
-      }
-    | {
-          type: "private";
-          reply_to: string;
-          private_message_recipient: string;
-          to_user_ids: string | undefined;
-          // TODO: It would be nice to only require stream_id and topic
-          // on "stream" objects, but that requires some refactoring.
-          stream_id: undefined;
-          topic: "";
-      }
-);
+export type SendMessageData = compose_send.ComposeSendMessageData & {draft_id: string};
 
 export function clear_invites(): void {
     $(
@@ -127,11 +90,34 @@ export function clear_compose_box(): void {
     compose_pear.clear();
 }
 
-export type SentMessageData = SendMessageData & {
-    local_id: string;
-    locally_echoed: boolean;
-    resend: boolean;
-};
+export type SentMessageData = compose_send.SentComposeMessageData<SendMessageData>;
+
+function after_main_send_success(
+    sent_message: SentMessageData | LocalMessage,
+    data: PostMessageAPIData,
+): void {
+    if (sent_message.type !== "stream") {
+        return;
+    }
+    if (data.automatic_new_visibility_policy) {
+        if (!onboarding_steps.ONE_TIME_NOTICES_TO_DISPLAY.has("visibility_policy_banner")) {
+            return;
+        }
+        compose_notifications.notify_automatic_new_visibility_policy(sent_message, {
+            ...data,
+            automatic_new_visibility_policy: data.automatic_new_visibility_policy,
+        });
+        return;
+    }
+    const muted_narrow = compose_notifications.get_muted_narrow(sent_message);
+    if (muted_narrow) {
+        compose_notifications.notify_unmute(
+            muted_narrow,
+            sent_message.stream_id,
+            sent_message.topic,
+        );
+    }
+}
 
 export function send_message_success(
     sent_message: SentMessageData | LocalMessage,
@@ -141,248 +127,100 @@ export function send_message_success(
         clear_compose_box();
     }
 
-    echo.reify_message_id(sent_message.local_id, data.id);
-    drafts.draft_model.deleteDrafts([sent_message.draft_id]);
-
-    if (sent_message.type === "stream") {
-        if (data.automatic_new_visibility_policy) {
-            if (!onboarding_steps.ONE_TIME_NOTICES_TO_DISPLAY.has("visibility_policy_banner")) {
-                return;
-            }
-            // topic has been automatically unmuted or followed. No need to
-            // suggest the user to unmute. Show the banner and return.
-            compose_notifications.notify_automatic_new_visibility_policy(sent_message, {
-                ...data,
-                automatic_new_visibility_policy: data.automatic_new_visibility_policy,
-            });
-            return;
-        }
-
-        const muted_narrow = compose_notifications.get_muted_narrow(sent_message);
-        if (muted_narrow) {
-            compose_notifications.notify_unmute(
-                muted_narrow,
-                sent_message.stream_id,
-                sent_message.topic,
-            );
-        }
-    }
+    compose_send.finalize_message_success(sent_message, data);
+    after_main_send_success(sent_message, data);
 }
 
-function try_start_pear_side_session(): boolean {
-    const content = compose_state.message_content();
-    if (!content.startsWith("/side")) {
-        return false;
-    }
-    if (compose_state.get_message_type() !== "stream") {
-        return false;
-    }
-
-    const side_request = content.slice("/side".length).trim();
-    if (!side_request) {
-        compose_banner.show_error_message(
-            $t({defaultMessage: "Add a request after /side."}),
-            compose_banner.CLASSNAMES.generic_compose_error,
-            $("#compose_banners"),
-            $("textarea#compose-textarea"),
-        );
-        return true;
-    }
-
-    void channel.post({
-        url: "/json/pear/side",
-        data: {
-            stream: compose_state.stream_name(),
-            topic: compose_state.topic(),
-            request: side_request,
-        },
-        success(raw_data) {
-            clear_compose_box();
-            pear_panel.refresh();
-            const data = raw_data as {dm_narrow_url?: string};
-            if (data.dm_narrow_url !== undefined) {
-                window.location.hash = data.dm_narrow_url.slice(1);
-            }
-        },
-        error(xhr) {
-            if (xhr.readyState === 0) {
-                return;
-            }
-            compose_banner.show_error_message(
-                channel.xhr_error_message(
-                    $t({defaultMessage: "Error starting Pear side session"}),
-                    xhr,
-                ),
-                compose_banner.CLASSNAMES.generic_compose_error,
-                $("#compose_banners"),
-                $("textarea#compose-textarea"),
-            );
-        },
-    });
-    return true;
-}
-
-export let send_message = (): void => {
-    if (try_start_pear_side_session()) {
-        return;
-    }
-
-    // Changes here must also be kept in sync with echo.try_deliver_locally
-    compose_state.set_recipient_edited_manually(false);
-    compose_state.set_is_content_unedited_restored_draft(false);
-
-    // Silently save / update a draft to ensure the message is not lost in case send fails.
-    // We delete the draft on successful send.
-    const draft_id = drafts.update_draft({
-        no_notify: true,
-        update_count: false,
-        is_sending_saving: true,
-        // Even 2-character messages that you actually tried to send
-        // should be saved as a draft, since it's confusing if a
-        // message can just disappear into the void.
-        force_save: true,
-    });
-    assert(draft_id !== undefined);
-
+function main_destination(): compose_controller.ComposeDestination {
     const message_type = compose_state.get_message_type();
     assert(message_type !== undefined);
-    let message_data: SendMessageData;
+    let recipient: compose_send.ResolvedComposeRecipient;
     if (message_type === "private") {
         const recipient_emails = compose_state.private_message_recipient_emails();
         const recipient_ids = compose_state.private_message_recipient_ids();
-        message_data = {
-            type: message_type,
-            content: compose_state.message_content(),
-            sender_id: current_user.user_id,
-            queue_id: server_events_state.queue_id,
-            topic: "",
-            to: JSON.stringify(recipient_ids),
-            reply_to: recipient_emails,
-            private_message_recipient: recipient_emails,
-            to_user_ids: util.sorted_ids(recipient_ids).join(","),
-            draft_id,
-            stream_id: undefined,
+        recipient = {
+            type: "private",
+            user_ids: recipient_ids,
+            recipient_emails,
         };
     } else {
         const stream_id = compose_state.stream_id();
         assert(stream_id !== undefined);
-        const topic = compose_state.topic();
-        message_data = {
-            type: message_type,
-            content: compose_state.message_content(),
-            sender_id: current_user.user_id,
-            queue_id: server_events_state.queue_id,
-            topic: util.is_topic_name_considered_empty(topic) ? "" : topic,
+        recipient = {
+            type: "stream",
             stream_id,
-            to: JSON.stringify([stream_id]),
-            draft_id,
+            topic: compose_state.topic(),
         };
-        if (compose_pear.is_followup_enabled()) {
-            message_data.pear_followup = JSON.stringify(true);
-        }
     }
+    return {
+        recipient,
+        pear_followup: recipient.type === "stream" && compose_pear.is_followup_enabled(),
+    };
+}
 
-    let local_id: string;
-
-    const message = echo.try_deliver_locally(message_data, message_events.insert_new_messages);
-    const locally_echoed = Boolean(message);
-    if (message) {
-        // We are rendering this message locally with an id
-        // like 92l99.01 that corresponds to a reasonable
-        // approximation of the id we'll get from the server
-        // in terms of sorting messages.
-        assert(message.local_id !== undefined);
-        local_id = message.local_id;
-    } else {
-        // We are not rendering this message locally, but we
-        // track the message's life cycle with an id like
-        // loc-1, loc-2, loc-3,etc.
-        local_id = sent_messages.get_new_local_id();
+function show_main_send_error(response: string, server_error_code: string): void {
+    if (server_error_code === "TOPIC_WILDCARD_MENTION_NOT_ALLOWED") {
+        const new_row_html = render_wildcard_mention_not_allowed_error({
+            banner_type: compose_banner.ERROR,
+            classname: compose_banner.CLASSNAMES.wildcards_not_allowed,
+        });
+        compose_banner.append_compose_banner_to_banner_list($(new_row_html), $("#compose_banners"));
+        return;
     }
+    compose_banner.show_error_message(
+        response,
+        compose_banner.CLASSNAMES.generic_compose_error,
+        $("#compose_banners"),
+        $("textarea#compose-textarea"),
+    );
+}
 
-    function success(data: unknown): void {
-        const parsed_data = z
-            .object({
-                id: z.number(),
-                automatic_new_visibility_policy: z.optional(z.number()),
-            })
-            .parse(data);
-        send_message_success(
-            {
-                ...message_data,
-                local_id,
-                locally_echoed,
-                resend: false,
-            },
-            parsed_data,
-        );
-    }
+let main_controller: compose_controller.ComposeController | undefined;
 
-    function error(response: string, server_error_code: string): void {
-        // Error callback for failed message send attempts.
-        if (!locally_echoed) {
-            if (server_error_code === "TOPIC_WILDCARD_MENTION_NOT_ALLOWED") {
-                // The topic wildcard mention permission code path has
-                // a special error.
-                const new_row_html = render_wildcard_mention_not_allowed_error({
-                    banner_type: compose_banner.ERROR,
-                    classname: compose_banner.CLASSNAMES.wildcards_not_allowed,
-                });
-                compose_banner.append_compose_banner_to_banner_list(
-                    $(new_row_html),
-                    $("#compose_banners"),
-                );
+function get_main_controller(): compose_controller.ComposeController {
+    main_controller ??= compose_controller.create({
+        get_content: compose_state.message_content,
+        get_destination: main_destination,
+        validate: compose_validate.validate,
+        save_draft(is_sending_saving) {
+            return drafts.update_draft({
+                no_notify: true,
+                update_count: false,
+                is_sending_saving,
+                force_save: is_sending_saving,
+            });
+        },
+        is_busy: () => compose_ui.compose_spinner_visible,
+        set_busy(busy) {
+            if (busy) {
+                compose_ui.show_compose_spinner();
             } else {
-                compose_banner.show_error_message(
-                    response,
-                    compose_banner.CLASSNAMES.generic_compose_error,
-                    $("#compose_banners"),
-                    $("textarea#compose-textarea"),
-                );
+                compose_ui.hide_compose_spinner();
             }
+        },
+        clear: clear_compose_box,
+        show_send_error: show_main_send_error,
+        stop_typing: typing.stop_typing_notifications,
+        before_finish() {
+            clear_invites();
+            clear_private_stream_alert();
+            compose_banner.clear_message_sent_banners();
+        },
+        before_send() {
+            compose_state.set_recipient_edited_manually(false);
+            compose_state.set_is_content_unedited_restored_draft(false);
+        },
+        dispatch_send() {
+            send_message();
+        },
+        schedule: schedule_message_to_custom_date,
+        after_success: after_main_send_success,
+    });
+    return main_controller;
+}
 
-            // For messages that were not locally echoed, we're
-            // responsible for hiding the compose spinner to restore
-            // the compose box so one can send a next message.
-            //
-            // (Restoring this state is handled by clear_compose_box
-            // for locally echoed messages.)
-            compose_ui.hide_compose_spinner();
-            return;
-        }
-
-        assert(message !== undefined);
-        echo.message_send_error(message.id, response);
-
-        // We might not have updated the draft count because we assumed the
-        // message would send. Ensure that the displayed count is correct.
-        drafts.sync_count();
-
-        assert(draft_id !== undefined);
-        const draft = drafts.draft_model.getDraft(draft_id);
-        assert(draft !== false);
-        draft.is_sending_saving = false;
-        drafts.draft_model.editDraft(draft_id, draft);
-    }
-
-    transmit.send_message(
-        {...message_data, local_id, locally_echoed, resend: false},
-        success,
-        error,
-    );
-    server_events_state.assert_get_events_running(
-        "Restarting get_events because it was not running during send",
-    );
-
-    if (locally_echoed) {
-        clear_compose_box();
-        assert(message !== undefined);
-        // Schedule a timer to display a spinner when the message is
-        // taking a longtime to send.
-        setTimeout(() => {
-            echo.display_slow_send_loading_spinner(message);
-        }, 5000);
-    }
+export let send_message = (): void => {
+    get_main_controller().send();
 };
 
 export function rewire_send_message(value: typeof send_message): void {
@@ -405,56 +243,15 @@ export function handle_enter_key_with_preview_open(cmd_or_ctrl_pressed = false):
 // Common entrypoint for asking the server to send the message
 // currently drafted in the compose box, including for scheduled
 // messages.
-export let finish = (scheduling_message = false): boolean | undefined => {
-    if (compose_ui.compose_spinner_visible) {
-        // Avoid sending a message twice in parallel in races where
-        // the user clicks the `Send` button very quickly twice or
-        // presses enter and the send button simultaneously.
-        return undefined;
-    }
-
-    clear_invites();
-    clear_private_stream_alert();
-    compose_banner.clear_message_sent_banners();
-
-    const message_content = compose_state.message_content();
-
-    // Skip normal validation for zcommands, since they aren't
-    // actual messages with recipients; users only send them
-    // from the compose box for convenience sake.
-    if (zcommand.process(message_content)) {
-        do_post_send_tasks();
-        clear_compose_box();
-        return undefined;
-    }
-
-    compose_ui.show_compose_spinner();
-
-    if (!compose_validate.validate(scheduling_message)) {
-        // If the message failed validation, hide compose spinner.
-        compose_ui.hide_compose_spinner();
-        return false;
-    }
-
-    if (scheduling_message) {
-        schedule_message_to_custom_date();
-    } else {
-        send_message();
-    }
-    do_post_send_tasks();
-    return true;
-};
+export let finish = (scheduling_message = false): boolean | undefined =>
+    get_main_controller().finish(scheduling_message);
 
 export function rewire_finish(value: typeof finish): void {
     finish = value;
 }
 
 export function do_post_send_tasks(): void {
-    // TODO: Do we want to perform below tasks even if the send failed due
-    // to a server-side error?
-    message_viewport.bottom_of_feed.reset();
-    typing.stop_typing_notifications();
-    reload.maybe_reset_pending_reload_timeout("compose_end");
+    compose_controller.run_post_send_tasks(typing.stop_typing_notifications);
 }
 
 function schedule_message_to_custom_date(): void {

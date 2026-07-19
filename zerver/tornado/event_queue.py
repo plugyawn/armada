@@ -1206,6 +1206,9 @@ def process_message_event(
     user_ids_without_access_to_sender = set(
         event_template.get("user_ids_without_access_to_sender", [])
     )
+    user_ids_without_thread_root_access = set(
+        event_template.get("user_ids_without_thread_root_access", [])
+    )
     realm_host = event_template.get("realm_host", "")
 
     # TODO/compatibility: We need to set `push_device_registered_user_ids` to None
@@ -1332,6 +1335,11 @@ def process_message_event(
             allow_empty_topic_name=client.empty_topic_name,
             can_access_sender=can_access_sender,
         )
+        if client.user_profile_id in user_ids_without_thread_root_access:
+            # get_client_payload is shared by clients with identical render
+            # settings. Copy before applying this viewer-only projection.
+            message_dict = message_dict.copy()
+            message_dict.pop("thread_root_message_id", None)
 
         # Make sure mirroring bots know whether stream is invite-only
         if "mirror" in client.client_type_name and event_template.get("invite_only"):

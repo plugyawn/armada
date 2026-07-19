@@ -45,11 +45,17 @@ export type ProcessedMessage =
           message: LocalMessage;
       };
 
-export function process_new_server_message(raw_message: RawMessage): Message {
-    return process_new_message({
-        type: "server_message",
-        raw_message,
-    }).message;
+export function process_new_server_message(
+    raw_message: RawMessage,
+    context: {thread_summary_fetch_generation?: number} = {},
+): Message {
+    return process_new_message(
+        {
+            type: "server_message",
+            raw_message,
+        },
+        context,
+    ).message;
 }
 
 export function process_new_local_message(raw_message: RawLocalMessage): LocalMessage {
@@ -61,7 +67,10 @@ export function process_new_local_message(raw_message: RawLocalMessage): LocalMe
     return data.message;
 }
 
-export function process_new_message(opts: NewMessage): ProcessedMessage {
+export function process_new_message(
+    opts: NewMessage,
+    context: {thread_summary_fetch_generation?: number} = {},
+): ProcessedMessage {
     // Call this function when processing a new message.  After
     // a message is processed and inserted into the message store
     // cache, most modules use message_store.get to look at
@@ -78,10 +87,36 @@ export function process_new_message(opts: NewMessage): ProcessedMessage {
             assert(cached_msg_data.type === "server_message");
             util.set_match_data(cached_msg_data.message, opts.raw_message);
         }
+        // Thread summaries are a server-owned projection of ordinary child
+        // Messages. Re-fetching a cached root must refresh that projection;
+        // otherwise reconnects and event-driven reconciliation retain stale
+        // reply counts even though the canonical message fetch is current.
+        if (
+            opts.type === "server_message" &&
+            (context.thread_summary_fetch_generation === undefined ||
+                message_store.can_apply_thread_summary_from_fetch(
+                    opts.raw_message.id,
+                    context.thread_summary_fetch_generation,
+                ))
+        ) {
+            cached_msg_data.message.reply_summary = opts.raw_message.reply_summary;
+        }
         return cached_msg_data;
     }
 
     const message_with_booleans = message_store.convert_raw_message_to_message_with_booleans(opts);
+    if (
+        opts.type === "server_message" &&
+        context.thread_summary_fetch_generation !== undefined &&
+        !message_store.can_apply_thread_summary_from_fetch(
+            opts.raw_message.id,
+            context.thread_summary_fetch_generation,
+        )
+    ) {
+        if ("reply_summary" in message_with_booleans.message) {
+            delete message_with_booleans.message.reply_summary;
+        }
+    }
     people.extract_people_from_message(message_with_booleans.message);
 
     const sent_by_me = people.is_my_user_id(message_with_booleans.message.sender_id);

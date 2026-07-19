@@ -139,6 +139,26 @@ run_test("basics", () => {
     assert.equal(mld.has_unread_messages(), false);
 });
 
+run_test("thread children are isolated from ordinary message lists", () => {
+    const root = make_msg(40);
+    const matching_child = {...make_msg(41), thread_root_message_id: 40};
+    const other_child = {...make_msg(42), thread_root_message_id: 99};
+
+    const timeline = new MessageListData({
+        excludes_muted_topics: false,
+        filter: new Filter([]),
+    });
+    timeline.add_messages([root, matching_child, other_child], true);
+    assert_msg_ids(timeline.all_messages_after_mute_filtering(), [40]);
+
+    const thread = new MessageListData({
+        excludes_muted_topics: false,
+        filter: new Filter([{operator: "thread", operand: 40}]),
+    });
+    thread.add_messages([root, matching_child, other_child], true);
+    assert_msg_ids(thread.all_messages_after_mute_filtering(), [41]);
+});
+
 run_test("muting", () => {
     const dm_filter = new Filter([{operator: "dm", operand: [1]}]);
     let mld = new MessageListData({

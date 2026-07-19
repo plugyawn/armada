@@ -16,6 +16,7 @@ import render_topics_required_error_message from "../templates/topics_required_e
 import * as blueslip from "./blueslip.ts";
 import * as compose_banner from "./compose_banner.ts";
 import * as compose_pm_pill from "./compose_pm_pill.ts";
+import type {ResolvedComposeRecipient} from "./compose_send.ts";
 import * as compose_state from "./compose_state.ts";
 import * as compose_ui from "./compose_ui.ts";
 import * as hash_util from "./hash_util.ts";
@@ -756,8 +757,7 @@ export function set_user_acknowledged_stream_wildcard_flag(value: boolean): void
     user_acknowledged_stream_wildcard = value;
 }
 
-function is_recipient_large_stream(): boolean {
-    const stream_id = compose_state.stream_id();
+function is_recipient_large_stream(stream_id = compose_state.stream_id()): boolean {
     if (stream_id === undefined) {
         return false;
     }
@@ -806,12 +806,14 @@ export function topic_participant_count_more_than_threshold(
     return false;
 }
 
-function is_recipient_large_topic(): boolean {
-    const stream_id = compose_state.stream_id();
+function is_recipient_large_topic(
+    stream_id: number | undefined = compose_state.stream_id(),
+    topic: string | undefined = compose_state.topic(),
+): boolean {
     if (stream_id === undefined) {
         return false;
     }
-    return topic_participant_count_more_than_threshold(stream_id, compose_state.topic());
+    return topic_participant_count_more_than_threshold(stream_id, topic ?? "");
 }
 
 function user_can_mention_many_users(): boolean {
@@ -822,12 +824,15 @@ function user_can_mention_many_users(): boolean {
     );
 }
 
-export function stream_wildcard_mention_allowed(): boolean {
-    return !is_recipient_large_stream() || user_can_mention_many_users();
+export function stream_wildcard_mention_allowed(stream_id = compose_state.stream_id()): boolean {
+    return !is_recipient_large_stream(stream_id) || user_can_mention_many_users();
 }
 
-export function topic_wildcard_mention_allowed(): boolean {
-    return !is_recipient_large_topic() || user_can_mention_many_users();
+export function topic_wildcard_mention_allowed(
+    stream_id: number | undefined = compose_state.stream_id(),
+    topic: string | undefined = compose_state.topic(),
+): boolean {
+    return !is_recipient_large_topic(stream_id, topic) || user_can_mention_many_users();
 }
 
 export function set_wildcard_mention_threshold(value: number): void {
@@ -1167,6 +1172,88 @@ export function validate_message_length($container: JQuery, trigger_flash = true
     return true;
 }
 
+export type ResolvedMessageValidationResult =
+    | {valid: true}
+    | {valid: false; error?: string | undefined};
+
+export function validate_resolved_message({
+    recipient,
+    content,
+    $banner_container,
+    $textarea,
+    upload_in_progress: instance_upload_in_progress,
+}: {
+    recipient: ResolvedComposeRecipient;
+    content: string;
+    $banner_container: JQuery;
+    $textarea: JQuery<HTMLTextAreaElement>;
+    upload_in_progress: boolean;
+}): ResolvedMessageValidationResult {
+    if (/^\s*$/.test(content)) {
+        $textarea.addClass("invalid");
+        return {valid: false, error: NO_MESSAGE_CONTENT_ERROR_MESSAGE};
+    }
+    $textarea.removeClass("invalid");
+    if (content.trimEnd().length > realm.max_message_length) {
+        $textarea.addClass("flash");
+        setTimeout(() => $textarea.removeClass("flash"), 500);
+        return {valid: false, error: get_message_too_long_for_compose_error()};
+    }
+    if (instance_upload_in_progress) {
+        return {valid: false, error: UPLOAD_IN_PROGRESS_ERROR_TOOLTIP_MESSAGE};
+    }
+
+    if (recipient.type === "private") {
+        if (recipient.user_ids.length === 0) {
+            return {valid: false, error: NO_PRIVATE_RECIPIENT_ERROR_MESSAGE};
+        }
+        const recipient_ids = util.sorted_ids(recipient.user_ids).join(",");
+        const permission_error = check_dm_permissions_and_get_error_string(recipient_ids);
+        if (permission_error !== "") {
+            return {valid: false, error: permission_error};
+        }
+        const inactive_ids = recipient.user_ids.filter((id) => !people.is_person_active(id));
+        if (inactive_ids.length > 0) {
+            return {
+                valid: false,
+                error: inactive_ids.some((id) => people.get_by_user_id(id).is_deleted)
+                    ? $t({defaultMessage: "You cannot send messages to deleted users."})
+                    : $t({defaultMessage: "You cannot send messages to deactivated users."}),
+            };
+        }
+        return {valid: true};
+    }
+
+    const sub = stream_data.get_sub_by_id(recipient.stream_id);
+    if (sub === undefined || sub.is_archived) {
+        return {valid: false, error: INVALID_CHANNEL_ERROR_TOOLTIP_MESSAGE};
+    }
+    if (!sub.subscribed) {
+        return {valid: false, error: UNSUBSCRIBED_CHANNEL_ERROR_MESSAGE};
+    }
+    if (!stream_data.can_post_messages_in_stream(sub)) {
+        return {valid: false, error: NO_PERMISSION_TO_POST_IN_CHANNEL_ERROR_MESSAGE};
+    }
+    if (
+        !stream_data.can_use_empty_topic(recipient.stream_id) &&
+        util.is_topic_name_considered_empty(recipient.topic)
+    ) {
+        return {valid: false, error: get_topics_required_error_tooltip_message_html()};
+    }
+    const stream_wildcard_mention = util.find_stream_wildcard_mentions(content);
+    if (
+        !validate_stream_message_mentions({
+            stream_id: recipient.stream_id,
+            $banner_container,
+            stream_wildcard_mention,
+            scheduling_message: false,
+        })
+    ) {
+        return {valid: false};
+    }
+    return {valid: true};
+}
+
 function report_validation_error(
     message: string,
     classname: string,
@@ -1263,12 +1350,14 @@ export function convert_mentions_to_silent_in_direct_messages(
     mention_text: string,
     full_name: string,
     user_id: number,
+    context?: {is_private: boolean; recipient_user_ids: number[]},
 ): string {
-    if (compose_state.get_message_type() !== "private") {
+    const is_private = context?.is_private ?? compose_state.get_message_type() === "private";
+    if (!is_private) {
         return mention_text;
     }
 
-    const recipient_user_ids = compose_pm_pill.get_user_ids();
+    const recipient_user_ids = context?.recipient_user_ids ?? compose_pm_pill.get_user_ids();
     if (recipient_user_ids.length !== 1 || recipient_user_ids[0] !== user_id) {
         return mention_text;
     }

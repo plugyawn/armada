@@ -53,6 +53,7 @@ export const server_message_schema = z.intersection(
         last_edit_timestamp: z.optional(z.number()),
         last_moved_timestamp: z.optional(z.number()),
         reply_summary: z.optional(message_thread_reply_summary_schema),
+        thread_root_message_id: z.optional(z.number()),
         reactions: message_reaction_schema,
         sender_email: z.string(),
         sender_full_name: z.string(),

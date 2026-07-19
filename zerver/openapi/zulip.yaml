@@ -8695,6 +8695,7 @@ paths:
                 - include_anchor
                 - message_ids
                 - anchor_date
+                - exclude_thread_replies
       parameters:
         - name: anchor
           in: query
@@ -8883,6 +8884,23 @@ paths:
 
             **Changes**: New in Zulip 10.0 (feature level 334). Previously, the empty string
             was not a valid topic.
+          schema:
+            type: boolean
+            default: false
+          example: true
+        - name: exclude_thread_replies
+          in: query
+          description: |
+            Whether ordinary feed queries should omit messages that are replies
+            in a message thread. Replies are ordinary messages and are included
+            by default, preserving compatibility with message events and older
+            clients.
+
+            When this parameter is `true`, replies are still returned for an
+            explicit `thread`, `id`, `near`, or search narrow, and for explicit
+            `is:alerted`, `is:mentioned`, `is:starred`, and `is:unread` narrows.
+            This lets clients present top-level feeds and thread panes without
+            creating a second message API or lifecycle.
           schema:
             type: boolean
             default: false
@@ -9149,6 +9167,12 @@ paths:
                   example: [9, 10]
                 content:
                   $ref: "#/components/schemas/RequiredContent"
+                thread_root_message_id:
+                  type: integer
+                  description: |
+                    The ID of the top-level message this message replies to. When
+                    present, the new message is stored and delivered as an ordinary
+                    message but is displayed in that message's thread.
                 topic:
                   description: |
                     The topic of the message. Only required for channel messages
@@ -28968,6 +28992,7 @@ components:
             is_me_message: {}
             is_pear_message: {}
             reply_summary: {}
+            thread_root_message_id: {}
             last_edit_timestamp: {}
             last_moved_timestamp: {}
             reactions: {}
@@ -29007,7 +29032,7 @@ components:
       type: object
       additionalProperties: false
       description: |
-        A compact summary of human replies attached to this message. The field
+        A compact summary of replies attached to this message. The field
         is absent when the message has no replies; reply bodies are fetched
         separately when the thread is opened.
       properties:
@@ -29019,6 +29044,12 @@ components:
           type: integer
           description: |
             The UNIX timestamp of the most recent reply.
+        unread_reply_count:
+          type: integer
+          description: |
+            The number of replies that are unread for the requesting user.
+            This viewer-specific field is omitted for unauthenticated
+            web-public requests.
         last_sender:
           type: object
           nullable: true
@@ -29240,6 +29271,11 @@ components:
             Whether the message was sent by the Pear embedded bot.
         reply_summary:
           $ref: "#/components/schemas/MessageThreadSummary"
+        thread_root_message_id:
+          type: integer
+          description: |
+            The ID of the top-level message this message replies to. Absent for
+            top-level messages.
         last_edit_timestamp:
           type: integer
           description: |

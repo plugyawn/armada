@@ -23,7 +23,7 @@ from zerver.lib.bot_storage import (
 )
 from zerver.lib.integrations import EMBEDDED_BOTS
 from zerver.lib.topic import get_topic_from_message_info
-from zerver.models import UserProfile
+from zerver.models import Message, UserProfile
 from zerver.models.users import get_active_user
 
 
@@ -105,6 +105,22 @@ class EmbeddedBotHandler:
         if not self._rate_limit.is_legal():
             self._rate_limit.show_error_and_exit()
 
+        thread_root_message = None
+        thread_root_message_id = message.get("thread_root_message_id")
+        if thread_root_message_id is not None:
+            if not isinstance(thread_root_message_id, int) or isinstance(
+                thread_root_message_id, bool
+            ):
+                raise ValueError("thread_root_message_id must be an integer")
+            # Service bots intentionally do not receive UserMessage rows.  Do
+            # not use access_message here: the canonical send validator below
+            # verifies the bot can send to the root's exact destination and
+            # rejects nested/mismatched roots without exposing root content.
+            thread_root_message = Message.objects.select_related("recipient").get(
+                id=thread_root_message_id,
+                realm=self.user_profile.realm,
+            )
+
         if message["type"] == "stream":
             message_id = internal_send_stream_message_by_name(
                 self.user_profile.realm,
@@ -112,6 +128,7 @@ class EmbeddedBotHandler:
                 message["to"],
                 message["topic"],
                 message["content"],
+                thread_root_message=thread_root_message,
             )
             return {"id": message_id}
 
@@ -125,11 +142,18 @@ class EmbeddedBotHandler:
         elif len(message["to"]) == 1:
             recipient_user = get_active_user(recipients[0], self.user_profile.realm)
             message_id = internal_send_private_message(
-                self.user_profile, recipient_user, message["content"]
+                self.user_profile,
+                recipient_user,
+                message["content"],
+                thread_root_message=thread_root_message,
             )
         else:
             message_id = internal_send_group_direct_message(
-                self.user_profile.realm, self.user_profile, message["content"], emails=recipients
+                self.user_profile.realm,
+                self.user_profile,
+                message["content"],
+                emails=recipients,
+                thread_root_message=thread_root_message,
             )
         return {"id": message_id}
 
@@ -143,6 +167,7 @@ class EmbeddedBotHandler:
                     to=[x["email"] for x in message["display_recipient"]],
                     content=response,
                     sender_email=message["sender_email"],
+                    thread_root_message_id=message.get("thread_root_message_id"),
                 )
             )
         else:
@@ -153,6 +178,7 @@ class EmbeddedBotHandler:
                     topic=get_topic_from_message_info(message),
                     content=response,
                     sender_email=message["sender_email"],
+                    thread_root_message_id=message.get("thread_root_message_id"),
                 )
             )
         return {"id": result["id"]}

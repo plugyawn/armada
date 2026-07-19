@@ -27,6 +27,7 @@
 # message or group of messages) as we use for message retention policy
 # deletions.
 import copy
+import heapq
 import logging
 import time
 from collections.abc import Iterable, Mapping
@@ -36,7 +37,7 @@ from typing import Any
 from django.conf import settings
 from django.contrib.postgres.aggregates import ArrayAgg
 from django.db import connection, transaction
-from django.db.models import Case, CharField, Model, Value, When
+from django.db.models import Case, CharField, Model, Q, Value, When
 from django.db.models.functions import Upper
 from django.utils.timezone import now as timezone_now
 from psycopg2.sql import SQL, Composable, Identifier, Literal
@@ -49,6 +50,7 @@ from zerver.lib.topic import DB_TOPIC_NAME
 from zerver.lib.utils import assert_is_not_none
 from zerver.models import (
     ArchivedAttachment,
+    ArchivedMessage,
     ArchivedReaction,
     ArchivedSubMessage,
     ArchivedUserMessage,
@@ -133,6 +135,19 @@ def move_rows(
             return []
 
 
+def message_ids_with_thread_replies(message_ids: list[int]) -> list[int]:
+    """Return the complete Message aggregate for roots in ``message_ids``."""
+    if not message_ids:
+        return []
+
+    root_ids = Message.objects.filter(
+        id__in=message_ids,
+        thread_root__isnull=True,
+    ).values_list("id", flat=True)
+    reply_ids = Message.objects.filter(thread_root_id__in=root_ids).values_list("id", flat=True)
+    return sorted({*message_ids, *reply_ids})
+
+
 def run_archiving(
     query: SQL,
     type: int,
@@ -166,7 +181,45 @@ def run_archiving(
                 archive_transaction_id=Literal(archive_transaction.id),
                 **kwargs,
             )
+            selected_chunk_size = len(new_chunk)
             if new_chunk:
+                # Sending a reply locks its root before the final destination
+                # check and insert.  Take the same lock here before expanding
+                # the aggregate: a concurrent send therefore either commits
+                # before this expansion (and is archived with the root), or
+                # wakes after the root is gone and fails validation.  Without
+                # this lock, a reply could be CASCADE-deleted without ever
+                # being archived or included in the delete event.
+                list(
+                    Message.objects.select_for_update()
+                    .filter(id__in=new_chunk, thread_root__isnull=True)
+                    .order_by("id")
+                    .values_list("id", flat=True)
+                )
+                complete_chunk = message_ids_with_thread_replies(new_chunk)
+                reply_ids = sorted(set(complete_chunk).difference(new_chunk))
+                if reply_ids:
+                    reply_query = SQL(
+                        """
+                    INSERT INTO zerver_archivedmessage ({dst_fields}, archive_transaction_id)
+                        SELECT {src_fields}, {archive_transaction_id}
+                        FROM zerver_message
+                        WHERE zerver_message.id IN {message_ids}
+                    ON CONFLICT (id) DO UPDATE
+                        SET archive_transaction_id = {archive_transaction_id}
+                    RETURNING id
+                    """
+                    )
+                    new_chunk.extend(
+                        move_rows(
+                            Message,
+                            reply_query,
+                            returning_id=True,
+                            archive_transaction_id=Literal(archive_transaction.id),
+                            message_ids=Literal(tuple(reply_ids)),
+                        )
+                    )
+                    new_chunk.sort()
                 move_related_objects_to_archive(new_chunk)
                 delete_messages(new_chunk, realm, skip_notify=skip_notify, acting_user=acting_user)
                 message_count += len(new_chunk)
@@ -188,7 +241,7 @@ def run_archiving(
         # We run the loop, until the query returns fewer results than chunk_size,
         # which means we are done; or if we're not chunking, we're done
         # after one iteration.
-        if chunk_size is None or len(new_chunk) < chunk_size:
+        if chunk_size is None or selected_chunk_size < chunk_size:
             break
 
     return message_count
@@ -625,10 +678,18 @@ def move_messages_to_archive(
     count = 0
     # In order to avoid sending a massive list of message ids to the database,
     # we'll handle chunking the list of ids directly here.
-    message_ids_head = message_ids
+    message_ids_head = list(dict.fromkeys(message_ids))
     while message_ids_head:
         message_ids_chunk = message_ids_head[0:chunk_size]
         message_ids_head = message_ids_head[chunk_size:]
+        live_message_ids_chunk = list(
+            Message.objects.filter(id__in=message_ids_chunk).values_list("id", flat=True)
+        )
+        if not live_message_ids_chunk:
+            # An earlier root chunk may already have archived a requested
+            # reply.  Skipping the now-missing ID avoids treating successful
+            # aggregate archiving as a later per-chunk failure.
+            continue
 
         # Uses index: zerver_message_pkey
         query = SQL(
@@ -645,15 +706,18 @@ def move_messages_to_archive(
         count += run_archiving(
             query,
             type=ArchiveTransaction.MANUAL,
-            message_ids=Literal(tuple(message_ids_chunk)),
+            message_ids=Literal(tuple(live_message_ids_chunk)),
             realm=realm,
             chunk_size=None,
             skip_notify=skip_notify,
             acting_user=acting_user,
         )
         # Clean up attachments:
+        archived_aggregate_ids = ArchivedMessage.objects.filter(
+            Q(id__in=live_message_ids_chunk) | Q(thread_root_message_id__in=live_message_ids_chunk)
+        ).values_list("id", flat=True)
         archived_attachments = ArchivedAttachment.objects.filter(
-            messages__id__in=message_ids_chunk
+            messages__id__in=archived_aggregate_ids
         ).distinct()
         Attachment.objects.filter(
             messages__isnull=True, scheduled_messages__isnull=True, id__in=archived_attachments
@@ -747,7 +811,90 @@ def restore_attachment_messages_from_archive(archive_transaction_id: int) -> Non
         cursor.execute(query, dict(archive_transaction_id=archive_transaction_id))
 
 
-def restore_data_from_archive(archive_transaction: ArchiveTransaction) -> int:
+def archive_transactions_in_thread_dependency_order(
+    archive_transactions: Iterable[ArchiveTransaction],
+) -> list[ArchiveTransaction]:
+    """Order transactions so every thread root is live before its replies.
+
+    A reply and its root can be archived independently.  PostgreSQL can restore
+    a root and its replies in one statement, but a reply-only transaction must
+    not be restored while its root still lives only in another archive
+    transaction.
+    """
+    transactions = list(archive_transactions)
+    if not transactions:
+        return []
+
+    transactions_by_id = {
+        archive_transaction.id: archive_transaction for archive_transaction in transactions
+    }
+    transaction_ids = list(transactions_by_id)
+    archived_rows = list(
+        ArchivedMessage.objects.filter(archive_transaction_id__in=transaction_ids).values_list(
+            "id",
+            "thread_root_message_id",
+            "archive_transaction_id",
+        )
+    )
+    transaction_for_archived_message = {
+        message_id: archive_transaction_id
+        for message_id, _thread_root_message_id, archive_transaction_id in archived_rows
+    }
+    dependencies: dict[int, set[int]] = {
+        archive_transaction_id: set() for archive_transaction_id in transaction_ids
+    }
+    external_root_ids: set[int] = set()
+    for _message_id, thread_root_message_id, archive_transaction_id in archived_rows:
+        if thread_root_message_id is None:
+            continue
+        root_transaction_id = transaction_for_archived_message.get(thread_root_message_id)
+        if root_transaction_id is None:
+            external_root_ids.add(thread_root_message_id)
+        elif root_transaction_id != archive_transaction_id:
+            dependencies[archive_transaction_id].add(root_transaction_id)
+
+    live_external_root_ids = set(
+        Message.objects.filter(
+            id__in=external_root_ids,
+            thread_root__isnull=True,
+        ).values_list("id", flat=True)
+    )
+    missing_root_ids = external_root_ids - live_external_root_ids
+    if missing_root_ids:
+        missing_root_id = min(missing_root_ids)
+        raise Message.DoesNotExist(
+            f"Cannot restore a thread reply before archived root message {missing_root_id}"
+        )
+
+    dependents: dict[int, set[int]] = {
+        archive_transaction_id: set() for archive_transaction_id in transaction_ids
+    }
+    for archive_transaction_id, root_transaction_ids in dependencies.items():
+        for root_transaction_id in root_transaction_ids:
+            dependents[root_transaction_id].add(archive_transaction_id)
+
+    ready = [
+        archive_transaction_id
+        for archive_transaction_id, root_transaction_ids in dependencies.items()
+        if not root_transaction_ids
+    ]
+    heapq.heapify(ready)
+    ordered_ids: list[int] = []
+    while ready:
+        archive_transaction_id = heapq.heappop(ready)
+        ordered_ids.append(archive_transaction_id)
+        for dependent_id in sorted(dependents[archive_transaction_id]):
+            dependencies[dependent_id].discard(archive_transaction_id)
+            if not dependencies[dependent_id]:
+                heapq.heappush(ready, dependent_id)
+
+    if len(ordered_ids) != len(transaction_ids):
+        raise RuntimeError("Archived message thread dependencies contain a cycle")
+
+    return [transactions_by_id[archive_transaction_id] for archive_transaction_id in ordered_ids]
+
+
+def _restore_data_from_archive(archive_transaction: ArchiveTransaction) -> int:
     logger.info("Restoring %s", archive_transaction)
     # transaction.atomic needs to be used here, rather than being a wrapper on the whole function,
     # so that when we log "Finished", the process has indeed finished - and that happens only after
@@ -767,14 +914,21 @@ def restore_data_from_archive(archive_transaction: ArchiveTransaction) -> int:
     return len(msg_ids)
 
 
+def restore_data_from_archive(archive_transaction: ArchiveTransaction) -> int:
+    ordered_transactions = archive_transactions_in_thread_dependency_order([archive_transaction])
+    return _restore_data_from_archive(ordered_transactions[0])
+
+
 def restore_data_from_archive_by_transactions(
     archive_transactions: Iterable[ArchiveTransaction],
 ) -> int:
     # Looping over the list of ids means we're batching the restoration process by the size of the
     # transactions:
     message_count = 0
-    for archive_transaction in archive_transactions:
-        message_count += restore_data_from_archive(archive_transaction)
+    for archive_transaction in archive_transactions_in_thread_dependency_order(
+        archive_transactions
+    ):
+        message_count += _restore_data_from_archive(archive_transaction)
 
     return message_count
 

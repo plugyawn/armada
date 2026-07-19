@@ -6,6 +6,7 @@ import type {PanZoom} from "panzoom";
 import render_lightbox_overlay from "../templates/lightbox_overlay.hbs";
 
 import * as blueslip from "./blueslip.ts";
+import * as message_lists from "./message_lists.ts";
 import * as message_store from "./message_store.ts";
 import * as overlays from "./overlays.ts";
 import * as people from "./people.ts";
@@ -700,7 +701,8 @@ export function initialize(): void {
     open_image = build_open_media_function(reset_lightbox_state);
     open_video = build_open_media_function(undefined);
 
-    $("#main_div, #compose .preview_content").on(
+    const $message_interaction_root = message_lists.get_rendered_message_interaction_root();
+    $message_interaction_root.on(
         "click",
         ".message-media-inline-image a, .message-media-preview-image:not(.message_inline_video) a, .message_inline_animated_image_still",
         function (e) {
@@ -713,7 +715,7 @@ export function initialize(): void {
         },
     );
 
-    $("#main_div, #compose .preview_content").on("click", ".message_inline_video", (e) => {
+    $message_interaction_root.on("click", ".message_inline_video", (e) => {
         e.preventDefault();
         e.stopPropagation();
 

@@ -181,6 +181,7 @@ class MessageFieldForDirectMessageEvent(BaseModel):
     timestamp: int
     type: str
     display_recipient: list[DirectMessageDisplayRecipient]
+    thread_root_message_id: int | None = None
 
 
 class DirectMessageEvent(BaseEvent):
@@ -259,43 +260,13 @@ class MessageFieldForMessageEvent(BaseModel):
     type: str
     display_recipient: str
     stream_id: int
+    thread_root_message_id: int | None = None
 
 
 class MessageEvent(BaseEvent):
     type: Literal["message"]
     flags: list[str]
     message: MessageFieldForMessageEvent
-
-
-class MessageThreadUser(BaseModel):
-    user_id: int
-    full_name: str
-    avatar_url: str | None
-
-
-class MessageThreadSummary(BaseModel):
-    reply_count: int
-    last_reply_at: int
-    last_sender: MessageThreadUser | None
-    participants: list[MessageThreadUser]
-
-
-class MessageThreadReply(BaseModel):
-    id: int
-    message_id: int
-    sender_id: int
-    sender_full_name: str
-    avatar_url: str | None
-    content: str
-    content_type: Literal["text/html"]
-    timestamp: int
-
-
-class MessageThreadEvent(BaseEvent):
-    type: Literal["message_thread"]
-    message_id: int
-    reply_summary: MessageThreadSummary
-    reply: MessageThreadReply
 
 
 class MutedTopicsEvent(BaseEvent):

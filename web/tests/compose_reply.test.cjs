@@ -4,6 +4,7 @@ const assert = require("node:assert/strict");
 
 const {zrequire, mock_esm} = require("./lib/namespace.cjs");
 const {run_test} = require("./lib/test.cjs");
+const $ = require("./lib/zjquery.cjs");
 
 const compose_reply = zrequire("compose_reply");
 const message_store = zrequire("message_store");
@@ -389,4 +390,49 @@ run_test("build_and_process_quote_assets_for_messages", ({override}) => {
         {message: msg_unhydrated, quote_content: "converted_by_turndown: <p>unhydrated</p>"},
         "Fallback to using paste_handler_converter",
     );
+});
+
+run_test("explicit thread quote targets the owning instance editor", () => {
+    const compose_ui = zrequire("compose_ui");
+    const $textarea = $.create("thread-compose-textarea");
+    const message = {
+        id: 901,
+        type: "stream",
+        stream_id: 10,
+        topic: "design",
+        sender_id: 5,
+        sender_full_name: "Iago",
+        timestamp: 1_700_000_000,
+        submessages: [],
+    };
+    message_store.set_messages_for_tests([{type: "server_message", message}]);
+    let insert_target;
+    let replace_target;
+    let content_change_count = 0;
+    compose_ui.rewire_insert_syntax_and_focus((_syntax, target) => {
+        insert_target = target;
+    });
+    compose_ui.rewire_replace_syntax((_old_syntax, _content, target) => {
+        replace_target = target;
+        return true;
+    });
+    compose_ui.rewire_autosize_textarea(() => {});
+    compose_reply.rewire_respond_to_message(() => {
+        throw new Error("thread quote must not open the primary compose box");
+    });
+
+    compose_reply.quote_messages({
+        message_id: message.id,
+        quote_content: "quoted markdown",
+        thread_compose_target: {
+            textarea: $textarea.get(0),
+            notify_content_changed() {
+                content_change_count += 1;
+            },
+        },
+    });
+
+    assert.equal(insert_target.get(0), $textarea.get(0));
+    assert.equal(replace_target.get(0), $textarea.get(0));
+    assert.equal(content_change_count, 2);
 });

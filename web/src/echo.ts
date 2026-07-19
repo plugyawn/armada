@@ -10,6 +10,7 @@ import * as blueslip from "./blueslip.ts";
 import * as browser_history from "./browser_history.ts";
 import type * as compose from "./compose.ts";
 import * as compose_notifications from "./compose_notifications.ts";
+import type {ComposeSendMessageData} from "./compose_send.ts";
 import * as compose_ui from "./compose_ui.ts";
 import * as echo_state from "./echo_state.ts";
 import * as hash_util from "./hash_util.ts";
@@ -53,6 +54,7 @@ type MessageRequestObject = {
     content: string;
     to: string;
     draft_id: string | undefined;
+    thread_root_message_id?: number | undefined;
 };
 
 type PrivateMessageObject = {
@@ -249,7 +251,7 @@ export function track_local_message(message: LocalMessage): void {
 }
 
 export function insert_local_message(
-    message_request: compose.SendMessageData,
+    message_request: ComposeSendMessageData & {draft_id: string},
     local_id_float: number,
     insert_new_messages: (opts: InsertNewMessagesOpts) => Message[],
 ): Message {
@@ -294,7 +296,7 @@ export function is_slash_command(content: string): boolean {
 }
 
 export let try_deliver_locally = (
-    message_request: compose.SendMessageData,
+    message_request: ComposeSendMessageData & {draft_id: string},
     insert_new_messages: (opts: InsertNewMessagesOpts) => Message[],
 ): Message | undefined => {
     // Checks if the message request can be locally echoed, and if so,
@@ -664,6 +666,7 @@ export function initialize({
     on_send_message_success: typeof compose.send_message_success;
     send_message: typeof transmit.send_message;
 }): void {
+    const $message_interaction_root = message_lists.get_rendered_message_interaction_root();
     function on_failed_action(
         selector: string,
         callback: (
@@ -678,7 +681,7 @@ export function initialize({
             },
         ) => void,
     ): void {
-        $("#main_div").on("click", selector, function (this: HTMLElement, e) {
+        $message_interaction_root.on("click", selector, function (this: HTMLElement, e) {
             e.stopPropagation();
             const $row = $(this).closest(".message_row");
             const local_id = rows.local_echo_id($row);

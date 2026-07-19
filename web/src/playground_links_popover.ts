@@ -5,6 +5,7 @@ import Template from "uri-template-lite";
 import render_playground_links_popover from "../templates/popovers/playground_links_popover.hbs";
 
 import * as blueslip from "./blueslip.ts";
+import * as message_lists from "./message_lists.ts";
 import * as popover_menus from "./popover_menus.ts";
 import * as realm_playground from "./realm_playground.ts";
 import type {RealmPlayground} from "./realm_playground.ts";
@@ -96,10 +97,10 @@ export function handle_keyboard(key: string): void {
 }
 
 function register_click_handlers(): void {
-    $("#main_div, #preview_content, #message-history").on(
-        "click",
-        ".code_external_link",
-        function (e) {
+    message_lists
+        .get_rendered_message_interaction_root()
+        .add("#preview_content, #message-history")
+        .on("click", ".code_external_link", function (e) {
             const $view_in_playground_button = $(this);
             const $codehilite_div = $(this).closest(".codehilite");
             e.stopPropagation();
@@ -132,8 +133,7 @@ function register_click_handlers(): void {
                 );
                 toggle_playground_links_popover(popover_target, playground_store);
             }
-        },
-    );
+        });
 
     $("body").on("click", ".popover_playground_link", (e) => {
         hide();

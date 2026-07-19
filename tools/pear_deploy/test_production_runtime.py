@@ -1112,6 +1112,7 @@ class StaticRuntimeContractTest(unittest.TestCase):
             "zerver.tests.test_pear_workspace_io",
             "zerver.tests.test_pear_workspace_index",
             "zerver.tests.test_pear_workspace_resources",
+            "zerver.tests.test_message_threads",
         ):
             self.assertIn(suite, update)
             self.assertIn(suite, backend_workflow)

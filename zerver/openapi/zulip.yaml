@@ -8961,6 +8961,7 @@ paths:
                                 id: {}
                                 is_me_message: {}
                                 is_pear_message: {}
+                                reply_summary: {}
                                 last_edit_timestamp: {}
                                 last_moved_timestamp: {}
                                 reactions: {}
@@ -10355,6 +10356,7 @@ paths:
                               id: {}
                               is_me_message: {}
                               is_pear_message: {}
+                              reply_summary: {}
                               last_edit_timestamp: {}
                               last_moved_timestamp: {}
                               reactions: {}
@@ -27082,6 +27084,7 @@ paths:
                           id: {}
                           is_me_message: {}
                           is_pear_message: {}
+                          reply_summary: {}
                           last_edit_timestamp: {}
                           last_moved_timestamp: {}
                           reactions: {}
@@ -28964,6 +28967,7 @@ components:
             id: {}
             is_me_message: {}
             is_pear_message: {}
+            reply_summary: {}
             last_edit_timestamp: {}
             last_moved_timestamp: {}
             reactions: {}
@@ -28978,6 +28982,73 @@ components:
             timestamp: {}
             topic_links: {}
             type: {}
+    MessageThreadParticipant:
+      type: object
+      additionalProperties: false
+      properties:
+        user_id:
+          type: integer
+          description: |
+            The user ID of a participant in the message thread.
+        full_name:
+          type: string
+          description: |
+            The participant's full name.
+        avatar_url:
+          type: string
+          nullable: true
+          description: |
+            The URL of the participant's avatar.
+      required:
+        - user_id
+        - full_name
+        - avatar_url
+    MessageThreadSummary:
+      type: object
+      additionalProperties: false
+      description: |
+        A compact summary of human replies attached to this message. The field
+        is absent when the message has no replies; reply bodies are fetched
+        separately when the thread is opened.
+      properties:
+        reply_count:
+          type: integer
+          description: |
+            The total number of replies attached to this message.
+        last_reply_at:
+          type: integer
+          description: |
+            The UNIX timestamp of the most recent reply.
+        last_sender:
+          type: object
+          nullable: true
+          additionalProperties: false
+          description: |
+            The sender of the most recent reply.
+          properties:
+            user_id:
+              type: integer
+            full_name:
+              type: string
+            avatar_url:
+              type: string
+              nullable: true
+          required:
+            - user_id
+            - full_name
+            - avatar_url
+        participants:
+          type: array
+          description: |
+            The bounded set of participants represented in the compact thread
+            summary.
+          items:
+            $ref: "#/components/schemas/MessageThreadParticipant"
+      required:
+        - reply_count
+        - last_reply_at
+        - last_sender
+        - participants
     MessagesBase:
       type: object
       description: |
@@ -29167,6 +29238,8 @@ components:
           type: boolean
           description: |
             Whether the message was sent by the Pear embedded bot.
+        reply_summary:
+          $ref: "#/components/schemas/MessageThreadSummary"
         last_edit_timestamp:
           type: integer
           description: |

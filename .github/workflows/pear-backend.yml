@@ -41,6 +41,7 @@ jobs:
             zerver.tests.test_pear_workspace_io \
             zerver.tests.test_pear_workspace_index \
             zerver.tests.test_pear_workspace_resources \
+            zerver.tests.test_message_threads \
             --ban-console-output
 
       - name: Test production deployment tooling

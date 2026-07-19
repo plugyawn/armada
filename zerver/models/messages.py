@@ -359,8 +359,7 @@ class MessageThreadReply(models.Model):
     class Meta:
         indexes = [
             models.Index(
-                "thread",
-                "id",
+                fields=["thread", "id"],
                 name="zerver_thread_reply_page",
             ),
         ]

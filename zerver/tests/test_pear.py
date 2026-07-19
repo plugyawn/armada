@@ -6386,7 +6386,7 @@ class PearAppServerProtocolCitizenTest(TestCase):
 
     def test_native_collaboration_item_retains_bounded_agent_metadata(self) -> None:
         translator = self.make_translator()
-        session, event = translator.events_from_message(
+        session, child_progress, event = translator.events_from_message(
             {
                 "method": "item/completed",
                 "params": {
@@ -6411,6 +6411,9 @@ class PearAppServerProtocolCitizenTest(TestCase):
         self.assertEqual(session["metadata"]["codex_thread_id"], "child-1")
         self.assertEqual(session["metadata"]["parent_thread_id"], "root-1")
         self.assertEqual(session["metadata"]["thread"]["status"], {"type": "active"})
+        self.assertEqual(child_progress["kind"], "assistant")
+        self.assertEqual(child_progress["body"], "Inspecting UI")
+        self.assertEqual(child_progress["metadata"]["codex_thread_id"], "child-1")
         self.assertEqual(event["kind"], "agent")
         self.assertEqual(event["title"], "Started an agent")
         self.assertEqual(event["metadata"]["codex_thread_id"], "root-1")

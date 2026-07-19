@@ -4,6 +4,7 @@ from collections.abc import Callable
 from typing import Any
 
 from django.conf import settings
+from django.db import transaction
 from django.utils.translation import gettext as _
 from zulip_bots.lib import BotIdentity, RateLimit
 
@@ -166,9 +167,18 @@ class EmbeddedBotHandler:
 
         rendering_only = message.get("rendering_only") is True
         if rendering_only:
-            from zerver.actions.message_edit import check_update_message_rendering_only
+            from zerver.actions.message_edit import (
+                check_update_message_rendering_only,
+                check_update_message_rendering_only_in_transaction,
+            )
 
-            check_update_message_rendering_only(
+            update_rendered_message = check_update_message_rendering_only
+            # Pear serializes completion against cancellation in a caller-owned
+            # transaction. In that case the message update must participate in
+            # the existing transaction rather than opening a nested durable one.
+            if transaction.get_connection().in_atomic_block:
+                update_rendered_message = check_update_message_rendering_only_in_transaction
+            update_rendered_message(
                 self.user_profile,
                 message_id,
                 content=content,

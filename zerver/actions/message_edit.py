@@ -505,8 +505,7 @@ def do_update_embedded_data(
     send_event_on_commit(user_profile.realm, event, list(map(user_info, filtered_ums)))
 
 
-@transaction.atomic(durable=True)
-def check_update_message_rendering_only(
+def _check_update_message_rendering_only(
     user_profile: UserProfile,
     message_id: int,
     *,
@@ -591,6 +590,31 @@ def check_update_message_rendering_only(
         }
 
     send_event_on_commit(user_profile.realm, event, list(map(user_info, filtered_ums)))
+
+
+@transaction.atomic(durable=True)
+def check_update_message_rendering_only(
+    user_profile: UserProfile,
+    message_id: int,
+    *,
+    content: str,
+) -> None:
+    _check_update_message_rendering_only(user_profile, message_id, content=content)
+
+
+def check_update_message_rendering_only_in_transaction(
+    user_profile: UserProfile,
+    message_id: int,
+    *,
+    content: str,
+) -> None:
+    """Update rendered content as part of a caller-owned transaction."""
+    assert transaction.get_connection().in_atomic_block
+    # Keep this operation isolated behind a savepoint. Callers such as Pear may
+    # recover by posting a new message if this edit fails; they must not commit
+    # a partial edit and its fallback together.
+    with transaction.atomic():
+        _check_update_message_rendering_only(user_profile, message_id, content=content)
 
 
 def get_visibility_policy_after_merge(

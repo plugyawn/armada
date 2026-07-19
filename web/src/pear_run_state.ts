@@ -239,6 +239,15 @@ function active_result_message_union(): Set<number> {
     return result;
 }
 
+function remove_active_result_message_from_contexts(message_id: number): void {
+    for (const [key, message_ids] of active_result_message_ids_by_context) {
+        message_ids.delete(message_id);
+        if (message_ids.size === 0) {
+            active_result_message_ids_by_context.delete(key);
+        }
+    }
+}
+
 function notify_active_result_message_change_listeners(
     change: PearActiveResultMessageChange,
 ): void {
@@ -491,21 +500,26 @@ export function apply_pear_run_event(event: PearRunPushEvent): void {
     remember_overview(event.run_id, event.overview);
     run_views_by_id.set(event.run_id, view);
     const message_id = event.result_message_id;
+    const previous_message_id = previous?.result_message_id;
     if (
-        typeof previous?.result_message_id === "number" &&
-        previous.result_message_id !== message_id &&
-        run_ids_by_result_message.get(previous.result_message_id) === event.run_id
+        typeof previous_message_id === "number" &&
+        previous_message_id !== message_id &&
+        run_ids_by_result_message.get(previous_message_id) === event.run_id
     ) {
-        run_ids_by_result_message.delete(previous.result_message_id);
+        run_ids_by_result_message.delete(previous_message_id);
+        if (ambient_run_ids_by_result_message.get(previous_message_id) === event.run_id) {
+            ambient_run_ids_by_result_message.delete(previous_message_id);
+            if (typeof message_id === "number") {
+                ambient_run_ids_by_result_message.set(message_id, event.run_id);
+            }
+        }
+        remove_active_result_message_from_contexts(previous_message_id);
+        active_run_started_at.delete(previous_message_id);
+        active_run_operations.delete(previous_message_id);
     }
     if (message_id !== null) {
         run_ids_by_result_message.set(message_id, event.run_id);
-        for (const [key, message_ids] of active_result_message_ids_by_context) {
-            message_ids.delete(message_id);
-            if (message_ids.size === 0) {
-                active_result_message_ids_by_context.delete(key);
-            }
-        }
+        remove_active_result_message_from_contexts(message_id);
         if (is_active_status(event.status)) {
             const key = active_context_key(event.stream, event.topic);
             const context_message_ids =
@@ -524,11 +538,21 @@ export function apply_pear_run_event(event: PearRunPushEvent): void {
                 overview: last_overview_by_run_id.get(event.run_id) ?? null,
             });
         }
-        replace_active_result_message_ids(active_result_message_union());
+        const removed_message_ids = replace_active_result_message_ids(
+            active_result_message_union(),
+        );
+        if (!is_active_status(event.status) && !removed_message_ids.includes(message_id)) {
+            removed_message_ids.push(message_id);
+        }
         notify_active_result_message_change_listeners({
-            removed_message_ids: is_active_status(event.status) ? [] : [message_id],
+            removed_message_ids,
             footer_changed_message_ids: [message_id],
         });
+    } else if (typeof previous_message_id === "number" && previous_message_id !== message_id) {
+        const removed_message_ids = replace_active_result_message_ids(
+            active_result_message_union(),
+        );
+        notify_active_result_message_change_listeners({removed_message_ids});
     }
     for (const listener of run_state_listeners) {
         listener(view, event);

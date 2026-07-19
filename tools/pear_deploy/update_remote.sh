@@ -858,12 +858,31 @@ verify_reusable_remote_production_assets() {
         $REMOTE_PATH/tools/pear_deploy/production_assets.py --repo-root $REMOTE_PATH"
 }
 
+cleanup_remote_deploy_scratch() {
+    # Recovery must be the final remote mutation in a failed deploy. Cleaning
+    # these paths after a successful rollback would put that cleanup outside
+    # the rollback stability proof and could make the success message stale.
+    if [[ -n "$REMOTE_ASSET_BUILD_DIR" ]]; then
+        ssh_root "rm -rf $REMOTE_ASSET_BUILD_DIR" >/dev/null 2>&1 || true
+    fi
+    if [[ "$REMOTE_BUILD_SWAP_ACTIVE" == true ]]; then
+        disable_remote_build_swap >/dev/null 2>&1 || true
+    fi
+    if [[ -n "$REMOTE_FROZEN_ASSET_DIR" ]]; then
+        ssh_root "rm -rf $REMOTE_FROZEN_ASSET_DIR" >/dev/null 2>&1 || true
+    fi
+    if [[ -n "$REMOTE_TRUSTED_RUNTIME" ]]; then
+        remove_remote_pear_deploy_bundle "$REMOTE_TRUSTED_RUNTIME" >/dev/null 2>&1 || true
+    fi
+}
+
 rollback_on_error() {
     local status=$?
+    set +e
+    cleanup_remote_deploy_scratch
     if [[ $status -ne 0 && "$ROLLBACK_READY" == true && "$ROLLBACK_DONE" == false ]]; then
         echo
         echo "Update failed after snapshot; rolling back from $SNAPSHOT_DIR" >&2
-        set +e
         rollback_command="bash -s --"
         rollback_args=(
             "$SNAPSHOT_DIR"
@@ -1112,7 +1131,6 @@ if [[ "$rollback_ready" != true ]]; then
 fi
 REMOTE
         local rollback_status=$?
-        set -e
         if [[ $rollback_status -eq 0 ]]; then
             ROLLBACK_DONE=true
             SERVICE_RESTART_REQUIRED=false
@@ -1135,18 +1153,6 @@ REMOTE
     fi
     if [[ $status -ne 0 && "$ROLLBACK_READY" != true && -n "$SNAPSHOT_DIR" ]]; then
         ssh_root "rm -rf -- $SNAPSHOT_DIR" >/dev/null 2>&1 || true
-    fi
-    if [[ -n "$REMOTE_ASSET_BUILD_DIR" ]]; then
-        ssh_root "rm -rf $REMOTE_ASSET_BUILD_DIR" >/dev/null 2>&1 || true
-    fi
-    if [[ "$REMOTE_BUILD_SWAP_ACTIVE" == true ]]; then
-        disable_remote_build_swap >/dev/null 2>&1 || true
-    fi
-    if [[ -n "$REMOTE_FROZEN_ASSET_DIR" ]]; then
-        ssh_root "rm -rf $REMOTE_FROZEN_ASSET_DIR" >/dev/null 2>&1 || true
-    fi
-    if [[ -n "$REMOTE_TRUSTED_RUNTIME" ]]; then
-        remove_remote_pear_deploy_bundle "$REMOTE_TRUSTED_RUNTIME" >/dev/null 2>&1 || true
     fi
     exit "$status"
 }
@@ -1291,6 +1297,8 @@ if [[ "$PREV_SHA" != "$LOCAL_SHA" ]]; then
     echo "Deploy delta:"
     git -C "$REPO_ROOT" diff --stat "$PREV_SHA..$LOCAL_SHA" -- \
         zproject/default_settings.py \
+        zerver/actions/message_edit.py \
+        zerver/lib/bot_lib.py \
         zerver/lib/pear.py \
         zerver/lib/pear_gate.py \
         zerver/lib/pear_agent.py \
@@ -1317,6 +1325,7 @@ if [[ "$PREV_SHA" != "$LOCAL_SHA" ]]; then
         web/src \
         web/styles \
         web/templates \
+        web/tests \
         tools/pear-health-report \
         tools/pear_deploy || true
 else

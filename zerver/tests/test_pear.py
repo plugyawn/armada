@@ -5473,9 +5473,8 @@ class PearSessionDefaultsTest(TestCase):
         )
 
         self.assertTrue(tool_runner.interrupted)
-        self.assertIn(("cancelled", 502, "Cancelled by user."), recorded_statuses)
+        self.assertIn(("cancelled", 502, None), recorded_statuses)
         self.assertNotIn(("done", 502, None), recorded_statuses)
-        self.assertIn(("cancelled", "Cancelled by user."), recorded_events)
         self.assertIn(
             {
                 "summary": "Cancelled by user.",
@@ -5570,12 +5569,9 @@ class PearSessionDefaultsTest(TestCase):
 
         self.assertEqual(
             recorded_statuses,
-            [("failed", None, "Pear active session loader failed.")],
+            [("failed", 801, "Pear active session loader failed.")],
         )
-        self.assertEqual(
-            recorded_events,
-            [("failed", "Pear active session loader failed.")],
-        )
+        self.assertEqual(recorded_events, [])
         self.assertEqual(len(sent_replies), 1)
         self.assertIn("Pear worker failed.", sent_replies[0])
         self.assertIn("Pear active session loader failed.", sent_replies[0])

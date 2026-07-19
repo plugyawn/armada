@@ -912,7 +912,7 @@ class PearSessionEndpointTest(ZulipTestCase):
                     "codex_method": "turn/completed",
                     "codex_thread_id": "quiet-child",
                     "codex_turn_id": "quiet-turn",
-                    "turn": {"id": "quiet-turn", "status": "failed"},
+                    "turn_status": "failed",
                 },
             },
         )
@@ -3518,6 +3518,7 @@ class PearSessionEndpointTest(ZulipTestCase):
             with (
                 self.subTest(status=status),
                 self.assertRaisesRegex(PearWorkerLeaseLostError, "lost attempt 1"),
+                transaction.atomic(),
                 store.worker_completion(bot_handler, message_id),
             ):
                 entered_completion = True
@@ -4158,6 +4159,7 @@ class PearSessionEndpointTest(ZulipTestCase):
 
     def test_pause_locks_workspace_before_run(self) -> None:
         owner = self.example_user("hamlet")
+        self.subscribe(owner, PEAR_DEFAULT_STREAM)
         pear_bot = self.create_test_bot(
             "pear-lock-order",
             owner,

@@ -36,6 +36,21 @@ const display_recipient_schema = z.union([z.string(), z.array(display_recipient_
 
 export type DisplayRecipient = z.infer<typeof display_recipient_schema>;
 
+export const message_thread_participant_schema = z.object({
+    user_id: z.number(),
+    full_name: z.string(),
+    avatar_url: z.nullish(z.string()),
+});
+
+export const message_thread_reply_summary_schema = z.object({
+    reply_count: z.number(),
+    last_reply_at: z.number(),
+    last_sender: z.nullable(message_thread_participant_schema),
+    participants: z.array(message_thread_participant_schema),
+});
+
+export type MessageThreadReplySummary = z.infer<typeof message_thread_reply_summary_schema>;
+
 const message_edit_history_entry_schema = z.object({
     user_id: z.nullable(z.number()),
     timestamp: z.number(),
@@ -91,6 +106,7 @@ export const raw_message_schema = z.intersection(
             id: z.number(),
             is_me_message: z.boolean(),
             is_pear_message: z.optional(z.boolean()),
+            reply_summary: z.optional(message_thread_reply_summary_schema),
             last_edit_timestamp: z.optional(z.number()),
             last_moved_timestamp: z.optional(z.number()),
             reactions: z.array(message_reaction_schema),
@@ -214,6 +230,10 @@ export type Message = (
     // Used in message_notifications to track if a notification has already
     // been sent for this message.
     notification_sent?: boolean;
+
+    // Human replies are hydrated as a batched summary with ordinary messages;
+    // reply bodies remain lazy and live in the shared message-thread shell.
+    reply_summary?: MessageThreadReplySummary | undefined;
 
     // Added during message rendering in message_list_view.ts. Should
     // never be accessed outside rendering, as the value may be stale.

@@ -65,6 +65,7 @@ PEAR_DEPLOY_TRUSTED_BUNDLE_PATHS=(
     tools/pear_deploy/deployment_record.py
     tools/pear_deploy/freeze_asset_build.py
     tools/pear_deploy/production_assets.py
+    tools/pear_deploy/rollback_remote.sh
     tools/pear_deploy/runtime_config.py
     tools/pear_deploy/workspace_helper_runtime.py
     tools/pear_deploy/runtime/Caddyfile

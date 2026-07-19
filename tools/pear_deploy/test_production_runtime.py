@@ -856,6 +856,7 @@ class StaticRuntimeContractTest(unittest.TestCase):
         common = (REPO_ROOT / "tools/pear_deploy/deploy_common.sh").read_text()
         caddyfile = (REPO_ROOT / "tools/pear_deploy/runtime/Caddyfile").read_text()
         update = (REPO_ROOT / "tools/pear_deploy/update_remote.sh").read_text()
+        rollback = (REPO_ROOT / "tools/pear_deploy/rollback_remote.sh").read_text()
         verify = (REPO_ROOT / "tools/pear_deploy/verify_remote.sh").read_text()
         bootstrap = (REPO_ROOT / "tools/pear_deploy/bootstrap_remote.sh").read_text()
         deploy_readme = (REPO_ROOT / "tools/pear_deploy/README.md").read_text()
@@ -935,12 +936,13 @@ class StaticRuntimeContractTest(unittest.TestCase):
             update.rindex("wait_for_remote_pear_worker_consumer_timeout_queues"),
         )
         self.assertIn("intentionally additive broker state", deploy_readme)
+        self.assertIn("tools/pear_deploy/rollback_remote.sh", common)
         self.assertIn(
             "systemctl stop caddy pear-worker pear-monitor-worker",
-            update,
+            rollback,
         )
-        self.assertIn("systemctl stop pear-worker-1 2>/dev/null || true", update)
-        self.assertIn("systemctl disable pear-worker-1 2>/dev/null || true", update)
+        self.assertIn("systemctl stop pear-worker-1 2>/dev/null || true", rollback)
+        self.assertIn("systemctl disable pear-worker-1 2>/dev/null || true", rollback)
         self.assertIn("accepted =", update)
         self.assertIn("0806_pear_workspace_scope_casefold", update)
         self.assertIn(
@@ -953,29 +955,56 @@ class StaticRuntimeContractTest(unittest.TestCase):
         )
         rollback_handler = update.index("rollback_on_error()")
         rollback_cleanup = update.index("cleanup_remote_deploy_scratch", rollback_handler)
-        rollback_stop = update.index("systemctl stop caddy pear-worker pear-monitor-worker")
-        rollback_settle = update.index("rollback_settled_runs=")
-        rollback_purge = update.index('rabbitmqctl purge_queue -p / "$queue"')
-        rollback_delete = update.index('rabbitmqctl delete_queue -p / "$queue"')
-        rollback_restore = update.index("rsync -a --delete", rollback_stop)
-        rollback_health = update.index("restored Pear runtime did not remain healthy")
-        self.assertLess(rollback_cleanup, rollback_stop)
+        rollback_start = update.index("start_remote_rollback", rollback_handler)
+        rollback_wait = update.index("wait_for_remote_rollback", rollback_start)
+        rollback_verify = update.index("verify_completed_remote_rollback", rollback_wait)
+        rollback_success_message = update.index("Durable rollback restored", rollback_verify)
+        self.assertLess(rollback_cleanup, rollback_start)
+        self.assertLess(rollback_start, rollback_wait)
+        self.assertLess(rollback_wait, rollback_verify)
+        self.assertLess(rollback_verify, rollback_success_message)
+        rollback_arm = update.rindex("\narm_remote_rollback\n")
+        rollback_ready = update.rindex("\nROLLBACK_READY=true")
+        self.assertLess(rollback_arm, rollback_ready)
+        self.assertIn("systemd-run --quiet --no-block", update)
+        self.assertNotIn("systemd-run --quiet --wait", update)
+        self.assertIn("Every sample opens a new SSH connection", update)
+        self.assertIn("state=success\\ exit_code=0", update)
+        self.assertIn("PREDEPLOY_RECORD_SHA256", update)
+        self.assertIn("preserving the record byte-for-byte for rollback", update)
+        self.assertIn("independent rollback queue check failed", update)
+        self.assertIn("independent public HTTPS rollback check", update)
+
+        rollback_stop = rollback.index("systemctl stop caddy pear-worker pear-monitor-worker")
+        rollback_settle = rollback.index("rollback_settled_runs=")
+        rollback_purge = rollback.index('rabbitmqctl purge_queue -p / "$queue"')
+        rollback_delete = rollback.index('rabbitmqctl delete_queue -p / "$queue"')
+        rollback_restore = rollback.index("rsync -a --delete", rollback_stop)
+        rollback_runtime_restore = rollback.index('tar -C / -xpf "$SNAPSHOT_DIR/runtime-config.tar"')
+        rollback_source_check = rollback.index('restored_sha="$(sudo -Hu zulipdev git')
+        rollback_record_check = rollback.index('restored_record_sha256="$(sha256sum')
+        rollback_restart = rollback.index("systemctl daemon-reload")
+        rollback_health = rollback.index("restored Pear runtime did not remain healthy")
         self.assertLess(rollback_stop, rollback_settle)
         self.assertLess(rollback_settle, rollback_purge)
         self.assertLess(rollback_purge, rollback_delete)
         self.assertLess(rollback_purge, rollback_restore)
+        self.assertLess(rollback_restore, rollback_runtime_restore)
+        self.assertLess(rollback_runtime_restore, rollback_source_check)
+        self.assertLess(rollback_source_check, rollback_record_check)
+        self.assertLess(rollback_record_check, rollback_restart)
         self.assertLess(rollback_restore, rollback_health)
         self.assertIn(
             "for service in caddy pear-worker pear-worker-1 pear-monitor-worker",
-            update,
+            rollback,
         )
         self.assertNotIn(
             "ROLLBACK_SERVICES=(caddy pear-worker pear-monitor-worker",
-            update,
+            rollback,
         )
-        rollback_stability = update.index("rollback_stable_samples=0", rollback_restore)
-        rollback_public_health = update.index('url "https://$FQDN/devlogin"', rollback_stability)
-        rollback_success = update.index(
+        rollback_stability = rollback.index("rollback_stable_samples=0", rollback_restore)
+        rollback_public_health = rollback.index('url "https://$FQDN/devlogin"', rollback_stability)
+        rollback_success = rollback.index(
             'if [[ "$rollback_stable_samples" -ge 10 ]]', rollback_public_health
         )
         self.assertLess(rollback_restore, rollback_stability)
@@ -983,23 +1012,22 @@ class StaticRuntimeContractTest(unittest.TestCase):
         self.assertLess(rollback_public_health, rollback_success)
         self.assertIn(
             "systemctl is-active caddy $PREDEPLOY_SERVICES",
-            update[rollback_stability:rollback_success],
+            rollback[rollback_stability:rollback_success],
         )
-        self.assertIn("rollback_service_generation", update[rollback_stability:rollback_success])
-        self.assertIn("--property=NRestarts", update)
-        self.assertIn("--property=ActiveEnterTimestampMonotonic", update)
-        self.assertIn("stable rollback samples:", update)
-        rollback_success_message = update.index(
-            "Rollback restored the pre-deploy snapshot", rollback_success
-        )
-        self.assertLess(rollback_success, rollback_success_message)
+        self.assertIn("rollback_service_generation", rollback[rollback_stability:rollback_success])
+        self.assertIn("--property=NRestarts", rollback)
+        self.assertIn("--property=ActiveEnterTimestampMonotonic", rollback)
+        self.assertIn("stable rollback samples:", rollback)
+        self.assertIn("write_rollback_status", rollback)
+        self.assertIn('ROLLBACK_STAGE="complete"', rollback)
         self.assertNotIn("--max-orphan-active-markers", update)
         self.assertNotIn("--max-orphan-active-markers", verify)
         self.assertIn("classify_production_asset_requirement", update)
-        self.assertIn("zerver/actions/message_edit.py", update)
-        self.assertIn("zerver/lib/bot_lib.py", update)
-        self.assertIn("zerver/lib/pear_agent_threads.py", update)
-        self.assertIn("web/tests", update)
+        self.assertIn(
+            'git -C "$REPO_ROOT" diff --stat "$PREV_SHA..$LOCAL_SHA" || true',
+            update,
+        )
+        self.assertNotIn('diff --stat "$PREV_SHA..$LOCAL_SHA" -- \\\n', update)
         self.assertIn("asset_source_zulip_sha=", update)
         self.assertLess(
             update.rindex("classify_production_asset_requirement"),
@@ -1116,6 +1144,14 @@ class StaticRuntimeContractTest(unittest.TestCase):
         ):
             self.assertIn(suite, update)
             self.assertIn(suite, backend_workflow)
+        self.assertIn(
+            "zerver.tests.test_openapi.OpenAPIToolsTest.test_get_messages_accepts_thread_metadata",
+            update,
+        )
+        self.assertIn(
+            "zerver.tests.test_event_system.ClientDescriptorsTest.test_process_message_event_projects_hidden_thread_root_per_viewer",
+            update,
+        )
         self.assertIn("tools.pear_deploy.test_production_runtime", backend_workflow)
         self.assertIn("-type d ! -perm -0005", visual_runtime)
         self.assertIn("-type f ! -perm -0004", visual_runtime)

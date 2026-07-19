@@ -813,6 +813,10 @@ SERVICE_RESTART_REQUIRED=false
 ASSET_BUILD_REQUIRED=true
 ASSET_REBUILD_TRIGGER=""
 ASSET_SOURCE_SHA=""
+PREDEPLOY_RECORD_SHA256=""
+REMOTE_ROLLBACK_SCRIPT=""
+REMOTE_ROLLBACK_STATUS_PATH=""
+REMOTE_ROLLBACK_UNIT=""
 
 classify_production_asset_requirement() {
     local policy_status
@@ -876,267 +880,179 @@ cleanup_remote_deploy_scratch() {
     fi
 }
 
+arm_remote_rollback() {
+    local install_command
+    local source_path="$REMOTE_TRUSTED_RUNTIME/tools/pear_deploy/rollback_remote.sh"
+
+    REMOTE_ROLLBACK_SCRIPT="$SNAPSHOT_DIR/rollback-runner.sh"
+    REMOTE_ROLLBACK_STATUS_PATH="$SNAPSHOT_DIR/rollback.status"
+    REMOTE_ROLLBACK_UNIT="pear-deploy-rollback-$(basename "$SNAPSHOT_DIR" | tr -cd 'A-Za-z0-9_.-')"
+    printf -v install_command \
+        'install -m 700 %q %q && rm -f -- %q && test -x %q' \
+        "$source_path" \
+        "$REMOTE_ROLLBACK_SCRIPT" \
+        "$REMOTE_ROLLBACK_STATUS_PATH" \
+        "$REMOTE_ROLLBACK_SCRIPT"
+    ssh_root "$install_command"
+}
+
+start_remote_rollback() {
+    local attempt
+    local launch_command="systemd-run --quiet --no-block"
+    local rollback_arg
+    local rollback_args=(
+        "$REMOTE_ROLLBACK_STATUS_PATH"
+        "$PREV_SHA"
+        "$PREDEPLOY_RECORD_SHA256"
+        "$DEPLOY_RECORD_PATH"
+        "$SNAPSHOT_DIR"
+        "$REMOTE_PATH"
+        "$REMOTE_GIT_COMMON_DIR"
+        "$REMOTE_PEAR_SKILLS_DIR"
+        "${PREDEPLOY_SERVICES[*]}"
+        "${PREDEPLOY_QUEUES[*]}"
+        "$FQDN"
+        "${#PEAR_DEPLOY_RUNTIME_CONFIG_PATHS[@]}"
+        "${PEAR_DEPLOY_RUNTIME_CONFIG_PATHS[@]}"
+        "${#PEAR_DEPLOY_RSYNC_EXCLUDES[@]}"
+        "${PEAR_DEPLOY_RSYNC_EXCLUDES[@]}"
+    )
+
+    launch_command+=" --unit=$(printf '%q' "$REMOTE_ROLLBACK_UNIT")"
+    launch_command+=" --property=Type=oneshot -- $(printf '%q' "$REMOTE_ROLLBACK_SCRIPT")"
+    for rollback_arg in "${rollback_args[@]}"; do
+        launch_command+=" $(printf '%q' "$rollback_arg")"
+    done
+
+    # The first launch can succeed even when its SSH response is lost. Treat an
+    # already loaded unit as accepted so a reconnect never starts two writers.
+    for attempt in $(seq 1 5); do
+        if ssh_root "systemctl show --property=LoadState --value $(printf '%q' "$REMOTE_ROLLBACK_UNIT")" 2>/dev/null |
+            grep -Fxq loaded; then
+            return 0
+        fi
+        ssh_root "$launch_command" >/dev/null 2>&1 || true
+        if ssh_root "systemctl show --property=LoadState --value $(printf '%q' "$REMOTE_ROLLBACK_UNIT")" 2>/dev/null |
+            grep -Fxq loaded; then
+            return 0
+        fi
+        sleep 2
+    done
+    return 1
+}
+
+wait_for_remote_rollback() {
+    local attempt
+    local rollback_status=""
+
+    # Every sample opens a new SSH connection. The systemd-owned runner keeps
+    # progressing while the client is disconnected or retrying.
+    for attempt in $(seq 1 180); do
+        rollback_status="$(
+            ssh_root "if [[ -f $(printf '%q' "$REMOTE_ROLLBACK_STATUS_PATH") ]]; then cat $(printf '%q' "$REMOTE_ROLLBACK_STATUS_PATH"); fi" 2>/dev/null || true
+        )"
+        case "$rollback_status" in
+            state=success\ exit_code=0\ *)
+                return 0
+                ;;
+            state=failed\ *)
+                echo "$rollback_status" >&2
+                return 1
+                ;;
+        esac
+        sleep 2
+    done
+    echo "durable rollback did not publish a final status within 360 seconds" >&2
+    return 1
+}
+
+verify_completed_remote_rollback() {
+    local public_status
+    local source_status
+    local verify_source_command="bash -s --"
+    local verify_source_arg
+    local verify_source_args=(
+        "$REMOTE_ROLLBACK_STATUS_PATH"
+        "$PREV_SHA"
+        "$PREDEPLOY_RECORD_SHA256"
+        "$DEPLOY_RECORD_PATH"
+        "$REMOTE_PATH"
+        "${PREDEPLOY_SERVICES[*]}"
+    )
+
+    for verify_source_arg in "${verify_source_args[@]}"; do
+        verify_source_command+=" $(printf '%q' "$verify_source_arg")"
+    done
+    source_status="$(ssh_root "$verify_source_command" <<'REMOTE_VERIFY'
+set -euo pipefail
+ROLLBACK_STATUS_PATH="$1"
+EXPECTED_PREV_SHA="$2"
+EXPECTED_DEPLOY_RECORD_SHA256="$3"
+DEPLOY_RECORD_PATH="$4"
+REMOTE_PATH="$5"
+PREDEPLOY_SERVICES="$6"
+
+read -r rollback_state rollback_exit _ <"$ROLLBACK_STATUS_PATH"
+[[ "$rollback_state" == state=success && "$rollback_exit" == exit_code=0 ]]
+restored_sha="$(sudo -Hu zulipdev git -C "$REMOTE_PATH" rev-parse HEAD)"
+[[ "$restored_sha" == "$EXPECTED_PREV_SHA" ]]
+[[ -z "$(sudo -Hu zulipdev git -C "$REMOTE_PATH" status --porcelain --untracked-files=no)" ]]
+restored_record_sha256="$(sha256sum "$DEPLOY_RECORD_PATH" | awk '{print $1}')"
+[[ "$restored_record_sha256" == "$EXPECTED_DEPLOY_RECORD_SHA256" ]]
+systemctl is-active caddy $PREDEPLOY_SERVICES >/dev/null
+printf '%s\n' "$restored_sha"
+REMOTE_VERIFY
+)" || return 1
+    if [[ "$source_status" != "$PREV_SHA" ]]; then
+        echo "independent rollback source check returned ${source_status:-no SHA}" >&2
+        return 1
+    fi
+
+    if ! ssh_zulip "$REMOTE_PATH/tools/pear-health-report --max-active-runs 0 --max-stale-active-runs 0"; then
+        echo "independent rollback Pear health check failed" >&2
+        return 1
+    fi
+    if ! ssh_root "rabbitmqctl list_queues name messages_ready messages_unacknowledged consumers" |
+        validate_pear_deploy_queue_snapshot "${PREDEPLOY_QUEUES[*]}"; then
+        echo "independent rollback queue check failed" >&2
+        return 1
+    fi
+
+    public_status="$(curl \
+        --silent --show-error --location --max-redirs 3 \
+        --connect-timeout 2 --max-time 10 --output /dev/null \
+        --write-out '%{http_code}' --url "https://$FQDN/devlogin" 2>/dev/null || true)"
+    if [[ "$public_status" != 200 ]]; then
+        echo "independent public HTTPS rollback check returned ${public_status:-no status}" >&2
+        return 1
+    fi
+}
+
 rollback_on_error() {
     local status=$?
+    local rollback_status=1
+
     set +e
     cleanup_remote_deploy_scratch
     if [[ $status -ne 0 && "$ROLLBACK_READY" == true && "$ROLLBACK_DONE" == false ]]; then
         echo
-        echo "Update failed after snapshot; rolling back from $SNAPSHOT_DIR" >&2
-        rollback_command="bash -s --"
-        rollback_args=(
-            "$SNAPSHOT_DIR"
-            "$REMOTE_PATH"
-            "$REMOTE_GIT_COMMON_DIR"
-            "$REMOTE_PEAR_SKILLS_DIR"
-            "${PREDEPLOY_SERVICES[*]}"
-            "${PREDEPLOY_QUEUES[*]}"
-            "$FQDN"
-            "${#PEAR_DEPLOY_RUNTIME_CONFIG_PATHS[@]}"
-            "${PEAR_DEPLOY_RUNTIME_CONFIG_PATHS[@]}"
-            "${#PEAR_DEPLOY_RSYNC_EXCLUDES[@]}"
-            "${PEAR_DEPLOY_RSYNC_EXCLUDES[@]}"
-        )
-        for rollback_arg in "${rollback_args[@]}"; do
-            rollback_command+=" $(printf '%q' "$rollback_arg")"
-        done
-        ssh_root "$rollback_command" <<'REMOTE'
-# Optional pre-cutover entries may be absent on older snapshots. Rollback is
-# the recovery path, so decode the positional vector without nounset aborts.
-set -eo pipefail
-SNAPSHOT_DIR="$1"
-REMOTE_PATH="$2"
-REMOTE_GIT_COMMON_DIR="$3"
-REMOTE_PEAR_SKILLS_DIR="$4"
-PREDEPLOY_SERVICES="$5"
-PREDEPLOY_QUEUES="$6"
-FQDN="$7"
-RUNTIME_CONFIG_COUNT="$8"
-shift 8
-RUNTIME_CONFIG_PATHS=("${@:1:RUNTIME_CONFIG_COUNT}")
-shift "$RUNTIME_CONFIG_COUNT"
-RSYNC_EXCLUDE_COUNT="$1"
-shift
-RSYNC_EXCLUDES=("$@")
-if [[ "${#RSYNC_EXCLUDES[@]}" -ne "$RSYNC_EXCLUDE_COUNT" ]]; then
-    echo "invalid rollback rsync exclude argument count" >&2
-    exit 1
-fi
-
-systemctl stop caddy pear-worker pear-monitor-worker pear-embedded-bots pear-thumbnail pear-zulip-dev
-systemctl stop pear-worker-1 2>/dev/null || true
-if [[ " $PREDEPLOY_SERVICES " != *" pear-worker-1 "* ]]; then
-    systemctl disable pear-worker-1 2>/dev/null || true
-fi
-systemctl stop pear-addressing 2>/dev/null || true
-systemctl stop pear-presentation 2>/dev/null || true
-
-# The pre-release Workspace is disposable, but queue deliveries must never be
-# left pointing at RUNNING rows that the restored single-slot runtime cannot
-# consume. Settle every active row while the new source is still present, then
-# purge both worker queues before restoring code and units.
-sudo -Hu zulipdev bash -lc "cd '$REMOTE_PATH' && set -a && . /home/zulipdev/pear.env && set +a && .venv/bin/python3 manage.py shell" <<'PY'
-from django.db import transaction
-from django.utils.timezone import now
-
-from zerver.lib.pear_worker import settle_orphaned_pear_run_message
-from zerver.models.bots import PearWorkerRun
-
-rollback_error = "Run interrupted by deployment rollback."
-with transaction.atomic():
-    runs = list(
-        PearWorkerRun.objects.select_for_update()
-        .select_related("bot_profile")
-        .filter(status__in=(PearWorkerRun.QUEUED, PearWorkerRun.RUNNING))
-    )
-    finished_at = now()
-    for run in runs:
-        run.status = PearWorkerRun.FAILED
-        run.error = rollback_error
-        run.current_activity = rollback_error
-        run.summary = rollback_error
-        run.heartbeat_at = None
-        run.date_updated = finished_at
-        run.date_finished = finished_at
-        run.save(
-            update_fields=[
-                "status",
-                "error",
-                "current_activity",
-                "summary",
-                "heartbeat_at",
-                "date_updated",
-                "date_finished",
-            ]
-        )
-for run in runs:
-    settle_orphaned_pear_run_message(run)
-print(f"rollback_settled_runs={len(runs)}")
-PY
-
-worker_queues="$(
-    rabbitmqctl list_queues -p / name --formatter json |
-        python3 -c 'import json, sys; expected = {"pear_worker", "pear_worker_1"}; rows = json.load(sys.stdin); print("\n".join(row["name"] for row in rows if isinstance(row, dict) and row.get("name") in expected))'
-)"
-while IFS= read -r queue; do
-    if [[ -n "$queue" ]]; then
-        rabbitmqctl purge_queue -p / "$queue"
-        if [[ "$queue" == "pear_worker_1" ]]; then
-            rabbitmqctl delete_queue -p / "$queue"
-        fi
-    fi
-done <<<"$worker_queues"
-
-rsync -a --delete \
-    "${RSYNC_EXCLUDES[@]}" \
-    "$SNAPSHOT_DIR/worktree/" "$REMOTE_PATH/"
-
-if [[ -d "$SNAPSHOT_DIR/git-common" ]]; then
-    install -d -m 755 "$(dirname "$REMOTE_GIT_COMMON_DIR")"
-    rsync -a --delete "$SNAPSHOT_DIR/git-common/" "$REMOTE_GIT_COMMON_DIR/"
-fi
-if [[ -f "$SNAPSHOT_DIR/pear-skills.exists" ]]; then
-    install -d -m 755 "$REMOTE_PEAR_SKILLS_DIR"
-    rsync -a --delete "$SNAPSHOT_DIR/pear-skills/" "$REMOTE_PEAR_SKILLS_DIR/"
-else
-    rm -rf "$REMOTE_PEAR_SKILLS_DIR"
-fi
-
-rm -rf \
-    "$REMOTE_PATH/prod-static" \
-    "$REMOTE_PATH/static/generated" \
-    "$REMOTE_PATH/static/webpack-bundles" \
-    "$REMOTE_PATH/static/images/landing-page/hello/generated" \
-    "$REMOTE_PATH/locale/en" \
-    "$REMOTE_PATH/web/generated"
-rm -f \
-    "$REMOTE_PATH/webpack-stats-production.json" \
-    "$REMOTE_PATH/staticfiles.json" \
-    "$REMOTE_PATH/locale/language_options.json" \
-    "$REMOTE_PATH/locale/language_name_map.json"
-find "$REMOTE_PATH/locale" -type f -name '*.mo' -delete
-find "$REMOTE_PATH/locale" -type f -name 'mobile.json' -delete
-if [[ -s "$SNAPSHOT_DIR/generated-output.paths" ]]; then
-    tar -C "$REMOTE_PATH" -xpf "$SNAPSHOT_DIR/generated-output.tar"
-fi
-
-for runtime_path in "${RUNTIME_CONFIG_PATHS[@]}"; do
-    rm -rf "$runtime_path"
-done
-if [[ -s "$SNAPSHOT_DIR/runtime-config.paths" ]]; then
-    tar -C / -xpf "$SNAPSHOT_DIR/runtime-config.tar"
-fi
-
-systemctl daemon-reload
-ROLLBACK_SERVICES=()
-for service in caddy pear-worker pear-worker-1 pear-monitor-worker pear-embedded-bots pear-thumbnail pear-zulip-dev; do
-    if systemctl cat "$service" >/dev/null 2>&1; then
-        ROLLBACK_SERVICES+=("$service")
-    fi
-done
-if systemctl cat pear-addressing >/dev/null 2>&1; then
-    ROLLBACK_SERVICES+=(pear-addressing)
-fi
-if systemctl cat pear-presentation >/dev/null 2>&1; then
-    ROLLBACK_SERVICES+=(pear-presentation)
-fi
-if [[ "${#ROLLBACK_SERVICES[@]}" -gt 0 ]]; then
-    systemctl restart "${ROLLBACK_SERVICES[@]}"
-fi
-
-validate_predeploy_queues() {
-    awk -v expected_queues="$PREDEPLOY_QUEUES" '
-BEGIN {
-    count = split(expected_queues, expected, " ")
-    for (i = 1; i <= count; i += 1) {
-        required[expected[i]] = 1
-    }
-}
-$1 in required {
-    seen[$1] = 1
-    if ($2 !~ /^[0-9]+$/ || $3 !~ /^[0-9]+$/ || $4 !~ /^[0-9]+$/ || $2 != 0 || $3 != 0 || $4 < 1) {
-        bad = 1
-    }
-}
-END {
-    for (queue in required) {
-        if (!(queue in seen)) {
-            bad = 1
-        }
-    }
-    exit bad
-}
-'
-}
-
-rollback_service_generation() {
-    local service
-    for service in caddy $PREDEPLOY_SERVICES; do
-        printf '%s=' "$service"
-        systemctl show \
-            --property=ActiveEnterTimestampMonotonic \
-            --property=NRestarts \
-            --value \
-            "$service" | tr '\n' ':'
-        printf '\n'
-    done
-}
-
-rollback_ready=false
-rollback_stable_samples=0
-rollback_service_generation_snapshot=""
-rollback_public_status=""
-for _ in $(seq 1 45); do
-    if systemctl is-active caddy $PREDEPLOY_SERVICES >/dev/null 2>&1 &&
-        sudo -Hu zulipdev bash -lc "cd '$REMOTE_PATH' && set -a && . /home/zulipdev/pear.env && set +a && tools/pear-health-report --max-active-runs 0 --max-stale-active-runs 0" >/dev/null 2>&1 &&
-        rabbitmqctl list_queues -p / name messages_ready messages_unacknowledged consumers 2>/dev/null |
-            validate_predeploy_queues; then
-        rollback_public_status="$(
-            curl \
-                --silent --show-error --location --max-redirs 3 \
-                --connect-timeout 2 --max-time 4 --output /dev/null \
-                --write-out '%{http_code}' --url "https://$FQDN/devlogin" 2>/dev/null || true
-        )"
-        current_service_generation="$(rollback_service_generation)"
-        if [[ "$rollback_public_status" == "200" ]] &&
-            systemctl is-active caddy $PREDEPLOY_SERVICES >/dev/null 2>&1; then
-            if [[ "$current_service_generation" == "$rollback_service_generation_snapshot" ]]; then
-                rollback_stable_samples=$((rollback_stable_samples + 1))
-            else
-                rollback_service_generation_snapshot="$current_service_generation"
-                rollback_stable_samples=1
-            fi
-            if [[ "$rollback_stable_samples" -ge 10 ]]; then
-                rollback_ready=true
-                break
-            fi
+        echo "Update failed after snapshot; starting durable rollback from $SNAPSHOT_DIR" >&2
+        if ! start_remote_rollback; then
+            echo "Could not register $REMOTE_ROLLBACK_UNIT with systemd." >&2
+        elif ! wait_for_remote_rollback; then
+            echo "Durable rollback did not report success; it may still be running remotely." >&2
+        elif ! verify_completed_remote_rollback; then
+            echo "Rollback completed but failed independent verification." >&2
         else
-            rollback_stable_samples=0
-            rollback_service_generation_snapshot=""
+            rollback_status=0
         fi
-    else
-        rollback_stable_samples=0
-        rollback_service_generation_snapshot=""
-    fi
-    sleep 2
-done
-if [[ "$rollback_ready" != true ]]; then
-    echo "restored Pear runtime did not remain healthy after rollback" >&2
-    echo "stable rollback samples: $rollback_stable_samples/10; public HTTPS: ${rollback_public_status:-unavailable}" >&2
-    systemctl --no-pager --full status caddy $PREDEPLOY_SERVICES || true
-    sudo -Hu zulipdev bash -lc "cd '$REMOTE_PATH' && set -a && . /home/zulipdev/pear.env && set +a && tools/pear-health-report --max-active-runs 0 --max-stale-active-runs 0" || true
-    rabbitmqctl list_queues -p / name messages_ready messages_unacknowledged consumers |
-        validate_predeploy_queues || true
-    exit 1
-fi
-REMOTE
-        local rollback_status=$?
+
         if [[ $rollback_status -eq 0 ]]; then
             ROLLBACK_DONE=true
             SERVICE_RESTART_REQUIRED=false
-            echo "Rollback restored the pre-deploy snapshot and restarted Pear services." >&2
+            echo "Durable rollback restored the snapshot and independently verified source, record, services, queues, and public HTTPS." >&2
         else
-            echo "Rollback failed; inspect $SNAPSHOT_DIR on the box." >&2
+            echo "Inspect systemd unit $REMOTE_ROLLBACK_UNIT and $SNAPSHOT_DIR on the box." >&2
         fi
     fi
     if [[
@@ -1244,8 +1160,23 @@ echo "Preflight: committed Workspace helper SHA-256 is $LOCAL_WORKSPACE_HELPER_S
 PREV_SHA="$(ssh_zulip "git rev-parse HEAD")"
 REMOTE_STATUS="$(ssh_zulip "git status --porcelain --untracked-files=no")"
 REMOTE_UNTRACKED_SOURCE="$(remote_untracked_source_files)"
+PREDEPLOY_RECORD_SHA256="$(ssh_root "sha256sum $DEPLOY_RECORD_PATH | cut -d' ' -f1")"
+PREDEPLOY_RECORDED_ZULIP_SHA="$(
+    ssh_root "recorded=\$(sed -n 's/^zulip_sha=//p' $DEPLOY_RECORD_PATH | tail -1); if [[ -z \"\$recorded\" ]]; then read -r recorded _ <$DEPLOY_RECORD_PATH; fi; printf '%s\\n' \"\$recorded\""
+)"
 
 echo "Preflight: remote HEAD $PREV_SHA"
+echo "Preflight: deployment record names Zulip $PREDEPLOY_RECORDED_ZULIP_SHA (SHA-256 $PREDEPLOY_RECORD_SHA256)."
+if [[ ! "$PREDEPLOY_RECORD_SHA256" =~ ^[0-9a-f]{64}$ ]]; then
+    fail "remote deployment record SHA-256 is invalid"
+fi
+if [[ ! "$PREDEPLOY_RECORDED_ZULIP_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+    fail "remote deployment record contains an invalid Zulip SHA"
+fi
+if [[ "$PREDEPLOY_RECORDED_ZULIP_SHA" != "$PREV_SHA" ]]; then
+    echo "Preflight warning: source HEAD $PREV_SHA is not the recorded deployment $PREDEPLOY_RECORDED_ZULIP_SHA." >&2
+    echo "Preflight warning: preserving the record byte-for-byte for rollback; only a successful deploy will reconcile it." >&2
+fi
 if [[ -n "$REMOTE_STATUS" ]]; then
     echo "$REMOTE_STATUS" >&2
     if remote_dirty_tree_matches_local_head; then
@@ -1439,6 +1370,8 @@ if [[ -s "$SNAPSHOT_DIR/runtime-config.paths" ]]; then
         -T "$SNAPSHOT_DIR/runtime-config.paths"
 fi
 REMOTE
+echo "Arming the root-owned rollback runner before cutover..."
+arm_remote_rollback
 ROLLBACK_READY=true
 
 if [[ -d "$LOCAL_GIT_COMMON_DIR" ]]; then
@@ -1527,6 +1460,8 @@ ssh_zulip_clean "./tools/test-backend \
     zerver.tests.test_pear_workspace_index \
     zerver.tests.test_pear_workspace_resources \
     zerver.tests.test_message_threads \
+    zerver.tests.test_openapi.OpenAPIToolsTest.test_get_messages_accepts_thread_metadata \
+    zerver.tests.test_event_system.ClientDescriptorsTest.test_process_message_event_projects_hidden_thread_root_per_viewer \
     zerver.tests.test_submessage"
 
 # Ingress is live again at this point. New ambient runs are ordinary traffic,

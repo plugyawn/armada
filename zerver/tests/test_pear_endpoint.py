@@ -2151,14 +2151,22 @@ class PearSessionEndpointTest(ZulipTestCase):
         stop = threading.Event()
         stop.set()
 
-        pear_worker_module.PearWorker.run_side_pump(
-            object.__new__(pear_worker_module.PearWorker),
-            stop=stop,
-            runtime=PearWorkerRuntime(),
-            bot_profile_id=pear_bot.id,
-            stream=PEAR_DEFAULT_STREAM,
-            topic=PEAR_DEFAULT_TOPIC,
-        )
+        # This deliberately exercises the side-pump body synchronously.  Its
+        # production entry point runs in a dedicated thread, where database
+        # connection cleanup is thread-local; running that cleanup here would
+        # instead close this TestCase's transaction connection.
+        with (
+            patch.object(pear_worker_module, "close_old_connections"),
+            patch.object(pear_worker_module, "reset_queries"),
+        ):
+            pear_worker_module.PearWorker.run_side_pump(
+                object.__new__(pear_worker_module.PearWorker),
+                stop=stop,
+                runtime=PearWorkerRuntime(),
+                bot_profile_id=pear_bot.id,
+                stream=PEAR_DEFAULT_STREAM,
+                topic=PEAR_DEFAULT_TOPIC,
+            )
 
         run.refresh_from_db()
         result_message = Message.objects.get(id=result_message_id)

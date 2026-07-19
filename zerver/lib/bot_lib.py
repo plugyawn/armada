@@ -22,8 +22,9 @@ from zerver.lib.bot_storage import (
     set_bot_storage,
 )
 from zerver.lib.integrations import EMBEDDED_BOTS
+from zerver.lib.message import access_message
 from zerver.lib.topic import get_topic_from_message_info
-from zerver.models import Message, UserProfile
+from zerver.models import UserProfile
 from zerver.models.users import get_active_user
 
 
@@ -112,13 +113,10 @@ class EmbeddedBotHandler:
                 thread_root_message_id, bool
             ):
                 raise ValueError("thread_root_message_id must be an integer")
-            # Service bots intentionally do not receive UserMessage rows.  Do
-            # not use access_message here: the canonical send validator below
-            # verifies the bot can send to the root's exact destination and
-            # rejects nested/mismatched roots without exposing root content.
-            thread_root_message = Message.objects.select_related("recipient").get(
-                id=thread_root_message_id,
-                realm=self.user_profile.realm,
+            thread_root_message = access_message(
+                self.user_profile,
+                thread_root_message_id,
+                is_modifying_message=False,
             )
 
         if message["type"] == "stream":

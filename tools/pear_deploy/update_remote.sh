@@ -1297,8 +1297,15 @@ if [[ "$PREV_SHA" != "$LOCAL_SHA" ]]; then
     echo "Deploy delta:"
     git -C "$REPO_ROOT" diff --stat "$PREV_SHA..$LOCAL_SHA" -- \
         zproject/default_settings.py \
+        zproject/urls.py \
+        zerver/actions/message_threads.py \
         zerver/actions/message_edit.py \
+        zerver/actions/message_send.py \
         zerver/lib/bot_lib.py \
+        zerver/lib/event_schema.py \
+        zerver/lib/event_types.py \
+        zerver/lib/message_cache.py \
+        zerver/lib/message_threads.py \
         zerver/lib/pear.py \
         zerver/lib/pear_gate.py \
         zerver/lib/pear_agent.py \
@@ -1314,14 +1321,19 @@ if [[ "$PREV_SHA" != "$LOCAL_SHA" ]]; then
         zerver/worker/pear_presentation.py \
         zerver/views/pear.py \
         zerver/views/pear_workspace.py \
+        zerver/views/message_threads.py \
         zerver/views/users.py \
+        zerver/models/__init__.py \
         zerver/models/bots.py \
+        zerver/models/messages.py \
+        zerver/openapi/zulip.yaml \
         zerver/migrations \
         zerver/tests/test_service_bot_system.py \
         zerver/tests/test_pear.py \
         zerver/tests/test_pear_artifact.py \
         zerver/tests/test_pear_generated_vector.py \
         zerver/tests/test_pear_endpoint.py \
+        zerver/tests/test_message_threads.py \
         web/src \
         web/styles \
         web/templates \
@@ -1554,6 +1566,7 @@ ssh_zulip_clean "./tools/test-backend \
     zerver.tests.test_pear_workspace_io \
     zerver.tests.test_pear_workspace_index \
     zerver.tests.test_pear_workspace_resources \
+    zerver.tests.test_message_threads \
     zerver.tests.test_submessage"
 
 # Ingress is live again at this point. New ambient runs are ordinary traffic,

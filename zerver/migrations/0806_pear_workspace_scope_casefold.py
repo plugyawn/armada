@@ -22,6 +22,12 @@ def clear_disposable_pear_state(
 
 
 class Migration(migrations.Migration):
+    # PostgreSQL rejects DDL on a table with pending trigger events.  The
+    # scratch-state purge intentionally deletes rows from this table before
+    # replacing its uniqueness constraint, so those two phases must commit
+    # separately during the pre-release cutover.
+    atomic = False
+
     dependencies = [
         ("zerver", "0805_pear_runtime"),
     ]

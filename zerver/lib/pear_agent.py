@@ -905,7 +905,9 @@ def pear_app_server_thread_descriptor(thread: dict[str, Any]) -> dict[str, Any] 
     return descriptor
 
 
-def pear_thread_session_event(descriptor: dict[str, Any]) -> PearWorkerTranscriptEvent:
+def pear_thread_session_event(
+    descriptor: dict[str, Any], *, codex_method: str = "thread/started"
+) -> PearWorkerTranscriptEvent:
     thread_id = str(descriptor["id"])
     return {
         "kind": "session",
@@ -913,7 +915,7 @@ def pear_thread_session_event(descriptor: dict[str, Any]) -> PearWorkerTranscrip
         "title": f"Codex thread {thread_id}",
         "body": thread_id,
         "metadata": {
-            "codex_method": "thread/started",
+            "codex_method": codex_method,
             "codex_thread_id": thread_id,
             "parent_thread_id": descriptor.get("parent_thread_id"),
             "agent_nickname": descriptor.get("agent_nickname"),
@@ -941,6 +943,94 @@ class PearCodexAppServerTranscriptTranslator:
         self.last_rate_limit_key: tuple[object, ...] | None = None
         self.reported_unknown_methods: set[str] = set()
         self.thread_descriptors: dict[str, dict[str, Any]] = {}
+
+    def collaboration_thread_events(
+        self, method: str, params: dict[str, Any], item: dict[str, Any]
+    ) -> list[PearWorkerTranscriptEvent]:
+        """Project native collaboration receiver identities as child sessions.
+
+        Some app-server builds announce a spawned child only through the
+        collaboration item's receiverThreadIds/agentsStates before it becomes
+        visible to thread/list.  Those are still the native Codex thread IDs;
+        preserving them here closes the live projection gap without inventing
+        a second agent model.
+        """
+
+        if item.get("type") != "collab_agent_tool_call":
+            return []
+        sender_thread_id = item.get("senderThreadId")
+        if not isinstance(sender_thread_id, str) or not sender_thread_id.strip():
+            sender_thread_id = params.get("threadId")
+        if not isinstance(sender_thread_id, str) or not sender_thread_id.strip():
+            return []
+        receiver_thread_ids = item.get("receiverThreadIds")
+        agent_states = item.get("agentsStates")
+        if not isinstance(receiver_thread_ids, list) or not isinstance(agent_states, dict):
+            return []
+
+        events: list[PearWorkerTranscriptEvent] = []
+        for raw_thread_id in receiver_thread_ids[:16]:
+            if not isinstance(raw_thread_id, str) or not raw_thread_id.strip():
+                continue
+            thread_id = raw_thread_id.strip()
+            if thread_id == sender_thread_id:
+                continue
+            raw_state = agent_states.get(raw_thread_id)
+            if not isinstance(raw_state, dict):
+                continue
+            raw_status = str(raw_state.get("status") or "").strip().lower()
+            if raw_status in {
+                "active",
+                "busy",
+                "inprogress",
+                "pendinginit",
+                "running",
+                "working",
+            }:
+                status_type = "active"
+            elif raw_status in {
+                "cancelled",
+                "error",
+                "errored",
+                "failed",
+                "interrupted",
+                "notfound",
+                "systemerror",
+            }:
+                status_type = "failed"
+            else:
+                status_type = "idle"
+
+            previous = self.thread_descriptors.get(thread_id)
+            descriptor = dict(previous) if previous is not None else {"id": thread_id}
+            descriptor.setdefault("parent_thread_id", sender_thread_id.strip())
+            descriptor.setdefault("agent_nickname", None)
+            descriptor.setdefault("agent_role", None)
+            descriptor.setdefault("name", None)
+            descriptor["thread_source"] = "subagent"
+            next_status = {"type": status_type}
+            status_changed = previous is None or previous.get("status") != next_status
+            descriptor["status"] = next_status
+            self.thread_descriptors[thread_id] = descriptor
+            if status_changed:
+                events.append(pear_thread_session_event(descriptor, codex_method=method))
+            message = raw_state.get("message")
+            if isinstance(message, str) and message.strip():
+                events.append(
+                    {
+                        "kind": "error" if status_type == "failed" else "assistant",
+                        "status": "failed" if status_type == "failed" else "done",
+                        "title": "Agent failed." if status_type == "failed" else "Agent reply",
+                        "body": trim_pear_agent_text(message, limit=4000),
+                        "metadata": {
+                            "codex_method": method,
+                            "codex_thread_id": thread_id,
+                            "parent_thread_id": descriptor.get("parent_thread_id"),
+                            "thread_status": status_type,
+                        },
+                    }
+                )
+        return events
 
     def contextualize_events(
         self,
@@ -1204,16 +1294,19 @@ class PearCodexAppServerTranscriptTranslator:
         item = params.get("item")
         if not isinstance(item, dict):
             return []
-        return self.contextualize_events(
+        normalized_item = pear_app_server_normalized_item(item)
+        collaboration_events = self.collaboration_thread_events(method, params, normalized_item)
+        item_events = self.contextualize_events(
             self.json_translator.events_from_json_event(
                 {
                     "type": "item.started" if method == "item/started" else "item.completed",
-                    "item": pear_app_server_normalized_item(item),
+                    "item": normalized_item,
                 }
             ),
             method=method,
             params=params,
         )
+        return [*collaboration_events, *item_events]
 
 
 class PearDisabledAgentRunner:
@@ -2419,7 +2512,13 @@ class PearCodexAppServerToolRunner:
             )
         return started_thread_id
 
-    def reconcile_descendant_threads(self, root_thread_id: str) -> None:
+    def reconcile_descendant_threads(
+        self,
+        root_thread_id: str,
+        *,
+        thread_ids: set[str] | None = None,
+        event_callback: PearWorkerTranscriptCallback | None = None,
+    ) -> None:
         """Restore native child identities after an app-server restart.
 
         This is one runtime reconciliation request, never a frontend poller.
@@ -2444,13 +2543,41 @@ class PearCodexAppServerToolRunner:
         threads = result.get("data") if isinstance(result, dict) else None
         if not isinstance(threads, list):
             return
+        selected_thread_ids: set[str] | None = None
+        if thread_ids is not None:
+            selected_thread_ids = set(thread_ids)
+            threads_by_id = {
+                raw_thread_id: thread
+                for thread in threads
+                if isinstance(thread, dict) and isinstance((raw_thread_id := thread.get("id")), str)
+            }
+            pending = list(selected_thread_ids)
+            while pending:
+                selected_thread_id = pending.pop()
+                selected_thread = threads_by_id.get(selected_thread_id)
+                if selected_thread is None:
+                    continue
+                parent_thread_id = selected_thread.get("parentThreadId")
+                if (
+                    isinstance(parent_thread_id, str)
+                    and parent_thread_id != root_thread_id
+                    and parent_thread_id not in selected_thread_ids
+                ):
+                    selected_thread_ids.add(parent_thread_id)
+                    pending.append(parent_thread_id)
         for thread in threads:
             if not isinstance(thread, dict):
                 continue
+            thread_id = thread.get("id")
+            if selected_thread_ids is not None and thread_id not in selected_thread_ids:
+                continue
             with self.state_lock:
-                self.translator.events_from_message(
+                events = self.translator.events_from_message(
                     {"method": "thread/started", "params": {"thread": thread}}
                 )
+            if event_callback is not None:
+                for event in events:
+                    event_callback(event)
 
     def thread_descriptor(self, thread_id: str) -> dict[str, Any] | None:
         with self.state_lock:
@@ -2618,14 +2745,26 @@ class PearCodexAppServerToolRunner:
                 self.active_thread_id = thread_id
                 self.active_turn_id = None
             persisted_child_thread_ids: set[str] = set()
+            native_agent_thread_ids: set[str] = set()
 
             def run_event_callback(event: PearWorkerTranscriptEvent) -> None:
-                if event_callback is None:
-                    return
                 metadata = event.get("metadata")
                 event_thread_id = (
                     metadata.get("codex_thread_id") if isinstance(metadata, dict) else None
                 )
+                receiver_thread_ids = (
+                    metadata.get("receiver_thread_ids") if isinstance(metadata, dict) else None
+                )
+                if isinstance(event_thread_id, str) and event_thread_id != thread_id:
+                    native_agent_thread_ids.add(event_thread_id)
+                if isinstance(receiver_thread_ids, list):
+                    native_agent_thread_ids.update(
+                        receiver_thread_id
+                        for receiver_thread_id in receiver_thread_ids
+                        if isinstance(receiver_thread_id, str) and receiver_thread_id != thread_id
+                    )
+                if event_callback is None:
+                    return
                 if not isinstance(event_thread_id, str) or event_thread_id == thread_id:
                     event_callback(event)
                     return
@@ -2681,6 +2820,12 @@ class PearCodexAppServerToolRunner:
                         turn_context=turn_context,
                     )
                 )
+                if native_agent_thread_ids:
+                    self.reconcile_descendant_threads(
+                        thread_id,
+                        thread_ids=native_agent_thread_ids,
+                        event_callback=run_event_callback,
+                    )
             finally:
                 self.unregister_turn_context(turn_context)
             results = pear_worker_results_from_final_text(

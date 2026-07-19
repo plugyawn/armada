@@ -6386,7 +6386,7 @@ class PearAppServerProtocolCitizenTest(TestCase):
 
     def test_native_collaboration_item_retains_bounded_agent_metadata(self) -> None:
         translator = self.make_translator()
-        [event] = translator.events_from_message(
+        session, event = translator.events_from_message(
             {
                 "method": "item/completed",
                 "params": {
@@ -6406,6 +6406,11 @@ class PearAppServerProtocolCitizenTest(TestCase):
                 },
             }
         )
+        self.assertEqual(session["kind"], "session")
+        self.assertEqual(session["metadata"]["codex_method"], "item/completed")
+        self.assertEqual(session["metadata"]["codex_thread_id"], "child-1")
+        self.assertEqual(session["metadata"]["parent_thread_id"], "root-1")
+        self.assertEqual(session["metadata"]["thread"]["status"], {"type": "active"})
         self.assertEqual(event["kind"], "agent")
         self.assertEqual(event["title"], "Started an agent")
         self.assertEqual(event["metadata"]["codex_thread_id"], "root-1")
@@ -6413,8 +6418,74 @@ class PearAppServerProtocolCitizenTest(TestCase):
         self.assertEqual(event["metadata"]["receiver_thread_ids"], ["child-1"])
         self.assertEqual(event["metadata"]["agent_states"]["child-1"]["status"], "running")
 
+        idle_session, child_reply, waited = translator.events_from_message(
+            {
+                "method": "item/completed",
+                "params": {
+                    "threadId": "root-1",
+                    "turnId": "turn-1",
+                    "item": {
+                        "id": "collab-2",
+                        "type": "collabAgentToolCall",
+                        "tool": "wait",
+                        "senderThreadId": "root-1",
+                        "receiverThreadIds": ["child-1"],
+                        "agentsStates": {"child-1": {"status": "completed", "message": "Done"}},
+                        "status": "completed",
+                    },
+                },
+            }
+        )
+        self.assertEqual(idle_session["metadata"]["codex_method"], "item/completed")
+        self.assertEqual(idle_session["metadata"]["thread"]["status"], {"type": "idle"})
+        self.assertEqual(child_reply["kind"], "assistant")
+        self.assertEqual(child_reply["body"], "Done")
+        self.assertEqual(child_reply["metadata"]["codex_thread_id"], "child-1")
+        self.assertEqual(waited["title"], "Waited for agents")
+
+        failed_session, child_error, _waited = translator.events_from_message(
+            {
+                "method": "item/completed",
+                "params": {
+                    "threadId": "root-1",
+                    "turnId": "turn-1",
+                    "item": {
+                        "id": "collab-3",
+                        "type": "collabAgentToolCall",
+                        "tool": "wait",
+                        "senderThreadId": "root-1",
+                        "receiverThreadIds": ["child-1"],
+                        "agentsStates": {
+                            "child-1": {"status": "errored", "message": "Agent broke"}
+                        },
+                        "status": "completed",
+                    },
+                },
+            }
+        )
+        self.assertEqual(failed_session["metadata"]["thread"]["status"], {"type": "failed"})
+        self.assertEqual(child_error["kind"], "error")
+        self.assertEqual(child_error["body"], "Agent broke")
+
+        [authoritative_session] = translator.events_from_message(
+            {
+                "method": "thread/started",
+                "params": {
+                    "thread": {
+                        "id": "child-1",
+                        "parentThreadId": "root-1",
+                        "agentNickname": "Scout",
+                        "status": {"type": "idle"},
+                    }
+                },
+            }
+        )
+        self.assertEqual(authoritative_session["metadata"]["thread"]["agent_nickname"], "Scout")
+        self.assertEqual(len(translator.thread_descriptors), 1)
+
     def test_runtime_reconciliation_restores_native_descendant_threads(self) -> None:
         runner = self.make_runner(isolated=True)
+        emitted: list[dict[str, Any]] = []
         with patch.object(
             runner,
             "request",
@@ -6438,7 +6509,11 @@ class PearAppServerProtocolCitizenTest(TestCase):
                 "nextCursor": None,
             },
         ) as request:
-            runner.reconcile_descendant_threads("root-1")
+            runner.reconcile_descendant_threads(
+                "root-1",
+                thread_ids={"grandchild-1"},
+                event_callback=emitted.append,
+            )
 
         params = request.call_args.args[1]
         self.assertEqual(params["ancestorThreadId"], "root-1")
@@ -6449,6 +6524,10 @@ class PearAppServerProtocolCitizenTest(TestCase):
                 descriptor["id"]
                 for descriptor in runner.child_thread_lineage("root-1", "grandchild-1")
             ],
+            ["child-1", "grandchild-1"],
+        )
+        self.assertEqual(
+            [event["metadata"]["codex_thread_id"] for event in emitted],
             ["child-1", "grandchild-1"],
         )
 

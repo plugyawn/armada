@@ -21,6 +21,7 @@ import * as hashchange from "./hashchange.ts";
 import * as message_edit from "./message_edit.ts";
 import * as message_lists from "./message_lists.ts";
 import * as message_store from "./message_store.ts";
+import * as message_thread_hooks from "./message_thread_hooks.ts";
 import * as message_view from "./message_view.ts";
 import * as mouse_drag from "./mouse_drag.ts";
 import * as narrow_state from "./narrow_state.ts";
@@ -46,8 +47,15 @@ import {parse_html} from "./ui_util.ts";
 import {user_settings} from "./user_settings.ts";
 import * as util from "./util.ts";
 
+function message_list_for_row($row: JQuery): NonNullable<typeof message_lists.current> {
+    const message_list = message_lists.get_message_list_for_row($row) ?? message_lists.current;
+    assert(message_list !== undefined);
+    return message_list;
+}
+
 export function initialize(): void {
     // MESSAGE CLICKING
+    const $message_interaction_root = message_lists.get_rendered_message_interaction_root();
 
     function initialize_long_tap(): void {
         const MS_DELAY = 750;
@@ -56,16 +64,16 @@ export function initialize(): void {
             current_target: undefined,
         };
 
-        $("#main_div").on("touchstart", ".messagebox", function () {
+        $message_interaction_root.on("touchstart", ".messagebox", function () {
             meta.touchdown = true;
             meta.invalid = false;
-            const id = rows.id($(this).closest(".message_row"));
+            const $row = $(this).closest(".message_row");
+            const id = rows.id($row);
             meta.current_target = id;
             if (!id) {
                 return;
             }
-            assert(message_lists.current !== undefined);
-            message_lists.current.select_id(id);
+            message_list_for_row($row).select_id(id);
             setTimeout(() => {
                 // The algorithm to trigger long tap is that first, we check
                 // whether the message is still touched after MS_DELAY ms and
@@ -80,15 +88,15 @@ export function initialize(): void {
             }, MS_DELAY);
         });
 
-        $("#main_div").on("touchend", ".messagebox", () => {
+        $message_interaction_root.on("touchend", ".messagebox", () => {
             meta.touchdown = false;
         });
 
-        $("#main_div").on("touchmove", ".messagebox", () => {
+        $message_interaction_root.on("touchmove", ".messagebox", () => {
             meta.invalid = true;
         });
 
-        $("#main_div").on("contextmenu", ".messagebox", (e) => {
+        $message_interaction_root.on("contextmenu", ".messagebox", (e) => {
             e.preventDefault();
         });
     }
@@ -215,8 +223,8 @@ export function initialize(): void {
         const $row = $(this).closest(".message_row");
         const id = rows.id($row);
 
-        assert(message_lists.current !== undefined);
-        message_lists.current.select_id(id);
+        const message_list = message_list_for_row($row);
+        message_list.select_id(id);
 
         if (message_edit.currently_editing_messages.has(id)) {
             // Clicks on a message being edited shouldn't trigger a reply.
@@ -241,6 +249,13 @@ export function initialize(): void {
         if (page_params.is_spectator) {
             return;
         }
+        if (
+            !message_list.view.manages_primary_viewport &&
+            message_thread_hooks.focus_composer(id)
+        ) {
+            e.stopPropagation();
+            return;
+        }
         compose_reply.respond_to_message({trigger: "message click"});
         e.stopPropagation();
     };
@@ -248,10 +263,10 @@ export function initialize(): void {
     // if on normal non-mobile experience, a `click` event should run the message
     // selection function which will open the compose box  and select the message.
     if (!util.is_mobile()) {
-        $("#main_div").on("click", ".messagebox", select_message_function);
+        $message_interaction_root.on("click", ".messagebox", select_message_function);
     }
 
-    $("#main_div").on("click", ".star_container", function (e) {
+    $message_interaction_root.on("click", ".star_container", function (e) {
         e.stopPropagation();
 
         if (page_params.is_spectator) {
@@ -265,7 +280,7 @@ export function initialize(): void {
         starred_messages_ui.toggle_starred_and_update_server(message);
     });
 
-    $("#main_div").on("click", ".message_reaction", function (this: HTMLElement, e) {
+    $message_interaction_root.on("click", ".message_reaction", function (this: HTMLElement, e) {
         e.stopPropagation();
 
         if (page_params.is_spectator) {
@@ -280,28 +295,29 @@ export function initialize(): void {
     });
 
     $("body").on("click", ".reveal-hidden-message", (e) => {
-        assert(message_lists.current !== undefined);
-        const message_id = rows.id($(e.currentTarget).closest(".message_row"));
-        message_lists.current.view.reveal_hidden_message(message_id);
+        const $row = $(e.currentTarget).closest(".message_row");
+        const message_id = rows.id($row);
+        message_list_for_row($row).view.reveal_hidden_message(message_id);
         e.stopPropagation();
         e.preventDefault();
     });
 
-    $("#main_div").on("click", ".rehide-muted-user-message", (e) => {
+    $message_interaction_root.on("click", ".rehide-muted-user-message", (e) => {
         const message_id = Number($(e.currentTarget).attr("data-message-id"));
-        assert(message_lists.current !== undefined);
-        const $row = message_lists.current.get_row(message_id);
-        const message = message_lists.current.get(rows.id($row));
+        const $event_row = $(e.currentTarget).closest(".message_row");
+        const message_list = message_list_for_row($event_row);
+        const $row = message_list.get_row(message_id);
+        const message = message_list.get(rows.id($row));
         assert(message !== undefined);
-        const message_container = message_lists.current.view.message_containers.get(message.id);
+        const message_container = message_list.view.message_containers.get(message.id);
         assert(message_container !== undefined);
         assert(!message_container.is_hidden);
-        message_lists.current.view.hide_revealed_message(message_id);
+        message_list.view.hide_revealed_message(message_id);
         e.preventDefault();
         e.stopPropagation();
     });
 
-    $("#main_div").on("click", "a.stream", function (this: HTMLAnchorElement, e) {
+    $message_interaction_root.on("click", "a.stream", function (this: HTMLAnchorElement, e) {
         if (e.metaKey || e.ctrlKey || e.shiftKey) {
             // Let the browser handle modified clicks (open in a new
             // tab/window) using the link's href.
@@ -345,7 +361,7 @@ export function initialize(): void {
         }
     });
 
-    $("body").on("click", ".message_row", function () {
+    $message_interaction_root.on("click", ".message_row", function () {
         $(".selected_msg_for_touchscreen").removeClass("selected_msg_for_touchscreen");
         $(this).addClass("selected_msg_for_touchscreen");
     });
@@ -353,17 +369,19 @@ export function initialize(): void {
     // MESSAGE EDITING
 
     $("body").on("click", ".edit_content_button", function (e) {
-        assert(message_lists.current !== undefined);
-        const $row = message_lists.current.get_row(rows.id($(this).closest(".message_row")));
-        message_lists.current.select_id(rows.id($row));
+        const $event_row = $(this).closest(".message_row");
+        const message_list = message_list_for_row($event_row);
+        const $row = message_list.get_row(rows.id($event_row));
+        message_list.select_id(rows.id($row));
         message_edit.start($row);
         e.stopPropagation();
     });
     $("body").on("click", ".move_message_button", function (e) {
-        assert(message_lists.current !== undefined);
-        const $row = message_lists.current.get_row(rows.id($(this).closest(".message_row")));
+        const $event_row = $(this).closest(".message_row");
+        const message_list = message_list_for_row($event_row);
+        const $row = message_list.get_row(rows.id($event_row));
         const message_id = rows.id($row);
-        const message = message_lists.current.get(message_id);
+        const message = message_list.get(message_id);
         assert(message?.type === "stream");
         void stream_popover.build_move_topic_to_stream_popover(
             message.stream_id,

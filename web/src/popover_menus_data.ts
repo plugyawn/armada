@@ -9,6 +9,7 @@ import * as hash_util from "./hash_util.ts";
 import {$t} from "./i18n.ts";
 import * as message_delete from "./message_delete.ts";
 import * as message_edit from "./message_edit.ts";
+import type {MessageList} from "./message_list.ts";
 import * as message_lists from "./message_lists.ts";
 import type {Message} from "./message_store.ts";
 import * as narrow_state from "./narrow_state.ts";
@@ -147,9 +148,12 @@ type BillingInfo = {
     show_plans: boolean;
 };
 
-export function get_actions_popover_content_context(message_id: number): ActionPopoverContext {
-    assert(message_lists.current !== undefined);
-    const message = message_lists.current.get(message_id);
+export function get_actions_popover_content_context(
+    message_id: number,
+    message_list: MessageList = message_lists.current!,
+): ActionPopoverContext {
+    assert(message_list !== undefined);
+    const message = message_list.get(message_id);
     assert(message !== undefined);
     const not_spectator = !page_params.is_spectator;
     const is_content_editable = message_edit.is_content_editable(message);
@@ -231,8 +235,7 @@ export function get_actions_popover_content_context(message_id: number): ActionP
             : undefined;
 
     function is_add_reaction_icon_visible(): boolean {
-        assert(message_lists.current !== undefined);
-        const $message_row = message_lists.current.get_row(message_id);
+        const $message_row = message_list.get_row(message_id);
         const $reaction_button = $message_row.find(".message_controls .reaction_button");
         return $reaction_button.length === 1 && $reaction_button.css("display") !== "none";
     }

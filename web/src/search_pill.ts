@@ -42,7 +42,7 @@ type SearchPill = ({type: "generic_operator"} & NarrowCanonicalTerm) | SearchUse
 export type SearchPillWidget = InputPillContainer<SearchPill>;
 
 type PillRenderData =
-    | ({type: "generic_operator"} & NarrowTermSuggestion & {
+    | ({type: "generic_operator"} & (NarrowCanonicalTerm | NarrowTermSuggestion) & {
               display_value?: string;
               is_empty_string_topic?: boolean;
               sign?: string;
@@ -87,7 +87,7 @@ export function get_search_string_from_item(item: SearchPill): string {
             operand = stream_data.get_valid_sub_by_id_string(item.operand).name;
             break;
         default:
-            operand = item.operand;
+            operand = String(item.operand);
     }
 
     const sign = item.negated ? "-" : "";
@@ -326,7 +326,7 @@ export function generate_pills_html(suggestion: Suggestion, text_query: string):
                 [
                     {
                         operator: render_data.operator,
-                        operand: render_data.operand,
+                        operand: String(render_data.operand),
                         negated: render_data.negated,
                     },
                 ],
@@ -552,6 +552,12 @@ export function get_current_search_pill_terms(
                 return {
                     operator: item.operator,
                     operand: item.users[0]!.user_id,
+                    negated: item.negated,
+                };
+            case "thread":
+                return {
+                    operator: item.operator,
+                    operand: item.operand,
                     negated: item.negated,
                 };
             default:

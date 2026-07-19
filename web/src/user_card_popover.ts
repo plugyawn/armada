@@ -717,7 +717,8 @@ function toggle_sidebar_user_card_popover($target: JQuery): void {
 }
 
 function register_click_handlers(): void {
-    $("#main_div").on(
+    const $message_interaction_root = message_lists.get_rendered_message_interaction_root();
+    $message_interaction_root.on(
         "click",
         ".sender_name, .inline-profile-picture-wrapper",
         function (this: HTMLElement, e) {
@@ -726,14 +727,16 @@ function register_click_handlers(): void {
                 return;
             }
             const $row = $(this).closest(".message_row");
-            assert(message_lists.current !== undefined);
-            const message = message_lists.current.get(rows.id($row));
+            const message_list =
+                message_lists.get_message_list_for_row($row) ?? message_lists.current;
+            assert(message_list !== undefined);
+            const message = message_list.get(rows.id($row));
             assert(message !== undefined);
             toggle_user_card_popover_for_message(this, message.sender_id, message.sender_id, true);
         },
     );
 
-    $("#main_div").on("click", ".user-mention", function (this: HTMLElement, e) {
+    $message_interaction_root.on("click", ".user-mention", function (this: HTMLElement, e) {
         e.stopPropagation();
         if (mouse_drag.is_drag(e)) {
             return;
@@ -746,8 +749,9 @@ function register_click_handlers(): void {
             return;
         }
         const $row = $(this).closest(".message_row");
-        assert(message_lists.current !== undefined);
-        const message = message_lists.current.get(rows.id($row));
+        const message_list = message_lists.get_message_list_for_row($row) ?? message_lists.current;
+        assert(message_list !== undefined);
+        const message = message_list.get(rows.id($row));
         assert(message !== undefined);
         let user_id;
         if (id_string) {

@@ -1,65 +1,44 @@
 import $ from "jquery";
-import * as z from "zod/mini";
 
-import * as channel from "./channel.ts";
+import * as compose_editor from "./compose_editor.ts";
+import type {ResolvedComposeRecipient} from "./compose_send.ts";
+import {Filter} from "./filter.ts";
 import {$t} from "./i18n.ts";
+import * as message_fetch from "./message_fetch.ts";
+import {MessageList} from "./message_list.ts";
+import {MessageListData} from "./message_list_data.ts";
+import * as message_lists from "./message_lists.ts";
 import * as message_store from "./message_store.ts";
+import * as message_thread_hooks from "./message_thread_hooks.ts";
 import * as modals from "./modals.ts";
 import * as overlay_util from "./overlay_util.ts";
 import * as overlays from "./overlays.ts";
 import * as pear_run_state from "./pear_run_state.ts";
 import * as pear_run_trace from "./pear_run_trace.ts";
-import * as rendered_markdown from "./rendered_markdown.ts";
+import * as people from "./people.ts";
+import type {UpdateMessageEvent} from "./server_event_types.ts";
 import * as timerender from "./timerender.ts";
 import * as ui_util from "./ui_util.ts";
+import * as unread_ops from "./unread_ops.ts";
 
 const HUMAN_THREAD_KEY = "replies";
-const REPLY_PAGE_SIZE = 50;
-
-const message_thread_reply_schema = z.object({
-    id: z.number(),
-    message_id: z.number(),
-    sender_id: z.number(),
-    sender_full_name: z.string(),
-    avatar_url: z.nullish(z.string()),
-    content: z.string(),
-    content_type: z.literal("text/html"),
-    timestamp: z.number(),
-});
-
-const message_thread_response_schema = z.object({
-    reply_summary: z.nullable(message_store.message_thread_reply_summary_schema),
-    replies: z.array(message_thread_reply_schema),
-    has_more: z.boolean(),
-});
-
-const message_thread_post_response_schema = z.object({
-    reply_summary: message_store.message_thread_reply_summary_schema,
-    reply: message_thread_reply_schema,
-});
-
-export const message_thread_event_schema = z.object({
-    type: z.literal("message_thread"),
-    message_id: z.number(),
-    reply_summary: message_store.message_thread_reply_summary_schema,
-    reply: message_thread_reply_schema,
-});
-
-type MessageThreadReply = z.infer<typeof message_thread_reply_schema>;
-type MessageThreadEvent = z.infer<typeof message_thread_event_schema>;
 type TraceEnhancer = (root: HTMLElement) => void;
 
-type ReplyState = {
-    summary?: message_store.MessageThreadReplySummary | undefined;
-    replies: Map<number, MessageThreadReply>;
-    draft: string;
-    has_more: boolean;
-    loaded: boolean;
-    failed: boolean;
-    request?: JQuery.jqXHR<unknown> | undefined;
-    request_generation: number;
-    posting: boolean;
-    post_failed: boolean;
+type HumanThreadView = {
+    message_id: number;
+    reply_list: MessageList;
+    editor: compose_editor.ComposeEditor;
+    visibility_observer?: IntersectionObserver | undefined;
+};
+
+type RootThreadView = {
+    message_id: number;
+    root_list: MessageList;
+};
+
+type PaneAgentEntry = {
+    agent: pear_run_state.PearAgentThread;
+    run: pear_run_state.PearRunLiveView;
 };
 
 type PaneElements = {
@@ -67,6 +46,7 @@ type PaneElements = {
     title: HTMLElement;
     meta: HTMLElement;
     tabs: HTMLElement;
+    body: HTMLElement;
     panel: HTMLElement;
     activity: HTMLElement;
     replies: HTMLElement;
@@ -75,17 +55,20 @@ type PaneElements = {
     reply_status: HTMLElement;
     reply_list: HTMLElement;
     older: HTMLButtonElement;
-    composer: HTMLFormElement;
-    textarea: HTMLTextAreaElement;
-    submit: HTMLButtonElement;
+    composer: HTMLElement;
     trace_root: HTMLElement;
     trace_host: HTMLElement;
     trace_status: HTMLElement;
     close: HTMLButtonElement;
 };
 
-const reply_state_by_message_id = new Map<number, ReplyState>();
+const pending_summary_reconciliation_root_ids = new Set<number>();
+const root_load_callbacks_by_message_id = new Map<number, ((loaded: boolean) => void)[]>();
+const root_load_data_by_message_id = new Map<number, MessageListData>();
+const pending_root_by_anchor_message_id = new Map<number, number>();
 const trace_enhancer_by_row = new WeakMap<HTMLElement, TraceEnhancer>();
+let human_thread_view: HumanThreadView | undefined;
+let root_thread_view: RootThreadView | undefined;
 let pane_elements: PaneElements | undefined;
 let open_message_id: number | undefined;
 let selected_thread_key: string | undefined;
@@ -96,73 +79,14 @@ let anchor_message_id: number | undefined;
 let anchor_thread_key: string | undefined;
 let pane_trace_enhancer: TraceEnhancer | undefined;
 let mobile_scroll_locked = false;
+let mobile_inerted_elements: HTMLElement[] = [];
 let initialized = false;
 let tabs_signature = "";
 let pane_render_frame: number | undefined;
 let pane_open_focus_frame: number | undefined;
 let pane_restore_focus_frame: number | undefined;
-
-function reply_state(message_id: number): ReplyState {
-    let state = reply_state_by_message_id.get(message_id);
-    if (state === undefined) {
-        state = {
-            replies: new Map(),
-            draft: "",
-            has_more: false,
-            loaded: false,
-            failed: false,
-            request_generation: 0,
-            posting: false,
-            post_failed: false,
-        };
-        reply_state_by_message_id.set(message_id, state);
-    }
-    return state;
-}
-
-function summary_is_at_least_as_new(
-    incoming: message_store.MessageThreadReplySummary,
-    current: message_store.MessageThreadReplySummary | undefined,
-): boolean {
-    return (
-        current === undefined ||
-        incoming.reply_count > current.reply_count ||
-        (incoming.reply_count === current.reply_count &&
-            incoming.last_reply_at >= current.last_reply_at)
-    );
-}
-
-export function remember_reply_summary(
-    message_id: number,
-    summary: message_store.MessageThreadReplySummary | undefined,
-): void {
-    if (summary === undefined) {
-        return;
-    }
-    const state = reply_state(message_id);
-    if (!summary_is_at_least_as_new(summary, state.summary)) {
-        return;
-    }
-    state.summary = summary;
-    const message = message_store.get(message_id);
-    if (message !== undefined) {
-        message.reply_summary = summary;
-    }
-}
-
-function merge_reply(state: ReplyState, reply: MessageThreadReply): boolean {
-    if (state.replies.has(reply.id)) {
-        return false;
-    }
-    state.replies.set(reply.id, reply);
-    return true;
-}
-
-function ordered_replies(state: ReplyState): MessageThreadReply[] {
-    return [...state.replies.values()].toSorted(
-        (left, right) => left.timestamp - right.timestamp || left.id - right.id,
-    );
-}
+let summary_reconciliation_in_flight = false;
+let summary_reconciliation_generation = 0;
 
 function hash_thread_id(thread_id: string): number {
     let hash = 2_166_136_261;
@@ -226,15 +150,6 @@ export function selection_after_update_for_testing(
     return agents[0]?.thread_id ?? HUMAN_THREAD_KEY;
 }
 
-export function parse_thread_event_for_testing(raw: unknown): MessageThreadEvent | undefined {
-    const result = message_thread_event_schema.safeParse(raw);
-    return result.success ? result.data : undefined;
-}
-
-export function reply_state_count_for_testing(): number {
-    return reply_state_by_message_id.size;
-}
-
 function create_sigil(agent: pear_run_state.PearAgentThread): HTMLElement {
     const sigil = document.createElement("span");
     sigil.className = `message-thread-agent-sigil message-thread-agent-sigil-tone-${hash_thread_id(agent.thread_id) % 6}`;
@@ -262,7 +177,11 @@ function initials(full_name: string): string {
 }
 
 function create_avatar(
-    participant: z.infer<typeof message_store.message_thread_participant_schema>,
+    participant: {
+        user_id: number;
+        full_name: string;
+        avatar_url?: string | null | undefined;
+    },
     class_name: string,
 ): HTMLElement {
     if (participant.avatar_url) {
@@ -296,6 +215,7 @@ function summary_signature(summary: message_store.MessageThreadReplySummary | un
     }
     return [
         summary.reply_count,
+        summary.unread_reply_count,
         summary.last_reply_at,
         summary.last_sender?.user_id ?? "",
         ...summary.participants.map((participant) =>
@@ -331,6 +251,28 @@ function focusable_elements(pane: HTMLElement): HTMLElement[] {
     );
 }
 
+function set_mobile_background_inert(enabled: boolean): void {
+    if (!enabled) {
+        for (const element of mobile_inerted_elements) {
+            element.removeAttribute("inert");
+        }
+        mobile_inerted_elements = [];
+        return;
+    }
+    const pane = pane_elements?.pane;
+    const parent = pane?.parentElement;
+    if (pane === undefined || parent === null || parent === undefined) {
+        return;
+    }
+    set_mobile_background_inert(false);
+    for (const sibling of parent.children) {
+        if (sibling instanceof HTMLElement && sibling !== pane && !sibling.hasAttribute("inert")) {
+            sibling.setAttribute("inert", "");
+            mobile_inerted_elements.push(sibling);
+        }
+    }
+}
+
 function update_pane_layout(): void {
     const elements = pane_elements;
     if (elements === undefined || elements.pane.hidden) {
@@ -342,12 +284,14 @@ function update_pane_layout(): void {
     elements.pane.setAttribute("role", mobile ? "dialog" : "complementary");
     if (mobile) {
         elements.pane.setAttribute("aria-modal", "true");
+        set_mobile_background_inert(true);
         if (!mobile_scroll_locked) {
             overlay_util.disable_scrolling();
             mobile_scroll_locked = true;
         }
     } else {
         elements.pane.removeAttribute("aria-modal");
+        set_mobile_background_inert(false);
         if (mobile_scroll_locked) {
             overlay_util.enable_scrolling();
             mobile_scroll_locked = false;
@@ -409,48 +353,8 @@ function create_pane_elements(pane: HTMLElement): PaneElements {
     older.hidden = true;
     const reply_list = document.createElement("div");
     reply_list.className = "message-thread-reply-list";
-    reply_list.setAttribute("role", "feed");
-    reply_list.setAttribute("aria-label", $t({defaultMessage: "Replies"}));
-    const composer = document.createElement("form");
-    composer.className = "message-thread-composer";
-    const composer_toolbar = document.createElement("div");
-    composer_toolbar.className = "message-thread-composer-toolbar";
-    for (const [format, icon, label] of [
-        ["bold", "bold", $t({defaultMessage: "Bold"})],
-        ["italic", "italic", $t({defaultMessage: "Italic"})],
-        ["link", "link", $t({defaultMessage: "Link"})],
-        ["numbered", "ordered-list", $t({defaultMessage: "Numbered list"})],
-        ["bulleted", "unordered-list", $t({defaultMessage: "Bulleted list"})],
-        ["code", "code", $t({defaultMessage: "Code"})],
-    ] as const) {
-        const button = document.createElement("button");
-        button.className = `message-thread-format-button formatting_button zulip-icon zulip-icon-${icon}`;
-        button.type = "button";
-        button.dataset["formatType"] = format;
-        button.setAttribute("aria-label", label);
-        button.setAttribute("title", label);
-        composer_toolbar.append(button);
-    }
-    const textarea = document.createElement("textarea");
-    textarea.className = "message-thread-composer-input";
-    textarea.rows = 2;
-    textarea.placeholder = $t({defaultMessage: "Reply…"});
-    textarea.setAttribute("aria-label", $t({defaultMessage: "Reply to this message"}));
-    const submit = document.createElement("button");
-    submit.className = "message-thread-composer-submit";
-    submit.type = "submit";
-    submit.setAttribute("aria-label", $t({defaultMessage: "Send reply"}));
-    const send_icon = document.createElement("i");
-    send_icon.className = "zulip-icon zulip-icon-send";
-    send_icon.setAttribute("aria-hidden", "true");
-    submit.append(send_icon);
-    const composer_footer = document.createElement("div");
-    composer_footer.className = "message-thread-composer-footer";
-    const send_hint = document.createElement("span");
-    send_hint.className = "message-thread-composer-hint";
-    send_hint.textContent = $t({defaultMessage: "Ctrl/⌘ + Enter to send"});
-    composer_footer.append(send_hint, submit);
-    composer.append(composer_toolbar, textarea, composer_footer);
+    const composer = document.createElement("div");
+    composer.className = "message-thread-composer-host";
     replies.append(separator, reply_status, older, reply_list, composer);
 
     const trace_root = document.createElement("div");
@@ -475,6 +379,7 @@ function create_pane_elements(pane: HTMLElement): PaneElements {
         title,
         meta,
         tabs,
+        body,
         panel,
         activity,
         replies,
@@ -484,8 +389,6 @@ function create_pane_elements(pane: HTMLElement): PaneElements {
         reply_list,
         older,
         composer,
-        textarea,
-        submit,
         trace_root,
         trace_host,
         trace_status,
@@ -518,17 +421,13 @@ function ensure_initialized(): PaneElements | undefined {
         });
         pane_elements.tabs.addEventListener("keydown", handle_tablist_keydown);
         pane_elements.older.addEventListener("click", load_earlier_replies);
-        pane_elements.composer.addEventListener("submit", submit_reply);
-        pane_elements.textarea.addEventListener("input", sync_composer_state);
-        document.addEventListener("click", handle_thread_button_click);
-        pane_elements.textarea.addEventListener("keydown", (event) => {
-            if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
-                pane_elements?.composer.requestSubmit();
-                event.preventDefault();
-            }
+        pane_elements.body.addEventListener("scroll", mark_visible_thread_replies_read, {
+            passive: true,
         });
+        document.addEventListener("click", handle_thread_button_click);
         document.addEventListener("keydown", handle_document_keydown);
         window.addEventListener("resize", update_pane_layout);
+        window.addEventListener("focus", mark_visible_thread_replies_read);
         modals.register_pre_open_hook(() => {
             close({restore_focus: false});
         });
@@ -539,34 +438,57 @@ function ensure_initialized(): PaneElements | undefined {
     return pane_elements;
 }
 
-function active_run(): pear_run_state.PearRunLiveView | undefined {
-    return open_message_id === undefined ? undefined : pear_run_state.get_run_view(open_message_id);
+function run_views_for_root(
+    message_id: number,
+    replies = message_store.get_thread_replies(message_id),
+): pear_run_state.PearRunLiveView[] {
+    const messages = [message_store.get(message_id), ...replies].filter(
+        (message) => message !== undefined,
+    );
+    const runs = new Map<number, pear_run_state.PearRunLiveView>();
+    for (const message of messages) {
+        const run = pear_run_state.get_run_view(message.id);
+        if (run !== undefined) {
+            runs.set(run.id, run);
+        }
+    }
+    return [...runs.values()];
 }
 
-function agents_for_open_message(): pear_run_state.PearAgentThread[] {
-    return active_run()?.agents ?? [];
+function agent_entries_for_open_message(): PaneAgentEntry[] {
+    if (open_message_id === undefined) {
+        return [];
+    }
+    const entries = new Map<string, PaneAgentEntry>();
+    for (const run of run_views_for_root(open_message_id)) {
+        for (const agent of run.agents ?? []) {
+            entries.set(agent.thread_id, {agent, run});
+        }
+    }
+    return [...entries.values()];
 }
 
-function selected_agent(): pear_run_state.PearAgentThread | undefined {
-    return agents_for_open_message().find((agent) => agent.thread_id === selected_thread_key);
-}
-
-function render_tabs(agents: pear_run_state.PearAgentThread[]): void {
+function render_tabs(agent_entries: PaneAgentEntry[]): void {
     const elements = pane_elements;
     if (elements === undefined || open_message_id === undefined) {
         return;
     }
-    const summary = reply_state(open_message_id).summary;
-    const signature = `${selected_thread_key ?? ""}\u0001${summary_signature(summary)}\u0001${agents.map((agent) => agent_signature(agent)).join("\u0001")}`;
+    const summary = message_store.get(open_message_id)?.reply_summary;
+    const signature = `${selected_thread_key ?? ""}\u0001${summary_signature(summary)}\u0001${agent_entries.map(({agent, run}) => `${run.id}:${agent_signature(agent)}`).join("\u0001")}`;
     if (signature === tabs_signature) {
         return;
     }
     tabs_signature = signature;
-    elements.tabs.hidden = agents.length === 0;
-    if (agents.length === 0) {
+    elements.tabs.hidden = agent_entries.length === 0;
+    if (agent_entries.length === 0) {
         elements.tabs.replaceChildren();
+        elements.panel.setAttribute("role", "region");
+        elements.panel.setAttribute("aria-label", $t({defaultMessage: "Thread content"}));
+        elements.panel.removeAttribute("aria-labelledby");
         return;
     }
+    elements.panel.setAttribute("role", "tabpanel");
+    elements.panel.removeAttribute("aria-label");
     const restore_tab_focus = elements.tabs.contains(document.activeElement);
     const tabs: HTMLButtonElement[] = [];
     const replies_tab = document.createElement("button");
@@ -589,7 +511,7 @@ function render_tabs(agents: pear_run_state.PearAgentThread[]): void {
         replies_tab.append(count);
     }
     tabs.push(replies_tab);
-    for (const [index, agent] of agents.entries()) {
+    for (const [index, {agent}] of agent_entries.entries()) {
         const tab = document.createElement("button");
         const selected = agent.thread_id === selected_thread_key;
         const name = display_name_for_testing(agent, index);
@@ -619,276 +541,538 @@ function render_tabs(agents: pear_run_state.PearAgentThread[]): void {
     }
 }
 
-type ConversationEntry = {
-    id: number;
-    sender_id: number;
-    sender_full_name: string;
-    avatar_url: string | null | undefined;
-    content: string;
-    timestamp: number;
-    is_pear_message: boolean;
-};
-
-function render_conversation_entry(entry: ConversationEntry, kind: "root" | "reply"): HTMLElement {
-    const article = document.createElement("article");
-    article.className = `message-thread-entry message-thread-${kind}${entry.is_pear_message ? " message-thread-entry-pear" : ""}`;
-    article.dataset[kind === "root" ? "messageId" : "replyId"] = String(entry.id);
-    article.setAttribute(
-        "aria-label",
-        kind === "root"
-            ? $t({defaultMessage: "Original message from {name}"}, {name: entry.sender_full_name})
-            : $t({defaultMessage: "Reply from {name}"}, {name: entry.sender_full_name}),
-    );
-    const participant = {
-        user_id: entry.sender_id,
-        full_name: entry.sender_full_name,
-        avatar_url: entry.avatar_url,
+function resolved_recipient_for_message(message: message_store.Message): ResolvedComposeRecipient {
+    if (message.type === "stream") {
+        return {type: "stream", stream_id: message.stream_id, topic: message.topic};
+    }
+    const user_ids = people.pm_with_user_ids(message) ?? [];
+    const display_recipient = Array.isArray(message.display_recipient)
+        ? message.display_recipient
+        : [];
+    return {
+        type: "private",
+        user_ids,
+        recipient_emails: display_recipient
+            .filter((recipient) => user_ids.includes(recipient.id))
+            .map((recipient) => recipient.email)
+            .join(","),
     };
-    article.append(create_avatar(participant, "message-thread-entry-avatar"));
-    const main = document.createElement("div");
-    main.className = "message-thread-entry-main";
-    const header = document.createElement("header");
-    header.className = "message-thread-entry-header";
-    const sender = document.createElement("strong");
-    sender.textContent = entry.sender_full_name;
-    const time = document.createElement("time");
-    time.dateTime = new Date(entry.timestamp * 1000).toISOString();
-    time.textContent = timerender.format_time_modern(entry.timestamp * 1000);
-    header.append(sender, time);
-    const content = document.createElement("div");
-    content.className = "message-thread-entry-content rendered_markdown";
-    content.append(ui_util.parse_html(entry.content));
-    rendered_markdown.update_elements($(content));
-    main.append(header, content);
-    article.append(main);
-    return article;
 }
 
-function render_reply(reply: MessageThreadReply): HTMLElement {
-    return render_conversation_entry(
-        {
-            id: reply.id,
-            sender_id: reply.sender_id,
-            sender_full_name: reply.sender_full_name,
-            avatar_url: reply.avatar_url,
-            content: reply.content,
-            timestamp: reply.timestamp,
-            is_pear_message: false,
-        },
-        "reply",
-    );
+function destroy_human_thread_view(): void {
+    if (human_thread_view === undefined) {
+        return;
+    }
+    const {reply_list, editor, visibility_observer} = human_thread_view;
+    visibility_observer?.disconnect();
+    editor.destroy();
+    message_fetch.cancel_retries_for_message_list_data(reply_list.data);
+    message_lists.delete_message_list(reply_list);
+    human_thread_view = undefined;
 }
 
-function render_root_message(message_id: number): void {
+function destroy_root_thread_view(): void {
+    if (root_thread_view === undefined) {
+        return;
+    }
+    message_fetch.cancel_retries_for_message_list_data(root_thread_view.root_list.data);
+    message_lists.delete_message_list(root_thread_view.root_list);
+    root_thread_view = undefined;
+}
+
+function update_reply_list_chrome(): void {
     const elements = pane_elements;
-    const message = message_store.get(message_id);
-    if (elements === undefined || message === undefined) {
-        elements?.root.replaceChildren();
+    const view = human_thread_view;
+    if (elements === undefined || view === undefined) {
         return;
     }
-    const signature = [
-        message.id,
-        message.sender_id,
-        message.sender_full_name,
-        message.avatar_url ?? "",
-        message.content,
-        message.timestamp,
-        message.is_pear_message,
-    ].join("\u0001");
-    if (elements.root.dataset["signature"] === signature) {
-        return;
-    }
-    elements.root.dataset["signature"] = signature;
-    elements.root.replaceChildren(
-        render_conversation_entry(
-            {
-                id: message.id,
-                sender_id: message.sender_id,
-                sender_full_name: message.sender_full_name,
-                avatar_url: message.avatar_url,
-                content: message.content,
-                timestamp: message.timestamp,
-                is_pear_message: message.is_pear_message,
-            },
-            "root",
-        ),
-    );
-}
-
-function sync_composer_state(): void {
-    const elements = pane_elements;
-    if (elements === undefined || open_message_id === undefined) {
-        return;
-    }
-    const state = reply_state(open_message_id);
-    state.draft = elements.textarea.value;
-    if (state.post_failed) {
-        state.post_failed = false;
-        elements.reply_status.textContent = "";
-    }
-    elements.submit.disabled = state.posting || elements.textarea.value.trim() === "";
-}
-
-function render_replies(options: {scroll_to_end?: boolean} = {}): void {
-    const elements = pane_elements;
-    if (elements === undefined || open_message_id === undefined) {
-        return;
-    }
-    const state = reply_state(open_message_id);
-    const replies = ordered_replies(state);
-    const reply_count = state.summary?.reply_count ?? replies.length;
-    elements.separator.hidden = reply_count === 0;
+    const count =
+        message_store.get(view.message_id)?.reply_summary?.reply_count ??
+        view.reply_list.data.num_items();
+    elements.separator.hidden = count === 0;
     elements.separator.textContent = $t(
         {defaultMessage: "{count, plural, one {# reply} other {# replies}}"},
-        {count: reply_count},
+        {count},
     );
-    const signature = replies.map((reply) => reply.id).join(",");
-    if (elements.reply_list.dataset["signature"] !== signature) {
-        elements.reply_list.dataset["signature"] = signature;
-        elements.reply_list.replaceChildren(...replies.map((reply) => render_reply(reply)));
+    elements.older.hidden = !view.reply_list.data.fetch_status.can_load_older_messages();
+    elements.older.disabled = false;
+    elements.reply_status.textContent =
+        count === 0 && view.reply_list.data.fetch_status.has_found_oldest()
+            ? $t({defaultMessage: "No replies yet."})
+            : "";
+}
+
+function reconcile_root_summaries(root_ids: Iterable<number>): void {
+    const cached_root_ids = [...new Set(root_ids)].filter(
+        (root_id) => message_store.get(root_id) !== undefined,
+    );
+    message_store.mark_thread_reply_lifecycle(cached_root_ids);
+    for (const root_id of cached_root_ids) {
+        pending_summary_reconciliation_root_ids.add(root_id);
     }
-    elements.older.hidden = !state.has_more && !state.failed;
-    elements.older.disabled = state.request !== undefined;
-    elements.older.textContent = state.failed
-        ? $t({defaultMessage: "Retry loading replies"})
-        : $t({defaultMessage: "Load earlier replies"});
-    if (state.request !== undefined && replies.length === 0) {
-        elements.reply_status.textContent = $t({defaultMessage: "Loading replies…"});
-    } else if (state.failed && replies.length === 0) {
-        elements.reply_status.textContent = $t({defaultMessage: "Could not load replies."});
-    } else if (state.post_failed) {
-        elements.reply_status.textContent = $t({defaultMessage: "Could not send reply."});
-    } else if (state.loaded && replies.length === 0) {
-        elements.reply_status.textContent = $t({defaultMessage: "No replies yet."});
-    } else {
-        elements.reply_status.textContent = "";
+    if (summary_reconciliation_in_flight || pending_summary_reconciliation_root_ids.size === 0) {
+        return;
     }
-    elements.submit.disabled = state.posting || elements.textarea.value.trim() === "";
-    elements.textarea.disabled = state.posting;
-    if (options.scroll_to_end === true) {
-        elements.reply_list.lastElementChild?.scrollIntoView({block: "end"});
+
+    const requested_root_ids = [...pending_summary_reconciliation_root_ids];
+    pending_summary_reconciliation_root_ids.clear();
+    summary_reconciliation_in_flight = true;
+    const generation = summary_reconciliation_generation;
+    function finish(): void {
+        if (generation !== summary_reconciliation_generation) {
+            return;
+        }
+        summary_reconciliation_in_flight = false;
+        for (const root_id of requested_root_ids) {
+            render_registered_rows(root_id);
+        }
+        if (open_message_id !== undefined && requested_root_ids.includes(open_message_id)) {
+            tabs_signature = "";
+            schedule_pane_render();
+        }
+        if (pending_summary_reconciliation_root_ids.size > 0) {
+            reconcile_root_summaries([]);
+        }
+    }
+    message_fetch.load_messages_by_ids({
+        message_ids: requested_root_ids,
+        suppress_connection_error: true,
+        cont: finish,
+        on_error: finish,
+    });
+}
+
+function ensure_root_message_loaded(message_id: number, callback: (loaded: boolean) => void): void {
+    if (message_store.get(message_id) !== undefined) {
+        callback(true);
+        return;
+    }
+    const callbacks = root_load_callbacks_by_message_id.get(message_id);
+    if (callbacks !== undefined) {
+        callbacks.push(callback);
+        return;
+    }
+    root_load_callbacks_by_message_id.set(message_id, [callback]);
+    const data = new MessageListData({
+        filter: new Filter([{operator: "id", operand: String(message_id)}]),
+        excludes_muted_topics: false,
+        excludes_muted_users: false,
+    });
+    root_load_data_by_message_id.set(message_id, data);
+    function finish(loaded: boolean): void {
+        if (root_load_data_by_message_id.get(message_id) !== data) {
+            return;
+        }
+        root_load_data_by_message_id.delete(message_id);
+        for (const [anchor_message_id, root_message_id] of pending_root_by_anchor_message_id) {
+            if (root_message_id === message_id) {
+                pending_root_by_anchor_message_id.delete(anchor_message_id);
+            }
+        }
+        const pending = root_load_callbacks_by_message_id.get(message_id) ?? [];
+        root_load_callbacks_by_message_id.delete(message_id);
+        render_registered_rows(message_id);
+        for (const pending_callback of pending) {
+            pending_callback(loaded);
+        }
+    }
+    message_fetch.load_messages({
+        anchor: message_id,
+        num_before: 0,
+        num_after: 0,
+        msg_list_data: data,
+        suppress_connection_error: true,
+        cont() {
+            finish(message_store.get(message_id) !== undefined);
+        },
+        on_error() {
+            finish(false);
+        },
+    });
+}
+
+function cancel_root_load(message_id: number): void {
+    const data = root_load_data_by_message_id.get(message_id);
+    if (data !== undefined) {
+        message_fetch.cancel_retries_for_message_list_data(data);
+        root_load_data_by_message_id.delete(message_id);
+    }
+    const pending = root_load_callbacks_by_message_id.get(message_id) ?? [];
+    root_load_callbacks_by_message_id.delete(message_id);
+    for (const [anchor_message_id, root_message_id] of pending_root_by_anchor_message_id) {
+        if (root_message_id === message_id) {
+            pending_root_by_anchor_message_id.delete(anchor_message_id);
+        }
+    }
+    for (const callback of pending) {
+        callback(false);
     }
 }
 
-function load_replies(before?: number): void {
-    if (open_message_id === undefined) {
+function cached_unread_reply_count(
+    message_id: number,
+    replies = message_store.get_thread_replies(message_id),
+): number {
+    return replies.filter((message) => message.unread).length;
+}
+
+function unread_reply_count(
+    message_id: number,
+    replies = message_store.get_thread_replies(message_id),
+): number {
+    return (
+        message_store.get(message_id)?.reply_summary?.unread_reply_count ??
+        cached_unread_reply_count(message_id, replies)
+    );
+}
+
+function set_unread_reply_count(message_id: number, count: number): boolean {
+    const summary = message_store.get(message_id)?.reply_summary;
+    if (summary === undefined) {
+        return false;
+    }
+    const next_count = Math.max(0, Math.min(count, summary.reply_count));
+    if (summary.unread_reply_count === next_count) {
+        return false;
+    }
+    summary.unread_reply_count = next_count;
+    // The summary remains the canonical Message projection. This generation is
+    // only a fence against a fetch that began before this local mutation.
+    message_store.mark_thread_reply_lifecycle([message_id]);
+    render_registered_rows(message_id);
+    return true;
+}
+
+function adjust_unread_reply_count(message_id: number, delta: number): void {
+    const current = unread_reply_count(message_id);
+    set_unread_reply_count(message_id, current + delta);
+}
+
+function mark_visible_thread_replies_read(): void {
+    const elements = pane_elements;
+    const view = human_thread_view;
+    if (
+        elements === undefined ||
+        view === undefined ||
+        selected_thread_key !== HUMAN_THREAD_KEY ||
+        elements.pane.hidden ||
+        !unread_ops.viewport_is_visible_and_focused()
+    ) {
         return;
     }
-    const message_id = open_message_id;
-    const state = reply_state(message_id);
-    if (state.request !== undefined) {
+    const viewport = elements.body.getBoundingClientRect();
+    const visible_messages: message_store.Message[] = [];
+    for (const row of elements.reply_list.querySelectorAll<HTMLElement>(".message_row")) {
+        const message_id = Number(row.dataset["messageId"]);
+        const message = message_store.get(message_id);
+        if (!message?.unread) {
+            continue;
+        }
+        const bounds = row.getBoundingClientRect();
+        if (bounds.bottom > viewport.top && bounds.top < viewport.bottom) {
+            visible_messages.push(message);
+        }
+    }
+    if (visible_messages.length === 0) {
         return;
     }
-    state.failed = false;
-    state.request_generation += 1;
-    const generation = state.request_generation;
-    state.request = channel.get({
-        url: `/json/messages/${message_id}/thread`,
-        data: {limit: REPLY_PAGE_SIZE, ...(before === undefined ? {} : {before})},
-        success(raw_data) {
-            if (generation !== state.request_generation) {
-                return;
-            }
-            const result = message_thread_response_schema.safeParse(raw_data);
-            state.request = undefined;
-            if (!result.success) {
-                state.failed = true;
-                if (open_message_id === message_id && selected_thread_key === HUMAN_THREAD_KEY) {
-                    render_replies();
-                }
-                return;
-            }
-            remember_reply_summary(message_id, result.data.reply_summary ?? undefined);
-            for (const reply of result.data.replies) {
-                merge_reply(state, reply);
-            }
-            state.has_more = result.data.has_more;
-            state.loaded = true;
-            state.failed = false;
+    adjust_unread_reply_count(view.message_id, -visible_messages.length);
+    unread_ops.notify_server_messages_read(visible_messages);
+    for (const message of visible_messages) {
+        render_registered_rows(message.id);
+    }
+    render_registered_rows(view.message_id);
+}
+
+function observe_reply_rows(): void {
+    const view = human_thread_view;
+    if (view === undefined) {
+        return;
+    }
+    view.visibility_observer?.disconnect();
+    if (typeof IntersectionObserver !== "undefined") {
+        view.visibility_observer = new IntersectionObserver(
+            () => {
+                mark_visible_thread_replies_read();
+            },
+            {root: pane_elements?.body ?? null, threshold: 0.01},
+        );
+        for (const row of pane_elements?.reply_list.querySelectorAll(".message_row") ?? []) {
+            view.visibility_observer.observe(row);
+        }
+    }
+    mark_visible_thread_replies_read();
+}
+
+export function handle_added_messages(messages: message_store.Message[]): void {
+    const root_ids = new Set<number>();
+    for (const message of messages) {
+        if (message.thread_root_message_id !== undefined) {
+            root_ids.add(message.thread_root_message_id);
+        }
+        render_registered_rows(message.id);
+    }
+    reconcile_root_summaries(root_ids);
+    if (human_thread_view !== undefined && root_ids.has(human_thread_view.message_id)) {
+        update_reply_list_chrome();
+        observe_reply_rows();
+    }
+    for (const root_id of root_ids) {
+        render_registered_rows(root_id);
+    }
+}
+
+export function handle_updated_messages(events: UpdateMessageEvent[]): void {
+    const root_ids = new Set<number>();
+    for (const event of events) {
+        for (const message_id of event.message_ids) {
+            const message = message_store.get(message_id);
+            root_ids.add(message?.thread_root_message_id ?? message_id);
             render_registered_rows(message_id);
-            if (open_message_id === message_id && selected_thread_key === HUMAN_THREAD_KEY) {
-                render_pane();
+        }
+    }
+    for (const root_id of root_ids) {
+        render_registered_rows(root_id);
+    }
+    if (open_message_id !== undefined && root_ids.has(open_message_id)) {
+        human_thread_view?.editor.refresh_recipient();
+        tabs_signature = "";
+        schedule_pane_render();
+    }
+}
+
+export function handle_read_flag_update(message_ids: number[], marked_read: boolean): void {
+    const root_deltas = new Map<number, number>();
+    const root_ids = new Set<number>();
+    let has_uncached_message = false;
+    for (const message_id of message_ids) {
+        const message = message_store.get(message_id);
+        if (message === undefined) {
+            has_uncached_message = true;
+            continue;
+        }
+        const root_id = message.thread_root_message_id;
+        if (root_id === undefined) {
+            continue;
+        }
+        root_ids.add(root_id);
+        if (marked_read ? message.unread : !message.unread) {
+            root_deltas.set(root_id, (root_deltas.get(root_id) ?? 0) + (marked_read ? -1 : 1));
+        }
+    }
+    if (has_uncached_message) {
+        for (const root of message_store.get_thread_roots()) {
+            root_ids.add(root.id);
+        }
+    }
+    for (const [root_id, delta] of root_deltas) {
+        adjust_unread_reply_count(root_id, delta);
+    }
+    for (const root_id of root_ids) {
+        render_registered_rows(root_id);
+    }
+    reconcile_root_summaries(root_ids);
+}
+
+export function handle_topic_marked_read(stream_id: number, topic: string): void {
+    const root_ids = message_store
+        .get_thread_roots()
+        .filter(
+            (message) =>
+                message.type === "stream" &&
+                message.stream_id === stream_id &&
+                message.topic.toLocaleLowerCase() === topic.toLocaleLowerCase(),
+        )
+        .map((message) => message.id);
+    for (const root_id of root_ids) {
+        set_unread_reply_count(root_id, 0);
+    }
+    reconcile_root_summaries(root_ids);
+}
+
+export function handle_reconnect(): void {
+    reconcile_root_summaries(message_store.get_thread_roots().map((root) => root.id));
+}
+
+export function get_compose_target(
+    message_id: number,
+): message_thread_hooks.ThreadComposeTarget | undefined {
+    const view = human_thread_view;
+    const message = message_store.get(message_id);
+    if (
+        view === undefined ||
+        selected_thread_key !== HUMAN_THREAD_KEY ||
+        message === undefined ||
+        (message.id !== view.message_id && message.thread_root_message_id !== view.message_id)
+    ) {
+        return undefined;
+    }
+    return {
+        textarea: view.editor.textarea,
+        notify_content_changed: view.editor.notify_content_changed,
+    };
+}
+
+export function handle_deleted_messages(message_ids: number[]): void {
+    const deleted_ids = new Set(message_ids);
+    for (const message_id of deleted_ids) {
+        pending_summary_reconciliation_root_ids.delete(message_id);
+    }
+    if (open_message_id !== undefined && deleted_ids.has(open_message_id)) {
+        close({restore_focus: false});
+    }
+    const root_ids = new Set<number>();
+    let has_uncached_message = false;
+    for (const message_id of message_ids) {
+        const message = message_store.get(message_id);
+        if (message === undefined) {
+            has_uncached_message = true;
+            continue;
+        }
+        const root_id = message.thread_root_message_id;
+        if (root_id !== undefined && !deleted_ids.has(root_id)) {
+            root_ids.add(root_id);
+        }
+    }
+    if (has_uncached_message) {
+        for (const root of message_store.get_thread_roots()) {
+            if (!deleted_ids.has(root.id)) {
+                root_ids.add(root.id);
             }
-        },
-        error() {
-            if (generation !== state.request_generation) {
-                return;
-            }
-            state.request = undefined;
-            state.failed = true;
-            if (open_message_id === message_id && selected_thread_key === HUMAN_THREAD_KEY) {
-                render_replies();
-            }
+        }
+    }
+    reconcile_root_summaries(root_ids);
+    for (const root_id of root_ids) {
+        render_registered_rows(root_id);
+    }
+}
+
+function secondary_view_options(): {
+    manages_primary_viewport: false;
+    show_recipient_headers: false;
+    show_thread_previews: false;
+} {
+    return {
+        manages_primary_viewport: false,
+        show_recipient_headers: false,
+        show_thread_previews: false,
+    };
+}
+
+function mount_root_thread_view(message_id: number): void {
+    const elements = pane_elements;
+    const root_message = message_store.get(message_id);
+    if (elements === undefined || root_message === undefined) {
+        return;
+    }
+    if (root_thread_view?.message_id === message_id) {
+        return;
+    }
+    destroy_root_thread_view();
+    elements.root.replaceChildren();
+    const root_list = new MessageList({
+        data: new MessageListData({
+            filter: new Filter([{operator: "id", operand: String(message_id)}]),
+            excludes_muted_topics: false,
+            excludes_muted_users: false,
+        }),
+        reading_prevented: true,
+        view_options: {
+            ...secondary_view_options(),
+            mount: elements.root,
+            role: "list",
+            aria_label: $t({defaultMessage: "Thread root message"}),
         },
     });
-    render_replies();
+    message_lists.add_rendered_message_list(root_list);
+    root_list.add_messages([root_message], {}, true);
+    if (root_message.unread && unread_ops.viewport_is_visible_and_focused()) {
+        unread_ops.notify_server_message_read(root_message);
+    }
+    root_thread_view = {message_id, root_list};
+}
+
+function mount_human_thread_view(message_id: number): void {
+    const elements = pane_elements;
+    const root_message = message_store.get(message_id);
+    if (elements === undefined || root_message === undefined) {
+        return;
+    }
+    if (human_thread_view?.message_id === message_id) {
+        return;
+    }
+    destroy_human_thread_view();
+    elements.reply_list.replaceChildren();
+    elements.reply_status.textContent = $t({defaultMessage: "Loading replies…"});
+    elements.older.hidden = true;
+
+    const reply_list = new MessageList({
+        data: new MessageListData({
+            filter: new Filter([{operator: "thread", operand: message_id}]),
+            excludes_muted_topics: false,
+            excludes_muted_users: false,
+        }),
+        view_options: {
+            ...secondary_view_options(),
+            mount: elements.reply_list,
+            role: "list",
+            aria_label: $t({defaultMessage: "Replies"}),
+        },
+    });
+    message_lists.add_rendered_message_list(reply_list);
+
+    const editor = compose_editor.create({
+        $host: $(elements.composer),
+        get_recipient() {
+            const current_root = message_store.get(message_id);
+            return current_root === undefined
+                ? undefined
+                : resolved_recipient_for_message(current_root);
+        },
+        thread_root_message_id: message_id,
+        placeholder: $t({defaultMessage: "Reply…"}),
+        aria_label: $t({defaultMessage: "Reply to this message"}),
+        send_label: $t({defaultMessage: "Send reply"}),
+    });
+    human_thread_view = {message_id, reply_list, editor};
+    message_fetch.load_messages_for_narrow({
+        anchor: "newest",
+        msg_list: reply_list,
+        cont() {
+            if (human_thread_view?.reply_list !== reply_list) {
+                return;
+            }
+            update_reply_list_chrome();
+            observe_reply_rows();
+        },
+    });
 }
 
 function load_earlier_replies(): void {
-    if (open_message_id === undefined) {
-        return;
-    }
-    const first_reply = ordered_replies(reply_state(open_message_id))[0];
-    load_replies(first_reply?.id);
-}
-
-function submit_reply(event: SubmitEvent): void {
-    event.preventDefault();
+    const view = human_thread_view;
     const elements = pane_elements;
-    if (elements === undefined || open_message_id === undefined) {
+    if (view === undefined || elements === undefined) {
         return;
     }
-    const message_id = open_message_id;
-    const content = elements.textarea.value.trim();
-    const state = reply_state(message_id);
-    if (content === "" || state.posting) {
-        return;
-    }
-    state.posting = true;
-    state.post_failed = false;
-    render_replies();
-    void channel.post({
-        url: `/json/messages/${message_id}/thread`,
-        data: {content},
-        success(raw_data) {
-            state.posting = false;
-            const result = message_thread_post_response_schema.safeParse(raw_data);
-            if (!result.success) {
-                state.post_failed = true;
-                render_replies();
-                return;
-            }
-            remember_reply_summary(message_id, result.data.reply_summary);
-            merge_reply(state, result.data.reply);
-            state.loaded = true;
-            state.post_failed = false;
-            state.draft = "";
-            render_registered_rows(message_id);
-            if (open_message_id === message_id) {
-                elements.textarea.value = "";
-            }
-            if (open_message_id === message_id && selected_thread_key === HUMAN_THREAD_KEY) {
-                render_pane({scroll_replies_to_end: true});
-                elements.textarea.focus({preventScroll: true});
-            }
-        },
-        error() {
-            state.posting = false;
-            state.post_failed = true;
-            if (open_message_id === message_id && selected_thread_key === HUMAN_THREAD_KEY) {
-                render_replies();
+    elements.older.disabled = true;
+    message_fetch.maybe_load_older_messages({
+        msg_list: view.reply_list,
+        msg_list_data: view.reply_list.data,
+        cont() {
+            if (human_thread_view?.reply_list === view.reply_list) {
+                update_reply_list_chrome();
+                observe_reply_rows();
             }
         },
     });
 }
 
-function mount_selected_agent_trace(): void {
+function mount_selected_agent_trace(selected: PaneAgentEntry): void {
     const elements = pane_elements;
-    const agent = selected_agent();
-    const run = active_run();
-    if (elements === undefined || agent === undefined || run === undefined) {
+    if (elements === undefined) {
         return;
     }
+    const {agent, run} = selected;
     if (trace_thread_id === agent.thread_id && trace_controller !== undefined) {
         return;
     }
@@ -918,37 +1102,44 @@ function render_pane(options: {scroll_replies_to_end?: boolean} = {}): void {
         close();
         return;
     }
-    const state = reply_state(open_message_id);
-    const agents = agents_for_open_message();
+    const agent_entries = agent_entries_for_open_message();
+    const agents = agent_entries.map(({agent}) => agent);
     selected_thread_key = selection_after_update_for_testing(agents, selected_thread_key);
-    render_root_message(open_message_id);
-    render_tabs(agents);
+    mount_root_thread_view(open_message_id);
+    render_tabs(agent_entries);
     if (selected_thread_key === HUMAN_THREAD_KEY) {
+        mount_human_thread_view(open_message_id);
         trace_controller?.destroy();
         trace_controller = undefined;
         trace_thread_id = undefined;
         elements.replies.hidden = false;
         elements.trace_root.hidden = true;
         elements.activity.hidden = true;
+        const reply_count =
+            message_store.get(open_message_id)?.reply_summary?.reply_count ??
+            human_thread_view?.reply_list.data.num_items() ??
+            0;
         elements.meta.textContent = $t(
             {defaultMessage: "{count, plural, one {# reply} other {# replies}}"},
-            {count: state.summary?.reply_count ?? 0},
+            {count: reply_count},
         );
-        render_replies(
-            options.scroll_replies_to_end === undefined
-                ? {}
-                : {scroll_to_end: options.scroll_replies_to_end},
-        );
-        if (!state.loaded && state.request === undefined) {
-            load_replies();
+        update_reply_list_chrome();
+        if (options.scroll_replies_to_end === true) {
+            human_thread_view?.reply_list.view.$list
+                .find(".message_row")
+                .last()
+                .get(0)
+                ?.scrollIntoView({block: "end"});
         }
     } else {
-        const agent = selected_agent();
-        if (agent === undefined) {
+        destroy_human_thread_view();
+        const selected = agent_entries.find(({agent}) => agent.thread_id === selected_thread_key);
+        if (selected === undefined) {
             selected_thread_key = HUMAN_THREAD_KEY;
             render_pane();
             return;
         }
+        const {agent} = selected;
         const index = agents.indexOf(agent);
         elements.meta.textContent = [display_name_for_testing(agent, index), agent.role?.trim()]
             .filter(Boolean)
@@ -961,7 +1152,7 @@ function render_pane(options: {scroll_replies_to_end?: boolean} = {}): void {
                 : $t({defaultMessage: "Status: {status}"}, {status: agent.status});
         elements.replies.hidden = true;
         elements.trace_root.hidden = false;
-        mount_selected_agent_trace();
+        mount_selected_agent_trace(selected);
     }
     update_pane_layout();
 }
@@ -1090,6 +1281,9 @@ function handle_document_keydown(event: KeyboardEvent): void {
     if (first === undefined || last === undefined) {
         event.preventDefault();
         elements.pane.focus({preventScroll: true});
+    } else if (!elements.pane.contains(document.activeElement)) {
+        event.preventDefault();
+        (event.shiftKey ? last : first).focus({preventScroll: true});
     } else if (event.shiftKey && document.activeElement === first) {
         event.preventDefault();
         last.focus({preventScroll: true});
@@ -1112,8 +1306,9 @@ function open(
     }
     cancel_focus_frame(pane_restore_focus_frame);
     pane_restore_focus_frame = undefined;
-    if (open_message_id !== undefined) {
-        reply_state(open_message_id).draft = elements.textarea.value;
+    if (open_message_id !== message_id) {
+        destroy_human_thread_view();
+        destroy_root_thread_view();
     }
     anchor_element = anchor;
     anchor_message_id = message_id;
@@ -1121,9 +1316,6 @@ function open(
     pane_trace_enhancer = enhance_trace;
     open_message_id = message_id;
     selected_thread_key = thread_key;
-    const state = reply_state(message_id);
-    state.summary ??= message_store.get(message_id)?.reply_summary;
-    elements.textarea.value = state.draft;
     elements.pane.hidden = false;
     elements.pane.setAttribute("aria-hidden", "false");
     document.body.classList.add("message-thread-pane-open");
@@ -1136,11 +1328,38 @@ function open(
             return;
         }
         if (options.focus_composer === true && thread_key === HUMAN_THREAD_KEY) {
-            elements.textarea.focus({preventScroll: true});
+            human_thread_view?.editor.focus();
         } else {
-            elements.tabs
-                .querySelector<HTMLElement>(`[data-thread-key="${CSS.escape(thread_key)}"]`)
-                ?.focus({preventScroll: true});
+            const selected_tab = elements.tabs.querySelector<HTMLElement>(
+                `[data-thread-key="${CSS.escape(thread_key)}"]`,
+            );
+            if (selected_tab !== null) {
+                selected_tab.focus({preventScroll: true});
+            } else {
+                elements.close.focus({preventScroll: true});
+            }
+        }
+    });
+}
+
+function open_after_root_loaded(
+    message_id: number,
+    thread_key: string,
+    anchor: HTMLElement,
+    enhance_trace: TraceEnhancer,
+    options: {focus_composer?: boolean} = {},
+): void {
+    const anchor_message_id = Number(
+        anchor.closest<HTMLElement>(".message_row")?.dataset["messageId"],
+    );
+    if (Number.isSafeInteger(anchor_message_id) && anchor_message_id !== message_id) {
+        pending_root_by_anchor_message_id.set(anchor_message_id, message_id);
+    }
+    anchor.setAttribute("aria-busy", "true");
+    ensure_root_message_loaded(message_id, (loaded) => {
+        anchor.removeAttribute("aria-busy");
+        if (loaded) {
+            open(message_id, thread_key, anchor, enhance_trace, options);
         }
     });
 }
@@ -1155,8 +1374,9 @@ function handle_thread_button_click(event: MouseEvent): void {
     if (button === null || row === undefined || row === null || !Number.isSafeInteger(message_id)) {
         return;
     }
-    open(
-        message_id,
+    const root_message_id = message_store.get(message_id)?.thread_root_message_id ?? message_id;
+    open_after_root_loaded(
+        root_message_id,
         HUMAN_THREAD_KEY,
         button,
         trace_enhancer_by_row.get(row) ?? noop_trace_enhancer,
@@ -1183,9 +1403,8 @@ export function close(options: {restore_focus?: boolean} = {}): void {
     pane_restore_focus_frame = undefined;
     const focus_message_id = anchor_message_id;
     const focus_thread_key = anchor_thread_key;
-    if (open_message_id !== undefined) {
-        reply_state(open_message_id).draft = elements.textarea.value;
-    }
+    destroy_human_thread_view();
+    destroy_root_thread_view();
     trace_controller?.destroy();
     trace_controller = undefined;
     trace_thread_id = undefined;
@@ -1194,6 +1413,7 @@ export function close(options: {restore_focus?: boolean} = {}): void {
     tabs_signature = "";
     elements.pane.hidden = true;
     elements.pane.setAttribute("aria-hidden", "true");
+    set_mobile_background_inert(false);
     document.body.classList.remove("message-thread-pane-open", "message-thread-pane-mobile-open");
     if (mobile_scroll_locked) {
         overlay_util.enable_scrolling();
@@ -1213,14 +1433,41 @@ export function close(options: {restore_focus?: boolean} = {}): void {
 }
 
 export function destroy_for_message(message_id: number): void {
+    const pending_root_id = pending_root_by_anchor_message_id.get(message_id);
+    pending_root_by_anchor_message_id.delete(message_id);
+    if (pending_root_id !== undefined) {
+        cancel_root_load(pending_root_id);
+    }
+    cancel_root_load(message_id);
     if (anchor_message_id === message_id) {
         close({restore_focus: false});
     }
 }
 
+export function open_for_draft(thread_root_message_id: number): void {
+    const elements = ensure_initialized();
+    if (elements === undefined) {
+        return;
+    }
+    const row = document.querySelector<HTMLElement>(
+        `.message_row[data-message-id="${thread_root_message_id}"]`,
+    );
+    const anchor =
+        row?.querySelector<HTMLElement>(".message-thread-reply-launch, .message_thread_button") ??
+        (document.activeElement instanceof HTMLElement ? document.activeElement : elements.pane);
+    open_after_root_loaded(
+        thread_root_message_id,
+        HUMAN_THREAD_KEY,
+        anchor,
+        trace_enhancer_by_row.get(row ?? elements.pane) ?? noop_trace_enhancer,
+        {focus_composer: true},
+    );
+}
+
 function create_reply_preview(
     message_id: number,
     summary: message_store.MessageThreadReplySummary,
+    unread_count: number,
     enhance_trace: TraceEnhancer,
 ): HTMLElement {
     const cluster = document.createElement("div");
@@ -1245,8 +1492,21 @@ function create_reply_preview(
         ),
     );
     launch.addEventListener("click", () => {
-        open(message_id, HUMAN_THREAD_KEY, launch, enhance_trace);
+        open_after_root_loaded(message_id, HUMAN_THREAD_KEY, launch, enhance_trace);
     });
+    if (unread_count > 0) {
+        const unread = document.createElement("span");
+        unread.className = "message-thread-unread-count";
+        unread.textContent = String(unread_count);
+        unread.setAttribute(
+            "aria-label",
+            $t(
+                {defaultMessage: "{count, plural, one {# unread reply} other {# unread replies}}"},
+                {count: unread_count},
+            ),
+        );
+        launch.append(unread);
+    }
     const last_reply = document.createElement("span");
     last_reply.className = "message-thread-last-reply";
     last_reply.textContent = $t(
@@ -1281,7 +1541,7 @@ function create_agent_preview(
         button.setAttribute("title", `${name} · ${agent.status}`);
         button.append(create_sigil(agent));
         button.addEventListener("click", () => {
-            open(message_id, agent.thread_id, button, enhance_trace);
+            open_after_root_loaded(message_id, agent.thread_id, button, enhance_trace);
         });
         badges.append(button);
     }
@@ -1295,7 +1555,7 @@ function create_agent_preview(
     const first_agent = agents[0];
     if (first_agent !== undefined) {
         count.addEventListener("click", () => {
-            open(message_id, first_agent.thread_id, count, enhance_trace);
+            open_after_root_loaded(message_id, first_agent.thread_id, count, enhance_trace);
         });
     }
     cluster.append(badges, count);
@@ -1314,17 +1574,69 @@ export function render_for_message_row(
     }
     trace_enhancer_by_row.set(row, enhance_trace);
     const message = message_store.get(message_id);
-    remember_reply_summary(message_id, message?.reply_summary);
-    const summary = reply_state_by_message_id.get(message_id)?.summary ?? message?.reply_summary;
-    const run = pear_run_state.get_run_view(message_id);
-    const agents = run?.agents ?? [];
+    if (message === undefined) {
+        host.hidden = true;
+        host.replaceChildren();
+        delete host.dataset["signature"];
+        return;
+    }
+    const root_message_id = message?.thread_root_message_id ?? message_id;
+    if (message.thread_root_message_id !== undefined) {
+        const signature = `child\u0001${root_message_id}\u0001${String(message.unread)}`;
+        if (host.dataset["signature"] !== signature) {
+            host.dataset["signature"] = signature;
+            host.hidden = false;
+            const strip = document.createElement("div");
+            strip.className = "message-thread-strip message-thread-child-context";
+            strip.setAttribute("role", "group");
+            strip.setAttribute("aria-label", $t({defaultMessage: "Message thread"}));
+            const launch = document.createElement("button");
+            launch.className = "message-thread-reply-launch message-thread-child-launch";
+            launch.type = "button";
+            launch.textContent = $t({defaultMessage: "View thread"});
+            if (message.unread) {
+                const unread = document.createElement("span");
+                unread.className = "message-thread-unread-dot";
+                unread.setAttribute("aria-label", $t({defaultMessage: "Unread reply"}));
+                launch.append(unread);
+            }
+            launch.addEventListener("click", () => {
+                open_after_root_loaded(root_message_id, HUMAN_THREAD_KEY, launch, enhance_trace, {
+                    focus_composer: true,
+                });
+            });
+            strip.append(launch);
+            host.replaceChildren(strip);
+        }
+        if (message_store.get(root_message_id) === undefined) {
+            pending_root_by_anchor_message_id.set(message_id, root_message_id);
+            ensure_root_message_loaded(root_message_id, (loaded) => {
+                if (loaded && row.isConnected) {
+                    render_for_message_row(row, message_id, enhance_trace);
+                }
+            });
+        }
+        return;
+    }
+    const root_message = message_store.get(root_message_id);
+    const summary = root_message?.reply_summary;
+    const replies = message_store.get_thread_replies(root_message_id);
+    const runs = run_views_for_root(root_message_id, replies);
+    const agents_by_thread_id = new Map<string, pear_run_state.PearAgentThread>();
+    for (const run of runs) {
+        for (const agent of run.agents ?? []) {
+            agents_by_thread_id.set(agent.thread_id, agent);
+        }
+    }
+    const agents = [...agents_by_thread_id.values()];
     if (summary === undefined && agents.length === 0) {
         host.hidden = true;
         host.replaceChildren();
         delete host.dataset["signature"];
         return;
     }
-    const signature = `${summary_signature(summary)}\u0001${run?.id ?? ""}\u0001${agents.map((agent) => agent_signature(agent)).join("\u0001")}`;
+    const unread_count = unread_reply_count(root_message_id, replies);
+    const signature = `${summary_signature(summary)}\u0001${unread_count}\u0001${runs.map((run) => run.id).join(",")}\u0001${agents.map((agent) => agent_signature(agent)).join("\u0001")}`;
     if (host.dataset["signature"] === signature) {
         return;
     }
@@ -1335,7 +1647,7 @@ export function render_for_message_row(
     strip.setAttribute("role", "group");
     strip.setAttribute("aria-label", $t({defaultMessage: "Message threads"}));
     if (summary !== undefined) {
-        strip.append(create_reply_preview(message_id, summary, enhance_trace));
+        strip.append(create_reply_preview(root_message_id, summary, unread_count, enhance_trace));
     }
     if (summary !== undefined && agents.length > 0) {
         const divider = document.createElement("span");
@@ -1343,8 +1655,8 @@ export function render_for_message_row(
         divider.setAttribute("aria-hidden", "true");
         strip.append(divider);
     }
-    if (run !== undefined && agents.length > 0) {
-        strip.append(create_agent_preview(message_id, agents, enhance_trace));
+    if (agents.length > 0) {
+        strip.append(create_agent_preview(root_message_id, agents, enhance_trace));
     }
     host.replaceChildren(strip);
 }
@@ -1360,25 +1672,18 @@ function render_registered_rows(message_id: number): void {
     }
 }
 
-export function apply_message_thread_event(raw_event: unknown): void {
-    const event = message_thread_event_schema.parse(raw_event);
-    remember_reply_summary(event.message_id, event.reply_summary);
-    merge_reply(reply_state(event.message_id), event.reply);
-    render_registered_rows(event.message_id);
-    if (open_message_id === event.message_id) {
-        render_pane({scroll_replies_to_end: selected_thread_key === HUMAN_THREAD_KEY});
-    }
-}
-
 pear_run_state.on_run_state_changed((run, event) => {
     if (!document_is_available()) {
         return;
     }
     const message_id = run.result_message_id;
-    if (typeof message_id === "number") {
-        render_registered_rows(message_id);
+    if (typeof message_id !== "number") {
+        return;
     }
-    if (message_id !== open_message_id) {
+    const root_message_id = message_store.get(message_id)?.thread_root_message_id ?? message_id;
+    render_registered_rows(message_id);
+    render_registered_rows(root_message_id);
+    if (root_message_id !== open_message_id) {
         return;
     }
     if (event?.event_type === "agent" && event.agent_thread_id === selected_thread_key) {
@@ -1389,9 +1694,23 @@ pear_run_state.on_run_state_changed((run, event) => {
 
 export function clear_for_testing(): void {
     close({restore_focus: false});
-    for (const state of reply_state_by_message_id.values()) {
-        state.request_generation += 1;
-        state.request?.abort();
+    destroy_human_thread_view();
+    destroy_root_thread_view();
+    pending_summary_reconciliation_root_ids.clear();
+    summary_reconciliation_in_flight = false;
+    summary_reconciliation_generation += 1;
+    root_load_callbacks_by_message_id.clear();
+    for (const data of root_load_data_by_message_id.values()) {
+        message_fetch.cancel_retries_for_message_list_data(data);
     }
-    reply_state_by_message_id.clear();
+    root_load_data_by_message_id.clear();
+    pending_root_by_anchor_message_id.clear();
 }
+
+message_thread_hooks.register({
+    destroy_for_message,
+    get_compose_target,
+    handle_topic_marked_read,
+    open_for_draft,
+    render_for_message_row,
+});

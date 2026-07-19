@@ -36,7 +36,11 @@ def check_update_first_message_id(
     if stream.first_message_id not in message_ids:
         return
     current_first_message_id = (
-        Message.objects.filter(realm_id=realm.id, recipient_id=stream.recipient_id)
+        Message.objects.filter(
+            realm_id=realm.id,
+            recipient_id=stream.recipient_id,
+            thread_root__isnull=True,
+        )
         .values_list("id", flat=True)
         .order_by("id")
         .first()

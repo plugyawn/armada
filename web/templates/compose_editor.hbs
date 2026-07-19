@@ -1,0 +1,25 @@
+<form class="compose-editor" data-compose-editor="{{instance_key}}">
+    <div class="compose-editor-banners"></div>
+    <div class="compose-editor-input surround-formatting-buttons-row">
+        <textarea
+          class="compose-editor-textarea message-textarea"
+          name="content"
+          rows="2"
+          placeholder="{{placeholder}}"
+          aria-label="{{aria_label}}"></textarea>
+        <div class="scrolling_list preview_message_area" data-simplebar data-simplebar-tab-index="-1" style="display:none;">
+            <div class="markdown_preview_spinner"></div>
+            <div class="preview_content rendered_markdown"></div>
+        </div>
+    </div>
+    <div class="compose-editor-footer">
+        <div class="compose-editor-formatting compose-scrolling-buttons-container">
+            {{> compose_control_buttons . instance_editor=true }}
+        </div>
+        <button type="submit" class="compose-editor-submit compose-submit-button compose-send-or-save-button" aria-label="{{send_label}}">
+            <img class="loader" alt="" src="" hidden />
+            <i class="zulip-icon zulip-icon-send" aria-hidden="true"></i>
+        </button>
+    </div>
+    <div class="compose-editor-status" role="status" aria-live="polite"></div>
+</form>

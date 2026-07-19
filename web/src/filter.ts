@@ -193,6 +193,9 @@ function build_term_predicate(term: NarrowCanonicalTerm): ((message: Message) =>
         case "sender":
             return (message) => message.sender_id === term.operand;
 
+        case "thread":
+            return (message) => message.thread_root_message_id === term.operand;
+
         case "dm": {
             const operand_ids = people.sorted_other_user_ids(term.operand);
             return (message) => {
@@ -347,6 +350,7 @@ export class Filter {
             case "mentions":
             case "dm":
             case "dm-including":
+            case "thread":
                 break;
             case "search":
                 // The mac app automatically substitutes regular quotes with curly
@@ -622,6 +626,18 @@ export class Filter {
                     potential_narrow_term = result;
                     break;
                 }
+                case "thread": {
+                    const operand = Number(suggestion.operand);
+                    if (!Number.isInteger(operand)) {
+                        return undefined;
+                    }
+                    potential_narrow_term = {
+                        operator: canonical_operator,
+                        operand,
+                        negated: suggestion.negated,
+                    };
+                    break;
+                }
                 default:
                     potential_narrow_term = {
                         operator: canonical_operator,
@@ -664,6 +680,8 @@ export class Filter {
             case "near":
             case "with":
                 return Number.isInteger(Number(term.operand));
+            case "thread":
+                return Number.isInteger(term.operand) && term.operand > 0;
             case "channel":
                 return stream_data.get_sub_by_id_string(term.operand) !== undefined;
             case "channels":
@@ -746,6 +764,7 @@ export class Filter {
             "channels-web-public",
             "channel",
             "topic",
+            "thread",
             "dm",
             "dm-including",
             "with",
@@ -1226,6 +1245,7 @@ export class Filter {
             "not-channel",
             "topic",
             "not-topic",
+            "thread",
             "dm",
             "dm-including",
             "not-dm-including",
@@ -1888,12 +1908,33 @@ export class Filter {
 
     // Build a filter function from a list of operators.
     _build_predicate(): (message: Message) => boolean {
-        if (!this.can_apply_locally()) {
-            return () => true;
-        }
+        const is_thread_filter = this._terms.some(
+            (term) => term.operator === "thread" && !term.negated,
+        );
+        const includes_thread_replies =
+            is_thread_filter ||
+            this._terms.some(
+                (term) =>
+                    term.operator === "search" ||
+                    (!term.negated && ["id", "near"].includes(term.operator)) ||
+                    (!term.negated &&
+                        term.operator === "is" &&
+                        ["alerted", "mentioned", "starred", "unread"].includes(term.operand)),
+            );
+        const lineage_predicate = is_thread_filter
+            ? (message: Message): boolean => message.thread_root_message_id !== undefined
+            : includes_thread_replies
+              ? (_message: Message): boolean => true
+              : (message: Message): boolean => message.thread_root_message_id === undefined;
 
-        const predicates: ((message: Message) => boolean)[] = [];
+        const predicates: ((message: Message) => boolean)[] = [lineage_predicate];
         for (const term of this._terms) {
+            // Search and mention matching is server-owned. Keep applying every
+            // locally decidable term, especially `thread`, so a thread+search
+            // response cannot admit a child from a different root.
+            if (["search", "mentions"].includes(term.operator)) {
+                continue;
+            }
             const pred = build_term_predicate(term);
             if (pred === null) {
                 continue;
@@ -1948,6 +1989,7 @@ export class Filter {
     is_conversation_view(): boolean {
         const term_types = this.sorted_term_types();
         if (
+            _.isEqual(term_types, ["thread"]) ||
             _.isEqual(term_types, ["channel", "topic", "near"]) ||
             _.isEqual(term_types, ["channel", "topic", "with"]) ||
             _.isEqual(term_types, ["channel", "topic"]) ||
@@ -1982,7 +2024,8 @@ export class Filter {
     may_contain_multiple_conversations(): boolean {
         return !(
             (this.has_operator("channel") && this.has_operator("topic")) ||
-            this.has_operator("dm")
+            this.has_operator("dm") ||
+            this.has_operator("thread")
         );
     }
 

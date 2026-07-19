@@ -7,7 +7,7 @@ from django.core import validators
 from django.core.exceptions import ValidationError
 from django.http import HttpRequest, HttpResponse
 from django.utils.translation import gettext as _
-from pydantic import Json
+from pydantic import Json, PositiveInt
 
 from zerver.actions.message_send import (
     check_send_message,
@@ -19,6 +19,7 @@ from zerver.actions.message_send import (
 )
 from zerver.lib.exceptions import JsonableError
 from zerver.lib.markdown import render_message_markdown
+from zerver.lib.message import access_message
 from zerver.lib.request import RequestNotes
 from zerver.lib.response import json_success
 from zerver.lib.typed_endpoint import (
@@ -123,6 +124,7 @@ def send_message_backend(
     time: Annotated[
         Json[float] | None, ApiParamConfig("time", documentation_status=DOCUMENTATION_PENDING)
     ] = None,
+    thread_root_message_id: Json[PositiveInt] | None = None,
     topic_name: OptionalTopic = None,
     widget_content: Annotated[
         str | None, ApiParamConfig("widget_content", documentation_status=DOCUMENTATION_PENDING)
@@ -172,6 +174,14 @@ def send_message_backend(
         raise JsonableError(_("User not authorized for this query"))
 
     realm = user_profile.realm
+
+    thread_root_message = None
+    if thread_root_message_id is not None:
+        thread_root_message = access_message(
+            user_profile,
+            thread_root_message_id,
+            is_modifying_message=False,
+        )
 
     if client.name in ["irc_mirror", "jabber_mirror", "JabberMirror"]:
         # Here's how security works for mirroring:
@@ -237,6 +247,7 @@ def send_message_backend(
         widget_content=widget_content,
         read_by_sender=read_by_sender,
         pear_followup=bool(pear_followup),
+        thread_root_message=thread_root_message,
     )
     data["id"] = sent_message_result.message_id
     if sent_message_result.automatic_new_visibility_policy:

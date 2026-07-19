@@ -47,6 +47,7 @@ const message_events = mock_esm("../src/message_events", {
     update_current_view_for_topic_visibility: noop,
 });
 const message_threads = mock_esm("../src/message_threads");
+message_threads.handle_read_flag_update = noop;
 const message_lists = mock_esm("../src/message_lists");
 const user_topics_ui = mock_esm("../src/user_topics_ui");
 const muted_users_ui = mock_esm("../src/muted_users_ui");
@@ -181,34 +182,6 @@ run_test("pear_workspace_changed reaches the Workspace event reducer", ({overrid
     dispatch(event);
     assert.equal(stub.num_calls, 1);
     assert.equal(stub.get_args("event").event, event);
-});
-
-run_test("message_thread reaches the shared thread reducer", ({override}) => {
-    const stub = make_stub();
-    override(message_threads, "apply_message_thread_event", stub.f);
-    const event = {
-        type: "message_thread",
-        message_id: 42,
-        reply_summary: {
-            reply_count: 1,
-            last_reply_at: 100,
-            last_sender: null,
-            participants: [],
-        },
-        reply: {
-            id: 9,
-            message_id: 42,
-            sender_id: 7,
-            sender_full_name: "Ada Lovelace",
-            avatar_url: null,
-            content: "<p>Reply</p>",
-            content_type: "text/html",
-            timestamp: 100,
-        },
-    };
-    dispatch(event);
-    assert.equal(stub.num_calls, 1);
-    assert.equal(stub.get_args("raw_event").raw_event, event);
 });
 
 const me = {
@@ -1540,24 +1513,36 @@ run_test("update_message (read)", ({override}) => {
     const event = event_fixtures.update_message_flags__read;
 
     const stub = make_stub();
+    const thread_stub = make_stub();
     override(unread_ops, "process_read_messages_event", stub.f);
+    override(message_threads, "handle_read_flag_update", thread_stub.f);
     dispatch(event);
     assert.equal(stub.num_calls, 1);
     const args = stub.get_args("message_ids");
     assert_same(args.message_ids, [999]);
+    assert.deepEqual(thread_stub.get_args("message_ids", "marked_read"), {
+        message_ids: [999],
+        marked_read: true,
+    });
 });
 
 run_test("update_message (unread)", ({override}) => {
     const event = event_fixtures.update_message_flags__read_remove;
 
     const stub = make_stub();
+    const thread_stub = make_stub();
     override(unread_ops, "process_unread_messages_event", stub.f);
+    override(message_threads, "handle_read_flag_update", thread_stub.f);
     dispatch(event);
     assert.equal(stub.num_calls, 1);
     const {args} = stub.get_args("args");
     assert.deepEqual(args, {
         message_ids: event.messages,
         message_details: event.message_details,
+    });
+    assert.deepEqual(thread_stub.get_args("message_ids", "marked_read"), {
+        message_ids: event.messages,
+        marked_read: false,
     });
 });
 
@@ -1598,6 +1583,9 @@ run_test("delete_message", ({override}) => {
     const stream_topic_history_stub = make_stub();
     override(stream_topic_history, "remove_messages", stream_topic_history_stub.f);
 
+    const message_threads_stub = make_stub();
+    override(message_threads, "handle_deleted_messages", message_threads_stub.f);
+
     override(emoji_frequency, "update_emoji_frequency_on_messages_deletion", noop);
 
     dispatch(event);
@@ -1615,6 +1603,9 @@ run_test("delete_message", ({override}) => {
     assert_same(args.opts.topic_name, "topic1");
     assert_same(args.opts.num_messages, 1);
     assert_same(args.opts.max_removed_msg_id, 1337);
+
+    args = message_threads_stub.get_args("message_ids");
+    assert_same(args.message_ids, [1337]);
 });
 
 run_test("user_status", ({override}) => {

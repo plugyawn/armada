@@ -31,8 +31,10 @@ export function message_hover($message_row: JQuery): void {
     // This code is performance-sensitive, so we must perform any DOM updates
     // together. We don't want to trigger reflows multiple times.
     const id = rows.id($message_row);
-    assert(message_lists.current !== undefined);
-    const message = message_lists.current.get(id);
+    const message_list =
+        message_lists.get_message_list_for_row($message_row) ?? message_lists.current;
+    assert(message_list !== undefined);
+    const message = message_list.get(id);
     assert(message !== undefined);
 
     if ($current_message_hover && rows.id($current_message_hover) === id) {
@@ -124,26 +126,31 @@ function change_edit_content_button($message_row: JQuery, message: Message): voi
 }
 
 export function initialize(): void {
-    $("#main_div").on("mouseover", ".message-list .message_row", function (this: HTMLElement) {
-        const $row = $(this).closest(".message_row");
-        message_hover($row);
-    });
+    const $message_interaction_root = message_lists.get_rendered_message_interaction_root();
+    $message_interaction_root.on(
+        "mouseover",
+        ".message-list .message_row",
+        function (this: HTMLElement) {
+            const $row = $(this).closest(".message_row");
+            message_hover($row);
+        },
+    );
 
-    $("#main_div").on("mouseleave", ".message-list .message_row", () => {
+    $message_interaction_root.on("mouseleave", ".message-list .message_row", () => {
         message_unhover();
     });
 
-    $("#main_div").on("mouseover", ".sender_info_hover", function (this: HTMLElement) {
+    $message_interaction_root.on("mouseover", ".sender_info_hover", function (this: HTMLElement) {
         const $row = $(this).closest(".message_row");
         $row.addClass("sender_info_hovered");
     });
 
-    $("#main_div").on("mouseout", ".sender_info_hover", function (this: HTMLElement) {
+    $message_interaction_root.on("mouseout", ".sender_info_hover", function (this: HTMLElement) {
         const $row = $(this).closest(".message_row");
         $row.removeClass("sender_info_hovered");
     });
 
-    $("#main_div").on(
+    $message_interaction_root.on(
         "mouseover",
         '.message-list .media-image-element[data-animated="true"]',
         function (this: HTMLElement) {
@@ -161,7 +168,7 @@ export function initialize(): void {
         },
     );
 
-    $("#main_div").on(
+    $message_interaction_root.on(
         "mouseout",
         '.message-list .media-image-element[data-animated="true"]',
         function (this: HTMLElement) {

@@ -4,12 +4,13 @@
 
 import json
 import queue
+import threading
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from types import SimpleNamespace
-from typing import NoReturn
+from typing import Any, NoReturn
 from unittest import TestCase
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, call, patch
 
 from zerver.lib.exceptions import JsonableError
 from zerver.lib.pear import (
@@ -42,12 +43,10 @@ from zerver.lib.pear import (
     PEAR_SAVE_WORK_PROMPT,
     PEAR_SERVER_CONTRACT_VERSION,
     PEAR_SESSION_ENDPOINT,
-    PEAR_SIDE_ENDPOINT,
     PEAR_STATUS_CHECK_PROMPT,
     PEAR_TOPIC_PREFIX,
     PEAR_TRIGGER_MESSAGE_KEY,
     PEAR_VERIFY_CHANGES_PROMPT,
-    PEAR_WORKER_RUNS_STORAGE_KEY,
     PEAR_WORKING_MESSAGE,
     PearActiveSessionSummary,
     PearAmbientDecision,
@@ -84,22 +83,22 @@ from zerver.lib.pear import (
     get_pear_session_payload,
     is_pear_request_message,
     is_pear_thread_request_message,
-    load_pear_worker_run_records,
     normalize_pear_response_policy,
     pear_distinct_transcript_tool_events,
     pear_normalize_token_usage,
     pear_sanitized_child_agent_event,
-    pear_worker_already_started,
     pear_worker_event_tool_results,
-    pear_worker_run_for_message,
     pear_worker_should_start,
     pear_worker_summary_from_tool_results,
-    record_pear_worker_run,
     split_pear_persistent_message,
     update_pear_worker_status_message,
 )
 from zerver.lib.pear_agent import (
+    PEAR_CODEX_SIDE_BOUNDARY_PROMPT,
+    PEAR_CODEX_SIDE_DEVELOPER_INSTRUCTIONS,
+    PEAR_CODEX_WARM_SIDE_CONVERSATION_LIMIT,
     PearAgentRuntimeError,
+    PearAppServerTurnContext,
     PearCodexAppServerToolRunner,
     PearCodexAppServerTranscriptTranslator,
     PearDisabledAgentRunner,
@@ -123,6 +122,100 @@ from zerver.worker import pear_worker as pear_worker_module
 from zerver.worker.embedded_bots import EmbeddedBotWorker
 from zerver.worker.pear_addressing import PearAddressingWorker
 from zproject import computed_settings as pear_computed_settings
+
+
+class FakePearWorkerRunStore:
+    """Test-only in-memory implementation of the durable run-store protocol."""
+
+    def __init__(self) -> None:
+        self.runs: dict[int, dict[str, object]] = {}
+
+    def start(
+        self,
+        bot_handler,
+        message_id: int,
+        *,
+        stream: str,
+        topic: str,
+        source_message_id: int | None = None,
+    ) -> bool:
+        existing = self.runs.get(message_id)
+        if existing is not None and existing["status"] in {"queued", "running", "done"}:
+            return False
+        self.runs[message_id] = {
+            "status": "queued",
+            "stream": stream,
+            "topic": topic,
+            "source_message_id": source_message_id,
+            "result_message_id": None,
+            "error": None,
+        }
+        return True
+
+    def record(
+        self,
+        bot_handler,
+        message_id: int,
+        status: str,
+        *,
+        stream: str,
+        topic: str,
+        result_message_id: int | None = None,
+        error: str | None = None,
+    ) -> None:
+        self.runs[message_id] = {
+            **self.runs.get(message_id, {}),
+            "status": status,
+            "stream": stream,
+            "topic": topic,
+            "result_message_id": result_message_id,
+            "error": error,
+        }
+
+
+class FakePearInlineWorkerDispatcher:
+    """Test-only synchronous dispatcher for focused handler tests."""
+
+    def dispatch(
+        self,
+        pear_handler,
+        bot_handler,
+        message: dict[str, Any],
+        *,
+        content: str,
+        active_session: PearActiveSessionSummary | None,
+        message_id: int,
+        stream: str,
+        topic: str,
+        requesting_user_id: int | None = None,
+        session_kind: str = "shared",
+        source_stream: str = "",
+        source_topic: str = "",
+        source_message_id: int | None = None,
+        progress_message_id: int | None = None,
+    ) -> None:
+        pear_handler.run_worker_turn(
+            message,
+            bot_handler,
+            content=content,
+            active_session=active_session,
+            message_id=message_id,
+            stream=stream,
+            topic=topic,
+            post_started_progress=False,
+            requesting_user_id=requesting_user_id,
+            session_kind=session_kind,
+            source_stream=source_stream,
+            source_topic=source_topic,
+            source_message_id=source_message_id,
+            progress_message_id=progress_message_id,
+        )
+
+
+def make_test_pear_handler(**kwargs) -> PearEmbeddedBotHandler:
+    kwargs.setdefault("worker_run_store", FakePearWorkerRunStore())
+    kwargs.setdefault("worker_dispatcher", FakePearInlineWorkerDispatcher())
+    return PearEmbeddedBotHandler(**kwargs)
 
 
 class PearComputedSettingsEnvTest(TestCase):
@@ -504,7 +597,6 @@ class PearSessionDefaultsTest(TestCase):
         self.assertEqual(PEAR_CONFIG_ENDPOINT, "/pear/config")
         self.assertEqual(PEAR_FIRST_RUN_ENDPOINT, "/pear/first-run")
         self.assertEqual(PEAR_RUNS_ENDPOINT, "/pear/runs")
-        self.assertEqual(PEAR_SIDE_ENDPOINT, "/pear/side")
 
     def test_session_payload_for_target_topic(self) -> None:
         payload = get_pear_session_payload(
@@ -1750,19 +1842,39 @@ class PearSessionDefaultsTest(TestCase):
         worker = object.__new__(pear_worker_module.PearWorker)
         worker.active_run_id = 42
         worker.active_run_attempt = 3
+        worker.active_side_run_id = 43
+        worker.active_side_run_attempt = 4
 
-        with patch.object(
-            pear_worker_module,
-            "maintain_pear_worker_run_liveness",
-            return_value=2,
-        ) as maintain_liveness:
+        with (
+            patch.object(
+                pear_worker_module,
+                "maintain_pear_worker_run_liveness",
+                return_value=0,
+            ) as maintain_liveness,
+            patch.object(
+                pear_worker_module,
+                "reap_stale_pear_worker_runs",
+                return_value=2,
+            ) as reap_stale,
+        ):
             self.assertEqual(worker.run_liveness_pass(), 2)
 
-        maintain_liveness.assert_called_once_with(
-            active_run_id=42,
-            active_run_attempt=3,
-            session_kinds=worker.OWNED_SESSION_KINDS,
+        self.assertEqual(
+            maintain_liveness.call_args_list,
+            [
+                call(
+                    active_run_id=42,
+                    active_run_attempt=3,
+                    session_kinds=(),
+                ),
+                call(
+                    active_run_id=43,
+                    active_run_attempt=4,
+                    session_kinds=(),
+                ),
+            ],
         )
+        reap_stale.assert_called_once_with(session_kinds=worker.OWNED_SESSION_KINDS)
 
     def test_pear_worker_liveness_stop_is_bounded_and_reports_a_stuck_thread(self) -> None:
         worker = object.__new__(pear_worker_module.PearWorker)
@@ -1777,6 +1889,29 @@ class PearSessionDefaultsTest(TestCase):
         worker.run_liveness_thread.join.assert_called_once_with(
             timeout=pear_worker_module.PEAR_WORKER_HEARTBEAT_INTERVAL_SECONDS
         )
+
+    def test_pear_worker_shutdown_aborts_uncached_runtime_and_joins_side_pump(self) -> None:
+        worker = object.__new__(pear_worker_module.PearWorker)
+        runtime = Mock(spec=PearWorkerRuntime)
+        worker.active_runtime = runtime
+
+        with (
+            patch.object(worker, "stop_side_pump") as stop_side_pump,
+            patch.object(worker, "stop_liveness_loop") as stop_liveness_loop,
+            patch.object(pear_worker_module, "close_pear_worker_runtimes") as close_runtimes,
+            patch.object(pear_worker_module.QueueProcessingWorker, "stop") as super_stop,
+        ):
+            worker.stop()
+
+        self.assertEqual(
+            stop_side_pump.call_args_list,
+            [call(wait=False), call(wait=True, timeout=2)],
+        )
+        stop_liveness_loop.assert_called_once_with()
+        runtime.abort.assert_called_once()
+        self.assertEqual(str(runtime.abort.call_args.args[0]), "Pear worker is shutting down.")
+        close_runtimes.assert_called_once_with()
+        super_stop.assert_called_once_with()
 
     def test_pear_worker_consume_resets_active_lease_and_runtime_on_failure(self) -> None:
         worker = object.__new__(pear_worker_module.PearWorker)
@@ -1804,6 +1939,53 @@ class PearSessionDefaultsTest(TestCase):
         self.assertIsNone(worker.active_run_id)
         self.assertIsNone(worker.active_run_attempt)
         self.assertIsNone(worker.active_runtime)
+
+    def test_worker_side_pump_starts_side_before_parent_consume_returns(self) -> None:
+        worker = object.__new__(pear_worker_module.PearWorker)
+        worker.queue_name = "pear_worker"
+        worker.side_pump_stop = None
+        worker.side_pump_thread = None
+        runtime = Mock(spec=PearWorkerRuntime)
+        side_run = SimpleNamespace(id=73)
+        queued_runs: queue.Queue[object] = queue.Queue()
+        queued_runs.put(side_run)
+        side_started = threading.Event()
+        parent_returned = threading.Event()
+
+        def next_queued_side_run(**kwargs) -> object | None:
+            try:
+                return queued_runs.get_nowait()
+            except queue.Empty:
+                return None
+
+        def consume_side(event: dict[str, object], *, side_runtime) -> None:
+            self.assertEqual(event, {"message_id": 73})
+            self.assertIs(side_runtime, runtime)
+            self.assertFalse(parent_returned.is_set())
+            side_started.set()
+
+        def parent_turn() -> None:
+            self.assertTrue(side_started.wait(timeout=1))
+            parent_returned.set()
+
+        with (
+            patch.object(worker, "next_queued_side_run", side_effect=next_queued_side_run),
+            patch.object(worker, "side_event_for_run", return_value={"message_id": 73}),
+            patch.object(worker, "_consume", side_effect=consume_side),
+            patch.object(pear_worker_module, "close_old_connections"),
+            patch.object(pear_worker_module, "reset_queries"),
+        ):
+            worker.run_parent_with_side_pump(
+                runtime=runtime,
+                bot_profile_id=17,
+                stream="devel",
+                topic="parallel",
+                parent_turn=parent_turn,
+            )
+
+        self.assertTrue(side_started.is_set())
+        self.assertTrue(parent_returned.is_set())
+        self.assertIsNone(worker.side_pump_thread)
 
     def test_pear_worker_propagates_pre_turn_failure_to_the_queue(self) -> None:
         worker = object.__new__(pear_worker_module.PearWorker)
@@ -2941,7 +3123,7 @@ class PearSessionDefaultsTest(TestCase):
             "content": "Fold in the failing terminal UI test too.",
         }
 
-        PearEmbeddedBotHandler(
+        make_test_pear_handler(
             worker_runtime=PearWorkerRuntime(tool_runner),
             active_session_loader=active_session_loader,
             worker_run_store=run_store,
@@ -3003,7 +3185,7 @@ class PearSessionDefaultsTest(TestCase):
             def send_reply(self, message: dict[str, object], response: str) -> None:
                 sent_replies.append(response)
 
-        PearEmbeddedBotHandler(
+        make_test_pear_handler(
             active_session_loader=active_session_loader,
             worker_run_store=FakeRunStore(),
         ).handle_message(
@@ -3115,7 +3297,7 @@ class PearSessionDefaultsTest(TestCase):
             "content": "@Pear can i interrupt? You can stop",
         }
 
-        PearEmbeddedBotHandler(
+        make_test_pear_handler(
             active_session_loader=active_session_loader,
             worker_run_store=run_store,
         ).handle_message(message, FakeBotHandler())
@@ -3139,6 +3321,205 @@ class PearSessionDefaultsTest(TestCase):
             },
         )
         self.assertEqual(metadata_updates, [])
+
+    def test_embedded_bot_handler_runs_addressed_reply_as_native_side_turn(self) -> None:
+        loaded_session = build_pear_active_session_summary_from_messages(
+            pear_session=get_pear_session_payload(),
+            source="server",
+            stream_exists=True,
+            messages=[
+                (100, "@Pear investigate the parser", False),
+                (101, "I am checking the parser now.", True),
+            ],
+            latest_codex_thread_id="root-thread",
+            latest_codex_trigger_message_id=100,
+            current_trigger_message_id=102,
+        )
+        side_starts: list[dict[str, object]] = []
+        dispatches: list[dict[str, object]] = []
+        sent_replies: list[tuple[int, str]] = []
+
+        class FakeRunStore:
+            def active_worker_run_message_id(self, *args, **kwargs) -> int:
+                return 100
+
+            def side_start_blocked_reason(self, *args, **kwargs) -> None:
+                return None
+
+            def start_side(self, bot_handler, message_id: int, **kwargs) -> bool:
+                side_starts.append({"message_id": message_id, **kwargs})
+                return True
+
+            def record_event(self, *args, **kwargs) -> None:
+                raise AssertionError("a threaded side turn must not steer the shared run")
+
+        class FakeDispatcher:
+            def dispatch(self, *args, **kwargs) -> None:
+                dispatches.append(kwargs)
+
+        class FakeBotHandler:
+            def send_reply(self, message: dict[str, object], response: str) -> dict[str, int]:
+                root_message_id = message.get("thread_root_message_id")
+                assert isinstance(root_message_id, int)
+                sent_replies.append((root_message_id, response))
+                return {"id": 900}
+
+        make_test_pear_handler(
+            active_session_loader=lambda message, bot_handler: loaded_session,
+            worker_run_store=FakeRunStore(),
+            worker_dispatcher=FakeDispatcher(),
+        ).handle_message(
+            {
+                "id": 102,
+                "type": "stream",
+                "display_recipient": PEAR_DEFAULT_STREAM,
+                "topic": PEAR_DEFAULT_TOPIC,
+                "sender_id": 9,
+                "content": "@Pear what does that finding mean?",
+                "thread_root_message_id": 101,
+            },
+            FakeBotHandler(),
+        )
+
+        self.assertEqual(sent_replies, [(101, PEAR_WORKING_MESSAGE)])
+        self.assertEqual(
+            side_starts,
+            [
+                {
+                    "message_id": 102,
+                    "stream": PEAR_DEFAULT_STREAM,
+                    "topic": PEAR_DEFAULT_TOPIC,
+                    "requesting_user_id": 9,
+                    "source_message_id": 101,
+                }
+            ],
+        )
+        self.assertEqual(len(dispatches), 1)
+        self.assertEqual(dispatches[0]["session_kind"], "side")
+        self.assertEqual(dispatches[0]["source_message_id"], 101)
+        self.assertEqual(dispatches[0]["active_session"], loaded_session)
+        self.assertEqual(dispatches[0]["progress_message_id"], 900)
+
+    def test_embedded_bot_handler_does_not_borrow_unrelated_thread_context(self) -> None:
+        loaded_session = build_pear_active_session_summary_from_messages(
+            pear_session=get_pear_session_payload(),
+            source="server",
+            stream_exists=True,
+            messages=[(102, "@Pear unrelated child question", False)],
+            latest_codex_thread_id=None,
+            current_trigger_message_id=102,
+        )
+        shared_starts: list[dict[str, object]] = []
+        dispatches: list[dict[str, object]] = []
+        sent_replies: list[tuple[int, str]] = []
+
+        class FakeRunStore:
+            def active_worker_run_message_id(self, *args, **kwargs) -> int:
+                # An unrelated shared turn is active elsewhere in this topic.
+                return 100
+
+            def start_blocked_reason(self, *args, **kwargs) -> None:
+                return None
+
+            def start(self, bot_handler, message_id: int, **kwargs) -> bool:
+                shared_starts.append({"message_id": message_id, **kwargs})
+                return True
+
+            def start_side(self, *args, **kwargs) -> bool:
+                raise AssertionError("an unrelated root must not create a side fork")
+
+            def record_event(self, *args, **kwargs) -> None:
+                raise AssertionError("an unrelated root must not steer the active run")
+
+        class FakeDispatcher:
+            def dispatch(self, *args, **kwargs) -> None:
+                dispatches.append(kwargs)
+
+        class FakeBotHandler:
+            def send_reply(self, message: dict[str, object], response: str) -> dict[str, int]:
+                root_message_id = message.get("thread_root_message_id")
+                assert isinstance(root_message_id, int)
+                sent_replies.append((root_message_id, response))
+                return {"id": 901}
+
+        make_test_pear_handler(
+            active_session_loader=lambda message, bot_handler: loaded_session,
+            worker_run_store=FakeRunStore(),
+            worker_dispatcher=FakeDispatcher(),
+        ).handle_message(
+            {
+                "id": 102,
+                "type": "stream",
+                "display_recipient": PEAR_DEFAULT_STREAM,
+                "topic": PEAR_DEFAULT_TOPIC,
+                "sender_id": 9,
+                "content": "@Pear unrelated child question",
+                "thread_root_message_id": 777,
+            },
+            FakeBotHandler(),
+        )
+
+        self.assertEqual(
+            shared_starts,
+            [
+                {
+                    "message_id": 102,
+                    "stream": PEAR_DEFAULT_STREAM,
+                    "topic": PEAR_DEFAULT_TOPIC,
+                    "source_message_id": 777,
+                }
+            ],
+        )
+        self.assertEqual(sent_replies, [(777, PEAR_WORKING_MESSAGE)])
+        self.assertEqual(len(dispatches), 1)
+        self.assertEqual(dispatches[0]["session_kind"], "shared")
+        self.assertEqual(dispatches[0]["source_message_id"], 777)
+        self.assertEqual(dispatches[0]["active_session"], loaded_session)
+
+    def test_embedded_bot_handler_redispatches_its_same_queued_trigger(self) -> None:
+        dispatches: list[dict[str, object]] = []
+        sent_replies: list[str] = []
+
+        class FakeRunStore:
+            def active_worker_run_message_id(self, *args, **kwargs) -> int:
+                return 204
+
+            def start_blocked_reason(self, *args, **kwargs) -> None:
+                return None
+
+            def start(self, bot_handler, message_id: int, **kwargs) -> bool:
+                return True
+
+            def record_event(self, *args, **kwargs) -> None:
+                raise AssertionError("same-trigger redelivery must not become steering")
+
+        class FakeDispatcher:
+            def dispatch(self, *args, **kwargs) -> None:
+                dispatches.append(kwargs)
+
+        class FakeBotHandler:
+            def send_reply(self, message: dict[str, object], response: str) -> dict[str, int]:
+                sent_replies.append(response)
+                return {"id": 902}
+
+        make_test_pear_handler(
+            worker_run_store=FakeRunStore(),
+            worker_dispatcher=FakeDispatcher(),
+        ).handle_message(
+            {
+                "id": 204,
+                "type": "stream",
+                "display_recipient": PEAR_DEFAULT_STREAM,
+                "topic": PEAR_DEFAULT_TOPIC,
+                "sender_id": 9,
+                "content": "@Pear recover this queued delivery",
+            },
+            FakeBotHandler(),
+        )
+
+        self.assertEqual(sent_replies, [PEAR_WORKING_MESSAGE])
+        self.assertEqual(len(dispatches), 1)
+        self.assertEqual(dispatches[0]["message_id"], 204)
 
     def test_embedded_bot_handler_records_steering_without_reply(self) -> None:
         payload = get_pear_session_payload()
@@ -3191,7 +3572,7 @@ class PearSessionDefaultsTest(TestCase):
                 sent_replies.append(response)
                 return {"id": 400 + len(sent_replies)}
 
-        PearEmbeddedBotHandler(
+        make_test_pear_handler(
             active_session_loader=active_session_loader,
             worker_run_store=FakeRunStore(),
         ).handle_message(
@@ -3280,7 +3661,7 @@ class PearSessionDefaultsTest(TestCase):
             "content": content,
         }
 
-        PearEmbeddedBotHandler(
+        make_test_pear_handler(
             worker_runtime=PearWorkerRuntime(tool_runner),
             active_session_loader=active_session_loader,
             worker_run_store=run_store,
@@ -3369,7 +3750,7 @@ class PearSessionDefaultsTest(TestCase):
             "content": "Fold in the failing terminal UI test too.",
         }
 
-        handler = PearEmbeddedBotHandler(
+        handler = make_test_pear_handler(
             worker_runtime=PearWorkerRuntime(tool_runner),
             active_session_loader=active_session_loader,
             worker_run_store=run_store,
@@ -3461,7 +3842,7 @@ class PearSessionDefaultsTest(TestCase):
             PEAR_EXPLICIT_MENTION_MESSAGE_KEY: True,
         }
 
-        PearEmbeddedBotHandler(
+        make_test_pear_handler(
             worker_runtime=PearWorkerRuntime(tool_runner),
             active_session_loader=active_session_loader,
             worker_run_store=run_store,
@@ -3543,7 +3924,7 @@ class PearSessionDefaultsTest(TestCase):
             PEAR_EXPLICIT_MENTION_MESSAGE_KEY: True,
         }
 
-        PearEmbeddedBotHandler(
+        make_test_pear_handler(
             worker_runtime=PearWorkerRuntime(tool_runner),
             active_session_loader=active_session_loader,
             worker_run_store=run_store,
@@ -3631,7 +4012,7 @@ class PearSessionDefaultsTest(TestCase):
                 return {"id": 400 + len(sent_replies)}
 
         run_store = FakeRunStore()
-        PearEmbeddedBotHandler(
+        make_test_pear_handler(
             worker_runtime=PearWorkerRuntime(tool_runner),
             active_session_loader=active_session_loader,
             worker_run_store=run_store,
@@ -3730,7 +4111,7 @@ class PearSessionDefaultsTest(TestCase):
             ) -> None:
                 warm_calls.append((int(message["id"]), stream, topic))
 
-        PearEmbeddedBotHandler(
+        make_test_pear_handler(
             active_session_loader=active_session_loader,
             worker_run_store=FakeRunStore(),
             worker_dispatcher=FakeDispatcher(),
@@ -3768,7 +4149,7 @@ class PearSessionDefaultsTest(TestCase):
             def send_reply(self, message: dict[str, object], response: str) -> None:
                 sent_replies.append(response)
 
-        handler = PearEmbeddedBotHandler(
+        handler = make_test_pear_handler(
             active_session_loader=lambda message, bot_handler: loaded_session,
             addressing_intent_classifier=addressing_intent_classifier,
         )
@@ -3925,7 +4306,7 @@ class PearSessionDefaultsTest(TestCase):
                 sent_replies.append(response)
                 return {"id": 400 + len(sent_replies)}
 
-        PearEmbeddedBotHandler(
+        make_test_pear_handler(
             active_session_loader=active_session_loader,
             worker_run_store=FakeRunStore(),
             addressing_intent_classifier=addressing_intent_classifier,
@@ -3976,7 +4357,7 @@ class PearSessionDefaultsTest(TestCase):
             "content": "@Pear resume after deploy",
         }
 
-        PearEmbeddedBotHandler(active_session_loader=active_session_loader).handle_message(
+        make_test_pear_handler(active_session_loader=active_session_loader).handle_message(
             message,
             FakeBotHandler(),
         )
@@ -3986,99 +4367,11 @@ class PearSessionDefaultsTest(TestCase):
         self.assertIn("Pear worker is not starting.", sent_replies[1])
         self.assertIn("paused", sent_replies[1])
 
-    def test_worker_started_message_storage(self) -> None:
-        class FakeStorage:
-            def __init__(self) -> None:
-                self.values: dict[str, object] = {}
-
-            def contains(self, key: str) -> bool:
-                return key in self.values
-
-            def get(self, key: str) -> object:
-                return self.values[key]
-
-            def put(self, key: str, value: object) -> None:
-                self.values[key] = value
-
-        class FakeBotHandler:
-            def __init__(self) -> None:
-                self.storage = FakeStorage()
-
-        bot_handler = FakeBotHandler()
-        record_pear_worker_run(
-            bot_handler,
-            101,
-            "queued",
-            stream=PEAR_DEFAULT_STREAM,
-            topic=PEAR_DEFAULT_TOPIC,
-        )
-        record_pear_worker_run(
-            bot_handler,
-            101,
-            "done",
-            stream=PEAR_DEFAULT_STREAM,
-            topic=PEAR_DEFAULT_TOPIC,
-            result_message_id=301,
-        )
-        record_pear_worker_run(
-            bot_handler,
-            102,
-            "failed",
-            stream=PEAR_DEFAULT_STREAM,
-            topic=PEAR_DEFAULT_TOPIC,
-            error="tool failed",
-        )
-
-        self.assertTrue(pear_worker_already_started(bot_handler, 101))
-        self.assertFalse(pear_worker_already_started(bot_handler, 102))
-        self.assertFalse(pear_worker_already_started(bot_handler, 103))
-        self.assertEqual(pear_worker_run_for_message(bot_handler, 101)["status"], "done")
-        self.assertEqual(pear_worker_run_for_message(bot_handler, 101)["result_message_id"], 301)
-        self.assertEqual(pear_worker_run_for_message(bot_handler, 102)["status"], "failed")
-        self.assertEqual(
-            bot_handler.storage.values[PEAR_WORKER_RUNS_STORAGE_KEY],
-            [
-                {
-                    "trigger_message_id": 101,
-                    "status": "done",
-                    "stream": PEAR_DEFAULT_STREAM,
-                    "topic": PEAR_DEFAULT_TOPIC,
-                    "result_message_id": 301,
-                    "error": None,
-                },
-                {
-                    "trigger_message_id": 102,
-                    "status": "failed",
-                    "stream": PEAR_DEFAULT_STREAM,
-                    "topic": PEAR_DEFAULT_TOPIC,
-                    "result_message_id": None,
-                    "error": "tool failed",
-                },
-            ],
-        )
-        self.assertEqual(len(load_pear_worker_run_records(bot_handler)), 2)
-
     def test_embedded_bot_suppresses_duplicate_worker_post(self) -> None:
         sent_replies: list[str] = []
         updated_replies: list[str] = []
 
-        class FakeStorage:
-            def __init__(self) -> None:
-                self.values: dict[str, object] = {}
-
-            def contains(self, key: str) -> bool:
-                return key in self.values
-
-            def get(self, key: str) -> object:
-                return self.values[key]
-
-            def put(self, key: str, value: object) -> None:
-                self.values[key] = value
-
         class FakeBotHandler:
-            def __init__(self) -> None:
-                self.storage = FakeStorage()
-
             def send_reply(self, message: dict[str, object], response: str) -> dict[str, int]:
                 sent_replies.append(response)
                 return {"id": 300 + len(sent_replies)}
@@ -4097,37 +4390,26 @@ class PearSessionDefaultsTest(TestCase):
             "content": "@Pear fix the checkout test",
         }
 
-        handler = PearEmbeddedBotHandler()
+        run_store = FakePearWorkerRunStore()
+        handler = make_test_pear_handler(worker_run_store=run_store)
         handler.handle_message(message, bot_handler)
         handler.handle_message(message, bot_handler)
 
         self.assertEqual(len(sent_replies), 2)
-        self.assertEqual(len(updated_replies), 3)
+        self.assertEqual(len(updated_replies), 2)
         self.assertEqual(sent_replies[0], PEAR_WORKING_MESSAGE)
         self.assertEqual(updated_replies[0], PEAR_WORKING_MESSAGE)
         self.assertEqual(
             updated_replies[1],
             PEAR_NO_VISIBLE_RESPONSE_MESSAGE,
         )
-        self.assertEqual(sent_replies[1], PEAR_WORKING_MESSAGE)
         self.assertEqual(
-            updated_replies[2],
+            sent_replies[1],
             "Pear worker is not starting.\n\n"
             "Reason: This request was already handled or is no longer claimable.",
         )
-        self.assertEqual(
-            bot_handler.storage.values[PEAR_WORKER_RUNS_STORAGE_KEY],
-            [
-                {
-                    "trigger_message_id": 201,
-                    "status": "done",
-                    "stream": PEAR_DEFAULT_STREAM,
-                    "topic": PEAR_DEFAULT_TOPIC,
-                    "result_message_id": 301,
-                    "error": None,
-                }
-            ],
-        )
+        self.assertEqual(run_store.runs[201]["status"], "done")
+        self.assertEqual(run_store.runs[201]["result_message_id"], 301)
 
     def test_embedded_bot_uses_injected_worker_run_store(self) -> None:
         sent_replies: list[str] = []
@@ -4193,7 +4475,7 @@ class PearSessionDefaultsTest(TestCase):
             "content": "@Pear fix the checkout test",
         }
 
-        PearEmbeddedBotHandler(worker_run_store=run_store).handle_message(
+        make_test_pear_handler(worker_run_store=run_store).handle_message(
             message,
             FakeBotHandler(),
         )
@@ -4218,6 +4500,12 @@ class PearSessionDefaultsTest(TestCase):
             updated_replies[1],
             PEAR_NO_VISIBLE_RESPONSE_MESSAGE,
         )
+
+    def test_embedded_bot_routing_requires_injected_dispatcher(self) -> None:
+        handler = PearEmbeddedBotHandler(worker_run_store=FakePearWorkerRunStore())
+
+        with self.assertRaisesRegex(RuntimeError, "requires an injected worker dispatcher"):
+            handler.handle_message({}, object())
 
     def test_embedded_bot_settles_ack_when_worker_start_claim_fails(self) -> None:
         sent_replies: list[str] = []
@@ -4254,7 +4542,7 @@ class PearSessionDefaultsTest(TestCase):
             "content": "@Pear fix the checkout test",
         }
 
-        PearEmbeddedBotHandler(
+        make_test_pear_handler(
             worker_run_store=FakeRunStore(),
             worker_dispatcher=FailingDispatcher(),
         ).handle_message(
@@ -4262,20 +4550,14 @@ class PearSessionDefaultsTest(TestCase):
             FakeBotHandler(),
         )
 
-        self.assertEqual(sent_replies, [PEAR_WORKING_MESSAGE])
         self.assertEqual(
-            updated_replies,
+            sent_replies,
             [
-                {
-                    "message_id": 311,
-                    "content": (
-                        "Pear worker is not starting.\n\n"
-                        "Reason: This request was already handled or is no longer claimable."
-                    ),
-                    "rendering_only": True,
-                }
+                "Pear worker is not starting.\n\n"
+                "Reason: This request was already handled or is no longer claimable."
             ],
         )
+        self.assertEqual(updated_replies, [])
 
     def test_embedded_bot_rejects_direct_message_without_dispatch(self) -> None:
         sent_replies: list[str] = []
@@ -4306,7 +4588,7 @@ class PearSessionDefaultsTest(TestCase):
                 raise AssertionError("a blocked direct message must not be dispatched")
 
         run_store = ChannelOnlyRunStore()
-        PearEmbeddedBotHandler(
+        make_test_pear_handler(
             worker_run_store=run_store,
             worker_dispatcher=FailingDispatcher(),
         ).handle_message(
@@ -4619,7 +4901,7 @@ class PearSessionDefaultsTest(TestCase):
             "content": "@Pear fix the checkout test",
         }
 
-        PearEmbeddedBotHandler(
+        make_test_pear_handler(
             worker_runtime=PearWorkerRuntime(tool_runner),
             worker_run_store=run_store,
         ).run_worker_turn(
@@ -4690,7 +4972,7 @@ class PearSessionDefaultsTest(TestCase):
             "sender_full_name": "plugyawn",
             "content": "@**Pear** run the typing check",
         }
-        handler = PearEmbeddedBotHandler(
+        handler = make_test_pear_handler(
             worker_runtime=PearWorkerRuntime(tool_runner),
             worker_run_store=FakeRunStore(),
         )
@@ -4810,7 +5092,7 @@ class PearSessionDefaultsTest(TestCase):
             "content": "@Pear run quietly",
         }
 
-        PearEmbeddedBotHandler(
+        make_test_pear_handler(
             worker_runtime=NonPostingRuntime(),
             worker_run_store=FakeRunStore(),
         ).run_worker_turn(
@@ -4930,7 +5212,7 @@ class PearSessionDefaultsTest(TestCase):
             "content": "@Pear run quietly",
         }
 
-        PearEmbeddedBotHandler(
+        make_test_pear_handler(
             worker_runtime=QuietTranscriptRuntime(),
             worker_run_store=FakeRunStore(),
         ).run_worker_turn(
@@ -5002,7 +5284,7 @@ class PearSessionDefaultsTest(TestCase):
             "content": "@Pear summarize the links",
         }
 
-        PearEmbeddedBotHandler(
+        make_test_pear_handler(
             worker_runtime=PearWorkerRuntime(tool_runner),
             worker_run_store=FakeRunStore(),
         ).run_worker_turn(
@@ -5130,7 +5412,7 @@ class PearSessionDefaultsTest(TestCase):
             "content": "@Pear write two letters",
         }
 
-        PearEmbeddedBotHandler(
+        make_test_pear_handler(
             worker_runtime=PearWorkerRuntime(tool_runner),
             worker_run_store=FakeRunStore(),
         ).run_worker_turn(
@@ -5252,7 +5534,7 @@ class PearSessionDefaultsTest(TestCase):
             "content": "@Pear run a script",
         }
 
-        PearEmbeddedBotHandler(
+        make_test_pear_handler(
             worker_runtime=PearWorkerRuntime(tool_runner),
             worker_run_store=FakeRunStore(),
         ).run_worker_turn(
@@ -5337,7 +5619,7 @@ class PearSessionDefaultsTest(TestCase):
         }
         tool_runner = CloseableToolRunner()
 
-        PearEmbeddedBotHandler(
+        make_test_pear_handler(
             worker_runtime=PearWorkerRuntime(tool_runner),
             worker_run_store=FakeRunStore(),
         ).run_worker_turn(
@@ -5457,7 +5739,7 @@ class PearSessionDefaultsTest(TestCase):
         run_store = FakeRunStore()
         tool_runner = InterruptibleToolRunner()
 
-        PearEmbeddedBotHandler(
+        make_test_pear_handler(
             worker_runtime=PearWorkerRuntime(tool_runner),
             worker_run_store=run_store,
         ).run_worker_turn(
@@ -5552,7 +5834,7 @@ class PearSessionDefaultsTest(TestCase):
             "content": "@Pear run a script",
         }
 
-        PearEmbeddedBotHandler(
+        make_test_pear_handler(
             worker_runtime=PearWorkerRuntime(tool_runner),
             active_session_loader=active_session_loader,
             worker_run_store=FakeRunStore(),
@@ -5672,7 +5954,7 @@ class PearSessionDefaultsTest(TestCase):
             "content": "only one message? you cant see the previous question i asked about load factors?",
         }
 
-        PearEmbeddedBotHandler(
+        make_test_pear_handler(
             worker_runtime=PearWorkerRuntime(tool_runner),
             active_session_loader=active_session_loader,
             worker_run_store=FakeRunStore(),
@@ -5817,7 +6099,7 @@ class PearSessionDefaultsTest(TestCase):
         }
 
         with patch("zerver.lib.pear.attach_pear_artifact_to_message", side_effect=attach_artifact):
-            PearEmbeddedBotHandler(
+            make_test_pear_handler(
                 worker_runtime=PearWorkerRuntime(FakeToolRunner()),
                 worker_run_store=FakeRunStore(),
             ).run_worker_turn(
@@ -5900,34 +6182,22 @@ class PearSessionDefaultsTest(TestCase):
             "content": "@Pear fix the checkout test",
         }
 
-        PearEmbeddedBotHandler(worker_run_store=DuplicateRunStore()).handle_message(
+        make_test_pear_handler(worker_run_store=DuplicateRunStore()).handle_message(
             message,
             FakeBotHandler(),
         )
 
         self.assertEqual(len(sent_replies), 1)
-        self.assertEqual(sent_replies[0], PEAR_WORKING_MESSAGE)
+        self.assertEqual(
+            sent_replies[0],
+            "Pear worker is not starting.\n\n"
+            "Reason: This request was already handled or is no longer claimable.",
+        )
 
     def test_embedded_bot_records_failed_worker_run(self) -> None:
         sent_replies: list[str] = []
 
-        class FakeStorage:
-            def __init__(self) -> None:
-                self.values: dict[str, object] = {}
-
-            def contains(self, key: str) -> bool:
-                return key in self.values
-
-            def get(self, key: str) -> object:
-                return self.values[key]
-
-            def put(self, key: str, value: object) -> None:
-                self.values[key] = value
-
         class FakeBotHandler:
-            def __init__(self) -> None:
-                self.storage = FakeStorage()
-
             def send_reply(self, message: dict[str, object], response: str) -> None:
                 sent_replies.append(response)
 
@@ -5943,26 +6213,19 @@ class PearSessionDefaultsTest(TestCase):
             "content": "@Pear fix the checkout test",
         }
 
-        PearEmbeddedBotHandler(worker_runtime=PearWorkerRuntime(tool_runner)).handle_message(
+        run_store = FakePearWorkerRunStore()
+        make_test_pear_handler(
+            worker_runtime=PearWorkerRuntime(tool_runner),
+            worker_run_store=run_store,
+        ).handle_message(
             message,
             bot_handler,
         )
 
         self.assertEqual(len(sent_replies), 2)
         self.assertEqual(sent_replies[1], "Pear worker failed.\n\nError: codex adapter failed")
-        self.assertEqual(
-            bot_handler.storage.values[PEAR_WORKER_RUNS_STORAGE_KEY],
-            [
-                {
-                    "trigger_message_id": 202,
-                    "status": "failed",
-                    "stream": PEAR_DEFAULT_STREAM,
-                    "topic": PEAR_DEFAULT_TOPIC,
-                    "result_message_id": None,
-                    "error": "codex adapter failed",
-                }
-            ],
-        )
+        self.assertEqual(run_store.runs[202]["status"], "failed")
+        self.assertEqual(run_store.runs[202]["error"], "codex adapter failed")
 
     def run_embedded_bot_handler(self, content: str) -> list[str]:
         sent_replies: list[tuple[dict[str, object], str]] = []
@@ -5978,7 +6241,7 @@ class PearSessionDefaultsTest(TestCase):
             "content": content,
         }
 
-        PearEmbeddedBotHandler().handle_message(message, FakeBotHandler())
+        make_test_pear_handler().handle_message(message, FakeBotHandler())
 
         self.assertEqual(sent_replies[0][0], message)
         return [response for _message, response in sent_replies]
@@ -6189,6 +6452,55 @@ class PearAppServerProtocolCitizenTest(TestCase):
             ["child-1", "grandchild-1"],
         )
 
+    def test_side_descendants_never_extend_the_parent_completion_barrier(self) -> None:
+        runner = self.make_runner(isolated=True)
+        runner.translator.thread_descriptors = {
+            "main-agent": {
+                "id": "main-agent",
+                "parent_thread_id": "root-1",
+                "agent_nickname": "Main scout",
+                "status": {"type": "active"},
+            },
+            "side-1": {
+                "id": "side-1",
+                "parent_thread_id": "root-1",
+                "thread_source": "fork",
+                "status": {"type": "active"},
+            },
+            "side-agent": {
+                "id": "side-agent",
+                "parent_thread_id": "side-1",
+                "agent_nickname": "Side scout",
+                "status": {"type": "active"},
+            },
+        }
+        runner.side_thread_ids.add("side-1")
+
+        self.assertEqual(runner.active_descendant_thread_ids("root-1"), {"main-agent"})
+        self.assertEqual(runner.active_descendant_thread_ids("side-1"), {"side-agent"})
+
+    def test_late_retained_side_notification_is_not_replayed_into_the_next_turn(self) -> None:
+        runner = self.make_runner(isolated=True)
+        runner.side_thread_ids_by_conversation_key["message-root-42"] = "side-1"
+
+        runner.dispatch_message(
+            {
+                "method": "turn/completed",
+                "params": {"threadId": "side-1", "turn": {"id": "old-side-turn"}},
+            }
+        )
+
+        self.assertEqual(runner.unrouted_notifications, {})
+        next_context = PearAppServerTurnContext(
+            thread_id="side-1",
+            event_callback=None,
+            user_input_provider=None,
+            is_main=False,
+        )
+        runner.register_turn_context(next_context)
+        self.assertTrue(next_context.messages.empty())
+        runner.unregister_turn_context(next_context)
+
     def test_child_notifications_never_mutate_the_root_turn_result(self) -> None:
         runner = self.make_runner(isolated=True)
         runner.active_thread_id = "root-1"
@@ -6338,6 +6650,549 @@ class PearAppServerProtocolCitizenTest(TestCase):
             runner(active_session, "answer directly", event_callback=events.append)
 
         self.assertEqual(events, [])
+
+    def test_native_side_turn_forks_ephemerally_without_mutating_parent(self) -> None:
+        runner = self.make_runner(isolated=True)
+        runner.loaded_thread_id = "root-1"
+        runner.loaded_through_trigger_message_id = 11
+        runner.active_thread_id = "root-1"
+        runner.active_turn_id = "root-turn-1"
+        active_session = build_pear_active_session_summary_from_messages(
+            pear_session=get_pear_session_payload(),
+            source="server",
+            stream_exists=True,
+            messages=[(12, "@Pear explain that", False)],
+            latest_codex_thread_id="root-1",
+            latest_codex_trigger_message_id=11,
+            current_trigger_message_id=12,
+        )
+        requests: list[tuple[str, dict[str, Any]]] = []
+
+        def request(method, params, **kwargs):
+            requests.append((method, params))
+            if method == "thread/fork":
+                return {"thread": {"id": "side-1"}}
+            if method == "turn/start":
+                return {"turn": {"id": "side-turn-1"}}
+            return {}
+
+        with (
+            patch.object(runner, "ensure_started"),
+            patch.object(runner, "ensure_thread", return_value="root-1"),
+            patch.object(runner, "request", side_effect=request),
+            patch.object(runner, "wait_for_turn", return_value=("Side answer", 0, 0, 0)),
+        ):
+            results = runner.run_side(active_session, "what does that mean?")
+
+        self.assertEqual([result["value"] for result in results], ["Side answer"])
+        self.assertEqual(
+            [method for method, _params in requests],
+            ["thread/fork", "thread/inject_items", "turn/start", "thread/unsubscribe"],
+        )
+        fork_params = requests[0][1]
+        self.assertEqual(fork_params["threadId"], "root-1")
+        self.assertIs(fork_params["ephemeral"], True)
+        self.assertIn(
+            PEAR_CODEX_SIDE_DEVELOPER_INSTRUCTIONS,
+            str(fork_params["developerInstructions"]),
+        )
+        inject_params = requests[1][1]
+        self.assertEqual(inject_params["threadId"], "side-1")
+        boundary = inject_params["items"][0]["content"][0]["text"]
+        self.assertEqual(boundary, PEAR_CODEX_SIDE_BOUNDARY_PROMPT)
+        turn_params = requests[2][1]
+        self.assertEqual(turn_params["threadId"], "side-1")
+        self.assertEqual(
+            turn_params["input"],
+            [{"type": "text", "text": "what does that mean?"}],
+        )
+        self.assertNotIn("Recent Zulip context", str(turn_params["input"]))
+        self.assertEqual(requests[3][1], {"threadId": "side-1"})
+        self.assertEqual(runner.loaded_thread_id, "root-1")
+        self.assertEqual(runner.loaded_through_trigger_message_id, 11)
+        self.assertEqual(runner.active_thread_id, "root-1")
+        self.assertEqual(runner.active_turn_id, "root-turn-1")
+
+    def test_native_side_conversation_reuses_one_ephemeral_thread_per_message_root(self) -> None:
+        runner = self.make_runner(isolated=True)
+        runner.loaded_thread_id = "root-1"
+        runner.loaded_through_trigger_message_id = 11
+        runner.active_thread_id = "root-1"
+        active_session = build_pear_active_session_summary_from_messages(
+            pear_session=get_pear_session_payload(),
+            source="server",
+            stream_exists=True,
+            messages=[(12, "@Pear explain that", False)],
+            latest_codex_thread_id="root-1",
+            latest_codex_trigger_message_id=11,
+            current_trigger_message_id=12,
+        )
+        requests: list[tuple[str, dict[str, Any]]] = []
+        next_turn = iter(("side-turn-1", "side-turn-2"))
+
+        def request(method, params, **kwargs):
+            requests.append((method, params))
+            if method == "thread/fork":
+                return {"thread": {"id": "side-1"}}
+            if method == "turn/start":
+                return {"turn": {"id": next(next_turn)}}
+            return {}
+
+        with (
+            patch.object(runner, "ensure_started"),
+            patch.object(runner, "ensure_thread", return_value="root-1"),
+            patch.object(runner, "request", side_effect=request),
+            patch.object(
+                runner,
+                "wait_for_turn",
+                side_effect=[("First answer", 0, 0, 0), ("Follow-up answer", 0, 0, 0)],
+            ),
+        ):
+            first = runner.run_side(
+                active_session,
+                "what does that mean?",
+                conversation_key="message-root-42",
+            )
+            second = runner.run_side(
+                active_session,
+                "elaborate on that",
+                conversation_key="message-root-42",
+            )
+
+        self.assertEqual([result["value"] for result in first], ["First answer"])
+        self.assertEqual([result["value"] for result in second], ["Follow-up answer"])
+        self.assertEqual(
+            [method for method, _params in requests],
+            ["thread/fork", "thread/inject_items", "turn/start", "turn/start"],
+        )
+        self.assertEqual(
+            [params["threadId"] for method, params in requests if method == "turn/start"],
+            ["side-1", "side-1"],
+        )
+        self.assertEqual(
+            runner.side_thread_ids_by_conversation_key,
+            {"message-root-42": "side-1"},
+        )
+        self.assertNotIn("side-1", runner.side_thread_ids)
+
+    def test_failed_reusable_side_turn_retires_its_native_thread(self) -> None:
+        runner = self.make_runner(isolated=True)
+        active_session = build_pear_active_session_summary_from_messages(
+            pear_session=get_pear_session_payload(),
+            source="server",
+            stream_exists=True,
+            messages=[(12, "@Pear explain that", False)],
+            latest_codex_thread_id="root-1",
+            latest_codex_trigger_message_id=11,
+            current_trigger_message_id=12,
+        )
+        requests: list[tuple[str, dict[str, Any]]] = []
+
+        def request(method, params, **kwargs):
+            requests.append((method, params))
+            if method == "thread/fork":
+                return {"thread": {"id": "side-broken"}}
+            if method == "turn/start":
+                return {"turn": {"id": "side-turn-broken"}}
+            return {}
+
+        with (
+            patch.object(runner, "ensure_started"),
+            patch.object(runner, "ensure_thread", return_value="root-1"),
+            patch.object(runner, "request", side_effect=request),
+            patch.object(
+                runner,
+                "wait_for_turn",
+                side_effect=PearAgentRuntimeError("side turn failed"),
+            ),
+            self.assertRaisesRegex(PearAgentRuntimeError, "side turn failed"),
+        ):
+            runner.run_side(
+                active_session,
+                "what does that mean?",
+                conversation_key="message-root-42",
+            )
+
+        self.assertEqual(requests[-1], ("thread/unsubscribe", {"threadId": "side-broken"}))
+        self.assertEqual(runner.side_thread_ids_by_conversation_key, {})
+        self.assertNotIn("side-broken", runner.side_thread_ids)
+
+    def test_native_side_conversation_cache_evicts_the_lru_thread(self) -> None:
+        runner = self.make_runner(isolated=True)
+        for index in range(PEAR_CODEX_WARM_SIDE_CONVERSATION_LIMIT):
+            key = f"root-{index}"
+            thread_id = f"side-{index}"
+            runner.side_thread_ids_by_conversation_key[key] = thread_id
+        requests: list[tuple[str, dict[str, Any]]] = []
+
+        def request(method, params, **kwargs):
+            requests.append((method, params))
+            if method == "thread/fork":
+                return {"thread": {"id": "side-new"}}
+            if method == "turn/start":
+                return {"turn": {"id": "side-turn-new"}}
+            return {}
+
+        active_session = build_pear_active_session_summary_from_messages(
+            pear_session=get_pear_session_payload(),
+            source="server",
+            stream_exists=True,
+            messages=[(12, "@Pear new side question", False)],
+            latest_codex_thread_id="main-1",
+            latest_codex_trigger_message_id=11,
+            current_trigger_message_id=12,
+        )
+        with (
+            patch.object(runner, "ensure_started"),
+            patch.object(runner, "ensure_thread", return_value="main-1"),
+            patch.object(runner, "request", side_effect=request),
+            patch.object(runner, "wait_for_turn", return_value=("Answer", 0, 0, 0)),
+        ):
+            runner.run_side(
+                active_session,
+                "new side question",
+                conversation_key="root-new",
+            )
+
+        self.assertEqual(
+            requests[0],
+            ("thread/unsubscribe", {"threadId": "side-0"}),
+        )
+        self.assertNotIn("root-0", runner.side_thread_ids_by_conversation_key)
+        self.assertEqual(
+            runner.side_thread_ids_by_conversation_key["root-new"],
+            "side-new",
+        )
+        self.assertEqual(
+            len(runner.side_thread_ids_by_conversation_key),
+            PEAR_CODEX_WARM_SIDE_CONVERSATION_LIMIT,
+        )
+
+    def test_native_side_turn_uses_live_parent_before_thread_id_is_persisted(self) -> None:
+        runner = self.make_runner(isolated=True)
+        runner.loaded_thread_id = "root-live"
+        runner.active_thread_id = "root-live"
+        runner.active_turn_id = "root-turn-live"
+        parent_context = PearAppServerTurnContext(
+            thread_id="root-live",
+            turn_id="root-turn-live",
+            event_callback=None,
+            user_input_provider=None,
+            is_main=True,
+        )
+        runner.register_turn_context(parent_context)
+        active_session = build_pear_active_session_summary_from_messages(
+            pear_session=get_pear_session_payload(),
+            source="server",
+            stream_exists=True,
+            messages=[(12, "@Pear /btw explain that", False)],
+            current_trigger_message_id=12,
+        )
+        requests: list[tuple[str, dict[str, Any]]] = []
+
+        def request(method, params, **kwargs):
+            requests.append((method, params))
+            if method == "thread/fork":
+                return {"thread": {"id": "side-live"}}
+            if method == "turn/start":
+                return {"turn": {"id": "side-turn-live"}}
+            return {}
+
+        with (
+            patch.object(runner, "ensure_started"),
+            patch.object(
+                runner,
+                "ensure_thread",
+                side_effect=AssertionError("must use the in-memory parent"),
+            ),
+            patch.object(runner, "request", side_effect=request),
+            patch.object(runner, "wait_for_turn", return_value=("Side answer", 0, 0, 0)),
+        ):
+            results = runner.run_side(active_session, "what does that mean?")
+
+        self.assertEqual([result["value"] for result in results], ["Side answer"])
+        self.assertEqual(requests[0][0], "thread/fork")
+        self.assertEqual(requests[0][1]["threadId"], "root-live")
+        self.assertEqual(runner.active_thread_id, "root-live")
+        self.assertEqual(runner.active_turn_id, "root-turn-live")
+
+    def test_native_side_turn_never_reconciles_a_live_persisted_parent(self) -> None:
+        runner = self.make_runner(isolated=True)
+        runner.loaded_thread_id = "root-live"
+        runner.loaded_through_trigger_message_id = 10
+        runner.active_thread_id = "root-live"
+        runner.active_turn_id = "root-turn-live"
+        parent_context = PearAppServerTurnContext(
+            thread_id="root-live",
+            turn_id="root-turn-live",
+            event_callback=None,
+            user_input_provider=None,
+            is_main=True,
+        )
+        runner.register_turn_context(parent_context)
+        active_session = build_pear_active_session_summary_from_messages(
+            pear_session=get_pear_session_payload(),
+            source="server",
+            stream_exists=True,
+            messages=[(12, "@Pear /btw explain that", False)],
+            current_trigger_message_id=12,
+            latest_codex_thread_id="root-live",
+            latest_codex_trigger_message_id=11,
+        )
+
+        def request(method, params, **kwargs):
+            if method == "thread/fork":
+                self.assertEqual(params["threadId"], "root-live")
+                return {"thread": {"id": "side-live"}}
+            if method == "turn/start":
+                return {"turn": {"id": "side-turn-live"}}
+            return {}
+
+        with (
+            patch.object(runner, "ensure_started"),
+            patch.object(
+                runner,
+                "ensure_thread",
+                side_effect=AssertionError("must not reconcile a live parent"),
+            ),
+            patch.object(
+                runner,
+                "reset_transport",
+                side_effect=AssertionError("must not reset a live parent"),
+            ),
+            patch.object(runner, "request", side_effect=request),
+            patch.object(runner, "wait_for_turn", return_value=("Side answer", 0, 0, 0)),
+        ):
+            results = runner.run_side(active_session, "what does that mean?")
+
+        self.assertEqual([result["value"] for result in results], ["Side answer"])
+        self.assertEqual(runner.loaded_thread_id, "root-live")
+        self.assertEqual(runner.loaded_through_trigger_message_id, 10)
+        self.assertEqual(runner.active_thread_id, "root-live")
+        self.assertEqual(runner.active_turn_id, "root-turn-live")
+
+    def test_concurrent_requests_are_demultiplexed_by_request_id(self) -> None:
+        runner = self.make_runner(isolated=True)
+        sent: list[dict[str, Any]] = []
+        sent_condition = threading.Condition()
+
+        def send_message(message: dict[str, Any]) -> None:
+            with sent_condition:
+                sent.append(message)
+                sent_condition.notify_all()
+
+        results: dict[str, object] = {}
+
+        def request(name: str) -> None:
+            results[name] = runner.request(name, {"name": name})
+
+        with patch.object(runner, "send_message", side_effect=send_message):
+            first = threading.Thread(target=request, args=("first",))
+            second = threading.Thread(target=request, args=("second",))
+            first.start()
+            second.start()
+            with sent_condition:
+                self.assertTrue(sent_condition.wait_for(lambda: len(sent) == 2, timeout=2))
+            request_ids = {message["method"]: message["id"] for message in sent}
+            runner.dispatch_message({"id": request_ids["second"], "result": {"owner": "second"}})
+            runner.dispatch_message({"id": request_ids["first"], "result": {"owner": "first"}})
+            first.join(timeout=2)
+            second.join(timeout=2)
+
+        self.assertFalse(first.is_alive())
+        self.assertFalse(second.is_alive())
+        self.assertEqual(results["first"], {"owner": "first"})
+        self.assertEqual(results["second"], {"owner": "second"})
+        self.assertEqual(runner.pending_responses, {})
+
+    def test_parent_and_side_turns_isolate_events_tools_input_and_results(self) -> None:
+        runner = self.make_runner(isolated=True)
+        runner.active_thread_id = "root-1"
+        runner.active_turn_id = "root-turn-1"
+        root_questions: list[list[dict[str, object]]] = []
+        side_questions: list[list[dict[str, object]]] = []
+        root_events: list[dict[str, Any]] = []
+        side_events: list[dict[str, Any]] = []
+
+        def root_provider(questions):
+            root_questions.append(questions)
+            return {"root-question": ["root-answer"]}
+
+        def side_provider(questions):
+            side_questions.append(questions)
+            return {"side-question": ["side-answer"]}
+
+        root_context = PearAppServerTurnContext(
+            thread_id="root-1",
+            turn_id="root-turn-1",
+            event_callback=root_events.append,
+            user_input_provider=root_provider,
+            is_main=True,
+        )
+        side_context = PearAppServerTurnContext(
+            thread_id="side-1",
+            turn_id="side-turn-1",
+            event_callback=side_events.append,
+            user_input_provider=side_provider,
+            is_main=False,
+        )
+        runner.register_turn_context(root_context)
+        runner.bind_turn_context(root_context, "root-turn-1")
+        runner.register_turn_context(side_context)
+        runner.bind_turn_context(side_context, "side-turn-1")
+        results: dict[str, tuple[str, int, int, int]] = {}
+
+        def wait(name: str, context: PearAppServerTurnContext) -> None:
+            results[name] = runner.wait_for_turn(
+                thread_id=context.thread_id,
+                turn_id=context.turn_id,
+                event_callback=context.event_callback,
+                turn_context=context,
+            )
+
+        sent: list[dict[str, Any]] = []
+        sent_condition = threading.Condition()
+
+        def send_message(message: dict[str, Any]) -> None:
+            with sent_condition:
+                sent.append(message)
+                sent_condition.notify_all()
+
+        root_waiter = threading.Thread(target=wait, args=("root", root_context))
+        side_waiter = threading.Thread(target=wait, args=("side", side_context))
+        with patch.object(runner, "send_message", side_effect=send_message):
+            root_waiter.start()
+            side_waiter.start()
+            for request_id, thread_id, turn_id, question_id, body in (
+                (101, "side-1", "side-turn-1", "side-question", "side artifact"),
+                (102, "root-1", "root-turn-1", "root-question", "root artifact"),
+            ):
+                runner.dispatch_message(
+                    {
+                        "id": request_id,
+                        "method": "item/tool/call",
+                        "params": {
+                            "threadId": thread_id,
+                            "turnId": turn_id,
+                            "tool": "pear_artifact",
+                            "callId": f"{thread_id}-artifact",
+                            "namespace": None,
+                            "arguments": {
+                                "version": 1,
+                                "blocks": [{"type": "copy", "body": body}],
+                            },
+                        },
+                    }
+                )
+                runner.dispatch_message(
+                    {
+                        "id": request_id + 10,
+                        "method": "item/tool/requestUserInput",
+                        "params": {
+                            "threadId": thread_id,
+                            "turnId": turn_id,
+                            "questions": [
+                                {"id": question_id, "question": f"Question for {thread_id}?"}
+                            ],
+                        },
+                    }
+                )
+            with sent_condition:
+                self.assertTrue(sent_condition.wait_for(lambda: len(sent) == 4, timeout=2))
+            for thread_id, turn_id, text in (
+                ("side-1", "side-turn-1", "Side-only answer"),
+                ("root-1", "root-turn-1", "Root-only answer"),
+            ):
+                runner.dispatch_message(
+                    {
+                        "method": "item/completed",
+                        "params": {
+                            "threadId": thread_id,
+                            "turnId": turn_id,
+                            "item": {
+                                "id": f"{thread_id}-answer",
+                                "type": "agentMessage",
+                                "text": text,
+                            },
+                        },
+                    }
+                )
+            runner.dispatch_message(
+                {
+                    "method": "turn/completed",
+                    "params": {"threadId": "side-1", "turn": {"id": "side-turn-1"}},
+                }
+            )
+            side_waiter.join(timeout=2)
+            self.assertFalse(side_waiter.is_alive())
+            self.assertEqual(runner.active_thread_id, "root-1")
+            self.assertEqual(runner.active_turn_id, "root-turn-1")
+            self.assertTrue(root_waiter.is_alive())
+            runner.dispatch_message(
+                {
+                    "method": "turn/completed",
+                    "params": {"threadId": "root-1", "turn": {"id": "root-turn-1"}},
+                }
+            )
+            root_waiter.join(timeout=2)
+
+        runner.unregister_turn_context(side_context)
+        self.assertIs(runner.turn_contexts_by_thread_id["root-1"], root_context)
+        runner.unregister_turn_context(root_context)
+        self.assertFalse(root_waiter.is_alive())
+        self.assertEqual(results["root"], ("Root-only answer", 0, 0, 0))
+        self.assertEqual(results["side"], ("Side-only answer", 0, 0, 0))
+        self.assertEqual(
+            [json.loads(value)["blocks"][0]["body"] for value in root_context.pending_artifacts],
+            ["root artifact"],
+        )
+        self.assertEqual(
+            [json.loads(value)["blocks"][0]["body"] for value in side_context.pending_artifacts],
+            ["side artifact"],
+        )
+        self.assertEqual(root_questions[0][0]["id"], "root-question")
+        self.assertEqual(side_questions[0][0]["id"], "side-question")
+        self.assertNotIn("Side-only answer", [event.get("body") for event in root_events])
+        self.assertNotIn("Root-only answer", [event.get("body") for event in side_events])
+
+    def test_side_cleanup_failure_preserves_answer_and_surfaces_status(self) -> None:
+        runner = self.make_runner(isolated=True)
+        active_session = build_pear_active_session_summary_from_messages(
+            pear_session=get_pear_session_payload(),
+            source="server",
+            stream_exists=True,
+            messages=[(12, "@Pear explain that", False)],
+            latest_codex_thread_id="root-1",
+            latest_codex_trigger_message_id=11,
+            current_trigger_message_id=12,
+        )
+        events: list[dict[str, Any]] = []
+
+        def request(method, params, **kwargs):
+            if method == "thread/fork":
+                return {"thread": {"id": "side-1"}}
+            if method == "turn/start":
+                return {"turn": {"id": "side-turn-1"}}
+            if method == "thread/unsubscribe":
+                raise PearAgentRuntimeError("cleanup failed")
+            return {}
+
+        with (
+            patch.object(runner, "ensure_started"),
+            patch.object(runner, "ensure_thread", return_value="root-1"),
+            patch.object(runner, "request", side_effect=request),
+            patch.object(runner, "wait_for_turn", return_value=("Useful answer", 0, 0, 0)),
+            self.assertLogs("zerver.lib.pear_agent", level="WARNING"),
+        ):
+            results = runner.run_side(
+                active_session,
+                "quick question",
+                event_callback=events.append,
+            )
+
+        self.assertEqual([result["value"] for result in results], ["Useful answer"])
+        self.assertEqual(events[-1]["title"], "Side conversation cleanup needs attention.")
+        self.assertEqual(events[-1]["metadata"]["method"], "thread/unsubscribe")
 
     def test_missing_thread_started_notification_uses_canonical_session_event(self) -> None:
         runner = self.make_runner(isolated=True)

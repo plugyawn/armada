@@ -16,6 +16,7 @@ import * as message_edit from "./message_edit.ts";
 import * as message_lists from "./message_lists.ts";
 import * as message_report from "./message_report.ts";
 import type {Message} from "./message_store.ts";
+import * as message_thread_hooks from "./message_thread_hooks.ts";
 import * as message_viewport from "./message_viewport.ts";
 import * as popover_menus from "./popover_menus.ts";
 import * as popover_menus_data from "./popover_menus_data.ts";
@@ -97,13 +98,25 @@ export function initialize({
             popover_menus.on_show_prep(instance);
             const $row = $(instance.reference).closest(".message_row");
             const message_id = rows.id($row);
-            const args = popover_menus_data.get_actions_popover_content_context(message_id);
+            const message_list =
+                message_lists.get_message_list_for_row($row) ?? message_lists.current;
+            assert(message_list !== undefined);
+            const args = popover_menus_data.get_actions_popover_content_context(
+                message_id,
+                message_list,
+            );
             instance.setContent(parse_html(render_message_actions_popover(args)));
             $row.addClass("has_actions_popover");
         },
         onMount(instance) {
             const $row = $(instance.reference).closest(".message_row");
             const message_id = rows.id($row);
+            const message_list =
+                message_lists.get_message_list_for_row($row) ?? message_lists.current;
+            assert(message_list !== undefined);
+            const thread_compose_target = !message_list.view.manages_primary_viewport
+                ? message_thread_hooks.get_compose_target(message_id)
+                : undefined;
             let quote_content: string | undefined;
             const highlighted_message_ids = compose_reply.get_highlighted_message_ids();
             if (
@@ -131,6 +144,7 @@ export function initialize({
                     trigger: "popover respond",
                     message_id,
                     quote_content,
+                    thread_compose_target,
                 });
                 e.preventDefault();
                 e.stopPropagation();
@@ -151,9 +165,7 @@ export function initialize({
 
             $popper.one("click", ".popover_edit_message, .popover_view_source", (e) => {
                 const message_id = Number($(e.currentTarget).attr("data-message-id"));
-                assert(message_lists.current !== undefined);
-                const $row = message_lists.current.get_row(message_id);
-                message_edit.start($row);
+                message_edit.start(message_list.get_row(message_id));
                 e.preventDefault();
                 e.stopPropagation();
                 popover_menus.hide_current_popover_if_visible(instance);
@@ -169,9 +181,8 @@ export function initialize({
 
             $popper.one("click", ".popover_move_message", (e) => {
                 const message_id = Number($(e.currentTarget).attr("data-message-id"));
-                assert(message_lists.current !== undefined);
-                message_lists.current.select_id(message_id);
-                const message = message_lists.current.get(message_id);
+                message_list.select_id(message_id);
+                const message = message_list.get(message_id);
                 assert(message?.type === "stream");
                 void stream_popover.build_move_topic_to_stream_popover(
                     message.stream_id,
@@ -186,7 +197,7 @@ export function initialize({
 
             $popper.one("click", ".mark_as_unread", (e) => {
                 const message_id = Number($(e.currentTarget).attr("data-message-id"));
-                unread_ops.mark_as_unread_from_here(message_id);
+                unread_ops.mark_as_unread_from_here(message_id, message_list);
                 e.preventDefault();
                 e.stopPropagation();
                 popover_menus.hide_current_popover_if_visible(instance);
@@ -194,8 +205,7 @@ export function initialize({
 
             $popper.one("click", ".popover_toggle_collapse", (e) => {
                 const message_id = Number($(e.currentTarget).attr("data-message-id"));
-                assert(message_lists.current !== undefined);
-                const message = message_lists.current.get(message_id);
+                const message = message_list.get(message_id);
                 assert(message !== undefined);
                 if (message.collapsed) {
                     condense.uncollapse(message);
@@ -226,8 +236,7 @@ export function initialize({
             $popper.one("click", ".not_for_pear", (e) => {
                 const message_id = Number($(e.currentTarget).attr("data-message-id"));
                 const run_id = Number($(e.currentTarget).attr("data-run-id"));
-                assert(message_lists.current !== undefined);
-                const message = message_lists.current.get(message_id);
+                const message = message_list.get(message_id);
                 assert(message !== undefined);
                 void channel.post({
                     url: `/json/pear/runs/${run_id}/not-for-pear`,
@@ -250,8 +259,7 @@ export function initialize({
 
             $popper.one("click", ".popover_report_message", (e) => {
                 const message_id = Number($(e.currentTarget).attr("data-message-id"));
-                assert(message_lists.current !== undefined);
-                const message = message_lists.current.get(message_id);
+                const message = message_list.get(message_id);
                 assert(message !== undefined);
                 message_report.show_message_report_modal(message);
                 e.preventDefault();

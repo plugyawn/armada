@@ -1253,6 +1253,78 @@ class ClientDescriptorsTest(ZulipTestCase):
             ],
         )
 
+    def test_process_message_event_projects_hidden_thread_root_per_viewer(self) -> None:
+        hamlet = self.example_user("hamlet")
+        cordelia = self.example_user("cordelia")
+
+        class MockClient:
+            def __init__(self, user_profile_id: int) -> None:
+                self.user_profile_id = user_profile_id
+                self.apply_markdown = True
+                self.client_gravatar = False
+                self.client_type_name = "website"
+                self.empty_topic_name = True
+                self.events: list[dict[str, Any]] = []
+
+            def accepts_messages(self) -> bool:
+                return True
+
+            def accepts_event(self, event: dict[str, Any]) -> bool:
+                return True
+
+            def add_event(self, event: dict[str, Any]) -> None:
+                self.events.append(event)
+
+        visible_client = MockClient(hamlet.id)
+        hidden_client = MockClient(cordelia.id)
+        client_info = {
+            "visible": dict(client=visible_client, flags=[]),
+            "hidden": dict(client=hidden_client, flags=[]),
+        }
+        wide_message_dict = dict(
+            id=999,
+            content="reply",
+            rendered_content="<p>reply</p>",
+            sender_id=hamlet.id,
+            recipient_id=1111,
+            type="stream",
+            client="website",
+            sender_email=hamlet.email,
+            sender_delivery_email=hamlet.delivery_email,
+            sender_realm_id=hamlet.realm_id,
+            sender_avatar_source=UserProfile.AVATAR_FROM_GRAVATAR,
+            sender_avatar_version=1,
+            sender_is_mirror_dummy=None,
+            sender_email_address_visibility=UserProfile.EMAIL_ADDRESS_VISIBILITY_EVERYONE,
+            recipient_type=None,
+            recipient_type_id=None,
+            thread_root_message_id=777,
+        )
+        message_event = dict(
+            message_dict=wide_message_dict,
+            user_ids_without_thread_root_access=[cordelia.id],
+        )
+
+        with mock.patch(
+            "zerver.tornado.event_queue.get_client_info_for_message_event",
+            return_value=client_info,
+        ):
+            process_message_event(message_event, [])
+
+        self.assertEqual(
+            visible_client.events[0]["message"]["thread_root_message_id"],
+            777,
+        )
+        self.assertNotIn(
+            "thread_root_message_id",
+            hidden_client.events[0]["message"],
+        )
+        self.assertEqual(wide_message_dict["thread_root_message_id"], 777)
+        self.assertNotIn(
+            "user_ids_without_thread_root_access",
+            hidden_client.events[0],
+        )
+
 
 class ReloadWebClientsTest(ZulipTestCase):
     @override_settings(DEVELOPMENT=False, PEAR_WORKER_AGENT_RUNTIME="disabled")

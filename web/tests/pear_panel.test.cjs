@@ -311,12 +311,10 @@ run_test("template renders workbench without active run", () => {
             workbench_meta: "devel / routing-fix / a3f92c1",
             workbench_diff_selected: false,
             workbench_history_selected: true,
-            workbench_side_selected: false,
             workbench_diff_disabled: false,
             workbench_history_disabled: false,
             diff_tab_label: "diff",
             history_tab_label: "history",
-            side_tab_label: "whisper",
             workbench_view: "history",
             has_recent_commits: false,
             workbench_diff_summary_label: "2 files +16 -4",
@@ -346,7 +344,6 @@ run_test("template renders workbench without active run", () => {
     assert.match(html, /pear-workbench-close/);
     assert.match(html, /diff/);
     assert.match(html, /history/);
-    assert.match(html, /whisper/);
     assert.doesNotMatch(html, /pear-workbench-head-row/);
     assert.doesNotMatch(html, /pear-workbench-diffstat/);
     assert.doesNotMatch(html, /pear-workbench-context-meter/);
@@ -380,12 +377,10 @@ run_test("template keeps volatile run metadata out of workbench chrome", () => {
             workbench_scope_note: "Changes and commits are scoped to this topic worktree.",
             workbench_diff_selected: true,
             workbench_history_selected: false,
-            workbench_side_selected: false,
             workbench_diff_disabled: false,
             workbench_history_disabled: false,
             diff_tab_label: "diff",
             history_tab_label: "history",
-            side_tab_label: "whisper",
             workbench_view: "diff",
             has_workbench_diff: false,
         },
@@ -428,12 +423,10 @@ run_test("template keeps runtime controls out of workbench chrome", () => {
             workbench_scope_note: "Changes and commits are scoped to this topic worktree.",
             workbench_diff_selected: true,
             workbench_history_selected: false,
-            workbench_side_selected: false,
             workbench_diff_disabled: false,
             workbench_history_disabled: false,
             diff_tab_label: "diff",
             history_tab_label: "history",
-            side_tab_label: "whisper",
             workbench_view: "diff",
             has_workbench_diff: false,
         },
@@ -471,12 +464,10 @@ run_test("template renders diff rows without duplicate summary chips", () => {
             workbench_scope_note: "Changes and commits are scoped to this topic worktree.",
             workbench_diff_selected: true,
             workbench_history_selected: false,
-            workbench_side_selected: false,
             workbench_diff_disabled: false,
             workbench_history_disabled: false,
             diff_tab_label: "diff 2",
             history_tab_label: "history",
-            side_tab_label: "whisper",
             workbench_view: "diff",
             has_workbench_diff: true,
             has_changed_files: true,
@@ -793,14 +784,6 @@ run_test("workbench_view_for_testing", () => {
             has_history: false,
         }),
         "history",
-    );
-    assert.equal(
-        pear_panel.workbench_view_for_testing({
-            requested: "side",
-            has_diff: true,
-            has_history: true,
-        }),
-        "side",
     );
 });
 

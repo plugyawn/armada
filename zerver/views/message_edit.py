@@ -21,6 +21,7 @@ from zerver.lib.message import (
     messages_for_ids,
     visible_edit_history_for_message,
 )
+from zerver.lib.message_cache import MessageDict
 from zerver.lib.request import RequestNotes
 from zerver.lib.response import json_success
 from zerver.lib.streams import can_delete_any_message_in_channel, can_delete_own_message_in_channel
@@ -280,6 +281,14 @@ def json_fetch_raw_message(
         allow_empty_topic_name=allow_empty_topic_name,
         user_profile=user_profile,
         realm=message.realm,
+    )
+    MessageDict.bulk_project_message_thread_roots(
+        message_dict_list,
+        user_profile=user_profile,
+    )
+    MessageDict.bulk_hydrate_message_thread_summaries(
+        message_dict_list,
+        user_profile=user_profile,
     )
     response = dict(
         message=message_dict_list[0],

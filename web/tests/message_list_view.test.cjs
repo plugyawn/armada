@@ -37,6 +37,7 @@ const message_list_view = zrequire("../src/message_list_view");
 const {MessageListView} = message_list_view;
 const message_list = zrequire("message_list");
 const {MessageListData} = zrequire("message_list_data");
+const message_lists = zrequire("message_lists");
 const message_store = zrequire("message_store");
 const muted_users = zrequire("muted_users");
 const pear_run_state = zrequire("../src/pear_run_state");
@@ -118,6 +119,64 @@ run_test("pear live announcements change only with the Codex plan step", () => {
         ),
         true,
     );
+});
+
+test("secondary message lists use the canonical renderer without owning the viewport", ({
+    mock_template,
+}) => {
+    let message_list_context;
+    let message_group_context;
+    mock_template("message_list.hbs", false, (context) => {
+        message_list_context = context;
+        return "<secondary-message-list-stub>";
+    });
+    mock_template("message_group.hbs", false, (context) => {
+        message_group_context = context;
+        return "<secondary-message-group-stub>";
+    });
+
+    const view = new MessageListView({id: 91}, true, true, {
+        role: "feed",
+        manages_primary_viewport: false,
+        show_recipient_headers: false,
+    });
+    view._render_group({message_groups: [], use_match_properties: false});
+
+    assert.deepEqual(message_list_context, {
+        message_list_id: 91,
+        role: "feed",
+        aria_label: "translated: Replies",
+    });
+    assert.equal(view.manages_primary_viewport, false);
+    assert.equal(view.show_recipient_headers, false);
+    assert.equal(message_group_context.show_recipient_headers, false);
+});
+
+run_test("message rows resolve to their registered owning list", () => {
+    const owner = {id: 92};
+    message_lists.add_rendered_message_list(owner);
+    const $row = {
+        closest(selector) {
+            assert.equal(selector, ".message-list");
+            return {
+                attr(attribute) {
+                    assert.equal(attribute, "data-message-list-id");
+                    return "92";
+                },
+            };
+        },
+    };
+
+    assert.equal(message_lists.get_message_list_for_row($row), owner);
+    assert.equal(
+        message_lists.get_message_list_for_row({
+            closest() {
+                return {attr: () => undefined};
+            },
+        }),
+        undefined,
+    );
+    message_lists.rendered_message_lists.delete(owner.id);
 });
 
 run_test(

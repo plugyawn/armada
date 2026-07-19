@@ -90,6 +90,21 @@ def messages_for_topic(
     )
 
 
+def top_level_messages_for_topic(
+    realm_id: int, stream_recipient_id: int, topic_name: str
+) -> QuerySet[Message]:
+    """Return conversation roots for topic-level presentation semantics.
+
+    ``messages_for_topic`` deliberately remains the lifecycle-level query for
+    every ordinary Message in the topic, including replies.  Callers choosing
+    a topic anchor or inspecting the last top-level post should use this
+    explicit projection instead of changing the canonical topic query.
+    """
+    return messages_for_topic(realm_id, stream_recipient_id, topic_name).filter(
+        thread_root__isnull=True
+    )
+
+
 def get_latest_message_for_user_in_topic(
     realm_id: int,
     user_profile: UserProfile | None,
@@ -104,7 +119,7 @@ def get_latest_message_for_user_in_topic(
 
     if history_public_to_subscribers:
         return (
-            messages_for_topic(realm_id, recipient_id, topic_name)
+            top_level_messages_for_topic(realm_id, recipient_id, topic_name)
             .values_list("id", flat=True)
             .last()
         )
@@ -116,6 +131,7 @@ def get_latest_message_for_user_in_topic(
                 message__recipient_id=recipient_id,
                 message__subject__iexact=topic_name,
                 message__is_channel_message=True,
+                message__thread_root__isnull=True,
             )
             .values_list("message_id", flat=True)
             .last()
@@ -178,10 +194,13 @@ def update_messages_for_topic_edit(
         recipient_id=assert_is_not_none(old_stream.recipient_id),
         subject__iexact=message_edit_request.orig_topic_name,
         is_channel_message=True,
+        thread_root__isnull=True,
     )
-    if message_edit_request.propagate_mode == "change_all":
+    if message_edit_request.propagate_mode == "change_one":
+        messages = messages.none()
+    elif message_edit_request.propagate_mode == "change_all":
         messages = messages.exclude(id=edited_message.id)
-    if message_edit_request.propagate_mode == "change_later":
+    elif message_edit_request.propagate_mode == "change_later":
         messages = messages.filter(id__gt=edited_message.id)
 
     if message_edit_request.is_stream_edited:
@@ -196,6 +215,23 @@ def update_messages_for_topic_edit(
         # allow moving history the user may not have access in order
         # to keep topics together.
         pass
+
+    # A root and its replies are one conversation aggregate.  Sending a reply
+    # locks the root before its final destination check and insert, so lock all
+    # propagated roots in a deterministic order before expanding descendants.
+    # A concurrent send then either lands before this snapshot and moves with
+    # the root, or observes the moved destination and fails validation.
+    propagated_root_ids = list(messages.order_by("id").values_list("id", flat=True))
+    root_ids = sorted({edited_message.id, *propagated_root_ids})
+    locked_root_ids = list(
+        Message.objects.select_for_update()
+        .filter(id__in=root_ids, thread_root__isnull=True)
+        .order_by("id")
+        .values_list("id", flat=True)
+    )
+    messages = Message.objects.filter(
+        Q(id__in=locked_root_ids) | Q(thread_root_id__in=locked_root_ids)
+    )
 
     update_fields: dict[str, object] = {
         "last_edit_time": last_edit_time,
@@ -283,7 +319,8 @@ def get_topic_history_for_public_stream(
     WHERE (
         "zerver_message"."realm_id" = %s AND
         "zerver_message"."recipient_id" = %s AND
-        "zerver_message"."is_channel_message"
+        "zerver_message"."is_channel_message" AND
+        "zerver_message"."thread_root_message_id" IS NULL
     )
     GROUP BY (
         "zerver_message"."subject"
@@ -326,7 +363,8 @@ def get_topic_history_for_stream(
         "zerver_usermessage"."user_profile_id" = %s AND
         "zerver_message"."realm_id" = %s AND
         "zerver_message"."recipient_id" = %s AND
-        "zerver_message"."is_channel_message"
+        "zerver_message"."is_channel_message" AND
+        "zerver_message"."thread_root_message_id" IS NULL
     )
     GROUP BY (
         "zerver_message"."subject"

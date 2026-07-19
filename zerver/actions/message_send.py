@@ -53,6 +53,7 @@ from zerver.lib.message import (
     visibility_policy_for_send_message,
 )
 from zerver.lib.message_cache import MessageDict
+from zerver.lib.message_threads import user_ids_without_thread_root_access_for_delivery
 from zerver.lib.muted_users import get_muting_users
 from zerver.lib.notification_data import (
     UserMessageNotificationsData,
@@ -964,6 +965,38 @@ def do_send_messages(
         if send_request is not None
     ]
 
+    thread_root_ids = {
+        send_request.message.thread_root_id
+        for send_request in send_message_requests
+        if send_request.message.thread_root_id is not None
+    }
+    if thread_root_ids:
+        # Hold each root through the insert so a concurrent delete cannot turn
+        # a validated reply into an orphan or an integrity error.
+        locked_thread_roots = {
+            root.id: root
+            for root in (
+                Message.objects.select_for_update(of=("self",)).filter(
+                    id__in=thread_root_ids,
+                    thread_root__isnull=True,
+                )
+            )
+        }
+        if set(locked_thread_roots) != thread_root_ids:
+            raise JsonableError(_("Invalid message(s)"))
+        for send_request in send_message_requests:
+            message = send_request.message
+            if message.thread_root_id is None:
+                continue
+            root = locked_thread_roots[message.thread_root_id]
+            if (
+                root.realm_id != message.realm_id
+                or root.recipient_id != message.recipient_id
+                or root.is_channel_message != message.is_channel_message
+                or root.subject.casefold() != message.subject.casefold()
+            ):
+                raise JsonableError(_("Reply target does not match the message destination"))
+
     # Save the message receipts in the database
     user_message_flags: dict[int, dict[int, list[str]]] = defaultdict(dict)
 
@@ -1148,13 +1181,7 @@ def do_send_messages(
 
         # Deliver events to the real-time push system, as well as
         # enqueuing any additional processing triggered by the message.
-        # A newly inserted parent cannot have replies yet; do not add the two
-        # batched thread-summary queries to the ordinary send hot path.
-        wide_message_dict = MessageDict.wide_dict(
-            send_request.message,
-            realm_id,
-            include_message_thread_summary=False,
-        )
+        wide_message_dict = MessageDict.wide_dict(send_request.message, realm_id)
 
         user_flags = user_message_flags.get(send_request.message.id, {})
 
@@ -1171,6 +1198,11 @@ def do_send_messages(
                about changing the next line.
         """
         user_ids = send_request.active_user_ids | set(user_flags.keys())
+        user_ids_without_thread_root_access = user_ids_without_thread_root_access_for_delivery(
+            thread_root_message_id=send_request.message.thread_root_id,
+            stream=send_request.stream,
+            user_ids=user_ids,
+        )
         sender_id = send_request.message.sender_id
 
         # We make sure the sender is listed first in the `users` list;
@@ -1274,6 +1306,12 @@ def do_send_messages(
             disable_external_notifications=send_request.disable_external_notifications,
             realm_host=send_request.realm.host,
         )
+        if user_ids_without_thread_root_access:
+            # Internal event-template projection metadata. Tornado consumes
+            # this before constructing each client's public message event.
+            event["user_ids_without_thread_root_access"] = sorted(
+                user_ids_without_thread_root_access
+            )
 
         if send_request.message.is_channel_message:
             # Note: This is where authorization for single-stream
@@ -1353,10 +1391,14 @@ def do_send_messages(
         assert send_request.service_queue_events is not None
         for queue_name, events in send_request.service_queue_events.items():
             for event in events:
+                service_message_dict = wide_message_dict
+                if event["user_profile_id"] in user_ids_without_thread_root_access:
+                    service_message_dict = wide_message_dict.copy()
+                    service_message_dict.pop("thread_root_message_id", None)
                 queue_event_on_commit(
                     queue_name,
                     {
-                        "message": wide_message_dict,
+                        "message": service_message_dict,
                         "trigger": event["trigger"],
                         "user_profile_id": event["user_profile_id"],
                     },
@@ -1513,6 +1555,7 @@ def check_send_message(
     skip_stream_access_check: bool = False,
     read_by_sender: bool = False,
     pear_followup: bool = False,
+    thread_root_message: Message | None = None,
 ) -> SentMessageResult:
     addressee = Addressee.legacy_build(sender, recipient_type_name, message_to, topic_name)
     message_request = check_message(
@@ -1529,6 +1572,7 @@ def check_send_message(
         widget_content,
         skip_stream_access_check=skip_stream_access_check,
         pear_followup=pear_followup,
+        thread_root_message=thread_root_message,
     )
     return do_send_messages(
         [message_request],
@@ -1794,6 +1838,7 @@ def check_message(
     no_previews: bool = False,
     acting_user: UserProfile | None = None,
     pear_followup: bool = False,
+    thread_root_message: Message | None = None,
 ) -> SendMessageRequest:
     """See
     https://zulip.readthedocs.io/en/latest/subsystems/sending-messages.html
@@ -1922,6 +1967,18 @@ def check_message(
         message.date_sent = timezone_now()
     message.sending_client = client
 
+    if thread_root_message is not None:
+        if thread_root_message.thread_root_id is not None:
+            raise JsonableError(_("Replies cannot be nested"))
+        if (
+            thread_root_message.realm_id != message.realm_id
+            or thread_root_message.recipient_id != message.recipient_id
+            or thread_root_message.is_channel_message != message.is_channel_message
+            or thread_root_message.subject.casefold() != message.subject.casefold()
+        ):
+            raise JsonableError(_("Reply target does not match the message destination"))
+        message.thread_root = thread_root_message
+
     # We render messages later in the process.
     assert message.rendered_content is None
 
@@ -1994,6 +2051,7 @@ def _internal_prep_message(
     forged_timestamp: float | None = None,
     archived_channel_notice: bool = False,
     acting_user: UserProfile | None = None,
+    thread_root_message: Message | None = None,
 ) -> SendMessageRequest | None:
     """
     Create a message object and checks it, but doesn't send it or save it to the database.
@@ -2027,6 +2085,7 @@ def _internal_prep_message(
             forged_timestamp=forged_timestamp,
             archived_channel_notice=archived_channel_notice,
             acting_user=acting_user,
+            thread_root_message=thread_root_message,
         )
     except JsonableError as e:
         logging.exception(
@@ -2052,6 +2111,7 @@ def internal_prep_stream_message(
     forged_timestamp: float | None = None,
     archived_channel_notice: bool = False,
     acting_user: UserProfile | None = None,
+    thread_root_message: Message | None = None,
 ) -> SendMessageRequest | None:
     """
     See _internal_prep_message for details of how this works.
@@ -2071,6 +2131,7 @@ def internal_prep_stream_message(
         forged_timestamp=forged_timestamp,
         archived_channel_notice=archived_channel_notice,
         acting_user=acting_user,
+        thread_root_message=thread_root_message,
     )
 
 
@@ -2080,6 +2141,8 @@ def internal_prep_stream_message_by_name(
     stream_name: str,
     topic_name: str,
     content: str,
+    *,
+    thread_root_message: Message | None = None,
 ) -> SendMessageRequest | None:
     """
     See _internal_prep_message for details of how this works.
@@ -2091,6 +2154,7 @@ def internal_prep_stream_message_by_name(
         sender=sender,
         addressee=addressee,
         content=content,
+        thread_root_message=thread_root_message,
     )
 
 
@@ -2102,6 +2166,7 @@ def internal_prep_private_message(
     mention_backend: MentionBackend | None = None,
     disable_external_notifications: bool = False,
     acting_user: UserProfile | None = None,
+    thread_root_message: Message | None = None,
 ) -> SendMessageRequest | None:
     """
     See _internal_prep_message for details of how this works.
@@ -2120,6 +2185,7 @@ def internal_prep_private_message(
         mention_backend=mention_backend,
         disable_external_notifications=disable_external_notifications,
         acting_user=acting_user,
+        thread_root_message=thread_root_message,
     )
 
 
@@ -2130,6 +2196,7 @@ def internal_send_private_message(
     *,
     disable_external_notifications: bool = False,
     acting_user: UserProfile | None = None,
+    thread_root_message: Message | None = None,
 ) -> int | None:
     message_request = internal_prep_private_message(
         sender,
@@ -2137,6 +2204,7 @@ def internal_send_private_message(
         content,
         disable_external_notifications=disable_external_notifications,
         acting_user=acting_user,
+        thread_root_message=thread_root_message,
     )
     if message_request is None:
         return None
@@ -2156,6 +2224,7 @@ def internal_send_stream_message(
     mark_as_read_for_acting_user: bool = False,
     archived_channel_notice: bool = False,
     acting_user: UserProfile | None = None,
+    thread_root_message: Message | None = None,
 ) -> int | None:
     message_request = internal_prep_stream_message(
         sender,
@@ -2167,6 +2236,7 @@ def internal_send_stream_message(
         limit_unread_user_ids=limit_unread_user_ids,
         archived_channel_notice=archived_channel_notice,
         acting_user=acting_user,
+        thread_root_message=thread_root_message,
     )
 
     if message_request is None:
@@ -2186,6 +2256,8 @@ def internal_send_stream_message_by_name(
     stream_name: str,
     topic_name: str,
     content: str,
+    *,
+    thread_root_message: Message | None = None,
 ) -> int | None:
     message_request = internal_prep_stream_message_by_name(
         realm,
@@ -2193,6 +2265,7 @@ def internal_send_stream_message_by_name(
         stream_name,
         topic_name,
         content,
+        thread_root_message=thread_root_message,
     )
 
     if message_request is None:
@@ -2208,6 +2281,7 @@ def internal_prep_group_direct_message(
     *,
     emails: list[str] | None = None,
     recipient_users: list[UserProfile] | None = None,
+    thread_root_message: Message | None = None,
 ) -> SendMessageRequest | None:
     if recipient_users is not None:
         addressee = Addressee.for_user_profiles(recipient_users)
@@ -2220,6 +2294,7 @@ def internal_prep_group_direct_message(
         sender=sender,
         addressee=addressee,
         content=content,
+        thread_root_message=thread_root_message,
     )
 
 
@@ -2230,9 +2305,15 @@ def internal_send_group_direct_message(
     *,
     emails: list[str] | None = None,
     recipient_users: list[UserProfile] | None = None,
+    thread_root_message: Message | None = None,
 ) -> int | None:
     message_request = internal_prep_group_direct_message(
-        realm, sender, content, emails=emails, recipient_users=recipient_users
+        realm,
+        sender,
+        content,
+        emails=emails,
+        recipient_users=recipient_users,
+        thread_root_message=thread_root_message,
     )
 
     if message_request is None:

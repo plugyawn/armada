@@ -16,6 +16,7 @@ import * as drafts from "./drafts.ts";
 import {$t} from "./i18n.ts";
 import * as markdown from "./markdown.ts";
 import {message_render_response_schema} from "./message_store.ts";
+import * as message_thread_hooks from "./message_thread_hooks.ts";
 import * as message_view from "./message_view.ts";
 import * as messages_overlay_ui from "./messages_overlay_ui.ts";
 import * as mouse_drag from "./mouse_drag.ts";
@@ -80,6 +81,12 @@ function show_delete_banner(): void {
 function restore_draft(draft_id: string): void {
     const draft = drafts.draft_model.getDraft(draft_id);
     if (!draft) {
+        return;
+    }
+
+    if (draft.thread_root_message_id !== undefined) {
+        overlays.close_overlay("drafts");
+        message_thread_hooks.open_for_draft(draft.thread_root_message_id);
         return;
     }
 

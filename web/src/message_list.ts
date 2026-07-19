@@ -9,6 +9,7 @@ import * as compose_ui from "./compose_ui.ts";
 import type {MessageListData} from "./message_list_data.ts";
 import * as message_list_tooltips from "./message_list_tooltips.ts";
 import {MessageListView} from "./message_list_view.ts";
+import type {MessageListViewOptions} from "./message_list_view.ts";
 import type {Message} from "./message_store.ts";
 import * as message_viewport from "./message_viewport.ts";
 import * as narrow_banner from "./narrow_banner.ts";
@@ -123,6 +124,7 @@ export class MessageList {
         is_node_test?: boolean;
         reading_prevented?: boolean;
         near_view_reading_gate_pending?: boolean;
+        view_options?: MessageListViewOptions;
     }) {
         MessageList.id_counter += 1;
         this.id = MessageList.id_counter;
@@ -134,7 +136,12 @@ export class MessageList {
         // query .data.filter directly.
         const collapse_messages = this.data.filter.contains_no_partial_conversations();
 
-        this.view = new MessageListView(this, collapse_messages, opts.is_node_test);
+        this.view = new MessageListView(
+            this,
+            collapse_messages,
+            opts.is_node_test,
+            opts.view_options,
+        );
         this.is_combined_feed_view = this.data.filter.is_in_home();
         // In /near/ conversation views, prevent reading initially to
         // avoid marking messages as read that the user hasn't seen.

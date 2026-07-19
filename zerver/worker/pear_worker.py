@@ -3,12 +3,14 @@ import logging
 import threading
 import time
 from collections import OrderedDict
+from collections.abc import Callable
 from typing import Any
 
 from django.db import close_old_connections, reset_queries
 from typing_extensions import override
 
 from zerver.lib.bot_lib import EmbeddedBotHandler
+from zerver.lib.message_cache import MessageDict
 from zerver.lib.pear import (
     PearEmbeddedBotHandler,
     PearWorkerLeaseLostError,
@@ -38,6 +40,7 @@ from zerver.lib.pear_worker import (
 )
 from zerver.lib.queue import QUEUE_REDELIVERED_EVENT_KEY, QueueEventDiscardError, SimpleQueueClient
 from zerver.models.bots import PearWorkerRun
+from zerver.models.messages import Message
 from zerver.models.users import UserProfile, get_user_profile_by_id
 from zerver.worker.base import QueueProcessingWorker, assign_queue
 
@@ -45,6 +48,7 @@ logger = logging.getLogger(__name__)
 
 PEAR_WORKER_RUNTIME_CACHE_LIMIT = 4
 PEAR_WORKER_RUNTIME_IDLE_SECONDS = 30 * 60
+PEAR_SIDE_PUMP_INTERVAL_SECONDS = 0.2
 PearWorkerRuntimeKey = tuple[str, str, str]
 pear_worker_runtimes: OrderedDict[PearWorkerRuntimeKey, PearWorkerRuntime] = OrderedDict()
 pear_worker_runtime_last_used: dict[PearWorkerRuntimeKey, float] = {}
@@ -187,7 +191,11 @@ class PearWorker(QueueProcessingWorker):
         reap_stale_pear_worker_runs(session_kinds=self.OWNED_SESSION_KINDS)
         self.active_run_id: int | None = None
         self.active_run_attempt: int | None = None
+        self.active_side_run_id: int | None = None
+        self.active_side_run_attempt: int | None = None
         self.active_runtime: PearWorkerRuntime | None = None
+        self.side_pump_stop: threading.Event | None = None
+        self.side_pump_thread: threading.Thread | None = None
         self.run_liveness_stop = threading.Event()
         self.run_liveness_thread = threading.Thread(
             target=self.run_liveness_loop,
@@ -215,11 +223,29 @@ class PearWorker(QueueProcessingWorker):
         )
 
     def run_liveness_pass(self) -> int:
-        return maintain_pear_worker_run_liveness(
+        reaped_count = maintain_pear_worker_run_liveness(
             active_run_id=self.active_run_id,
             active_run_attempt=self.active_run_attempt,
-            session_kinds=self.OWNED_SESSION_KINDS,
+            session_kinds=(),
         )
+        side_run_id = getattr(self, "active_side_run_id", None)
+        side_run_attempt = getattr(self, "active_side_run_attempt", None)
+        try:
+            maintain_pear_worker_run_liveness(
+                active_run_id=side_run_id,
+                active_run_attempt=side_run_attempt,
+                session_kinds=(),
+            )
+        except PearWorkerLeaseLostError as error:
+            # A side turn has an independent durable lease. Its fenced run
+            # store will suppress every stale write when the turn unwinds;
+            # never abort the parent app-server merely because one /btw lost
+            # ownership.
+            if self.active_side_run_id == side_run_id:
+                self.active_side_run_id = None
+                self.active_side_run_attempt = None
+            logger.warning("Pear side-run lease was lost: %s", error)
+        return reaped_count + reap_stale_pear_worker_runs(session_kinds=self.OWNED_SESSION_KINDS)
 
     def run_liveness_loop(self) -> None:  # nocoverage
         close_old_connections()
@@ -250,27 +276,63 @@ class PearWorker(QueueProcessingWorker):
         if self.run_liveness_thread.is_alive():
             logger.warning("Pear run liveness thread did not stop before worker shutdown.")
 
+    def stop_side_pump(self, *, wait: bool, timeout: float | None = None) -> None:
+        stop = getattr(self, "side_pump_stop", None)
+        thread = getattr(self, "side_pump_thread", None)
+        if stop is not None:
+            stop.set()
+        if wait and thread is not None and thread is not threading.current_thread():
+            thread.join(timeout=timeout)
+            if timeout is not None and thread.is_alive():
+                logger.warning("Pear side-turn pump did not stop before worker shutdown.")
+        if thread is None or not thread.is_alive():
+            self.side_pump_stop = None
+            self.side_pump_thread = None
+
     @override
     def stop(self) -> None:  # nocoverage
+        self.stop_side_pump(wait=False)
         self.stop_liveness_loop()
+        runtime = getattr(self, "active_runtime", None)
         try:
-            close_pear_worker_runtimes()
+            if runtime is not None:
+                # An isolation failure can leave the active runtime uncached,
+                # so closing the warm-runtime cache alone is not a complete
+                # shutdown. Abort wakes both the parent and any native /btw
+                # fork without waiting for either turn lock.
+                runtime.abort(RuntimeError("Pear worker is shutting down."))
         finally:
-            super().stop()
+            try:
+                close_pear_worker_runtimes()
+            finally:
+                try:
+                    self.stop_side_pump(wait=True, timeout=2)
+                finally:
+                    super().stop()
 
     @override
     def consume(self, event: dict[str, Any]) -> None:
+        self.stop_side_pump(wait=True)
         self.active_run_id = None
         self.active_run_attempt = None
+        self.active_side_run_id = None
+        self.active_side_run_attempt = None
         self.active_runtime = None
         try:
             self._consume(event)
         finally:
             self.active_run_id = None
             self.active_run_attempt = None
+            self.active_side_run_id = None
+            self.active_side_run_attempt = None
             self.active_runtime = None
 
-    def _consume(self, event: dict[str, Any]) -> None:
+    def _consume(
+        self,
+        event: dict[str, Any],
+        *,
+        side_runtime: PearWorkerRuntime | None = None,
+    ) -> None:
         redelivered = event.pop(QUEUE_REDELIVERED_EVENT_KEY, False) is True
         user_profile_id = event.get("user_profile_id")
         if (
@@ -317,6 +379,28 @@ class PearWorker(QueueProcessingWorker):
         context_topic = topic or source_topic
         if not context_stream:
             raise QueueEventDiscardError("Pear worker event has no channel context.")
+        if session_kind == PearWorkerRun.SIDE and side_runtime is None:
+            # Never let an orphaned shared lease suppress this delivery. If
+            # the parent really is live, its in-process pump owns the durable
+            # side row and will use the exact same app-server instance.
+            reap_stale_pear_worker_runs(
+                bot_profile=user_profile,
+                stream=context_stream,
+                topic=context_topic,
+                session_kinds=(PearWorkerRun.SHARED,),
+            )
+            if PearWorkerRun.objects.filter(
+                bot_profile=user_profile,
+                stream_name__iexact=context_stream,
+                topic_name__iexact=context_topic,
+                session_kind=PearWorkerRun.SHARED,
+                status=PearWorkerRun.RUNNING,
+            ).exists():
+                # A competing Rabbit consumer may acknowledge its duplicate
+                # delivery, but must not create a second process-local runtime
+                # for the same worktree. The parent's still-unacked delivery
+                # is the crash-recovery wakeup for this durable side row.
+                return
         worker_run_store = PearDatabaseWorkerRunStore()
         if event.get("warm_only") is True:
             # Low-priority consumers may steal real turns to avoid head-of-line
@@ -397,8 +481,12 @@ class PearWorker(QueueProcessingWorker):
         )
         # Publish the attempt first so the liveness thread can never observe a
         # run id without its fencing token.
-        self.active_run_attempt = active_run_attempt
-        self.active_run_id = active_run_id
+        if side_runtime is None:
+            self.active_run_attempt = active_run_attempt
+            self.active_run_id = active_run_id
+        else:
+            self.active_side_run_attempt = active_run_attempt
+            self.active_side_run_id = active_run_id
         model = pear_worker_model_for_topic(
             user_profile, stream=context_stream, topic=context_topic
         )
@@ -421,26 +509,34 @@ class PearWorker(QueueProcessingWorker):
             process_isolation,
             workdir=workdir,
         )
-        runtime = get_pear_worker_runtime(
+        runtime = side_runtime or get_pear_worker_runtime(
             model,
             workdir,
             reasoning_effort,
             process_isolation,
             isolation_error,
         )
-        self.active_runtime = runtime
-        keep_runtime_warm = not self.POOL_QUEUE_NAMES or pear_worker_slot_should_warm(
-            self.worker_slot,
-            user_profile.id,
-            stream=context_stream,
-            topic=context_topic,
+        if side_runtime is None:
+            self.active_runtime = runtime
+        keep_runtime_warm = (
+            side_runtime is not None
+            or not self.POOL_QUEUE_NAMES
+            or (
+                pear_worker_slot_should_warm(
+                    self.worker_slot,
+                    user_profile.id,
+                    stream=context_stream,
+                    topic=context_topic,
+                )
+            )
         )
         pear_handler = PearEmbeddedBotHandler(
             worker_runtime=runtime,
             active_session_loader=load_pear_active_session_from_zulip,
             worker_run_store=worker_run_store,
         )
-        try:
+
+        def run_parent_turn() -> None:
             active_session = pear_handler.load_active_session(message, bot_handler, content)
             pear_handler.run_worker_turn(
                 message,
@@ -472,8 +568,175 @@ class PearWorker(QueueProcessingWorker):
                     )
                 except Exception:
                     logger.exception("Pear monitor setup application failed.")
+
+        try:
+            if session_kind == PearWorkerRun.SHARED and side_runtime is None:
+                self.run_parent_with_side_pump(
+                    runtime=runtime,
+                    bot_profile_id=user_profile.id,
+                    stream=context_stream,
+                    topic=context_topic,
+                    parent_turn=run_parent_turn,
+                )
+            else:
+                run_parent_turn()
         finally:
+            if side_runtime is not None:
+                self.active_side_run_id = None
+                self.active_side_run_attempt = None
             if not keep_runtime_warm:
                 # A stolen turn may resume the native thread on this slot, but
                 # only its stable home slot is allowed to retain a warm process.
                 evict_pear_worker_runtime(runtime)
+
+    def next_queued_side_run(
+        self,
+        *,
+        bot_profile_id: int,
+        stream: str,
+        topic: str,
+    ) -> PearWorkerRun | None:
+        return (
+            PearWorkerRun.objects.filter(
+                bot_profile_id=bot_profile_id,
+                stream_name__iexact=stream,
+                topic_name__iexact=topic,
+                session_kind=PearWorkerRun.SIDE,
+                status=PearWorkerRun.QUEUED,
+            )
+            .order_by("date_created", "id")
+            .first()
+        )
+
+    def side_event_for_run(self, run: PearWorkerRun) -> dict[str, Any] | None:
+        message = Message.objects.filter(id=run.trigger_message_id).first()
+        if message is None:
+            error = f"Pear side run trigger message {run.trigger_message_id} no longer exists."
+            logger.warning(
+                "Pear side run %s references missing trigger message %s; settling it.",
+                run.id,
+                run.trigger_message_id,
+            )
+            PearDatabaseWorkerRunStore().fail_unreconstructable_side_run(
+                run.id,
+                error=error,
+            )
+            return None
+        return {
+            "user_profile_id": run.bot_profile_id,
+            "message_id": run.trigger_message_id,
+            "stream": run.stream_name,
+            "topic": run.topic_name,
+            "content": message.content,
+            "message": MessageDict.wide_dict(message),
+            "requesting_user_id": run.requesting_user_id,
+            "session_kind": PearWorkerRun.SIDE,
+            "source_stream": run.source_stream_name,
+            "source_topic": run.source_topic_name,
+            "source_message_id": run.source_message_id,
+            "progress_message_id": run.result_message_id,
+        }
+
+    def run_side_pump(
+        self,
+        *,
+        stop: threading.Event,
+        runtime: PearWorkerRuntime,
+        bot_profile_id: int,
+        stream: str,
+        topic: str,
+        propagate_errors: bool = False,
+    ) -> None:
+        close_old_connections()
+        try:
+            while True:
+                run = self.next_queued_side_run(
+                    bot_profile_id=bot_profile_id,
+                    stream=stream,
+                    topic=topic,
+                )
+                if run is None:
+                    if stop.is_set():
+                        return
+                    stop.wait(PEAR_SIDE_PUMP_INTERVAL_SECONDS)
+                    continue
+                event = self.side_event_for_run(run)
+                if event is None:
+                    # The durable row was settled while reconstructing it.
+                    continue
+                try:
+                    self._consume(event, side_runtime=runtime)
+                except Exception:
+                    logger.exception("Pear native side turn failed in the shared runtime pump.")
+                    if propagate_errors:
+                        raise
+                    return
+                finally:
+                    reset_queries()
+                    close_old_connections()
+        finally:
+            close_old_connections()
+
+    def start_side_pump(
+        self,
+        *,
+        runtime: PearWorkerRuntime,
+        bot_profile_id: int,
+        stream: str,
+        topic: str,
+    ) -> None:
+        self.stop_side_pump(wait=True)
+        stop = threading.Event()
+        thread = threading.Thread(
+            target=self.run_side_pump,
+            kwargs={
+                "stop": stop,
+                "runtime": runtime,
+                "bot_profile_id": bot_profile_id,
+                "stream": stream,
+                "topic": topic,
+            },
+            name=f"{self.queue_name}-side-pump",
+            daemon=True,
+        )
+        self.side_pump_stop = stop
+        self.side_pump_thread = thread
+        thread.start()
+
+    def run_parent_with_side_pump(
+        self,
+        *,
+        runtime: PearWorkerRuntime,
+        bot_profile_id: int,
+        stream: str,
+        topic: str,
+        parent_turn: Callable[[], None],
+    ) -> None:
+        self.start_side_pump(
+            runtime=runtime,
+            bot_profile_id=bot_profile_id,
+            stream=stream,
+            topic=topic,
+        )
+        try:
+            parent_turn()
+        finally:
+            # Drain every side row which became durable before the parent
+            # settled, then release the shared runtime. This closes the race
+            # between the final parent event and Rabbit delivery.
+            stop = self.side_pump_stop
+            self.stop_side_pump(wait=True)
+            if stop is not None:
+                # A broker consumer may already have acknowledged the side
+                # delivery after seeing this active parent. Do one synchronous
+                # source-of-truth drain after joining the pump; if DB access or
+                # pre-turn setup still fails, fail the parent delivery too so
+                # Rabbit redelivery can recover both durable rows.
+                self.run_side_pump(
+                    stop=stop,
+                    runtime=runtime,
+                    bot_profile_id=bot_profile_id,
+                    stream=stream,
+                    topic=topic,
+                    propagate_errors=True,
+                )

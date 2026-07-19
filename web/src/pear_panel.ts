@@ -6,7 +6,6 @@ import render_pear_topic_header_controls from "../templates/pear_topic_header_co
 import render_pear_workspace_rail from "../templates/pear_workspace_rail.hbs";
 
 import * as blueslip from "./blueslip.ts";
-import * as browser_history from "./browser_history.ts";
 import * as channel from "./channel.ts";
 import {$t} from "./i18n.ts";
 import * as message_lists from "./message_lists.ts";
@@ -187,10 +186,6 @@ const pear_runs_response_schema = z.object({
     ),
 });
 
-const pear_side_response_schema = z.object({
-    dm_narrow_url: z.optional(z.string()),
-});
-
 type PearRunEvent = z.infer<typeof pear_run_event_schema>;
 type PearRun = z.infer<typeof pear_run_schema>;
 type PearRunsResponse = z.infer<typeof pear_runs_response_schema>;
@@ -198,7 +193,7 @@ type PearGitContext = z.infer<typeof pear_git_context_schema>;
 type PearWorkspaceContext = z.infer<typeof pear_topic_context_schema>;
 type PearGitCommit = z.infer<typeof pear_git_commit_schema>;
 
-type PearWorkbenchView = "diff" | "history" | "side";
+type PearWorkbenchView = "diff" | "history";
 type PearDisplayTopicContext = NonNullable<ReturnType<typeof display_topic_context>>;
 
 let initialized = false;
@@ -217,7 +212,6 @@ const dismissed_error_by_context = new Map<string, string>();
 // the active→idle transition that retires the Pear typing line.
 const contexts_with_active_run = new Set<string>();
 const workbench_view_by_context = new Map<string, PearWorkbenchView>();
-const side_request_by_context = new Map<string, string>();
 const topic_context_by_context = new Map<string, PearWorkspaceContext>();
 type RefreshOptions = {force_context?: boolean; live?: boolean};
 type RefreshRequest = {
@@ -368,10 +362,6 @@ function reasoning_effort_meter_class(effort: string | undefined): string {
 
 function is_pear_runs_response(data: unknown): data is PearRunsResponse {
     return pear_runs_response_schema.safeParse(data).success;
-}
-
-function is_pear_side_response(data: unknown): data is {dm_narrow_url?: string} {
-    return pear_side_response_schema.safeParse(data).success;
 }
 
 function display_event(event: PearRunEvent): PearRunEvent & {
@@ -536,9 +526,6 @@ export function workbench_view_for_testing(options: {
     has_diff: boolean;
     has_history: boolean;
 }): PearWorkbenchView {
-    if (options.requested === "side") {
-        return "side";
-    }
     if (options.requested === "history") {
         return "history";
     }
@@ -556,7 +543,7 @@ export function workbench_view_for_testing(options: {
 
 export function workbench_view_for_artifact_label(
     label: string,
-): Exclude<PearWorkbenchView, "side"> | undefined {
+): PearWorkbenchView | undefined {
     const normalized_label = label.trim().toLowerCase();
     if (normalized_label === "diff") {
         return "diff";
@@ -742,12 +729,10 @@ function display_topic_context(topic_context: PearWorkspaceContext | undefined |
           workbench_view: PearWorkbenchView;
           workbench_diff_selected: boolean;
           workbench_history_selected: boolean;
-          workbench_side_selected: boolean;
           workbench_diff_disabled: boolean;
           workbench_history_disabled: boolean;
           diff_tab_label: string;
           history_tab_label: string;
-          side_tab_label: string;
           history_commits: (PearGitCommit & {is_head: boolean; ref_label: string})[];
           workbench_title: string;
           workbench_meta: string;
@@ -869,7 +854,6 @@ function display_topic_context(topic_context: PearWorkspaceContext | undefined |
         workbench_view,
         workbench_diff_selected: workbench_view === "diff",
         workbench_history_selected: workbench_view === "history",
-        workbench_side_selected: workbench_view === "side",
         workbench_diff_disabled: false,
         workbench_history_disabled: false,
         diff_tab_label:
@@ -880,7 +864,6 @@ function display_topic_context(topic_context: PearWorkspaceContext | undefined |
             recent_commit_count > 0
                 ? $t({defaultMessage: "History {recent_commit_count}"}, {recent_commit_count})
                 : $t({defaultMessage: "History"}),
-        side_tab_label: $t({defaultMessage: "Whisper"}),
         history_commits,
         workbench_title,
         workbench_meta,
@@ -2096,42 +2079,18 @@ function render(
     }
     const $panel = $(panel);
     if (last_render_state_key !== next_render_state_key) {
-        // The html() swap below replaces every node in the panel, which drops
-        // focus and the caret.  A live re-render fires up to twice a second
-        // during an active run, so without this a user typing in the whisper
-        // textarea would silently lose their cursor mid-word.  Capture the
-        // focused element and caret, then restore them after the swap.  (We are
-        // past ensure_pear_panel_host(), so the DOM globals are available.)
+        // The html() swap below replaces every node in the panel. Preserve
+        // focus for the workbench controls across live renders.
         const focused = document.activeElement;
         const focused_id =
             focused instanceof HTMLElement && panel.contains(focused) ? focused.id : "";
-        const caret =
-            focused instanceof HTMLTextAreaElement || focused instanceof HTMLInputElement
-                ? {start: focused.selectionStart, end: focused.selectionEnd}
-                : undefined;
-
-        const side_request = $panel.find("#pear-side-request").val();
-        if (typeof side_request === "string" && next_context_key !== "") {
-            side_request_by_context.set(next_context_key, side_request);
-        }
         $panel.html(render_pear_panel(render_state));
         $panel.toggleClass("pear-panel-collapsed", !panel_open && visible_error === "");
         set_workbench_popover_open(workbench_open);
-        const stored_side_request = side_request_by_context.get(next_context_key);
-        if (stored_side_request !== undefined) {
-            $panel.find("#pear-side-request").val(stored_side_request);
-        }
         if (focused_id !== "") {
             const refocused = panel.querySelector(`#${focused_id}`);
             if (refocused instanceof HTMLElement) {
                 refocused.focus();
-                if (
-                    caret !== undefined &&
-                    (refocused instanceof HTMLTextAreaElement ||
-                        refocused instanceof HTMLInputElement)
-                ) {
-                    refocused.setSelectionRange(caret.start, caret.end);
-                }
             }
         }
         pear_run_state.notify_liveness_markers_changed();
@@ -2301,44 +2260,6 @@ export function optimistic_topic_context_for_testing(
     };
 }
 
-function start_side_session(): void {
-    const {stream, topic} = current_context();
-    const side_request = $("#pear-side-request").val();
-    if (stream === undefined || topic === undefined || typeof side_request !== "string") {
-        return;
-    }
-    const request = side_request.trim();
-    if (!request) {
-        return;
-    }
-    void channel.post({
-        url: "/json/pear/side",
-        data: {
-            stream,
-            topic,
-            request,
-        },
-        success(raw_data) {
-            $("#pear-side-request").val("");
-            side_request_by_context.delete(context_key(stream, topic));
-            refresh({force_context: true});
-            if (!is_pear_side_response(raw_data)) {
-                blueslip.warn("Pear side session returned an invalid response.");
-                return;
-            }
-            const data = raw_data;
-            if (data.dm_narrow_url !== undefined) {
-                browser_history.go_to_location(data.dm_narrow_url);
-            }
-        },
-        error(xhr) {
-            if (xhr.readyState !== 0) {
-                blueslip.warn(`Failed to start Pear side session: ${xhr.responseText}`);
-            }
-        },
-    });
-}
-
 export function initialize(): void {
     if (initialized) {
         refresh();
@@ -2390,7 +2311,7 @@ export function initialize(): void {
         e.stopPropagation();
         const requested_view = $(e.currentTarget).attr("data-pear-workbench-view");
         open_work_details(
-            requested_view === "diff" || requested_view === "history" || requested_view === "side"
+            requested_view === "diff" || requested_view === "history"
                 ? requested_view
                 : undefined,
             e.currentTarget instanceof HTMLElement ? e.currentTarget : undefined,
@@ -2431,7 +2352,7 @@ export function initialize(): void {
                         tabs.length;
             const next_tab = tabs[next_index];
             const view = next_tab?.dataset["pearWorkbenchView"];
-            if (view === "diff" || view === "history" || view === "side") {
+            if (view === "diff" || view === "history") {
                 select_workbench_view(view);
                 document
                     .querySelector<HTMLElement>(
@@ -2471,7 +2392,7 @@ export function initialize(): void {
     });
     $("body").on("click.pear_panel", ".pear-workbench-tab", function () {
         const view = $(this).attr("data-pear-workbench-view");
-        if (view !== "diff" && view !== "history" && view !== "side") {
+        if (view !== "diff" && view !== "history") {
             return;
         }
         select_workbench_view(view);
@@ -2484,9 +2405,6 @@ export function initialize(): void {
             return;
         }
         post_run_action(run_id, action);
-    });
-    $("body").on("click.pear_panel", "#pear-side-start", () => {
-        start_side_session();
     });
     $(window).on("resize.pear_panel", () => {
         // Coalesce the resize-event burst into one render per frame.

@@ -47,7 +47,6 @@ from zerver.lib.event_types import (
     LogoData,
     MessageContentEditLimitSecondsData,
     MessageEvent,
-    MessageThreadEvent,
     ModernPresenceEvent,
     MutedTopicsEvent,
     MutedUsersEvent,
@@ -197,7 +196,6 @@ check_draft_update = make_checker(DraftsUpdateEvent)
 check_heartbeat = make_checker(HeartbeatEvent)
 check_invites_changed = make_checker(InvitesChangedEvent)
 check_message = make_checker(MessageEvent)
-check_message_thread_event = make_checker(MessageThreadEvent)
 check_muted_users = make_checker(MutedUsersEvent)
 check_navigation_view_add = make_checker(NavigationViewAddEvent)
 check_navigation_view_remove = make_checker(NavigationViewRemoveEvent)

@@ -78,6 +78,7 @@ from zerver.lib.topic import (
     messages_for_topic,
     participants_for_topic,
     save_message_for_edit_use_case,
+    top_level_messages_for_topic,
     update_edit_history,
     update_messages_for_topic_edit,
 )
@@ -308,7 +309,7 @@ def maybe_delete_previous_resolve_topic_notification(
     user_profile: UserProfile, stream: Stream, topic: str
 ) -> bool:
     assert stream.recipient_id is not None
-    last_message = messages_for_topic(stream.realm_id, stream.recipient_id, topic).last()
+    last_message = top_level_messages_for_topic(stream.realm_id, stream.recipient_id, topic).last()
 
     if last_message is None:
         return False
@@ -991,6 +992,9 @@ def do_update_message(
     realm = user_profile.realm
     attachment_reference_change = AttachmentChangeResult(False, [])
 
+    if message_edit_request.is_message_moved and target_message.thread_root_id is not None:
+        raise JsonableError(_("Replies cannot be moved independently"))
+
     ums = UserMessage.objects.filter(message=target_message.id)
 
     def user_info(um: UserMessage) -> dict[str, Any]:
@@ -1162,7 +1166,7 @@ def do_update_message(
     changed_message_ids = [target_message.id]
     changed_messages_count = 1
     save_changes_for_propagation_mode: Callable[[], None] = lambda: None
-    if message_edit_request.propagate_mode in ["change_later", "change_all"]:
+    if message_edit_request.is_message_moved:
         # Other messages should only get topic/stream fields in their edit history.
         topic_only_edit_history_event: EditHistoryEvent = {
             "user_id": edit_history_event["user_id"],
@@ -1175,16 +1179,31 @@ def do_update_message(
             topic_only_edit_history_event["prev_stream"] = edit_history_event["prev_stream"]
             topic_only_edit_history_event["stream"] = edit_history_event["stream"]
 
-        later_messages, save_changes_for_propagation_mode = update_messages_for_topic_edit(
+        related_messages, save_changes_for_propagation_mode = update_messages_for_topic_edit(
             acting_user=user_profile,
             edited_message=target_message,
             message_edit_request=message_edit_request,
             edit_history_event=topic_only_edit_history_event,
             last_edit_time=timestamp,
         )
-        changed_messages |= later_messages
+        changed_messages |= related_messages
         changed_message_ids = list(changed_messages.values_list("id", flat=True))
         changed_messages_count = len(changed_message_ids)
+
+        # A root and its replies move as one conversation aggregate.  A user
+        # can legitimately have a UserMessage for only a reply (for example,
+        # after loading an explicit thread narrow in a protected-history
+        # channel).  Build the notification audience from the complete moved
+        # aggregate so that client's canonical Message rows cannot retain the
+        # old destination.  Keep the target/root UserMessage first when one
+        # exists, since its flags are the established per-user event flags.
+        if changed_messages.filter(thread_root__isnull=False).exists():
+            unmodified_user_messages = (
+                UserMessage.objects.filter(message_id__in=changed_message_ids)
+                .exclude(user_profile__in=users_losing_usermessages)
+                .order_by("user_profile_id", "message_id")
+                .distinct("user_profile_id")
+            )
 
     if message_edit_request.is_stream_edited:
         # The fact that the user didn't have a UserMessage

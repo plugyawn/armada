@@ -252,6 +252,16 @@ test("my_message_all_actions", ({override}) => {
     assert.equal(response.should_display_read_receipts_option, true);
     assert.equal(response.should_display_quote_message, true);
     assert.equal(response.not_for_pear_run_id, undefined);
+
+    add_message_with_view(list, [
+        {
+            ...messages[0],
+            id: 2,
+            thread_root_message_id: 1,
+        },
+    ]);
+    const child_response = popover_menus_data.get_actions_popover_content_context(2, list);
+    assert.equal(child_response.move_message_menu_item, undefined);
 });
 
 test("ambient Pear response offers Not for Pear feedback", ({override}) => {

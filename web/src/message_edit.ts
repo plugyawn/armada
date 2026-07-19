@@ -70,6 +70,21 @@ import * as util from "./util.ts";
 export const currently_editing_messages = new Map<number, JQuery<HTMLTextAreaElement>>();
 const resized_edit_box_height = new Map<number, number>();
 let currently_topic_editing_message_ids: number[] = [];
+
+function message_list_for_row($row: JQuery): NonNullable<typeof message_lists.current> {
+    const message_list = message_lists.get_message_list_for_row($row) ?? message_lists.current;
+    assert(message_list !== undefined);
+    return message_list;
+}
+
+function message_list_is_rendered(
+    message_list: NonNullable<typeof message_lists.current>,
+): boolean {
+    return (
+        message_lists.current === message_list ||
+        message_lists.rendered_message_lists.get(message_list.id) === message_list
+    );
+}
 const currently_echoing_messages = new Map<number, EchoedMessageData>();
 
 type EchoedMessageData = {
@@ -274,6 +289,12 @@ export function is_stream_editable(message: Message, edit_limit_seconds_buffer =
 }
 
 export function can_move_message(message: Message): boolean {
+    // A native thread reply inherits its root's conversation and cannot be
+    // moved independently by the backend. Keep every move affordance on the
+    // shared capability predicate so secondary rows cannot expose a dead path.
+    if (message.thread_root_message_id !== undefined) {
+        return false;
+    }
     return is_topic_editable(message) || is_stream_editable(message);
 }
 
@@ -606,8 +627,8 @@ function edit_message($row: JQuery, raw_content: string): void {
     // Notably, when switching views, this can be called for a row
     // that hasn't been added to the DOM yet so, keep all the selector
     // queries and events to operate on `$row` or `$form`.
-    assert(message_lists.current !== undefined);
-    const message = message_lists.current.get(rows.id($row));
+    const message_list = message_list_for_row($row);
+    const message = message_list.get(rows.id($row));
     assert(message !== undefined);
     condense.hide_message_length_toggle($row);
 
@@ -649,7 +670,7 @@ function edit_message($row: JQuery, raw_content: string): void {
     currently_editing_messages.set(message.id, $message_edit_content);
     const previous_height = resized_edit_box_height.get(message.id);
     const do_autosize = previous_height === undefined;
-    message_lists.current.show_edit_message($row, $form, do_autosize);
+    message_list.show_edit_message($row, $form, do_autosize);
 
     if (previous_height) {
         $(the($message_edit_content)).height(previous_height + "px");
@@ -800,8 +821,8 @@ function start_edit_with_content(
 }
 
 export function start($row: JQuery, edit_box_open_callback?: () => void): void {
-    assert(message_lists.current !== undefined);
-    const message = message_lists.current.get(rows.id($row));
+    const message_list = message_list_for_row($row);
+    const message = message_list.get(rows.id($row));
     if (message === undefined) {
         blueslip.error("Couldn't find message ID for edit", {row_id: rows.id($row)});
         return;
@@ -816,11 +837,11 @@ export function start($row: JQuery, edit_box_open_callback?: () => void): void {
         return;
     }
 
-    const msg_list = message_lists.current;
+    const msg_list = message_list;
     message_fetch_raw_content.get_raw_content_for_single_message({
         message_id: message.id,
         on_success(raw_content) {
-            if (message_lists.current === msg_list) {
+            if (message_list_is_rendered(msg_list)) {
                 start_edit_with_content($row, raw_content, edit_box_open_callback);
             }
         },
@@ -1120,7 +1141,7 @@ export function end_inline_topic_edit($row: JQuery): void {
 }
 
 export function end_message_row_edit($row: JQuery): void {
-    assert(message_lists.current !== undefined);
+    const message_list = message_list_for_row($row);
     const row_id = rows.id($row);
 
     // Clean up the upload handler
@@ -1131,12 +1152,12 @@ export function end_message_row_edit($row: JQuery): void {
         clear_preview_area($row);
     }
 
-    const message = message_lists.current.get(row_id);
+    const message = message_list.get(row_id);
     if (message !== undefined && currently_editing_messages.has(message.id)) {
         typing.stop_message_edit_notifications(message.id);
         currently_editing_messages.delete(message.id);
         resized_edit_box_height.delete(message.id);
-        message_lists.current.hide_edit_message($row);
+        message_list.hide_edit_message($row);
         compose_call_session_manager.abandon_session(message.id.toString());
     }
     if ($row.find(".could-be-condensed").length > 0) {
@@ -1290,7 +1311,7 @@ export function do_save_inline_topic_edit($row: JQuery, message: Message, new_to
 export async function save_message_row_edit($row: JQuery): Promise<void> {
     compose_tooltips.hide_compose_control_button_tooltips($row);
 
-    assert(message_lists.current !== undefined);
+    const message_list = message_list_for_row($row);
     const $banner_container = compose_banner.get_compose_banner_container(
         $row.find(".message_edit_form textarea"),
     );
@@ -1299,9 +1320,9 @@ export async function save_message_row_edit($row: JQuery): Promise<void> {
     if (stream_id_data !== undefined) {
         stream_id = Number.parseInt(stream_id_data, 10);
     }
-    const msg_list = message_lists.current;
+    const msg_list = message_list;
     let message_id = rows.id($row);
-    let message = message_lists.current.get(message_id);
+    let message = message_list.get(message_id);
     assert(message !== undefined);
     let changed = false;
     let edit_locally_echoed = false;
@@ -1342,7 +1363,7 @@ export async function save_message_row_edit($row: JQuery): Promise<void> {
             message = echo.edit_locally(message, {
                 raw_content: new_content,
             });
-            $row = message_lists.current.get_row(message_id);
+            $row = message_list.get_row(message_id);
         }
         end_message_row_edit($row);
         return;
@@ -1382,7 +1403,7 @@ export async function save_message_row_edit($row: JQuery): Promise<void> {
 
         message = echo.edit_locally(message, currently_echoing_messages.get(message_id)!);
 
-        $row = message_lists.current.get_row(message_id);
+        $row = message_list.get_row(message_id);
         end_message_row_edit($row);
     }
 
@@ -1410,7 +1431,7 @@ export async function save_message_row_edit($row: JQuery): Promise<void> {
             }
         },
         error(xhr) {
-            if (msg_list === message_lists.current) {
+            if (message_list_is_rendered(msg_list)) {
                 message_id = rows.id($row);
 
                 if (edit_locally_echoed) {
@@ -1431,7 +1452,7 @@ export async function save_message_row_edit($row: JQuery): Promise<void> {
                         alerted: echo_data.alerted,
                     });
 
-                    $row = message_lists.current.get_row(message_id);
+                    $row = msg_list.get_row(message_id);
                     if (!currently_editing_messages.has(message_id)) {
                         // Return to the message editing open UI state with the edited content.
                         start_edit_maintaining_scroll($row, echo_data.raw_content);

@@ -11,7 +11,10 @@ from zerver.lib.cache import cache_set_many, cache_with_key, to_dict_cache_key, 
 from zerver.lib.display_recipient import bulk_fetch_display_recipients
 from zerver.lib.markdown import render_message_markdown, topic_links
 from zerver.lib.markdown import version as markdown_version
-from zerver.lib.message_threads import bulk_message_thread_summaries
+from zerver.lib.message_threads import (
+    bulk_message_thread_summaries,
+    message_ids_with_accessible_thread_roots,
+)
 from zerver.lib.pear_identity import pear_bot_user_ids_from_user_ids
 from zerver.lib.query_helpers import query_for_ids
 from zerver.lib.timestamp import datetime_to_timestamp
@@ -139,8 +142,6 @@ class MessageDict:
     def wide_dict(
         message: Message,
         realm_id: int | None = None,
-        *,
-        include_message_thread_summary: bool = True,
     ) -> dict[str, Any]:
         """
         The next two lines get the cacheable field related
@@ -158,8 +159,6 @@ class MessageDict:
         """
         MessageDict.bulk_hydrate_sender_info([obj])
         MessageDict.bulk_hydrate_pear_message_flags([obj])
-        if include_message_thread_summary:
-            MessageDict.bulk_hydrate_message_thread_summaries([obj])
         MessageDict.bulk_hydrate_recipient_info([obj])
 
         return obj
@@ -183,7 +182,6 @@ class MessageDict:
         """
         MessageDict.bulk_hydrate_sender_info(objs)
         MessageDict.bulk_hydrate_pear_message_flags(objs)
-        MessageDict.bulk_hydrate_message_thread_summaries(objs)
         MessageDict.bulk_hydrate_recipient_info(objs)
 
         for obj in objs:
@@ -331,6 +329,7 @@ class MessageDict:
                 "sender_id": message.sender.id,
                 "sending_client__name": message.sending_client.name,
                 "sender__realm_id": message.sender.realm_id,
+                "thread_root_id": message.thread_root_id,
             }
             for message in messages
         ]
@@ -359,13 +358,13 @@ class MessageDict:
             "sender_id",
             "sending_client__name",
             "sender__realm_id",
+            "thread_root_id",
         ]
         # Uses index: zerver_message_pkey
         messages = Message.objects.filter(id__in=needed_ids).values(*fields)
         MessageDict.sew_submessages_and_reactions_to_msgs(messages)
         message_dicts = [MessageDict.build_dict_from_raw_db_row(row) for row in messages]
         MessageDict.bulk_hydrate_pear_message_flags(message_dicts)
-        MessageDict.bulk_hydrate_message_thread_summaries(message_dicts)
         return message_dicts
 
     @staticmethod
@@ -398,6 +397,7 @@ class MessageDict:
             recipient_type_id=row["recipient__type_id"],
             reactions=row["reactions"],
             submessages=row["submessages"],
+            thread_root_message_id=row["thread_root_id"],
         )
 
     @staticmethod
@@ -419,6 +419,7 @@ class MessageDict:
         recipient_type_id: int,
         reactions: list[RawReactionRow],
         submessages: list[dict[str, Any]],
+        thread_root_message_id: int | None,
     ) -> dict[str, Any]:
         obj = dict(
             id=message_id,
@@ -433,6 +434,8 @@ class MessageDict:
 
         obj[TOPIC_NAME] = topic_name
         obj["sender_realm_id"] = sender_realm_id
+        if thread_root_message_id is not None:
+            obj["thread_root_message_id"] = thread_root_message_id
 
         # Render topic_links with the stream's realm instead of the
         # sender's realm; this is important for messages sent by
@@ -529,14 +532,44 @@ class MessageDict:
             obj["is_pear_message"] = obj["sender_id"] in pear_bot_user_ids
 
     @staticmethod
-    def bulk_hydrate_message_thread_summaries(objs: list[dict[str, Any]]) -> None:
-        """Attach compact reply metadata without placing reply bodies in message caches."""
-        objs_to_hydrate = [obj for obj in objs if "reply_summary" not in obj]
-        summaries = bulk_message_thread_summaries([obj["id"] for obj in objs_to_hydrate])
+    def bulk_hydrate_message_thread_summaries(
+        objs: list[dict[str, Any]], *, user_profile: UserProfile | None = None
+    ) -> None:
+        """Attach a viewer-safe projection outside the shared message cache."""
+        objs_to_hydrate = [
+            obj
+            for obj in objs
+            if "reply_summary" not in obj and "thread_root_message_id" not in obj
+        ]
+        summaries = bulk_message_thread_summaries(
+            [obj["id"] for obj in objs_to_hydrate],
+            user_profile=user_profile,
+        )
         for obj in objs_to_hydrate:
             summary = summaries.get(obj["id"])
             if summary is not None:
                 obj["reply_summary"] = summary
+
+    @staticmethod
+    def bulk_project_message_thread_roots(
+        objs: list[dict[str, Any]], *, user_profile: UserProfile | None
+    ) -> None:
+        """Hide inaccessible roots on viewer-owned API payload dictionaries.
+
+        The cache and durable Message retain the canonical relationship.  This
+        method runs only after messages_for_ids has decoded and finalized fresh
+        response dictionaries for one viewer.
+        """
+        if user_profile is None:
+            return
+        reply_objs = [obj for obj in objs if "thread_root_message_id" in obj]
+        accessible_message_ids = message_ids_with_accessible_thread_roots(
+            [obj["id"] for obj in reply_objs],
+            user_profile,
+        )
+        for obj in reply_objs:
+            if obj["id"] not in accessible_message_ids:
+                obj.pop("thread_root_message_id")
 
     @staticmethod
     def hydrate_recipient_info(obj: dict[str, Any], display_recipient: DisplayRecipientT) -> None:

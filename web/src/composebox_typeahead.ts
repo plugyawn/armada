@@ -512,8 +512,8 @@ export function tokenize_compose_str(s: string): string {
     return "";
 }
 
-function get_wildcard_string(mention: string): string {
-    if (compose_state.get_message_type() === "private") {
+function get_wildcard_string(mention: string, is_private: boolean): string {
+    if (is_private) {
         return $t({defaultMessage: "Notify recipients"});
     }
     if (mention === "topic") {
@@ -522,21 +522,25 @@ function get_wildcard_string(mention: string): string {
     return $t({defaultMessage: "Notify all channel subscribers"});
 }
 
-export function broadcast_mentions(): PseudoMentionUser[] {
+export function broadcast_mentions(
+    stream_id: number | undefined = compose_state.stream_id(),
+    topic: string | undefined = compose_state.topic(),
+    is_private = stream_id === undefined && compose_state.get_message_type() === "private",
+): PseudoMentionUser[] {
     let wildcard_mention_array: string[] = [];
-    if (compose_state.get_message_type() === "private") {
+    if (is_private) {
         wildcard_mention_array = ["all", "everyone"];
-    } else if (compose_validate.stream_wildcard_mention_allowed()) {
+    } else if (compose_validate.stream_wildcard_mention_allowed(stream_id)) {
         // TODO: Eventually remove "stream" wildcard from typeahead suggestions
         // once the rename of stream to channel has settled for users.
         wildcard_mention_array = ["all", "everyone", "stream", "channel", "topic"];
-    } else if (compose_validate.topic_wildcard_mention_allowed()) {
+    } else if (compose_validate.topic_wildcard_mention_allowed(stream_id, topic)) {
         wildcard_mention_array = ["topic"];
     }
 
     return wildcard_mention_array.map((mention, idx) => ({
         special_item_text: mention,
-        secondary_text: get_wildcard_string(mention),
+        secondary_text: get_wildcard_string(mention, is_private),
         email: mention,
 
         // Always sort above, under the assumption that names will
@@ -675,6 +679,7 @@ type PersonSuggestionOpts = {
     filter_pills: boolean;
     stream_id: number | undefined;
     topic: string | undefined;
+    is_private?: boolean;
     filter_groups_for_dm?: boolean;
     filter_groups_for_mention?: boolean;
     allow_custom_profile_field_matching?: boolean;
@@ -686,7 +691,17 @@ function filter_persons<T>(
     filter_pills: boolean,
     want_broadcast: boolean,
     filterer: (person_items: UserPillData[], broadcast_items: UserOrMentionPillData[]) => T[],
+    recipient?: {
+        stream_id: number | undefined;
+        topic: string | undefined;
+        is_private?: boolean;
+    },
 ): T[] {
+    recipient ??= {
+        stream_id: compose_state.stream_id(),
+        topic: compose_state.topic(),
+        is_private: compose_state.get_message_type() === "private",
+    };
     let persons;
 
     if (filter_pills) {
@@ -705,7 +720,11 @@ function filter_persons<T>(
     let broadcast_items: UserOrMentionPillData[] = [];
 
     if (want_broadcast) {
-        broadcast_items = broadcast_mentions().map((mention) => ({
+        broadcast_items = broadcast_mentions(
+            recipient.stream_id,
+            recipient.topic,
+            recipient.is_private,
+        ).map((mention) => ({
             type: "broadcast" as const,
             user: mention,
         }));
@@ -918,7 +937,7 @@ export function get_person_suggestions(
     });
 
     const filtered_message_persons = apply_dm_permission_filter(
-        filter_persons(message_persons, opts.filter_pills, opts.want_broadcast, filterer),
+        filter_persons(message_persons, opts.filter_pills, opts.want_broadcast, filterer, opts),
     );
 
     let filtered_persons: UserOrMentionPillData[];
@@ -932,7 +951,7 @@ export function get_person_suggestions(
             active_users_only: false,
         });
         filtered_persons = apply_dm_permission_filter(
-            filter_persons(realm_people, opts.filter_pills, opts.want_broadcast, filterer),
+            filter_persons(realm_people, opts.filter_pills, opts.want_broadcast, filterer, opts),
         );
     }
 
@@ -949,17 +968,36 @@ export function get_person_suggestions(
 function get_stream_topic_data(input_element: TypeaheadInputElement): {
     stream_id: number | undefined;
     topic: string | undefined;
+    is_private: boolean;
+    private_user_ids?: number[];
 } {
     let stream_id;
     let topic;
-    const $message_row = input_element.$element.closest(".message_row");
-    if ($message_row.length === 1) {
+    const instance_stream_id = input_element.$element.attr?.("data-compose-stream-id");
+    if (instance_stream_id !== undefined) {
+        stream_id = Number(instance_stream_id);
+        topic = input_element.$element.attr("data-compose-topic");
+        return {stream_id, topic, is_private: false};
+    }
+    if (input_element.$element.attr?.("data-compose-private") === "true") {
+        const private_user_ids = (
+            input_element.$element.attr?.("data-compose-private-user-ids") ?? ""
+        )
+            .split(",")
+            .filter((value) => value !== "")
+            .map(Number);
+        return {stream_id: undefined, topic: undefined, is_private: true, private_user_ids};
+    }
+    const $message_row = input_element.$element.closest?.(".message_row");
+    if ($message_row?.length === 1) {
         // we are editing a message so we try to use its keys.
         const msg = message_store.get(rows.id($message_row));
         assert(msg !== undefined);
         if (msg.type === "stream") {
             stream_id = msg.stream_id;
             topic = msg.topic;
+        } else {
+            return {stream_id: undefined, topic: undefined, is_private: true};
         }
     } else {
         stream_id = compose_state.stream_id();
@@ -968,6 +1006,7 @@ function get_stream_topic_data(input_element: TypeaheadInputElement): {
     return {
         stream_id,
         topic,
+        is_private: stream_id === undefined && compose_state.get_message_type() === "private",
     };
 }
 
@@ -1151,7 +1190,7 @@ export function get_candidates(
             let used_syntax_prefix = "#**";
             if (tokens[1] === ">") {
                 // The shortcut syntax is used.
-                const stream_id = compose_state.stream_id();
+                const stream_id = get_stream_topic_data(input_element).stream_id;
                 if (stream_id !== undefined) {
                     sub = stream_data.get_sub_by_id(stream_id);
                 }
@@ -1407,10 +1446,17 @@ export function content_typeahead_selected(
                 );
                 if (!is_silent && item.type !== "broadcast") {
                     void compose_validate.warn_if_mentioning_unsubscribed_user(item, $textbox);
+                    const recipient = get_stream_topic_data(input_element);
                     mention_text = compose_validate.convert_mentions_to_silent_in_direct_messages(
                         mention_text,
                         item.user.full_name,
                         item.user.user_id,
+                        recipient.is_private && recipient.private_user_ids === undefined
+                            ? undefined
+                            : {
+                                  is_private: recipient.is_private,
+                                  recipient_user_ids: recipient.private_user_ids ?? [],
+                              },
                     );
                 }
                 beginning += mention_text + " ";
@@ -1701,72 +1747,77 @@ function set_recipient_from_typeahead(item: UserGroupPillData | UserPillData): v
     }
 }
 
-export function initialize_compose_typeahead($element: JQuery<HTMLTextAreaElement>): void {
+export function initialize_compose_typeahead(
+    $element: JQuery<HTMLTextAreaElement>,
+    options: {register_as_primary?: boolean} = {},
+): Typeahead<TypeaheadSuggestion> {
     const bootstrap_typeahead_input: TypeaheadInputElement = {
         $element,
         type: "textarea",
     };
 
-    compose_ui.set_compose_textarea_typeahead(
-        new Typeahead(bootstrap_typeahead_input, {
-            items: max_num_items,
-            dropup: true,
-            // Performance note: We have trivial matcher/sorters to do
-            // matching and sorting inside the `source` field to avoid
-            // O(n) behavior in the number of users in the organization
-            // inside the typeahead library.
-            source: get_candidates,
-            item_html: content_item_html,
-            matcher(_query: string) {
-                return () => true;
-            },
-            sorter(items) {
-                return items;
-            },
-            updater: content_typeahead_selected,
-            stopAdvance: true, // Do not advance to the next field on a Tab or Enter
-            select_on_escape_condition: () => completing === "topic_list",
-            automated: compose_automated_selection,
-            option_label(_matching_items, item): string | false {
-                if (item.type === "topic_list") {
-                    if (item.is_channel_link) {
-                        return `<em>${$t({defaultMessage: "(link to channel)"})}</em>`;
-                    }
-
-                    if (item.is_new_topic) {
-                        return `<em>${$t({defaultMessage: "New"})}</em>`;
-                    }
-                } else if (item.type === "syntax") {
-                    if (
-                        item.language !== "" &&
-                        item.language === realm.realm_default_code_block_language
-                    ) {
-                        return `<em>${$t({defaultMessage: "(default)"})}</em>`;
-                    } else if (item.language === "text") {
-                        return `<em>${$t({defaultMessage: "(no highlighting)"})}</em>`;
-                    }
+    const instance = new Typeahead(bootstrap_typeahead_input, {
+        items: max_num_items,
+        dropup: true,
+        // Performance note: We have trivial matcher/sorters to do
+        // matching and sorting inside the `source` field to avoid
+        // O(n) behavior in the number of users in the organization
+        // inside the typeahead library.
+        source: get_candidates,
+        item_html: content_item_html,
+        matcher(_query: string) {
+            return () => true;
+        },
+        sorter(items) {
+            return items;
+        },
+        updater: content_typeahead_selected,
+        stopAdvance: true, // Do not advance to the next field on a Tab or Enter
+        select_on_escape_condition: () => completing === "topic_list",
+        automated: compose_automated_selection,
+        option_label(_matching_items, item): string | false {
+            if (item.type === "topic_list") {
+                if (item.is_channel_link) {
+                    return `<em>${$t({defaultMessage: "(link to channel)"})}</em>`;
                 }
-                return false;
-            },
-            trigger_selection: compose_trigger_selection,
-            footer_html: get_footer_html,
-            hideAfterSelect() {
-                // After selecting a stream, we immediately show topic options,
-                // so we don't want to hide the typeahead.
-                return completing !== "stream";
-            },
-            getCustomItemClassname(item) {
-                // Inject this class for non stream items in the typeahead menu to remove extra
-                // gap between the stream name, chevron and the topic name.
-                return item.type === "topic_list" && !item.is_channel_link
-                    ? "topic-typeahead-link"
-                    : "";
-            },
-            clear_typeahead_tooltip() {
-                tippyjs.typeahead_status_emoji_tooltip?.hide();
-            },
-        }),
-    );
+
+                if (item.is_new_topic) {
+                    return `<em>${$t({defaultMessage: "New"})}</em>`;
+                }
+            } else if (item.type === "syntax") {
+                if (
+                    item.language !== "" &&
+                    item.language === realm.realm_default_code_block_language
+                ) {
+                    return `<em>${$t({defaultMessage: "(default)"})}</em>`;
+                } else if (item.language === "text") {
+                    return `<em>${$t({defaultMessage: "(no highlighting)"})}</em>`;
+                }
+            }
+            return false;
+        },
+        trigger_selection: compose_trigger_selection,
+        footer_html: get_footer_html,
+        hideAfterSelect() {
+            // After selecting a stream, we immediately show topic options,
+            // so we don't want to hide the typeahead.
+            return completing !== "stream";
+        },
+        getCustomItemClassname(item) {
+            // Inject this class for non stream items in the typeahead menu to remove extra
+            // gap between the stream name, chevron and the topic name.
+            return item.type === "topic_list" && !item.is_channel_link
+                ? "topic-typeahead-link"
+                : "";
+        },
+        clear_typeahead_tooltip() {
+            tippyjs.typeahead_status_emoji_tooltip?.hide();
+        },
+    });
+    if (options.register_as_primary !== false) {
+        compose_ui.set_compose_textarea_typeahead(instance);
+    }
+    return instance;
 }
 
 function get_footer_html_for_topic_typeahead(

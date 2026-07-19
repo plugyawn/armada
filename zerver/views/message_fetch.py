@@ -16,6 +16,7 @@ from zerver.lib.exceptions import (
     MissingAuthenticationError,
 )
 from zerver.lib.message import get_first_visible_message_id, messages_for_ids
+from zerver.lib.message_cache import MessageDict
 from zerver.lib.narrow import (
     NarrowParameter,
     add_narrow_conditions,
@@ -113,6 +114,7 @@ def get_messages_backend(
     client_requested_message_ids: Annotated[
         Json[list[NonNegativeInt] | None], ApiParamConfig("message_ids")
     ] = None,
+    exclude_thread_replies: Json[bool] = False,
     include_anchor: Json[bool] = True,
     narrow: Json[list[NarrowParameter] | None] = None,
     num_after: Json[NonNegativeInt] = 0,
@@ -244,6 +246,7 @@ def get_messages_backend(
             num_before=num_before,
             num_after=num_after,
             client_requested_message_ids=client_requested_message_ids,
+            exclude_thread_replies=exclude_thread_replies,
         )
 
         anchor = query_info.anchor
@@ -305,6 +308,17 @@ def get_messages_backend(
             message_edit_history_visibility_policy=realm.message_edit_history_visibility_policy,
             user_profile=user_profile,
             realm=realm,
+        )
+
+        # Thread relationships and summaries are viewer-specific projections.
+        # Keep them out of shared message cache objects and internal consumers.
+        MessageDict.bulk_project_message_thread_roots(
+            message_list,
+            user_profile=user_profile,
+        )
+        MessageDict.bulk_hydrate_message_thread_summaries(
+            message_list,
+            user_profile=user_profile,
         )
 
     if client_requested_message_ids is not None:

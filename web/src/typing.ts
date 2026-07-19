@@ -233,6 +233,64 @@ export function stop_message_edit_notifications(message_id: number): void {
     );
 }
 
+export type ComposeTypingRecipient = Extract<Recipient, {notification_event_type: "typing"}>;
+
+export type ComposeTypingController = {
+    update: (recipient: ComposeTypingRecipient | null, has_content: boolean) => void;
+    destroy: () => void;
+};
+
+export function create_compose_typing_controller(): ComposeTypingController {
+    let active_recipient: ComposeTypingRecipient | null = null;
+    let last_start_time = 0;
+    let idle_timer: ReturnType<typeof setTimeout> | undefined;
+
+    function recipient_key(recipient: ComposeTypingRecipient): string {
+        return recipient.message_type === "stream"
+            ? `stream:${recipient.stream_id}:${recipient.topic.toLowerCase()}`
+            : `direct:${recipient.ids.toSorted((a, b) => a - b).join(",")}`;
+    }
+
+    function stop(): void {
+        if (idle_timer !== undefined) {
+            clearTimeout(idle_timer);
+            idle_timer = undefined;
+        }
+        if (active_recipient !== null) {
+            notify_server_stop(active_recipient);
+            active_recipient = null;
+        }
+    }
+
+    function update(recipient: ComposeTypingRecipient | null, has_content: boolean): void {
+        if (!has_content || recipient === null) {
+            stop();
+            return;
+        }
+        if (
+            active_recipient !== null &&
+            recipient_key(active_recipient) !== recipient_key(recipient)
+        ) {
+            stop();
+        }
+        const now = Date.now();
+        if (
+            active_recipient === null ||
+            now - last_start_time >= realm.server_typing_started_wait_period_milliseconds
+        ) {
+            notify_server_start(recipient);
+            active_recipient = recipient;
+            last_start_time = now;
+        }
+        if (idle_timer !== undefined) {
+            clearTimeout(idle_timer);
+        }
+        idle_timer = setTimeout(stop, realm.server_typing_stopped_wait_period_milliseconds);
+    }
+
+    return {update, destroy: stop};
+}
+
 export function initialize(): void {
     worker = {
         get_current_time,

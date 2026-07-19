@@ -105,6 +105,10 @@ const incompatible_patterns: Record<SearchFilter, TermPattern[]> = {
         {operator: "dm-including"},
         {operator: "topic"},
     ],
+    // Thread narrows are created by the reply pane, not suggested in the
+    // global search box. Keeping an entry here preserves exhaustiveness for
+    // the canonical narrow vocabulary without advertising internal UI state.
+    thread: [],
     dm: [
         {operator: "dm"},
         {operator: "pm-with"},
@@ -947,6 +951,8 @@ function get_operator_suggestions(
                     ],
                     true,
                 );
+            case "thread":
+                return format_as_suggestion([{operator: choice, operand: -1, negated}], true);
             default:
                 return format_as_suggestion([{operator: choice, operand: "", negated}], true);
         }

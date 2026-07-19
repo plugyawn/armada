@@ -193,10 +193,6 @@ export function dispatch_normal_event(event) {
             pear_panel.handle_pear_run_event(event);
             break;
 
-        case "message_thread":
-            message_threads.apply_message_thread_event(event);
-            break;
-
         case "pear_workspace_changed":
             pear_workspace_events.apply_pear_workspace_changed_event(event);
             break;
@@ -221,6 +217,7 @@ export function dispatch_normal_event(event) {
             // So double marking something as read would not occur
             unread_ops.process_read_messages_event(msg_ids);
             emoji_frequency.update_emoji_frequency_on_messages_deletion(msg_ids);
+            message_threads.handle_deleted_messages(msg_ids);
             // This methods updates message_list too and since stream_topic_history relies on it
             // this method should be called first.
             message_events.remove_messages(msg_ids);
@@ -839,6 +836,7 @@ export function dispatch_normal_event(event) {
                         }
                         const message_ids = message_store.get_message_ids_in_stream(stream_id);
                         unread_ops.process_read_messages_event(message_ids);
+                        message_threads.handle_deleted_messages(message_ids);
                         message_events.remove_messages(message_ids);
                         stream_topic_history.remove_history_for_stream(stream_id);
                         user_group_edit.update_group_permissions_panel_on_losing_stream_access(
@@ -1203,6 +1201,7 @@ export function dispatch_normal_event(event) {
                     );
                     break;
                 case "read":
+                    message_threads.handle_read_flag_update(event.messages, new_value);
                     if (event.op === "add") {
                         unread_ops.process_read_messages_event(event.messages);
                     } else {

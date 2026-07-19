@@ -23,6 +23,12 @@ page_params.test_suite = false;
 // we also directly write to pointer
 set_global("pointer", {});
 
+const echo = mock_esm("../src/echo", {
+    process_from_server(messages) {
+        return messages;
+    },
+});
+
 mock_esm("../src/popup_banners", {
     close_connection_error_popup_banner() {},
 });
@@ -49,6 +55,7 @@ const message_events = mock_esm("../src/message_events", {
 const message_threads = mock_esm("../src/message_threads");
 message_threads.handle_reconnect = noop;
 
+const message_store = zrequire("message_store");
 const server_events = zrequire("server_events");
 
 const message = {
@@ -110,6 +117,34 @@ run_test("message_event", ({override}) => {
     server_events._get_events_success([event]);
     assert.ok(inserted);
     assert.equal(thread_messages, inserted_messages);
+});
+
+run_test("locally echoed message updates thread lifecycle", ({override}) => {
+    const event = {
+        type: "message",
+        message: {...message, id: 2, thread_root_message_id: 1},
+        flags: [],
+        local_message_id: "local-thread-reply",
+    };
+    const reified_message = {
+        id: 2,
+        thread_root_message_id: 1,
+    };
+
+    override(echo, "process_from_server", (messages) => {
+        assert.equal(messages[0].local_id, event.local_message_id);
+        return [];
+    });
+    message_store.clear_for_testing();
+    message_store.update_message_cache({message: reified_message});
+    let thread_messages;
+    override(message_threads, "handle_added_messages", (messages) => {
+        thread_messages = messages;
+    });
+
+    server_events._get_events_success([event]);
+    assert.deepEqual(thread_messages, [reified_message]);
+    message_store.clear_for_testing();
 });
 
 run_test("successful reconnect refreshes thread summaries", ({override}) => {

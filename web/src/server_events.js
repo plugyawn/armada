@@ -6,6 +6,7 @@ import * as channel from "./channel.ts";
 import * as echo from "./echo.ts";
 import * as loading from "./loading.ts";
 import * as message_events from "./message_events.ts";
+import * as message_store from "./message_store.ts";
 import * as message_threads from "./message_threads.ts";
 import {page_params} from "./page_params.ts";
 import * as popup_banners from "./popup_banners.ts";
@@ -107,7 +108,9 @@ function get_events_success(events) {
         // message lists in order.
         raw_messages = _.sortBy(raw_messages, "id");
         try {
+            const delivered_message_ids = raw_messages.map((message) => message.id);
             raw_messages = echo.process_from_server(raw_messages);
+            let inserted_messages = [];
             if (raw_messages.length > 0) {
                 let sent_by_this_client = false;
                 for (const msg of raw_messages) {
@@ -123,13 +126,28 @@ function get_events_success(events) {
                 // But in any case, insert_new_messages handles multiple
                 // messages, only one of which was sent by this client,
                 // correctly.
-                const inserted_messages = message_events.insert_new_messages({
+                inserted_messages = message_events.insert_new_messages({
                     type: "server_message",
                     raw_messages,
                     sent_by_this_client,
                 });
-                message_threads.handle_added_messages(inserted_messages);
             }
+            const inserted_message_ids = new Set(inserted_messages.map((message) => message.id));
+            const reified_echo_messages = delivered_message_ids.flatMap((message_id) => {
+                if (inserted_message_ids.has(message_id)) {
+                    return [];
+                }
+                // echo.process_from_server installs locally echoed messages in the
+                // canonical store, but intentionally omits them from its return value.
+                // They still need the same post-delivery lifecycle as new messages.
+                const message = message_store.get(message_id);
+                return message === undefined ? [] : [message];
+            });
+            const thread_messages =
+                reified_echo_messages.length === 0
+                    ? inserted_messages
+                    : [...inserted_messages, ...reified_echo_messages];
+            message_threads.handle_added_messages(thread_messages);
         } catch (error) {
             blueslip.error("Failed to insert new messages", undefined, error);
         }

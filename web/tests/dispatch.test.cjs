@@ -46,6 +46,7 @@ const message_events = mock_esm("../src/message_events", {
     update_views_filtered_on_message_property: noop,
     update_current_view_for_topic_visibility: noop,
 });
+const message_threads = mock_esm("../src/message_threads");
 const message_lists = mock_esm("../src/message_lists");
 const user_topics_ui = mock_esm("../src/user_topics_ui");
 const muted_users_ui = mock_esm("../src/muted_users_ui");
@@ -180,6 +181,34 @@ run_test("pear_workspace_changed reaches the Workspace event reducer", ({overrid
     dispatch(event);
     assert.equal(stub.num_calls, 1);
     assert.equal(stub.get_args("event").event, event);
+});
+
+run_test("message_thread reaches the shared thread reducer", ({override}) => {
+    const stub = make_stub();
+    override(message_threads, "apply_message_thread_event", stub.f);
+    const event = {
+        type: "message_thread",
+        message_id: 42,
+        reply_summary: {
+            reply_count: 1,
+            last_reply_at: 100,
+            last_sender: null,
+            participants: [],
+        },
+        reply: {
+            id: 9,
+            message_id: 42,
+            sender_id: 7,
+            sender_full_name: "Ada Lovelace",
+            avatar_url: null,
+            content: "<p>Reply</p>",
+            content_type: "text/html",
+            timestamp: 100,
+        },
+    };
+    dispatch(event);
+    assert.equal(stub.num_calls, 1);
+    assert.equal(stub.get_args("raw_event").raw_event, event);
 });
 
 const me = {

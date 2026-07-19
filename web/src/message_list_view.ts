@@ -28,12 +28,12 @@ import * as message_lists from "./message_lists.ts";
 import * as message_reminder from "./message_reminder.ts";
 import * as message_store from "./message_store.ts";
 import type {Message} from "./message_store.ts";
+import * as message_threads from "./message_threads.ts";
 import * as message_viewport from "./message_viewport.ts";
 import type {MessageViewportInfo} from "./message_viewport.ts";
 import * as muted_users from "./muted_users.ts";
 import * as narrow_state from "./narrow_state.ts";
 import {page_params} from "./page_params.ts";
-import * as pear_agent_threads from "./pear_agent_threads.ts";
 import {unmount_pear_artifact} from "./pear_artifact_lifecycle.ts";
 import {
     pear_live_overview_key,
@@ -163,13 +163,16 @@ function unmount_pear_artifacts_in(root: JQuery | HTMLElement): void {
     }
 }
 
-function destroy_pear_agent_threads_in(root: JQuery | HTMLElement): void {
+function destroy_message_threads_in(root: JQuery | HTMLElement): void {
     const element = root instanceof HTMLElement ? root : root[0];
     if (element === undefined) {
         return;
     }
-    for (const row of element.querySelectorAll<HTMLElement>(".message_row.pear-message")) {
-        pear_agent_threads.destroy_for_message(rows.id($(row)));
+    const message_rows = element.matches(".message_row")
+        ? [element]
+        : [...element.querySelectorAll<HTMLElement>(".message_row")];
+    for (const row of message_rows) {
+        message_threads.destroy_for_message(rows.id($(row)));
     }
 }
 
@@ -466,15 +469,12 @@ function enhance_pear_tool_rows($row: JQuery): void {
     });
 }
 
-function render_pear_agent_threads($row: JQuery): void {
-    if (!$row.hasClass("pear-message")) {
-        return;
-    }
+function render_message_threads($row: JQuery): void {
     const row = $row[0];
     if (!(row instanceof HTMLElement)) {
         return;
     }
-    pear_agent_threads.render_for_message_row(row, rows.id($row), (trace_root) => {
+    message_threads.render_for_message_row(row, rows.id($row), (trace_root) => {
         enhance_pear_tool_rows($(trace_root));
     });
 }
@@ -1594,7 +1594,7 @@ function update_rendered_pear_active_messages(): void {
         // so the settling ticker must be drawn here too.
         maybe_render_pear_run_footer($row);
         render_pear_live_progress($row);
-        render_pear_agent_threads($row);
+        render_message_threads($row);
         // Artifact submessages can arrive immediately before the final
         // streaming edit.  Keep the independently mounted artifact host
         // present while those two event streams settle; render_submessage is
@@ -2913,7 +2913,7 @@ export class MessageListView {
         enhance_pear_tool_rows($row);
         maybe_render_pear_run_footer($row);
         render_pear_live_progress($row);
-        render_pear_agent_threads($row);
+        render_message_threads($row);
         // Live progress owns the current-step glyph, so it must exist before
         // the animation decorator scans the row. Streaming edits take this
         // path repeatedly; reversing these calls leaves the freshly replaced
@@ -3095,7 +3095,7 @@ export class MessageListView {
 
                 this._post_process($dom_messages);
                 unmount_pear_artifacts_in($old_message_group);
-                destroy_pear_agent_threads_in($old_message_group);
+                destroy_message_threads_in($old_message_group);
                 $old_message_group.replaceWith($rendered_groups);
                 condense.condense_and_collapse($dom_messages);
             }
@@ -3574,7 +3574,7 @@ export class MessageListView {
                 enhance_pear_tool_rows($row);
                 maybe_render_pear_run_footer($row);
                 render_pear_live_progress($row);
-                render_pear_agent_threads($row);
+                render_message_threads($row);
                 maybe_render_pear_thinking_glyph($row);
                 submessage.render_submessage({
                     $row,
@@ -3588,7 +3588,7 @@ export class MessageListView {
         }
         this._post_process($rendered_msg);
         unmount_pear_artifacts_in($row);
-        destroy_pear_agent_threads_in($row);
+        destroy_message_threads_in($row);
         $row.replaceWith($rendered_msg);
 
         message_list_hover.reapply_hover_on_row_replace($row, $rendered_msg, message_container.msg);

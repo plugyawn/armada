@@ -77,8 +77,8 @@
 
 {{#if is_pear_message}}
 <div class="pear-artifact-message-host"></div>
-<div class="pear-agent-thread-host" hidden></div>
 {{/if}}
+<div class="message-thread-host" hidden></div>
 
 {{#unless (or is_hidden (eq msg.message_reactions.length 0))}}
     {{> message_reactions . }}

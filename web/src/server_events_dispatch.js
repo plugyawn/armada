@@ -34,6 +34,7 @@ import * as message_lists from "./message_lists.ts";
 import * as message_live_update from "./message_live_update.ts";
 import * as message_reminder from "./message_reminder.ts";
 import * as message_store from "./message_store.ts";
+import * as message_threads from "./message_threads.ts";
 import * as message_view from "./message_view.ts";
 import * as muted_users_ui from "./muted_users_ui.ts";
 import * as narrow_title from "./narrow_title.ts";
@@ -190,6 +191,10 @@ export function dispatch_normal_event(event) {
         case "pear_run":
             pear_run_state.apply_pear_run_event(event);
             pear_panel.handle_pear_run_event(event);
+            break;
+
+        case "message_thread":
+            message_threads.apply_message_thread_event(event);
             break;
 
         case "pear_workspace_changed":

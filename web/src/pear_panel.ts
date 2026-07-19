@@ -56,6 +56,15 @@ const pear_live_run_schema = z.object({
     has_visible_assistant_text: z.optional(z.boolean()),
 });
 
+const pear_agent_thread_schema = z.object({
+    thread_id: z.string(),
+    nickname: z.nullish(z.string()),
+    role: z.nullish(z.string()),
+    name: z.nullish(z.string()),
+    status: z.string(),
+    current_activity: z.optional(z.string()),
+});
+
 const pear_run_schema = z.object({
     id: z.number(),
     snapshot_sequence: z.optional(z.number()),
@@ -82,6 +91,7 @@ const pear_run_schema = z.object({
     plan: z.nullish(z.array(z.object({step: z.string(), status: z.string()}))),
     overview: z.nullish(z.string()),
     live: z.nullish(pear_live_run_schema),
+    agents: z.optional(z.array(pear_agent_thread_schema)),
     events: z.optional(z.array(pear_run_event_schema)),
 });
 
@@ -402,8 +412,8 @@ function topic_context_matches(
     return (
         stream !== undefined &&
         topic !== undefined &&
-        topic_context?.stream === stream &&
-        topic_context.topic === topic
+        topic_context?.stream.toLowerCase() === stream.toLowerCase() &&
+        topic_context.topic.toLowerCase() === topic.toLowerCase()
     );
 }
 
@@ -1461,6 +1471,9 @@ export function handle_pear_run_event(event: {
     has_visible_assistant_text: boolean | null;
     usage: z.infer<typeof pear_usage_schema> | null;
     duration_seconds: number | null;
+    agent_thread_id?: string | null | undefined;
+    agent?: pear_run_state.PearAgentThreadDelta | null | undefined;
+    agents?: pear_run_state.PearAgentThread[] | null | undefined;
 }): void {
     const {stream, topic} = current_context();
     if (stream !== event.stream || topic !== event.topic) {
@@ -1485,6 +1498,7 @@ export function handle_pear_run_event(event: {
         tool_count: event.tool_count,
         plan: event.plan ?? run.plan,
         overview: event.overview ?? (event.plan === null ? run.overview : null),
+        agents: pear_run_state.get_run_view_by_id(event.run_id)?.agents ?? run.agents,
         usage: {
             ...run.usage,
             ...event.usage,
@@ -1646,6 +1660,7 @@ export function reconcile_run_snapshot_for_testing(
         current_activity: view.current_activity ?? base.current_activity,
         plan: view.plan !== undefined ? view.plan : base.plan,
         overview: view.overview !== undefined ? view.overview : base.overview,
+        agents: view.agents ?? base.agents,
         tool_count: view.tool_count ?? base.tool_count,
         date_created: view.date_created ?? base.date_created,
         date_updated: view.updated_at ?? base.date_updated,

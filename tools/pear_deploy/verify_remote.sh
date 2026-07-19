@@ -78,6 +78,10 @@ for key, value in values.items():
 PY
 )"
 
+ssh_root() {
+    ssh -F "$SSH_CONFIG" pear-staging-root "$@"
+}
+
 LOCAL_SHA="$(git -C "$REPO_ROOT" rev-parse HEAD)"
 REMOTE_SHA="$(
     ssh -F "$SSH_CONFIG" pear-staging-root \
@@ -296,6 +300,13 @@ ssh -F "$SSH_CONFIG" pear-staging-root \
 
 echo
 echo "Pear queue health:"
-ssh -F "$SSH_CONFIG" pear-staging-root \
-    'rabbitmqctl list_queues name messages_ready messages_unacknowledged consumers' |
-    validate_pear_deploy_queue_snapshot
+queue_snapshot="$(
+    ssh_root 'rabbitmqctl list_queues name messages_ready messages_unacknowledged consumers'
+)"
+printf '%s\n' "$queue_snapshot" | validate_pear_deploy_queue_snapshot
+printf '%s\n' "$queue_snapshot" | validate_pear_worker_pool_snapshot
+remote_pear_worker_pool_topology_snapshot | validate_pear_worker_pool_topology_snapshot
+
+echo
+echo "Pear worker delivery policy:"
+verify_remote_pear_worker_consumer_timeout_policy

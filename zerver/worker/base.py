@@ -89,6 +89,10 @@ def check_and_send_restart_signal() -> None:
 class QueueProcessingWorker(ABC):
     queue_name: str
     MAX_CONSUME_SECONDS: int | None = 30
+    # Most Zulip workers record a failed event and continue.  Workers whose
+    # queue acknowledgment is their durable retry boundary can opt into
+    # propagating failures after the common diagnostics are recorded.
+    RERAISE_CONSUME_EXCEPTIONS = False
     CONSUME_ITERATIONS_BEFORE_UPDATE_STATS_NUM = 50
     MAX_SECONDS_BEFORE_UPDATE_STATS = 30
 
@@ -140,7 +144,7 @@ class QueueProcessingWorker(ABC):
 
         os.makedirs(settings.QUEUE_STATS_DIR, exist_ok=True)
 
-        fname = f"{self.queue_name}.stats"
+        fname = self.statistics_file_name()
         fn = os.path.join(settings.QUEUE_STATS_DIR, fname)
         with lockfile(fn + ".lock"):
             tmp_fn = fn + ".tmp"
@@ -150,6 +154,9 @@ class QueueProcessingWorker(ABC):
                 )
             os.rename(tmp_fn, fn)
         self.last_statistics_update_time = time.time()
+
+    def statistics_file_name(self) -> str:
+        return f"{self.queue_name}.stats"
 
     def get_remaining_local_queue_size(self) -> int:
         if self.q is not None:
@@ -212,6 +219,8 @@ class QueueProcessingWorker(ABC):
                 self.consumed_since_last_emptied += len(events)
             except Exception as e:
                 self._handle_consume_exception(events, e)
+                if self.RERAISE_CONSUME_EXCEPTIONS and not isinstance(e, InterruptConsumeError):
+                    raise
             finally:
                 flush_per_request_caches()
                 reset_queries()

@@ -5,6 +5,7 @@ import subprocess
 import sys
 import time
 from collections import defaultdict
+from contextlib import suppress
 from typing import Any
 
 ZULIP_PATH = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -24,10 +25,14 @@ normal_queues = [
     "missedmessage_mobile_notifications",
     "outgoing_webhooks",
     "pear_worker",
+    "pear_worker_1",
     "thumbnail",
     "user_activity",
     "user_activity_interval",
 ]
+
+PEAR_WORKER_QUEUE_NAMES = ("pear_worker", "pear_worker_1")
+PEAR_WORKER_STATS_FILES = ("pear_worker-0.stats", "pear_worker-1.stats")
 
 mobile_notification_shards = int(
     get_config(get_config_file(), "application_server", "mobile_notification_shards", "1")
@@ -66,6 +71,36 @@ CRITICAL_SECONDS_TO_CLEAR: defaultdict[str, int] = defaultdict(
     email_senders=300,
     deferred_email_senders=4500,
 )
+
+
+def aggregate_parallel_queue_stats(slot_stats: list[dict[str, Any]]) -> dict[str, Any]:
+    """Combine process-level stats into one conservative pool capacity view."""
+    if len(slot_stats) != len(PEAR_WORKER_STATS_FILES) or any(not stats for stats in slot_stats):
+        return {}
+    consume_times = [
+        stats["recent_average_consume_time"]
+        for stats in slot_stats
+        if stats.get("recent_average_consume_time") is not None
+    ]
+    average_consume_time = (
+        sum(consume_times) / len(consume_times) / len(slot_stats) if consume_times else None
+    )
+    return {
+        "update_time": max(stats["update_time"] for stats in slot_stats),
+        "recent_average_consume_time": average_consume_time,
+        "queue_last_emptied_timestamp": min(
+            stats["queue_last_emptied_timestamp"] for stats in slot_stats
+        ),
+        "consumed_since_last_emptied": sum(
+            stats["consumed_since_last_emptied"] for stats in slot_stats
+        ),
+    }
+
+
+def queue_statistics_filenames(queue_name: str) -> tuple[str, ...]:
+    if queue_name in PEAR_WORKER_QUEUE_NAMES:
+        return PEAR_WORKER_STATS_FILES
+    return (f"{queue_name}.stats",)
 
 
 def analyze_queue_stats(
@@ -122,6 +157,44 @@ def analyze_queue_stats(
     return dict(status=OK, name=queue_name, message="")
 
 
+def pear_worker_health_results(
+    slot_stats: list[dict[str, Any]], queue_counts: dict[str, int], now: int | None = None
+) -> list[dict[str, Any]]:
+    """Check pool topology and each slot independently."""
+    now = int(time.time()) if now is None else now
+    results: list[dict[str, Any]] = []
+    for queue in PEAR_WORKER_QUEUE_NAMES:
+        consumers = queue_counts.get(queue, 0)
+        if consumers != len(PEAR_WORKER_STATS_FILES):
+            results.append(
+                dict(
+                    status=CRITICAL,
+                    name=queue,
+                    message=f"expected {len(PEAR_WORKER_STATS_FILES)} consumers, found {consumers}",
+                )
+            )
+    for index, stats in enumerate(slot_stats):
+        if not stats:
+            results.append(
+                dict(
+                    status=CRITICAL,
+                    name=PEAR_WORKER_STATS_FILES[index],
+                    message="missing or invalid stats data",
+                )
+            )
+        elif now - stats["update_time"] > 180 and any(
+            queue_counts.get(queue, 0) > 0 for queue in PEAR_WORKER_QUEUE_NAMES
+        ):
+            results.append(
+                dict(
+                    status=CRITICAL,
+                    name=PEAR_WORKER_STATS_FILES[index],
+                    message=f"worker slot appears stale, last update {stats['update_time']}",
+                )
+            )
+    return results
+
+
 WARN_COUNT_THRESHOLD_DEFAULT = 10
 CRITICAL_COUNT_THRESHOLD_DEFAULT = 50
 
@@ -172,7 +245,7 @@ def check_rabbitmq_queues() -> None:
     ).strip()
     queue_stats: dict[str, dict[str, Any]] = {}
 
-    check_queues = normal_queues
+    check_queues = list(normal_queues)
     if mobile_notification_shards > 1:
         # For sharded queue workers, where there's a separate queue
         # for each shard, we need to make sure none of those are
@@ -185,20 +258,34 @@ def check_rabbitmq_queues() -> None:
         check_queues += [f"user_activity_shard{d}" for d in range(1, user_activity_shards + 1)]
 
     queues_to_check = set(check_queues).intersection(set(queues_with_consumers))
+    pear_slot_stats: list[dict[str, Any]] = []
+    for filename in PEAR_WORKER_STATS_FILES:
+        file_path = os.path.join(queue_stats_dir, filename)
+        stats: dict[str, Any] = {}
+        if os.path.exists(file_path):
+            with open(file_path) as f, suppress(json.decoder.JSONDecodeError):
+                stats = json.load(f)
+        pear_slot_stats.append(stats)
+    results = pear_worker_health_results(pear_slot_stats, queue_counts_rabbitmqctl)
     for queue in queues_to_check:
-        fn = queue + ".stats"
-        file_path = os.path.join(queue_stats_dir, fn)
-        if not os.path.exists(file_path):
-            queue_stats[queue] = {}
-            continue
+        stats_files = queue_statistics_filenames(queue)
+        loaded_stats = []
+        for filename in stats_files:
+            file_path = os.path.join(queue_stats_dir, filename)
+            if not os.path.exists(file_path):
+                loaded_stats.append({})
+                continue
+            with open(file_path) as f:
+                try:
+                    loaded_stats.append(json.load(f))
+                except json.decoder.JSONDecodeError:
+                    loaded_stats.append({})
+        queue_stats[queue] = (
+            aggregate_parallel_queue_stats(loaded_stats)
+            if queue in PEAR_WORKER_QUEUE_NAMES
+            else loaded_stats[0]
+        )
 
-        with open(file_path) as f:
-            try:
-                queue_stats[queue] = json.load(f)
-            except json.decoder.JSONDecodeError:
-                queue_stats[queue] = {}
-
-    results = []
     for queue_name, stats in queue_stats.items():
         results.append(analyze_queue_stats(queue_name, stats, queue_counts_rabbitmqctl[queue_name]))
 

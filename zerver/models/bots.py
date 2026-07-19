@@ -2,6 +2,7 @@ import uuid
 
 from django.db import models
 from django.db.models import CASCADE, SET_NULL
+from django.db.models.functions import Lower
 from django.utils.timezone import now as timezone_now
 
 from zerver.models.constants import MAX_TOPIC_NAME_LENGTH
@@ -344,7 +345,14 @@ class PearWorkspaceNode(models.Model):
     date_updated = models.DateTimeField(default=timezone_now)
 
     class Meta:
-        unique_together = ("realm", "stream_name", "topic_name")
+        constraints = [
+            models.UniqueConstraint(
+                "realm",
+                Lower("stream_name"),
+                Lower("topic_name"),
+                name="zerver_pear_ws_scope_ci_uniq",
+            ),
+        ]
         indexes = [
             models.Index(
                 fields=["project", "date_updated"],

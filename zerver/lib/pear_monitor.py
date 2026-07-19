@@ -21,6 +21,7 @@ from typing import Any, Final
 
 from django.utils.timezone import now as timezone_now
 
+from zerver.lib.pear import pear_topic_scope
 from zerver.lib.pear_agent import PearProcessIsolation, pear_isolated_command
 from zerver.lib.pear_artifact import PearArtifactError, canonicalize_pear_artifact
 from zerver.models import PearMonitor, UserProfile
@@ -478,6 +479,7 @@ def pear_create_monitor_from_spec(
     pin-to-wall path: an artifact the agent already composed in chat needs
     no setup run, no DM anchor, no provisioning state."""
     spec = pear_validate_monitor_spec(raw_spec)
+    stream_name, topic_name = pear_topic_scope(stream_name, topic_name)
     return PearMonitor.objects.create(
         realm=realm,
         bot_profile=bot_profile,

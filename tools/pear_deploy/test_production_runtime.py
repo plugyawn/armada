@@ -858,6 +858,7 @@ class StaticRuntimeContractTest(unittest.TestCase):
         update = (REPO_ROOT / "tools/pear_deploy/update_remote.sh").read_text()
         verify = (REPO_ROOT / "tools/pear_deploy/verify_remote.sh").read_text()
         bootstrap = (REPO_ROOT / "tools/pear_deploy/bootstrap_remote.sh").read_text()
+        deploy_readme = (REPO_ROOT / "tools/pear_deploy/README.md").read_text()
         codex_sandbox_runtime = (
             REPO_ROOT / "tools/pear_deploy/codex_sandbox_runtime.sh"
         ).read_text()
@@ -907,6 +908,67 @@ class StaticRuntimeContractTest(unittest.TestCase):
         self.assertIn("install_remote_gemini_config", update)
         self.assertIn("PEAR_GEMINI_INTERACTIONS_API_KEY", update)
         self.assertIn("zerver.tests.test_pear_presentation", update)
+        self.assertIn("PEAR_WORKER_CONSUMER_TIMEOUT_MS=21600000", common)
+        self.assertIn("--apply-to\n    queues", common)
+        self.assertIn("install_remote_pear_worker_consumer_timeout_policy", bootstrap)
+        self.assertIn("install_remote_pear_worker_consumer_timeout_policy", update)
+        self.assertIn("wait_for_remote_pear_worker_consumer_timeout_queues", bootstrap)
+        self.assertIn("wait_for_remote_pear_worker_consumer_timeout_queues", update)
+        self.assertIn("wait_for_remote_pear_worker_pool_topology", bootstrap)
+        self.assertIn("wait_for_remote_pear_worker_pool_topology", update)
+        self.assertIn("verify_remote_pear_worker_consumer_timeout_policy", update)
+        self.assertIn("verify_remote_pear_worker_consumer_timeout_policy", verify)
+        self.assertIn("validate_pear_worker_pool_snapshot", update)
+        self.assertIn("validate_pear_worker_pool_snapshot", verify)
+        self.assertLess(
+            bootstrap.index("install_remote_pear_worker_consumer_timeout_policy"),
+            bootstrap.index(
+                "systemctl daemon-reload && systemctl enable caddy ${PEAR_DEPLOY_SERVICES[*]}"
+            ),
+        )
+        self.assertLess(
+            update.rindex("install_remote_pear_worker_consumer_timeout_policy"),
+            update.rindex("systemctl restart caddy ${PEAR_DEPLOY_SERVICES[*]}"),
+        )
+        self.assertLess(
+            update.rindex("systemctl restart caddy ${PEAR_DEPLOY_SERVICES[*]}"),
+            update.rindex("wait_for_remote_pear_worker_consumer_timeout_queues"),
+        )
+        self.assertIn("intentionally additive broker state", deploy_readme)
+        self.assertIn(
+            "systemctl stop caddy pear-worker pear-monitor-worker",
+            update,
+        )
+        self.assertIn("systemctl stop pear-worker-1 2>/dev/null || true", update)
+        self.assertIn('systemctl disable pear-worker-1 2>/dev/null || true', update)
+        self.assertIn('current = {"0805_pear_runtime", "0806_pear_workspace_scope_casefold"}', update)
+        self.assertIn(
+            "systemctl restart caddy ${PREDEPLOY_SERVICES[*]}",
+            update,
+        )
+        self.assertNotIn(
+            'if ssh_root "systemctl restart caddy ${PEAR_DEPLOY_SERVICES[*]}"',
+            update,
+        )
+        rollback_stop = update.index("systemctl stop caddy pear-worker pear-monitor-worker")
+        rollback_settle = update.index("rollback_settled_runs=")
+        rollback_purge = update.index('rabbitmqctl purge_queue -p / "$queue"')
+        rollback_delete = update.index('rabbitmqctl delete_queue -p / "$queue"')
+        rollback_restore = update.index("rsync -a --delete", rollback_stop)
+        rollback_health = update.index("restored Pear runtime did not become healthy")
+        self.assertLess(rollback_stop, rollback_settle)
+        self.assertLess(rollback_settle, rollback_purge)
+        self.assertLess(rollback_purge, rollback_delete)
+        self.assertLess(rollback_purge, rollback_restore)
+        self.assertLess(rollback_restore, rollback_health)
+        self.assertIn(
+            "for service in caddy pear-worker pear-worker-1 pear-monitor-worker",
+            update,
+        )
+        self.assertNotIn(
+            "ROLLBACK_SERVICES=(caddy pear-worker pear-monitor-worker",
+            update,
+        )
         self.assertNotIn("--max-orphan-active-markers", update)
         self.assertNotIn("--max-orphan-active-markers", verify)
         self.assertIn("classify_production_asset_requirement", update)
@@ -1131,6 +1193,7 @@ sys.stdout.write(status)
             "source tools/pear_deploy/deploy_common.sh; "
             "printf '%s\\n' "
             "'pear_worker 0 0 1' "
+            "'pear_worker_1 0 0 1' "
             "'pear_monitor_worker 0 0 1' "
             "'pear_addressing 0 0 1' "
             "'pear_presentation 0 0 1' "
@@ -1200,6 +1263,185 @@ sys.stdout.write(status)
         )
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("queue has no active consumer: pear_worker", result.stderr)
+
+    def test_worker_pool_validator_requires_exactly_two_consumers_per_queue(self) -> None:
+        valid = subprocess.run(
+            [
+                "bash",
+                "-c",
+                "source tools/pear_deploy/deploy_common.sh; "
+                "printf '%s\\n' 'pear_worker 2 1 2' 'pear_worker_1 0 0 2' | "
+                "validate_pear_worker_pool_snapshot",
+            ],
+            cwd=REPO_ROOT,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(valid.returncode, 0, valid.stderr)
+
+        for rows in (
+            ("pear_worker 0 0 1", "pear_worker_1 0 0 2"),
+            ("pear_worker 0 0 3", "pear_worker_1 0 0 2"),
+            ("pear_worker 0 0 2",),
+            ("pear_worker 0 0 2", "pear_worker 0 0 2", "pear_worker_1 0 0 2"),
+        ):
+            payload = "\n".join(rows) + "\n"
+            invalid = subprocess.run(
+                [
+                    "bash",
+                    "-c",
+                    "source tools/pear_deploy/deploy_common.sh; validate_pear_worker_pool_snapshot",
+                ],
+                cwd=REPO_ROOT,
+                input=payload,
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertNotEqual(invalid.returncode, 0, rows)
+
+    def test_worker_pool_topology_validator_checks_affinity_ack_and_qos(self) -> None:
+        consumers = [
+            {
+                "queue_name": queue,
+                "channel_pid": pid,
+                "consumer_tag": f"{pid}-{queue}",
+                "ack_required": True,
+                "prefetch_count": 1,
+                "active": True,
+                "arguments": {"x-priority": priority},
+            }
+            for pid, priorities in (("<slot.0>", (10, 0)), ("<slot.1>", (0, 10)))
+            for queue, priority in zip(("pear_worker", "pear_worker_1"), priorities, strict=True)
+        ]
+        channels = [
+            {
+                "pid": pid,
+                "vhost": "/",
+                "consumer_count": 2,
+                "prefetch_count": 1,
+                "global_prefetch_count": 1,
+            }
+            for pid in ("<slot.0>", "<slot.1>")
+        ]
+
+        def validate(
+            consumer_rows: list[dict[str, object]],
+            channel_rows: list[dict[str, object]],
+        ) -> subprocess.CompletedProcess[str]:
+            payload = (
+                json.dumps(consumer_rows)
+                + "\n-- pear-worker-channels --\n"
+                + json.dumps(channel_rows)
+            )
+            return subprocess.run(
+                [
+                    "bash",
+                    "-c",
+                    "source tools/pear_deploy/deploy_common.sh; "
+                    "validate_pear_worker_pool_topology_snapshot",
+                ],
+                cwd=REPO_ROOT,
+                input=payload,
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+
+        valid = validate(consumers, channels)
+        self.assertEqual(valid.returncode, 0, valid.stderr)
+
+        for field, value in (
+            ("ack_required", False),
+            ("active", False),
+            ("prefetch_count", 2),
+            ("arguments", {"x-priority": 4}),
+        ):
+            invalid_consumers = [dict(row) for row in consumers]
+            invalid_consumers[0][field] = value
+            invalid = validate(invalid_consumers, channels)
+            self.assertNotEqual(invalid.returncode, 0, (field, invalid.stderr))
+
+        invalid_channels = [dict(row) for row in channels]
+        invalid_channels[0]["global_prefetch_count"] = 0
+        invalid = validate(consumers, invalid_channels)
+        self.assertNotEqual(invalid.returncode, 0)
+        self.assertIn("does not have global prefetch 1", invalid.stderr)
+
+    def test_worker_timeout_policy_validators_accept_the_exact_contract(self) -> None:
+        policy = json.dumps(
+            [
+                {
+                    "vhost": "/",
+                    "name": "pear-worker-consumer-timeout",
+                    "pattern": "^pear_worker(_1)?$",
+                    "apply-to": "queues",
+                    "definition": {"consumer-timeout": 21_600_000},
+                    "priority": 10,
+                }
+            ]
+        )
+        queues = json.dumps(
+            [
+                {
+                    "name": name,
+                    "type": "classic",
+                    "durable": True,
+                    "policy": "pear-worker-consumer-timeout",
+                    "effective_policy_definition": {"consumer-timeout": 21_600_000},
+                    "arguments": [],
+                }
+                for name in ("pear_worker", "pear_worker_1")
+            ]
+        )
+        for validator, payload in (
+            ("validate_pear_worker_consumer_timeout_policy_snapshot", policy),
+            ("validate_pear_worker_consumer_timeout_queue_snapshot", queues),
+        ):
+            result = subprocess.run(
+                [
+                    "bash",
+                    "-c",
+                    f"source tools/pear_deploy/deploy_common.sh; {validator}",
+                ],
+                cwd=REPO_ROOT,
+                input=payload,
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_worker_timeout_queue_validator_rejects_a_missing_effective_policy(self) -> None:
+        queues = json.dumps(
+            [
+                {
+                    "name": name,
+                    "type": "classic",
+                    "durable": True,
+                    "policy": "pear-worker-consumer-timeout",
+                    "effective_policy_definition": {},
+                    "arguments": [],
+                }
+                for name in ("pear_worker", "pear_worker_1")
+            ]
+        )
+        result = subprocess.run(
+            [
+                "bash",
+                "-c",
+                "source tools/pear_deploy/deploy_common.sh; "
+                "validate_pear_worker_consumer_timeout_queue_snapshot",
+            ],
+            cwd=REPO_ROOT,
+            input=queues,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("does not have the effective consumer timeout", result.stderr)
 
     def test_untracked_output_allowlist_uses_exact_file_names(self) -> None:
         script = (

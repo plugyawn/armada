@@ -27,6 +27,15 @@ MAX_REQUEST_RETRIES = 3
 ChannelT = TypeVar("ChannelT", Channel, BlockingChannel)
 Consumer: TypeAlias = Callable[[ChannelT, Basic.Deliver, pika.BasicProperties, bytes], None]
 
+# Private delivery metadata used only between the queue adapter and workers
+# that explicitly opt in.  Keeping it out of the durable event body means the
+# producer contract stays unchanged.
+QUEUE_REDELIVERED_EVENT_KEY = "_rabbitmq_redelivered"
+
+
+class QueueEventDiscardError(Exception):
+    """A queue delivery is permanently invalid and must not be requeued."""
+
 
 # This simple queuing library doesn't expose much of the power of
 # RabbitMQ/Pika's queuing system; its purpose is to just provide an
@@ -228,6 +237,73 @@ class SimpleQueueClient(QueueClient[BlockingChannel]):
                     break
 
         self.ensure_queue(queue_name, do_consume)
+
+    def start_json_consumers(
+        self,
+        queue_priorities: Mapping[str, int],
+        callback: Callable[[list[dict[str, Any]]], None],
+        *,
+        annotate_redelivery: bool = False,
+    ) -> None:
+        """Consume several queues through one globally-prefetched channel.
+
+        This is intentionally narrower than the batching API above.  It is for
+        long-running workers which need RabbitMQ consumer priorities while
+        retaining a single in-flight event across all subscribed queues.
+        """
+        if not queue_priorities:
+            raise ValueError("at least one queue is required")
+        if self.channel is None:
+            raise RuntimeError("queue client is not connected")
+
+        # RabbitMQ normally applies prefetch per consumer.  These consumers
+        # share one synchronous worker, so also impose a channel-wide limit;
+        # otherwise one process can reserve an event from every queue.
+        self.channel.basic_qos(prefetch_count=self.prefetch, global_qos=True)
+
+        def on_message(
+            channel: BlockingChannel,
+            method: Basic.Deliver,
+            _properties: pika.BasicProperties,
+            body: bytes,
+        ) -> None:
+            try:
+                event = orjson.loads(body)
+            except orjson.JSONDecodeError:
+                self.log.exception("Discarding malformed JSON queue delivery.")
+                if channel.is_open:
+                    channel.basic_nack(method.delivery_tag, requeue=False)
+                return
+            if not isinstance(event, dict):
+                self.log.error("Discarding JSON queue delivery that is not an object.")
+                if channel.is_open:
+                    channel.basic_nack(method.delivery_tag, requeue=False)
+                return
+            if annotate_redelivery and method.redelivered:
+                event[QUEUE_REDELIVERED_EVENT_KEY] = True
+            try:
+                callback([event])
+                channel.basic_ack(method.delivery_tag)
+            except QueueEventDiscardError:
+                self.log.exception("Discarding permanently invalid queue delivery.")
+                if channel.is_open:
+                    channel.basic_nack(method.delivery_tag, requeue=False)
+            except BaseException:
+                if channel.is_open:
+                    channel.basic_nack(method.delivery_tag, requeue=True)
+                raise
+
+        for queue_name, priority in queue_priorities.items():
+            self.ensure_queue(
+                queue_name,
+                lambda channel, queue_name=queue_name, priority=priority: channel.basic_consume(
+                    queue=queue_name,
+                    on_message_callback=on_message,
+                    arguments={"x-priority": priority},
+                ),
+            )
+        self.is_consuming = True
+        self.channel.start_consuming()
 
     def local_queue_size(self) -> int:
         assert self.channel is not None

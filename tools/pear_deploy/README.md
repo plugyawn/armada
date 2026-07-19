@@ -73,9 +73,20 @@ starts:
 - `pear-zulip-dev.service`
 - `pear-embedded-bots.service`
 - `pear-worker.service`
+- `pear-worker-1.service`
 - `pear-monitor-worker.service`
 - `pear-thumbnail.service`
 - `caddy.service`
+
+The two Codex worker queues retain an unacknowledged RabbitMQ delivery while a
+turn is running. Bootstrap and guarded updates therefore install the vhost `/`
+policy `pear-worker-consumer-timeout` on `pear_worker` and `pear_worker_1`, with
+a six-hour acknowledgement timeout, before either worker starts. The deploy
+then verifies that both queues are classic, durable, and effectively carry the
+policy. This policy is intentionally additive broker state: a code rollback
+leaves it installed because it is also safe for the former single-worker
+topology and prevents a healthy long turn from being redelivered at RabbitMQ's
+30-minute default.
 
 After it finishes, test:
 
@@ -108,8 +119,8 @@ ssh -F output/pear-staging/ssh_config pear-staging-root
 Useful service checks:
 
 ```bash
-sudo systemctl status pear-zulip-dev pear-embedded-bots pear-worker caddy
-sudo journalctl -u pear-zulip-dev -u pear-embedded-bots -u pear-worker -f
+sudo systemctl status pear-zulip-dev pear-embedded-bots pear-worker pear-worker-1 caddy
+sudo journalctl -u pear-zulip-dev -u pear-embedded-bots -u pear-worker -u pear-worker-1 -f
 ```
 
 ## Re-sync after local edits

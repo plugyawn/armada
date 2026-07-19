@@ -30,6 +30,7 @@ from zerver.lib.pear import (
     PearAddressingIntentClassifier,
     PearEmbeddedBotHandler,
     PearPendingSteeringEvent,
+    PearWorkerLeaseLostError,
     PearWorkerRunStatus,
     PearWorkerRuntime,
     build_pear_active_session_summary,
@@ -39,6 +40,7 @@ from zerver.lib.pear import (
     pear_message_id,
     pear_message_stream,
     pear_message_topic,
+    pear_topic_scope,
     trim_pear_text,
 )
 from zerver.lib.pear_agent import (
@@ -51,11 +53,18 @@ from zerver.lib.pear_skills import reconcile_pear_codex_skills
 from zerver.lib.queue import queue_json_publish_rollback_unsafe
 from zerver.lib.streams import access_stream_by_name
 from zerver.lib.topic import messages_for_topic
-from zerver.models import Stream
-from zerver.models.bots import PearProject, PearWorkerRun, PearWorkerRunEvent, PearWorkspaceNode
+from zerver.models import Realm, Stream
+from zerver.models.bots import (
+    PearMonitor,
+    PearProject,
+    PearWorkerRun,
+    PearWorkerRunEvent,
+    PearWorkspaceNode,
+)
 from zerver.models.users import UserProfile
 
 PEAR_WORKER_QUEUE_NAME = "pear_worker"
+PEAR_WORKER_QUEUE_NAMES = (PEAR_WORKER_QUEUE_NAME, "pear_worker_1")
 PEAR_MONITOR_WORKER_QUEUE_NAME = "pear_monitor_worker"
 PEAR_ADDRESSING_QUEUE_NAME = "pear_addressing"
 PEAR_PRESENTATION_QUEUE_NAME = "pear_presentation"
@@ -81,6 +90,20 @@ PEAR_RUN_LEGAL_TRANSITIONS: dict[PearWorkerRunStatus, frozenset[PearWorkerRunSta
     PearWorkerRun.DONE: frozenset(),
     PearWorkerRun.CANCELLED: frozenset(),
 }
+
+
+def pear_worker_home_slot(user_profile_id: int, *, stream: str, topic: str) -> int:
+    """Return a stable home slot without creating a second ownership store."""
+    stream, topic = pear_topic_scope(stream, topic)
+    affinity_key = f"{user_profile_id}\0{stream}\0{topic}".encode()
+    digest = hashlib.blake2s(affinity_key, digest_size=2).digest()
+    return int.from_bytes(digest, "big") % len(PEAR_WORKER_QUEUE_NAMES)
+
+
+def pear_worker_queue_name(user_profile_id: int, *, stream: str, topic: str) -> str:
+    return PEAR_WORKER_QUEUE_NAMES[
+        pear_worker_home_slot(user_profile_id, stream=stream, topic=topic)
+    ]
 
 
 def pear_run_attention_cache_key(run_id: int) -> str:
@@ -156,13 +179,51 @@ def pear_worker_run_is_stale(run: PearWorkerRun, *, current_time: datetime) -> b
     return last_seen <= current_time - timedelta(seconds=pear_worker_stale_after_seconds())
 
 
+def wait_for_redelivered_pear_worker_run(
+    *,
+    bot_profile_id: int,
+    trigger_message_id: int,
+) -> None:
+    """Hold a redelivery until its previous worker lease settles or expires.
+
+    A RabbitMQ connection can disappear while Codex is still finishing a
+    turn.  Acknowledging that redelivery immediately can lose the only retry;
+    claiming it immediately can run the same turn twice.  The database
+    heartbeat is already the authoritative lease, so wait on that one source
+    of truth instead of adding a parallel ownership registry.
+    """
+    while True:
+        run = PearWorkerRun.objects.filter(
+            bot_profile_id=bot_profile_id,
+            trigger_message_id=trigger_message_id,
+        ).first()
+        current_time = timezone_now()
+        if (
+            run is None
+            or run.status != PearWorkerRun.RUNNING
+            or pear_worker_run_is_stale(run, current_time=current_time)
+        ):
+            return
+        last_seen = run.heartbeat_at or run.date_updated
+        lease_remaining = (
+            last_seen + timedelta(seconds=pear_worker_stale_after_seconds()) - current_time
+        ).total_seconds()
+        time.sleep(
+            max(
+                0.05,
+                min(float(PEAR_WORKER_HEARTBEAT_INTERVAL_SECONDS), lease_remaining),
+            )
+        )
+
+
 def pear_workspace_is_paused(user_profile: UserProfile, *, stream: str, topic: str) -> bool:
     if not stream:
         return False
+    stream, topic = pear_topic_scope(stream, topic)
     return PearWorkspaceNode.objects.filter(
         realm=user_profile.realm,
-        stream_name=stream,
-        topic_name=topic,
+        stream_name__iexact=stream,
+        topic_name__iexact=topic,
         is_paused=True,
     ).exists()
 
@@ -176,6 +237,7 @@ def set_pear_workspace_paused(
 ) -> None:
     if not stream:
         return
+    stream, topic = pear_topic_scope(stream, topic)
     with transaction.atomic(savepoint=False):
         workspace_node = ensure_pear_workspace_node(user_profile, stream=stream, topic=topic)
         workspace_node = PearWorkspaceNode.objects.select_for_update().get(id=workspace_node.id)
@@ -194,10 +256,11 @@ def pear_workspace_response_policy(
 ) -> str:
     if not stream:
         return PEAR_DEFAULT_RESPONSE_POLICY
+    stream, topic = pear_topic_scope(stream, topic)
     workspace_node = PearWorkspaceNode.objects.filter(
         realm=user_profile.realm,
-        stream_name=stream,
-        topic_name=topic,
+        stream_name__iexact=stream,
+        topic_name__iexact=topic,
     ).first()
     if workspace_node is None:
         return PEAR_DEFAULT_RESPONSE_POLICY
@@ -213,6 +276,7 @@ def set_pear_workspace_response_policy(
 ) -> None:
     if not stream:
         return
+    stream, topic = pear_topic_scope(stream, topic)
     clean_response_policy = normalize_pear_response_policy(response_policy)
     workspace_node = ensure_pear_workspace_node(user_profile, stream=stream, topic=topic)
     if workspace_node.response_policy == clean_response_policy:
@@ -251,34 +315,26 @@ def reap_stale_pear_worker_runs(
     bot_profile: UserProfile | None = None,
     stream: str | None = None,
     topic: str | None = None,
-    assume_orphaned: bool = False,
     session_kinds: Sequence[str] | None = None,
 ) -> int:
-    """Fail RUNNING runs that no longer have a live worker behind them.
-
-    With assume_orphaned=True (worker startup), age is ignored: the pear
-    queue is single-consumer, so at boot no run can legitimately be
-    RUNNING — a restart mid-turn otherwise leaves a zombie record that
-    blocks the deploy health gate for the full staleness window.
-    """
+    """Fail RUNNING runs whose shared heartbeat lease expired."""
     current_time = timezone_now()
     cutoff = current_time - timedelta(seconds=pear_worker_stale_after_seconds())
     stale_runs = PearWorkerRun.objects.filter(status=PearWorkerRun.RUNNING)
     if session_kinds is not None:
         stale_runs = stale_runs.filter(session_kind__in=list(session_kinds))
-    if not assume_orphaned:
-        stale_runs = stale_runs.filter(
-            Q(heartbeat_at__isnull=False, heartbeat_at__lte=cutoff)
-            | Q(heartbeat_at__isnull=True, date_updated__lte=cutoff)
-        )
+    stale_runs = stale_runs.filter(
+        Q(heartbeat_at__isnull=False, heartbeat_at__lte=cutoff)
+        | Q(heartbeat_at__isnull=True, date_updated__lte=cutoff)
+    )
     if realm is not None:
         stale_runs = stale_runs.filter(realm=realm)
     if bot_profile is not None:
         stale_runs = stale_runs.filter(bot_profile=bot_profile)
     if stream is not None:
-        stale_runs = stale_runs.filter(stream_name=stream)
+        stale_runs = stale_runs.filter(stream_name__iexact=stream)
     if topic is not None:
-        stale_runs = stale_runs.filter(topic_name=topic)
+        stale_runs = stale_runs.filter(topic_name__iexact=topic)
 
     stale_run_ids = list(stale_runs.values_list("id", flat=True)[:100])
     reaped_count = 0
@@ -293,7 +349,7 @@ def reap_stale_pear_worker_runs(
             )
             if run is None:
                 continue
-            if not assume_orphaned and not pear_worker_run_is_stale(run, current_time=current_time):
+            if not pear_worker_run_is_stale(run, current_time=current_time):
                 continue
             if not store._transition(
                 run,
@@ -301,22 +357,14 @@ def reap_stale_pear_worker_runs(
                 stream=run.stream_name,
                 topic=run.topic_name,
                 result_message_id=run.result_message_id,
-                error=(
-                    "Pear worker run was orphaned by a worker restart."
-                    if assume_orphaned
-                    else "Pear worker run became stale and was recovered."
-                ),
+                error="Pear worker run became stale and was recovered.",
                 allow_requeue=False,
             ):
                 continue
             store._record_event(
                 run,
-                "orphan_reaped" if assume_orphaned else "stale_reaped",
-                summary=(
-                    "Recovered Pear worker run orphaned by restart."
-                    if assume_orphaned
-                    else "Recovered stale Pear worker run."
-                ),
+                "stale_reaped",
+                summary="Recovered stale Pear worker run.",
                 payload={
                     "stale_after_seconds": pear_worker_stale_after_seconds(),
                     "heartbeat_at": run.heartbeat_at.isoformat()
@@ -335,6 +383,7 @@ def reap_stale_pear_worker_runs(
 def maintain_pear_worker_run_liveness(
     *,
     active_run_id: int | None,
+    active_run_attempt: int | None,
     session_kinds: Sequence[str],
 ) -> int:
     """Renew the local run's lease, then settle abandoned leases.
@@ -345,11 +394,30 @@ def maintain_pear_worker_run_liveness(
     whose worker disappeared settle after a bounded number of missed beats.
     """
     if active_run_id is not None:
+        if active_run_attempt is None:
+            raise PearWorkerLeaseLostError(
+                f"Pear worker run {active_run_id} has no active claim attempt."
+            )
         current_time = timezone_now()
-        PearWorkerRun.objects.filter(
+        renewed_count = PearWorkerRun.objects.filter(
             id=active_run_id,
+            attempts=active_run_attempt,
             status=PearWorkerRun.RUNNING,
         ).update(heartbeat_at=current_time, date_updated=current_time)
+        if renewed_count != 1:
+            if PearWorkerRun.objects.filter(
+                id=active_run_id,
+                attempts=active_run_attempt,
+                status=PearWorkerRun.DONE,
+            ).exists():
+                # The turn can settle between the liveness thread reading the
+                # process-local id and issuing this update.  That exact,
+                # completed attempt no longer needs a heartbeat and must not
+                # have its now-warm Codex process aborted.
+                return reap_stale_pear_worker_runs(session_kinds=session_kinds)
+            raise PearWorkerLeaseLostError(
+                f"Pear worker run {active_run_id} attempt {active_run_attempt} lost its lease."
+            )
     return reap_stale_pear_worker_runs(session_kinds=session_kinds)
 
 
@@ -360,12 +428,22 @@ def latest_pear_codex_run_for_topic(
     topic: str,
     before_message_id: int,
 ) -> PearWorkerRun | None:
+    stream, topic = pear_topic_scope(stream, topic)
+    workspace = PearWorkspaceNode.objects.filter(
+        realm=user_profile.realm,
+        stream_name__iexact=stream,
+        topic_name__iexact=topic,
+    ).first()
     runs = PearWorkerRun.objects.filter(
         bot_profile=user_profile,
-        stream_name=stream,
-        topic_name=topic,
         session_kind=PearWorkerRun.SHARED,
     ).exclude(codex_thread_id="")
+    if workspace is not None:
+        runs = runs.filter(workspace_node=workspace)
+    else:
+        # Legacy runs created before workspace identity was attached remain
+        # discoverable by their labels during the scratch-pad cutover.
+        runs = runs.filter(stream_name__iexact=stream, topic_name__iexact=topic)
     if before_message_id > 0:
         runs = runs.filter(trigger_message_id__lt=before_message_id)
     return runs.order_by("-trigger_message_id", "-id").first()
@@ -424,6 +502,7 @@ def pear_topic_workdir_slug(
     stream: str,
     topic: str,
 ) -> str:
+    stream, topic = pear_topic_scope(stream, topic)
     human_slug = re.sub(r"[^a-zA-Z0-9._-]+", "-", f"{stream}-{topic}").strip("-").lower()
     if not human_slug:
         human_slug = "topic"
@@ -470,6 +549,7 @@ def pear_project_cache_slug(
     *,
     stream: str,
 ) -> str:
+    stream = stream.lower()
     human_slug = re.sub(r"[^a-zA-Z0-9._-]+", "-", stream).strip("-").lower()
     if not human_slug:
         human_slug = "project"
@@ -576,6 +656,7 @@ def pear_topic_isolation_username_for_realm(
     stream: str,
     topic: str,
 ) -> str:
+    stream, topic = pear_topic_scope(stream, topic)
     digest = hashlib.sha256(f"{realm_id}\0{stream}\0{topic}".encode()).hexdigest()[:24]
     return f"pear-{digest}"
 
@@ -1065,10 +1146,11 @@ def ensure_pear_workspace_node(
     topic: str,
     parent_node: PearWorkspaceNode | None = None,
 ) -> PearWorkspaceNode:
+    stream, topic = pear_topic_scope(stream, topic)
     if parent_node is None and topic:
         parent_node = PearWorkspaceNode.objects.filter(
             realm=user_profile.realm,
-            stream_name=stream,
+            stream_name__iexact=stream,
             topic_name="",
         ).first()
     project = (
@@ -1387,9 +1469,10 @@ def configure_pear_channel_repository_workspace(
     stream: str,
     repository_url: str,
 ) -> PearWorkspaceNode:
+    stream, _topic = pear_topic_scope(stream, "")
     clean_url = clean_pear_repository_url(repository_url)
     workspace_node = PearWorkspaceNode.objects.filter(
-        realm=user_profile.realm, stream_name=stream, topic_name=""
+        realm=user_profile.realm, stream_name__iexact=stream, topic_name=""
     ).first()
     workdir = (
         workspace_node.workdir.strip()
@@ -1445,29 +1528,50 @@ def maybe_refactor_pear_workspace_on_move(
     new_topic: str,
     moved_all_visible_messages: bool,
 ) -> PearTopicRenameRefactorResult | None:
-    if old_stream.name == new_stream.name and old_topic == new_topic:
+    old_stream_name, old_topic_name = pear_topic_scope(old_stream.name, old_topic)
+    new_stream_name, new_topic_name = pear_topic_scope(new_stream.name, new_topic)
+    if old_stream_name == new_stream_name and old_topic_name == new_topic_name:
         return None
     workspace_node = PearWorkspaceNode.objects.filter(
         realm=user_profile.realm,
-        stream_name=old_stream.name,
-        topic_name=old_topic,
+        stream_name__iexact=old_stream_name,
+        topic_name__iexact=old_topic_name,
     ).first()
-    if workspace_node is None:
+    monitors = PearMonitor.objects.filter(
+        realm=user_profile.realm,
+        stream_name__iexact=old_stream_name,
+        topic_name__iexact=old_topic_name,
+    )
+    if workspace_node is None and not monitors.exists():
         return None
 
-    target = PearWorkspaceNode.objects.filter(
-        realm=user_profile.realm,
-        stream_name=new_stream.name,
-        topic_name=new_topic,
-    ).first()
+    target = (
+        PearWorkspaceNode.objects.filter(
+            realm=user_profile.realm,
+            stream_name__iexact=new_stream_name,
+            topic_name__iexact=new_topic_name,
+        ).first()
+        if workspace_node is not None
+        else None
+    )
     if target is not None and target.id != workspace_node.id:
+        monitor_count = monitors.update(
+            stream_name=new_stream_name,
+            topic_name=new_topic_name,
+            date_updated=timezone_now(),
+        )
         return PearTopicRenameRefactorResult(
             stream_name=new_stream.name,
             topic_name=new_topic,
             message=(
                 "Pear workspace warning: I did not move the Pear workspace context "
                 "because the destination topic already has its own Pear context. "
-                "Review the sidebar before starting more Codex work."
+                + (
+                    f"I moved {monitor_count} wall monitor(s) with the topic. "
+                    if monitor_count
+                    else ""
+                )
+                + "Review the sidebar before starting more Codex work."
             ),
         )
 
@@ -1484,21 +1588,21 @@ def maybe_refactor_pear_workspace_on_move(
 
     busy_run_exists = PearWorkerRun.objects.filter(
         realm=user_profile.realm,
-        stream_name=old_stream.name,
-        topic_name=old_topic,
+        stream_name__iexact=old_stream_name,
+        topic_name__iexact=old_topic_name,
         session_kind=PearWorkerRun.SHARED,
         status__in=PEAR_WORKER_RUN_BUSY_STATUSES,
     ).exists()
     if busy_run_exists:
         reap_stale_pear_worker_runs(
             realm=user_profile.realm,
-            stream=old_stream.name,
-            topic=old_topic,
+            stream=old_stream_name,
+            topic=old_topic_name,
         )
         busy_run_exists = PearWorkerRun.objects.filter(
             realm=user_profile.realm,
-            stream_name=old_stream.name,
-            topic_name=old_topic,
+            stream_name__iexact=old_stream_name,
+            topic_name__iexact=old_topic_name,
             session_kind=PearWorkerRun.SHARED,
             status__in=PEAR_WORKER_RUN_BUSY_STATUSES,
         ).exists()
@@ -1513,15 +1617,26 @@ def maybe_refactor_pear_workspace_on_move(
             ),
         )
 
-    workspace_node.stream_name = new_stream.name
-    workspace_node.topic_name = new_topic
-    workspace_node.date_updated = timezone_now()
-    workspace_node.save(update_fields=["stream_name", "topic_name", "date_updated"])
+    timestamp = timezone_now()
+    if workspace_node is not None:
+        workspace_node.stream_name = new_stream_name
+        workspace_node.topic_name = new_topic_name
+        workspace_node.date_updated = timestamp
+        workspace_node.save(update_fields=["stream_name", "topic_name", "date_updated"])
+    monitor_count = monitors.update(
+        stream_name=new_stream_name,
+        topic_name=new_topic_name,
+        date_updated=timestamp,
+    )
 
     return PearTopicRenameRefactorResult(
         stream_name=new_stream.name,
         topic_name=new_topic,
-        message="Pear workspace label moved with this topic.",
+        message=(
+            "Pear workspace label moved with this topic."
+            if workspace_node is not None
+            else f"Pear wall moved {monitor_count} monitor(s) with this topic."
+        ),
     )
 
 
@@ -1531,32 +1646,49 @@ def maybe_refactor_pear_stream_workspaces_on_rename(
     old_stream_name: str,
     new_stream_name: str,
 ) -> str | None:
-    if old_stream_name == new_stream_name:
+    old_scope_stream, _topic = pear_topic_scope(old_stream_name, "")
+    new_scope_stream, _topic = pear_topic_scope(new_stream_name, "")
+    if old_scope_stream == new_scope_stream:
         return None
 
     workspace_nodes = PearWorkspaceNode.objects.filter(
         realm=user_profile.realm,
-        stream_name=old_stream_name,
+        stream_name__iexact=old_scope_stream,
     )
-    if not workspace_nodes.exists():
+    monitors = PearMonitor.objects.filter(
+        realm=user_profile.realm,
+        stream_name__iexact=old_scope_stream,
+    )
+    if not workspace_nodes.exists() and not monitors.exists():
         return None
 
     if PearWorkspaceNode.objects.filter(
         realm=user_profile.realm,
-        stream_name=new_stream_name,
+        stream_name__iexact=new_scope_stream,
     ).exists():
+        monitor_count = monitors.update(
+            stream_name=new_scope_stream,
+            date_updated=timezone_now(),
+        )
         return (
             "Pear workspace warning: I did not rename Pear channel context "
             "because the destination channel name already has Pear context. "
-            "Review the sidebar before starting more Codex work."
+            + (
+                f"I moved {monitor_count} wall monitor(s) with the channel. "
+                if monitor_count
+                else ""
+            )
+            + "Review the sidebar before starting more Codex work."
         )
 
     timestamp = timezone_now()
-    workspace_count = workspace_nodes.update(stream_name=new_stream_name, date_updated=timestamp)
+    workspace_count = workspace_nodes.update(stream_name=new_scope_stream, date_updated=timestamp)
+    monitor_count = monitors.update(stream_name=new_scope_stream, date_updated=timestamp)
 
     return (
         f"Pear channel context renamed from `{old_stream_name}` to `{new_stream_name}` "
-        f"for {workspace_count} workspace layer(s). Existing worktree paths were kept unchanged; "
+        f"for {workspace_count} workspace layer(s) and {monitor_count} wall monitor(s). "
+        "Existing worktree paths were kept unchanged; "
         "check the sidebar before starting Codex work."
     )
 
@@ -1750,6 +1882,7 @@ def pear_git_status_delta(
     if not workdir:
         return {"available": False}
 
+    topic = topic.lower()
     cache_key = (workdir, isolation_username or "", topic)
     current_time = time.monotonic()
     cached = pear_git_status_delta_cache.get(cache_key)
@@ -2058,6 +2191,130 @@ def build_pear_addressing_intent_classifier_from_settings() -> (
 
 
 class PearDatabaseWorkerRunStore:
+    def __init__(self) -> None:
+        # A store instance belongs to one queue delivery. Once it claims a run,
+        # its attempt number becomes the fencing token for every worker-owned
+        # read and write made through that instance. Web/pre-claim stores have
+        # no token and retain their existing control-plane behavior.
+        self._claimed_attempts: dict[tuple[int, int], int] = {}
+
+    def _run_key(self, bot_profile_id: int, message_id: int) -> tuple[int, int]:
+        return (bot_profile_id, message_id)
+
+    def _remember_claimed_attempt(self, run: PearWorkerRun) -> None:
+        self._claimed_attempts[self._run_key(run.bot_profile_id, run.trigger_message_id)] = (
+            run.attempts
+        )
+
+    def _claimed_attempt(self, bot_profile_id: int, message_id: int) -> int | None:
+        return self._claimed_attempts.get(self._run_key(bot_profile_id, message_id))
+
+    def _require_worker_attempt(
+        self,
+        *,
+        bot_profile_id: int,
+        message_id: int,
+        run: PearWorkerRun | None,
+        require_running: bool = True,
+    ) -> None:
+        claimed_attempt = self._claimed_attempt(bot_profile_id, message_id)
+        if claimed_attempt is None:
+            return
+        if (
+            run is None
+            or run.attempts != claimed_attempt
+            or (require_running and run.status != PearWorkerRun.RUNNING)
+        ):
+            raise PearWorkerLeaseLostError(
+                f"Pear worker run for message {message_id} lost attempt {claimed_attempt}."
+            )
+
+    @contextlib.contextmanager
+    def worker_completion(self, bot_handler: Any, message_id: int) -> Any:
+        """Serialize final visible writes against cancel/reap transitions."""
+        user_profile = bot_handler.user_profile
+        assert isinstance(user_profile, UserProfile)
+        with transaction.atomic(savepoint=False):
+            run = (
+                PearWorkerRun.objects.select_for_update()
+                .filter(bot_profile=user_profile, trigger_message_id=message_id)
+                .first()
+            )
+            self._require_worker_attempt(
+                bot_profile_id=user_profile.id,
+                message_id=message_id,
+                run=run,
+            )
+            yield
+
+    def _lock_workspace_node(
+        self,
+        workspace_node: PearWorkspaceNode | None,
+    ) -> PearWorkspaceNode | None:
+        if workspace_node is None:
+            return None
+        return PearWorkspaceNode.objects.select_for_update().get(id=workspace_node.id)
+
+    def _lock_realm(self, user_profile: UserProfile) -> None:
+        Realm.objects.select_for_update().only("id").get(id=user_profile.realm_id)
+
+    def _realm_run_limit_reached(
+        self,
+        user_profile: UserProfile,
+        *,
+        exclude_run_id: int | None = None,
+    ) -> bool:
+        realm_limit = settings.PEAR_WORKER_MAX_ACTIVE_RUNS_PER_REALM
+        if realm_limit <= 0:
+            return False
+        busy_runs = PearWorkerRun.objects.filter(
+            realm=user_profile.realm,
+            status__in=PEAR_WORKER_RUN_BUSY_STATUSES,
+        )
+        if exclude_run_id is not None:
+            busy_runs = busy_runs.exclude(id=exclude_run_id)
+        return busy_runs.count() >= realm_limit
+
+    def _shared_topic_run_limit_reached(
+        self,
+        user_profile: UserProfile,
+        *,
+        stream: str,
+        topic: str,
+        exclude_run_id: int | None = None,
+    ) -> bool:
+        topic_limit = settings.PEAR_WORKER_MAX_ACTIVE_RUNS_PER_TOPIC
+        if topic_limit <= 0:
+            return False
+        busy_runs = PearWorkerRun.objects.filter(
+            realm=user_profile.realm,
+            bot_profile=user_profile,
+            stream_name__iexact=stream,
+            topic_name__iexact=topic,
+            session_kind=PearWorkerRun.SHARED,
+            status__in=PEAR_WORKER_RUN_BUSY_STATUSES,
+        )
+        if exclude_run_id is not None:
+            busy_runs = busy_runs.exclude(id=exclude_run_id)
+        return busy_runs.count() >= topic_limit
+
+    def _shared_run_is_topic_blocked(
+        self,
+        run: PearWorkerRun,
+        user_profile: UserProfile,
+        *,
+        stream: str,
+        topic: str,
+    ) -> bool:
+        if run.session_kind != PearWorkerRun.SHARED:
+            return False
+        return self._shared_topic_run_limit_reached(
+            user_profile,
+            stream=stream,
+            topic=topic,
+            exclude_run_id=run.id,
+        )
+
     def active_worker_run_message_id(
         self,
         bot_handler: Any,
@@ -2068,6 +2325,7 @@ class PearDatabaseWorkerRunStore:
     ) -> int | None:
         if not stream:
             return None
+        stream, topic = pear_topic_scope(stream, topic)
 
         user_profile = bot_handler.user_profile
         assert isinstance(user_profile, UserProfile)
@@ -2082,8 +2340,8 @@ class PearDatabaseWorkerRunStore:
             PearWorkerRun.objects.filter(
                 realm=user_profile.realm,
                 bot_profile=user_profile,
-                stream_name=stream,
-                topic_name=topic,
+                stream_name__iexact=stream,
+                topic_name__iexact=topic,
                 status__in=PEAR_WORKER_RUN_BUSY_STATUSES,
             )
             .order_by("-date_updated", "-id")
@@ -2104,6 +2362,7 @@ class PearDatabaseWorkerRunStore:
     ) -> None:
         if message_id <= 0 or progress_message_id is None:
             return
+        stream, topic = pear_topic_scope(stream, topic)
 
         user_profile = bot_handler.user_profile
         assert isinstance(user_profile, UserProfile)
@@ -2114,11 +2373,16 @@ class PearDatabaseWorkerRunStore:
                 .filter(
                     bot_profile=user_profile,
                     trigger_message_id=message_id,
-                    stream_name=stream,
-                    topic_name=topic,
+                    stream_name__iexact=stream,
+                    topic_name__iexact=topic,
                     status__in=PEAR_WORKER_RUN_BUSY_STATUSES,
                 )
                 .first()
+            )
+            self._require_worker_attempt(
+                bot_profile_id=user_profile.id,
+                message_id=message_id,
+                run=run,
             )
             if run is None or run.result_message_id == progress_message_id:
                 return
@@ -2141,8 +2405,11 @@ class PearDatabaseWorkerRunStore:
         topic: str,
         requesting_user_id: int | None,
     ) -> str | None:
+        if not stream:
+            return "Pear Codex runs currently require a channel topic."
         if message_id <= 0 or requesting_user_id is None:
             return None
+        stream, topic = pear_topic_scope(stream, topic)
 
         user_profile = bot_handler.user_profile
         assert isinstance(user_profile, UserProfile)
@@ -2176,8 +2443,8 @@ class PearDatabaseWorkerRunStore:
             topic_limit > 0
             and busy_runs.filter(
                 bot_profile=user_profile,
-                stream_name=stream,
-                topic_name=topic,
+                stream_name__iexact=stream,
+                topic_name__iexact=topic,
                 session_kind=PearWorkerRun.SHARED,
             ).count()
             >= topic_limit
@@ -2195,24 +2462,43 @@ class PearDatabaseWorkerRunStore:
         stream: str,
         topic: str,
     ) -> bool:
+        if not stream:
+            return False
         if message_id <= 0:
             return True
+        stream, topic = pear_topic_scope(stream, topic)
 
         user_profile = bot_handler.user_profile
         assert isinstance(user_profile, UserProfile)
-        workspace_node = self._workspace_node_for_topic(
-            user_profile,
-            stream=stream,
-            topic=topic,
-        )
 
         try:
             with transaction.atomic(savepoint=False):
+                self._lock_realm(user_profile)
+                workspace_node = self._workspace_node_for_topic(
+                    user_profile,
+                    stream=stream,
+                    topic=topic,
+                )
+                workspace_node = self._lock_workspace_node(workspace_node)
                 run = (
                     PearWorkerRun.objects.select_for_update()
                     .filter(bot_profile=user_profile, trigger_message_id=message_id)
                     .first()
                 )
+                if run is not None and run.status in PEAR_WORKER_RUN_ACTIVE_STATUSES:
+                    return False
+                if self._shared_topic_run_limit_reached(
+                    user_profile,
+                    stream=stream,
+                    topic=topic,
+                    exclude_run_id=run.id if run is not None else None,
+                ):
+                    return False
+                if self._realm_run_limit_reached(
+                    user_profile,
+                    exclude_run_id=run.id if run is not None else None,
+                ):
+                    return False
                 if run is None:
                     run = PearWorkerRun.objects.create(
                         realm=user_profile.realm,
@@ -2239,8 +2525,6 @@ class PearDatabaseWorkerRunStore:
                         payload={"stream": stream, "topic": topic},
                     )
                     return True
-                if run.status in PEAR_WORKER_RUN_ACTIVE_STATUSES:
-                    return False
                 if not self._update_run(
                     run,
                     "queued",
@@ -2268,33 +2552,54 @@ class PearDatabaseWorkerRunStore:
         *,
         stream: str,
         topic: str,
+        redelivered: bool = False,
     ) -> bool:
+        if not stream:
+            return False
         if message_id <= 0:
             return True
+        stream, topic = pear_topic_scope(stream, topic)
 
         user_profile = bot_handler.user_profile
         assert isinstance(user_profile, UserProfile)
-        workspace_node = self._workspace_node_for_topic(
-            user_profile,
-            stream=stream,
-            topic=topic,
-        )
 
         current_time = timezone_now()
         try:
             with transaction.atomic(savepoint=False):
-                topic_is_paused = pear_workspace_is_paused(
+                self._lock_realm(user_profile)
+                workspace_node = self._workspace_node_for_topic(
                     user_profile,
                     stream=stream,
                     topic=topic,
+                )
+                workspace_node = self._lock_workspace_node(workspace_node)
+                topic_is_paused = (
+                    workspace_node.is_paused
+                    if workspace_node is not None
+                    else pear_workspace_is_paused(
+                        user_profile,
+                        stream=stream,
+                        topic=topic,
+                    )
                 )
                 run = (
                     PearWorkerRun.objects.select_for_update()
                     .filter(bot_profile=user_profile, trigger_message_id=message_id)
                     .first()
                 )
+                if self._realm_run_limit_reached(
+                    user_profile,
+                    exclude_run_id=run.id if run is not None else None,
+                ):
+                    return False
                 if run is None:
                     if topic_is_paused:
+                        return False
+                    if self._shared_topic_run_limit_reached(
+                        user_profile,
+                        stream=stream,
+                        topic=topic,
+                    ):
                         return False
                     run = PearWorkerRun.objects.create(
                         realm=user_profile.realm,
@@ -2316,6 +2621,7 @@ class PearDatabaseWorkerRunStore:
                         approval_policy=self._approval_policy_label(),
                         workdir=self._workdir_label(user_profile, stream=stream, topic=topic),
                     )
+                    self._remember_claimed_attempt(run)
                     self._record_event(
                         run,
                         "claimed",
@@ -2349,6 +2655,19 @@ class PearDatabaseWorkerRunStore:
                     return False
 
                 if run.status == PearWorkerRun.QUEUED:
+                    if self._shared_run_is_topic_blocked(
+                        run,
+                        user_profile,
+                        stream=stream,
+                        topic=topic,
+                    ):
+                        self._record_claim_dropped(
+                            run,
+                            stream=stream,
+                            topic=topic,
+                            reason="topic_busy",
+                        )
+                        return False
                     return self._claim_locked_run(
                         run,
                         stream=stream,
@@ -2383,6 +2702,19 @@ class PearDatabaseWorkerRunStore:
                             reason="stale_retry_limit",
                         )
                         return False
+                    if self._shared_run_is_topic_blocked(
+                        run,
+                        user_profile,
+                        stream=stream,
+                        topic=topic,
+                    ):
+                        self._record_claim_dropped(
+                            run,
+                            stream=stream,
+                            topic=topic,
+                            reason="topic_busy",
+                        )
+                        return False
                     return self._claim_locked_run(
                         run,
                         stream=stream,
@@ -2390,6 +2722,50 @@ class PearDatabaseWorkerRunStore:
                         current_time=current_time,
                         stale_reclaim=True,
                     )
+
+                if run.status == PearWorkerRun.FAILED and redelivered:
+                    latest_event_type = (
+                        run.events.order_by("-id").values_list("event_type", flat=True).first()
+                    )
+                    if latest_event_type == "stale_reaped":
+                        if run.attempts >= PEAR_WORKER_MAX_CLAIM_ATTEMPTS:
+                            self._record_claim_dropped(
+                                run,
+                                stream=stream,
+                                topic=topic,
+                                reason="stale_retry_limit",
+                            )
+                            return False
+                        if self._shared_run_is_topic_blocked(
+                            run,
+                            user_profile,
+                            stream=stream,
+                            topic=topic,
+                        ):
+                            self._record_claim_dropped(
+                                run,
+                                stream=stream,
+                                topic=topic,
+                                reason="topic_busy",
+                            )
+                            return False
+                        if not self._transition(
+                            run,
+                            PearWorkerRun.QUEUED,
+                            stream=stream,
+                            topic=topic,
+                            result_message_id=run.result_message_id,
+                            error=None,
+                            allow_requeue=True,
+                        ):
+                            return False
+                        return self._claim_locked_run(
+                            run,
+                            stream=stream,
+                            topic=topic,
+                            current_time=current_time,
+                            stale_reclaim=True,
+                        )
 
                 self._record_claim_dropped(
                     run,
@@ -2414,6 +2790,7 @@ class PearDatabaseWorkerRunStore:
     ) -> None:
         if message_id <= 0:
             return
+        stream, topic = pear_topic_scope(stream, topic)
 
         user_profile = bot_handler.user_profile
         assert isinstance(user_profile, UserProfile)
@@ -2446,6 +2823,11 @@ class PearDatabaseWorkerRunStore:
                     "workdir": self._workdir_label(user_profile, stream=stream, topic=topic),
                 },
             )
+            self._require_worker_attempt(
+                bot_profile_id=user_profile.id,
+                message_id=message_id,
+                run=run,
+            )
             if created:
                 self._record_event(
                     run,
@@ -2473,6 +2855,7 @@ class PearDatabaseWorkerRunStore:
                     "result_message_id": result_message_id,
                     "error": error,
                 },
+                require_running_lease=False,
             )
 
     def _claim_locked_run(
@@ -2498,6 +2881,7 @@ class PearDatabaseWorkerRunStore:
         run.heartbeat_at = current_time
         run.date_updated = current_time
         run.save(update_fields=["attempts", "heartbeat_at", "date_updated"])
+        self._remember_claimed_attempt(run)
         self._record_event(
             run,
             "claimed",
@@ -2571,6 +2955,11 @@ class PearDatabaseWorkerRunStore:
                 PearWorkerRun.objects.select_for_update()
                 .filter(bot_profile=user_profile, trigger_message_id=message_id)
                 .first()
+            )
+            self._require_worker_attempt(
+                bot_profile_id=user_profile.id,
+                message_id=message_id,
+                run=run,
             )
             if run is None:
                 return
@@ -2657,6 +3046,11 @@ class PearDatabaseWorkerRunStore:
             bot_profile=user_profile,
             trigger_message_id=message_id,
         ).first()
+        self._require_worker_attempt(
+            bot_profile_id=user_profile.id,
+            message_id=message_id,
+            run=run,
+        )
         if run is None:
             return
         self._record_event(run, event_type, summary=summary, payload=payload or {})
@@ -2667,14 +3061,30 @@ class PearDatabaseWorkerRunStore:
 
         user_profile = bot_handler.user_profile
         assert isinstance(user_profile, UserProfile)
-        return (
-            PearWorkerRun.objects.filter(
-                bot_profile=user_profile,
-                trigger_message_id=message_id,
+        run = PearWorkerRun.objects.filter(
+            bot_profile=user_profile,
+            trigger_message_id=message_id,
+        ).first()
+        if run is None:
+            self._require_worker_attempt(
+                bot_profile_id=user_profile.id,
+                message_id=message_id,
+                run=run,
             )
-            .filter(Q(cancel_requested_at__isnull=False) | Q(status=PearWorkerRun.CANCELLED))
-            .exists()
+            return False
+        claimed_attempt = self._claimed_attempt(user_profile.id, message_id)
+        if claimed_attempt is not None and run.attempts != claimed_attempt:
+            raise PearWorkerLeaseLostError(
+                f"Pear worker run for message {message_id} lost attempt {claimed_attempt}."
+            )
+        if run.status == PearWorkerRun.CANCELLED:
+            return True
+        self._require_worker_attempt(
+            bot_profile_id=user_profile.id,
+            message_id=message_id,
+            run=run,
         )
+        return run.cancel_requested_at is not None
 
     def topic_response_policy(
         self,
@@ -2685,6 +3095,7 @@ class PearDatabaseWorkerRunStore:
     ) -> str:
         user_profile = bot_handler.user_profile
         assert isinstance(user_profile, UserProfile)
+        stream, topic = pear_topic_scope(stream, topic)
         return pear_workspace_response_policy(
             user_profile,
             stream=stream,
@@ -2701,6 +3112,7 @@ class PearDatabaseWorkerRunStore:
     ) -> None:
         user_profile = bot_handler.user_profile
         assert isinstance(user_profile, UserProfile)
+        stream, topic = pear_topic_scope(stream, topic)
         set_pear_workspace_response_policy(
             user_profile,
             stream=stream,
@@ -2724,6 +3136,11 @@ class PearDatabaseWorkerRunStore:
             bot_profile=user_profile,
             trigger_message_id=message_id,
         ).first()
+        self._require_worker_attempt(
+            bot_profile_id=user_profile.id,
+            message_id=message_id,
+            run=run,
+        )
         if run is None:
             return []
 
@@ -2902,11 +3319,30 @@ class PearDatabaseWorkerRunStore:
         *,
         summary: str,
         payload: dict[str, Any],
+        require_running_lease: bool = True,
     ) -> None:
         # Keep the durable event and every run field represented by its push
         # payload in one commit. The runs endpoint can then expose the event id
         # as an authoritative snapshot watermark.
         with transaction.atomic(savepoint=False):
+            claimed_attempt = self._claimed_attempt(
+                run.bot_profile_id,
+                run.trigger_message_id,
+            )
+            if claimed_attempt is not None:
+                fenced_run = (
+                    PearWorkerRun.objects.select_for_update()
+                    .filter(id=run.id, attempts=claimed_attempt)
+                    .first()
+                )
+                self._require_worker_attempt(
+                    bot_profile_id=run.bot_profile_id,
+                    message_id=run.trigger_message_id,
+                    run=fenced_run,
+                    require_running=require_running_lease,
+                )
+                assert fenced_run is not None
+                run = fenced_run
             run_event = PearWorkerRunEvent.objects.create(
                 run=run,
                 event_type=event_type,
@@ -2994,7 +3430,7 @@ class PearQueueWorkerDispatcher:
         if not isinstance(user_profile_id, int):
             raise AssertionError("Pear queue warm requires a bot user id")
         queue_json_publish_rollback_unsafe(
-            PEAR_WORKER_QUEUE_NAME,
+            pear_worker_queue_name(user_profile_id, stream=stream, topic=topic),
             {
                 "warm_only": True,
                 "user_profile_id": user_profile_id,
@@ -3027,14 +3463,22 @@ class PearQueueWorkerDispatcher:
         user_profile_id = getattr(bot_handler.user_profile, "id", None)
         if not isinstance(user_profile_id, int):
             raise AssertionError("Pear queue dispatch requires a bot user id")
+        if session_kind == PearWorkerRun.SHARED and not stream:
+            raise AssertionError("Pear shared queue dispatch requires a channel topic")
         worker_message = dict(message)
         worker_message["content"] = content
         # Monitor turns ride their own queue/consumer: a provisioning
         # wall block must never queue ahead of a chat run.
+        context_stream = stream or source_stream
+        context_topic = topic or source_topic
         queue_name = (
             PEAR_MONITOR_WORKER_QUEUE_NAME
             if session_kind == PearWorkerRun.MONITOR
-            else PEAR_WORKER_QUEUE_NAME
+            else pear_worker_queue_name(
+                user_profile_id,
+                stream=context_stream,
+                topic=context_topic,
+            )
         )
         queue_json_publish_rollback_unsafe(
             queue_name,
@@ -3151,6 +3595,10 @@ def load_pear_active_session_from_zulip(
         prompt_messages=prompt_message_rows,
         topic_message_count=message_count,
         latest_codex_thread_id=latest_codex_thread_id,
+        latest_codex_trigger_message_id=(
+            latest_codex_run.trigger_message_id if latest_codex_run is not None else None
+        ),
+        current_trigger_message_id=trigger_message_id if trigger_message_id > 0 else None,
         workspace_context=workspace_context,
         is_paused=pear_workspace_is_paused(
             user_profile,

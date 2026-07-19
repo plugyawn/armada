@@ -4,6 +4,7 @@ import logging
 import re
 import time
 from collections.abc import Callable, Sequence
+from contextlib import nullcontext
 from dataclasses import dataclass
 from re import IGNORECASE, compile, sub
 from typing import Any, Final, Literal, NotRequired, Protocol, TypedDict
@@ -91,6 +92,15 @@ PearWorkerRunStatus = Literal["queued", "running", "done", "failed", "cancelled"
 
 class PearRunCancelledError(Exception):
     pass
+
+
+class PearWorkerLeaseLostError(Exception):
+    """The durable run was reclaimed by another worker attempt."""
+
+
+def pear_topic_scope(stream: str, topic: str) -> tuple[str, str]:
+    """Return Zulip's case-insensitive logical channel/topic identity."""
+    return (stream.lower(), topic.lower())
 
 
 @dataclass(frozen=True)
@@ -192,6 +202,8 @@ class PearActiveSessionSummary(TypedDict):
     latest_request_message_id: int | None
     latest_message_id: int | None
     latest_codex_thread_id: str | None
+    latest_codex_trigger_message_id: int | None
+    current_trigger_message_id: int | None
     response_policy: PearResponsePolicy
     is_paused: bool
     worker_state: PearWorkerState
@@ -1610,6 +1622,104 @@ def pear_worker_event_tool_results(
     ]
 
 
+def pear_sanitized_child_agent_event(
+    event: PearWorkerTranscriptEvent,
+) -> PearWorkerTranscriptEvent | None:
+    """Persist only the display contract for a native child thread.
+
+    The Codex protocol can carry private reasoning and raw command output.
+    Child traces need coherent assistant paragraphs and typed lifecycle/tool
+    rows, never a lossless copy of an engine event.
+    """
+    kind = event.get("kind")
+    if kind not in {
+        "agent",
+        "assistant",
+        "command",
+        "error",
+        "file_change",
+        "plan",
+        "session",
+        "status",
+        "tool",
+    }:
+        return None
+    sanitized: PearWorkerTranscriptEvent = {"kind": kind}
+    status = event.get("status")
+    if isinstance(status, str):
+        sanitized["status"] = trim_pear_text(status, limit=40)
+    title = event.get("title")
+    if isinstance(title, str) and title.strip():
+        sanitized["title"] = trim_pear_text(title, limit=500)
+    item_id = event.get("item_id")
+    if isinstance(item_id, str) and item_id:
+        sanitized["item_id"] = trim_pear_text(item_id, limit=500)
+    body = event.get("body")
+    if kind in {"assistant", "error"} and isinstance(body, str) and body.strip():
+        sanitized["body"] = trim_pear_text(
+            body,
+            limit=PEAR_PERSISTENT_MESSAGE_LIMIT if kind == "assistant" else 1000,
+        )
+
+    raw_metadata = event.get("metadata")
+    if not isinstance(raw_metadata, dict):
+        return sanitized
+    metadata: dict[str, Any] = {}
+    for key in (
+        "agent_nickname",
+        "agent_role",
+        "codex_method",
+        "codex_thread_id",
+        "codex_turn_id",
+        "parent_thread_id",
+        "thread_status",
+        "turn_status",
+    ):
+        value = raw_metadata.get(key)
+        if value is None and key == "parent_thread_id":
+            metadata[key] = None
+        elif isinstance(value, str):
+            metadata[key] = trim_pear_text(value, limit=500)
+    raw_steps = raw_metadata.get("steps")
+    if kind == "plan" and isinstance(raw_steps, list):
+        metadata["steps"] = [
+            {
+                "step": trim_pear_text(str(step["step"]), limit=500),
+                "status": trim_pear_text(str(step.get("status") or "pending"), limit=40),
+            }
+            for step in raw_steps[:64]
+            if isinstance(step, dict) and isinstance(step.get("step"), str)
+        ]
+    raw_thread = raw_metadata.get("thread")
+    if kind == "session" and isinstance(raw_thread, dict):
+        thread: dict[str, Any] = {}
+        for key in (
+            "agent_nickname",
+            "agent_role",
+            "id",
+            "name",
+            "parent_thread_id",
+        ):
+            value = raw_thread.get(key)
+            if value is None and key == "parent_thread_id":
+                thread[key] = None
+            elif isinstance(value, str):
+                thread[key] = trim_pear_text(value, limit=500)
+        for key in ("created_at", "updated_at"):
+            value = raw_thread.get(key)
+            if isinstance(value, int | float) and not isinstance(value, bool):
+                thread[key] = value
+        thread_status = raw_thread.get("status")
+        if isinstance(thread_status, dict) and isinstance(thread_status.get("type"), str):
+            thread["status"] = {
+                "type": trim_pear_text(thread_status["type"], limit=40),
+            }
+        metadata["thread"] = thread
+    if metadata:
+        sanitized["metadata"] = metadata
+    return sanitized
+
+
 class PearWorkerRuntime:
     def __init__(self, tool_runner: PearWorkerToolRunner | None = None) -> None:
         self.tool_runner = tool_runner
@@ -1700,6 +1810,15 @@ class PearWorkerRuntime:
         close = getattr(self.tool_runner, "close", None)
         if callable(close):
             close()
+
+    def abort(self, error: Exception) -> None:
+        if self.tool_runner is None:
+            return
+        abort = getattr(self.tool_runner, "abort", None)
+        if callable(abort):
+            abort(error)
+            return
+        self.close()
 
     def configure_turn(self, *, model: str, reasoning_effort: str) -> None:
         if self.tool_runner is None:
@@ -2043,6 +2162,8 @@ def build_pear_active_session_summary(
     request_count: int = 0,
     latest_request_message_id: int | None = None,
     latest_codex_thread_id: str | None = None,
+    latest_codex_trigger_message_id: int | None = None,
+    current_trigger_message_id: int | None = None,
     recent_messages: list[PearRecentMessage] | None = None,
     routing_messages: list[PearRecentMessage] | None = None,
     workspace_context: PearWorkspaceContext | None = None,
@@ -2088,6 +2209,8 @@ def build_pear_active_session_summary(
         "latest_request_message_id": latest_request_message_id,
         "latest_message_id": latest_message_id,
         "latest_codex_thread_id": latest_codex_thread_id,
+        "latest_codex_trigger_message_id": latest_codex_trigger_message_id,
+        "current_trigger_message_id": current_trigger_message_id,
         "response_policy": normalized_response_policy,
         "is_paused": state == "paused",
         "worker_state": worker_state,
@@ -2108,6 +2231,8 @@ def build_pear_active_session_summary_from_messages(
     prompt_messages: Sequence[PearMessage] | None = None,
     topic_message_count: int | None = None,
     latest_codex_thread_id: str | None = None,
+    latest_codex_trigger_message_id: int | None = None,
+    current_trigger_message_id: int | None = None,
     workspace_context: PearWorkspaceContext | None = None,
     is_paused: bool = False,
     response_policy: str | None = None,
@@ -2143,6 +2268,12 @@ def build_pear_active_session_summary_from_messages(
         latest_request_message_id=latest_request_message_id,
         latest_message_id=latest_message_id,
         latest_codex_thread_id=latest_codex_thread_id,
+        latest_codex_trigger_message_id=latest_codex_trigger_message_id,
+        current_trigger_message_id=(
+            current_trigger_message_id
+            if current_trigger_message_id is not None
+            else latest_request_message_id
+        ),
         recent_messages=build_pear_recent_messages(
             sorted_messages if prompt_messages is None else list(prompt_messages)
         ),
@@ -2377,10 +2508,14 @@ class PearEmbeddedBotHandler:
         except Exception:
             logger.warning("Pear addressing router failed.", exc_info=True)
             user_profile_id = getattr(getattr(bot_handler, "user_profile", None), "id", 0)
-            failure_key = (
-                user_profile_id if isinstance(user_profile_id, int) else 0,
+            failure_stream, failure_topic = pear_topic_scope(
                 pear_message_stream(message),
                 pear_message_topic(message),
+            )
+            failure_key = (
+                user_profile_id if isinstance(user_profile_id, int) else 0,
+                failure_stream,
+                failure_topic,
             )
             current_time = time.monotonic()
             previous_notice = self.addressing_failure_notices.get(failure_key)
@@ -2429,6 +2564,13 @@ class PearEmbeddedBotHandler:
         update_metadata = getattr(self.worker_run_store, "update_metadata", None)
         if callable(update_metadata):
             update_metadata(bot_handler, message_id, **metadata)
+
+    def worker_completion(self, bot_handler: Any, message_id: int) -> Any:
+        """Hold the durable worker lease while publishing its final result."""
+        completion = getattr(self.worker_run_store, "worker_completion", None)
+        if callable(completion):
+            return completion(bot_handler, message_id)
+        return nullcontext()
 
     def worker_run_cancel_requested(
         self,
@@ -3060,6 +3202,59 @@ class PearWorkerTurn:
         title = event.get("title", "").strip()
         event_kind = event.get("kind")
         metadata = event.get("metadata")
+        event_thread_id = metadata.get("codex_thread_id") if isinstance(metadata, dict) else None
+        root_thread_id = self.handler.worker_runtime.codex_thread_id()
+        root_session_started = (
+            event_kind == "session"
+            and isinstance(metadata, dict)
+            and metadata.get("parent_thread_id") is None
+        )
+        if (
+            isinstance(event_thread_id, str)
+            and (event_thread_id == root_thread_id or root_session_started)
+            and self.codex_thread_id != event_thread_id
+        ):
+            # Persist the native root identity as soon as the turn starts, not
+            # only after it settles. Child-thread push events can then be
+            # ancestry-checked and rendered while the run is still live.
+            self.codex_thread_id = event_thread_id
+            root_thread_id = event_thread_id
+            self.handler.update_worker_metadata(
+                self.bot_handler,
+                self.message_id,
+                codex_thread_id=event_thread_id,
+            )
+        child_thread_event = (
+            isinstance(event_thread_id, str)
+            and bool(root_thread_id)
+            and event_thread_id != root_thread_id
+        )
+        if child_thread_event:
+            # Native child-thread activity is durable and live, but it must
+            # never enter the root message buffer, tool count, or final text.
+            # Streaming deltas are intentionally skipped; item completion
+            # persists the coherent paragraph without a row per token.
+            streaming_child_delta = (
+                event_kind == "assistant"
+                and event.get("status") == "running"
+                and isinstance(metadata, dict)
+                and metadata.get("streaming") is True
+            )
+            if not streaming_child_delta:
+                child_event = pear_sanitized_child_agent_event(event)
+                if child_event is not None:
+                    summary = (
+                        child_event.get("title") or child_event.get("body") or "Agent activity."
+                    )
+                    self.handler.record_worker_event(
+                        self.bot_handler,
+                        self.message_id,
+                        "agent",
+                        summary=trim_pear_text(str(summary), limit=500),
+                        payload=dict(child_event),
+                    )
+            self.maybe_apply_same_turn_steering()
+            return
         if isinstance(metadata, dict) and isinstance(metadata.get("operation"), str):
             # Long engine operations (compaction, …) drive the client's
             # footer loader through the volatile channel.
@@ -3121,6 +3316,7 @@ class PearWorkerTurn:
                 current_activity=trim_pear_text(summary, limit=500),
             )
         sparse_event = event_kind in {
+            "agent",
             "command",
             "error",
             "file_change",
@@ -3399,67 +3595,27 @@ class PearWorkerTurn:
             self.result_summary = pear_worker_summary_from_tool_results(
                 self.worker_result["tool_results"]
             )
-            if self.worker_result["should_post"] and self.worker_result["content"] is not None:
-                content_chunks = [
-                    self.embed_result_images(chunk)
-                    for chunk in split_pear_persistent_message(self.worker_result["content"])
-                ]
-                content_to_post = content_chunks[0]
-                result_updated = update_pear_worker_status_message(
-                    self.bot_handler,
-                    progress_message_id=self.result_message_id or self.progress_message_id,
-                    content=content_to_post,
-                    rendering_only=True,
-                )
-                result = None
-                if not result_updated:
-                    result = self.bot_handler.send_reply(
-                        self.message,
-                        normalize_pear_task_markers(
-                            normalize_pear_math_delimiters(content_to_post)
-                        ),
-                    )
-                for continuation_content in content_chunks[1:]:
-                    self.bot_handler.send_reply(
-                        self.message,
-                        normalize_pear_task_markers(
-                            normalize_pear_math_delimiters(continuation_content)
-                        ),
-                    )
-                write_pear_live_run_state(
-                    self.message_id,
-                    status="done",
-                )
-                if isinstance(result, dict) and isinstance(result.get("id"), int):
-                    self.result_message_id = result["id"]
-                if self.result_message_id is not None:
-                    self.handler.record_worker_event(
+            with self.handler.worker_completion(self.bot_handler, self.message_id):
+                if self.worker_result["should_post"] and self.worker_result["content"] is not None:
+                    content_chunks = [
+                        self.embed_result_images(chunk)
+                        for chunk in split_pear_persistent_message(self.worker_result["content"])
+                    ]
+                    content_to_post = content_chunks[0]
+                    result_updated = update_pear_worker_status_message(
                         self.bot_handler,
-                        self.message_id,
-                        "result_updated" if result_updated else "result_posted",
-                        summary=(
-                            "Updated worker result message."
-                            if result_updated
-                            else "Posted worker result message."
-                        ),
-                        payload={"result_message_id": self.result_message_id},
+                        progress_message_id=self.result_message_id or self.progress_message_id,
+                        content=content_to_post,
+                        rendering_only=True,
                     )
-            elif self.result_message_id is not None or self.progress_message_id is not None:
-                content_chunks = build_pear_worker_completed_message_chunks(
-                    task=self.task,
-                    tool_results=self.worker_result["tool_results"],
-                    transcript_events=self.transcript_events,
-                )
-                content_to_post = content_chunks[0] if content_chunks else ""
-                content_to_post = self.embed_result_images(content_to_post)
-                target_message_id = self.result_message_id or self.progress_message_id
-                result_updated = update_pear_worker_status_message(
-                    self.bot_handler,
-                    progress_message_id=target_message_id,
-                    content=content_to_post,
-                    rendering_only=True,
-                )
-                if result_updated:
+                    result = None
+                    if not result_updated:
+                        result = self.bot_handler.send_reply(
+                            self.message,
+                            normalize_pear_task_markers(
+                                normalize_pear_math_delimiters(content_to_post)
+                            ),
+                        )
                     for continuation_content in content_chunks[1:]:
                         self.bot_handler.send_reply(
                             self.message,
@@ -3467,75 +3623,91 @@ class PearWorkerTurn:
                                 normalize_pear_math_delimiters(continuation_content)
                             ),
                         )
-                write_pear_live_run_state(
-                    self.message_id,
-                    status="done",
-                )
-                if result_updated:
-                    self.result_message_id = target_message_id
-                    self.handler.record_worker_event(
-                        self.bot_handler,
-                        self.message_id,
-                        "result_updated",
-                        summary="Settled worker progress message.",
-                        payload={"result_message_id": self.result_message_id},
+                    if isinstance(result, dict) and isinstance(result.get("id"), int):
+                        self.result_message_id = result["id"]
+                    if self.result_message_id is not None:
+                        self.handler.record_worker_event(
+                            self.bot_handler,
+                            self.message_id,
+                            "result_updated" if result_updated else "result_posted",
+                            summary=(
+                                "Updated worker result message."
+                                if result_updated
+                                else "Posted worker result message."
+                            ),
+                            payload={"result_message_id": self.result_message_id},
+                        )
+                elif self.result_message_id is not None or self.progress_message_id is not None:
+                    content_chunks = build_pear_worker_completed_message_chunks(
+                        task=self.task,
+                        tool_results=self.worker_result["tool_results"],
+                        transcript_events=self.transcript_events,
                     )
-            has_artifact = bool(self.artifact_tool_results)
-            artifact_workdir, artifact_isolation_username = self.artifact_workspace_context()
-            artifact_attached = attach_pear_artifact_to_message(
-                self.bot_handler,
-                message_id=self.result_message_id,
-                tool_results=self.artifact_tool_results,
-                workdir=artifact_workdir,
-                isolation_username=artifact_isolation_username,
-            )
-            if has_artifact and not artifact_attached:
-                raise RuntimeError("Pear artifact could not be attached to the result message.")
-            self.handler.worker_run_store.record(
-                self.bot_handler,
+                    content_to_post = content_chunks[0] if content_chunks else ""
+                    content_to_post = self.embed_result_images(content_to_post)
+                    target_message_id = self.result_message_id or self.progress_message_id
+                    result_updated = update_pear_worker_status_message(
+                        self.bot_handler,
+                        progress_message_id=target_message_id,
+                        content=content_to_post,
+                        rendering_only=True,
+                    )
+                    if result_updated:
+                        for continuation_content in content_chunks[1:]:
+                            self.bot_handler.send_reply(
+                                self.message,
+                                normalize_pear_task_markers(
+                                    normalize_pear_math_delimiters(continuation_content)
+                                ),
+                            )
+                        self.result_message_id = target_message_id
+                        self.handler.record_worker_event(
+                            self.bot_handler,
+                            self.message_id,
+                            "result_updated",
+                            summary="Settled worker progress message.",
+                            payload={"result_message_id": self.result_message_id},
+                        )
+                has_artifact = bool(self.artifact_tool_results)
+                artifact_workdir, artifact_isolation_username = self.artifact_workspace_context()
+                artifact_attached = attach_pear_artifact_to_message(
+                    self.bot_handler,
+                    message_id=self.result_message_id,
+                    tool_results=self.artifact_tool_results,
+                    workdir=artifact_workdir,
+                    isolation_username=artifact_isolation_username,
+                )
+                if has_artifact and not artifact_attached:
+                    raise RuntimeError("Pear artifact could not be attached to the result message.")
+                self.handler.update_worker_metadata(
+                    self.bot_handler,
+                    self.message_id,
+                    summary=self.result_summary or "Completed.",
+                    current_activity="Completed.",
+                    codex_thread_id=self.codex_thread_id,
+                )
+                # This terminal transition is deliberately last. The row lock
+                # above makes completion and panel cancellation a single-winner
+                # operation, so no cancelled run can publish a late result.
+                self.handler.worker_run_store.record(
+                    self.bot_handler,
+                    self.message_id,
+                    "done",
+                    stream=self.stream,
+                    topic=self.topic,
+                    result_message_id=self.result_message_id,
+                )
+            write_pear_live_run_state(
                 self.message_id,
-                "done",
-                stream=self.stream,
-                topic=self.topic,
-                result_message_id=self.result_message_id,
+                status="done",
             )
-            self.handler.update_worker_metadata(
-                self.bot_handler,
-                self.message_id,
-                summary=self.result_summary or "Completed.",
-                current_activity="Completed.",
-                codex_thread_id=self.codex_thread_id,
-            )
-            self.handler.record_worker_event(
-                self.bot_handler,
-                self.message_id,
-                "done",
-                summary=self.result_summary or "Completed.",
-                payload={"result_message_id": self.result_message_id},
-            )
+        except PearWorkerLeaseLostError:
+            # A newer fenced attempt owns both the durable run and its result
+            # message. Stop this app-server generation without writing a
+            # competing failure/cancel/result update.
+            self.handler.worker_runtime.close()
+            return
         except PearRunCancelledError as error:
-            self.handler.worker_run_store.record(
-                self.bot_handler,
-                self.message_id,
-                "cancelled",
-                stream=self.stream,
-                topic=self.topic,
-                result_message_id=self.result_message_id,
-                error=str(error),
-            )
-            self.handler.update_worker_metadata(
-                self.bot_handler,
-                self.message_id,
-                summary=str(error),
-                current_activity="Cancelled.",
-            )
-            self.handler.record_worker_event(
-                self.bot_handler,
-                self.message_id,
-                "cancelled",
-                summary=str(error),
-                payload={"result_message_id": self.result_message_id},
-            )
             self.transcript_events.append(
                 {
                     "kind": "status",
@@ -3560,28 +3732,6 @@ class PearWorkerTurn:
                 rendering_only=True,
             )
         except Exception as error:
-            self.handler.worker_run_store.record(
-                self.bot_handler,
-                self.message_id,
-                "failed",
-                stream=self.stream,
-                topic=self.topic,
-                result_message_id=self.result_message_id,
-                error=str(error),
-            )
-            self.handler.update_worker_metadata(
-                self.bot_handler,
-                self.message_id,
-                summary=str(error),
-                current_activity="Failed.",
-            )
-            self.handler.record_worker_event(
-                self.bot_handler,
-                self.message_id,
-                "failed",
-                summary=str(error),
-                payload={"result_message_id": self.result_message_id},
-            )
             self.transcript_events.append(
                 {
                     "kind": "error",
@@ -3595,17 +3745,39 @@ class PearWorkerTurn:
                 status="failed",
                 transcript_events=self.transcript_events,
             )
+            try:
+                with self.handler.worker_completion(self.bot_handler, self.message_id):
+                    if not update_pear_worker_status_message(
+                        self.bot_handler,
+                        progress_message_id=self.result_message_id or self.progress_message_id,
+                        content=failure_message,
+                        rendering_only=True,
+                    ):
+                        result = self.bot_handler.send_reply(self.message, failure_message)
+                        if isinstance(result, dict) and isinstance(result.get("id"), int):
+                            self.result_message_id = result["id"]
+                    self.handler.update_worker_metadata(
+                        self.bot_handler,
+                        self.message_id,
+                        summary=str(error),
+                        current_activity="Failed.",
+                    )
+                    self.handler.worker_run_store.record(
+                        self.bot_handler,
+                        self.message_id,
+                        "failed",
+                        stream=self.stream,
+                        topic=self.topic,
+                        result_message_id=self.result_message_id,
+                        error=str(error),
+                    )
+            except PearWorkerLeaseLostError:
+                self.handler.worker_runtime.close()
+                return
             write_pear_live_run_state(
                 self.message_id,
                 status="failed",
             )
-            if not update_pear_worker_status_message(
-                self.bot_handler,
-                progress_message_id=self.result_message_id or self.progress_message_id,
-                content=failure_message,
-                rendering_only=True,
-            ):
-                self.bot_handler.send_reply(self.message, failure_message)
         finally:
             self.signal_typing("stop")
 

@@ -3,7 +3,6 @@ import {isSameDay} from "date-fns";
 import $ from "jquery";
 import _ from "lodash";
 import assert from "minimalistic-assert";
-import * as z from "zod/mini";
 
 import render_bookend from "../templates/bookend.hbs";
 import render_login_to_view_image_button from "../templates/login_to_view_image_button.hbs";
@@ -34,6 +33,7 @@ import type {MessageViewportInfo} from "./message_viewport.ts";
 import * as muted_users from "./muted_users.ts";
 import * as narrow_state from "./narrow_state.ts";
 import {page_params} from "./page_params.ts";
+import * as pear_agent_threads from "./pear_agent_threads.ts";
 import {unmount_pear_artifact} from "./pear_artifact_lifecycle.ts";
 import {
     pear_live_overview_key,
@@ -43,6 +43,7 @@ import {
 } from "./pear_live_dom.ts";
 import * as pear_panel from "./pear_panel.ts";
 import * as pear_run_state from "./pear_run_state.ts";
+import * as pear_run_trace from "./pear_run_trace.ts";
 import {active_plan_presentation} from "./pear_runtime_shared.ts";
 import * as people from "./people.ts";
 import * as popovers from "./popovers.ts";
@@ -159,6 +160,16 @@ function unmount_pear_artifacts_in(root: JQuery | HTMLElement): void {
     }
     for (const host of element.querySelectorAll<HTMLElement>("[data-pear-artifact-host]")) {
         unmount_pear_artifact(host);
+    }
+}
+
+function destroy_pear_agent_threads_in(root: JQuery | HTMLElement): void {
+    const element = root instanceof HTMLElement ? root : root[0];
+    if (element === undefined) {
+        return;
+    }
+    for (const row of element.querySelectorAll<HTMLElement>(".message_row.pear-message")) {
+        pear_agent_threads.destroy_for_message(rows.id($(row)));
     }
 }
 
@@ -452,6 +463,19 @@ function enhance_pear_tool_rows($row: JQuery): void {
         if (block instanceof HTMLElement) {
             render_pear_tool_block_header(block);
         }
+    });
+}
+
+function render_pear_agent_threads($row: JQuery): void {
+    if (!$row.hasClass("pear-message")) {
+        return;
+    }
+    const row = $row[0];
+    if (!(row instanceof HTMLElement)) {
+        return;
+    }
+    pear_agent_threads.render_for_message_row(row, rows.id($row), (trace_root) => {
+        enhance_pear_tool_rows($(trace_root));
     });
 }
 
@@ -985,65 +1009,17 @@ function render_pear_live_progress($row: JQuery): void {
     }
 }
 
-const pear_trace_response_schema = z.object({
-    rendered: z.string(),
-    trace: z.array(
-        z.object({
-            id: z.number(),
-            kind: z.string(),
-            title: z.string(),
-            body: z.optional(z.string()),
-            plan: z.optional(z.array(z.object({step: z.string(), status: z.string()}))),
-        }),
-    ),
-});
-
-export function pear_trace_rendered_for_testing(raw_data: unknown): string | undefined {
-    const result = pear_trace_response_schema.safeParse(raw_data);
-    return result.success ? result.data.rendered : undefined;
-}
-
-export function pear_trace_should_load_on_open_for_testing(
-    loaded: boolean,
-    dirty: boolean,
-    failed: boolean,
-): boolean {
-    return !loaded || dirty || failed;
-}
-
-export function pear_trace_event_should_load_for_testing(expanded: boolean): boolean {
-    return expanded;
-}
-
 type PearTraceRequestState = {
     run_id: number;
     reveal: HTMLElement;
     host: HTMLElement;
     status: HTMLElement;
-    in_flight: boolean;
-    dirty: boolean;
-    loaded: boolean;
+    controller: pear_run_trace.PearRunTraceController;
     expanded: boolean;
 };
 
 function pear_trace_block_signature(element: Element): string {
     return `${element.tagName}:${(element.textContent ?? "").replaceAll(/\s+/g, " ").trim()}`;
-}
-
-export function pear_trace_duplicate_tail_count_for_testing(
-    trace_blocks: readonly string[],
-    message_blocks: readonly string[],
-): number {
-    let count = 0;
-    while (
-        count < trace_blocks.length &&
-        count < message_blocks.length &&
-        trace_blocks[trace_blocks.length - 1 - count] ===
-            message_blocks[message_blocks.length - 1 - count]
-    ) {
-        count += 1;
-    }
-    return count;
 }
 
 function remove_pear_run_trace_duplicate_tail(state: PearTraceRequestState): void {
@@ -1058,7 +1034,7 @@ function remove_pear_run_trace_duplicate_tail(state: PearTraceRequestState): voi
             !child.classList.contains("pear-live-progress") &&
             !child.classList.contains("pear-run-footer"),
     );
-    const duplicate_count = pear_trace_duplicate_tail_count_for_testing(
+    const duplicate_count = pear_run_trace.duplicate_tail_count_for_testing(
         trace_blocks.map((element) => pear_trace_block_signature(element)),
         message_blocks.map((element) => pear_trace_block_signature(element)),
     );
@@ -1125,8 +1101,8 @@ function update_pear_run_trace_triggers(state: PearTraceRequestState): void {
     }
     const label = pear_trace_trigger_label_for_testing(
         state.expanded,
-        state.loaded,
-        state.reveal.dataset["state"],
+        state.controller.loaded,
+        state.controller.request_state,
     );
     for (const trigger of content.querySelectorAll<HTMLElement>(
         `[aria-controls="${state.host.id}"]`,
@@ -1138,84 +1114,7 @@ function update_pear_run_trace_triggers(state: PearTraceRequestState): void {
 }
 
 function load_pear_run_trace(state: PearTraceRequestState): void {
-    if (state.in_flight) {
-        state.dirty = true;
-        return;
-    }
-    state.in_flight = true;
-    state.dirty = false;
-    const {run_id, reveal, host, status} = state;
-    const first_load = !state.loaded;
-    reveal.setAttribute("aria-busy", "true");
-    reveal.dataset["state"] = "loading";
-    if (first_load) {
-        host.textContent = $t({defaultMessage: "Loading work…"});
-        status.textContent = $t({defaultMessage: "Loading work"});
-    }
-    update_pear_run_trace_triggers(state);
-    void channel.get({
-        url: `/json/pear/runs/${run_id}/trace`,
-        data: {limit: 100},
-        success(raw_data) {
-            try {
-                const rendered = pear_trace_rendered_for_testing(raw_data);
-                if (rendered === undefined) {
-                    fail_pear_run_trace(state);
-                    return;
-                }
-                host.replaceChildren(ui_util.parse_html(rendered));
-                host.classList.add("rendered_markdown");
-                rendered_markdown.update_elements($(host));
-                remove_pear_run_trace_duplicate_tail(state);
-                const row = host.closest(".message_row");
-                if (row instanceof HTMLElement) {
-                    enhance_pear_tool_rows($(row));
-                }
-                state.loaded = true;
-                reveal.removeAttribute("aria-busy");
-                reveal.dataset["state"] = "ready";
-                state.in_flight = false;
-                status.textContent = first_load ? $t({defaultMessage: "Work loaded"}) : "";
-                update_pear_run_trace_triggers(state);
-                if (state.dirty && state.expanded) {
-                    load_pear_run_trace(state);
-                }
-            } catch {
-                fail_pear_run_trace(state);
-            }
-        },
-        error() {
-            fail_pear_run_trace(state);
-        },
-    });
-}
-
-function fail_pear_run_trace(state: PearTraceRequestState): void {
-    const had_loaded_trace = state.loaded;
-    state.reveal.removeAttribute("aria-busy");
-    state.reveal.dataset["state"] = "failed";
-    const error = had_loaded_trace
-        ? $t({defaultMessage: "Could not refresh work. Retry available."})
-        : $t({defaultMessage: "Could not load work."});
-    if (!had_loaded_trace) {
-        const error_row = document.createElementNS("http://www.w3.org/1999/xhtml", "div");
-        error_row.setAttribute("class", "pear-run-trace-error");
-        const error_text = document.createElementNS("http://www.w3.org/1999/xhtml", "span");
-        error_text.textContent = error;
-        const retry = document.createElementNS("http://www.w3.org/1999/xhtml", "button");
-        retry.setAttribute("class", "pear-run-trace-retry");
-        retry.setAttribute("type", "button");
-        retry.textContent = $t({defaultMessage: "Retry"});
-        retry.addEventListener("click", () => {
-            load_pear_run_trace(state);
-        });
-        error_row.append(error_text, retry);
-        state.host.replaceChildren(error_row);
-    }
-    state.status.textContent = error;
-    state.in_flight = false;
-    state.dirty = had_loaded_trace;
-    update_pear_run_trace_triggers(state);
+    state.controller.load();
 }
 
 function set_pear_run_trace_expanded(state: PearTraceRequestState, expanded: boolean): void {
@@ -1227,10 +1126,7 @@ function set_pear_run_trace_expanded(state: PearTraceRequestState, expanded: boo
 }
 
 function toggle_pear_run_trace(state: PearTraceRequestState): void {
-    const action = pear_trace_toggle_action_for_testing(
-        state.expanded,
-        state.reveal.dataset["state"] === "failed",
-    );
+    const action = pear_trace_toggle_action_for_testing(state.expanded, state.controller.failed);
     if (action === "retry") {
         load_pear_run_trace(state);
         return;
@@ -1241,10 +1137,10 @@ function toggle_pear_run_trace(state: PearTraceRequestState): void {
     }
     set_pear_run_trace_expanded(state, true);
     if (
-        pear_trace_should_load_on_open_for_testing(
-            state.loaded,
-            state.dirty,
-            state.reveal.dataset["state"] === "failed",
+        pear_run_trace.should_load_on_open_for_testing(
+            state.controller.loaded,
+            state.controller.dirty,
+            state.controller.failed,
         )
     ) {
         load_pear_run_trace(state);
@@ -1265,6 +1161,10 @@ function ensure_pear_run_trace(content: HTMLElement, run_id: number): PearTraceR
         }
     }
     for (const stale of content.querySelectorAll(":scope > .pear-run-trace-reveal")) {
+        const stale_host = stale.querySelector<HTMLElement>(":scope > .pear-run-trace");
+        if (stale_host !== null) {
+            pear_trace_request_states.get(stale_host)?.controller.destroy();
+        }
         stale.remove();
     }
     const reveal = document.createElementNS("http://www.w3.org/1999/xhtml", "div");
@@ -1285,14 +1185,32 @@ function ensure_pear_run_trace(content: HTMLElement, run_id: number): PearTraceR
     next_pear_trace_host_id += 1;
     trace.id = `pear-run-trace-${run_id}-${next_pear_trace_host_id}`;
     reveal.append(trace_status, trace);
-    const state: PearTraceRequestState = {
+    let state: PearTraceRequestState;
+    const controller = pear_run_trace.create_controller({
+        run_id,
+        host: trace,
+        status: trace_status,
+        after_render() {
+            remove_pear_run_trace_duplicate_tail(state);
+            const row = trace.closest(".message_row");
+            if (row instanceof HTMLElement) {
+                enhance_pear_tool_rows($(row));
+            }
+        },
+        on_state_change(next_controller) {
+            reveal.dataset["state"] = next_controller.request_state;
+            reveal.toggleAttribute("aria-busy", next_controller.in_flight);
+            if (state !== undefined) {
+                update_pear_run_trace_triggers(state);
+            }
+        },
+    });
+    state = {
         run_id,
         reveal,
         host: trace,
         status: trace_status,
-        in_flight: false,
-        dirty: false,
-        loaded: false,
+        controller,
         expanded: false,
     };
     pear_trace_request_states.set(trace, state);
@@ -1320,8 +1238,8 @@ function wire_pear_run_trace_trigger(trigger: HTMLElement, state: PearTraceReque
     trigger.setAttribute("aria-expanded", String(state.expanded));
     const label = pear_trace_trigger_label_for_testing(
         state.expanded,
-        state.loaded,
-        state.reveal.dataset["state"],
+        state.controller.loaded,
+        state.controller.request_state,
     );
     trigger.setAttribute("aria-label", label);
     trigger.setAttribute("title", label);
@@ -1392,6 +1310,10 @@ function ensure_pear_live_trace_disclosure(
 
 function remove_pear_run_trace(content: HTMLElement): void {
     for (const reveal of content.querySelectorAll(":scope > .pear-run-trace-reveal")) {
+        const trace = reveal.querySelector<HTMLElement>(":scope > .pear-run-trace");
+        if (trace !== null) {
+            pear_trace_request_states.get(trace)?.controller.destroy();
+        }
         reveal.remove();
     }
 }
@@ -1434,10 +1356,9 @@ function refresh_open_pear_run_traces(run_id: number): void {
         }
         const state = pear_trace_request_states.get(trace);
         if (state !== undefined) {
-            state.dirty = true;
-            if (pear_trace_event_should_load_for_testing(state.expanded)) {
-                load_pear_run_trace(state);
-            }
+            state.controller.mark_dirty(
+                pear_run_trace.event_should_load_for_testing(state.expanded),
+            );
         }
     }
 }
@@ -1673,6 +1594,7 @@ function update_rendered_pear_active_messages(): void {
         // so the settling ticker must be drawn here too.
         maybe_render_pear_run_footer($row);
         render_pear_live_progress($row);
+        render_pear_agent_threads($row);
         // Artifact submessages can arrive immediately before the final
         // streaming edit.  Keep the independently mounted artifact host
         // present while those two event streams settle; render_submessage is
@@ -1737,7 +1659,7 @@ pear_run_state.on_active_run_result_messages_changed((change) => {
     schedule_pear_presence_render();
 });
 
-pear_run_state.on_run_state_changed((run) => {
+pear_run_state.on_run_state_changed((run, event) => {
     if (typeof run.result_message_id !== "number") {
         return;
     }
@@ -1745,7 +1667,9 @@ pear_run_state.on_run_state_changed((run) => {
         pear_live_announcement_signatures.delete(run.result_message_id);
     }
     schedule_pear_presence_render();
-    refresh_open_pear_run_traces(run.id);
+    if (event?.event_type !== "agent") {
+        refresh_open_pear_run_traces(run.id);
+    }
     remember_pear_attention_candidate(run);
 });
 
@@ -2989,6 +2913,7 @@ export class MessageListView {
         enhance_pear_tool_rows($row);
         maybe_render_pear_run_footer($row);
         render_pear_live_progress($row);
+        render_pear_agent_threads($row);
         // Live progress owns the current-step glyph, so it must exist before
         // the animation decorator scans the row. Streaming edits take this
         // path repeatedly; reversing these calls leaves the freshly replaced
@@ -3170,6 +3095,7 @@ export class MessageListView {
 
                 this._post_process($dom_messages);
                 unmount_pear_artifacts_in($old_message_group);
+                destroy_pear_agent_threads_in($old_message_group);
                 $old_message_group.replaceWith($rendered_groups);
                 condense.condense_and_collapse($dom_messages);
             }
@@ -3648,6 +3574,7 @@ export class MessageListView {
                 enhance_pear_tool_rows($row);
                 maybe_render_pear_run_footer($row);
                 render_pear_live_progress($row);
+                render_pear_agent_threads($row);
                 maybe_render_pear_thinking_glyph($row);
                 submessage.render_submessage({
                     $row,
@@ -3661,6 +3588,7 @@ export class MessageListView {
         }
         this._post_process($rendered_msg);
         unmount_pear_artifacts_in($row);
+        destroy_pear_agent_threads_in($row);
         $row.replaceWith($rendered_msg);
 
         message_list_hover.reapply_hover_on_row_replace($row, $rendered_msg, message_container.msg);

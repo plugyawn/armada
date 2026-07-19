@@ -537,6 +537,42 @@ def pear_codex_item_metadata(item: dict[str, Any]) -> dict[str, Any]:
         value = item.get(key)
         if isinstance(value, str) and value.strip():
             metadata[key] = trim_pear_agent_text(value, limit=500)
+    if item.get("type") == "collab_agent_tool_call":
+        for source_key, target_key in (
+            ("senderThreadId", "sender_thread_id"),
+            ("prompt", "prompt"),
+            ("model", "model"),
+            ("reasoningEffort", "reasoning_effort"),
+        ):
+            value = item.get(source_key)
+            if isinstance(value, str) and value.strip():
+                metadata[target_key] = trim_pear_agent_text(value, limit=1000)
+        receiver_thread_ids = item.get("receiverThreadIds")
+        if isinstance(receiver_thread_ids, list):
+            metadata["receiver_thread_ids"] = [
+                thread_id
+                for thread_id in receiver_thread_ids[:16]
+                if isinstance(thread_id, str) and thread_id.strip()
+            ]
+        agent_states = item.get("agentsStates")
+        if isinstance(agent_states, dict):
+            metadata["agent_states"] = {
+                str(thread_id): {
+                    "status": str(state.get("status") or "unknown"),
+                    "message": trim_pear_agent_text(str(state.get("message") or ""), limit=500),
+                }
+                for thread_id, state in list(agent_states.items())[:16]
+                if isinstance(thread_id, str) and isinstance(state, dict)
+            }
+    elif item.get("type") == "sub_agent_activity":
+        for source_key, target_key in (
+            ("kind", "activity_kind"),
+            ("agentThreadId", "agent_thread_id"),
+            ("agentPath", "agent_path"),
+        ):
+            value = item.get(source_key)
+            if isinstance(value, str) and value.strip():
+                metadata[target_key] = trim_pear_agent_text(value, limit=500)
     return metadata
 
 
@@ -711,6 +747,25 @@ def pear_transcript_events_from_codex_json_event(
     if item_type == "user_message":
         # The turn prompt echoed back as an item; the topic already shows it.
         return []
+    if item_type == "collab_agent_tool_call":
+        tool = str(item.get("tool") or "agent")
+        title = {
+            "spawnAgent": "Started an agent",
+            "sendInput": "Sent input to an agent",
+            "resumeAgent": "Resumed an agent",
+            "wait": "Waited for agents",
+            "closeAgent": "Closed an agent",
+        }.get(tool, "Agent activity")
+        return [{**base_event, "kind": "agent", "title": title}]
+    if item_type == "sub_agent_activity":
+        activity_kind = str(item.get("kind") or "activity")
+        return [
+            {
+                **base_event,
+                "kind": "agent",
+                "title": f"Agent {activity_kind}",
+            }
+        ]
     if isinstance(item_type, str) and ("tool" in item_type or item_type == "web_search"):
         return [{**base_event, "kind": "tool", "title": title or item_type}]
     if isinstance(item_type, str):
@@ -750,13 +805,14 @@ PEAR_APP_SERVER_ITEM_TYPE_MAP: dict[str, str] = {
     "webSearch": "web_search",
     "contextCompaction": "context_compaction",
     "userMessage": "user_message",
+    "collabAgentToolCall": "collab_agent_tool_call",
+    "subAgentActivity": "sub_agent_activity",
 }
 
 # Engine chatter that never belongs in a run transcript. turn/diff joins
 # the translated set with the live-diff surface.
 PEAR_APP_SERVER_IGNORED_METHODS = frozenset(
     {
-        "thread/status/changed",
         "mcpServer/startupStatus/updated",
         "remoteControl/status/changed",
         "thread/goal/cleared",
@@ -802,6 +858,66 @@ def pear_app_server_normalized_item(item: dict[str, Any]) -> dict[str, Any]:
     return normalized
 
 
+def pear_app_server_thread_descriptor(thread: dict[str, Any]) -> dict[str, Any] | None:
+    thread_id = thread.get("id")
+    if not isinstance(thread_id, str) or not thread_id.strip():
+        return None
+    descriptor: dict[str, Any] = {"id": thread_id.strip()}
+    for source_key, target_key in (
+        ("parentThreadId", "parent_thread_id"),
+        ("agentNickname", "agent_nickname"),
+        ("agentRole", "agent_role"),
+        ("name", "name"),
+    ):
+        value = thread.get(source_key)
+        if isinstance(value, str):
+            descriptor[target_key] = trim_pear_agent_text(value, limit=1000)
+        elif value is None and source_key in {
+            "parentThreadId",
+            "agentNickname",
+            "agentRole",
+            "name",
+        }:
+            descriptor[target_key] = None
+    for source_key, target_key in (("createdAt", "created_at"), ("updatedAt", "updated_at")):
+        value = thread.get(source_key)
+        if isinstance(value, int | float) and not isinstance(value, bool):
+            descriptor[target_key] = float(value)
+    status = thread.get("status")
+    if isinstance(status, dict) and isinstance(status.get("type"), str):
+        descriptor["status"] = {"type": status["type"]}
+    source = thread.get("source")
+    sub_agent = source.get("subAgent") if isinstance(source, dict) else None
+    thread_spawn = sub_agent.get("thread_spawn") if isinstance(sub_agent, dict) else None
+    if isinstance(thread_spawn, dict):
+        for source_key, target_key in (
+            ("agent_nickname", "agent_nickname"),
+            ("agent_role", "agent_role"),
+        ):
+            value = thread_spawn.get(source_key)
+            if descriptor.get(target_key) is None and isinstance(value, str):
+                descriptor[target_key] = trim_pear_agent_text(value, limit=500)
+    return descriptor
+
+
+def pear_thread_session_event(descriptor: dict[str, Any]) -> PearWorkerTranscriptEvent:
+    thread_id = str(descriptor["id"])
+    return {
+        "kind": "session",
+        "status": "done",
+        "title": f"Codex thread {thread_id}",
+        "body": thread_id,
+        "metadata": {
+            "codex_method": "thread/started",
+            "codex_thread_id": thread_id,
+            "parent_thread_id": descriptor.get("parent_thread_id"),
+            "agent_nickname": descriptor.get("agent_nickname"),
+            "agent_role": descriptor.get("agent_role"),
+            "thread": descriptor,
+        },
+    }
+
+
 def pear_app_server_usage_event(params: dict[str, Any]) -> PearWorkerTranscriptEvent | None:
     usage = pear_normalize_token_usage(params)
     if usage is None:
@@ -819,6 +935,37 @@ class PearCodexAppServerTranscriptTranslator:
         self.json_translator = PearCodexJsonTranscriptTranslator()
         self.last_rate_limit_key: tuple[object, ...] | None = None
         self.reported_unknown_methods: set[str] = set()
+        self.thread_descriptors: dict[str, dict[str, Any]] = {}
+
+    def contextualize_events(
+        self,
+        events: list[PearWorkerTranscriptEvent],
+        *,
+        method: str,
+        params: dict[str, Any],
+    ) -> list[PearWorkerTranscriptEvent]:
+        thread_id = params.get("threadId")
+        turn_id = params.get("turnId")
+        turn = params.get("turn")
+        if not isinstance(turn_id, str) and isinstance(turn, dict):
+            raw_turn_id = turn.get("id")
+            if isinstance(raw_turn_id, str):
+                turn_id = raw_turn_id
+        descriptor = self.thread_descriptors.get(thread_id) if isinstance(thread_id, str) else None
+        for event in events:
+            metadata = event.get("metadata")
+            event_metadata = dict(metadata) if isinstance(metadata, dict) else {}
+            event_metadata["codex_method"] = method
+            if isinstance(thread_id, str):
+                event_metadata["codex_thread_id"] = thread_id
+            if isinstance(turn_id, str):
+                event_metadata["codex_turn_id"] = turn_id
+            if descriptor is not None:
+                event_metadata["parent_thread_id"] = descriptor.get("parent_thread_id")
+                event_metadata["agent_nickname"] = descriptor.get("agent_nickname")
+                event_metadata["agent_role"] = descriptor.get("agent_role")
+            event["metadata"] = event_metadata
+        return events
 
     def rate_limit_events(self, params: dict[str, Any]) -> list[PearWorkerTranscriptEvent]:
         limits = params.get("rateLimits")
@@ -880,18 +1027,40 @@ class PearCodexAppServerTranscriptTranslator:
 
         if method == "thread/started":
             thread = params.get("thread")
-            thread_id = thread.get("id") if isinstance(thread, dict) else None
-            if not isinstance(thread_id, str):
+            descriptor = (
+                pear_app_server_thread_descriptor(thread) if isinstance(thread, dict) else None
+            )
+            if descriptor is None:
                 return []
-            return [
-                {
-                    "kind": "session",
-                    "status": "done",
-                    "title": f"Codex thread {thread_id}",
-                    "body": thread_id,
-                    "metadata": {"thread_id": thread_id},
-                }
-            ]
+            thread_id = descriptor["id"]
+            assert isinstance(thread_id, str)
+            self.thread_descriptors[thread_id] = descriptor
+            return [pear_thread_session_event(descriptor)]
+        if method == "thread/status/changed":
+            thread_id = params.get("threadId")
+            raw_status = params.get("status")
+            if not isinstance(thread_id, str) or not isinstance(raw_status, dict):
+                return []
+            status_type = str(raw_status.get("type") or "unknown")
+            descriptor = self.thread_descriptors.get(thread_id)
+            if descriptor is not None:
+                descriptor["status"] = {"type": status_type}
+            if descriptor is None or not isinstance(descriptor.get("parent_thread_id"), str):
+                # Root thread liveness already has a typed Pear run state.
+                # Only child status belongs in the native-agent surface.
+                return []
+            return self.contextualize_events(
+                [
+                    {
+                        "kind": "agent",
+                        "status": "running" if status_type == "active" else "done",
+                        "title": f"Agent {status_type}",
+                        "metadata": {"thread_status": status_type},
+                    }
+                ],
+                method=method,
+                params=params,
+            )
         if method == "turn/plan/updated":
             # The app-server emits the model's update_plan checklist as
             # its own notification (not a thread item): full-state
@@ -909,51 +1078,97 @@ class PearCodexAppServerTranscriptTranslator:
                         steps.append({"step": step.strip(), "status": status})
             if not steps:
                 return []
-            return [
-                {
-                    "kind": "plan",
-                    "status": "done",
-                    "title": "Plan",
-                    "metadata": {"steps": steps},
-                }
-            ]
+            return self.contextualize_events(
+                [
+                    {
+                        "kind": "plan",
+                        "status": "done",
+                        "title": "Plan",
+                        "metadata": {"steps": steps},
+                    }
+                ],
+                method=method,
+                params=params,
+            )
         if method == "turn/started":
-            return [
-                {
-                    "kind": "status",
-                    "status": "running",
-                    "title": "Codex turn started.",
-                }
-            ]
+            thread_id = params.get("threadId")
+            descriptor = (
+                self.thread_descriptors.get(thread_id) if isinstance(thread_id, str) else None
+            )
+            if descriptor is not None:
+                descriptor["status"] = {"type": "active"}
+            return self.contextualize_events(
+                [
+                    {
+                        "kind": "status",
+                        "status": "running",
+                        "title": "Codex turn started.",
+                    }
+                ],
+                method=method,
+                params=params,
+            )
         if method == "turn/completed":
-            return [
-                {
-                    "kind": "status",
-                    "status": "done",
-                    "title": "Codex turn completed.",
-                    "metadata": {"turn": params.get("turn")},
+            thread_id = params.get("threadId")
+            descriptor = (
+                self.thread_descriptors.get(thread_id) if isinstance(thread_id, str) else None
+            )
+            turn = params.get("turn")
+            raw_turn_status = turn.get("status") if isinstance(turn, dict) else None
+            turn_status = str(raw_turn_status or "completed")
+            if descriptor is not None:
+                descriptor["status"] = {
+                    "type": "failed" if turn_status in {"failed", "interrupted"} else "idle"
                 }
-            ]
+            return self.contextualize_events(
+                [
+                    {
+                        "kind": "status",
+                        "status": "done",
+                        "title": "Codex turn completed.",
+                        # The native Turn object contains its complete item
+                        # history. Persist only the terminal reducer input;
+                        # command bodies already have their own bounded rows.
+                        "metadata": {"turn_status": turn_status},
+                    }
+                ],
+                method=method,
+                params=params,
+            )
         if method == "thread/tokenUsage/updated":
             usage_event = pear_app_server_usage_event(params)
-            return [usage_event] if usage_event is not None else []
+            return (
+                self.contextualize_events([usage_event], method=method, params=params)
+                if usage_event is not None
+                else []
+            )
         if method == "error":
-            return [
-                {
-                    "kind": "error",
-                    "status": "failed",
-                    "title": "Codex runtime error.",
-                    "body": str(params.get("message", "") or params.get("error", "")),
-                    "metadata": {"error": params},
-                }
-            ]
+            return self.contextualize_events(
+                [
+                    {
+                        "kind": "error",
+                        "status": "failed",
+                        "title": "Codex runtime error.",
+                        "body": trim_pear_agent_text(
+                            str(params.get("message", "") or params.get("error", "")),
+                            limit=1000,
+                        ),
+                    }
+                ],
+                method=method,
+                params=params,
+            )
         if method == "item/agentMessage/delta":
-            return self.json_translator.events_from_json_event(
-                {
-                    "type": "item.delta",
-                    "item_id": params.get("itemId"),
-                    "delta": params.get("delta", ""),
-                }
+            return self.contextualize_events(
+                self.json_translator.events_from_json_event(
+                    {
+                        "type": "item.delta",
+                        "item_id": params.get("itemId"),
+                        "delta": params.get("delta", ""),
+                    }
+                ),
+                method=method,
+                params=params,
             )
         if method == "account/rateLimits/updated":
             return self.rate_limit_events(params)
@@ -961,27 +1176,38 @@ class PearCodexAppServerTranscriptTranslator:
             body = str(params.get("message") or params.get("summary") or "").strip()
             if not body:
                 return []
-            return [
-                {
-                    "kind": "status",
-                    "status": "done",
-                    "title": "Codex warning.",
-                    "body": trim_pear_agent_text(body, limit=600),
-                    "metadata": {"method": method},
-                }
-            ]
+            return self.contextualize_events(
+                [
+                    {
+                        "kind": "status",
+                        "status": "done",
+                        "title": "Codex warning.",
+                        "body": trim_pear_agent_text(body, limit=600),
+                    }
+                ],
+                method=method,
+                params=params,
+            )
         if method in PEAR_APP_SERVER_IGNORED_METHODS:
             return []
         if method not in {"item/started", "item/completed"}:
-            return self.unknown_method_events(method, params)
+            return self.contextualize_events(
+                self.unknown_method_events(method, params),
+                method=method,
+                params=params,
+            )
         item = params.get("item")
         if not isinstance(item, dict):
             return []
-        return self.json_translator.events_from_json_event(
-            {
-                "type": "item.started" if method == "item/started" else "item.completed",
-                "item": pear_app_server_normalized_item(item),
-            }
+        return self.contextualize_events(
+            self.json_translator.events_from_json_event(
+                {
+                    "type": "item.started" if method == "item/started" else "item.completed",
+                    "item": pear_app_server_normalized_item(item),
+                }
+            ),
+            method=method,
+            params=params,
         )
 
 
@@ -1043,9 +1269,11 @@ class PearCodexAppServerToolRunner:
         self.process: subprocess.Popen[str] | None = None
         self.messages: queue.Queue[dict[str, Any] | None] = queue.Queue()
         self.reader_thread: threading.Thread | None = None
+        self.transport_abort_error: Exception | None = None
         self.next_request_id = 0
         self.lock = threading.RLock()
         self.loaded_thread_id: str | None = None
+        self.loaded_through_trigger_message_id: int | None = None
         self.active_thread_id: str | None = None
         self.active_turn_id: str | None = None
         self.background_request_ids: set[int] = set()
@@ -1091,10 +1319,17 @@ class PearCodexAppServerToolRunner:
             self.process is not None
             and self.process.poll() is None
             and self.reader_thread is not None
+            and self.transport_abort_error is None
         ):
             return
+        if (
+            self.process is not None
+            or self.reader_thread is not None
+            or self.loaded_thread_id is not None
+        ):
+            self.reset_transport()
         try:
-            self.process = self.popen_command(
+            process = self.popen_command(
                 self.build_command(),
                 cwd=pear_subprocess_cwd(self.workdir, self.process_isolation),
                 text=True,
@@ -1106,13 +1341,17 @@ class PearCodexAppServerToolRunner:
         except FileNotFoundError as error:
             raise PearAgentRuntimeError(f"Codex executable not found: {self.codex_bin}") from error
 
-        self.messages = queue.Queue()
-        self.reader_thread = threading.Thread(
+        messages: queue.Queue[dict[str, Any] | None] = queue.Queue()
+        self.process = process
+        self.messages = messages
+        reader_thread = threading.Thread(
             target=self.read_messages,
+            args=(process, messages),
             name="pear-codex-app-server-reader",
             daemon=True,
         )
-        self.reader_thread.start()
+        self.reader_thread = reader_thread
+        reader_thread.start()
         self.request(
             "initialize",
             {
@@ -1130,10 +1369,13 @@ class PearCodexAppServerToolRunner:
         )
         self.notify("initialized", {})
 
-    def read_messages(self) -> None:
-        process = self.process
+    def read_messages(
+        self,
+        process: subprocess.Popen[str],
+        messages: queue.Queue[dict[str, Any] | None],
+    ) -> None:
         if process is None or process.stdout is None:
-            self.messages.put(None)
+            messages.put(None)
             return
         try:
             for line in process.stdout:
@@ -1145,9 +1387,47 @@ class PearCodexAppServerToolRunner:
                     continue
                 if isinstance(message, dict):
                     pear_capture_protocol_message("recv", message)
-                    self.messages.put(message)
+                    messages.put(message)
         finally:
-            self.messages.put(None)
+            messages.put(None)
+
+    def reset_transport(self) -> None:
+        """Retire one app-server generation without contaminating the next.
+
+        Every reader owns the process and queue it was created with.  This
+        makes a late EOF from an old process harmless after a stale-thread
+        fence forces a native resume in a fresh app-server.
+        """
+        process = self.process
+        reader_thread = self.reader_thread
+        self.process = None
+        self.reader_thread = None
+        self.messages = queue.Queue()
+        self.transport_abort_error = None
+        self.loaded_thread_id = None
+        self.loaded_through_trigger_message_id = None
+        self.active_thread_id = None
+        self.active_turn_id = None
+        self.background_request_ids.clear()
+        self.current_user_input_provider = None
+        self.pending_artifacts = []
+        self.translator = PearCodexAppServerTranscriptTranslator()
+        if process is not None and process.poll() is None:
+            process.terminate()
+            wait = getattr(process, "wait", None)
+            if callable(wait):
+                try:
+                    wait(timeout=2)
+                except subprocess.TimeoutExpired:
+                    kill = getattr(process, "kill", None)
+                    if callable(kill):
+                        kill()
+        if (
+            reader_thread is not None
+            and reader_thread is not threading.current_thread()
+            and reader_thread.is_alive()
+        ):
+            reader_thread.join(timeout=2)
 
     def next_id(self) -> int:
         self.next_request_id += 1
@@ -1210,11 +1490,15 @@ class PearCodexAppServerToolRunner:
 
     def next_message(self, timeout: float) -> dict[str, Any] | None:
         try:
-            return self.messages.get(timeout=timeout)
+            message = self.messages.get(timeout=timeout)
         except queue.Empty as error:
             raise PearAgentRuntimeError(
                 f"Codex app-server produced no activity for {timeout:g} seconds."
             ) from error
+        abort_error = self.transport_abort_error
+        if abort_error is not None:
+            raise abort_error
+        return message
 
     def handle_server_request(
         self,
@@ -1238,7 +1522,12 @@ class PearCodexAppServerToolRunner:
             reply["result"] = result
         self.send_message(reply)
         if event is not None and event_callback is not None:
-            event_callback(event)
+            [contextualized] = self.translator.contextualize_events(
+                [event],
+                method=method,
+                params=params,
+            )
+            event_callback(contextualized)
         return True
 
     def answer_for_server_request(
@@ -1408,12 +1697,19 @@ class PearCodexAppServerToolRunner:
         method = message.get("method")
         params = message.get("params")
         if method == "turn/started" and isinstance(params, dict):
+            thread_id = params.get("threadId")
             turn = params.get("turn")
             turn_id = turn.get("id") if isinstance(turn, dict) else None
-            if isinstance(turn_id, str):
+            if (
+                isinstance(thread_id, str)
+                and isinstance(turn_id, str)
+                and thread_id == self.active_thread_id
+            ):
                 self.active_turn_id = turn_id
-        if method == "turn/completed":
-            self.active_turn_id = None
+        if method == "turn/completed" and isinstance(params, dict):
+            thread_id = params.get("threadId")
+            if isinstance(thread_id, str) and thread_id == self.active_thread_id:
+                self.active_turn_id = None
         events = self.translator.events_from_message(message)
         if event_callback is not None:
             for event in events:
@@ -1464,9 +1760,24 @@ class PearCodexAppServerToolRunner:
             if isinstance(latest_thread_id, str) and latest_thread_id.strip()
             else None
         )
+        predecessor_trigger_id = active_session.get("latest_codex_trigger_message_id")
+        current_trigger_id = active_session.get("current_trigger_message_id")
+        if not isinstance(predecessor_trigger_id, int) or isinstance(predecessor_trigger_id, bool):
+            predecessor_trigger_id = None
+        if not isinstance(current_trigger_id, int) or isinstance(current_trigger_id, bool):
+            current_trigger_id = None
         thread_id = existing_thread_id
         if thread_id is not None and thread_id == self.loaded_thread_id:
-            return thread_id
+            if self.loaded_through_trigger_message_id in {
+                predecessor_trigger_id,
+                current_trigger_id,
+            }:
+                return thread_id
+            # Another worker advanced this durable thread.  A native resume in
+            # a new app-server is the only safe way to refresh its in-memory
+            # thread state; replaying transcript context would duplicate Codex.
+            self.reset_transport()
+            self.ensure_started()
         if thread_id is not None:
             result = self.request(
                 "thread/resume",
@@ -1475,6 +1786,8 @@ class PearCodexAppServerToolRunner:
             )
             resumed_thread_id = pear_app_server_thread_id_from_result(result) or thread_id
             self.loaded_thread_id = resumed_thread_id
+            self.loaded_through_trigger_message_id = predecessor_trigger_id
+            self.reconcile_descendant_threads(resumed_thread_id)
             return resumed_thread_id
         result = self.request(
             "thread/start",
@@ -1485,17 +1798,89 @@ class PearCodexAppServerToolRunner:
         if started_thread_id is None:
             raise PearAgentRuntimeError("Codex app-server did not return a thread id.")
         self.loaded_thread_id = started_thread_id
-        if event_callback is not None:
+        self.loaded_through_trigger_message_id = None
+        if (
+            event_callback is not None
+            and started_thread_id not in self.translator.thread_descriptors
+        ):
             event_callback(
-                {
-                    "kind": "session",
-                    "status": "done",
-                    "title": f"Codex thread {started_thread_id}",
-                    "body": started_thread_id,
-                    "metadata": {"thread_id": started_thread_id},
-                }
+                pear_thread_session_event(
+                    {
+                        "id": started_thread_id,
+                        "parent_thread_id": None,
+                        "agent_nickname": None,
+                        "agent_role": None,
+                        "name": None,
+                    }
+                )
             )
         return started_thread_id
+
+    def reconcile_descendant_threads(self, root_thread_id: str) -> None:
+        """Restore native child identities after an app-server restart.
+
+        This is one runtime reconciliation request, never a frontend poller.
+        The durable Pear event log remains the browser's source of truth.
+        """
+        result = self.request(
+            "thread/list",
+            {
+                "ancestorThreadId": root_thread_id,
+                "limit": 100,
+                "sourceKinds": [
+                    "subAgent",
+                    "subAgentReview",
+                    "subAgentCompact",
+                    "subAgentThreadSpawn",
+                    "subAgentOther",
+                ],
+                "useStateDbOnly": True,
+            },
+            event_callback=None,
+        )
+        threads = result.get("data") if isinstance(result, dict) else None
+        if not isinstance(threads, list):
+            return
+        for thread in threads:
+            if not isinstance(thread, dict):
+                continue
+            self.translator.events_from_message(
+                {"method": "thread/started", "params": {"thread": thread}}
+            )
+
+    def child_thread_lineage(
+        self, root_thread_id: str, child_thread_id: str
+    ) -> list[dict[str, Any]]:
+        lineage: list[dict[str, Any]] = []
+        current_thread_id = child_thread_id
+        seen: set[str] = set()
+        while current_thread_id != root_thread_id and current_thread_id not in seen:
+            seen.add(current_thread_id)
+            descriptor = self.translator.thread_descriptors.get(current_thread_id)
+            if descriptor is None:
+                return []
+            lineage.append(descriptor)
+            parent_thread_id = descriptor.get("parent_thread_id")
+            if not isinstance(parent_thread_id, str):
+                return []
+            current_thread_id = parent_thread_id
+        if current_thread_id != root_thread_id:
+            return []
+        lineage.reverse()
+        return lineage
+
+    def active_descendant_thread_ids(self, root_thread_id: str) -> set[str]:
+        active: set[str] = set()
+        for thread_id, descriptor in self.translator.thread_descriptors.items():
+            if thread_id == root_thread_id or not self.child_thread_lineage(
+                root_thread_id, thread_id
+            ):
+                continue
+            status = descriptor.get("status")
+            status_type = status.get("type") if isinstance(status, dict) else None
+            if status_type == "active":
+                active.add(thread_id)
+        return active
 
     def wait_for_turn(
         self,
@@ -1508,6 +1893,7 @@ class PearCodexAppServerToolRunner:
         command_count = 0
         file_change_count = 0
         tool_call_count = 0
+        root_turn_completed = False
         while True:
             message = self.next_message(self.timeout_seconds)
             if message is None:
@@ -1525,6 +1911,12 @@ class PearCodexAppServerToolRunner:
                 continue
             events = self.handle_notification(message, event_callback=event_callback)
             for event in events:
+                metadata = event.get("metadata")
+                event_thread_id = (
+                    metadata.get("codex_thread_id") if isinstance(metadata, dict) else None
+                )
+                if isinstance(event_thread_id, str) and event_thread_id != thread_id:
+                    continue
                 if event.get("kind") == "assistant":
                     body = event.get("body")
                     if isinstance(body, str):
@@ -1540,6 +1932,8 @@ class PearCodexAppServerToolRunner:
                     tool_call_count += 1
             method = message.get("method")
             params = message.get("params")
+            if root_turn_completed and not self.active_descendant_thread_ids(thread_id):
+                return final_text, command_count, file_change_count, tool_call_count
             if method != "turn/completed" or not isinstance(params, dict):
                 continue
             if params.get("threadId") != thread_id:
@@ -1550,8 +1944,11 @@ class PearCodexAppServerToolRunner:
             )
             if turn_id is not None and completed_turn_id != turn_id:
                 continue
-            self.active_turn_id = None
-            return final_text, command_count, file_change_count, tool_call_count
+            if thread_id == self.active_thread_id:
+                self.active_turn_id = None
+            root_turn_completed = True
+            if not self.active_descendant_thread_ids(thread_id):
+                return final_text, command_count, file_change_count, tool_call_count
 
     def __call__(
         self,
@@ -1565,13 +1962,57 @@ class PearCodexAppServerToolRunner:
             self.ensure_started()
             self.pending_artifacts = []
             self.current_user_input_provider = user_input_provider
-            thread_id = self.ensure_thread(active_session, event_callback=event_callback)
+            bootstrap_events: list[PearWorkerTranscriptEvent] = []
+            thread_id = self.ensure_thread(
+                active_session,
+                event_callback=bootstrap_events.append,
+            )
             self.active_thread_id = thread_id
+            persisted_child_thread_ids: set[str] = set()
+
+            def run_event_callback(event: PearWorkerTranscriptEvent) -> None:
+                if event_callback is None:
+                    return
+                metadata = event.get("metadata")
+                event_thread_id = (
+                    metadata.get("codex_thread_id") if isinstance(metadata, dict) else None
+                )
+                if not isinstance(event_thread_id, str) or event_thread_id == thread_id:
+                    event_callback(event)
+                    return
+                lineage = self.child_thread_lineage(thread_id, event_thread_id)
+                if not lineage:
+                    # The app-server process can hold other resumed roots. An
+                    # event is part of this run only when its complete native
+                    # parent chain reaches the active root.
+                    return
+                for descriptor in lineage:
+                    descriptor_thread_id = descriptor.get("id")
+                    if (
+                        not isinstance(descriptor_thread_id, str)
+                        or descriptor_thread_id in persisted_child_thread_ids
+                    ):
+                        continue
+                    is_current_session_event = (
+                        event.get("kind") == "session" and descriptor_thread_id == event_thread_id
+                    )
+                    if not is_current_session_event:
+                        event_callback(pear_thread_session_event(descriptor))
+                    persisted_child_thread_ids.add(descriptor_thread_id)
+                event_callback(event)
+
+            # Resume/list requests can emit child notifications before the
+            # active-turn router exists. Reconciliation above has now rebuilt
+            # ancestry, so replay those bounded events through the same lineage
+            # gate as live turn traffic.
+            for bootstrap_event in bootstrap_events:
+                run_event_callback(bootstrap_event)
+
             prompt = build_pear_codex_turn_prompt(active_session, task)
             result = self.request(
                 "turn/start",
                 self.turn_params(thread_id, prompt),
-                event_callback=event_callback,
+                event_callback=run_event_callback,
             )
             turn_id = pear_app_server_turn_id_from_result(result)
             if turn_id is not None:
@@ -1581,7 +2022,7 @@ class PearCodexAppServerToolRunner:
                     self.wait_for_turn(
                         thread_id=thread_id,
                         turn_id=turn_id,
-                        event_callback=event_callback,
+                        event_callback=run_event_callback,
                     )
                 )
             finally:
@@ -1590,6 +2031,9 @@ class PearCodexAppServerToolRunner:
                 final_text, output_limit=self.output_limit
             )
             results.extend(artifact_tool_result(encoded) for encoded in self.pending_artifacts)
+            current_trigger_id = active_session.get("current_trigger_message_id")
+            if isinstance(current_trigger_id, int) and not isinstance(current_trigger_id, bool):
+                self.loaded_through_trigger_message_id = current_trigger_id
             return results
 
     def consume_background_response(self, message: dict[str, Any]) -> bool:
@@ -1642,20 +2086,23 @@ class PearCodexAppServerToolRunner:
                     "method": "turn/interrupt",
                     "params": {
                         "threadId": self.active_thread_id,
-                        "expectedTurnId": self.active_turn_id,
+                        "turnId": self.active_turn_id,
                     },
                 }
             )
             return True
 
     def close(self) -> None:
+        with self.lock:
+            self.reset_transport()
+
+    def abort(self, error: Exception) -> None:
+        """Wake a blocked turn and stop its process without waiting on the turn lock."""
+        messages = self.messages
         process = self.process
-        self.process = None
-        self.active_thread_id = None
-        self.active_turn_id = None
-        if process is None:
-            return
-        if process.poll() is None:
+        self.transport_abort_error = error
+        messages.put(None)
+        if process is not None and process.poll() is None:
             process.terminate()
 
     def codex_thread_id(self) -> str:

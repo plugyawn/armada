@@ -462,25 +462,6 @@ RestartSec=5
 WantedBy=multi-user.target
 EOF
 
-cat >/etc/systemd/system/pear-worker.service <<'EOF'
-[Unit]
-Description=Pear Codex worker queue
-After=network-online.target pear-zulip-dev.service
-Wants=pear-zulip-dev.service
-
-[Service]
-Type=simple
-User=zulipdev
-WorkingDirectory=/home/zulipdev/zulip
-EnvironmentFile=/home/zulipdev/pear.env
-ExecStart=/bin/bash -lc 'cd /home/zulipdev/zulip && exec /home/zulipdev/zulip/.venv/bin/python3 /home/zulipdev/zulip/manage.py process_queue --queue_name pear_worker --automated'
-Restart=always
-RestartSec=5
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
 cat >/etc/systemd/system/pear-monitor-worker.service <<'EOF'
 [Unit]
 Description=Pear standing-monitor queue
@@ -525,7 +506,11 @@ printf -v runtime_command '%q ' \
     --repo-root "$REMOTE_TRUSTED_RUNTIME" \
     --fqdn "$FQDN"
 ssh -F "$SSH_CONFIG" pear-staging-root "$runtime_command"
+install_remote_pear_worker_consumer_timeout_policy
 ssh_root "systemctl daemon-reload && systemctl enable caddy ${PEAR_DEPLOY_SERVICES[*]} && systemctl restart caddy ${PEAR_DEPLOY_SERVICES[*]}"
+wait_for_remote_pear_worker_consumer_timeout_queues
+wait_for_remote_pear_worker_pool_topology
+verify_remote_pear_worker_consumer_timeout_policy
 
 if [[ -n "$PEAR_GEMINI_API_KEY" ]]; then
     echo "Copying Gemini Interactions key to the server without printing it..."
@@ -587,6 +572,7 @@ print(
 PY
 
 ssh_root "systemctl restart ${PEAR_DEPLOY_SERVICES[*]}"
+wait_for_remote_pear_worker_pool_topology
 
 DEPLOYED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 ssh_root 'install -d -m 755 -o root -g root /var/lib/pear'

@@ -1818,6 +1818,387 @@
     margin-top: var(--pear-space-3);
 }
 
+/* Native Codex child threads. The row owns only this compact launch strip;
+   one document-level pane renders every selected child thread. */
+.pear-agent-thread-host {
+    grid-area: agent;
+    min-width: 0;
+    margin-top: var(--pear-space-2);
+}
+
+.pear-agent-thread-strip {
+    display: flex;
+    width: fit-content;
+    max-width: 100%;
+    align-items: center;
+    gap: var(--pear-space-2);
+    color: var(--pear-ink-3);
+    font-family: var(--pear-font-pixel);
+    font-synthesis: none;
+    font-size: 12px;
+}
+
+.pear-agent-thread-badges {
+    display: flex;
+    align-items: center;
+    padding-left: 2px;
+}
+
+.pear-agent-thread-badge {
+    position: relative;
+    display: grid;
+    width: 28px;
+    height: 28px;
+    margin-left: -5px;
+    appearance: none;
+    border: 2px solid var(--color-background-pear-message-content);
+    border-radius: var(--pear-radius-chip);
+    background: transparent;
+    padding: 0;
+    place-items: center;
+    cursor: pointer;
+    transition:
+        transform var(--pear-dur-1) var(--pear-ease),
+        filter var(--pear-dur-1) var(--pear-ease);
+
+    &:first-child {
+        margin-left: 0;
+    }
+
+    &:hover,
+    &:focus-visible {
+        z-index: 2;
+        filter: brightness(1.08);
+        outline: none;
+        transform: translateY(-2px);
+    }
+
+    &:focus-visible {
+        box-shadow: 0 0 0 2px var(--pear-interaction);
+    }
+}
+
+.pear-agent-thread-count {
+    min-height: 24px;
+    appearance: none;
+    border: 0;
+    border-radius: var(--pear-radius-chip);
+    background: transparent;
+    padding: 2px 6px;
+    color: var(--pear-ink-3);
+    font: inherit;
+    cursor: pointer;
+
+    &:hover,
+    &:focus-visible {
+        background: var(--pear-interaction-fill);
+        color: var(--pear-ink-1);
+        outline: none;
+    }
+}
+
+.pear-agent-sigil {
+    position: relative;
+    display: grid;
+    box-sizing: border-box;
+    width: 24px;
+    height: 24px;
+    grid-template: repeat(3, 1fr) / repeat(3, 1fr);
+    gap: 1px;
+    border: 1px solid var(--pear-hairline);
+    border-radius: var(--pear-radius-px);
+    background: var(--pear-surface-2);
+    padding: 3px;
+    color: var(--pear-cat-1);
+}
+
+.pear-agent-sigil-tone-1 {
+    color: var(--pear-cat-2);
+}
+
+.pear-agent-sigil-tone-2 {
+    color: var(--pear-cat-3);
+}
+
+.pear-agent-sigil-tone-3 {
+    color: var(--pear-cat-4);
+}
+
+.pear-agent-sigil-tone-4 {
+    color: var(--pear-cat-5);
+}
+
+.pear-agent-sigil-tone-5 {
+    color: var(--pear-cat-6);
+}
+
+.pear-agent-sigil-cell {
+    border-radius: 1px;
+    background: transparent;
+}
+
+.pear-agent-sigil-cell-on {
+    background: currentcolor;
+}
+
+.pear-agent-status {
+    position: absolute;
+    right: -3px;
+    bottom: -3px;
+    box-sizing: border-box;
+    width: 7px;
+    height: 7px;
+    border: 2px solid var(--pear-surface-1);
+    border-radius: 50%;
+    background: var(--pear-ink-3);
+}
+
+.pear-agent-status-active {
+    background: var(--pear-accent);
+    box-shadow: 0 0 0 2px var(--pear-accent-fill);
+    animation: pear-agent-presence 1.8s var(--pear-ease) infinite;
+}
+
+.pear-agent-status-failed {
+    background: var(--pear-danger);
+}
+
+body.pear-agent-pane-open:not(.pear-agent-pane-mobile-open) {
+    --pear-agent-pane-width: clamp(320px, 32vw, 520px);
+
+    .app-main > .column-right {
+        display: none;
+    }
+
+    #userlist-toggle {
+        visibility: hidden;
+        pointer-events: none;
+    }
+
+    #compose-content,
+    .app-main .column-middle {
+        margin-right: calc(var(--pear-agent-pane-width) + var(--pear-space-2));
+    }
+}
+
+#pear-agent-pane {
+    position: fixed;
+    z-index: 102;
+    top: var(--navbar-fixed-height);
+    right: 0;
+    bottom: 0;
+    display: flex;
+    box-sizing: border-box;
+    width: var(--pear-agent-pane-width, clamp(320px, 32vw, 520px));
+    min-width: 0;
+    flex-direction: column;
+    overflow: hidden;
+    border-left: 1px solid var(--pear-hairline);
+    background: var(--pear-surface-0);
+    box-shadow: var(--pear-shadow-pop);
+    color: var(--pear-ink-1);
+
+    &[hidden] {
+        display: none;
+    }
+
+    &.pear-agent-pane-mobile {
+        z-index: 105;
+        inset: 0;
+        width: 100vw;
+        max-width: none;
+        border: 0;
+    }
+}
+
+.pear-agent-pane-header {
+    display: flex;
+    min-height: 56px;
+    flex: none;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--pear-space-3);
+    border-bottom: 1px solid var(--pear-hairline);
+    padding: var(--pear-space-3) var(--pear-space-4);
+}
+
+.pear-agent-pane-heading {
+    display: grid;
+    min-width: 0;
+    grid-template-columns: minmax(0, auto) minmax(0, 1fr);
+    align-items: baseline;
+    gap: 2px var(--pear-space-2);
+}
+
+.pear-agent-pane-eyebrow {
+    grid-column: 1 / -1;
+    color: var(--pear-ink-3);
+    font-family: var(--pear-font-pixel);
+    font-size: 11px;
+    line-height: 1;
+    text-transform: lowercase;
+}
+
+#pear-agent-pane-title {
+    min-width: 0;
+    margin: 0;
+    overflow: hidden;
+    color: var(--pear-ink-1);
+    font-family: var(--pear-font-ui);
+    font-size: 18px;
+    font-weight: 650;
+    line-height: 1.2;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.pear-agent-pane-role {
+    overflow: hidden;
+    color: var(--pear-ink-3);
+    font-family: var(--pear-font-pixel);
+    font-size: 12px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.pear-agent-pane-close {
+    display: grid;
+    width: 32px;
+    height: 32px;
+    flex: none;
+    appearance: none;
+    border: 0;
+    border-radius: var(--pear-radius-chip);
+    background: transparent;
+    padding: 0;
+    place-items: center;
+    color: var(--pear-ink-2);
+    font-family: var(--pear-font-ui);
+    font-size: 28px;
+    line-height: 1;
+
+    &:hover,
+    &:focus-visible {
+        background: var(--pear-interaction-fill);
+        color: var(--pear-ink-1);
+        outline: none;
+    }
+}
+
+.pear-agent-pane-tabs {
+    display: flex;
+    min-width: 0;
+    flex: none;
+    gap: var(--pear-space-1);
+    overflow-x: auto;
+    border-bottom: 1px solid var(--pear-hairline);
+    padding: var(--pear-space-2) var(--pear-space-3);
+    scrollbar-width: none;
+
+    &::-webkit-scrollbar {
+        display: none;
+    }
+}
+
+.pear-agent-pane-tab {
+    display: flex;
+    min-width: 0;
+    max-width: 160px;
+    flex: none;
+    align-items: center;
+    gap: var(--pear-space-2);
+    appearance: none;
+    border: 1px solid transparent;
+    border-radius: var(--pear-radius-chip);
+    background: transparent;
+    padding: 4px 7px;
+    color: var(--pear-ink-2);
+    font-family: var(--pear-font-pixel);
+    font-size: 12px;
+
+    &[aria-selected="true"] {
+        border-color: color-mix(
+            in srgb,
+            var(--pear-interaction) 30%,
+            transparent
+        );
+        background: var(--pear-interaction-fill);
+        color: var(--pear-ink-1);
+    }
+
+    &:focus-visible {
+        outline: 2px solid var(--pear-interaction);
+        outline-offset: -2px;
+    }
+}
+
+.pear-agent-pane-tab-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.pear-agent-pane-body {
+    display: flex;
+    min-height: 0;
+    flex: 1;
+    flex-direction: column;
+    overflow: auto;
+    overscroll-behavior: contain;
+    padding: var(--pear-space-3) var(--pear-space-4) var(--pear-space-5);
+    scrollbar-gutter: stable;
+}
+
+.pear-agent-pane-activity {
+    flex: none;
+    overflow: hidden;
+    margin-bottom: var(--pear-space-3);
+    color: var(--pear-ink-3);
+    font-family: var(--pear-font-pixel);
+    font-size: 13px;
+    line-height: 1.35;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.pear-agent-pane-trace.pear-message-surface.pear-message {
+    min-width: 0;
+    background: transparent;
+}
+
+.pear-agent-pane-trace .pear-agent-pane-message.message_content {
+    max-width: none;
+    padding: 0;
+
+    > .pear-run-trace {
+        padding-inline: 0;
+    }
+}
+
+.pear-run-trace-truncated {
+    margin-top: var(--pear-space-3);
+    color: var(--pear-ink-3);
+    font-family: var(--pear-font-pixel);
+    font-size: 12px;
+}
+
+@keyframes pear-agent-presence {
+    0%,
+    100% {
+        opacity: 0.72;
+    }
+
+    50% {
+        opacity: 1;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .pear-agent-status-active {
+        animation: none;
+    }
+}
+
 .pear-artifact {
     box-sizing: border-box;
     overflow: hidden;

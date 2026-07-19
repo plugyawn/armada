@@ -1,6 +1,7 @@
 from typing import Any
 
 from zerver.lib.message import event_recipient_ids_for_action_on_messages
+from zerver.lib.pear_agent_threads import pear_agent_delta_from_event, serialize_pear_agent_threads
 from zerver.lib.stream_subscription import get_user_ids_for_streams
 from zerver.models import Message, Stream
 from zerver.models.bots import PearWorkerRun, PearWorkerRunEvent, PearWorkspaceNode
@@ -43,6 +44,15 @@ def _pear_run_usage(payload: dict[str, Any]) -> dict[str, int | float | None] | 
     return usage or None
 
 
+def _pear_agent_event_needs_snapshot(
+    payload: dict[str, Any],
+) -> bool:
+    # Session/error events can establish or invalidate topology. Ordinary
+    # lifecycle and activity events are bounded deltas for an existing child
+    # and must not rebuild the full graph on the hot push path.
+    return payload.get("kind") in {"error", "session"}
+
+
 def send_pear_run_event(run: PearWorkerRun, run_event: PearWorkerRunEvent) -> None:
     """Push one reducer-friendly Pear run delta to users who can see its trigger."""
     try:
@@ -66,7 +76,15 @@ def send_pear_run_event(run: PearWorkerRun, run_event: PearWorkerRunEvent) -> No
         if run.date_finished is not None
         else None
     )
-    event = {
+    metadata = payload.get("metadata") if isinstance(payload.get("metadata"), dict) else {}
+    agent_thread_id = metadata.get("codex_thread_id") if run_event.event_type == "agent" else None
+    agents = (
+        serialize_pear_agent_threads(run)
+        if run_event.event_type == "agent" and _pear_agent_event_needs_snapshot(payload)
+        else None
+    )
+    agent = None if agents is not None else pear_agent_delta_from_event(run_event)
+    event: dict[str, Any] = {
         "type": "pear_run",
         "version": 1,
         "sequence": run_event.id,
@@ -98,10 +116,16 @@ def send_pear_run_event(run: PearWorkerRun, run_event: PearWorkerRunEvent) -> No
             "steering_applied",
             "tool_results",
             "transcript",
+            "agent",
         },
         "run_date_created": run.date_created.timestamp(),
         "date_created": run_event.date_created.timestamp(),
+        "agent_thread_id": agent_thread_id if isinstance(agent_thread_id, str) else None,
     }
+    if agent is not None:
+        event["agent"] = agent
+    if agents is not None:
+        event["agents"] = agents
     send_event_on_commit(run.realm, event, list(recipient_ids))
 
 

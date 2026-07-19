@@ -46,7 +46,12 @@ from zerver.lib.pear import (
     normalize_pear_visible_markdown,
     pear_normalize_token_usage,
     pear_token_usage_summary,
+    pear_topic_scope,
     trim_pear_text,
+)
+from zerver.lib.pear_agent_threads import (
+    load_pear_agent_thread_events,
+    serialize_pear_agent_threads,
 )
 from zerver.lib.pear_gate import invalidate_pear_selected_bot_cache
 from zerver.lib.pear_monitor import (
@@ -438,12 +443,13 @@ def pear_workspace_for_request(
     stream_name: str,
     topic_name: str,
 ) -> PearWorkspaceNode | None:
+    stream_name, topic_name = pear_topic_scope(stream_name, topic_name)
     return (
         PearWorkspaceNode.objects.select_related("parent_node__project", "project")
         .filter(
             realm=user_profile.realm,
-            stream_name=stream_name,
-            topic_name=topic_name,
+            stream_name__iexact=stream_name,
+            topic_name__iexact=topic_name,
         )
         .first()
     )
@@ -714,7 +720,7 @@ def pear_usage_from_event_payload(payload: object) -> PearTokenUsage | None:
 def pear_worker_run_summary_events(
     runs: list[PearWorkerRun],
 ) -> dict[int, list[PearWorkerRunEvent]]:
-    """Load all event data used by run cards in one query.
+    """Load bounded run-card state without issuing per-run queries.
 
     Run-list hydration must not issue per-run event queries. Detail
     serialization can still use the model managers when no batch was supplied.
@@ -750,8 +756,13 @@ def pear_worker_run_summary_events(
         .filter(summary_rank=1)
         .only("id", "run_id", "event_type", "payload", "date_created")
     )
+    agent_candidates = load_pear_agent_thread_events(events_by_run_id)
     unique_events: dict[int, PearWorkerRunEvent] = {}
-    for event in [*newest_usage_candidates, *newest_display_candidates]:
+    for event in [
+        *newest_usage_candidates,
+        *newest_display_candidates,
+        *agent_candidates,
+    ]:
         unique_events[event.id] = event
     for event in sorted(
         unique_events.values(),
@@ -925,6 +936,7 @@ def serialize_pear_worker_run(
         "plan": plan,
         "overview": serialize_pear_worker_run_overview(run, summary_events, plan=plan),
         "live": live_state,
+        "agents": serialize_pear_agent_threads(run, summary_events),
     }
     snapshot_sequence = getattr(run, "snapshot_sequence", None)
     if isinstance(snapshot_sequence, int):
@@ -1402,11 +1414,12 @@ def get_pear_active_session_backend(
                 topic=pear_session["topic"],
             ),
         )
+        scope_stream, scope_topic = pear_topic_scope(pear_session["stream"], pear_session["topic"])
         topic_runs = PearWorkerRun.objects.filter(
             realm=user_profile.realm,
             session_kind=PearWorkerRun.SHARED,
-            stream_name=pear_session["stream"],
-            topic_name=pear_session["topic"],
+            stream_name__iexact=scope_stream,
+            topic_name__iexact=scope_topic,
         )
         latest_run = topic_runs.order_by("-trigger_message_id", "-id").first()
         latest_thread_run = (
@@ -1520,6 +1533,7 @@ def get_pear_runs_backend(
         )
     elif stream_name is not None and topic_name is not None:
         access_stream_by_name(user_profile, stream_name)
+        scope_stream, scope_topic = pear_topic_scope(stream_name, topic_name)
         topic_workspace = pear_workspace_for_request(
             user_profile,
             stream_name=stream_name,
@@ -1528,8 +1542,8 @@ def get_pear_runs_backend(
         workspace_node = topic_workspace
         shared_run_filter = Q(
             session_kind=PearWorkerRun.SHARED,
-            stream_name=stream_name,
-            topic_name=topic_name,
+            stream_name__iexact=scope_stream,
+            topic_name__iexact=scope_topic,
         )
         if workspace_node is not None:
             shared_run_filter |= Q(
@@ -1544,8 +1558,8 @@ def get_pear_runs_backend(
                 | Q(
                     session_kind=PearWorkerRun.SIDE,
                     requesting_user=user_profile,
-                    source_stream_name=stream_name,
-                    source_topic_name=topic_name,
+                    source_stream_name__iexact=scope_stream,
+                    source_topic_name__iexact=scope_topic,
                 )
             )
             .order_by("-date_created", "-id")[:PEAR_RUN_LIST_LIMIT]
@@ -1630,7 +1644,7 @@ def get_pear_run_backend(
 
 def serialize_pear_run_trace_event(event: PearWorkerRunEvent) -> dict[str, object] | None:
     payload = event.payload if isinstance(event.payload, dict) else {}
-    if event.event_type == "transcript":
+    if event.event_type in {"transcript", "agent"}:
         kind = payload.get("kind")
         if kind == "assistant":
             body = payload.get("body")
@@ -1655,13 +1669,13 @@ def serialize_pear_run_trace_event(event: PearWorkerRunEvent) -> dict[str, objec
                 "plan": plan,
                 "date_created": datetime_to_timestamp(event.date_created),
             }
-        if kind in {"command", "file_change", "status", "tool"}:
+        if kind in {"agent", "command", "error", "file_change", "status", "tool"}:
             title = payload.get("title")
             serialized: dict[str, object] = {
                 "id": event.id,
                 "kind": str(kind),
-                "title": str(title or event.summary),
-                "status": str(payload.get("status") or "done"),
+                "title": trim_pear_text(str(title or event.summary), limit=500),
+                "status": "failed" if kind == "error" else str(payload.get("status") or "done"),
                 "date_created": datetime_to_timestamp(event.date_created),
             }
             item_id = payload.get("item_id")
@@ -1730,6 +1744,11 @@ def pear_run_trace_markdown(trace: list[dict[str, object]]) -> str:
         if kind in {"command", "file_change", "tool"}:
             tool_events.append(event)
             continue
+        if kind == "error":
+            flush_tools()
+            error_title = trim_pear_text(str(event.get("title") or "Agent failed."), limit=500)
+            blocks.append(f"**Agent error:** `{error_title.replace('`', "'")}`")
+            continue
         if kind == "assistant":
             flush_tools()
             body = event.get("body")
@@ -1766,25 +1785,57 @@ def get_pear_run_trace_backend(
         Json[int],
         ApiParamConfig("limit", documentation_status=INTENTIONALLY_UNDOCUMENTED),
     ] = PEAR_RUN_TRACE_LIMIT,
+    thread_id: Annotated[
+        Json[str] | None,
+        ApiParamConfig("thread_id", documentation_status=INTENTIONALLY_UNDOCUMENTED),
+    ] = None,
 ) -> HttpResponse:
     run = get_visible_pear_worker_run(user_profile, run_id)
     requested_limit = max(1, min(limit, PEAR_RUN_TRACE_MAX_LIMIT))
-    events = run.events.filter(
-        Q(
-            event_type="transcript",
-            payload__kind__in=["assistant", "plan", "command", "file_change", "status", "tool"],
-        )
-        | Q(
-            event_type__in=[
-                "tool_results",
-                "steering_applied",
-                "cancelled",
-                "done",
-                "failed",
-                "running",
-            ]
-        )
-    ).order_by("-id")
+    if thread_id is not None:
+        visible_thread_ids = {
+            str(agent["thread_id"]) for agent in serialize_pear_agent_threads(run)
+        }
+        if thread_id not in visible_thread_ids:
+            raise JsonableError(_("Pear agent thread not found."))
+        events = run.events.filter(
+            event_type="agent",
+            payload__metadata__codex_thread_id=thread_id,
+            payload__kind__in=[
+                "agent",
+                "assistant",
+                "plan",
+                "command",
+                "file_change",
+                "error",
+                "status",
+                "tool",
+            ],
+        ).order_by("-id")
+    else:
+        events = run.events.filter(
+            Q(
+                event_type="transcript",
+                payload__kind__in=[
+                    "assistant",
+                    "plan",
+                    "command",
+                    "file_change",
+                    "status",
+                    "tool",
+                ],
+            )
+            | Q(
+                event_type__in=[
+                    "tool_results",
+                    "steering_applied",
+                    "cancelled",
+                    "done",
+                    "failed",
+                    "running",
+                ]
+            )
+        ).order_by("-id")
     if before_event_id is not None:
         events = events.filter(id__lt=before_event_id)
     candidates = list(events[: requested_limit + 1])
@@ -1809,6 +1860,7 @@ def get_pear_run_trace_backend(
         request,
         data={
             "run_id": run.id,
+            "thread_id": thread_id,
             "trace": trace,
             "rendered": rendered_trace,
             "has_more": len(candidates) > requested_limit,
@@ -1843,35 +1895,52 @@ def update_pear_run_control_event(
 ) -> PearWorkerRun:
     visible_run = get_visible_pear_worker_run(user_profile, run_id)
     with transaction.atomic(savepoint=False):
+        if event_type in {"pause", "resume"}:
+            # Worker claims take locks in realm -> workspace -> run order.  Keep
+            # controls on the same workspace-before-run order so a pause cannot
+            # deadlock with a claim holding the workspace row while waiting for
+            # this run row.
+            control_stream = (
+                visible_run.source_stream_name
+                if visible_run.session_kind == PearWorkerRun.SIDE
+                else ""
+            )
+            control_topic = (
+                visible_run.source_topic_name
+                if visible_run.session_kind == PearWorkerRun.SIDE
+                else ""
+            )
+            set_pear_workspace_paused(
+                visible_run.bot_profile,
+                stream=control_stream or visible_run.stream_name,
+                topic=control_topic or visible_run.topic_name,
+                is_paused=event_type == "pause",
+            )
         run = PearWorkerRun.objects.select_for_update().get(id=visible_run.id)
+        record_control_event = True
         if event_type == "cancel" and run.status in {
             PearWorkerRun.QUEUED,
             PearWorkerRun.RUNNING,
         }:
-            PearDatabaseWorkerRunStore().cancel_locked_run(run, summary="Cancelled.")
+            record_control_event = PearDatabaseWorkerRunStore().cancel_locked_run(
+                run, summary="Cancelled."
+            )
+        elif event_type == "cancel":
+            record_control_event = False
         elif event_type in {"pause", "resume"}:
-            control_stream = (
-                run.source_stream_name if run.session_kind == PearWorkerRun.SIDE else ""
-            )
-            control_topic = run.source_topic_name if run.session_kind == PearWorkerRun.SIDE else ""
-            set_pear_workspace_paused(
-                run.bot_profile,
-                stream=control_stream or run.stream_name,
-                topic=control_topic or run.topic_name,
-                is_paused=event_type == "pause",
-            )
             run.current_activity = summary
             run.date_updated = timezone_now()
             run.save(update_fields=["current_activity", "date_updated"])
-        run_event = PearWorkerRunEvent.objects.create(
-            run=run,
-            event_type=event_type,
-            summary=summary,
-            payload={"user_id": user_profile.id},
-        )
-        # Capture this exact transition's payload now; the action helper
-        # defers delivery with send_event_on_commit.
-        send_pear_run_event(run, run_event)
+        if record_control_event:
+            run_event = PearWorkerRunEvent.objects.create(
+                run=run,
+                event_type=event_type,
+                summary=summary,
+                payload={"user_id": user_profile.id},
+            )
+            # Capture this exact transition's payload now; the action helper
+            # defers delivery with send_event_on_commit.
+            send_pear_run_event(run, run_event)
     return run
 
 
@@ -2223,8 +2292,11 @@ def get_pear_monitors_backend(
     ],
 ) -> HttpResponse:
     access_stream_by_name(user_profile, stream_name)
+    stream_name, topic_name = pear_topic_scope(stream_name, topic_name)
     monitors = PearMonitor.objects.filter(
-        realm=user_profile.realm, stream_name=stream_name, topic_name=topic_name
+        realm=user_profile.realm,
+        stream_name__iexact=stream_name,
+        topic_name__iexact=topic_name,
     ).order_by("position", "id")
     return json_success(
         request,
@@ -2258,11 +2330,14 @@ def post_pear_monitors_backend(
     if not ask_request:
         raise JsonableError(_("Pear monitor request cannot be empty."))
     access_stream_by_name(user_profile, stream_name)
+    stream_name, topic_name = pear_topic_scope(stream_name, topic_name)
     pear_bot = get_selected_pear_bot(user_profile)
     if pear_bot is None:
         raise JsonableError(_("Pear bot is not configured."))
     topic_count = PearMonitor.objects.filter(
-        realm=user_profile.realm, stream_name=stream_name, topic_name=topic_name
+        realm=user_profile.realm,
+        stream_name__iexact=stream_name,
+        topic_name__iexact=topic_name,
     ).count()
     if topic_count >= PEAR_MONITOR_MAX_PER_TOPIC:
         raise JsonableError(_("This topic already has the maximum number of monitors."))

@@ -864,17 +864,23 @@ rollback_on_error() {
         echo
         echo "Update failed after snapshot; rolling back from $SNAPSHOT_DIR" >&2
         set +e
-        ssh_root bash -s -- \
-            "$SNAPSHOT_DIR" \
-            "$REMOTE_PATH" \
-            "$REMOTE_GIT_COMMON_DIR" \
-            "$REMOTE_PEAR_SKILLS_DIR" \
-            "${PREDEPLOY_SERVICES[*]}" \
-            "${PREDEPLOY_QUEUES[*]}" \
-            "${#PEAR_DEPLOY_RUNTIME_CONFIG_PATHS[@]}" \
-            "${PEAR_DEPLOY_RUNTIME_CONFIG_PATHS[@]}" \
-            "${#PEAR_DEPLOY_RSYNC_EXCLUDES[@]}" \
-            "${PEAR_DEPLOY_RSYNC_EXCLUDES[@]}" <<'REMOTE'
+        rollback_command="bash -s --"
+        rollback_args=(
+            "$SNAPSHOT_DIR"
+            "$REMOTE_PATH"
+            "$REMOTE_GIT_COMMON_DIR"
+            "$REMOTE_PEAR_SKILLS_DIR"
+            "${PREDEPLOY_SERVICES[*]}"
+            "${PREDEPLOY_QUEUES[*]}"
+            "${#PEAR_DEPLOY_RUNTIME_CONFIG_PATHS[@]}"
+            "${PEAR_DEPLOY_RUNTIME_CONFIG_PATHS[@]}"
+            "${#PEAR_DEPLOY_RSYNC_EXCLUDES[@]}"
+            "${PEAR_DEPLOY_RSYNC_EXCLUDES[@]}"
+        )
+        for rollback_arg in "${rollback_args[@]}"; do
+            rollback_command+=" $(printf '%q' "$rollback_arg")"
+        done
+        ssh_root "$rollback_command" <<'REMOTE'
 # Optional pre-cutover entries may be absent on older snapshots. Rollback is
 # the recovery path, so decode the positional vector without nounset aborts.
 set -eo pipefail

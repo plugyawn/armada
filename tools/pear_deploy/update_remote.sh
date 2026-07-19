@@ -875,7 +875,9 @@ rollback_on_error() {
             "${PEAR_DEPLOY_RUNTIME_CONFIG_PATHS[@]}" \
             "${#PEAR_DEPLOY_RSYNC_EXCLUDES[@]}" \
             "${PEAR_DEPLOY_RSYNC_EXCLUDES[@]}" <<'REMOTE'
-set -euo pipefail
+# Optional pre-cutover entries may be absent on older snapshots. Rollback is
+# the recovery path, so decode the positional vector without nounset aborts.
+set -eo pipefail
 SNAPSHOT_DIR="$1"
 REMOTE_PATH="$2"
 REMOTE_GIT_COMMON_DIR="$3"

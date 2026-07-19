@@ -2914,6 +2914,11 @@ class PearDatabaseWorkerRunStore:
                 "attempts": run.attempts,
                 "reason": reason,
             },
+            # A claim can be dropped because this same fenced attempt just
+            # settled the row (for example, after exhausting stale retries).
+            # Preserve attempt fencing, but do not require a terminal row to
+            # still be running merely to record why the delivery was dropped.
+            require_running_lease=False,
         )
 
     def _run_is_stale(self, run: PearWorkerRun, *, current_time: datetime) -> bool:

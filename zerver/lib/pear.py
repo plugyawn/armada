@@ -3731,6 +3731,28 @@ class PearWorkerTurn:
                 content=cancelled_message,
                 rendering_only=True,
             )
+            try:
+                # Panel cancellation normally settles the database row before
+                # the worker observes it. Keep this fallback for other run
+                # stores (and a legacy requested-only row): publish terminal
+                # metadata when this worker still owns a running attempt, but
+                # quietly defer to an already-settled control-plane winner.
+                self.handler.update_worker_metadata(
+                    self.bot_handler,
+                    self.message_id,
+                    summary=str(error),
+                    current_activity="Cancelled.",
+                )
+                self.handler.worker_run_store.record(
+                    self.bot_handler,
+                    self.message_id,
+                    "cancelled",
+                    stream=self.stream,
+                    topic=self.topic,
+                    result_message_id=self.result_message_id or self.progress_message_id,
+                )
+            except PearWorkerLeaseLostError:
+                pass
         except Exception as error:
             self.transcript_events.append(
                 {

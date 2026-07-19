@@ -170,6 +170,7 @@ def _complete_visible_descriptor_ids(
         descriptors.values(),
         key=lambda descriptor: (
             float(descriptor.get("date_created") or 0),
+            int(descriptor.get("session_event_id") or 0),
             str(descriptor["thread_id"]),
         ),
         reverse=True,
@@ -246,6 +247,10 @@ def serialize_pear_agent_threads(
                     "date_created": _normalized_timestamp(
                         raw_thread.get("created_at"), fallback=event_timestamp
                     ),
+                    # Zulip timestamps are second-granularity on the wire. Use
+                    # the durable event id to preserve native child creation
+                    # order when siblings start in the same second.
+                    "session_event_id": event.id,
                 }
 
         thread_id = metadata.get("codex_thread_id")
@@ -276,6 +281,7 @@ def serialize_pear_agent_threads(
     visible.sort(
         key=lambda descriptor: (
             float(descriptor.get("date_created") or 0),
+            int(descriptor.get("session_event_id") or 0),
             str(descriptor["thread_id"]),
         )
     )

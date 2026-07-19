@@ -293,6 +293,70 @@ test("topic reconciliation preserves active messages in other rendered topics", 
     assert.ok(pear_run_state.is_active_run_result_message(502));
 });
 
+test("result message rebind retires the previous active message", () => {
+    pear_run_state.remember_runs([
+        {
+            id: 53,
+            status: "running",
+            ambient_triggered: true,
+            result_message_id: 503,
+            stream: "devel",
+            topic: "rebind",
+            date_created: 100,
+        },
+    ]);
+    pear_run_state.set_active_run_result_messages(
+        [
+            {
+                id: 53,
+                status: "running",
+                ambient_triggered: true,
+                result_message_id: 503,
+                stream: "devel",
+                topic: "rebind",
+                date_created: 100,
+            },
+        ],
+        {stream: "devel", topic: "rebind"},
+    );
+    const changes = [];
+    const unsubscribe = pear_run_state.on_active_run_result_messages_changed((change) =>
+        changes.push(change),
+    );
+    try {
+        pear_run_state.apply_pear_run_event({
+            version: 1,
+            sequence: 1,
+            run_id: 53,
+            event_type: "result_posted",
+            status: "running",
+            result_message_id: 504,
+            stream: "devel",
+            topic: "rebind",
+            current_activity: "Working",
+            tool_count: 1,
+            plan: null,
+            overview: null,
+            has_visible_assistant_text: true,
+            usage: null,
+            duration_seconds: null,
+            trace_available: true,
+            run_date_created: 100,
+            date_created: 110,
+        });
+
+        assert.ok(!pear_run_state.is_active_run_result_message(503));
+        assert.ok(pear_run_state.is_active_run_result_message(504));
+        assert.equal(pear_run_state.get_run_view(503), undefined);
+        assert.equal(pear_run_state.get_run_view(504).id, 53);
+        assert.equal(pear_run_state.get_ambient_run_id(503), undefined);
+        assert.equal(pear_run_state.get_ambient_run_id(504), 53);
+        assert.deepEqual(changes[0].removed_message_ids, [503]);
+    } finally {
+        unsubscribe();
+    }
+});
+
 test("quiet active result message remains active until a terminal event", () => {
     pear_run_state.set_active_run_result_messages([{status: "running", result_message_id: 6}]);
     clock.tick(60_000);

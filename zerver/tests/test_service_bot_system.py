@@ -6,6 +6,7 @@ from unittest import mock
 import orjson
 import responses
 from django.conf import settings
+from django.db import transaction
 from django.test import override_settings
 from typing_extensions import ParamSpec, override
 
@@ -23,7 +24,7 @@ from zerver.lib.pear import PEAR_EMBEDDED_BOT_SERVICE, PEAR_FOLLOWUP_TRIGGER
 from zerver.lib.test_classes import ZulipTestCase
 from zerver.lib.test_helpers import mock_queue_publish
 from zerver.lib.validator import check_string
-from zerver.models import Recipient, UserProfile
+from zerver.models import Message, Recipient, UserProfile
 from zerver.models.bots import PearWorkspaceNode
 from zerver.models.messages import UserMessage
 from zerver.models.realms import get_realm
@@ -836,6 +837,24 @@ class TestServiceBotConfigHandler(ZulipTestCase):
             EmbeddedBotEmptyRecipientsListError, "Message must have recipients!"
         ):
             self.bot_handler.send_message(message={"type": "private", "to": []})
+
+    def test_rendering_only_update_inside_caller_transaction(self) -> None:
+        result = self.bot_handler.send_message(
+            message={"type": "private", "to": [self.user_profile.email], "content": "before"}
+        )
+
+        with transaction.atomic():
+            self.bot_handler.update_message(
+                {
+                    "message_id": result["id"],
+                    "content": "after",
+                    "rendering_only": True,
+                }
+            )
+
+        message = Message.objects.get(id=result["id"])
+        self.assertEqual(message.content, "after")
+        self.assertEqual(message.rendered_content, "<p>after</p>")
 
 
 ParamT = ParamSpec("ParamT")

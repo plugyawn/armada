@@ -354,6 +354,11 @@ if len(matches) != 1:
 policy = matches[0]
 apply_to = policy.get("apply-to", policy.get("apply_to"))
 definition = policy.get("definition")
+if isinstance(definition, str):
+    try:
+        definition = json.loads(definition)
+    except (json.JSONDecodeError, TypeError):
+        definition = None
 if policy.get("vhost") != "/":
     raise SystemExit(f"{name} policy is not scoped to vhost /")
 if policy.get("pattern") != pattern:
@@ -391,6 +396,11 @@ if set(names) != expected or len(names) != len(expected):
 for row in matched:
     name = row["name"]
     definition = row.get("effective_policy_definition")
+    if isinstance(definition, str):
+        try:
+            definition = json.loads(definition)
+        except (json.JSONDecodeError, TypeError):
+            definition = None
     if isinstance(definition, list):
         try:
             definition = dict(definition)

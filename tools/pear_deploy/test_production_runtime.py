@@ -956,7 +956,7 @@ class StaticRuntimeContractTest(unittest.TestCase):
         rollback_purge = update.index('rabbitmqctl purge_queue -p / "$queue"')
         rollback_delete = update.index('rabbitmqctl delete_queue -p / "$queue"')
         rollback_restore = update.index("rsync -a --delete", rollback_stop)
-        rollback_health = update.index("restored Pear runtime did not become healthy")
+        rollback_health = update.index("restored Pear runtime did not remain healthy")
         self.assertLess(rollback_stop, rollback_settle)
         self.assertLess(rollback_settle, rollback_purge)
         self.assertLess(rollback_purge, rollback_delete)
@@ -970,9 +970,26 @@ class StaticRuntimeContractTest(unittest.TestCase):
             "ROLLBACK_SERVICES=(caddy pear-worker pear-monitor-worker",
             update,
         )
+        rollback_stability = update.index("rollback_stable_samples=0", rollback_restore)
+        rollback_public_health = update.index('url "https://$FQDN/devlogin"', rollback_stability)
+        rollback_success = update.index(
+            'if [[ "$rollback_stable_samples" -ge 10 ]]', rollback_public_health
+        )
+        self.assertLess(rollback_restore, rollback_stability)
+        self.assertLess(rollback_stability, rollback_public_health)
+        self.assertLess(rollback_public_health, rollback_success)
+        self.assertIn(
+            "systemctl is-active caddy $PREDEPLOY_SERVICES",
+            update[rollback_stability:rollback_success],
+        )
+        self.assertIn("rollback_service_generation", update[rollback_stability:rollback_success])
+        self.assertIn("--property=NRestarts", update)
+        self.assertIn("--property=ActiveEnterTimestampMonotonic", update)
+        self.assertIn("stable rollback samples:", update)
         self.assertNotIn("--max-orphan-active-markers", update)
         self.assertNotIn("--max-orphan-active-markers", verify)
         self.assertIn("classify_production_asset_requirement", update)
+        self.assertIn("zerver/lib/pear_agent_threads.py", update)
         self.assertIn("asset_source_zulip_sha=", update)
         self.assertLess(
             update.rindex("classify_production_asset_requirement"),

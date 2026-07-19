@@ -872,6 +872,7 @@ rollback_on_error() {
             "$REMOTE_PEAR_SKILLS_DIR"
             "${PREDEPLOY_SERVICES[*]}"
             "${PREDEPLOY_QUEUES[*]}"
+            "$FQDN"
             "${#PEAR_DEPLOY_RUNTIME_CONFIG_PATHS[@]}"
             "${PEAR_DEPLOY_RUNTIME_CONFIG_PATHS[@]}"
             "${#PEAR_DEPLOY_RSYNC_EXCLUDES[@]}"
@@ -890,8 +891,9 @@ REMOTE_GIT_COMMON_DIR="$3"
 REMOTE_PEAR_SKILLS_DIR="$4"
 PREDEPLOY_SERVICES="$5"
 PREDEPLOY_QUEUES="$6"
-RUNTIME_CONFIG_COUNT="$7"
-shift 7
+FQDN="$7"
+RUNTIME_CONFIG_COUNT="$8"
+shift 8
 RUNTIME_CONFIG_PATHS=("${@:1:RUNTIME_CONFIG_COUNT}")
 shift "$RUNTIME_CONFIG_COUNT"
 RSYNC_EXCLUDE_COUNT="$1"
@@ -1048,20 +1050,61 @@ END {
 '
 }
 
+rollback_service_generation() {
+    local service
+    for service in caddy $PREDEPLOY_SERVICES; do
+        printf '%s=' "$service"
+        systemctl show \
+            --property=ActiveEnterTimestampMonotonic \
+            --property=NRestarts \
+            --value \
+            "$service" | tr '\n' ':'
+        printf '\n'
+    done
+}
+
 rollback_ready=false
-for _ in $(seq 1 30); do
-    if systemctl is-active $PREDEPLOY_SERVICES >/dev/null 2>&1 &&
+rollback_stable_samples=0
+rollback_service_generation_snapshot=""
+rollback_public_status=""
+for _ in $(seq 1 45); do
+    if systemctl is-active caddy $PREDEPLOY_SERVICES >/dev/null 2>&1 &&
         sudo -Hu zulipdev bash -lc "cd '$REMOTE_PATH' && set -a && . /home/zulipdev/pear.env && set +a && tools/pear-health-report --max-active-runs 0 --max-stale-active-runs 0" >/dev/null 2>&1 &&
         rabbitmqctl list_queues -p / name messages_ready messages_unacknowledged consumers 2>/dev/null |
             validate_predeploy_queues; then
-        rollback_ready=true
-        break
+        rollback_public_status="$(
+            curl \
+                --silent --show-error --location --max-redirs 3 \
+                --connect-timeout 2 --max-time 4 --output /dev/null \
+                --write-out '%{http_code}' --url "https://$FQDN/devlogin" 2>/dev/null || true
+        )"
+        current_service_generation="$(rollback_service_generation)"
+        if [[ "$rollback_public_status" == "200" ]] &&
+            systemctl is-active caddy $PREDEPLOY_SERVICES >/dev/null 2>&1; then
+            if [[ "$current_service_generation" == "$rollback_service_generation_snapshot" ]]; then
+                rollback_stable_samples=$((rollback_stable_samples + 1))
+            else
+                rollback_service_generation_snapshot="$current_service_generation"
+                rollback_stable_samples=1
+            fi
+            if [[ "$rollback_stable_samples" -ge 10 ]]; then
+                rollback_ready=true
+                break
+            fi
+        else
+            rollback_stable_samples=0
+            rollback_service_generation_snapshot=""
+        fi
+    else
+        rollback_stable_samples=0
+        rollback_service_generation_snapshot=""
     fi
-    sleep 1
+    sleep 2
 done
 if [[ "$rollback_ready" != true ]]; then
-    echo "restored Pear runtime did not become healthy after rollback" >&2
-    systemctl is-active $PREDEPLOY_SERVICES || true
+    echo "restored Pear runtime did not remain healthy after rollback" >&2
+    echo "stable rollback samples: $rollback_stable_samples/10; public HTTPS: ${rollback_public_status:-unavailable}" >&2
+    systemctl --no-pager --full status caddy $PREDEPLOY_SERVICES || true
     sudo -Hu zulipdev bash -lc "cd '$REMOTE_PATH' && set -a && . /home/zulipdev/pear.env && set +a && tools/pear-health-report --max-active-runs 0 --max-stale-active-runs 0" || true
     rabbitmqctl list_queues -p / name messages_ready messages_unacknowledged consumers |
         validate_predeploy_queues || true
@@ -1251,6 +1294,7 @@ if [[ "$PREV_SHA" != "$LOCAL_SHA" ]]; then
         zerver/lib/pear.py \
         zerver/lib/pear_gate.py \
         zerver/lib/pear_agent.py \
+        zerver/lib/pear_agent_threads.py \
         zerver/lib/pear_artifact.py \
         zerver/lib/pear_artifact_contract.py \
         zerver/lib/pear_worker.py \

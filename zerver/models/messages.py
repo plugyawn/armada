@@ -7,7 +7,7 @@ from bitfield.types import Bit, BitHandler
 from django.contrib.postgres.indexes import GinIndex
 from django.contrib.postgres.search import SearchVectorField
 from django.db import models
-from django.db.models import CASCADE, F, Q, QuerySet
+from django.db.models import CASCADE, SET_NULL, F, Q, QuerySet
 from django.db.models.functions import Upper
 from django.db.models.signals import post_delete, post_save
 from django.utils.timezone import now as timezone_now
@@ -327,6 +327,43 @@ def get_context_for_message(message: Message) -> QuerySet[Message]:
 
 
 post_save.connect(flush_message, sender=Message)
+
+
+class MessageThread(models.Model):
+    message = models.OneToOneField(
+        Message,
+        on_delete=CASCADE,
+        primary_key=True,
+        related_name="thread_summary",
+    )
+    reply_count = models.PositiveIntegerField(default=0)
+    last_reply_at = models.DateTimeField(null=True)
+    last_reply_sender = models.ForeignKey(
+        UserProfile,
+        null=True,
+        on_delete=SET_NULL,
+        related_name="+",
+    )
+    # Most-recent unique reply authors, newest first. The action layer keeps
+    # this list bounded so message-list hydration never needs reply bodies.
+    participant_user_ids = models.JSONField(default=list)
+
+
+class MessageThreadReply(models.Model):
+    thread = models.ForeignKey(MessageThread, on_delete=CASCADE, related_name="replies")
+    sender = models.ForeignKey(UserProfile, on_delete=CASCADE)
+    content = models.TextField()
+    rendered_content = models.TextField()
+    date_sent = models.DateTimeField(default=timezone_now)
+
+    class Meta:
+        indexes = [
+            models.Index(
+                "thread",
+                "id",
+                name="zerver_thread_reply_page",
+            ),
+        ]
 
 
 class AbstractSubMessage(models.Model):

@@ -267,6 +267,37 @@ class MessageEvent(BaseEvent):
     message: MessageFieldForMessageEvent
 
 
+class MessageThreadUser(BaseModel):
+    user_id: int
+    full_name: str
+    avatar_url: str | None
+
+
+class MessageThreadSummary(BaseModel):
+    reply_count: int
+    last_reply_at: int
+    last_sender: MessageThreadUser | None
+    participants: list[MessageThreadUser]
+
+
+class MessageThreadReply(BaseModel):
+    id: int
+    message_id: int
+    sender_id: int
+    sender_full_name: str
+    avatar_url: str | None
+    content: str
+    content_type: Literal["text/html"]
+    timestamp: int
+
+
+class MessageThreadEvent(BaseEvent):
+    type: Literal["message_thread"]
+    message_id: int
+    reply_summary: MessageThreadSummary
+    reply: MessageThreadReply
+
+
 class MutedTopicsEvent(BaseEvent):
     type: Literal["muted_topics"]
     muted_topics: list[list[str | int]]

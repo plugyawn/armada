@@ -1039,9 +1039,7 @@ def do_send_messages(
             active_user_ids=send_request.active_user_ids,
             recipient_type=send_request.message.recipient.type,
             recipient_id=send_request.message.recipient_id,
-            stream_name=send_request.stream.name
-            if send_request.stream is not None
-            else None,
+            stream_name=send_request.stream.name if send_request.stream is not None else None,
             topic_name=send_request.message.topic_name()
             if send_request.message.is_channel_message
             else None,
@@ -1150,7 +1148,13 @@ def do_send_messages(
 
         # Deliver events to the real-time push system, as well as
         # enqueuing any additional processing triggered by the message.
-        wide_message_dict = MessageDict.wide_dict(send_request.message, realm_id)
+        # A newly inserted parent cannot have replies yet; do not add the two
+        # batched thread-summary queries to the ordinary send hot path.
+        wide_message_dict = MessageDict.wide_dict(
+            send_request.message,
+            realm_id,
+            include_message_thread_summary=False,
+        )
 
         user_flags = user_message_flags.get(send_request.message.id, {})
 

@@ -11,6 +11,7 @@ from zerver.lib.cache import cache_set_many, cache_with_key, to_dict_cache_key, 
 from zerver.lib.display_recipient import bulk_fetch_display_recipients
 from zerver.lib.markdown import render_message_markdown, topic_links
 from zerver.lib.markdown import version as markdown_version
+from zerver.lib.message_threads import bulk_message_thread_summaries
 from zerver.lib.pear_identity import pear_bot_user_ids_from_user_ids
 from zerver.lib.query_helpers import query_for_ids
 from zerver.lib.timestamp import datetime_to_timestamp
@@ -135,7 +136,12 @@ class MessageDict:
     """
 
     @staticmethod
-    def wide_dict(message: Message, realm_id: int | None = None) -> dict[str, Any]:
+    def wide_dict(
+        message: Message,
+        realm_id: int | None = None,
+        *,
+        include_message_thread_summary: bool = True,
+    ) -> dict[str, Any]:
         """
         The next two lines get the cacheable field related
         to our message object, with the side effect of
@@ -152,6 +158,8 @@ class MessageDict:
         """
         MessageDict.bulk_hydrate_sender_info([obj])
         MessageDict.bulk_hydrate_pear_message_flags([obj])
+        if include_message_thread_summary:
+            MessageDict.bulk_hydrate_message_thread_summaries([obj])
         MessageDict.bulk_hydrate_recipient_info([obj])
 
         return obj
@@ -175,6 +183,7 @@ class MessageDict:
         """
         MessageDict.bulk_hydrate_sender_info(objs)
         MessageDict.bulk_hydrate_pear_message_flags(objs)
+        MessageDict.bulk_hydrate_message_thread_summaries(objs)
         MessageDict.bulk_hydrate_recipient_info(objs)
 
         for obj in objs:
@@ -356,6 +365,7 @@ class MessageDict:
         MessageDict.sew_submessages_and_reactions_to_msgs(messages)
         message_dicts = [MessageDict.build_dict_from_raw_db_row(row) for row in messages]
         MessageDict.bulk_hydrate_pear_message_flags(message_dicts)
+        MessageDict.bulk_hydrate_message_thread_summaries(message_dicts)
         return message_dicts
 
     @staticmethod
@@ -517,6 +527,16 @@ class MessageDict:
 
         for obj in objs_to_hydrate:
             obj["is_pear_message"] = obj["sender_id"] in pear_bot_user_ids
+
+    @staticmethod
+    def bulk_hydrate_message_thread_summaries(objs: list[dict[str, Any]]) -> None:
+        """Attach compact reply metadata without placing reply bodies in message caches."""
+        objs_to_hydrate = [obj for obj in objs if "reply_summary" not in obj]
+        summaries = bulk_message_thread_summaries([obj["id"] for obj in objs_to_hydrate])
+        for obj in objs_to_hydrate:
+            summary = summaries.get(obj["id"])
+            if summary is not None:
+                obj["reply_summary"] = summary
 
     @staticmethod
     def hydrate_recipient_info(obj: dict[str, Any], display_recipient: DisplayRecipientT) -> None:

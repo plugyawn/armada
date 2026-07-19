@@ -951,12 +951,15 @@ class StaticRuntimeContractTest(unittest.TestCase):
             'if ssh_root "systemctl restart caddy ${PEAR_DEPLOY_SERVICES[*]}"',
             update,
         )
+        rollback_handler = update.index("rollback_on_error()")
+        rollback_cleanup = update.index("cleanup_remote_deploy_scratch", rollback_handler)
         rollback_stop = update.index("systemctl stop caddy pear-worker pear-monitor-worker")
         rollback_settle = update.index("rollback_settled_runs=")
         rollback_purge = update.index('rabbitmqctl purge_queue -p / "$queue"')
         rollback_delete = update.index('rabbitmqctl delete_queue -p / "$queue"')
         rollback_restore = update.index("rsync -a --delete", rollback_stop)
         rollback_health = update.index("restored Pear runtime did not remain healthy")
+        self.assertLess(rollback_cleanup, rollback_stop)
         self.assertLess(rollback_stop, rollback_settle)
         self.assertLess(rollback_settle, rollback_purge)
         self.assertLess(rollback_purge, rollback_delete)
@@ -986,10 +989,17 @@ class StaticRuntimeContractTest(unittest.TestCase):
         self.assertIn("--property=NRestarts", update)
         self.assertIn("--property=ActiveEnterTimestampMonotonic", update)
         self.assertIn("stable rollback samples:", update)
+        rollback_success_message = update.index(
+            "Rollback restored the pre-deploy snapshot", rollback_success
+        )
+        self.assertLess(rollback_success, rollback_success_message)
         self.assertNotIn("--max-orphan-active-markers", update)
         self.assertNotIn("--max-orphan-active-markers", verify)
         self.assertIn("classify_production_asset_requirement", update)
+        self.assertIn("zerver/actions/message_edit.py", update)
+        self.assertIn("zerver/lib/bot_lib.py", update)
         self.assertIn("zerver/lib/pear_agent_threads.py", update)
+        self.assertIn("web/tests", update)
         self.assertIn("asset_source_zulip_sha=", update)
         self.assertLess(
             update.rindex("classify_production_asset_requirement"),

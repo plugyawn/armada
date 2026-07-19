@@ -940,8 +940,9 @@ class StaticRuntimeContractTest(unittest.TestCase):
             update,
         )
         self.assertIn("systemctl stop pear-worker-1 2>/dev/null || true", update)
-        self.assertIn('systemctl disable pear-worker-1 2>/dev/null || true', update)
-        self.assertIn('current = {"0805_pear_runtime", "0806_pear_workspace_scope_casefold"}', update)
+        self.assertIn("systemctl disable pear-worker-1 2>/dev/null || true", update)
+        self.assertIn("accepted =", update)
+        self.assertIn("0806_pear_workspace_scope_casefold", update)
         self.assertIn(
             "systemctl restart caddy ${PREDEPLOY_SERVICES[*]}",
             update,
@@ -1001,7 +1002,7 @@ class StaticRuntimeContractTest(unittest.TestCase):
         self.assertNotIn("pear-rebaseline-schema", common)
         self.assertNotIn("pear-rebaseline-schema", update)
         self.assertNotIn("PEAR_SCHEMA_REBASELINE", update)
-        self.assertIn("names == current", update)
+        self.assertIn("names in accepted", update)
         self.assertIn("superseded or mixed Pear migration baseline", update)
         self.assertIn('workspace_helper_runtime.py" install', bootstrap)
         self.assertIn("--smoke-existing-isolation-user", bootstrap)

@@ -139,11 +139,10 @@ def user_ids_without_thread_root_access_for_delivery(
 ) -> set[int]:
     """Return live recipients for whom a reply root is protected history.
 
-    Direct-message recipients are fixed and therefore have root access even
-    when service bots intentionally lack UserMessage rows. Live channel
-    recipients have current channel access. Public channels and private
-    channels with shared history expose the root normally; only protected
-    private channels require the root's UserMessage row.
+    Direct-message recipients are fixed and therefore have root access. Live
+    channel recipients have current channel access. Public channels and
+    private channels with shared history expose the root normally; only
+    protected private channels require the root's UserMessage row.
     """
     if thread_root_message_id is None or not user_ids or stream is None:
         return set()

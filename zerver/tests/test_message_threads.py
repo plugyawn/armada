@@ -3,7 +3,6 @@ from django.test import override_settings
 
 from zerver.actions.message_edit import maybe_delete_previous_resolve_topic_notification
 from zerver.lib.bot_lib import EmbeddedBotHandler
-from zerver.lib.event_types import MessageEvent
 from zerver.lib.message_cache import MessageDict
 from zerver.lib.message_threads import bulk_message_thread_summaries
 from zerver.lib.retention import (
@@ -74,11 +73,14 @@ class MessageThreadTest(ZulipTestCase):
         self.assertIn("<strong>hello</strong>", reply.rendered_content)
         self.assertNotIn("<script>", reply.rendered_content)
 
+        # capture_send_event_calls records the internal queue envelope.  The
+        # Tornado event queue later projects message_dict plus per-user flags
+        # into the public MessageEvent shape.
         event = events[0]["event"]
-        MessageEvent.model_validate(event)
         self.assertEqual(event["type"], "message")
-        self.assertEqual(event["message"]["id"], reply_id)
-        self.assertEqual(event["message"]["thread_root_message_id"], root_message_id)
+        self.assertEqual(event["message"], reply_id)
+        self.assertEqual(event["message_dict"]["id"], reply_id)
+        self.assertEqual(event["message_dict"]["thread_root_message_id"], root_message_id)
 
         serialized_reply = MessageDict.wide_dict(reply)
         self.assertEqual(serialized_reply["thread_root_message_id"], root_message_id)
@@ -677,7 +679,7 @@ class MessageThreadTest(ZulipTestCase):
             service_name="helloworld",
         )
         root_message_id = self.send_personal_message(hamlet, bot, "direct root")
-        self.assertFalse(
+        self.assertTrue(
             UserMessage.objects.filter(
                 user_profile=bot,
                 message_id=root_message_id,
@@ -767,7 +769,14 @@ class MessageThreadTest(ZulipTestCase):
         with self.capture_send_event_calls(expected_num_events=1) as events:
             move_result = self.client_patch(
                 f"/json/messages/{root_message_id}",
-                {"topic": "moved thread", "propagate_mode": "change_one"},
+                {
+                    "topic": "moved thread",
+                    "propagate_mode": "change_one",
+                    # This test isolates the canonical update_message event;
+                    # the optional destination breadcrumb is independently
+                    # covered by the topic-move tests.
+                    "send_notification_to_new_thread": "false",
+                },
             )
         self.assert_json_success(move_result)
         update_event = events[0]

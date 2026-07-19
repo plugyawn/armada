@@ -281,8 +281,7 @@ class Message(AbstractMessage):
                 name="zerver_message_realm_id",
             ),
             models.Index(
-                "thread_root",
-                "id",
+                fields=["thread_root", "id"],
                 name="zerver_message_thread_root_id",
             ),
             models.Index(

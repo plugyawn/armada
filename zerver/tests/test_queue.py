@@ -7,6 +7,8 @@ from pika.exceptions import AMQPConnectionError, ConnectionClosed
 from typing_extensions import override
 
 from zerver.lib.queue import (
+    QUEUE_REDELIVERED_EVENT_KEY,
+    QueueEventDiscardError,
     SimpleQueueClient,
     TornadoQueueClient,
     get_queue_client,
@@ -31,6 +33,158 @@ class TestTornadoQueueClient(ZulipTestCase):
 
 
 class TestQueueImplementation(ZulipTestCase):
+    def test_priority_consumers_share_one_prefetch_and_preserve_redelivery(self) -> None:
+        client = object.__new__(SimpleQueueClient)
+        channel = mock.MagicMock()
+        client.channel = channel
+        client.prefetch = 1
+        client.is_consuming = False
+        callbacks: dict[str, Any] = {}
+        received: list[dict[str, Any]] = []
+
+        def ensure_queue(queue_name: str, callback: Any) -> None:
+            callback(channel)
+
+        def basic_consume(*, queue: str, on_message_callback: Any, **kwargs: Any) -> None:
+            callbacks[queue] = (on_message_callback, kwargs)
+
+        def start_consuming() -> None:
+            callback, _kwargs = callbacks["pear_worker_1"]
+            callback(
+                channel,
+                mock.Mock(delivery_tag=41, redelivered=True),
+                mock.Mock(),
+                orjson.dumps({"run_id": 9}),
+            )
+
+        client.ensure_queue = ensure_queue  # type: ignore[method-assign]
+        channel.basic_consume.side_effect = basic_consume
+        channel.start_consuming.side_effect = start_consuming
+
+        client.start_json_consumers(
+            {"pear_worker": 0, "pear_worker_1": 10},
+            lambda events: received.extend(events),
+            annotate_redelivery=True,
+        )
+
+        channel.basic_qos.assert_called_once_with(prefetch_count=1, global_qos=True)
+        self.assertEqual(callbacks["pear_worker"][1]["arguments"], {"x-priority": 0})
+        self.assertEqual(callbacks["pear_worker_1"][1]["arguments"], {"x-priority": 10})
+        self.assertEqual(
+            received,
+            [{"run_id": 9, QUEUE_REDELIVERED_EVENT_KEY: True}],
+        )
+        channel.basic_ack.assert_called_once_with(41)
+
+    def test_priority_consumer_nacks_and_requeues_callback_failures(self) -> None:
+        client = object.__new__(SimpleQueueClient)
+        channel = mock.MagicMock()
+        channel.is_open = True
+        client.channel = channel
+        client.prefetch = 1
+        client.is_consuming = False
+        callbacks: dict[str, Any] = {}
+
+        def ensure_queue(queue_name: str, callback: Any) -> None:
+            callback(channel)
+
+        def basic_consume(*, queue: str, on_message_callback: Any, **kwargs: Any) -> None:
+            callbacks[queue] = (on_message_callback, kwargs)
+
+        def start_consuming() -> None:
+            callback, _kwargs = callbacks["pear_worker"]
+            callback(
+                channel,
+                mock.Mock(delivery_tag=42, redelivered=False),
+                mock.Mock(),
+                orjson.dumps({"run_id": 10}),
+            )
+
+        client.ensure_queue = ensure_queue  # type: ignore[method-assign]
+        channel.basic_consume.side_effect = basic_consume
+        channel.start_consuming.side_effect = start_consuming
+
+        def fail_before_turn(_events: list[dict[str, Any]]) -> None:
+            raise RuntimeError("pre-turn setup failed")
+
+        with self.assertRaisesRegex(RuntimeError, "pre-turn setup failed"):
+            client.start_json_consumers(
+                {"pear_worker": 10, "pear_worker_1": 0},
+                fail_before_turn,
+                annotate_redelivery=True,
+            )
+
+        channel.basic_ack.assert_not_called()
+        channel.basic_nack.assert_called_once_with(42, requeue=True)
+
+    def test_priority_consumer_discards_permanently_invalid_delivery(self) -> None:
+        client = object.__new__(SimpleQueueClient)
+        channel = mock.MagicMock()
+        channel.is_open = True
+        client.channel = channel
+        client.prefetch = 1
+        client.is_consuming = False
+        callbacks: dict[str, Any] = {}
+
+        def ensure_queue(_queue_name: str, callback: Any) -> None:
+            callback(channel)
+
+        def basic_consume(*, queue: str, on_message_callback: Any, **_kwargs: Any) -> None:
+            callbacks[queue] = on_message_callback
+
+        def start_consuming() -> None:
+            callbacks["pear_worker"](
+                channel,
+                mock.Mock(delivery_tag=43, redelivered=False),
+                mock.Mock(),
+                orjson.dumps({"run_id": 11}),
+            )
+
+        client.ensure_queue = ensure_queue  # type: ignore[method-assign]
+        channel.basic_consume.side_effect = basic_consume
+        channel.start_consuming.side_effect = start_consuming
+
+        client.start_json_consumers(
+            {"pear_worker": 10},
+            lambda _events: (_ for _ in ()).throw(QueueEventDiscardError("invalid event")),
+        )
+
+        channel.basic_ack.assert_not_called()
+        channel.basic_nack.assert_called_once_with(43, requeue=False)
+
+    def test_priority_consumer_discards_malformed_json(self) -> None:
+        client = object.__new__(SimpleQueueClient)
+        channel = mock.MagicMock()
+        channel.is_open = True
+        client.channel = channel
+        client.prefetch = 1
+        client.is_consuming = False
+        callback: Any = None
+
+        def ensure_queue(_queue_name: str, register: Any) -> None:
+            register(channel)
+
+        def basic_consume(*, on_message_callback: Any, **_kwargs: Any) -> None:
+            nonlocal callback
+            callback = on_message_callback
+
+        def start_consuming() -> None:
+            callback(
+                channel,
+                mock.Mock(delivery_tag=44, redelivered=False),
+                mock.Mock(),
+                b"not-json",
+            )
+
+        client.ensure_queue = ensure_queue  # type: ignore[method-assign]
+        channel.basic_consume.side_effect = basic_consume
+        channel.start_consuming.side_effect = start_consuming
+
+        client.start_json_consumers({"pear_worker": 10}, lambda _events: None)
+
+        channel.basic_ack.assert_not_called()
+        channel.basic_nack.assert_called_once_with(44, requeue=False)
+
     @override_settings(USING_RABBITMQ=True)
     def test_register_consumer(self) -> None:
         output = []

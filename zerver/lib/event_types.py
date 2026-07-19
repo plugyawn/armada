@@ -2,7 +2,7 @@ from typing import Annotated, Literal
 
 from django.core.exceptions import ValidationError
 from django.core.validators import URLValidator
-from pydantic import AfterValidator, BaseModel
+from pydantic import AfterValidator, BaseModel, ConfigDict
 
 from zerver.lib.types import UserGroupMembersDict
 from zerver.models.realms import RealmExportSlug
@@ -1295,6 +1295,25 @@ class PearRunUsage(BaseModel):
     cache_percent: float | None = None
 
 
+class PearRunAgent(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    thread_id: str
+    nickname: str | None
+    role: str | None
+    name: str | None
+    status: Literal["active", "failed", "idle"]
+    current_activity: str
+
+
+class PearRunAgentDelta(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    thread_id: str
+    status: Literal["active", "failed", "idle"] | None = None
+    current_activity: str | None = None
+
+
 class PearRunEvent(BaseEvent):
     type: Literal["pear_run"]
     version: Literal[1]
@@ -1317,6 +1336,9 @@ class PearRunEvent(BaseEvent):
     trace_available: bool
     run_date_created: float
     date_created: float
+    agent_thread_id: str | None = None
+    agent: PearRunAgentDelta | None = None
+    agents: list[PearRunAgent] | None = None
 
 
 class PearWorkspaceChangedEvent(BaseEvent):

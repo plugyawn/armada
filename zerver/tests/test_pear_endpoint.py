@@ -3,10 +3,12 @@ import tempfile
 from datetime import timedelta
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any
 from unittest.mock import patch
 
 import orjson
 from django.core.cache import cache
+from django.db import transaction
 from django.utils.timezone import now as timezone_now
 
 from zerver.actions.pear import send_pear_run_event, send_pear_workspace_changed_event
@@ -31,6 +33,7 @@ from zerver.lib.pear import (
     PEAR_SESSION_ENDPOINT,
     PEAR_SIDE_ENDPOINT,
     PEAR_TOPIC_CONTEXT_ENDPOINT,
+    PearWorkerLeaseLostError,
     build_pear_active_session_summary_from_messages,
     get_pear_session_payload,
     write_pear_live_run_state,
@@ -85,6 +88,7 @@ from zerver.lib.pear_worker import (
     pear_workspace_node_default_branch,
     pear_workspace_relative_path,
     reap_stale_pear_worker_runs,
+    wait_for_redelivered_pear_worker_run,
 )
 from zerver.lib.test_classes import ZulipTestCase
 from zerver.models import Message, Recipient, Subscription, UserProfile
@@ -103,6 +107,7 @@ from zerver.views.pear import (
     pear_workspace_isolation_username,
     serialize_pear_worker_run,
     serialize_pear_workspace_context,
+    update_pear_run_control_event,
 )
 
 
@@ -193,6 +198,112 @@ class PearSessionEndpointTest(ZulipTestCase):
             {**event, "id": 2, "has_visible_assistant_text": True},
         )
         self.assertIn(owner.id, send_event.call_args.args[2])
+
+        run.codex_thread_id = "root-thread"
+        run.save(update_fields=["codex_thread_id"])
+        agent_event = PearWorkerRunEvent.objects.create(
+            run=run,
+            event_type="agent",
+            summary="Started Scout",
+            payload={
+                "kind": "session",
+                "metadata": {
+                    "codex_thread_id": "child-thread",
+                    "thread": {
+                        "id": "child-thread",
+                        "parent_thread_id": "root-thread",
+                        "agent_nickname": "Scout",
+                        "status": {"type": "active"},
+                    },
+                },
+            },
+        )
+        with patch("zerver.actions.pear.send_event_on_commit") as send_agent_event:
+            send_pear_run_event(run, agent_event)
+
+        agent_push = send_agent_event.call_args.args[1]
+        check_pear_run_event("event", {**agent_push, "id": 3})
+        self.assertEqual(agent_push["agent_thread_id"], "child-thread")
+        self.assertEqual(
+            agent_push["agents"],
+            [
+                {
+                    "thread_id": "child-thread",
+                    "nickname": "Scout",
+                    "role": None,
+                    "name": None,
+                    "status": "active",
+                    "current_activity": "",
+                }
+            ],
+        )
+        self.assertNotIn("agent", agent_push)
+
+        activity_event = PearWorkerRunEvent.objects.create(
+            run=run,
+            event_type="agent",
+            summary="Inspect files",
+            payload={
+                "kind": "command",
+                "title": "Inspect files",
+                "metadata": {
+                    "codex_method": "item/completed",
+                    "codex_thread_id": "child-thread",
+                    "parent_thread_id": "root-thread",
+                },
+            },
+        )
+        with (
+            patch("zerver.actions.pear.send_event_on_commit") as send_activity_event,
+            patch("zerver.actions.pear.serialize_pear_agent_threads") as serialize_agents,
+        ):
+            send_pear_run_event(run, activity_event)
+        serialize_agents.assert_not_called()
+
+        activity_push = send_activity_event.call_args.args[1]
+        check_pear_run_event("event", {**activity_push, "id": 4})
+        self.assertEqual(activity_push["agent_thread_id"], "child-thread")
+        self.assertEqual(
+            activity_push["agent"],
+            {
+                "thread_id": "child-thread",
+                "current_activity": "Inspect files",
+            },
+        )
+        self.assertNotIn("agents", activity_push)
+
+        turn_event = PearWorkerRunEvent.objects.create(
+            run=run,
+            event_type="agent",
+            summary="Agent turn started",
+            payload={
+                "kind": "agent",
+                "title": "Agent turn started",
+                "metadata": {
+                    "codex_method": "turn/started",
+                    "codex_thread_id": "child-thread",
+                    "codex_turn_id": "child-turn",
+                    "parent_thread_id": "root-thread",
+                },
+            },
+        )
+        with (
+            patch("zerver.actions.pear.send_event_on_commit") as send_turn_event,
+            patch("zerver.actions.pear.serialize_pear_agent_threads") as serialize_agents,
+        ):
+            send_pear_run_event(run, turn_event)
+        serialize_agents.assert_not_called()
+
+        turn_push = send_turn_event.call_args.args[1]
+        self.assertNotIn("agents", turn_push)
+        self.assertEqual(
+            turn_push["agent"],
+            {
+                "thread_id": "child-thread",
+                "status": "active",
+                "current_activity": "Agent turn started",
+            },
+        )
 
     def test_workspace_changed_push_event_is_typed_and_visibility_scoped(self) -> None:
         owner = self.example_user("hamlet")
@@ -730,7 +841,9 @@ class PearSessionEndpointTest(ZulipTestCase):
                 },
             )
 
-        with self.assert_database_query_count(2):
+        # Usage, display state, and the bounded child-session lookup are one
+        # fixed batch each. With no child sessions, no reducer query is needed.
+        with self.assert_database_query_count(3):
             events_by_run_id = pear_worker_run_summary_events(runs)
         with self.assert_database_query_count(0):
             serialized = [
@@ -747,6 +860,102 @@ class PearSessionEndpointTest(ZulipTestCase):
             [item["overview"] for item in serialized],
             [f"Visible overview {index}." for index in range(5)],
         )
+
+    def test_run_summary_keeps_each_agent_latest_lifecycle_event(self) -> None:
+        user = self.example_user("hamlet")
+        pear_bot = self.create_test_bot(
+            "pear",
+            user,
+            full_name="Pear",
+            bot_type=UserProfile.EMBEDDED_BOT,
+            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+        )
+        run = PearWorkerRun.objects.create(
+            realm=user.realm,
+            bot_profile=pear_bot,
+            trigger_message_id=710,
+            requesting_user=user,
+            status=PearWorkerRun.RUNNING,
+            codex_thread_id="root-thread",
+        )
+        for thread_id, nickname in (
+            ("quiet-child", "  Quiet\nScout  "),
+            ("noisy-child", "Builder"),
+        ):
+            PearWorkerRunEvent.objects.create(
+                run=run,
+                event_type="agent",
+                summary=f"Started {nickname}",
+                payload={
+                    "kind": "session",
+                    "metadata": {
+                        "codex_thread_id": thread_id,
+                        "thread": {
+                            "id": thread_id,
+                            "parent_thread_id": "root-thread",
+                            "agent_nickname": nickname,
+                            "agent_path": f"unused/{thread_id}",
+                            "depth": 1,
+                            "status": {"type": "active"},
+                        },
+                    },
+                },
+            )
+        PearWorkerRunEvent.objects.create(
+            run=run,
+            event_type="agent",
+            summary="Quiet child failed",
+            payload={
+                "kind": "status",
+                "title": "Quiet child failed",
+                "metadata": {
+                    "codex_method": "turn/completed",
+                    "codex_thread_id": "quiet-child",
+                    "codex_turn_id": "quiet-turn",
+                    "turn": {"id": "quiet-turn", "status": "failed"},
+                },
+            },
+        )
+        PearWorkerRunEvent.objects.bulk_create(
+            [
+                PearWorkerRunEvent(
+                    run=run,
+                    event_type="agent",
+                    summary=f"Noisy activity {index}",
+                    payload={
+                        "kind": "command",
+                        "title": f"Noisy activity {index}",
+                        "metadata": {
+                            "codex_method": "item/completed",
+                            "codex_thread_id": "noisy-child",
+                        },
+                    },
+                )
+                for index in range(70)
+            ]
+        )
+
+        # The fourth query is one latest lifecycle/activity reducer row per
+        # native child, not a global tail that a noisy sibling can monopolize.
+        with self.assert_database_query_count(4):
+            events_by_run_id = pear_worker_run_summary_events([run])
+        with self.assert_database_query_count(0):
+            agents = serialize_pear_worker_run(run, summary_events=events_by_run_id[run.id])[
+                "agents"
+            ]
+        assert isinstance(agents, list)
+        [quiet, noisy] = agents
+
+        self.assertEqual(quiet["thread_id"], "quiet-child")
+        self.assertEqual(quiet["nickname"], "Quiet Scout")
+        self.assertEqual(quiet["status"], "failed")
+        self.assertEqual(
+            set(quiet),
+            {"thread_id", "nickname", "role", "name", "status", "current_activity"},
+        )
+        self.assertEqual(noisy["thread_id"], "noisy-child")
+        self.assertEqual(noisy["status"], "active")
+        self.assertEqual(noisy["current_activity"], "Noisy activity 69")
 
     def test_get_pear_runs_includes_requested_run_ids_outside_topic_window(self) -> None:
         owner = self.example_user("hamlet")
@@ -995,8 +1204,8 @@ class PearSessionEndpointTest(ZulipTestCase):
             )
             PearWorkspaceNode.objects.create(
                 realm=owner.realm,
-                stream_name=PEAR_DEFAULT_STREAM,
-                topic_name="quiet-context",
+                stream_name=PEAR_DEFAULT_STREAM.upper(),
+                topic_name="Quiet-Context",
                 response_policy="mentions_only",
             )
             quiet_context_event = get_pear_followup_service_bot_event(
@@ -1463,7 +1672,7 @@ class PearSessionEndpointTest(ZulipTestCase):
         self.assertEqual(trunk_payload["branch"], "main")
         self.assertTrue(trunk_payload["branch_is_topic_default"])
 
-    def test_startup_reap_fails_orphaned_running_runs_regardless_of_age(self) -> None:
+    def test_shared_pool_startup_reap_preserves_fresh_running_lease(self) -> None:
         user = self.example_user("hamlet")
         pear_bot = self.create_test_bot(
             "pear",
@@ -1483,17 +1692,43 @@ class PearSessionEndpointTest(ZulipTestCase):
             heartbeat_at=timezone_now(),
         )
 
-        # A fresh heartbeat protects the run from the age-gated reap.
+        # Either slot may boot while the other is running.  A fresh shared
+        # heartbeat lease must therefore survive every startup reap.
         self.assertEqual(reap_stale_pear_worker_runs(), 0)
         run.refresh_from_db()
         self.assertEqual(run.status, PearWorkerRun.RUNNING)
 
-        # The queue is single-consumer: at worker boot, a RUNNING run is
-        # by definition orphaned, however young its heartbeat.
-        self.assertEqual(reap_stale_pear_worker_runs(assume_orphaned=True), 1)
-        run.refresh_from_db()
-        self.assertEqual(run.status, PearWorkerRun.FAILED)
-        self.assertIn("orphaned", run.error)
+    def test_redelivered_run_waits_for_the_database_lease(self) -> None:
+        user = self.example_user("hamlet")
+        pear_bot = self.create_test_bot(
+            "pear",
+            user,
+            full_name="Pear",
+            bot_type=UserProfile.EMBEDDED_BOT,
+            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+        )
+        run = PearWorkerRun.objects.create(
+            realm=user.realm,
+            bot_profile=pear_bot,
+            trigger_message_id=4343,
+            requesting_user=user,
+            status=PearWorkerRun.RUNNING,
+            stream_name=PEAR_DEFAULT_STREAM,
+            topic_name=PEAR_DEFAULT_TOPIC,
+            heartbeat_at=timezone_now(),
+        )
+
+        def expire_lease(_seconds: float) -> None:
+            run.heartbeat_at = timezone_now() - timedelta(minutes=2)
+            run.save(update_fields=["heartbeat_at"])
+
+        with patch("zerver.lib.pear_worker.time.sleep", side_effect=expire_lease) as sleep:
+            wait_for_redelivered_pear_worker_run(
+                bot_profile_id=pear_bot.id,
+                trigger_message_id=run.trigger_message_id,
+            )
+
+        sleep.assert_called_once()
 
     def test_worker_run_store_links_runs_to_workspace_node(self) -> None:
         owner = self.example_user("hamlet")
@@ -1968,7 +2203,7 @@ class PearSessionEndpointTest(ZulipTestCase):
             side_effect=[clean_status, "", "", dirty_status, "", ""],
         ) as git_output:
             clean_delta = pear_git_status_delta("/repo", topic="topic-a")
-            cached_delta = pear_git_status_delta("/repo", topic="topic-a")
+            cached_delta = pear_git_status_delta("/repo", topic="TOPIC-A")
             invalidate_pear_git_status_delta("/repo")
             dirty_delta = pear_git_status_delta("/repo", topic="topic-a")
 
@@ -2425,6 +2660,14 @@ class PearSessionEndpointTest(ZulipTestCase):
                     source_topic_name="old topic",
                     status=PearWorkerRun.DONE,
                 )
+                monitor = PearMonitor.objects.create(
+                    realm=owner.realm,
+                    bot_profile=pear_bot,
+                    creator=owner,
+                    stream_name=PEAR_DEFAULT_STREAM.upper(),
+                    topic_name="OLD TOPIC",
+                    ask="watch the moved topic",
+                )
 
                 result = maybe_refactor_pear_workspace_on_move(
                     owner,
@@ -2439,6 +2682,7 @@ class PearSessionEndpointTest(ZulipTestCase):
             context.refresh_from_db()
             run.refresh_from_db()
             side_run.refresh_from_db()
+            monitor.refresh_from_db()
 
             self.assertEqual(result.topic_name, "new topic")
             self.assertEqual(result.message, "Pear workspace label moved with this topic.")
@@ -2462,6 +2706,8 @@ class PearSessionEndpointTest(ZulipTestCase):
             self.assertEqual(run.topic_name, "old topic")
             self.assertEqual(run.workspace_node_id, context.id)
             self.assertEqual(side_run.source_topic_name, "old topic")
+            self.assertEqual(monitor.stream_name, PEAR_DEFAULT_STREAM.lower())
+            self.assertEqual(monitor.topic_name, "new topic")
             self.assertFalse(
                 PearWorkspaceNode.objects.filter(
                     realm=owner.realm,
@@ -2473,6 +2719,13 @@ class PearSessionEndpointTest(ZulipTestCase):
     def test_topic_context_refactor_warns_for_partial_topic_move(self) -> None:
         owner = self.example_user("hamlet")
         stream = self.subscribe(owner, PEAR_DEFAULT_STREAM)
+        pear_bot = self.create_test_bot(
+            "pear",
+            owner,
+            full_name="Pear",
+            bot_type=UserProfile.EMBEDDED_BOT,
+            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+        )
 
         with (
             tempfile.TemporaryDirectory() as temp_dir,
@@ -2486,6 +2739,14 @@ class PearSessionEndpointTest(ZulipTestCase):
                 topic="old topic",
             )
             old_workdir = context.workdir
+            monitor = PearMonitor.objects.create(
+                realm=owner.realm,
+                bot_profile=pear_bot,
+                creator=owner,
+                stream_name=PEAR_DEFAULT_STREAM,
+                topic_name="old topic",
+                ask="stay with the original topic",
+            )
 
             result = maybe_refactor_pear_workspace_on_move(
                 owner,
@@ -2497,12 +2758,14 @@ class PearSessionEndpointTest(ZulipTestCase):
             )
 
             context.refresh_from_db()
+            monitor.refresh_from_db()
 
         assert result is not None
         self.assertIn("only part of the topic was moved", result.message)
         self.assertEqual(result.topic_name, "new topic")
         self.assertEqual(context.topic_name, "old topic")
         self.assertEqual(context.workdir, old_workdir)
+        self.assertEqual(monitor.topic_name, "old topic")
 
     def test_stream_context_refactor_updates_channel_rename_metadata(self) -> None:
         owner = self.example_user("hamlet")
@@ -2546,6 +2809,14 @@ class PearSessionEndpointTest(ZulipTestCase):
             source_topic_name="feature",
             status=PearWorkerRun.DONE,
         )
+        monitor = PearMonitor.objects.create(
+            realm=owner.realm,
+            bot_profile=pear_bot,
+            creator=owner,
+            stream_name="OLD-REPO",
+            topic_name="feature",
+            ask="watch the renamed channel",
+        )
 
         message = maybe_refactor_pear_stream_workspaces_on_rename(
             owner,
@@ -2570,8 +2841,10 @@ class PearSessionEndpointTest(ZulipTestCase):
         )
         run.refresh_from_db()
         side_run.refresh_from_db()
+        monitor.refresh_from_db()
         self.assertEqual(run.stream_name, "old-repo")
         self.assertEqual(side_run.source_stream_name, "old-repo")
+        self.assertEqual(monitor.stream_name, "new-repo")
 
     def test_clone_or_update_pear_repository_workdir_clones_repository(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -2661,6 +2934,189 @@ class PearSessionEndpointTest(ZulipTestCase):
         )
 
         self.assertEqual(reason, "This topic already has an active Pear worker run.")
+
+    def test_worker_start_serializes_case_variants_of_the_same_topic(self) -> None:
+        owner = self.example_user("hamlet")
+        pear_bot = self.create_test_bot(
+            "pear",
+            owner,
+            full_name="Pear",
+            bot_type=UserProfile.EMBEDDED_BOT,
+            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+        )
+        bot_handler = SimpleNamespace(user_profile=pear_bot)
+        first_store = PearDatabaseWorkerRunStore()
+        second_store = PearDatabaseWorkerRunStore()
+
+        with (
+            self.settings(
+                PEAR_WORKER_MAX_ACTIVE_RUNS_PER_TOPIC=1,
+                PEAR_WORKER_MAX_ACTIVE_RUNS_PER_REALM=2,
+            ),
+            patch.object(
+                first_store,
+                "_lock_workspace_node",
+                wraps=first_store._lock_workspace_node,
+            ) as first_lock,
+            patch.object(
+                second_store,
+                "_lock_workspace_node",
+                wraps=second_store._lock_workspace_node,
+            ) as second_lock,
+        ):
+            self.assertTrue(
+                first_store.start(
+                    bot_handler,
+                    951,
+                    stream=PEAR_DEFAULT_STREAM,
+                    topic="serialized-start",
+                )
+            )
+            self.assertFalse(
+                second_store.start(
+                    bot_handler,
+                    952,
+                    stream=PEAR_DEFAULT_STREAM.upper(),
+                    topic="SERIALIZED-START",
+                )
+            )
+        first_lock.assert_called_once()
+        second_lock.assert_called_once()
+
+        self.assertEqual(
+            list(
+                PearWorkerRun.objects.filter(topic_name="serialized-start").values_list(
+                    "trigger_message_id", "status"
+                )
+            ),
+            [(951, PearWorkerRun.QUEUED)],
+        )
+
+    def test_worker_start_and_claim_serialize_in_the_same_topic(self) -> None:
+        owner = self.example_user("hamlet")
+        pear_bot = self.create_test_bot(
+            "pear",
+            owner,
+            full_name="Pear",
+            bot_type=UserProfile.EMBEDDED_BOT,
+            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+        )
+        bot_handler = SimpleNamespace(user_profile=pear_bot)
+        start_store = PearDatabaseWorkerRunStore()
+        claim_store = PearDatabaseWorkerRunStore()
+
+        with (
+            self.settings(
+                PEAR_WORKER_MAX_ACTIVE_RUNS_PER_TOPIC=1,
+                PEAR_WORKER_MAX_ACTIVE_RUNS_PER_REALM=2,
+            ),
+            patch.object(
+                start_store,
+                "_lock_workspace_node",
+                wraps=start_store._lock_workspace_node,
+            ) as start_lock,
+            patch.object(
+                claim_store,
+                "_lock_workspace_node",
+                wraps=claim_store._lock_workspace_node,
+            ) as claim_lock,
+        ):
+            self.assertTrue(
+                start_store.start(
+                    bot_handler,
+                    953,
+                    stream=PEAR_DEFAULT_STREAM,
+                    topic="serialized-claim",
+                )
+            )
+            self.assertFalse(
+                claim_store.claim_for_run(
+                    bot_handler,
+                    954,
+                    stream=PEAR_DEFAULT_STREAM,
+                    topic="serialized-claim",
+                )
+            )
+        start_lock.assert_called_once()
+        claim_lock.assert_called_once()
+
+        self.assertTrue(
+            PearWorkerRun.objects.filter(
+                trigger_message_id=953,
+                status=PearWorkerRun.QUEUED,
+            ).exists()
+        )
+        self.assertFalse(PearWorkerRun.objects.filter(trigger_message_id=954).exists())
+
+    def test_streamless_runs_are_rejected(self) -> None:
+        owner = self.example_user("hamlet")
+        pear_bot = self.create_test_bot(
+            "pear",
+            owner,
+            full_name="Pear",
+            bot_type=UserProfile.EMBEDDED_BOT,
+            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+        )
+        bot_handler = SimpleNamespace(user_profile=pear_bot)
+        store = PearDatabaseWorkerRunStore()
+
+        self.assertEqual(
+            store.start_blocked_reason(
+                bot_handler,
+                957,
+                stream="",
+                topic="",
+                requesting_user_id=owner.id,
+            ),
+            "Pear Codex runs currently require a channel topic.",
+        )
+        self.assertFalse(store.start(bot_handler, 957, stream="", topic=""))
+        self.assertFalse(store.claim_for_run(bot_handler, 957, stream="", topic=""))
+        self.assertFalse(PearWorkerRun.objects.filter(trigger_message_id=957).exists())
+
+    def test_worker_claims_in_different_topics_are_independent(self) -> None:
+        owner = self.example_user("hamlet")
+        pear_bot = self.create_test_bot(
+            "pear",
+            owner,
+            full_name="Pear",
+            bot_type=UserProfile.EMBEDDED_BOT,
+            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+        )
+        bot_handler = SimpleNamespace(user_profile=pear_bot)
+
+        with self.settings(
+            PEAR_WORKER_MAX_ACTIVE_RUNS_PER_TOPIC=1,
+            PEAR_WORKER_MAX_ACTIVE_RUNS_PER_REALM=2,
+        ):
+            self.assertTrue(
+                PearDatabaseWorkerRunStore().claim_for_run(
+                    bot_handler,
+                    955,
+                    stream=PEAR_DEFAULT_STREAM,
+                    topic="independent-a",
+                )
+            )
+            self.assertTrue(
+                PearDatabaseWorkerRunStore().claim_for_run(
+                    bot_handler,
+                    956,
+                    stream=PEAR_DEFAULT_STREAM,
+                    topic="independent-b",
+                )
+            )
+
+        self.assertEqual(
+            set(
+                PearWorkerRun.objects.filter(trigger_message_id__in=(955, 956)).values_list(
+                    "topic_name", "status", "attempts"
+                )
+            ),
+            {
+                ("independent-a", PearWorkerRun.RUNNING, 1),
+                ("independent-b", PearWorkerRun.RUNNING, 1),
+            },
+        )
 
     def test_worker_run_store_rejects_illegal_terminal_transitions(self) -> None:
         owner = self.example_user("hamlet")
@@ -2900,6 +3356,295 @@ class PearSessionEndpointTest(ZulipTestCase):
             "already_running",
         )
 
+    def test_stale_worker_attempt_rejects_every_worker_owned_store_path(self) -> None:
+        owner = self.example_user("hamlet")
+        pear_bot = self.create_test_bot(
+            "pear",
+            owner,
+            full_name="Pear",
+            bot_type=UserProfile.EMBEDDED_BOT,
+            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+        )
+        bot_handler = SimpleNamespace(user_profile=pear_bot)
+        store = PearDatabaseWorkerRunStore()
+        self.assertTrue(
+            store.claim_for_run(
+                bot_handler,
+                957,
+                stream=PEAR_DEFAULT_STREAM,
+                topic="fenced-store",
+            )
+        )
+        run = PearWorkerRun.objects.get(trigger_message_id=957)
+        self.assertEqual(run.attempts, 1)
+        event_count = run.events.count()
+        PearWorkerRun.objects.filter(id=run.id).update(attempts=2)
+
+        operations = {
+            "progress": lambda: store.register_progress_message(
+                bot_handler,
+                run.trigger_message_id,
+                stream=PEAR_DEFAULT_STREAM,
+                topic="fenced-store",
+                progress_message_id=4001,
+            ),
+            "status": lambda: store.record(
+                bot_handler,
+                run.trigger_message_id,
+                PearWorkerRun.DONE,
+                stream=PEAR_DEFAULT_STREAM,
+                topic="fenced-store",
+                result_message_id=4001,
+            ),
+            "metadata": lambda: store.update_metadata(
+                bot_handler,
+                run.trigger_message_id,
+                summary="stale summary",
+            ),
+            "event": lambda: store.record_event(
+                bot_handler,
+                run.trigger_message_id,
+                "transcript",
+                summary="stale event",
+            ),
+            "cancel": lambda: store.cancel_requested(
+                bot_handler,
+                run.trigger_message_id,
+            ),
+            "steering": lambda: store.steering_events_after(
+                bot_handler,
+                run.trigger_message_id,
+                after_event_id=0,
+            ),
+        }
+        for operation_name, operation in operations.items():
+            with (
+                self.subTest(operation=operation_name),
+                self.assertRaisesRegex(PearWorkerLeaseLostError, "lost attempt 1"),
+                transaction.atomic(),
+            ):
+                operation()
+
+        run.refresh_from_db()
+        self.assertEqual(run.status, PearWorkerRun.RUNNING)
+        self.assertEqual(run.attempts, 2)
+        self.assertIsNone(run.result_message_id)
+        self.assertEqual(run.summary, "")
+        self.assertEqual(run.events.count(), event_count)
+
+    def test_record_event_rechecks_attempt_inside_its_durable_transaction(self) -> None:
+        owner = self.example_user("hamlet")
+        pear_bot = self.create_test_bot(
+            "pear",
+            owner,
+            full_name="Pear",
+            bot_type=UserProfile.EMBEDDED_BOT,
+            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+        )
+        bot_handler = SimpleNamespace(user_profile=pear_bot)
+        store = PearDatabaseWorkerRunStore()
+        self.assertTrue(
+            store.claim_for_run(
+                bot_handler,
+                958,
+                stream=PEAR_DEFAULT_STREAM,
+                topic="fenced-event",
+            )
+        )
+        run = PearWorkerRun.objects.get(trigger_message_id=958)
+        original_record_event = store._record_event
+
+        def reclaim_before_durable_write(
+            locked_run: PearWorkerRun,
+            event_type: str,
+            *,
+            summary: str,
+            payload: dict[str, Any],
+        ) -> None:
+            PearWorkerRun.objects.filter(id=locked_run.id).update(attempts=2)
+            original_record_event(
+                locked_run,
+                event_type,
+                summary=summary,
+                payload=payload,
+            )
+
+        with (
+            patch.object(store, "_record_event", side_effect=reclaim_before_durable_write),
+            self.assertRaisesRegex(PearWorkerLeaseLostError, "lost attempt 1"),
+            transaction.atomic(),
+        ):
+            store.record_event(
+                bot_handler,
+                run.trigger_message_id,
+                "transcript",
+                summary="must not commit",
+            )
+
+        run.refresh_from_db()
+        self.assertEqual(run.attempts, 1)
+        self.assertFalse(run.events.filter(summary="must not commit").exists())
+
+    def test_worker_completion_rejects_terminal_run_with_the_same_attempt(self) -> None:
+        owner = self.example_user("hamlet")
+        pear_bot = self.create_test_bot(
+            "pear",
+            owner,
+            full_name="Pear",
+            bot_type=UserProfile.EMBEDDED_BOT,
+            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+        )
+        bot_handler = SimpleNamespace(user_profile=pear_bot)
+        store = PearDatabaseWorkerRunStore()
+
+        for message_id, status in (
+            (1961, PearWorkerRun.CANCELLED),
+            (1962, PearWorkerRun.FAILED),
+        ):
+            topic = f"terminal-fence-{status}"
+            self.assertTrue(
+                store.claim_for_run(
+                    bot_handler,
+                    message_id,
+                    stream=PEAR_DEFAULT_STREAM,
+                    topic=topic,
+                )
+            )
+            run = PearWorkerRun.objects.get(trigger_message_id=message_id)
+            self.assertEqual(run.attempts, 1)
+            PearWorkerRun.objects.filter(id=run.id).update(status=status)
+
+            entered_completion = False
+            with (
+                self.subTest(status=status),
+                self.assertRaisesRegex(PearWorkerLeaseLostError, "lost attempt 1"),
+                store.worker_completion(bot_handler, message_id),
+            ):
+                entered_completion = True
+            self.assertFalse(entered_completion)
+
+    def test_claimed_cancel_check_distinguishes_cancelled_from_failed_run(self) -> None:
+        owner = self.example_user("hamlet")
+        pear_bot = self.create_test_bot(
+            "pear",
+            owner,
+            full_name="Pear",
+            bot_type=UserProfile.EMBEDDED_BOT,
+            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+        )
+        bot_handler = SimpleNamespace(user_profile=pear_bot)
+        store = PearDatabaseWorkerRunStore()
+        cancelled_at = timezone_now()
+
+        self.assertTrue(
+            store.claim_for_run(
+                bot_handler,
+                1963,
+                stream=PEAR_DEFAULT_STREAM,
+                topic="cancel-check-cancelled",
+            )
+        )
+        cancelled_run = PearWorkerRun.objects.get(trigger_message_id=1963)
+        PearWorkerRun.objects.filter(id=cancelled_run.id).update(
+            status=PearWorkerRun.CANCELLED,
+            cancel_requested_at=None,
+        )
+        self.assertTrue(store.cancel_requested(bot_handler, 1963))
+
+        self.assertTrue(
+            store.claim_for_run(
+                bot_handler,
+                1964,
+                stream=PEAR_DEFAULT_STREAM,
+                topic="cancel-check-failed",
+            )
+        )
+        failed_run = PearWorkerRun.objects.get(trigger_message_id=1964)
+        PearWorkerRun.objects.filter(id=failed_run.id).update(
+            status=PearWorkerRun.FAILED,
+            cancel_requested_at=cancelled_at,
+        )
+        with self.assertRaisesRegex(PearWorkerLeaseLostError, "lost attempt 1"):
+            store.cancel_requested(bot_handler, 1964)
+
+    def test_unclaimed_control_store_keeps_preclaim_paths_unfenced(self) -> None:
+        owner = self.example_user("hamlet")
+        pear_bot = self.create_test_bot(
+            "pear",
+            owner,
+            full_name="Pear",
+            bot_type=UserProfile.EMBEDDED_BOT,
+            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+        )
+        bot_handler = SimpleNamespace(user_profile=pear_bot)
+        cancelled_at = timezone_now()
+        run = PearWorkerRun.objects.create(
+            realm=owner.realm,
+            bot_profile=pear_bot,
+            requesting_user=owner,
+            trigger_message_id=959,
+            stream_name=PEAR_DEFAULT_STREAM,
+            topic_name="control-store",
+            status=PearWorkerRun.RUNNING,
+            attempts=7,
+            cancel_requested_at=cancelled_at,
+        )
+        steering_event = PearWorkerRunEvent.objects.create(
+            run=run,
+            event_type="steering",
+            summary="Continue carefully",
+            payload={"instruction": "Continue carefully", "message_id": 991},
+        )
+        control_store = PearDatabaseWorkerRunStore()
+
+        control_store.register_progress_message(
+            bot_handler,
+            run.trigger_message_id,
+            stream=PEAR_DEFAULT_STREAM,
+            topic="control-store",
+            progress_message_id=4002,
+        )
+        control_store.record(
+            bot_handler,
+            run.trigger_message_id,
+            PearWorkerRun.RUNNING,
+            stream=PEAR_DEFAULT_STREAM,
+            topic="control-store",
+            result_message_id=4002,
+        )
+        control_store.update_metadata(
+            bot_handler,
+            run.trigger_message_id,
+            summary="control metadata",
+        )
+        control_store.record_event(
+            bot_handler,
+            run.trigger_message_id,
+            "control_event",
+            summary="control event",
+        )
+
+        self.assertTrue(control_store.cancel_requested(bot_handler, run.trigger_message_id))
+        self.assertEqual(
+            control_store.steering_events_after(
+                bot_handler,
+                run.trigger_message_id,
+                after_event_id=0,
+            ),
+            [
+                {
+                    "event_id": steering_event.id,
+                    "message_id": 991,
+                    "instruction": "Continue carefully",
+                }
+            ],
+        )
+        run.refresh_from_db()
+        self.assertEqual(run.attempts, 7)
+        self.assertEqual(run.result_message_id, 4002)
+        self.assertEqual(run.summary, "control metadata")
+        self.assertTrue(run.events.filter(event_type="control_event").exists())
+
     def test_worker_run_store_drops_completed_redelivery(self) -> None:
         owner = self.example_user("hamlet")
         pear_bot = self.create_test_bot(
@@ -3005,6 +3750,52 @@ class PearSessionEndpointTest(ZulipTestCase):
             "stale_retry_limit",
         )
 
+    def test_redelivery_reclaims_a_run_after_the_reaper_wins_the_race(self) -> None:
+        owner = self.example_user("hamlet")
+        pear_bot = self.create_test_bot(
+            "pear",
+            owner,
+            full_name="Pear",
+            bot_type=UserProfile.EMBEDDED_BOT,
+            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+        )
+        bot_handler = SimpleNamespace(user_profile=pear_bot)
+        store = PearDatabaseWorkerRunStore()
+        stale_time = timezone_now() - timedelta(seconds=400)
+        run = PearWorkerRun.objects.create(
+            realm=owner.realm,
+            bot_profile=pear_bot,
+            requesting_user=owner,
+            trigger_message_id=911,
+            stream_name=PEAR_DEFAULT_STREAM,
+            topic_name="topic-a",
+            status=PearWorkerRun.RUNNING,
+            attempts=1,
+            heartbeat_at=stale_time,
+            date_updated=stale_time,
+        )
+
+        with patch("zerver.lib.pear_worker.settle_orphaned_pear_run_message"):
+            self.assertEqual(reap_stale_pear_worker_runs(bot_profile=pear_bot), 1)
+
+        run.refresh_from_db()
+        self.assertEqual(run.status, PearWorkerRun.FAILED)
+        self.assertEqual(run.events.latest("id").event_type, "stale_reaped")
+        self.assertTrue(
+            store.claim_for_run(
+                bot_handler,
+                run.trigger_message_id,
+                stream=PEAR_DEFAULT_STREAM,
+                topic="topic-a",
+                redelivered=True,
+            )
+        )
+        run.refresh_from_db()
+        self.assertEqual(run.status, PearWorkerRun.RUNNING)
+        self.assertEqual(run.attempts, 2)
+        self.assertIsNone(run.error)
+        self.assertEqual(run.events.latest("id").event_type, "claimed")
+
     def test_worker_run_store_busy_reader_reaps_stale_running_run(self) -> None:
         owner = self.example_user("hamlet")
         pear_bot = self.create_test_bot(
@@ -3067,6 +3858,7 @@ class PearSessionEndpointTest(ZulipTestCase):
             stream_name=PEAR_DEFAULT_STREAM,
             topic_name="topic-a",
             status=PearWorkerRun.RUNNING,
+            attempts=1,
             heartbeat_at=stale_time,
             date_updated=stale_time,
         )
@@ -3085,6 +3877,7 @@ class PearSessionEndpointTest(ZulipTestCase):
         self.assertEqual(
             maintain_pear_worker_run_liveness(
                 active_run_id=active_run.id,
+                active_run_attempt=active_run.attempts,
                 session_kinds=(PearWorkerRun.SHARED,),
             ),
             1,
@@ -3100,6 +3893,84 @@ class PearSessionEndpointTest(ZulipTestCase):
                 "stale_after_seconds"
             ],
             60,
+        )
+
+    def test_worker_liveness_renewal_requires_the_matching_claim_attempt(self) -> None:
+        owner = self.example_user("hamlet")
+        pear_bot = self.create_test_bot(
+            "pear",
+            owner,
+            full_name="Pear",
+            bot_type=UserProfile.EMBEDDED_BOT,
+            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+        )
+        old_heartbeat = timezone_now() - timedelta(seconds=20)
+        active_run = PearWorkerRun.objects.create(
+            realm=owner.realm,
+            bot_profile=pear_bot,
+            requesting_user=owner,
+            trigger_message_id=960,
+            stream_name=PEAR_DEFAULT_STREAM,
+            topic_name="attempt-liveness",
+            status=PearWorkerRun.RUNNING,
+            attempts=3,
+            heartbeat_at=old_heartbeat,
+            date_updated=old_heartbeat,
+        )
+
+        for stale_attempt in (None, 2):
+            with (
+                self.subTest(attempt=stale_attempt),
+                self.assertRaises(PearWorkerLeaseLostError),
+            ):
+                maintain_pear_worker_run_liveness(
+                    active_run_id=active_run.id,
+                    active_run_attempt=stale_attempt,
+                    session_kinds=(PearWorkerRun.SHARED,),
+                )
+
+        active_run.refresh_from_db()
+        self.assertEqual(active_run.heartbeat_at, old_heartbeat)
+
+        self.assertEqual(
+            maintain_pear_worker_run_liveness(
+                active_run_id=active_run.id,
+                active_run_attempt=3,
+                session_kinds=(PearWorkerRun.SHARED,),
+            ),
+            0,
+        )
+        active_run.refresh_from_db()
+        self.assertGreater(active_run.heartbeat_at, old_heartbeat)
+
+    def test_worker_liveness_ignores_the_exact_attempt_after_it_settles(self) -> None:
+        owner = self.example_user("hamlet")
+        pear_bot = self.create_test_bot(
+            "pear",
+            owner,
+            full_name="Pear",
+            bot_type=UserProfile.EMBEDDED_BOT,
+            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+        )
+        settled_run = PearWorkerRun.objects.create(
+            realm=owner.realm,
+            bot_profile=pear_bot,
+            requesting_user=owner,
+            trigger_message_id=961,
+            stream_name=PEAR_DEFAULT_STREAM,
+            topic_name="settled-liveness",
+            status=PearWorkerRun.DONE,
+            attempts=4,
+            heartbeat_at=timezone_now(),
+        )
+
+        self.assertEqual(
+            maintain_pear_worker_run_liveness(
+                active_run_id=settled_run.id,
+                active_run_attempt=4,
+                session_kinds=(PearWorkerRun.SHARED,),
+            ),
+            0,
         )
 
     def test_worker_run_store_events_refresh_heartbeat_when_due(self) -> None:
@@ -3285,6 +4156,79 @@ class PearSessionEndpointTest(ZulipTestCase):
         self.assertEqual(run.status, PearWorkerRun.CANCELLED)
         self.assertIsNotNone(run.cancel_requested_at)
 
+    def test_pause_locks_workspace_before_run(self) -> None:
+        owner = self.example_user("hamlet")
+        pear_bot = self.create_test_bot(
+            "pear-lock-order",
+            owner,
+            full_name="Pear",
+            bot_type=UserProfile.EMBEDDED_BOT,
+            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+        )
+        run = PearWorkerRun.objects.create(
+            realm=owner.realm,
+            bot_profile=pear_bot,
+            requesting_user=owner,
+            trigger_message_id=916,
+            stream_name=PEAR_DEFAULT_STREAM,
+            topic_name="topic-lock-order",
+            status=PearWorkerRun.RUNNING,
+        )
+        call_order: list[str] = []
+        real_select_for_update = PearWorkerRun.objects.select_for_update
+
+        def select_for_update(*args: Any, **kwargs: Any) -> Any:
+            call_order.append("run")
+            return real_select_for_update(*args, **kwargs)
+
+        with (
+            patch(
+                "zerver.views.pear.set_pear_workspace_paused",
+                side_effect=lambda *args, **kwargs: call_order.append("workspace"),
+            ),
+            patch.object(
+                PearWorkerRun.objects,
+                "select_for_update",
+                side_effect=select_for_update,
+            ),
+            patch("zerver.views.pear.send_pear_run_event"),
+        ):
+            update_pear_run_control_event(owner, run.id, "pause", "Paused by user.")
+
+        self.assertEqual(call_order, ["workspace", "run"])
+
+    def test_cancel_does_not_record_false_event_after_completion(self) -> None:
+        owner = self.example_user("hamlet")
+        self.subscribe(owner, PEAR_DEFAULT_STREAM)
+        pear_bot = self.create_test_bot(
+            "pear",
+            owner,
+            full_name="Pear",
+            bot_type=UserProfile.EMBEDDED_BOT,
+            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+        )
+        run = PearWorkerRun.objects.create(
+            realm=owner.realm,
+            bot_profile=pear_bot,
+            requesting_user=owner,
+            trigger_message_id=915,
+            stream_name=PEAR_DEFAULT_STREAM,
+            topic_name="topic-a",
+            status=PearWorkerRun.DONE,
+        )
+        self.login_user(owner)
+
+        with patch("zerver.views.pear.send_pear_run_event") as send_run_event:
+            result = self.client_post(
+                f"/json/pear/runs/{run.id}/cancel",
+                intentionally_undocumented=True,
+            )
+
+        response = self.assert_json_success(result)
+        self.assertEqual(response["pear_run"]["status"], PearWorkerRun.DONE)
+        self.assertFalse(run.events.filter(event_type="cancel").exists())
+        send_run_event.assert_not_called()
+
     def test_worker_event_push_and_presentation_respect_commit_order(self) -> None:
         owner = self.example_user("hamlet")
         self.subscribe(owner, PEAR_DEFAULT_STREAM)
@@ -3354,6 +4298,7 @@ class PearSessionEndpointTest(ZulipTestCase):
             stream_name=PEAR_DEFAULT_STREAM,
             topic_name="topic-a",
             status=PearWorkerRun.RUNNING,
+            codex_thread_id="root-thread",
         )
         PearWorkerRunEvent.objects.create(
             run=run,
@@ -3389,6 +4334,89 @@ class PearSessionEndpointTest(ZulipTestCase):
             event_type="transcript",
             summary="Codex",
             payload={"kind": "assistant", "body": "I’m checking the relevant files."},
+        )
+        PearWorkerRunEvent.objects.create(
+            run=run,
+            event_type="agent",
+            summary="Codex thread child-thread",
+            payload={
+                "kind": "session",
+                "title": "Codex thread child-thread",
+                "metadata": {
+                    "codex_method": "thread/started",
+                    "codex_thread_id": "child-thread",
+                    "thread": {
+                        "id": "child-thread",
+                        "parent_thread_id": "root-thread",
+                        "agent_nickname": "Scout",
+                        "agent_role": "researcher",
+                        "status": {"type": "active"},
+                        "created_at": 1.0,
+                    },
+                },
+            },
+        )
+        PearWorkerRunEvent.objects.create(
+            run=run,
+            event_type="agent",
+            summary="Hidden child reasoning",
+            payload={
+                "kind": "reasoning",
+                "body": "private child chain of thought",
+                "metadata": {
+                    "codex_method": "item/completed",
+                    "codex_thread_id": "child-thread",
+                    "codex_turn_id": "child-turn",
+                },
+            },
+        )
+        PearWorkerRunEvent.objects.create(
+            run=run,
+            event_type="agent",
+            summary="Inspect child files",
+            payload={
+                "kind": "command",
+                "title": "Inspect child files",
+                "body": "secret child command output",
+                "status": "done",
+                "metadata": {
+                    "codex_method": "item/completed",
+                    "codex_thread_id": "child-thread",
+                    "codex_turn_id": "child-turn",
+                },
+            },
+        )
+        PearWorkerRunEvent.objects.create(
+            run=run,
+            event_type="agent",
+            summary="Child result",
+            payload={
+                "kind": "assistant",
+                "body": "The child found the relevant rendering seam.",
+                "status": "done",
+                "metadata": {
+                    "codex_method": "item/completed",
+                    "codex_thread_id": "child-thread",
+                    "codex_turn_id": "child-turn",
+                },
+            },
+        )
+        PearWorkerRunEvent.objects.create(
+            run=run,
+            event_type="agent",
+            summary="Codex runtime error.",
+            payload={
+                "kind": "error",
+                "title": "Codex runtime error.",
+                "body": "secret child runtime detail",
+                "status": "failed",
+                "metadata": {
+                    "codex_method": "error",
+                    "codex_thread_id": "child-thread",
+                    "codex_turn_id": "child-turn",
+                    "parent_thread_id": "root-thread",
+                },
+            },
         )
         self.login_user(owner)
 
@@ -3433,6 +4461,44 @@ class PearSessionEndpointTest(ZulipTestCase):
         self.assertEqual(len(third_page["trace"]), 1)
         self.assertEqual(third_page["trace"][0]["kind"], "command")
         self.assertFalse(third_page["has_more"])
+
+        child_trace_result = self.client_get(
+            f"/json/pear/runs/{run.id}/trace?thread_id=child-thread",
+            intentionally_undocumented=True,
+        )
+        child_trace_payload = self.assert_json_success(child_trace_result)
+        self.assertEqual(child_trace_payload["thread_id"], "child-thread")
+        child_trace_text = orjson.dumps(child_trace_payload["trace"]).decode()
+        self.assertIn("Inspect child files", child_trace_text)
+        self.assertIn("The child found the relevant rendering seam.", child_trace_text)
+        self.assertIn("Codex runtime error.", child_trace_text)
+        self.assertNotIn("private child chain of thought", child_trace_text)
+        self.assertNotIn("secret child command output", child_trace_text)
+        self.assertNotIn("secret child runtime detail", child_trace_text)
+        self.assertIn(
+            "The child found the relevant rendering seam.", child_trace_payload["rendered"]
+        )
+        self.assertIn("Codex runtime error.", child_trace_payload["rendered"])
+        self.assertNotIn("private child chain of thought", child_trace_payload["rendered"])
+        self.assertNotIn("secret child command output", child_trace_payload["rendered"])
+        self.assertNotIn("secret child runtime detail", child_trace_payload["rendered"])
+
+        missing_child_result = self.client_get(
+            f"/json/pear/runs/{run.id}/trace?thread_id=unrelated-thread",
+            intentionally_undocumented=True,
+        )
+        self.assert_json_error(missing_child_result, "Pear agent thread not found.")
+
+        run_payload = self.assert_json_success(
+            self.client_get(
+                f"/json/pear/runs/{run.id}",
+                intentionally_undocumented=True,
+            )
+        )["pear_run"]
+        self.assertEqual(len(run_payload["agents"]), 1)
+        self.assertEqual(run_payload["agents"][0]["thread_id"], "child-thread")
+        self.assertEqual(run_payload["agents"][0]["nickname"], "Scout")
+        self.assertEqual(run_payload["agents"][0]["status"], "failed")
 
         with (
             patch("zerver.views.pear.mark_pear_run_attended") as mark_attended,
@@ -4404,7 +5470,12 @@ class PearMonitorTest(ZulipTestCase):
         self.subscribe(owner, PEAR_DEFAULT_STREAM)
         self.login_user(owner)
         for index in range(PEAR_MONITOR_MAX_PER_TOPIC):
-            self.create_live_monitor(owner, pear_bot, title=f"m{index}")
+            self.create_live_monitor(
+                owner,
+                pear_bot,
+                title=f"m{index}",
+                topic_name=(PEAR_DEFAULT_TOPIC.upper() if index == 0 else PEAR_DEFAULT_TOPIC),
+            )
         result = self.client_post(
             "/json/pear/monitors",
             {
@@ -4415,6 +5486,26 @@ class PearMonitorTest(ZulipTestCase):
             intentionally_undocumented=True,
         )
         self.assert_json_error(result, "This topic already has the maximum number of monitors.")
+
+    def test_monitor_list_uses_logical_case_insensitive_topic_scope(self) -> None:
+        owner = self.example_user("hamlet")
+        pear_bot = self.create_pear_bot(owner)
+        self.subscribe(owner, PEAR_DEFAULT_STREAM)
+        monitor = self.create_live_monitor(
+            owner,
+            pear_bot,
+            topic_name=PEAR_DEFAULT_TOPIC.upper(),
+        )
+        self.login_user(owner)
+
+        result = self.client_get(
+            "/json/pear/monitors",
+            {"stream": PEAR_DEFAULT_STREAM, "topic": PEAR_DEFAULT_TOPIC},
+            intentionally_undocumented=True,
+        )
+
+        payload = self.assert_json_success(result)
+        self.assertEqual([item["id"] for item in payload["pear_monitors"]], [monitor.id])
 
     def test_monitor_actions_and_delete(self) -> None:
         owner = self.example_user("hamlet")

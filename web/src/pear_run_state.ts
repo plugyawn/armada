@@ -9,6 +9,7 @@ type PearRunForActiveMessage = {
     current_activity?: string | undefined;
     plan?: PearRunPlanStep[] | null | undefined;
     overview?: string | null | undefined;
+    agents?: PearAgentThread[] | undefined;
     tool_count?: number | undefined;
     date_created?: number | undefined;
     date_updated?: number | undefined;
@@ -39,6 +40,21 @@ export type PearRunPlanStep = {
     status: string;
 };
 
+export type PearAgentThread = {
+    thread_id: string;
+    nickname?: string | null | undefined;
+    role?: string | null | undefined;
+    name?: string | null | undefined;
+    status: string;
+    current_activity?: string | undefined;
+};
+
+export type PearAgentThreadDelta = {
+    thread_id: string;
+    status?: string | undefined;
+    current_activity?: string | undefined;
+};
+
 export type PearRunLiveView = {
     id: number;
     snapshot_sequence?: number | undefined;
@@ -49,6 +65,7 @@ export type PearRunLiveView = {
     current_activity?: string | undefined;
     plan?: PearRunPlanStep[] | null | undefined;
     overview?: string | null | undefined;
+    agents?: PearAgentThread[] | undefined;
     has_visible_assistant_text?: boolean | undefined;
     live_updated_at?: number | undefined;
     trace_available?: boolean | undefined;
@@ -90,7 +107,12 @@ export type PearRunPushEvent = {
     trace_available: boolean;
     run_date_created: number;
     date_created: number;
+    agent_thread_id?: string | null | undefined;
+    agent?: PearAgentThreadDelta | null | undefined;
+    agents?: PearAgentThread[] | null | undefined;
 };
+
+type PearRunStateListener = (run: PearRunLiveView, event?: PearRunPushEvent) => void;
 
 type PearActiveResultMessageChange = {
     removed_message_ids: number[];
@@ -129,7 +151,7 @@ const active_run_operations = new Map<number, PearRunOperation>();
 const run_views_by_id = new Map<number, PearRunLiveView>();
 const run_ids_by_result_message = new Map<number, number>();
 const latest_sequence_by_run_id = new Map<number, number>();
-const run_state_listeners = new Set<(run: PearRunLiveView) => void>();
+const run_state_listeners = new Set<PearRunStateListener>();
 const active_result_message_change_listeners = new Set<
     (change: PearActiveResultMessageChange) => void
 >();
@@ -325,6 +347,7 @@ export function remember_runs(runs: PearRunForActiveMessage[]): void {
             current_activity: run.current_activity,
             plan: run.plan,
             overview: run.overview,
+            agents: run.agents,
             has_visible_assistant_text: run.live?.has_visible_assistant_text,
             live_updated_at: run.live?.updated_at,
             trace_available: true,
@@ -343,11 +366,6 @@ export function remember_runs(runs: PearRunForActiveMessage[]): void {
         if (run.snapshot_sequence !== undefined && run.snapshot_sequence > latest_event_sequence) {
             latest_sequence_by_run_id.set(run.id, run.snapshot_sequence);
         }
-        const base_view =
-            previous?.updated_at !== undefined &&
-            previous.updated_at > (hydrated_view.updated_at ?? Number.NEGATIVE_INFINITY)
-                ? previous
-                : hydrated_view;
         const hydrated_live_is_newer =
             hydrated_view.live_updated_at !== undefined &&
             hydrated_view.live_updated_at >=
@@ -356,7 +374,10 @@ export function remember_runs(runs: PearRunForActiveMessage[]): void {
         // clocks.  A newer push must not prevent the next authoritative live
         // snapshot from revealing the first real assistant text.
         const view: PearRunLiveView = {
-            ...base_view,
+            // The event watermark, not date_updated, establishes durable
+            // ordering. A current snapshot contains the complete derived
+            // agent graph even when heartbeat time predates the last event.
+            ...hydrated_view,
             has_visible_assistant_text: hydrated_live_is_newer
                 ? hydrated_view.has_visible_assistant_text
                 : previous?.has_visible_assistant_text,
@@ -376,7 +397,9 @@ export function remember_runs(runs: PearRunForActiveMessage[]): void {
         if (typeof view.result_message_id === "number") {
             run_ids_by_result_message.set(view.result_message_id, run.id);
         }
-        if (is_active_status(run.status)) {
+        const agents_changed =
+            JSON.stringify(previous?.agents ?? []) !== JSON.stringify(view.agents ?? []);
+        if (is_active_status(run.status) || agents_changed) {
             for (const listener of run_state_listeners) {
                 listener(view);
             }
@@ -399,6 +422,36 @@ export function event_is_latest(run_id: number, sequence: number): boolean {
     return sequence === (latest_sequence_by_run_id.get(run_id) ?? 0);
 }
 
+function agents_after_event(
+    previous: PearAgentThread[] | undefined,
+    agents: PearAgentThread[] | null | undefined,
+    delta: PearAgentThreadDelta | null | undefined,
+): PearAgentThread[] | undefined {
+    if (agents !== undefined && agents !== null) {
+        return agents;
+    }
+    if (delta === undefined || delta === null || previous === undefined) {
+        return previous;
+    }
+    const index = previous.findIndex((agent) => agent.thread_id === delta.thread_id);
+    if (index === -1) {
+        // A delta cannot establish presentation metadata. Wait for the next
+        // bounded topology snapshot instead of inventing a partial child.
+        return previous;
+    }
+    return previous.map((agent, agent_index) => {
+        if (agent_index !== index) {
+            return agent;
+        }
+        const merged: PearAgentThread = {
+            ...agent,
+            status: delta.status ?? agent.status,
+            current_activity: delta.current_activity ?? agent.current_activity,
+        };
+        return merged;
+    });
+}
+
 export function apply_pear_run_event(event: PearRunPushEvent): void {
     if (
         event.version !== 1 ||
@@ -418,6 +471,7 @@ export function apply_pear_run_event(event: PearRunPushEvent): void {
         current_activity: event.current_activity,
         plan: event.plan ?? previous?.plan,
         overview: event.overview ?? (event.plan === null ? previous?.overview : null),
+        agents: agents_after_event(previous?.agents, event.agents, event.agent),
         has_visible_assistant_text:
             event.has_visible_assistant_text ?? previous?.has_visible_assistant_text,
         live_updated_at:
@@ -477,7 +531,7 @@ export function apply_pear_run_event(event: PearRunPushEvent): void {
         });
     }
     for (const listener of run_state_listeners) {
-        listener(view);
+        listener(view, event);
     }
 }
 
@@ -493,7 +547,7 @@ export function get_run_view_by_id(run_id: number): PearRunLiveView | undefined 
     return run_views_by_id.get(run_id);
 }
 
-export function on_run_state_changed(listener: (run: PearRunLiveView) => void): () => void {
+export function on_run_state_changed(listener: PearRunStateListener): () => void {
     run_state_listeners.add(listener);
     return () => run_state_listeners.delete(listener);
 }

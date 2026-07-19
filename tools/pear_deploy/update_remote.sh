@@ -208,7 +208,7 @@ ssh_zulip_clean() {
 }
 
 detect_remote_pear_schema_state() {
-    ssh_zulip "$REMOTE_PATH/.venv/bin/python3 $REMOTE_PATH/manage.py shell -c 'from django.db import connection; cursor = connection.cursor(); cursor.execute(\"SELECT name FROM django_migrations WHERE app = %s AND name LIKE %s\", [\"zerver\", \"08%pear%\"]); names = {row[0] for row in cursor.fetchall()}; current = {\"0805_pear_runtime\"}; print(\"current\" if names == current else \"empty\" if not names else \"unexpected\")'"
+    ssh_zulip "$REMOTE_PATH/.venv/bin/python3 $REMOTE_PATH/manage.py shell -c 'from django.db import connection; cursor = connection.cursor(); cursor.execute(\"SELECT name FROM django_migrations WHERE app = %s AND name LIKE %s\", [\"zerver\", \"08%pear%\"]); names = {row[0] for row in cursor.fetchall()}; current = {\"0805_pear_runtime\", \"0806_pear_workspace_scope_casefold\"}; print(\"current\" if names == current else \"empty\" if not names else \"unexpected\")'"
 }
 
 preflight_remote_workspace_helper() {
@@ -346,6 +346,7 @@ verify_remote_readiness() {
     local phase="$1"
     local services="${2:-${PEAR_DEPLOY_SERVICES[*]}}"
     local queues="${3:-${PEAR_DEPLOY_QUEUES[*]}}"
+    local queue_snapshot
 
     echo "$phase: Pear stale-run health"
     if ! ssh_zulip "$REMOTE_PATH/tools/pear-health-report --allow-active-runs --max-stale-active-runs 0"; then
@@ -358,10 +359,19 @@ verify_remote_readiness() {
     fi
 
     echo "$phase: queue readiness"
-    if ! ssh_root "rabbitmqctl list_queues name messages_ready messages_unacknowledged consumers" |
+    queue_snapshot="$(
+        ssh_root "rabbitmqctl list_queues name messages_ready messages_unacknowledged consumers"
+    )"
+    if ! printf '%s\n' "$queue_snapshot" |
         validate_pear_deploy_queue_ready_snapshot "$queues"; then
         fail "$phase failed: one or more deploy-managed queues are missing or unconsumed"
     fi
+    if ! printf '%s\n' "$queue_snapshot" | validate_pear_worker_pool_snapshot; then
+        fail "$phase failed: the two-slot Pear worker pool is not fully connected"
+    fi
+
+    echo "$phase: worker delivery policy"
+    verify_remote_pear_worker_consumer_timeout_policy
 }
 
 configure_predeploy_runtime_expectations() {
@@ -859,6 +869,8 @@ rollback_on_error() {
             "$REMOTE_PATH" \
             "$REMOTE_GIT_COMMON_DIR" \
             "$REMOTE_PEAR_SKILLS_DIR" \
+            "${PREDEPLOY_SERVICES[*]}" \
+            "${PREDEPLOY_QUEUES[*]}" \
             "${#PEAR_DEPLOY_RUNTIME_CONFIG_PATHS[@]}" \
             "${PEAR_DEPLOY_RUNTIME_CONFIG_PATHS[@]}" \
             "${#PEAR_DEPLOY_RSYNC_EXCLUDES[@]}" \
@@ -868,8 +880,10 @@ SNAPSHOT_DIR="$1"
 REMOTE_PATH="$2"
 REMOTE_GIT_COMMON_DIR="$3"
 REMOTE_PEAR_SKILLS_DIR="$4"
-RUNTIME_CONFIG_COUNT="$5"
-shift 5
+PREDEPLOY_SERVICES="$5"
+PREDEPLOY_QUEUES="$6"
+RUNTIME_CONFIG_COUNT="$7"
+shift 7
 RUNTIME_CONFIG_PATHS=("${@:1:RUNTIME_CONFIG_COUNT}")
 shift "$RUNTIME_CONFIG_COUNT"
 RSYNC_EXCLUDE_COUNT="$1"
@@ -881,8 +895,68 @@ if [[ "${#RSYNC_EXCLUDES[@]}" -ne "$RSYNC_EXCLUDE_COUNT" ]]; then
 fi
 
 systemctl stop caddy pear-worker pear-monitor-worker pear-embedded-bots pear-thumbnail pear-zulip-dev
+systemctl stop pear-worker-1 2>/dev/null || true
+if [[ " $PREDEPLOY_SERVICES " != *" pear-worker-1 "* ]]; then
+    systemctl disable pear-worker-1 2>/dev/null || true
+fi
 systemctl stop pear-addressing 2>/dev/null || true
 systemctl stop pear-presentation 2>/dev/null || true
+
+# The pre-release Workspace is disposable, but queue deliveries must never be
+# left pointing at RUNNING rows that the restored single-slot runtime cannot
+# consume. Settle every active row while the new source is still present, then
+# purge both worker queues before restoring code and units.
+sudo -Hu zulipdev bash -lc "cd '$REMOTE_PATH' && set -a && . /home/zulipdev/pear.env && set +a && .venv/bin/python3 manage.py shell" <<'PY'
+from django.db import transaction
+from django.utils.timezone import now
+
+from zerver.lib.pear_worker import settle_orphaned_pear_run_message
+from zerver.models.bots import PearWorkerRun
+
+rollback_error = "Run interrupted by deployment rollback."
+with transaction.atomic():
+    runs = list(
+        PearWorkerRun.objects.select_for_update()
+        .select_related("bot_profile")
+        .filter(status__in=(PearWorkerRun.QUEUED, PearWorkerRun.RUNNING))
+    )
+    finished_at = now()
+    for run in runs:
+        run.status = PearWorkerRun.FAILED
+        run.error = rollback_error
+        run.current_activity = rollback_error
+        run.summary = rollback_error
+        run.heartbeat_at = None
+        run.date_updated = finished_at
+        run.date_finished = finished_at
+        run.save(
+            update_fields=[
+                "status",
+                "error",
+                "current_activity",
+                "summary",
+                "heartbeat_at",
+                "date_updated",
+                "date_finished",
+            ]
+        )
+for run in runs:
+    settle_orphaned_pear_run_message(run)
+print(f"rollback_settled_runs={len(runs)}")
+PY
+
+worker_queues="$(
+    rabbitmqctl list_queues -p / name --formatter json |
+        python3 -c 'import json, sys; expected = {"pear_worker", "pear_worker_1"}; rows = json.load(sys.stdin); print("\n".join(row["name"] for row in rows if isinstance(row, dict) and row.get("name") in expected))'
+)"
+while IFS= read -r queue; do
+    if [[ -n "$queue" ]]; then
+        rabbitmqctl purge_queue -p / "$queue"
+        if [[ "$queue" == "pear_worker_1" ]]; then
+            rabbitmqctl delete_queue -p / "$queue"
+        fi
+    fi
+done <<<"$worker_queues"
 
 rsync -a --delete \
     "${RSYNC_EXCLUDES[@]}" \
@@ -925,14 +999,66 @@ if [[ -s "$SNAPSHOT_DIR/runtime-config.paths" ]]; then
 fi
 
 systemctl daemon-reload
-ROLLBACK_SERVICES=(caddy pear-worker pear-monitor-worker pear-embedded-bots pear-thumbnail pear-zulip-dev)
+ROLLBACK_SERVICES=()
+for service in caddy pear-worker pear-worker-1 pear-monitor-worker pear-embedded-bots pear-thumbnail pear-zulip-dev; do
+    if systemctl cat "$service" >/dev/null 2>&1; then
+        ROLLBACK_SERVICES+=("$service")
+    fi
+done
 if systemctl cat pear-addressing >/dev/null 2>&1; then
     ROLLBACK_SERVICES+=(pear-addressing)
 fi
 if systemctl cat pear-presentation >/dev/null 2>&1; then
     ROLLBACK_SERVICES+=(pear-presentation)
 fi
-systemctl restart "${ROLLBACK_SERVICES[@]}"
+if [[ "${#ROLLBACK_SERVICES[@]}" -gt 0 ]]; then
+    systemctl restart "${ROLLBACK_SERVICES[@]}"
+fi
+
+validate_predeploy_queues() {
+    awk -v expected_queues="$PREDEPLOY_QUEUES" '
+BEGIN {
+    count = split(expected_queues, expected, " ")
+    for (i = 1; i <= count; i += 1) {
+        required[expected[i]] = 1
+    }
+}
+$1 in required {
+    seen[$1] = 1
+    if ($2 !~ /^[0-9]+$/ || $3 !~ /^[0-9]+$/ || $4 !~ /^[0-9]+$/ || $2 != 0 || $3 != 0 || $4 < 1) {
+        bad = 1
+    }
+}
+END {
+    for (queue in required) {
+        if (!(queue in seen)) {
+            bad = 1
+        }
+    }
+    exit bad
+}
+'
+}
+
+rollback_ready=false
+for _ in $(seq 1 30); do
+    if systemctl is-active $PREDEPLOY_SERVICES >/dev/null 2>&1 &&
+        sudo -Hu zulipdev bash -lc "cd '$REMOTE_PATH' && set -a && . /home/zulipdev/pear.env && set +a && tools/pear-health-report --max-active-runs 0 --max-stale-active-runs 0" >/dev/null 2>&1 &&
+        rabbitmqctl list_queues -p / name messages_ready messages_unacknowledged consumers 2>/dev/null |
+            validate_predeploy_queues; then
+        rollback_ready=true
+        break
+    fi
+    sleep 1
+done
+if [[ "$rollback_ready" != true ]]; then
+    echo "restored Pear runtime did not become healthy after rollback" >&2
+    systemctl is-active $PREDEPLOY_SERVICES || true
+    sudo -Hu zulipdev bash -lc "cd '$REMOTE_PATH' && set -a && . /home/zulipdev/pear.env && set +a && tools/pear-health-report --max-active-runs 0 --max-stale-active-runs 0" || true
+    rabbitmqctl list_queues -p / name messages_ready messages_unacknowledged consumers |
+        validate_predeploy_queues || true
+    exit 1
+fi
 REMOTE
         local rollback_status=$?
         set -e
@@ -950,7 +1076,7 @@ REMOTE
         "$SERVICE_RESTART_REQUIRED" == true
     ]]; then
         echo "Update failed before a rollback snapshot was ready; restarting the pre-deploy services." >&2
-        if ssh_root "systemctl restart caddy ${PEAR_DEPLOY_SERVICES[*]}"; then
+        if ssh_root "systemctl restart caddy ${PREDEPLOY_SERVICES[*]}"; then
             SERVICE_RESTART_REQUIRED=false
         else
             echo "Pre-snapshot service recovery failed; inspect the host immediately." >&2
@@ -1322,6 +1448,7 @@ ssh_root python3 "$REMOTE_TRUSTED_RUNTIME/tools/pear_deploy/runtime_config.py" v
     --repo-root "$REMOTE_TRUSTED_RUNTIME" \
     --fqdn "$FQDN"
 install_remote_gemini_config
+install_remote_pear_worker_consumer_timeout_policy
 ssh_root "systemctl daemon-reload"
 ssh_root "systemctl enable ${PEAR_DEPLOY_SERVICES[*]}"
 
@@ -1331,6 +1458,8 @@ ssh_zulip "$REMOTE_PATH/.venv/bin/python3 $REMOTE_PATH/manage.py migrate zerver 
 echo "Restarting Pear services..."
 ssh_root "systemctl restart caddy ${PEAR_DEPLOY_SERVICES[*]}"
 SERVICE_RESTART_REQUIRED=false
+wait_for_remote_pear_worker_consumer_timeout_queues
+wait_for_remote_pear_worker_pool_topology
 
 echo "Waiting for the public Caddy app route to serve..."
 SITE_CODE=""
@@ -1393,8 +1522,8 @@ ssh_zulip "$REMOTE_PATH/.venv/bin/python3 $REMOTE_PATH/manage.py showmigrations 
 echo "Service status:"
 ssh_root "systemctl --no-pager --full status ${PEAR_DEPLOY_SERVICES[*]}" | sed -n "1,120p"
 
-echo "pear-worker log tail:"
-ssh_root 'journalctl -u pear-worker -n 40 --no-pager'
+echo "Pear worker pool log tail:"
+ssh_root 'journalctl -u pear-worker -u pear-worker-1 -n 80 --no-pager'
 
 echo "pear-addressing log tail:"
 ssh_root 'journalctl -u pear-addressing -n 40 --no-pager'

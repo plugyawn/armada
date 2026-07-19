@@ -47,6 +47,194 @@ test("ambient run ids are retained by result message", () => {
     assert.equal(pear_run_state.get_ambient_run_id(301), undefined);
 });
 
+test("agent snapshots hydrate once and unrelated push events preserve them", () => {
+    const agents = [
+        {
+            thread_id: "child-a",
+            nickname: "Scout",
+            status: "active",
+        },
+    ];
+    pear_run_state.remember_runs([
+        {
+            id: 44,
+            status: "running",
+            ambient_triggered: false,
+            result_message_id: 304,
+            agents,
+        },
+    ]);
+    assert.deepEqual(pear_run_state.get_run_view_by_id(44).agents, agents);
+
+    pear_run_state.apply_pear_run_event({
+        version: 1,
+        sequence: 1,
+        run_id: 44,
+        event_type: "transcript",
+        status: "running",
+        result_message_id: 304,
+        stream: "devel",
+        topic: "agents",
+        current_activity: "Working",
+        tool_count: 1,
+        plan: null,
+        overview: null,
+        has_visible_assistant_text: true,
+        usage: null,
+        duration_seconds: null,
+        trace_available: true,
+        run_date_created: 10,
+        date_created: 11,
+        agent_thread_id: null,
+    });
+    assert.deepEqual(pear_run_state.get_run_view_by_id(44).agents, agents);
+});
+
+test("native agent activity merges into an existing descriptor", () => {
+    pear_run_state.remember_runs([
+        {
+            id: 46,
+            status: "running",
+            ambient_triggered: false,
+            result_message_id: 306,
+            agents: [
+                {
+                    thread_id: "child-a",
+                    nickname: "Scout",
+                    status: "active",
+                    current_activity: "Starting",
+                },
+            ],
+        },
+    ]);
+
+    pear_run_state.apply_pear_run_event({
+        version: 1,
+        sequence: 1,
+        run_id: 46,
+        event_type: "agent",
+        status: "running",
+        result_message_id: 306,
+        stream: "devel",
+        topic: "agents",
+        current_activity: "Delegating",
+        tool_count: 1,
+        plan: null,
+        overview: null,
+        has_visible_assistant_text: true,
+        usage: null,
+        duration_seconds: null,
+        trace_available: true,
+        run_date_created: 10,
+        date_created: 12,
+        agent_thread_id: "child-a",
+        agent: {
+            thread_id: "child-a",
+            current_activity: "Inspect files",
+        },
+    });
+
+    assert.deepEqual(pear_run_state.get_run_view_by_id(46).agents, [
+        {
+            thread_id: "child-a",
+            nickname: "Scout",
+            status: "active",
+            current_activity: "Inspect files",
+        },
+    ]);
+});
+
+test("native agent activity never invents an unknown child descriptor", () => {
+    const agents = [
+        {
+            thread_id: "child-a",
+            nickname: "Scout",
+            status: "active",
+        },
+    ];
+    pear_run_state.remember_runs([
+        {
+            id: 47,
+            status: "running",
+            ambient_triggered: false,
+            result_message_id: 307,
+            agents,
+        },
+    ]);
+
+    pear_run_state.apply_pear_run_event({
+        version: 1,
+        sequence: 1,
+        run_id: 47,
+        event_type: "agent",
+        status: "running",
+        result_message_id: 307,
+        stream: "devel",
+        topic: "agents",
+        current_activity: "Delegating",
+        tool_count: 1,
+        plan: null,
+        overview: null,
+        has_visible_assistant_text: true,
+        usage: null,
+        duration_seconds: null,
+        trace_available: true,
+        run_date_created: 10,
+        date_created: 12,
+        agent_thread_id: "child-missing",
+        agent: {
+            thread_id: "child-missing",
+            status: "active",
+        },
+    });
+
+    assert.deepEqual(pear_run_state.get_run_view_by_id(47).agents, agents);
+});
+
+test("native agent event identity reaches listeners with the refreshed snapshot", () => {
+    const agents = [
+        {
+            thread_id: "child-a",
+            nickname: "Scout",
+            status: "active",
+        },
+    ];
+    let observed;
+    const unsubscribe = pear_run_state.on_run_state_changed((run, event) => {
+        if (event !== undefined) {
+            observed = {run, event};
+        }
+    });
+    try {
+        pear_run_state.apply_pear_run_event({
+            version: 1,
+            sequence: 1,
+            run_id: 45,
+            event_type: "agent",
+            status: "running",
+            result_message_id: 305,
+            stream: "devel",
+            topic: "agents",
+            current_activity: "Delegating",
+            tool_count: 1,
+            plan: null,
+            overview: null,
+            has_visible_assistant_text: true,
+            usage: null,
+            duration_seconds: null,
+            trace_available: true,
+            run_date_created: 10,
+            date_created: 11,
+            agent_thread_id: "child-a",
+            agents,
+        });
+        assert.equal(observed.event.agent_thread_id, "child-a");
+        assert.deepEqual(observed.run.agents, agents);
+    } finally {
+        unsubscribe();
+    }
+});
+
 test("done run clears active result message immediately", () => {
     const changes = [];
     const unsubscribe = pear_run_state.on_active_run_result_messages_changed((change) =>
@@ -301,6 +489,62 @@ test("authoritative snapshot advances the event watermark", () => {
     assert.equal(pear_run_state.get_run_view(100).status, "done");
     assert.ok(pear_run_state.event_is_latest(10, 30));
     assert.ok(!pear_run_state.event_is_latest(10, 29));
+});
+
+test("authoritative snapshot hydrates a newer agent graph despite an older heartbeat", () => {
+    const first_agent = {
+        thread_id: "child-a",
+        nickname: "Scout",
+        status: "active",
+    };
+    pear_run_state.apply_pear_run_event({
+        version: 1,
+        sequence: 40,
+        run_id: 11,
+        event_type: "agent",
+        status: "running",
+        result_message_id: 110,
+        stream: "devel",
+        topic: "agents",
+        current_activity: "Delegating",
+        tool_count: 1,
+        plan: null,
+        overview: null,
+        has_visible_assistant_text: true,
+        usage: null,
+        duration_seconds: null,
+        trace_available: true,
+        run_date_created: 100,
+        date_created: 400,
+        agent_thread_id: "child-a",
+        agents: [first_agent],
+    });
+
+    const authoritative_agents = [
+        first_agent,
+        {
+            thread_id: "child-b",
+            nickname: "Verifier",
+            status: "idle",
+        },
+    ];
+    pear_run_state.remember_runs([
+        {
+            id: 11,
+            snapshot_sequence: 40,
+            status: "running",
+            ambient_triggered: false,
+            result_message_id: 110,
+            stream: "devel",
+            topic: "agents",
+            current_activity: "Delegating",
+            agents: authoritative_agents,
+            date_created: 100,
+            date_updated: 200,
+        },
+    ]);
+
+    assert.deepEqual(pear_run_state.get_run_view_by_id(11).agents, authoritative_agents);
 });
 
 test("typed assistant-visible push retires the placeholder immediately", () => {

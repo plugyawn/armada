@@ -17,7 +17,7 @@ def pear_project_stream_ids_for_realm(realm: Realm) -> list[int]:
 def pear_workspace_topics_for_stream(realm: Realm, stream_name: str) -> list[dict[str, str]]:
     nodes = PearWorkspaceNode.objects.filter(
         realm=realm,
-        stream_name=stream_name,
+        stream_name__iexact=stream_name,
         lifecycle_status=PearWorkspaceNode.ACTIVE,
     ).order_by("topic_name")
     return [{"topic": node.topic_name, "branch": node.branch_name} for node in nodes]

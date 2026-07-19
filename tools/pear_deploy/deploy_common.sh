@@ -53,6 +53,8 @@ PEAR_DEPLOY_RUNTIME_CONFIG_PATHS=(
     /etc/systemd/system/pear-zulip-dev.service
     /etc/systemd/system/pear-addressing.service
     /etc/systemd/system/pear-presentation.service
+    /etc/systemd/system/pear-worker.service
+    /etc/systemd/system/pear-worker-1.service
     /home/zulipdev/pear.env
     /home/zulipdev/pear-deployed-sha
     /var/lib/pear
@@ -70,6 +72,8 @@ PEAR_DEPLOY_TRUSTED_BUNDLE_PATHS=(
     tools/pear_deploy/runtime/pear-zulip-dev.service
     tools/pear_deploy/runtime/pear-addressing.service
     tools/pear_deploy/runtime/pear-presentation.service
+    tools/pear_deploy/runtime/pear-worker.service
+    tools/pear_deploy/runtime/pear-worker-1.service
     zerver/lib/pear_workspace_io.py
 )
 
@@ -78,6 +82,7 @@ PEAR_WORKSPACE_HELPER_PATH="/usr/local/lib/pear-workspace-io"
 
 PEAR_DEPLOY_SERVICES=(
     pear-worker
+    pear-worker-1
     pear-monitor-worker
     pear-addressing
     pear-presentation
@@ -88,6 +93,7 @@ PEAR_DEPLOY_SERVICES=(
 
 PEAR_DEPLOY_WORKER_SERVICES=(
     pear-worker
+    pear-worker-1
     pear-monitor-worker
     pear-addressing
     pear-presentation
@@ -97,11 +103,34 @@ PEAR_DEPLOY_WORKER_SERVICES=(
 
 PEAR_DEPLOY_QUEUES=(
     pear_worker
+    pear_worker_1
     pear_monitor_worker
     pear_addressing
     pear_presentation
     embedded_bots
     thumbnail
+)
+
+# Pear keeps RabbitMQ deliveries unacknowledged for the duration of a Codex
+# turn so a dead worker can be retried.  The broker's 30-minute default would
+# otherwise redeliver a healthy, active long turn.  This policy is deliberately
+# broker-owned additive state: code rollback leaves it in place, where it is
+# also safe for the former single-worker topology.
+PEAR_WORKER_CONSUMER_TIMEOUT_POLICY_NAME="pear-worker-consumer-timeout"
+PEAR_WORKER_CONSUMER_TIMEOUT_POLICY_PATTERN='^pear_worker(_1)?$'
+PEAR_WORKER_CONSUMER_TIMEOUT_MS=21600000
+PEAR_WORKER_CONSUMER_TIMEOUT_POLICY_COMMAND=(
+    rabbitmqctl
+    set_policy
+    -p
+    /
+    --priority
+    10
+    --apply-to
+    queues
+    "$PEAR_WORKER_CONSUMER_TIMEOUT_POLICY_NAME"
+    "$PEAR_WORKER_CONSUMER_TIMEOUT_POLICY_PATTERN"
+    "{\"consumer-timeout\":$PEAR_WORKER_CONSUMER_TIMEOUT_MS}"
 )
 
 filter_deploy_untracked_source_files() {
@@ -178,6 +207,276 @@ validate_pear_deploy_queue_empty_snapshot() {
 
 validate_pear_deploy_queue_ready_snapshot() {
     _validate_pear_deploy_queue_snapshot true false "${1:-${PEAR_DEPLOY_QUEUES[*]}}"
+}
+
+validate_pear_worker_pool_snapshot() {
+    awk '
+$1 == "pear_worker" || $1 == "pear_worker_1" {
+    seen[$1] += 1
+    if ($2 !~ /^[0-9]+$/ || $3 !~ /^[0-9]+$/ || $4 !~ /^[0-9]+$/) {
+        print "invalid queue health row for " $1 > "/dev/stderr"
+        bad = 1
+        next
+    }
+    if ($4 != 2) {
+        print "Pear worker queue must have exactly two consumers: " $1 > "/dev/stderr"
+        bad = 1
+    }
+}
+END {
+    for (i = 1; i <= 2; i += 1) {
+        queue = i == 1 ? "pear_worker" : "pear_worker_1"
+        if (seen[queue] != 1) {
+            print "expected exactly one queue health row for " queue > "/dev/stderr"
+            bad = 1
+        }
+    }
+    exit bad
+}
+'
+}
+
+validate_pear_worker_pool_topology_snapshot() {
+    python3 -c '
+import json
+import sys
+
+separator = "\n-- pear-worker-channels --\n"
+payload = sys.stdin.read()
+if payload.count(separator) != 1:
+    raise SystemExit("invalid Pear worker topology snapshot envelope")
+consumer_text, channel_text = payload.split(separator, 1)
+try:
+    consumers = json.loads(consumer_text)
+    channels = json.loads(channel_text)
+except (json.JSONDecodeError, UnicodeDecodeError) as error:
+    raise SystemExit(f"invalid Pear worker topology JSON: {error}")
+if not isinstance(consumers, list) or not isinstance(channels, list):
+    raise SystemExit("Pear worker topology snapshots must be lists")
+
+expected_queues = {"pear_worker", "pear_worker_1"}
+worker_consumers = [
+    row
+    for row in consumers
+    if isinstance(row, dict) and row.get("queue_name") in expected_queues
+]
+if len(worker_consumers) != 4:
+    raise SystemExit(f"expected four Pear worker consumers, found {len(worker_consumers)}")
+
+def arguments_dict(value: object) -> dict[str, object]:
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, list):
+        try:
+            return dict(value)
+        except (TypeError, ValueError):
+            return {}
+    return {}
+
+by_queue: dict[str, list[dict[str, object]]] = {name: [] for name in expected_queues}
+by_channel: dict[str, list[dict[str, object]]] = {}
+consumer_keys: set[tuple[str, str]] = set()
+for row in worker_consumers:
+    queue = row["queue_name"]
+    channel_pid = row.get("channel_pid")
+    consumer_tag = row.get("consumer_tag")
+    if not isinstance(channel_pid, str) or not channel_pid:
+        raise SystemExit(f"{queue} consumer has no channel PID")
+    if not isinstance(consumer_tag, str) or not consumer_tag:
+        raise SystemExit(f"{queue} consumer has no consumer tag")
+    consumer_key = (channel_pid, consumer_tag)
+    if consumer_key in consumer_keys:
+        raise SystemExit("duplicate Pear worker consumer identity")
+    consumer_keys.add(consumer_key)
+    if row.get("ack_required") is not True:
+        raise SystemExit(f"{queue} consumer is not using manual acknowledgements")
+    if row.get("active") is not True:
+        raise SystemExit(f"{queue} consumer is not active")
+    if row.get("prefetch_count") != 1:
+        raise SystemExit(f"{queue} consumer does not have prefetch 1")
+    priority = arguments_dict(row.get("arguments")).get("x-priority")
+    if priority not in (0, 10):
+        raise SystemExit(f"{queue} consumer has invalid priority {priority!r}")
+    row["_pear_priority"] = priority
+    by_queue[queue].append(row)
+    by_channel.setdefault(channel_pid, []).append(row)
+
+for queue, rows in by_queue.items():
+    if sorted(row["_pear_priority"] for row in rows) != [0, 10]:
+        raise SystemExit(f"{queue} does not have home and stealing consumers")
+if len(by_channel) != 2:
+    raise SystemExit(f"expected two Pear worker channels, found {len(by_channel)}")
+for channel_pid, rows in by_channel.items():
+    if {row["queue_name"] for row in rows} != expected_queues:
+        raise SystemExit(f"Pear worker channel {channel_pid} is not subscribed to both queues")
+    if sorted(row["_pear_priority"] for row in rows) != [0, 10]:
+        raise SystemExit(f"Pear worker channel {channel_pid} has invalid affinity priorities")
+
+channel_rows: dict[str, dict[str, object]] = {}
+for row in channels:
+    if not isinstance(row, dict) or row.get("pid") not in by_channel:
+        continue
+    pid = row["pid"]
+    if pid in channel_rows:
+        raise SystemExit(f"duplicate channel snapshot row for {pid}")
+    channel_rows[pid] = row
+if set(channel_rows) != set(by_channel):
+    raise SystemExit("missing Pear worker channel details")
+for pid, row in channel_rows.items():
+    if row.get("vhost") != "/":
+        raise SystemExit(f"Pear worker channel {pid} is on the wrong vhost")
+    if row.get("consumer_count") != 2:
+        raise SystemExit(f"Pear worker channel {pid} does not have two consumers")
+    if row.get("prefetch_count") != 1:
+        raise SystemExit(f"Pear worker channel {pid} does not have consumer prefetch 1")
+    if row.get("global_prefetch_count") != 1:
+        raise SystemExit(f"Pear worker channel {pid} does not have global prefetch 1")
+'
+}
+
+validate_pear_worker_consumer_timeout_policy_snapshot() {
+    python3 -c '
+import json
+import sys
+
+name, pattern, timeout_text = sys.argv[1:]
+timeout = int(timeout_text)
+try:
+    policies = json.load(sys.stdin)
+except (json.JSONDecodeError, UnicodeDecodeError) as error:
+    raise SystemExit(f"invalid RabbitMQ policy JSON: {error}")
+if not isinstance(policies, list):
+    raise SystemExit("RabbitMQ policy snapshot is not a list")
+
+matches = [policy for policy in policies if isinstance(policy, dict) and policy.get("name") == name]
+if len(matches) != 1:
+    raise SystemExit(f"expected exactly one {name!r} policy, found {len(matches)}")
+policy = matches[0]
+apply_to = policy.get("apply-to", policy.get("apply_to"))
+definition = policy.get("definition")
+if policy.get("vhost") != "/":
+    raise SystemExit(f"{name} policy is not scoped to vhost /")
+if policy.get("pattern") != pattern:
+    raise SystemExit(f"{name} policy has the wrong queue pattern")
+if apply_to != "queues":
+    raise SystemExit(f"{name} policy does not apply to queues")
+if policy.get("priority") != 10:
+    raise SystemExit(f"{name} policy has the wrong priority")
+if not isinstance(definition, dict) or definition.get("consumer-timeout") != timeout:
+    raise SystemExit(f"{name} policy has the wrong consumer timeout")
+' "$PEAR_WORKER_CONSUMER_TIMEOUT_POLICY_NAME" \
+        "$PEAR_WORKER_CONSUMER_TIMEOUT_POLICY_PATTERN" \
+        "$PEAR_WORKER_CONSUMER_TIMEOUT_MS"
+}
+
+validate_pear_worker_consumer_timeout_queue_snapshot() {
+    python3 -c '
+import json
+import sys
+
+policy_name, timeout_text = sys.argv[1:]
+timeout = int(timeout_text)
+expected = {"pear_worker", "pear_worker_1"}
+try:
+    rows = json.load(sys.stdin)
+except (json.JSONDecodeError, UnicodeDecodeError) as error:
+    raise SystemExit(f"invalid RabbitMQ queue JSON: {error}")
+if not isinstance(rows, list):
+    raise SystemExit("RabbitMQ queue snapshot is not a list")
+
+matched = [row for row in rows if isinstance(row, dict) and row.get("name") in expected]
+names = [row["name"] for row in matched]
+if set(names) != expected or len(names) != len(expected):
+    raise SystemExit("RabbitMQ queue snapshot does not contain exactly both Pear worker queues")
+for row in matched:
+    name = row["name"]
+    definition = row.get("effective_policy_definition")
+    if isinstance(definition, list):
+        try:
+            definition = dict(definition)
+        except (TypeError, ValueError):
+            definition = None
+    if row.get("type") != "classic":
+        raise SystemExit(f"{name} is not a classic queue")
+    if row.get("durable") is not True:
+        raise SystemExit(f"{name} is not durable")
+    if row.get("policy") != policy_name:
+        raise SystemExit(f"{name} does not have policy {policy_name}")
+    if not isinstance(definition, dict) or definition.get("consumer-timeout") != timeout:
+        raise SystemExit(f"{name} does not have the effective consumer timeout")
+' "$PEAR_WORKER_CONSUMER_TIMEOUT_POLICY_NAME" "$PEAR_WORKER_CONSUMER_TIMEOUT_MS"
+}
+
+install_remote_pear_worker_consumer_timeout_policy() {
+    local remote_command
+
+    echo "Installing the Pear worker delivery timeout policy..."
+    printf -v remote_command '%q ' "${PEAR_WORKER_CONSUMER_TIMEOUT_POLICY_COMMAND[@]}"
+    ssh_root "$remote_command"
+    if ! ssh_root "rabbitmqctl list_policies -p / --formatter json" |
+        validate_pear_worker_consumer_timeout_policy_snapshot; then
+        fail "Pear worker delivery timeout policy verification failed"
+    fi
+}
+
+wait_for_remote_pear_worker_consumer_timeout_queues() {
+    local attempt
+    local snapshot=""
+
+    echo "Verifying the delivery timeout on both Pear worker queues..."
+    for attempt in $(seq 1 30); do
+        snapshot="$(
+            ssh_root "rabbitmqctl list_queues -p / name type durable policy effective_policy_definition arguments --formatter json" 2>/dev/null || true
+        )"
+        if printf '%s\n' "$snapshot" |
+            validate_pear_worker_consumer_timeout_queue_snapshot >/dev/null 2>&1; then
+            return 0
+        fi
+        sleep 1
+    done
+    printf '%s\n' "$snapshot" | validate_pear_worker_consumer_timeout_queue_snapshot || true
+    fail "Pear worker queues did not acquire the required delivery timeout policy"
+}
+
+verify_remote_pear_worker_consumer_timeout_policy() {
+    if ! ssh_root "rabbitmqctl list_policies -p / --formatter json" |
+        validate_pear_worker_consumer_timeout_policy_snapshot; then
+        fail "Pear worker delivery timeout policy verification failed"
+    fi
+    if ! ssh_root "rabbitmqctl list_queues -p / name type durable policy effective_policy_definition arguments --formatter json" |
+        validate_pear_worker_consumer_timeout_queue_snapshot; then
+        fail "Pear worker queues do not have the required delivery timeout policy"
+    fi
+}
+
+remote_pear_worker_pool_topology_snapshot() {
+    local consumer_snapshot
+    local channel_snapshot
+
+    consumer_snapshot="$(
+        ssh_root "rabbitmqctl list_consumers -p / --formatter json"
+    )"
+    channel_snapshot="$(
+        ssh_root "rabbitmqctl list_channels pid vhost consumer_count prefetch_count global_prefetch_count --formatter json"
+    )"
+    printf '%s\n-- pear-worker-channels --\n%s\n' "$consumer_snapshot" "$channel_snapshot"
+}
+
+wait_for_remote_pear_worker_pool_topology() {
+    local attempt
+    local snapshot=""
+
+    echo "Verifying both consumers and channels in the Pear worker pool..."
+    for attempt in $(seq 1 30); do
+        snapshot="$(remote_pear_worker_pool_topology_snapshot 2>/dev/null || true)"
+        if printf '%s' "$snapshot" |
+            validate_pear_worker_pool_topology_snapshot >/dev/null 2>&1; then
+            return 0
+        fi
+        sleep 1
+    done
+    printf '%s' "$snapshot" | validate_pear_worker_pool_topology_snapshot || true
+    fail "Pear worker pool did not reach the required two-slot topology"
 }
 
 stage_remote_pear_deploy_bundle() {

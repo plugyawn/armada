@@ -70,14 +70,15 @@ def pear_followup_topic_context_allows_candidate(
     stream_name: str,
     topic_name: str,
 ) -> bool:
-    from zerver.lib.pear import normalize_pear_response_policy
+    from zerver.lib.pear import normalize_pear_response_policy, pear_topic_scope
     from zerver.models.bots import PearWorkspaceNode
 
+    stream_name, topic_name = pear_topic_scope(stream_name, topic_name)
     workspace = (
         PearWorkspaceNode.objects.filter(
             realm_id=realm_id,
-            stream_name=stream_name,
-            topic_name=topic_name,
+            stream_name__iexact=stream_name,
+            topic_name__iexact=topic_name,
         )
         .values("is_paused", "response_policy")
         .first()

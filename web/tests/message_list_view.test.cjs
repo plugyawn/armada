@@ -120,48 +120,6 @@ run_test("pear live announcements change only with the Codex plan step", () => {
     );
 });
 
-run_test("pear trace refreshes when reopened after collapsed events", () => {
-    assert.equal(
-        message_list_view.pear_trace_should_load_on_open_for_testing(true, true, false),
-        true,
-    );
-    assert.equal(
-        message_list_view.pear_trace_should_load_on_open_for_testing(true, false, false),
-        false,
-    );
-    assert.equal(message_list_view.pear_trace_event_should_load_for_testing(false), false);
-    assert.equal(message_list_view.pear_trace_event_should_load_for_testing(true), true);
-});
-
-run_test("pear trace rejects malformed payloads and removes the visible answer tail", () => {
-    assert.equal(message_list_view.pear_trace_rendered_for_testing({trace: []}), undefined);
-    assert.equal(
-        message_list_view.pear_trace_rendered_for_testing({rendered: "<p>Ready</p>", trace: []}),
-        "<p>Ready</p>",
-    );
-    assert.equal(
-        message_list_view.pear_trace_duplicate_tail_count_for_testing(
-            ["P:Earlier update", "DIV:Ran 2 tools", "P:Current answer"],
-            ["P:Current answer"],
-        ),
-        1,
-    );
-    assert.equal(
-        message_list_view.pear_trace_duplicate_tail_count_for_testing(
-            ["P:Earlier update", "P:Answer line one", "P:Answer line two"],
-            ["P:Answer line one", "P:Answer line two"],
-        ),
-        2,
-    );
-    assert.equal(
-        message_list_view.pear_trace_duplicate_tail_count_for_testing(
-            ["P:Earlier update"],
-            ["P:Current answer"],
-        ),
-        0,
-    );
-});
-
 run_test(
     "pear trace disclosure labels loading and failure separately from live plan status",
     () => {

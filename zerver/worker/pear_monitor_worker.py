@@ -21,6 +21,12 @@ logger = logging.getLogger(__name__)
 @assign_queue("pear_monitor_worker")
 class PearMonitorWorker(PearWorker):
     OWNED_SESSION_KINDS = ("monitor",)
+    # This queue still uses QueueProcessingWorker's ordinary consume/ack
+    # contract; only the two manual-ack chat slots rethrow for broker retry.
+    RERAISE_CONSUME_EXCEPTIONS = False
+    # Monitor work deliberately stays on its dedicated queue; it must never
+    # participate in the chat worker pool inherited from PearWorker.
+    POOL_QUEUE_NAMES: tuple[str, ...] = ()
 
     @override
     def setup(self) -> None:

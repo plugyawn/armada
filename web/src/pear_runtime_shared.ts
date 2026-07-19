@@ -46,7 +46,7 @@ export function context_key(stream: string | undefined, topic: string | undefine
     if (stream === undefined || topic === undefined) {
         return "";
     }
-    return `${stream}\n${topic}`;
+    return `${stream.toLowerCase()}\n${topic.toLowerCase()}`;
 }
 
 export function compact_reasoning_effort(effort: string | undefined): string {

@@ -295,6 +295,11 @@ for row in worker_consumers:
     if row.get("prefetch_count") != 1:
         raise SystemExit(f"{queue} consumer does not have prefetch 1")
     priority = arguments_dict(row.get("arguments")).get("x-priority")
+    # RabbitMQ omits x-priority for the default-priority consumer; normalize
+    # that wire representation to the explicit zero used by the topology
+    # contract.
+    if priority is None:
+        priority = 0
     if priority not in (0, 10):
         raise SystemExit(f"{queue} consumer has invalid priority {priority!r}")
     row["_pear_priority"] = priority

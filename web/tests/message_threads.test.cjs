@@ -4,10 +4,11 @@ const assert = require("node:assert/strict");
 
 const {JSDOM} = require("jsdom");
 
+const render_message_controls = require("../templates/message_controls.hbs");
+
 const {mock_esm, set_global, zrequire} = require("./lib/namespace.cjs");
 const {run_test} = require("./lib/test.cjs");
 const $ = require("./lib/zjquery.cjs");
-const render_message_controls = require("../templates/message_controls.hbs");
 
 const dom = new JSDOM(
     "<!doctype html><html><body><main class='app-main'></main><div class='message_row' data-message-id='31'><div class='message_controls'><button class='message_thread_button'></button></div><div class='message-thread-host' hidden></div></div><aside id='message-thread-pane' hidden></aside></body></html>",
@@ -46,7 +47,6 @@ let disable_scrolling_count = 0;
 let enable_scrolling_count = 0;
 let controller_options;
 let destroyed_count = 0;
-let mark_dirty_count = 0;
 let desktop_viewport = false;
 const get_requests = [];
 const post_requests = [];
@@ -92,9 +92,7 @@ mock_esm("../src/pear_run_trace", {
                 destroyed_count += 1;
             },
             load() {},
-            mark_dirty() {
-                mark_dirty_count += 1;
-            },
+            mark_dirty() {},
             get dirty() {
                 return false;
             },
@@ -115,6 +113,7 @@ mock_esm("../src/pear_run_trace", {
 });
 
 const pear_run_state = zrequire("pear_run_state");
+const message_store = zrequire("message_store");
 const message_threads = zrequire("message_threads");
 
 const agents = [
@@ -165,6 +164,19 @@ function reply({id = 91, content = "<p>Thread reply</p>"} = {}) {
 function reset_dom() {
     message_threads.clear_for_testing();
     pear_run_state.clear_for_testing();
+    message_store.set_messages_for_tests([
+        {
+            message: {
+                id: 31,
+                sender_id: 5,
+                sender_full_name: "Pear",
+                avatar_url: "/avatar/5",
+                content: "<p>Original thread message</p>",
+                timestamp: 90,
+                is_pear_message: true,
+            },
+        },
+    ]);
     const host = document.querySelector(".message-thread-host");
     host.replaceChildren();
     host.hidden = true;
@@ -177,7 +189,6 @@ function reset_dom() {
     enable_scrolling_count = 0;
     controller_options = undefined;
     destroyed_count = 0;
-    mark_dirty_count = 0;
     desktop_viewport = false;
     get_requests.length = 0;
     post_requests.length = 0;
@@ -270,6 +281,16 @@ run_test("the toolbar opens an empty thread lazily and focuses its composer", ()
     flush_animation_frame();
     assert.equal(document.activeElement, pane.querySelector(".message-thread-composer-input"));
     assert.match(pane.querySelector(".message-thread-reply-status").textContent, /No replies/);
+    assert.equal(pane.querySelector(".message-thread-pane-tabs").hidden, true);
+    assert.equal(pane.querySelectorAll(".message-thread-format-button").length, 6);
+    assert.equal(
+        pane.querySelector(".message-thread-root .message-thread-entry-content").textContent,
+        "Original thread message",
+    );
+    assert.equal(
+        pane.querySelectorAll(".message-thread-root .message-thread-entry-pear").length,
+        1,
+    );
     assert.equal(message_threads.reply_state_count_for_testing(), 1);
 });
 
@@ -318,7 +339,10 @@ run_test("composer enables on input and POST and live event deduplicate one repl
         reply: reply(),
     });
     assert.equal(pane.querySelectorAll(".message-thread-reply").length, 1);
-    assert.equal(pane.querySelector(".message-thread-reply-content").textContent, "Thread reply");
+    assert.equal(
+        pane.querySelector(".message-thread-reply .message-thread-entry-content").textContent,
+        "Thread reply",
+    );
     assert.equal(document.querySelector(".message-thread-reply-preview").hidden, false);
 });
 
@@ -342,7 +366,7 @@ run_test("the shared composer keeps its draft bound to the parent message", () =
     const textarea = pane.querySelector(".message-thread-composer-input");
     textarea.value = "Still drafting";
     textarea.dispatchEvent(new Event("input", {bubbles: true}));
-    document.dispatchEvent(new KeyboardEvent("keydown", {key: "Escape", bubbles: true}));
+    document.dispatchEvent(new window.KeyboardEvent("keydown", {key: "Escape", bubbles: true}));
     flush_animation_frame();
     document.querySelector(".message_thread_button").click();
     assert.equal(textarea.value, "Still drafting");
@@ -381,7 +405,7 @@ run_test("Escape closes the mobile pane and restores launch focus", () => {
     const row = render_row();
     const launch = row.querySelector(".message-thread-agent-launch");
     launch.click();
-    document.dispatchEvent(new KeyboardEvent("keydown", {key: "Escape", bubbles: true}));
+    document.dispatchEvent(new window.KeyboardEvent("keydown", {key: "Escape", bubbles: true}));
     flush_animation_frame();
     assert.equal(document.querySelector("#message-thread-pane").hidden, true);
     assert.equal(document.activeElement, launch);

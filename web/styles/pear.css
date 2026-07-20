@@ -1737,8 +1737,11 @@
     flex-wrap: wrap;
     gap: var(--pear-space-1) var(--pear-space-2);
     color: var(--pear-ink-3);
-    font-family: var(--pear-font-ui);
-    font-size: 13px;
+    /* Thread/run state is agent-surface meta; it speaks the pixel voice
+       like the run footer above it, not the room's chrome face. */
+    font-family: var(--pear-font-pixel);
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
 }
 
 .message-thread-reply-preview,
@@ -2009,7 +2012,7 @@ body.message-thread-pane-open {
     justify-content: space-between;
     gap: var(--pear-space-3);
     border-bottom: 1px solid var(--pear-hairline);
-    padding: 8px 16px;
+    padding: 8px 12px;
 }
 
 .message-thread-pane-heading {
@@ -2169,7 +2172,7 @@ body.message-thread-pane-open {
     flex: none;
     align-items: center;
     gap: var(--pear-space-1);
-    margin: 6px 16px 0;
+    margin: 6px 12px 0;
     border: 1px solid var(--pear-hairline);
     border-radius: var(--pear-radius-chip);
     padding: 2px;
@@ -2261,7 +2264,7 @@ body.message-thread-pane-open {
 .message-thread-pane-activity {
     flex: none;
     overflow: hidden;
-    margin: 12px 16px 0;
+    margin: 12px 12px 0;
     color: var(--pear-ink-3);
     font-family: var(--pear-font-pixel);
     font-size: 13px;
@@ -2291,7 +2294,7 @@ body.message-thread-pane-open {
     display: flex;
     align-items: center;
     gap: 10px;
-    margin: 4px 16px;
+    margin: 4px 12px;
     color: var(--pear-ink-3);
     font-family: var(--pear-font-ui);
     font-size: 12px;
@@ -2312,7 +2315,7 @@ body.message-thread-pane-open {
 
 .message-thread-reply-status {
     min-height: 20px;
-    padding-inline: 16px;
+    padding-inline: 12px;
     color: var(--pear-ink-3);
     font-family: var(--pear-font-ui);
     font-size: 13px;
@@ -2320,7 +2323,7 @@ body.message-thread-pane-open {
 
 .message-thread-load-older {
     align-self: flex-start;
-    margin: 0 16px 8px;
+    margin: 0 12px 8px;
     padding: 4px 8px;
     font-family: var(--pear-font-ui);
     font-size: 13px;
@@ -2367,7 +2370,7 @@ body.message-thread-pane-open {
 /* The composer is pinned below the scroll region, not part of it. */
 .message-thread-composer-host {
     flex: none;
-    margin: 14px 16px 20px;
+    margin: 14px 12px 20px;
 
     &[hidden] {
         display: none;
@@ -4006,5 +4009,23 @@ body.message-thread-pane-open {
 @media (prefers-reduced-motion: reduce) {
     .pear-op-compaction::after {
         animation: none;
+    }
+}
+
+/* Pear workbench geometry: the right rail widens for the thread pane and
+   workbench cards, sidebar insets tighten, and the middle column shifts
+   left so feed lines lengthen. Widening trims apply only at and above
+   lg, where the room exists. */
+:root {
+    --left-sidebar-padding-left: 3px;
+    --right-sidebar-left-spacing: 2px;
+}
+
+@media (width >= 992px) {
+    :root {
+        --left-sidebar-max-width: calc(
+            17.5714em - var(--left-sidebar-right-margin)
+        );
+        --right-sidebar-width: min(24vw, 24em);
     }
 }

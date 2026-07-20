@@ -571,6 +571,20 @@ export function get_run_view_by_id(run_id: number): PearRunLiveView | undefined 
     return run_views_by_id.get(run_id);
 }
 
+export function runs_for_context(stream: string, topic: string): PearRunLiveView[] {
+    // All known run views in one stream+topic context (the sidebar agent
+    // roster reads this), newest first by creation date.
+    const stream_key = stream.toLowerCase();
+    const topic_key = topic.toLowerCase();
+    return [...run_views_by_id.values()]
+        .filter(
+            (view) =>
+                view.stream?.toLowerCase() === stream_key &&
+                view.topic?.toLowerCase() === topic_key,
+        )
+        .toSorted((a, b) => (b.date_created ?? 0) - (a.date_created ?? 0));
+}
+
 export function on_run_state_changed(listener: PearRunStateListener): () => void {
     run_state_listeners.add(listener);
     return () => run_state_listeners.delete(listener);

@@ -1,5 +1,22 @@
 <div class="right-sidebar" id="right-sidebar" role="navigation">
     <div class="right-sidebar-items">
+        <div class="right-sidebar-tabs" role="tablist" aria-label="{{t 'Sidebar views'}}">
+            <button
+                type="button"
+                class="right-sidebar-tab"
+                role="tab"
+                data-tab="agents"
+                aria-selected="false"
+            >{{t "Agents"}}</button>
+            <button
+                type="button"
+                class="right-sidebar-tab right-sidebar-tab-selected"
+                role="tab"
+                data-tab="people"
+                aria-selected="true"
+            >{{t "People"}}</button>
+        </div>
+        <div id="pear-agent-roster" hidden></div>
         <div id="user-list">
             <div id="userlist-header">
                 {{#> components/input_wrapper input_type="filter-input" id="userlist-header-search" icon="search" input_button_icon="close"}}

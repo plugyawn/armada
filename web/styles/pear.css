@@ -2048,6 +2048,10 @@ body.message-thread-pane-open {
    breakpoint at the end of this block. */
 #message-thread-pane .messagebox-content {
     position: relative;
+    /* The first grid row is floored at the hover-icon height so action
+       icons fit; the pane hides that chrome, so drop the floor and let
+       one-line rows be one line tall. */
+    --message-box-sender-line-height: 0px;
     grid-template-columns:
         var(--message-box-avatar-column-width) minmax(0, 1fr) max-content
         8px 0;

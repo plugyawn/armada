@@ -442,16 +442,13 @@ run_test("human replies mount canonical message lists and the shared composer", 
     assert.equal(message_lists_created[1].options.view_options.aria_label, "translated: Replies");
     assert.deepEqual(read_message_ids, []);
 
-    // Without runs there is no agent bar; the header context is the root's
-    // conversation and the composer is pinned outside the scroll region.
+    // Without runs there is no agent bar; the header is just the static
+    // title (the middle header already names the conversation) and the
+    // composer is pinned outside the scroll region.
     assert.equal(pane.querySelector(".message-thread-agent-bar").hidden, true);
     assert.equal(
         pane.querySelector("#message-thread-pane-title").textContent,
         "translated: Thread",
-    );
-    assert.equal(
-        pane.querySelector(".message-thread-pane-context").textContent,
-        "devel > native threads",
     );
     const composer_host = pane.querySelector(".message-thread-composer-host");
     assert.equal(composer_host.hidden, false);
@@ -593,20 +590,17 @@ run_test("launch strips never render inside the pane", () => {
     assert.notEqual(feed_row.querySelector(".message-thread-reply-launch"), null);
 });
 
-run_test("header context is stable across thread selections", () => {
+run_test("header title is stable across thread selections", () => {
     reset_dom();
     remember_agents();
     render_row().querySelector(".message_thread_button").click();
     const pane = document.querySelector("#message-thread-pane");
     const title = pane.querySelector("#message-thread-pane-title");
-    const context = pane.querySelector(".message-thread-pane-context");
     assert.equal(title.textContent, "translated: Thread");
-    assert.equal(context.textContent, "devel > native threads");
     pane.querySelector(".message-thread-agent-cycle-next").click();
     assert.equal(title.textContent, "translated: Thread");
-    assert.equal(context.textContent, "devel > native threads");
     pane.querySelector(".message-thread-agent-cycle-prev").click();
-    assert.equal(context.textContent, "devel > native threads");
+    assert.equal(title.textContent, "translated: Thread");
 });
 
 run_test("Alt+arrow cycles threads only while the composer is empty", () => {
@@ -792,10 +786,11 @@ run_test("pushed summary re-renders the open pane", () => {
     flush_animation_frame();
     assert.equal(message_store.get(31).reply_summary.reply_count, 5);
     assert.equal(separator.textContent, "translated: 5 replies");
-    // The divider is the only reply count in the pane; nothing else shows it.
+    // The divider is the only reply count in the pane; the header carries
+    // nothing but the static title.
     assert.equal(
-        pane.querySelector(".message-thread-pane-context").textContent.includes("5"),
-        false,
+        pane.querySelector(".message-thread-pane-heading").textContent.trim(),
+        "translated: Thread",
     );
 });
 

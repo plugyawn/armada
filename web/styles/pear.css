@@ -2053,6 +2053,108 @@ body.message-thread-pane-open {
     --message-box-avatar-column-width: 0px;
 }
 
+/* Narrow rows cannot spare a max-content timestamp column on every first
+   line: grouped rows carry the time on the sender line instead, and
+   follow-up rows reveal it as a hover/selection overlay. Applies always
+   inside the thread pane; the same rules repeat feed-wide below the md
+   breakpoint at the end of this block. */
+#message-thread-pane .messagebox-content {
+    position: relative;
+    grid-template-columns:
+        var(--message-box-avatar-column-width) minmax(0, 1fr) max-content
+        8px 0;
+}
+
+#message-thread-pane .messagebox-includes-sender .message-time {
+    grid-area: sender;
+}
+
+#message-thread-pane .messagebox-includes-sender .message_sender {
+    overflow: hidden;
+    max-width: calc(100% - 64px);
+}
+
+#message-thread-pane
+    .message_row:not(.messagebox-includes-sender)
+    .message-time {
+    position: absolute;
+    z-index: 1;
+    top: 2px;
+    right: 6px;
+    padding-right: 0;
+    border-radius: var(--pear-radius-chip);
+    background: var(--color-background-stream-message-content);
+    opacity: 0;
+    transition: opacity var(--pear-dur-1) var(--pear-ease);
+}
+
+#message-thread-pane
+    .private-message:not(.messagebox-includes-sender)
+    .message-time {
+    background: var(--color-background-private-message-content);
+}
+
+#message-thread-pane
+    .pear-message:not(.messagebox-includes-sender)
+    .message-time {
+    background: var(--color-background-pear-message-content);
+}
+
+#message-thread-pane
+    .message_row:not(.messagebox-includes-sender):hover
+    .message-time,
+#message-thread-pane
+    .message_row.selected_message:not(.messagebox-includes-sender)
+    .message-time {
+    opacity: 0.8;
+}
+
+@media (width < 768px) {
+    /* Small screens get the same treatment feed-wide. */
+    .app-main .messagebox-content {
+        position: relative;
+        grid-template-columns:
+            var(--message-box-avatar-column-width) minmax(0, 1fr) max-content
+            8px 0;
+    }
+
+    .app-main .messagebox-includes-sender .message-time {
+        grid-area: sender;
+    }
+
+    .app-main .messagebox-includes-sender .message_sender {
+        overflow: hidden;
+        max-width: calc(100% - 64px);
+    }
+
+    .app-main .message_row:not(.messagebox-includes-sender) .message-time {
+        position: absolute;
+        z-index: 1;
+        top: 2px;
+        right: 6px;
+        padding-right: 0;
+        border-radius: var(--pear-radius-chip);
+        background: var(--color-background-stream-message-content);
+        opacity: 0;
+        transition: opacity var(--pear-dur-1) var(--pear-ease);
+    }
+
+    .app-main .private-message:not(.messagebox-includes-sender) .message-time {
+        background: var(--color-background-private-message-content);
+    }
+
+    .app-main .pear-message:not(.messagebox-includes-sender) .message-time {
+        background: var(--color-background-pear-message-content);
+    }
+
+    .app-main .message_row:not(.messagebox-includes-sender):hover .message-time,
+    .app-main
+        .message_row.selected_message:not(.messagebox-includes-sender)
+        .message-time {
+        opacity: 0.8;
+    }
+}
+
 .message-thread-pane-close {
     display: grid;
     width: 28px;

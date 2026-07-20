@@ -1986,22 +1986,23 @@ body.message-thread-pane-open #pear-agent-roster {
     flex: none;
     align-items: center;
     gap: var(--pear-space-1);
-    margin-bottom: var(--pear-space-2);
+    margin: 0 var(--pear-space-2) var(--pear-space-2);
     border: 1px solid var(--pear-hairline);
     border-radius: var(--pear-radius-chip);
     padding: 2px;
 }
 
 .right-sidebar-tab {
+    display: grid;
     flex: 1;
     appearance: none;
     border: 0;
     border-radius: var(--pear-radius-chip);
     background: transparent;
     padding: 3px 8px;
+    place-items: center;
     color: var(--pear-ink-3);
-    font-family: var(--pear-font-pixel);
-    font-size: 12px;
+    font-size: 15px;
     cursor: pointer;
 
     &:hover,
@@ -2172,13 +2173,19 @@ body.message-thread-pane-open #pear-agent-roster {
    breakpoint at the end of this block. */
 #message-thread-pane .messagebox-content {
     position: relative;
-    /* The first grid row is floored at the hover-icon height so action
-       icons fit; the pane hides that chrome, so drop the floor and let
-       one-line rows be one line tall. */
-    --message-box-sender-line-height: 0px;
     grid-template-columns:
         var(--message-box-avatar-column-width) minmax(0, 1fr) max-content
         8px 0;
+}
+
+#message-thread-pane
+    .message_row:not(.messagebox-includes-sender)
+    .messagebox-content {
+    /* The first grid row is floored at the hover-icon height so action
+       icons fit; the pane hides that chrome, so drop the floor for
+       senderless rows and let one-line replies be one line tall. (Sender
+       rows keep the var -- it doubles as the sender name's line-height.) */
+    --message-box-sender-line-height: 0px;
 }
 
 #message-thread-pane .messagebox-includes-sender .message-time {
@@ -4169,7 +4176,7 @@ body.message-thread-pane-open #pear-agent-roster {
     }
 }
 
-@media (width >= 1600px) {
+@media (width >= 1200px) {
     #message-lists-container .message_row.pear-message .message_content {
         max-width: min(100%, calc(var(--base-font-size-px) * 56));
     }

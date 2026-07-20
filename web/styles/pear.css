@@ -1960,16 +1960,6 @@
    .right-sidebar-items and fills the sidebar's own box, inheriting its
    width, top offset, and edge instead of duplicating any geometry. */
 body.message-thread-pane-open {
-    /* The column must keep its slot whenever the pane is open: the user
-       list can be hidden (body.hide-right-sidebar) and below the xl
-       breakpoint the column is display: none via container query. In
-       those configurations the pane overlays the feed's right edge
-       (mirroring the .column-right.expanded overlay pattern); on mobile
-       the pane is a full-viewport dialog regardless. */
-    .app-main .column-right {
-        display: block;
-    }
-
     .app-main .column-right #user-list {
         display: none;
     }
@@ -1979,11 +1969,6 @@ body.message-thread-pane-open {
        pane can fill it (composer pinned at the bottom). */
     .app-main .column-right .right-sidebar {
         inset: 0 auto;
-    }
-
-    &.hide-right-sidebar:not(.message-thread-pane-mobile-open)
-        #message-thread-pane {
-        box-shadow: var(--pear-shadow-pop);
     }
 }
 
@@ -2343,6 +2328,19 @@ body.message-thread-pane-open {
 
 .message-thread-reply-list {
     display: block;
+
+    /* Pack follow-up rows tightly in the pane: the stock 5px focus-ring
+       padding on first children plus paragraph margins made one-word
+       replies read as isolated cards instead of a conversation. */
+    .message_content > p:first-child,
+    .message_content > ul:first-child,
+    .message_content > ol:first-child {
+        padding-top: 1px;
+    }
+
+    .pear-message .message_content > p {
+        margin-block: 0.1em 0.4em;
+    }
 }
 
 #message-thread-pane div.message-list {

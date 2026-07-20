@@ -2332,12 +2332,13 @@ body.message-thread-pane-open {
 .message-thread-reply-list {
     display: block;
 
-    /* Pack follow-up rows tightly in the pane: the stock focus-ring
-       padding on .message_content plus paragraph margins made one-word
-       replies read as isolated cards instead of a conversation. */
-    .message_content {
+    /* Pack follow-up rows tightly in the pane: the stock :has() rule pads
+       .message_content by ~5px; out-specify it here (and only here). */
+    .message_content:has(> p:first-child, > ol:first-child, > ul:first-child) {
         padding-top: 1px;
+    }
 
+    .message_content {
         > p:first-child,
         > ul:first-child,
         > ol:first-child {

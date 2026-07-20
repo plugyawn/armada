@@ -284,21 +284,26 @@
                 color: var(--pear-danger);
             }
 
-            /* Settled footers stay on one flex line: the meta text shrinks
-               and wraps inside its own box, so the ✓/✗ glyph never drops
-               onto a line of its own and the trace chip never detaches. */
+            /* Settled footers read as one quiet meta line that wraps like
+               ordinary prose: meta and glyph flow inline (the glyph can
+               never detach from its last token), and the trace chip
+               floats at the top right. */
             .pear-run-footer:not(.pear-run-footer-ticker) {
-                flex-wrap: nowrap;
-                align-items: center;
-            }
+                display: block;
 
-            .pear-run-footer-meta {
-                min-width: 0;
-            }
+                .pear-run-footer-meta,
+                .pear-run-footer-status {
+                    display: inline;
+                }
 
-            .pear-run-footer-status,
-            .pear-run-trace-toggle {
-                flex: none;
+                .pear-run-footer-status {
+                    margin-left: var(--pear-space-2);
+                }
+
+                .pear-run-trace-toggle {
+                    float: right;
+                    margin-left: var(--pear-space-2);
+                }
             }
 
             .pear-run-footer-ticker .pear-run-elapsed {

@@ -160,6 +160,11 @@ export function initialize(): void {
             roster_signature = "";
         }
     });
+    right_sidebar_tabs.on_tab_changed((tab) => {
+        if (tab === "agents") {
+            render();
+        }
+    });
     $(window).on("hashchange", () => {
         roster_signature = "";
         render();

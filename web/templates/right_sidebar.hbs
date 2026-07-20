@@ -7,14 +7,24 @@
                 role="tab"
                 data-tab="agents"
                 aria-selected="false"
-            >{{t "Agents"}}</button>
+                aria-label="{{t 'Agents'}}"
+                data-tippy-content="{{t 'Agents'}}"
+            >
+                <i class="zulip-icon zulip-icon-bot" aria-hidden="true"></i>
+                <span class="sr-only">{{t "Agents"}}</span>
+            </button>
             <button
                 type="button"
                 class="right-sidebar-tab right-sidebar-tab-selected"
                 role="tab"
                 data-tab="people"
                 aria-selected="true"
-            >{{t "People"}}</button>
+                aria-label="{{t 'People'}}"
+                data-tippy-content="{{t 'People'}}"
+            >
+                <i class="zulip-icon zulip-icon-users" aria-hidden="true"></i>
+                <span class="sr-only">{{t "People"}}</span>
+            </button>
         </div>
         <div id="pear-agent-roster" hidden></div>
         <div id="user-list">

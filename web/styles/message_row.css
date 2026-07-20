@@ -89,7 +89,10 @@
         .message_content {
             max-width: min(100%, calc(var(--base-font-size-px) * 48));
             padding-right: 0.35em;
-            overflow-wrap: anywhere;
+            /* break-word only splits a token when nothing fits the line;
+               anywhere shredded ordinary words ("refere\ne") in narrow
+               contexts like the thread pane. */
+            overflow-wrap: break-word;
             font-family: var(--pear-font-pixel);
             font-synthesis: none;
             font-size: var(--base-font-size-px);
@@ -279,6 +282,22 @@
 
             .pear-run-footer-status.pear-run-footer-failed {
                 color: var(--pear-danger);
+            }
+
+            /* Settled footers stay on one flex line: the meta text shrinks
+               and wraps inside its own box, so the ✓/✗ glyph never drops
+               onto a line of its own and the trace chip never detaches. */
+            .pear-run-footer:not(.pear-run-footer-ticker) {
+                flex-wrap: nowrap;
+            }
+
+            .pear-run-footer-meta {
+                min-width: 0;
+            }
+
+            .pear-run-footer-status,
+            .pear-run-trace-toggle {
+                flex: none;
             }
 
             .pear-run-footer-ticker .pear-run-elapsed {

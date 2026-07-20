@@ -2332,12 +2332,9 @@ body.message-thread-pane-open {
 .message-thread-reply-list {
     display: block;
 
-    /* Pack follow-up rows tightly in the pane: the stock :has() rule pads
-       .message_content by ~5px; out-specify it here (and only here). */
-    .message_content:has(> p:first-child, > ol:first-child, > ul:first-child) {
-        padding-top: 1px;
-    }
-
+    /* Pack follow-up rows tightly in the pane: the stock padding rule is
+       .messagebox-content .message_content:not(.status-message):has(...)
+       at (0,4,1), so the pane's override anchors on the pane id. */
     .message_content {
         > p:first-child,
         > ul:first-child,
@@ -2353,6 +2350,12 @@ body.message-thread-pane-open {
     .pear-message .message_content > p {
         margin-block: 0.1em 0.4em;
     }
+}
+
+#message-thread-pane
+    .message-thread-reply-list
+    .message_content:has(> p:first-child, > ol:first-child, > ul:first-child) {
+    padding-top: 1px;
 }
 
 #message-thread-pane div.message-list {
@@ -4038,7 +4041,7 @@ body.message-thread-pane-open {
 }
 
 @media (width >= 1600px) {
-    .app-main .message_list .message_row.pear-message .message_content {
+    #message-lists-container .message_row.pear-message .message_content {
         max-width: min(100%, calc(var(--base-font-size-px) * 56));
     }
 }

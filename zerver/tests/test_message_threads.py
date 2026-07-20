@@ -2,6 +2,7 @@ import orjson
 from django.test import override_settings
 
 from zerver.actions.message_edit import maybe_delete_previous_resolve_topic_notification
+from zerver.actions.realm_settings import do_change_realm_permission_group_setting
 from zerver.lib.bot_lib import EmbeddedBotHandler
 from zerver.lib.event_schema import check_message_thread_summary
 from zerver.lib.message_cache import MessageDict
@@ -16,6 +17,7 @@ from zerver.lib.test_helpers import mock_queue_publish
 from zerver.lib.timestamp import datetime_to_timestamp
 from zerver.lib.topic import get_latest_message_for_user_in_topic
 from zerver.models import ArchivedMessage, ArchiveTransaction, Message, UserMessage, UserProfile
+from zerver.models.groups import NamedUserGroup, SystemGroups
 from zerver.models.streams import get_stream
 
 
@@ -802,6 +804,68 @@ class MessageThreadTest(ZulipTestCase):
                 flags__andnz=UserMessage.flags.read.mask,
             ).exists()
         )
+
+    def test_restricted_guest_receives_anonymized_thread_summary_event(self) -> None:
+        hamlet = self.example_user("hamlet")
+        othello = self.example_user("othello")
+        polonius = self.example_user("polonius")
+        realm = hamlet.realm
+        # Guests may not access all users; only stream-sharing makes a user
+        # visible to them.
+        members_system_group = NamedUserGroup.objects.get(name=SystemGroups.MEMBERS, realm=realm)
+        do_change_realm_permission_group_setting(
+            realm, "can_access_all_users_group", members_system_group, acting_user=None
+        )
+
+        stream_name, root_message_id = self._thread_message([hamlet, othello, polonius])
+        self._send_reply(othello, stream_name, root_message_id, "reply from othello")
+        # Once othello leaves the thread stream and polonius leaves Verona
+        # (his only default fixture subscription), the two share no active
+        # subscription, so othello becomes inaccessible to the guest.
+        self.unsubscribe(othello, stream_name)
+        self.unsubscribe(polonius, "Verona")
+
+        with self.capture_send_event_calls(expected_num_events=3) as events:
+            self._send_reply(hamlet, stream_name, root_message_id, "reply from hamlet")
+
+        summary_events = [
+            event for event in events if event["event"]["type"] == "message_thread_summary"
+        ]
+        self.assertEqual(len(summary_events), 2)
+        by_recipient = {}
+        for summary_event in summary_events:
+            check_message_thread_summary("summary_event", {**summary_event["event"], "id": 1})
+            recipient_ids = {
+                user["id"] if isinstance(user, dict) else user for user in summary_event["users"]
+            }
+            self.assertEqual(len(recipient_ids), 1)
+            by_recipient[recipient_ids.pop()] = summary_event["event"]["summary"]
+
+        unrestricted = by_recipient[hamlet.id]
+        self.assertEqual(unrestricted["reply_count"], 2)
+        othello_unrestricted = next(
+            participant
+            for participant in unrestricted["participants"]
+            if participant["user_id"] == othello.id
+        )
+        self.assertEqual(othello_unrestricted["full_name"], othello.full_name)
+
+        restricted = by_recipient[polonius.id]
+        self.assertEqual(restricted["reply_count"], 2)
+        self.assertNotIn("unread_reply_count", restricted)
+        othello_restricted = next(
+            participant
+            for participant in restricted["participants"]
+            if participant["user_id"] == othello.id
+        )
+        self.assertEqual(othello_restricted["full_name"], UserProfile.INACCESSIBLE_USER_NAME)
+        # The stream-sharing participant stays fully visible to the guest.
+        hamlet_restricted = next(
+            participant
+            for participant in restricted["participants"]
+            if participant["user_id"] == hamlet.id
+        )
+        self.assertEqual(hamlet_restricted["full_name"], hamlet.full_name)
 
     def test_embedded_bot_reply_preserves_existing_thread(self) -> None:
         hamlet = self.example_user("hamlet")

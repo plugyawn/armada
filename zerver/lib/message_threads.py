@@ -22,7 +22,7 @@ from django.db.models.query import QuerySet
 from zerver.lib.avatar import get_avatar_field, get_avatar_for_inaccessible_user
 from zerver.lib.timestamp import datetime_to_timestamp
 from zerver.lib.user_groups import get_recursive_membership_groups
-from zerver.lib.users import get_inaccessible_user_ids
+from zerver.lib.users import check_user_can_access_all_users, get_inaccessible_user_ids
 from zerver.models import Message, Realm, Recipient, Stream, Subscription, UserMessage, UserProfile
 from zerver.tornado.django_api import send_event_on_commit
 
@@ -305,15 +305,46 @@ def send_message_thread_summary_event(
     thread_root_message_id stripping on the reply's message event: to them
     the replies are standalone messages and the thread structure stays
     invisible.
+
+    Participant metadata is viewer-relative: the fetch path anonymizes
+    participants the viewer cannot access, so the push must do the same.
+    Viewers who can access all users share one unrestricted projection;
+    restricted viewers (guests outside can_access_all_users_group) each get
+    their own anonymized projection, computed exactly as the fetch path does.
     """
     root_message_ids = list(dict.fromkeys(thread_root_message_ids))
     if not root_message_ids or not user_ids:
         return
-    summaries = bulk_message_thread_summaries(root_message_ids)
+
+    recipient_profiles = {
+        profile.id: profile for profile in UserProfile.objects.filter(id__in=set(user_ids))
+    }
+    unrestricted_user_ids: set[int] = set()
+    restricted_profiles: list[UserProfile] = []
+    for user_id in user_ids:
+        profile = recipient_profiles.get(user_id)
+        if profile is None:
+            continue
+        if check_user_can_access_all_users(profile):
+            unrestricted_user_ids.add(user_id)
+        else:
+            restricted_profiles.append(profile)
+
+    summaries: dict[int, dict[str, object]] = {}
+    if unrestricted_user_ids:
+        summaries = bulk_message_thread_summaries(root_message_ids)
+    restricted_summaries_by_user_id: dict[int, dict[int, dict[str, object]]] = {}
+    for profile in restricted_profiles:
+        per_user_summaries = bulk_message_thread_summaries(root_message_ids, user_profile=profile)
+        # The push shape omits the per-viewer unread count; clients keep
+        # their own local unread accounting.
+        for summary in per_user_summaries.values():
+            summary.pop("unread_reply_count", None)
+        restricted_summaries_by_user_id[profile.id] = per_user_summaries
+
     for root_message_id in root_message_ids:
         # A root with no surviving replies has no summary row; report null so
         # clients drop the stale projection.
-        summary = summaries.get(root_message_id)
         recipient_ids = set(user_ids) - user_ids_without_thread_root_access_for_delivery(
             thread_root_message_id=root_message_id,
             stream=stream,
@@ -321,9 +352,20 @@ def send_message_thread_summary_event(
         )
         if not recipient_ids:
             continue
-        event = {
-            "type": "message_thread_summary",
-            "root_message_id": root_message_id,
-            "summary": summary,
-        }
-        send_event_on_commit(realm, event, sorted(recipient_ids))
+        unrestricted_recipient_ids = sorted(recipient_ids & unrestricted_user_ids)
+        if unrestricted_recipient_ids:
+            event = {
+                "type": "message_thread_summary",
+                "root_message_id": root_message_id,
+                "summary": summaries.get(root_message_id),
+            }
+            send_event_on_commit(realm, event, unrestricted_recipient_ids)
+        for profile in restricted_profiles:
+            if profile.id not in recipient_ids:
+                continue
+            event = {
+                "type": "message_thread_summary",
+                "root_message_id": root_message_id,
+                "summary": restricted_summaries_by_user_id[profile.id].get(root_message_id),
+            }
+            send_event_on_commit(realm, event, [profile.id])

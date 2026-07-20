@@ -267,6 +267,14 @@ export function notify_local_mixes(
             continue;
         }
 
+        if (message.thread_root_message_id !== undefined) {
+            // Thread replies render in the thread side pane, never in the
+            // main feed; they are not "outside the current view", so skip
+            // both the narrow-to-recipient banner and the jump that would
+            // re-narrow (and reload) the feed on every pane reply.
+            continue;
+        }
+
         const link_msg_id = message.id;
         const show_narrow_to_recipient_banner = should_show_narrow_to_recipient_banner(message);
         if (show_narrow_to_recipient_banner) {

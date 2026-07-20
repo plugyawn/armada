@@ -1574,17 +1574,24 @@ run_test("delete_message", ({override}) => {
 
     override(stream_list, "update_streams_sidebar", noop);
 
+    const call_order = [];
+
     const message_events_stub = make_stub();
     override(message_events, "remove_messages", message_events_stub.f);
 
-    const unread_ops_stub = make_stub();
-    override(unread_ops, "process_read_messages_event", unread_ops_stub.f);
+    override(unread_ops, "process_read_messages_event", (message_ids) => {
+        call_order.push("unread_ops");
+        return message_ids;
+    });
 
     const stream_topic_history_stub = make_stub();
     override(stream_topic_history, "remove_messages", stream_topic_history_stub.f);
 
-    const message_threads_stub = make_stub();
-    override(message_threads, "handle_deleted_messages", message_threads_stub.f);
+    let thread_message_ids;
+    override(message_threads, "handle_deleted_messages", (message_ids) => {
+        call_order.push("message_threads");
+        thread_message_ids = message_ids;
+    });
 
     override(emoji_frequency, "update_emoji_frequency_on_messages_deletion", noop);
 
@@ -1595,17 +1602,36 @@ run_test("delete_message", ({override}) => {
     args = message_events_stub.get_args("message_ids");
     assert_same(args.message_ids, [1337]);
 
-    args = unread_ops_stub.get_args("message_ids");
-    assert_same(args.message_ids, [1337]);
-
     args = stream_topic_history_stub.get_args("opts");
     assert_same(args.opts.stream_id, 99);
     assert_same(args.opts.topic_name, "topic1");
     assert_same(args.opts.num_messages, 1);
     assert_same(args.opts.max_removed_msg_id, 1337);
 
-    args = message_threads_stub.get_args("message_ids");
-    assert_same(args.message_ids, [1337]);
+    assert_same(thread_message_ids, [1337]);
+
+    // Thread bookkeeping reads the deleted messages' unread flags, so it
+    // must run before unread_ops flips them.
+    assert.deepEqual(call_order, ["message_threads", "unread_ops"]);
+});
+
+run_test("message_thread_summary", ({override}) => {
+    const event = {
+        id: 1,
+        type: "message_thread_summary",
+        root_message_id: 31,
+        summary: {
+            reply_count: 3,
+            last_reply_at: 100,
+            last_sender: {user_id: 7, full_name: "Ada Lovelace", avatar_url: "/avatar/7"},
+            participants: [{user_id: 7, full_name: "Ada Lovelace", avatar_url: "/avatar/7"}],
+        },
+    };
+    const stub = make_stub();
+    override(message_threads, "handle_summary_event", stub.f);
+    dispatch(event);
+    assert.equal(stub.num_calls, 1);
+    assert_same(stub.get_args("event").event, event);
 });
 
 run_test("user_status", ({override}) => {

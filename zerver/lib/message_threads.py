@@ -1,3 +1,4 @@
+from collections.abc import Collection, Iterable
 from typing import Any
 
 from django.db.models import (
@@ -22,7 +23,8 @@ from zerver.lib.avatar import get_avatar_field, get_avatar_for_inaccessible_user
 from zerver.lib.timestamp import datetime_to_timestamp
 from zerver.lib.user_groups import get_recursive_membership_groups
 from zerver.lib.users import get_inaccessible_user_ids
-from zerver.models import Message, Recipient, Stream, Subscription, UserMessage, UserProfile
+from zerver.models import Message, Realm, Recipient, Stream, Subscription, UserMessage, UserProfile
+from zerver.tornado.django_api import send_event_on_commit
 
 MESSAGE_THREAD_PARTICIPANT_LIMIT = 4
 THREAD_ROOT_ACCESS_ALIAS = "viewer_can_access_thread_root"
@@ -283,3 +285,45 @@ def bulk_message_thread_summaries(
             summary["unread_reply_count"] = row["unread_reply_count"]
         summaries[root_id] = summary
     return summaries
+
+
+def send_message_thread_summary_event(
+    realm: Realm,
+    thread_root_message_ids: Iterable[int],
+    user_ids: Collection[int],
+    *,
+    stream: Stream | None,
+) -> None:
+    """Push fresh reply summaries for roots whose reply set just changed.
+
+    Sent when a reply is posted or deleted so clients can update the root's
+    stored summary without refetching it.  The payload omits the per-viewer
+    unread count; clients keep their own local unread accounting.  A root
+    whose last reply was deleted carries a null summary so clients clear it.
+
+    Viewers for whom the root is protected history are excluded, matching the
+    thread_root_message_id stripping on the reply's message event: to them
+    the replies are standalone messages and the thread structure stays
+    invisible.
+    """
+    root_message_ids = list(dict.fromkeys(thread_root_message_ids))
+    if not root_message_ids or not user_ids:
+        return
+    summaries = bulk_message_thread_summaries(root_message_ids)
+    for root_message_id in root_message_ids:
+        # A root with no surviving replies has no summary row; report null so
+        # clients drop the stale projection.
+        summary = summaries.get(root_message_id)
+        recipient_ids = set(user_ids) - user_ids_without_thread_root_access_for_delivery(
+            thread_root_message_id=root_message_id,
+            stream=stream,
+            user_ids=set(user_ids),
+        )
+        if not recipient_ids:
+            continue
+        event = {
+            "type": "message_thread_summary",
+            "root_message_id": root_message_id,
+            "summary": summary,
+        }
+        send_event_on_commit(realm, event, sorted(recipient_ids))

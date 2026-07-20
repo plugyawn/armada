@@ -1,5 +1,7 @@
 import $ from "jquery";
 
+import render_message_thread_pane from "../templates/message_thread_pane.hbs";
+
 import * as compose_editor from "./compose_editor.ts";
 import type {ResolvedComposeRecipient} from "./compose_send.ts";
 import {Filter} from "./filter.ts";
@@ -44,8 +46,11 @@ type PaneAgentEntry = {
 type PaneElements = {
     pane: HTMLElement;
     title: HTMLElement;
-    meta: HTMLElement;
-    tabs: HTMLElement;
+    context: HTMLElement;
+    agent_bar: HTMLElement;
+    agent_prev: HTMLButtonElement;
+    agent_current: HTMLButtonElement;
+    agent_next: HTMLButtonElement;
     body: HTMLElement;
     panel: HTMLElement;
     activity: HTMLElement;
@@ -62,7 +67,6 @@ type PaneElements = {
     close: HTMLButtonElement;
 };
 
-const pending_summary_reconciliation_root_ids = new Set<number>();
 const root_load_callbacks_by_message_id = new Map<number, ((loaded: boolean) => void)[]>();
 const root_load_data_by_message_id = new Map<number, MessageListData>();
 const pending_root_by_anchor_message_id = new Map<number, number>();
@@ -81,12 +85,10 @@ let pane_trace_enhancer: TraceEnhancer | undefined;
 let mobile_scroll_locked = false;
 let mobile_inerted_elements: HTMLElement[] = [];
 let initialized = false;
-let tabs_signature = "";
+let agent_bar_signature = "";
 let pane_render_frame: number | undefined;
 let pane_open_focus_frame: number | undefined;
 let pane_restore_focus_frame: number | undefined;
-let summary_reconciliation_in_flight = false;
-let summary_reconciliation_generation = 0;
 
 function hash_thread_id(thread_id: string): number {
     let hash = 2_166_136_261;
@@ -148,6 +150,27 @@ export function selection_after_update_for_testing(
         return selected;
     }
     return agents[0]?.thread_id ?? HUMAN_THREAD_KEY;
+}
+
+export function cycle_order_for_testing(agents: pear_run_state.PearAgentThread[]): string[] {
+    // The human thread (Main) always leads; agents follow in stable
+    // first-seen spawn order.
+    return [HUMAN_THREAD_KEY, ...agents.map((agent) => agent.thread_id)];
+}
+
+export function cycle_selection_for_testing(
+    order: string[],
+    selected: string | undefined,
+    delta: number,
+): string {
+    const index = selected === undefined ? -1 : order.indexOf(selected);
+    const start = index === -1 ? 0 : index;
+    return order[(start + delta + order.length) % order.length] ?? HUMAN_THREAD_KEY;
+}
+
+export function agent_is_dimmed_for_testing(agent: pear_run_state.PearAgentThread): boolean {
+    // Closed/finished agents are shown dimmed in the cycler.
+    return status_tone_for_testing(agent.status) !== "active";
 }
 
 function create_sigil(agent: pear_run_state.PearAgentThread): HTMLElement {
@@ -260,12 +283,32 @@ function set_mobile_background_inert(enabled: boolean): void {
         return;
     }
     const pane = pane_elements?.pane;
-    const parent = pane?.parentElement;
-    if (pane === undefined || parent === null || parent === undefined) {
+    // The pane lives inside .column-right; the modal background is everything
+    // the column does not contain (its .app-main siblings) plus the pane's
+    // own siblings inside the column (the user list).
+    const column = pane?.parentElement;
+    const parent = column?.parentElement;
+    if (
+        pane === undefined ||
+        column === null ||
+        column === undefined ||
+        parent === null ||
+        parent === undefined
+    ) {
         return;
     }
     set_mobile_background_inert(false);
     for (const sibling of parent.children) {
+        if (
+            sibling instanceof HTMLElement &&
+            sibling !== column &&
+            !sibling.hasAttribute("inert")
+        ) {
+            sibling.setAttribute("inert", "");
+            mobile_inerted_elements.push(sibling);
+        }
+    }
+    for (const sibling of column.children) {
         if (sibling instanceof HTMLElement && sibling !== pane && !sibling.hasAttribute("inert")) {
             sibling.setAttribute("inert", "");
             mobile_inerted_elements.push(sibling);
@@ -299,100 +342,49 @@ function update_pane_layout(): void {
     }
 }
 
+function required_element(root: ParentNode, selector: string): HTMLElement {
+    const element = root.querySelector<HTMLElement>(selector);
+    if (element === null) {
+        throw new Error(`message thread pane template is missing ${selector}`);
+    }
+    return element;
+}
+
+function required_button(root: ParentNode, selector: string): HTMLButtonElement {
+    const element = root.querySelector<HTMLButtonElement>(selector);
+    if (element?.tagName !== "BUTTON") {
+        throw new TypeError(`message thread pane template ${selector} is not a button`);
+    }
+    return element;
+}
+
 function create_pane_elements(pane: HTMLElement): PaneElements {
     pane.replaceChildren();
-    const header = document.createElement("header");
-    header.className = "message-thread-pane-header";
-    const heading_group = document.createElement("div");
-    heading_group.className = "message-thread-pane-heading";
-    const title = document.createElement("h2");
-    title.id = "message-thread-pane-title";
-    title.textContent = $t({defaultMessage: "Thread"});
-    const meta = document.createElement("span");
-    meta.className = "message-thread-pane-meta";
-    heading_group.append(title, meta);
-    const close_button = document.createElement("button");
-    close_button.className = "message-thread-pane-close";
-    close_button.type = "button";
-    close_button.setAttribute("aria-label", $t({defaultMessage: "Close thread"}));
-    const close_icon = document.createElement("i");
-    close_icon.className = "zulip-icon zulip-icon-close";
-    close_icon.setAttribute("aria-hidden", "true");
-    close_button.append(close_icon);
-    header.append(heading_group, close_button);
-
-    const tabs = document.createElement("div");
-    tabs.className = "message-thread-pane-tabs";
-    tabs.setAttribute("role", "tablist");
-    tabs.setAttribute("aria-label", $t({defaultMessage: "Message threads"}));
-
-    const body = document.createElement("section");
-    body.className = "message-thread-pane-body";
-    const activity = document.createElement("div");
-    activity.className = "message-thread-pane-activity";
-    activity.setAttribute("aria-live", "polite");
-    const panel = document.createElement("div");
-    panel.className = "message-thread-pane-panel";
-    panel.id = "message-thread-pane-panel";
-    panel.setAttribute("role", "tabpanel");
-
-    const replies = document.createElement("div");
-    replies.className = "message-thread-replies";
-    const root = document.createElement("div");
-    root.className = "message-thread-root";
-    const separator = document.createElement("div");
-    separator.className = "message-thread-reply-separator";
-    const reply_status = document.createElement("div");
-    reply_status.className = "message-thread-reply-status";
-    reply_status.setAttribute("role", "status");
-    reply_status.setAttribute("aria-live", "polite");
-    const older = document.createElement("button");
-    older.className = "message-thread-load-older";
-    older.type = "button";
-    older.textContent = $t({defaultMessage: "Load earlier replies"});
-    older.hidden = true;
-    const reply_list = document.createElement("div");
-    reply_list.className = "message-thread-reply-list";
-    const composer = document.createElement("div");
-    composer.className = "message-thread-composer-host";
-    replies.append(separator, reply_status, older, reply_list, composer);
-
-    const trace_root = document.createElement("div");
-    trace_root.className = "message-thread-agent-trace pear-message-surface pear-message";
-    const message = document.createElement("div");
-    message.className = "message-thread-agent-message message_content";
-    const trace_status = document.createElement("span");
-    trace_status.className = "pear-run-trace-status";
-    trace_status.setAttribute("aria-live", "polite");
-    trace_status.setAttribute("role", "status");
-    const trace_host = document.createElement("div");
-    trace_host.className = "pear-run-trace";
-    message.append(trace_status, trace_host);
-    trace_root.append(message);
-
-    panel.append(replies, trace_root);
-    body.append(root, activity, panel);
-    pane.append(header, tabs, body);
+    pane.innerHTML = render_message_thread_pane();
+    const title = required_element(pane, "#message-thread-pane-title");
     pane.setAttribute("aria-labelledby", title.id);
     return {
         pane,
         title,
-        meta,
-        tabs,
-        body,
-        panel,
-        activity,
-        replies,
-        root,
-        separator,
-        reply_status,
-        reply_list,
-        older,
-        composer,
-        trace_root,
-        trace_host,
-        trace_status,
-        close: close_button,
+        context: required_element(pane, ".message-thread-pane-context"),
+        agent_bar: required_element(pane, ".message-thread-agent-bar"),
+        agent_prev: required_button(pane, ".message-thread-agent-cycle-prev"),
+        agent_current: required_button(pane, ".message-thread-agent-current"),
+        agent_next: required_button(pane, ".message-thread-agent-cycle-next"),
+        body: required_element(pane, ".message-thread-pane-body"),
+        panel: required_element(pane, "#message-thread-pane-panel"),
+        activity: required_element(pane, ".message-thread-pane-activity"),
+        replies: required_element(pane, ".message-thread-replies"),
+        root: required_element(pane, ".message-thread-root"),
+        separator: required_element(pane, ".message-thread-reply-separator"),
+        reply_status: required_element(pane, ".message-thread-reply-status"),
+        reply_list: required_element(pane, ".message-thread-reply-list"),
+        older: required_button(pane, ".message-thread-load-older"),
+        composer: required_element(pane, ".message-thread-composer-host"),
+        trace_root: required_element(pane, ".message-thread-agent-trace"),
+        trace_host: required_element(pane, ".pear-run-trace"),
+        trace_status: required_element(pane, ".pear-run-trace-status"),
+        close: required_button(pane, ".message-thread-pane-close"),
     };
 }
 
@@ -410,16 +402,15 @@ function ensure_initialized(): PaneElements | undefined {
         pane_elements.close.addEventListener("click", () => {
             close();
         });
-        pane_elements.tabs.addEventListener("click", (event) => {
-            if (!(event.target instanceof Element)) {
-                return;
-            }
-            const tab = event.target.closest<HTMLButtonElement>("[role=tab]");
-            if (tab?.dataset["threadKey"] !== undefined) {
-                select_thread(tab.dataset["threadKey"], true);
-            }
+        pane_elements.agent_prev.addEventListener("click", () => {
+            cycle_thread(-1, false);
         });
-        pane_elements.tabs.addEventListener("keydown", handle_tablist_keydown);
+        pane_elements.agent_next.addEventListener("click", () => {
+            cycle_thread(1, false);
+        });
+        pane_elements.agent_current.addEventListener("click", () => {
+            cycle_thread(1, false);
+        });
         pane_elements.older.addEventListener("click", load_earlier_replies);
         pane_elements.body.addEventListener("scroll", mark_visible_thread_replies_read, {
             passive: true,
@@ -468,77 +459,52 @@ function agent_entries_for_open_message(): PaneAgentEntry[] {
     return [...entries.values()];
 }
 
-function render_tabs(agent_entries: PaneAgentEntry[]): void {
+function render_agent_bar(agent_entries: PaneAgentEntry[]): void {
     const elements = pane_elements;
     if (elements === undefined || open_message_id === undefined) {
         return;
     }
-    const summary = message_store.get(open_message_id)?.reply_summary;
-    const signature = `${selected_thread_key ?? ""}\u0001${summary_signature(summary)}\u0001${agent_entries.map(({agent, run}) => `${run.id}:${agent_signature(agent)}`).join("\u0001")}`;
-    if (signature === tabs_signature) {
+    const selected_entry = agent_entries.find(({agent}) => agent.thread_id === selected_thread_key);
+    const signature = `${selected_thread_key ?? ""}\u0001${agent_entries.length}\u0001${selected_entry === undefined ? "" : agent_signature(selected_entry.agent)}`;
+    if (signature === agent_bar_signature) {
         return;
     }
-    tabs_signature = signature;
-    elements.tabs.hidden = agent_entries.length === 0;
-    if (agent_entries.length === 0) {
-        elements.tabs.replaceChildren();
-        elements.panel.setAttribute("role", "region");
-        elements.panel.setAttribute("aria-label", $t({defaultMessage: "Thread content"}));
-        elements.panel.removeAttribute("aria-labelledby");
-        return;
-    }
-    elements.panel.setAttribute("role", "tabpanel");
-    elements.panel.removeAttribute("aria-label");
-    const restore_tab_focus = elements.tabs.contains(document.activeElement);
-    const tabs: HTMLButtonElement[] = [];
-    const replies_tab = document.createElement("button");
-    replies_tab.className = "message-thread-pane-tab message-thread-pane-replies-tab";
-    replies_tab.type = "button";
-    replies_tab.dataset["threadKey"] = HUMAN_THREAD_KEY;
-    replies_tab.id = "message-thread-pane-tab-replies";
-    replies_tab.setAttribute("role", "tab");
-    replies_tab.setAttribute("aria-selected", String(selected_thread_key === HUMAN_THREAD_KEY));
-    replies_tab.setAttribute("aria-controls", elements.panel.id);
-    replies_tab.setAttribute("tabindex", selected_thread_key === HUMAN_THREAD_KEY ? "0" : "-1");
-    const reply_label = document.createElement("span");
-    reply_label.className = "message-thread-pane-tab-label";
-    reply_label.textContent = $t({defaultMessage: "Replies"});
-    replies_tab.append(reply_label);
-    if ((summary?.reply_count ?? 0) > 0) {
-        const count = document.createElement("span");
-        count.className = "message-thread-pane-tab-count";
-        count.textContent = String(summary!.reply_count);
-        replies_tab.append(count);
-    }
-    tabs.push(replies_tab);
-    for (const [index, {agent}] of agent_entries.entries()) {
-        const tab = document.createElement("button");
-        const selected = agent.thread_id === selected_thread_key;
-        const name = display_name_for_testing(agent, index);
-        tab.className = "message-thread-pane-tab";
-        tab.type = "button";
-        tab.dataset["threadKey"] = agent.thread_id;
-        tab.id = `message-thread-pane-tab-agent-${index}`;
-        tab.setAttribute("role", "tab");
-        tab.setAttribute("aria-selected", String(selected));
-        tab.setAttribute("aria-controls", elements.panel.id);
-        tab.setAttribute("tabindex", selected ? "0" : "-1");
-        tab.setAttribute("title", name);
-        tab.append(create_sigil(agent));
+    agent_bar_signature = signature;
+    elements.agent_bar.hidden = agent_entries.length === 0;
+    const current = elements.agent_current;
+    current.replaceChildren();
+    if (selected_entry === undefined) {
+        delete current.dataset["threadKey"];
+        current.classList.remove("message-thread-agent-current-dimmed");
         const label = document.createElement("span");
-        label.className = "message-thread-pane-tab-label";
-        label.textContent = name;
-        tab.append(label);
-        tabs.push(tab);
+        label.className = "message-thread-agent-current-label";
+        label.textContent = $t({defaultMessage: "Replies"});
+        current.append(label);
+        return;
     }
-    elements.tabs.replaceChildren(...tabs);
-    const selected_tab = elements.tabs.querySelector<HTMLElement>("[role=tab][aria-selected=true]");
-    if (selected_tab !== null) {
-        elements.panel.setAttribute("aria-labelledby", selected_tab.id);
+    const {agent} = selected_entry;
+    const index = agent_entries.indexOf(selected_entry);
+    current.dataset["threadKey"] = agent.thread_id;
+    current.classList.toggle(
+        "message-thread-agent-current-dimmed",
+        agent_is_dimmed_for_testing(agent),
+    );
+    current.append(create_sigil(agent));
+    const name = document.createElement("span");
+    name.className = "message-thread-agent-current-label";
+    name.textContent = display_name_for_testing(agent, index);
+    current.append(name);
+    const role = agent.role?.trim();
+    if (role !== undefined && role !== "") {
+        const role_element = document.createElement("span");
+        role_element.className = "message-thread-agent-current-role";
+        role_element.textContent = `(${role})`;
+        current.append(role_element);
     }
-    if (restore_tab_focus) {
-        selected_tab?.focus({preventScroll: true});
-    }
+    const status = document.createElement("span");
+    status.className = "message-thread-agent-current-status";
+    status.textContent = `· ${agent.status}`;
+    current.append(status);
 }
 
 function resolved_recipient_for_message(message: message_store.Message): ResolvedComposeRecipient {
@@ -557,6 +523,16 @@ function resolved_recipient_for_message(message: message_store.Message): Resolve
             .map((recipient) => recipient.email)
             .join(","),
     };
+}
+
+function context_label_for_message(message: message_store.Message): string {
+    if (message.type === "stream") {
+        const stream_name =
+            typeof message.display_recipient === "string" ? message.display_recipient : "";
+        const topic = message.topic.trim();
+        return topic === "" ? stream_name : `${stream_name} > ${topic}`;
+    }
+    return $t({defaultMessage: "Direct messages"});
 }
 
 function destroy_human_thread_view(): void {
@@ -586,9 +562,9 @@ function update_reply_list_chrome(): void {
     if (elements === undefined || view === undefined) {
         return;
     }
-    const count =
-        message_store.get(view.message_id)?.reply_summary?.reply_count ??
-        view.reply_list.data.num_items();
+    // The pushed reply summary is the only reply count in the pane; a local
+    // message list is a window onto the thread, not a count source.
+    const count = message_store.get(view.message_id)?.reply_summary?.reply_count ?? 0;
     elements.separator.hidden = count === 0;
     elements.separator.textContent = $t(
         {defaultMessage: "{count, plural, one {# reply} other {# replies}}"},
@@ -600,46 +576,6 @@ function update_reply_list_chrome(): void {
         count === 0 && view.reply_list.data.fetch_status.has_found_oldest()
             ? $t({defaultMessage: "No replies yet."})
             : "";
-}
-
-function reconcile_root_summaries(root_ids: Iterable<number>): void {
-    const cached_root_ids = [...new Set(root_ids)].filter(
-        (root_id) => message_store.get(root_id) !== undefined,
-    );
-    message_store.mark_thread_reply_lifecycle(cached_root_ids);
-    for (const root_id of cached_root_ids) {
-        pending_summary_reconciliation_root_ids.add(root_id);
-    }
-    if (summary_reconciliation_in_flight || pending_summary_reconciliation_root_ids.size === 0) {
-        return;
-    }
-
-    const requested_root_ids = [...pending_summary_reconciliation_root_ids];
-    pending_summary_reconciliation_root_ids.clear();
-    summary_reconciliation_in_flight = true;
-    const generation = summary_reconciliation_generation;
-    function finish(): void {
-        if (generation !== summary_reconciliation_generation) {
-            return;
-        }
-        summary_reconciliation_in_flight = false;
-        for (const root_id of requested_root_ids) {
-            render_registered_rows(root_id);
-        }
-        if (open_message_id !== undefined && requested_root_ids.includes(open_message_id)) {
-            tabs_signature = "";
-            schedule_pane_render();
-        }
-        if (pending_summary_reconciliation_root_ids.size > 0) {
-            reconcile_root_summaries([]);
-        }
-    }
-    message_fetch.load_messages_by_ids({
-        message_ids: requested_root_ids,
-        suppress_connection_error: true,
-        cont: finish,
-        on_error: finish,
-    });
 }
 
 function ensure_root_message_loaded(message_id: number, callback: (loaded: boolean) => void): void {
@@ -731,7 +667,11 @@ function set_unread_reply_count(message_id: number, count: number): boolean {
     if (summary === undefined) {
         return false;
     }
-    const next_count = Math.max(0, Math.min(count, summary.reply_count));
+    // Only clamped below, not at reply_count: the local reply_count may be
+    // stale while a summary push is in flight, and clamping against it
+    // would drop unread increments for replies that just arrived. The
+    // pushed summary re-clamps on apply.
+    const next_count = Math.max(0, count);
     if (summary.unread_reply_count === next_count) {
         return false;
     }
@@ -812,13 +752,32 @@ export function handle_added_messages(messages: message_store.Message[]): void {
         }
         render_registered_rows(message.id);
     }
-    reconcile_root_summaries(root_ids);
+    // New replies change their roots' summaries. The server pushes the fresh
+    // summary as a message_thread_summary event; here we only fence in-flight
+    // fetches and keep the local unread count current until it arrives.
+    message_store.mark_thread_reply_lifecycle(root_ids);
+    for (const message of messages) {
+        if (message.thread_root_message_id !== undefined && message.unread) {
+            adjust_unread_reply_count(message.thread_root_message_id, 1);
+        }
+    }
     if (human_thread_view !== undefined && root_ids.has(human_thread_view.message_id)) {
         update_reply_list_chrome();
         observe_reply_rows();
     }
     for (const root_id of root_ids) {
         render_registered_rows(root_id);
+    }
+}
+
+export function handle_summary_event(event: message_store.MessageThreadSummaryEvent): void {
+    const root_message_id = event.root_message_id;
+    if (!message_store.apply_thread_summary(root_message_id, event.summary)) {
+        return;
+    }
+    render_registered_rows(root_message_id);
+    if (open_message_id === root_message_id) {
+        schedule_pane_render();
     }
 }
 
@@ -836,7 +795,6 @@ export function handle_updated_messages(events: UpdateMessageEvent[]): void {
     }
     if (open_message_id !== undefined && root_ids.has(open_message_id)) {
         human_thread_view?.editor.refresh_recipient();
-        tabs_signature = "";
         schedule_pane_render();
     }
 }
@@ -844,11 +802,11 @@ export function handle_updated_messages(events: UpdateMessageEvent[]): void {
 export function handle_read_flag_update(message_ids: number[], marked_read: boolean): void {
     const root_deltas = new Map<number, number>();
     const root_ids = new Set<number>();
-    let has_uncached_message = false;
     for (const message_id of message_ids) {
         const message = message_store.get(message_id);
         if (message === undefined) {
-            has_uncached_message = true;
+            // Replies we never cached cannot be attributed to a root
+            // locally; the next summary hydration reconciles them.
             continue;
         }
         const root_id = message.thread_root_message_id;
@@ -860,18 +818,12 @@ export function handle_read_flag_update(message_ids: number[], marked_read: bool
             root_deltas.set(root_id, (root_deltas.get(root_id) ?? 0) + (marked_read ? -1 : 1));
         }
     }
-    if (has_uncached_message) {
-        for (const root of message_store.get_thread_roots()) {
-            root_ids.add(root.id);
-        }
-    }
     for (const [root_id, delta] of root_deltas) {
         adjust_unread_reply_count(root_id, delta);
     }
     for (const root_id of root_ids) {
         render_registered_rows(root_id);
     }
-    reconcile_root_summaries(root_ids);
 }
 
 export function handle_topic_marked_read(stream_id: number, topic: string): void {
@@ -887,11 +839,6 @@ export function handle_topic_marked_read(stream_id: number, topic: string): void
     for (const root_id of root_ids) {
         set_unread_reply_count(root_id, 0);
     }
-    reconcile_root_summaries(root_ids);
-}
-
-export function handle_reconnect(): void {
-    reconcile_root_summaries(message_store.get_thread_roots().map((root) => root.id));
 }
 
 export function get_compose_target(
@@ -915,33 +862,36 @@ export function get_compose_target(
 
 export function handle_deleted_messages(message_ids: number[]): void {
     const deleted_ids = new Set(message_ids);
-    for (const message_id of deleted_ids) {
-        pending_summary_reconciliation_root_ids.delete(message_id);
-    }
     if (open_message_id !== undefined && deleted_ids.has(open_message_id)) {
         close({restore_focus: false});
     }
     const root_ids = new Set<number>();
-    let has_uncached_message = false;
+    const root_unread_deltas = new Map<number, number>();
     for (const message_id of message_ids) {
         const message = message_store.get(message_id);
         if (message === undefined) {
-            has_uncached_message = true;
+            // Replies we never cached cannot be attributed to a root locally;
+            // the pushed summary still updates the root's other fields.
             continue;
         }
         const root_id = message.thread_root_message_id;
-        if (root_id !== undefined && !deleted_ids.has(root_id)) {
-            root_ids.add(root_id);
+        if (root_id === undefined || deleted_ids.has(root_id)) {
+            continue;
+        }
+        root_ids.add(root_id);
+        if (message.unread) {
+            root_unread_deltas.set(root_id, (root_unread_deltas.get(root_id) ?? 0) - 1);
         }
     }
-    if (has_uncached_message) {
-        for (const root of message_store.get_thread_roots()) {
-            if (!deleted_ids.has(root.id)) {
-                root_ids.add(root.id);
-            }
-        }
+    // Deleting replies changes their roots' summaries. The server pushes the
+    // fresh summary as a message_thread_summary event (with no unread
+    // count); fence in-flight fetches and settle the local unread count here.
+    // This must run before unread_ops flips the deleted messages' unread
+    // booleans, so the dispatch order in server_events_dispatch.js matters.
+    message_store.mark_thread_reply_lifecycle(root_ids);
+    for (const [root_id, delta] of root_unread_deltas) {
+        adjust_unread_reply_count(root_id, delta);
     }
-    reconcile_root_summaries(root_ids);
     for (const root_id of root_ids) {
         render_registered_rows(root_id);
     }
@@ -951,11 +901,13 @@ function secondary_view_options(): {
     manages_primary_viewport: false;
     show_recipient_headers: false;
     show_thread_previews: false;
+    suppress_row_chrome: true;
 } {
     return {
         manages_primary_viewport: false,
         show_recipient_headers: false,
         show_thread_previews: false,
+        suppress_row_chrome: true,
     };
 }
 
@@ -1102,27 +1054,27 @@ function render_pane(options: {scroll_replies_to_end?: boolean} = {}): void {
         close();
         return;
     }
+    // The header is static: the context subtitle describes the root's
+    // conversation for as long as the pane is open and never changes
+    // meaning with the selected thread.
+    const root_message = message_store.get(open_message_id);
+    elements.context.textContent =
+        root_message === undefined ? "" : context_label_for_message(root_message);
     const agent_entries = agent_entries_for_open_message();
     const agents = agent_entries.map(({agent}) => agent);
     selected_thread_key = selection_after_update_for_testing(agents, selected_thread_key);
     mount_root_thread_view(open_message_id);
-    render_tabs(agent_entries);
+    render_agent_bar(agent_entries);
     if (selected_thread_key === HUMAN_THREAD_KEY) {
         mount_human_thread_view(open_message_id);
         trace_controller?.destroy();
         trace_controller = undefined;
         trace_thread_id = undefined;
         elements.replies.hidden = false;
+        elements.composer.hidden = false;
         elements.trace_root.hidden = true;
         elements.activity.hidden = true;
-        const reply_count =
-            message_store.get(open_message_id)?.reply_summary?.reply_count ??
-            human_thread_view?.reply_list.data.num_items() ??
-            0;
-        elements.meta.textContent = $t(
-            {defaultMessage: "{count, plural, one {# reply} other {# replies}}"},
-            {count: reply_count},
-        );
+        elements.panel.setAttribute("aria-label", $t({defaultMessage: "Replies"}));
         update_reply_list_chrome();
         if (options.scroll_replies_to_end === true) {
             human_thread_view?.reply_list.view.$list
@@ -1141,9 +1093,10 @@ function render_pane(options: {scroll_replies_to_end?: boolean} = {}): void {
         }
         const {agent} = selected;
         const index = agents.indexOf(agent);
-        elements.meta.textContent = [display_name_for_testing(agent, index), agent.role?.trim()]
-            .filter(Boolean)
-            .join(" · ");
+        elements.panel.setAttribute(
+            "aria-label",
+            display_name_for_testing(agent, Math.max(index, 0)),
+        );
         elements.activity.hidden = false;
         const current_activity = agent.current_activity?.trim();
         elements.activity.textContent =
@@ -1151,6 +1104,7 @@ function render_pane(options: {scroll_replies_to_end?: boolean} = {}): void {
                 ? current_activity
                 : $t({defaultMessage: "Status: {status}"}, {status: agent.status});
         elements.replies.hidden = true;
+        elements.composer.hidden = true;
         elements.trace_root.hidden = false;
         mount_selected_agent_trace(selected);
     }
@@ -1219,7 +1173,7 @@ function restore_launch_focus(
     row.focus({preventScroll: true});
 }
 
-function select_thread(thread_key: string, focus_tab: boolean): void {
+function select_thread(thread_key: string, focus_current: boolean): void {
     if (
         thread_key === selected_thread_key &&
         (thread_key === HUMAN_THREAD_KEY || trace_controller !== undefined)
@@ -1228,38 +1182,24 @@ function select_thread(thread_key: string, focus_tab: boolean): void {
     }
     selected_thread_key = thread_key;
     render_pane({scroll_replies_to_end: thread_key === HUMAN_THREAD_KEY});
-    if (focus_tab) {
-        pane_elements?.tabs
-            .querySelector<HTMLElement>(`[data-thread-key="${CSS.escape(thread_key)}"]`)
-            ?.focus({preventScroll: true});
+    if (focus_current && !pane_elements?.agent_bar.hidden) {
+        pane_elements?.agent_current.focus({preventScroll: true});
     }
 }
 
-function handle_tablist_keydown(event: KeyboardEvent): void {
-    if (!(event.target instanceof Element)) {
+function cycle_thread(delta: number, focus_current: boolean): void {
+    if (open_message_id === undefined) {
         return;
     }
-    const tab = event.target.closest<HTMLButtonElement>("[role=tab]");
-    if (tab === null || !["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) {
+    const order = cycle_order_for_testing(agent_entries_for_open_message().map(({agent}) => agent));
+    if (order.length < 2) {
         return;
     }
-    const elements = pane_elements;
-    if (elements === undefined) {
-        return;
-    }
-    const tabs = [...elements.tabs.querySelectorAll<HTMLButtonElement>("[role=tab]")];
-    const index = tabs.indexOf(tab);
-    const next_index =
-        event.key === "Home"
-            ? 0
-            : event.key === "End"
-              ? tabs.length - 1
-              : (index + (event.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length;
-    const thread_key = tabs[next_index]?.dataset["threadKey"];
-    if (thread_key !== undefined) {
-        select_thread(thread_key, true);
-        event.preventDefault();
-    }
+    select_thread(cycle_selection_for_testing(order, selected_thread_key, delta), focus_current);
+}
+
+function thread_composer_has_content(): boolean {
+    return human_thread_view !== undefined && human_thread_view.editor.textarea.value.trim() !== "";
 }
 
 function handle_document_keydown(event: KeyboardEvent): void {
@@ -1269,6 +1209,22 @@ function handle_document_keydown(event: KeyboardEvent): void {
     }
     if (event.key === "Escape") {
         close();
+        event.preventDefault();
+        return;
+    }
+    if (
+        event.altKey &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.shiftKey &&
+        (event.key === "ArrowLeft" || event.key === "ArrowRight")
+    ) {
+        // codex-cli-style thread cycling; a non-empty composer keeps
+        // Alt+arrow for its own text navigation.
+        if (thread_composer_has_content()) {
+            return;
+        }
+        cycle_thread(event.key === "ArrowRight" ? 1 : -1, true);
         event.preventDefault();
         return;
     }
@@ -1329,15 +1285,10 @@ function open(
         }
         if (options.focus_composer === true && thread_key === HUMAN_THREAD_KEY) {
             human_thread_view?.editor.focus();
+        } else if (thread_key !== HUMAN_THREAD_KEY && !elements.agent_bar.hidden) {
+            elements.agent_current.focus({preventScroll: true});
         } else {
-            const selected_tab = elements.tabs.querySelector<HTMLElement>(
-                `[data-thread-key="${CSS.escape(thread_key)}"]`,
-            );
-            if (selected_tab !== null) {
-                selected_tab.focus({preventScroll: true});
-            } else {
-                elements.close.focus({preventScroll: true});
-            }
+            elements.close.focus({preventScroll: true});
         }
     });
 }
@@ -1410,7 +1361,7 @@ export function close(options: {restore_focus?: boolean} = {}): void {
     trace_thread_id = undefined;
     open_message_id = undefined;
     selected_thread_key = undefined;
-    tabs_signature = "";
+    agent_bar_signature = "";
     elements.pane.hidden = true;
     elements.pane.setAttribute("aria-hidden", "true");
     set_mobile_background_inert(false);
@@ -1572,6 +1523,14 @@ export function render_for_message_row(
     if (host === null) {
         return;
     }
+    if (row.closest("#message-thread-pane") !== null) {
+        // Rows inside the pane render chrome-stripped; the pane itself is
+        // the thread UI, so a launch strip would recurse into it.
+        host.hidden = true;
+        host.replaceChildren();
+        delete host.dataset["signature"];
+        return;
+    }
     trace_enhancer_by_row.set(row, enhance_trace);
     const message = message_store.get(message_id);
     if (message === undefined) {
@@ -1696,9 +1655,6 @@ export function clear_for_testing(): void {
     close({restore_focus: false});
     destroy_human_thread_view();
     destroy_root_thread_view();
-    pending_summary_reconciliation_root_ids.clear();
-    summary_reconciliation_in_flight = false;
-    summary_reconciliation_generation += 1;
     root_load_callbacks_by_message_id.clear();
     for (const data of root_load_data_by_message_id.values()) {
         message_fetch.cancel_retries_for_message_list_data(data);

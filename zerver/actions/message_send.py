@@ -53,7 +53,10 @@ from zerver.lib.message import (
     visibility_policy_for_send_message,
 )
 from zerver.lib.message_cache import MessageDict
-from zerver.lib.message_threads import user_ids_without_thread_root_access_for_delivery
+from zerver.lib.message_threads import (
+    send_message_thread_summary_event,
+    user_ids_without_thread_root_access_for_delivery,
+)
 from zerver.lib.muted_users import get_muting_users
 from zerver.lib.notification_data import (
     UserMessageNotificationsData,
@@ -1366,6 +1369,17 @@ def do_send_messages(
         if send_request.sender_queue_id is not None:
             event["sender_queue_id"] = send_request.sender_queue_id
         send_event_on_commit(send_request.realm, event, users)
+
+        if send_request.message.thread_root_id is not None:
+            # A reply changes its root's reply summary. Push the fresh
+            # summary (after the message event, so clients apply them in
+            # order) instead of letting clients refetch the root.
+            send_message_thread_summary_event(
+                send_request.realm,
+                [send_request.message.thread_root_id],
+                [user["id"] for user in users],
+                stream=send_request.stream,
+            )
 
         if send_request.links_for_embed:
             event_data = {

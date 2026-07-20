@@ -11,7 +11,7 @@ const {run_test} = require("./lib/test.cjs");
 const $ = require("./lib/zjquery.cjs");
 
 const dom = new JSDOM(
-    "<!doctype html><html><body><main class='app-main'><section id='primary-shell'><div class='message_row' data-message-id='31'><div class='message_controls'><button class='message_thread_button'></button></div><div class='message-thread-host' hidden></div></div><div class='message_row' data-message-id='41'><div class='message_controls'><button class='message_thread_button'></button></div><div class='message-thread-host' hidden></div></div></section><aside id='message-thread-pane' hidden></aside></main></body></html>",
+    "<!doctype html><html><body><main class='app-main'><section id='primary-shell'><div class='message_row' data-message-id='31'><div class='message_controls'><button class='message_thread_button'></button></div><div class='message-thread-host' hidden></div></div><div class='message_row' data-message-id='41'><div class='message_controls'><button class='message_thread_button'></button></div><div class='message-thread-host' hidden></div></div></section><div class='column-right'><aside id='message-thread-pane' hidden></aside></div></main></body></html>",
     {pretendToBeVisual: true},
 );
 const {window} = dom;
@@ -373,6 +373,29 @@ run_test("sigils and agent selection are deterministic", () => {
     assert.equal(message_threads.status_tone_for_testing("failed"), "failed");
 });
 
+run_test("cycler order, wrap, and dimming are deterministic", () => {
+    // The human thread leads; agents follow in first-seen spawn order.
+    const order = message_threads.cycle_order_for_testing(agents);
+    assert.deepEqual(order, ["replies", "child-a", "child-b"]);
+    assert.equal(message_threads.cycle_selection_for_testing(order, "replies", 1), "child-a");
+    assert.equal(message_threads.cycle_selection_for_testing(order, "replies", -1), "child-b");
+    assert.equal(message_threads.cycle_selection_for_testing(order, "child-a", -1), "replies");
+    assert.equal(message_threads.cycle_selection_for_testing(order, "child-b", 1), "replies");
+    assert.equal(message_threads.cycle_selection_for_testing(order, "missing", 1), "child-a");
+    assert.equal(message_threads.cycle_selection_for_testing(order, undefined, -1), "child-b");
+    // Active agents are bright; anything closed, finished, or failed dims.
+    assert.equal(message_threads.agent_is_dimmed_for_testing(agents[0]), false);
+    assert.equal(message_threads.agent_is_dimmed_for_testing(agents[1]), true);
+    assert.equal(
+        message_threads.agent_is_dimmed_for_testing({thread_id: "x", status: "done"}),
+        true,
+    );
+    assert.equal(
+        message_threads.agent_is_dimmed_for_testing({thread_id: "x", status: "failed"}),
+        true,
+    );
+});
+
 run_test("message controls expose one real thread button only for durable messages", () => {
     const durable = render_message_controls({
         is_archived: false,
@@ -405,6 +428,7 @@ run_test("human replies mount canonical message lists and the shared composer", 
         assert.equal(list.options.view_options.manages_primary_viewport, false);
         assert.equal(list.options.view_options.show_recipient_headers, false);
         assert.equal(list.options.view_options.show_thread_previews, false);
+        assert.equal(list.options.view_options.suppress_row_chrome, true);
     }
     assert.equal(compose_creations.length, 1);
     assert.equal(compose_creations[0].options.thread_root_message_id, 31);
@@ -417,6 +441,22 @@ run_test("human replies mount canonical message lists and the shared composer", 
     assert.equal(message_lists_created[1].options.view_options.role, "list");
     assert.equal(message_lists_created[1].options.view_options.aria_label, "translated: Replies");
     assert.deepEqual(read_message_ids, []);
+
+    // Without runs there is no agent bar; the header context is the root's
+    // conversation and the composer is pinned outside the scroll region.
+    assert.equal(pane.querySelector(".message-thread-agent-bar").hidden, true);
+    assert.equal(
+        pane.querySelector("#message-thread-pane-title").textContent,
+        "translated: Thread",
+    );
+    assert.equal(
+        pane.querySelector(".message-thread-pane-context").textContent,
+        "devel > native threads",
+    );
+    const composer_host = pane.querySelector(".message-thread-composer-host");
+    assert.equal(composer_host.hidden, false);
+    assert.equal(composer_host.parentElement, pane);
+    assert.equal(pane.querySelector(".message-thread-pane-body").contains(composer_host), false);
 
     message_lists_created[1].add_messages([child_message()]);
     narrow_requests[0].cont();
@@ -434,24 +474,173 @@ run_test("secondary reply rows expose their owning thread compose target", () =>
     assert.equal(compose_creations[0].editor.external_change_count, 1);
 });
 
-run_test("agent tabs do not mount a hidden reply list or composer", () => {
+run_test("agent cycler mounts traces and replies on demand", () => {
     reset_dom();
     remember_agents();
     render_row().querySelector(".message-thread-agent-launch").click();
+    const pane = document.querySelector("#message-thread-pane");
+    const current = pane.querySelector(".message-thread-agent-current");
+    const prev = pane.querySelector(".message-thread-agent-cycle-prev");
+    const next = pane.querySelector(".message-thread-agent-cycle-next");
+    // Opening an agent thread mounts only the root anchor and the trace.
+    assert.equal(pane.querySelector(".message-thread-agent-bar").hidden, false);
     assert.equal(message_lists_created.length, 1);
     assert.equal(compose_creations.length, 0);
     assert.equal(narrow_requests.length, 0);
     assert.equal(controller_options.thread_id, "child-a");
+    assert.equal(current.dataset.threadKey, "child-a");
+    assert.equal(current.textContent.includes("Scout"), true);
+    assert.equal(current.textContent.includes("(repository mapper)"), true);
+    assert.equal(current.textContent.includes("· active"), true);
+    assert.equal(current.classList.contains("message-thread-agent-current-dimmed"), false);
 
-    document.querySelector('[role="tab"][data-thread-key="replies"]').click();
+    // Cycling backwards from the first agent lands on the human thread.
+    prev.click();
+    assert.equal(current.dataset.threadKey, undefined);
+    assert.equal(current.textContent, "translated: Replies");
     assert.equal(message_lists_created.length, 2);
     assert.equal(compose_creations.length, 1);
     assert.equal(narrow_requests.length, 1);
 
-    document.querySelector('[role="tab"][data-thread-key="child-b"]').click();
+    // Replies → child-a → child-b; the idle agent renders dimmed.
+    next.click();
+    assert.equal(current.dataset.threadKey, "child-a");
+    next.click();
+    assert.equal(current.dataset.threadKey, "child-b");
+    assert.equal(current.classList.contains("message-thread-agent-current-dimmed"), true);
     assert.equal(rendered_message_lists.length, 1);
-    assert.equal(destroyed_controller_count, 1);
+    assert.equal(destroyed_controller_count, 2);
     assert.equal(controller_options.thread_id, "child-b");
+
+    // The bar wraps: child-b → Replies.
+    next.click();
+    assert.equal(current.dataset.threadKey, undefined);
+});
+
+run_test("agent view hides the composer entirely", () => {
+    reset_dom();
+    remember_agents();
+    render_row().querySelector(".message_thread_button").click();
+    const pane = document.querySelector("#message-thread-pane");
+    const composer_host = pane.querySelector(".message-thread-composer-host");
+    const replies = pane.querySelector(".message-thread-replies");
+    const trace_root = pane.querySelector(".message-thread-agent-trace");
+    assert.equal(composer_host.hidden, false);
+    assert.equal(compose_creations.length, 1);
+    assert.equal(trace_root.hidden, true);
+
+    pane.querySelector(".message-thread-agent-cycle-next").click();
+    assert.equal(composer_host.hidden, true);
+    assert.equal(replies.hidden, true);
+    assert.equal(trace_root.hidden, false);
+    assert.equal(controller_options.thread_id, "child-a");
+
+    pane.querySelector(".message-thread-agent-cycle-prev").click();
+    assert.equal(composer_host.hidden, false);
+    assert.equal(replies.hidden, false);
+    assert.equal(trace_root.hidden, true);
+    assert.equal(compose_creations.length, 2);
+});
+
+run_test("reply divider counts only the pushed summary", () => {
+    reset_dom();
+    render_row().querySelector(".message_thread_button").click();
+    const pane = document.querySelector("#message-thread-pane");
+    const separator = pane.querySelector(".message-thread-reply-separator");
+    const reply_status = pane.querySelector(".message-thread-reply-status");
+    // A cached reply list alone is not a count source.
+    message_lists_created[1].add_messages([child_message()]);
+    narrow_requests[0].cont();
+    assert.equal(message_lists_created[1].data.num_items(), 1);
+    assert.equal(separator.hidden, true);
+    assert.equal(reply_status.textContent, "translated: No replies yet.");
+
+    message_threads.handle_summary_event({
+        id: 1,
+        type: "message_thread_summary",
+        root_message_id: 31,
+        summary: {
+            reply_count: 3,
+            last_reply_at: 100,
+            last_sender: participant,
+            participants: [participant],
+        },
+    });
+    flush_animation_frame();
+    assert.equal(separator.hidden, false);
+    assert.equal(separator.textContent, "translated: 3 replies");
+});
+
+run_test("launch strips never render inside the pane", () => {
+    reset_dom();
+    message_store.get(31).reply_summary = summary({count: 2, unread_count: 1});
+    render_row().querySelector(".message_thread_button").click();
+    const pane = document.querySelector("#message-thread-pane");
+    // The pane's root anchor row shares the feed row's message id but must
+    // stay bare even when rendered through the hook directly.
+    const pane_root_row = pane.querySelector(".message-thread-root .message_row");
+    assert.notEqual(pane_root_row, null);
+    const host = document.createElement("div");
+    host.className = "message-thread-host";
+    pane_root_row.append(host);
+    message_threads.render_for_message_row(pane_root_row, 31, () => {});
+    assert.equal(host.hidden, true);
+    assert.equal(host.children.length, 0);
+
+    // The feed row for the same message still renders its strip.
+    const feed_row = row_for(31);
+    message_threads.render_for_message_row(feed_row, 31, () => {});
+    assert.notEqual(feed_row.querySelector(".message-thread-reply-launch"), null);
+});
+
+run_test("header context is stable across thread selections", () => {
+    reset_dom();
+    remember_agents();
+    render_row().querySelector(".message_thread_button").click();
+    const pane = document.querySelector("#message-thread-pane");
+    const title = pane.querySelector("#message-thread-pane-title");
+    const context = pane.querySelector(".message-thread-pane-context");
+    assert.equal(title.textContent, "translated: Thread");
+    assert.equal(context.textContent, "devel > native threads");
+    pane.querySelector(".message-thread-agent-cycle-next").click();
+    assert.equal(title.textContent, "translated: Thread");
+    assert.equal(context.textContent, "devel > native threads");
+    pane.querySelector(".message-thread-agent-cycle-prev").click();
+    assert.equal(context.textContent, "devel > native threads");
+});
+
+run_test("Alt+arrow cycles threads only while the composer is empty", () => {
+    reset_dom();
+    remember_agents();
+    render_row().querySelector(".message_thread_button").click();
+    const pane = document.querySelector("#message-thread-pane");
+    const current = pane.querySelector(".message-thread-agent-current");
+    const press = (key) => {
+        document.dispatchEvent(
+            new window.KeyboardEvent("keydown", {key, altKey: true, bubbles: true}),
+        );
+    };
+    press("ArrowRight");
+    assert.equal(current.dataset.threadKey, "child-a");
+    press("ArrowRight");
+    assert.equal(current.dataset.threadKey, "child-b");
+    // Wraps back to the human thread, then backwards to the last agent.
+    press("ArrowRight");
+    assert.equal(current.dataset.threadKey, undefined);
+    press("ArrowLeft");
+    assert.equal(current.dataset.threadKey, "child-b");
+
+    // A non-empty composer keeps Alt+arrow for its own text navigation.
+    pane.querySelector(".message-thread-agent-cycle-prev").click();
+    pane.querySelector(".message-thread-agent-cycle-prev").click();
+    assert.equal(current.dataset.threadKey, undefined);
+    const textarea = compose_creations.at(-1).editor.textarea;
+    textarea.value = "draft";
+    press("ArrowRight");
+    assert.equal(current.dataset.threadKey, undefined);
+    textarea.value = "";
+    press("ArrowRight");
+    assert.equal(current.dataset.threadKey, "child-a");
 });
 
 run_test("child launch and previews resolve to the direct root", () => {
@@ -475,18 +664,154 @@ run_test("child launch and previews resolve to the direct root", () => {
     ]);
 });
 
-run_test("ordinary add and delete events refresh summary without reading hidden replies", () => {
+run_test("ordinary add and delete events update summaries locally without fetches", () => {
     reset_dom();
     render_row().querySelector(".message_thread_button").click();
     read_message_ids = [];
     message_threads.handle_added_messages([child_message()]);
     assert.deepEqual(read_message_ids, []);
-    assert.equal(summary_batch_requests.length, 1);
-    assert.deepEqual(summary_batch_requests[0].message_ids, [31]);
+    assert.equal(summary_batch_requests.length, 0);
+    // The root has no summary yet; the pushed summary event installs one.
+    message_threads.handle_summary_event({
+        id: 1,
+        type: "message_thread_summary",
+        root_message_id: 31,
+        summary: {
+            reply_count: 1,
+            last_reply_at: 100,
+            last_sender: participant,
+            participants: [participant],
+        },
+    });
+    assert.equal(message_store.get(31).reply_summary.reply_count, 1);
+    assert.equal(message_store.get(31).reply_summary.unread_reply_count, 1);
+    assert.equal(summary_batch_requests.length, 0);
 
     message_threads.handle_deleted_messages([31, 41]);
     assert.equal(document.querySelector("#message-thread-pane").hidden, true);
-    assert.equal(summary_batch_requests.length, 1);
+    assert.equal(summary_batch_requests.length, 0);
+});
+
+run_test("pushed summary updates rows and preserves the local unread count", () => {
+    reset_dom();
+    const root = message_store.get(31);
+    root.reply_summary = summary({count: 1, unread_count: 1});
+    const row = render_row();
+    message_threads.handle_summary_event({
+        id: 1,
+        type: "message_thread_summary",
+        root_message_id: 31,
+        summary: {
+            reply_count: 3,
+            last_reply_at: 200,
+            last_sender: participant,
+            participants: [participant],
+        },
+    });
+    const applied = message_store.get(31).reply_summary;
+    assert.equal(applied.reply_count, 3);
+    assert.equal(applied.last_reply_at, 200);
+    assert.equal(applied.unread_reply_count, 1);
+    assert.equal(row.querySelector(".message-thread-unread-count").textContent, "1");
+    assert.equal(row.querySelector(".message-thread-reply-launch").textContent.includes("3"), true);
+    assert.equal(summary_batch_requests.length, 0);
+});
+
+run_test("pushed summary clamps preserved unread to the new reply count", () => {
+    reset_dom();
+    message_store.get(31).reply_summary = summary({count: 2, unread_count: 2});
+    message_threads.handle_summary_event({
+        id: 1,
+        type: "message_thread_summary",
+        root_message_id: 31,
+        summary: {
+            reply_count: 1,
+            last_reply_at: 200,
+            last_sender: participant,
+            participants: [participant],
+        },
+    });
+    const applied = message_store.get(31).reply_summary;
+    assert.equal(applied.reply_count, 1);
+    assert.equal(applied.unread_reply_count, 1);
+});
+
+run_test("pushed null summary clears the root preview", () => {
+    reset_dom();
+    message_store.get(31).reply_summary = summary();
+    const row = render_row();
+    assert.notEqual(row.querySelector(".message-thread-reply-launch"), null);
+    message_threads.handle_summary_event({
+        id: 1,
+        type: "message_thread_summary",
+        root_message_id: 31,
+        summary: null,
+    });
+    assert.equal(message_store.get(31).reply_summary, undefined);
+    assert.equal(row.querySelector(".message-thread-host").hidden, true);
+});
+
+run_test("pushed summary for an uncached root is ignored", () => {
+    reset_dom();
+    message_threads.handle_summary_event({
+        id: 1,
+        type: "message_thread_summary",
+        root_message_id: 999,
+        summary: {
+            reply_count: 2,
+            last_reply_at: 200,
+            last_sender: participant,
+            participants: [participant],
+        },
+    });
+    assert.equal(message_store.get(999), undefined);
+    assert.equal(summary_batch_requests.length, 0);
+});
+
+run_test("pushed summary re-renders the open pane", () => {
+    reset_dom();
+    message_store.get(31).reply_summary = summary({count: 1, unread_count: 1});
+    remember_agents();
+    render_row().querySelector(".message_thread_button").click();
+    const pane = document.querySelector("#message-thread-pane");
+    assert.equal(pane.hidden, false);
+    const separator = pane.querySelector(".message-thread-reply-separator");
+    assert.equal(separator.hidden, false);
+    assert.equal(separator.textContent, "translated: 1 reply");
+    message_threads.handle_summary_event({
+        id: 1,
+        type: "message_thread_summary",
+        root_message_id: 31,
+        summary: {
+            reply_count: 5,
+            last_reply_at: 200,
+            last_sender: participant,
+            participants: [participant],
+        },
+    });
+    flush_animation_frame();
+    assert.equal(message_store.get(31).reply_summary.reply_count, 5);
+    assert.equal(separator.textContent, "translated: 5 replies");
+    // The divider is the only reply count in the pane; nothing else shows it.
+    assert.equal(
+        pane.querySelector(".message-thread-pane-context").textContent.includes("5"),
+        false,
+    );
+});
+
+run_test("unread reply arrivals increment the local count without a fetch", () => {
+    reset_dom();
+    message_store.get(31).reply_summary = summary({count: 1, unread_count: 1});
+    render_row();
+    message_threads.handle_added_messages([child_message()]);
+    assert.equal(message_store.get(31).reply_summary.unread_reply_count, 2);
+    // The push, not the arrival path, owns the reply count.
+    assert.equal(message_store.get(31).reply_summary.reply_count, 1);
+    assert.equal(summary_batch_requests.length, 0);
+
+    const read_child = {...child_message(), id: 42, unread: false};
+    message_threads.handle_added_messages([read_child]);
+    assert.equal(message_store.get(31).reply_summary.unread_reply_count, 2);
 });
 
 run_test("cold root summary renders unread replies without cached children", () => {
@@ -512,32 +837,56 @@ run_test("visible pane reads settle the authoritative root badge immediately", (
     assert.equal(row.querySelector(".message-thread-unread-count"), null);
 });
 
-run_test("live child read and delete events reconcile the root summary", () => {
+run_test("live child read and delete events settle the root summary locally", () => {
     reset_dom();
     message_store.get(31).reply_summary = summary({unread_count: 1});
     render_row();
     message_threads.handle_read_flag_update([41], true);
     assert.equal(message_store.get(31).reply_summary.unread_reply_count, 0);
-    assert.equal(summary_batch_requests.length, 1);
-    summary_batch_requests[0].cont([]);
+    assert.equal(summary_batch_requests.length, 0);
     message_threads.handle_deleted_messages([41]);
-    assert.equal(summary_batch_requests.length, 2);
+    assert.equal(summary_batch_requests.length, 0);
+    // The server then pushes the post-delete summary; the last reply's
+    // deletion arrives as a null summary.
+    message_threads.handle_summary_event({
+        id: 1,
+        type: "message_thread_summary",
+        root_message_id: 31,
+        summary: null,
+    });
+    assert.equal(message_store.get(31).reply_summary, undefined);
 });
 
-run_test("cold child read and delete events refresh roots without child bodies", () => {
+run_test("cold child read and delete events wait for the pushed summary", () => {
     reset_dom();
     const root = root_message();
     root.reply_summary = summary({count: 2, unread_count: 2});
     message_store.set_messages_for_tests([{message: root}]);
+    // Uncached messages cannot be attributed to a root locally, so no
+    // immediate mutation and no fetch happen; the pushed summary event (or
+    // the next hydration) is what reconciles the root.
     message_threads.handle_read_flag_update([404], true);
-    assert.equal(summary_batch_requests.length, 1);
-    assert.deepEqual(summary_batch_requests[0].message_ids, [31]);
-    summary_batch_requests[0].cont([]);
+    assert.equal(summary_batch_requests.length, 0);
+    assert.equal(root.reply_summary.unread_reply_count, 2);
     message_threads.handle_deleted_messages([405]);
-    assert.equal(summary_batch_requests.length, 2);
+    assert.equal(summary_batch_requests.length, 0);
+    assert.equal(root.reply_summary.reply_count, 2);
+    message_threads.handle_summary_event({
+        id: 1,
+        type: "message_thread_summary",
+        root_message_id: 31,
+        summary: {
+            reply_count: 1,
+            last_reply_at: 200,
+            last_sender: participant,
+            participants: [participant],
+        },
+    });
+    assert.equal(root.reply_summary.reply_count, 1);
+    assert.equal(root.reply_summary.unread_reply_count, 1);
 });
 
-run_test("topic read and reconnect refresh cold authoritative summaries", () => {
+run_test("topic read settles cold authoritative summaries without a fetch", () => {
     reset_dom();
     const root = root_message();
     root.reply_summary = summary({count: 2, unread_count: 2});
@@ -545,28 +894,7 @@ run_test("topic read and reconnect refresh cold authoritative summaries", () => 
     render_row();
     message_threads.handle_topic_marked_read(9, "NATIVE THREADS");
     assert.equal(root.reply_summary.unread_reply_count, 0);
-    assert.equal(summary_batch_requests.length, 1);
-    summary_batch_requests[0].cont([]);
-    message_threads.handle_reconnect();
-    assert.equal(summary_batch_requests.length, 2);
-});
-
-run_test("reconnect refreshes closed root summaries in one exact-ID batch", () => {
-    reset_dom();
-    const first_root = root_message();
-    first_root.reply_summary = summary({unread_count: 1});
-    const second_root = {...root_message(), id: 32, reply_summary: summary({unread_count: 1})};
-    message_store.set_messages_for_tests([{message: first_root}, {message: second_root}]);
-    const row = render_row(31);
-    assert.equal(row.querySelector(".message-thread-unread-count").textContent, "1");
-    message_threads.handle_reconnect();
-    assert.equal(summary_batch_requests.length, 1);
-    assert.deepEqual(summary_batch_requests[0].message_ids, [31, 32]);
-    first_root.reply_summary = summary({count: 3, unread_count: 2});
-    summary_batch_requests[0].cont([]);
-    assert.equal(row.querySelector(".message-thread-reply-launch").textContent.includes("3"), true);
-    assert.equal(row.querySelector(".message-thread-unread-count").textContent, "2");
-    assert.equal(document.querySelector("#message-thread-pane").hidden, true);
+    assert.equal(summary_batch_requests.length, 0);
 });
 
 run_test("moved roots update the live composer recipient", () => {
@@ -626,16 +954,6 @@ run_test("child hydration clears failure state, retries on demand, and cancels o
     assert.equal(cancelled_retry_data.includes(retry_data), true);
 });
 
-run_test("summary refresh failures terminate and allow a later event to retry", () => {
-    reset_dom();
-    message_threads.handle_added_messages([child_message()]);
-    assert.equal(summary_batch_requests.length, 1);
-    assert.equal(summary_batch_requests[0].suppress_connection_error, true);
-    summary_batch_requests[0].on_error({status: 400});
-    message_threads.handle_added_messages([child_message()]);
-    assert.equal(summary_batch_requests.length, 2);
-});
-
 run_test("unread replies are marked only while visible and focused", () => {
     reset_dom();
     viewport_focused = false;
@@ -648,7 +966,7 @@ run_test("unread replies are marked only while visible and focused", () => {
     assert.deepEqual(read_message_ids, [41]);
 });
 
-run_test("agent tabs aggregate side runs attached to replies", () => {
+run_test("agent cycler aggregates side runs attached to replies", () => {
     reset_dom();
     remember_agents();
     pear_run_state.remember_runs([
@@ -668,10 +986,21 @@ run_test("agent tabs aggregate side runs attached to replies", () => {
         },
     ]);
     render_row().querySelector(".message-thread-agent-launch").click();
-    assert.equal(document.querySelectorAll('[role="tab"]').length, 4);
-    document.querySelector('[role="tab"][data-thread-key="side-agent"]').click();
+    const pane = document.querySelector("#message-thread-pane");
+    const current = pane.querySelector(".message-thread-agent-current");
+    const next = pane.querySelector(".message-thread-agent-cycle-next");
+    // Stable first-seen spawn order: child-a, child-b, then the side agent.
+    assert.equal(current.dataset.threadKey, "child-a");
+    next.click();
+    assert.equal(current.dataset.threadKey, "child-b");
+    next.click();
     assert.equal(controller_options.run_id, 5);
     assert.equal(controller_options.thread_id, "side-agent");
+    assert.equal(current.dataset.threadKey, "side-agent");
+    // The cycler wraps back to the human thread.
+    next.click();
+    assert.equal(current.dataset.threadKey, undefined);
+    assert.equal(current.textContent, "translated: Replies");
 });
 
 run_test("desktop and mobile reuse one accessible pane shell", () => {

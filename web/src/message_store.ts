@@ -52,6 +52,29 @@ export const message_thread_reply_summary_schema = z.object({
 
 export type MessageThreadReplySummary = z.infer<typeof message_thread_reply_summary_schema>;
 
+// The server-pushed summary update for a thread root whose reply set
+// changed. Unlike the fetch-hydrated summary above, it carries no
+// per-viewer unread count; the client preserves its local unread accounting
+// when applying it. A null summary means the thread's last reply was
+// deleted.
+export const message_thread_summary_fields_schema = z.object({
+    reply_count: z.number(),
+    last_reply_at: z.number(),
+    last_sender: z.nullable(message_thread_participant_schema),
+    participants: z.array(message_thread_participant_schema),
+});
+
+export type MessageThreadSummaryFields = z.infer<typeof message_thread_summary_fields_schema>;
+
+export const message_thread_summary_event_schema = z.object({
+    id: z.number(),
+    type: z.literal("message_thread_summary"),
+    root_message_id: z.number(),
+    summary: z.nullable(message_thread_summary_fields_schema),
+});
+
+export type MessageThreadSummaryEvent = z.infer<typeof message_thread_summary_event_schema>;
+
 const message_edit_history_entry_schema = z.object({
     user_id: z.nullable(z.number()),
     timestamp: z.number(),
@@ -396,6 +419,37 @@ export function get_thread_roots(): Message[] {
             ? [message]
             : [],
     );
+}
+
+export function apply_thread_summary(
+    root_message_id: number,
+    summary: MessageThreadSummaryFields | null,
+): boolean {
+    // Applies a server-pushed message_thread_summary event to the cached
+    // root. Returns false when the root is not cached; a later fetch
+    // hydrates the fresh summary anyway.
+    const message = get(root_message_id);
+    if (message === undefined) {
+        return false;
+    }
+    // Fence fetches that began before this push from overwriting it (and the
+    // local unread adjustments made since) with a stale hydrated summary.
+    mark_thread_reply_lifecycle([root_message_id]);
+    if (summary === null) {
+        message.reply_summary = undefined;
+        return true;
+    }
+    // The push carries no per-viewer unread count; preserve the local one.
+    // With no prior summary, derive it from the cached replies, matching the
+    // fallback in unread_reply_count readers.
+    const preserved_unread_count =
+        message.reply_summary?.unread_reply_count ??
+        get_thread_replies(root_message_id).filter((reply) => reply.unread).length;
+    message.reply_summary = {
+        ...summary,
+        unread_reply_count: Math.max(0, Math.min(preserved_unread_count, summary.reply_count)),
+    };
+    return true;
 }
 
 export function set_messages_for_tests(messages: ProcessedMessage[]): void {

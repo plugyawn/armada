@@ -153,6 +153,7 @@ export type MessageListViewOptions = {
     manages_primary_viewport?: boolean;
     show_recipient_headers?: boolean;
     show_thread_previews?: boolean;
+    suppress_row_chrome?: boolean;
 };
 
 type RenderingPlan = {
@@ -485,7 +486,8 @@ function render_message_threads($row: JQuery): void {
     if (!(row instanceof HTMLElement)) {
         return;
     }
-    if (message_lists.get_message_list_for_row($row)?.view.show_thread_previews === false) {
+    const view = message_lists.get_message_list_for_row($row)?.view;
+    if (view !== undefined && (!view.show_thread_previews || view.suppress_row_chrome)) {
         const host = row.querySelector<HTMLElement>(".message-thread-host");
         host?.replaceChildren();
         if (host !== null && host !== undefined) {
@@ -1422,6 +1424,11 @@ function maybe_render_pear_run_footer($row: JQuery): void {
     if (!$row.hasClass("pear-message") || typeof document.createElementNS !== "function") {
         return;
     }
+    if (message_lists.get_message_list_for_row($row)?.view.suppress_row_chrome === true) {
+        // Lists mounted inside the thread pane render the message bare; the
+        // pane's own agent view exposes the run.
+        return;
+    }
     const row = $row[0];
     if (!(row instanceof HTMLElement)) {
         return;
@@ -2121,6 +2128,10 @@ export class MessageListView {
     manages_primary_viewport: boolean;
     show_recipient_headers: boolean;
     show_thread_previews: boolean;
+    // Secondary lists (e.g. the thread pane) can strip per-row chrome that
+    // would duplicate the chrome of the container they are mounted in:
+    // the message-thread strip and the pear run footer.
+    suppress_row_chrome: boolean;
     // TODO: Access this via .list.data.
     collapse_messages: boolean;
 
@@ -2172,6 +2183,7 @@ export class MessageListView {
         this.manages_primary_viewport = options.manages_primary_viewport ?? true;
         this.show_recipient_headers = options.show_recipient_headers ?? true;
         this.show_thread_previews = options.show_thread_previews ?? true;
+        this.suppress_row_chrome = options.suppress_row_chrome ?? false;
         this.$list = this._add_message_list_to_DOM(options);
         this.collapse_messages = collapse_messages;
         this._rows = new Map();

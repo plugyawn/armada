@@ -2109,6 +2109,10 @@ def apply_event(
         # Pear deltas update dedicated client-side reducers; they do not mutate
         # the initial-state payload assembled by this module.
         pass
+    elif event["type"] == "message_thread_summary":
+        # Thread summaries are hydrated per message fetch, not held in the
+        # register state; clients apply these pushes to their message store.
+        pass
     elif event["type"] == "device":
         if event["op"] == "add":
             state["devices"][str(event["device_id"])] = {

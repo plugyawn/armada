@@ -83,6 +83,7 @@ let anchor_thread_key: string | undefined;
 let pane_trace_enhancer: TraceEnhancer | undefined;
 let mobile_scroll_locked = false;
 let mobile_inerted_elements: HTMLElement[] = [];
+let sidebar_hidden_before_pane = false;
 let initialized = false;
 let agent_bar_signature = "";
 let pane_render_frame: number | undefined;
@@ -1261,6 +1262,15 @@ function open(
     pane_trace_enhancer = enhance_trace;
     open_message_id = message_id;
     selected_thread_key = thread_key;
+    if (document.body.classList.contains("hide-right-sidebar")) {
+        // The pane borrows the sidebar's slot while it is open: restore
+        // the slot (without persisting a preference change) so the pane
+        // never overlays the feed's collapsed-margin edge; close()
+        // returns the loan.
+        sidebar_hidden_before_pane = true;
+        document.body.classList.remove("hide-right-sidebar");
+        document.querySelector("#userlist-toggle-button")?.setAttribute("aria-expanded", "true");
+    }
     elements.pane.hidden = false;
     elements.pane.setAttribute("aria-hidden", "false");
     document.body.classList.add("message-thread-pane-open");
@@ -1355,6 +1365,12 @@ export function close(options: {restore_focus?: boolean} = {}): void {
     elements.pane.setAttribute("aria-hidden", "true");
     set_mobile_background_inert(false);
     document.body.classList.remove("message-thread-pane-open", "message-thread-pane-mobile-open");
+    if (sidebar_hidden_before_pane) {
+        // Return the sidebar-slot loan from open().
+        sidebar_hidden_before_pane = false;
+        document.body.classList.add("hide-right-sidebar");
+        document.querySelector("#userlist-toggle-button")?.setAttribute("aria-expanded", "false");
+    }
     if (mobile_scroll_locked) {
         overlay_util.enable_scrolling();
         mobile_scroll_locked = false;

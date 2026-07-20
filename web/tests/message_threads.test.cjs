@@ -603,6 +603,23 @@ run_test("header title is stable across thread selections", () => {
     assert.equal(title.textContent, "translated: Thread");
 });
 
+run_test("pane borrows the collapsed sidebar's slot and returns it on close", () => {
+    reset_dom();
+    render_row();
+    document.body.classList.add("hide-right-sidebar");
+    document.querySelector(".message_row .message_thread_button").click();
+    assert.equal(document.body.classList.contains("hide-right-sidebar"), false);
+    assert.equal(document.body.classList.contains("message-thread-pane-open"), true);
+    message_threads.close();
+    assert.equal(document.body.classList.contains("hide-right-sidebar"), true);
+
+    // Without a prior collapse, close leaves the sidebar alone.
+    document.body.classList.remove("hide-right-sidebar");
+    document.querySelector(".message_row .message_thread_button").click();
+    message_threads.close();
+    assert.equal(document.body.classList.contains("hide-right-sidebar"), false);
+});
+
 run_test("Alt+arrow cycles threads only while the composer is empty", () => {
     reset_dom();
     remember_agents();

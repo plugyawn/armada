@@ -1097,15 +1097,19 @@ function render_pane(options: {scroll_replies_to_end?: boolean} = {}): void {
             "aria-label",
             display_name_for_testing(agent, Math.max(index, 0)),
         );
-        elements.activity.hidden = false;
-        const current_activity = agent.current_activity?.trim();
-        elements.activity.textContent =
-            current_activity !== undefined && current_activity !== ""
-                ? current_activity
-                : $t({defaultMessage: "Status: {status}"}, {status: agent.status});
         elements.replies.hidden = true;
         elements.composer.hidden = true;
         elements.trace_root.hidden = false;
+        const current_activity = agent.current_activity?.trim();
+        // The cycler already carries the status; the activity line only
+        // appears when the agent reports live activity.
+        if (current_activity !== undefined && current_activity !== "") {
+            elements.activity.hidden = false;
+            elements.activity.textContent = current_activity;
+        } else {
+            elements.activity.hidden = true;
+            elements.activity.textContent = "";
+        }
         mount_selected_agent_trace(selected);
     }
     update_pane_layout();

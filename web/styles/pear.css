@@ -2332,13 +2332,21 @@ body.message-thread-pane-open {
 .message-thread-reply-list {
     display: block;
 
-    /* Pack follow-up rows tightly in the pane: the stock 5px focus-ring
-       padding on first children plus paragraph margins made one-word
+    /* Pack follow-up rows tightly in the pane: the stock focus-ring
+       padding on .message_content plus paragraph margins made one-word
        replies read as isolated cards instead of a conversation. */
-    .message_content > p:first-child,
-    .message_content > ul:first-child,
-    .message_content > ol:first-child {
+    .message_content {
         padding-top: 1px;
+
+        > p:first-child,
+        > ul:first-child,
+        > ol:first-child {
+            padding-top: 0;
+        }
+
+        > p {
+            margin-block-end: 2px;
+        }
     }
 
     .pear-message .message_content > p {
@@ -4023,9 +4031,7 @@ body.message-thread-pane-open {
 
 @media (width >= 992px) {
     :root {
-        --left-sidebar-max-width: calc(
-            17.5714em - var(--left-sidebar-right-margin)
-        );
+        --left-sidebar-max-width: calc(16em - var(--left-sidebar-right-margin));
         --right-sidebar-width: min(24vw, 24em);
     }
 }

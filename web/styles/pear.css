@@ -4038,7 +4038,7 @@ body.message-thread-pane-open {
 }
 
 @media (width >= 1600px) {
-    .message_list .message_row.pear-message .message_content {
+    .app-main .message_list .message_row.pear-message .message_content {
         max-width: min(100%, calc(var(--base-font-size-px) * 56));
     }
 }

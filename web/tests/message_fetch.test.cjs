@@ -13,6 +13,10 @@ mock_esm("../src/channel", {
     },
 });
 mock_esm("../src/retry_backoff", {get_retry_backoff_seconds: () => 5});
+mock_esm("../src/message_util", {do_unread_count_updates() {}});
+mock_esm("../src/direct_message_group_data", {process_loaded_messages() {}});
+mock_esm("../src/stream_list", {update_streams_sidebar_for_messages() {}});
+mock_esm("../src/unread_ops", {process_visible() {}});
 let closed_connection_banners = 0;
 let opened_connection_banners = 0;
 mock_esm("../src/popup_banners", {
@@ -27,7 +31,18 @@ mock_esm("../src/popup_banners", {
 const {Filter} = zrequire("filter");
 const {MessageListData} = zrequire("message_list_data");
 const message_fetch = zrequire("message_fetch");
+const message_lists = zrequire("message_lists");
 const message_store = zrequire("message_store");
+const people = zrequire("people");
+const {set_current_user, set_realm} = zrequire("state_data");
+const {initialize_user_settings} = zrequire("user_settings");
+
+initialize_user_settings({user_settings: {}});
+const me = {user_id: 30, email: "me@example.com", full_name: "Me Myself", is_guest: false};
+people.add_active_user(me);
+people.initialize_current_user(me.user_id);
+set_current_user({user_id: me.user_id, is_guest: false});
+set_realm({});
 
 function raw_stream_message(id, thread_root_message_id) {
     return {
@@ -215,4 +230,80 @@ run_test("result batches hydrate all missing thread roots once before rendering"
     assert.equal(completed, false);
     assert.equal(get_requests.length, 2);
     assert.equal(get_requests[1].data.message_ids, "[31,32]");
+});
+
+run_test("registered secondary lists keep their fetch render path", () => {
+    // Live secondary lists (the thread pane's reply list) are registered in
+    // message_lists.rendered_message_lists; their fetch results must reach
+    // add_messages, not be demoted to a data-only cache update like stale
+    // narrows are.
+    message_store.clear_for_testing();
+    get_requests.length = 0;
+
+    function secondary_list(id) {
+        const data = new MessageListData({
+            excludes_muted_topics: false,
+            filter: new Filter([{operator: "thread", operand: 1149}]),
+        });
+        const rendered_ids = [];
+        const msg_list = {
+            id,
+            data,
+            should_preserve_current_rendered_state: () => false,
+            add_messages(messages) {
+                rendered_ids.push(...messages.map((message) => message.id));
+            },
+        };
+        return {msg_list, data, rendered_ids};
+    }
+
+    function success_payload(messages) {
+        return {
+            anchor: 1151,
+            found_newest: true,
+            found_oldest: true,
+            found_anchor: true,
+            history_limited: false,
+            messages,
+            result: "success",
+            msg: "",
+        };
+    }
+
+    const live = secondary_list(77);
+    message_lists.add_rendered_message_list(live.msg_list);
+    message_fetch.load_messages({
+        anchor: "newest",
+        num_before: 60,
+        num_after: 150,
+        msg_list: live.msg_list,
+        msg_list_data: live.data,
+        cont() {},
+    });
+    get_requests[0].success(
+        success_payload([raw_stream_message(1150, 1149), raw_stream_message(1151, 1149)]),
+    );
+    // The uncached root is hydrated by exact ID before rendering.
+    assert.equal(get_requests.length, 2);
+    assert.equal(get_requests[1].data.message_ids, "[1149]");
+    get_requests[1].success(success_payload([raw_stream_message(1149)]));
+    assert.deepEqual(live.rendered_ids, [1150, 1151]);
+    message_lists.rendered_message_lists.delete(live.msg_list.id);
+
+    // Control: an unregistered stale list is demoted to a data-only update.
+    const stale = secondary_list(78);
+    message_fetch.load_messages({
+        anchor: "newest",
+        num_before: 60,
+        num_after: 150,
+        msg_list: stale.msg_list,
+        msg_list_data: stale.data,
+        cont() {},
+    });
+    assert.equal(get_requests.length, 3);
+    get_requests[2].success(
+        success_payload([raw_stream_message(1150, 1149), raw_stream_message(1151, 1149)]),
+    );
+    assert.deepEqual(stale.rendered_ids, []);
+    assert.equal(stale.data.num_items(), 2);
 });

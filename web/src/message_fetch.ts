@@ -319,11 +319,16 @@ function get_messages_success(
     if (
         opts.msg_list &&
         !opts.msg_list.should_preserve_current_rendered_state() &&
-        opts.msg_list !== message_lists.current
+        opts.msg_list !== message_lists.current &&
+        message_lists.rendered_message_lists.get(opts.msg_list.id) !== opts.msg_list
     ) {
         // We changed narrow before receiving new messages but
         // since the message list data is cached, we just
         // update the cached data and don't update the msg list.
+        //
+        // Registered secondary lists (e.g. the thread pane's reply
+        // list) are exempt: they are live rendered views whose fetch
+        // results must reach the DOM, not stale cached narrows.
         opts.msg_list_data = opts.msg_list.data;
         opts.msg_list = undefined;
     }

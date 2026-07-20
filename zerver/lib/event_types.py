@@ -269,6 +269,28 @@ class MessageEvent(BaseEvent):
     message: MessageFieldForMessageEvent
 
 
+class MessageThreadParticipant(BaseModel):
+    user_id: int
+    full_name: str
+    avatar_url: str | None
+
+
+class MessageThreadReplySummary(BaseModel):
+    reply_count: int
+    last_reply_at: int
+    last_sender: MessageThreadParticipant | None
+    participants: list[MessageThreadParticipant]
+
+
+class MessageThreadSummaryEvent(BaseEvent):
+    type: Literal["message_thread_summary"]
+    root_message_id: int
+    # The summary is null when the thread's last reply was deleted; clients
+    # then clear the root's stored summary. It never carries the per-viewer
+    # unread count; clients keep their own local unread accounting.
+    summary: MessageThreadReplySummary | None
+
+
 class MutedTopicsEvent(BaseEvent):
     type: Literal["muted_topics"]
     muted_topics: list[list[str | int]]

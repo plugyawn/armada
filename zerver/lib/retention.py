@@ -45,6 +45,7 @@ from psycopg2.sql import SQL, Composable, Identifier, Literal
 from zerver.actions.message_flags import do_clear_mobile_push_notifications_for_ids
 from zerver.lib.logging_util import log_to_file
 from zerver.lib.message import bulk_access_messages, event_recipient_ids_for_action_on_messages
+from zerver.lib.message_threads import send_message_thread_summary_event
 from zerver.lib.request import RequestVariableConversionError
 from zerver.lib.topic import DB_TOPIC_NAME
 from zerver.lib.utils import assert_is_not_none
@@ -418,11 +419,20 @@ def _process_grouped_messages_deletion(
 
     # We exclude long-term idle users, since they by definition have no active clients.
     users_to_notify = set()
+    deleted_reply_root_ids: list[int] = []
     if not skip_notify:
         users_to_notify = event_recipient_ids_for_action_on_messages(
             message_ids,
             is_channel_message=message_type == "stream",
             channel=stream if message_type == "stream" else None,
+        )
+
+        # Deleted replies change their roots' reply summaries; capture the
+        # roots now, since the reply rows are gone after the delete below.
+        deleted_reply_root_ids = list(
+            Message.objects.filter(id__in=message_ids, thread_root__isnull=False)
+            .values_list("thread_root_id", flat=True)
+            .distinct()
         )
 
         acting_user_event: DeleteMessagesEvent | None = None
@@ -466,6 +476,23 @@ def _process_grouped_messages_deletion(
         if acting_user_event is not None:
             assert acting_user is not None
             send_event_on_commit(realm, acting_user_event, [acting_user.id])
+
+        # Push fresh reply summaries for roots that lost replies but survive
+        # themselves, after the delete events so clients apply removals first.
+        # A root whose last reply was deleted gets a null summary.
+        surviving_root_ids = list(
+            Message.objects.filter(id__in=deleted_reply_root_ids).values_list("id", flat=True)
+        )
+        if surviving_root_ids:
+            summary_user_ids = set(users_to_notify)
+            if acting_user is not None:
+                summary_user_ids.add(acting_user.id)
+            send_message_thread_summary_event(
+                realm,
+                surviving_root_ids,
+                summary_user_ids,
+                stream=stream,
+            )
 
 
 def delete_messages(

@@ -414,7 +414,10 @@ export function focus_topic_search_filter(): void {
 export function initialize_right_sidebar(): void {
     const rendered_sidebar = render_right_sidebar();
 
-    $("#right-sidebar-container").html(rendered_sidebar);
+    // The thread pane aside lives inside the column as a sibling of the
+    // user list; replace only the sidebar, never the whole container.
+    $("#right-sidebar-container").find(".right-sidebar").remove();
+    $("#right-sidebar-container").prepend($(rendered_sidebar));
 
     buddy_list.initialize_tooltips();
     pear_panel.initialize();

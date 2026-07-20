@@ -84,6 +84,7 @@ function get_events_success(events) {
                 break;
 
             case "delete_message":
+            case "message_thread_summary":
             case "submessage":
             case "update_message_flags":
                 post_message_events.push(event);
@@ -212,7 +213,6 @@ function get_events({dont_block = false} = {}) {
         data: get_events_params,
         timeout: event_queue_longpoll_timeout_seconds * 1000,
         success(data) {
-            const was_reconnecting = get_events_params.dont_block || get_events_failures > 0;
             watchdog.set_suspect_offline(false);
             try {
                 get_events_xhr = undefined;
@@ -220,9 +220,6 @@ function get_events({dont_block = false} = {}) {
                 popup_banners.close_connection_error_popup_banner("server_events");
 
                 get_events_success(data.events);
-                if (was_reconnecting) {
-                    message_threads.handle_reconnect();
-                }
                 mark_first_events_response_received();
             } catch (error) {
                 blueslip.error("Failed to handle get_events success", undefined, error);

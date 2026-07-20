@@ -1734,7 +1734,9 @@
 .message-thread-strip {
     width: fit-content;
     max-width: 100%;
-    gap: var(--pear-space-2);
+    flex-wrap: wrap;
+    column-gap: var(--pear-space-2);
+    row-gap: var(--pear-space-1);
     color: var(--pear-ink-3);
     font-family: var(--pear-font-ui);
     font-size: 13px;
@@ -1842,10 +1844,10 @@
 }
 
 .message-thread-last-reply {
-    overflow: hidden;
+    /* Wraps to a second line instead of truncating mid-word when the row
+       is narrow; the strip itself also wraps its clusters. */
+    min-width: 0;
     color: var(--pear-ink-3);
-    text-overflow: ellipsis;
-    white-space: nowrap;
 }
 
 .message-thread-strip-divider {
@@ -1955,10 +1957,22 @@
     background: var(--pear-danger);
 }
 
-body.message-thread-pane-open:not(.message-thread-pane-mobile-open) {
-    --message-thread-pane-width: clamp(400px, 32vw, 520px);
+/* The thread pane is a mode of the right column: opening it swaps the pane
+   in for the user list without touching the center column's margin, so the
+   feed never reflows. */
+body.message-thread-pane-open {
+    /* The column must keep its slot whenever the pane is open: the user
+       list can be hidden (body.hide-right-sidebar) and below the xl
+       breakpoint the column is display: none via container query. The
+       center column's margin stays as-is, so in those configurations the
+       pane overlays the feed's right edge (mirroring the
+       .column-right.expanded overlay pattern); on mobile the pane is a
+       full-viewport dialog regardless. */
+    .app-main .column-right {
+        display: block;
+    }
 
-    .app-main > .column-right {
+    .app-main .column-right .right-sidebar {
         display: none;
     }
 
@@ -1967,29 +1981,33 @@ body.message-thread-pane-open:not(.message-thread-pane-mobile-open) {
         pointer-events: none;
     }
 
-    #compose-content,
-    .app-main .column-middle {
-        margin-right: calc(
-            var(--message-thread-pane-width) + var(--pear-space-2)
-        );
+    &.hide-right-sidebar:not(.message-thread-pane-mobile-open)
+        #message-thread-pane {
+        box-shadow: var(--pear-shadow-pop);
     }
 }
 
 #message-thread-pane {
+    /* Mirrors .app-main .column-right .right-sidebar (zulip.css): a fixed
+       child of the right column taking the column's width and top offset.
+       bottom: 0 bounds the interior flex column so the scroll region and
+       the pinned composer share the column height. */
     position: fixed;
     z-index: 102;
-    top: var(--navbar-fixed-height);
+    top: 0;
     right: 0;
     bottom: 0;
     display: flex;
     box-sizing: border-box;
-    width: var(--message-thread-pane-width, clamp(400px, 32vw, 520px));
+    width: var(--right-sidebar-width);
     min-width: 0;
     flex-direction: column;
     overflow: hidden;
     border-left: 1px solid var(--pear-hairline);
     background: var(--pear-surface-0);
-    box-shadow: var(--pear-shadow-pop);
+    padding-top: calc(
+        var(--navbar-fixed-height) + var(--header-padding-bottom)
+    );
     color: var(--pear-ink-1);
 
     &[hidden] {
@@ -2002,6 +2020,7 @@ body.message-thread-pane-open:not(.message-thread-pane-mobile-open) {
         width: 100vw;
         max-width: none;
         border: 0;
+        padding-top: 0;
     }
 }
 
@@ -2036,7 +2055,7 @@ body.message-thread-pane-open:not(.message-thread-pane-mobile-open) {
     white-space: nowrap;
 }
 
-.message-thread-pane-meta {
+.message-thread-pane-context {
     overflow: hidden;
     color: var(--pear-ink-3);
     font-family: var(--pear-font-ui);
@@ -2068,72 +2087,89 @@ body.message-thread-pane-open:not(.message-thread-pane-mobile-open) {
     }
 }
 
-.message-thread-pane-tabs {
+.message-thread-agent-bar {
     display: flex;
     min-width: 0;
     flex: none;
+    align-items: center;
     gap: var(--pear-space-1);
-    overflow-x: auto;
-    border-bottom: 1px solid var(--pear-hairline);
-    padding: var(--pear-space-2) var(--pear-space-3);
-    scrollbar-width: none;
+    margin: 6px 16px 0;
+    border: 1px solid var(--pear-hairline);
+    border-radius: var(--pear-radius-chip);
+    padding: 2px;
 
     &[hidden] {
         display: none;
     }
+}
 
-    &::-webkit-scrollbar {
-        display: none;
+.message-thread-agent-cycle {
+    display: grid;
+    width: 24px;
+    height: 24px;
+    flex: none;
+    appearance: none;
+    border: 0;
+    border-radius: var(--pear-radius-chip);
+    background: transparent;
+    padding: 0;
+    place-items: center;
+    color: var(--pear-ink-3);
+
+    &:hover,
+    &:focus-visible {
+        background: var(--pear-interaction-fill);
+        color: var(--pear-ink-1);
+        outline: none;
     }
 }
 
-.message-thread-pane-tab {
+.message-thread-agent-current {
     display: flex;
     min-width: 0;
-    max-width: 160px;
-    flex: none;
+    flex: 1;
     align-items: center;
+    justify-content: center;
     gap: var(--pear-space-2);
     appearance: none;
-    border: 1px solid transparent;
+    border: 0;
     border-radius: var(--pear-radius-chip);
     background: transparent;
-    padding: 4px 7px;
-    color: var(--pear-ink-2);
+    padding: 2px 6px;
+    color: var(--pear-ink-1);
     font-family: var(--pear-font-pixel);
     font-size: 12px;
 
-    &[aria-selected="true"] {
-        border-color: color-mix(
-            in srgb,
-            var(--pear-interaction) 30%,
-            transparent
-        );
+    &:hover,
+    &:focus-visible {
         background: var(--pear-interaction-fill);
-        color: var(--pear-ink-1);
+        outline: none;
     }
 
-    &:focus-visible {
-        outline: 2px solid var(--pear-interaction);
-        outline-offset: -2px;
+    .message-thread-agent-sigil {
+        flex: none;
     }
 }
 
-.message-thread-pane-tab-label {
+.message-thread-agent-current-dimmed {
+    color: var(--pear-ink-3);
+
+    .message-thread-agent-sigil {
+        opacity: 0.55;
+    }
+}
+
+.message-thread-agent-current-label,
+.message-thread-agent-current-role {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
 
-.message-thread-pane-tab-count {
-    display: grid;
-    min-width: 18px;
-    min-height: 18px;
-    border-radius: var(--pear-radius-chip);
-    background: color-mix(in srgb, currentcolor 12%, transparent);
-    padding-inline: 4px;
-    place-items: center;
-    font-variant-numeric: tabular-nums;
+.message-thread-agent-current-role,
+.message-thread-agent-current-status {
+    flex: none;
+    color: var(--pear-ink-3);
 }
 
 .message-thread-pane-body {
@@ -2164,9 +2200,11 @@ body.message-thread-pane-open:not(.message-thread-pane-mobile-open) {
 }
 
 .message-thread-replies {
-    display: flex;
-    min-height: 100%;
-    flex-direction: column;
+    min-width: 0;
+
+    &[hidden] {
+        display: none;
+    }
 }
 
 .message-thread-root {
@@ -2223,14 +2261,28 @@ body.message-thread-pane-open:not(.message-thread-pane-mobile-open) {
     margin: 0;
 }
 
+/* Pane rows render chrome-stripped: the pane's header and agent bar are the
+   chrome, so the per-row hover action bar never appears inside the pane.
+   (The thread strip and pear run footer are suppressed per list via the
+   MessageListView suppress_row_chrome option.) */
+#message-thread-pane .message_controls {
+    display: none !important;
+}
+
 .message-thread-root,
 .message-thread-reply-list {
     min-width: 0;
     width: 100%;
 }
 
+/* The composer is pinned below the scroll region, not part of it. */
 .message-thread-composer-host {
+    flex: none;
     margin: 14px 16px 20px;
+
+    &[hidden] {
+        display: none;
+    }
 }
 
 .compose-editor {

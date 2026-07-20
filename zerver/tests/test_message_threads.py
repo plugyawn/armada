@@ -3,6 +3,7 @@ from django.test import override_settings
 
 from zerver.actions.message_edit import maybe_delete_previous_resolve_topic_notification
 from zerver.lib.bot_lib import EmbeddedBotHandler
+from zerver.lib.event_schema import check_message_thread_summary
 from zerver.lib.message_cache import MessageDict
 from zerver.lib.message_threads import bulk_message_thread_summaries
 from zerver.lib.retention import (
@@ -12,6 +13,7 @@ from zerver.lib.retention import (
 )
 from zerver.lib.test_classes import ZulipTestCase
 from zerver.lib.test_helpers import mock_queue_publish
+from zerver.lib.timestamp import datetime_to_timestamp
 from zerver.lib.topic import get_latest_message_for_user_in_topic
 from zerver.models import ArchivedMessage, ArchiveTransaction, Message, UserMessage, UserProfile
 from zerver.models.streams import get_stream
@@ -59,7 +61,7 @@ class MessageThreadTest(ZulipTestCase):
         hamlet = self.example_user("hamlet")
         stream_name, root_message_id = self._thread_message([othello, hamlet])
 
-        with self.capture_send_event_calls(expected_num_events=1) as events:
+        with self.capture_send_event_calls(expected_num_events=2) as events:
             reply_id = self._send_reply(
                 hamlet,
                 stream_name,
@@ -81,6 +83,28 @@ class MessageThreadTest(ZulipTestCase):
         self.assertEqual(event["message"], reply_id)
         self.assertEqual(event["message_dict"]["id"], reply_id)
         self.assertEqual(event["message_dict"]["thread_root_message_id"], root_message_id)
+
+        # The reply also pushes the root's fresh summary, so clients can
+        # update it without refetching.  The pushed payload deliberately
+        # omits the per-viewer unread count; clients keep their own local
+        # unread accounting.
+        summary_event = events[1]
+        self.assertEqual(summary_event["event"]["type"], "message_thread_summary")
+        check_message_thread_summary("events[1]", {**summary_event["event"], "id": 1})
+        self.assertEqual(summary_event["event"]["root_message_id"], root_message_id)
+        pushed_summary = summary_event["event"]["summary"]
+        self.assertEqual(pushed_summary["reply_count"], 1)
+        self.assertNotIn("unread_reply_count", pushed_summary)
+        self.assertEqual(pushed_summary["last_reply_at"], datetime_to_timestamp(reply.date_sent))
+        self.assertEqual(pushed_summary["last_sender"]["user_id"], hamlet.id)
+        self.assertEqual(
+            [participant["user_id"] for participant in pushed_summary["participants"]],
+            [hamlet.id],
+        )
+        summary_recipient_ids = {
+            user["id"] if isinstance(user, dict) else user for user in summary_event["users"]
+        }
+        self.assertEqual(summary_recipient_ids, {othello.id, hamlet.id})
 
         serialized_reply = MessageDict.wide_dict(reply)
         self.assertEqual(serialized_reply["thread_root_message_id"], root_message_id)
@@ -351,7 +375,7 @@ class MessageThreadTest(ZulipTestCase):
         )
 
         self.subscribe(cordelia, stream_name)
-        with self.capture_send_event_calls(expected_num_events=1) as events:
+        with self.capture_send_event_calls(expected_num_events=2) as events:
             reply_id = self._send_reply(
                 hamlet,
                 stream_name,
@@ -370,6 +394,18 @@ class MessageThreadTest(ZulipTestCase):
         self.assertEqual(event["message_dict"]["thread_root_message_id"], root_message_id)
         self.assertIn(cordelia.id, event["user_ids_without_thread_root_access"])
         self.assertNotIn(hamlet.id, event["user_ids_without_thread_root_access"])
+
+        # The pushed summary follows the same protected-history filtering:
+        # cordelia, for whom the root is protected history, sees the reply as
+        # a standalone message and learns nothing about the thread structure.
+        summary_event = events[1]
+        self.assertEqual(summary_event["event"]["type"], "message_thread_summary")
+        check_message_thread_summary("events[1]", {**summary_event["event"], "id": 1})
+        summary_recipient_ids = {
+            user["id"] if isinstance(user, dict) else user for user in summary_event["users"]
+        }
+        self.assertIn(hamlet.id, summary_recipient_ids)
+        self.assertNotIn(cordelia.id, summary_recipient_ids)
 
         self.assertTrue(
             UserMessage.objects.filter(
@@ -599,6 +635,114 @@ class MessageThreadTest(ZulipTestCase):
             self.client_get(f"/json/messages/{root_message_id}")
         )
         self.assertNotIn("reply_summary", after_delete["message"])
+
+    def test_delete_reply_pushes_updated_thread_summary_event(self) -> None:
+        hamlet = self.example_user("hamlet")
+        othello = self.example_user("othello")
+        stream_name, root_message_id = self._thread_message([hamlet, othello])
+        self._send_reply(othello, stream_name, root_message_id, "first reply")
+        second_reply_id = self._send_reply(hamlet, stream_name, root_message_id, "second reply")
+
+        self.login_user(hamlet)
+        with self.capture_send_event_calls(expected_num_events=2) as events:
+            result = self.client_delete(f"/json/messages/{second_reply_id}")
+            self.assert_json_success(result)
+
+        delete_event = events[0]
+        self.assertEqual(delete_event["event"]["type"], "delete_message")
+        self.assertEqual(delete_event["event"]["message_ids"], [second_reply_id])
+
+        summary_event = events[1]
+        self.assertEqual(summary_event["event"]["type"], "message_thread_summary")
+        check_message_thread_summary("events[1]", {**summary_event["event"], "id": 1})
+        self.assertEqual(summary_event["event"]["root_message_id"], root_message_id)
+        pushed_summary = summary_event["event"]["summary"]
+        self.assertEqual(pushed_summary["reply_count"], 1)
+        self.assertNotIn("unread_reply_count", pushed_summary)
+        self.assertEqual(pushed_summary["last_sender"]["user_id"], othello.id)
+        self.assertEqual(
+            [participant["user_id"] for participant in pushed_summary["participants"]],
+            [othello.id],
+        )
+        summary_recipient_ids = {
+            user["id"] if isinstance(user, dict) else user for user in summary_event["users"]
+        }
+        self.assertEqual(summary_recipient_ids, {hamlet.id, othello.id})
+
+    def test_delete_last_reply_pushes_null_thread_summary_event(self) -> None:
+        hamlet = self.example_user("hamlet")
+        othello = self.example_user("othello")
+        stream_name, root_message_id = self._thread_message([hamlet, othello])
+        reply_id = self._send_reply(hamlet, stream_name, root_message_id, "only reply")
+
+        self.login_user(hamlet)
+        with self.capture_send_event_calls(expected_num_events=2) as events:
+            result = self.client_delete(f"/json/messages/{reply_id}")
+            self.assert_json_success(result)
+
+        self.assertEqual(events[0]["event"]["type"], "delete_message")
+        summary_event = events[1]
+        self.assertEqual(summary_event["event"]["type"], "message_thread_summary")
+        check_message_thread_summary("events[1]", {**summary_event["event"], "id": 1})
+        self.assertEqual(summary_event["event"]["root_message_id"], root_message_id)
+        # No replies survive, so clients must clear the stored summary.
+        self.assertIsNone(summary_event["event"]["summary"])
+
+    def test_delete_root_pushes_no_thread_summary_event(self) -> None:
+        hamlet = self.example_user("hamlet")
+        stream_name, root_message_id = self._thread_message([hamlet])
+        reply_id = self._send_reply(hamlet, stream_name, root_message_id, "reply")
+
+        self.login_user(hamlet)
+        with self.capture_send_event_calls(expected_num_events=2) as events:
+            result = self.client_delete(f"/json/messages/{root_message_id}")
+            self.assert_json_success(result)
+
+        # The delete event covers the whole aggregate (root plus its reply);
+        # the stream first_message_id update is the only other event. A dead
+        # root gets no summary update.
+        event_types = [event["event"]["type"] for event in events]
+        self.assertNotIn("message_thread_summary", event_types)
+        delete_event = next(
+            event["event"] for event in events if event["event"]["type"] == "delete_message"
+        )
+        self.assertEqual(delete_event["message_ids"], [root_message_id, reply_id])
+        self.assertFalse(Message.objects.filter(id__in=[root_message_id, reply_id]).exists())
+
+    def test_protected_history_summary_event_recipients_after_delete(self) -> None:
+        hamlet = self.example_user("hamlet")
+        cordelia = self.example_user("cordelia")
+        stream_name = "protected-thread-delete"
+        self.make_stream(
+            stream_name,
+            invite_only=True,
+            history_public_to_subscribers=False,
+        )
+        self.subscribe(hamlet, stream_name)
+        root_message_id = self.send_stream_message(
+            hamlet,
+            stream_name,
+            content="root before join",
+            topic_name="thread topic",
+        )
+        self.subscribe(cordelia, stream_name)
+        reply_id = self._send_reply(hamlet, stream_name, root_message_id, "reply after join")
+
+        self.login_user(hamlet)
+        with self.capture_send_event_calls(expected_num_events=2) as events:
+            result = self.client_delete(f"/json/messages/{reply_id}")
+            self.assert_json_success(result)
+
+        summary_event = events[1]
+        self.assertEqual(summary_event["event"]["type"], "message_thread_summary")
+        # The root lost its only reply; viewers with root access are told to
+        # clear the summary, while cordelia never learns the thread existed.
+        self.assertIsNone(summary_event["event"]["summary"])
+        summary_recipient_ids = {
+            user["id"] if isinstance(user, dict) else user for user in summary_event["users"]
+        }
+        self.assertIn(hamlet.id, summary_recipient_ids)
+        self.assertNotIn(cordelia.id, summary_recipient_ids)
 
     def test_protected_history_summary_does_not_reveal_inaccessible_replies(self) -> None:
         hamlet = self.example_user("hamlet")

@@ -212,12 +212,14 @@ export function dispatch_normal_event(event) {
 
         case "delete_message": {
             const msg_ids = event.message_ids;
+            // Thread bookkeeping reads the deleted messages' unread flags,
+            // so it must run before process_read_messages_event flips them.
+            message_threads.handle_deleted_messages(msg_ids);
             // message is passed to unread.get_unread_messages,
             // which returns all the unread messages out of a given list.
             // So double marking something as read would not occur
             unread_ops.process_read_messages_event(msg_ids);
             emoji_frequency.update_emoji_frequency_on_messages_deletion(msg_ids);
-            message_threads.handle_deleted_messages(msg_ids);
             // This methods updates message_list too and since stream_topic_history relies on it
             // this method should be called first.
             message_events.remove_messages(msg_ids);
@@ -257,6 +259,10 @@ export function dispatch_normal_event(event) {
             if ($("#admin-invites-list").length > 0) {
                 settings_invites.set_up(false);
             }
+            break;
+
+        case "message_thread_summary":
+            message_threads.handle_summary_event(event);
             break;
 
         case "muted_users":

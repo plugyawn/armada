@@ -53,7 +53,6 @@ const message_events = mock_esm("../src/message_events", {
     },
 });
 const message_threads = mock_esm("../src/message_threads");
-message_threads.handle_reconnect = noop;
 
 const message_store = zrequire("message_store");
 const server_events = zrequire("server_events");
@@ -147,18 +146,40 @@ run_test("locally echoed message updates thread lifecycle", ({override}) => {
     message_store.clear_for_testing();
 });
 
-run_test("successful reconnect refreshes thread summaries", ({override}) => {
-    let request;
-    channel.get = (options) => {
-        request = options;
+run_test("thread summary events are dispatched after new messages", ({override}) => {
+    const summary_event = {
+        id: 2,
+        type: "message_thread_summary",
+        root_message_id: 1,
+        summary: {
+            reply_count: 1,
+            last_reply_at: 100000001,
+            last_sender: null,
+            participants: [],
+        },
     };
-    let reconnect_count = 0;
-    override(message_threads, "handle_reconnect", () => {
-        reconnect_count += 1;
+    const call_order = [];
+    override(message_events, "insert_new_messages", (message_data) => {
+        call_order.push("insert_new_messages");
+        return message_data.raw_messages;
     });
-    server_events.restart_get_events({dont_block: true});
-    request.success({events: []});
-    assert.equal(reconnect_count, 1);
+    override(message_threads, "handle_added_messages", () => {
+        call_order.push("handle_added_messages");
+    });
+    override(message_threads, "handle_summary_event", (event) => {
+        call_order.push("handle_summary_event");
+        assert.equal(event.root_message_id, summary_event.root_message_id);
+    });
+
+    server_events._get_events_success([
+        {type: "message", id: 1, message, flags: []},
+        summary_event,
+    ]);
+    assert.deepEqual(call_order, [
+        "insert_new_messages",
+        "handle_added_messages",
+        "handle_summary_event",
+    ]);
 });
 
 // Start blueslip tests here

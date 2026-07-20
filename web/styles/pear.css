@@ -2021,7 +2021,6 @@ body.message-thread-pane-open {
 
 .message-thread-pane-header {
     display: flex;
-    min-height: 48px;
     flex: none;
     align-items: center;
     justify-content: space-between;

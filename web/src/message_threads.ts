@@ -46,7 +46,6 @@ type PaneAgentEntry = {
 type PaneElements = {
     pane: HTMLElement;
     title: HTMLElement;
-    context: HTMLElement;
     agent_bar: HTMLElement;
     agent_prev: HTMLButtonElement;
     agent_current: HTMLButtonElement;
@@ -366,7 +365,6 @@ function create_pane_elements(pane: HTMLElement): PaneElements {
     return {
         pane,
         title,
-        context: required_element(pane, ".message-thread-pane-context"),
         agent_bar: required_element(pane, ".message-thread-agent-bar"),
         agent_prev: required_button(pane, ".message-thread-agent-cycle-prev"),
         agent_current: required_button(pane, ".message-thread-agent-current"),
@@ -523,16 +521,6 @@ function resolved_recipient_for_message(message: message_store.Message): Resolve
             .map((recipient) => recipient.email)
             .join(","),
     };
-}
-
-function context_label_for_message(message: message_store.Message): string {
-    if (message.type === "stream") {
-        const stream_name =
-            typeof message.display_recipient === "string" ? message.display_recipient : "";
-        const topic = message.topic.trim();
-        return topic === "" ? stream_name : `${stream_name} > ${topic}`;
-    }
-    return $t({defaultMessage: "Direct messages"});
 }
 
 function destroy_human_thread_view(): void {
@@ -1054,12 +1042,9 @@ function render_pane(options: {scroll_replies_to_end?: boolean} = {}): void {
         close();
         return;
     }
-    // The header is static: the context subtitle describes the root's
-    // conversation for as long as the pane is open and never changes
-    // meaning with the selected thread.
-    const root_message = message_store.get(open_message_id);
-    elements.context.textContent =
-        root_message === undefined ? "" : context_label_for_message(root_message);
+    // The header is static: just the "Thread" title for as long as the
+    // pane is open; the middle header already names the conversation, so
+    // a context subtitle would duplicate it awkwardly.
     const agent_entries = agent_entries_for_open_message();
     const agents = agent_entries.map(({agent}) => agent);
     selected_thread_key = selection_after_update_for_testing(agents, selected_thread_key);
@@ -1668,6 +1653,7 @@ export function clear_for_testing(): void {
 }
 
 message_thread_hooks.register({
+    close,
     destroy_for_message,
     get_compose_target,
     handle_topic_marked_read,

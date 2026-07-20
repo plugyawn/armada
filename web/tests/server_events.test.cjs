@@ -182,6 +182,57 @@ run_test("thread summary events are dispatched after new messages", ({override})
     ]);
 });
 
+run_test("replayed message and summary batches stay ordered across reconnects", ({override}) => {
+    const replayed_batch = [
+        {type: "message", id: 3, message: {...message, id: 3, thread_root_message_id: 1}, flags: []},
+        {
+            id: 4,
+            type: "message_thread_summary",
+            root_message_id: 1,
+            summary: {
+                reply_count: 2,
+                last_reply_at: 100000002,
+                last_sender: null,
+                participants: [],
+            },
+        },
+    ];
+    const call_order = [];
+    override(message_events, "insert_new_messages", (message_data) => {
+        call_order.push("insert_new_messages");
+        return message_data.raw_messages;
+    });
+    override(message_threads, "handle_added_messages", () => {
+        call_order.push("handle_added_messages");
+    });
+    override(message_threads, "handle_summary_event", (event) => {
+        call_order.push("handle_summary_event");
+        assert.equal(event.root_message_id, 1);
+    });
+
+    // A reconnect on the same queue can replay events the client has not yet
+    // acknowledged. Each redelivered batch must still insert the reply before
+    // applying the summary that describes it.
+    channel.get = (options) => {
+        options.success({events: replayed_batch});
+    };
+    server_events.restart_get_events();
+    assert.deepEqual(call_order, [
+        "insert_new_messages",
+        "handle_added_messages",
+        "handle_summary_event",
+    ]);
+
+    call_order.length = 0;
+    server_events.restart_get_events();
+    assert.deepEqual(call_order, [
+        "insert_new_messages",
+        "handle_added_messages",
+        "handle_summary_event",
+    ]);
+    channel.get = () => {};
+});
+
 // Start blueslip tests here
 
 const setup = () => {

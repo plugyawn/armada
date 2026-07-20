@@ -230,6 +230,94 @@ test("thread summary fetches cannot overwrite newer add or delete events", () =>
     assert.equal(root.reply_summary.reply_count, 1);
 });
 
+test("pushed thread summary fences a fetch that started before the push", () => {
+    const root = {
+        id: 902,
+        reply_summary: {
+            reply_count: 1,
+            unread_reply_count: 1,
+            last_reply_at: 10,
+            participants: [],
+        },
+        submessages: [],
+    };
+    message_store.update_message_cache({type: "server_message", message: root});
+
+    // message_fetch.load_messages_by_ids captures the generation when the
+    // request starts; the response is applied only when it returns, possibly
+    // after a summary push landed in between.
+    const in_flight = message_store.capture_thread_summary_fetch_generation();
+
+    // The push applies immediately, preserving the local unread count the
+    // push does not carry.
+    assert.equal(
+        message_store.apply_thread_summary(root.id, {
+            reply_count: 3,
+            last_reply_at: 30,
+            last_sender: null,
+            participants: [],
+        }),
+        true,
+    );
+    assert.equal(root.reply_summary.reply_count, 3);
+    assert.equal(root.reply_summary.unread_reply_count, 1);
+    assert.equal(message_store.can_apply_thread_summary_from_fetch(root.id, in_flight), false);
+
+    // The stale hydration completes after the push and cannot overwrite it.
+    message_helper.process_new_server_message(
+        {
+            id: root.id,
+            reply_summary: {
+                reply_count: 1,
+                unread_reply_count: 1,
+                last_reply_at: 10,
+                participants: [],
+            },
+        },
+        {thread_summary_fetch_generation: in_flight},
+    );
+    assert.equal(root.reply_summary.reply_count, 3);
+    assert.equal(root.reply_summary.unread_reply_count, 1);
+
+    // A null push (last reply deleted) fences the same in-flight hydration:
+    // the cleared preview cannot be resurrected by the stale payload.
+    assert.equal(message_store.apply_thread_summary(root.id, null), true);
+    assert.equal(root.reply_summary, undefined);
+    message_helper.process_new_server_message(
+        {
+            id: root.id,
+            reply_summary: {
+                reply_count: 1,
+                unread_reply_count: 1,
+                last_reply_at: 10,
+                participants: [],
+            },
+        },
+        {thread_summary_fetch_generation: in_flight},
+    );
+    assert.equal(root.reply_summary, undefined);
+
+    // A fetch that starts after the pushes hydrates the fresh summary.
+    const after_push = message_store.capture_thread_summary_fetch_generation();
+    assert.equal(
+        message_store.can_apply_thread_summary_from_fetch(root.id, after_push),
+        true,
+    );
+    message_helper.process_new_server_message(
+        {
+            id: root.id,
+            reply_summary: {
+                reply_count: 4,
+                unread_reply_count: 2,
+                last_reply_at: 40,
+                participants: [],
+            },
+        },
+        {thread_summary_fetch_generation: after_push},
+    );
+    assert.equal(root.reply_summary.reply_count, 4);
+});
+
 test("process_new_message", () => {
     let message = {
         sender_email: "me@example.com",

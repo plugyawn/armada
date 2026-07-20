@@ -1956,23 +1956,29 @@
     background: var(--pear-danger);
 }
 
-/* The thread pane is a mode of the right column: opening it swaps the pane
-   in for the user list without touching the center column's margin, so the
-   feed never reflows. */
+/* The thread pane is a view of the right sidebar itself: it mounts inside
+   .right-sidebar-items and fills the sidebar's own box, inheriting its
+   width, top offset, and edge instead of duplicating any geometry. */
 body.message-thread-pane-open {
     /* The column must keep its slot whenever the pane is open: the user
        list can be hidden (body.hide-right-sidebar) and below the xl
-       breakpoint the column is display: none via container query. The
-       center column's margin stays as-is, so in those configurations the
-       pane overlays the feed's right edge (mirroring the
-       .column-right.expanded overlay pattern); on mobile the pane is a
-       full-viewport dialog regardless. */
+       breakpoint the column is display: none via container query. In
+       those configurations the pane overlays the feed's right edge
+       (mirroring the .column-right.expanded overlay pattern); on mobile
+       the pane is a full-viewport dialog regardless. */
     .app-main .column-right {
         display: block;
     }
 
-    .app-main .column-right .right-sidebar {
+    .app-main .column-right #user-list {
         display: none;
+    }
+
+    /* The fixed sidebar's height is content-driven; while the pane is
+       standing in for its content, stretch it across the viewport so the
+       pane can fill it (composer pinned at the bottom). */
+    .app-main .column-right .right-sidebar {
+        inset: 0 auto;
     }
 
     &.hide-right-sidebar:not(.message-thread-pane-mobile-open)
@@ -1982,22 +1988,18 @@ body.message-thread-pane-open {
 }
 
 #message-thread-pane {
-    /* Mirrors .app-main .column-right .right-sidebar (zulip.css): a fixed
-       child of the right column taking the column's width. It starts BELOW
-       the fixed navbar (not under it), so the border-left never crosses the
-       navbar and the pane header shares the feed's top edge. */
-    position: fixed;
-    z-index: 102;
-    top: var(--navbar-fixed-height);
-    right: 0;
-    bottom: 0;
+    /* Fills the fixed .right-sidebar (its positioning context): same top
+       offset and left inset the sidebar gives its own content
+       (zulip.css), same right edge. */
+    position: absolute;
+    z-index: 1;
+    inset: calc(var(--navbar-fixed-height) + var(--header-padding-bottom)) 0 0
+        var(--right-sidebar-left-spacing);
     display: flex;
     box-sizing: border-box;
-    width: var(--right-sidebar-width);
     min-width: 0;
     flex-direction: column;
     overflow: hidden;
-    border-left: 1px solid var(--pear-hairline);
     background: var(--pear-surface-0);
     color: var(--pear-ink-1);
 
@@ -2006,6 +2008,7 @@ body.message-thread-pane-open {
     }
 
     &.message-thread-pane-mobile {
+        position: fixed;
         z-index: 105;
         inset: 0;
         width: 100vw;

@@ -17,9 +17,9 @@ import {ListCursor} from "./list_cursor.ts";
 import {localstorage} from "./localstorage.ts";
 import * as message_lists from "./message_lists.ts";
 import * as message_reminder from "./message_reminder.ts";
-import * as message_thread_hooks from "./message_thread_hooks.ts";
 import * as message_viewport from "./message_viewport.ts";
 import {page_params} from "./page_params.ts";
+import * as pear_agent_roster from "./pear_agent_roster.ts";
 import * as pear_moments from "./pear_moments.ts";
 import * as pear_panel from "./pear_panel.ts";
 import {print_pear_signature} from "./pear_signature.ts";
@@ -30,6 +30,7 @@ import * as pm_list from "./pm_list.ts";
 import * as popover_menus from "./popover_menus.ts";
 import * as popovers from "./popovers.ts";
 import * as resize from "./resize.ts";
+import * as right_sidebar_tabs from "./right_sidebar_tabs.ts";
 import * as scheduled_messages from "./scheduled_messages.ts";
 import * as scroll_util from "./scroll_util.ts";
 import * as settings_config from "./settings_config.ts";
@@ -212,10 +213,10 @@ export function initialize(): void {
         e.preventDefault();
         e.stopPropagation();
 
-        if (document.body.classList.contains("message-thread-pane-open")) {
-            // The thread pane is standing in for the user list; the toggle
-            // stays put and is the graceful way back to it.
-            message_thread_hooks.close();
+        if (right_sidebar_tabs.current() === "agents") {
+            // The Agents tab is standing in for the user list; the toggle
+            // is the graceful way back to People.
+            right_sidebar_tabs.set_tab("people");
             return;
         }
 
@@ -425,6 +426,8 @@ export function initialize_right_sidebar(): void {
     $("#right-sidebar-container").html(rendered_sidebar);
 
     buddy_list.initialize_tooltips();
+    right_sidebar_tabs.initialize();
+    pear_agent_roster.initialize();
     pear_panel.initialize();
     pear_wall.initialize();
     print_pear_signature();

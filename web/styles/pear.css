@@ -1961,28 +1961,152 @@
 
 /* The thread pane is a view of the right sidebar itself: it mounts inside
    .right-sidebar-items and fills the sidebar's own box, inheriting its
-   width, top offset, and edge instead of duplicating any geometry. */
-body.message-thread-pane-open {
-    .app-main .column-right #user-list {
-        display: none;
-    }
+   width, top offset, and edge instead of duplicating any geometry. The
+   sidebar has two tabs -- Agents (roster + pane) and People (the user
+   list, rail, and wall) -- swapped via body.right-sidebar-tab-agents. */
+body.message-thread-pane-open .app-main .column-right .right-sidebar,
+body.right-sidebar-tab-agents .app-main .column-right .right-sidebar {
+    /* The fixed sidebar's height is content-driven; while the pane or the
+       roster is standing in for its content, stretch it across the
+       viewport so they can fill it. */
+    inset: 0 auto;
+}
 
-    /* The fixed sidebar's height is content-driven; while the pane is
-       standing in for its content, stretch it across the viewport so the
-       pane can fill it (composer pinned at the bottom). */
-    .app-main .column-right .right-sidebar {
-        inset: 0 auto;
+body.right-sidebar-tab-agents .app-main .column-right #user-list,
+body:not(.right-sidebar-tab-agents) #pear-agent-roster,
+body:not(.right-sidebar-tab-agents) #message-thread-pane,
+body.message-thread-pane-open #pear-agent-roster {
+    display: none;
+}
+
+.right-sidebar-tabs {
+    display: flex;
+    box-sizing: border-box;
+    height: var(--right-sidebar-tabs-height);
+    flex: none;
+    align-items: center;
+    gap: var(--pear-space-1);
+    margin-bottom: var(--pear-space-2);
+    border: 1px solid var(--pear-hairline);
+    border-radius: var(--pear-radius-chip);
+    padding: 2px;
+}
+
+.right-sidebar-tab {
+    flex: 1;
+    appearance: none;
+    border: 0;
+    border-radius: var(--pear-radius-chip);
+    background: transparent;
+    padding: 3px 8px;
+    color: var(--pear-ink-3);
+    font-family: var(--pear-font-pixel);
+    font-size: 12px;
+    cursor: pointer;
+
+    &:hover,
+    &:focus-visible {
+        background: var(--pear-interaction-fill);
+        color: var(--pear-ink-1);
+        outline: none;
     }
 }
 
+.right-sidebar-tab-selected {
+    background: var(--pear-interaction-fill);
+    color: var(--pear-ink-1);
+}
+
+#pear-agent-roster {
+    /* Same box the pane fills (below the tab strip). */
+    position: absolute;
+    z-index: 1;
+    inset: calc(
+            var(--navbar-fixed-height) + var(--header-padding-bottom) +
+                var(--right-sidebar-tabs-height) + var(--pear-space-2)
+        )
+        0 0 var(--right-sidebar-left-spacing);
+    overflow: auto;
+    background: var(--pear-surface-0);
+    padding: 0 12px;
+}
+
+.pear-agent-roster-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--pear-space-1);
+}
+
+.pear-agent-roster-row {
+    display: flex;
+    appearance: none;
+    align-items: center;
+    gap: var(--pear-space-2);
+    width: 100%;
+    border: 1px solid var(--pear-hairline);
+    border-radius: var(--pear-radius-card);
+    background: var(--pear-surface-1);
+    padding: var(--pear-space-2);
+    color: var(--pear-ink-1);
+    font-family: var(--pear-font-pixel);
+    font-size: 12px;
+    cursor: pointer;
+    text-align: left;
+    transition: background-color var(--pear-dur-1) var(--pear-ease);
+
+    &:hover,
+    &:focus-visible {
+        background: var(--pear-surface-2);
+        outline: none;
+    }
+}
+
+.pear-agent-roster-text {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 1px;
+}
+
+.pear-agent-roster-name {
+    overflow: hidden;
+    color: var(--pear-ink-1);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.pear-agent-roster-role {
+    color: var(--pear-ink-3);
+}
+
+.pear-agent-roster-activity {
+    overflow: hidden;
+    color: var(--pear-ink-3);
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.pear-agent-roster-empty {
+    padding: var(--pear-space-3) var(--pear-space-2);
+    color: var(--pear-ink-3);
+    font-family: var(--pear-font-pixel);
+    font-size: 12px;
+    line-height: 1.5;
+}
+
 #message-thread-pane {
-    /* Fills the fixed .right-sidebar (its positioning context): same top
-       offset and left inset the sidebar gives its own content
+    /* Fills the fixed .right-sidebar (its positioning context) below the
+       tab strip: same left inset the sidebar gives its own content
        (zulip.css), same right edge. */
     position: absolute;
     z-index: 1;
-    inset: calc(var(--navbar-fixed-height) + var(--header-padding-bottom)) 0 0
-        var(--right-sidebar-left-spacing);
+    inset: calc(
+            var(--navbar-fixed-height) + var(--header-padding-bottom) +
+                var(--right-sidebar-tabs-height) + var(--pear-space-2)
+        )
+        0 0 var(--right-sidebar-left-spacing);
     display: flex;
     box-sizing: border-box;
     min-width: 0;
@@ -4036,6 +4160,7 @@ body.message-thread-pane-open {
    dead band beside the rail. */
 :root {
     --right-sidebar-left-spacing: 2px;
+    --right-sidebar-tabs-height: 36px;
 }
 
 @media (width >= 992px) {

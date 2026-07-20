@@ -15,9 +15,15 @@ import * as message_thread_hooks from "./message_thread_hooks.ts";
 import * as modals from "./modals.ts";
 import * as overlay_util from "./overlay_util.ts";
 import * as overlays from "./overlays.ts";
+import {
+    create_sigil,
+    display_name_for_testing,
+    status_tone_for_testing,
+} from "./pear_agent_sigil.ts";
 import * as pear_run_state from "./pear_run_state.ts";
 import * as pear_run_trace from "./pear_run_trace.ts";
 import * as people from "./people.ts";
+import * as right_sidebar_tabs from "./right_sidebar_tabs.ts";
 import type {UpdateMessageEvent} from "./server_event_types.ts";
 import * as timerender from "./timerender.ts";
 import * as ui_util from "./ui_util.ts";
@@ -90,54 +96,12 @@ let pane_render_frame: number | undefined;
 let pane_open_focus_frame: number | undefined;
 let pane_restore_focus_frame: number | undefined;
 
-function hash_thread_id(thread_id: string): number {
-    let hash = 2_166_136_261;
-    for (const char of thread_id) {
-        hash = (hash * 16_777_619 + (char.codePointAt(0) ?? 0)) % 4_294_967_296;
-    }
-    return hash;
-}
-
-export function sigil_cells_for_testing(thread_id: string): boolean[] {
-    const hash = hash_thread_id(thread_id);
-    const cells = Array.from({length: 9}, () => false);
-    for (let row = 0; row < 3; row += 1) {
-        const edge = Math.floor(hash / 2 ** (row * 2)) % 2 !== 0;
-        cells[row * 3] = edge;
-        cells[row * 3 + 2] = edge;
-        cells[row * 3 + 1] = Math.floor(hash / 2 ** (row * 2 + 1)) % 2 !== 0;
-    }
-    cells[4] = true;
-    if (cells.filter(Boolean).length < 4) {
-        cells[0] = true;
-        cells[2] = true;
-        cells[7] = true;
-    }
-    return cells;
-}
-
-export function status_tone_for_testing(status: string): "active" | "failed" | "idle" {
-    const normalized = status.trim().toLowerCase();
-    if (["active", "busy", "running", "working"].includes(normalized)) {
-        return "active";
-    }
-    if (["error", "failed", "cancelled"].includes(normalized)) {
-        return "failed";
-    }
-    return "idle";
-}
-
-export function display_name_for_testing(
-    agent: pear_run_state.PearAgentThread,
-    index: number,
-): string {
-    return (
-        [agent.nickname, agent.role, agent.name]
-            .map((value) => value?.trim())
-            .find((value) => value !== undefined && value !== "") ??
-        $t({defaultMessage: "Agent {number}"}, {number: index + 1})
-    );
-}
+export {
+    create_sigil,
+    display_name_for_testing,
+    sigil_cells_for_testing,
+    status_tone_for_testing,
+} from "./pear_agent_sigil.ts";
 
 export function selection_after_update_for_testing(
     agents: pear_run_state.PearAgentThread[],
@@ -171,23 +135,6 @@ export function cycle_selection_for_testing(
 export function agent_is_dimmed_for_testing(agent: pear_run_state.PearAgentThread): boolean {
     // Closed/finished agents are shown dimmed in the cycler.
     return status_tone_for_testing(agent.status) !== "active";
-}
-
-function create_sigil(agent: pear_run_state.PearAgentThread): HTMLElement {
-    const sigil = document.createElement("span");
-    sigil.className = `message-thread-agent-sigil message-thread-agent-sigil-tone-${hash_thread_id(agent.thread_id) % 6}`;
-    sigil.setAttribute("aria-hidden", "true");
-    for (const active of sigil_cells_for_testing(agent.thread_id)) {
-        const cell = document.createElement("i");
-        cell.className = active
-            ? "message-thread-agent-sigil-cell message-thread-agent-sigil-cell-on"
-            : "message-thread-agent-sigil-cell";
-        sigil.append(cell);
-    }
-    const status = document.createElement("span");
-    status.className = `message-thread-agent-status message-thread-agent-status-${status_tone_for_testing(agent.status)}`;
-    sigil.append(status);
-    return sigil;
 }
 
 function initials(full_name: string): string {
@@ -1262,6 +1209,9 @@ function open(
     pane_trace_enhancer = enhance_trace;
     open_message_id = message_id;
     selected_thread_key = thread_key;
+    // Opening a thread switches the sidebar to the Agents tab, where the
+    // pane lives; the tab strip switches back to People.
+    right_sidebar_tabs.set_tab("agents");
     if (document.body.classList.contains("hide-right-sidebar")) {
         // The pane borrows the sidebar's slot while it is open: restore
         // the slot (without persisting a preference change) so the pane
@@ -1674,5 +1624,6 @@ message_thread_hooks.register({
     get_compose_target,
     handle_topic_marked_read,
     open_for_draft,
+    open_thread: open_after_root_loaded,
     render_for_message_row,
 });

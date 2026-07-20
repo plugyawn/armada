@@ -6,6 +6,7 @@ export type ThreadComposeTarget = {
 };
 
 type MessageThreadHooks = {
+    close: () => void;
     destroy_for_message: (message_id: number) => void;
     handle_topic_marked_read: (stream_id: number, topic: string) => void;
     get_compose_target: (message_id: number) => ThreadComposeTarget | undefined;
@@ -21,6 +22,10 @@ let hooks: MessageThreadHooks | undefined;
 
 export function register(message_thread_hooks: MessageThreadHooks): void {
     hooks = message_thread_hooks;
+}
+
+export function close(): void {
+    hooks?.close();
 }
 
 export function destroy_for_message(message_id: number): void {

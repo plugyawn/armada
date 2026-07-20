@@ -17,6 +17,7 @@ import {ListCursor} from "./list_cursor.ts";
 import {localstorage} from "./localstorage.ts";
 import * as message_lists from "./message_lists.ts";
 import * as message_reminder from "./message_reminder.ts";
+import * as message_thread_hooks from "./message_thread_hooks.ts";
 import * as message_viewport from "./message_viewport.ts";
 import {page_params} from "./page_params.ts";
 import * as pear_moments from "./pear_moments.ts";
@@ -210,6 +211,13 @@ export function initialize(): void {
     $("#userlist-toggle-button").on("click", (e) => {
         e.preventDefault();
         e.stopPropagation();
+
+        if (document.body.classList.contains("message-thread-pane-open")) {
+            // The thread pane is standing in for the user list; the toggle
+            // stays put and is the graceful way back to it.
+            message_thread_hooks.close();
+            return;
+        }
 
         if (ui_util.matches_viewport_state("gte_xl_min")) {
             $("body").toggleClass("hide-right-sidebar");

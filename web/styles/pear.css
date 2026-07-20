@@ -4022,17 +4022,23 @@ body.message-thread-pane-open {
 }
 
 /* Pear workbench geometry: the right rail widens for the thread pane and
-   workbench cards, sidebar insets tighten, and the middle column shifts
-   left so feed lines lengthen. Widening trims apply only at and above
-   lg, where the room exists. */
+   workbench cards, and sidebar insets tighten. The widening applies only
+   at and above lg, where the room exists; the left sidebar keeps its
+   stock width (slimming it mangled topic names). On wide monitors the
+   agent prose measure stretches to match the room instead of leaving a
+   dead band beside the rail. */
 :root {
-    --left-sidebar-padding-left: 3px;
     --right-sidebar-left-spacing: 2px;
 }
 
 @media (width >= 992px) {
     :root {
-        --left-sidebar-max-width: calc(16em - var(--left-sidebar-right-margin));
         --right-sidebar-width: min(24vw, 24em);
+    }
+}
+
+@media (width >= 1600px) {
+    .message_list .message_row.pear-message .message_content {
+        max-width: min(100%, calc(var(--base-font-size-px) * 56));
     }
 }

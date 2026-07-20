@@ -124,6 +124,7 @@ export function render(): void {
         return;
     }
     roster_signature = signature;
+    host.hidden = false;
 
     host.replaceChildren();
     if (entries.length === 0) {

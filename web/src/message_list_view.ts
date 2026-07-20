@@ -481,12 +481,15 @@ function enhance_pear_tool_rows($row: JQuery): void {
     });
 }
 
-function render_message_threads($row: JQuery): void {
+function render_message_threads(view: MessageListView | undefined, $row: JQuery): void {
     const row = $row[0];
     if (!(row instanceof HTMLElement)) {
         return;
     }
-    const view = message_lists.get_message_list_for_row($row)?.view;
+    // The view is authoritative: callers pass `this` from MessageListView
+    // methods, because during initial render the row can still be detached
+    // and a DOM lookup for its list would fail (leaking the strip into
+    // chrome-stripped lists like the thread pane's).
     if (view !== undefined && (!view.show_thread_previews || view.suppress_row_chrome)) {
         const host = row.querySelector<HTMLElement>(".message-thread-host");
         host?.replaceChildren();
@@ -1417,16 +1420,18 @@ function ensure_pear_run_elapsed_timer(): void {
     pear_run_elapsed_timer = setInterval(update_pear_run_elapsed_labels, 1000);
 }
 
-function maybe_render_pear_run_footer($row: JQuery): void {
+function maybe_render_pear_run_footer(view: MessageListView | undefined, $row: JQuery): void {
     // A completed run closes its result message with one quiet meta
     // line (design §8.3): `run 33s · 3 tools · 13.5k tokens · ✓`.
     // While the run is still live the slot holds the settling ticker.
     if (!$row.hasClass("pear-message") || typeof document.createElementNS !== "function") {
         return;
     }
-    if (message_lists.get_message_list_for_row($row)?.view.suppress_row_chrome === true) {
-        // Lists mounted inside the thread pane render the message bare; the
-        // pane's own agent view exposes the run.
+    // `view` comes from the rendering MessageListView (authoritative even
+    // while the row is detached mid-render); lists mounted inside the
+    // thread pane render the message bare, since the pane's own agent
+    // view exposes the run.
+    if (view?.suppress_row_chrome === true) {
         return;
     }
     const row = $row[0];
@@ -1617,10 +1622,14 @@ function update_rendered_pear_active_messages(): void {
         );
         // The footer slot follows the run state: a run's start reaches
         // rendered rows through this sweep (not through a row rebuild),
-        // so the settling ticker must be drawn here too.
-        maybe_render_pear_run_footer($row);
+        // so the settling ticker must be drawn here too. Suppression only
+        // applies inside the thread pane; for anything else an undefined
+        // view renders the full chrome.
+        const in_pane = row instanceof HTMLElement && row.closest("#message-thread-pane") !== null;
+        const row_view = in_pane ? message_lists.get_message_list_for_row($row)?.view : undefined;
+        maybe_render_pear_run_footer(row_view, $row);
         render_pear_live_progress($row);
-        render_message_threads($row);
+        render_message_threads(row_view, $row);
         // Artifact submessages can arrive immediately before the final
         // streaming edit.  Keep the independently mounted artifact host
         // present while those two event streams settle; render_submessage is
@@ -2971,9 +2980,9 @@ export class MessageListView {
 
         rendered_markdown.update_elements($content);
         enhance_pear_tool_rows($row);
-        maybe_render_pear_run_footer($row);
+        maybe_render_pear_run_footer(this, $row);
         render_pear_live_progress($row);
-        render_message_threads($row);
+        render_message_threads(this, $row);
         // Live progress owns the current-step glyph, so it must exist before
         // the animation decorator scans the row. Streaming edits take this
         // path repeatedly; reversing these calls leaves the freshly replaced
@@ -3650,9 +3659,9 @@ export class MessageListView {
                     rendered_markdown.update_elements($(node));
                 }
                 enhance_pear_tool_rows($row);
-                maybe_render_pear_run_footer($row);
+                maybe_render_pear_run_footer(this, $row);
                 render_pear_live_progress($row);
-                render_message_threads($row);
+                render_message_threads(this, $row);
                 maybe_render_pear_thinking_glyph($row);
                 submessage.render_submessage({
                     $row,

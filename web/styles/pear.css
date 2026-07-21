@@ -2271,42 +2271,11 @@ body.message-thread-pane-open #pear-agent-roster {
     --message-box-sender-line-height: 0px;
 }
 
+/* Follow-up rows carry no timestamp at all -- the gutter reveal always
+   bled onto the first words of the message. Grouped rows keep their
+   quiet inline time after the name; nothing reveals on hover. */
 .message_row:not(.messagebox-includes-sender) .message-time {
-    position: absolute;
-    z-index: 1;
-    top: 2px;
-    /* Slack-style reveal in the empty avatar gutter, clear of both the
-       message text (left:6px of the message area lands on the first
-       words) and the hover action icons at top right. Absolute
-       positioning in a grid still aligns within the grid area, so pin
-       it to the full-width message area first, then step back into the
-       gutter. */
-    grid-area: message;
-    left: calc(var(--pear-space-2) - var(--message-box-avatar-column-width));
-    right: auto;
-    justify-self: start;
-    padding-right: 0;
-    /* The pane's senderless row-floor override zeroes the shared sender
-       line-height var this element normally uses; the overlay carries
-       its own line-height so the glyphs can never stack. */
-    line-height: 1.2;
-    border-radius: var(--pear-radius-chip);
-    background: var(--color-background-stream-message-content);
-    opacity: 0;
-    transition: opacity var(--pear-dur-1) var(--pear-ease);
-}
-
-.private-message:not(.messagebox-includes-sender) .message-time {
-    background: var(--color-background-private-message-content);
-}
-
-.pear-message:not(.messagebox-includes-sender) .message-time {
-    background: var(--color-background-pear-message-content);
-}
-
-.message_row:not(.messagebox-includes-sender):hover .message-time,
-.message_row.selected_message:not(.messagebox-includes-sender) .message-time {
-    opacity: 0.8;
+    display: none;
 }
 
 /* Air between the room's last word and the agent's block -- but the

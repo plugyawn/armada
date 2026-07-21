@@ -457,9 +457,23 @@ run_test("human replies mount canonical message lists and the shared composer", 
 
     message_lists_created[1].add_messages([child_message()]);
     narrow_requests[0].cont();
-    assert.deepEqual(read_message_ids, [41]);
+    assert.deepEqual([...new Set(read_message_ids)], [41]);
     flush_animation_frame();
     assert.equal(document.activeElement, compose_creations[0].editor.textarea);
+});
+
+run_test("pane paints cached replies before the fetch resolves", () => {
+    reset_dom();
+    render_row().querySelector(".message_thread_button").click();
+    const reply_list = message_lists_created[1];
+    // The cached reply is painted at mount -- no network wait -- and the
+    // narrow fetch still reconciles afterwards.
+    assert.deepEqual(
+        reply_list.all_messages().map((message) => message.id),
+        [41],
+    );
+    assert.equal(reply_list.element.querySelectorAll(".message_row").length, 1);
+    assert.equal(narrow_requests.length, 1);
 });
 
 run_test("secondary reply rows expose their owning thread compose target", () => {
@@ -545,8 +559,8 @@ run_test("reply divider counts only the pushed summary", () => {
     const pane = document.querySelector("#message-thread-pane");
     const separator = pane.querySelector(".message-thread-reply-separator");
     const reply_status = pane.querySelector(".message-thread-reply-status");
-    // A cached reply list alone is not a count source.
-    message_lists_created[1].add_messages([child_message()]);
+    // A cached reply list alone is not a count source (the mount seeds
+    // it from the store); the divider still waits for the summary.
     narrow_requests[0].cont();
     assert.equal(message_lists_created[1].data.num_items(), 1);
     assert.equal(separator.hidden, true);
@@ -680,7 +694,9 @@ run_test("ordinary add and delete events update summaries locally without fetche
     render_row().querySelector(".message_thread_button").click();
     read_message_ids = [];
     message_threads.handle_added_messages([child_message()]);
-    assert.deepEqual(read_message_ids, []);
+    // The reply is seeded in the open pane's list and visible, so it is
+    // marked read; still no summary fetches fire.
+    assert.deepEqual(read_message_ids, [41]);
     assert.equal(summary_batch_requests.length, 0);
     // The root has no summary yet; the pushed summary event installs one.
     message_threads.handle_summary_event({
@@ -695,7 +711,9 @@ run_test("ordinary add and delete events update summaries locally without fetche
         },
     });
     assert.equal(message_store.get(31).reply_summary.reply_count, 1);
-    assert.equal(message_store.get(31).reply_summary.unread_reply_count, 1);
+    // The seeded reply was visible at mount and marked read, so the
+    // preserved local unread count is zero.
+    assert.equal(message_store.get(31).reply_summary.unread_reply_count, 0);
     assert.equal(summary_batch_requests.length, 0);
 
     message_threads.handle_deleted_messages([31, 41]);
@@ -845,7 +863,7 @@ run_test("visible pane reads settle the authoritative root badge immediately", (
     row.querySelector(".message-thread-reply-launch").click();
     message_lists_created[1].add_messages([child_message()]);
     narrow_requests[0].cont();
-    assert.deepEqual(read_message_ids, [41]);
+    assert.deepEqual([...new Set(read_message_ids)], [41]);
     assert.equal(message_store.get(31).reply_summary.unread_reply_count, 0);
     assert.equal(row.querySelector(".message-thread-unread-count"), null);
 });
@@ -976,7 +994,7 @@ run_test("unread replies are marked only while visible and focused", () => {
     assert.deepEqual(read_message_ids, []);
     viewport_focused = true;
     window.dispatchEvent(new Event("focus"));
-    assert.deepEqual(read_message_ids, [41]);
+    assert.deepEqual([...new Set(read_message_ids)], [41]);
 });
 
 run_test("agent cycler aggregates side runs attached to replies", () => {

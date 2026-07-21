@@ -912,6 +912,17 @@ function mount_human_thread_view(message_id: number): void {
     });
     message_lists.add_rendered_message_list(reply_list);
 
+    // Paint from the client store immediately -- the replies we already
+    // know about (events, prior fetches) render with no network wait,
+    // and the narrow fetch below reconciles anything missing. This is
+    // what makes the pane feel as instant as the feed.
+    const cached_replies = message_store.get_thread_replies(message_id);
+    if (cached_replies.length > 0) {
+        reply_list.add_messages(cached_replies, {}, true);
+        update_reply_list_chrome();
+        observe_reply_rows();
+    }
+
     const editor = compose_editor.create({
         $host: $(elements.composer),
         get_recipient() {

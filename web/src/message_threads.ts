@@ -30,7 +30,7 @@ import * as timerender from "./timerender.ts";
 import * as ui_util from "./ui_util.ts";
 import * as unread_ops from "./unread_ops.ts";
 
-const HUMAN_THREAD_KEY = "replies";
+const HUMAN_THREAD_KEY = message_thread_hooks.HUMAN_THREAD_KEY;
 type TraceEnhancer = (root: HTMLElement) => void;
 
 type HumanThreadView = {

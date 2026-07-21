@@ -1,5 +1,8 @@
 type TraceEnhancer = (root: HTMLElement) => void;
 
+// The human thread always leads the cycler ("Main" in codex-cli terms).
+export const HUMAN_THREAD_KEY = "replies";
+
 export type ThreadComposeTarget = {
     textarea: HTMLTextAreaElement;
     notify_content_changed: () => void;

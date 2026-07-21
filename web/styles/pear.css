@@ -1982,6 +1982,21 @@ body.message-thread-pane-open #pear-agent-roster {
     display: none;
 }
 
+/* One surface, one composer. Human reply rows melt into the pane instead
+   of stacking as white cards on it (the agent block keeps its tint), and
+   the main compose yields to the pane's composer while a thread is open. */
+#message-thread-pane .message_row {
+    background-color: transparent;
+}
+
+#message-thread-pane .message_row.pear-message {
+    background-color: var(--color-background-pear-message-content);
+}
+
+body.message-thread-pane-open #compose-content {
+    display: none;
+}
+
 /* No invented header: the sidebar starts with the filter row, same as
    the left sidebar, and everything flows downward from it. The two tab
    icons live inside that row, inline with the buddy-list menu. */

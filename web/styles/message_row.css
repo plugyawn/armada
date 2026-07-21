@@ -2072,25 +2072,25 @@
         grid-area: right_divider_content;
         display: flex;
         align-items: center;
-        justify-content: end;
+        /* The date belongs to the left edge now, in line with the
+           left-flowing timestamp language: text first, line after. */
+        justify-content: start;
         white-space: nowrap;
         letter-spacing: 0.04em;
+        text-align: left;
 
         &::before {
             position: relative;
+            order: 2;
             min-width: 20px;
             width: 100%;
-            right: calc(-1 * var(--date-divider-line-inset));
-            margin-left: -50%;
+            right: auto;
+            margin-right: -50%;
+            margin-left: 0;
         }
 
         &::after {
-            position: absolute;
-            right: var(--date-divider-right-edge-offset);
-            width: calc(
-                var(--date-divider-line-inset) -
-                    var(--date-divider-right-edge-offset)
-            );
+            display: none;
         }
 
         &::before,

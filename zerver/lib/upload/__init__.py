@@ -263,7 +263,7 @@ def upload_message_attachment(
     # filename column, due to PostgreSQL limitations
     uploaded_file_name = re.sub(r"\x00", "", uploaded_file_name)
 
-    with transaction.atomic(durable=True):
+    def store_attachment() -> None:
         get_upload_backend().store_message_attachment(
             path_id,
             uploaded_file_name,
@@ -280,6 +280,15 @@ def upload_message_attachment(
             user_profile,
             target_realm,
         )
+
+    # Pear's worker completion publishes final results inside a caller-owned
+    # transaction. In that case the upload must participate in the existing
+    # transaction rather than opening a nested durable one.
+    if transaction.get_connection().in_atomic_block:
+        store_attachment()
+    else:
+        with transaction.atomic(durable=True):
+            store_attachment()
     return f"/user_uploads/{path_id}", uploaded_file_name
 
 

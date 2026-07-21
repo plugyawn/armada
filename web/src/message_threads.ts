@@ -994,19 +994,30 @@ function render_pane(options: {scroll_replies_to_end?: boolean} = {}): void {
         return;
     }
     // The header echoes the feed's topic header: the stream's colored hash
-    // plus the conversation, so the pane reads as part of the branch, not
-    // a foreign panel.
+    // plus the conversation. Desktop shows it in the unified sidebar
+    // header (the pane's own header row is mobile-only); the pane heading
+    // gets the same content for the mobile sheet and accessibility.
     const root_message = message_store.get(open_message_id);
+    let context_text: string;
+    let context_color = "";
     if (root_message?.type === "stream" && typeof root_message.display_recipient === "string") {
         const stream_name = root_message.display_recipient;
         const topic = root_message.topic.trim();
-        elements.title.textContent = topic === "" ? stream_name : `${stream_name} > ${topic}`;
-        elements.stream_icon.style.color = stream_data.get_color(
+        context_text = topic === "" ? stream_name : `${stream_name} > ${topic}`;
+        context_color = stream_data.get_color(
             stream_data.get_sub_by_name(stream_name)?.stream_id,
         );
     } else {
-        elements.title.textContent = $t({defaultMessage: "Direct messages"});
-        elements.stream_icon.style.color = "";
+        context_text = $t({defaultMessage: "Direct messages"});
+    }
+    elements.title.textContent = context_text;
+    elements.stream_icon.style.color = context_color;
+    const sidebar_context = document.querySelector<HTMLElement>("#right-sidebar-context");
+    const sidebar_icon = document.querySelector<HTMLElement>("#right-sidebar-context-icon");
+    if (sidebar_context !== null && sidebar_icon !== null) {
+        sidebar_context.textContent = context_text;
+        sidebar_icon.hidden = false;
+        sidebar_icon.style.color = context_color;
     }
     const agent_entries = agent_entries_for_open_message();
     const agents = agent_entries.map(({agent}) => agent);
@@ -1336,6 +1347,8 @@ export function close(options: {restore_focus?: boolean} = {}): void {
         document.body.classList.add("hide-right-sidebar");
         document.querySelector("#userlist-toggle-button")?.setAttribute("aria-expanded", "false");
     }
+    // Restore the tab's own label in the sidebar header context.
+    right_sidebar_tabs.refresh();
     if (mobile_scroll_locked) {
         overlay_util.enable_scrolling();
         mobile_scroll_locked = false;

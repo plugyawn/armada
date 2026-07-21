@@ -1,5 +1,7 @@
 <div class="right-sidebar" id="right-sidebar" role="navigation">
-    <div class="right-sidebar-items">
+    <div class="right-sidebar-header">
+        <span id="right-sidebar-context-icon" aria-hidden="true" hidden>#</span>
+        <span id="right-sidebar-context"></span>
         <div class="right-sidebar-tabs" role="tablist" aria-label="{{t 'Sidebar views'}}">
             <button
                 type="button"
@@ -26,6 +28,8 @@
                 <span class="sr-only">{{t "People"}}</span>
             </button>
         </div>
+    </div>
+    <div class="right-sidebar-items">
         <div id="pear-agent-roster" hidden></div>
         <div id="user-list">
             <div id="userlist-header">

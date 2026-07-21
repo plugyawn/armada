@@ -402,7 +402,7 @@ run_test("message controls expose one real thread button only for durable messag
         msg: {locally_echoed: false, sent_by_me: false, starred: false},
     });
     assert.match(durable, /message_thread_button/);
-    assert.match(durable, /zulip-icon-message-square-text/);
+    assert.match(durable, /message-thread-reply-glyph/);
     assert.doesNotMatch(
         render_message_controls({
             is_archived: true,

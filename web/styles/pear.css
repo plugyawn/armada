@@ -2067,7 +2067,8 @@ body.message-thread-pane-open #pear-agent-roster {
     position: absolute;
     z-index: 1;
     inset: calc(
-            var(--navbar-fixed-height) + var(--right-sidebar-tabs-height) +
+            var(--navbar-fixed-height) +
+                max(var(--pear-topic-bar-height, 66px), 66px) +
                 var(--pear-space-2)
         )
         0 0 var(--right-sidebar-left-spacing);
@@ -2182,7 +2183,8 @@ body.message-thread-pane-open #pear-agent-roster {
     position: absolute;
     z-index: 1;
     inset: calc(
-            var(--navbar-fixed-height) + var(--right-sidebar-tabs-height) +
+            var(--navbar-fixed-height) +
+                max(var(--pear-topic-bar-height, 66px), 66px) +
                 var(--pear-space-2)
         )
         0 0 var(--right-sidebar-left-spacing);
@@ -2314,6 +2316,12 @@ body.message-thread-pane-open #pear-agent-roster {
 .message_row:not(.messagebox-includes-sender):hover .message-time,
 .message_row.selected_message:not(.messagebox-includes-sender) .message-time {
     opacity: 0.8;
+}
+
+/* Air between the room's last word and the agent's block -- but the
+   agent's own consecutive blocks stay one continuous surface. */
+.message_row:not(.pear-message) + .message_row.pear-message {
+    margin-top: var(--pear-space-2);
 }
 
 .message-thread-pane-close {

@@ -57,8 +57,6 @@
 
     :is(&.pear-message, .pear-message-surface.pear-message) {
         background-color: var(--color-background-pear-message-content);
-        /* Air between the room's last word and the agent's block. */
-        margin-top: var(--pear-space-2);
 
         /* Pear has one authored voice across prose and live state. User
            messages stay in the room's proportional face; agent output uses

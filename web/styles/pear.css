@@ -1711,6 +1711,8 @@
     grid-area: artifact;
     min-width: 0;
     margin-top: var(--pear-space-3);
+    /* Air between the artifact card and the next message. */
+    margin-bottom: var(--pear-space-3);
 }
 
 /* Replies and Codex child agents share one message-thread shell. The row owns
@@ -2265,7 +2267,10 @@ body.message-thread-pane-open #pear-agent-roster {
     position: absolute;
     z-index: 1;
     top: 2px;
-    right: 6px;
+    /* The left gutter, Slack-style: the hover action icons own the top
+       right, so the revealed time must never sit there. */
+    left: 6px;
+    right: auto;
     padding-right: 0;
     /* The pane's senderless row-floor override zeroes the shared sender
        line-height var this element normally uses; the overlay carries

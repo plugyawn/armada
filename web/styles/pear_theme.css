@@ -7,6 +7,13 @@
 
 :root,
 :root.dark-theme {
+    /* The agent's tinted block gets a slightly deeper step in the light
+       theme so the pixel voice keeps its contrast against it. */
+    --color-background-pear-message-content: light-dark(
+        var(--pear-surface-2),
+        var(--pear-surface-1)
+    );
+
     /* Page and panels use the neutral graphite ramp. */
     --color-background: var(--pear-surface-0);
     --color-background-navbar: var(--pear-surface-1);

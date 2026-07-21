@@ -13,6 +13,9 @@
                 {{/unless}}
             {{/unless}}
         </span>
+        <a {{#unless msg/locally_echoed}}href="{{ msg/url }}"{{/unless}} class="message-time">
+            {{timestr}}
+        </a>
         {{#unless is_hidden}}
             {{#if sender_is_bot}}
                 <i class="zulip-icon zulip-icon-bot" aria-label="{{t 'Bot' }}"></i>
@@ -30,12 +33,12 @@
     {{/if}}
 </span>
 
+{{#unless include_sender}}
 <a {{#unless msg/locally_echoed}}href="{{ msg/url }}"{{/unless}} class="message-time">
-    {{#unless include_sender}}
     <span class="copy-paste-text">&nbsp;</span>
-    {{/unless}}
     {{timestr}}
 </a>
+{{/unless}}
 
 {{#if (and (not msg/failed_request) msg/locally_echoed)}}
     <span data-tooltip-template-id="slow-send-spinner-tooltip-template" class="fa fa-circle-o-notch slow-send-spinner{{#unless msg/show_slow_send_spinner }} hidden{{/unless}}"></span>

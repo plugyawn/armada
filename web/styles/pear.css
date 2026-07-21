@@ -2268,9 +2268,11 @@ body.message-thread-pane-open #pear-agent-roster {
     z-index: 1;
     top: 2px;
     /* The left gutter, Slack-style: the hover action icons own the top
-       right, so the revealed time must never sit there. */
+       right, so the revealed time must never sit there. The stock
+       justify-self: end would fight the absolute left in a grid. */
     left: 6px;
     right: auto;
+    justify-self: start;
     padding-right: 0;
     /* The pane's senderless row-floor override zeroes the shared sender
        line-height var this element normally uses; the overlay carries

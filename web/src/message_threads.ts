@@ -1005,30 +1005,20 @@ function render_pane(options: {scroll_replies_to_end?: boolean} = {}): void {
         return;
     }
     // The header echoes the feed's topic header: the stream's colored hash
-    // plus the conversation. Desktop shows it in the unified sidebar
-    // header (the pane's own header row is mobile-only); the pane heading
-    // gets the same content for the mobile sheet and accessibility.
+    // plus the conversation. The mobile sheet shows it in the pane's own
+    // header; on desktop the pane is headerless and the sidebar's filter
+    // row carries the tabs.
     const root_message = message_store.get(open_message_id);
-    let context_text: string;
-    let context_color = "";
     if (root_message?.type === "stream" && typeof root_message.display_recipient === "string") {
         const stream_name = root_message.display_recipient;
         const topic = root_message.topic.trim();
-        context_text = topic === "" ? stream_name : `${stream_name} > ${topic}`;
-        context_color = stream_data.get_color(
+        elements.title.textContent = topic === "" ? stream_name : `${stream_name} > ${topic}`;
+        elements.stream_icon.style.color = stream_data.get_color(
             stream_data.get_sub_by_name(stream_name)?.stream_id,
         );
     } else {
-        context_text = $t({defaultMessage: "Direct messages"});
-    }
-    elements.title.textContent = context_text;
-    elements.stream_icon.style.color = context_color;
-    const sidebar_context = document.querySelector<HTMLElement>("#right-sidebar-context");
-    const sidebar_icon = document.querySelector<HTMLElement>("#right-sidebar-context-icon");
-    if (sidebar_context !== null && sidebar_icon !== null) {
-        sidebar_context.textContent = context_text;
-        sidebar_icon.hidden = false;
-        sidebar_icon.style.color = context_color;
+        elements.title.textContent = $t({defaultMessage: "Direct messages"});
+        elements.stream_icon.style.color = "";
     }
     const agent_entries = agent_entries_for_open_message();
     const agents = agent_entries.map(({agent}) => agent);

@@ -2035,12 +2035,6 @@ body.message-thread-pane-open #pear-agent-roster {
     padding: 0 12px;
 }
 
-.pear-agent-roster-list {
-    display: flex;
-    flex-direction: column;
-    gap: var(--pear-space-1);
-}
-
 .pear-agent-roster-row {
     display: flex;
     appearance: none;
@@ -2098,6 +2092,45 @@ body.message-thread-pane-open #pear-agent-roster {
     font-family: var(--pear-font-pixel);
     font-size: 12px;
     line-height: 1.5;
+}
+
+/* A turn header: quiet meta separating one run's agents from the next;
+   clickable, it opens the turn itself. */
+.pear-agent-roster-turn {
+    appearance: none;
+    overflow: hidden;
+    border: 0;
+    background: transparent;
+    padding: var(--pear-space-2) var(--pear-space-2) var(--pear-space-1);
+    color: var(--pear-ink-3);
+    font-family: var(--pear-font-pixel);
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+    cursor: pointer;
+    text-align: left;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+
+    &:hover,
+    &:focus-visible {
+        color: var(--pear-ink-1);
+        outline: none;
+    }
+}
+
+.pear-agent-roster-turn-live {
+    color: var(--pear-accent-ink);
+}
+
+/* Turn groups breathe between turns but pack within one. */
+.pear-agent-roster-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--pear-space-1);
+}
+
+.pear-agent-roster-turn:not(:first-child) {
+    margin-top: var(--pear-space-2);
 }
 
 #message-thread-pane {

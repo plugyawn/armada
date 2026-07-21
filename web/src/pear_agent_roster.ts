@@ -1,72 +1,143 @@
-import $ from "jquery";
-
 import {$t} from "./i18n.ts";
 import * as message_thread_hooks from "./message_thread_hooks.ts";
 import * as narrow_state from "./narrow_state.ts";
-import {
-    create_sigil,
-    display_name_for_testing,
-    status_tone_for_testing,
-} from "./pear_agent_sigil.ts";
+import {create_sigil, display_name_for_testing} from "./pear_agent_sigil.ts";
 import * as pear_run_state from "./pear_run_state.ts";
 import * as right_sidebar_tabs from "./right_sidebar_tabs.ts";
+import * as timerender from "./timerender.ts";
 
-/* The Agents tab's home surface: every Codex child agent in the current
-   topic context, live first, then recently settled. Selecting one opens
-   its trace in the thread pane (one selection model with the cycler).
-   Rendered like codex-cli's /agent picker: sigil, name [role], status,
-   last activity. */
+/* The Agents tab's home surface: the topic's Codex child agents grouped
+   by the turn that spawned them (codex-cli has no cross-turn agent
+   identity -- each run's children are fresh threads). Live turns first,
+   then recently settled. A turn header opens the turn itself; an agent
+   row opens that agent's trace in the thread pane, one selection model
+   with the cycler. Rendered like codex-cli's /agent picker: sigil, name
+   [role], status, last activity. */
 
 let roster_signature = "";
 let initialized = false;
+const landed_turn_ids = new Set<number>();
 
 type RosterEntry = {
     agent: pear_run_state.PearAgentThread;
     run: pear_run_state.PearRunLiveView;
 };
 
+type TurnGroup = {
+    run: pear_run_state.PearRunLiveView;
+    entries: RosterEntry[];
+};
+
 function noop_enhance(_root: HTMLElement): void {
     return;
 }
 
-function entries_for_current_context(): RosterEntry[] {
+function run_is_live(run: pear_run_state.PearRunLiveView): boolean {
+    return ["active", "busy", "running", "working", "starting", "queued"].includes(
+        run.status.trim().toLowerCase(),
+    );
+}
+
+function groups_for_current_context(): TurnGroup[] {
     const stream = narrow_state.stream_name();
     const topic = narrow_state.topic();
     if (stream === undefined || topic === undefined) {
         return [];
     }
-    const entries = new Map<string, RosterEntry>();
+    const groups: TurnGroup[] = [];
     for (const run of pear_run_state.runs_for_context(stream, topic)) {
-        for (const agent of run.agents ?? []) {
-            entries.set(agent.thread_id, {agent, run});
+        const entries = (run.agents ?? []).map((agent) => ({agent, run}));
+        if (entries.length > 0) {
+            groups.push({run, entries});
         }
     }
-    // Live agents first, then settled; stable nickname order within.
-    const tone_rank = {active: 0, failed: 1, idle: 2};
-    return [...entries.values()].toSorted((a, b) => {
-        const rank_delta =
-            tone_rank[status_tone_for_testing(a.agent.status)] -
-            tone_rank[status_tone_for_testing(b.agent.status)];
-        if (rank_delta !== 0) {
-            return rank_delta;
+    return groups.toSorted((a, b) => {
+        const live_delta = Number(run_is_live(b.run)) - Number(run_is_live(a.run));
+        if (live_delta !== 0) {
+            return live_delta;
         }
         return (b.run.date_created ?? 0) - (a.run.date_created ?? 0);
     });
 }
 
-function signature_for(entries: RosterEntry[], stream: string, topic: string): string {
+function signature_for(groups: TurnGroup[], stream: string, topic: string): string {
     return [
         stream,
         topic,
-        ...entries.map(({agent, run}) =>
-            [
-                agent.thread_id,
-                agent.status,
-                agent.current_activity ?? "",
-                run.result_message_id ?? "",
-            ].join(" "),
-        ),
-    ].join("");
+        ...groups.flatMap(({run, entries}) => [
+            `run:${run.id}:${run.status}:${run.result_message_id ?? ""}`,
+            ...entries.map(({agent}) =>
+                [agent.thread_id, agent.status, agent.current_activity ?? ""].join(" "),
+            ),
+        ]),
+    ].join(" ");
+}
+
+function format_tokens(total_tokens: number | undefined): string | undefined {
+    if (total_tokens === undefined) {
+        return undefined;
+    }
+    if (total_tokens >= 1_000_000) {
+        return `${(total_tokens / 1_000_000).toFixed(1)}M tokens`;
+    }
+    if (total_tokens >= 1000) {
+        return `${(total_tokens / 1000).toFixed(1)}k tokens`;
+    }
+    return `${total_tokens} tokens`;
+}
+
+function format_duration(duration_seconds: number | null | undefined): string | undefined {
+    if (duration_seconds === null || duration_seconds === undefined) {
+        return undefined;
+    }
+    const seconds = Math.round(duration_seconds);
+    if (seconds < 60) {
+        return `${seconds}s`;
+    }
+    return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
+}
+
+export function turn_header_text_for_testing(run: pear_run_state.PearRunLiveView): string {
+    const parts = [
+        format_duration(run.usage?.duration_seconds),
+        run.tool_count !== undefined
+            ? $t(
+                  {defaultMessage: "{count, plural, one {# tool} other {# tools}}"},
+                  {
+                      count: run.tool_count,
+                  },
+              )
+            : undefined,
+        format_tokens(run.usage?.total_tokens),
+        run.date_created !== undefined
+            ? timerender.relative_time_string_from_date(new Date(run.date_created * 1000), true)
+            : undefined,
+    ].filter((part) => part !== undefined && part !== "");
+    const meta = parts.join(" · ");
+    return meta === "" ? "run" : `run ${meta}`;
+}
+
+function create_turn_header(group: TurnGroup): HTMLElement {
+    const {run} = group;
+    const header = document.createElement("button");
+    header.type = "button";
+    header.className = "pear-agent-roster-turn";
+    if (run_is_live(run)) {
+        header.classList.add("pear-agent-roster-turn-live");
+    }
+    header.textContent = turn_header_text_for_testing(run);
+    header.setAttribute("aria-label", $t({defaultMessage: "Open this turn in the thread pane"}));
+    header.addEventListener("click", () => {
+        if (typeof run.result_message_id === "number") {
+            message_thread_hooks.open_thread(
+                run.result_message_id,
+                message_thread_hooks.HUMAN_THREAD_KEY,
+                header,
+                noop_enhance,
+            );
+        }
+    });
+    return header;
 }
 
 function create_entry_row(entry: RosterEntry, index: number): HTMLElement {
@@ -118,8 +189,8 @@ export function render(): void {
     }
     const stream = narrow_state.stream_name() ?? "";
     const topic = narrow_state.topic() ?? "";
-    const entries = entries_for_current_context();
-    const signature = signature_for(entries, stream, topic);
+    const groups = groups_for_current_context();
+    const signature = signature_for(groups, stream, topic);
     if (signature === roster_signature) {
         return;
     }
@@ -127,7 +198,7 @@ export function render(): void {
     host.hidden = false;
 
     host.replaceChildren();
-    if (entries.length === 0) {
+    if (groups.length === 0) {
         const empty = document.createElement("div");
         empty.className = "pear-agent-roster-empty";
         empty.textContent = $t({
@@ -139,12 +210,45 @@ export function render(): void {
     const list = document.createElement("div");
     list.className = "pear-agent-roster-list";
     list.setAttribute("role", "list");
-    for (const [index, entry] of entries.entries()) {
-        const row = create_entry_row(entry, index);
-        row.setAttribute("role", "listitem");
-        list.append(row);
+    for (const group of groups) {
+        const header = create_turn_header(group);
+        header.setAttribute("role", "listitem");
+        list.append(header);
+        for (const [index, entry] of group.entries.entries()) {
+            const row = create_entry_row(entry, index);
+            row.setAttribute("role", "listitem");
+            list.append(row);
+        }
     }
     host.append(list);
+}
+
+function maybe_land_on_live_turn(): void {
+    const stream = narrow_state.stream_name();
+    const topic = narrow_state.topic();
+    if (stream === undefined || topic === undefined) {
+        return;
+    }
+    const live_turn = pear_run_state
+        .runs_for_context(stream, topic)
+        .find((run) => run_is_live(run) && (run.agents ?? []).length > 0);
+    if (
+        live_turn === undefined ||
+        typeof live_turn.result_message_id !== "number" ||
+        landed_turn_ids.has(live_turn.id)
+    ) {
+        return;
+    }
+    // First sighting of a live turn with agents: land on it (Replies;
+    // the cycler walks its agents one Alt+arrow away). Once per turn per
+    // session, so the roster stays reachable afterwards.
+    landed_turn_ids.add(live_turn.id);
+    message_thread_hooks.open_thread(
+        live_turn.result_message_id,
+        message_thread_hooks.HUMAN_THREAD_KEY,
+        document.querySelector<HTMLElement>("#pear-agent-roster") ?? document.body,
+        noop_enhance,
+    );
 }
 
 export function initialize(): void {
@@ -163,9 +267,10 @@ export function initialize(): void {
     right_sidebar_tabs.on_tab_changed((tab) => {
         if (tab === "agents") {
             render();
+            maybe_land_on_live_turn();
         }
     });
-    $(window).on("hashchange", () => {
+    window.addEventListener("hashchange", () => {
         roster_signature = "";
         render();
     });
@@ -174,5 +279,6 @@ export function initialize(): void {
 
 export function clear_for_testing(): void {
     roster_signature = "";
+    landed_turn_ids.clear();
     initialized = false;
 }

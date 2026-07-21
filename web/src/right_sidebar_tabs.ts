@@ -44,7 +44,7 @@ export function on_tab_changed(listener: (tab: SidebarTab) => void): () => void 
 }
 
 export function initialize(): void {
-    $(".right-sidebar-tabs").on("click", ".right-sidebar-tab", (event) => {
+    $("#userlist-header").on("click", ".right-sidebar-tab", (event) => {
         const tab = $(event.currentTarget).attr("data-tab");
         if (tab === "agents" || tab === "people") {
             set_tab(tab);

@@ -25,6 +25,7 @@ import * as pear_run_trace from "./pear_run_trace.ts";
 import * as people from "./people.ts";
 import * as right_sidebar_tabs from "./right_sidebar_tabs.ts";
 import type {UpdateMessageEvent} from "./server_event_types.ts";
+import * as stream_data from "./stream_data.ts";
 import * as timerender from "./timerender.ts";
 import * as ui_util from "./ui_util.ts";
 import * as unread_ops from "./unread_ops.ts";
@@ -52,6 +53,7 @@ type PaneAgentEntry = {
 type PaneElements = {
     pane: HTMLElement;
     title: HTMLElement;
+    stream_icon: HTMLElement;
     agent_bar: HTMLElement;
     agent_prev: HTMLButtonElement;
     agent_current: HTMLButtonElement;
@@ -313,6 +315,7 @@ function create_pane_elements(pane: HTMLElement): PaneElements {
     return {
         pane,
         title,
+        stream_icon: required_element(pane, ".message-thread-pane-stream-icon"),
         agent_bar: required_element(pane, ".message-thread-agent-bar"),
         agent_prev: required_button(pane, ".message-thread-agent-cycle-prev"),
         agent_current: required_button(pane, ".message-thread-agent-current"),
@@ -990,9 +993,21 @@ function render_pane(options: {scroll_replies_to_end?: boolean} = {}): void {
         close();
         return;
     }
-    // The header is static: just the "Thread" title for as long as the
-    // pane is open; the middle header already names the conversation, so
-    // a context subtitle would duplicate it awkwardly.
+    // The header echoes the feed's topic header: the stream's colored hash
+    // plus the conversation, so the pane reads as part of the branch, not
+    // a foreign panel.
+    const root_message = message_store.get(open_message_id);
+    if (root_message?.type === "stream" && typeof root_message.display_recipient === "string") {
+        const stream_name = root_message.display_recipient;
+        const topic = root_message.topic.trim();
+        elements.title.textContent = topic === "" ? stream_name : `${stream_name} > ${topic}`;
+        elements.stream_icon.style.color = stream_data.get_color(
+            stream_data.get_sub_by_name(stream_name)?.stream_id,
+        );
+    } else {
+        elements.title.textContent = $t({defaultMessage: "Direct messages"});
+        elements.stream_icon.style.color = "";
+    }
     const agent_entries = agent_entries_for_open_message();
     const agents = agent_entries.map(({agent}) => agent);
     selected_thread_key = selection_after_update_for_testing(agents, selected_thread_key);

@@ -4235,6 +4235,10 @@ body.message-thread-pane-open #pear-agent-roster {
 @media (width >= 992px) {
     :root {
         --right-sidebar-width: min(24vw, 24em);
+        /* The column reserves max-width for the sidebar; keep it in step
+           with the widened rail or the middle column and the sidebar
+           drift 55px apart. */
+        --right-sidebar-max-width: 24em;
     }
 }
 

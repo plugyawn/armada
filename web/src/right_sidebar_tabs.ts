@@ -23,9 +23,9 @@ function sync_dom(): void {
         button.classList.toggle("right-sidebar-tab-selected", selected);
         button.setAttribute("aria-selected", String(selected));
     }
-    // Context fallback: the tab's own label. When a thread is open,
-    // message_threads renders the conversation motif here instead.
-    if (!document.body.classList.contains("message-thread-pane-open")) {
+    // Context fallback: the tab's own label. When a thread is open on the
+    // Agents tab, message_threads renders the conversation motif instead.
+    if (!document.body.classList.contains("message-thread-pane-open") || current_tab === "people") {
         const context = document.querySelector<HTMLElement>("#right-sidebar-context");
         const icon = document.querySelector<HTMLElement>("#right-sidebar-context-icon");
         if (context !== null && icon !== null) {

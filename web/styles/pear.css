@@ -1994,6 +1994,14 @@ body.message-thread-pane-open #pear-agent-roster {
     background-color: var(--color-background-pear-message-content);
 }
 
+/* A plain carriage-return glyph for reply-in-thread, in the pixel voice. */
+.message-thread-reply-glyph::before {
+    content: "⏎";
+    font-family: var(--pear-font-pixel);
+    font-size: 15px;
+    line-height: 1;
+}
+
 /* No invented header: the sidebar starts with the filter row, same as
    the left sidebar, and everything flows downward from it. The two tab
    icons live inside that row, inline with the buddy-list menu. */

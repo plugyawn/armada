@@ -2249,6 +2249,10 @@ body.message-thread-pane-open #pear-agent-roster {
     top: 2px;
     right: 6px;
     padding-right: 0;
+    /* The senderless row-floor override zeroes the shared sender
+       line-height var this element normally uses; give the overlay its
+       own line-height or the timestamp glyphs stack on themselves. */
+    line-height: 1.2;
     border-radius: var(--pear-radius-chip);
     background: var(--color-background-stream-message-content);
     opacity: 0;
@@ -2300,6 +2304,7 @@ body.message-thread-pane-open #pear-agent-roster {
         top: 2px;
         right: 6px;
         padding-right: 0;
+        line-height: 1.2;
         border-radius: var(--pear-radius-chip);
         background: var(--color-background-stream-message-content);
         opacity: 0;

@@ -2069,36 +2069,21 @@
 
     .date-divider-content {
         position: relative;
-        grid-area: right_divider_content;
+        /* The date belongs to the left edge now, in line with the
+           left-flowing timestamp language: a left-anchored label with
+           its own surface, the divider rule continuing underneath. */
+        grid-area: left_divider_content;
         display: flex;
         align-items: center;
-        /* The date belongs to the left edge now, in line with the
-           left-flowing timestamp language: text first, line after. */
         justify-content: start;
+        background: var(--color-background-stream-message-content);
         white-space: nowrap;
         letter-spacing: 0.04em;
         text-align: left;
 
-        &::before {
-            position: relative;
-            order: 2;
-            min-width: 20px;
-            width: 100%;
-            right: auto;
-            margin-right: -50%;
-            margin-left: 0;
-        }
-
-        &::after {
-            display: none;
-        }
-
         &::before,
         &::after {
-            content: " ";
-            height: 0;
-            border-bottom: 1px solid
-                var(--color-border-message-group-spacer-line);
+            display: none;
         }
 
         .date_row_text {
@@ -2115,7 +2100,6 @@
         font-style: normal;
         font-weight: 600;
         line-height: 17px; /* identical to box height, or 131% */
-        text-align: right;
         color: var(--color-date);
     }
 }

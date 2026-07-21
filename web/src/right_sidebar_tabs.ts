@@ -1,7 +1,5 @@
 import $ from "jquery";
 
-import {$t} from "./i18n.ts";
-
 export type SidebarTab = "agents" | "people";
 
 /* The right sidebar is one workbench surface with two tabs: Agents (the
@@ -22,19 +20,6 @@ function sync_dom(): void {
         const selected = button.dataset["tab"] === current_tab;
         button.classList.toggle("right-sidebar-tab-selected", selected);
         button.setAttribute("aria-selected", String(selected));
-    }
-    // Context fallback: the tab's own label. When a thread is open on the
-    // Agents tab, message_threads renders the conversation motif instead.
-    if (!document.body.classList.contains("message-thread-pane-open") || current_tab === "people") {
-        const context = document.querySelector<HTMLElement>("#right-sidebar-context");
-        const icon = document.querySelector<HTMLElement>("#right-sidebar-context-icon");
-        if (context !== null && icon !== null) {
-            context.textContent =
-                current_tab === "agents"
-                    ? $t({defaultMessage: "Agents"})
-                    : $t({defaultMessage: "People"});
-            icon.hidden = true;
-        }
     }
 }
 

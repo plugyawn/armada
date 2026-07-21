@@ -1,3 +1,5 @@
+import $ from "jquery";
+
 import {$t} from "./i18n.ts";
 import * as message_thread_hooks from "./message_thread_hooks.ts";
 import * as narrow_state from "./narrow_state.ts";
@@ -15,6 +17,7 @@ import * as timerender from "./timerender.ts";
    [role], status, last activity. */
 
 let roster_signature = "";
+let roster_filter_query = "";
 let initialized = false;
 const landed_turn_ids = new Set<number>();
 
@@ -38,6 +41,17 @@ function run_is_live(run: pear_run_state.PearRunLiveView): boolean {
     );
 }
 
+function entry_matches_filter({agent}: RosterEntry, query: string): boolean {
+    if (query === "") {
+        return true;
+    }
+    return [agent.nickname, agent.role, agent.name, agent.status, agent.current_activity]
+        .filter((value) => value !== undefined && value !== null && value !== "")
+        .join(" ")
+        .toLowerCase()
+        .includes(query);
+}
+
 function groups_for_current_context(): TurnGroup[] {
     const stream = narrow_state.stream_name();
     const topic = narrow_state.topic();
@@ -45,8 +59,11 @@ function groups_for_current_context(): TurnGroup[] {
         return [];
     }
     const groups: TurnGroup[] = [];
+    const query = roster_filter_query;
     for (const run of pear_run_state.runs_for_context(stream, topic)) {
-        const entries = (run.agents ?? []).map((agent) => ({agent, run}));
+        const entries = (run.agents ?? [])
+            .map((agent) => ({agent, run}))
+            .filter((entry) => entry_matches_filter(entry, query));
         if (entries.length > 0) {
             groups.push({run, entries});
         }
@@ -201,9 +218,12 @@ export function render(): void {
     if (groups.length === 0) {
         const empty = document.createElement("div");
         empty.className = "pear-agent-roster-empty";
-        empty.textContent = $t({
-            defaultMessage: "No agents in this topic yet. Ask @**Pear** for a few.",
-        });
+        empty.textContent =
+            roster_filter_query === ""
+                ? $t({
+                      defaultMessage: "No agents in this topic yet. Ask @**Pear** for a few.",
+                  })
+                : $t({defaultMessage: "No agents match the filter."});
         host.append(empty);
         return;
     }
@@ -270,6 +290,14 @@ export function initialize(): void {
             maybe_land_on_live_turn();
         }
     });
+    $("#userlist-header").on("input", ".user-list-filter", (event) => {
+        roster_filter_query =
+            event.target instanceof HTMLInputElement ? event.target.value.trim().toLowerCase() : "";
+        if (right_sidebar_tabs.current() === "agents") {
+            roster_signature = "";
+            render();
+        }
+    });
     window.addEventListener("hashchange", () => {
         roster_signature = "";
         render();
@@ -279,6 +307,7 @@ export function initialize(): void {
 
 export function clear_for_testing(): void {
     roster_signature = "";
+    roster_filter_query = "";
     landed_turn_ids.clear();
     initialized = false;
 }

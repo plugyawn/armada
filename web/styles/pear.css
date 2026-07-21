@@ -1982,27 +1982,54 @@ body.message-thread-pane-open #pear-agent-roster {
     display: none;
 }
 
-.right-sidebar-tabs {
+/* One unified header row for the whole sidebar, in the topic header's
+   motif: context left, tab icons right. */
+.right-sidebar-header {
     display: flex;
-    box-sizing: border-box;
     height: var(--right-sidebar-tabs-height);
     flex: none;
     align-items: center;
-    gap: var(--pear-space-1);
-    margin: 0 var(--pear-space-2) var(--pear-space-2);
-    border: 1px solid var(--pear-hairline);
-    border-radius: var(--pear-radius-chip);
-    padding: 2px;
+    gap: var(--pear-space-2);
+    border-bottom: 1px solid var(--pear-hairline);
+    padding: 0 var(--pear-space-2) 0 10px;
+}
+
+#right-sidebar-context-icon {
+    flex: none;
+    font-family: var(--pear-font-pixel);
+    font-size: 15px;
+    font-weight: 700;
+    line-height: 1;
+}
+
+#right-sidebar-context {
+    overflow: hidden;
+    flex: 1;
+    min-width: 0;
+    color: var(--pear-ink-1);
+    font-family: var(--pear-font-ui);
+    font-size: 15px;
+    font-weight: 600;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.right-sidebar-tabs {
+    display: flex;
+    flex: none;
+    align-items: center;
+    gap: 2px;
 }
 
 .right-sidebar-tab {
     display: grid;
-    flex: 1;
+    width: 26px;
+    height: 26px;
     appearance: none;
     border: 0;
     border-radius: var(--pear-radius-chip);
     background: transparent;
-    padding: 3px 8px;
+    padding: 0;
     place-items: center;
     color: var(--pear-ink-3);
     font-size: 15px;
@@ -2019,6 +2046,13 @@ body.message-thread-pane-open #pear-agent-roster {
 .right-sidebar-tab-selected {
     background: var(--pear-interaction-fill);
     color: var(--pear-ink-1);
+}
+
+/* The desktop pane needs no header of its own -- the sidebar header
+   carries context and tabs. The mobile sheet keeps its full header. */
+#message-thread-pane:not(.message-thread-pane-mobile)
+    .message-thread-pane-header {
+    display: none;
 }
 
 #pear-agent-roster {
@@ -4169,7 +4203,7 @@ body.message-thread-pane-open #pear-agent-roster {
    dead band beside the rail. */
 :root {
     --right-sidebar-left-spacing: 2px;
-    --right-sidebar-tabs-height: 36px;
+    --right-sidebar-tabs-height: 40px;
 }
 
 /* The sidebar's right edge was flush against the window; give its items

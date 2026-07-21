@@ -442,13 +442,13 @@ run_test("human replies mount canonical message lists and the shared composer", 
     assert.equal(message_lists_created[1].options.view_options.aria_label, "translated: Replies");
     assert.deepEqual(read_message_ids, []);
 
-    // Without runs there is no agent bar; the header is just the static
-    // title (the middle header already names the conversation) and the
-    // composer is pinned outside the scroll region.
+    // Without runs there is no agent bar; the header echoes the feed's
+    // topic header (colored hash + conversation) and the composer is
+    // pinned outside the scroll region.
     assert.equal(pane.querySelector(".message-thread-agent-bar").hidden, true);
     assert.equal(
         pane.querySelector("#message-thread-pane-title").textContent,
-        "translated: Thread",
+        "devel > native threads",
     );
     const composer_host = pane.querySelector(".message-thread-composer-host");
     assert.equal(composer_host.hidden, false);
@@ -596,11 +596,11 @@ run_test("header title is stable across thread selections", () => {
     render_row().querySelector(".message_thread_button").click();
     const pane = document.querySelector("#message-thread-pane");
     const title = pane.querySelector("#message-thread-pane-title");
-    assert.equal(title.textContent, "translated: Thread");
+    assert.equal(title.textContent, "devel > native threads");
     pane.querySelector(".message-thread-agent-cycle-next").click();
-    assert.equal(title.textContent, "translated: Thread");
+    assert.equal(title.textContent, "devel > native threads");
     pane.querySelector(".message-thread-agent-cycle-prev").click();
-    assert.equal(title.textContent, "translated: Thread");
+    assert.equal(title.textContent, "devel > native threads");
 });
 
 run_test("pane borrows the collapsed sidebar's slot and returns it on close", () => {
@@ -804,11 +804,12 @@ run_test("pushed summary re-renders the open pane", () => {
     assert.equal(message_store.get(31).reply_summary.reply_count, 5);
     assert.equal(separator.textContent, "translated: 5 replies");
     // The divider is the only reply count in the pane; the header carries
-    // nothing but the static title.
-    assert.equal(
-        pane.querySelector(".message-thread-pane-heading").textContent.trim(),
-        "translated: Thread",
-    );
+    // only the conversation context.
+    const heading_text = pane
+        .querySelector(".message-thread-pane-heading")
+        .textContent.replace(/\s+/g, " ")
+        .trim();
+    assert.equal(heading_text, "# devel > native threads");
 });
 
 run_test("unread reply arrivals increment the local count without a fetch", () => {

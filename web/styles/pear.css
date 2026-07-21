@@ -1983,14 +1983,17 @@ body.message-thread-pane-open #pear-agent-roster {
 }
 
 /* One unified header row for the whole sidebar, in the topic header's
-   motif: context left, tab icons right. */
+   motif: context left, tab icons right. Pulled up so its bottom hairline
+   tracks the feed header's at the same y as you scroll. */
 .right-sidebar-header {
     display: flex;
     height: var(--right-sidebar-tabs-height);
     flex: none;
     align-items: center;
     gap: var(--pear-space-2);
+    margin-top: calc(-1 * var(--header-padding-bottom));
     border-bottom: 1px solid var(--pear-hairline);
+    background: var(--pear-surface-0);
     padding: 0 var(--pear-space-2) 0 10px;
 }
 
@@ -2056,16 +2059,18 @@ body.message-thread-pane-open #pear-agent-roster {
 }
 
 #pear-agent-roster {
-    /* Same box the pane fills (below the tab strip). */
+    /* Same box the pane fills: below the unified sidebar header, which
+       is pulled up to share the feed header's top edge. */
     position: absolute;
     z-index: 1;
     inset: calc(
-            var(--navbar-fixed-height) + var(--header-padding-bottom) +
-                var(--right-sidebar-tabs-height) + var(--pear-space-2)
+            var(--navbar-fixed-height) + var(--right-sidebar-tabs-height) +
+                var(--pear-space-2)
         )
         0 0 var(--right-sidebar-left-spacing);
     overflow: auto;
-    background: var(--pear-surface-0);
+    border-left: 1px solid var(--pear-hairline);
+    background: var(--pear-surface-1);
     padding: 0 12px;
 }
 
@@ -2169,13 +2174,13 @@ body.message-thread-pane-open #pear-agent-roster {
 
 #message-thread-pane {
     /* Fills the fixed .right-sidebar (its positioning context) below the
-       tab strip: same left inset the sidebar gives its own content
-       (zulip.css), same right edge. */
+       unified sidebar header: same left inset the sidebar gives its own
+       content (zulip.css), same right edge. */
     position: absolute;
     z-index: 1;
     inset: calc(
-            var(--navbar-fixed-height) + var(--header-padding-bottom) +
-                var(--right-sidebar-tabs-height) + var(--pear-space-2)
+            var(--navbar-fixed-height) + var(--right-sidebar-tabs-height) +
+                var(--pear-space-2)
         )
         0 0 var(--right-sidebar-left-spacing);
     display: flex;
@@ -2183,7 +2188,8 @@ body.message-thread-pane-open #pear-agent-roster {
     min-width: 0;
     flex-direction: column;
     overflow: hidden;
-    background: var(--pear-surface-0);
+    border-left: 1px solid var(--pear-hairline);
+    background: var(--pear-surface-1);
     color: var(--pear-ink-1);
 
     &[hidden] {

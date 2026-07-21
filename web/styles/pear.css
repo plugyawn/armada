@@ -2275,13 +2275,14 @@ body.message-thread-pane-open #pear-agent-roster {
     position: absolute;
     z-index: 1;
     top: 2px;
-    /* The left gutter, Slack-style: the hover action icons own the top
-       right, so the revealed time must never sit there. Absolute
+    /* Slack-style reveal in the empty avatar gutter, clear of both the
+       message text (left:6px of the message area lands on the first
+       words) and the hover action icons at top right. Absolute
        positioning in a grid still aligns within the grid area, so pin
-       it to the full-width message area rather than the rightmost time
-       column. */
+       it to the full-width message area first, then step back into the
+       gutter. */
     grid-area: message;
-    left: 6px;
+    left: calc(var(--pear-space-2) - var(--message-box-avatar-column-width));
     right: auto;
     justify-self: start;
     padding-right: 0;

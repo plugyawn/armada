@@ -1983,15 +1983,18 @@ body.message-thread-pane-open #pear-agent-roster {
 }
 
 /* One unified header row for the whole sidebar, in the topic header's
-   motif: context left, tab icons right. Pulled up so its bottom hairline
-   tracks the feed header's at the same y as you scroll. */
+   motif: context left, tab icons right. Its bottom hairline tracks the
+   clamped feed bar's bottom edge (navbar + bar height) as you scroll. */
 .right-sidebar-header {
     display: flex;
     height: var(--right-sidebar-tabs-height);
     flex: none;
     align-items: center;
     gap: var(--pear-space-2);
-    margin-top: calc(-1 * var(--header-padding-bottom));
+    margin-top: calc(
+        max(var(--pear-topic-bar-height, 66px), 66px) -
+            var(--navbar-fixed-height) - var(--header-padding-bottom)
+    );
     border-bottom: 1px solid var(--pear-hairline);
     background: var(--pear-surface-0);
     padding: 0 var(--pear-space-2) 0 10px;

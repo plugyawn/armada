@@ -150,7 +150,9 @@ run_test("instance editor sends through the shared compose lifecycle", () => {
     assert.deepEqual(send_args.message_data, message_data);
     assert.equal($textarea.val(), "");
     assert.equal(changed_to, "");
-    assert.equal($submit.prop("disabled"), false);
+    // After send + clear the editor is empty, so the submit greys out
+    // (same contract as the main compose).
+    assert.equal($submit.prop("disabled"), true);
     assert.equal(sent_data.data.id, 902);
     assert.equal(finalized.data.id, 902);
     assert.deepEqual(draft_updates[0], {
@@ -199,10 +201,7 @@ run_test("instance formatting owns the click before the global compose delegate"
 
     // These are the two real delegation levels: the instance form first and
     // the body-level primary-compose delegate only if the event still bubbles.
-    const instance_delegate = $form.get_on_handler(
-        "click.composeEditor",
-        ".formatting_button",
-    );
+    const instance_delegate = $form.get_on_handler("click.composeEditor", ".formatting_button");
     let global_delegate_calls = 0;
     $("body").on("click", ".formatting_button", () => {
         global_delegate_calls += 1;

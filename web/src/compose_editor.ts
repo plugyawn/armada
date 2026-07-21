@@ -1,4 +1,5 @@
 import autosize from "autosize";
+import $ from "jquery";
 import assert from "minimalistic-assert";
 
 import render_compose_editor from "../templates/compose_editor.hbs";
@@ -6,10 +7,10 @@ import render_compose_editor from "../templates/compose_editor.hbs";
 import * as compose_banner from "./compose_banner.ts";
 import * as compose_controller from "./compose_controller.ts";
 import type * as compose_send from "./compose_send.ts";
+import * as compose_ui from "./compose_ui.ts";
 import * as compose_validate from "./compose_validate.ts";
 import * as composebox_typeahead from "./composebox_typeahead.ts";
 import * as drafts from "./drafts.ts";
-import * as compose_ui from "./compose_ui.ts";
 import {$t} from "./i18n.ts";
 import {realm} from "./state_data.ts";
 import * as typing from "./typing.ts";
@@ -124,7 +125,7 @@ export function create(options: ComposeEditorOptions): ComposeEditor {
 
     function set_busy(value: boolean): void {
         sending = value;
-        $submit.prop("disabled", value);
+        update_submit_state();
         $form.toggleClass("compose-editor-sending", value);
     }
 
@@ -185,6 +186,13 @@ export function create(options: ComposeEditorOptions): ComposeEditor {
         compose_ui.autosize_textarea($textarea);
         options.on_draft_change?.(content());
         controller.notify_content_changed();
+        update_submit_state();
+    }
+
+    function update_submit_state(): void {
+        // Same contract as the main compose: the send button greys out
+        // until there is text (and while a send is in flight).
+        $submit.prop("disabled", sending || content().trim() === "");
     }
 
     function validate(): boolean {
@@ -320,6 +328,7 @@ export function create(options: ComposeEditorOptions): ComposeEditor {
     const textarea = $textarea.get(0);
     assert(element !== undefined);
     assert(textarea !== undefined);
+    update_submit_state();
     return {
         element,
         textarea,

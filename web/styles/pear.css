@@ -2037,7 +2037,8 @@ body.message-thread-pane-open #pear-agent-roster {
 }
 
 #pear-agent-roster {
-    /* Same box the pane fills: below the top row. */
+    /* Same box the pane fills: below the top row, and against the same
+       background as the People tab -- no separate surface, no cutoff. */
     position: absolute;
     z-index: 1;
     inset: calc(
@@ -2046,8 +2047,7 @@ body.message-thread-pane-open #pear-agent-roster {
         )
         0 0 var(--right-sidebar-left-spacing);
     overflow: auto;
-    border-left: 1px solid var(--pear-hairline);
-    background: var(--pear-surface-1);
+    background: transparent;
     padding: 0 12px;
 }
 
@@ -2151,8 +2151,8 @@ body.message-thread-pane-open #pear-agent-roster {
 
 #message-thread-pane {
     /* Fills the fixed .right-sidebar (its positioning context) below the
-       unified sidebar header: same left inset the sidebar gives its own
-       content (zulip.css), same right edge. */
+       top row: same left inset the sidebar gives its own content
+       (zulip.css), same right edge, same background as the People tab. */
     position: absolute;
     z-index: 1;
     inset: calc(
@@ -2165,8 +2165,7 @@ body.message-thread-pane-open #pear-agent-roster {
     min-width: 0;
     flex-direction: column;
     overflow: hidden;
-    border-left: 1px solid var(--pear-hairline);
-    background: var(--pear-surface-1);
+    background: transparent;
     color: var(--pear-ink-1);
 
     &[hidden] {
@@ -2180,6 +2179,7 @@ body.message-thread-pane-open #pear-agent-roster {
         width: 100vw;
         max-width: none;
         border: 0;
+        background: var(--pear-surface-0);
     }
 }
 
@@ -4195,10 +4195,11 @@ body.message-thread-pane-open #pear-agent-roster {
     --right-sidebar-tabs-height: 40px;
 }
 
-/* The sidebar's right edge was flush against the window; give its items
-   the little right padding the rail cards and rows were missing. */
+/* People and Agents share one width: the user list spans the full
+   sidebar like the roster and pane do, against the same background. */
 .right-sidebar-items {
-    padding-right: var(--pear-space-2);
+    padding-right: 0;
+    padding-left: 0;
 }
 
 @media (width >= 992px) {

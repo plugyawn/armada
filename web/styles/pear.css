@@ -2268,8 +2268,11 @@ body.message-thread-pane-open #pear-agent-roster {
     z-index: 1;
     top: 2px;
     /* The left gutter, Slack-style: the hover action icons own the top
-       right, so the revealed time must never sit there. The stock
-       justify-self: end would fight the absolute left in a grid. */
+       right, so the revealed time must never sit there. Absolute
+       positioning in a grid still aligns within the grid area, so pin
+       it to the full-width message area rather than the rightmost time
+       column. */
+    grid-area: message;
     left: 6px;
     right: auto;
     justify-self: start;

@@ -37,7 +37,7 @@
         outline-offset: -1px;
         border: none;
         border-radius: 4px;
-        transition: 0.1s linear;
+        transition: 0.1s var(--pear-ease);
         transition-property: outline-color, box-shadow;
 
         &:hover {

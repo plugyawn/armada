@@ -43,6 +43,15 @@ export function reset_scrollbar($element: JQuery): void {
     }
 }
 
+// Native smooth scrolling follows the platform's spring-like easing; it
+// replaces the jQuery swing-era .animate({scrollTop: top}, "fast") pattern.
+// The optional call keeps fake DOM nodes in tests a safe no-op.
+export function smooth_scroll_to($element: JQuery, top: number): void {
+    for (const element of $element) {
+        element.scrollTo?.({top, behavior: "smooth"});
+    }
+}
+
 export function scroll_delta(opts: {
     elem_top: number;
     elem_bottom: number;

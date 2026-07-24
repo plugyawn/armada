@@ -27,7 +27,7 @@ export function message(
         .fadeTo(0, 1);
     if (remove_after !== undefined) {
         setTimeout(() => {
-            $status_box.fadeOut(400, () => $status_box.removeClass(cls));
+            $status_box.fadeOut(150, () => $status_box.removeClass(cls));
         }, remove_after);
     }
     $status_box.addClass("show");
@@ -63,7 +63,7 @@ export function generic_embed_error(error_html: string, remove_after?: number): 
 
     if (remove_after !== undefined) {
         setTimeout(() => {
-            $alert.fadeOut(400);
+            $alert.fadeOut(150);
         }, remove_after);
     }
 }

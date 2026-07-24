@@ -2086,7 +2086,7 @@ label.preferences-radio-choice-label {
         .content-wrapper.right {
             position: absolute;
             display: block;
-            left: 101%;
+            left: 0;
             margin: 0;
             width: 100%;
             height: calc(100% - var(--settings-overlay-header-height));
@@ -2095,11 +2095,12 @@ label.preferences-radio-choice-label {
             background-color: var(--color-background-modal);
             border: none;
 
-            transition: left 0.3s ease; /* stylelint-disable-line plugin/no-low-performance-animation-properties */
+            transform: translateX(101%);
+            transition: transform 0.25s var(--pear-ease);
             z-index: 10;
 
             &.show {
-                left: 0%;
+                transform: translateX(0);
             }
         }
 

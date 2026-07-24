@@ -1075,7 +1075,7 @@
         width: 0;
         /* The progress updates seem to come every second or so,
         so this is the smoothest it can probably get. */
-        transition: width 1s ease-in-out; /* stylelint-disable-line plugin/no-low-performance-animation-properties */
+        transition: width 1s var(--pear-ease); /* stylelint-disable-line plugin/no-low-performance-animation-properties */
         background: var(--color-background-main-view-banner-moving-bar);
         top: 0;
         bottom: 0;

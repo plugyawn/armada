@@ -33,7 +33,7 @@ export function populate_realm_domains_table(realm_domains: RealmDomain[]): void
 
 function fade_status_element($elem: JQuery): void {
     setTimeout(() => {
-        $elem.fadeOut(500);
+        $elem.fadeOut(200);
     }, 3000);
 }
 

@@ -56,6 +56,7 @@ import * as recent_view_util from "./recent_view_util.ts";
 import * as reminders_overlay_ui from "./reminders_overlay_ui.ts";
 import * as saved_snippets_ui from "./saved_snippets_ui.ts";
 import * as scheduled_messages_overlay_ui from "./scheduled_messages_overlay_ui.ts";
+import * as scroll_util from "./scroll_util.ts";
 import * as search from "./search.ts";
 import {message_edit_history_visibility_policy_values} from "./settings_config.ts";
 import * as settings_data from "./settings_data.ts";
@@ -1092,14 +1093,12 @@ function process_hotkey(e: JQuery.KeyDownEvent, hotkey: Hotkey): boolean {
         } else {
             switch (event_name) {
                 case "page_up":
-                    $(":focus").caret(0).animate({scrollTop: 0}, "fast");
+                    scroll_util.smooth_scroll_to($(":focus").caret(0), 0);
                     return true;
                 case "page_down": {
                     // so that it always goes to the end of the text box.
                     const height = util.the($(":focus")).scrollHeight;
-                    $(":focus")
-                        .caret(Number.POSITIVE_INFINITY)
-                        .animate({scrollTop: height}, "fast");
+                    scroll_util.smooth_scroll_to($(":focus").caret(Number.POSITIVE_INFINITY), height);
                     return true;
                 }
                 case "search_with_k":

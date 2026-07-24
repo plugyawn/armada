@@ -483,12 +483,12 @@
 
     /* Shared sidebar typography and effects values. */
     --font-weight-sidebar-heading: 600;
-    --font-weight-sidebar-action-heading: 370;
-    --font-variant-sidebar-action-heading: all-small-caps;
-    --font-feature-settings-sidebar-action-heading: "c2sc", "smcp";
+    --font-weight-sidebar-action-heading: 500;
+    --font-variant-sidebar-action-heading: normal;
+    --font-feature-settings-sidebar-action-heading: normal;
     /* 17px at 16px/1em = 1.0625em */
     --font-size-sidebar-action-heading: 1.0625em;
-    --text-transform-sidebar-action-heading: uppercase;
+    --text-transform-sidebar-action-heading: none;
     --letter-spacing-sidebar-heading: 0.0469em;
     --opacity-sidebar-heading: 0.7;
     --opacity-sidebar-heading-icon: 0.5;

@@ -16,9 +16,10 @@
 .right-sidebar-title {
     color: var(--color-text-sidebar-heading);
     opacity: var(--opacity-sidebar-heading);
-    font-size: inherit;
-    font-weight: var(--font-weight-sidebar-heading);
-    letter-spacing: var(--letter-spacing-sidebar-heading);
+    font-family: var(--pear-font-pixel);
+    font-size: 12px;
+    font-weight: 400;
+    letter-spacing: normal;
 }
 
 #buddy_list_wrapper {

@@ -1636,7 +1636,7 @@ div.topic_edit_spinner .loading_indicator_spinner {
                 height: 100%;
                 width: var(--right-sidebar-width);
                 right: 0;
-                background-color: var(--color-background);
+                background-color: var(--pear-surface-1);
             }
         }
     }
@@ -1699,7 +1699,7 @@ div.topic_edit_spinner .loading_indicator_spinner {
             top: 0;
 
             .left-sidebar {
-                background-color: var(--color-background);
+                background-color: var(--pear-surface-1);
                 border-right: 1px solid var(--pear-hairline);
                 height: 100%;
                 padding-left: 10px;

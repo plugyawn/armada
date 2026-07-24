@@ -23,6 +23,7 @@ from django.utils.timezone import now as timezone_now
 from django.utils.translation import gettext as _
 
 from zerver.lib.exceptions import JsonableError
+from zerver.lib.message import bulk_access_stream_messages_query
 from zerver.lib.pear import (
     PEAR_DEFAULT_RESPONSE_POLICY,
     PEAR_REASONING_EFFORTS,
@@ -30,6 +31,8 @@ from zerver.lib.pear import (
     PearAddressingIntentClassifier,
     PearEmbeddedBotHandler,
     PearPendingSteeringEvent,
+    PearReferencedMessage,
+    PearReferencedThread,
     PearWorkerLeaseLostError,
     PearWorkerRunStatus,
     PearWorkerRuntime,
@@ -53,7 +56,8 @@ from zerver.lib.pear_skills import reconcile_pear_codex_skills
 from zerver.lib.queue import queue_json_publish_rollback_unsafe
 from zerver.lib.streams import access_stream_by_name
 from zerver.lib.topic import messages_for_topic
-from zerver.models import Realm, Stream
+from zerver.lib.users import get_inaccessible_user_ids
+from zerver.models import Message, Realm, Stream
 from zerver.models.bots import (
     PearMonitor,
     PearProject,
@@ -71,6 +75,10 @@ PEAR_PRESENTATION_QUEUE_NAME = "pear_presentation"
 PEAR_RUN_ATTENTION_TTL_SECONDS = 15
 PEAR_PRESENTATION_CADENCE_SECONDS = 5
 PEAR_WORKER_TOPIC_HISTORY_LIMIT = 200
+PEAR_REFERENCED_CONVERSATION_LIMIT = 4
+PEAR_REFERENCED_MESSAGE_LIMIT = 30
+PEAR_REFERENCED_THREAD_TOKEN_LIMIT = 1500
+PEAR_REFERENCED_TOTAL_TOKEN_LIMIT = 3000
 PEAR_WORKER_RUN_ACTIVE_STATUSES = frozenset(
     (PearWorkerRun.QUEUED, PearWorkerRun.RUNNING, PearWorkerRun.DONE)
 )
@@ -104,6 +112,155 @@ def pear_worker_queue_name(user_profile_id: int, *, stream: str, topic: str) -> 
     return PEAR_WORKER_QUEUE_NAMES[
         pear_worker_home_slot(user_profile_id, stream=stream, topic=topic)
     ]
+
+
+def pear_referenced_conversations(content: str) -> list[tuple[str, str | None]]:
+    if "#**" not in content:
+        return []
+    # Import lazily: the Markdown engine is intentionally not part of the
+    # ordinary worker startup path. These are the canonical Zulip link
+    # patterns, so Pear cannot drift into accepting a second reference syntax.
+    from zerver.lib.markdown import (
+        get_compiled_stream_link_regex,
+        get_compiled_stream_topic_link_regex,
+    )
+
+    topic_matches = list(get_compiled_stream_topic_link_regex().finditer(content))
+    topic_spans = [match.span() for match in topic_matches]
+    references: list[tuple[int, str, str | None]] = [
+        (match.start(), match.group("stream_name"), match.group("topic_name"))
+        for match in topic_matches
+    ]
+    for match in get_compiled_stream_link_regex().finditer(content):
+        if any(start <= match.start() < end for start, end in topic_spans):
+            continue
+        references.append((match.start(), match.group("stream_name"), None))
+
+    ordered: list[tuple[str, str | None]] = []
+    seen: set[tuple[str, str | None]] = set()
+    for _position, stream, topic in sorted(references):
+        reference = (stream.strip(), topic.strip() if topic is not None else None)
+        reference_key = (reference[0].casefold(), reference[1].casefold() if reference[1] else None)
+        if not reference[0] or reference_key in seen:
+            continue
+        seen.add(reference_key)
+        ordered.append(reference)
+        if len(ordered) >= PEAR_REFERENCED_CONVERSATION_LIMIT:
+            break
+    return ordered
+
+
+def pear_reference_token_count(value: str) -> int:
+    # A deterministic, dependency-free conservative approximation is enough
+    # for a hard context budget. Punctuation counts separately, as it does for
+    # the model tokenizer, rather than treating an entire code line as one word.
+    return len(re.findall(r"\w+|[^\w\s]", value, re.UNICODE))
+
+
+def load_pear_referenced_threads(
+    requesting_user: UserProfile | None,
+    *,
+    content: str,
+    current_stream: str,
+    current_topic: str,
+) -> list[PearReferencedThread]:
+    references = pear_referenced_conversations(content)
+    if not references:
+        return []
+
+    remaining_total_tokens = PEAR_REFERENCED_TOTAL_TOKEN_LIMIT
+    referenced_threads: list[PearReferencedThread] = []
+    for stream_name, topic_name in references:
+        if (
+            topic_name is not None
+            and stream_name.casefold() == current_stream.casefold()
+            and topic_name.casefold() == current_topic.casefold()
+        ):
+            continue
+
+        unavailable: PearReferencedThread = {
+            "stream": stream_name,
+            "topic": topic_name,
+            "accessible": False,
+            "truncated": False,
+            "messages": [],
+        }
+        if requesting_user is None:
+            referenced_threads.append(unavailable)
+            continue
+        try:
+            stream, _subscription = access_stream_by_name(requesting_user, stream_name)
+        except JsonableError:
+            referenced_threads.append(unavailable)
+            continue
+
+        assert stream.recipient_id is not None
+        if topic_name is None:
+            message_query = Message.objects.filter(
+                realm_id=requesting_user.realm_id,
+                recipient_id=stream.recipient_id,
+            )
+        else:
+            message_query = messages_for_topic(
+                requesting_user.realm_id,
+                stream.recipient_id,
+                topic_name,
+            )
+        visible_query = bulk_access_stream_messages_query(
+            requesting_user,
+            message_query,
+            stream,
+        )
+        candidates = list(
+            visible_query.select_related("sender").order_by("-id")[
+                : PEAR_REFERENCED_MESSAGE_LIMIT + 1
+            ]
+        )
+        has_earlier_messages = len(candidates) > PEAR_REFERENCED_MESSAGE_LIMIT
+        candidates = candidates[:PEAR_REFERENCED_MESSAGE_LIMIT]
+        inaccessible_sender_ids = get_inaccessible_user_ids(
+            [message.sender_id for message in candidates],
+            requesting_user,
+        )
+
+        thread_budget = min(PEAR_REFERENCED_THREAD_TOKEN_LIMIT, remaining_total_tokens)
+        selected_messages: list[PearReferencedMessage] = []
+        used_tokens = 0
+        for candidate in candidates:
+            sender_name = (
+                str(UserProfile.INACCESSIBLE_USER_NAME)
+                if candidate.sender_id in inaccessible_sender_ids
+                else candidate.sender.full_name
+            )
+            clean_content = trim_pear_text(candidate.content, limit=1200)
+            message_tokens = pear_reference_token_count(sender_name) + pear_reference_token_count(
+                clean_content
+            )
+            if used_tokens + message_tokens > thread_budget:
+                has_earlier_messages = True
+                break
+            selected_messages.append(
+                {
+                    "message_id": candidate.id,
+                    "sender": trim_pear_text(sender_name, limit=120),
+                    "sender_is_bot": candidate.sender.is_bot,
+                    "content": clean_content,
+                    "topic": candidate.topic_name(),
+                }
+            )
+            used_tokens += message_tokens
+        remaining_total_tokens = max(remaining_total_tokens - used_tokens, 0)
+        selected_messages.reverse()
+        referenced_threads.append(
+            {
+                "stream": stream.name,
+                "topic": topic_name,
+                "accessible": True,
+                "truncated": has_earlier_messages,
+                "messages": selected_messages,
+            }
+        )
+    return referenced_threads
 
 
 def pear_run_attention_cache_key(run_id: int) -> str:
@@ -3463,13 +3620,31 @@ class PearDatabaseWorkerRunStore:
                 instruction = event.summary.strip()
             if not instruction:
                 continue
-            pending_events.append(
-                {
-                    "event_id": event.id,
-                    "message_id": message_id_value,
-                    "instruction": instruction,
-                }
-            )
+            pending_event: PearPendingSteeringEvent = {
+                "event_id": event.id,
+                "message_id": message_id_value,
+                "instruction": instruction,
+            }
+            steering_message = None
+            if "#**" in instruction:
+                steering_message = (
+                    Message.objects.select_related("sender")
+                    .filter(
+                        id=message_id_value,
+                        realm_id=user_profile.realm_id,
+                    )
+                    .first()
+                )
+            if steering_message is not None:
+                referenced_threads = load_pear_referenced_threads(
+                    steering_message.sender if steering_message.sender.is_active else None,
+                    content=steering_message.content,
+                    current_stream=run.stream_name,
+                    current_topic=run.topic_name,
+                )
+                if referenced_threads:
+                    pending_event["referenced_threads"] = referenced_threads
+            pending_events.append(pending_event)
         return pending_events
 
     def _update_run(
@@ -3891,6 +4066,28 @@ def load_pear_active_session_from_zulip(
             "sender__full_name",
         )[:30]
     )
+    requesting_user_id = message.get("sender_id")
+    if not isinstance(requesting_user_id, int) or isinstance(requesting_user_id, bool):
+        requesting_user_id = (
+            Message.objects.filter(id=trigger_message_id, realm_id=user_profile.realm_id)
+            .values_list("sender_id", flat=True)
+            .first()
+        )
+    requesting_user = (
+        UserProfile.objects.filter(
+            id=requesting_user_id,
+            realm_id=user_profile.realm_id,
+            is_active=True,
+        ).first()
+        if isinstance(requesting_user_id, int)
+        else None
+    )
+    referenced_threads = load_pear_referenced_threads(
+        requesting_user,
+        content=str(message.get("content", "")),
+        current_stream=pear_session["stream"],
+        current_topic=pear_session["topic"],
+    )
     workspace_context = build_pear_workspace_context(
         user_profile,
         stream=pear_session["stream"],
@@ -3902,6 +4099,7 @@ def load_pear_active_session_from_zulip(
         stream_exists=True,
         messages=message_rows,
         prompt_messages=prompt_message_rows,
+        referenced_threads=referenced_threads,
         topic_message_count=message_count,
         latest_codex_thread_id=latest_codex_thread_id,
         latest_codex_trigger_message_id=(

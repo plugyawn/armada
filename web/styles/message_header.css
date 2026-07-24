@@ -582,8 +582,8 @@
     font-style: normal;
     font-weight: 600;
     line-height: 17px; /* identical to box height, or 131% */
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
+    letter-spacing: normal;
+    text-transform: none;
     padding-top: 1px;
 
     /* Display the date when unchanged only for sticky headers. */

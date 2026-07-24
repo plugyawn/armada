@@ -593,8 +593,10 @@
         background-color: var(--color-background-recent-view-table-thead-th);
         overflow: hidden;
         color: var(--color-text-recent-view-table-thead-th);
-        text-transform: uppercase;
-        font-weight: 600;
+        font-family: var(--pear-font-pixel);
+        font-size: 12px;
+        text-transform: none;
+        font-weight: 400;
         line-height: 1.25em; /* 20px at 16px/1em */
         z-index: 1;
 

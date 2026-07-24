@@ -840,7 +840,7 @@ input.settings_text_input {
             font-size: 1.1em;
             font-weight: bold;
             line-height: var(--header-line-height);
-            text-transform: uppercase;
+            text-transform: none;
         }
 
         .exit {

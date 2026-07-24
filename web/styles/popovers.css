@@ -121,10 +121,6 @@
     color: hsl(0deg 0% 0%);
 }
 
-.tippy-box[data-theme="popover-menu"]:has(#gear-menu-dropdown) {
-    --box-shadow-popover-menu: var(--box-shadow-gear-menu);
-}
-
 .user_full_name {
     text-overflow: ellipsis;
     overflow: hidden;

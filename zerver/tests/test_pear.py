@@ -6214,18 +6214,24 @@ class PearSessionDefaultsTest(TestCase):
         }
 
         run_store = FakePearWorkerRunStore()
-        make_test_pear_handler(
-            worker_runtime=PearWorkerRuntime(tool_runner),
-            worker_run_store=run_store,
-        ).handle_message(
-            message,
-            bot_handler,
-        )
+        with self.assertLogs("zerver.lib.pear", level="ERROR") as logs:
+            make_test_pear_handler(
+                worker_runtime=PearWorkerRuntime(tool_runner),
+                worker_run_store=run_store,
+            ).handle_message(
+                message,
+                bot_handler,
+            )
 
         self.assertEqual(len(sent_replies), 2)
         self.assertEqual(sent_replies[1], "Pear worker failed.\n\nError: codex adapter failed")
         self.assertEqual(run_store.runs[202]["status"], "failed")
         self.assertEqual(run_store.runs[202]["error"], "codex adapter failed")
+        self.assertEqual(
+            logs.records[0].getMessage(),
+            "Pear worker failed for request message 202.",
+        )
+        self.assertIsNotNone(logs.records[0].exc_info)
 
     def run_embedded_bot_handler(self, content: str) -> list[str]:
         sent_replies: list[tuple[dict[str, object], str]] = []

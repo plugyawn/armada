@@ -3753,6 +3753,7 @@ class PearWorkerTurn:
             except PearWorkerLeaseLostError:
                 pass
         except Exception as error:
+            logger.exception("Pear worker failed for request message %s.", self.message_id)
             self.transcript_events.append(
                 {
                     "kind": "error",

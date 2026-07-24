@@ -299,6 +299,30 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
         self.assertNotIn(".hidden-empty", by_path)
         self.assertNotIn("ignored-empty", by_path)
 
+    def test_snapshot_treats_an_untracked_embedded_repository_as_a_directory(self) -> None:
+        user = self.example_user("hamlet")
+        stream = self.subscribe(user, "workspace-resource")
+        self.login_user(user)
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo = self.make_workspace(Path(temp_dir).resolve())
+            embedded_repo = repo / "agent-1"
+            embedded_repo.mkdir()
+            subprocess.run(
+                ["git", "-C", str(embedded_repo), "init", "--quiet"],
+                check=True,
+                timeout=10,
+            )
+            (embedded_repo / "notes.md").write_text("agent scratch\n", encoding="utf-8")
+            node = self.make_node(user, stream.name, repo)
+
+            descriptor = self.descriptor(node)
+            entries = self.tree(node)["entries"]
+
+        by_path = {entry["path"]: entry for entry in entries}
+        self.assertEqual(by_path["agent-1"]["kind"], "directory")
+        self.assertFalse(by_path["agent-1"]["has_children"])
+        self.assertEqual(descriptor["dirty_count"], 1)
+
     def test_create_rename_delete_enforce_policy_revision_and_confirmation(self) -> None:
         user = self.example_user("hamlet")
         stream = self.subscribe(user, "workspace-resource")

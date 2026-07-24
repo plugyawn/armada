@@ -4,7 +4,7 @@
 
     .navbar-search {
         margin: 0.2187em 0; /* 3.5px at 16px em */
-        border-radius: 5px;
+        border-radius: var(--pear-radius-chip);
         position: absolute;
         overflow: hidden;
         /* We bump the z-index to keep the search box
@@ -99,7 +99,7 @@
         }
 
         .search-input {
-            border-radius: 5px;
+            border-radius: var(--pear-radius-chip);
             color: var(--color-text-search);
             box-shadow: none;
         }

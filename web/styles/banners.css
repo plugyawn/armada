@@ -11,7 +11,7 @@
     grid-template-areas: var(--banner-grid-template-areas);
     place-items: start;
     border: 1px solid;
-    border-radius: 6px;
+    border-radius: var(--pear-radius-card);
 }
 
 .banner-link {

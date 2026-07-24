@@ -205,7 +205,7 @@
     background-color: var(--color-compose-box-background);
     padding: 4px 4px 6px;
     border: 1px solid var(--color-border-compose-content);
-    border-radius: 9px 9px 0 0;
+    border-radius: var(--pear-radius-card) var(--pear-radius-card) 0 0;
     box-shadow: 0 0 0 hsl(236deg 11% 28%);
     height: 100%;
     display: flex;

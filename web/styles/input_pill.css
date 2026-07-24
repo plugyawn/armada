@@ -8,7 +8,7 @@
 
     padding: var(--outer-spacing-input-pill-container);
     border: 1px solid var(--color-border-pill-container);
-    border-radius: 4px;
+    border-radius: var(--pear-radius-chip);
     align-items: center;
 
     cursor: text;

@@ -41,6 +41,7 @@ import type {Emoji, EmojiSuggestion} from "./typeahead.ts";
 import * as typeahead from "./typeahead.ts";
 import * as typeahead_helper from "./typeahead_helper.ts";
 import type {UserOrMentionPillData} from "./typeahead_helper.ts";
+import * as unread from "./unread.ts";
 import type {UserGroupPillData} from "./user_group_pill.ts";
 import * as user_groups from "./user_groups.ts";
 import type {UserGroup} from "./user_groups.ts";
@@ -101,6 +102,18 @@ export type TopicSuggestion = {
     is_new_topic: boolean;
 };
 
+// A cross-stream topic match in the `#` reference popup: the user has typed
+// `#query` (no stream prefix yet), and selecting the item inserts the full
+// #**stream>topic** link in one shot.
+export type TopicReferenceSuggestion = {
+    topic: string;
+    topic_display_name: string;
+    type: "topic_reference";
+    is_empty_string_topic: boolean;
+    stream_data: StreamPillData;
+    unread_count: number;
+};
+
 type TimeJumpSuggestion = {
     message: string;
     type: "time_jump";
@@ -119,6 +132,7 @@ export type TypeaheadSuggestion =
     | TimeJumpSuggestion
     | LanguageSuggestion
     | TopicSuggestion
+    | TopicReferenceSuggestion
     | EmojiSuggestion
     | SlashCommandSuggestion;
 
@@ -258,6 +272,113 @@ function get_topic_matcher(query: string): (topic: string) => boolean {
             should_remove_diacritics,
         );
     };
+}
+
+export let topic_reference_history_prefetched = false;
+
+export function rewire_topic_reference_history_prefetched(value: boolean): void {
+    topic_reference_history_prefetched = value;
+}
+
+function prefetch_topic_reference_history(): void {
+    // One-shot per page load: warm full topic history for the most active
+    // channels so cross-stream reference matching improves on later
+    // keystrokes. Same fetch-now/show-later idiom as topics_seen_for.
+    if (topic_reference_history_prefetched) {
+        return;
+    }
+    topic_reference_history_prefetched = true;
+    const active_subs = stream_data
+        .get_unsorted_subs_with_content_access()
+        .toSorted(typeahead_helper.compare_by_activity)
+        .slice(0, 8);
+    for (const sub of active_subs) {
+        if (stream_data.is_empty_topic_only_channel(sub.stream_id)) {
+            continue;
+        }
+        stream_topic_history_util.get_server_history(sub.stream_id, () => {
+            // The extended results are used on later keystrokes.
+        });
+    }
+}
+
+function get_topic_reference_matcher(query: string): (topic_display_name: string) => boolean {
+    query = typeahead.clean_query_lowercase(query, false);
+    const should_remove_diacritics = !typeahead.contains_diacritics(query);
+
+    return function (topic_display_name: string): boolean {
+        return (
+            typeahead.query_matches_string_in_order(
+                query,
+                topic_display_name,
+                " ",
+                should_remove_diacritics,
+            ) || typeahead.query_matches_subsequence(query, topic_display_name)
+        );
+    };
+}
+
+function sort_topic_references(
+    query: string,
+    candidates: TopicReferenceSuggestion[],
+): TopicReferenceSuggestion[] {
+    // GitHub-style tiers: exact > prefix (case-sensitive, then insensitive) >
+    // word boundary > substring > subsequence. Within a tier, preserve the
+    // input order, which is recency by latest message per channel.
+    const results = typeahead.triage_raw(query, candidates, (x) => x.topic_display_name);
+    const lower_query = query.toLowerCase();
+    const substring_matches: TopicReferenceSuggestion[] = [];
+    const subsequence_matches: TopicReferenceSuggestion[] = [];
+    for (const candidate of results.no_matches) {
+        if (candidate.topic_display_name.toLowerCase().includes(lower_query)) {
+            substring_matches.push(candidate);
+        } else {
+            subsequence_matches.push(candidate);
+        }
+    }
+    return [
+        ...results.exact_matches,
+        ...results.begins_with_case_sensitive_matches,
+        ...results.begins_with_case_insensitive_matches,
+        ...results.word_boundary_matches,
+        ...substring_matches,
+        ...subsequence_matches,
+    ];
+}
+
+export let get_topic_reference_candidates = (query: string): TopicReferenceSuggestion[] => {
+    prefetch_topic_reference_history();
+    const matcher = get_topic_reference_matcher(query);
+    const candidates: TopicReferenceSuggestion[] = [];
+    for (const sub of stream_data.get_unsorted_subs_with_content_access()) {
+        if (stream_data.is_empty_topic_only_channel(sub.stream_id)) {
+            continue;
+        }
+        for (const topic of stream_topic_history.get_recent_topic_names(sub.stream_id)) {
+            const topic_display_name = util.get_final_topic_display_name(topic);
+            if (!matcher(topic_display_name)) {
+                continue;
+            }
+            candidates.push({
+                topic,
+                topic_display_name,
+                type: "topic_reference",
+                is_empty_string_topic: topic === "",
+                stream_data: {
+                    ...sub,
+                    type: "stream",
+                },
+                unread_count: unread.num_unread_for_topic(sub.stream_id, topic),
+            });
+        }
+    }
+    return sort_topic_references(query, candidates);
+};
+
+export function rewire_get_topic_reference_candidates(
+    value: typeof get_topic_reference_candidates,
+): void {
+    get_topic_reference_candidates = value;
 }
 
 export function should_enter_send(e: JQuery.KeyDownEvent): boolean {
@@ -1303,7 +1424,11 @@ export function get_candidates(
             }));
         const matcher = get_stream_matcher(token);
         const matches = candidate_list.filter((item) => matcher(item));
-        return typeahead_helper.sort_streams(matches, token);
+        const stream_suggestions = typeahead_helper.sort_streams(matches, token);
+        // GitHub-style combined references: channel matches first, then
+        // cross-channel topic matches for the same query.
+        const topic_suggestions = get_topic_reference_candidates(token);
+        return [...stream_suggestions, ...topic_suggestions];
     }
 
     if (ALLOWED_MARKDOWN_FEATURES.timestamp) {
@@ -1358,6 +1483,12 @@ export function content_item_html(
                 }
                 return typeahead_helper.render_stream_topic(item);
             }
+            case "topic_reference":
+                return typeahead_helper.render_typeahead_item({
+                    topic_object: item,
+                    is_stream_topic: true,
+                    secondary: "# " + item.stream_data.name,
+                });
             case "time_jump":
                 return typeahead_helper.render_typeahead_item({primary: item.message});
             default:
@@ -1495,6 +1626,19 @@ export function content_typeahead_selected(
             }
 
             void compose_validate.warn_if_private_stream_is_linked(item, $textbox);
+            break;
+        }
+        case "topic_reference": {
+            // Cross-channel topic reference: replace the bare `#query` token
+            // with the full #**stream>topic** link in one shot.
+            beginning = beginning.slice(0, -token.length - 1);
+            if (beginning.endsWith("#*")) {
+                beginning = beginning.slice(0, -2);
+            }
+            beginning += topic_link_util.get_stream_topic_link_syntax(
+                item.stream_data.name,
+                item.topic,
+            );
             break;
         }
         case "syntax": {
@@ -1776,37 +1920,52 @@ export function initialize_compose_typeahead(
         select_on_escape_condition: () => completing === "topic_list",
         automated: compose_automated_selection,
         option_label(_matching_items, item): string | false {
-            if (item.type === "topic_list") {
-                if (item.is_channel_link) {
-                    return `<em>${$t({defaultMessage: "(link to channel)"})}</em>`;
-                }
+            switch (item.type) {
+                case "topic_reference":
+                    if (item.unread_count > 0) {
+                        return `<em>${item.unread_count}</em>`;
+                    }
+                    break;
+                case "topic_list":
+                    if (item.is_channel_link) {
+                        return `<em>${$t({defaultMessage: "(link to channel)"})}</em>`;
+                    }
 
-                if (item.is_new_topic) {
-                    return `<em>${$t({defaultMessage: "New"})}</em>`;
-                }
-            } else if (item.type === "syntax") {
-                if (
-                    item.language !== "" &&
-                    item.language === realm.realm_default_code_block_language
-                ) {
-                    return `<em>${$t({defaultMessage: "(default)"})}</em>`;
-                } else if (item.language === "text") {
-                    return `<em>${$t({defaultMessage: "(no highlighting)"})}</em>`;
-                }
+                    if (item.is_new_topic) {
+                        return `<em>${$t({defaultMessage: "New"})}</em>`;
+                    }
+                    break;
+                case "syntax":
+                    if (
+                        item.language !== "" &&
+                        item.language === realm.realm_default_code_block_language
+                    ) {
+                        return `<em>${$t({defaultMessage: "(default)"})}</em>`;
+                    } else if (item.language === "text") {
+                        return `<em>${$t({defaultMessage: "(no highlighting)"})}</em>`;
+                    }
+                    break;
+                default:
+                    break;
             }
             return false;
         },
         trigger_selection: compose_trigger_selection,
         footer_html: get_footer_html,
-        hideAfterSelect() {
-            // After selecting a stream, we immediately show topic options,
-            // so we don't want to hide the typeahead.
+        hideAfterSelect(item) {
+            // Cross-channel topic references insert the complete link, so the
+            // popup's work is done. After selecting a channel, we immediately
+            // show topic options, so we don't want to hide the typeahead.
+            if (item.type === "topic_reference") {
+                return true;
+            }
             return completing !== "stream";
         },
         getCustomItemClassname(item) {
             // Inject this class for non stream items in the typeahead menu to remove extra
             // gap between the stream name, chevron and the topic name.
-            return item.type === "topic_list" && !item.is_channel_link
+            return (item.type === "topic_list" && !item.is_channel_link) ||
+                item.type === "topic_reference"
                 ? "topic-typeahead-link"
                 : "";
         },

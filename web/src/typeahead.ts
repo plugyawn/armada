@@ -143,6 +143,25 @@ export function query_matches_string_in_order_assume_canonicalized(
     return source_str.startsWith(query) || source_str.includes(split_char + query);
 }
 
+// Case-insensitive subsequence match: every character of the query appears
+// in the source, in order ("hc" matches "hyper-contraction"). This is the
+// loosest tier of reference matching, below substring, and should only be
+// used where a dedicated sorter keeps it below stronger matches.
+export function query_matches_subsequence(query: string, source_str: string): boolean {
+    query = query.toLowerCase();
+    source_str = source_str.toLowerCase();
+    let query_index = 0;
+    for (const source_char of source_str) {
+        if (source_char === query[query_index]) {
+            query_index += 1;
+            if (query_index === query.length) {
+                return true;
+            }
+        }
+    }
+    return query_index === query.length;
+}
+
 // Match the words in the query to the words in the source text, in any order.
 //
 // The query matches the source if each word in the query can be matched to

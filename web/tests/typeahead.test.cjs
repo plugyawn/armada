@@ -113,6 +113,21 @@ run_test("query_matches_string_in_order", () => {
     assert_no_match("josé mar", "Jose Maria", " ");
 });
 
+run_test("query_matches_subsequence", () => {
+    // Characters in order, case-insensitive.
+    assert.ok(typeahead.query_matches_subsequence("hc", "hyper-contraction"));
+    assert.ok(typeahead.query_matches_subsequence("mani", "manimo"));
+    assert.ok(typeahead.query_matches_subsequence("MC", "Manifold-Constrained"));
+    assert.ok(typeahead.query_matches_subsequence("mani", "muffin at night"));
+    // Not a subsequence.
+    assert.ok(!typeahead.query_matches_subsequence("mani", "quux glacier"));
+    assert.ok(!typeahead.query_matches_subsequence("xyz", "manimo"));
+    // Order matters: reversed characters do not match.
+    assert.ok(!typeahead.query_matches_subsequence("inam", "manimo"));
+    // The empty query matches everything, like String.includes.
+    assert.ok(typeahead.query_matches_subsequence("", "anything"));
+});
+
 run_test("triage", () => {
     const alice = {name: "alice"};
     const alicia = {name: "Alicia"};

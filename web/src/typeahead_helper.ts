@@ -9,6 +9,7 @@ import * as compose_state from "./compose_state.ts";
 import type {
     LanguageSuggestion,
     SlashCommandSuggestion,
+    TopicReferenceSuggestion,
     TopicSuggestion,
 } from "./composebox_typeahead.ts";
 import type {InputPillContainer} from "./input_pill.ts";
@@ -68,7 +69,7 @@ export let render_typeahead_item = (args: {
     is_user_group?: boolean;
     stream?: StreamData;
     emoji_code?: string | undefined;
-    topic_object?: TopicSuggestion;
+    topic_object?: TopicSuggestion | TopicReferenceSuggestion;
     is_stream_topic?: boolean;
     is_empty_string_topic?: boolean;
     is_default_language?: boolean;

@@ -130,6 +130,8 @@ set_global("document", "document-stub");
 
 const typeahead = zrequire("typeahead");
 const stream_topic_history = zrequire("stream_topic_history");
+const message_store = zrequire("message_store");
+const unread = zrequire("unread");
 const compose_state = zrequire("compose_state");
 const emoji = zrequire("emoji");
 const emoji_picker = zrequire("emoji_picker");
@@ -1403,6 +1405,9 @@ for (const [index, topic_name] of sweden_topics_to_show.entries()) {
 test("initialize", ({override, override_rewire, mock_template}) => {
     mock_banners();
     $("#private_message_recipient").set_parent($.create("pm-recipient-container"));
+    // Cross-channel topic reference candidates are covered by their own
+    // tests; keep this wiring check focused on channels.
+    override_rewire(ct, "get_topic_reference_candidates", () => []);
 
     let pill_items = [];
     let cleared = false;
@@ -3333,4 +3338,103 @@ test("get_pm_people respects DM permissions", ({override}) => {
     // permission group should not appear.
     results = ct.get_pm_people("othello");
     assert.deepEqual(results, []);
+});
+
+test("topic_reference_candidates", ({override, override_rewire}) => {
+    // A clean slate: topic history accumulates across tests in this file.
+    stream_topic_history.reset();
+    let history_fetches = 0;
+    override(stream_topic_history_util, "get_server_history", () => {
+        history_fetches += 1;
+    });
+    override_rewire(ct, "topic_reference_history_prefetched", false);
+
+    stream_topic_history.add_message({
+        stream_id: sweden_stream.stream_id,
+        message_id: 9001,
+        topic_name: "quux glacier",
+    });
+    stream_topic_history.add_message({
+        stream_id: sweden_stream.stream_id,
+        message_id: 9002,
+        topic_name: "manimo",
+    });
+    stream_topic_history.add_message({
+        stream_id: denmark_stream.stream_id,
+        message_id: 9003,
+        topic_name: "lego maniacs",
+    });
+    stream_topic_history.add_message({
+        stream_id: denmark_stream.stream_id,
+        message_id: 9004,
+        topic_name: "muffin at night",
+    });
+
+    const input_element = {
+        $element: {
+            closest: () => [],
+        },
+        type: "textarea",
+    };
+    input_element.$element.caret = function (...args) {
+        if (args.length === 0) {
+            return 0;
+        }
+        return this;
+    };
+    input_element.$element.range = function () {
+        return this;
+    };
+    function get_values(input, rest = "") {
+        override_rewire(ct, "split_at_cursor", () => [input, rest]);
+        return ct.get_candidates(input, input_element);
+    }
+    function labels(values) {
+        return values.map((value) =>
+            value.type === "stream"
+                ? `channel:${value.name}`
+                : `topic:${value.stream_data.name}>${value.topic}`,
+        );
+    }
+
+    // Channels come first; topic references follow for the same query.
+    let values = get_values("#swe");
+    assert.deepEqual(labels(values), ["channel:Sweden"]);
+
+    // The first lookup prefetches full history for the most active channels
+    // (bounded); later lookups do not refetch.
+    assert.ok(history_fetches >= 1 && history_fetches <= 8);
+    const fetches_after_first_lookup = history_fetches;
+    get_values("#sw");
+    assert.equal(history_fetches, fetches_after_first_lookup);
+
+    // Cross-channel topic matches: prefix tier, then word-boundary tier,
+    // then the subsequence tier.
+    values = get_values("#mani");
+    assert.deepEqual(labels(values), [
+        "topic:Sweden>manimo",
+        "topic:Denmark>lego maniacs",
+        "topic:Denmark>muffin at night",
+    ]);
+
+    // Unread counts ride along for the badge.
+    const unread_messages = [9501, 9502, 9503, 9504, 9505].map((id) => ({
+        id,
+        type: "stream",
+        stream_id: sweden_stream.stream_id,
+        topic: "manimo",
+        mentioned: false,
+        unread: true,
+    }));
+    for (const message of unread_messages) {
+        message_store.update_message_cache({type: "server_message", message});
+    }
+    unread.process_loaded_messages(unread_messages);
+    values = get_values("#mani");
+    assert.equal(values[0].unread_count, 5);
+    assert.equal(values[1].unread_count, 0);
+
+    // Selecting a topic reference inserts the full link in one shot.
+    const inserted = ct.content_typeahead_selected(values[0], "#mani", input_element);
+    assert.equal(inserted, "#**Sweden>manimo**");
 });

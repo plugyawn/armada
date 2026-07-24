@@ -25,6 +25,11 @@
         <strong class="typeahead-strong-section{{#if is_empty_string_topic}} empty-topic-display{{/if}}">
             {{~ topic_display_name ~}}
         </strong>
+        {{~#if has_secondary}}
+        <span class="autocomplete_secondary">
+            {{~ secondary ~}}
+        </span>
+        {{~/if}}
     </div>
     {{else}}
     {{!-- Separate container to ensure overflowing text remains in this container. --}}

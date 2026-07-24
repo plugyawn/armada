@@ -139,7 +139,8 @@
  *   This is useful for complicated typeaheads that have custom logic
  *   for setting their element's contents after an item is selected.
  *
- * 17. Add `hideAfterSelect` option, default true.
+ * 17. Add `hideAfterSelect` option, default true. It receives the selected
+ *   item so per-item hide behavior is possible.
  *
  *   This is useful for custom situations where we want to trigger the
  *   typeahead to do a lookup after selecting an option, when the user
@@ -264,7 +265,8 @@ export class Typeahead<ItemType extends string | object> {
     showOnFocus: () => boolean;
     // Used for custom situations where we want to hide the typeahead
     // after selecting an option, instead of the default call to lookup().
-    hideAfterSelect: () => boolean;
+    // Receives the selected item so per-item behavior is possible.
+    hideAfterSelect: (item: ItemType) => boolean;
     hideOnEmptyAfterBackspace: boolean;
     // Used for adding a custom classname to the typeahead link.
     getCustomItemClassname: ((item: ItemType) => string) | undefined;
@@ -351,7 +353,7 @@ export class Typeahead<ItemType extends string | object> {
             this.input_element.$element.trigger("change");
         }
 
-        if (this.hideAfterSelect()) {
+        if (this.hideAfterSelect(val)) {
             return this.hide();
         }
         return this.lookup(false);
@@ -526,9 +528,12 @@ export class Typeahead<ItemType extends string | object> {
         this.shown = false;
         if (this.non_tippy_parent_element) {
             this.$container.hide();
-        } else {
-            this.instance?.destroy();
+        } else if (this.instance !== undefined) {
+            // Let tippy run its exit transition instead of destroying the
+            // instance outright; the onHidden callback owns the destroy.
+            const instance = this.instance;
             this.instance = undefined;
+            instance.hide();
         }
 
         if (this.closeInputFieldOnHide !== undefined) {
@@ -987,6 +992,6 @@ type TypeaheadOptions<ItemType> = {
     updateElementContent?: boolean;
     showOnClick?: boolean;
     showOnFocus?: () => boolean;
-    hideAfterSelect?: () => boolean;
+    hideAfterSelect?: (item: ItemType) => boolean;
     getCustomItemClassname?: (item: ItemType) => string;
 };

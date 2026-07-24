@@ -20,6 +20,7 @@ from zerver.lib.pear import (
     PearWorkerToolResult,
     PearWorkerTranscriptCallback,
     PearWorkerTranscriptEvent,
+    format_pear_referenced_threads,
     pear_normalize_token_usage,
 )
 from zerver.lib.pear_artifact import (
@@ -393,13 +394,17 @@ def build_pear_codex_turn_prompt(active_session: PearActiveSessionSummary, task:
         )
         for message in recent_messages[-30:]
     ]
+    referenced_context_lines = format_pear_referenced_threads(
+        active_session.get("referenced_threads", [])
+    )
     if active_session.get("latest_codex_thread_id"):
         if not recent_transcript_lines:
-            return task_text
+            return "\n".join([task_text, *referenced_context_lines])
         return "\n".join(
             [
                 "New Zulip messages since your previous turn:",
                 *recent_transcript_lines,
+                *referenced_context_lines,
                 "",
                 "Current request:",
                 task_text,
@@ -446,6 +451,7 @@ def build_pear_codex_turn_prompt(active_session: PearActiveSessionSummary, task:
             "",
             "Recent Zulip topic transcript, oldest to newest:",
             *initial_transcript_lines,
+            *referenced_context_lines,
         ]
     )
 

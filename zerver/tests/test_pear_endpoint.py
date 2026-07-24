@@ -71,6 +71,7 @@ from zerver.lib.pear_worker import (
     invalidate_pear_git_status_delta,
     latest_pear_codex_run_for_topic,
     load_pear_active_session_from_zulip,
+    load_pear_referenced_threads,
     maintain_pear_worker_run_liveness,
     maybe_refactor_pear_stream_workspaces_on_rename,
     maybe_refactor_pear_workspace_on_move,
@@ -79,6 +80,7 @@ from zerver.lib.pear_worker import (
     pear_git_output,
     pear_git_status_delta,
     pear_read_text_path,
+    pear_referenced_conversations,
     pear_topic_branch_name,
     pear_topic_isolation_user_exists,
     pear_topic_isolation_username,
@@ -5529,6 +5531,121 @@ class PearSessionEndpointTest(ZulipTestCase):
             active_session["latest_codex_trigger_message_id"],
             old_trigger_message_id,
         )
+
+    def test_pear_reference_parser_uses_canonical_zulip_link_syntax(self) -> None:
+        self.assertEqual(
+            pear_referenced_conversations(
+                "Compare #**devel>parser** with #**research** and #**Devel>parser**; ignore #devel."
+            ),
+            [("devel", "parser"), ("research", None)],
+        )
+        self.assertEqual(pear_referenced_conversations("No explicit references here."), [])
+
+    def test_worker_loader_resolves_references_with_requester_permissions(self) -> None:
+        owner = self.example_user("hamlet")
+        berry = self.example_user("othello")
+        pear_bot = self.create_test_bot(
+            "pear",
+            owner,
+            full_name="Pear",
+            bot_type=UserProfile.EMBEDDED_BOT,
+            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+        )
+        for user in (owner, berry, pear_bot):
+            self.subscribe(user, PEAR_DEFAULT_STREAM)
+        source_message_id = self.send_stream_message(
+            berry,
+            PEAR_DEFAULT_STREAM,
+            "The parser has a bounded reference resolver.",
+            topic_name="source-topic",
+        )
+        private_stream = self.make_stream("sekrit", invite_only=True)
+        self.subscribe(berry, private_stream.name)
+        self.send_stream_message(
+            berry,
+            private_stream.name,
+            "This message must remain private.",
+            topic_name="hidden-topic",
+        )
+        trigger_content = (
+            f"@Pear compare #**{PEAR_DEFAULT_STREAM}>source-topic** with #**sekrit>hidden-topic**."
+        )
+        trigger_message_id = self.send_stream_message(
+            owner,
+            PEAR_DEFAULT_STREAM,
+            trigger_content,
+            topic_name=PEAR_DEFAULT_TOPIC,
+        )
+
+        active_session = load_pear_active_session_from_zulip(
+            {
+                "id": trigger_message_id,
+                "sender_id": owner.id,
+                "type": "stream",
+                "display_recipient": PEAR_DEFAULT_STREAM,
+                "topic": PEAR_DEFAULT_TOPIC,
+                "content": trigger_content,
+            },
+            SimpleNamespace(user_profile=pear_bot),
+        )
+
+        self.assertEqual(
+            active_session["referenced_threads"],
+            [
+                {
+                    "stream": PEAR_DEFAULT_STREAM,
+                    "topic": "source-topic",
+                    "accessible": True,
+                    "truncated": False,
+                    "messages": [
+                        {
+                            "message_id": source_message_id,
+                            "sender": berry.full_name,
+                            "sender_is_bot": False,
+                            "content": "The parser has a bounded reference resolver.",
+                            "topic": "source-topic",
+                        }
+                    ],
+                },
+                {
+                    "stream": "sekrit",
+                    "topic": "hidden-topic",
+                    "accessible": False,
+                    "truncated": False,
+                    "messages": [],
+                },
+            ],
+        )
+
+    def test_reference_loader_skips_current_topic_and_caps_shared_budget(self) -> None:
+        owner = self.example_user("hamlet")
+        self.subscribe(owner, PEAR_DEFAULT_STREAM)
+        self.send_stream_message(
+            owner,
+            PEAR_DEFAULT_STREAM,
+            "alpha beta gamma delta",
+            topic_name="source-topic",
+        )
+
+        with patch(
+            "zerver.lib.pear_worker.PEAR_REFERENCED_TOTAL_TOKEN_LIMIT",
+            2,
+        ):
+            references = load_pear_referenced_threads(
+                owner,
+                content=(
+                    f"#**{PEAR_DEFAULT_STREAM}>{PEAR_DEFAULT_TOPIC}** "
+                    f"#**{PEAR_DEFAULT_STREAM}>source-topic**"
+                ),
+                current_stream=PEAR_DEFAULT_STREAM,
+                current_topic=PEAR_DEFAULT_TOPIC,
+            )
+
+        self.assertEqual(len(references), 1)
+        self.assertEqual(references[0]["topic"], "source-topic")
+        self.assertTrue(references[0]["accessible"])
+        self.assertTrue(references[0]["truncated"])
+        self.assertEqual(references[0]["messages"], [])
 
     def test_worker_loader_preserves_empty_topic_history(self) -> None:
         owner = self.example_user("hamlet")

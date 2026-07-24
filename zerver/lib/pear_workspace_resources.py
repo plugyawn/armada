@@ -1130,7 +1130,11 @@ def _parse_status(
             status = "conflict"
         else:
             raise WorkspaceSnapshotError("Git returned an invalid workspace status.")
-        path = _decode_git_path(raw_path)
+        # Porcelain v2 uses the same trailing-slash marker for an untracked
+        # embedded repository. It contributes to the workspace fingerprint
+        # and dirty count, but the explicit-directory pass owns its kind.
+        status_path = raw_path[:-1] if tag == b"?" and raw_path.endswith(b"/") else raw_path
+        path = _decode_git_path(status_path)
         if _is_internal_staging_path(path):
             continue
         dirty_count += 1
@@ -1212,6 +1216,13 @@ def _enumerate_workspace(
     allowed_paths: set[str] = set()
     for raw_path in paths_output.split(b"\0"):
         if raw_path:
+            # An untracked embedded Git repository is reported as an opaque
+            # directory marker (for example, ``agent-1/``) even without
+            # ``--directory``.  The explicit-directory pass below owns those
+            # entries; treating the marker as a file both violates path
+            # validation and would represent one path with two kinds.
+            if raw_path.endswith(b"/"):
+                continue
             path = _decode_git_path(raw_path)
             if not _is_internal_staging_path(path):
                 allowed_paths.add(path)

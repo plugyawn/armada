@@ -2,7 +2,7 @@
   "model": "groq/llama-3.3-70b-versatile",
   "messages": [
     {
-      "content": "The following is a chat conversation in the Zulip team chat app. channel: Zulip features, topic: New feature launch",
+      "content": "The following is a chat conversation in the Armada team chat app. channel: Zulip features, topic: New feature launch",
       "role": "system"
     },
     {

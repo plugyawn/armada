@@ -138,7 +138,7 @@ def do_summarize_narrow(
     # is primarily trained on English.
     conversation_length = len(message_list)
     max_summary_length = get_max_summary_length(conversation_length)
-    intro = "The following is a chat conversation in the Zulip team chat app."
+    intro = "The following is a chat conversation in the Armada team chat app."
     topic: str | None = None
     channel: str | None = None
     if narrow and len(narrow) == 2:

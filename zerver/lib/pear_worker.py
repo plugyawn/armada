@@ -1601,9 +1601,29 @@ def pear_provision_topic_workdir(
             path,
             isolation_username=isolation_username,
         ):
-            raise JsonableError(
-                _("This topic has a non-Git workspace; reset it before starting Armada.")
-            )
+            # An isolation user's git refuses a zulipdev-owned clone on
+            # dubious-ownership grounds. Repair the ownership through the
+            # privileged helper rather than forcing a reset, but only when
+            # the path is genuinely a Git workdir; anything else is the
+            # wrong-file case the strict check exists for.
+            if (
+                isolation_username is not None
+                and settings.PEAR_TOPIC_ISOLATION_HELPER
+                and pear_path_is_git_worktree(
+                    path,
+                    isolation_username=None,
+                )
+            ):
+                prep_error = pear_prepare_isolated_workdir(
+                    isolation_username=isolation_username,
+                    workdir=str(path),
+                )
+                if prep_error is not None:
+                    raise JsonableError(_(prep_error))
+            else:
+                raise JsonableError(
+                    _("This topic has a non-Git workspace; reset it before starting Armada.")
+                )
         origin_url = pear_run_git_checked(
             [
                 *pear_git_command_prefix(isolation_username),
@@ -1650,6 +1670,17 @@ def pear_provision_topic_workdir(
     exclude_path = path / ".git" / "info" / "exclude"
     with exclude_path.open("a", encoding="utf-8") as exclude_file:
         exclude_file.write("\n# Armada runtime outputs\n.pear/\n")
+    if isolation_username is not None and settings.PEAR_TOPIC_ISOLATION_HELPER:
+        # Hand the fresh clone to the isolation user immediately: every
+        # later consumer (attach checks, runtime, workspace IO) runs git as
+        # that user, and a zulipdev-owned clone fails the dubious-ownership
+        # guard from its first breath.
+        prep_error = pear_prepare_isolated_workdir(
+            isolation_username=isolation_username,
+            workdir=str(path),
+        )
+        if prep_error is not None:
+            raise JsonableError(_(prep_error))
     return branch_name
 
 

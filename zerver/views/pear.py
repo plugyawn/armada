@@ -75,7 +75,6 @@ from zerver.lib.pear_worker import (
     pear_logical_repository_label,
     pear_logical_worktree_label,
     pear_pinned_repository_value,
-    pear_prepare_isolated_workdir,
     pear_repo_artifact_value_is_durable,
     pear_topic_isolation_user_exists,
     pear_topic_isolation_username_for_realm,
@@ -1274,20 +1273,6 @@ def post_pear_topic_context_backend(
         raise JsonableError(_("Invalid Pear response policy."))
     clean_response_policy = response_policy
     workspace_node = ensure_pear_workspace_node(user_profile, stream=stream_name, topic=topic_name)
-    if (
-        workspace_node.isolation_username
-        and pear_topic_os_user_isolation_enabled()
-    ):
-        # The picker save path consumes the workdir as the topic's isolation
-        # user (attach checks run git as that user), so the zulipdev-owned
-        # clone must be handed over first; otherwise every save fails with a
-        # spurious "non-Git workspace" from git's dubious-ownership guard.
-        isolation_error = pear_prepare_isolated_workdir(
-            isolation_username=workspace_node.isolation_username,
-            workdir=workspace_node.workdir,
-        )
-        if isolation_error is not None:
-            raise JsonableError(_(isolation_error))
     previous_model = pear_worker_model_for_topic(
         user_profile,
         stream=stream_name,

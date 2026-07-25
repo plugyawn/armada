@@ -131,10 +131,10 @@ class PearSessionEndpointTest(ZulipTestCase):
         self.subscribe(self.example_user("hamlet"), PEAR_DEFAULT_STREAM)
         # Topic workdirs persist on disk across tests in this class while the
         # database resets; the strict channel-repository attach check then
-        # rejects the stale workdir. Clean only inside the OS temp dir, never
-        # the production /srv root.
+        # rejects the stale workdir. Clean the test root, protecting only the
+        # production /srv root.
         workdir_root = pear_topic_workdir_root()
-        if workdir_root.is_relative_to(Path(tempfile.gettempdir())):
+        if workdir_root != Path("/srv/pear-workspaces"):
             shutil.rmtree(workdir_root, ignore_errors=True)
 
     def create_git_repository(self, path: Path) -> None:

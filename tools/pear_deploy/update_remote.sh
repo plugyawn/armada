@@ -208,7 +208,7 @@ ssh_zulip_clean() {
 }
 
 detect_remote_pear_schema_state() {
-    ssh_zulip "$REMOTE_PATH/.venv/bin/python3 $REMOTE_PATH/manage.py shell -c 'from django.db import connection; cursor = connection.cursor(); cursor.execute(\"SELECT name FROM django_migrations WHERE app = %s AND name LIKE %s\", [\"zerver\", \"08%pear%\"]); names = {row[0] for row in cursor.fetchall()}; accepted = [{\"0805_pear_runtime\"}, {\"0805_pear_runtime\", \"0806_pear_workspace_scope_casefold\"}]; print(\"current\" if names in accepted else \"empty\" if not names else \"unexpected\")'"
+    ssh_zulip "$REMOTE_PATH/.venv/bin/python3 $REMOTE_PATH/manage.py shell -c 'from django.db import connection; cursor = connection.cursor(); cursor.execute(\"SELECT name FROM django_migrations WHERE app = %s AND name LIKE %s\", [\"zerver\", \"08%pear%\"]); names = {row[0] for row in cursor.fetchall()}; accepted = [{\"0805_pear_runtime\"}, {\"0805_pear_runtime\", \"0806_pear_workspace_scope_casefold\"}, {\"0805_pear_runtime\", \"0806_pear_workspace_scope_casefold\", \"0809_remove_pearworkspacenode_legacy_relationships\"}]; print(\"current\" if names in accepted else \"empty\" if not names else \"unexpected\")'"
 }
 
 preflight_remote_workspace_helper() {

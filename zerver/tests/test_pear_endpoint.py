@@ -1,3 +1,4 @@
+import shutil
 import subprocess
 import tempfile
 import threading
@@ -64,8 +65,8 @@ from zerver.lib.pear_worker import (
     PearDatabaseWorkerRunStore,
     build_pear_worker_runtime_from_settings,
     build_pear_workspace_context,
-    clone_or_update_pear_repository_workdir,
     configure_pear_channel_repository_workspace,
+    ensure_pear_project_origin,
     ensure_pear_topic_workdir,
     ensure_pear_workspace_node,
     invalidate_pear_git_status_delta,
@@ -75,12 +76,14 @@ from zerver.lib.pear_worker import (
     maintain_pear_worker_run_liveness,
     maybe_refactor_pear_stream_workspaces_on_rename,
     maybe_refactor_pear_workspace_on_move,
+    pear_expected_project_cache_path,
     pear_expected_topic_workdir,
     pear_git_current_branch_name,
     pear_git_output,
     pear_git_status_delta,
     pear_read_text_path,
     pear_referenced_conversations,
+    pear_seed_empty_bare_origin,
     pear_topic_branch_name,
     pear_topic_isolation_user_exists,
     pear_topic_isolation_username,
@@ -120,6 +123,20 @@ from zerver.worker import pear_worker as pear_worker_module
 
 
 class PearSessionEndpointTest(ZulipTestCase):
+    def setUp(self) -> None:
+        super().setUp()
+        # Every run/store path now resolves a per-channel PearProject, which
+        # requires the channel to exist; most tests in this class act on the
+        # default Pear channel without creating it first.
+        self.subscribe(self.example_user("hamlet"), PEAR_DEFAULT_STREAM)
+        # Topic workdirs persist on disk across tests in this class while the
+        # database resets; the strict channel-repository attach check then
+        # rejects the stale workdir. Clean only inside the OS temp dir, never
+        # the production /srv root.
+        workdir_root = pear_topic_workdir_root()
+        if workdir_root.is_relative_to(Path(tempfile.gettempdir())):
+            shutil.rmtree(workdir_root, ignore_errors=True)
+
     def create_git_repository(self, path: Path) -> None:
         path.mkdir()
         subprocess.run(["git", "-C", str(path), "init", "--quiet"], check=True, timeout=10)
@@ -142,6 +159,18 @@ class PearSessionEndpointTest(ZulipTestCase):
             check=True,
             timeout=10,
         )
+
+    def create_bare_origin(self, root: Path) -> tuple[Path, str]:
+        source = root / "source"
+        origin = root / "origin.git"
+        self.create_git_repository(source)
+        branch = pear_git_current_branch_name(source)
+        subprocess.run(
+            ["git", "clone", "--quiet", "--bare", str(source), str(origin)],
+            check=True,
+            timeout=10,
+        )
+        return origin, branch
 
     def test_pear_run_push_event_is_typed_and_visibility_scoped(self) -> None:
         owner = self.example_user("hamlet")
@@ -1645,7 +1674,10 @@ class PearSessionEndpointTest(ZulipTestCase):
         # collapse the redundant branch chip in the topic header.
         self.assertEqual(payload["branch"], pear_topic_branch_name(PEAR_DEFAULT_TOPIC))
         self.assertTrue(payload["branch_is_topic_default"])
-        self.assertEqual(payload["base_ref"], "")
+        # A freshly seeded local origin carries real provenance from day one:
+        # the "main" base ref and the "Initialize workspace" seed commit.
+        self.assertEqual(payload["base_ref"], "main")
+        # The recorded HEAD pointer stays blank until the first refresh.
         self.assertEqual(payload["head"], "")
 
         # A legacy or custom branch is surprising and must stay visible.
@@ -2290,13 +2322,6 @@ class PearSessionEndpointTest(ZulipTestCase):
     def test_os_user_topic_context_uses_independent_repository_clone(self) -> None:
         owner = self.example_user("hamlet")
         self.subscribe(owner, "megatron-lm")
-        repository_url = "https://github.com/NVIDIA/Megatron-LM.git"
-        cloned_paths: list[Path] = []
-
-        def fake_clone(_repository_url: str, workdir: Path) -> None:
-            cloned_paths.append(workdir)
-            workdir.mkdir(parents=True)
-            (workdir / ".git").mkdir()
 
         with (
             tempfile.TemporaryDirectory() as temp_dir,
@@ -2304,32 +2329,27 @@ class PearSessionEndpointTest(ZulipTestCase):
                 PEAR_TOPIC_WORKDIR_ROOT=temp_dir,
                 PEAR_TOPIC_ISOLATION_BACKEND="os-user",
             ),
-            patch(
-                "zerver.lib.pear_worker.clone_or_update_pear_repository_workdir",
-                side_effect=fake_clone,
-            ),
         ):
-            channel_context = configure_pear_channel_repository_workspace(
+            channel_context = ensure_pear_workspace_node(
                 owner,
                 stream="megatron-lm",
-                repository_url=repository_url,
+                topic="",
             )
-            project = PearProject.objects.get(
-                realm=owner.realm,
-                stream=get_stream("megatron-lm", owner.realm),
-            )
-            project.default_base_ref = "dev"
-            project.save(update_fields=["default_base_ref", "date_updated"])
             topic_context = ensure_pear_workspace_node(
                 owner,
                 stream="megatron-lm",
                 topic="optimizer work",
             )
 
+            self.assertEqual(topic_context.project_id, channel_context.project_id)
+            assert channel_context.project is not None
             self.assertEqual(
-                cloned_paths,
-                [Path(channel_context.workdir), Path(topic_context.workdir)],
+                channel_context.project.repo_cache_path,
+                str(pear_expected_project_cache_path(owner, stream="megatron-lm")),
             )
+            self.assertTrue(Path(channel_context.project.repo_cache_path).is_dir())
+            self.assertEqual(channel_context.branch_name, "main")
+            self.assertEqual(topic_context.branch_name, "optimizer-work")
             self.assertTrue((Path(topic_context.workdir) / ".git").is_dir())
             self.assertFalse((Path(topic_context.workdir) / ".git").is_file())
 
@@ -2494,10 +2514,17 @@ class PearSessionEndpointTest(ZulipTestCase):
                 PEAR_TOPIC_ISOLATION_BACKEND="os-user",
             ),
         ):
+            origin, base_ref = self.create_bare_origin(Path(temp_dir))
             workdir = Path(temp_dir) / "topic"
-            ensure_pear_topic_workdir(str(workdir))
+            ensure_pear_topic_workdir(
+                str(workdir),
+                origin=origin,
+                branch_name="topic",
+                base_ref=base_ref,
+            )
 
             self.assertTrue((workdir / ".git").is_dir())
+            self.assertEqual(pear_git_current_branch_name(workdir), "topic")
 
     def test_topic_workdir_provisions_git_author_identity(self) -> None:
         with (
@@ -2507,8 +2534,14 @@ class PearSessionEndpointTest(ZulipTestCase):
                 PEAR_TOPIC_ISOLATION_BACKEND="os-user",
             ),
         ):
+            origin, base_ref = self.create_bare_origin(Path(temp_dir))
             workdir = Path(temp_dir) / "fable-ui-tour"
-            ensure_pear_topic_workdir(str(workdir))
+            ensure_pear_topic_workdir(
+                str(workdir),
+                origin=origin,
+                branch_name="fable-ui-tour",
+                base_ref=base_ref,
+            )
 
             email = subprocess.run(
                 ["git", "-C", str(workdir), "config", "user.email"],
@@ -2524,8 +2557,8 @@ class PearSessionEndpointTest(ZulipTestCase):
                 text=True,
                 timeout=10,
             ).stdout.strip()
-            self.assertEqual(name, "Pear")
-            self.assertTrue(email.startswith("pear-worker@"))
+            self.assertEqual(name, "Armada")
+            self.assertTrue(email.startswith("armada-worker@"))
 
     def test_topic_workdir_keeps_existing_git_author_identity(self) -> None:
         with (
@@ -2535,15 +2568,26 @@ class PearSessionEndpointTest(ZulipTestCase):
                 PEAR_TOPIC_ISOLATION_BACKEND="os-user",
             ),
         ):
+            origin, base_ref = self.create_bare_origin(Path(temp_dir))
             workdir = Path(temp_dir) / "fable-ui-tour"
-            ensure_pear_topic_workdir(str(workdir))
+            ensure_pear_topic_workdir(
+                str(workdir),
+                origin=origin,
+                branch_name="fable-ui-tour",
+                base_ref=base_ref,
+            )
             subprocess.run(
                 ["git", "-C", str(workdir), "config", "user.email", "human@example.com"],
                 check=True,
                 timeout=10,
             )
 
-            ensure_pear_topic_workdir(str(workdir))
+            ensure_pear_topic_workdir(
+                str(workdir),
+                origin=origin,
+                branch_name="fable-ui-tour",
+                base_ref=base_ref,
+            )
 
             email = subprocess.run(
                 ["git", "-C", str(workdir), "config", "user.email"],
@@ -2765,32 +2809,13 @@ class PearSessionEndpointTest(ZulipTestCase):
                 PEAR_TOPIC_WORKDIR_ROOT=temp_dir,
             ),
         ):
-            workdir = pear_expected_topic_workdir(
+            # With no external repository pinned, the topic workspace is
+            # provisioned from the seeded local origin on the topic branch.
+            context = ensure_pear_workspace_node(
                 owner,
                 stream=PEAR_DEFAULT_STREAM,
                 topic=PEAR_DEFAULT_TOPIC,
             )
-            self.create_git_repository(workdir)
-            subprocess.run(
-                [
-                    "git",
-                    "-C",
-                    str(workdir),
-                    "remote",
-                    "add",
-                    "origin",
-                    "https://github.com/zulip/zulip.git",
-                ],
-                check=True,
-                timeout=10,
-            )
-            context = PearWorkspaceNode.objects.create(
-                realm=owner.realm,
-                stream_name=PEAR_DEFAULT_STREAM,
-                topic_name=PEAR_DEFAULT_TOPIC,
-                workdir=str(workdir),
-            )
-            expected_branch = pear_git_current_branch_name(workdir)
 
             workspace_context = build_pear_workspace_context(
                 owner,
@@ -2801,7 +2826,9 @@ class PearSessionEndpointTest(ZulipTestCase):
             self.assertEqual(workspace_context["repository"], PEAR_DEFAULT_STREAM)
             self.assertEqual(workspace_context["remote_url"], "")
             self.assertEqual(workspace_context["worktree"], PEAR_DEFAULT_TOPIC)
-            self.assertEqual(workspace_context["branch"], expected_branch)
+            self.assertEqual(
+                workspace_context["branch"], pear_topic_branch_name(PEAR_DEFAULT_TOPIC)
+            )
             self.assertEqual(workspace_context["head"], "")
             topic_payload = serialize_pear_workspace_context(
                 context,
@@ -2812,13 +2839,28 @@ class PearSessionEndpointTest(ZulipTestCase):
             self.assertEqual(topic_payload["repo_label"], PEAR_DEFAULT_STREAM)
             self.assertEqual(topic_payload["worktree_label"], PEAR_DEFAULT_TOPIC)
 
+        # An externally pinned repository is reported as the remote. Pin in a
+        # fresh workdir scope: changing an existing channel cache's repository
+        # is (correctly) rejected as wrong-file protection.
+        with (
+            tempfile.TemporaryDirectory() as pin_dir,
+            self.settings(
+                PEAR_WORKER_WORKDIR=str(Path(pin_dir) / "base"),
+                PEAR_TOPIC_WORKDIR_ROOT=pin_dir,
+            ),
+        ):
+            (Path(pin_dir) / "external").mkdir()
+            external_origin, _external_branch = self.create_bare_origin(Path(pin_dir) / "external")
+            # A pin is only a durable remote as a real URL; plain local paths
+            # are (deliberately) treated as local topic paths instead.
+            pinned_url = f"file://{external_origin}"
             project, _created = PearProject.objects.update_or_create(
                 realm=owner.realm,
                 stream=get_stream(PEAR_DEFAULT_STREAM, owner.realm),
                 defaults={
-                    "repository_url": "zulip/zulip",
-                    "repo_cache_path": str(workdir),
-                    "clone_status": PearProject.READY,
+                    "repository_url": pinned_url,
+                    "repo_cache_path": "",
+                    "clone_status": PearProject.UNCONFIGURED,
                 },
             )
             context.project = project
@@ -2830,8 +2872,8 @@ class PearSessionEndpointTest(ZulipTestCase):
                 topic=PEAR_DEFAULT_TOPIC,
             )
 
-            self.assertEqual(workspace_context["repository"], "zulip/zulip")
-            self.assertEqual(workspace_context["remote_url"], "zulip/zulip")
+            self.assertEqual(workspace_context["repository"], pinned_url)
+            self.assertEqual(workspace_context["remote_url"], pinned_url)
 
     def test_topic_workdir_creation_does_not_copy_self_dev_overlay(self) -> None:
         owner = self.example_user("hamlet")
@@ -2861,12 +2903,36 @@ class PearSessionEndpointTest(ZulipTestCase):
         self.login_user(owner)
         repository_url = "https://github.com/NVIDIA/Megatron-LM.git"
 
+        def initialize_without_network(origin: Path, *, repository_url: str) -> tuple[str, str]:
+            subprocess.run(
+                ["git", "init", "--bare", "--quiet", "--initial-branch=main", str(origin)],
+                check=True,
+                timeout=10,
+            )
+            subprocess.run(
+                [
+                    "git",
+                    "--git-dir",
+                    str(origin),
+                    "remote",
+                    "add",
+                    "upstream",
+                    repository_url,
+                ],
+                check=True,
+                timeout=10,
+            )
+            return "main", pear_seed_empty_bare_origin(origin, branch_name="main")
+
         with (
             tempfile.TemporaryDirectory() as temp_dir,
             self.settings(
                 PEAR_TOPIC_WORKDIR_ROOT=temp_dir,
             ),
-            patch("zerver.lib.pear_worker.clone_or_update_pear_repository_workdir") as clone_mock,
+            patch(
+                "zerver.lib.pear_worker.pear_initialize_bare_origin",
+                side_effect=initialize_without_network,
+            ),
         ):
             result = self.client_post(
                 "/json/users/me/subscriptions",
@@ -2894,17 +2960,39 @@ class PearSessionEndpointTest(ZulipTestCase):
                 stream=get_stream("megatron-lm", owner.realm),
             )
             self.assertEqual(project.repository_url, repository_url)
-            self.assertEqual(project.repo_cache_path, context.workdir)
+            self.assertEqual(
+                project.repo_cache_path,
+                str(pear_expected_project_cache_path(owner, stream="megatron-lm")),
+            )
+            self.assertNotEqual(project.repo_cache_path, context.workdir)
+            self.assertTrue(Path(project.repo_cache_path).is_dir())
             self.assertNotIn("pear_repository_error", result_dict)
-            clone_mock.assert_called_once_with(repository_url, Path(context.workdir))
 
     def test_topic_context_inherits_channel_repository_checkout(self) -> None:
         owner = self.example_user("hamlet")
         self.subscribe(owner, "megatron-lm")
         repository_url = "https://github.com/NVIDIA/Megatron-LM.git"
 
-        def fake_clone(_repository_url: str, workdir: Path) -> None:
-            workdir.mkdir(parents=True)
+        def initialize_without_network(origin: Path, *, repository_url: str) -> tuple[str, str]:
+            subprocess.run(
+                ["git", "init", "--bare", "--quiet", "--initial-branch=dev", str(origin)],
+                check=True,
+                timeout=10,
+            )
+            subprocess.run(
+                [
+                    "git",
+                    "--git-dir",
+                    str(origin),
+                    "remote",
+                    "add",
+                    "upstream",
+                    repository_url,
+                ],
+                check=True,
+                timeout=10,
+            )
+            return "dev", pear_seed_empty_bare_origin(origin, branch_name="dev")
 
         with (
             tempfile.TemporaryDirectory() as temp_dir,
@@ -2912,8 +3000,8 @@ class PearSessionEndpointTest(ZulipTestCase):
                 PEAR_TOPIC_WORKDIR_ROOT=temp_dir,
             ),
             patch(
-                "zerver.lib.pear_worker.clone_or_update_pear_repository_workdir",
-                side_effect=fake_clone,
+                "zerver.lib.pear_worker.pear_initialize_bare_origin",
+                side_effect=initialize_without_network,
             ),
         ):
             channel_context = configure_pear_channel_repository_workspace(
@@ -2921,28 +3009,24 @@ class PearSessionEndpointTest(ZulipTestCase):
                 stream="megatron-lm",
                 repository_url=repository_url,
             )
-            project = PearProject.objects.get(
-                realm=owner.realm,
-                stream=get_stream("megatron-lm", owner.realm),
-            )
-            project.default_base_ref = "dev"
-            project.save(update_fields=["default_base_ref", "date_updated"])
             topic_context = ensure_pear_workspace_node(
                 owner,
                 stream="megatron-lm",
                 topic="optimizer work",
             )
 
-            self.assertEqual(topic_context.parent_node_id, channel_context.id)
             assert channel_context.project is not None
             self.assertEqual(channel_context.project.repository_url, repository_url)
             self.assertNotEqual(topic_context.workdir, channel_context.workdir)
             self.assertTrue(Path(topic_context.workdir).exists())
             assert topic_context.project is not None
             self.assertEqual(topic_context.project.repository_url, repository_url)
-            self.assertEqual(topic_context.branch_name, "dev")
+            self.assertEqual(channel_context.branch_name, "dev")
+            self.assertEqual(topic_context.branch_name, "optimizer-work")
+            self.assertEqual(topic_context.base_ref, "dev")
+            self.assertEqual(topic_context.project_id, channel_context.project_id)
 
-    def test_topic_context_does_not_clone_local_parent_workspace_path(self) -> None:
+    def test_topic_context_does_not_use_general_topic_as_repository_parent(self) -> None:
         owner = self.example_user("hamlet")
 
         with (
@@ -2951,11 +3035,11 @@ class PearSessionEndpointTest(ZulipTestCase):
                 PEAR_TOPIC_ISOLATION_BACKEND="os-user",
                 PEAR_TOPIC_WORKDIR_ROOT=temp_dir,
             ),
-            patch("zerver.lib.pear_worker.clone_or_update_pear_repository_workdir") as clone,
         ):
+            self.subscribe(owner, "devel")
             parent_path = Path(temp_dir) / "devel-base"
             parent_path.mkdir()
-            PearWorkspaceNode.objects.create(
+            general_context = PearWorkspaceNode.objects.create(
                 realm=owner.realm,
                 stream_name="devel",
                 topic_name="",
@@ -2968,9 +3052,9 @@ class PearSessionEndpointTest(ZulipTestCase):
                 topic="general chat",
             )
 
-            clone.assert_not_called()
-            self.assertIsNotNone(topic_context.parent_node)
-            self.assertEqual(topic_context.parent_node.stream_name, "devel")
+            self.assertIsNone(general_context.project_id)
+            self.assertIsNotNone(topic_context.project_id)
+            self.assertEqual(topic_context.branch_name, "general-chat")
             self.assertTrue(Path(topic_context.workdir).is_dir())
 
     def test_context_isolation_username_waits_for_existing_os_user(self) -> None:
@@ -3266,36 +3350,31 @@ class PearSessionEndpointTest(ZulipTestCase):
         self.assertEqual(side_run.source_stream_name, "old-repo")
         self.assertEqual(monitor.stream_name, "new-repo")
 
-    def test_clone_or_update_pear_repository_workdir_clones_repository(self) -> None:
+    def test_project_origin_clones_repository_and_seeds_topic_branch(self) -> None:
+        owner = self.example_user("hamlet")
         with tempfile.TemporaryDirectory() as temp_dir:
             source = Path(temp_dir) / "source"
-            destination = Path(temp_dir) / "checkout"
-            source.mkdir()
-            subprocess.run(["git", "-C", str(source), "init", "--quiet"], check=True, timeout=10)
-            (source / "README.md").write_text("hello\n", encoding="utf-8")
-            subprocess.run(["git", "-C", str(source), "add", "README.md"], check=True, timeout=10)
-            subprocess.run(
-                [
-                    "git",
-                    "-C",
-                    str(source),
-                    "-c",
-                    "user.email=pear@example.com",
-                    "-c",
-                    "user.name=Pear",
-                    "commit",
-                    "--quiet",
-                    "-m",
-                    "initial",
-                ],
-                check=True,
-                timeout=10,
+            self.create_git_repository(source)
+            project = PearProject.objects.create(
+                realm=owner.realm,
+                stream=get_stream(PEAR_DEFAULT_STREAM, owner.realm),
+                repository_url=source.as_uri(),
             )
 
-            clone_or_update_pear_repository_workdir(source.as_uri(), destination)
+            with self.settings(PEAR_TOPIC_WORKDIR_ROOT=temp_dir):
+                origin = ensure_pear_project_origin(owner, project)
+                workspace = ensure_pear_workspace_node(
+                    owner,
+                    stream=PEAR_DEFAULT_STREAM,
+                    topic="origin-smoke",
+                )
 
-            self.assertEqual((destination / "README.md").read_text(encoding="utf-8"), "hello\n")
-            self.assertTrue((destination / ".git").exists())
+            self.assertTrue(origin.name.endswith(".git"))
+            self.assertEqual(
+                (Path(workspace.workdir) / "README.md").read_text(encoding="utf-8"),
+                "hello\n",
+            )
+            self.assertEqual(workspace.branch_name, "origin-smoke")
 
     def test_worker_start_allows_same_user_in_different_topics(self) -> None:
         owner = self.example_user("hamlet")
@@ -5204,8 +5283,11 @@ class PearSessionEndpointTest(ZulipTestCase):
     def test_get_pear_active_session_without_stream(self) -> None:
         self.login("hamlet")
 
+        # Ask for a deliberately nonexistent channel; the default channel is
+        # created in setUp, so the missing-stream state needs a named stream.
         result = self.client_get(
             f"/json{PEAR_ACTIVE_SESSION_ENDPOINT}",
+            {"stream": "definitely-not-a-channel"},
             intentionally_undocumented=True,
         )
 

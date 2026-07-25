@@ -443,7 +443,7 @@ def pear_workspace_for_request(
 ) -> PearWorkspaceNode | None:
     stream_name, topic_name = pear_topic_scope(stream_name, topic_name)
     return (
-        PearWorkspaceNode.objects.select_related("parent_node__project", "project")
+        PearWorkspaceNode.objects.select_related("project")
         .filter(
             realm=user_profile.realm,
             stream_name__iexact=stream_name,
@@ -468,19 +468,10 @@ def serialize_pear_workspace_context(
         if workspace_node is not None and workspace_node.model.strip()
         else default_model
     )
-    parent_node = (
-        workspace_node.parent_node
-        if workspace_node is not None and workspace_node.parent_node_id is not None
-        else None
-    )
     selected_reasoning_effort = (
         workspace_node.reasoning_effort.strip()
         if workspace_node is not None and workspace_node.reasoning_effort.strip()
-        else (
-            parent_node.reasoning_effort.strip()
-            if parent_node is not None and parent_node.reasoning_effort.strip()
-            else default_reasoning_effort
-        )
+        else default_reasoning_effort
     )
     selected_response_policy = normalize_pear_response_policy(
         workspace_node.response_policy if workspace_node is not None else None
@@ -495,15 +486,10 @@ def serialize_pear_workspace_context(
         if workspace_node is not None and workspace_node.project_id is not None
         else ""
     )
-    parent_repo = (
-        parent_node.project.repository_url.strip()
-        if parent_node is not None and parent_node.project_id is not None
-        else ""
-    )
     github_repo = next(
         (
             repo_value
-            for repo_value in (workspace_repo, parent_repo)
+            for repo_value in (workspace_repo,)
             if pear_repo_artifact_value_is_durable(repo_value)
         ),
         "",
@@ -513,7 +499,6 @@ def serialize_pear_workspace_context(
             repo_value
             for repo_value in (
                 pear_pinned_repository_value(workspace_repo),
-                pear_pinned_repository_value(parent_repo),
             )
             if repo_value
         ),
@@ -522,7 +507,7 @@ def serialize_pear_workspace_context(
     repo_label = pear_logical_repository_label(
         stream=stream_name,
         context_repo=workspace_repo,
-        parent_repo=parent_repo,
+        parent_repo="",
     )
     worktree_label = pear_logical_worktree_label(
         stream=stream_name,
@@ -573,11 +558,6 @@ def serialize_pear_workspace_context(
         "branch_is_topic_default": expected_branch
         == pear_workspace_node_default_branch(
             project=project,
-            parent_node=(
-                workspace_node.parent_node
-                if workspace_node is not None and workspace_node.parent_node_id is not None
-                else None
-            ),
             topic=topic_name,
         ),
         "head": workspace_node.head_commit if workspace_node is not None else "",
@@ -588,9 +568,10 @@ def serialize_pear_workspace_context(
         "worktree_label": worktree_label,
         "workdir": workdir,
         "is_paused": bool(workspace_node is not None and workspace_node.is_paused),
-        "parent_workspace_id": workspace_node.parent_node_id
-        if workspace_node is not None
-        else None,
+        # Kept as an additive-wire compatibility field. Topic workspaces no
+        # longer have hidden parent/config rows; every topic is an ordinary
+        # branch of the stream's canonical repository.
+        "parent_workspace_id": None,
     }
     if include_git:
         payload["git"] = build_pear_git_context(

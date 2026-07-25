@@ -309,18 +309,6 @@ class PearWorkspaceNode(models.Model):
     uuid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     stream_name = models.CharField(max_length=60)
     topic_name = models.CharField(max_length=MAX_TOPIC_NAME_LENGTH)
-    parent_node = models.ForeignKey(
-        "self",
-        null=True,
-        on_delete=SET_NULL,
-        related_name="child_nodes",
-    )
-    source_node = models.ForeignKey(
-        "self",
-        null=True,
-        on_delete=SET_NULL,
-        related_name="side_nodes",
-    )
     workdir = models.TextField(blank=True)
     branch_name = models.TextField(blank=True)
     base_ref = models.TextField(blank=True)

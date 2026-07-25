@@ -6,7 +6,9 @@ import os
 import posixpath
 import pwd
 import re
+import shutil
 import subprocess
+import tempfile
 import time
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -22,6 +24,7 @@ from django.db.models import F, Q
 from django.utils.timezone import now as timezone_now
 from django.utils.translation import gettext as _
 
+from zerver.lib.context_managers import lockfile
 from zerver.lib.exceptions import JsonableError
 from zerver.lib.message import bulk_access_stream_messages_query
 from zerver.lib.pear import (
@@ -745,7 +748,7 @@ def pear_expected_project_cache_path(
             user_profile,
             stream=stream,
         )
-    )
+    ).with_suffix(".git")
 
 
 def pear_project_for_stream(
@@ -762,10 +765,16 @@ def pear_project_for_stream(
     except JsonableError:
         return None
 
+    expected_cache_path = str(
+        pear_expected_project_cache_path(
+            user_profile,
+            stream=stream_obj.name,
+        )
+    )
     defaults = {
         "repository_url": repository_url,
-        "repo_cache_path": repo_cache_path,
-        "clone_status": PearProject.READY if repository_url else PearProject.UNCONFIGURED,
+        "repo_cache_path": repo_cache_path or expected_cache_path,
+        "clone_status": PearProject.UNCONFIGURED,
     }
     project, _created = PearProject.objects.get_or_create(
         realm=user_profile.realm,
@@ -776,12 +785,10 @@ def pear_project_for_stream(
     if repository_url and project.repository_url != repository_url:
         project.repository_url = repository_url
         update_fields.append("repository_url")
-    if repo_cache_path and project.repo_cache_path != repo_cache_path:
-        project.repo_cache_path = repo_cache_path
+    canonical_cache_path = repo_cache_path or expected_cache_path
+    if project.repo_cache_path != canonical_cache_path:
+        project.repo_cache_path = canonical_cache_path
         update_fields.append("repo_cache_path")
-    if repository_url and project.clone_status == PearProject.UNCONFIGURED:
-        project.clone_status = PearProject.READY
-        update_fields.append("clone_status")
     if update_fields:
         project.date_updated = timezone_now()
         project.save(update_fields=[*update_fields, "date_updated"])
@@ -791,7 +798,6 @@ def pear_project_for_stream(
 def pear_workspace_node_default_branch(
     *,
     project: PearProject | None = None,
-    parent_node: PearWorkspaceNode | None = None,
     topic: str = "",
 ) -> str:
     # pear_topic_branch_name never returns an empty string (it falls back
@@ -801,9 +807,8 @@ def pear_workspace_node_default_branch(
     # repository need per-topic branch names, or every sibling topic
     # collides and falls into the digest-suffix retry.
     candidates = (
-        project.default_base_ref if project is not None else "",
         topic,
-        parent_node.branch_name if parent_node is not None else "",
+        project.default_base_ref if project is not None else "",
         "main",
     )
     for candidate in candidates:
@@ -1013,9 +1018,34 @@ def pear_workspace_workdir_needs_repair(workspace_node: PearWorkspaceNode) -> bo
     return workdir_path == base_workdir or workdir_path.is_relative_to(base_workdir)
 
 
-def pear_git_branch_exists(base_path: Path, branch_name: str) -> bool:
+def pear_git_command_prefix(isolation_username: str | None = None) -> list[str]:
+    if isolation_username is None:
+        return ["git"]
+    return [
+        "sudo",
+        "-n",
+        "-u",
+        isolation_username,
+        "/usr/bin/env",
+        "git",
+    ]
+
+
+def pear_git_branch_exists(
+    base_path: Path,
+    branch_name: str,
+    *,
+    isolation_username: str | None = None,
+) -> bool:
     completed = subprocess.run(
-        ["git", "-C", str(base_path), "rev-parse", "--verify", f"refs/heads/{branch_name}"],
+        [
+            *pear_git_command_prefix(isolation_username),
+            "-C",
+            str(base_path),
+            "rev-parse",
+            "--verify",
+            f"refs/heads/{branch_name}",
+        ],
         check=False,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
@@ -1024,10 +1054,20 @@ def pear_git_branch_exists(base_path: Path, branch_name: str) -> bool:
     return completed.returncode == 0
 
 
-def pear_path_is_git_worktree(path: Path) -> bool:
+def pear_path_is_git_worktree(
+    path: Path,
+    *,
+    isolation_username: str | None = None,
+) -> bool:
     try:
         completed = subprocess.run(
-            ["git", "-C", str(path), "rev-parse", "--is-inside-work-tree"],
+            [
+                *pear_git_command_prefix(isolation_username),
+                "-C",
+                str(path),
+                "rev-parse",
+                "--is-inside-work-tree",
+            ],
             check=False,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
@@ -1038,10 +1078,20 @@ def pear_path_is_git_worktree(path: Path) -> bool:
     return completed.returncode == 0
 
 
-def pear_git_current_branch_name(path: Path) -> str:
+def pear_git_current_branch_name(
+    path: Path,
+    *,
+    isolation_username: str | None = None,
+) -> str:
     try:
         completed = subprocess.run(
-            ["git", "-C", str(path), "branch", "--show-current"],
+            [
+                *pear_git_command_prefix(isolation_username),
+                "-C",
+                str(path),
+                "branch",
+                "--show-current",
+            ],
             check=False,
             stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL,
@@ -1055,44 +1105,34 @@ def pear_git_current_branch_name(path: Path) -> str:
     return pear_topic_branch_name(completed.stdout.strip())
 
 
-def pear_try_add_worktree(
-    base_path: Path,
+def pear_switch_workdir_to_branch(
     path: Path,
-    *,
     branch_name: str,
-) -> str | None:
-    if pear_git_branch_exists(base_path, branch_name):
-        args = ["git", "-C", str(base_path), "worktree", "add", str(path), branch_name]
-    else:
-        args = [
-            "git",
-            "-C",
-            str(base_path),
-            "worktree",
-            "add",
-            "-b",
-            branch_name,
-            str(path),
-            "HEAD",
-        ]
-    completed = subprocess.run(
-        args,
-        check=False,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        timeout=30,
-    )
-    if completed.returncode != 0:
-        return None
-    return branch_name
-
-
-def pear_switch_workdir_to_branch(path: Path, branch_name: str) -> bool:
+    *,
+    isolation_username: str | None = None,
+) -> bool:
     try:
-        if pear_git_branch_exists(path, branch_name):
-            args = ["git", "-C", str(path), "switch", branch_name]
+        if pear_git_branch_exists(
+            path,
+            branch_name,
+            isolation_username=isolation_username,
+        ):
+            args = [
+                *pear_git_command_prefix(isolation_username),
+                "-C",
+                str(path),
+                "switch",
+                branch_name,
+            ]
         else:
-            args = ["git", "-C", str(path), "switch", "-c", branch_name]
+            args = [
+                *pear_git_command_prefix(isolation_username),
+                "-C",
+                str(path),
+                "switch",
+                "-c",
+                branch_name,
+            ]
         completed = subprocess.run(
             args,
             check=False,
@@ -1320,19 +1360,15 @@ def ensure_pear_workspace_node(
     *,
     stream: str,
     topic: str,
-    parent_node: PearWorkspaceNode | None = None,
 ) -> PearWorkspaceNode:
     stream, topic = pear_topic_scope(stream, topic)
-    if parent_node is None and topic:
-        parent_node = PearWorkspaceNode.objects.filter(
-            realm=user_profile.realm,
-            stream_name__iexact=stream,
-            topic_name="",
-        ).first()
-    project = (
-        parent_node.project
-        if parent_node is not None and parent_node.project_id is not None
-        else pear_project_for_stream(user_profile, stream=stream)
+    project = pear_project_for_stream(user_profile, stream=stream)
+    if project is None:
+        raise JsonableError(_("Could not create a repository for this channel."))
+    origin = ensure_pear_project_origin(user_profile, project)
+    branch_name = pear_workspace_node_default_branch(
+        project=project,
+        topic=topic,
     )
     expected_workdir = str(pear_expected_topic_workdir(user_profile, stream=stream, topic=topic))
     workspace_node, _created = PearWorkspaceNode.objects.get_or_create(
@@ -1341,13 +1377,10 @@ def ensure_pear_workspace_node(
         topic_name=topic,
         defaults={
             "project": project,
-            "parent_node": parent_node,
             "workdir": expected_workdir,
-            "branch_name": pear_workspace_node_default_branch(
-                project=project,
-                parent_node=parent_node,
-                topic=topic,
-            ),
+            "branch_name": branch_name,
+            "base_ref": project.default_base_ref,
+            "base_commit": project.default_base_commit,
             "isolation_username": (
                 pear_topic_isolation_username(user_profile, stream=stream, topic=topic)
                 if pear_topic_os_user_isolation_enabled()
@@ -1359,22 +1392,18 @@ def ensure_pear_workspace_node(
     if project is not None and workspace_node.project_id != project.id:
         workspace_node.project = project
         update_fields.append("project")
-    if parent_node is not None and parent_node.id not in (
-        workspace_node.id,
-        workspace_node.parent_node_id,
-    ):
-        workspace_node.parent_node = parent_node
-        update_fields.append("parent_node")
     if pear_workspace_workdir_needs_repair(workspace_node):
         workspace_node.workdir = expected_workdir
         update_fields.append("workdir")
-    if not workspace_node.branch_name:
-        workspace_node.branch_name = pear_workspace_node_default_branch(
-            project=project,
-            parent_node=parent_node,
-            topic=topic,
-        )
+    if workspace_node.branch_name != branch_name:
+        workspace_node.branch_name = branch_name
         update_fields.append("branch_name")
+    if workspace_node.base_ref != project.default_base_ref:
+        workspace_node.base_ref = project.default_base_ref
+        update_fields.append("base_ref")
+    if workspace_node.base_commit != project.default_base_commit:
+        workspace_node.base_commit = project.default_base_commit
+        update_fields.append("base_commit")
     expected_isolation_username = (
         pear_topic_isolation_username(user_profile, stream=stream, topic=topic)
         if pear_topic_os_user_isolation_enabled()
@@ -1386,21 +1415,18 @@ def ensure_pear_workspace_node(
     if update_fields:
         workspace_node.date_updated = timezone_now()
         workspace_node.save(update_fields=[*update_fields, "date_updated"])
-    repository_url = (
-        project.repository_url.strip()
-        if project is not None and project.repository_url.strip()
-        else None
-    )
-    base_workdir = (
-        project.repo_cache_path.strip()
-        if project is not None and project.repo_cache_path.strip() and topic
+    existing_isolation_username = (
+        workspace_node.isolation_username
+        if workspace_node.isolation_username
+        and pear_topic_isolation_user_exists(workspace_node.isolation_username)
         else None
     )
     effective_branch = ensure_pear_topic_workdir(
         workspace_node.workdir,
-        base_workdir=base_workdir,
-        repository_url=repository_url,
+        origin=origin,
         branch_name=workspace_node.branch_name,
+        base_ref=project.default_base_ref,
+        isolation_username=existing_isolation_username,
     )
     effective_branch_name = (
         pear_topic_branch_name(effective_branch) if isinstance(effective_branch, str) else ""
@@ -1412,14 +1438,24 @@ def ensure_pear_workspace_node(
     return workspace_node
 
 
-def pear_ensure_workdir_git_identity(path: Path) -> None:
+def pear_ensure_workdir_git_identity(
+    path: Path,
+    *,
+    isolation_username: str | None = None,
+) -> None:
     # Fresh scratch repos and isolated clones have no author identity, so
     # the agent's very first commit fails and every session burns a
     # failed-tool round on `git config`.  Provision a local identity up
     # front, but never override one the repository already has.
     try:
         existing = subprocess.run(
-            ["git", "-C", str(path), "config", "user.email"],
+            [
+                *pear_git_command_prefix(isolation_username),
+                "-C",
+                str(path),
+                "config",
+                "user.email",
+            ],
             check=False,
             capture_output=True,
             text=True,
@@ -1428,7 +1464,14 @@ def pear_ensure_workdir_git_identity(path: Path) -> None:
         if existing.returncode == 0 and existing.stdout.strip():
             return
         subprocess.run(
-            ["git", "-C", str(path), "config", "user.name", "Pear"],
+            [
+                *pear_git_command_prefix(isolation_username),
+                "-C",
+                str(path),
+                "config",
+                "user.name",
+                "Armada",
+            ],
             check=False,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
@@ -1436,12 +1479,12 @@ def pear_ensure_workdir_git_identity(path: Path) -> None:
         )
         subprocess.run(
             [
-                "git",
+                *pear_git_command_prefix(isolation_username),
                 "-C",
                 str(path),
                 "config",
                 "user.email",
-                f"pear-worker@{settings.EXTERNAL_HOST.split(':')[0]}",
+                f"armada-worker@{settings.EXTERNAL_HOST.split(':')[0]}",
             ],
             check=False,
             stdout=subprocess.DEVNULL,
@@ -1455,91 +1498,134 @@ def pear_ensure_workdir_git_identity(path: Path) -> None:
 def ensure_pear_topic_workdir(
     workdir: str,
     *,
-    base_workdir: str | Path | None = None,
-    repository_url: str | None = None,
-    branch_name: str | None = None,
+    origin: str | Path,
+    branch_name: str,
+    base_ref: str,
+    isolation_username: str | None = None,
 ) -> str:
     branch = pear_provision_topic_workdir(
         workdir,
-        base_workdir=base_workdir,
-        repository_url=repository_url,
+        origin=origin,
         branch_name=branch_name,
+        base_ref=base_ref,
+        isolation_username=isolation_username,
     )
     path = Path(workdir)
-    if pear_path_is_git_worktree(path):
-        pear_ensure_workdir_git_identity(path)
+    if pear_path_is_git_worktree(path, isolation_username=isolation_username):
+        pear_ensure_workdir_git_identity(
+            path,
+            isolation_username=isolation_username,
+        )
     return branch
+
+
+def pear_ensure_origin_branch(
+    origin: Path,
+    *,
+    branch_name: str,
+    base_ref: str,
+) -> None:
+    if pear_git_branch_exists(origin, branch_name):
+        return
+    base_commit = pear_run_git_checked(
+        [
+            "git",
+            "--git-dir",
+            str(origin),
+            "rev-parse",
+            "--verify",
+            f"refs/heads/{base_ref}^{{commit}}",
+        ],
+        error_message="Could not find the channel repository base branch.",
+        timeout=10,
+    ).stdout.strip()
+    pear_run_git_checked(
+        [
+            "git",
+            "--git-dir",
+            str(origin),
+            "update-ref",
+            f"refs/heads/{branch_name}",
+            base_commit,
+        ],
+        error_message="Could not create the topic branch.",
+        timeout=10,
+    )
 
 
 def pear_provision_topic_workdir(
     workdir: str,
     *,
-    base_workdir: str | Path | None = None,
-    repository_url: str | None = None,
-    branch_name: str | None = None,
+    origin: str | Path,
+    branch_name: str,
+    base_ref: str,
+    isolation_username: str | None = None,
 ) -> str:
     path = Path(workdir)
-    branch_name = pear_topic_branch_name(branch_name or "main")
-    if pear_topic_os_user_isolation_enabled():
-        if path.exists():
-            if pear_path_is_git_worktree(path):
-                return pear_git_current_branch_name(path) or branch_name
-            with contextlib.suppress(FileNotFoundError, OSError, subprocess.TimeoutExpired):
-                subprocess.run(
-                    ["git", "-C", str(path), "init", "--quiet"],
-                    check=False,
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                    timeout=10,
-                )
-            pear_switch_workdir_to_branch(path, branch_name)
-            return pear_git_current_branch_name(path) or branch_name
-        if repository_url:
-            clone_or_update_pear_repository_workdir(repository_url, path)
-            pear_switch_workdir_to_branch(path, branch_name)
-            return pear_git_current_branch_name(path) or branch_name
-        path.mkdir(parents=True, exist_ok=True)
-        with contextlib.suppress(FileNotFoundError, OSError, subprocess.TimeoutExpired):
-            subprocess.run(
-                ["git", "-C", str(path), "init", "--quiet"],
-                check=False,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                timeout=10,
-            )
-        pear_switch_workdir_to_branch(path, branch_name)
-        return pear_git_current_branch_name(path) or branch_name
-    base_path = (
-        Path(base_workdir) if base_workdir is not None else Path(pear_default_worker_workdir())
+    origin_path = Path(origin)
+    branch_name = pear_topic_branch_name(branch_name)
+    base_ref = pear_topic_branch_name(base_ref)
+    pear_ensure_origin_branch(
+        origin_path,
+        branch_name=branch_name,
+        base_ref=base_ref,
     )
-    base_is_git_worktree = pear_path_is_git_worktree(base_path)
-    path_was_empty = not ((path / ".git").exists() or (path.exists() and any(path.iterdir())))
-    worktree_added_branch: str | None = None
-    if path_was_empty:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        try:
-            worktree_added_branch = pear_try_add_worktree(
-                base_path,
-                path,
-                branch_name=branch_name,
+
+    if path.exists():
+        if not pear_path_is_git_worktree(
+            path,
+            isolation_username=isolation_username,
+        ):
+            raise JsonableError(
+                _("This topic has a non-Git workspace; reset it before starting Armada.")
             )
-            if worktree_added_branch is None:
-                digest = hashlib.sha256(str(path).encode()).hexdigest()[:12]
-                worktree_added_branch = pear_try_add_worktree(
-                    base_path,
-                    path,
-                    branch_name=f"{branch_name}-{digest}",
-                )
-        except (FileNotFoundError, OSError, subprocess.TimeoutExpired):
-            pass
-    if not path_was_empty and pear_path_is_git_worktree(path):
-        return pear_git_current_branch_name(path) or branch_name
-    if base_is_git_worktree and not ((path / ".git").exists() or worktree_added_branch):
-        return worktree_added_branch or branch_name
-    path.mkdir(parents=True, exist_ok=True)
-    if path_was_empty and worktree_added_branch is None and pear_path_is_git_worktree(path):
-        pear_switch_workdir_to_branch(path, branch_name)
-    return pear_git_current_branch_name(path) or worktree_added_branch or branch_name
+        origin_url = pear_run_git_checked(
+            [
+                *pear_git_command_prefix(isolation_username),
+                "-C",
+                str(path),
+                "remote",
+                "get-url",
+                "origin",
+            ],
+            error_message="Could not inspect the topic repository.",
+            timeout=10,
+        ).stdout.strip()
+        if pear_normalize_path(origin_url) != pear_normalize_path(origin_path):
+            raise JsonableError(
+                _("This topic workspace is not attached to its channel repository.")
+            )
+        current_branch = pear_git_current_branch_name(
+            path,
+            isolation_username=isolation_username,
+        )
+        if current_branch != branch_name and not pear_switch_workdir_to_branch(
+            path,
+            branch_name,
+            isolation_username=isolation_username,
+        ):
+            raise JsonableError(_("Could not switch to the topic branch."))
+        return branch_name
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    pear_run_git_checked(
+        [
+            "git",
+            "clone",
+            "--quiet",
+            "--no-local",
+            "--no-tags",
+            "--branch",
+            branch_name,
+            str(origin_path),
+            str(path),
+        ],
+        error_message="Could not create the topic workspace.",
+    )
+    exclude_path = path / ".git" / "info" / "exclude"
+    with exclude_path.open("a", encoding="utf-8") as exclude_file:
+        exclude_file.write("\n# Armada runtime outputs\n.pear/\n")
+    return branch_name
 
 
 def clean_pear_repository_url(repository_url: str) -> str:
@@ -1563,57 +1649,266 @@ def clean_pear_repository_url(repository_url: str) -> str:
     return clean_url
 
 
-def clone_or_update_pear_repository_workdir(repository_url: str, workdir: Path) -> None:
-    workdir.parent.mkdir(parents=True, exist_ok=True)
-    if (workdir / ".git").exists():
-        try:
-            completed = subprocess.run(
-                ["git", "-C", str(workdir), "config", "--get", "remote.origin.url"],
-                check=False,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.DEVNULL,
-                text=True,
-                timeout=10,
-            )
-        except (FileNotFoundError, OSError, subprocess.TimeoutExpired):
-            completed = None
-        current_url = completed.stdout.strip() if completed is not None else ""
-        if current_url and current_url != repository_url:
-            raise JsonableError(_("This channel already has a different repository checkout."))
-        subprocess.run(
-            ["git", "-C", str(workdir), "fetch", "--quiet", "--prune", "origin"],
-            check=False,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            timeout=PEAR_REPOSITORY_CLONE_TIMEOUT_SECONDS,
-        )
-        return
-
-    if workdir.exists() and any(workdir.iterdir()):
-        raise JsonableError(_("This channel already has a non-empty workspace."))
-
+def pear_run_git_checked(
+    command: Sequence[str],
+    *,
+    error_message: str,
+    input_text: str | None = None,
+    env: dict[str, str] | None = None,
+    timeout: int = PEAR_REPOSITORY_CLONE_TIMEOUT_SECONDS,
+) -> subprocess.CompletedProcess[str]:
     try:
         completed = subprocess.run(
-            [
-                "git",
-                "clone",
-                "--filter=blob:none",
-                "--no-tags",
-                repository_url,
-                str(workdir),
-            ],
+            list(command),
             check=False,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.PIPE,
+            input=input_text,
+            capture_output=True,
             text=True,
-            timeout=PEAR_REPOSITORY_CLONE_TIMEOUT_SECONDS,
+            env=env,
+            timeout=timeout,
         )
     except (FileNotFoundError, OSError, subprocess.TimeoutExpired) as error:
-        raise JsonableError(_("Could not clone the Git repository.")) from error
+        raise JsonableError(_(error_message)) from error
     if completed.returncode != 0:
-        if workdir.exists() and not any(workdir.iterdir()):
-            workdir.rmdir()
-        raise JsonableError(_("Could not clone the Git repository."))
+        raise JsonableError(_(error_message))
+    return completed
+
+
+def pear_seed_empty_bare_origin(origin: Path, *, branch_name: str) -> str:
+    tree = pear_run_git_checked(
+        ["git", "--git-dir", str(origin), "mktree"],
+        error_message="Could not initialize the channel repository.",
+        input_text="",
+        timeout=10,
+    ).stdout.strip()
+    identity_env = {
+        **os.environ,
+        "GIT_AUTHOR_NAME": "Armada",
+        "GIT_AUTHOR_EMAIL": f"armada-worker@{settings.EXTERNAL_HOST.split(':')[0]}",
+        "GIT_COMMITTER_NAME": "Armada",
+        "GIT_COMMITTER_EMAIL": f"armada-worker@{settings.EXTERNAL_HOST.split(':')[0]}",
+    }
+    commit = pear_run_git_checked(
+        ["git", "--git-dir", str(origin), "commit-tree", tree, "-m", "Initialize workspace"],
+        error_message="Could not initialize the channel repository.",
+        env=identity_env,
+        timeout=10,
+    ).stdout.strip()
+    pear_run_git_checked(
+        ["git", "--git-dir", str(origin), "update-ref", f"refs/heads/{branch_name}", commit],
+        error_message="Could not initialize the channel repository.",
+        timeout=10,
+    )
+    return commit
+
+
+def pear_initialize_bare_origin(
+    origin: Path,
+    *,
+    repository_url: str,
+) -> tuple[str, str]:
+    pear_run_git_checked(
+        ["git", "init", "--bare", "--quiet", "--initial-branch=main", str(origin)],
+        error_message="Could not initialize the channel repository.",
+        timeout=30,
+    )
+    if not repository_url:
+        base_ref = "main"
+        base_commit = pear_seed_empty_bare_origin(origin, branch_name=base_ref)
+    else:
+        pear_run_git_checked(
+            ["git", "--git-dir", str(origin), "remote", "add", "upstream", repository_url],
+            error_message="Could not configure the channel repository.",
+            timeout=10,
+        )
+        pear_run_git_checked(
+            [
+                "git",
+                "--git-dir",
+                str(origin),
+                "fetch",
+                "--quiet",
+                "--prune",
+                "--no-tags",
+                "upstream",
+                "+refs/heads/*:refs/remotes/upstream/*",
+            ],
+            error_message="Could not clone the Git repository.",
+        )
+        remote_refs = pear_run_git_checked(
+            [
+                "git",
+                "--git-dir",
+                str(origin),
+                "for-each-ref",
+                "--format=%(refname:strip=3)",
+                "refs/remotes/upstream",
+            ],
+            error_message="Could not inspect the Git repository.",
+            timeout=10,
+        ).stdout.splitlines()
+        candidates = sorted(ref.strip() for ref in remote_refs if ref.strip() and ref != "HEAD")
+        if not candidates:
+            raise JsonableError(_("The Git repository has no branches."))
+        base_ref = next(
+            (candidate for candidate in ("main", "master") if candidate in candidates),
+            candidates[0],
+        )
+        base_commit = pear_run_git_checked(
+            [
+                "git",
+                "--git-dir",
+                str(origin),
+                "rev-parse",
+                "--verify",
+                f"refs/remotes/upstream/{base_ref}^{{commit}}",
+            ],
+            error_message="Could not inspect the Git repository.",
+            timeout=10,
+        ).stdout.strip()
+        pear_run_git_checked(
+            [
+                "git",
+                "--git-dir",
+                str(origin),
+                "update-ref",
+                f"refs/heads/{base_ref}",
+                base_commit,
+            ],
+            error_message="Could not initialize the channel repository.",
+            timeout=10,
+        )
+    pear_run_git_checked(
+        [
+            "git",
+            "--git-dir",
+            str(origin),
+            "symbolic-ref",
+            "HEAD",
+            f"refs/heads/{base_ref}",
+        ],
+        error_message="Could not initialize the channel repository.",
+        timeout=10,
+    )
+    return base_ref, base_commit
+
+
+def ensure_pear_project_origin(
+    user_profile: UserProfile,
+    project: PearProject,
+    *,
+    refresh_upstream: bool = False,
+) -> Path:
+    origin = pear_expected_project_cache_path(
+        user_profile,
+        stream=project.stream.name,
+    )
+    origin.parent.mkdir(parents=True, exist_ok=True)
+    lock_path = origin.parent / f".{origin.name}.lock"
+    try:
+        with lockfile(str(lock_path)):
+            if origin.exists():
+                is_bare = pear_run_git_checked(
+                    ["git", "--git-dir", str(origin), "rev-parse", "--is-bare-repository"],
+                    error_message="The channel repository cache is invalid.",
+                    timeout=10,
+                ).stdout.strip()
+                if is_bare != "true":
+                    raise JsonableError(_("The channel repository cache is invalid."))
+                configured_url = pear_run_git_checked(
+                    [
+                        "git",
+                        "--git-dir",
+                        str(origin),
+                        "config",
+                        "--get",
+                        "remote.upstream.url",
+                    ],
+                    error_message="Could not inspect the channel repository.",
+                    timeout=10,
+                ).stdout.strip() if project.repository_url else ""
+                if project.repository_url and configured_url != project.repository_url:
+                    raise JsonableError(
+                        _("This channel already has a different Git repository.")
+                    )
+                if project.repository_url and refresh_upstream:
+                    pear_run_git_checked(
+                        [
+                            "git",
+                            "--git-dir",
+                            str(origin),
+                            "fetch",
+                            "--quiet",
+                            "--prune",
+                            "--no-tags",
+                            "upstream",
+                            "+refs/heads/*:refs/remotes/upstream/*",
+                        ],
+                        error_message="Could not refresh the Git repository.",
+                    )
+                base_ref = (
+                    project.default_base_ref.strip()
+                    or pear_run_git_checked(
+                        ["git", "--git-dir", str(origin), "symbolic-ref", "--short", "HEAD"],
+                        error_message="Could not inspect the channel repository.",
+                        timeout=10,
+                    ).stdout.strip().removeprefix("refs/heads/")
+                )
+                base_commit = pear_run_git_checked(
+                    [
+                        "git",
+                        "--git-dir",
+                        str(origin),
+                        "rev-parse",
+                        "--verify",
+                        f"refs/heads/{base_ref}^{{commit}}",
+                    ],
+                    error_message="Could not inspect the channel repository.",
+                    timeout=10,
+                ).stdout.strip()
+            else:
+                temporary = Path(
+                    tempfile.mkdtemp(
+                        prefix=f".{origin.name}.",
+                        dir=origin.parent,
+                    )
+                )
+                try:
+                    base_ref, base_commit = pear_initialize_bare_origin(
+                        temporary,
+                        repository_url=project.repository_url.strip(),
+                    )
+                    os.replace(temporary, origin)
+                finally:
+                    shutil.rmtree(temporary, ignore_errors=True)
+    except JsonableError as error:
+        project.clone_status = PearProject.FAILED
+        project.clone_error = str(error)
+        project.date_updated = timezone_now()
+        project.save(update_fields=["clone_status", "clone_error", "date_updated"])
+        raise
+
+    update_fields = []
+    origin_value = str(origin)
+    if project.repo_cache_path != origin_value:
+        project.repo_cache_path = origin_value
+        update_fields.append("repo_cache_path")
+    if project.default_base_ref != base_ref:
+        project.default_base_ref = base_ref
+        update_fields.append("default_base_ref")
+    if project.default_base_commit != base_commit:
+        project.default_base_commit = base_commit
+        update_fields.append("default_base_commit")
+    if project.clone_status != PearProject.READY:
+        project.clone_status = PearProject.READY
+        update_fields.append("clone_status")
+    if project.clone_error:
+        project.clone_error = ""
+        update_fields.append("clone_error")
+    if update_fields:
+        project.date_updated = timezone_now()
+        project.save(update_fields=[*update_fields, "date_updated"])
+    return origin
 
 
 def configure_pear_channel_repository_workspace(
@@ -1624,52 +1919,44 @@ def configure_pear_channel_repository_workspace(
 ) -> PearWorkspaceNode:
     stream, _topic = pear_topic_scope(stream, "")
     clean_url = clean_pear_repository_url(repository_url)
-    workspace_node = PearWorkspaceNode.objects.filter(
-        realm=user_profile.realm, stream_name__iexact=stream, topic_name=""
-    ).first()
-    workdir = (
-        workspace_node.workdir.strip()
-        if workspace_node is not None and workspace_node.workdir.strip()
-        else str(pear_expected_topic_workdir(user_profile, stream=stream, topic=""))
-    )
-    clone_or_update_pear_repository_workdir(clean_url, Path(workdir))
-    project = pear_project_for_stream(
-        user_profile,
-        stream=stream,
-        repository_url=clean_url,
-        repo_cache_path=workdir,
-    )
+    project = pear_project_for_stream(user_profile, stream=stream)
     if project is None:
         raise JsonableError(_("Could not configure this channel workspace."))
-    if workspace_node is None:
-        workspace_node = PearWorkspaceNode.objects.create(
-            realm=user_profile.realm,
-            project=project,
-            stream_name=stream,
-            topic_name="",
-            workdir=workdir,
-            branch_name=pear_workspace_node_default_branch(project=project),
-            isolation_username=(
-                pear_topic_isolation_username(user_profile, stream=stream, topic="")
-                if pear_topic_os_user_isolation_enabled()
-                else ""
-            ),
+    if project.repository_url and project.repository_url != clean_url:
+        raise JsonableError(
+            _("This channel already has a different Git repository.")
         )
-        return workspace_node
-    update_fields = []
-    if workspace_node.project_id != project.id:
-        workspace_node.project = project
-        update_fields.append("project")
-    if workspace_node.workdir != workdir:
-        workspace_node.workdir = workdir
-        update_fields.append("workdir")
-    if not workspace_node.branch_name:
-        workspace_node.branch_name = pear_workspace_node_default_branch(project=project)
-        update_fields.append("branch_name")
-    if update_fields:
-        workspace_node.date_updated = timezone_now()
-        workspace_node.save(update_fields=[*update_fields, "date_updated"])
-    return workspace_node
+    origin = pear_expected_project_cache_path(user_profile, stream=stream)
+    if not project.repository_url and origin.exists():
+        raise JsonableError(
+            _(
+                "This channel already has local work. Reset its workspace before "
+                "attaching a Git repository."
+            )
+        )
+    if project.repository_url != clean_url:
+        project.repository_url = clean_url
+        project.clone_status = PearProject.UNCONFIGURED
+        project.clone_error = ""
+        project.date_updated = timezone_now()
+        project.save(
+            update_fields=[
+                "repository_url",
+                "clone_status",
+                "clone_error",
+                "date_updated",
+            ]
+        )
+    ensure_pear_project_origin(
+        user_profile,
+        project,
+        refresh_upstream=True,
+    )
+    return ensure_pear_workspace_node(
+        user_profile,
+        stream=stream,
+        topic="",
+    )
 
 
 def maybe_refactor_pear_workspace_on_move(
@@ -2103,22 +2390,16 @@ def build_pear_workspace_context(
     topic: str,
 ) -> dict[str, str]:
     workspace_node = ensure_pear_workspace_node(user_profile, stream=stream, topic=topic)
-    parent_node = workspace_node.parent_node if workspace_node.parent_node_id is not None else None
     workdir = workspace_node.workdir.strip() or pear_default_worker_workdir()
     workspace_repo = (
         workspace_node.project.repository_url.strip()
         if workspace_node.project_id is not None
         else ""
     )
-    parent_repo = (
-        parent_node.project.repository_url.strip()
-        if parent_node is not None and parent_node.project_id is not None
-        else ""
-    )
     repository = pear_logical_repository_label(
         stream=stream,
         context_repo=workspace_repo,
-        parent_repo=parent_repo,
+        parent_repo="",
     )
     worktree = pear_logical_worktree_label(
         stream=stream,
@@ -2128,14 +2409,10 @@ def build_pear_workspace_context(
     return {
         "repository": repository,
         "remote_url": pear_pinned_repository_value(workspace_repo)
-        or pear_pinned_repository_value(parent_repo),
+        or "",
         "worktree": worktree,
         "workdir": workdir,
-        "branch": (
-            workspace_node.branch_name.strip()
-            if workspace_node.branch_name.strip()
-            else pear_workspace_node_default_branch()
-        ),
+        "branch": workspace_node.branch_name.strip() or pear_workspace_node_default_branch(),
         "head": "",
     }
 
@@ -2214,9 +2491,6 @@ def pear_worker_model_for_topic(
     workspace_node = ensure_pear_workspace_node(user_profile, stream=stream, topic=topic)
     if workspace_node.model.strip():
         return workspace_node.model.strip()
-    parent_node = workspace_node.parent_node if workspace_node.parent_node_id is not None else None
-    if parent_node is not None and parent_node.model.strip():
-        return parent_node.model.strip()
     return pear_default_worker_model()
 
 
@@ -2231,9 +2505,6 @@ def pear_worker_reasoning_effort_for_topic(
     workspace_node = ensure_pear_workspace_node(user_profile, stream=stream, topic=topic)
     if workspace_node.reasoning_effort.strip():
         return workspace_node.reasoning_effort.strip()
-    parent_node = workspace_node.parent_node if workspace_node.parent_node_id is not None else None
-    if parent_node is not None and parent_node.reasoning_effort.strip():
-        return parent_node.reasoning_effort.strip()
     return pear_default_worker_reasoning_effort()
 
 

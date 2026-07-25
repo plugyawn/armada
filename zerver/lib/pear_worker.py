@@ -967,12 +967,37 @@ def pear_worker_process_isolation_error(
         pear_provision_codex_skills(codex_home_source)
     except OSError as error:
         return f"Pear Codex skills provisioning failed: {error}"
+    return pear_prepare_isolated_workdir(
+        isolation_username=process_isolation.username,
+        workdir=workdir,
+        codex_home_source=codex_home_source,
+    )
+
+
+def pear_prepare_isolated_workdir(
+    *,
+    isolation_username: str,
+    workdir: str,
+    codex_home_source: str | None = None,
+) -> str | None:
+    """Give a topic's isolation user ownership of its workdir through the
+    privileged helper, so isolation-user git operations and the runtime can
+    use it. Required anywhere a workdir is consumed as the isolation user,
+    not only at run start: zulipdev-owned clones fail git's dubious
+    ownership guard for those consumers."""
+    helper = str(settings.PEAR_TOPIC_ISOLATION_HELPER or "")
+    if not helper:
+        return (
+            "Pear per-topic OS-user isolation is enabled, but no isolation helper is configured."
+        )
+    if codex_home_source is None:
+        codex_home_source = str(pear_shared_codex_home())
     command = [
         "sudo",
         "-n",
         helper,
         "--user",
-        process_isolation.username,
+        isolation_username,
         "--workdir",
         workdir,
         "--topic-root",

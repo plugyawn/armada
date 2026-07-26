@@ -1445,6 +1445,7 @@ class PearSessionEndpointTest(ZulipTestCase):
             self.settings(
                 PEAR_WORKER_MODEL="gpt-5.5",
                 PEAR_WORKER_MODEL_CHOICES=["gpt-5.5", "gpt-5.5-mini"],
+                PEAR_WORKER_REASONING_EFFORT="medium",
                 PEAR_WORKER_WORKDIR="/workspace/base",
                 PEAR_TOPIC_WORKDIR_ROOT=temp_dir,
             ),
@@ -1483,7 +1484,11 @@ class PearSessionEndpointTest(ZulipTestCase):
         self.login_user(owner)
 
         with (
-            self.settings(PEAR_WORKER_WORKDIR="/workspace/base"),
+            self.settings(
+                PEAR_WORKER_MODEL="gpt-5.5",
+                PEAR_WORKER_REASONING_EFFORT="medium",
+                PEAR_WORKER_WORKDIR="/workspace/base",
+            ),
             patch("zerver.views.pear.build_pear_git_context") as build_git_context,
         ):
             topic_result = self.client_get(

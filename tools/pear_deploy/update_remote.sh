@@ -33,6 +33,7 @@ for env_file in "$PEAR_ROOT/env.local" "$REPO_ROOT/.env.local"; do
     fi
 done
 PEAR_GEMINI_API_KEY="${PEAR_GEMINI_INTERACTIONS_API_KEY:-${GEMINI_API_KEY:-${GEMINI_KEY:-${GOOGLE_API_KEY:-${GOOGLE_GENAI_API_KEY:-}}}}}"
+PEAR_PRIME_API_KEY="${PRIME_API_KEY:-${PRIMEINTELLECT_API_KEY:-${PRIME_INTELLECT_API_KEY:-}}}"
 
 fail() {
     echo "ERROR: $*" >&2
@@ -264,6 +265,27 @@ install_remote_runtime_config() {
     )
     printf -v remote_command '%q ' "${command[@]}"
     ssh_root "$remote_command"
+}
+
+install_remote_prime_config() {
+    # GPU launches are an optional capability: install the key when the local
+    # deploy environment provides it, leave the remote untouched otherwise.
+    if [[ -z "$PEAR_PRIME_API_KEY" ]]; then
+        echo "Prime Intellect key not set locally; skipping remote install."
+        return 0
+    fi
+    echo "Installing the shared Prime Intellect key without printing it..."
+    printf 'PRIME_API_KEY=%s\n' "$PEAR_PRIME_API_KEY" |
+        ssh_root 'set -euo pipefail
+env_path=/home/zulipdev/pear.env
+tmp="$(mktemp /home/zulipdev/.pear.env.XXXXXX)"
+trap '\''rm -f "$tmp"'\'' EXIT
+grep -Ev '\''^PRIME_API_KEY='\'' "$env_path" >"$tmp" || true
+cat >>"$tmp"
+chown zulipdev:zulipdev "$tmp"
+chmod 600 "$tmp"
+mv -f "$tmp" "$env_path"
+trap - EXIT'
 }
 
 install_remote_gemini_config() {
@@ -1414,6 +1436,7 @@ ssh_root python3 "$REMOTE_TRUSTED_RUNTIME/tools/pear_deploy/runtime_config.py" v
     --repo-root "$REMOTE_TRUSTED_RUNTIME" \
     --fqdn "$FQDN"
 install_remote_gemini_config
+install_remote_prime_config
 install_remote_pear_worker_consumer_timeout_policy
 ssh_root "systemctl daemon-reload"
 ssh_root "systemctl enable ${PEAR_DEPLOY_SERVICES[*]}"

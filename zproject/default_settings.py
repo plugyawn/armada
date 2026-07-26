@@ -782,11 +782,11 @@ PEAR_WORKER_WORKDIR: str | None = None
 PEAR_TOPIC_WORKDIR_ROOT: str | None = None
 PEAR_TOPIC_ISOLATION_BACKEND: Literal["codex-sandbox", "os-user"] = "codex-sandbox"
 PEAR_TOPIC_ISOLATION_HELPER = "/usr/local/sbin/pear-topic-isolate"
-PEAR_WORKER_MODEL: str | None = "gpt-5.5"
-PEAR_WORKER_MODEL_CHOICES: list[str] = ["gpt-5.5"]
+PEAR_WORKER_MODEL: str | None = "gpt-5.6-sol"
+PEAR_WORKER_MODEL_CHOICES: list[str] = ["gpt-5.6-sol"]
 PEAR_WORKER_SERVICE_TIER: str | None = "fast"
 PEAR_WORKER_FAST_MODE = True
-PEAR_WORKER_REASONING_EFFORT: Literal["low", "medium", "high", "xhigh", "max", "ultra"] = "medium"
+PEAR_WORKER_REASONING_EFFORT: Literal["low", "medium", "high", "xhigh", "max", "ultra"] = "xhigh"
 PEAR_WORKER_SANDBOX: Literal["read-only", "workspace-write", "danger-full-access"] = "read-only"
 PEAR_WORKER_APPROVAL_POLICY: Literal["untrusted", "on-request", "never"] = "on-request"
 # Keep long-running Codex tool calls alive below the six-hour broker delivery

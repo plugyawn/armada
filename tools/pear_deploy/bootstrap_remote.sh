@@ -421,6 +421,7 @@ chmod 755 /usr/local/sbin/pear-topic-isolate
 cat >/etc/sudoers.d/91-pear-topic-isolation <<'EOF'
 zulipdev ALL=(root) NOPASSWD: /usr/local/sbin/pear-topic-isolate
 zulipdev ALL=(%pear-topic) NOPASSWD: /usr/bin/env *
+Defaults:zulipdev env_keep += "PRIME_API_KEY"
 EOF
 chmod 440 /etc/sudoers.d/91-pear-topic-isolation
 

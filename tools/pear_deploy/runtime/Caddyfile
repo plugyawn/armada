@@ -24,6 +24,56 @@
 		reverse_proxy 127.0.0.1:9991
 	}
 
+	# Agent-built dev servers live on the host loopback; /preview/<port>/...
+	# forwards there over the same public TLS. Authless by design for this
+	# scratch deployment: only 127.0.0.1 upstreams, only the common dev
+	# ports below. Caddy < 2.8 evaluates upstream placeholders at provision
+	# time, so the port map is static; handle_path strips the prefix.
+	# Agents should run dev servers on one of these ports.
+	handle_path /preview/3000/* {
+		reverse_proxy 127.0.0.1:3000
+	}
+
+	handle_path /preview/3001/* {
+		reverse_proxy 127.0.0.1:3001
+	}
+
+	handle_path /preview/4200/* {
+		reverse_proxy 127.0.0.1:4200
+	}
+
+	handle_path /preview/5000/* {
+		reverse_proxy 127.0.0.1:5000
+	}
+
+	handle_path /preview/5173/* {
+		reverse_proxy 127.0.0.1:5173
+	}
+
+	handle_path /preview/8000/* {
+		reverse_proxy 127.0.0.1:8000
+	}
+
+	handle_path /preview/8001/* {
+		reverse_proxy 127.0.0.1:8001
+	}
+
+	handle_path /preview/8080/* {
+		reverse_proxy 127.0.0.1:8080
+	}
+
+	handle_path /preview/8123/* {
+		reverse_proxy 127.0.0.1:8123
+	}
+
+	handle_path /preview/8888/* {
+		reverse_proxy 127.0.0.1:8888
+	}
+
+	handle_path /preview/9000/* {
+		reverse_proxy 127.0.0.1:9000
+	}
+
 	handle {
 		# Browsers may keep sending the retired outer Basic credential until the
 		# origin's authentication cache is cleared. Zulip API clients only use

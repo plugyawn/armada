@@ -28,17 +28,6 @@
     font-display: swap;
 }
 
-/* The display face: brand wordmark and accent moments. Geist Pixel is a
-   commercial Pangram Pangram typeface (per-deployment copy, not OFL);
-   the subset here covers basic Latin + typographic punctuation. */
-@font-face {
-    font-family: "Geist Pixel";
-    src: url("../fonts/pear/Geist Pixel-Regular.woff2") format("woff2");
-    font-weight: 400;
-    font-style: normal;
-    font-display: swap;
-}
-
 @font-face {
     font-family: "Geist Mono VF";
     src: url("../fonts/pear/GeistMonoVF.woff2") format("woff2");

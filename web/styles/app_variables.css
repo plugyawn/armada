@@ -907,7 +907,7 @@
        design — pixel faces go mushy at arbitrary scales. */
     --pear-font-ui: "Hanken Grotesk VF", "Source Sans 3 VF", sans-serif;
     --pear-font-pixel: "Geist Pixel", "Geist Mono VF", ui-monospace, monospace;
-    --pear-font-display: "Geist Pixel", "Geist Pixel", ui-monospace, monospace;
+    --pear-font-display: "Geist Pixel", "Geist Mono VF", ui-monospace, monospace;
     --pear-font-mono:
         "Geist Mono VF", ui-monospace, "SFMono-Regular", monospace;
 

@@ -5,6 +5,13 @@
 
 Armada is a Codex-client attached to Zulip, where each topic and thread become managed worktrees. It's how we think the next paradigm of team programming should be.
 
+In other words, Armada is like Slack, except
+- _streams are gitrepos, topics are worktrees_:
+Each topic is a coding thread with its own linked git worktree on a shared repo (the stream); fanned-out subagents get sibling branches they can see, diff, and merge. 
+- _each topic owns its own codex runtime_:
+One warm Codex app-server runtime per worktree; replies steer the live turn instead of spawning duplicates.
+
+
 ---
 
 [Zulip](https://zulip.com) is an open-source organized team chat app with unique

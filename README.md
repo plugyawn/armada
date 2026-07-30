@@ -1,7 +1,14 @@
 # Armada
-<img width="3600" height="1802" alt="image" src="https://github.com/user-attachments/assets/8f776bbc-cdc6-473c-aa0d-27f62af05ee8" />
-<img width="3600" height="1940" alt="image" src="https://github.com/user-attachments/assets/434e8e9e-a984-4ece-822b-129d0bdcbd93" />
-
+<table>
+  <tr>
+    <td width="50%">
+      <img src="https://github.com/user-attachments/assets/434e8e9e-a984-4ece-822b-129d0bdcbd93" width="100%">
+    </td>
+    <td width="50%">
+      <img src="https://github.com/user-attachments/assets/8f776bbc-cdc6-473c-aa0d-27f62af05ee8" width="100%">
+    </td>
+  </tr>
+</table>
 
 Armada is a Codex-client attached to Zulip, where each topic and thread become managed worktrees. It's how we think the next paradigm of team programming should be.
 

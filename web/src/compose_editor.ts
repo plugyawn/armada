@@ -1,4 +1,3 @@
-import autosize from "autosize";
 import $ from "jquery";
 import assert from "minimalistic-assert";
 
@@ -156,7 +155,7 @@ export function create(options: ComposeEditorOptions): ComposeEditor {
 
     function exit_preview(): void {
         compose_ui.exit_preview_mode($form);
-        autosize.update($textarea);
+        compose_ui.resize_textarea_to_content($textarea);
     }
 
     function show_preview(): void {
@@ -320,9 +319,8 @@ export function create(options: ComposeEditorOptions): ComposeEditor {
     const initial_content = options.content ?? existing_draft?.content;
     if (initial_content !== undefined) {
         set_content(initial_content, false);
-    } else {
-        compose_ui.autosize_textarea($textarea);
     }
+    compose_ui.size_textarea_to_content($textarea);
 
     const element = $form.get(0);
     const textarea = $textarea.get(0);
@@ -359,7 +357,7 @@ export function create(options: ComposeEditorOptions): ComposeEditor {
             typeahead.hide();
             typeahead.unlisten();
             typeahead.$container.remove();
-            autosize.destroy($textarea);
+            compose_ui.stop_sizing_textarea_to_content($textarea);
             options.$host.empty();
         },
     };

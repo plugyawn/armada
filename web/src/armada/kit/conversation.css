@@ -1,0 +1,618 @@
+/* The conversation: people in bubbles in their own stone, the agent's words
+   on the plane. A turn is one speaker's run of bubbles, words and blocks:
+   16 between turns whoever speaks, 4 inside one. */
+@layer armada.kit {
+    /* The lane: the conversation's column. Every shape of the conversation
+       starts on its left edge or ends on its right. */
+    .armada-lane {
+        margin-left: var(--lx);
+        width: var(--col);
+        position: relative;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .armada-turn {
+        margin-top: var(--gap-turn);
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        position: relative;
+        font: var(--t-talk);
+    }
+
+    .armada-turn[data-side="mine"] {
+        align-items: flex-end;
+    }
+
+    .armada-turn[data-side="agent"] {
+        align-items: stretch;
+    }
+
+    .armada-turn > * + * {
+        margin-top: var(--gap-part);
+    }
+
+    .armada-turn > :is(.armada-turn-name, .armada-face, .armada-sigil) + * {
+        margin-top: 0;
+    }
+
+    .armada-turn-name {
+        font: var(--t-label);
+        color: var(--ink-2);
+        padding-left: var(--pad-x);
+        margin-bottom: var(--gap-same);
+        height: var(--s-4);
+        white-space: nowrap;
+    }
+
+    /* The gutter: one column of speakers. A person's face and the agent's
+       sigil are the same size on the same axis. */
+    .armada-turn > .armada-face {
+        position: absolute;
+        left: calc(-1 * var(--gutter));
+        top: var(--s-1);
+    }
+
+    .armada-turn[data-named] > .armada-face {
+        top: var(--s-6);
+    }
+
+    .armada-turn > .armada-sigil {
+        position: absolute;
+        left: calc(-1 * var(--gutter));
+        top: calc(var(--px) * -2);
+        color: var(--ink-1);
+    }
+
+    .armada-turn[data-named] > .armada-sigil {
+        top: calc(var(--px) * 18);
+    }
+
+    /* A bubble: the unit of a person's talk. Mine has my colour; everyone
+       else's is stone with a hint of their own. Never a state. */
+    .armada-bubble-row {
+        display: flex;
+        align-items: flex-end;
+        gap: var(--s-2);
+        max-width: 100%;
+        position: relative;
+    }
+
+    .armada-turn[data-side="mine"] > .armada-bubble-row {
+        flex-direction: row-reverse;
+    }
+
+    .armada-bubble-row
+        + :is(
+            .armada-bubble-row,
+            .armada-receipt,
+            .armada-thread-line,
+            .armada-preview,
+            .armada-block,
+            .armada-thread
+        ) {
+        margin-top: var(--gap-same);
+    }
+
+    .armada-bubble {
+        max-width: min(var(--bubble-max), calc(var(--col) * 0.78));
+        min-height: var(--h-l);
+        padding: var(--pad-y) var(--pad-x);
+        border-radius: var(--r-bubble);
+        background: var(--bubble);
+        position: relative;
+        overflow-wrap: break-word;
+        transform-origin: 0 0;
+    }
+
+    .armada-turn[data-stone="moss"] .armada-bubble {
+        background: var(--b-moss);
+    }
+
+    .armada-turn[data-stone="larimar"] .armada-bubble {
+        background: var(--b-larimar);
+    }
+
+    .armada-turn[data-stone="lapis"] .armada-bubble {
+        background: var(--b-lapis);
+    }
+
+    .armada-turn[data-stone="amethyst"] .armada-bubble {
+        background: var(--b-amethyst);
+    }
+
+    .armada-turn[data-stone="rose"] .armada-bubble {
+        background: var(--b-rose);
+    }
+
+    .armada-turn[data-stone="flint"] .armada-bubble {
+        background: var(--b-flint);
+    }
+
+    .armada-turn[data-side="mine"] .armada-bubble {
+        background: var(--bubble-me);
+        color: var(--on-me);
+    }
+
+    /* Stacked bubbles of one speaker close their facing corners to 6 on
+       the speaker's side. */
+    .armada-bubble[data-join~="above"] {
+        border-top-left-radius: var(--r-ctl);
+    }
+
+    .armada-bubble[data-join~="below"] {
+        border-bottom-left-radius: var(--r-ctl);
+    }
+
+    .armada-turn:where([data-side="mine"]) .armada-bubble[data-join~="above"] {
+        border-top-left-radius: var(--r-bubble);
+        border-top-right-radius: var(--r-ctl);
+    }
+
+    .armada-turn:where([data-side="mine"]) .armada-bubble[data-join~="below"] {
+        border-bottom-left-radius: var(--r-bubble);
+        border-bottom-right-radius: var(--r-ctl);
+    }
+
+    .armada-bubble :where(a) {
+        color: inherit;
+    }
+
+    /* One to three emoji and nothing else; deleted by someone else, kept as
+       an outline until I leave; not sent, at half its colour; a picture. */
+    .armada-turn .armada-bubble[data-kind="jumbo"] {
+        background: none;
+        padding: 0 calc(var(--px) * 2);
+        font: var(--t-display);
+    }
+
+    .armada-turn .armada-bubble[data-kind="gone"] {
+        background: none;
+        outline: var(--px) solid var(--fill-3);
+        outline-offset: var(--k-inset);
+        color: var(--ink-2);
+    }
+
+    .armada-bubble[data-kind="unsent"] {
+        opacity: 0.55;
+    }
+
+    .armada-bubble[data-kind="image"] {
+        padding: 0;
+        min-height: 0;
+        line-height: 0;
+        overflow: hidden;
+    }
+
+    /* A mention is Strong. A mention of me is Strong in my colour: no fill
+       inside a fill. */
+    .armada-mention {
+        font-weight: var(--k-strong);
+    }
+
+    .armada-mention[data-me] {
+        color: var(--accent-text);
+    }
+
+    /* The time, beside the last bubble, on its last line's centre. */
+    .armada-time {
+        font: var(--t-caption);
+        color: var(--ink-2);
+        font-variant-numeric: tabular-nums;
+        flex: none;
+        white-space: nowrap;
+        height: var(--s-4);
+        margin-bottom: calc(var(--px) * 10);
+    }
+
+    .armada-bubble-row > .armada-text-control {
+        align-self: flex-end;
+        margin-bottom: calc(var(--px) * 6);
+    }
+
+    /* Reactions: real emoji in a 20 px chip seated on the bubble's outer
+       edge, on its last line, cut in by 2 px of the plane. A chip overlaps
+       only its own bubble and stands in the row's slack: the first one adds
+       no height. The time follows it. Mine wears my colour, and the bubble
+       I reacted to keeps a faint wash from where the chip sits. */
+    .armada-reactions {
+        display: flex;
+        gap: var(--s-1);
+        height: var(--h-chip);
+        white-space: nowrap;
+        flex: none;
+        position: relative;
+    }
+
+    .armada-bubble-row > .armada-reactions {
+        margin: 0 0 var(--s-2) calc(var(--px) * -14);
+    }
+
+    .armada-turn[data-side="mine"] .armada-reactions {
+        margin: 0 calc(var(--px) * -14) var(--s-2) 0;
+        flex-direction: row-reverse;
+    }
+
+    .armada-reaction {
+        height: var(--h-chip);
+        min-width: calc(var(--px) * 28);
+        padding: 0 calc(var(--px) * 6);
+        border-radius: var(--r-chip);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: var(--s-1);
+        flex: none;
+        background-color: var(--chip);
+        outline: var(--k-cut) solid var(--plane);
+        box-shadow: inset 0 0 0 1px var(--edge);
+        font: var(--t-caption);
+        line-height: var(--h-chip);
+        color: var(--ink-2);
+        font-variant-numeric: tabular-nums;
+        transition: background-color var(--fade-out) linear;
+    }
+
+    .armada-reaction-emoji {
+        font: var(--t-text);
+        line-height: var(--h-chip);
+        display: block;
+        height: var(--h-chip);
+    }
+
+    .armada-reaction[aria-pressed="true"] {
+        background-color: var(--bubble-me);
+        color: var(--on-me);
+        box-shadow: none;
+    }
+
+    .armada-bubble[data-liked]::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        border-radius: inherit;
+        pointer-events: none;
+        background: radial-gradient(
+            120% 150% at 100% 100%,
+            var(--bubble-me),
+            transparent 60%
+        );
+        opacity: 0.2;
+    }
+
+    /* On the agent's words there is no edge to sit on: the chips follow the
+       last word of the turn, 12 px after it, on its line. On a turn that
+       ends in a block: the block's top right corner. */
+    .armada-reaction-anchor {
+        display: inline-block;
+        width: 0;
+        height: 0;
+        position: relative;
+        vertical-align: top;
+    }
+
+    .armada-reaction-anchor > .armada-reactions {
+        position: absolute;
+        left: var(--s-3);
+        top: calc(var(--px) * 2);
+        margin: 0;
+    }
+
+    .armada-turn > .armada-reaction-corner {
+        position: relative;
+        height: 0;
+        margin-top: 0;
+        align-self: stretch;
+    }
+
+    .armada-reaction-corner > .armada-reactions {
+        position: absolute;
+        top: calc(var(--px) * -2);
+        right: var(--s-3);
+        margin: 0;
+    }
+
+    .armada-turn > .armada-reaction-corner + .armada-block {
+        margin-top: var(--gap-part);
+    }
+
+    /* Small lines under a bubble, on the plane. */
+    .armada-receipt {
+        font: var(--t-caption);
+        color: var(--ink-2);
+        padding: 0 var(--pad-x);
+        height: var(--s-4);
+        font-variant-numeric: tabular-nums;
+    }
+
+    .armada-thread-line {
+        font: var(--t-text);
+        padding-left: var(--pad-x);
+        height: var(--h-s);
+        display: flex;
+        align-items: center;
+        gap: var(--s-2);
+        max-width: min(var(--bubble-max), 100%);
+        min-width: 0;
+    }
+
+    .armada-turn[data-side="mine"] > .armada-thread-line {
+        padding: 0 var(--pad-x) 0 0;
+    }
+
+    .armada-thread-snippet {
+        color: var(--ink-2);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        min-width: 0;
+    }
+
+    .armada-thread-line > .armada-text-control {
+        margin: 0 calc(-1 * var(--s-1));
+        padding: 0 var(--s-1);
+    }
+
+    .armada-thread-line > .armada-time {
+        margin-bottom: 0;
+    }
+
+    /* A day, and where what is new begins: one Label line each, centred.
+       No rule. New is my colour. */
+    .armada-day,
+    .armada-new {
+        align-self: stretch;
+        text-align: center;
+        font: var(--t-label);
+        color: var(--ink-2);
+        margin-top: var(--gap-section);
+        height: var(--s-4);
+    }
+
+    .armada-new {
+        color: var(--accent-text);
+    }
+
+    :is(.armada-day, .armada-new) + .armada-turn,
+    .armada-day + .armada-new {
+        margin-top: var(--gap-para);
+    }
+
+    /* An empty worktree: the sigil at its one large size. */
+    .armada-hello {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: var(--s-4);
+        padding: 0 var(--pad-x) var(--s-2);
+    }
+
+    /* A thread opened where it is: its replies stand under the root
+       bubble, set in from it, on one stone line. */
+    .armada-thread {
+        align-self: stretch;
+        margin: var(--gap-same) 0 0 var(--pad-x);
+        padding: 0 0 0 calc(var(--gutter) + var(--s-3));
+        position: relative;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .armada-thread::before {
+        content: "";
+        position: absolute;
+        left: 0;
+        top: 0;
+        bottom: 0;
+        width: calc(var(--px) * 2);
+        border-radius: var(--r-mark);
+        background: var(--fill-3);
+    }
+
+    .armada-thread > .armada-turn {
+        margin-top: var(--gap-part);
+    }
+
+    .armada-thread > .armada-turn:first-child {
+        margin-top: 0;
+    }
+
+    .armada-thread .armada-bubble {
+        max-width: min(var(--bubble-max), calc(var(--col) * 0.66));
+    }
+
+    .armada-thread > .armada-field {
+        width: 100%;
+        margin: var(--gap-part) 0 0;
+    }
+
+    /* The agent's words: on the plane, at the text edge where the words in
+       everyone's bubbles start. No fill, no frame and no padding of a
+       bubble it does not have: the gaps are measured from its lines. */
+    .armada-answer {
+        padding: 0 0 0 var(--pad-x);
+        max-width: calc(var(--prose) + var(--pad-x));
+        overflow-wrap: break-word;
+    }
+
+    .armada-answer > * + * {
+        margin-top: var(--gap-para);
+    }
+
+    .armada-answer > :where(h3) {
+        font: var(--t-heading);
+        margin-top: var(--s-5);
+    }
+
+    .armada-answer > :where(h4) {
+        font: var(--t-heading);
+        font-weight: var(--k-strong);
+        margin-top: var(--s-4);
+    }
+
+    .armada-answer > :where(h3, h4):first-child {
+        margin-top: 0;
+    }
+
+    .armada-answer > :where(h3, h4) + * {
+        margin-top: var(--gap-same);
+    }
+
+    .armada-answer > :where(p) + :where(ul, ol) {
+        margin-top: var(--gap-same);
+    }
+
+    .armada-answer :where(ul, ol) {
+        list-style: none;
+        counter-reset: armada-item;
+    }
+
+    .armada-answer :where(li) {
+        position: relative;
+        padding-left: var(--s-5);
+        counter-increment: armada-item;
+    }
+
+    .armada-answer :where(li) + :where(li) {
+        margin-top: var(--gap-same);
+    }
+
+    .armada-answer :where(ul) > :where(li)::before {
+        content: "";
+        position: absolute;
+        left: calc(var(--px) * 3);
+        top: calc(var(--px) * 10);
+        width: var(--s-1);
+        height: var(--s-1);
+        border-radius: var(--r-round);
+        background: var(--ink-2);
+    }
+
+    .armada-answer :where(ol) > :where(li)::before {
+        content: counter(armada-item);
+        position: absolute;
+        left: 0;
+        top: 0;
+        color: var(--ink-2);
+        font-variant-numeric: tabular-nums;
+    }
+
+    /* A run's footer: one line under a turn that did work, with at most
+       one verb. Second ink; the failed and the stopped keep their mark. */
+    .armada-footer {
+        font: var(--t-text);
+        padding-left: var(--pad-x);
+        display: flex;
+        align-items: center;
+        gap: var(--s-2);
+        min-height: var(--h-s);
+        color: var(--ink-2);
+        white-space: nowrap;
+    }
+
+    /* One line, whatever the language: a long record ends in an ellipsis
+       and keeps its verb. */
+    .armada-footer-text {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .armada-footer > .armada-text-control {
+        margin-left: var(--s-1);
+    }
+
+    .armada-turn > :is(.armada-answer, .armada-block) + .armada-footer {
+        margin-top: var(--gap-same);
+    }
+
+    /* Hover overlay: raised, at most four targets, never in flow. */
+    .armada-overlay {
+        position: absolute;
+        top: calc(var(--px) * -16);
+        left: calc(100% - calc(var(--px) * 20));
+        display: flex;
+        padding: var(--s-1);
+        border-radius: var(--r-block);
+        background: var(--raised);
+        /* prettier-ignore */
+        box-shadow: 0 0 0 1px var(--edge), var(--shadow-raised);
+        color: var(--ink-2);
+    }
+
+    .armada-turn[data-side="mine"] .armada-overlay {
+        left: auto;
+        right: calc(100% - calc(var(--px) * 20));
+    }
+
+    .armada-turn[data-side="agent"] > .armada-overlay {
+        left: auto;
+        right: 0;
+        top: calc(var(--px) * -6);
+        margin-top: 0;
+    }
+
+    .armada-overlay > .armada-control {
+        width: var(--h-s);
+        height: var(--h-s);
+        padding: 0;
+        justify-content: center;
+    }
+
+    /* A link's preview: a block of its own under the bubble, never inside
+       it. 368 wide: the one block that is not the lane's width, because it
+       belongs to the bubble above it. */
+    .armada-preview {
+        width: min(calc(var(--px) * 368), 100%);
+        min-height: calc(var(--px) * 56);
+        border-radius: var(--r-block);
+        background: var(--block);
+        padding: var(--s-2) var(--pad-x);
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        column-gap: var(--s-3);
+        align-items: center;
+        font: var(--t-text);
+    }
+
+    .armada-preview-title {
+        font: var(--t-strong);
+        display: block;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .armada-preview-caption {
+        font: var(--t-caption);
+        color: var(--ink-2);
+        display: block;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        font-variant-numeric: tabular-nums;
+    }
+
+    .armada-preview-thumb {
+        width: var(--s-10);
+        height: var(--s-10);
+        border-radius: var(--r-ctl);
+        display: grid;
+        place-items: center;
+        color: var(--ink-2);
+        margin-right: calc(-1 * var(--s-2));
+    }
+
+    .armada-turn:where([data-side="theirs"])
+        > .armada-bubble-row
+        + :is(.armada-block, .armada-preview) {
+        border-top-left-radius: var(--r-ctl);
+    }
+
+    .armada-turn:where([data-side="mine"])
+        > .armada-bubble-row
+        + :is(.armada-block, .armada-preview) {
+        border-top-right-radius: var(--r-ctl);
+    }
+}

@@ -1,8 +1,8 @@
 import assert from "minimalistic-assert";
 import * as z from "zod/mini";
 
-import * as echo from "./echo.ts";
 import * as drafts from "./drafts.ts";
+import * as echo from "./echo.ts";
 import type {Message} from "./message_store.ts";
 import * as sent_messages from "./sent_messages.ts";
 import * as server_events_state from "./server_events_state.ts";

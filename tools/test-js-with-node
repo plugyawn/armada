@@ -220,13 +220,11 @@ EXEMPT_FILES = make_set(
         "web/src/scheduled_messages_feed_ui.ts",
         "web/src/scheduled_messages_overlay_ui.ts",
         "web/src/scheduled_messages_ui.ts",
-        "web/src/scroll_bar.ts",
         "web/src/scroll_util.ts",
         "web/src/search.ts",
         "web/src/search_pill.ts",
         "web/src/search_suggestion.ts",
         "web/src/sent_messages.ts",
-        "web/src/sentry.ts",
         "web/src/server_event_types.ts",
         "web/src/server_events.js",
         "web/src/server_events_state.ts",
@@ -336,6 +334,64 @@ EXEMPT_FILES = make_set(
     ]
 )
 
+# Armada (Pear) modules and their tests. The proof-of-concept UI was
+# written without the 100% line coverage that upstream modules have, and
+# it is being rebuilt; these files are exempt until their replacements
+# land with tests. Remove a file from this list when it is deleted or
+# reaches full coverage (the check below fails for a fully covered file
+# that is still listed).
+ARMADA_EXEMPT_FILES = make_set(
+    [
+        "web/src/compose_controller.ts",
+        "web/src/compose_editor.ts",
+        "web/src/compose_pear.ts",
+        "web/src/compose_send.ts",
+        "web/src/message_thread_hooks.ts",
+        "web/src/message_threads.ts",
+        "web/src/pear_agent_roster.ts",
+        "web/src/pear_artifact.ts",
+        "web/src/pear_artifact_lifecycle.ts",
+        "web/src/pear_live_dom.ts",
+        "web/src/pear_moments.ts",
+        "web/src/pear_panel.ts",
+        "web/src/pear_run_state.ts",
+        "web/src/pear_run_trace.ts",
+        "web/src/pear_runtime_menu.ts",
+        "web/src/pear_runtime_shared.ts",
+        "web/src/pear_signature.ts",
+        "web/src/pear_wall.ts",
+        "web/src/pear_workspace.ts",
+        "web/src/pear_workspace_api.ts",
+        "web/src/pear_workspace_editor.ts",
+        "web/src/pear_workspace_editor_contract.ts",
+        "web/src/pear_workspace_explorer.ts",
+        "web/src/pear_workspace_files.ts",
+        "web/src/pear_workspace_location.ts",
+        "web/src/pear_workspace_markdown_editor.ts",
+        "web/src/pear_workspace_markdown_preview.ts",
+        "web/src/pear_workspace_marks.ts",
+        "web/src/pear_workspace_preview.ts",
+        "web/src/pear_workspace_shell.ts",
+        "web/src/pear_workspace_shell_view.ts",
+        "web/src/pear_workspace_source_editor.ts",
+        "web/src/pear_workspace_store.ts",
+        "web/src/pear_workspace_tree.ts",
+        "web/src/right_sidebar_tabs.ts",
+        "web/tests/compose_controller.test.cjs",
+        "web/tests/compose_editor.test.cjs",
+        "web/tests/compose_send.test.cjs",
+        "web/tests/message_threads.test.cjs",
+        "web/tests/pear_agent_roster.test.cjs",
+        "web/tests/pear_workspace_api.test.cjs",
+        "web/tests/pear_workspace_editor.test.cjs",
+        "web/tests/pear_workspace_files.test.cjs",
+        "web/tests/pear_workspace_markdown_editor.test.cjs",
+        "web/tests/pear_workspace_shell.test.cjs",
+        "web/tests/pear_workspace_source_editor.test.cjs",
+    ]
+)
+EXEMPT_FILES |= ARMADA_EXEMPT_FILES
+
 from tools.lib.test_script import add_provision_check_override_param, assert_provisioning_status_ok
 
 parser = argparse.ArgumentParser(USAGE)
@@ -427,7 +483,12 @@ def run_tests_via_node_js() -> int:
         parallel = 1
         files = individual_files
     else:
-        files = sorted(glob.glob(os.path.join(ROOT_DIR, "web/tests/*.test.cjs")))
+        files = sorted(
+            [
+                *glob.glob(os.path.join(ROOT_DIR, "web/tests/*.test.cjs")),
+                *glob.glob(os.path.join(ROOT_DIR, "web/tests/armada/*.test.cjs")),
+            ]
+        )
 
     test_files = clean_files(files)
 
@@ -452,7 +513,9 @@ def run_tests_via_node_js() -> int:
 
         nyc = os.path.join(ROOT_DIR, "node_modules/.bin/nyc")
         command = [nyc]
-        command += [f"--extension={ext}" for ext in [".cjs", ".cts", ".hbs", ".mjs", ".mts", ".ts"]]
+        command += [
+            f"--extension={ext}" for ext in [".cjs", ".cts", ".hbs", ".mjs", ".mts", ".ts", ".tsx"]
+        ]
         command += ["--report-dir", coverage_dir]
         command += ["--temp-directory", coverage_dir]
         command += ["-r=lcov", "-r=json", "-r=text-summary"]
@@ -501,16 +564,49 @@ def read_coverage() -> Any:
     return coverage_json
 
 
+# The parts of the rebuilt frontend (web/src/armada/) that are pure and
+# therefore held to 100% coverage from their first file: stores, the
+# API layer, motion maths, sound recipes, the command registry and the
+# splitter of message HTML.  Components and the feed's DOM code are
+# tested for behaviour with web/tests/lib/real_dom.cjs and by
+# `arm check`, not by line count.
+ARMADA_FULLY_COVERED_GLOBS = [
+    *(
+        f"web/src/armada/{directory}/**/*.{extension}"
+        for directory in ["state", "api", "motion", "sound", "commands"]
+        for extension in ["ts", "tsx"]
+    ),
+    "web/src/armada/feed/parts.ts",
+]
+
+
+def armada_fully_covered_files() -> set[str]:
+    return {
+        path
+        for pattern in ARMADA_FULLY_COVERED_GLOBS
+        for path in glob.glob(pattern, recursive=True)
+        if not path.endswith(".d.ts")
+    }
+
+
 def enforce_proper_coverage(coverage_json: Any) -> bool:
     all_js_files = {
         *glob.glob("web/src/*.js"),
         *glob.glob("web/src/*.ts"),
         *glob.glob("web/src/billing/*.js"),
         *glob.glob("web/tests/*.cjs"),
+        *glob.glob("web/tests/armada/*.cjs"),
         *glob.glob("web/tests/lib/*.cjs"),
+        *armada_fully_covered_files(),
     }
-    missing_files = sorted(EXEMPT_FILES - all_js_files)
+    # The rebuild deletes Armada's old modules package by package, and
+    # this file has a single owner at a time; an Armada entry whose file
+    # is gone is skipped here and pruned by that owner, rather than
+    # failing every package that deletes a module.
+    missing_files = sorted(EXEMPT_FILES - ARMADA_EXEMPT_FILES - all_js_files)
     assert not missing_files, f"Missing files should be removed from EXEMPT_FILES: {missing_files}"
+    for relative_path in sorted(ARMADA_EXEMPT_FILES - all_js_files):
+        print(f"Note: {relative_path} is gone; remove it from ARMADA_EXEMPT_FILES.")
     enforce_fully_covered = sorted(all_js_files - EXEMPT_FILES)
 
     coverage_lost = False

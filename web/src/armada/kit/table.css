@@ -1,0 +1,46 @@
+/* A table in a block: Text with figures in fixed cells, the head in the
+   second ink over the one permitted separator. The only file of the kit
+   that may draw a border. */
+@layer armada.kit {
+    .armada-table {
+        /* Separate, with no spacing: the separator then belongs to the
+           head's cells alone, and no row starts on a half pixel. */
+        border-collapse: separate;
+        border-spacing: 0;
+        width: 100%;
+        font: var(--t-text);
+    }
+
+    .armada-table :where(th, td) {
+        text-align: left;
+        padding: 0 var(--s-4) 0 0;
+        font-weight: var(--k-regular);
+        white-space: nowrap;
+        height: var(--s-5);
+    }
+
+    .armada-table :where(th) {
+        color: var(--ink-2);
+        /* The separator takes the last pixel of the head's 24, so the
+           rows below it stay on the 4 px grid. */
+        padding-bottom: calc(var(--s-1) - var(--px));
+        height: calc(var(--s-6) - var(--px));
+        border-bottom: var(--px) solid var(--fill-3);
+    }
+
+    .armada-table :where(tbody tr:first-child td) {
+        padding-top: var(--s-1);
+        height: var(--s-6);
+    }
+
+    .armada-table :where([data-align="end"]) {
+        text-align: right;
+        padding-right: 0;
+        padding-left: var(--s-4);
+        font-variant-numeric: tabular-nums;
+    }
+
+    .armada-table [data-align="end"] .armada-figure {
+        justify-content: flex-end;
+    }
+}

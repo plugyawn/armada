@@ -139,6 +139,16 @@ test("thread reply index tracks insert, update, delete, reify, and clear", () =>
     );
     message_store.clear_for_testing();
     assert.deepEqual(message_store.get_thread_replies(200), []);
+
+    // Messages are singletons that events edit in place, so a message
+    // can name a root it was never indexed under; removing it is a no-op
+    // for the index.
+    const moved = reply(21, undefined);
+    message_store.update_message_cache({type: "server_message", message: moved});
+    moved.thread_root_message_id = 300;
+    message_store.remove([21]);
+    assert.equal(message_store.get(21), undefined);
+    assert.deepEqual(message_store.get_thread_replies(300), []);
 });
 
 test("thread reply lookups stay isolated across many roots", () => {
@@ -299,10 +309,7 @@ test("pushed thread summary fences a fetch that started before the push", () => 
 
     // A fetch that starts after the pushes hydrates the fresh summary.
     const after_push = message_store.capture_thread_summary_fetch_generation();
-    assert.equal(
-        message_store.can_apply_thread_summary_from_fetch(root.id, after_push),
-        true,
-    );
+    assert.equal(message_store.can_apply_thread_summary_from_fetch(root.id, after_push), true);
     message_helper.process_new_server_message(
         {
             id: root.id,
@@ -316,6 +323,40 @@ test("pushed thread summary fences a fetch that started before the push", () => 
         {thread_summary_fetch_generation: after_push},
     );
     assert.equal(root.reply_summary.reply_count, 4);
+});
+
+test("stale thread summary is dropped from a message that is not cached yet", () => {
+    const stale = message_store.capture_thread_summary_fetch_generation();
+    message_store.mark_thread_reply_lifecycle([903]);
+    const raw_message = (id) => ({
+        sender_email: "me@example.com",
+        sender_id: me.user_id,
+        type: "private",
+        display_recipient: convert_recipients([me, bob]),
+        flags: [],
+        is_me_message: false,
+        id,
+        reactions: [],
+        avatar_url: `/avatar/${me.user_id}`,
+        submessages: [],
+        reply_summary: {
+            reply_count: 1,
+            unread_reply_count: 1,
+            last_reply_at: 10,
+            participants: [],
+        },
+    });
+
+    const fenced = message_helper.process_new_server_message(raw_message(903), {
+        thread_summary_fetch_generation: stale,
+    });
+    assert.equal(fenced.reply_summary, undefined);
+
+    // No reply event touched this root, so the fetched summary stands.
+    const untouched = message_helper.process_new_server_message(raw_message(904), {
+        thread_summary_fetch_generation: stale,
+    });
+    assert.equal(untouched.reply_summary.reply_count, 1);
 });
 
 test("process_new_message", () => {

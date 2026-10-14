@@ -1400,15 +1400,11 @@ def _pear_parse_int_list(name: str) -> list[int]:
 
 
 def _pear_parse_worker_model_choices(name: str) -> list[str]:
-    raw_value = os.getenv(name)
-    if raw_value is not None:
-        return [value for value in raw_value.replace(",", " ").split() if value]
-    model = _pear_env_optional_string(
-        "PEAR_WORKER_MODEL", _pear_configured_default("PEAR_WORKER_MODEL")
-    )
-    if model is not None:
-        return [model]
-    return list(_pear_configured_default(name))
+    choices = _pear_parse_string_list(name)
+    model = _pear_parse_optional_string("PEAR_WORKER_MODEL")
+    if model is not None and model not in choices:
+        choices.insert(0, model)
+    return choices
 
 
 def _pear_parse_gemini_api_key(name: str) -> str:
@@ -1432,8 +1428,8 @@ _PEAR_ENV_OVERRIDES: Final[dict[str, Callable[[str], object]]] = {
     "PEAR_WORKER_TIMEOUT_SECONDS": _pear_parse_int,
     "PEAR_WORKER_OUTPUT_LIMIT": _pear_parse_int,
     "PEAR_WORKER_CODEX_EPHEMERAL": _pear_parse_bool,
-    "PEAR_WORKER_CODEX_EXTRA_ARGS": _pear_parse_string_list,
     "PEAR_CODEX_SKILLS_DIR": _pear_parse_optional_string,
+    "PEAR_WORKER_TRUSTED_USERS_ONLY": _pear_parse_bool,
     "PEAR_WORKER_TRUSTED_USER_IDS": _pear_parse_int_list,
     "PEAR_WORKER_MAX_ACTIVE_RUNS_PER_TOPIC": _pear_parse_int,
     "PEAR_WORKER_MAX_ACTIVE_RUNS_PER_REALM": _pear_parse_int,

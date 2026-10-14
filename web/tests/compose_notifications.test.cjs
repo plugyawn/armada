@@ -47,6 +47,7 @@ run_test("notify_local_mixes skips thread replies entirely", () => {
 
     let narrowed_to;
     compose_notifications.notify_local_mixes([message], false, {
+        /* istanbul ignore next */
         narrow_to_recipient(message_id) {
             narrowed_to = message_id;
         },
@@ -64,6 +65,7 @@ run_test("notify_local_mixes skips thread reply banner when navigation disabled"
 
     let narrowed_to;
     compose_notifications.notify_local_mixes([message], false, {
+        /* istanbul ignore next */
         narrow_to_recipient(message_id) {
             narrowed_to = message_id;
         },

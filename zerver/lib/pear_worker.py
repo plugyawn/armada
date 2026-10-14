@@ -647,6 +647,21 @@ def pear_configured_worker_sandbox() -> str:
     return str(settings.PEAR_WORKER_SANDBOX or "read-only")
 
 
+def pear_runs_restricted() -> bool:
+    return settings.PEAR_WORKER_TRUSTED_USERS_ONLY or bool(settings.PEAR_WORKER_TRUSTED_USER_IDS)
+
+
+def pear_user_is_trusted(user_profile: UserProfile) -> bool:
+    """Whether this person may drive the agent (start, steer or answer
+    runs) and give a new channel a repository URL, which makes the
+    server fetch it."""
+    return (
+        not pear_runs_restricted()
+        or user_profile.is_realm_admin
+        or user_profile.id in settings.PEAR_WORKER_TRUSTED_USER_IDS
+    )
+
+
 def pear_topic_isolation_backend() -> str:
     return str(settings.PEAR_TOPIC_ISOLATION_BACKEND or "codex-sandbox")
 
@@ -2958,12 +2973,7 @@ class PearDatabaseWorkerRunStore:
         except UserProfile.DoesNotExist:
             return "Pear could not identify the requesting user."
 
-        trusted_user_ids = set(settings.PEAR_WORKER_TRUSTED_USER_IDS)
-        if (
-            trusted_user_ids
-            and not requesting_user.is_realm_admin
-            and requesting_user.id not in trusted_user_ids
-        ):
+        if not pear_user_is_trusted(requesting_user):
             return "This user is not allowed to start Pear worker runs."
         if pear_workspace_is_paused(user_profile, stream=stream, topic=topic):
             return "Pear session is paused until a resume control is posted."
@@ -3026,12 +3036,7 @@ class PearDatabaseWorkerRunStore:
             )
         except UserProfile.DoesNotExist:
             return "Pear could not identify the requesting user."
-        trusted_user_ids = set(settings.PEAR_WORKER_TRUSTED_USER_IDS)
-        if (
-            trusted_user_ids
-            and not requesting_user.is_realm_admin
-            and requesting_user.id not in trusted_user_ids
-        ):
+        if not pear_user_is_trusted(requesting_user):
             return "This user is not allowed to start Pear worker runs."
         if pear_workspace_is_paused(user_profile, stream=stream, topic=topic):
             return "Pear session is paused until a resume control is posted."

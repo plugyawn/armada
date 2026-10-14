@@ -242,6 +242,44 @@ function test(label, f) {
     });
 }
 
+run_test("katex_is_fetched_on_first_use", async ({override_rewire}) => {
+    // KaTeX is not part of the first load. Until it has arrived, math is
+    // something only the server renders, and asking starts the fetch.
+    let fetches = 0;
+    override_rewire(markdown, "fetch_katex", async () => {
+        fetches += 1;
+        throw new Error("offline");
+    });
+    assert.ok(!markdown.katex_is_loaded());
+    assert.ok(!markdown.needs_backend_for_math("no math in $5 and 10$"));
+    assert.ok(!markdown.contains_backend_only_syntax("```python\nmath\n```"));
+    assert.equal(fetches, 0);
+    assert.ok(markdown.contains_backend_only_syntax("so $$x^2$$ it is"));
+    assert.ok(markdown.contains_backend_only_syntax("```math\nx^2\n```"));
+    assert.ok(markdown.contains_backend_only_syntax("~~~ math\nx^2\n~~~"));
+    assert.equal(fetches, 1);
+
+    // A fetch that fails leaves math to the server, and is tried again.
+    await assert.rejects(markdown.load_katex(), {message: "offline"});
+    await markdown.try_to_load_katex();
+    assert.equal(fetches, 2);
+    assert.ok(!markdown.katex_is_loaded());
+    // Rendered without asking first, a formula is its source, as text;
+    // that asks for KaTeX too.
+    assert.equal(markdown.render("so $$x<2$$ it is").content, "<p>so $$x&lt;2$$ it is</p>");
+    await markdown.try_to_load_katex();
+    assert.equal(fetches, 3);
+
+    override_rewire(markdown, "fetch_katex", async () => katex);
+    await markdown.try_to_load_katex();
+    assert.ok(markdown.katex_is_loaded());
+    assert.ok(!markdown.contains_backend_only_syntax("so $$x^2$$ it is"));
+    assert.ok(!markdown.contains_backend_only_syntax("```math\nx^2\n```"));
+    // A second request is the same one.
+    await markdown.load_katex();
+    assert.ok(markdown.katex_is_loaded());
+});
+
 test("markdown_detection", () => {
     const no_markup = [
         "This is a plaintext message",

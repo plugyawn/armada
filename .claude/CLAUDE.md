@@ -1,9 +1,203 @@
-# CLAUDE.md - Guidelines for AI Contributions to Zulip
+# CLAUDE.md - Guidelines for AI Contributions to Armada
 
 This file provides guidance to Claude (and other AI coding assistants) for
-contributing to the Zulip codebase. These guidelines are designed to produce
+contributing to this codebase. These guidelines are designed to produce
 contributions that meet the same high standards we expect from human
 contributors.
+
+## This repository is Armada
+
+Armada is a fork of Zulip: a Codex client attached to a team chat. A
+channel is a git repository, a topic is a worktree with its own warm agent
+runtime, and a reply steers the live turn. The product is **Armada**; its
+agent is **Onyx**. `pear` is the old code name: it survives as the server
+and wire namespace (`Pear*` models, `/json/pear/` routes, `PEAR_*`
+settings), and the server still calls the agent Pear, until the rename
+package (D3 of the plan).
+
+The frontend is being rebuilt. This section says what the user has
+decided, where the build is and how to work here. The rest of the file
+is Zulip's own guidance and still holds: commit discipline, testing,
+honesty about what was verified, when to pause. Where it speaks of
+Zulip's existing UI, read it through this section, which wins where the
+two disagree.
+
+### What the user has decided
+
+The brief is `var/armada-overhaul/BRIEF.md`; later statements override
+earlier ones.
+
+- Keep Armada's semantics: repositories as channels, worktrees as topics,
+  agent runs with steering, queueing and stop, threads, artifacts,
+  monitors, the README, Files and Changes views, the GitHub-like topic
+  header, the checklist of a run, people talking to each other and to
+  the agent.
+- Lean and instant. No perceptible latency on a keypress or on send; no
+  interaction moves the layout. These are budgets with numbers, and
+  `arm check` measures them.
+- One design language, Armada's own, written down in
+  `docs/armada/design-language.md`: Apple's principles, not Apple's
+  assets, and not Zulip's look. People talk in bubbles (statement 17).
+  Onyx's words are ambient, on the page with no bubble, and set in Söhne
+  like everyone's: the user offered that as a "maybe", to be shown and
+  judged (statement 20); the design follows it and F3 built it, and the
+  brief records no verdict yet. People, Onyx and chrome are set in Söhne,
+  code in Geist Mono, with Hanken Grotesk as the open fallback behind
+  Söhne. Söhne is licensed: its files live in the git-ignored
+  `web/fonts/licensed/` and are never committed. There is no pixel
+  typeface (Geist Pixel is gone); in the design, pixels are drawings:
+  Onyx's sigil and the marks of a run. No new code names a system
+  typeface (a few old portico sheets and one test still do; the fork
+  ledger counts them down).
+- Motion and sound are part of the product, everywhere, and never cost
+  responsiveness or distract.
+- Targets: Electron is the main target ("main target would probably be
+  electron"). In browsers, Chromium 132 and later and Safari 18 and
+  later; Firefox best effort. English only, with every string still
+  tagged for translation. Phones are not drawn: that is the plan's
+  reading, not something the user said, so ask before deleting anything
+  that only a phone needs.
+- The cut list is approved: `docs/armada/cuts.md`. Each line is carried
+  out by the package that owns it, by deleting the code, never by hiding
+  it in CSS.
+- Zulip's own UI is not off limits, and merging from upstream is given
+  up for the frontend as a constraint. It stays as a cost to name: say
+  what a deep change to a Zulip file gives up (upstream mergeability,
+  tests that have to be rewritten) and what it buys, and make no deep
+  change that buys nothing. `tools/armada/fork_ledger` records every
+  Zulip file the fork changes.
+- A hosted beta is wanted: the new interface usable by the team on a
+  hosted server ahead of the full rebuild.
+- The base model for new topics is `gpt-6-astra` on the ultrafast tier
+  (the user's choice on 14 October; their "sol 6.1" is not in the Codex
+  catalog). Effort defaults to medium; `gpt-6-sol` and `gpt-5.6-sol`
+  stay selectable. See `PEAR_WORKER_*` in `zproject/default_settings.py`.
+- Maintainability for future agents is a goal in itself: less code, one
+  obvious place for each thing.
+
+### Still open
+
+Do not state a guess about these; build on what the plan assumes and
+say so.
+
+- **Where the hosted beta runs.** The user chose "My Mac for now". This
+  Mac's disk was 98% full on 14 October (18 GB free), too little for a
+  second, production VM, so the user has been asked to free space, use
+  the dev server as a stopgap, or take a VPS. Do not create a VM until
+  that is answered.
+- **Onyx's ambient words** (statement 20, a "maybe"): built, with no
+  verdict from the user recorded.
+- **The design's five questions** (palette, the composer's button,
+  threads in place, the column's four lists, the two-line header): the
+  build follows the design lead's recommendations, listed in
+  `docs/armada/design-language.md` ("Open with the user") and marked
+  (P-5) to (P-9) where `architecture.md` and `cuts.md` build on them.
+- **S-10 in the cut list** (`corporate/`) says "only if approved"; ask
+  before carrying it out.
+
+### Where the build is
+
+The plan is `var/armada-overhaul/design/final3/PLAN.md`: 35 packages in
+five stages. Each package's report is
+`var/armada-overhaul/build/<id>.md`, with its verification beside it.
+Nothing is committed yet. Built so far, the Foundation packages:
+
+- **F0, pins**: the behaviour checks in `tools/armada-checks/` (feed,
+  echo, keyboard, stream, parts, interaction stability), the breakages
+  that prove each can fail (`lib/mutate.mjs`, `lib/prove.mjs`), and a
+  real DOM for tests (`web/tests/lib/real_dom.cjs`).
+- **F1, toolchain**: `.tsx` with Preact; the lint rules for
+  `web/src/armada/` in `eslint.config.js`, `stylelint.config.js` and
+  `tools/linter_lib/custom_check.py`; the cascade layer (every old sheet
+  is wrapped in `@layer zulip` by `web/zulip-layer-loader.ts`); the fork
+  ledger; this guidance and `docs/armada/`.
+- **F2, load fixes**: the field sizes itself in CSS, KaTeX and the emoji
+  sheets load on use; the `size` and `weight` checks.
+- **F3, tokens and fonts**: `web/src/armada/tokens/` (the token set, the
+  layer order, the faces) and four generated palettes (Lapis the default;
+  Tide, Citrine, Onyx), one setting (`ARMADA_PALETTE`) to change.
+- **F4, kit**: `web/src/armada/kit/` (every component, drawn once and
+  rendered by Preact or as plain DOM), the icon sprite, `motion/`,
+  `sound/`, the showroom at `/devtools/armada/`, and the `kit`, `motion`
+  and `design-lint` checks.
+
+The frame (F5) and everything after it are not built: `frame/`, `feed/`,
+`state/`, `api/`, `commands/` and each `surfaces/<name>/` hold only a
+README. The screens people use are still the old interface, set in the
+new faces.
+
+An interim hosted beta is being built beside the plan, at `/beta/`
+(`web/src/armada/beta/`, served by `zerver/views/armada_beta.py`, linked
+from the navbar): the design's prototype run on the server's real data.
+It is outside the rebuild's rules: eslint, stylelint, prettier and the
+custom checks all ignore `web/src/armada/beta/`, so no rule in
+`.claude/rules/` holds there, and it is deleted when the rebuild's
+conversation lands.
+
+### Where things live
+
+- `web/src/armada/`: the rebuilt frontend. Every directory has a README
+  of a few lines saying what belongs there. New frontend code goes here
+  and nowhere else; the old `web/src/pear_*.ts` modules, `web/styles/`
+  and `web/templates/` are deleted surface by surface, not extended.
+- `.claude/rules/`: the rules of the rebuild, each with the lint or
+  check that enforces it, or a plain statement that nothing does.
+  Most load only when you work on the files they govern.
+- `docs/armada/`: `design-language.md`, `architecture.md`, `cuts.md`,
+  and the generated `fork-ledger.md`.
+- `tools/armada-checks/`: the gates (`README.md` there is the manual).
+  `tools/armada/`: the fork ledger and the generators (palette, icons,
+  sound reel, size).
+- `var/armada-overhaul/` (not in git, present on the machine the rebuild
+  is done on): the brief (`BRIEF.md`), the environment (`ENV.md`), the
+  design and the plan (`design/final3/`), the build reports (`build/`).
+  Read `BRIEF.md` and `ENV.md` first when they exist.
+
+### How to work here
+
+**Running things.** On the rebuild's machine the app runs inside a Lima
+VM from a synced copy of this checkout; `var/armada-overhaul/ENV.md` has
+the details. Edit files in this checkout with your normal tools and run
+the tooling through the VM:
+
+```bash
+limactl shell armada -- arm lint <files...>    # all linters, TypeScript included
+limactl shell armada -- arm fmt  <files...>    # eslint, prettier, stylelint autofix
+limactl shell armada -- arm test <names...>    # node tests; armada/<name> for web/tests/armada/
+limactl shell armada -- arm check [names...]   # the gates in tools/armada-checks/
+limactl shell armada -- arm shot <scenario>    # screenshots of the running app
+```
+
+`tools/lint` here also lints files git does not track yet, because the
+rebuild's work is uncommitted until its orchestrator commits it.
+
+**The gates.** A change is finished when `arm lint` passes on its files,
+its node tests pass, and the `arm check` assertions it affects have the
+status its task names: none may turn `FAIL`, and a known failure it
+repairs must turn `FIXED`. A frontend change names the check or test
+that proves it; a server change names its backend test; a change to
+documentation or guidance says that no check applies.
+
+**Three prohibitions.**
+
+- **No shared git state changes.** Several agents work in this tree at
+  once. Do not commit, stash, reset, check out, rebase or fetch unless
+  your task says the tree is yours. The commit and rebase guidance
+  below applies when it is.
+- **No edits inside the VM copy** (`/srv/armada/zulip`): the sync
+  overwrites them. Do not start, stop or restart the dev server unless
+  your task says so.
+- **No new dependency without approval.** Installing or upgrading a
+  package, and running `./tools/provision`, need the user's approval,
+  one request at a time. Do it only when your task says the user
+  approved that step; otherwise stop short of it and report what is
+  needed and why.
+
+**Upstream Zulip.** Do not rebase or merge this branch onto upstream
+Zulip. A fix from upstream, a security fix above all, may be brought in
+deliberately: as a cherry-pick in a task that says so, on a tree that is
+yours, with the upstream commit named in the commit message and the
+files it touches in the fork ledger.
 
 ## Philosophy
 
@@ -42,8 +236,9 @@ can be classified as low-priority and deferred.
 This philosophy extends to every aspect of the product:
 
 - **Visual precision matters.** Alignment, spacing, colors, and font
-  sizes must be consistent with similar existing UI. When making CSS
-  changes, you must demonstrate with pixel-precise before/after
+  sizes must follow the design language (`docs/armada/design-language.md`)
+  and the kit's components, not the old Zulip UI around them. When making
+  CSS changes, you must demonstrate with pixel-precise before/after
   comparisons that there are no unintended side effects.
 - **Every state matters.** UI must look correct in all its states:
   hover, active, disabled, focused, selected, empty, overflowing.
@@ -54,10 +249,13 @@ This philosophy extends to every aspect of the product:
   `padding`, `display`, `font-weight`, etc.) only need a single
   theme verified.
 - **Every window size matters.** UI must look good from wide desktop
-  (1920px) down to narrow phone screens (480px).
-- **Every language matters.** Translated strings can be 1.5x longer
-  than English or half as short. UI must handle both extremes without
-  breaking layout. Think about right-to-left languages too.
+  (1920px) down to 1100px, the narrowest window the design draws; below
+  1040px the nav becomes a sheet. Electron is the main target; phones
+  are not drawn (see the top of this file).
+- **Every string is tagged.** Armada ships in English only, and every
+  user-visible string is still tagged for translation so that languages
+  can return. Where the design gives a cell room for a longer string,
+  keep that room.
 - **Every interaction path matters.** Keyboard navigation, screen
   readers, permission levels, feature interactions (banners
   overlapping, resolved topics, muted messages), and edge cases in
@@ -181,7 +379,8 @@ Zulip has over 185,000 words of developer documentation. Before working on any a
   the reason isn't obvious, not narrate "what" the code does.
 - Use `em` units instead of `px` for computed CSS values that need to
   scale with font size. Pixel approximations break at different zoom
-  levels and font-size settings.
+  levels and font-size settings. Under `web/src/armada/` no length is
+  written at all: every value is a token (`.claude/rules/design-language.md`).
 - Comments should have a line to themself except for CSS px math.
 - **Review CSS for redundant rules.** After writing CSS, review the
   full set of rules affecting the same elements. Look for rules that
@@ -338,8 +537,9 @@ before the change is ready.
 
 **Visual appearance:**
 
-- Is the new UI consistent with similar elements (fonts, colors, sizes)?
-  Find the closest existing analogues and compare carefully.
+- Is the new UI consistent with the kit's components (fonts, colors,
+  sizes)? Find the closest component in the showroom (`/devtools/armada/`)
+  and the matching still of the design, and compare carefully.
 - Is alignment correct, both vertically and horizontally? Measure
   programmatically with `getBoundingClientRect()` when in doubt —
   don't eyeball it.
@@ -354,22 +554,24 @@ before the change is ready.
   imagery. Pure geometry/typography changes (`font-size`,
   `line-height`, `margin`, `padding`, `display`, `font-weight`,
   etc.) don't need a separate dark-theme pass —
-  `web/styles/dark_theme.css` only overrides colors, so a single
-  theme suffices for theme-invariant changes.
+  `web/styles/dark_theme.css` and the palette files in
+  `web/src/armada/tokens/` only set colors, so a single theme suffices
+  for theme-invariant changes.
 
 **Responsiveness and internationalization:**
 
-- Does the UI look good at different window sizes? Check wide desktop
-  (1920px), typical laptop (1280px), tablet, and narrow phone (480px).
-- Would the UI break if translated strings were 1.5x longer than
-  English? What if they were half as long? Both directions matter.
+- Does the UI look good at different window sizes? Check 1920px, 1440px
+  and 1100px.
+- Is every user-visible string tagged for translation? Armada ships in
+  English only, but the strings stay tagged.
 
 **Functionality:**
 
 - Are live updates working as expected?
 - Is keyboard navigation, including tabbing to interactive elements, working?
 - If the feature affects the message view, try different narrows: topic,
-  channel, Combined feed, direct messages.
+  channel, direct messages (and Combined feed until its cut, K-19,
+  lands).
 - If the feature affects the compose box, test both channel messages and
   direct messages, and both ways of resizing.
 - If the feature requires elevated permissions, test as both a user who
@@ -379,14 +581,15 @@ before the change is ready.
 - Think about edge cases in data: empty lists, very long names, single
   items vs. hundreds, special characters in strings.
 
-### Puppeteer Visual Tests: Verifying Alignment
+### Visual Tests: Verifying Alignment
 
-When using Puppeteer to verify visual alignment, do not rely on
-eyeballing screenshots — especially small full-page ones. Instead:
+When using `arm shot` (the `visual-test` skill) to verify visual
+alignment, do not rely on eyeballing screenshots — especially small
+full-page ones. Instead:
 
-- Use `page.evaluate()` with `getBoundingClientRect()` to measure
-  actual pixel positions of the elements you need aligned, and print
-  them to the console. Compare the numbers.
+- Use an `eval` step with `getBoundingClientRect()` to measure
+  actual pixel positions of the elements you need aligned; it prints
+  as an `EVAL` line. Compare the numbers.
 - Always take **both** a full-page screenshot and a zoomed clip of
   the area of interest.
 - For zoomed clips, calculate the clip region from non-fixed elements;
@@ -396,15 +599,17 @@ eyeballing screenshots — especially small full-page ones. Instead:
   (e.g., `.parent .my-class`) — reusing the same class name in a
   different context may not pick up the expected styles.
 - To verify keyboard-focus styles, use real keyboard navigation
-  (`page.keyboard.press`); programmatic `.focus()` doesn't reliably
+  (a `press` step); programmatic `.focus()` doesn't reliably
   trigger `:focus-visible` and may be overridden by view-level focus
   management.
 - Focus rings drawn as `::before` / `::after` pseudo-elements aren't
   visible in `getComputedStyle` of the focused element — verify them
   in a screenshot, not via computed styles.
-- For visual changes, produce before/after screenshot pairs by writing
-  one test and running it twice with a `SCREENSHOT_SUFFIX` env var
-  (`-old` on `main`, `-updated` on your branch).
+- For visual changes, produce before/after screenshot pairs from one
+  scenario run twice: once before you make the change and once after
+  it. Do not check out another branch to get the "before" (see the
+  prohibitions at the top); if the change is already made, compare with
+  the design's stills instead.
 
 ## Self-Review Checklist
 
@@ -512,14 +717,16 @@ faster and easier to just plan and write them well the first time.
 
 ### Process:
 
-- Always check if you're working on top of the latest upstream/main, and
-  fetch + rebase when starting a project so you're not using a stale branch.
-  If you're continuing a project, start by rebasing, resolving merge
-  conflicts carefully.
+- Do not fetch from, merge or rebase on upstream Zulip. An upstream fix,
+  a security fix above all, is brought in deliberately and named, as
+  "Upstream Zulip" at the top of this file says.
 - Don't make design or UX decisions silently. When a technical
   constraint forces a tradeoff, present the constraint and options
-  to the user rather than picking one. Never remove features, hide
-  UI elements, or change interaction patterns without asking.
+  to the user rather than picking one. Features are removed only as
+  `docs/armada/cuts.md` lists them, by deleting their code and never by
+  hiding them in CSS; say in your report which lines you carried out.
+  For anything that is not on that list, or that the list marks as
+  never to be cut, ask first.
 - Don't submit code you haven't tested
 - Don't skip becoming familiar with the code you're modifying
 - Don't make claims about code behavior without verification, and
@@ -534,8 +741,9 @@ faster and easier to just plan and write them well the first time.
 ### PR Description Should:
 
 When opening a pull request, prefix the PR title with `[ai]` (e.g.,
-`[ai] compose: Fix cursor position after emoji insertion.`). Use
-`upstream/main` as the base branch.
+`[ai] compose: Fix cursor position after emoji insertion.`). Armada's
+pull requests go to this repository (`origin`, `plugyawn/armada`), never
+to upstream Zulip; use the base branch your task names.
 
 Output the PR description in a markdown code block so that formatting
 (bold, headers, checkboxes, etc.) copy-pastes correctly into GitHub.
@@ -629,21 +837,24 @@ zerver/           # Main Django app
   webhooks/       # Integration webhooks
 web/              # Frontend TypeScript/JavaScript
   src/            # Main frontend code
+    armada/       # The rebuilt frontend (all new frontend code)
   styles/         # CSS
   templates/      # Frontend HTML
   tests/          # Frontend tests
 templates/        # Jinja2/Handlebars templates
 tools/            # Development and testing scripts
+  armada/         # Fork ledger and generators
+  armada-checks/  # The gates run by `arm check`
 docs/             # ReadTheDocs documentation source
+  armada/         # Design language, architecture, cuts, fork ledger
 ```
 
 ## Help Center Documentation
 
-When making any user-facing change, **read
-`docs/documentation/helpcenter.md`** in full and review the relevant
-help center articles under `starlight_help/src/content/docs/` for any
-updates that should be made. The writing guide there is the source
-of truth for help center conventions, components, and structure.
+Zulip's help center (`starlight_help/`) documents Zulip, not Armada, and
+the approved cut list removes it (S-02 in `docs/armada/cuts.md`). Do not
+update it for an Armada change. When a change alters what Armada does,
+update `docs/armada/` instead.
 
 ## Zulip Chat Links
 
@@ -664,7 +875,12 @@ message content.
 git grep "pattern"          # Search codebase (use extensively!)
 ```
 
-If a tool complains that provision is outdated, run `./tools/provision`
-to fix it. Do not use `--skip-provision-check` to work around the
-error; the check exists because tests and linters depend on provisioned
-dependencies being current.
+On the rebuild's machine these run inside the VM, through the `arm`
+commands at the top of this file; do not start the dev server yourself.
+
+If a tool complains that provision is outdated, do not use
+`--skip-provision-check` to work around the error; the check exists
+because tests and linters depend on provisioned dependencies being
+current. `./tools/provision` installs packages, so it needs the user's
+approval: run it only when your task says the user approved it;
+otherwise report the complaint, with the version it names, and wait.

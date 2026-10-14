@@ -1,0 +1,193 @@
+/* Armada palette: onyx. Written by tools/armada/palette.py from
+   tools/armada/palette.json; never edit it by hand. Onyx: the second final's
+   graphite, on this round's roles, kept for comparison. Graphite and white;
+   the accent is ink; my bubble is graphite, and in dark a graphite two steps
+   above everyone else's. Needs-you is blue. */
+@layer armada.tokens.palette {
+    :root[data-palette="onyx"] {
+        --ground: #e7eaed;
+        --content: #f8fbfe;
+        --raised: #fff;
+        --ink-1: #0d1014;
+        --ink-2: #4a4f55;
+        --dim: #9ba1a6;
+        --fill-1: rgb(13 16 20 / 6%);
+        --fill-2: rgb(13 16 20 / 10%);
+        --fill-3: rgb(13 16 20 / 14%);
+        --block: #edf0f3;
+        --line: #e1e4e7;
+        --edge: #e0e0e0;
+        --edge-2: #bbbcbd;
+        --edge-ctl: #828689;
+        --bubble: #dbdee2;
+        --bubble-me: #2b3035;
+        --on-me: #f8fbfe;
+        --chip: #fff;
+        --b-moss: #dbdee2;
+        --b-larimar: #dbdee2;
+        --b-lapis: #dbdee2;
+        --b-amethyst: #dbdee2;
+        --b-rose: #dbdee2;
+        --b-flint: #dbdee2;
+        --accent: #0d1014;
+        --accent-hover: #2a2d30;
+        --accent-press: #424548;
+        --on-accent: #f8fbfe;
+        --accent-text: #0d1014;
+        --ring: rgb(13 16 20 / 58%);
+        --success: #02675a;
+        --attention: #1755b9;
+        --failure: #b01003;
+        --tint-add: #d0f2d8;
+        --tint-del: #fdcfcc;
+        --add-ink: #016430;
+        --del-ink: #b31220;
+        --syn-k: #2a44bc;
+        --syn-s: #914006;
+        --syn-n: #01646d;
+        --syn-c: #575b62;
+        --p-moss: #badeba;
+        --p-moss-ink: #243c25;
+        --p-larimar: #a2e0e3;
+        --p-larimar-ink: #0c3d3f;
+        --p-lapis: #b4d7fb;
+        --p-lapis-ink: #21374e;
+        --p-amethyst: #dcc9f4;
+        --p-amethyst-ink: #3b2f4a;
+        --p-rose: #f5c2d5;
+        --p-rose-ink: #4a2a37;
+        --p-flint: #d5d2cd;
+        --p-flint-ink: #383531;
+        --shadow-raised:
+            0 1px 1px rgb(0 0 0 / 6%), 0 8px 24px rgb(0 0 0 / 12%),
+            0 16px 32px rgb(0 0 0 / 8%);
+        --shadow-field:
+            0 1px 2px rgb(0 0 0 / 6%), 0 6px 12px -4px rgb(0 0 0 / 10%);
+        --shadow-field-focus:
+            0 1px 2px rgb(0 0 0 / 7%), 0 8px 14px -5px rgb(0 0 0 / 18%);
+    }
+
+    @media (prefers-color-scheme: dark) {
+        :root[data-palette="onyx"]:not([data-theme="light"]) {
+            --ground: #080a0c;
+            --content: #17191b;
+            --raised: #2a2d30;
+            --ink-1: #ebeef1;
+            --ink-2: #b8bdc1;
+            --dim: #606468;
+            --fill-1: rgb(235 238 241 / 6%);
+            --fill-2: rgb(235 238 241 / 10.5%);
+            --fill-3: rgb(235 238 241 / 15%);
+            --block: #232527;
+            --line: #303335;
+            --edge: #515457;
+            --edge-2: #6f7275;
+            --edge-ctl: #818486;
+            --bubble: #313438;
+            --bubble-me: #52575d;
+            --on-me: #f8fafd;
+            --chip: #3d4043;
+            --b-moss: #313438;
+            --b-larimar: #313438;
+            --b-lapis: #313438;
+            --b-amethyst: #313438;
+            --b-rose: #313438;
+            --b-flint: #313438;
+            --accent: #ebeef1;
+            --accent-hover: #dbdde0;
+            --accent-press: #cacdcf;
+            --on-accent: #080a0c;
+            --accent-text: #ebeef1;
+            --ring: rgb(235 238 241 / 58%);
+            --success: #18cb6b;
+            --attention: #76acfc;
+            --failure: #fe9ead;
+            --tint-add: #21412b;
+            --tint-del: #4e1d1f;
+            --add-ink: #69d98d;
+            --del-ink: #fe8a88;
+            --syn-k: #91b7fe;
+            --syn-s: #f0b27d;
+            --syn-n: #7ad2d5;
+            --syn-c: #a1a5ac;
+            --p-moss: #3b5c3c;
+            --p-moss-ink: #d4f1d4;
+            --p-larimar: #1a5d61;
+            --p-larimar-ink: #c2f3f5;
+            --p-lapis: #365575;
+            --p-lapis-ink: #d7eaff;
+            --p-amethyst: #5b496f;
+            --p-amethyst-ink: #eee1ff;
+            --p-rose: #6f4354;
+            --p-rose-ink: #ffdee9;
+            --p-flint: #55524e;
+            --p-flint-ink: #ebe7e2;
+            --shadow-raised:
+                0 1px 2px rgb(0 0 0 / 30%), 0 8px 22px rgb(0 0 0 / 36%),
+                0 16px 32px rgb(0 0 0 / 36%);
+            --shadow-field: inset 0 1px 0 rgb(255 255 255 / 5%);
+            --shadow-field-focus: inset 0 1px 0 rgb(255 255 255 / 7%);
+        }
+    }
+
+    :root[data-palette="onyx"][data-theme="dark"] {
+        --ground: #080a0c;
+        --content: #17191b;
+        --raised: #2a2d30;
+        --ink-1: #ebeef1;
+        --ink-2: #b8bdc1;
+        --dim: #606468;
+        --fill-1: rgb(235 238 241 / 6%);
+        --fill-2: rgb(235 238 241 / 10.5%);
+        --fill-3: rgb(235 238 241 / 15%);
+        --block: #232527;
+        --line: #303335;
+        --edge: #515457;
+        --edge-2: #6f7275;
+        --edge-ctl: #818486;
+        --bubble: #313438;
+        --bubble-me: #52575d;
+        --on-me: #f8fafd;
+        --chip: #3d4043;
+        --b-moss: #313438;
+        --b-larimar: #313438;
+        --b-lapis: #313438;
+        --b-amethyst: #313438;
+        --b-rose: #313438;
+        --b-flint: #313438;
+        --accent: #ebeef1;
+        --accent-hover: #dbdde0;
+        --accent-press: #cacdcf;
+        --on-accent: #080a0c;
+        --accent-text: #ebeef1;
+        --ring: rgb(235 238 241 / 58%);
+        --success: #18cb6b;
+        --attention: #76acfc;
+        --failure: #fe9ead;
+        --tint-add: #21412b;
+        --tint-del: #4e1d1f;
+        --add-ink: #69d98d;
+        --del-ink: #fe8a88;
+        --syn-k: #91b7fe;
+        --syn-s: #f0b27d;
+        --syn-n: #7ad2d5;
+        --syn-c: #a1a5ac;
+        --p-moss: #3b5c3c;
+        --p-moss-ink: #d4f1d4;
+        --p-larimar: #1a5d61;
+        --p-larimar-ink: #c2f3f5;
+        --p-lapis: #365575;
+        --p-lapis-ink: #d7eaff;
+        --p-amethyst: #5b496f;
+        --p-amethyst-ink: #eee1ff;
+        --p-rose: #6f4354;
+        --p-rose-ink: #ffdee9;
+        --p-flint: #55524e;
+        --p-flint-ink: #ebe7e2;
+        --shadow-raised:
+            0 1px 2px rgb(0 0 0 / 30%), 0 8px 22px rgb(0 0 0 / 36%),
+            0 16px 32px rgb(0 0 0 / 36%);
+        --shadow-field: inset 0 1px 0 rgb(255 255 255 / 5%);
+        --shadow-field-focus: inset 0 1px 0 rgb(255 255 255 / 7%);
+    }
+}

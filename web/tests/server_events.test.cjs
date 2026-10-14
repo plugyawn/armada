@@ -184,7 +184,12 @@ run_test("thread summary events are dispatched after new messages", ({override})
 
 run_test("replayed message and summary batches stay ordered across reconnects", ({override}) => {
     const replayed_batch = [
-        {type: "message", id: 3, message: {...message, id: 3, thread_root_message_id: 1}, flags: []},
+        {
+            type: "message",
+            id: 3,
+            message: {...message, id: 3, thread_root_message_id: 1},
+            flags: [],
+        },
         {
             id: 4,
             type: "message_thread_summary",

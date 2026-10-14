@@ -6,7 +6,6 @@ const {JSDOM} = require("jsdom");
 
 const {set_global, zrequire} = require("./lib/namespace.cjs");
 const {run_test} = require("./lib/test.cjs");
-const $ = require("./lib/zjquery.cjs");
 
 const dom = new JSDOM(
     `<!doctype html><html><body>

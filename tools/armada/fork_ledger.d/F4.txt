@@ -1,0 +1,4 @@
+# F4, kit, sprite, motion, sound, showroom.
+kept web/webpack.dev-assets.json  # the armada-showroom entry
+kept zerver/views/development/showroom.py  # showroom_armada: /devtools/armada/
+kept zproject/dev_urls.py  # the route to it

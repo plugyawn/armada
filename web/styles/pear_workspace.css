@@ -5,15 +5,35 @@
     min-block-size: 0;
 }
 
+/* The host shows this line only while the shell's code is on its way. */
+.pear-workspace-host[aria-busy="true"]:not(:has(.pear-workspace-shell)) {
+    display: grid;
+    place-items: center;
+    color: var(--pear-ink-3);
+    font-family: var(--pear-font-pixel);
+    font-size: 11px;
+}
+
 .pear-workspace-shell {
     --pear-workspace-border: var(--pear-hairline);
     --pear-workspace-muted: var(--pear-ink-2);
-    --pear-workspace-hover: var(--pear-surface-2);
-    --pear-workspace-selected: var(--pear-interaction-fill);
+    --pear-workspace-faint: var(--pear-ink-3);
+    --pear-workspace-hover: color-mix(
+        in srgb,
+        var(--pear-ink-1) 6%,
+        transparent
+    );
+    --pear-workspace-pressed: color-mix(
+        in srgb,
+        var(--pear-ink-1) 11%,
+        transparent
+    );
+    --pear-workspace-selected: var(--pear-interaction-fill-strong);
     --pear-workspace-focus: var(--pear-interaction);
-    --pear-workspace-row-height: 28px;
+    --pear-workspace-row-height: 26px;
+    --pear-workspace-control-height: 26px;
+    --pear-workspace-control-radius: 6px;
     --pear-workspace-editor-surface: var(--pear-surface-0);
-    --pear-workspace-editor-gutter: var(--pear-surface-1);
 
     box-sizing: border-box;
     display: grid;
@@ -22,8 +42,9 @@
     min-block-size: 0;
     color: var(--pear-ink-1);
     background: var(--pear-surface-0);
-    font-family: var(--pear-font-ui, "Hanken Grotesk VF", sans-serif);
-    font-size: 14px;
+    font-family: var(--pear-font-ui);
+    font-size: 13px;
+    line-height: 1.35;
 }
 
 .pear-workspace-shell *,
@@ -38,35 +59,99 @@
     font: inherit;
 }
 
+/* Controls answer the pointer at once: colour is the only thing that
+   eases, and it eases quickly. Nothing here changes size or weight on
+   hover or selection, so rows never shift under the cursor. */
 .pear-workspace-shell button,
-.pear-workspace-shell a {
-    border-radius: var(--pear-radius-px);
+.pear-workspace-shell a,
+.pear-workspace-tree-row {
     transition:
-        border-color var(--pear-dur-1) var(--pear-ease),
         background-color var(--pear-dur-1) var(--pear-ease),
         color var(--pear-dur-1) var(--pear-ease),
-        opacity var(--pear-dur-1) var(--pear-ease);
+        box-shadow var(--pear-dur-1) var(--pear-ease);
 }
 
 .pear-workspace-shell button:focus-visible,
 .pear-workspace-shell a:focus-visible,
 .pear-workspace-shell input:focus-visible,
-.pear-workspace-shell [role="treeitem"]:focus-visible {
+.pear-workspace-shell [role="treeitem"]:focus-visible,
+.pear-workspace-shell [data-workspace-path]:focus-visible {
     outline: 2px solid var(--pear-workspace-focus);
     outline-offset: -2px;
 }
 
+/* One quiet control shape for every button and link in the shell. */
+.pear-workspace-shell__header button,
+.pear-workspace-shell__document-actions > button,
+.pear-workspace-shell__document-actions > a,
+.pear-workspace-file-menu-wrap > button,
+.pear-workspace-shell [data-role="conflict"] button,
+.pear-workspace-shell__nontext button,
+.pear-workspace-shell__status button {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    min-block-size: var(--pear-workspace-control-height);
+    padding: 0 8px;
+    border: 0;
+    border-radius: var(--pear-workspace-control-radius);
+    color: var(--pear-workspace-muted);
+    background: transparent;
+    font-size: 12px;
+    font-weight: 500;
+    text-decoration: none;
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+.pear-workspace-shell__header button:hover,
+.pear-workspace-shell__document-actions > button:hover,
+.pear-workspace-shell__document-actions > a:hover,
+.pear-workspace-file-menu-wrap > button:hover,
+.pear-workspace-file-menu-wrap > button[aria-expanded="true"],
+.pear-workspace-shell [data-role="conflict"] button:hover,
+.pear-workspace-shell__nontext button:hover,
+.pear-workspace-shell__status button:hover {
+    color: var(--pear-ink-1);
+    background: var(--pear-workspace-hover);
+}
+
+.pear-workspace-shell__header button:active,
+.pear-workspace-shell__document-actions > button:active,
+.pear-workspace-shell__document-actions > a:active,
+.pear-workspace-file-menu-wrap > button:active {
+    background: var(--pear-workspace-pressed);
+}
+
+.pear-workspace-shell .pear-workspace-icon-button {
+    inline-size: var(--pear-workspace-control-height);
+    padding: 0;
+}
+
+.pear-workspace-shell .zulip-icon {
+    font-size: 15px;
+}
+
+.pear-workspace-shell__document-actions > button:disabled,
+.pear-workspace-shell__document-actions > [aria-disabled="true"] {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+.pear-workspace-shell__button-label {
+    display: none;
+}
+
 .pear-workspace-shell__header {
-    position: sticky;
-    z-index: 4;
-    inset-block-start: 0;
     display: flex;
     align-items: center;
-    gap: var(--pear-space-2);
-    min-block-size: 40px;
-    padding: var(--pear-space-1) var(--pear-space-3);
+    gap: var(--pear-space-1);
+    min-block-size: 36px;
+    padding: var(--pear-space-1) var(--pear-space-2);
     border-block-end: 1px solid var(--pear-workspace-border);
-    background: inherit;
+    background: var(--pear-surface-1);
 }
 
 .pear-workspace-shell__identity {
@@ -75,11 +160,12 @@
     min-inline-size: 0;
     align-items: baseline;
     gap: var(--pear-space-2);
+    padding-inline: var(--pear-space-1);
 }
 
 .pear-workspace-shell__identity strong {
     overflow: hidden;
-    font-family: var(--pear-font-pixel, "Geist Pixel", monospace);
+    font-family: var(--pear-font-pixel);
     font-size: 12px;
     font-weight: 400;
     text-overflow: ellipsis;
@@ -89,86 +175,91 @@
 .pear-workspace-shell__identity [data-role="workspace-meta"],
 .pear-workspace-shell__status,
 .pear-workspace-tree-row__status {
-    color: var(--pear-workspace-muted);
-    font-family: var(--pear-font-pixel, "Geist Pixel", monospace);
+    overflow: hidden;
+    color: var(--pear-workspace-faint);
+    font-family: var(--pear-font-pixel);
     font-size: 11px;
     letter-spacing: 0.01em;
-}
-
-.pear-workspace-shell__header button,
-.pear-workspace-shell__document-actions button,
-.pear-workspace-shell__document-actions a,
-.pear-workspace-shell [data-role="conflict"] button {
-    min-block-size: 28px;
-    padding: var(--pear-space-1) var(--pear-space-2);
-    border: 1px solid var(--pear-workspace-border);
-    color: inherit;
-    background: transparent;
-    text-decoration: none;
-    cursor: pointer;
-}
-
-.pear-workspace-shell__header button:hover,
-.pear-workspace-shell__document-actions button:hover,
-.pear-workspace-shell__document-actions a:hover,
-.pear-workspace-shell [data-role="conflict"] button:hover {
-    background: var(--pear-workspace-hover);
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .pear-workspace-shell__body {
     display: grid;
     min-block-size: 0;
     grid-template-columns:
-        var(--pear-workspace-explorer-width, 272px) var(--pear-space-1)
-        minmax(0, 1fr);
+        min(var(--pear-workspace-explorer-width, 248px), 44cqi)
+        1px minmax(0, 1fr);
 }
 
+/* A column, not a grid: the search results row comes and goes, and the
+   tree must keep the remaining height (and its own scrolling) either way. */
 .pear-workspace-shell__explorer {
-    display: grid;
+    display: flex;
+    flex-direction: column;
     min-inline-size: 0;
     min-block-size: 0;
-    grid-template-rows: auto auto minmax(0, 1fr);
     background: var(--pear-surface-1);
 }
 
+/* A hairline to look at, eight pixels to grab. */
 .pear-workspace-shell__splitter {
     position: relative;
     z-index: 2;
-    min-inline-size: var(--pear-space-1);
-    border-inline: 1px solid transparent;
     background: var(--pear-workspace-border);
     cursor: col-resize;
     touch-action: none;
-    transition:
-        border-color var(--pear-dur-1) var(--pear-ease),
-        background-color var(--pear-dur-1) var(--pear-ease);
+    transition: background-color var(--pear-dur-1) var(--pear-ease);
+}
+
+.pear-workspace-shell__splitter::after {
+    position: absolute;
+    inset: 0 -4px;
+    content: "";
 }
 
 .pear-workspace-shell__splitter:hover,
 .pear-workspace-shell__splitter:focus-visible,
 .pear-workspace-shell__splitter[data-resizing="true"] {
-    border-color: var(--pear-workspace-focus);
     background: var(--pear-workspace-focus);
+    box-shadow: 0 0 0 1px var(--pear-workspace-focus);
     outline: 0;
 }
 
 .pear-workspace-shell [data-role="search-form"] {
-    padding: var(--pear-space-2);
-    border-block-end: 1px solid var(--pear-workspace-border);
+    flex: 0 0 auto;
+    margin: 0;
+    padding: var(--pear-space-2) var(--pear-space-2) var(--pear-space-1);
 }
 
 .pear-workspace-shell [data-role="search-input"] {
     inline-size: 100%;
-    block-size: 32px;
+    block-size: 28px;
+    margin: 0;
     padding-inline: var(--pear-space-2);
     border: 1px solid var(--pear-workspace-border);
-    border-radius: var(--pear-radius-chip);
+    border-radius: 7px;
     background: var(--pear-surface-0);
+    transition:
+        border-color var(--pear-dur-1) var(--pear-ease),
+        box-shadow var(--pear-dur-1) var(--pear-ease);
+}
+
+.pear-workspace-shell [data-role="search-input"]::placeholder {
+    color: var(--pear-workspace-faint);
+}
+
+.pear-workspace-shell [data-role="search-input"]:focus-visible {
+    border-color: var(--pear-workspace-focus);
+    box-shadow: 0 0 0 3px var(--pear-interaction-fill-strong);
+    outline: 0;
 }
 
 .pear-workspace-shell [data-role="search-results"] {
+    flex: 0 0 auto;
     max-block-size: 220px;
     overflow: auto;
+    padding: 0 var(--pear-space-1) var(--pear-space-1);
     border-block-end: 1px solid var(--pear-workspace-border);
 }
 
@@ -176,14 +267,17 @@
     display: block;
     overflow: hidden;
     inline-size: 100%;
-    min-block-size: 32px;
-    padding: var(--pear-space-1) var(--pear-space-2);
+    min-block-size: var(--pear-workspace-row-height);
+    padding: 0 var(--pear-space-2);
     border: 0;
-    border-radius: 0;
+    border-radius: var(--pear-workspace-control-radius);
     background: transparent;
+    font-family: var(--pear-font-mono);
+    font-size: 12px;
     text-align: start;
     text-overflow: ellipsis;
     white-space: nowrap;
+    cursor: pointer;
 }
 
 .pear-workspace-shell [data-role="search-results"] button:hover {
@@ -191,27 +285,23 @@
 }
 
 .pear-workspace-shell__tree {
+    flex: 1 1 0;
     overflow: auto;
     min-block-size: 0;
-    padding-block: var(--pear-space-2);
+    padding: var(--pear-space-1) 6px var(--pear-space-3);
+    /* Rows are uniform, so the browser can skip offscreen ones. */
+    contain: content;
 }
 
 .pear-workspace-tree-row {
     display: grid;
-    min-block-size: var(--pear-workspace-row-height);
-    grid-template-columns: 16px minmax(0, 1fr) auto;
+    block-size: var(--pear-workspace-row-height);
+    grid-template-columns: 14px 16px minmax(0, 1fr) auto;
     align-items: center;
     gap: var(--pear-space-1);
-    padding-inline: calc(
-            var(--pear-space-2) + var(--pear-tree-depth, 0) *
-                var(--pear-space-4)
-        )
-        var(--pear-space-2);
-    border-radius: var(--pear-radius-chip);
+    padding-inline: calc(4px + var(--pear-tree-depth, 0) * 14px) 8px;
+    border-radius: var(--pear-workspace-control-radius);
     cursor: default;
-    transition:
-        background-color var(--pear-dur-1) var(--pear-ease),
-        color var(--pear-dur-1) var(--pear-ease);
     user-select: none;
 }
 
@@ -221,12 +311,52 @@
 
 .pear-workspace-tree-row[aria-selected="true"] {
     background: var(--pear-workspace-selected);
-    font-weight: 600;
 }
 
 .pear-workspace-tree-row__disclosure {
+    display: grid;
+    block-size: 14px;
+    place-items: center;
+    color: var(--pear-workspace-faint);
+}
+
+.pear-workspace-tree-row__disclosure .zulip-icon {
+    font-size: 12px;
+    transition: transform var(--pear-dur-1) var(--pear-ease);
+}
+
+.pear-workspace-tree-row__disclosure[data-state="expanded"] .zulip-icon {
+    transform: rotate(90deg);
+}
+
+.pear-workspace-tree-row__disclosure[data-state="none"] .zulip-icon,
+.pear-workspace-tree-row__disclosure[data-state="loading"] .zulip-icon {
+    display: none;
+}
+
+.pear-workspace-tree-row__disclosure[data-state="loading"]::after {
+    inline-size: 9px;
+    block-size: 9px;
+    border: 1.5px solid var(--pear-workspace-border);
+    border-block-start-color: var(--pear-workspace-muted);
+    border-radius: 50%;
+    content: "";
+    animation: pear-workspace-spin 0.6s linear infinite;
+}
+
+@keyframes pear-workspace-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.pear-workspace-shell .pear-workspace-tree-row__icon {
+    color: var(--pear-workspace-faint);
+    font-size: 14px;
+}
+
+.pear-workspace-shell .pear-workspace-tree-row__icon.zulip-icon-folder {
     color: var(--pear-workspace-muted);
-    text-align: center;
 }
 
 .pear-workspace-tree-row__name {
@@ -235,24 +365,43 @@
     white-space: nowrap;
 }
 
+.pear-workspace-tree-row__status[data-status="modified"],
+.pear-workspace-tree-row__status[data-status="renamed"] {
+    color: var(--pear-warn);
+}
+
+.pear-workspace-tree-row__status[data-status="added"],
+.pear-workspace-tree-row__status[data-status="untracked"] {
+    color: var(--pear-accent-ink);
+}
+
+.pear-workspace-tree-row__status[data-status="deleted"],
+.pear-workspace-tree-row__status[data-status="conflicted"] {
+    color: var(--pear-danger);
+}
+
 .pear-workspace-tree-row [data-action="load-more"] {
     padding-inline: var(--pear-space-1);
+    border: 0;
     color: var(--pear-workspace-focus);
+    background: transparent;
     font-size: 12px;
     cursor: pointer;
 }
 
 .pear-workspace-shell__tree > button {
-    inline-size: calc(100% - var(--pear-space-4));
-    margin: var(--pear-space-1) var(--pear-space-2);
-    padding: var(--pear-space-1);
-    border: 1px solid transparent;
+    inline-size: 100%;
+    min-block-size: var(--pear-workspace-row-height);
+    border: 0;
+    border-radius: var(--pear-workspace-control-radius);
     color: var(--pear-workspace-muted);
     background: transparent;
+    font-size: 12px;
+    cursor: pointer;
 }
 
 .pear-workspace-shell__tree > button:hover {
-    border-color: var(--pear-workspace-border);
+    color: var(--pear-ink-1);
     background: var(--pear-workspace-hover);
 }
 
@@ -267,73 +416,113 @@
 
 .pear-workspace-shell [data-role="tabs"] {
     display: flex;
-    min-block-size: 32px;
+    min-block-size: 36px;
+    align-items: center;
+    gap: 2px;
     overflow-x: auto;
+    padding: 0 6px;
     border-block-end: 1px solid var(--pear-workspace-border);
-    scrollbar-width: thin;
+    background: var(--pear-surface-1);
+    scrollbar-width: none;
+}
+
+.pear-workspace-shell [data-role="tabs"]:empty {
+    display: none;
 }
 
 .pear-workspace-file-tab-item {
     display: flex;
     flex: 0 0 auto;
-    max-inline-size: 240px;
-    border-inline-end: 1px solid var(--pear-workspace-border);
+    align-items: center;
+    max-inline-size: 220px;
+    block-size: var(--pear-workspace-control-height);
+    border-radius: var(--pear-workspace-control-radius);
+    color: var(--pear-workspace-muted);
+    transition:
+        background-color var(--pear-dur-1) var(--pear-ease),
+        color var(--pear-dur-1) var(--pear-ease);
+}
+
+.pear-workspace-file-tab-item:hover {
+    color: var(--pear-ink-1);
+    background: var(--pear-workspace-hover);
+}
+
+.pear-workspace-file-tab-item:has([aria-selected="true"]) {
+    box-shadow:
+        0 0 0 1px var(--pear-workspace-border),
+        0 1px 2px hsl(0deg 0% 0% / 6%);
+    color: var(--pear-ink-1);
+    background: var(--pear-surface-0);
 }
 
 .pear-workspace-file-tab {
     flex: 1 1 auto;
-    max-inline-size: 220px;
-    padding: var(--pear-space-1) var(--pear-space-3);
+    min-inline-size: 0;
+    block-size: 100%;
+    padding: 0 2px 0 10px;
     overflow: hidden;
     border: 0;
-    border-radius: 0;
     background: transparent;
+    font-size: 12px;
+    font-weight: 500;
     text-overflow: ellipsis;
     white-space: nowrap;
-}
-
-.pear-workspace-file-tab-close {
-    flex: 0 0 26px;
-    padding: 0;
-    border: 0;
-    border-radius: 0;
-    color: var(--pear-workspace-muted);
-    background: transparent;
     cursor: pointer;
-}
-
-.pear-workspace-file-tab-close:hover {
-    color: inherit;
-    background: var(--pear-workspace-hover);
-}
-
-.pear-workspace-file-tab[aria-selected="true"] {
-    box-shadow: inset 0 -2px var(--pear-workspace-focus);
-    background: var(--pear-workspace-hover);
 }
 
 .pear-workspace-file-tab--preview {
     font-style: italic;
 }
 
+.pear-workspace-file-tab-close {
+    display: grid;
+    flex: 0 0 18px;
+    block-size: 18px;
+    margin-inline-end: 4px;
+    padding: 0;
+    place-items: center;
+    border: 0;
+    border-radius: 5px;
+    color: var(--pear-workspace-muted);
+    background: transparent;
+    opacity: 0;
+    cursor: pointer;
+}
+
+.pear-workspace-shell .pear-workspace-file-tab-close .zulip-icon {
+    font-size: 12px;
+}
+
+.pear-workspace-file-tab-item:hover .pear-workspace-file-tab-close,
+.pear-workspace-file-tab-item:focus-within .pear-workspace-file-tab-close,
+.pear-workspace-file-tab-item:has([aria-selected="true"])
+    .pear-workspace-file-tab-close {
+    opacity: 1;
+}
+
+.pear-workspace-file-tab-close:hover {
+    color: var(--pear-ink-1);
+    background: var(--pear-workspace-pressed);
+}
+
 .pear-workspace-shell__document-header {
-    position: sticky;
-    z-index: 3;
-    inset-block-start: 0;
     display: flex;
-    min-block-size: 40px;
+    min-block-size: 36px;
     align-items: center;
     justify-content: space-between;
-    gap: 12px;
-    padding: var(--pear-space-1) var(--pear-space-3);
+    gap: var(--pear-space-3);
+    padding: var(--pear-space-1) var(--pear-space-2) var(--pear-space-1)
+        var(--pear-space-3);
     border-block-end: 1px solid var(--pear-workspace-border);
-    background: inherit;
+    background: var(--pear-surface-0);
 }
 
 .pear-workspace-shell [data-role="breadcrumb"] {
     overflow: hidden;
+    min-inline-size: 0;
     color: var(--pear-workspace-muted);
-    font-family: var(--pear-font-mono, "Geist Mono VF", monospace);
+    font-family: var(--pear-font-mono);
     font-size: 12px;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -349,35 +538,99 @@
 
 .pear-workspace-shell [data-role="breadcrumb"] button:hover {
     color: var(--pear-ink-1);
-    text-decoration: underline;
+}
+
+.pear-workspace-shell [data-role="breadcrumb"] [aria-current="page"] {
+    color: var(--pear-ink-1);
+}
+
+.pear-workspace-breadcrumb-separator {
+    margin-inline: 5px;
+    color: var(--pear-workspace-faint);
 }
 
 .pear-workspace-shell__document-actions {
     display: flex;
     flex: 0 0 auto;
     align-items: center;
-    gap: var(--pear-space-1);
+    gap: 2px;
+}
+
+/* Read / Rich / Source is one choice, so it is one control. */
+.pear-workspace-segmented {
+    display: inline-flex;
+    gap: 2px;
+    margin-inline: var(--pear-space-1);
+    padding: 2px;
+    border-radius: 8px;
+    background: var(--pear-surface-2);
+}
+
+/* A choice of one is not a choice. */
+.pear-workspace-segmented:not(
+        :has(button:not([hidden]) ~ button:not([hidden]))
+    ) {
+    display: none;
+}
+
+.pear-workspace-segmented button {
+    min-block-size: 22px;
+    padding: 0 10px;
+    border: 0;
+    border-radius: 6px;
+    color: var(--pear-workspace-muted);
+    background: transparent;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+}
+
+.pear-workspace-segmented button[hidden] {
+    display: none;
+}
+
+.pear-workspace-segmented button:hover {
+    color: var(--pear-ink-1);
+}
+
+.pear-workspace-segmented button[aria-pressed="true"] {
+    box-shadow:
+        0 0 0 0.5px var(--pear-workspace-border),
+        0 1px 2px hsl(0deg 0% 0% / 14%);
+    color: var(--pear-ink-1);
+    background: var(--pear-surface-0);
+}
+
+.pear-workspace-segmented button:disabled,
+.pear-workspace-segmented button[aria-disabled="true"] {
+    opacity: 0.45;
+    cursor: not-allowed;
 }
 
 .pear-workspace-shell__mode-feedback {
-    max-inline-size: min(42vw, 520px);
-    color: var(--pear-workspace-muted);
-    font-family: var(--pear-font-ui, "Hanken Grotesk VF", sans-serif);
-    font-size: 12px;
+    max-inline-size: min(42cqi, 420px);
+    overflow: hidden;
+    color: var(--pear-workspace-faint);
+    font-size: 11px;
     line-height: 1.25;
-    white-space: normal;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .pear-workspace-shell__mode-feedback[data-state="source_only"] {
-    color: var(--pear-warn, var(--pear-workspace-muted));
+    color: var(--pear-warn);
 }
 
 .pear-workspace-shell__mode-feedback[data-state="load_error"] {
-    color: var(--pear-danger, var(--pear-workspace-muted));
+    color: var(--pear-danger);
 }
 
 .pear-workspace-file-menu-wrap {
     position: relative;
+}
+
+.pear-workspace-shell .pear-workspace-file-menu-wrap > button .zulip-icon {
+    font-size: 11px;
 }
 
 .pear-workspace-file-menu {
@@ -386,24 +639,49 @@
     inset-block-start: calc(100% + 4px);
     inset-inline-end: 0;
     display: grid;
-    min-inline-size: 190px;
-    padding: 4px;
-    border: 1px solid var(--pear-workspace-border);
-    border-radius: var(--pear-radius-px);
+    min-inline-size: 196px;
+    padding: 5px;
+    border-radius: 10px;
     box-shadow: var(--pear-shadow-pop);
-    background: var(--pear-surface-2);
+    background: var(--pear-surface-0);
+    animation: pear-workspace-menu-in var(--pear-dur-1) var(--pear-ease);
+    transform-origin: top right;
+}
+
+@keyframes pear-workspace-menu-in {
+    from {
+        opacity: 0;
+        transform: scale(0.97) translateY(-2px);
+    }
 }
 
 .pear-workspace-file-menu[hidden] {
     display: none;
 }
 
-.pear-workspace-shell__document-actions
-    .pear-workspace-file-menu
-    [role="menuitem"] {
-    inline-size: 100%;
-    border-color: transparent;
+.pear-workspace-file-menu [role="menuitem"] {
+    min-block-size: 28px;
+    padding: 0 10px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    font-size: 13px;
     text-align: start;
+    cursor: pointer;
+}
+
+.pear-workspace-file-menu [role="menuitem"][hidden] {
+    display: none;
+}
+
+.pear-workspace-file-menu [role="menuitem"]:hover,
+.pear-workspace-file-menu [role="menuitem"]:focus-visible {
+    background: var(--pear-workspace-hover);
+    outline: 0;
+}
+
+.pear-workspace-file-menu [data-file-action="delete"] {
+    color: var(--pear-danger);
 }
 
 .pear-workspace-file-dialog-overlay {
@@ -421,10 +699,9 @@
     inline-size: min(100%, 520px);
     max-block-size: min(760px, calc(100vh - 48px));
     overflow: auto;
-    border: 1px solid var(--pear-workspace-border);
     border-radius: var(--pear-radius-card);
     box-shadow: var(--pear-shadow-pop);
-    background: var(--pear-surface-1);
+    background: var(--pear-surface-0);
 }
 
 .pear-workspace-file-dialog > header,
@@ -481,11 +758,27 @@
 }
 
 .pear-workspace-file-dialog button {
-    min-block-size: 32px;
-    padding: var(--pear-space-1) var(--pear-space-2);
+    min-block-size: 28px;
+    padding: 0 12px;
     border: 1px solid var(--pear-workspace-border);
+    border-radius: var(--pear-workspace-control-radius);
     color: inherit;
-    background: transparent;
+    background: var(--pear-surface-0);
+    font-weight: 500;
+}
+
+.pear-workspace-file-dialog button[type="submit"] {
+    border-color: transparent;
+    color: var(--pear-surface-0);
+    background: var(--pear-interaction);
+}
+
+.pear-workspace-file-dialog button[type="submit"]:not(:disabled):hover {
+    background: color-mix(
+        in srgb,
+        var(--pear-interaction) 88%,
+        var(--pear-ink-1)
+    );
 }
 
 .pear-workspace-file-dialog button:not(:disabled) {
@@ -529,24 +822,8 @@
 
 .pear-workspace-file-dialog [data-role="history-body"] span {
     color: var(--pear-workspace-muted);
-    font-family: var(--pear-font-mono, "Geist Mono VF", monospace);
+    font-family: var(--pear-font-mono);
     font-size: 11px;
-}
-
-.pear-workspace-shell__document-actions button[aria-pressed="true"] {
-    border-color: var(--pear-workspace-focus);
-    box-shadow: inset 0 -2px var(--pear-workspace-focus);
-    background: var(--pear-workspace-selected);
-}
-
-.pear-workspace-shell__document-actions button:disabled {
-    cursor: not-allowed;
-    opacity: 0.58;
-}
-
-.pear-workspace-shell__document-actions [aria-disabled="true"] {
-    cursor: not-allowed;
-    opacity: 0.45;
 }
 
 .pear-workspace-shell [data-role="conflict"] {
@@ -571,8 +848,7 @@
 .pear-workspace-shell [data-role="conflict"] summary {
     color: var(--pear-ink-2);
     cursor: pointer;
-    font-family: var(--pear-font-pixel, "Geist Pixel", monospace);
-    font-size: 11px;
+    font-size: 12px;
 }
 
 .pear-workspace-shell [data-role="conflict-remote"] {
@@ -584,7 +860,7 @@
     border-radius: var(--pear-radius-chip);
     background: var(--pear-surface-0);
     color: var(--pear-ink-1);
-    font-family: var(--pear-font-mono, "Geist Mono VF", monospace);
+    font-family: var(--pear-font-mono);
     white-space: pre-wrap;
 }
 
@@ -638,7 +914,7 @@
     block-size: 100%;
     color: var(--pear-ink-1);
     background: var(--pear-workspace-editor-surface);
-    font-family: var(--pear-font-mono, "Geist Mono VF", monospace);
+    font-family: var(--pear-font-mono);
     font-size: 13px;
     line-height: 1.55;
 }
@@ -648,9 +924,9 @@
 }
 
 .pear-workspace-shell__editor .cm-gutters {
-    border-inline-end: 1px solid var(--pear-workspace-border);
-    background: var(--pear-workspace-editor-gutter);
-    color: var(--pear-ink-3, var(--pear-workspace-muted));
+    border-inline-end: 0;
+    background: var(--pear-workspace-editor-surface);
+    color: var(--pear-workspace-faint);
 }
 
 .pear-workspace-shell__editor .cm-activeLineGutter {
@@ -688,7 +964,7 @@
     min-block-size: 100%;
     margin-inline: auto;
     padding: 38px 0 96px;
-    font-family: var(--pear-font-ui, "Hanken Grotesk VF", sans-serif);
+    font-family: var(--pear-font-ui);
     font-size: 16px;
     line-height: 1.62;
 }
@@ -720,7 +996,7 @@
 .pear-workspace-shell .pear-workspace-rich-editor .milkdown .ProseMirror h2,
 .pear-workspace-shell .pear-workspace-rich-editor .milkdown .ProseMirror h3 {
     color: inherit;
-    font-family: var(--pear-font-ui, "Hanken Grotesk VF", sans-serif);
+    font-family: var(--pear-font-ui);
     font-weight: 600;
     line-height: 1.2;
     text-wrap: balance;
@@ -798,7 +1074,7 @@
 
 .pear-workspace-shell .pear-workspace-rich-editor .milkdown .ProseMirror code,
 .pear-workspace-shell .pear-workspace-rich-editor .milkdown .ProseMirror pre {
-    font-family: var(--pear-font-mono, "Geist Mono VF", monospace);
+    font-family: var(--pear-font-mono);
     font-size: 0.88em;
 }
 
@@ -809,17 +1085,16 @@
     :not(pre)
     > code {
     padding: 0.12em 0.34em;
-    border: 1px solid var(--pear-workspace-border);
-    border-radius: 2px;
+    border-radius: 5px;
     background: var(--pear-workspace-hover);
 }
 
 .pear-workspace-shell .pear-workspace-rich-editor .milkdown .ProseMirror pre {
     overflow-x: auto;
-    padding: 13px 15px;
+    padding: 12px 14px;
     border: 1px solid var(--pear-workspace-border);
-    border-radius: 2px;
-    background: var(--pear-workspace-hover);
+    border-radius: 10px;
+    background: var(--pear-surface-1);
     line-height: 1.5;
 }
 
@@ -873,34 +1148,15 @@
     object-fit: contain;
 }
 
-.pear-workspace-shell__nontext button,
-.pear-workspace-shell__status button {
-    min-block-size: 24px;
-    padding: var(--pear-space-1) var(--pear-space-2);
-    border: 1px solid var(--pear-workspace-border);
-    background: transparent;
-    color: inherit;
-    cursor: pointer;
-}
-
-.pear-workspace-shell__nontext button:hover,
-.pear-workspace-shell__status button:hover {
-    background: var(--pear-workspace-hover);
-}
-
 .pear-workspace-shell__status {
-    position: sticky;
-    z-index: 3;
-    inset-block-end: 0;
     display: flex;
     min-block-size: 24px;
     align-items: center;
     justify-content: space-between;
     gap: var(--pear-space-2);
-    padding: var(--pear-space-1) var(--pear-space-2);
+    padding: 2px var(--pear-space-3);
     border-block-start: 1px solid var(--pear-workspace-border);
-    background: inherit;
-    text-align: end;
+    background: var(--pear-surface-1);
 }
 
 .pear-workspace-shell__status [data-role="status-actions"] {
@@ -935,7 +1191,7 @@
 
 .pear-workspace-readme-empty__glyph {
     color: var(--pear-workspace-focus);
-    font-family: var(--pear-font-pixel, "Geist Pixel", monospace);
+    font-family: var(--pear-font-pixel);
     font-size: 11px;
 }
 
@@ -946,19 +1202,190 @@
 }
 
 .pear-workspace-readme-empty button {
-    min-block-size: 32px;
+    min-block-size: 30px;
     margin-block-start: 8px;
-    padding: var(--pear-space-1) var(--pear-space-2);
-    border: 1px solid var(--pear-workspace-focus);
-    background: transparent;
+    padding: 0 14px;
+    border: 0;
+    border-radius: var(--pear-workspace-control-radius);
+    color: var(--pear-surface-0);
+    background: var(--pear-interaction);
+    font-weight: 500;
     cursor: pointer;
-    font-family: var(--pear-font-pixel, "Geist Pixel", monospace);
-    font-size: 11px;
+}
+
+/* The rendered reading view for Markdown: what a README looks like when
+   nobody is editing it. */
+.pear-workspace-shell__preview {
+    overflow: auto;
+    block-size: 100%;
+    padding: 32px max(24px, calc((100% - 74ch) / 2)) 96px;
+    color: var(--pear-ink-1);
+    font-family: var(--pear-font-ui);
+    font-size: 15px;
+    line-height: 1.65;
+    overflow-wrap: break-word;
+}
+
+.pear-workspace-shell__preview[hidden] {
+    display: none;
+}
+
+.pear-workspace-shell__preview > :first-child {
+    margin-block-start: 0;
+}
+
+.pear-workspace-shell__preview :is(h1, h2, h3, h4, h5, h6) {
+    font-weight: 600;
+    line-height: 1.25;
+    text-wrap: balance;
+}
+
+.pear-workspace-shell__preview h1 {
+    margin: 0 0 0.7em;
+    font-size: 28px;
+    letter-spacing: -0.02em;
+}
+
+.pear-workspace-shell__preview h2 {
+    margin: 1.8em 0 0.65em;
+    padding-block-end: 0.35em;
+    border-block-end: 1px solid var(--pear-workspace-border);
+    font-size: 20px;
+    letter-spacing: -0.012em;
+}
+
+.pear-workspace-shell__preview h3 {
+    margin: 1.5em 0 0.5em;
+    font-size: 16.5px;
+}
+
+.pear-workspace-shell__preview :is(h4, h5, h6) {
+    margin: 1.3em 0 0.4em;
+    font-size: 15px;
+}
+
+.pear-workspace-shell__preview
+    :is(p, ul, ol, blockquote, pre, details, .pear-workspace-preview__table) {
+    margin: 0 0 1em;
+}
+
+.pear-workspace-shell__preview :is(ul, ol) {
+    padding-inline-start: 1.5em;
+}
+
+.pear-workspace-shell__preview li + li {
+    margin-block-start: 0.25em;
+}
+
+.pear-workspace-shell__preview li > :is(ul, ol) {
+    margin: 0.25em 0 0;
+}
+
+.pear-workspace-shell__preview li:has(> input[type="checkbox"]) {
+    list-style: none;
+    margin-inline-start: -1.3em;
+}
+
+.pear-workspace-shell__preview a {
+    color: var(--pear-interaction);
+    text-decoration: underline;
+    text-decoration-color: color-mix(
+        in srgb,
+        var(--pear-interaction) 40%,
+        transparent
+    );
+    text-underline-offset: 2px;
+}
+
+.pear-workspace-shell__preview a[data-workspace-path] {
+    cursor: pointer;
+}
+
+.pear-workspace-shell__preview :is(code, pre, kbd) {
+    font-family: var(--pear-font-mono);
+    font-size: 0.87em;
+}
+
+.pear-workspace-shell__preview :not(pre) > code {
+    padding: 0.1em 0.36em;
+    border-radius: 5px;
+    background: var(--pear-workspace-hover);
+}
+
+.pear-workspace-shell__preview pre {
+    overflow-x: auto;
+    padding: 12px 14px;
+    border: 1px solid var(--pear-workspace-border);
+    border-radius: 10px;
+    background: var(--pear-surface-1);
+    line-height: 1.5;
+}
+
+.pear-workspace-shell__preview pre code {
+    font-size: inherit;
+}
+
+.pear-workspace-shell__preview kbd {
+    padding: 0.1em 0.4em;
+    border: 1px solid var(--pear-workspace-border);
+    border-block-end-width: 2px;
+    border-radius: 5px;
+    background: var(--pear-surface-1);
+}
+
+.pear-workspace-shell__preview blockquote {
+    padding-inline-start: 14px;
+    border-inline-start: 3px solid var(--pear-surface-3);
+    color: var(--pear-workspace-muted);
+}
+
+.pear-workspace-shell__preview img {
+    max-inline-size: 100%;
+    vertical-align: middle;
+}
+
+.pear-workspace-shell__preview img:not([src]) {
+    display: none;
+}
+
+.pear-workspace-shell__preview hr {
+    margin: 2em 0;
+    border: 0;
+    border-block-start: 1px solid var(--pear-workspace-border);
+}
+
+.pear-workspace-preview__table {
+    overflow-x: auto;
+}
+
+.pear-workspace-shell__preview table {
+    border-collapse: collapse;
+    font-size: 14px;
+}
+
+.pear-workspace-shell__preview :is(th, td) {
+    padding: 6px 12px;
+    border: 1px solid var(--pear-workspace-border);
+    text-align: start;
+    vertical-align: top;
+}
+
+.pear-workspace-shell__preview th {
+    background: var(--pear-surface-1);
+    font-weight: 600;
+}
+
+.pear-workspace-shell__preview [align="center"] {
+    text-align: center;
+}
+
+.pear-workspace-shell__preview [align="right"] {
+    text-align: end;
 }
 
 /* README is a calm context room, not a file tree with most of its chrome
    hidden. It shares the live document session with Files, but presents the
-   document at reading width and leaves only the Source/Rich escape hatch. */
+   document at reading width and leaves only the Read/Rich/Source choice. */
 .pear-workspace-shell[data-room="readme"] {
     grid-template-rows: minmax(0, 1fr);
 }
@@ -1005,30 +1432,11 @@
 
 .pear-workspace-shell[data-room="readme"] .pear-workspace-shell__status {
     grid-row: 4;
-    border: 0;
-    background: transparent;
 }
 
 .pear-workspace-shell[data-room="readme"]
     .pear-workspace-shell__document-header {
-    position: sticky;
-    z-index: 4;
-    inset: 0 0 auto;
-    min-block-size: 38px;
     justify-content: flex-end;
-    padding: var(--pear-space-1) var(--pear-space-3);
-    border-block-end: 1px solid var(--pear-workspace-border);
-    background: var(--pear-workspace-editor-surface);
-}
-
-.pear-workspace-shell[data-room="readme"]
-    .pear-workspace-shell__document-actions
-    button {
-    min-block-size: 24px;
-    padding: var(--pear-space-1) var(--pear-space-2);
-    border-color: transparent;
-    font-family: var(--pear-font-pixel, "Geist Pixel", monospace);
-    font-size: 11px;
 }
 
 .pear-workspace-shell[data-room="readme"][data-readme-state="absent"]
@@ -1036,25 +1444,28 @@
     display: none;
 }
 
-.pear-workspace-shell__explorer-toggle {
-    display: none;
+/* Docked: the toggle folds the explorer away. The custom property tells
+   the shell's script which of the two layouts is in effect. */
+@container (width >= 620px) {
+    .pear-workspace-shell {
+        --pear-workspace-explorer-mode: docked;
+    }
+
+    .pear-workspace-shell--explorer-collapsed .pear-workspace-shell__body {
+        grid-template-columns: 0 0 minmax(0, 1fr);
+    }
+
+    .pear-workspace-shell--explorer-collapsed
+        :is(.pear-workspace-shell__explorer, .pear-workspace-shell__splitter) {
+        visibility: hidden;
+        overflow: hidden;
+    }
 }
 
-@container (width < 800px) {
-    .pear-workspace-shell__header {
-        flex-wrap: wrap;
-    }
-
-    .pear-workspace-shell__identity {
-        flex-basis: calc(100% - 140px);
-    }
-
+/* Narrow: the explorer becomes a drawer over the document. */
+@container (width < 620px) {
     .pear-workspace-shell__identity [data-role="workspace-meta"] {
         display: none;
-    }
-
-    .pear-workspace-shell__explorer-toggle {
-        display: inline-block;
     }
 
     .pear-workspace-shell__body {
@@ -1070,46 +1481,54 @@
         position: absolute;
         z-index: 5;
         inset: 0;
-        display: none;
         background: color-mix(in srgb, var(--pear-ink-1) 22%, transparent);
         content: "";
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity var(--pear-dur-2) var(--pear-ease);
     }
 
     .pear-workspace-shell--explorer-open .pear-workspace-shell__body::after {
-        display: block;
+        opacity: 1;
+        pointer-events: auto;
     }
 
+    /* The drawer stays in the tree while closed so it can slide instead
+       of popping, and so its rows are already laid out when it opens. */
     .pear-workspace-shell__explorer {
         position: absolute;
         z-index: 6;
         inset: 0 auto 0 0;
-        display: none;
-        inline-size: min(88vw, 320px);
-        border-inline-end: 1px solid var(--pear-workspace-border);
+        inline-size: min(86cqi, 300px);
         box-shadow: var(--pear-shadow-pop);
+        visibility: hidden;
+        transform: translateX(-100%);
+        transition:
+            transform var(--pear-dur-2) var(--pear-ease),
+            visibility 0s linear var(--pear-dur-2);
     }
 
     .pear-workspace-shell--explorer-open .pear-workspace-shell__explorer {
-        display: grid;
+        visibility: visible;
+        transform: none;
+        transition: transform var(--pear-dur-2) var(--pear-ease);
     }
 
     .pear-workspace-shell__document {
         block-size: 100%;
     }
 
-    .pear-workspace-shell__document-header {
-        align-items: flex-start;
-        flex-direction: column;
-    }
-
-    .pear-workspace-shell__document-actions {
-        inline-size: 100%;
-        overflow-x: auto;
+    .pear-workspace-shell__mode-feedback {
+        display: none;
     }
 
     .pear-workspace-shell .pear-workspace-rich-editor {
         inline-size: min(100% - 24px, 72ch);
         padding-block-start: 20px;
+    }
+
+    .pear-workspace-shell__preview {
+        padding: 20px 16px 72px;
     }
 
     .pear-workspace-file-dialog-overlay {
@@ -1129,5 +1548,6 @@
     .pear-workspace-shell *::after {
         scroll-behavior: auto !important;
         transition: none !important;
+        animation: none !important;
     }
 }

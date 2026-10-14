@@ -38,6 +38,7 @@ import * as message_edit from "./message_edit.ts";
 import * as message_edit_history from "./message_edit_history.ts";
 import * as message_lists from "./message_lists.ts";
 import * as message_scroll_state from "./message_scroll_state.ts";
+import * as message_threads from "./message_threads.ts";
 import * as message_view from "./message_view.ts";
 import * as modals from "./modals.ts";
 import * as narrow_state from "./narrow_state.ts";
@@ -543,6 +544,12 @@ function process_escape_key(e: JQuery.KeyDownEvent): boolean {
 
     if (stream_list.is_zoomed_in()) {
         stream_list.zoom_out();
+        return true;
+    }
+
+    // An open thread is the topmost layer left; its own listener closes
+    // it, and this Esc does nothing more.
+    if (message_threads.is_open()) {
         return true;
     }
 
@@ -1098,7 +1105,10 @@ function process_hotkey(e: JQuery.KeyDownEvent, hotkey: Hotkey): boolean {
                 case "page_down": {
                     // so that it always goes to the end of the text box.
                     const height = util.the($(":focus")).scrollHeight;
-                    scroll_util.smooth_scroll_to($(":focus").caret(Number.POSITIVE_INFINITY), height);
+                    scroll_util.smooth_scroll_to(
+                        $(":focus").caret(Number.POSITIVE_INFINITY),
+                        height,
+                    );
                     return true;
                 }
                 case "search_with_k":

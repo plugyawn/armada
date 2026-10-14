@@ -1,0 +1,102 @@
+/* The loops. A live run has one, the working mark; a person who is typing
+   has their dots. With hover.css this is the only file with @keyframes. */
+@layer armada.kit {
+    /* One sprite of four drawings side by side, moved a drawing at a time,
+       so no frame is blank. At rest it shows the last one, the whole
+       stone. Each drawing holds for a quarter of the loop; the keyframes
+       state the steps themselves because a stepped curve is not a token. */
+    .armada-mark[data-working] {
+        overflow: hidden;
+    }
+
+    .armada-mark[data-working] > use {
+        transform: translateX(calc(var(--px) * -21));
+    }
+
+    .armada-mark[data-working="live"] > use {
+        animation: armada-working calc(var(--step) * 8) linear infinite;
+    }
+
+    @keyframes armada-working {
+        0%,
+        24.99% {
+            transform: translateX(0);
+        }
+
+        25%,
+        49.99% {
+            transform: translateX(calc(var(--px) * -7));
+        }
+
+        50%,
+        74.99% {
+            transform: translateX(calc(var(--px) * -14));
+        }
+
+        75%,
+        100% {
+            transform: translateX(calc(var(--px) * -21));
+        }
+    }
+
+    /* A person typing: three round dots take turns to grow and darken. */
+    .armada-dots > use {
+        transform-box: fill-box;
+        transform-origin: 50% 50%;
+        opacity: 0.35;
+        animation: armada-dot var(--caret-period) var(--spring-settle) infinite;
+    }
+
+    .armada-dots > use:nth-child(2) {
+        animation-delay: calc(var(--caret-period) * 0.15);
+    }
+
+    .armada-dots > use:nth-child(3) {
+        animation-delay: calc(var(--caret-period) * 0.3);
+    }
+
+    @keyframes armada-dot {
+        0%,
+        60%,
+        100% {
+            opacity: 0.35;
+            transform: scale(0.83);
+        }
+
+        30% {
+            opacity: 1;
+            transform: scale(1.17);
+        }
+    }
+
+    /* Reduced motion holds a loop on one frame. A loop on a thing that is
+       not shown does not run. */
+    @media (prefers-reduced-motion: reduce) {
+        .armada-mark[data-working="live"] > use,
+        .armada-dots > use {
+            animation: none;
+        }
+
+        .armada-dots > use {
+            opacity: 0.7;
+            transform: none;
+        }
+    }
+
+    :where(:root[data-motion="reduced"])
+        .armada-mark[data-working="live"]
+        > use,
+    :where(:root[data-motion="reduced"]) .armada-dots > use {
+        animation: none;
+    }
+
+    :where(:root[data-motion="reduced"]) .armada-dots > use {
+        opacity: 0.7;
+        transform: none;
+    }
+
+    :where([inert]) .armada-mark[data-working] > use,
+    :where([inert]) .armada-dots > use {
+        animation: none;
+    }
+}

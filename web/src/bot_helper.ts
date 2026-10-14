@@ -220,7 +220,10 @@ export function initialize_bot_click_handlers(): void {
             const bot_email = $bot_info.attr("data-email");
             const api_key = await fetch_bot_api_key(bot_id, $("#bot-edit-form-error"), $(this));
             if (!api_key) {
-                scroll_util.smooth_scroll_to($("#bot-edit-form").closest(".simplebar-content-wrapper"), 0);
+                scroll_util.smooth_scroll_to(
+                    $("#bot-edit-form").closest(".simplebar-content-wrapper"),
+                    0,
+                );
                 return;
             }
 
@@ -238,7 +241,10 @@ export function initialize_bot_click_handlers(): void {
             const bot = bot_data.get(bot_id)!;
             const api_key = await fetch_bot_api_key(bot_id, $("#bot-edit-form-error"), $(this));
             if (!api_key) {
-                scroll_util.smooth_scroll_to($("#bot-edit-form").closest(".simplebar-content-wrapper"), 0);
+                scroll_util.smooth_scroll_to(
+                    $("#bot-edit-form").closest(".simplebar-content-wrapper"),
+                    0,
+                );
                 return;
             }
 

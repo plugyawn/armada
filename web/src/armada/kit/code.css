@@ -1,0 +1,19 @@
+/* Code is coloured, on its own surface: four roles, the same in both
+   themes. Red and green are left to the diff. */
+@layer armada.kit {
+    .armada-syntax-keyword {
+        color: var(--syn-k);
+    }
+
+    .armada-syntax-string {
+        color: var(--syn-s);
+    }
+
+    .armada-syntax-number {
+        color: var(--syn-n);
+    }
+
+    .armada-syntax-comment {
+        color: var(--syn-c);
+    }
+}

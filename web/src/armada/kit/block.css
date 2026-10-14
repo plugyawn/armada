@@ -1,0 +1,181 @@
+/* Blocks: what a machine would accept, and artifacts. One quiet opaque
+   fill, lighter than a bubble; the lane's width; beside talk and never
+   inside it. Inside a block nothing has a resting fill. */
+@layer armada.kit {
+    .armada-block {
+        width: 100%;
+        background: var(--block);
+        border-radius: var(--r-block);
+        padding: var(--s-2) var(--pad-x);
+        font: var(--t-text);
+        display: block;
+    }
+
+    .armada-block[data-kind="code"] {
+        font: var(--t-code);
+        white-space: pre;
+        overflow: hidden;
+    }
+
+    /* Artifact: a kind glyph, a title, one caption, one verb, 36 high. */
+    .armada-block[data-kind="artifact"] {
+        display: flex;
+        align-items: center;
+        gap: var(--s-2);
+        min-height: var(--h-l);
+        padding-top: 0;
+        padding-bottom: 0;
+        white-space: nowrap;
+    }
+
+    /* One line: a long title ends in an ellipsis before its caption. */
+    .armada-block[data-kind="artifact"] > span {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .armada-block[data-kind="artifact"] > .armada-artifact-caption {
+        flex: none;
+    }
+
+    .armada-block[data-kind="artifact"] > :where(.armada-glyph) {
+        color: var(--ink-2);
+    }
+
+    .armada-artifact-caption {
+        color: var(--ink-2);
+        font: var(--t-caption);
+        margin-left: var(--s-1);
+    }
+
+    .armada-block[data-kind="artifact"] > .armada-text-control {
+        margin-left: auto;
+        margin-right: calc(-1 * var(--s-2));
+    }
+
+    /* A question: its options are buttons, not lines of code. No fill
+       behind them. */
+    .armada-question {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--s-2);
+    }
+
+    /* A diff: one grid for every line: old number, new number, a sign,
+       then the code. An added line has a green ground and a plus; a removed
+       line a red ground and a minus. The block's radius clips them. */
+    .armada-block[data-kind="diff"] {
+        padding: var(--s-1) 0;
+        overflow: hidden;
+    }
+
+    .armada-diff-line {
+        display: grid;
+        grid-template-columns: var(--s-10) var(--s-10) var(--s-5) minmax(0, 1fr);
+        align-items: baseline;
+        padding: 0 var(--pad-x) 0 0;
+        white-space: pre;
+        font: var(--t-code);
+        position: relative;
+    }
+
+    .armada-diff-line[data-bare] {
+        grid-template-columns: var(--s-5) minmax(0, 1fr);
+        padding-left: var(--s-3);
+    }
+
+    .armada-diff-line > i {
+        font: var(--t-code-s);
+        font-style: normal;
+        color: var(--ink-2);
+        text-align: right;
+        padding-right: var(--s-2);
+    }
+
+    .armada-diff-line > b {
+        font-weight: var(--k-regular);
+        color: var(--ink-2);
+        text-align: center;
+    }
+
+    .armada-diff-line[data-change="added"] {
+        background-color: var(--tint-add);
+    }
+
+    .armada-diff-line[data-change="added"] > b {
+        color: var(--add-ink);
+    }
+
+    .armada-diff-line[data-change="removed"] {
+        background-color: var(--tint-del);
+    }
+
+    .armada-diff-line[data-change="removed"] > b {
+        color: var(--del-ink);
+    }
+
+    .armada-diff-line[data-change="hunk"] {
+        color: var(--ink-2);
+        padding: var(--s-1) var(--pad-x);
+        display: flex;
+        gap: var(--s-2);
+        align-items: center;
+    }
+    /* Selected lines take Fill-2 and a 2 px bar of my colour. */
+    .armada-diff-line[aria-selected="true"] {
+        background-image: linear-gradient(var(--fill-2), var(--fill-2));
+    }
+
+    .armada-diff-line[aria-selected="true"]::before {
+        content: "";
+        position: absolute;
+        left: 0;
+        top: 0;
+        bottom: 0;
+        width: calc(var(--px) * 2);
+        background: var(--accent-text);
+    }
+
+    /* Source: a number in the code face at 12, then the code. A changed
+       line's ground is a shape like every other fill: set in 4 px, radius
+       4. */
+    .armada-source {
+        font: var(--t-code);
+        white-space: pre;
+    }
+
+    .armada-source-line {
+        display: grid;
+        grid-template-columns: calc(var(--px) * 44) minmax(0, 1fr);
+        height: var(--s-5);
+        margin-left: calc(-1 * var(--s-1));
+        padding-left: var(--s-1);
+        border-radius: var(--r-mark);
+    }
+
+    .armada-source-line > i {
+        font: var(--t-code-s);
+        font-style: normal;
+        color: var(--ink-2);
+        text-align: right;
+        padding-right: var(--s-4);
+    }
+
+    .armada-source-line[data-change="added"] {
+        background-color: var(--tint-add);
+    }
+
+    .armada-source-line[data-change="added"]
+        + :where(.armada-source-line[data-change="added"]) {
+        border-top-left-radius: 0;
+        border-top-right-radius: 0;
+    }
+
+    .armada-source-line[data-change="added"]:where(
+            :has(+ [data-change="added"])
+        ) {
+        border-bottom-left-radius: 0;
+        border-bottom-right-radius: 0;
+    }
+}

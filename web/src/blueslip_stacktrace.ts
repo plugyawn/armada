@@ -5,17 +5,6 @@ import StackTraceGPS from "stacktrace-gps";
 
 import render_blueslip_stacktrace from "../templates/blueslip_stacktrace.hbs";
 
-export class BlueslipError extends Error {
-    override name = "BlueslipError";
-    more_info?: object;
-    constructor(msg: string, more_info?: object, cause?: unknown) {
-        super(msg, {cause});
-        if (more_info !== undefined) {
-            this.more_info = more_info;
-        }
-    }
-}
-
 type FunctionName = {
     scope: string;
     name: string;
@@ -148,7 +137,8 @@ export async function display_stacktrace(ex: unknown, message?: string): Promise
                   )
                 : [];
         let more_info: string | undefined;
-        if (ex instanceof BlueslipError) {
+        // A BlueslipError (blueslip.ts) carries the more_info it was raised with.
+        if ("more_info" in ex) {
             more_info = JSON.stringify(ex.more_info, null, 4);
         }
         errors.push({

@@ -1,0 +1,24 @@
+{% extends "zerver/base.html" %}
+{# INTERIM BETA: deleted with web/src/armada/beta/ when the rebuild's conversation lands. #}
+{% set entrypoint = "armada-beta" %}
+
+{% block title %}
+<title>{{ doc_root_title }}</title>
+{% endblock %}
+
+{% block content %}
+{# The theme and motion this browser chose, applied before the first paint. #}
+<script{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}>
+(function () { try { var R = document.documentElement, t = localStorage.getItem("armada-beta-theme"); if (t === "light" || t === "dark") R.dataset.theme = t; if (localStorage.getItem("armada-beta-motion") === "reduced") R.dataset.motion = "reduced"; } catch (e) {} })();
+</script>
+{{ csrf_input }}
+{# What the page cannot ask the server for: how long a run waits for an answer, and the live runs Home starts from. #}
+<div id="beta-data" hidden data-question-timeout="{{ question_timeout_seconds }}" data-live-run-ids="{{ live_run_ids }}"></div>
+<div class="feed" id="pane"><div class="clip"><div class="lane" id="col"></div></div></div>
+<aside class="side" id="side"><div class="out" id="outline"></div></aside>
+<div class="pane cutb float" data-pane="Home" hidden><div class="lane" id="home"></div></div>
+<div class="pane cutb float" data-pane="README" hidden><div class="lane"><article class="doc" id="readme"></article></div></div>
+<div class="pane cutb float" data-pane="Files" hidden><div class="lane wide"><div class="files"><div class="tree" id="tree"></div><div class="fv" id="fv"></div></div></div></div>
+<div class="pane cutb float" data-pane="Changes" hidden><div class="lane wide" id="changes"></div></div>
+<noscript>The beta needs JavaScript. <a href="/">Open the old interface</a>.</noscript>
+{% endblock %}

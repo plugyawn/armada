@@ -6,12 +6,8 @@ const {make_realm} = require("./lib/example_realm.cjs");
 const {mock_esm, set_global, zrequire} = require("./lib/namespace.cjs");
 const {run_test, noop} = require("./lib/test.cjs");
 const $ = require("./lib/zjquery.cjs");
-set_global("$", $);
 
-const autosize = noop;
-autosize.update = noop;
-autosize.destroy = noop;
-mock_esm("autosize", {default: autosize});
+set_global("$", $);
 
 const message_data = {
     type: "stream",
@@ -88,6 +84,9 @@ mock_esm("../src/typing", {
 mock_esm("../src/compose_ui", {
     create_preview_render_tracker: () => ({render_count: 0}),
     autosize_textarea: noop,
+    resize_textarea_to_content: noop,
+    size_textarea_to_content: noop,
+    stop_sizing_textarea_to_content: noop,
     exit_preview_mode: noop,
     handle_keydown: noop,
     handle_keyup: noop,

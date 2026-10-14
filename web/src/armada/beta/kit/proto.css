@@ -1,0 +1,100 @@
+/* Armada prototype: what the working page needs beyond mock.css. Nothing here names a colour, a duration or a curve. */
+@layer zulip.armada-beta {   /* see index.js: the beta's sheets sit at the bottom of the cascade */
+
+/* ---- selection is one thumb a list here (motion.js moves it); the static fills give way */
+.row.sel, .tab.on, .seg button.on, .opt.sel, .pop .mi.hl, .pop .steps button.on { background-color: transparent; }
+nav, .tabs, .seg, .tree, .blk.ask { position: relative; }
+nav > .thumb { z-index: 2; left: 0; }
+/* the nav's blocks are opaque, so the block under a repository travels over its rows as one piece */
+nav .rest { display: flex; flex-direction: column; flex: 1; min-height: 0; background: var(--ground); position: relative; z-index: 1; }
+nav .rest > .me { margin-top: auto; }
+nav .grp { position: relative; }
+
+/* ---- the feed scrolls; its lane is clipped by a wrapper so a spring on the lane never adds scrollable overflow */
+.feed { display: block; overflow-y: auto; scrollbar-width: none; overscroll-behavior: contain; }
+.feed > .clip { min-height: 100%; }
+.feed .lane { padding-top: var(--s-10); }
+.feed .lane.runway { padding-bottom: calc(var(--h-band) + var(--s-3) + var(--h-s) + var(--gap-same)); }   /* under a stream that is being followed: the room its footer will take (a line and its gap), so Stop and a settling run land their record without moving the conversation */
+/* when the feed holds and text continues below the fold, its last line fades instead of being cut. The fade ends in the plane and runs on under the band's own row, so nothing reappears between the band and the field. */
+.band::before { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: calc(100% + var(--s-6)); background: linear-gradient(transparent, var(--content) var(--s-6)); pointer-events: none; opacity: 0; transition: opacity var(--fade-out) linear; }
+.band.more::before { opacity: 1; transition-duration: var(--fade-in); }
+.cl.onyx > .sigil, .rc, .mk { transform-origin: 50% 50%; }
+.cl > .who { transform-origin: 0 0; }
+
+/* ---- the column: the checklist and an opened thread share one place */
+@media (min-width: 1408px) { :root.wt aside.side { display: grid; grid-template: var(--h-line2) minmax(0, 1fr) / minmax(0, 1fr); } }
+aside.side > .hdg { grid-area: 1 / 1; } aside.side > .out, aside.side > .thr { grid-area: 2 / 1; min-height: 0; }
+aside.side > [inert] { opacity: 0; visibility: hidden; pointer-events: none; }   /* not drawn at all: a hidden field laid over the list would also change how the list's text is rasterised */
+:root.widepane aside.side > .out, :root.widepane aside.side > .thr { display: none; }
+.chk > li { transform-origin: 0 0; }
+.chk > li > .t { transition: color var(--fade-out) linear; }
+
+/* ---- panes */
+main > .pane.float { position: relative; z-index: auto; }
+.pop.float, .pal.float, .sheet-chk.float { z-index: 9; }
+
+/* ---- lab: the prototype's own controls. Not part of the design. */
+#lab { position: fixed; right: 12px; bottom: 12px; z-index: 80; font: var(--t-caption); color: var(--ink-2); display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+#lab .pn { display: none; background: var(--raised); box-shadow: var(--shadow-raised); border-radius: var(--r-block); padding: 8px; width: 316px; flex-wrap: wrap; gap: 4px; }
+#lab.open .pn { display: flex; }
+#lab button { font: var(--t-caption); height: 24px; padding: 0 8px; border-radius: 6px; background: var(--fill-1); color: var(--ink-1); }
+#lab label { display: inline-flex; align-items: center; gap: 4px; height: 24px; padding: 0 4px; }
+#lab input { width: 52px; font: inherit; color: inherit; background: var(--fill-1); border: 0; border-radius: 4px; height: 20px; padding: 0 4px; }
+#tstamp { position: fixed; z-index: 99; font: 400 12px/16px var(--f-code); color: var(--ink-2); background: var(--content); padding: 0 3px; pointer-events: none; white-space: nowrap; }
+
+/* ---- third final: what the fixes need. Tokens only. */
+/* (verifier, 01:40) the mask on .feed.cut is gone: mock.css now draws the header's 1 px line while the pane has .cut, and the two
+   together gave a line and a half-faded bubble under the tabs. */
+/* a scroll indicator: drawn only while the person scrolls, gone 600 ms after */
+.sbar { position: absolute; right: 3px; top: 0; width: 3px; border-radius: var(--r-round); background: var(--ink-2); opacity: 0; pointer-events: none; z-index: 3; }
+.sbar:not([data-off]) { opacity: 0.38; }
+main { position: relative; }
+/* the keyboard's selection in the conversation: one thumb */
+.msel { position: absolute; left: calc(-1 * var(--s-2)); right: calc(-1 * var(--s-2)); top: 0; height: var(--h, 0); transform: translateY(var(--y, 0)); transform-origin: 0 0; border-radius: var(--r-block); background: var(--fill-1); box-shadow: inset 0 0 0 1px var(--fill-2); pointer-events: none; }
+.msel[data-off] { opacity: 0; }
+.feed:focus { outline: none; }
+/* the composer stops growing at eight lines and scrolls inside its shape */
+.cz .tx { max-height: calc(8 * 24px + 8px); overflow-y: auto; scrollbar-width: none; overscroll-behavior: contain; }
+/* with Onix off the model control fades instead of vanishing */
+.cz .k.mode.off { visibility: visible; opacity: 0; pointer-events: none; }
+/* header values in fixed cells, read from their leading edge */
+.hcell { justify-items: start; white-space: nowrap; }
+/* a refusal with motion reduced: the edge takes the failure ink and lets it go */
+.m-no { position: absolute; inset: 0; border-radius: inherit; pointer-events: none; box-shadow: 0 0 0 1.5px var(--failure); }
+/* the live step's line changes in a cell (M.swap); its words end in an ellipsis inside it */
+.chk > li.ev > .t.cell { display: grid; grid-template-columns: minmax(0, 1fr); justify-items: start; }
+.chk > li.ev > .t.cell > span { max-width: 100%; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* a step still to come holds the room its activity line will take */
+.chk > li.step.room { margin-bottom: var(--h-m); }
+/* a reaction of mine stays: the wash is the kit's (mock.css .b.liked::after); here only where it spreads from */
+.b.liked::after { transform-origin: 100% 100%; }
+.m-bit { font-size: 10px; line-height: 12px; }
+/* the trace and the thread share the checklist's place; what is moved into a sheet keeps its own layout */
+aside.side > .trc { grid-area: 2 / 1; min-height: 0; }
+:root.widepane aside.side > .trc { display: none; }
+.sheet-chk > .thr, .sheet-chk > .trc, .sheet-chk > .out { display: flex; flex-direction: column; max-height: 60vh; }
+.sheet-chk > .thr .pb { overflow-y: auto; }
+.wn { opacity: 1; }
+
+/* ---- verifier (01:40): agreement with mock.css as it stands. Tokens only.
+   mock.css gives inline code a line-height of 0 (so it cannot make a 21 px line) and makes an event's .t a flex row; the
+   prototype's older column markup has a file's name as the only child of .t, which then has no height and is clipped. */
+.chk > li.ev > .t > code:only-child { line-height: 20px; }
+/* column rows the prototype makes */
+.ls > li, .sec { transform-origin: 0 0; }
+/* the band's word: kit.js snaps the cell to the width of the word it was drawn with ("Working", 53 px), so a longer word that arrives later ("Onix asks", 64 px) ran 3 px into the clock. The cell is never narrower than the widest word it holds. */
+.band .run .sw { min-width: max-content; }
+
+/* ---- fourth pass (14 October): tokens only */
+/* someone else's chip that arrives beside a bubble's time stands after the time */
+.bl > .rcs.late, .cl.me .bl > .rcs.late { order: 1; margin: 0 0 var(--s-2); }
+/* the fold's line: Jump to latest, or that a held answer runs on below and by how many lines. Its count is a cell read from its leading edge. */
+.band .jump .jw { justify-items: start; } .band .jump .jn { justify-items: start; color: var(--ink-2); font: var(--t-text); margin-left: var(--s-1); }
+.band .jump .jn .fig { font: inherit; }
+
+/* ---- verifier 2 (03:40): the checklist as a sheet, below 1408. The sheet took the whole column: Runs is the list that
+   grows, so in a sheet (no height to grow into) it drew a heading with no rows, and People ran out through the sheet's
+   foot over the conversation. The still (x-checklist-sheet-1100) draws the checklist and Changes only; so does this. */
+.sheet-chk > .out > .sec.grow, .sheet-chk > .out > .sec.foot { display: none; }
+.sheet-chk > .out { overflow: hidden auto; scrollbar-width: none; }
+}   /* @layer zulip.armada-beta */

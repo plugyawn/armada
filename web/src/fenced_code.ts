@@ -1,4 +1,4 @@
-import katex from "katex";
+import type katex_module from "katex";
 import _ from "lodash";
 import assert from "minimalistic-assert";
 
@@ -81,7 +81,20 @@ function wrap_quote(text: string): string {
     return quoted_paragraphs.join("\n");
 }
 
+// KaTeX is not part of the first load: markdown.ts fetches it when a
+// message first needs it and hands it over here.
+let katex: typeof katex_module | undefined;
+
+export function set_katex(loaded_katex: typeof katex_module | undefined): void {
+    katex = loaded_katex;
+}
+
 function wrap_tex(tex: string): string {
+    if (katex === undefined) {
+        // Callers ask markdown.needs_backend_for_math first, so this is
+        // what a caller that did not ask gets: the source, as text.
+        return "<p>" + _.escape(tex) + "</p>";
+    }
     try {
         return "<p>" + katex.renderToString(tex, {displayMode: true}) + "</p>";
     } catch {

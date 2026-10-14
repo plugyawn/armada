@@ -114,8 +114,75 @@ markdown_whitespace_rules: list["Rule"] = [
 ]
 
 
+# Armada names no system typeface: text is set in the faces the app
+# ships, so that it looks the same on every machine (and never in the
+# platform's own UI face). The files excluded here predate the rule;
+# tools/armada/fork_ledger counts them, and the count must only fall.
+system_face_rule: "Rule" = {
+    "pattern": r"system-ui|-apple-system|BlinkMacSystemFont|\bui-(sans-serif|serif|monospace|rounded)\b|Helvetica Neue|\bMenlo\b|\bSF ?(Pro|Mono)",
+    "include_only": {"web/"},
+    "exclude": {
+        "web/src/pear_signature.ts",
+        "web/styles/app_variables.css",
+        "web/styles/portico/activity.css",
+        "web/styles/portico/email_log.css",
+        "web/styles/portico/portico_signin.css",
+        "web/tests/compose_paste.test.cjs",
+        "web/third/",
+    },
+    "description": "Do not name a system typeface; use the font tokens (--f-human, --f-code).",
+    "good_lines": ['font-family: "Geist Mono", monospace;', "font: var(--t-text);"],
+    "bad_lines": [
+        "font-family: system-ui, sans-serif;",
+        'font-family: -apple-system, "Helvetica Neue";',
+        "font-family: ui-monospace, Menlo, monospace;",
+        'const stack = "SF Pro Text";',
+    ],
+}
+
+# The six stones a person's face and bubble are drawn in
+# (docs/armada/design-language.md, "Faces").
+ARMADA_STONES = "moss|larimar|lapis|amethyst|rose|flint"
+
+# In the rebuilt frontend a duration or an easing exists once, as a token
+# in web/src/armada/tokens/tokens.css; script reads it through
+# motion/springs.ts. Sound recipes are data in seconds and are exempt.
+armada_motion_literal_rules: list["Rule"] = [
+    {
+        "pattern": r"""["'`][^"'`\n]*(?<![\w.-])\d*\.?\d+m?s\b[^"'`\n]*["'`]""",
+        "include_only": {"web/src/armada/"},
+        "exclude": {"web/src/armada/sound/"},
+        # A sentence for a person may say "Retry in 30s".
+        "exclude_pattern": r"\bdefaultMessage\b",
+        "description": "No duration literal in script; read the token through motion/springs.ts.",
+        "good_lines": [
+            "element.style.transitionDuration = springs.touch.duration;",
+            '$t({defaultMessage: "Retry in 30s"})',
+        ],
+        "bad_lines": [
+            'element.style.transitionDuration = "210ms";',
+            "const fade = `opacity 0.08s`;",
+        ],
+    },
+    {
+        "pattern": r"\b(duration|delay|endDelay)\s*:\s*\d",
+        "include_only": {"web/src/armada/"},
+        "exclude": {"web/src/armada/sound/"},
+        "description": "No duration literal in script; read the token through motion/springs.ts.",
+        "good_lines": ["{duration: springs.move.duration}"],
+        "bad_lines": ["{duration: 340, fill: 'both'}"],
+    },
+    {
+        "pattern": r"""cubic-bezier\(|["'`](ease|ease-in|ease-out|ease-in-out)["'`]|\beasing\s*:\s*["'`]""",
+        "include_only": {"web/src/armada/"},
+        "description": "No easing literal in script; use a spring from motion/springs.ts.",
+        "good_lines": ["{easing: springs.move.easing}"],
+        "bad_lines": ['{easing: "ease-out"}', "cubic-bezier(0.2, 0, 0, 1)", 'timing = "ease";'],
+    },
+]
+
 js_rules = RuleList(
-    langs=["cjs", "js", "ts"],
+    langs=["cjs", "js", "ts", "tsx"],
     rules=[
         {
             "pattern": "subject|SUBJECT",
@@ -127,6 +194,11 @@ js_rules = RuleList(
                 "web/src/message_helper.ts",
                 "web/src/server_message.ts",
                 "web/src/state_data.ts",
+                # These use subject in the git sense (the first line of a
+                # commit message); it is the field name in the Pear API.
+                "web/src/pear_panel.ts",
+                "web/src/pear_workspace_api.ts",
+                "web/src/pear_workspace_files.ts",
                 "web/tests/",
             },
             "exclude_pattern": "emails",
@@ -235,6 +307,8 @@ js_rules = RuleList(
             "description": "Never call rewire_* functions directly. Use override_rewire.",
             "include_only": {"web/tests/"},
         },
+        system_face_rule,
+        *armada_motion_literal_rules,
         *whitespace_rules,
     ],
 )
@@ -528,6 +602,39 @@ bash_rules = RuleList(
 css_rules = RuleList(
     langs=["css"],
     rules=[
+        system_face_rule,
+        {
+            # The names are the families of the design's palette
+            # (docs/armada/design-language.md, "Colour"); a face's or a
+            # bubble's colour is --p-<stone> or --b-<stone>, and --p-gap
+            # or --b-size would be no colour.
+            "pattern": rf"^\s*--(ground|content|raised|ink-\d+|dim|fill-\d+|block|line|edge(-[a-z0-9]+)?|bubble(-me)?|on-(me|accent)|chip|b-({ARMADA_STONES})|p-({ARMADA_STONES})(-ink)?|accent(-[a-z]+)?|ring|success|attention|failure|tint-(add|del)|(add|del)-ink|syn-[a-z]+|shadow-[a-z-]+)\s*:",
+            "include_only": {"web/src/armada/"},
+            # tokens/ holds the palette files; stylelint keeps colour
+            # literals out of every other file there.
+            "exclude": {"web/src/armada/tokens/"},
+            "description": "A colour token is defined only in the generated tokens/palette-*.css (tools/armada/palette.py).",
+            "good_lines": [
+                "    color: var(--ink-1);",
+                "    --col: 704px;",
+                "    --p-gap: var(--s-2);",
+            ],
+            "bad_lines": [
+                "    --ink-1: var(--content);",
+                "--accent: var(--ink-2);",
+                "    --p-moss-ink: var(--ink-1);",
+                "--b-flint: var(--bubble);",
+            ],
+        },
+        {
+            "pattern": r"(?i)(?<![a-z])pear|(?-i:[a-z]Pear)|onyx",
+            "include_only": {"web/src/armada/"},
+            # One of the four palettes is called Onyx, after the stone.
+            "exclude": {"web/src/armada/tokens/"},
+            "description": "No class, token or attribute is named after the agent or the wire namespace.",
+            "good_lines": [".armada-turn[data-speaker='agent'] {", "    opacity: var(--appear);"],
+            "bad_lines": [".armada-onyx-row {", "    --pear-gap: var(--s-2);", "[data-pear] {"],
+        },
         *whitespace_rules,
     ],
 )
@@ -569,7 +676,8 @@ html_rules: list["Rule"] = [
             "templates/corporate/support/support_request_thanks.html",
             "templates/zerver/emails/support_request.html",
         },
-        "exclude_pattern": "email subject",
+        # pear-commitline-subject is the subject line of a git commit.
+        "exclude_pattern": "email subject|pear-commitline-subject",
         "description": "avoid subject in templates",
         "good_lines": ["topic_name"],
         "bad_lines": ['subject="foo"', " MAX_SUBJECT_LEN"],
@@ -757,6 +865,7 @@ handlebars_rules = RuleList(
     langs=["hbs"],
     rules=[
         *html_rules,
+        system_face_rule,
         {
             "pattern": "[<]script",
             "description": "Do not use inline <script> tags here; put JavaScript in web/src instead.",

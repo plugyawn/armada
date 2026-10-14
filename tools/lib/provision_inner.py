@@ -279,6 +279,9 @@ def main(options: argparse.Namespace) -> int:
 
     run(["node", "tools/setup/build_supported_browser_regex.ts"])
 
+    # Cheap, and its input is outside git, so it runs every time.
+    run(["tools/setup/build_armada_fonts"])
+
     if options.is_force or need_to_run_build_pygments_data():
         run(["tools/setup/build_pygments_data"])
         write_new_digest(

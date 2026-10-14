@@ -1,0 +1,36 @@
+# F2, load fixes and today's hot spots.
+bridged:A4 web/src/alert_words_ui.ts  # imports the Handlebars runtime, not the compiler; goes with alert words (K-15)
+bridged:D1 web/src/click_handlers.ts  # a click in the composer no longer looks for a message row
+bridged:B3 web/src/compose.ts  # the field is sized by the browser, not by autosize
+bridged:B3 web/src/compose_actions.ts  # the field is sized by the browser, not by autosize
+bridged:B3 web/src/compose_send_menu_popover.ts  # the reminder note is sized through compose_ui
+bridged:B3 web/src/compose_ui.ts  # size_textarea_to_content and its fallback replace autosize
+bridged:C7 web/src/emojisets.ts  # the sprite and its stylesheet are fetched when the first emoji appears (K-66 removes them)
+bridged:C1 web/src/fenced_code.ts  # KaTeX is handed over once loaded
+bridged:D1 web/src/info_overlay.ts  # the formatting help fills in its math examples once KaTeX has arrived
+bridged:I4 web/src/markdown.ts  # KaTeX is fetched on first use
+bridged:C1 web/src/message_edit.ts  # the edit box is sized through compose_ui
+bridged:D1 web/src/message_list.ts  # the edit box is sized through compose_ui
+bridged:D1 web/src/message_list_view.ts  # the edit box is sized through compose_ui
+bridged:F5 web/src/resize.ts  # a field resized by hand stops being sized to its text; the limit allows for its bottom room
+bridged:B3 web/styles/compose.css  # field-sizing: content
+bridged:A5 web/templates/popovers/left_sidebar/left_sidebar_view_popover_item.hbs  # a view without a count no longer throws
+kept web/tests/compose.test.cjs  # no autosize to stand in for
+kept web/tests/fenced_code.test.cjs  # math before and after KaTeX is handed over
+kept web/tests/markdown.test.cjs  # KaTeX is fetched on first use
+kept pnpm-workspace.yaml  # the autosize patch is gone with the package; core-js is no longer installed
+deleted patches/autosize.patch  # nothing imports autosize
+kept web/.browserslistrc  # Chromium and Edge 132, Safari 18, Firefox 140 (K-95)
+kept web/src/base_page_params.ts  # a comment no longer names sentry.ts
+kept web/src/blueslip.ts  # no Sentry (K-93); the development error display is a lazy chunk
+kept web/src/blueslip_stacktrace.ts  # BlueslipError moved to blueslip.ts, which loads this module on demand
+kept web/src/bundles/app.ts  # no jquery-validation in the app (K-92)
+bridged:A1 web/src/channel.ts  # no Sentry spans around requests (K-93)
+bridged:C1 web/src/echo.ts  # no Sentry disparity tag (K-93)
+bridged:D1 web/src/message_view.ts  # no Sentry spans around a narrow (K-93)
+bridged:C1 web/src/sent_messages.ts  # tracks only what the delayed-event restart needs; the Sentry spans are gone (K-93)
+deleted web/src/sentry.ts  # Sentry in the client (K-93)
+bridged:C1 web/src/transmit.ts  # a send is no longer wrapped in a Sentry span (K-93)
+kept web/tests/echo.test.cjs  # no disparity to count
+kept web/tests/transmit.test.cjs  # no span wrapper to stand in for
+kept docs/contributing/code-style.md  # Babel adds no polyfills (K-95)

@@ -144,7 +144,8 @@ function scroll_finish(): void {
 }
 
 export function initialize(): void {
-    $(document).on(
+    // The feed scrolls inside its pane; the document never does.
+    message_viewport.$scroll_container().on(
         "scroll",
         _.throttle(() => {
             if (message_lists.current === undefined) {

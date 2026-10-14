@@ -1,0 +1,21 @@
+/* The old right rail (the wall, the roster, the people and the thread
+   pane) in a sheet from the window's right edge, closed at rest
+   (legacy_column.ts; deleted by B4, and by B8 for the wall and the
+   people). It opens on a press of the column's heading or More, and while
+   a thread is open. */
+@layer armada.surfaces {
+    body.message-thread-pane-open #right-sidebar-container {
+        display: block;
+    }
+
+    #right-sidebar-container {
+        max-width: none;
+    }
+
+    #right-sidebar-container > .right-sidebar {
+        position: static;
+        width: auto;
+        height: 100%;
+        padding-top: 0;
+    }
+}

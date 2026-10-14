@@ -20,42 +20,22 @@ const dom = new JSDOM(
                         <button class="pear-workspace-mode-tab" data-pear-tab="files" role="tab">Files</button>
                     </span>
                 </div>
-                <div class="message_header_stream" data-height="42" data-header="active">
-                    <span class="pear-workspace-tabs pear-workspace-tabs-hidden" role="tablist">
-                        <button class="pear-workspace-mode-tab pear-workspace-tab-selected" data-pear-tab="chat" role="tab">Chat</button>
-                        <button class="pear-workspace-mode-tab" data-pear-tab="readme" role="tab">README</button>
-                        <button class="pear-workspace-mode-tab" data-pear-tab="files" role="tab">Files</button>
-                    </span>
-                </div>
             </div>
         </div>
+        <header data-armada="header">
+            <div class="message_header_stream" data-header="active">
+                <span class="pear-workspace-tabs pear-workspace-tabs-hidden" role="tablist">
+                    <button class="pear-workspace-mode-tab pear-workspace-tab-selected" data-pear-tab="chat" role="tab">Chat</button>
+                    <button class="pear-workspace-mode-tab" data-pear-tab="readme" role="tab">README</button>
+                    <button class="pear-workspace-mode-tab" data-pear-tab="files" role="tab">Files</button>
+                </span>
+            </div>
+        </header>
         <div id="compose"></div>
     </body></html>`,
     {pretendToBeVisual: true, url: "http://zulip.zulipdev.com/"},
 );
 const {window} = dom;
-window.scrollTo = () => {};
-const resize_observers = [];
-class ResizeObserver {
-    constructor(callback) {
-        this.callback = callback;
-        resize_observers.push(this);
-    }
-
-    observe(target) {
-        this.target = target;
-    }
-
-    disconnect() {
-        this.target = undefined;
-    }
-
-    trigger() {
-        this.callback([], this);
-    }
-}
-let compose_height = 144;
-window.document.querySelector("#compose").getBoundingClientRect = () => ({height: compose_height});
 for (const [name, value] of Object.entries({
     window,
     document: window.document,
@@ -64,7 +44,6 @@ for (const [name, value] of Object.entries({
     HTMLElement: window.HTMLElement,
     CustomEvent: window.CustomEvent,
     requestAnimationFrame: window.requestAnimationFrame.bind(window),
-    ResizeObserver,
 })) {
     set_global(name, value);
 }
@@ -105,6 +84,7 @@ mock_esm("../src/pear_workspace_shell", {
     },
 });
 
+const {route} = zrequire("armada/state/route");
 const pear_workspace = zrequire("pear_workspace");
 
 function click(selector) {
@@ -142,12 +122,8 @@ run_test("Chat, README, and Files keep one warm shell with separate rooms", asyn
         false,
     );
 
-    let active_header = document.querySelector("[data-header='active']");
-    let active_header_height = 42;
-    Object.defineProperty(active_header, "offsetHeight", {
-        configurable: true,
-        get: () => active_header_height,
-    });
+    const active_header = document.querySelector("[data-header='active']");
+    route.set({place: "worktree", view: "chat"});
     const chat_tab = active_header.querySelector('[data-pear-tab="chat"]');
     chat_tab.focus();
     keydown(chat_tab, "ArrowRight");
@@ -157,12 +133,8 @@ run_test("Chat, README, and Files keep one warm shell with separate rooms", asyn
     assert.equal(mounts.length, 1);
     assert.equal(mounts[0].options.workspaceId, "workspace-1");
     assert.equal(document.querySelector("#pear-workspace-pane").hasAttribute("hidden"), false);
-    assert.equal(
-        document
-            .querySelector(".column-middle-inner")
-            .style.getPropertyValue("--pear-topic-bar-height"),
-        "42px",
-    );
+    // The frame shows the view in front; the chat keeps its place under it.
+    assert.deepEqual(route.get(), {place: "worktree", view: "readme"});
     assert.equal(
         document.querySelector('[data-pear-tab="readme"]').getAttribute("aria-selected"),
         "true",
@@ -176,50 +148,7 @@ run_test("Chat, README, and Files keep one warm shell with separate rooms", asyn
         "true",
     );
     assert.deepEqual(mounts[0].rooms, ["readme", "files"]);
-    assert.equal(
-        document
-            .querySelector(".column-middle-inner")
-            .style.getPropertyValue("--pear-workspace-compose-height"),
-        "144px",
-    );
-    compose_height = 216;
-    resize_observers.find((observer) => observer.target?.id === "compose").trigger();
-    assert.equal(
-        document
-            .querySelector(".column-middle-inner")
-            .style.getPropertyValue("--pear-workspace-compose-height"),
-        "216px",
-    );
-    active_header_height = 68;
-    resize_observers.find((observer) => observer.target === active_header).trigger();
-    assert.equal(
-        document
-            .querySelector(".column-middle-inner")
-            .style.getPropertyValue("--pear-topic-bar-height"),
-        "68px",
-        "the clamp follows late tab insertion, font loading, and header wrapping",
-    );
-    const previous_header = active_header;
-    const replacement_header = active_header.cloneNode(true);
-    Object.defineProperty(replacement_header, "offsetHeight", {
-        configurable: true,
-        get: () => 74,
-    });
-    active_header.replaceWith(replacement_header);
-    active_header = replacement_header;
-    resize_observers.find((observer) => observer.target === previous_header).trigger();
-    assert.equal(
-        document
-            .querySelector(".column-middle-inner")
-            .style.getPropertyValue("--pear-topic-bar-height"),
-        "74px",
-        "a late header replacement transfers observation and clamp authority",
-    );
-    assert.equal(
-        resize_observers.at(-1).target,
-        replacement_header,
-        "the detached header is no longer observed",
-    );
+    assert.deepEqual(route.get(), {place: "worktree", view: "files"});
 
     keydown(document.querySelector("#pear-workspace-pane"), "Escape");
     assert.equal(pear_workspace.pane_is_open(), false);
@@ -228,16 +157,10 @@ run_test("Chat, README, and Files keep one warm shell with separate rooms", asyn
     assert.equal(
         document.activeElement.closest(".message_header_stream"),
         active_header,
-        "Escape restores focus to the current visible topic header, not an older duplicate",
+        "Escape restores focus to the header's views, not the feed's older copy",
     );
     assert.equal(mounts[0].destroys, 0, "Escape keeps the warm shell mounted");
-    assert.equal(resize_observers.at(-1).target, undefined);
-    assert.equal(
-        document
-            .querySelector(".column-middle-inner")
-            .style.getPropertyValue("--pear-topic-bar-height"),
-        "",
-    );
+    assert.deepEqual(route.get(), {place: "worktree", view: "chat"});
     click('[data-pear-tab="readme"]');
     await settle();
     assert.equal(mounts.length, 1);
@@ -267,7 +190,8 @@ run_test("Chat, README, and Files keep one warm shell with separate rooms", asyn
         document
             .querySelector(".pear-workspace-tabs")
             .classList.contains("pear-workspace-tabs-hidden"),
-        true,
+        false,
+        "the views stand before the worktree's context arrives",
     );
     await settle();
 

@@ -1,0 +1,41 @@
+{
+    "about": "What parts-corpus feeds to the client's and the server's Markdown. Cases are added here when a real message is found to split differently.",
+    "markdown_test_cases": "zerver/tests/fixtures/markdown_test_cases.json",
+    "fixture_topics": [
+        "demo-completed-run",
+        "demo-live-run",
+        "demo-needs-input",
+        "demo-failed-run",
+        "demo-cancelled-run",
+        "demo-paused-topic",
+        "demo-threads",
+        "demo-dirty-worktree",
+        "demo-long-topic"
+    ],
+    "extra": [
+        {
+            "name": "heading then prose then list",
+            "input": "## Result\n\nIt works now.\n\n- one\n- two"
+        },
+        {
+            "name": "prose, fence, prose",
+            "input": "Before the code.\n\n```python\nprint(1)\n```\n\nAfter the code."
+        },
+        {
+            "name": "rule between paragraphs",
+            "input": "First thought.\n\n---\n\nSecond thought."
+        },
+        {
+            "name": "quote after a paragraph",
+            "input": "You wrote:\n\n> the bar is astern\n\nand I agree."
+        },
+        {
+            "name": "table between paragraphs",
+            "input": "Numbers:\n\n| a | b |\n|---|---|\n| 1 | 2 |\n\nThat is all."
+        },
+        {
+            "name": "numbered list alone",
+            "input": "1. first\n2. second\n3. third"
+        }
+    ]
+}

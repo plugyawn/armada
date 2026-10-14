@@ -3,6 +3,7 @@
 // throw or block.
 export function print_pear_signature(): void {
     try {
+        // eslint-disable-next-line no-console -- the signature is console output by design
         console.log(
             "%c" +
                 String.raw`      _` +

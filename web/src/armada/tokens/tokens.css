@@ -1,0 +1,284 @@
+/* Every literal of Armada's design language that is not a colour. The names
+   and values are the design's (docs/armada/design-language.md); nothing in
+   web/src/armada/ names a size, a duration or a curve of its own. Colours
+   are in the generated palette-*.css beside this file. */
+@layer armada.tokens.values {
+    :root {
+        /* Faces: two. People, the agent and chrome speak Söhne; what a
+           machine would accept is Geist Mono. */
+        --f-human: "Söhne", "Hanken Grotesk", sans-serif;
+        --f-code: "Geist Mono", monospace;
+
+        /* Type: eleven styles on five sizes, 12, 14, 16, 20 and 28. What is
+           said, and what is read as a document, is 16 on a 24 line; chrome,
+           lists and code are 14 on a 20 line. */
+        /* A document's first heading; nothing in chrome. */
+        --t-display: 600 28px/32px var(--f-human);
+        /* The pane's one name. */
+        --t-title: 600 20px/28px var(--f-human);
+        --t-heading: 600 16px/24px var(--f-human);
+        /* What is said: a bubble, the agent's words, the field; and a
+           document's prose. */
+        --t-talk: 400 16px/24px var(--f-human);
+        --t-reading: var(--t-talk);
+        /* A verb that is a control; a list's heading; a repository in the
+           nav. */
+        --t-strong: 500 14px/20px var(--f-human);
+        /* Every label, row and fact in chrome. */
+        --t-text: 400 14px/20px var(--f-human);
+        /* A name over a turn, a day, initials in a face. */
+        --t-label: 500 12px/16px var(--f-human);
+        /* Times, counts, durations, receipts. */
+        --t-caption: 400 12px/16px var(--f-human);
+        /* 80 columns in 672: a block of 80 columns and its insets is the
+           conversation's 704. */
+        --t-code: 400 14px/20px var(--f-code);
+        /* A line number. */
+        --t-code-s: 400 12px/20px var(--f-code);
+
+        /* Space: unit 4. */
+        --s-1: 4px;
+        --s-2: 8px;
+        --s-3: 12px;
+        --s-4: 16px;
+        --s-5: 20px;
+        --s-6: 24px;
+        --s-8: 32px;
+        --s-10: 40px;
+        /* Bubbles of one turn; a name and its first bubble; a bubble and its
+           thread line or receipt. */
+        --gap-same: 4px;
+        /* Words and a block; two blocks; a turn's footer. */
+        --gap-part: 8px;
+        /* Paragraphs of one answer. */
+        --gap-para: 12px;
+        /* One turn and the next, whoever speaks. */
+        --gap-turn: 16px;
+        /* Groups in the nav; sections in the column. */
+        --gap-group: 20px;
+        /* A day; sections of a document or of Home. */
+        --gap-section: 32px;
+
+        /* Shape. */
+        --r-mark: 4px;
+        --r-ctl: 6px;
+        --r-block: 10px;
+        --r-pop: 14px;
+        --r-bubble: 18px;
+        --r-field: 22px;
+        --r-round: 50%;
+        /* A reaction: a 20 px bubble. */
+        --r-chip: 10px;
+        /* A control inside the field: the field's radius less its 6 px
+           inset. */
+        --r-in-field: 16px;
+
+        /* Sizes. */
+        --h-chip: 20px;
+        --h-s: 24px;
+        --h-m: 28px;
+        --h-k: 32px;
+        --h-l: 36px;
+        --h-field: 44px;
+        --h-line1: 52px;
+        --h-line2: 36px;
+        --h-band: 36px;
+        --avatar: 28px;
+        --gutter: 40px;
+        /* A shape's sideways inset: bubble, block. The text edge is the
+           lane's edge plus this. */
+        --pad-x: 16px;
+        /* A bubble's inset above and below its 24 px line: 36 for one
+           line. */
+        --pad-y: 6px;
+        /* A control's inset inside the 44 px field. */
+        --in-field: 6px;
+        /* The widest line of talk, a person's or the agent's, and a
+           document's measure. */
+        --prose: 608px;
+        /* Prose plus two insets. */
+        --bubble-max: 640px;
+        --doc: 608px;
+        --tree-w: 232px;
+
+        /* The composition: the conversation and the column beside it, on
+           every place. One continuous expression of the pane's width W;
+           centred in the pane and never less than 72 px from the nav. These
+           are the design's values for a window; the frame computes the same
+           table from the pane's own width (frame/frame.css). */
+        --nav-w: 248px;
+        /* stylelint-disable custom-property-pattern -- --W is the design's name */
+        --W: calc(100vw - var(--nav-w));
+        --col: min(704px, calc(var(--W) - 104px));
+        /* stylelint-disable-next-line length-zero-no-unit -- a length inside calc() */
+        --side-w: 0px;
+        /* stylelint-disable-next-line length-zero-no-unit -- a length inside calc() */
+        --side-gap: 0px;
+        --comp: calc(var(--col) + var(--side-gap) + var(--side-w));
+        --lx: max(72px, round(down, calc((var(--W) - var(--comp)) / 2), 1px));
+        /* What is left on the right. */
+        --rx: calc(var(--W) - var(--lx) - var(--comp));
+        /* stylelint-enable custom-property-pattern */
+        /* The header's right inset: the composition's edge when the column
+           stands. */
+        --hx: 24px;
+
+        /* Motion: four springs, each a curve, a response in seconds, a
+           damping ratio and a duration; the fades; the agent's clock;
+           thresholds; amplitudes. */
+        --spring-touch: linear(
+            0,
+            0.005 1.2%,
+            0.021 2.5%,
+            0.081 5.3%,
+            0.46 17.7%,
+            0.631 24.3%,
+            0.759 31.2%,
+            0.81 34.8%,
+            0.853 38.7%,
+            0.892 43.2%,
+            0.924 48.2%,
+            0.949 53.7%,
+            0.968 59.8%,
+            0.989 74.7%,
+            1
+        );
+        --spring-move: linear(
+            0,
+            0.005 1.2%,
+            0.02 2.5%,
+            0.081 5.5%,
+            0.46 18.2%,
+            0.63 25%,
+            0.755 31.8%,
+            0.806 35.5%,
+            0.849 39.3%,
+            0.888 43.8%,
+            0.92 48.8%,
+            0.946 54.3%,
+            0.965 60.7%,
+            0.988 75.3%,
+            1
+        );
+        --spring-settle: linear(
+            0,
+            0.005 1.2%,
+            0.02 2.5%,
+            0.083 5.5%,
+            0.456 17.8%,
+            0.628 24.7%,
+            0.755 31.5%,
+            0.806 35.2%,
+            0.85 39%,
+            0.889 43.5%,
+            0.921 48.5%,
+            0.947 54%,
+            0.966 60.3%,
+            0.989 75.2%,
+            1
+        );
+        --spring-land: linear(
+            0,
+            0.007 1.7%,
+            0.028 3.3%,
+            0.112 7.2%,
+            0.569 21.3%,
+            0.751 28%,
+            0.878 34.3%,
+            0.925 37.5%,
+            0.963 40.8%,
+            0.994 44.5%,
+            1.017 48.5%,
+            1.031 52.7%,
+            1.038 57.5%,
+            1.036 65.7%,
+            1.013 85%,
+            1
+        );
+        /* In place, under the pointer or the caret. */
+        --touch-r: 0.15;
+        --touch-z: 1;
+        --touch-t: 210ms;
+        /* What travels or opens because I acted. */
+        --move-r: 0.25;
+        --move-z: 1;
+        --move-t: 340ms;
+        /* What arrives without my doing it. */
+        --settle-r: 0.32;
+        --settle-z: 1;
+        --settle-t: 440ms;
+        /* Textless objects that arrive: 3.8% past the mark. */
+        --land-r: 0.3;
+        --land-z: 0.72;
+        --land-t: 360ms;
+        --fade-in: 80ms;
+        --fade-out: 60ms;
+        /* A hover fill leaving: one row behind the pointer, not two. */
+        --trail: 60ms;
+        --step: 100ms;
+        --burst: 280ms;
+        --shake: 200ms;
+        --tip-delay: 500ms;
+        --tip-linger: 300ms;
+        --caret-hold: 500ms;
+        --caret-period: 1100ms;
+        /* A run this young and this quiet does not touch the band, the nav
+           or the composer's verb. */
+        --pending: 400ms;
+        --quiet-soft: 10s;
+        --quiet: 40s;
+        /* Three thresholds the design names in prose and its stylesheet
+           does not: how long the pointer rests on a message before its
+           overlay appears, how long ⌘ is held alone before the default
+           button reads Queue, and how long a stream has run before its run
+           is announced. */
+        --overlay-rest: 120ms;
+        --mod-hold: 150ms;
+        --announce: 2s;
+        --rise: 8px;
+        --pane-rise: 4px;
+        --dip: 0.96;
+        --from: 0.7;
+        --follow: 20px;
+        --ring-near: 160px;
+        --hover-first: 0.3;
+        /* Glyph weight and nudge: 1 px at 1x; 1.5 px nudged a quarter pixel
+           at 2x. */
+        --ic-w: 1;
+        /* stylelint-disable-next-line length-zero-no-unit -- a length inside translate() */
+        --ic-n: 0px;
+        /* 1 px at 1x, 1.5 px at 2x; one pixel clear of the glyph on either
+           side. */
+        --caret-w: 1px;
+    }
+
+    @media (resolution >= 1.5dppx) {
+        :root {
+            --ic-w: 1.5;
+            --ic-n: 0.25px;
+            --caret-w: 1.5px;
+        }
+    }
+
+    /* Reduced motion: the spring durations and the one-shots collapse, the
+       fades stay, loops hold a frame. There is no blanket rule. */
+    @media (prefers-reduced-motion: reduce) {
+        :root {
+            --touch-t: 1ms;
+            --move-t: 1ms;
+            --settle-t: 1ms;
+            --land-t: 1ms;
+            --burst: 1ms;
+            --shake: 1ms;
+        }
+    }
+
+    :root[data-motion="reduced"] {
+        --touch-t: 1ms;
+        --move-t: 1ms;
+        --settle-t: 1ms;
+        --land-t: 1ms;
+        --burst: 1ms;
+        --shake: 1ms;
+    }
+}

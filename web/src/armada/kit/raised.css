@@ -1,0 +1,178 @@
+/* Raised things: opaque, the only plane with a shadow; a 1 px edge so the
+   shape holds where a shadow cannot, over a block and in dark. */
+@layer armada.kit {
+    .armada-raised {
+        --plane: var(--raised);
+        background: var(--raised);
+        /* prettier-ignore */
+        box-shadow: 0 0 0 1px var(--edge), var(--shadow-raised);
+        color: var(--ink-1);
+        font: var(--t-text);
+    }
+
+    :where(dialog[class^="armada-"]) {
+        all: unset;
+        box-sizing: border-box;
+    }
+
+    :where(dialog[class^="armada-"]:not([open])) {
+        display: none;
+    }
+
+    /* A raised surface in the top layer takes none of the platform's
+       popover defaults (a border, a margin, an inset, a scroll); where it
+       stands is its caller's. */
+    :where(.armada-raised[popover]) {
+        all: unset;
+        box-sizing: border-box;
+        display: block;
+        position: fixed;
+    }
+
+    .armada-raised[popover]:not(:popover-open) {
+        display: none;
+    }
+
+    .armada-palette-rows {
+        display: contents;
+    }
+
+    /* Menu: radius 10, rows 28, the key in the second ink at the right.
+       The highlighted row is a neutral fill: a resting selection is not
+       news. */
+    .armada-menu {
+        border-radius: var(--r-block);
+        padding: var(--s-1);
+        min-width: calc(var(--px) * 208);
+        width: max-content;
+        position: relative;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .armada-menu-item {
+        height: var(--h-m);
+        display: flex;
+        align-items: center;
+        gap: var(--s-4);
+        padding: 0 var(--s-2);
+        border-radius: var(--r-ctl);
+        width: 100%;
+        white-space: nowrap;
+    }
+
+    .armada-menu-key {
+        margin-left: auto;
+        color: var(--ink-2);
+        display: inline-flex;
+        align-items: center;
+        gap: var(--s-2);
+    }
+
+    .armada-menu-item[data-highlighted] {
+        background-color: var(--fill-2);
+    }
+
+    .armada-menu-item:is(:disabled, [aria-disabled="true"]) {
+        color: var(--dim);
+    }
+
+    .armada-menu-gap {
+        height: var(--s-2);
+        flex: none;
+    }
+
+    .armada-menu-caption {
+        font: var(--t-caption);
+        color: var(--ink-2);
+    }
+
+    /* The model and effort picker: every row, the caption and the first
+       and last effort word stand on the popover's inset. */
+    .armada-picker {
+        border-radius: var(--r-pop);
+        padding: var(--s-2);
+        width: calc(var(--px) * 280);
+        position: relative;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .armada-picker-steps {
+        display: flex;
+        justify-content: space-between;
+        margin-top: var(--s-2);
+        position: relative;
+    }
+
+    .armada-picker-step {
+        padding: 0 var(--s-2);
+        height: var(--h-m);
+        border-radius: var(--r-ctl);
+        color: var(--ink-2);
+        display: inline-flex;
+        align-items: center;
+    }
+
+    .armada-picker-step[aria-pressed="true"] {
+        background-color: var(--fill-3);
+        color: var(--ink-1);
+    }
+
+    .armada-picker-caption {
+        font: var(--t-caption);
+        color: var(--ink-2);
+        padding: var(--s-2) var(--s-2) 0;
+        display: block;
+    }
+
+    /* Dialog: for what cannot be undone. Palette. A sheet: the column's
+       lists below 1408. */
+    .armada-dialog {
+        border-radius: var(--r-bubble);
+        padding: var(--s-5);
+        width: calc(var(--px) * 400);
+    }
+
+    .armada-dialog-title {
+        font: var(--t-strong);
+    }
+
+    .armada-dialog-body {
+        margin-top: var(--s-2);
+        color: var(--ink-2);
+    }
+
+    .armada-dialog-buttons {
+        display: flex;
+        justify-content: flex-end;
+        gap: var(--s-2);
+        margin-top: var(--s-5);
+    }
+
+    .armada-palette {
+        border-radius: var(--r-bubble);
+        padding: var(--s-2);
+        width: calc(var(--px) * 560);
+        display: flex;
+        flex-direction: column;
+    }
+
+    .armada-palette-input {
+        height: var(--h-l);
+        padding: 0 var(--s-2);
+        display: flex;
+        align-items: center;
+        gap: var(--s-2);
+    }
+
+    .armada-palette-input > .armada-glyph {
+        color: var(--ink-2);
+    }
+
+    .armada-sheet {
+        border-radius: var(--r-pop);
+        padding: var(--s-2) var(--s-4) var(--s-3);
+        width: calc(var(--px) * 344);
+    }
+}

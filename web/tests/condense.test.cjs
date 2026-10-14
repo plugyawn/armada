@@ -37,6 +37,7 @@ run_test(
             },
         };
         message_lists.current = {
+            /* istanbul ignore next */
             get() {
                 throw new Error("secondary show-more must not use message_lists.current");
             },

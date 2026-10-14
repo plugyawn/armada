@@ -1,0 +1,99 @@
+/* Drawn marks. Strokes are for what people use; pixels are for the agent
+   and what it is doing. Every drawing is a symbol of icons/sprite.svg. */
+@layer armada.kit {
+    .armada-glyph {
+        width: var(--s-4);
+        height: var(--s-4);
+        flex: none;
+        display: block;
+        overflow: visible;
+        fill: none;
+        stroke: currentcolor;
+        stroke-width: var(--ic-w);
+        stroke-linecap: butt;
+        stroke-linejoin: round;
+    }
+
+    .armada-glyph[data-size="12"] {
+        width: var(--s-3);
+        height: var(--s-3);
+    }
+
+    /* Inside the sprite: strokes take the nudge that puts a 1.5 px line on
+       whole device pixels at 2x. */
+    .armada-glyph-stroke {
+        transform: translate(var(--ic-n), var(--ic-n));
+    }
+
+    .armada-mark {
+        width: calc(var(--px) * 14);
+        height: calc(var(--px) * 14);
+        flex: none;
+        display: block;
+        fill: currentcolor;
+    }
+
+    .armada-mark[data-size="28"] {
+        width: var(--avatar);
+        height: var(--avatar);
+    }
+
+    .armada-mark[data-mark="needs"] {
+        color: var(--attention);
+    }
+
+    .armada-mark[data-mark="failed"] {
+        color: var(--failure);
+    }
+
+    .armada-sigil {
+        flex: none;
+        display: block;
+        fill: currentcolor;
+        width: var(--avatar);
+        height: var(--avatar);
+    }
+
+    .armada-sigil[data-size="20"] {
+        width: var(--s-5);
+        height: var(--s-5);
+    }
+
+    .armada-sigil[data-size="64"] {
+        width: calc(var(--px) * 64);
+        height: calc(var(--px) * 64);
+    }
+
+    /* The head of the stream: the working mark stands where the next word
+       will be and takes no room. */
+    .armada-head {
+        display: inline-block;
+        width: 0;
+        height: 0;
+        position: relative;
+        vertical-align: baseline;
+    }
+
+    .armada-head > .armada-mark {
+        position: absolute;
+        left: calc(var(--px) * 6);
+        top: calc(var(--px) * -13);
+    }
+
+    .armada-head[data-first] > .armada-mark {
+        left: 0;
+    }
+
+    .armada-dots {
+        display: block;
+        width: calc(var(--px) * 26);
+        height: calc(var(--px) * 6);
+        fill: var(--ink-2);
+        overflow: visible;
+    }
+
+    .armada-dots[data-size="small"] {
+        width: calc(var(--px) * 13);
+        height: calc(var(--px) * 3);
+    }
+}

@@ -17,6 +17,7 @@ import {
     context_key,
     model_reasoning_efforts,
 } from "./pear_runtime_shared.ts";
+import * as pear_wall from "./pear_wall.ts";
 import * as pear_workspace from "./pear_workspace.ts";
 import * as pear_workspace_marks from "./pear_workspace_marks.ts";
 import * as stream_data from "./stream_data.ts";
@@ -224,7 +225,9 @@ let workbench_anchor_element: HTMLElement | undefined;
 let workbench_anchor_context_key = "";
 type WorkbenchAnchorKind = "context" | "git";
 let workbench_anchor_kind: WorkbenchAnchorKind | undefined;
-let last_observed_context_key = "";
+// Undefined until the first message view is shown, so that the first one
+// always asks for its runs, a view with no topic included.
+let last_observed_context_key: string | undefined;
 const CONTEXT_REFRESH_INTERVAL_MS = 60_000;
 const WORKBENCH_MIN_VIEWPORT_WIDTH_PX = 320;
 const WORKBENCH_POPOVER_MARGIN_PX = 8;
@@ -541,9 +544,7 @@ export function workbench_view_for_testing(options: {
     return "history";
 }
 
-export function workbench_view_for_artifact_label(
-    label: string,
-): PearWorkbenchView | undefined {
+export function workbench_view_for_artifact_label(label: string): PearWorkbenchView | undefined {
     const normalized_label = label.trim().toLowerCase();
     if (normalized_label === "diff") {
         return "diff";
@@ -1343,11 +1344,18 @@ export function should_refresh_context_for_testing(options: {
     last_refresh_key: string;
     last_refresh_at: number;
     has_context: boolean;
+    has_active_run: boolean;
 }): boolean {
-    if (options.live) {
+    if (options.context_key_value === "") {
         return false;
     }
-    if (options.context_key_value === "") {
+    // The end of a run changes its worktree. A request made while a run
+    // is live asks for the context too, so that an answer saying the run
+    // has ended needs no second request for it.
+    if (options.has_active_run) {
+        return true;
+    }
+    if (options.live) {
         return false;
     }
     if (options.force_context) {
@@ -1379,6 +1387,7 @@ function should_refresh_context(
         last_refresh_key: last_context_refresh_key,
         last_refresh_at: last_context_refresh_at,
         has_context: display_source_topic_context(stream, topic) !== undefined,
+        has_active_run: has_active_run(last_runs),
     });
 }
 
@@ -1680,6 +1689,7 @@ export function remember_saved_topic_context(raw_topic_context: unknown): void {
 }
 
 export function handle_narrow_activated(): void {
+    pear_wall.handle_narrow_changed();
     const key = current_context_key();
     if (key === last_observed_context_key) {
         render();
@@ -1905,7 +1915,8 @@ function render_workspace_rail(
     }
     const args = {
         has_workspace,
-        repo_label,
+        repo_label: pear_rail_repo_display_label(repo_label),
+        repo_title: repo_label,
         branch_label,
         head_short: git?.head_short?.trim() ?? "",
         status_class: dirty ? "dirty" : "clean",
@@ -1934,6 +1945,15 @@ function render_workspace_rail(
     $rail.empty();
     rail.append(template.content);
     $rail.removeAttr("hidden");
+}
+
+// A clone URL is the repository's address, not its name: the rail says
+// "pallets/click" and keeps the full URL for the tooltip.
+export function pear_rail_repo_display_label(label: string): string {
+    const match = /^(?:[a-z][a-z\d+.-]*:\/\/|git@)[^/:]+[/:](.+?)(?:\.git)?\/?$/i.exec(
+        label.trim(),
+    );
+    return match?.[1] ?? label;
 }
 
 export function pear_rail_queue_depth_for_testing(runs: {status: string}[]): number {
@@ -2311,9 +2331,7 @@ export function initialize(): void {
         e.stopPropagation();
         const requested_view = $(e.currentTarget).attr("data-pear-workbench-view");
         open_work_details(
-            requested_view === "diff" || requested_view === "history"
-                ? requested_view
-                : undefined,
+            requested_view === "diff" || requested_view === "history" ? requested_view : undefined,
             e.currentTarget instanceof HTMLElement ? e.currentTarget : undefined,
         );
     });
@@ -2424,7 +2442,11 @@ export function initialize(): void {
             refresh({force_context: true});
         }
     });
-    refresh();
+    // No request here: nothing is on screen yet that shows a run. The first
+    // message view asks for its own (handle_narrow_activated), so a page
+    // that opens on a topic makes one request, not two, and one that opens
+    // on Inbox or Recent makes none.
+    schedule_live_render();
 }
 
 export function stop(): void {

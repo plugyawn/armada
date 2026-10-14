@@ -111,11 +111,10 @@ export function process_new_message(
         !message_store.can_apply_thread_summary_from_fetch(
             opts.raw_message.id,
             context.thread_summary_fetch_generation,
-        )
+        ) &&
+        "reply_summary" in message_with_booleans.message
     ) {
-        if ("reply_summary" in message_with_booleans.message) {
-            delete message_with_booleans.message.reply_summary;
-        }
+        delete message_with_booleans.message.reply_summary;
     }
     people.extract_people_from_message(message_with_booleans.message);
 

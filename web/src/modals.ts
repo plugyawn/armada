@@ -4,8 +4,6 @@ import assert from "minimalistic-assert";
 
 import * as blueslip from "./blueslip.ts";
 import * as mouse_drag from "./mouse_drag.ts";
-import * as overlay_util from "./overlay_util.ts";
-import * as overlays from "./overlays.ts";
 import * as popovers from "./popovers.ts";
 
 type Hook = () => void;
@@ -182,24 +180,12 @@ export function open(
             conf.on_show();
         }
         // We avoid toggling scrolling when opening a modal over an active overlay.
-        // This prevents a subtle UI shift, as reported in
-        // https://chat.zulip.org/#narrow/channel/9-issues/topic/A.20little.20right.20shift.20can.20be.20observed.20when.20confirm.20dialog.20ope/near/2026160
-        // There is no need to enable or disable the scrolling when modal is
-        // opened because it is already handled while opening and closing the overlay.
-        if (!overlays.any_active()) {
-            overlay_util.disable_scrolling();
-        }
         call_hooks(pre_open_hooks);
     }
 
     function on_close_callback(): void {
         if (conf.on_hide) {
             conf.on_hide();
-        }
-        // Since we are disabling scroll only when the modal is not
-        // opened over an overlay, we will enable it in that way only.
-        if (!overlays.any_active()) {
-            overlay_util.enable_scrolling();
         }
         call_hooks(pre_close_hooks);
     }

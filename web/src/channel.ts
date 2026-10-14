@@ -1,4 +1,3 @@
-import * as Sentry from "@sentry/browser";
 import $ from "jquery";
 import _ from "lodash";
 import * as z from "zod/mini";
@@ -6,7 +5,6 @@ import * as z from "zod/mini";
 import {page_params} from "./base_page_params.ts";
 import * as blueslip from "./blueslip.ts";
 import * as reload_state from "./reload_state.ts";
-import {normalize_path, shouldCreateSpanForRequest} from "./sentry.ts";
 import * as spectators from "./spectators.ts";
 
 // We omit `success` handler from original `AjaxSettings` type because it types
@@ -44,32 +42,6 @@ function call(args: AjaxRequestHandlerOptions): JQuery.jqXHR<unknown> | undefine
         return undefined;
     }
 
-    const txn_title = `call ${args.type} ${normalize_path(args.url)}`;
-    const span_data = {
-        op: "function",
-        data: {
-            url: args.url,
-            method: args.type,
-        },
-    };
-    /* istanbul ignore if */
-    if (!shouldCreateSpanForRequest(args.url)) {
-        return call_in_span(undefined, args);
-    }
-    return Sentry.startSpanManual({...span_data, name: txn_title}, (span) => {
-        try {
-            return call_in_span(span, args);
-        } catch (error) /* istanbul ignore next */ {
-            span?.end();
-            throw error;
-        }
-    });
-}
-
-function call_in_span(
-    span: Sentry.Span | undefined,
-    args: AjaxRequestHandlerOptions,
-): JQuery.jqXHR<unknown> {
     // Remember the number of completed password changes when the
     // request was initiated. This allows us to detect race
     // situations where a password change occurred before we got a
@@ -84,11 +56,6 @@ function call_in_span(
             // Ignore errors by default
         });
     args.error = function wrapped_error(xhr, error_type, xhn) {
-        /* istanbul ignore if */
-        if (span !== undefined) {
-            Sentry.setHttpStatus(span, xhr.status);
-            span.end();
-        }
         if (reload_state.is_in_progress()) {
             // If we're in the process of reloading the browser,
             // there's no point in running the error handler,
@@ -150,11 +117,6 @@ function call_in_span(
             // Do nothing by default
         });
     args.success = function wrapped_success(data, textStatus, jqXHR) {
-        /* istanbul ignore if */
-        if (span !== undefined) {
-            Sentry.setHttpStatus(span, jqXHR.status);
-            span.end();
-        }
         if (reload_state.is_in_progress()) {
             // If we're in the process of reloading the browser,
             // there's no point in running the success handler,

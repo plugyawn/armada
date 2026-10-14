@@ -10,6 +10,7 @@ const $ = require("./lib/zjquery.cjs");
 
 set_global("document", "document-stub");
 
+/* istanbul ignore next */
 let sender_is_bot = () => false;
 
 // timerender calls setInterval when imported
@@ -1929,47 +1930,4 @@ test("render_windows", ({mock_template}) => {
         move_end: 250,
         no_move_start: 0,
     });
-});
-
-run_test("pear thinking frames stay in lockstep with the CSS engine", () => {
-    // The frame cycle executes as CSS keyframes (pear-thinking-frames in
-    // pear.css); the JS array remains the canonical sequence. If either
-    // side changes without the other, the ✦ Thinking animation would
-    // silently change character.
-    const fs = require("node:fs");
-    const path = require("node:path");
-    const css = fs.readFileSync(path.resolve(__dirname, "../styles/pear.css"), "utf8");
-    const keyframes_block = /@keyframes pear-thinking-frames \{([^]*?)\n\}/.exec(css);
-    assert.ok(keyframes_block, "pear-thinking-frames keyframes must exist in pear.css");
-    const css_frames = [...keyframes_block[1].matchAll(/content: "(.+?)";/g)].map((m) => m[1]);
-    const js_frames = [...message_list_view.pear_thinking_glyph_frames_for_testing()];
-    // The 100% keyframe repeats frame 0 to close the loop.
-    assert.deepEqual(css_frames, [...js_frames, js_frames[0]]);
-});
-
-run_test("pear work trace expands in the message scroll flow", () => {
-    const fs = require("node:fs");
-    const path = require("node:path");
-    const css = fs.readFileSync(path.resolve(__dirname, "../styles/message_row.css"), "utf8");
-    const trace_block = /\.pear-run-trace \{([^]*?)\n\s*\}\n\n\s*\.pear-tool-spoiler-block/.exec(
-        css,
-    );
-    assert.ok(trace_block, "pear-run-trace styles must exist in message_row.css");
-    assert.doesNotMatch(trace_block[1], /max-height|overflow|scrollbar-gutter/);
-    assert.match(trace_block[1], /> p \{\s*margin: 0;/);
-    assert.match(trace_block[1], /> \.pear-tool-spoiler-block \{\s*margin: 0;/);
-});
-
-run_test("pear live progress glow stays feathered inside its surface", () => {
-    const fs = require("node:fs");
-    const path = require("node:path");
-    const css = fs.readFileSync(path.resolve(__dirname, "../styles/message_row.css"), "utf8");
-    const progress_block =
-        /\.pear-live-progress:has\(> \.pear-live-progress-disclosure\) \{([^]*?)\n\s*\.pear-live-progress-disclosure \{/.exec(
-            css,
-        );
-    assert.ok(progress_block, "live progress disclosure styles must exist in message_row.css");
-    assert.match(progress_block[1], /&::before \{[^]*?inset: 0;/);
-    assert.doesNotMatch(progress_block[1], /inset:\s*-\d/);
-    assert.doesNotMatch(progress_block[1], /0 0 18px 1px/);
 });

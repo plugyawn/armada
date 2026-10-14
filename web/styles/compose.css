@@ -681,13 +681,6 @@
     }
 }
 
-#compose {
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    z-index: 4;
-}
-
 #compose-container {
     display: flex;
     flex-direction: column;
@@ -1127,6 +1120,34 @@ textarea.new_message_textarea {
     &:focus {
         outline: 0;
     }
+}
+
+/* A message field is as tall as its text, between the minimum and the
+   maximum height its own rule gives it. `compose_ui.ts` adds the class
+   while a field is sized this way, and writes the height itself in a
+   browser that does not know the property. */
+textarea.sized-to-content {
+    field-sizing: content;
+    height: auto;
+}
+
+/* The text face's glyph box is taller than a line (26px on a 22.4px line
+   at 16px), so the last line reaches 1.8px below the text's own height.
+   Without room for it the field could be scrolled by that much, and the
+   text would jump when the caret reached the last line. The composer's
+   minimum and maximum heights (compose_actions.ts, resize.ts) are less by
+   the same amount, so the field is as tall as it was at both ends. */
+textarea.new_message_textarea.sized-to-content,
+textarea.message_edit_content.sized-to-content {
+    --message-field-bottom-room: 0.125em;
+
+    padding-bottom: var(--message-field-bottom-room);
+}
+
+/* The thread composer has no limit of its own. Like the main composer's,
+   its limit leaves room for the conversation above it in a short window. */
+textarea.compose-editor-textarea.sized-to-content {
+    max-height: min(22em, 40vh);
 }
 
 #message-content-container,

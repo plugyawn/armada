@@ -1,0 +1,427 @@
+#!/usr/bin/env python3
+"""The fork ledger: every Zulip file this fork changed, and what became of it.
+
+Armada is a fork of Zulip.  The rebuild gives up merging from upstream for
+the frontend, so each Zulip file it changes or deletes has to be accounted
+for, and the old proof-of-concept code has to be seen to shrink.  A "Zulip
+file" is a path that exists at the fork base; a path the fork added is
+Armada's own and needs no entry.
+
+    tools/armada/fork_ledger --check     exit 1 if a changed Zulip file is unaccounted for, or if more
+                                         of the old frontend is left than last time (run by tools/lint)
+    tools/armada/fork_ledger --write     also write docs/armada/fork-ledger.md and lower the recorded
+                                         counts to today's (run on the host checkout)
+    tools/armada/fork_ledger --suggest   print ledger lines for the files that have none
+
+Entries live in tools/armada/fork_ledger.d/*.txt, one file per work package
+so that packages running in parallel never edit the same file.  A line is
+
+    <status> <path>            optionally followed by "  # why"
+
+    poc                 changed by the proof of concept, before the rebuild (poc.txt only; the line
+                        ends with the id of the file's content when the rebuild began)
+    hooked              upstream file that calls into web/src/armada/hooks/ on lines marked "armada:"
+    bridged:<package>   old code kept alive until <package> replaces it
+    absorbed:<path>     deleted; rewritten at <path> under web/src/armada/
+    deleted             deleted; the feature is cut (docs/armada/cuts.md)
+    kept                changed in place and staying: toolchain, configuration, server code, tests
+
+A package's entry for a path replaces the poc.txt entry for it.  A file
+that has only its poc.txt entry must still have the content recorded there:
+a package that edits it says what it did to it in its own file.
+
+What is left of the old frontend is counted, and the counts are kept in
+fork_ledger.d/counts.json.  They only fall: --check fails when one is above
+the recorded number, and --write lowers the record when one is below it.
+"""
+
+import argparse
+import json
+import os
+import re
+import subprocess
+import sys
+from collections import Counter
+
+FORK_BASE = "7813218321"
+
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+LEDGER_DIR = "tools/armada/fork_ledger.d"
+REPORT = "docs/armada/fork-ledger.md"
+BASELINE = "poc.txt"
+COUNTS = "counts.json"
+GONE = "-"
+
+# What is left of the old frontend: these may only fall.  The files under
+# web/src/armada/bridge/ are counted in the document and not held here,
+# because a bridge is added before it is removed.
+FALLING_COUNTS = {
+    "old_modules": "old Armada frontend modules (web/src/*.ts added by the fork)",
+    "exempt": "entries in ARMADA_EXEMPT_FILES (tools/test-js-with-node)",
+    "stylesheets": "stylesheets under web/styles/",
+    "old_stylesheets": "old Armada stylesheets under web/styles/",
+    "old_templates": "old Armada templates under web/templates/",
+    "system_faces": "files in web/ that name a system typeface",
+}
+
+# The same pattern as system_face_rule in tools/linter_lib/custom_check.py.
+SYSTEM_FACE = re.compile(
+    r"system-ui|-apple-system|BlinkMacSystemFont|\bui-(sans-serif|serif|monospace|rounded)\b"
+    r"|Helvetica Neue|\bMenlo\b|\bSF ?(Pro|Mono)"
+)
+
+STATUS = re.compile(r"^(poc|hooked|deleted|kept|bridged:[A-Z][0-9]+|absorbed:web/src/armada/\S+)$")
+BLOB = re.compile(r"^([0-9a-f]{40}|-)$")
+
+
+def git(*args: str) -> list[str]:
+    output = subprocess.check_output(["git", *args], cwd=ROOT, text=True)
+    return [item for item in output.split("\0") if item]
+
+
+def changed_since_base(*until: str) -> tuple[dict[str, str], set[str]]:
+    """Returns the Zulip files that differ from the fork base, as
+    {path: "M" or "D"}, and the files the fork added.  The comparison is
+    with the working tree, or with the commit given."""
+    fields = git("diff", "--name-status", "--no-renames", "-z", FORK_BASE, *until)
+    changed: dict[str, str] = {}
+    added: set[str] = set()
+    # Plain Python 3.9, so that this also runs outside the venv, on the host.
+    for index in range(0, len(fields), 2):
+        letter, path = fields[index], fields[index + 1]
+        if letter == "A":
+            added.add(path)
+        else:
+            changed[path] = "D" if letter == "D" else "M"
+    added.update(git("ls-files", "-z", "--others", "--exclude-standard"))
+    return changed, added
+
+
+def content_ids(paths: list[str]) -> dict[str, str]:
+    """The id git gives each file's content in the working tree, or GONE."""
+    present = [path for path in paths if os.path.isfile(os.path.join(ROOT, path))]
+    output = subprocess.run(
+        ["git", "hash-object", "--no-filters", "--stdin-paths"],
+        input="".join(f"{path}\n" for path in present),
+        cwd=ROOT,
+        text=True,
+        check=True,
+        stdout=subprocess.PIPE,
+    ).stdout.split()
+    ids = dict.fromkeys(paths, GONE)
+    # No zip(strict=): this also runs under Python 3.9, on the host.
+    assert len(output) == len(present)
+    ids.update({path: output[index] for index, path in enumerate(present)})
+    return ids
+
+
+def read_ledger() -> tuple[dict[str, tuple[str, str, str]], dict[str, str], list[str]]:
+    """Returns {path: (status, source file, note)}, the content recorded
+    for each poc.txt path as {path: id}, and the problems found while
+    reading."""
+    problems: list[str] = []
+    recorded: dict[str, str] = {}
+    baseline: dict[str, tuple[str, str, str]] = {}
+    entries: dict[str, tuple[str, str, str]] = {}
+    directory = os.path.join(ROOT, LEDGER_DIR)
+    for name in sorted(os.listdir(directory)) if os.path.isdir(directory) else []:
+        if not name.endswith(".txt"):
+            continue
+        with open(os.path.join(directory, name)) as f:
+            for number, raw in enumerate(f, start=1):
+                line, _, note = raw.partition("#")
+                parts = line.split()
+                if not parts:
+                    continue
+                where = f"{LEDGER_DIR}/{name}:{number}"
+                if name == BASELINE:
+                    if len(parts) != 3 or parts[0] != "poc" or not BLOB.match(parts[2]):
+                        problems.append(
+                            f"{where}: expected 'poc <path> <content id>', got: {raw.strip()}"
+                        )
+                        continue
+                    recorded[parts[1]] = parts.pop()
+                if len(parts) != 2 or not STATUS.match(parts[0]):
+                    problems.append(f"{where}: expected '<status> <path>', got: {raw.strip()}")
+                    continue
+                status, path = parts
+                if (status == "poc") != (name == BASELINE):
+                    problems.append(f"{where}: 'poc' entries belong in {BASELINE} and only there")
+                    continue
+                target = baseline if name == BASELINE else entries
+                if path in target:
+                    problems.append(f"{where}: {path} is already listed in {target[path][1]}")
+                    continue
+                target[path] = (status, name, note.strip())
+    return {**baseline, **entries}, recorded, problems
+
+
+def check(
+    changed: dict[str, str], ledger: dict[str, tuple[str, str, str]], recorded: dict[str, str]
+) -> list[str]:
+    problems: list[str] = []
+    only_poc = sorted(path for path in changed if path in ledger and ledger[path][1] == BASELINE)
+    for path, now in content_ids(only_poc).items():
+        # A file that is gone is reported below.
+        if now not in (GONE, recorded[path]):
+            problems.append(
+                f"{path}: changed since the rebuild began and no package's ledger file lists it;"
+                f" say what became of it in {LEDGER_DIR}/<your package>.txt"
+                " (tools/armada/fork_ledger --suggest)"
+            )
+    for path, letter in sorted(changed.items()):
+        if path not in ledger:
+            problems.append(
+                f"{path}: differs from the fork base and no ledger line accounts for it"
+                " (tools/armada/fork_ledger --suggest)"
+            )
+            continue
+        status = ledger[path][0].partition(":")[0]
+        if letter == "D" and status not in ("deleted", "absorbed"):
+            problems.append(
+                f"{path}: is gone but the ledger says '{ledger[path][0]}';"
+                " say 'deleted' or 'absorbed:<path>' in your package's file"
+            )
+        if letter == "M" and status in ("deleted", "absorbed"):
+            problems.append(f"{path}: the ledger says '{ledger[path][0]}' but the file exists")
+        if letter == "M" and status == "hooked":
+            with open(os.path.join(ROOT, path), errors="replace") as f:
+                if "armada:" not in f.read():
+                    problems.append(f"{path}: 'hooked' but no line is marked 'armada:'")
+        if status == "absorbed":
+            new_path = ledger[path][0].partition(":")[2]
+            if not os.path.exists(os.path.join(ROOT, new_path)):
+                problems.append(f"{path}: absorbed into {new_path}, which does not exist")
+    return problems
+
+
+def suggest(
+    changed: dict[str, str], ledger: dict[str, tuple[str, str, str]], recorded: dict[str, str]
+) -> list[str]:
+    lines = []
+    now = content_ids(sorted(recorded))
+    for path, letter in sorted(changed.items()):
+        status = ledger.get(path, ("",))[0].partition(":")[0]
+        edited = status == "poc" and now[path] != recorded[path]
+        if letter == "D" and status not in ("deleted", "absorbed"):
+            lines.append(f"deleted {path}")
+        elif path not in ledger or edited:
+            with open(os.path.join(ROOT, path), errors="replace") as f:
+                hooked = "armada:" in f.read()
+            lines.append(f"{'hooked' if hooked else 'bridged:??'} {path}")
+    return lines
+
+
+def exempt_files() -> list[str]:
+    with open(os.path.join(ROOT, "tools/test-js-with-node")) as f:
+        block = re.search(r"ARMADA_EXEMPT_FILES = make_set\(\s*\[(.*?)\]\s*\)", f.read(), re.DOTALL)
+    assert block is not None
+    return re.findall(r'"([^"]+)"', block.group(1))
+
+
+def system_face_files() -> list[str]:
+    found = []
+    for path in git("ls-files", "-z", "--cached", "--others", "--exclude-standard", "--", "web"):
+        if path.startswith("web/third/") or not path.endswith(
+            (".css", ".ts", ".tsx", ".js", ".cjs", ".hbs")
+        ):
+            continue
+        full = os.path.join(ROOT, path)
+        if not os.path.isfile(full):
+            continue
+        with open(full, errors="replace") as f:
+            if SYSTEM_FACE.search(f.read()):
+                found.append(path)
+    return found
+
+
+def what_is_left(added: set[str]) -> dict[str, list[str]]:
+    """The old proof-of-concept frontend and the scaffolding of the
+    rebuild.  The first three must reach zero at the final close."""
+    present = sorted(path for path in added if os.path.isfile(os.path.join(ROOT, path)))
+    all_files = git("ls-files", "-z", "--cached", "--others", "--exclude-standard", "--", "web")
+    return {
+        "old_modules": [p for p in present if re.fullmatch(r"web/src/[^/]+\.(ts|js)", p)],
+        "old_stylesheets": [p for p in present if re.fullmatch(r"web/styles/[^/]+\.css", p)],
+        "old_templates": [p for p in present if re.fullmatch(r"web/templates/.+\.hbs", p)],
+        "bridges": [
+            p
+            for p in present
+            if p.startswith("web/src/armada/bridge/") and not p.endswith("README.md")
+        ],
+        "exempt": exempt_files(),
+        "stylesheets": sorted(
+            p
+            for p in all_files
+            if p.startswith("web/styles/")
+            and p.endswith(".css")
+            and os.path.isfile(os.path.join(ROOT, p))
+        ),
+        "system_faces": system_face_files(),
+    }
+
+
+def read_counts() -> dict[str, int]:
+    with open(os.path.join(ROOT, LEDGER_DIR, COUNTS)) as f:
+        counts: dict[str, int] = json.load(f)
+    return counts
+
+
+def check_counts(left: dict[str, list[str]]) -> list[str]:
+    recorded = read_counts()
+    return [
+        f"{len(left[key])} {title}; there were {recorded[key]}, and the count only falls"
+        f" ({REPORT} lists them; {LEDGER_DIR}/{COUNTS} holds the number)"
+        for key, title in FALLING_COUNTS.items()
+        if len(left[key]) > recorded[key]
+    ]
+
+
+def write_counts(left: dict[str, list[str]], recorded: dict[str, int]) -> None:
+    """Lowers the recorded counts to today's; never raises one."""
+    counts = {key: min(len(left[key]), recorded.get(key, len(left[key]))) for key in FALLING_COUNTS}
+    if counts != recorded:
+        with open(os.path.join(ROOT, LEDGER_DIR, COUNTS), "w") as f:
+            f.write(json.dumps(counts, indent=4) + "\n")
+        print(f"wrote {LEDGER_DIR}/{COUNTS}")
+
+
+def render(
+    changed: dict[str, str], ledger: dict[str, tuple[str, str, str]], left: dict[str, list[str]]
+) -> str:
+    by_status: dict[str, list[str]] = {}
+    for path in sorted(changed):
+        status = ledger[path][0] if path in ledger else "unaccounted"
+        by_status.setdefault(status.partition(":")[0], []).append(path)
+    counts = Counter({status: len(paths) for status, paths in by_status.items()})
+
+    lines = [
+        "---",
+        "orphan: true",
+        "---",
+        "",
+        "# Fork ledger",
+        "",
+        "Generated by `tools/armada/fork_ledger --write`; do not edit by hand. It lists",
+        f"every Zulip file that differs from the fork base (`{FORK_BASE}`) and what",
+        "became of it, and counts what is left of the proof of concept. The entries",
+        "are in `tools/armada/fork_ledger.d/`; `tools/lint` fails when a changed Zulip",
+        "file has no entry, when a file the proof of concept changed is edited again",
+        "without a package saying so, and when one of the counts below, other than the",
+        "bridges, is higher than it was (`tools/armada/fork_ledger.d/counts.json`).",
+        "",
+        "## What is left",
+        "",
+        "The first three must reach 0 at the final close.",
+        "",
+        f"- Old Armada frontend modules (`web/src/*.ts` added by the fork): {len(left['old_modules'])}",
+        f"- Files under `web/src/armada/bridge/`: {len(left['bridges'])}",
+        f"- Entries in `ARMADA_EXEMPT_FILES` (`tools/test-js-with-node`): {len(left['exempt'])}",
+        f"- Stylesheets under `web/styles/`: {len(left['stylesheets'])}, of which"
+        f" {len(left['old_stylesheets'])} are the fork's own old sheets",
+        f"- Old Armada templates under `web/templates/`: {len(left['old_templates'])}",
+        f"- Files in `web/` that name a system typeface: {len(left['system_faces'])}",
+        "",
+        "## Zulip files that differ from the fork base",
+        "",
+        f"{len(changed)} files.",
+        "",
+    ]
+    names = {
+        "poc": "Changed by the proof of concept, not yet dealt with by the rebuild",
+        "hooked": "Hooked: upstream file with marked calls into `web/src/armada/hooks/`",
+        "bridged": "Bridged: old code kept alive until a named package replaces it",
+        "absorbed": "Absorbed: deleted and rewritten under `web/src/armada/`",
+        "deleted": "Deleted",
+        "kept": "Changed in place and staying (toolchain, configuration, server code, tests)",
+        "unaccounted": "Unaccounted for (lint fails)",
+    }
+    for status, title in names.items():
+        lines.append(f"- {title}: {counts[status]}")
+    for status, title in names.items():
+        if not by_status.get(status):
+            continue
+        lines += ["", f"### {title}", ""]
+        for path in by_status[status]:
+            entry = ledger.get(path, ("", "", ""))
+            detail = entry[0].partition(":")[2]
+            suffix = (f" ({detail})" if detail else "") + (f": {entry[2]}" if entry[2] else "")
+            lines.append(f"- `{path}`{suffix}")
+    for key, title in (
+        ("old_modules", "Old Armada frontend modules"),
+        ("system_faces", "Files that name a system typeface"),
+    ):
+        lines += ["", f"## {title}", ""]
+        lines += [f"- `{path}`" for path in left[key]] or ["None."]
+    return "\n".join(lines) + "\n"
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    parser.add_argument("--check", action="store_true", help="fail on an unaccounted file")
+    parser.add_argument("--write", action="store_true", help=f"write {REPORT}")
+    parser.add_argument("--suggest", action="store_true", help="print lines for unlisted files")
+    parser.add_argument(
+        "--snapshot",
+        action="store_true",
+        help=f"write {LEDGER_DIR}/{BASELINE} and {COUNTS} (done once, at the start of the rebuild)",
+    )
+    options = parser.parse_args()
+
+    if options.snapshot:
+        baseline = os.path.join(ROOT, LEDGER_DIR, BASELINE)
+        if os.path.exists(baseline):
+            print(f"{LEDGER_DIR}/{BASELINE} exists; the snapshot is taken once.")
+            return 1
+        changed, added = changed_since_base("HEAD")
+        head = git("rev-parse", "--short=10", "HEAD")[0].strip()
+        os.makedirs(os.path.join(ROOT, LEDGER_DIR), exist_ok=True)
+        with open(baseline, "w") as f:
+            f.write(
+                "# Zulip files the proof of concept had changed when the rebuild began\n"
+                f"# (the fork base {FORK_BASE} against {head}, the last commit before the\n"
+                "# rebuild).  Each line ends with the id of the file's content in the working\n"
+                "# tree when the snapshot was taken (git hash-object), or - for a file that\n"
+                "# was gone.  Written once by tools/armada/fork_ledger --snapshot; do not add\n"
+                "# to it or edit an id.  A package that deals with one of these files, or\n"
+                "# edits it, says so in its own file here.\n"
+            )
+            f.writelines(
+                f"poc {path} {blob}\n" for path, blob in content_ids(sorted(changed)).items()
+            )
+        write_counts(what_is_left(added), {})
+        return 0
+
+    changed, added = changed_since_base()
+    ledger, recorded, problems = read_ledger()
+
+    if options.suggest:
+        print("\n".join(suggest(changed, ledger, recorded)))
+        return 0
+
+    left = what_is_left(added)
+    problems += check(changed, ledger, recorded)
+    problems += check_counts(left)
+    for path in sorted(set(ledger) - set(changed)):
+        # Not a failure: whoever restored the file may not own the entry.
+        print(f"Note: {path} no longer differs from the fork base; remove its ledger line.")
+
+    if options.write:
+        os.makedirs(os.path.dirname(os.path.join(ROOT, REPORT)), exist_ok=True)
+        with open(os.path.join(ROOT, REPORT), "w") as f:
+            f.write(render(changed, ledger, left))
+        print(f"wrote {REPORT}")
+        write_counts(left, read_counts())
+
+    for problem in problems:
+        print(problem)
+    if problems:
+        print(
+            f"\n{len(problems)} problem(s) in the fork ledger. See tools/armada/fork_ledger --help."
+        )
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -53,8 +53,6 @@ for (const [name, value] of Object.entries({
     set_global(name, value);
 }
 
-let disable_scrolling_count = 0;
-let enable_scrolling_count = 0;
 let controller_options;
 let destroyed_controller_count = 0;
 let desktop_viewport = false;
@@ -209,14 +207,6 @@ mock_esm("../src/unread_ops", {
 });
 mock_esm("../src/modals", {register_pre_open_hook() {}});
 mock_esm("../src/overlays", {register_pre_open_hook() {}});
-mock_esm("../src/overlay_util", {
-    disable_scrolling() {
-        disable_scrolling_count += 1;
-    },
-    enable_scrolling() {
-        enable_scrolling_count += 1;
-    },
-});
 mock_esm("../src/timerender", {relative_time_string_from_date: () => "2h ago"});
 mock_esm("../src/ui_util", {matches_viewport_state: () => desktop_viewport});
 mock_esm("../src/pear_run_trace", {
@@ -313,8 +303,6 @@ function reset_dom() {
         delete host.dataset.signature;
     }
     document.querySelector("#message-thread-pane").hidden = true;
-    disable_scrolling_count = 0;
-    enable_scrolling_count = 0;
     controller_options = undefined;
     destroyed_controller_count = 0;
     desktop_viewport = false;
@@ -825,7 +813,7 @@ run_test("pushed summary re-renders the open pane", () => {
     // only the conversation context.
     const heading_text = pane
         .querySelector(".message-thread-pane-heading")
-        .textContent.replace(/\s+/g, " ")
+        .textContent.replaceAll(/\s+/g, " ")
         .trim();
     assert.equal(heading_text, "# devel > native threads");
 });
@@ -1046,11 +1034,9 @@ run_test("desktop and mobile reuse one accessible pane shell", () => {
     desktop_viewport = false;
     window.dispatchEvent(new Event("resize"));
     assert.equal(pane.getAttribute("role"), "dialog");
-    assert.equal(disable_scrolling_count, 1);
     assert.equal(document.querySelector("#primary-shell").hasAttribute("inert"), true);
     document.dispatchEvent(new window.KeyboardEvent("keydown", {key: "Escape", bubbles: true}));
     flush_animation_frame();
     assert.equal(pane.hidden, true);
-    assert.equal(enable_scrolling_count, 1);
     assert.equal(document.querySelector("#primary-shell").hasAttribute("inert"), false);
 });

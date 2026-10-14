@@ -1947,8 +1947,6 @@ export class Filter {
         // or 2 (channel+topic, channel+topic+with). Specialize these
         // cases to avoid .every() overhead.
         switch (predicates.length) {
-            case 0:
-                return () => true;
             case 1:
                 return predicates[0]!;
             case 2: {

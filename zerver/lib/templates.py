@@ -1,3 +1,4 @@
+import os
 import time
 from pathlib import Path
 from typing import Any
@@ -10,6 +11,7 @@ import markdown.extensions.toc
 import orjson
 from django.conf import settings
 from django.contrib.staticfiles.storage import staticfiles_storage
+from django.http import HttpRequest
 from django.template import Library, engines
 from django.template.backends.jinja2 import Jinja2
 from django.utils.safestring import mark_safe
@@ -196,7 +198,7 @@ def render_markdown_path(
     return mark_safe(jinja.from_string(html).render(context))  # noqa: S308
 
 
-def webpack_entry(entrypoint: str) -> list[str]:
+def webpack_stats() -> dict[str, Any]:
     while True:
         with open(settings.WEBPACK_STATS_FILE, "rb") as f:
             stats = orjson.loads(f.read())
@@ -207,7 +209,11 @@ def webpack_entry(entrypoint: str) -> list[str]:
 
     if status != "done":
         raise RuntimeError("Webpack compilation was not successful")
+    return stats
 
+
+def webpack_entry(entrypoint: str) -> list[str]:
+    stats = webpack_stats()
     try:
         files_from_entrypoints = [
             staticfiles_storage.url(settings.WEBPACK_BUNDLES + filename)
@@ -220,3 +226,69 @@ def webpack_entry(entrypoint: str) -> list[str]:
         )
 
     return files_from_entrypoints
+
+
+# The webpack entry points whose pages are drawn in the design's two
+# stacks (web/src/armada/tokens/tokens.css). Every other page is still
+# set by an old stylesheet in Zulip's old family name, which
+# web/src/armada/tokens/fonts.css points at Hanken Grotesk.
+ARMADA_TYPE_ENTRYPOINTS = {
+    "app",
+    # INTERIM BETA: /beta/ is set in the same faces; removed with web/src/armada/beta/.
+    "armada-beta",
+}
+
+
+def font_preloads(entrypoint: str) -> list[str]:
+    """The font files a first paint of this entry point needs, as URLs
+    to preload.
+
+    Text is never painted in one face and then in another, so every
+    face a first paint uses is fetched before it, and none it does not
+    use. The faces are found in the same webpack stats as the entry
+    points, by the name of the file each was built from. The app gets
+    the three upright weights of Söhne when
+    tools/setup/build_armada_fonts found them (the italic loads on
+    use), Geist Mono, and Hanken Grotesk only while it still draws
+    text, which is when Söhne is absent or is Klim's test files, which
+    hold no punctuation. A page outside the app gets Hanken Grotesk
+    alone.
+    """
+    built_from = {
+        os.path.basename(asset.get("sourceFilename", "")): asset["name"]
+        for asset in webpack_stats().get("assets", {}).values()
+    }
+    if entrypoint in ARMADA_TYPE_ENTRYPOINTS:
+        soehne = sorted(
+            name
+            for name in built_from
+            if name.endswith(".woff2") and "soehne" in name and "kursiv" not in name
+        )
+        wanted = [*soehne, "GeistMonoVF.woff2"]
+        if not soehne or any("test" in name for name in soehne):
+            wanted.append("HankenGrotesk-VF.woff2")
+    else:
+        wanted = ["HankenGrotesk-VF.woff2"]
+    return [
+        staticfiles_storage.url(settings.WEBPACK_BUNDLES + built_from[name])
+        for name in wanted
+        if name in built_from
+    ]
+
+
+# The palettes tools/armada/palette.py writes; the first is unscoped in
+# the stylesheet.
+ARMADA_PALETTES = ["lapis", "tide", "citrine", "onyx"]
+
+
+def armada_palette(request: HttpRequest | None = None) -> str:
+    """The palette the page is drawn in, for <html data-palette>.
+
+    It is the server's one setting, ARMADA_PALETTE, so a change of
+    palette needs no rebuild and the page never flashes another one. A
+    development server also takes ?p=<palette>, to compare them.
+    """
+    palette: str = settings.ARMADA_PALETTE
+    if settings.DEVELOPMENT and request is not None:
+        palette = request.GET.get("p", palette)
+    return palette if palette in ARMADA_PALETTES else ARMADA_PALETTES[0]

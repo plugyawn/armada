@@ -469,7 +469,7 @@ function set_table_focus(row: number, col: number, using_keyboard = false): bool
     $current_focus_elem = "table";
 
     if (using_keyboard) {
-        const scroll_element = util.the($(":root"));
+        const scroll_element = recent_scroller();
         const half_height_of_visible_area = scroll_element.offsetHeight / 2;
         const topic_offset = topic_offset_to_visible_area($topic_row);
 
@@ -1367,11 +1367,16 @@ function update_recent_view_folder_filter_button(): void {
     );
 }
 
+// Recent scrolls inside its pane of the frame; the document never does.
+function recent_scroller(): HTMLElement {
+    return util.the($("#recent_view"));
+}
+
 function hard_redraw_with_scroll_to_top(): void {
     row_focus = 0;
     assert(topics_widget !== undefined);
     topics_widget.hard_redraw();
-    window.scrollTo(0, 0);
+    recent_scroller().scrollTop = 0;
 }
 
 function folder_filter_click_handler(
@@ -1635,7 +1640,7 @@ function callback_after_render(): void {
     // It is important to restore the scroll position as soon
     // as the rendering is complete to avoid scroll jumping.
     if (last_scroll_offset !== undefined) {
-        window.scrollTo(0, last_scroll_offset);
+        recent_scroller().scrollTop = last_scroll_offset;
     }
 
     update_load_more_banner();
@@ -1732,7 +1737,7 @@ export function complete_rerender(coming_from_other_views = false): void {
         // This is the first time we are rendering the Recent Conversations view.
         // So, we always scroll to the top to avoid any scroll jumping in case
         // user is returning from another view.
-        window.scrollTo(0, 0);
+        recent_scroller().scrollTop = 0;
     }
 
     const rendered_body = render_recent_view_body({
@@ -1770,11 +1775,10 @@ export function complete_rerender(coming_from_other_views = false): void {
             ...list_widget.generic_sort_functions("numeric", ["last_msg_id"]),
         },
         html_selector: get_topic_row,
-        $simplebar_container: $(":root"),
+        $simplebar_container: $("#recent_view"),
         callback_after_render,
         render_empty_list_widget_for_table:
             render_recent_view_empty_list_widget_for_table_with_load_more,
-        is_scroll_position_for_render: views_util.is_scroll_position_for_render,
         post_scroll__pre_render_callback() {
             // Update the focused element for keyboard navigation if needed.
             recenter_focus_if_off_screen();
@@ -1879,7 +1883,7 @@ export function hide(): void {
     // views others than recent view, it is important to clear events here.
     topics_widget?.clear_event_handlers();
     is_waiting_for_revive_current_focus = true;
-    last_scroll_offset = window.scrollY;
+    last_scroll_offset = recent_scroller().scrollTop;
     views_util.hide({
         $view: $("#recent_view"),
         set_visible: recent_view_util.set_visible,
@@ -1977,25 +1981,25 @@ function get_page_up_down_delta(): number {
 
 function page_up_navigation(): void {
     const delta = get_page_up_down_delta();
-    const new_scrollTop = window.scrollY - delta;
+    const new_scrollTop = recent_scroller().scrollTop - delta;
     if (new_scrollTop <= 0) {
         row_focus = 0;
         // If we are already at the scroll top, a scroll event
         // is not triggered since the window doesn't actually scroll so
         // we need to update `row_focus` manually.
-        if (window.scrollY === 0) {
+        if (recent_scroller().scrollTop === 0) {
             set_table_focus(row_focus, col_focus);
             return;
         }
     }
 
-    window.scroll(0, new_scrollTop);
+    recent_scroller().scrollTop = new_scrollTop;
 }
 
 function page_down_navigation(): void {
     const delta = get_page_up_down_delta();
-    const new_scrollTop = window.scrollY + delta;
-    const max_scroll_top = document.body.scrollHeight - window.innerHeight;
+    const new_scrollTop = recent_scroller().scrollTop + delta;
+    const max_scroll_top = recent_scroller().scrollHeight - recent_scroller().clientHeight;
 
     if (new_scrollTop >= max_scroll_top) {
         assert(topics_widget !== undefined);
@@ -2003,13 +2007,13 @@ function page_down_navigation(): void {
         // If we are already at the scroll bottom, a scroll event
         // is not triggered since the window doesn't actually scroll so
         // we need to update `row_focus` manually.
-        if (window.scrollY === max_scroll_top) {
+        if (recent_scroller().scrollTop === max_scroll_top) {
             set_table_focus(row_focus, col_focus);
             return;
         }
     }
 
-    window.scroll(0, new_scrollTop);
+    recent_scroller().scrollTop = new_scrollTop;
 }
 
 function check_row_type_transition(row: number, col: number): boolean {
@@ -2425,7 +2429,7 @@ export function initialize({
         set_filter(filter);
         row_focus = 0;
         update_filters_view();
-        window.scrollTo(0, 0);
+        recent_scroller().scrollTop = 0;
         revive_current_focus();
     });
 
@@ -2530,7 +2534,7 @@ export function initialize({
                 const $topic_row = $("#recent-view-content-tbody tr").eq(row_focus);
                 const current_top = $topic_row[0]?.getBoundingClientRect().top;
                 if (current_top !== undefined && pre_search_topic_viewport_offset !== undefined) {
-                    window.scrollBy(0, current_top - pre_search_topic_viewport_offset);
+                    recent_scroller().scrollTop += current_top - pre_search_topic_viewport_offset;
                 }
                 pre_search_row_focus = undefined;
                 pre_search_topic_viewport_offset = undefined;
@@ -2539,7 +2543,7 @@ export function initialize({
                 row_focus = 0;
                 update_filters_view();
                 // Always scroll to top when there is a search term present.
-                window.scrollTo(0, 0);
+                recent_scroller().scrollTop = 0;
             }
             // Wait for user to go idle before initiating search.
         }, 300),

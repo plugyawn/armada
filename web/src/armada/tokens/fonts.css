@@ -1,0 +1,69 @@
+/* The faces the repository ships, both under the SIL Open Font License
+   (web/fonts/armada/). Söhne, the first face of --f-human, is licensed and
+   is declared by the build from whatever files this machine has
+   (tools/setup/build_armada_fonts, web/fonts/licensed/README.md).
+
+   Every face is `font-display: block` and the page's template preloads the
+   ones a first paint uses: a swap moves text, and nothing may move. */
+@layer armada.tokens.values {
+    /* Behind Söhne, for a glyph it lacks and for a machine without the
+       licensed files. 106% is the design's figure: at that size it sits
+       beside Söhne in one line of text. */
+    @font-face {
+        font-family: "Hanken Grotesk";
+        font-style: normal;
+        font-weight: 100 900;
+        font-display: block;
+        size-adjust: 106%;
+        src: url("../../../fonts/armada/HankenGrotesk-VF.woff2") format("woff2");
+    }
+
+    @font-face {
+        font-family: "Hanken Grotesk";
+        font-style: italic;
+        font-weight: 100 900;
+        font-display: block;
+        size-adjust: 106%;
+        src: url("../../../fonts/armada/HankenGrotesk-Italic-VF.woff2")
+            format("woff2");
+    }
+
+    /* One variable file; code is 400 everywhere. */
+    @font-face {
+        font-family: "Geist Mono";
+        font-style: normal;
+        font-weight: 100 900;
+        font-display: block;
+        src: url("../../../fonts/armada/GeistMonoVF.woff2") format("woff2");
+    }
+
+    /* Pages outside the app (sign-in, registration, error pages) still name
+       Zulip's two old families in their own stylesheets. Those families are
+       no longer shipped; until those pages are rebuilt or cut, the names
+       resolve to the faces above, so that no page falls to a face of the
+       platform. Deleted with the last stylesheet under web/styles/portico/. */
+    @font-face {
+        font-family: "Source Sans 3 VF";
+        font-style: normal;
+        font-weight: 100 900;
+        font-display: block;
+        src: url("../../../fonts/armada/HankenGrotesk-VF.woff2") format("woff2");
+    }
+
+    @font-face {
+        font-family: "Source Sans 3 VF";
+        font-style: italic;
+        font-weight: 100 900;
+        font-display: block;
+        src: url("../../../fonts/armada/HankenGrotesk-Italic-VF.woff2")
+            format("woff2");
+    }
+
+    @font-face {
+        font-family: "Source Code Pro";
+        font-style: normal;
+        font-weight: 100 900;
+        font-display: block;
+        src: url("../../../fonts/armada/GeistMonoVF.woff2") format("woff2");
+    }
+}

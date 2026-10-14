@@ -19,6 +19,8 @@ export type PearWorkspaceShellSurfaceElements = {
     statusActions: HTMLElement;
     sourceButton: HTMLButtonElement;
     richButton: HTMLButtonElement;
+    previewButton: HTMLButtonElement;
+    previewRoot: HTMLElement;
     modeFeedback: HTMLElement;
     rawLink: HTMLAnchorElement;
     downloadLink: HTMLAnchorElement;
@@ -59,7 +61,10 @@ export function render_pear_workspace_tabs(
         close.className = "pear-workspace-file-tab-close";
         close.dataset["closeTabPath"] = tab.path;
         close.setAttribute("aria-label", `Close ${tab.entry.name}`);
-        close.textContent = "×";
+        const close_icon = document.createElement("i");
+        close_icon.className = "zulip-icon zulip-icon-close-small";
+        close_icon.setAttribute("aria-hidden", "true");
+        close.append(close_icon);
         item.append(button, close);
         fragment.append(item);
     }
@@ -82,7 +87,8 @@ export function render_pear_workspace_breadcrumb(
         if (index > 0) {
             const separator = document.createElement("span");
             separator.setAttribute("aria-hidden", "true");
-            separator.textContent = " / ";
+            separator.className = "pear-workspace-breadcrumb-separator";
+            separator.textContent = "/";
             fragment.append(separator);
         }
         let part: HTMLElement;
@@ -145,22 +151,27 @@ export function render_pear_workspace_surface(options: {
     descriptor: PearWorkspaceDescriptor | undefined;
     activeTab: PearWorkspaceShellTab | undefined;
     snapshot: PearWorkspaceEditorSnapshot | undefined;
+    // Read-only Markdown rendering: `available` shows the control,
+    // `active` puts the rendering in place of the editor.
+    preview: {available: boolean; active: boolean};
     rawUrl: (workspaceId: string, entryId: string, download?: boolean) => string;
 }): void {
-    const {elements, snapshot} = options;
+    const {elements, snapshot, preview} = options;
     const surface = snapshot?.surface;
     const document_session = snapshot?.activeDocument;
     elements.conflictRoot.hidden = document_session?.state !== "conflict";
     elements.conflictRemote.textContent = document_session?.conflict?.remoteText ?? "";
     elements.sourceButton.hidden = surface?.kind !== "text";
     elements.richButton.hidden = surface?.kind !== "text" || !surface.file.rich_mode_eligible;
+    elements.previewButton.hidden = !preview.available;
+    elements.previewButton.setAttribute("aria-pressed", String(preview.active));
     elements.sourceButton.setAttribute(
         "aria-pressed",
-        String(document_session?.editorMode === "source"),
+        String(!preview.active && document_session?.editorMode === "source"),
     );
     elements.richButton.setAttribute(
         "aria-pressed",
-        String(document_session?.editorMode === "rich"),
+        String(!preview.active && document_session?.editorMode === "rich"),
     );
     const rich_issue = snapshot?.richModeIssue;
     const rich_loading = snapshot?.richModeLoading ?? false;
@@ -227,7 +238,8 @@ export function render_pear_workspace_surface(options: {
             elements.modeFeedback.dataset["state"] = rich_issue.kind;
         }
     }
-    elements.editorRoot.hidden = surface?.kind !== "text";
+    elements.editorRoot.hidden = surface?.kind !== "text" || preview.active;
+    elements.previewRoot.hidden = !preview.active;
     elements.nontextRoot.hidden = surface?.kind === "text" || surface?.kind === "empty";
     elements.nontextRoot.replaceChildren();
     switch (surface?.kind) {

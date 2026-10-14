@@ -1,46 +1,53 @@
 <section
   class="pear-workspace-shell"
-  aria-label="Workspace"
+  aria-label="{{t 'Workspace' }}"
   data-room="files"
   data-readme-state="unknown"
   >
     <header class="pear-workspace-shell__header">
+        <button
+          type="button"
+          data-action="toggle-explorer"
+          class="pear-workspace-shell__explorer-toggle pear-workspace-icon-button"
+          aria-controls="pear-workspace-explorer"
+          aria-expanded="false"
+          aria-label="{{t 'Toggle file explorer' }}"
+          >
+            <i class="zulip-icon zulip-icon-panel-left" aria-hidden="true"></i>
+            <span class="pear-workspace-shell__button-label">Files</span>
+        </button>
         <div class="pear-workspace-shell__identity">
             <strong data-role="workspace-title">Files</strong>
             <span data-role="workspace-meta"></span>
         </div>
         <button
           type="button"
-          data-action="toggle-explorer"
-          class="pear-workspace-shell__explorer-toggle"
-          aria-controls="pear-workspace-explorer"
-          aria-expanded="false"
-          >Files</button>
-        <button
-          type="button"
           data-action="refresh"
-          aria-label="Refresh workspace"
-          >Refresh</button>
+          class="pear-workspace-icon-button"
+          aria-label="{{t 'Refresh workspace' }}"
+          >
+            <i class="zulip-icon zulip-icon-refresh-cw" aria-hidden="true"></i>
+        </button>
     </header>
     <div class="pear-workspace-shell__body">
         <aside
           id="pear-workspace-explorer"
           class="pear-workspace-shell__explorer"
-          aria-label="Workspace explorer"
+          aria-label="{{t 'Workspace explorer' }}"
           >
             <form data-role="search-form" role="search">
                 <input
                   data-role="search-input"
                   type="search"
                   autocomplete="off"
-                  aria-label="Search files"
-                  placeholder="Filter files"
+                  aria-label="{{t 'Search files' }}"
+                  placeholder="{{t 'Filter files' }}"
                   />
             </form>
             <div
               data-role="search-results"
               role="listbox"
-              aria-label="Workspace search results"
+              aria-label="{{t 'Workspace search results' }}"
               hidden
               >
             </div>
@@ -48,7 +55,7 @@
               class="pear-workspace-shell__tree"
               data-role="tree"
               role="tree"
-              aria-label="Workspace files"
+              aria-label="{{t 'Workspace files' }}"
               >
             </div>
         </aside>
@@ -56,7 +63,7 @@
           class="pear-workspace-shell__splitter"
           data-role="explorer-splitter"
           role="separator"
-          aria-label="Resize file explorer"
+          aria-label="{{t 'Resize file explorer' }}"
           aria-orientation="vertical"
           aria-valuemin="180"
           aria-valuemax="480"
@@ -66,13 +73,13 @@
         <main
           id="pear-workspace-document-panel"
           class="pear-workspace-shell__document"
-          aria-label="Workspace document"
+          aria-label="{{t 'Workspace document' }}"
           role="tabpanel"
           tabindex="-1"
           >
-            <div data-role="tabs" role="tablist" aria-label="Open files"></div>
+            <div data-role="tabs" role="tablist" aria-label="{{t 'Open files' }}"></div>
             <header class="pear-workspace-shell__document-header">
-                <nav data-role="breadcrumb" aria-label="File path"></nav>
+                <nav data-role="breadcrumb" aria-label="{{t 'File path' }}"></nav>
                 <div class="pear-workspace-shell__document-actions">
                     <span
                       id="pear-workspace-mode-feedback"
@@ -90,12 +97,12 @@
                           data-role="file-menu-button"
                           aria-haspopup="menu"
                           aria-expanded="false"
-                          >File</button>
+                          >File<i class="zulip-icon zulip-icon-chevron-down" aria-hidden="true"></i></button>
                         <div
                           data-role="file-menu"
                           class="pear-workspace-file-menu"
                           role="menu"
-                          aria-label="File actions"
+                          aria-label="{{t 'File actions' }}"
                           hidden
                           >
                             <button
@@ -142,22 +149,40 @@
                         </div>
                     </div>
                     <button type="button" data-action="ask-pear" hidden>Ask Pear</button>
-                    <button
-                      type="button"
-                      data-action="mode-source"
-                      aria-describedby="pear-workspace-mode-feedback"
-                      >Source</button>
-                    <button
-                      type="button"
-                      data-action="mode-rich"
-                      aria-describedby="pear-workspace-mode-feedback"
-                      >Rich</button>
+                    <div
+                      class="pear-workspace-segmented"
+                      role="group"
+                      aria-label="{{t 'Document view' }}"
+                      >
+                        <button
+                          type="button"
+                          data-action="mode-preview"
+                          aria-pressed="false"
+                          hidden
+                          >Read</button>
+                        <button
+                          type="button"
+                          data-action="mode-rich"
+                          aria-describedby="pear-workspace-mode-feedback"
+                          >Rich</button>
+                        <button
+                          type="button"
+                          data-action="mode-source"
+                          aria-describedby="pear-workspace-mode-feedback"
+                          >Source</button>
+                    </div>
                     <a
                       data-role="raw-link"
+                      class="pear-workspace-icon-button"
                       target="_blank"
                       rel="noopener noreferrer"
-                      >Raw</a>
-                    <a data-role="download-link">Download</a>
+                      aria-label="{{t 'Open raw file' }}"
+                      ><i class="zulip-icon zulip-icon-external-link" aria-hidden="true"></i></a>
+                    <a
+                      data-role="download-link"
+                      class="pear-workspace-icon-button"
+                      aria-label="{{t 'Download file' }}"
+                      ><i class="zulip-icon zulip-icon-download" aria-hidden="true"></i></a>
                 </div>
             </header>
             <div data-role="conflict" role="alert" hidden>
@@ -194,6 +219,13 @@
                   class="pear-workspace-shell__editor"
                   >
                 </div>
+                <article
+                  data-role="preview"
+                  class="pear-workspace-shell__preview"
+                  aria-label="{{t 'Rendered Markdown' }}"
+                  hidden
+                  >
+                </article>
                 <div
                   data-role="nontext"
                   class="pear-workspace-shell__nontext"

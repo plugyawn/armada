@@ -1,0 +1,12 @@
+{% extends "zerver/base.html" %}
+{% set entrypoint = "armada-showroom" %}
+
+{% block title %}
+<title>{{ doc_root_title }} | Armada Dev</title>
+{% endblock %}
+
+{% block content %}
+{# The sprite, inlined once: every glyph, mark and sigil is a symbol of it. #}
+{{ sprite|safe }}
+<main class="armada-kit armada-showroom" data-plane="content" data-armada="showroom" data-agent="{{ agent_name }}" data-palettes="{{ palettes }}"></main>
+{% endblock %}

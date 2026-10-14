@@ -100,6 +100,15 @@ window.HTMLElement.prototype.requestFullscreen = async () => {
 const $ = jQueryFactory(window);
 mock_jquery($);
 
+// KaTeX decides when it is first loaded whether the document is in
+// standards mode, and replaces katex.render with a function that always
+// throws if it is not. The test runner keeps node_modules loaded across
+// test files, so a file that ran earlier with a stub `document` (for
+// example compose_paste) would leave that broken copy in place. Load a
+// fresh copy against this file's standards-mode document.
+// eslint-disable-next-line @typescript-eslint/no-dynamic-delete
+delete require.cache[require.resolve("katex")];
+
 const artifact = zrequire("pear_artifact");
 
 function graph_column(node) {

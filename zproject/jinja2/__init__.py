@@ -12,7 +12,13 @@ from two_factor.plugins.phonenumber.templatetags.phonenumber import device_actio
 
 from zerver.context_processors import DEFAULT_PAGE_PARAMS
 from zerver.lib.send_email import FromAddress
-from zerver.lib.templates import display_list, render_markdown_path, webpack_entry
+from zerver.lib.templates import (
+    armada_palette,
+    display_list,
+    font_preloads,
+    render_markdown_path,
+    webpack_entry,
+)
 
 
 def json_dumps(obj: object) -> str:
@@ -35,6 +41,8 @@ def environment(**options: Any) -> Environment:
         url=reverse,
         render_markdown_path=render_markdown_path,
         webpack_entry=webpack_entry,
+        font_preloads=font_preloads,
+        armada_palette=armada_palette,
         support_email=FromAddress.SUPPORT,
     )
 

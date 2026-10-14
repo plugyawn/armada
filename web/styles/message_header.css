@@ -287,37 +287,6 @@
     }
 }
 
-.message_header_stream:has(.pear-topic-header-status) {
-    overflow: visible;
-    white-space: normal;
-
-    .message-header-contents {
-        /* Single row by default — the Pear cluster sits inline, right-
-           aligned before the date — wrapping to a second row only when
-           the topic name leaves no room. */
-        height: auto;
-        min-height: 1.8666em; /* 28px at 15px em, the standard bar height */
-        flex-wrap: wrap;
-        align-items: center;
-        align-content: center;
-        gap: 4px;
-        padding-block: 2px;
-    }
-
-    .stream_label,
-    .stream_topic_separator,
-    .stream_topic,
-    .recipient_row_date {
-        flex: 0 0 auto;
-        white-space: nowrap;
-    }
-
-    .stream_topic {
-        min-width: 0;
-        flex: 0 1 auto;
-    }
-}
-
 .pear-topic-header-status {
     /* The cluster's children participate directly in the recipient bar's
        flex: the runtime pill rides row 1 right-aligned; the commit line
@@ -340,16 +309,25 @@
 
 .pear-topic-header-commitline {
     display: inline-flex;
+    overflow: hidden;
     min-width: 0;
-    max-width: 100%;
-    flex: 1 0 100%;
+    flex: 1 1 0;
     align-items: center;
+    justify-content: flex-end;
     gap: var(--pear-space-2);
-    margin: 1px 42px 3px 26px;
+    margin-inline: var(--pear-space-4) var(--pear-topic-bar-inset);
     line-height: 1;
-    /* Lay out after the bar's controls and date so they keep riding
-       row one; the commit sentence takes the wrapped second row. */
-    order: 10;
+    /* Row two, after the room tabs; it gives way first when space is
+       short. */
+    order: 11;
+}
+
+/* With no worktree there are no tabs, and the commit line leads the row. */
+.pear-topic-header-status:has(.pear-workspace-tabs-hidden)
+    .pear-topic-header-commitline {
+    justify-content: flex-start;
+    margin-inline-start: var(--pear-topic-bar-inset);
+    padding-block: 3px 5px;
 }
 
 .pear-topic-header-control {
@@ -629,19 +607,6 @@
         /* Always show the vdots */
         &.recipient-row-topic-menu {
             display: block;
-        }
-    }
-}
-
-@media (width < $ml_min) {
-    .without-container-query-support {
-        .recipient-bar-control {
-            display: none;
-
-            /* Always show the vdots */
-            &.recipient-row-topic-menu {
-                display: block;
-            }
         }
     }
 }

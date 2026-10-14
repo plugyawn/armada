@@ -1,347 +1,142 @@
 ---
 name: visual-test
-description: "Visually verify UI changes using Puppeteer screenshots. Use when you need to check layout, colors, positioning, or other visual aspects of a UI change."
+description: "Visually verify UI changes on the running Armada app: screenshots with arm shot, measurements with arm check, components in the showroom. Use when you need to check layout, colors, positioning, motion or other visual aspects of a UI change."
 ---
 
 # Visual Test
 
-Runs a real browser against the Zulip test server and takes
-screenshots you can read as images to verify layout, colors,
-positioning, text content, etc.
+Armada's dev server runs inside a Lima VM and is already up at
+`http://localhost:9991`. You do not start it, and you do not write a
+Puppeteer test file: you write a small scenario and run it with `arm shot`,
+which drives headless Chromium against the running app and saves
+screenshots you read as images. Read `var/armada-overhaul/ENV.md` first; it
+is the authority for the commands below.
 
-## Steps
+Three tools, for three questions:
 
-### 1. Write the puppeteer test script
+| Question                                | Tool                                          |
+| --------------------------------------- | --------------------------------------------- |
+| What does this screen look like now?    | `arm shot` (this file)                        |
+| Did anything move, slow down or break?  | `arm check` (`tools/armada-checks/README.md`) |
+| Is this component right in every state? | the showroom, `/devtools/armada/`             |
 
-Create `web/e2e-tests/_claude_<feature>_test.test.ts` using this template:
+## 1. Write a scenario
 
-```typescript
-import type {Page} from "puppeteer";
+Put a JSON file under `var/armada-overhaul/` (any subfolder; `var/` is not
+in git). Prefix every screenshot name with your task's key so that agents
+do not overwrite each other's files.
 
-import * as common from "./lib/common.ts";
-
-async function visual_test(page: Page): Promise<void> {
-    await common.log_in(page);
-    await common.screenshot(page, "step-1-logged-in");
-
-    // Navigate, interact, and screenshot each significant state.
-    // See "Available helpers" below.
+```json
+{
+    "viewport": [1440, 900],
+    "scale": 2,
+    "theme": "dark",
+    "user": "desdemona@zulip.com",
+    "out": "/Users/progyan/runix/zulip/var/armada-overhaul/build/<task>",
+    "steps": [
+        {"goto": "/#narrow/channel/22-click/topic/demo-live-run", "wait": 3000},
+        {"waitFor": ".some-selector"},
+        {"click": ".some-selector", "wait": 400},
+        {"hover": ".some-selector"},
+        {"type": "text", "sel": "#some-input"},
+        {"press": "Escape"},
+        {"eval": "(() => document.querySelector('.x').getBoundingClientRect().toJSON())()"},
+        {"shot": "mykey-01-whole"},
+        {"shot": "mykey-02-detail", "clip": [320, 88, 704, 400]},
+        {"shot": "mykey-03-element", "el": ".some-selector"}
+    ]
 }
-
-await common.run_test(visual_test);
 ```
 
-Adapt the body to exercise whatever UI you need to verify. Take a
-screenshot at every visually significant state using descriptive names
-like `step-2-color-picker-open`, `step-3-color-selected`.
+- `scale` is the device scale factor: 2 for anything a person will judge,
+  1 when you only need numbers.
+- `theme` is `light` (default) or `dark`. Check both when a change can
+  affect colour; geometry needs one.
+- `eval` runs in the page and prints its JSON result as an `EVAL` line.
+  Page errors print as `PAGEERROR`; a step that cannot run prints
+  `STEPFAIL`. Treat either as a failure of your change until shown
+  otherwise.
+- Sizes to cover: 1920, 1440 and 1100 wide. Electron is the main
+  target; phones are not drawn.
 
-**Important patterns:**
-
-These patterns are derived from the existing Puppeteer tests in
-`web/e2e-tests/`. Follow them to write reliable, non-flaky tests.
-
-#### Waiting: never use hardcoded timeouts
-
-The existing test suite has essentially zero `setTimeout` calls
-(the two in `common.ts` are explicitly commented workarounds for
-specific animation flakes). Always wait for the specific condition
-you expect instead. The three main waiting primitives, in order of
-preference:
-
-- **`waitForSelector`** — wait for an element to appear or disappear.
-  This is the most common pattern in the test suite (100+ uses):
-
-  ```typescript
-  // Wait for element to be visible (most common)
-  await page.waitForSelector("#left-sidebar", {visible: true});
-
-  // Wait for element to disappear (e.g., overlay closed, row deleted)
-  await page.waitForSelector("#subscription_overlay", {hidden: true});
-  ```
-
-- **`waitForFunction`** — wait for a condition that can't be
-  expressed as a single selector (text content, element count,
-  attribute value, application state):
-
-  ```typescript
-  // Wait for specific text content
-  await page.waitForFunction(
-      () => document.querySelector(".save-button")?.textContent?.trim() === "Save changes",
-  );
-
-  // Wait for element count after filtering
-  await page.waitForFunction(
-      () => document.querySelectorAll(".linkifier_row").length === 4,
-  );
-
-  // Wait for an input's value to update
-  await page.waitForFunction(
-      () => document.querySelector<HTMLInputElement>("#full_name")?.value === "New name",
-  );
-
-  // Wait for focus to land on a specific element
-  await page.waitForFunction(
-      () => document.activeElement?.classList?.contains("search") === true,
-  );
-
-  // Wait for internal app state via zulip_test
-  await page.waitForFunction(
-      (content) => {
-          const last_msg = zulip_test.current_msg_list?.last();
-          return last_msg !== undefined && last_msg.raw_content === content
-              && !last_msg.locally_echoed;
-      },
-      {},
-      content,
-  );
-  ```
-
-- **`waitForNavigation`** — only for actual full-page navigations
-  (form submits, reloads). Wrap with `Promise.all` when the
-  navigation is triggered by an action:
-  ```typescript
-  await Promise.all([
-      page.waitForNavigation(),
-      page.$eval("form#login_form", (form) => { form.submit(); }),
-  ]);
-  ```
-
-#### Interacting with elements
-
-- **`page.click(selector)`** is the standard for clicking. When it's
-  unreliable (overlapping elements, timing), fall back to clicking
-  via `evaluate` — several existing tests do this with a comment
-  explaining why:
-
-  ```typescript
-  // When page.click() is unreliable, click via the DOM directly
-  await page.evaluate(() => {
-      document.querySelector<HTMLElement>(".dialog_submit_button")?.click();
-  });
-  ```
-
-- **`page.type(selector, text)`** for typing. Use `{delay: 100}`
-  when typing triggers a typeahead or filter that needs per-keystroke
-  updates:
-
-  ```typescript
-  await page.type('[name="user_list_filter"]', "ot", {delay: 100});
-  ```
-
-- **`common.clear_and_type(page, selector, text)`** to replace
-  existing input content (triple-click + Delete + type).
-
-- **`common.fill_form(page, selector, params)`** to fill multiple
-  form fields at once — handles text inputs, checkboxes (by
-  toggling), and `<select>` elements.
-
-- **`common.select_item_via_typeahead(page, selector, str, item)`**
-  to type into a field and pick a typeahead suggestion.
-
-- **`page.keyboard.press("KeyC")`** for Zulip keyboard shortcuts.
-  After pressing, wait for the resulting UI change:
-
-  ```typescript
-  await page.keyboard.press("KeyC");
-  await page.waitForSelector("#compose-textarea", {visible: true});
-  ```
-
-- **Hover before clicking action buttons** that only appear on
-  hover (e.g., message action icons):
-  ```typescript
-  const msg = (await page.$$(".message_row")).at(-1)!;
-  await msg.hover();
-  await page.waitForSelector(".message-actions-menu-button", {visible: true});
-  await page.click(".message-actions-menu-button");
-  ```
-
-#### Navigating within the app
-
-- **Click sidebar items** for in-app navigation:
-
-  ```typescript
-  await page.click(".narrow-filter[data-stream-id='...'] .stream-name");
-  await page.waitForSelector("#message_view_header .zulip-icon-hashtag", {visible: true});
-  ```
-
-- **`page.goto(url)`** for hash-route navigation:
-
-  ```typescript
-  await page.goto(`http://zulip.zulipdev.com:9981/#channels/${stream_id}/Denmark`);
-  ```
-
-- **`common.manage_organization(page)`** to navigate to org settings,
-  **`common.open_personal_menu(page)`** to open the personal menu.
-
-#### Reading state with page.evaluate
-
-Use `page.evaluate()` to read internal application state or DOM
-properties not accessible through selectors:
-
-```typescript
-// Read internal Zulip state via the zulip_test global
-const stream_id = await page.evaluate(
-    () => zulip_test.get_sub("Verona")!.stream_id,
-);
-
-// Read DOM properties
-const page_language = await page.evaluate(
-    () => document.documentElement.lang,
-);
-```
-
-#### Changing user settings via the API
-
-Use `page.evaluate` with `fetch()` and reload, rather than clicking
-through the settings UI:
-
-```typescript
-await page.evaluate(async () => {
-    const csrfToken = document.querySelector<HTMLInputElement>(
-        'input[name="csrfmiddlewaretoken"]',
-    )?.value ?? "";
-    await fetch("/json/settings", {
-        method: "PATCH",
-        headers: {
-            "Content-Type": "application/x-www-form-urlencoded",
-            "X-CSRFToken": csrfToken,
-        },
-        body: "user_list_style=1",
-    });
-});
-await page.reload({waitUntil: "networkidle2"});
-```
-
-#### XPath selectors for text matching
-
-When you need to match elements by text content, use XPath with
-`common.has_class_x()`:
-
-```typescript
-await page.waitForSelector(
-    `xpath///*[${common.has_class_x("stream-name")} and normalize-space()="Verona"]`,
-);
-```
-
-#### Assertions for visual tests
-
-For visual test scripts, prefer a soft-assertion pattern that
-reports all failures rather than aborting on the first:
-
-```typescript
-const results: string[] = [];
-function check(name: string, ok: boolean): void {
-    results.push(`${ok ? "PASS" : "FAIL"}: ${name}`);
-    console.log(`${ok ? "PASS" : "FAIL"}: ${name}`);
-}
-// ... run checks ...
-const failures = results.filter((r) => r.startsWith("FAIL"));
-console.log(`\n${results.length - failures.length}/${results.length} tests passed`);
-```
-
-This keeps the test running through failures so you see all results,
-unlike `assert` which aborts on the first failure.
-
-### 2. Run the test
+## 2. Run it and read the result
 
 ```bash
-./tools/test-js-with-puppeteer _claude_<feature>_test
+limactl shell armada -- arm shot /Users/progyan/runix/zulip/var/armada-overhaul/build/<task>/scenario.json
 ```
 
-The runner matches test file names by prefix, so you don't need the
-full filename or `.test.ts` suffix. This starts a fresh test server
-on port 9981, runs the script, and saves screenshots to
-`var/puppeteer/`. The test database is reset between test files.
+Then use the Read tool on each PNG. Look at the whole picture first, then
+at a clip of the area you changed.
 
-On **aarch64 (ARM) hosts**, you must set `PUPPETEER_EXECUTABLE_PATH`
-(see "Environment details" below):
+## 3. Measure, do not eyeball
+
+- Positions and sizes: `getBoundingClientRect()` in an `eval` step. Compare
+  numbers with the design's table (`docs/armada/design-language.md`,
+  "Frame and layout").
+- Colours and type: `getComputedStyle()` in an `eval` step.
+- Keyboard focus: use `press` steps (`Tab`); a programmatic `.focus()` does
+  not show the ring.
+- A fixed or sticky element can report a rectangle that is not where it
+  is painted; compute a `clip` from elements in normal flow.
+- The VM's Chromium has no macOS fonts and not this Mac's emoji. For a
+  PNG that will be judged for type, colour or spacing, render a static
+  page on the host with `var/armada-overhaul/bin/mac-mock` (see `ENV.md`).
+
+## 4. Before and after
+
+Write one scenario and run it twice: before you make the change and after
+it, with a different `out` directory or name prefix. Do not check out
+another branch to get the "before": the working tree is shared. If the
+change is already made, compare with the design's stills instead.
+
+For a change that must not alter anything (a refactor, a build change),
+compare the two runs by pixel and by computed style, screen by screen; a
+worked example is `var/armada-overhaul/build/F1/tour/` (`tour.mjs` takes
+the tour, `compare.mjs` compares two tours).
+
+## 5. Stability, latency and motion: `arm check`
+
+A screenshot cannot show that a click moved the header by 3 px for one
+frame, or that a keypress forced a layout. The checks can:
 
 ```bash
-PUPPETEER_EXECUTABLE_PATH=$(echo ~/.cache/ms-playwright/chromium-*/chrome-linux/chrome) \
-    ./tools/test-js-with-puppeteer _claude_<feature>_test
+limactl shell armada -- arm check --list
+limactl shell armada -- arm check frame-stability interaction-stability
+limactl shell armada -- arm check typing-cost send-cost
 ```
 
-To run all existing Puppeteer tests, omit the test name argument.
+Run the checks your change can affect three times and require identical
+statuses. `FAIL` is a regression or a new assertion; `FIXED` means a known
+failure now passes and its entry leaves `known.json` (only Foundation
+packages and stage closes edit that file). A full run takes about ten
+minutes and is run under `flock /tmp/armada-check.lock`.
 
-**Timeout:** Tests can take 1–3 minutes each. Use a 300000ms timeout
-for the Bash tool.
+## 6. Components: the showroom
 
-### 3. Read the screenshots
+Every kit component is shown in every state (rest, hover, pressed,
+focused, selected, disabled, empty, loading, error, overflowing) at
+`/devtools/armada/`, in both themes, as Preact and as DOM builder side by
+side. A component that is not there may not be used. `arm check kit`
+compares the page with its baseline by pixel. The page takes
+`?as=preact|dom|both`, `?theme=light|dark`, `?p=tide|citrine|onyx` (Lapis
+is the default), `?motion=reduced` and `?section=<id>`.
 
-Use the Read tool on each `var/puppeteer/step-*.png` file. Claude's
-multimodal vision will show the rendered page.
+## Fixtures
 
-### 4. Analyze and report
+Channel `click` (stream id 22) is a real git repository. Its `demo-*`
+topics show every agent-run state without calling a model:
+`demo-completed-run`, `demo-live-run`, `demo-needs-input`,
+`demo-queued-run`, `demo-failed-run`, `demo-cancelled-run`,
+`demo-paused-topic`, `demo-artifacts`, `demo-wall-monitors`,
+`demo-threads`, `demo-dirty-worktree`, `demo-long-topic`
+(`var/armada-overhaul/SEED.md`). Reload them with
+`limactl shell armada -- arm manage pear_demo_data` (about 40 s), never
+while another agent is taking screenshots. Do not send messages to the
+agent to make a screenshot: a real run spends the user's quota.
 
-Describe what you see — layout, colors, text content, positioning,
-any issues. Compare against what was expected.
+## Report
 
-Zulip displays any JS exceptions encountered as a pop-up, but you should
-also be able to get them from the puppeteer output.
-
-### 5. Iterate if needed
-
-If something is wrong, fix the source code (or adjust the test
-script), then re-run from step 2.
-
-### 6. Clean up
-
-Leave test files as untracked `_claude_*` files so you can reuse them
-when rebasing or iterating on the pull request. The `_claude_` prefix
-is a convention to distinguish these from Zulip's committed test
-files. Do not commit them.
-
-## Environment details
-
-- **Architecture:** On x86_64, Puppeteer's bundled Chrome works. On
-  **aarch64**, it does NOT (fails with rosetta/ld-linux errors). Use
-  `uname -m` to check. For aarch64, install Playwright's Chromium
-  and point `PUPPETEER_EXECUTABLE_PATH` at it (shown in step 2).
-- **If the Playwright Chromium is missing**, install it:
-  ```bash
-  npx --yes playwright install chromium
-  ```
-- **Headless mode:** Tests run headless (`headless: true` in
-  `common.ts`). There is no display server.
-
-## Test infrastructure facts
-
-- **Server URL:** `http://zulip.zulipdev.com:9981/`
-- **Login:** `common.log_in(page)` uses credentials from
-  `var/puppeteer/test_credentials.json` (auto-generated by the test
-  harness). Default user is Desdemona (realm owner).
-- **Known users:** `common.fullname.cordelia`, `.othello`, `.hamlet`
-- **Screenshots:** saved to `var/puppeteer/<name>.png`
-- **Window size:** 1400 x 1024
-- **Test data:** The test database includes channels like "Verona",
-  "Denmark", "Scotland" with topics and messages. Non-system user
-  group `hamletcharacters` (members: Cordelia, Hamlet).
-- **`zulip_test` global:** Only a limited set of internal functions
-  are exposed — see `web/src/zulip_test.ts`. Functions like
-  `get_stream_id` and `get_user_id_from_name` are available, but
-  `user_groups` is not. Navigate to groups via URL hash routes
-  or by clicking list items instead.
-- **Database reset:** The test runner calls
-  `reset_zulip_test_database()` and `POST /flush_caches` between
-  test files, so each test file starts with a clean state.
-- **`common.run_test()`** handles browser lifecycle, console log
-  forwarding with source-map resolution, automatic failure
-  screenshots, and logout at the end.
-
-## Available helpers (from `web/e2e-tests/lib/common.ts`)
-
-| Helper                                        | Purpose                                  |
-| --------------------------------------------- | ---------------------------------------- |
-| `common.log_in(page)`                         | Log in as the default user (Desdemona)   |
-| `common.screenshot(page, "name")`             | Save `var/puppeteer/name.png`            |
-| `common.clear_and_type(page, selector, text)` | Clear input and type                     |
-| `common.fill_form(page, selector, params)`    | Fill multiple form fields at once        |
-| `common.wait_for_micromodal_to_open(page)`    | Wait for modal open animation            |
-| `common.wait_for_micromodal_to_close(page)`   | Wait for modal close animation           |
-| `common.get_stream_id(page, name)`            | Get a stream's ID                        |
-| `common.get_user_id_from_name(page, name)`    | Get a user's ID                          |
-| `common.open_personal_menu(page)`             | Open the personal menu                   |
-| `common.manage_organization(page)`            | Navigate to org settings                 |
-| `common.send_message(page, type, params)`     | Send a stream or DM message              |
-| `common.send_multiple_messages(page, msgs)`   | Send several messages in sequence        |
-| `common.select_item_via_typeahead(page, ...)` | Type into a field and select a typeahead |
+Say which screens you looked at, at which sizes and themes, and give the
+paths of the PNGs. Report what you measured as numbers. If a screen could
+not be reached or a step failed, say so; do not describe what you did not
+see.

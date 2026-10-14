@@ -1,4 +1,9 @@
-baseline widely available with downstream, unreleased versions
+# Armada's targets (statement 21, 2026-10-14): Electron and current
+# Chromium first, Safari 18, Firefox best effort.
+chrome >= 132
+edge >= 132
+safari >= 18
+firefox >= 140
 
 [test]
 current Node

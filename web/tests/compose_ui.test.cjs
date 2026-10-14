@@ -16,10 +16,6 @@ const $ = require("./lib/zjquery.cjs");
 
 set_global("navigator", {});
 
-const autosize = noop;
-autosize.update = noop;
-mock_esm("autosize", {default: autosize});
-
 mock_esm("../src/message_lists", {
     current: {},
 });
@@ -35,6 +31,10 @@ const compose_actions = zrequire("compose_actions");
 const message_lists = zrequire("message_lists");
 const text_field_edit = mock_esm("text-field-edit");
 const message_fetch_raw_content = mock_esm("../src/message_fetch_raw_content");
+// compose_reply looks quoted messages up in message_store (not only in
+// the current message list), so that messages shown only in a thread
+// pane can be quoted too.
+const message_store = mock_esm("../src/message_store");
 const {set_realm} = zrequire("state_data");
 const {initialize_user_settings} = zrequire("user_settings");
 const sub_store = zrequire("sub_store");
@@ -59,7 +59,14 @@ people.add_active_user(bob);
 
 function make_textbox(s) {
     // Simulate a jQuery textbox for testing purposes.
-    const $widget = {s, length: 1, [0]: "textarea", focused: false};
+    const $widget = {
+        s,
+        length: 1,
+        [0]: "textarea",
+        focused: false,
+        // Nothing to size: the stand-in has no element.
+        [Symbol.iterator]: () => [].values(),
+    };
 
     $widget.caret = function (arg) {
         if (typeof arg === "number") {
@@ -95,19 +102,110 @@ function make_textbox(s) {
     return $widget;
 }
 
-run_test("autosize_textarea", ({override}) => {
-    const textarea_autosized = {};
+// A field as the sizing code sees it, in a browser that does not size
+// fields itself (there is no `CSS.supports` here): its text and padding are
+// 120px tall, and its box has 2px of border above and below.
+function make_sized_field(box_sizing = "border-box") {
+    const classes = new Set();
+    const listeners = new Map();
+    return {
+        classList: {
+            add: (name) => classes.add(name),
+            remove: (name) => classes.delete(name),
+            contains: (name) => classes.has(name),
+        },
+        style: {height: "300px"},
+        computed_style: {boxSizing: box_sizing, paddingTop: "5px", paddingBottom: "2px"},
+        scrollHeight: 120,
+        offsetHeight: 54,
+        clientHeight: 50,
+        addEventListener: (type, listener) => listeners.set(type, listener),
+        removeEventListener: (type) => listeners.delete(type),
+        type_something() {
+            listeners.get("input")?.call(this);
+        },
+    };
+}
 
-    override(autosize, "update", (textarea) => {
-        textarea_autosized.textarea = textarea;
-        textarea_autosized.autosized = true;
-    });
+set_global("getComputedStyle", (element) => element.computed_style);
 
-    // Call autosize_textarea with an argument
-    const container = "container-stub";
-    compose_ui.autosize_textarea(container);
-    assert.equal(textarea_autosized.textarea, container);
-    assert.ok(textarea_autosized.autosized);
+run_test("size_textarea_to_content", () => {
+    compose_ui.set_expanded_status(false);
+    const field = make_sized_field();
+
+    // A field nobody asked to size is left alone.
+    compose_ui.autosize_textarea([field]);
+    assert.equal(field.style.height, "300px");
+
+    compose_ui.size_textarea_to_content([field]);
+    assert.equal(field.style.height, "124px");
+
+    field.scrollHeight = 200;
+    field.type_something();
+    assert.equal(field.style.height, "204px");
+
+    // After a change made from script.
+    field.scrollHeight = 80;
+    compose_ui.autosize_textarea([field]);
+    assert.equal(field.style.height, "84px");
+
+    // The expanded composer fills its box, whatever its text.
+    compose_ui.set_expanded_status(true);
+    field.scrollHeight = 500;
+    compose_ui.autosize_textarea([field]);
+    assert.equal(field.style.height, "84px");
+    compose_ui.set_expanded_status(false);
+
+    // Once stopped, the height is the stylesheet's or the caller's.
+    compose_ui.stop_sizing_textarea_to_content([field]);
+    assert.equal(field.style.height, "");
+    field.type_something();
+    compose_ui.resize_textarea_to_content([field]);
+    assert.equal(field.style.height, "");
+});
+
+run_test("size_textarea_to_content in a content-box field", () => {
+    // The main composer: its `height` leaves the padding out.
+    const field = make_sized_field("content-box");
+    compose_ui.size_textarea_to_content([field]);
+    assert.equal(field.style.height, "113px");
+    compose_ui.stop_sizing_textarea_to_content([field]);
+});
+
+const observed_fields = [];
+set_global(
+    "ResizeObserver",
+    class FakeResizeObserver {
+        constructor(callback) {
+            this.callback = callback;
+        }
+        observe(element) {
+            observed_fields.push(element);
+            this.callback();
+        }
+        disconnect() {
+            observed_fields.pop();
+        }
+    },
+);
+
+run_test("size_textarea_to_content reports its height", () => {
+    const observed = observed_fields;
+    observed.length = 0;
+
+    const field = make_sized_field();
+    const reported = [];
+    compose_ui.size_textarea_to_content([field], (textarea) => reported.push(textarea));
+    assert.deepEqual(reported, [field]);
+    assert.deepEqual(observed, [field]);
+
+    // Asking again without a callback keeps the one given before; a new
+    // one replaces it.
+    compose_ui.size_textarea_to_content([field]);
+    assert.deepEqual(observed, [field]);
+    compose_ui.size_textarea_to_content([field], () => reported.push("second"));
+    assert.deepEqual(reported, [field, "second"]);
+    assert.deepEqual(observed, [field]);
 });
 
 run_test("insert_syntax_and_focus", ({override}) => {
@@ -498,7 +596,7 @@ run_test("quote_message", ({override, override_rewire}) => {
         id: 100,
     };
 
-    override(message_lists.current, "get", (id) => (id === 100 ? selected_message : undefined));
+    override(message_store, "get", (id) => (id === 100 ? selected_message : undefined));
 
     let success_function;
     override(
@@ -679,10 +777,13 @@ run_test("set_compose_box_top", () => {
     assert.equal($("#compose")[0].style.getPropertyValue("top"), "");
 });
 
-run_test("test_compose_height_changes", ({override, override_rewire}) => {
-    let autosize_destroyed = false;
-    override(autosize, "destroy", () => {
-        autosize_destroyed = true;
+run_test("test_compose_height_changes", ({override_rewire}) => {
+    let sized_to_content;
+    override_rewire(compose_ui, "stop_sizing_textarea_to_content", () => {
+        sized_to_content = false;
+    });
+    override_rewire(compose_ui, "size_textarea_to_content", () => {
+        sized_to_content = true;
     });
 
     let compose_box_top_set = false;
@@ -693,8 +794,14 @@ run_test("test_compose_height_changes", ({override, override_rewire}) => {
     compose_ui.make_compose_box_full_size();
     assert.ok($("#compose").hasClass("compose-fullscreen"));
     assert.ok(compose_ui.is_expanded());
-    assert.ok(autosize_destroyed);
+    assert.equal(sized_to_content, false);
     assert.ok(compose_box_top_set);
+
+    sized_to_content = undefined;
+    compose_ui.make_compose_box_intermediate_size();
+    assert.ok($("#compose").hasClass("compose-intermediate"));
+    assert.equal(sized_to_content, false);
+    compose_ui.make_compose_box_full_size();
 
     $("textarea#compose-textarea").set_height(100);
     $("#compose .preview_message_area").set_height(100);
@@ -702,6 +809,7 @@ run_test("test_compose_height_changes", ({override, override_rewire}) => {
     assert.ok(!$("#compose").hasClass("compose-fullscreen"));
     assert.ok(!compose_ui.is_expanded());
     assert.ok(!compose_box_top_set);
+    assert.equal(sized_to_content, true);
 });
 
 const $textarea = $("textarea#compose-textarea");

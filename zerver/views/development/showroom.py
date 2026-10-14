@@ -1,7 +1,10 @@
 import os
 
+from django.conf import settings
 from django.http import HttpRequest, HttpResponse
 from django.shortcuts import render
+
+from zerver.lib.templates import ARMADA_PALETTES
 
 background_colors = [
     {"name": "Default background", "css_var": "--color-background"},
@@ -61,3 +64,27 @@ def showroom_component_inputs(request: HttpRequest) -> HttpResponse:
         "isolated_page": True,
     }
     return render(request, "zerver/development/showroom/inputs.html", context)
+
+
+# The name people see for the agent.  The showroom is the design's
+# contract, so it shows the name the design is drawn with; the
+# server's own constant is renamed with its models and routes.
+ARMADA_SHOWROOM_AGENT_NAME = "Onyx"
+
+
+def showroom_armada(request: HttpRequest) -> HttpResponse:
+    """The kit of the rebuilt frontend: every component in every state,
+    the tokens of every palette, the sprite, and the motion and sound
+    benches.  `arm check kit`, `motion` and `design-lint` read this
+    page."""
+    sprite_path = os.path.join(settings.DEPLOY_ROOT, "web/src/armada/kit/icons/sprite.svg")
+    with open(sprite_path) as sprite_file:
+        sprite = sprite_file.read()
+    context = {
+        "agent_name": ARMADA_SHOWROOM_AGENT_NAME,
+        "palettes": " ".join(ARMADA_PALETTES),
+        "sprite": sprite,
+        "doc_root_title": "Armada showroom",
+        "isolated_page": True,
+    }
+    return render(request, "zerver/development/showroom/armada.html", context)

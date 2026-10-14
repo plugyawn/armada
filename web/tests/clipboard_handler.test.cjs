@@ -6,7 +6,7 @@ const {JSDOM} = require("jsdom");
 
 const {make_stream} = require("./lib/example_stream.cjs");
 const {make_user} = require("./lib/example_user.cjs");
-const {zrequire, mock_esm} = require("./lib/namespace.cjs");
+const {zrequire, mock_esm, set_global} = require("./lib/namespace.cjs");
 const {run_test} = require("./lib/test.cjs");
 
 const settings_config = zrequire("settings_config");
@@ -36,7 +36,7 @@ run_test("copy_link_to_clipboard", async ({override}) => {
     });
     stream_data.add_sub_for_tests(stream);
     const {window} = new JSDOM();
-    global.document = window.document;
+    set_global("document", window.document);
 
     // Mock DataTransfer for testing purposes
     class MockDataTransfer {

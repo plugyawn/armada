@@ -28,10 +28,6 @@ set_global(
 
 const fake_now = 555;
 
-const autosize = noop;
-autosize.update = noop;
-mock_esm("autosize", {default: autosize});
-
 const channel = mock_esm("../src/channel");
 const compose_actions = mock_esm("../src/compose_actions", {
     register_compose_cancel_hook: noop,

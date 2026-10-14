@@ -1,0 +1,247 @@
+{
+    "_about": [
+        "Every colour of Armada, as chosen values. tools/armada/palette.py derives the",
+        "rest, checks every gate and writes web/src/armada/tokens/palette-*.css.",
+        "A colour is [lightness, chroma, hue] in OKLCH, or a hex string. Change a",
+        "value here and run `tools/armada/palette.py --write`; never edit the CSS."
+    ],
+    "default": "lapis",
+    "stones": {
+        "moss": 145,
+        "larimar": 200,
+        "lapis": 250,
+        "amethyst": 305,
+        "rose": 355,
+        "flint": 80
+    },
+    "syntax": {
+        "light": {
+            "keyword": [0.45, 0.19, 268],
+            "string": [0.47, 0.125, 48],
+            "number": [0.46, 0.085, 205],
+            "comment": [0.47, 0.012, 264]
+        },
+        "dark": {
+            "keyword": [0.78, 0.11, 262],
+            "string": [0.81, 0.1, 62],
+            "number": [0.81, 0.085, 198],
+            "comment": [0.72, 0.012, 264]
+        }
+    },
+    "diff": {
+        "light": {
+            "add": [0.93, 0.05, 152],
+            "del": [0.893, 0.052, 22],
+            "add_ink": [0.44, 0.12, 152],
+            "del_ink": [0.49, 0.19, 25]
+        },
+        "dark": {
+            "add": [0.345, 0.055, 152],
+            "del": [0.305, 0.075, 20],
+            "add_ink": [0.8, 0.15, 152],
+            "del_ink": [0.76, 0.14, 22]
+        }
+    },
+    "shadows": {
+        "light": {
+            "raised": [
+                "0 1px 1px rgb(0 0 0 / 6%)",
+                "0 8px 24px rgb(0 0 0 / 12%)",
+                "0 16px 32px rgb(0 0 0 / 8%)"
+            ],
+            "field": ["0 1px 2px rgb(0 0 0 / 6%)", "0 6px 12px -4px rgb(0 0 0 / 10%)"],
+            "focus": ["0 1px 2px rgb(0 0 0 / 7%)", "0 8px 14px -5px rgb(0 0 0 / 18%)"]
+        },
+        "dark": {
+            "raised": [
+                "0 1px 2px rgb(0 0 0 / 30%)",
+                "0 8px 22px rgb(0 0 0 / 36%)",
+                "0 16px 32px rgb(0 0 0 / 36%)"
+            ],
+            "field": ["inset 0 1px 0 rgb(255 255 255 / 5%)"],
+            "focus": ["inset 0 1px 0 rgb(255 255 255 / 7%)"]
+        }
+    },
+    "palettes": {
+        "lapis": {
+            "about": "Lapis: warm white stone, blue-black ink, and one lapis blue. People write in blue ink: my bubble, the default button, the caret, links and unread counts are lapis. Everyone else's bubble is stone with a hint of their own stone. Onyx is the black stone and has no colour. Needs-you is gold.",
+            "light": {
+                "ground": [0.945, 0.0045, 95],
+                "content": [0.987, 0.003, 95],
+                "raised": "#ffffff",
+                "ink1": [0.19, 0.012, 264],
+                "ink2": [0.43, 0.014, 264],
+                "dim": [0.7, 0.01, 264],
+                "accent": [0.415, 0.205, 263],
+                "on_accent": "#ffffff",
+                "accent_text": [0.415, 0.205, 263],
+                "me": [0.415, 0.205, 263],
+                "on_me": "#ffffff",
+                "success": [0.46, 0.1, 185],
+                "attention": [0.56, 0.125, 78],
+                "failure": [0.48, 0.22, 14],
+                "bubble": [0.905, 0.006, 95],
+                "tint": 0.026,
+                "face": [0.865, 0.062],
+                "fills": [0.06, 0.1, 0.14],
+                "block": 0.045
+            },
+            "dark": {
+                "ground": [0.15, 0.006, 264],
+                "content": [0.215, 0.007, 264],
+                "raised": [0.3, 0.009, 264],
+                "ink1": [0.95, 0.004, 264],
+                "ink2": [0.79, 0.01, 264],
+                "dim": [0.5, 0.01, 264],
+                "accent": [0.53, 0.19, 263],
+                "on_accent": "#ffffff",
+                "accent_text": [0.76, 0.12, 263],
+                "me": [0.5, 0.185, 263],
+                "on_me": "#ffffff",
+                "success": [0.8, 0.14, 180],
+                "attention": [0.84, 0.14, 88],
+                "failure": [0.72, 0.17, 25],
+                "bubble": [0.325, 0.008, 264],
+                "tint": 0.028,
+                "face": [0.44, 0.065],
+                "fills": [0.06, 0.105, 0.15],
+                "block": 0.055
+            }
+        },
+        "tide": {
+            "about": "Tide: sea-grey stone and one petrol, the colour of deep water under a fleet. Petrol is my bubble, the default button, the caret, links and unread counts. Everyone else's bubble is one sea-grey with no tint. Needs-you is gold.",
+            "light": {
+                "ground": [0.94, 0.007, 215],
+                "content": [0.987, 0.0035, 215],
+                "raised": "#ffffff",
+                "ink1": [0.19, 0.012, 215],
+                "ink2": [0.43, 0.013, 215],
+                "dim": [0.7, 0.011, 215],
+                "accent": [0.46, 0.09, 215],
+                "on_accent": "#ffffff",
+                "accent_text": [0.46, 0.09, 215],
+                "me": [0.46, 0.09, 215],
+                "on_me": "#ffffff",
+                "success": [0.54, 0.1, 180],
+                "attention": [0.55, 0.125, 74],
+                "failure": [0.47, 0.2, 16],
+                "bubble": [0.9, 0.011, 215],
+                "tint": 0,
+                "face": [0.865, 0.062],
+                "fills": [0.06, 0.1, 0.14],
+                "block": 0.045
+            },
+            "dark": {
+                "ground": [0.15, 0.008, 215],
+                "content": [0.218, 0.01, 215],
+                "raised": [0.3, 0.012, 215],
+                "ink1": [0.95, 0.005, 215],
+                "ink2": [0.79, 0.011, 215],
+                "dim": [0.5, 0.011, 215],
+                "accent": [0.53, 0.092, 215],
+                "on_accent": "#ffffff",
+                "accent_text": [0.8, 0.1, 212],
+                "me": [0.5, 0.088, 215],
+                "on_me": "#ffffff",
+                "success": [0.78, 0.12, 178],
+                "attention": [0.84, 0.14, 88],
+                "failure": [0.7, 0.19, 28],
+                "bubble": [0.33, 0.012, 215],
+                "tint": 0,
+                "face": [0.44, 0.065],
+                "fills": [0.06, 0.105, 0.15],
+                "block": 0.055
+            }
+        },
+        "citrine": {
+            "about": "Citrine: slate stone and one yellow, used as a fill with ink on it. Yellow is my bubble and the default button and nothing else; links, the caret and counts are ink. Everyone else's bubble is slate with no tint. Needs-you is blue.",
+            "light": {
+                "ground": [0.94, 0.007, 250],
+                "content": [0.986, 0.004, 250],
+                "raised": "#ffffff",
+                "ink1": [0.19, 0.012, 250],
+                "ink2": [0.43, 0.013, 250],
+                "dim": [0.7, 0.011, 250],
+                "accent": [0.885, 0.165, 96],
+                "on_accent": [0.19, 0.012, 250],
+                "accent_text": [0.19, 0.012, 250],
+                "me": [0.905, 0.145, 96],
+                "on_me": [0.19, 0.012, 250],
+                "success": [0.46, 0.19, 180],
+                "attention": [0.475, 0.17, 260],
+                "failure": [0.48, 0.21, 25],
+                "bubble": [0.9, 0.009, 250],
+                "tint": 0,
+                "face": [0.865, 0.062],
+                "fills": [0.06, 0.1, 0.14],
+                "block": 0.045
+            },
+            "dark": {
+                "ground": [0.15, 0.007, 250],
+                "content": [0.218, 0.008, 250],
+                "raised": [0.3, 0.01, 250],
+                "ink1": [0.95, 0.006, 250],
+                "ink2": [0.79, 0.01, 250],
+                "dim": [0.5, 0.01, 250],
+                "accent": [0.87, 0.16, 96],
+                "on_accent": [0.15, 0.007, 250],
+                "accent_text": [0.95, 0.006, 250],
+                "me": [0.835, 0.135, 96],
+                "on_me": [0.15, 0.007, 250],
+                "success": [0.84, 0.19, 185],
+                "attention": [0.76, 0.13, 260],
+                "failure": [0.76, 0.21, 15],
+                "bubble": [0.33, 0.01, 250],
+                "tint": 0,
+                "face": [0.44, 0.065],
+                "fills": [0.06, 0.105, 0.15],
+                "block": 0.055
+            }
+        },
+        "onyx": {
+            "about": "Onyx: the second final's graphite, on this round's roles, kept for comparison. Graphite and white; the accent is ink; my bubble is graphite, and in dark a graphite two steps above everyone else's. Needs-you is blue.",
+            "light": {
+                "ground": [0.936, 0.005, 250],
+                "content": [0.987, 0.005, 250],
+                "raised": "#ffffff",
+                "ink1": [0.172, 0.01, 250],
+                "ink2": [0.425, 0.012, 250],
+                "dim": [0.705, 0.01, 250],
+                "accent": [0.172, 0.01, 250],
+                "on_accent": [0.987, 0.005, 250],
+                "accent_text": [0.172, 0.01, 250],
+                "me": [0.305, 0.012, 250],
+                "on_me": [0.987, 0.005, 250],
+                "success": [0.46, 0.19, 180],
+                "attention": [0.475, 0.17, 260],
+                "failure": [0.48, 0.19, 30],
+                "bubble": [0.9, 0.006, 250],
+                "tint": 0,
+                "face": [0.865, 0.062],
+                "fills": [0.06, 0.1, 0.14],
+                "block": 0.045
+            },
+            "dark": {
+                "ground": [0.143, 0.005, 250],
+                "content": [0.212, 0.006, 250],
+                "raised": [0.295, 0.0075, 250],
+                "ink1": [0.948, 0.005, 250],
+                "ink2": [0.795, 0.008, 250],
+                "dim": [0.5, 0.008, 250],
+                "accent": [0.948, 0.005, 250],
+                "on_accent": [0.143, 0.005, 250],
+                "accent_text": [0.948, 0.005, 250],
+                "me": [0.455, 0.012, 250],
+                "on_me": [0.985, 0.004, 250],
+                "success": [0.74, 0.19, 152],
+                "attention": [0.74, 0.13, 258],
+                "failure": [0.8, 0.18, 10],
+                "bubble": [0.325, 0.008, 250],
+                "tint": 0,
+                "face": [0.44, 0.065],
+                "fills": [0.06, 0.105, 0.15],
+                "block": 0.055
+            }
+        }
+    }
+}

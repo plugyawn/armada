@@ -54,6 +54,8 @@ const muted_users_ui = mock_esm("../src/muted_users_ui");
 const narrow_title = mock_esm("../src/narrow_title");
 const navbar_alerts = mock_esm("../src/navbar_alerts");
 const pm_list = mock_esm("../src/pm_list");
+const pear_panel = mock_esm("../src/pear_panel");
+const pear_run_state = mock_esm("../src/pear_run_state");
 const pear_workspace_events = mock_esm("../src/pear_workspace_events");
 const reactions = mock_esm("../src/reactions", {
     generate_clean_reactions() {},
@@ -71,7 +73,6 @@ const scheduled_messages = mock_esm("../src/scheduled_messages");
 const scheduled_messages_feed_ui = mock_esm("../src/scheduled_messages_feed_ui");
 const scheduled_messages_overlay_ui = mock_esm("../src/scheduled_messages_overlay_ui");
 const scheduled_messages_ui = mock_esm("../src/scheduled_messages_ui");
-const scroll_bar = mock_esm("../src/scroll_bar");
 const settings_account = mock_esm("../src/settings_account");
 const settings_bots = mock_esm("../src/settings_bots");
 const settings_data = mock_esm("../src/settings_data");
@@ -119,7 +120,7 @@ const {Filter} = zrequire("filter");
 const {initialize: initialize_realm_user_settings_defaults} = zrequire(
     "realm_user_settings_defaults",
 );
-const {set_current_user, set_realm} = zrequire("state_data");
+const {is_pear_bot_user_id, set_current_user, set_realm} = zrequire("state_data");
 const {initialize_user_settings} = zrequire("user_settings");
 
 const realm = make_realm();
@@ -170,6 +171,17 @@ const server_events_dispatch = zrequire("server_events_dispatch");
 function dispatch(ev) {
     server_events_dispatch.dispatch_normal_event(ev);
 }
+
+run_test("pear_run reaches the run state and the panel", ({override}) => {
+    const state_stub = make_stub();
+    const panel_stub = make_stub();
+    override(pear_run_state, "apply_pear_run_event", state_stub.f);
+    override(pear_panel, "handle_pear_run_event", panel_stub.f);
+    const event = {type: "pear_run", run_id: 7, status: "running"};
+    dispatch(event);
+    assert.equal(state_stub.get_args("event").event, event);
+    assert.equal(panel_stub.get_args("event").event, event);
+});
 
 run_test("pear_workspace_changed reaches the Workspace event reducer", ({override}) => {
     const stub = make_stub();
@@ -903,6 +915,41 @@ run_test("realm_bot update", ({override}) => {
     assert_same(args.bot, event.bot);
 });
 
+run_test("realm_bot events keep the Pear bot ids current", ({override}) => {
+    const pear_bot_id = test_user.user_id;
+    override(bot_data, "add", noop);
+    override(bot_data, "update", noop);
+    override(bot_data, "del", noop);
+    override(settings_bots, "redraw_your_bots_list", noop);
+    override(settings_bots, "toggle_bot_config_download_container", noop);
+    override(settings_bots, "update_lock_icon_in_sidebar", noop);
+    const update = (services) => {
+        dispatch({type: "realm_bot", op: "update", bot: {user_id: pear_bot_id, services}});
+    };
+
+    dispatch({
+        type: "realm_bot",
+        op: "add",
+        bot: {user_id: pear_bot_id, services: [{service_name: "pear"}]},
+    });
+    assert.ok(is_pear_bot_user_id(pear_bot_id));
+
+    // An update that carries no service data says nothing about
+    // which embedded bot this is.
+    update(undefined);
+    update([]);
+    assert.ok(is_pear_bot_user_id(pear_bot_id));
+
+    update([{service_name: "converter"}]);
+    assert.ok(!is_pear_bot_user_id(pear_bot_id));
+
+    update([{service_name: "pear"}]);
+    assert.ok(is_pear_bot_user_id(pear_bot_id));
+
+    dispatch({type: "realm_bot", op: "delete", bot: {user_id: pear_bot_id}});
+    assert.ok(!is_pear_bot_user_id(pear_bot_id));
+});
+
 run_test("realm_emoji", ({override}) => {
     const ui_func_names = [
         [settings_emoji, "populate_emoji"],
@@ -1412,7 +1459,6 @@ run_test("user_settings", ({override}) => {
     dispatch(event);
     assert_same(user_settings.receives_typing_notifications, false);
 
-    override(scroll_bar, "set_layout_width", noop);
     event = event_fixtures.user_settings__fluid_layout_width;
     override(user_settings, "fluid_layout_width", false);
     dispatch(event);

@@ -1,7 +1,6 @@
 /* Compose box module responsible for manipulating the compose box
    textarea correctly. */
 
-import autosize from "autosize";
 import $ from "jquery";
 import _ from "lodash";
 import assert from "minimalistic-assert";
@@ -107,11 +106,99 @@ export function is_full_size(): boolean {
     return full_size_status;
 }
 
+// A message field is as tall as its text, between the minimum and the
+// maximum height its stylesheet gives it. The browser does the sizing
+// (`field-sizing: content`, see `.sized-to-content` in compose.css), so
+// typing runs no script and forces no layout. A browser without the
+// property gets the height written from script instead.
+const SIZED_TO_CONTENT_CLASS = "sized-to-content";
+const browser_sizes_fields =
+    typeof CSS !== "undefined" &&
+    typeof CSS.supports === "function" &&
+    CSS.supports("field-sizing", "content");
+const textarea_size_observers = new WeakMap<HTMLTextAreaElement, ResizeObserver>();
+
+function write_textarea_height(textarea: HTMLTextAreaElement): void {
+    if (browser_sizes_fields || !textarea.classList.contains(SIZED_TO_CONTENT_CLASS)) {
+        return;
+    }
+    textarea.style.height = "auto";
+    // `scrollHeight` counts the padding; `height` counts it too only in a
+    // border-box field. The main composer is content-box.
+    const style = getComputedStyle(textarea);
+    const height =
+        style.boxSizing === "border-box"
+            ? textarea.scrollHeight + textarea.offsetHeight - textarea.clientHeight
+            : textarea.scrollHeight -
+              Number.parseFloat(style.paddingTop) -
+              Number.parseFloat(style.paddingBottom);
+    textarea.style.height = `${height}px`;
+}
+
+function write_textarea_height_on_input(this: HTMLTextAreaElement): void {
+    write_textarea_height(this);
+}
+
+// Start sizing a field to its text. `on_height_change` is called once the
+// field has a size and after every later change of it, for as long as the
+// field exists, sized to its text or not; it runs after layout, so it may
+// read sizes. A later call without one keeps the one given before.
+export let size_textarea_to_content = (
+    $textarea: JQuery<HTMLTextAreaElement>,
+    on_height_change?: (textarea: HTMLTextAreaElement) => void,
+): void => {
+    for (const textarea of $textarea) {
+        // A height a person dragged, or an earlier fallback wrote, would win
+        // over the content's.
+        textarea.style.height = "";
+        textarea.classList.add(SIZED_TO_CONTENT_CLASS);
+        textarea.removeEventListener("input", write_textarea_height_on_input);
+        textarea.addEventListener("input", write_textarea_height_on_input);
+        write_textarea_height(textarea);
+        if (on_height_change !== undefined && typeof ResizeObserver !== "undefined") {
+            textarea_size_observers.get(textarea)?.disconnect();
+            const observer = new ResizeObserver(() => {
+                on_height_change(textarea);
+            });
+            observer.observe(textarea);
+            textarea_size_observers.set(textarea, observer);
+        }
+    }
+};
+
+export function rewire_size_textarea_to_content(value: typeof size_textarea_to_content): void {
+    size_textarea_to_content = value;
+}
+
+// Stop sizing a field to its text: it keeps the height its stylesheet or
+// the caller gives it (the expanded composer, a field resized by hand).
+export let stop_sizing_textarea_to_content = ($textarea: JQuery<HTMLTextAreaElement>): void => {
+    for (const textarea of $textarea) {
+        textarea.classList.remove(SIZED_TO_CONTENT_CLASS);
+        textarea.removeEventListener("input", write_textarea_height_on_input);
+        textarea.style.height = "";
+    }
+};
+
+export function rewire_stop_sizing_textarea_to_content(
+    value: typeof stop_sizing_textarea_to_content,
+): void {
+    stop_sizing_textarea_to_content = value;
+}
+
+// Called after the text of a field was changed from script. The browser
+// has already sized the field then; only the fallback has work to do.
+export function resize_textarea_to_content($textarea: JQuery<HTMLTextAreaElement>): void {
+    for (const textarea of $textarea) {
+        write_textarea_height(textarea);
+    }
+}
+
 export let autosize_textarea = ($textarea: JQuery<HTMLTextAreaElement>): void => {
     // Since this supports both compose and file upload, one must pass
-    // in the text area to autosize.
+    // in the text area to autosize. The expanded composer fills its box.
     if (!is_expanded()) {
-        autosize.update($textarea);
+        resize_textarea_to_content($textarea);
     }
 };
 
@@ -509,9 +596,9 @@ export function rewire_set_compose_box_top(value: typeof set_compose_box_top): v
 export function make_compose_box_full_size(): void {
     set_expanded_status(true);
 
-    // The autosize should be destroyed for the full size compose
-    // box else it will interfere and shrink its size accordingly.
-    autosize.destroy($("textarea#compose-textarea"));
+    // The full size compose box fills the window; its field is not
+    // sized to its text.
+    stop_sizing_textarea_to_content($("textarea#compose-textarea"));
 
     $("#compose").removeClass("compose-intermediate");
     $("#compose").removeClass("automatically-expanded");
@@ -527,9 +614,9 @@ export function make_compose_box_full_size(): void {
 export function make_compose_box_intermediate_size(): void {
     set_expanded_status(true, false);
 
-    // The autosize should be destroyed for the intermediate size compose
-    // box else it will interfere and shrink its size accordingly.
-    autosize.destroy($("textarea#compose-textarea"));
+    // The intermediate size compose box has a height of its own; its
+    // field is not sized to its text.
+    stop_sizing_textarea_to_content($("textarea#compose-textarea"));
 
     $("#compose").removeClass("compose-fullscreen");
     $("#compose").removeClass("automatically-expanded");
@@ -551,10 +638,10 @@ export function make_compose_box_original_size(): void {
     // Unset the `top` property of compose-box.
     set_compose_box_top(false);
 
-    // Again initialise the compose textarea as it was destroyed
-    // when compose box was made full screen
+    // Size the field to its text again; that stopped when the compose
+    // box was expanded.
     const $compose_textarea = $<HTMLTextAreaElement>("textarea#compose-textarea");
-    autosize($compose_textarea);
+    size_textarea_to_content($compose_textarea);
 
     // If the preview area is open, reset the min-height for it to
     // ensure a smooth back-and-forth for toggling preview mode.

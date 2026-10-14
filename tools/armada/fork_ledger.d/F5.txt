@@ -1,0 +1,20 @@
+# F5, the frame, the composition, seams and bridges.
+kept templates/zerver/app/index.html  # the frame, the inlined sprite; the splash and both logos deleted
+bridged:C1 web/src/message_viewport.ts  # the feed's scroller in the pane; no navbar or compose arithmetic
+bridged:C1 web/src/message_scroll.ts  # listens to the feed's scroller, not the document
+hooked web/src/message_view_header.ts  # the place, the worktree's facts and views, line 2's sentence
+hooked web/src/ui_init.js  # calls boot.ts; scroll_bar.ts gone
+bridged:B5 web/src/inbox_ui.ts  # Inbox scrolls in its pane
+bridged:B5 web/src/recent_view_ui.ts  # Recent scrolls in its pane
+bridged:B5 web/src/views_util.ts  # the document-scroll render test is gone with the document scroll
+kept web/src/overlay_util.ts  # the overlay scroll lock deleted
+kept web/src/overlays.ts  # the overlay scroll lock deleted
+kept web/src/modals.ts  # the overlay scroll lock deleted
+kept web/src/gif_picker_ui.ts  # the overlay scroll lock deleted
+kept web/src/resize_handler.ts  # scroll_bar.ts gone
+kept web/src/server_events_dispatch.js  # the fluid layout width setting no longer lays anything out
+deleted web/src/scroll_bar.ts
+kept web/styles/zulip.css  # no document scroll; the three-column max-width rules and their fallbacks deleted
+kept web/styles/message_header.css  # the container-query fallback deleted
+kept web/tests/dispatch.test.cjs  # scroll_bar.ts gone
+bridged:A5 web/src/hotkey.ts  # Esc with a thread open closes the thread and does not also go to the home view

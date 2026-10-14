@@ -11,7 +11,6 @@ overrides:
 
 patchedDependencies:
   "@types/jquery@4.0.0": patches/@types__jquery@4.0.0.patch # https://github.com/DefinitelyTyped/DefinitelyTyped/pull/74984
-  autosize: patches/autosize.patch
   email-addresses: patches/email-addresses.patch # https://github.com/jackbearheart/email-addresses/pull/81
   eslint-plugin-no-jquery: patches/eslint-plugin-no-jquery.patch # https://github.com/wikimedia/eslint-plugin-no-jquery/pull/363
   handlebars: patches/handlebars.patch # https://github.com/handlebars-lang/handlebars.js/pull/2053
@@ -22,7 +21,6 @@ patchedDependencies:
   tippy.js: patches/tippy.js@6.3.7.patch # https://github.com/atomiks/tippyjs/pull/1166
 
 allowBuilds:
-  core-js: false
   es5-ext: false
   esbuild: false
   puppeteer: false

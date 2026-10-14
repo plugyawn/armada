@@ -58,9 +58,8 @@
     :is(&.pear-message, .pear-message-surface.pear-message) {
         background-color: var(--color-background-pear-message-content);
 
-        /* Pear has one authored voice across prose and live state. User
-           messages stay in the room's proportional face; agent output uses
-           Geist Pixel, with Geist Mono reserved only for actual code blocks. */
+        /* The agent speaks in the same face as people; Geist Mono is
+           reserved for actual code blocks. */
 
         .message_edit_notice,
         .edit-notifications {

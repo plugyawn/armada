@@ -1,5 +1,3 @@
-import * as Sentry from "@sentry/browser";
-import {SPAN_STATUS_OK} from "@sentry/core";
 import $ from "jquery";
 import assert from "minimalistic-assert";
 import * as z from "zod/mini";
@@ -45,8 +43,8 @@ import * as narrow_history from "./narrow_history.ts";
 import * as narrow_state from "./narrow_state.ts";
 import * as narrow_title from "./narrow_title.ts";
 import {page_params} from "./page_params.ts";
-import * as people from "./people.ts";
 import * as pear_panel from "./pear_panel.ts";
+import * as people from "./people.ts";
 import * as pm_list from "./pm_list.ts";
 import * as popup_banners from "./popup_banners.ts";
 import * as recent_view_ui from "./recent_view_ui.ts";
@@ -529,11 +527,7 @@ export let show = (raw_terms: NarrowTerm[], show_opts: ShowMessageViewOpts): voi
         then_select_id: show_opts.then_select_id ?? -1,
     };
 
-    const span_data = {
-        op: "function",
-        data: {raw_terms, trigger: opts.trigger},
-    };
-    void Sentry.startSpan({...span_data, name: "narrow"}, async (span) => {
+    void (async () => {
         const id_info = get_id_info();
         const terms = filter.terms();
 
@@ -947,16 +941,9 @@ export let show = (raw_terms: NarrowTerm[], show_opts: ShowMessageViewOpts): voi
             });
         }
 
-        const post_span_context = {
-            name: "post-narrow busy time",
-            op: "function",
-        };
-        await Sentry.startSpan(post_span_context, async () => {
-            span?.setStatus({code: SPAN_STATUS_OK});
-            await new Promise((resolve) => setTimeout(resolve, 0));
-            resize.resize_stream_filters_container();
-        });
-    });
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        resize.resize_stream_filters_container();
+    })();
 };
 
 export function rewire_show(value: typeof show): void {

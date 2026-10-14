@@ -1,6 +1,5 @@
 /* Main compose box module for sending messages. */
 
-import autosize from "autosize";
 import $ from "jquery";
 import assert from "minimalistic-assert";
 import * as z from "zod/mini";
@@ -41,7 +40,7 @@ export function clear_private_stream_alert(): void {
 
 export function clear_preview_area(): void {
     compose_ui.exit_preview_mode($("#compose"));
-    autosize.update($("textarea#compose-textarea"));
+    compose_ui.resize_textarea_to_content($("textarea#compose-textarea"));
     compose_ui.clear_thumbnail_polling();
 }
 

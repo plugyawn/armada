@@ -1,0 +1,38 @@
+/* The old feed in the new pane (D1 deletes it with the old view): the
+   old rows keep their own layout and take the new faces and inks; their
+   column and the scroller around them are the frame's. */
+@layer armada.surfaces {
+    .armada-frame-pane > .column-middle-inner {
+        position: absolute;
+        inset: 0;
+        margin: 0;
+    }
+
+    .app-main .armada-frame-pane {
+        margin: 0;
+        min-height: 0;
+        background-color: transparent;
+    }
+
+    #message_feed_container {
+        padding-top: 0;
+    }
+
+    #main_div {
+        background-color: transparent;
+    }
+
+    /* The faces and inks of the design on old rows. */
+    #message-lists-container {
+        font-family: var(--f-human);
+        color: var(--ink-1);
+    }
+
+    body.app-loading-failed [data-armada="failure"] {
+        display: grid;
+        place-items: center;
+        position: fixed;
+        inset: 0;
+        background-color: var(--content);
+    }
+}

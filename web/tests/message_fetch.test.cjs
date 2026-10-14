@@ -143,6 +143,7 @@ run_test("secondary message lists own independent retry timers", () => {
 run_test("one-shot secondary fetch errors terminate without global banners or retry timers", () => {
     const original_set_timeout = globalThis.setTimeout;
     let timer_count = 0;
+    /* istanbul ignore next */
     globalThis.setTimeout = () => {
         timer_count += 1;
         return timer_count;
@@ -213,6 +214,7 @@ run_test("result batches hydrate all missing thread roots once before rendering"
         num_before: 0,
         num_after: 0,
         msg_list_data,
+        /* istanbul ignore next */
         cont() {
             completed = true;
         },

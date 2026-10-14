@@ -1,75 +1,52 @@
-<div class="header">
-    <nav class="header-main" id="top_navbar">
-        <div class="column-left">
-            <a class="header-button left-sidebar-toggle-button {{#if embedded}}hide-streamlist-toggle-visibility{{/if}}" tabindex="0" role="button" aria-label="{{t 'Toggle left sidebar' }}" aria-expanded="true">
-                <i class="zulip-icon zulip-icon-panel-left-dashed"></i>
-                <i class="zulip-icon zulip-icon-panel-left"></i>
-                <span class="left-sidebar-toggle-unreadcount"></span>
-            </a>
-            <a href="" class="brand no-style" aria-label="{{t 'Go to home view' }}">
-                <img id="realm-navbar-wide-logo" src="" alt="{{t 'Logo for {realm_name}' }}" class="nav-logo no-drag"/>
-            </a>
-        </div>
-        <div class="column-middle" id="navbar-middle">
-            <div class="column-middle-inner">
-                <div id="streamlist-toggle" class="{{#if embedded}}hide-streamlist-toggle-visibility{{/if}}">
-                    <a class="left-sidebar-toggle-button" role="button" tabindex="0" aria-label="{{t 'Toggle left sidebar' }}" aria-expanded="true">
-                        <i class="zulip-icon zulip-icon-panel-left-dashed"></i>
-                        <i class="zulip-icon zulip-icon-panel-left"></i>
-                        <span class="left-sidebar-toggle-unreadcount"></span>
-                    </a>
+{{!-- The header's first line while the old interface lives in the frame
+(web/src/armada/bridge/legacy_header.ts): the place's title, the
+worktree's facts, then search and the menus at the far end. The bar,
+its sidebar toggles and the logo are gone (K-77, K-37). --}}
+<div class="header-main" id="top_navbar">
+    <div id="message_view_header" class="notdisplayed">
+    </div>
+    {{!-- The worktree's runtime, branch, commit and views are drawn here by
+    pear_panel.ts, which fills any .message_header_stream of the topic in
+    front; message_view_header.ts sets the topic on this one. --}}
+    <div class="message_header_stream legacy-header-facts" data-armada="header-facts">
+        <span class="recipient_bar_controls"></span>
+    </div>
+    <div id="searchbox">
+        <form id="searchbox_form" class="navbar-search">
+            <div id="searchbox-input-container" class="input-append pill-container" tabindex="0" role="search" aria-label="{{t 'Search' }}">
+                <i class="search_icon zulip-icon zulip-icon-search"></i>
+                <div class="search-input-and-pills">
+                    <div class="search-input input" id="search_query" type="text" data-placeholder-text="{{t 'Search' }}"
+                      autocomplete="off" contenteditable="false" aria-label="{{t 'Search input'}}" role="searchbox"></div>
                 </div>
-                <div class="top-navbar-container">
-                    <div id="message_view_header" class="notdisplayed">
-                    </div>
-                    <div id="searchbox">
-                        <form id="searchbox_form" class="navbar-search">
-                            <div id="searchbox-input-container" class="input-append pill-container" tabindex="0" role="search" aria-label="{{t 'Search' }}">
-                                <i class="search_icon zulip-icon zulip-icon-search"></i>
-                                <div class="search-input-and-pills">
-                                    <div class="search-input input" id="search_query" type="text" data-placeholder-text="{{t 'Search' }}"
-                                      autocomplete="off" contenteditable="false" aria-label="{{t 'Search input'}}" role="searchbox"></div>
-                                </div>
-                                <button class="search_close_button tippy-zulip-delayed-tooltip" type="button" id="search_exit" aria-label="{{t 'Exit search' }}" data-tippy-content="Close"><i class="zulip-icon zulip-icon-close" aria-hidden="true"></i></button>
-                            </div>
-                        </form>
-                    </div>
+                <button class="search_close_button tippy-zulip-delayed-tooltip" type="button" id="search_exit" aria-label="{{t 'Exit search' }}" data-tippy-content="Close"><i class="zulip-icon zulip-icon-close" aria-hidden="true"></i></button>
+            </div>
+        </form>
+    </div>
+    <div class="legacy-header-end">
+        <div class="spectator_login_buttons only-visible-for-spectators">
+            <a id="login_button" class="login_button navbar-item" tabindex="0" role="button">
+                {{t 'Log in' }}
+            </a>
+        </div>
+        {{!-- INTERIM BETA: the plain link to /beta/; removed with web/src/armada/beta/. --}}
+        <a class="navbar-item armada-beta-link hidden-for-spectators" href="/beta/">{{t "Try the beta" }}</a>
+        <div id="help-menu" class="navbar-item">
+            <a class="header-button tippy-zulip-delayed-tooltip" tabindex="0" role="button" data-tooltip-template-id="help-menu-tooltip-template" aria-label="{{t 'Help menu' }}">
+                <i class="zulip-icon zulip-icon-help-bigger" aria-hidden="true"></i>
+            </a>
+        </div>
+        <div id="gear-menu" class="{{#if embedded}}hide-navbar-buttons-visibility{{/if}} navbar-item">
+            <a id="settings-dropdown" tabindex="0" role="button" class="header-button tippy-zulip-delayed-tooltip" data-tooltip-template-id="gear-menu-tooltip-template" aria-label="{{t 'Main menu' }}">
+                <i class="zulip-icon zulip-icon-gear" aria-hidden="true"></i>
+            </a>
+        </div>
+        <div id="personal-menu" class="hidden-for-spectators navbar-item">
+            <a class="header-button tippy-zulip-delayed-tooltip" tabindex="0" role="button" data-tooltip-template-id="personal-menu-tooltip-template" aria-label="{{t 'Personal menu' }}">
+                <div class="header-button-avatar">
+                    <img class="header-button-avatar-image" src="{{user_avatar}}"/>
                 </div>
-            </div>
+            </a>
         </div>
-        <div class="column-right">
-            <div class="spectator_login_buttons only-visible-for-spectators">
-                <a id="login_button" class="login_button navbar-item" tabindex="0" role="button">
-                    {{t 'Log in' }}
-                </a>
-            </div>
-            <div id="help-menu" class="navbar-item">
-                <a class="header-button tippy-zulip-delayed-tooltip" tabindex="0" role="button" data-tooltip-template-id="help-menu-tooltip-template" aria-label="{{t 'Help menu' }}">
-                    <i class="zulip-icon zulip-icon-help-bigger" aria-hidden="true"></i>
-                </a>
-            </div>
-            <div id="gear-menu" class="{{#if embedded}}hide-navbar-buttons-visibility{{/if}} navbar-item">
-                <a id="settings-dropdown" tabindex="0" role="button" class="header-button tippy-zulip-delayed-tooltip" data-tooltip-template-id="gear-menu-tooltip-template" aria-label="{{t 'Main menu' }}">
-                    <i class="zulip-icon zulip-icon-gear" aria-hidden="true"></i>
-                </a>
-            </div>
-            <div id="personal-menu" class="hidden-for-spectators navbar-item">
-                <a class="header-button tippy-zulip-delayed-tooltip" tabindex="0" role="button" data-tooltip-template-id="personal-menu-tooltip-template" aria-label="{{t 'Personal menu' }}">
-                    <div class="header-button-avatar">
-                        <img class="header-button-avatar-image" src="{{user_avatar}}"/>
-                    </div>
-                </a>
-            </div>
-            <div class="spectator_narrow_login_button only-visible-for-spectators" data-tippy-content="{{t 'Log in' }}" data-tippy-placement="bottom" aria-label="{{t 'Log in' }}">
-                <a id="login_button" class="header-button login_button navbar-item" tabindex="0">
-                    <i class="zulip-icon zulip-icon-log-in-navbar"></i>
-                </a>
-            </div>
-            <div id="userlist-toggle" class="hidden-for-spectators">
-                <a id="userlist-toggle-button" role="button" class="header-button navbar-item" tabindex="0" aria-label="{{t 'Toggle user list' }}" aria-expanded="true">
-                    <i class="zulip-icon zulip-icon-user-list"></i>
-                </a>
-            </div>
-        </div>
-    </nav>
+    </div>
 </div>

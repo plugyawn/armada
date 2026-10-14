@@ -17,16 +17,11 @@ const message_events_util = mock_esm("../src/message_events_util");
 const pm_list = mock_esm("../src/pm_list");
 const stream_list = mock_esm("../src/stream_list");
 
-let disparities = [];
-
 mock_esm("../src/message_live_update", {
     update_message_in_all_views() {},
 });
 
 mock_esm("../src/sent_messages", {
-    mark_disparity(local_id) {
-        disparities.push(local_id);
-    },
     report_event_received() {},
 });
 
@@ -146,10 +141,8 @@ run_test("process_from_server for differently rendered messages", ({override}) =
         },
     ];
     echo_state._patch_waiting_for_ack(waiting_for_ack);
-    disparities = [];
     const non_echo_messages = echo.process_from_server(server_messages);
     assert.deepEqual(non_echo_messages, []);
-    assert.equal(disparities.length, 1);
     assert.deepEqual(messages_to_rerender, [
         {
             content: server_messages[0].content,

@@ -12,6 +12,7 @@ import orjson
 from django.core.cache import cache
 from django.db import transaction
 from django.utils.timezone import now as timezone_now
+from typing_extensions import override
 
 from zerver.actions.pear import send_pear_run_event, send_pear_workspace_changed_event
 from zerver.lib.bot_lib import EmbeddedBotHandler
@@ -37,6 +38,7 @@ from zerver.lib.pear import (
     PEAR_SESSION_ENDPOINT,
     PEAR_TOPIC_CONTEXT_ENDPOINT,
     PEAR_WORKING_MESSAGE,
+    PearEmbeddedBotHandler,
     PearWorkerLeaseLostError,
     PearWorkerRuntime,
     build_pear_active_session_summary_from_messages,
@@ -63,6 +65,7 @@ from zerver.lib.pear_monitor import (
 )
 from zerver.lib.pear_worker import (
     PearDatabaseWorkerRunStore,
+    PearQueueWorkerDispatcher,
     build_pear_worker_runtime_from_settings,
     build_pear_workspace_context,
     configure_pear_channel_repository_workspace,
@@ -129,13 +132,16 @@ class PearSessionEndpointTest(ZulipTestCase):
         # requires the channel to exist; most tests in this class act on the
         # default Pear channel without creating it first.
         self.subscribe(self.example_user("hamlet"), PEAR_DEFAULT_STREAM)
-        # Topic workdirs persist on disk across tests in this class while the
-        # database resets; the strict channel-repository attach check then
-        # rejects the stale workdir. Clean the test root, protecting only the
-        # production /srv root.
-        workdir_root = pear_topic_workdir_root()
-        if workdir_root != Path("/srv/pear-workspaces"):
-            shutil.rmtree(workdir_root, ignore_errors=True)
+        # Topic workdirs would persist on disk across tests in this class while
+        # the database resets, and the strict channel-repository attach check
+        # then rejects the stale workdir. Each test gets its own root: the
+        # default root sits next to the checkout, where a development server
+        # keeps its real worktrees.
+        workdir_root = tempfile.mkdtemp(prefix="pear-test-workspaces-")
+        self.addCleanup(shutil.rmtree, workdir_root, ignore_errors=True)
+        workdir_root_setting = self.settings(PEAR_TOPIC_WORKDIR_ROOT=workdir_root)
+        workdir_root_setting.enable()
+        self.addCleanup(workdir_root_setting.disable)
 
     def create_git_repository(self, path: Path) -> None:
         path.mkdir()
@@ -6612,3 +6618,196 @@ class PearMonitorTest(ZulipTestCase):
         )
         self.assert_json_error_contains(result, "Invalid artifact spec")
         self.assertFalse(PearMonitor.objects.exists())
+
+
+class PearTrustedUsersTest(ZulipTestCase):
+    """With PEAR_WORKER_TRUSTED_USERS_ONLY (the production template's
+    default), only administrators and PEAR_WORKER_TRUSTED_USER_IDS may
+    drive the agent or give a channel a repository URL."""
+
+    def create_pear_bot(self, owner: UserProfile) -> UserProfile:
+        return self.create_test_bot(
+            "pear",
+            owner,
+            full_name="Pear",
+            bot_type=UserProfile.EMBEDDED_BOT,
+            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+        )
+
+    def test_run_start_requires_trusted_user(self) -> None:
+        hamlet = self.example_user("hamlet")
+        iago = self.example_user("iago")
+        pear_bot = self.create_pear_bot(hamlet)
+        store = PearDatabaseWorkerRunStore()
+        bot_handler = SimpleNamespace(user_profile=pear_bot)
+
+        def start_reason(user: UserProfile) -> str | None:
+            return store.start_blocked_reason(
+                bot_handler,
+                950,
+                stream=PEAR_DEFAULT_STREAM,
+                topic="trusted-users",
+                requesting_user_id=user.id,
+            )
+
+        def side_start_reason(user: UserProfile) -> str | None:
+            return store.side_start_blocked_reason(
+                bot_handler,
+                951,
+                stream=PEAR_DEFAULT_STREAM,
+                topic="trusted-users",
+                requesting_user_id=user.id,
+            )
+
+        refused = "This user is not allowed to start Pear worker runs."
+        self.assertIsNone(start_reason(hamlet))
+        with self.settings(PEAR_WORKER_TRUSTED_USERS_ONLY=True):
+            self.assertEqual(start_reason(hamlet), refused)
+            self.assertEqual(side_start_reason(hamlet), refused)
+            self.assertIsNone(start_reason(iago))
+        with self.settings(
+            PEAR_WORKER_TRUSTED_USERS_ONLY=True, PEAR_WORKER_TRUSTED_USER_IDS=[hamlet.id]
+        ):
+            self.assertIsNone(start_reason(hamlet))
+        with self.settings(PEAR_WORKER_TRUSTED_USER_IDS=[iago.id]):
+            self.assertEqual(start_reason(hamlet), refused)
+
+    def test_steering_requires_trusted_user(self) -> None:
+        hamlet = self.example_user("hamlet")
+        iago = self.example_user("iago")
+        pear_bot = self.create_pear_bot(hamlet)
+        loaded_session = build_pear_active_session_summary_from_messages(
+            pear_session=get_pear_session_payload(),
+            source="server",
+            stream_exists=True,
+            messages=[
+                (10, "@Pear fix the checkout test", False),
+                (11, PEAR_WORKING_MESSAGE, True),
+            ],
+        )
+        sent_replies: list[str] = []
+        steering_events: list[str] = []
+
+        class FakeRunStore(PearDatabaseWorkerRunStore):
+            @override
+            def active_worker_run_message_id(
+                self,
+                bot_handler: Any,
+                *,
+                stream: str,
+                topic: str,
+                requesting_user_id: int | None = None,
+            ) -> int | None:
+                return 101
+
+            @override
+            def record_event(
+                self,
+                bot_handler: Any,
+                message_id: int,
+                event_type: str,
+                *,
+                summary: str = "",
+                payload: dict[str, Any] | None = None,
+            ) -> None:
+                steering_events.append(event_type)
+
+            @override
+            def update_metadata(self, bot_handler: Any, message_id: int, **metadata: Any) -> None:
+                pass
+
+        class FakeBotHandler:
+            user_profile = pear_bot
+
+            def send_reply(self, message: dict[str, object], response: str) -> dict[str, int]:
+                sent_replies.append(response)
+                return {"id": 400 + len(sent_replies)}
+
+        def steer_as(sender_id: int | None) -> None:
+            PearEmbeddedBotHandler(
+                active_session_loader=lambda message, bot_handler: loaded_session,
+                worker_run_store=FakeRunStore(),
+                worker_dispatcher=PearQueueWorkerDispatcher(),
+            ).handle_message(
+                {
+                    "id": 206,
+                    "type": "stream",
+                    "display_recipient": PEAR_DEFAULT_STREAM,
+                    "topic": PEAR_DEFAULT_TOPIC,
+                    "sender_id": sender_id,
+                    "content": "@Pear make it the 30th",
+                },
+                FakeBotHandler(),
+            )
+
+        refused = "This user is not allowed to steer Pear worker runs."
+        with self.settings(PEAR_WORKER_TRUSTED_USERS_ONLY=True):
+            steer_as(hamlet.id)
+            steer_as(None)
+            steer_as(self.mit_user("starnine").id)
+            self.assertEqual(steering_events, [])
+            self.assert_length(sent_replies, 3)
+            for reply in sent_replies:
+                self.assertIn(refused, reply)
+
+            steer_as(iago.id)
+            self.assertEqual(steering_events, ["steering"])
+            self.assert_length(sent_replies, 3)
+
+        steer_as(hamlet.id)
+        self.assertEqual(steering_events, ["steering", "steering"])
+
+    def test_repository_url_requires_trusted_user(self) -> None:
+        hamlet = self.example_user("hamlet")
+        self.login_user(hamlet)
+        with self.settings(PEAR_WORKER_TRUSTED_USERS_ONLY=True):
+            result = self.client_post(
+                "/json/users/me/subscriptions",
+                {
+                    "subscriptions": orjson.dumps([{"name": "untrusted-repository"}]).decode(),
+                    "pear_repository_url": "https://github.com/pallets/click.git",
+                },
+            )
+        self.assert_json_error(result, "You are not allowed to give a channel a Git repository.")
+
+    def test_monitor_setup_run_requires_trusted_user(self) -> None:
+        hamlet = self.example_user("hamlet")
+        pear_bot = self.create_pear_bot(hamlet)
+        self.subscribe(hamlet, PEAR_DEFAULT_STREAM)
+        self.subscribe(pear_bot, PEAR_DEFAULT_STREAM)
+        self.login_user(hamlet)
+        monitor = PearMonitor.objects.create(
+            realm=hamlet.realm,
+            bot_profile=pear_bot,
+            creator=hamlet,
+            stream_name=PEAR_DEFAULT_STREAM,
+            topic_name=PEAR_DEFAULT_TOPIC,
+            title="loader",
+            ask="training loader",
+            status=PearMonitor.ERROR,
+        )
+
+        with (
+            self.settings(PEAR_WORKER_TRUSTED_USERS_ONLY=True),
+            patch("zerver.views.pear.PearQueueWorkerDispatcher.dispatch") as dispatch_mock,
+        ):
+            result = self.client_post(
+                "/json/pear/monitors",
+                {
+                    "stream": PEAR_DEFAULT_STREAM,
+                    "topic": PEAR_DEFAULT_TOPIC,
+                    "request": "training loader",
+                },
+                intentionally_undocumented=True,
+            )
+            self.assert_json_error(result, "You are not allowed to start agent runs.")
+            result = self.client_patch(
+                f"/json/pear/monitors/{monitor.id}",
+                {"action": "rebuild"},
+                intentionally_undocumented=True,
+            )
+            self.assert_json_error(result, "You are not allowed to start agent runs.")
+
+        dispatch_mock.assert_not_called()
+        self.assertEqual(PearMonitor.objects.count(), 1)
+        self.assertFalse(PearWorkerRun.objects.filter(session_kind=PearWorkerRun.MONITOR).exists())

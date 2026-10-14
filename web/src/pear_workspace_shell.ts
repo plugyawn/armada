@@ -24,6 +24,7 @@ import {
     read_pear_workspace_location,
     write_pear_workspace_location,
 } from "./pear_workspace_location.ts";
+import type * as pear_workspace_markdown_preview from "./pear_workspace_markdown_preview.ts";
 import {
     begin_pear_workspace_metric,
     finish_pear_workspace_metric,
@@ -94,9 +95,20 @@ const shell_state_cache = new Map<string, CachedWorkspaceShellState>();
 const shell_state_cache_limit = 8;
 const shell_cached_tab_limit = 24;
 const shell_cached_expansion_limit = 256;
-const explorer_width_default = 270;
+const explorer_width_default = 248;
+const directory_prefetch_limit = 24;
 const explorer_width_min = 180;
 const explorer_width_max = 480;
+
+const explorer_collapsed_storage_key = "pear-workspace-explorer-collapsed";
+
+function restored_explorer_collapsed(): boolean {
+    try {
+        return localStorage.getItem(explorer_collapsed_storage_key) === "true";
+    } catch {
+        return false;
+    }
+}
 
 function explorer_width_storage_key(workspace_id: string): string {
     return `pear-workspace-explorer-width:${workspace_id}`;
@@ -244,6 +256,12 @@ export function create_pear_workspace_shell(
         is_button,
     );
     const mode_feedback = required_element(options.root, "[data-role='mode-feedback']");
+    const preview_button = required_typed_element(
+        options.root,
+        "[data-action='mode-preview']",
+        is_button,
+    );
+    const preview_root = required_element(options.root, "[data-role='preview']");
     const ask_pear_button = required_typed_element(
         options.root,
         "[data-action='ask-pear']",
@@ -302,6 +320,13 @@ export function create_pear_workspace_shell(
     let closing_tab = false;
     let location_mode_request: "rich" | "source" | undefined;
     let explorer_width = restored_explorer_width(options.workspaceId);
+    // Whether each Markdown file shows its read-only rendering instead of
+    // an editor. Unset means "use the room's default": README reads,
+    // Files edits.
+    const preview_choices = new Map<string, boolean>();
+    let rendered_preview: {path: string; text: string} | undefined;
+    let preview_module: typeof pear_workspace_markdown_preview | undefined;
+    let preview_module_loading = false;
     let resize_pointer_id: number | undefined;
     const directory_requests = new Map<string, AbortableRequest>();
     const rebind_requests = new Map<string, AbortableRequest>();
@@ -423,6 +448,31 @@ export function create_pear_workspace_shell(
         set_explorer_width(next_width, true);
     };
 
+    // Wide layouts dock the explorer beside the document and the toggle
+    // folds it away; narrow ones present it as a drawer instead.
+    let explorer_collapsed = restored_explorer_collapsed();
+    // The stylesheet names the layout it applied, so this never has to
+    // guess at breakpoints (or at anything when styles are absent).
+    const explorer_is_drawer = (): boolean =>
+        typeof getComputedStyle !== "function" ||
+        getComputedStyle(shell_root).getPropertyValue("--pear-workspace-explorer-mode").trim() !==
+            "docked";
+
+    const set_explorer_collapsed = (collapsed: boolean): void => {
+        explorer_collapsed = collapsed;
+        shell_root.classList.toggle("pear-workspace-shell--explorer-collapsed", collapsed);
+        explorer_toggle.setAttribute("aria-expanded", String(!collapsed));
+        try {
+            localStorage.setItem(explorer_collapsed_storage_key, String(collapsed));
+        } catch {
+            // The preference is only a convenience.
+        }
+    };
+
+    if (explorer_collapsed) {
+        shell_root.classList.add("pear-workspace-shell--explorer-collapsed");
+    }
+
     const set_mobile_explorer_open = (open: boolean, restore_focus: boolean): void => {
         mobile_explorer_open = open;
         set_pear_workspace_mobile_explorer_open(options.root, explorer_toggle, open);
@@ -534,6 +584,68 @@ export function create_pear_workspace_shell(
         render_pear_workspace_breadcrumb(breadcrumb, active_tab());
     };
 
+    const preview_state = (): {available: boolean; active: boolean} => {
+        const surface = editor_snapshot?.surface;
+        const document_session = editor_snapshot?.activeDocument;
+        const available =
+            surface?.kind === "text" &&
+            document_session !== undefined &&
+            /\.(?:md|markdown)$/i.test(document_session.path);
+        if (!available) {
+            return {available: false, active: false};
+        }
+        return {
+            available: true,
+            active: preview_choices.get(document_session.path) ?? room === "readme",
+        };
+    };
+
+    const render_preview = (): void => {
+        const document_session = editor_snapshot?.activeDocument;
+        if (!preview_state().active || document_session === undefined) {
+            rendered_preview = undefined;
+            preview_root.replaceChildren();
+            return;
+        }
+        if (preview_module === undefined) {
+            if (!preview_module_loading) {
+                preview_module_loading = true;
+                void (async () => {
+                    try {
+                        preview_module = await import("./pear_workspace_markdown_preview.ts");
+                    } finally {
+                        preview_module_loading = false;
+                    }
+                    if (!destroyed) {
+                        render_preview();
+                    }
+                })();
+            }
+            return;
+        }
+        const {path, currentText: text} = document_session;
+        if (rendered_preview?.path === path && rendered_preview.text === text) {
+            return;
+        }
+        const scroll_top = rendered_preview?.path === path ? preview_root.scrollTop : 0;
+        preview_root.replaceChildren(
+            preview_module.render_pear_workspace_markdown_preview(text, {
+                path,
+                rawUrlForPath(workspace_path) {
+                    const entry = [...(tree?.entries.values() ?? [])].find(
+                        (candidate) =>
+                            candidate.kind === "file" && candidate.path === workspace_path,
+                    );
+                    return entry === undefined
+                        ? undefined
+                        : dependencies.rawUrl(options.workspaceId, entry.entry_id);
+                },
+            }),
+        );
+        preview_root.scrollTop = scroll_top;
+        rendered_preview = {path, text};
+    };
+
     const render_surface = (): void => {
         render_pear_workspace_surface({
             elements: {
@@ -545,6 +657,8 @@ export function create_pear_workspace_shell(
                 statusActions: status_actions,
                 sourceButton: source_button,
                 richButton: rich_button,
+                previewButton: preview_button,
+                previewRoot: preview_root,
                 modeFeedback: mode_feedback,
                 rawLink: raw_link,
                 downloadLink: download_link,
@@ -553,8 +667,10 @@ export function create_pear_workspace_shell(
             descriptor,
             activeTab: active_tab(),
             snapshot: editor_snapshot,
+            preview: preview_state(),
             rawUrl: dependencies.rawUrl,
         });
+        render_preview();
         ask_pear_button.hidden = active_tab() === undefined;
         ask_pear_button.disabled = compose_integration_loading;
     };
@@ -749,6 +865,40 @@ export function create_pear_workspace_shell(
         activate_tab_path(next.path, true);
     };
 
+    // Fetch the folders directly inside an open folder before anyone
+    // clicks them, so expanding one paints from memory instead of waiting
+    // on a round trip. Only open folders prefetch, which keeps this one
+    // level ahead of the user rather than crawling the whole worktree.
+    const prefetch_child_directories = (directory_id: string): void => {
+        if (destroyed || tree === undefined) {
+            return;
+        }
+        const directory_entry = tree.entries.get(directory_id);
+        const is_open =
+            directory_id === tree.rootId ||
+            (directory_entry !== undefined && tree.expandedPaths.has(directory_entry.path));
+        if (!is_open) {
+            return;
+        }
+        let remaining = directory_prefetch_limit;
+        for (const child_id of tree.directories.get(directory_id)?.childIds ?? []) {
+            if (remaining === 0) {
+                return;
+            }
+            const child_directory = tree.directories.get(child_id);
+            if (
+                tree.entries.get(child_id)?.kind !== "directory" ||
+                child_directory?.complete === true ||
+                (child_directory?.childIds.length ?? 0) > 0 ||
+                directory_requests.has(child_id)
+            ) {
+                continue;
+            }
+            remaining -= 1;
+            load_directory(child_id, true);
+        }
+    };
+
     const load_directory = (directory_id: string, first_page_only: boolean): void => {
         if (destroyed || tree === undefined || directory_requests.has(directory_id)) {
             return;
@@ -801,6 +951,7 @@ export function create_pear_workspace_shell(
                     for (const entry of expanded_unloaded) {
                         load_directory(entry.entry_id, true);
                     }
+                    prefetch_child_directories(directory_id);
                 },
                 error(error) {
                     directory_requests.delete(directory_id);
@@ -850,6 +1001,7 @@ export function create_pear_workspace_shell(
             render_tree();
             if (expanded) {
                 load_directory(entry_id, true);
+                prefetch_child_directories(entry_id);
             }
         },
         onLoadMore(entry_id) {
@@ -1511,7 +1663,16 @@ export function create_pear_workspace_shell(
         }
     };
 
+    const set_preview_choice = (preview: boolean): void => {
+        const path = editor_snapshot?.activeDocument?.path;
+        if (path !== undefined) {
+            preview_choices.set(path, preview);
+            render_surface();
+        }
+    };
+
     const switch_editor_mode = async (mode: "rich" | "source"): Promise<void> => {
+        set_preview_choice(false);
         if (await editor.switchMode(mode)) {
             sync_location("push");
         }
@@ -1522,6 +1683,14 @@ export function create_pear_workspace_shell(
         if (!(target instanceof Element)) {
             return;
         }
+        const workspace_link = target.closest<HTMLElement>("[data-workspace-path]");
+        if (workspace_link !== null && preview_root.contains(workspace_link)) {
+            const linked_path = workspace_link.dataset["workspacePath"];
+            if (linked_path !== undefined && room === "files") {
+                reveal_path(linked_path, true);
+            }
+            return;
+        }
         const action = target.closest<HTMLElement>("[data-action]")?.dataset["action"];
         switch (action) {
             case "refresh": {
@@ -1530,7 +1699,16 @@ export function create_pear_workspace_shell(
                 break;
             }
             case "toggle-explorer": {
-                set_mobile_explorer_open(!mobile_explorer_open, false);
+                if (explorer_is_drawer() || mobile_explorer_open) {
+                    set_mobile_explorer_open(!mobile_explorer_open, false);
+                } else {
+                    set_explorer_collapsed(!explorer_collapsed);
+                }
+
+                break;
+            }
+            case "mode-preview": {
+                set_preview_choice(true);
 
                 break;
             }

@@ -13,7 +13,6 @@ import * as message_lists from "./message_lists.ts";
 import * as message_store from "./message_store.ts";
 import * as message_thread_hooks from "./message_thread_hooks.ts";
 import * as modals from "./modals.ts";
-import * as overlay_util from "./overlay_util.ts";
 import * as overlays from "./overlays.ts";
 import {
     create_sigil,
@@ -89,7 +88,6 @@ let anchor_element: HTMLElement | undefined;
 let anchor_message_id: number | undefined;
 let anchor_thread_key: string | undefined;
 let pane_trace_enhancer: TraceEnhancer | undefined;
-let mobile_scroll_locked = false;
 let mobile_inerted_elements: HTMLElement[] = [];
 let sidebar_hidden_before_pane = false;
 let initialized = false;
@@ -277,17 +275,9 @@ function update_pane_layout(): void {
     if (mobile) {
         elements.pane.setAttribute("aria-modal", "true");
         set_mobile_background_inert(true);
-        if (!mobile_scroll_locked) {
-            overlay_util.disable_scrolling();
-            mobile_scroll_locked = true;
-        }
     } else {
         elements.pane.removeAttribute("aria-modal");
         set_mobile_background_inert(false);
-        if (mobile_scroll_locked) {
-            overlay_util.enable_scrolling();
-            mobile_scroll_locked = false;
-        }
     }
 }
 
@@ -1315,6 +1305,10 @@ function handle_thread_button_click(event: MouseEvent): void {
     event.stopPropagation();
 }
 
+export function is_open(): boolean {
+    return pane_elements !== undefined && !pane_elements.pane.hidden;
+}
+
 export function close(options: {restore_focus?: boolean} = {}): void {
     const elements = pane_elements;
     if (elements === undefined || elements.pane.hidden) {
@@ -1350,10 +1344,6 @@ export function close(options: {restore_focus?: boolean} = {}): void {
     }
     // Restore the tab's own label in the sidebar header context.
     right_sidebar_tabs.refresh();
-    if (mobile_scroll_locked) {
-        overlay_util.enable_scrolling();
-        mobile_scroll_locked = false;
-    }
     const anchor = anchor_element;
     anchor_element = undefined;
     anchor_message_id = undefined;

@@ -772,6 +772,11 @@ TOPIC_SUMMARIZATION_MODEL: str | None = None
 TOPIC_SUMMARIZATION_API_BASE: str | None = None
 TOPIC_SUMMARIZATION_PARAMETERS: dict[str, Any] = {}
 
+# The palette Armada is drawn in: "lapis", "tide", "citrine" or "onyx"
+# (tools/armada/palette.json). The page's template writes it on the root
+# element, so changing it needs no rebuild of the frontend.
+ARMADA_PALETTE: Literal["lapis", "tide", "citrine", "onyx"] = "lapis"
+
 # Pear pair-programming worker runtime. Use "codex-app-server" for direct Codex
 # app-server control with persistent threads, streaming events, and same-turn
 # steering. Ambient addressing is configured separately with
@@ -782,11 +787,15 @@ PEAR_WORKER_WORKDIR: str | None = None
 PEAR_TOPIC_WORKDIR_ROOT: str | None = None
 PEAR_TOPIC_ISOLATION_BACKEND: Literal["codex-sandbox", "os-user"] = "codex-sandbox"
 PEAR_TOPIC_ISOLATION_HELPER = "/usr/local/sbin/pear-topic-isolate"
-PEAR_WORKER_MODEL: str | None = "gpt-5.6-sol"
-PEAR_WORKER_MODEL_CHOICES: list[str] = ["gpt-5.6-sol"]
-PEAR_WORKER_SERVICE_TIER: str | None = "fast"
+PEAR_WORKER_MODEL: str | None = "gpt-6-astra"
+PEAR_WORKER_MODEL_CHOICES: list[str] = ["gpt-6-astra", "gpt-6-sol", "gpt-5.6-sol"]
+# The tier ids are the Codex catalog's: "ultrafast" is offered only for gpt-6-astra
+# (catalog of 2026-10-14).  The tier is sent with every turn, whichever model the
+# topic uses; Codex 0.157.1 omits a tier the model does not list (with a warning
+# in the run's transcript) and runs that model at standard speed.
+PEAR_WORKER_SERVICE_TIER: str | None = "ultrafast"
 PEAR_WORKER_FAST_MODE = True
-PEAR_WORKER_REASONING_EFFORT: Literal["low", "medium", "high", "xhigh", "max", "ultra"] = "xhigh"
+PEAR_WORKER_REASONING_EFFORT: Literal["low", "medium", "high", "xhigh", "max", "ultra"] = "medium"
 PEAR_WORKER_SANDBOX: Literal["read-only", "workspace-write", "danger-full-access"] = "read-only"
 PEAR_WORKER_APPROVAL_POLICY: Literal["untrusted", "on-request", "never"] = "on-request"
 # Keep long-running Codex tool calls alive below the six-hour broker delivery
@@ -794,8 +803,14 @@ PEAR_WORKER_APPROVAL_POLICY: Literal["untrusted", "on-request", "never"] = "on-r
 PEAR_WORKER_TIMEOUT_SECONDS = 19800
 PEAR_WORKER_OUTPUT_LIMIT = 50000
 PEAR_WORKER_CODEX_EPHEMERAL = False
-PEAR_WORKER_CODEX_EXTRA_ARGS: list[str] = []
 PEAR_CODEX_SKILLS_DIR: str | None = None
+# Who may drive the agent (start, steer and answer runs; set up monitors)
+# and give a new channel a repository URL.  Organization administrators
+# always may.  With
+# PEAR_WORKER_TRUSTED_USERS_ONLY, only they and the users in
+# PEAR_WORKER_TRUSTED_USER_IDS may; without it, an empty list means
+# every member may.  prod_settings_template.py turns it on.
+PEAR_WORKER_TRUSTED_USERS_ONLY = False
 PEAR_WORKER_TRUSTED_USER_IDS: list[int] = []
 PEAR_WORKER_MAX_ACTIVE_RUNS_PER_TOPIC = 1
 PEAR_WORKER_MAX_ACTIVE_RUNS_PER_REALM = 3

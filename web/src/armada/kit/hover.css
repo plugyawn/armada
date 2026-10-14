@@ -1,0 +1,244 @@
+/* Motion, the stylesheet half; motion/ is the only script that animates.
+   Hover and press: the fill is a layer behind the label, so it settles in
+   from a slightly smaller box while the label never scales. In: 30% in the
+   frame of the input, the rest on the fade. Out: a short trail. Press: the
+   deepest fill in the frame, arriving at 0.96 of the box. */
+@layer armada.kit {
+    .armada-hover {
+        --k-hover-in: scale(0.98, 0.86);
+        position: relative;
+    }
+
+    .armada-hover[data-hover="square"] {
+        --k-hover-in: scale(0.86);
+    }
+
+    .armada-hover[data-hover="wide"] {
+        --k-hover-in: scale(0.94, 0.86);
+    }
+
+    /* What the control holds stands over its fill. */
+    :where(.armada-hover) > :where(*) {
+        position: relative;
+    }
+
+    .armada-hover::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        border-radius: inherit;
+        pointer-events: none;
+        background-color: var(--fill-1);
+        opacity: 0;
+        transform: var(--k-hover-in);
+        transition:
+            opacity var(--trail) linear,
+            transform var(--k-now) linear var(--trail),
+            background-color var(--fade-out) linear;
+    }
+
+    .armada-hover:is(
+            :hover,
+            :active,
+            [data-force="hover"],
+            [data-force="press"]
+        )::before {
+        opacity: 1;
+        transform: none;
+        transition:
+            opacity calc(var(--fade-in) / (1 - var(--hover-first))) linear
+                calc(
+                    var(--fade-in) / (1 - var(--hover-first)) *
+                        var(--hover-first) * -1
+                ),
+            transform var(--touch-t) var(--spring-touch),
+            background-color var(--fade-out) linear;
+    }
+
+    .armada-hover:is(:active, [data-force="press"])::before {
+        background-color: var(--fill-press);
+        transition-duration: var(--k-now);
+        animation: armada-press var(--touch-t) var(--spring-touch);
+    }
+
+    @keyframes armada-press {
+        from {
+            transform: scale(var(--dip));
+        }
+    }
+
+    /* Selected, on and disabled things take no fill from the pointer. */
+    .armada-hover:is(
+            [aria-current],
+            [aria-pressed="true"],
+            [aria-selected="true"],
+            [aria-checked="true"],
+            :disabled,
+            [aria-disabled="true"]
+        )::before {
+        display: none;
+    }
+
+    /* A control that is its own fill dips as a whole. */
+    .armada-dip {
+        transition: transform var(--touch-t) var(--spring-touch);
+    }
+
+    .armada-dip:is(:active, [data-force="press"]) {
+        transform: scale(var(--dip));
+        transition-duration: var(--k-now);
+    }
+
+    /* Selection: one thumb a list, moved by motion.thumb. */
+    .armada-thumb {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: var(--w, 0);
+        height: var(--h, 0);
+        transform: translate(var(--x, 0), var(--y, 0));
+        transform-origin: 0 0;
+        border-radius: var(--r-ctl);
+        background: var(--fill-3);
+        pointer-events: none;
+    }
+
+    .armada-thumb[data-off] {
+        opacity: 0;
+    }
+
+    /* The window's one focus ring and one tooltip. */
+    .armada-ring {
+        position: fixed;
+        left: 0;
+        top: 0;
+        pointer-events: none;
+        opacity: 0;
+        transform-origin: 0 0;
+        outline: var(--k-ring-w) solid var(--ring);
+    }
+
+    /* The ring and the live tooltip are manual popovers (motion/layer.ts):
+       none of the platform's popover defaults are theirs. */
+    :where(.armada-ring[popover], .armada-tip[popover]) {
+        all: unset;
+    }
+
+    .armada-tip {
+        font: var(--t-caption);
+        color: var(--ink-1);
+        background: var(--raised);
+        border-radius: var(--r-ctl);
+        padding: var(--s-1) var(--s-2);
+        white-space: nowrap;
+        /* prettier-ignore */
+        box-shadow: 0 0 0 1px var(--edge), var(--shadow-field);
+        width: max-content;
+    }
+
+    .armada-tip[data-live] {
+        position: fixed;
+        left: 0;
+        top: 0;
+        pointer-events: none;
+        opacity: 0;
+    }
+
+    .armada-tip-key {
+        font: inherit;
+        color: var(--ink-2);
+        margin-left: var(--s-2);
+    }
+
+    /* A figure that changes: each character in a fixed cell, so only the
+       characters that changed move. */
+    .armada-figure {
+        display: inline-flex;
+        font-variant-numeric: tabular-nums;
+    }
+
+    .armada-figure > span {
+        display: inline-block;
+        /* stylelint-disable-next-line unit-disallowed-list -- a digit's cell is a ratio of its own type size */
+        width: 0.6em;
+        text-align: center;
+        position: relative;
+    }
+
+    .armada-figure > span[data-cell="mark"] {
+        /* stylelint-disable-next-line unit-disallowed-list -- as above, for punctuation */
+        width: 0.3em;
+    }
+
+    .armada-figure > span[data-cell="word"] {
+        width: auto;
+    }
+
+    .armada-figure > span > i {
+        position: absolute;
+        inset: 0;
+        font-style: normal;
+        pointer-events: none;
+    }
+
+    /* A word or a glyph that changes in a cell as wide as its longest
+       form. */
+    .armada-cell {
+        position: relative;
+        display: inline-grid;
+        place-items: center;
+    }
+
+    .armada-cell[data-align="start"] {
+        justify-items: start;
+    }
+
+    .armada-cell[data-align="end"] {
+        justify-items: end;
+    }
+
+    .armada-cell > * {
+        grid-area: 1 / 1;
+    }
+
+    .armada-cell > [data-gone] {
+        pointer-events: none;
+    }
+
+    .armada-cell > [data-sizer] {
+        visibility: hidden;
+        font-style: normal;
+    }
+
+    /* A fill that grows without bending its corners (nine slices), a
+       particle, and a refusal's edge when motion is reduced. */
+    .armada-nine {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+    }
+
+    .armada-nine > i {
+        position: absolute;
+        background: var(--nine);
+        transform-origin: 0 0;
+    }
+
+    .armada-bit {
+        position: fixed;
+        left: 0;
+        top: 0;
+        pointer-events: none;
+        font: var(--t-caption);
+        line-height: var(--s-3);
+    }
+
+    .armada-refusal {
+        position: absolute;
+        inset: 0;
+        border-radius: inherit;
+        pointer-events: none;
+        outline: var(--k-ring-w) solid var(--failure);
+        outline-offset: var(--k-inset);
+    }
+}

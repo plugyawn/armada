@@ -1,0 +1,15 @@
+/* Inbox and Recent as panes of the frame (legacy_home.ts; deleted by B5):
+   each scrolls inside itself, in the lane. */
+@layer armada.surfaces {
+    #inbox-view .inbox-container,
+    #recent_view .recent_view_container,
+    #recent_view #recent-view-content-table {
+        width: var(--col);
+        max-width: none;
+        margin-inline: var(--lx) 0;
+    }
+
+    #recent_view_bottom_whitespace {
+        height: auto;
+    }
+}

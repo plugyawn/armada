@@ -8,14 +8,17 @@ const formatJsOptions = {
 
 /** @type {import("@babel/preset-env").Options} */
 const presetEnvOptions = {
-    corejs: "3.49",
     shippedProposals: true,
-    useBuiltIns: "usage",
+    useBuiltIns: false,
 };
 
 /** @type {import("@babel/core").TransformOptions} */
 const config = {
-    plugins: [["formatjs", formatJsOptions]],
+    plugins: [
+        ["formatjs", formatJsOptions],
+        // .tsx under web/src/armada/ compiles to Preact's automatic runtime.
+        ["@babel/plugin-transform-react-jsx", {runtime: "automatic", importSource: "preact"}],
+    ],
     presets: [["@babel/preset-env", presetEnvOptions], "@babel/typescript"],
 };
 export default config;

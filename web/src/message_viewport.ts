@@ -1,7 +1,6 @@
 import $ from "jquery";
 import assert from "minimalistic-assert";
 
-import * as blueslip from "./blueslip.ts";
 import * as message_lists from "./message_lists.ts";
 import * as message_scroll_state from "./message_scroll_state.ts";
 import type {Message} from "./message_store.ts";
@@ -14,7 +13,25 @@ export type MessageViewportInfo = {
     visible_height: number;
 };
 
-export const $scroll_container = $(":root");
+// The conversation's own scroller, in the frame's pane: the document
+// never scrolls (web/src/armada/frame/frame.css). This module is the one
+// door through which old code reads and writes the feed's scroll.
+export function $scroll_container(): JQuery {
+    return $("[data-armada=feed-scroller]");
+}
+
+function scroller(): HTMLElement {
+    return util.the($scroll_container());
+}
+
+// The top of what can be read is the scroller's own; its bottom is the
+// band's top, since the conversation runs on under the band.
+function feed_bounds(): {top: number; bottom: number} {
+    const top = scroller().getBoundingClientRect().top;
+    const foot = document.querySelector("[data-armada=foot]");
+    const bottom = foot?.getBoundingClientRect().top ?? scroller().getBoundingClientRect().bottom;
+    return {top, bottom};
+}
 
 let window_resize_handler: () => void;
 
@@ -24,8 +41,8 @@ export function register_resize_handler(handler: () => void): void {
 
 let in_stoppable_autoscroll = false;
 
-const cached_width = new util.CachedValue({compute_value: () => $scroll_container.width() ?? 0});
-const cached_height = new util.CachedValue({compute_value: () => $scroll_container.height() ?? 0});
+const cached_width = new util.CachedValue({compute_value: () => scroller().clientWidth});
+const cached_height = new util.CachedValue({compute_value: () => scroller().clientHeight});
 export const width = cached_width.get.bind(cached_width);
 export const height = cached_height.get.bind(cached_height);
 
@@ -49,17 +66,15 @@ export function message_viewport_info(): MessageViewportInfo {
     // message pane, which should make sense for callers, who will
     // generally be concerned about whether actual message content is
     // visible.
-    const $element_just_above_us = $("#navbar-fixed-container");
-    const $element_just_below_us = $("#compose");
-
-    let visible_top = $element_just_above_us.outerHeight() ?? 0;
+    const bounds = feed_bounds();
+    let visible_top = bounds.top;
 
     const $sticky_header = $(".sticky_header");
     if ($sticky_header.length > 0) {
         visible_top += $sticky_header.outerHeight() ?? 0;
     }
 
-    const visible_bottom = $element_just_below_us.position().top;
+    const visible_bottom = bounds.bottom;
 
     const visible_height = visible_bottom - visible_top;
 
@@ -77,7 +92,7 @@ export function message_viewport_info(): MessageViewportInfo {
 export function at_rendered_bottom(): boolean {
     const bottom = scrollTop() + height();
     // This also includes bottom whitespace.
-    const full_height = util.the($scroll_container).scrollHeight;
+    const full_height = scroller().scrollHeight;
 
     // We only know within a pixel or two if we're
     // exactly at the bottom, due to browser quirkiness,
@@ -93,14 +108,9 @@ export function bottom_rendered_message_visible(): boolean {
     const $last_row = rows.last_visible();
     if ($last_row[0] !== undefined) {
         const message_bottom = $last_row[0].getBoundingClientRect().bottom;
-        const bottom_of_feed = util.the($("#compose")).getBoundingClientRect().top;
-        return bottom_of_feed > message_bottom;
+        return feed_bounds().bottom > message_bottom;
     }
     return false;
-}
-
-export function is_below_visible_bottom(offset: number): boolean {
-    return offset > scrollTop() + height() - ($("#compose").height() ?? 0);
 }
 
 export function is_scrolled_up(): boolean {
@@ -163,9 +173,9 @@ export function set_message_position(
     // This avoids a bug where message selection doesn't change on user scroll.
     if (
         // Can't scroll up if we are already at top.
-        (new_scroll_top <= 0 && window.scrollY === 0) ||
+        (new_scroll_top <= 0 && scrollTop() === 0) ||
         // Can't scroll down if we are already at bottom.
-        (new_scroll_top >= height() && window.scrollY === height())
+        (new_scroll_top >= height() && scrollTop() === height())
     ) {
         return;
     }
@@ -258,8 +268,7 @@ function add_to_visible<T>(
 
 const top_of_feed = new util.CachedValue({
     compute_value() {
-        const $header = $("#navbar-fixed-container");
-        let visible_top = $header.outerHeight() ?? 0;
+        let visible_top = feed_bounds().top;
 
         const $sticky_header = $(".sticky_header");
         if ($sticky_header.length > 0) {
@@ -271,7 +280,7 @@ const top_of_feed = new util.CachedValue({
 
 export const bottom_of_feed = new util.CachedValue({
     compute_value() {
-        return util.the($("#compose")).getBoundingClientRect().top;
+        return feed_bounds().bottom;
     },
 });
 
@@ -371,48 +380,16 @@ export function visible_messages(require_fully_visible: boolean): Message[] {
 export function scrollTop(): number;
 export function scrollTop(target_scrollTop: number): JQuery;
 export function scrollTop(target_scrollTop?: number): JQuery | number {
-    const orig_scrollTop = $scroll_container.scrollTop();
+    const $container = $scroll_container();
     if (target_scrollTop === undefined) {
-        return orig_scrollTop ?? 0;
+        return $container.scrollTop() ?? 0;
     }
-    let $ret = $scroll_container.scrollTop(target_scrollTop);
-    const new_scrollTop = $scroll_container.scrollTop();
-    const space_to_scroll = $("#bottom_whitespace").get_offset_to_window().top - height();
-
-    // Check whether our scrollTop didn't move even though one could have scrolled down
-    if (
-        space_to_scroll > 0 &&
-        target_scrollTop > 0 &&
-        orig_scrollTop === 0 &&
-        new_scrollTop === 0
-    ) {
-        // Chrome has a bug where sometimes calling
-        // window.scrollTop(x) has no effect, resulting in the browser
-        // staying at 0 -- and afterwards if you call
-        // window.scrollTop(x) again, it will still do nothing.  To
-        // fix this, we need to first scroll to some other place.
-        blueslip.info(
-            "ScrollTop did nothing when scrolling to " + target_scrollTop + ", fixing...",
-        );
-        // First scroll to 1 in order to clear the stuck state
-        $scroll_container.scrollTop(1);
-        // And then scroll where we intended to scroll to
-        $ret = $scroll_container.scrollTop(target_scrollTop);
-        if ($scroll_container.scrollTop() === 0) {
-            blueslip.info(
-                "ScrollTop fix did not work when scrolling to " +
-                    target_scrollTop +
-                    "!  space_to_scroll was " +
-                    space_to_scroll,
-            );
-        }
-    }
-    return $ret;
+    return $container.scrollTop(target_scrollTop);
 }
 
 export function stop_auto_scrolling(): void {
     if (in_stoppable_autoscroll) {
-        $scroll_container.stop();
+        $scroll_container().stop();
     }
 }
 
@@ -427,7 +404,7 @@ export function system_initiated_animate_scroll(
     message_scroll_state.set_update_selection_on_next_scroll(update_selection_on_scroll);
     const viewport_offset = scrollTop();
     in_stoppable_autoscroll = true;
-    $scroll_container.animate(
+    $scroll_container().animate(
         {
             scrollTop: viewport_offset + scroll_amount,
         },
@@ -446,7 +423,7 @@ export function user_initiated_animate_scroll(scroll_amount: number): void {
 
     const viewport_offset = scrollTop();
 
-    $scroll_container.animate(
+    $scroll_container().animate(
         {
             scrollTop: viewport_offset + scroll_amount,
         },
@@ -612,19 +589,44 @@ export function maybe_scroll_to_selected(): void {
 }
 
 export function can_scroll(): boolean {
-    const full_height = util.the($scroll_container).scrollHeight;
-    return full_height > window.innerHeight;
+    return scroller().scrollHeight > scroller().clientHeight;
 }
+
+function reset_cached_bounds(): void {
+    cached_width.reset();
+    cached_height.reset();
+    top_of_feed.reset();
+    bottom_of_feed.reset();
+}
+
+// Whether the newest message was in view at the last scroll: when the
+// pane changes height (the field grows or shrinks, the window is resized),
+// a feed that was at its end stays at its end.
+let pinned = true;
 
 export function initialize(): void {
     // This handler must be placed before all resize handlers in our application
     $(window).on("resize", () => {
-        cached_width.reset();
-        cached_height.reset();
-        top_of_feed.reset();
-        bottom_of_feed.reset();
+        reset_cached_bounds();
         window_resize_handler?.();
     });
+
+    const feed = scroller();
+    feed.addEventListener(
+        "scroll",
+        () => {
+            pinned = at_rendered_bottom();
+        },
+        {passive: true},
+    );
+    new ResizeObserver(() => {
+        reset_cached_bounds();
+        // A hidden feed (another view in front) keeps its place.
+        if (pinned && feed.clientHeight > 0 && feed.scrollHeight > feed.clientHeight) {
+            message_scroll_state.set_update_selection_on_next_scroll(false);
+            feed.scrollTop = feed.scrollHeight;
+        }
+    }).observe(feed);
 
     // We stop autoscrolling when the user is clearly in the middle of
     // doing something.  Be careful, though, if you try to capture

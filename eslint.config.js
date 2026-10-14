@@ -1,5 +1,8 @@
 // @ts-check
 
+import fs from "node:fs";
+import path from "node:path";
+
 import {FlatCompat} from "@eslint/eslintrc";
 import js from "@eslint/js";
 import confusingBrowserGlobals from "confusing-browser-globals";
@@ -17,6 +20,331 @@ import tseslint from "typescript-eslint";
 
 const compat = new FlatCompat({baseDirectory: import.meta.dirname});
 
+// The rebuilt frontend lives in web/src/armada/. Its rules are errors
+// from the first file; docs/armada/architecture.md says why each exists.
+const armada = "web/src/armada";
+
+// Every directory under surfaces/ is a surface, so that a new one is
+// fenced from its first file without being added to a list here.
+const armadaSurfaces = fs
+    .readdirSync(path.join(import.meta.dirname, armada, "surfaces"), {withFileTypes: true})
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name)
+    .toSorted();
+
+const layoutReads =
+    "offset(Top|Left|Width|Height|Parent)|client(Top|Left|Width|Height)|scroll(Top|Left|Width|Height)|inner(Width|Height)|outer(Width|Height)|scroll[XY]|page[XY]Offset";
+const layoutReadMessage =
+    "No layout read here: measure in the after-layout phase (motion/, frame/after_layout.ts, feed/scroll.ts, surfaces/composer/origin.ts).";
+const notAnImportSource =
+    ":not(ImportDeclaration > .source, ImportExpression > .source, ExportNamedDeclaration > .source, ExportAllDeclaration > .source)";
+
+// `pear` as a name of its own: at the start of a word in either case, as
+// a capitalised part of a camel-case name, or in capitals. "Appearance",
+// "disappear" and "spear" are not the wire name.
+const wireName = "(?<![A-Za-z])[Pp]ear|[a-z]Pear|PEAR";
+const wireNameMessage =
+    "The wire name appears only under web/src/armada/api/; elsewhere say agent, run, worktree, repository.";
+const agentNameMessage =
+    "The agent's name is never a literal and nothing is named after it: it arrives from the server; strings say {agent}.";
+
+const rawControls = "button|input|select|dialog";
+const rawControlMessage = "Surfaces use the kit's components, never a raw control element.";
+const htmlMessage = "HTML strings enter the DOM only in feed/parts.ts and feed/stream_writer.ts.";
+const bannedLibraries = String.raw`^(jquery|handlebars|tippy\.js|micromodal)\b`;
+const networkMessage = "Only web/src/armada/api/ touches the network.";
+const untaggedMessage =
+    "A string a person will read is tagged for translation ($t); this one is set on the DOM as a literal.";
+const wordsForPeople = "[A-Za-z]{2}";
+const templateWithWords = `TemplateLiteral:has(> TemplateElement[value.raw=/${wordsForPeople}/])`;
+const textAttributes = "aria-label|aria-description|aria-placeholder|title|placeholder|alt";
+
+/** @type {Record<string, {selector: string, message: string}[]>} */
+const armadaSyntax = {
+    jquery: [
+        {
+            selector: "CallExpression[callee.name='$']",
+            message: "No jQuery under web/src/armada/: use the kit, or kit/dom.ts in the feed.",
+        },
+    ],
+    banned_import: [
+        {
+            selector: `ImportExpression[source.value=/${bannedLibraries}/]`,
+            message: "Not under web/src/armada/: the kit and the motion kit replace it.",
+        },
+        {
+            selector: String.raw`ImportExpression[source.value=/\.hbs$/]`,
+            message: "No Handlebars under web/src/armada/: chrome is .tsx, the feed is kit/dom.ts.",
+        },
+    ],
+    animate: [
+        {
+            // Any method of this name, because the receiver's type is not
+            // known here; the motion kit exports none called `animate`.
+            selector: "CallExpression[callee.property.name='animate']",
+            message:
+                "Only web/src/armada/motion/ calls element.animate; use the motion kit (none of its functions is called animate, so name yours otherwise).",
+        },
+        {
+            selector: "NewExpression[callee.name=/^(Animation|KeyframeEffect)$/]",
+            message: "Only web/src/armada/motion/ creates an animation; use the motion kit.",
+        },
+    ],
+    audio: [
+        {
+            selector: "Identifier[name=/^(webkit)?(Offline)?AudioContext$/]",
+            message: "Only web/src/armada/sound/ may create or name an AudioContext.",
+        },
+    ],
+    layout_read: [
+        {
+            selector:
+                "CallExpression[callee.property.name=/^(getBoundingClientRect|getClientRects|elementFromPoint|elementsFromPoint|caretPositionFromPoint|caretRangeFromPoint)$/]",
+            message: layoutReadMessage,
+        },
+        {
+            selector:
+                ":matches(CallExpression[callee.name='getComputedStyle'], CallExpression[callee.property.name='getComputedStyle'])",
+            message: layoutReadMessage,
+        },
+        {
+            selector: `MemberExpression:matches([property.name=/^(${layoutReads})$/], [property.value=/^(${layoutReads})$/]):not(AssignmentExpression[operator='='] > .left)`,
+            message: layoutReadMessage,
+        },
+        {
+            // const {offsetWidth} = element;
+            selector: `ObjectPattern > Property:matches([key.name=/^(${layoutReads})$/], [key.value=/^(${layoutReads})$/])`,
+            message: layoutReadMessage,
+        },
+    ],
+    timers: [
+        {
+            selector:
+                ":matches(CallExpression[callee.name=/^set(Timeout|Interval)$/], CallExpression[callee.property.name=/^set(Timeout|Interval)$/])[arguments.1.property.name!=/^(pending|quiet)$/]",
+            message:
+                "No timers in the feed or the composer except the two named thresholds (pending, quiet).",
+        },
+    ],
+    inner_html: [
+        {
+            selector:
+                ":matches(MemberExpression[property.name=/^(innerHTML|outerHTML)$/], JSXAttribute[name.name='dangerouslySetInnerHTML'], Property:matches([key.name=/^(innerHTML|outerHTML|dangerouslySetInnerHTML)$/], [key.value=/^(innerHTML|outerHTML|dangerouslySetInnerHTML)$/]))",
+            message: htmlMessage,
+        },
+        {
+            selector:
+                ":matches(CallExpression[callee.property.name=/^(insertAdjacentHTML|setHTML|setHTMLUnsafe|parseHTMLUnsafe|parseFromString|createContextualFragment)$/], CallExpression[callee.object.name='document'][callee.property.name=/^write(ln)?$/])",
+            message: htmlMessage,
+        },
+        {
+            selector: "Identifier[name='DOMParser']",
+            message: htmlMessage,
+        },
+    ],
+    raw_elements: [
+        {
+            selector: `JSXOpeningElement[name.name=/^(${rawControls})$/]`,
+            message: rawControlMessage,
+        },
+        {
+            // h("button", ...) and document.createElement("button")
+            selector: `:matches(CallExpression[callee.name=/^(h|createElement)$/], CallExpression[callee.property.name=/^(h|createElement)$/])[arguments.0.value=/^(${rawControls})$/i]`,
+            message: rawControlMessage,
+        },
+    ],
+    network: [
+        {
+            selector:
+                ":matches(CallExpression[callee.name='fetch'], CallExpression[callee.object.name=/^(window|globalThis|self|navigator)$/][callee.property.name=/^(fetch|sendBeacon)$/])",
+            message: networkMessage,
+        },
+        {
+            selector: "Identifier[name=/^(XMLHttpRequest|WebSocket|EventSource|WebTransport)$/]",
+            message: networkMessage,
+        },
+    ],
+    untagged_text: [
+        {
+            // JSX is covered by formatjs/no-literal-string-in-jsx; this is
+            // the same mistake made with the DOM's own properties.
+            selector: `AssignmentExpression[left.property.name=/^(textContent|innerText|title|placeholder|alt|ariaLabel|ariaDescription|ariaPlaceholder)$/] > :matches(Literal[value=/${wordsForPeople}/], ${templateWithWords}).right`,
+            message: untaggedMessage,
+        },
+        {
+            selector: `CallExpression[callee.property.name='setAttribute'][arguments.0.value=/^(${textAttributes})$/] > :matches(Literal[value=/${wordsForPeople}/], ${templateWithWords}):nth-child(2)`,
+            message: untaggedMessage,
+        },
+        {
+            // One argument: URLSearchParams.append(name, value) is not text.
+            selector: `CallExpression[callee.property.name=/^(append|prepend|replaceChildren|createTextNode)$/][arguments.length=1] > :matches(Literal[value=/${wordsForPeople}/], ${templateWithWords})`,
+            message: untaggedMessage,
+        },
+    ],
+    wire_name: [
+        {
+            selector: `:matches(Literal[value=/${wireName}/], TemplateElement[value.raw=/${wireName}/], JSXText[value=/${wireName}/])${notAnImportSource}`,
+            message: wireNameMessage,
+        },
+        {
+            selector: `:matches(Identifier, JSXIdentifier)[name=/${wireName}/]`,
+            message: wireNameMessage,
+        },
+    ],
+    agent_name: [
+        {
+            selector:
+                ":matches(Literal[value=/onyx/i], TemplateElement[value.raw=/onyx/i], JSXText[value=/onyx/i])",
+            message: agentNameMessage,
+        },
+        {
+            selector: ":matches(Identifier, JSXIdentifier)[name=/onyx/i]",
+            message: agentNameMessage,
+        },
+    ],
+};
+
+// A later configuration object replaces a rule's options whole, so each
+// zone restates everything that applies to it. Zones run from general to
+// specific; `off` names the restrictions a zone is exempt from.
+const armadaSyntaxZones = [
+    {files: [`${armada}/**`], off: ["timers", "raw_elements"]},
+    {files: [`${armada}/motion/**`], off: ["timers", "raw_elements", "animate", "layout_read"]},
+    {files: [`${armada}/sound/**`], off: ["timers", "raw_elements", "audio"]},
+    {files: [`${armada}/api/**`], off: ["timers", "raw_elements", "wire_name", "network"]},
+    // One of the four palettes is called Onyx, after the stone.
+    {files: [`${armada}/tokens/**`], off: ["timers", "raw_elements", "agent_name"]},
+    {files: [`${armada}/frame/after_layout.ts`], off: ["timers", "raw_elements", "layout_read"]},
+    {files: [`${armada}/feed/**`], off: ["raw_elements"]},
+    {files: [`${armada}/feed/scroll.ts`], off: ["raw_elements", "layout_read"]},
+    {
+        files: [`${armada}/feed/parts.ts`, `${armada}/feed/stream_writer.ts`],
+        off: ["raw_elements", "inner_html"],
+    },
+    {files: [`${armada}/surfaces/**`], off: ["timers"]},
+    {files: [`${armada}/surfaces/composer/**`], off: []},
+    {files: [`${armada}/surfaces/composer/origin.ts`], off: ["layout_read"]},
+];
+
+/**
+ * @param {string[]} off
+ * @returns {import("eslint").Linter.RuleEntry}
+ */
+const armadaSyntaxRule = (off) => [
+    "error",
+    ...Object.entries(armadaSyntax).flatMap(([name, restrictions]) =>
+        off.includes(name) ? [] : restrictions,
+    ),
+];
+
+const armadaBannedImports = {
+    paths: [
+        {name: "zod", message: "Use zod/mini."},
+        ...["jquery", "handlebars", "tippy.js", "micromodal"].map((name) => ({
+            name,
+            message: "Not under web/src/armada/: the kit and the motion kit replace it.",
+        })),
+    ],
+    patterns: [
+        {
+            group: ["*.hbs"],
+            message: "No Handlebars under web/src/armada/: chrome is .tsx, the feed is kit/dom.ts.",
+        },
+        {
+            group: ["handlebars/*", "tippy.js/*"],
+            message: "Not under web/src/armada/: the kit and the motion kit replace it.",
+        },
+    ],
+};
+
+// Who may import whom (docs/armada/architecture.md, "Layers").
+const armadaImportZones = [
+    {
+        // Bundle entry points may import anything; ui_init.js calls boot.ts.
+        target: ["./web/src/*", "./web/src/!(armada|bundles)/**/*"],
+        from: `./${armada}`,
+        except: ["./hooks", "./boot.ts"],
+        message:
+            "Old modules reach the rebuild only through web/src/armada/hooks/ (and boot.ts, from ui_init.js).",
+    },
+    {
+        target: [`./${armada}/*`, `./${armada}/!(api)/**/*`],
+        from: "./web/src/channel.ts",
+        message: "Only web/src/armada/api/ touches the network.",
+    },
+    {
+        target: `./${armada}/kit/**/*`,
+        from: `./${armada}`,
+        except: ["./kit", "./motion", "./tokens"],
+        message: "The kit imports motion and nothing else of Armada's.",
+    },
+    {
+        target: `./${armada}/state/**/*`,
+        from: `./${armada}`,
+        except: ["./state", "./api"],
+        message: "Stores import no DOM module: of Armada's, only state/ and api/.",
+    },
+    {
+        target: `./${armada}/state/**/*`,
+        from: "./web/src",
+        except: ["./armada"],
+        message:
+            "Stores import no DOM module: nothing of the old app, which a store reaches through api/.",
+    },
+    {
+        target: `./${armada}/feed/**/*`,
+        from: `./${armada}`,
+        except: ["./feed", "./kit/dom.ts", "./kit/icons", "./state", "./motion", "./tokens"],
+        message: "The feed imports kit/dom.ts, state and motion only.",
+    },
+    ...armadaSurfaces.map((surface) => ({
+        target: `./${armada}/surfaces/${surface}/**/*`,
+        from: `./${armada}`,
+        except: [
+            "./kit",
+            "./state",
+            "./commands",
+            "./motion",
+            "./sound",
+            "./tokens",
+            `./surfaces/${surface}`,
+            ...armadaSurfaces
+                .filter((other) => other !== surface)
+                .map((other) => `./surfaces/${other}/index.tsx`),
+        ],
+        message:
+            "A surface imports kit, state, commands, motion and sound, and never another surface's internals.",
+    })),
+];
+
+// A selector cannot see a file's name, so this one rule is written here.
+/** @type {import("eslint").ESLint.Plugin} */
+const armadaPlugin = {
+    rules: {
+        "file-name": {
+            meta: {
+                type: "problem",
+                schema: [],
+                messages: {wire_name: wireNameMessage, agent_name: agentNameMessage},
+            },
+            create(context) {
+                const name = path
+                    .relative(path.join(import.meta.dirname, armada), context.filename)
+                    .replaceAll(path.sep, "/");
+                return {
+                    Program(node) {
+                        if (new RegExp(wireName).test(name) && !name.startsWith("api/")) {
+                            context.report({node, messageId: "wire_name"});
+                        }
+                        if (/onyx/i.test(name) && !name.startsWith("tokens/")) {
+                            context.report({node, messageId: "agent_name"});
+                        }
+                    },
+                };
+            },
+        },
+    },
+};
+
 export default defineConfig(
     {
         // This is intended for generated files and vendored third-party files.
@@ -29,6 +357,11 @@ export default defineConfig(
             "var",
             "web/generated",
             "web/third",
+            // INTERIM BETA (/beta/): the design prototype's kit and a spike,
+            // moved in whole and deleted when the rebuild's conversation
+            // lands; not held to web/src/armada/'s rules
+            // (web/src/armada/beta/README.md).
+            "web/src/armada/beta",
         ],
     },
     js.configs.recommended,
@@ -42,7 +375,7 @@ export default defineConfig(
     tseslint.configs.stylisticTypeChecked,
     mdx.flat,
     {
-        files: ["**/*.cts", "**/*.mts", "**/*.ts"],
+        files: ["**/*.cts", "**/*.mts", "**/*.ts", "**/*.tsx"],
         extends: [importPlugin.flatConfigs.typescript],
     },
     {
@@ -70,7 +403,7 @@ export default defineConfig(
             },
             "import/resolver": {
                 node: {
-                    extensions: [".ts", ".d.ts", ".js"],
+                    extensions: [".ts", ".tsx", ".d.ts", ".js"],
                 },
             },
             "no-jquery": {
@@ -190,7 +523,7 @@ export default defineConfig(
         },
     },
     {
-        ignores: ["**/*.cts", "**/*.mts", "**/*.ts"],
+        ignores: ["**/*.cts", "**/*.mts", "**/*.ts", "**/*.tsx"],
         extends: [tseslint.configs.disableTypeChecked],
         rules: {
             "@typescript-eslint/consistent-type-imports": "off",
@@ -300,6 +633,52 @@ export default defineConfig(
             },
         },
     },
+    {
+        files: ["web/src/**"],
+        rules: {
+            "import/no-restricted-paths": [
+                "error",
+                {basePath: import.meta.dirname, zones: armadaImportZones},
+            ],
+        },
+    },
+    {
+        files: [`${armada}/**`],
+        plugins: {armada: armadaPlugin},
+        rules: {
+            "armada/file-name": "error",
+            "@typescript-eslint/no-restricted-imports": ["error", armadaBannedImports],
+            "formatjs/no-literal-string-in-jsx": "error",
+        },
+    },
+    {
+        files: [`${armada}/feed/**`],
+        rules: {
+            "@typescript-eslint/no-restricted-imports": [
+                "error",
+                {
+                    paths: [
+                        ...armadaBannedImports.paths,
+                        {
+                            name: "preact",
+                            message: "The feed is an imperative renderer: no Preact in it.",
+                        },
+                    ],
+                    patterns: [
+                        ...armadaBannedImports.patterns,
+                        {
+                            group: ["preact/*", "*.tsx"],
+                            message: "The feed is an imperative renderer: no Preact in it.",
+                        },
+                    ],
+                },
+            ],
+        },
+    },
+    ...armadaSyntaxZones.map(({files, off}) => ({
+        files,
+        rules: {"no-restricted-syntax": armadaSyntaxRule(off)},
+    })),
     {
         files: ["starlight_help/src/scripts/client/**"],
         rules: {

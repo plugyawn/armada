@@ -1,0 +1,6 @@
+# Interim beta at /beta/ (web/src/armada/beta/README.md): every line here goes when the beta is deleted.
+kept .prettierignore  # interim beta: web/src/armada/beta is not formatted
+kept tools/linter_lib/exclude.py  # interim beta: web/src/armada/beta is not linted
+kept web/templates/navbar.hbs  # interim beta: the "Try the beta" link
+kept web/webpack.assets.json  # interim beta: the armada-beta entry
+kept zproject/urls.py  # interim beta: the /beta/ route

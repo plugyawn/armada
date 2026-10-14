@@ -37,65 +37,58 @@ export function send_message(
     error: (response: string, code: string) => void,
 ): void {
     if (!request.resend) {
-        sent_messages.start_tracking_message({
-            local_id: request.local_id,
-            locally_echoed: request.locally_echoed ?? false,
-        });
+        sent_messages.start_tracking_message(request.local_id);
     }
-    sent_messages.wrap_send(request.local_id, () => {
-        channel.post({
-            url: "/json/messages",
-            data: request,
-            success: function success(data) {
-                // Call back to our callers to do things like closing the compose
-                // box, turning off spinners, reifying locally echoed messages and
-                // displaying visibility policy related compose banners.
-                on_success(data);
-                // Once everything is done, get ready to report times to the server.
-                const state = sent_messages.get_message_state(request.local_id);
-                /* istanbul ignore if */
-                if (!state) {
-                    return;
-                }
-                state.report_server_ack();
+    channel.post({
+        url: "/json/messages",
+        data: request,
+        success: function success(data) {
+            // Call back to our callers to do things like closing the compose
+            // box, turning off spinners, reifying locally echoed messages and
+            // displaying visibility policy related compose banners.
+            on_success(data);
+            const state = sent_messages.get_message_state(request.local_id);
+            /* istanbul ignore if */
+            if (!state) {
+                return;
+            }
+            state.report_server_ack();
 
-                // We only start our timer for events coming in here,
-                // since it's plausible the server rejected our message,
-                // or took a while to process it, but there is nothing
-                // wrong with our event loop.
-                /* istanbul ignore if */
-                if (!state.saw_event) {
-                    setTimeout(() => {
-                        if (state.saw_event) {
-                            // We got our event, no need to do anything
-                            return;
-                        }
+            // We only start our timer for events coming in here,
+            // since it's plausible the server rejected our message,
+            // or took a while to process it, but there is nothing
+            // wrong with our event loop.
+            /* istanbul ignore if */
+            if (!state.saw_event) {
+                setTimeout(() => {
+                    if (state.saw_event) {
+                        // We got our event, no need to do anything
+                        return;
+                    }
 
-                        blueslip.log(
-                            `Restarting get_events due to delayed receipt of sent message ${request.local_id}`,
-                        );
+                    blueslip.log(
+                        `Restarting get_events due to delayed receipt of sent message ${request.local_id}`,
+                    );
 
-                        server_events_state.restart_get_events();
-                    }, 5000);
-                }
-            },
-            error(xhr, error_type) {
-                sent_messages.get_message_state(request.local_id)?.report_error();
-                if (error_type !== "timeout" && reload_state.is_pending()) {
-                    // The error might be due to the server changing
-                    reload.initiate({
-                        immediate: true,
-                        save_compose: true,
-                        send_after_reload: true,
-                    });
-                    return;
-                }
+                    server_events_state.restart_get_events();
+                }, 5000);
+            }
+        },
+        error(xhr, error_type) {
+            if (error_type !== "timeout" && reload_state.is_pending()) {
+                // The error might be due to the server changing
+                reload.initiate({
+                    immediate: true,
+                    save_compose: true,
+                    send_after_reload: true,
+                });
+                return;
+            }
 
-                const response = channel.xhr_error_message("Error sending message", xhr);
-                const parsed = z.object({code: z.string()}).safeParse(xhr.responseJSON);
-                error(response, parsed.success ? parsed.data.code : "");
-            },
-        });
+            const response = channel.xhr_error_message("Error sending message", xhr);
+            const parsed = z.object({code: z.string()}).safeParse(xhr.responseJSON);
+            error(response, parsed.success ? parsed.data.code : "");
+        },
     });
 }
 

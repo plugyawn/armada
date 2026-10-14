@@ -115,8 +115,14 @@ run_test("process_fenced_code_quote", () => {
 });
 
 run_test("process_fenced_code_math", () => {
+    const input = "```math\nx^2 < y\n```";
+
+    // Until KaTeX has been fetched, the source is shown as text.
+    fenced_code.set_katex(undefined);
+    assert.equal(fenced_code.process_fenced_code(input), "\n<p>x^2 &lt; y</p>\n\n");
+
     // Valid LaTeX renders via KaTeX.
-    const input = "```math\nx^2\n```";
+    fenced_code.set_katex(require("katex"));
     const output = fenced_code.process_fenced_code(input);
     assert.ok(output.includes("katex"));
 

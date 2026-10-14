@@ -1,8 +1,13 @@
-{% extends "zerver/base.html" %} {% set entrypoint = "app" %} {# The app itself.
-#} {# Includes some other templates as tabs. #} {% set PAGE_TITLE = _("Public
-view of {org_name} | Armada team chat").format(org_name=realm_name) %} {% set
-PAGE_DESCRIPTION = _("Browse the publicly accessible channels in {org_name}
-without logging in.").format(org_name=realm_name) %} {% block meta_viewport %}
+{% extends "zerver/base.html" %}
+{% set entrypoint = "app" %}
+
+{# The app itself. #}
+{# Includes some other templates as tabs. #}
+
+{% set PAGE_TITLE = _("Public view of {org_name} | Armada team chat").format(org_name=realm_name) %}
+{% set PAGE_DESCRIPTION = _("Browse the publicly accessible channels in {org_name} without logging in.").format(org_name=realm_name) %}
+
+{% block meta_viewport %}
 <!--
 From version 132, Firefox now defaults to not resize the viewport
 content but only the visual viewport. While this works well in
@@ -11,150 +16,27 @@ where the compose box is hidden under keyboard. To fix it, we rollback
 to resizing content when keyboard is shown on Firefox Android.
 TODO: Remove this when Firefox Android fixes the bug -
 https://bugzilla.mozilla.org/show_bug.cgi?id=1943053 -->
-<meta
-    name="viewport"
-    content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no{% if is_firefox_android %}, interactive-widget=resizes-content{% endif %}"
-/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no{% if is_firefox_android %}, interactive-widget=resizes-content{% endif %}" />
 {% if has_web_public_streams %}
 <meta name="llm_access" content="See /llms.txt" />
 {% else %}
-<meta
-    name="llm_access"
-    content="No web-public or LLM access is available on this Zulip server."
-/>
-{% endif %} {% endblock %} {% block customhead %} {% if enable_gravatar %}<link
-    rel="dns-prefetch"
-    href="https://secure.gravatar.com"
-/>
-{% endif -%} {% if s3_avatar_public_url_prefix %}<link
-    rel="dns-prefetch"
-    href="{{ s3_avatar_public_url_prefix }}"
-/>
-{% endif -%}
-<meta name="mobile-web-app-capable" content="yes" />
-<link
-    href="{{ static('images/logo/apple-touch-icon-precomposed.png') }}"
-    rel="apple-touch-icon-precomposed"
-/>
-<style>
-    #app-loading {
-        font-size: 16px;
-        background-color: hsl(0, 0%, 94%);
-        position: fixed;
-        height: 100%;
-        width: 100%;
-        padding: 10px;
-        top: 0px;
-        left: 0px;
-        z-index: 200;
-    }
-    #app-loading-middle-content,
-    #app-loading-bottom-content {
-        position: absolute;
-        left: 50%;
-        top: 50%;
-        transform: translate(-50%, -50%);
-        padding: 10px;
-    }
-    #app-loading-middle-content h3 {
-        text-align: center;
-    }
-    @keyframes showAtEnd {
-        99% {
-            visibility: hidden;
-        }
-        100% {
-            visibility: visible;
-        }
-    }
-    #app-loading-unsupported-browser,
-    #app-loading-unsupported-desktop-app {
-        margin-top: 25px;
-    }
-    #app-loading-bottom-content {
-        top: unset;
-        bottom: 20px;
-        animation: 7s showAtEnd;
-        animation-fill-mode: forwards;
-        visibility: hidden;
-    }
-    #app-loading-error {
-        display: flex;
-        height: 100vh;
-        justify-content: center;
-        align-items: center;
-        visibility: hidden;
-    }
-    body.app-loading-failed #app-loading-middle-content,
-    body.app-loading-failed #app-loading-bottom-content,
-    body.app-loading-failed .app {
-        display: none;
-    }
-    body.app-loading-failed #app-loading-error {
-        visibility: visible;
-    }
-    :root.dark-theme #app-loading {
-        background-color: hsl(0, 0%, 11%);
-        color: hsl(236, 33%, 90%);
-    }
-    @media (prefers-color-scheme: dark) {
-        :root.color-scheme-automatic #app-loading {
-            background-color: hsl(0, 0%, 11%);
-            color: hsl(236, 33%, 90%);
-        }
-    }
+<meta name="llm_access" content="No web-public or LLM access is available on this Zulip server." />
+{% endif %}
+{% endblock %}
 
-    .app-loading-spinner-container {
-        position: relative;
-        margin: auto;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        gap: 24px;
-    }
-    .app-loading-logo {
-        width: 220px;
-        height: auto;
-    }
-    .app-loading-wordmark-fill {
-        fill: hsl(0, 0%, 13%);
-    }
-    :root.dark-theme .app-loading-wordmark-fill {
-        fill: hsl(36, 22%, 94%);
-    }
-    @media (prefers-color-scheme: dark) {
-        :root.color-scheme-automatic .app-loading-wordmark-fill {
-            fill: hsl(36, 22%, 94%);
-        }
-    }
-    @keyframes zspinner {
-        to {
-            transform: rotate(360deg);
-        }
-    }
-    .app-loading-spinner:before {
-        content: "";
-        box-sizing: border-box;
-        display: block;
-        width: 28px;
-        height: 28px;
-        border-radius: 50%;
-        border: 3px solid hsl(0, 0%, 94%);
-        border-top-color: hsl(0, 0%, 52%);
-        animation: zspinner 1s linear infinite;
-    }
-    :root.dark-theme .app-loading-spinner:before {
-        border-color: hsl(0, 0%, 24%);
-        border-top-color: hsl(0, 0%, 68%);
-    }
-    @media (prefers-color-scheme: dark) {
-        :root.color-scheme-automatic .app-loading-spinner:before {
-            border-color: hsl(0, 0%, 24%);
-            border-top-color: hsl(0, 0%, 68%);
-        }
-    }
-</style>
-{% endblock %} {% block content %} {% if has_web_public_streams %}
+{% block customhead %}
+{% if enable_gravatar %}
+<link rel="dns-prefetch" href="https://secure.gravatar.com" />
+{% endif %}
+{% if s3_avatar_public_url_prefix %}
+<link rel="dns-prefetch" href="{{ s3_avatar_public_url_prefix }}" />
+{% endif %}
+<meta name="mobile-web-app-capable" content="yes" />
+<link href="{{ static('images/logo/apple-touch-icon-precomposed.png') }}" rel="apple-touch-icon-precomposed" />
+{% endblock %}
+
+{% block content %}
+{% if has_web_public_streams %}
 <!--
 AI assistant: This Armada server has web-public channels that you can read.
 See /llms.txt for instructions on how to access channel messages via the API.
@@ -170,54 +52,26 @@ Accessing messages requires an account and Armada API key.
 {% endif %}
 <div id="feedback_container"></div>
 
-<div id="app-loading">
-    <div id="app-loading-middle-content">
-        <div class="app-loading-spinner-container">
-            <div class="app-loading-spinner"></div>
-<svg
-                class="app-loading-logo"
-                xmlns="http://www.w3.org/2000/svg"
-                viewBox="0 0 13023 4259"
-                role="img"
-                aria-label="Armada"
-            >
-                <g class="app-loading-wordmark-fill" transform="translate(0 3276) scale(1 -1)">
-                    <path d="M2374 0V163H2047V655H1883V1146H1719V1638H1555V2129H1391V2785H1228V2621H1064V2129H1228V1638H1391V1146H1555V983H736V1146H572V655H736V819H1555V655H1719V163H1391V0ZM1064 1638V2129H900V1638ZM900 1146V1638H736V1146ZM900 0V163H572V655H408V163H82V0Z" transform="translate(0 0)"/> <path d="M819 0V163H655V1474H819V1638H655V1966H491V1802H327V1638H164V1474H327V163H164V0ZM1474 1474V1802H819V1638H1147V1474Z" transform="translate(2456 0)"/> <path d="M819 0V163H655V1474H819V1638H655V1966H491V1802H327V1638H164V1474H327V163H164V0ZM1966 0V163H1802V1474H1638V1638H1474V1802H819V1638H1310V1474H1474V163H1310V0ZM3113 0V163H2949V1474H2785V1638H2621V1802H1966V1638H2457V1474H2621V163H2457V0ZM1966 1474V1638H1802V1474Z" transform="translate(4012 0)"/> <path d="M1802 0V163H1638V1474H1474V1638H1310V1802H491V1638H327V1474H164V1310H491V1474H655V1638H1147V1474H1310V1146H1147V983H1310V327H1147V163H1474V0ZM1147 819V983H655V819ZM1147 0V163H655V327H491V655H655V819H327V655H164V327H327V163H491V0Z" transform="translate(7207 0)"/> <path d="M1966 0V163H1802V3112H1638V2949H1474V2785H1310V2621H1474V1638H1310V1474H1474V327H1310V163H1474V0ZM1310 0V163H819V327H655V655H491V1146H655V1474H819V1638H1310V1802H655V1638H491V1474H327V1146H164V655H327V327H491V163H655V0Z" transform="translate(9091 0)"/> <path d="M1802 0V163H1638V1474H1474V1638H1310V1802H491V1638H327V1474H164V1310H491V1474H655V1638H1147V1474H1310V1146H1147V983H1310V327H1147V163H1474V0ZM1147 819V983H655V819ZM1147 0V163H655V327H491V655H655V819H327V655H164V327H327V163H491V0Z" transform="translate(11139 0)"/>
-                </g>
-            </svg>
-        </div>
-        <div id="app-loading-unsupported-browser" hidden>
-            <p>
-                {% trans %}Because you're using an unsupported or very old
-                browser, Armada may not load.{% endtrans %}
-            </p>
-        </div>
-        <div id="app-loading-unsupported-desktop-app" hidden>
-            <p>
-                {% trans %}Because you're using a very old version of the
-                desktop app, Armada may not load.
-                <a
-                    href="https://zulip.com/apps/"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    >Download the latest version.</a
-                >
-                {% endtrans %}
-            </p>
-        </div>
-    </div>
-    <div id="app-loading-bottom-content">
-        <p>
-            {% trans %}If this message does not go away, try
-            <a class="reload-lnk">reloading</a> the page.{% endtrans %}
-        </p>
-    </div>
-    <div id="app-loading-error">
-        <p>
-            {% trans %}Error loading Armada. Try
-            <a class="reload-lnk">reloading</a> the page.{% endtrans %}
-        </p>
-    </div>
+{# The sprite, inlined once (a copy of web/src/armada/kit/icons/sprite.svg,
+which the release tarball does not ship; arm check frame-stability
+compares the two). #}
+{% include "zerver/app/armada_sprite.svg" %}
+
+{# Not a splash: the frame below is the first paint. These are shown only
+when loading fails or the browser or desktop app is too old. #}
+<div id="app-loading" class="armada-frame-failure" data-armada="failure">
+    <p id="app-loading-unsupported-browser" hidden>
+        {% trans %}Because you're using an unsupported or very old browser,
+        Armada may not load.{% endtrans %}
+    </p>
+    <p id="app-loading-unsupported-desktop-app" hidden>
+        {% trans %}Because you're using a very old version of the desktop
+        app, Armada may not load.{% endtrans %}
+    </p>
+    <p id="app-loading-error">
+        {% trans %}Error loading Armada. Try
+        <a class="reload-lnk">reloading</a> the page.{% endtrans %}
+    </p>
     <script nonce="{{ csp_nonce }}">
         document.addEventListener("DOMContentLoaded", function () {
             function reload() {
@@ -236,18 +90,9 @@ Accessing messages requires an account and Armada API key.
 <div id="drafts_table"></div>
 <div id="scheduled_messages_overlay_container"></div>
 <div id="reminders-overlay-container"></div>
-<div
-    id="settings_overlay_container"
-    class="overlay"
-    data-overlay="settings"
-    aria-hidden="true"
-></div>
+<div id="settings_overlay_container" class="overlay" data-overlay="settings" aria-hidden="true"></div>
 <div id="message-edit-history-overlay-container"></div>
-<div
-    class="informational-overlays overlay"
-    data-overlay="informationalOverlays"
-    aria-hidden="true"
->
+<div class="informational-overlays overlay" data-overlay="informationalOverlays" aria-hidden="true">
     <div class="overlay-content overlay-container">
         <div class="overlay-tabs">
             <span class="exit">&times;</span>
@@ -267,86 +112,70 @@ Accessing messages requires an account and Armada API key.
 
 <div id="alert-popup-container">
     <div id="popup_banners_wrapper" class="banner-wrapper alert-box">
-        <div
-            class="alert alert_sidebar alert-error home-error-bar"
-            id="home-error"
-        ></div>
+        <div class="alert alert_sidebar alert-error home-error-bar" id="home-error"></div>
     </div>
 </div>
 
 <div class="blueslip-error-container"></div>
 
-<div id="navbar-fixed-container">
-    <div id="navbar_alerts_wrapper" class="banner-wrapper"></div>
-    <div id="header-container"></div>
-</div>
-
-<div class="app">
-    <div class="app-main">
+{# The frame (docs/armada/architecture.md, "Frame"): one grid, the same on
+every place, in its final geometry before any script runs. The old
+interface lives inside it until each part's replacement lands
+(web/src/armada/bridge/README.md). A host of old markup never has a class
+attribute that starts with "armada-": the kit's reset matches that prefix
+and would reach every old element inside it. #}
+{# In Electron the window's buttons take the start of the nav's top row
+(--frame-inset-start, frame.css); known before the first paint. #}
+<script nonce="{{ csp_nonce }}">
+    if (/\bElectron\//.test(navigator.userAgent)) {
+        document.documentElement.setAttribute("data-electron", "");
+    }
+</script>
+<div class="app armada-frame" data-armada="frame">
+    <nav class="frame-host armada-frame-nav" data-armada="nav" aria-label="{{ _('Places') }}">
+        <div class="armada-frame-nav-top" data-armada="nav-top">
+            <a class="armada-frame-workspace" data-armada="workspace" href="#">{{ realm_name }}</a>
+        </div>
         <div class="column-left" id="left-sidebar-container"></div>
-        <div class="column-middle">
+    </nav>
+    <main class="app-main armada-plane" data-armada="plane" data-place="home" data-view="chat">
+        <header id="navbar-fixed-container" class="header armada-frame-header" data-armada="header">
+            <div id="header-container" class="frame-host armada-frame-line1" data-armada="header-line1"></div>
+            <div class="armada-frame-line2" data-armada="header-line2">
+                <p class="armada-frame-sentence" data-armada="sentence"></p>
+            </div>
+            <div class="armada-frame-more" data-armada="more"></div>
+        </header>
+        <div class="column-middle armada-frame-pane" data-armada="pane">
             <div class="column-middle-inner">
-                <div id="recent_view" class="no-visible-focus-outlines">
+                <div id="recent_view" class="no-visible-focus-outlines" data-armada="recent-scroller">
                     <div class="recent_view_container">
                         <div id="recent_view_table"></div>
                     </div>
                     <table id="recent-view-content-table">
-                        <tbody
-                            data-empty="{{ _('No conversations match your filters.') }}"
-                            id="recent-view-content-tbody"
-                        ></tbody>
+                        <tbody data-empty="{{ _('No conversations match your filters.') }}" id="recent-view-content-tbody"></tbody>
                     </table>
                     <div id="recent_view_bottom_whitespace">
-                        <div class="bottom-messages-logo">
-                            <svg
-                                class="messages-logo-svg"
-                                xmlns="http://www.w3.org/2000/svg"
-                                viewBox="0 0 774 774"
-                            >
-                                <circle cx="387" cy="387" r="370" />
-                                <path
-                                    d="M567.32 527.81c0 33.07-24.26 60.11-53.91 60.11H260.59c-29.65 0-53.91-27.04-53.91-60.11 0-20.24 9.10-38.25 22.95-49.14l134.50-120.12c2.50-2.14 5.75 1.31 3.94 4.20l-49.34 98.79c-1.38 2.76.41 6.17 3.25 6.17h191.42c29.65 0 53.91 27.04 53.91 60.11zm0-281.75c0 20.24-9.10 38.25-22.95 49.14l-134.50 120.12c-2.50 2.14-5.75-1.31-3.94-4.20l49.34-98.79c1.38-2.76-.41-6.17-3.25-6.17H260.59c-29.65 0-53.91-27.04-53.91-60.11s24.26-60.11 53.91-60.11h252.81c29.65 0 53.91 27.04 53.91 60.11z"
-                                />
-                            </svg>
-                        </div>
                         <div id="recent_view_loading_messages_indicator"></div>
                     </div>
                     <!-- Don't show the banner until we have some messages loaded. -->
-                    <div
-                        class="recent-view-load-more-container main-view-banner info notvisible"
-                    >
+                    <div class="recent-view-load-more-container main-view-banner info notvisible">
                         <div class="last-fetched-message banner_content">
                             {{ _('This view is still loading messages.') }}
                         </div>
-                        <button
-                            class="fetch-messages-button main-view-banner-action-button right_edge notvisible"
-                        >
+                        <button class="fetch-messages-button main-view-banner-action-button right_edge notvisible">
                             <span class="loading-indicator"></span>
-                            <span class="button-label"
-                                >{{ _('Load more') }}</span
-                            >
+                            <span class="button-label">{{ _('Load more') }}</span>
                         </button>
                     </div>
                 </div>
-                <div id="inbox-view" class="no-visible-focus-outlines">
+                <div id="inbox-view" class="no-visible-focus-outlines" data-armada="inbox-scroller">
                     <div class="inbox-container">
                         <div id="inbox-pane"></div>
                     </div>
                 </div>
-                <div id="message_feed_container">
-                    <div class="message-feed" id="main_div">
-                        <div class="top-messages-logo">
-                            <svg
-                                class="messages-logo-svg"
-                                xmlns="http://www.w3.org/2000/svg"
-                                viewBox="0 0 774 774"
-                            >
-                                <circle cx="387" cy="387" r="370" />
-                                <path
-                                    d="M567.32 527.81c0 33.07-24.26 60.11-53.91 60.11H260.59c-29.65 0-53.91-27.04-53.91-60.11 0-20.24 9.10-38.25 22.95-49.14l134.50-120.12c2.50-2.14 5.75 1.31 3.94 4.20l-49.34 98.79c-1.38 2.76.41 6.17 3.25 6.17h191.42c29.65 0 53.91 27.04 53.91 60.11zm0-281.75c0 20.24-9.10 38.25-22.95 49.14l-134.50 120.12c-2.50 2.14-5.75-1.31-3.94-4.20l49.34-98.79c1.38-2.76-.41-6.17-3.25-6.17H260.59c-29.65 0-53.91-27.04-53.91-60.11s24.26-60.11 53.91-60.11h252.81c29.65 0 53.91 27.04 53.91 60.11z"
-                                />
-                            </svg>
-                        </div>
+                <div id="message_feed_container" data-armada="feed-scroller">
+                    <div class="message-feed" id="main_div" data-armada="lane">
                         <div id="loading_older_messages_indicator"></div>
                         <div id="page_loading_indicator"></div>
                         <div id="message_feed_errors_container"></div>
@@ -354,20 +183,25 @@ Accessing messages requires an account and Armada API key.
                         <div id="scheduled_message_indicator"></div>
                         <div id="mark_read_on_scroll_state_banner"></div>
                         <div id="typing_notifications"></div>
-                        <div
-                            id="mark_read_on_scroll_state_banner_place_holder"
-                        ></div>
+                        <div id="mark_read_on_scroll_state_banner_place_holder"></div>
                         <div id="bottom_whitespace"></div>
                     </div>
                 </div>
-                <div id="compose" {% if embedded %}data-embedded{% endif %}>
-                    <div id="compose-container"></div>
-                </div>
             </div>
         </div>
-        <div class="column-right" id="right-sidebar-container"></div>
-        <!--/right sidebar-->
-    </div>
+        <div class="frame-host armada-frame-foot" data-armada="foot">
+            <div class="armada-frame-band" data-armada="band"></div>
+            <div id="compose" class="frame-host armada-frame-composer" data-armada="composer" {% if embedded %}data-embedded{% endif %}>
+                <div id="compose-container"></div>
+            </div>
+        </div>
+        <aside class="armada-frame-column" data-armada="column"></aside>
+        {# Raised over the pane: the old rail as a sheet from the window's
+        right edge, and the old alerts under the header. Children of the
+        plane, so the composition's properties place them. #}
+        <div class="column-right" id="right-sidebar-container" data-armada="sheet"></div>
+        <div id="navbar_alerts_wrapper" class="banner-wrapper" data-armada="alerts"></div>
+    </main>
 </div>
 
 <div class="hidden">

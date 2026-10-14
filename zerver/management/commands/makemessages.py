@@ -228,6 +228,7 @@ class Command(makemessages.Command):
                 "--ignore=**/*.d.ts",
                 "web/src/**/*.js",
                 "web/src/**/*.ts",
+                "web/src/**/*.tsx",
             ]
         )
         translation_strings.extend(orjson.loads(extracted).values())

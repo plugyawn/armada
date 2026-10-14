@@ -20,6 +20,7 @@ from zerver.lib.rest import rest_path
 from zerver.lib.url_redirects import DOCUMENTATION_REDIRECTS, get_integration_category_redirects
 from zerver.views.alert_words import add_alert_words, list_alert_words, remove_alert_words
 from zerver.views.antispam import get_challenge
+from zerver.views.armada_beta import armada_beta
 from zerver.views.attachments import list_by_user, remove
 from zerver.views.auth import (
     api_fetch_api_key,
@@ -759,6 +760,8 @@ v1_api_and_json_patterns = [
 # endpoint for use by code), you should add it here.
 i18n_urls = [
     path("", home, name="home"),
+    # INTERIM BETA: the second interface; removed with web/src/armada/beta/.
+    path("beta/", armada_beta),
     # We have a desktop-specific landing page in case we change our /
     # to not log in in the future. We don't want to require a new
     # desktop app build for everyone in that case

@@ -172,6 +172,16 @@ export function initialize(): void {
             return true;
         }
 
+        // A thread's preview under its root opens the thread; it does not
+        // also start a reply in the main composer.
+        if (
+            $target.closest(
+                ".message-thread-reply-preview, .message-thread-agent-preview, .message-thread-strip",
+            ).length > 0
+        ) {
+            return true;
+        }
+
         // Allow toggling of tasks in todo widget
         if (
             $target.is(".todo-widget label.checkbox") ||
@@ -263,7 +273,9 @@ export function initialize(): void {
     // if on normal non-mobile experience, a `click` event should run the message
     // selection function which will open the compose box  and select the message.
     if (!util.is_mobile()) {
-        $message_interaction_root.on("click", ".messagebox", select_message_function);
+        // The composer is also a `.messagebox`, and it is not a message:
+        // a click on one of its buttons must not look for a message row.
+        $message_interaction_root.on("click", ".message_row .messagebox", select_message_function);
     }
 
     $message_interaction_root.on("click", ".star_container", function (e) {

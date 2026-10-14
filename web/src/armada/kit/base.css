@@ -1,0 +1,190 @@
+/* What every component of the kit stands on: the few lengths the design
+   draws that are not tokens, each derived from one, the reset of the
+   elements the kit builds, and the inline styles of talk. Nothing here
+   reaches an element that is not the kit's: every selector starts from an
+   armada- class. */
+@layer armada.kit {
+    :root {
+        /* One pixel, from the space unit: a length the design draws once
+           and gave no name is a count of these. */
+        --px: calc(var(--s-1) / 4);
+        /* No time at all: a state that is whole in the frame of its input. */
+        --k-now: calc(var(--fade-in) * 0);
+        /* Buch and Kräftig, where a style's weight changes inside a line. */
+        --k-regular: 400;
+        --k-strong: 500;
+        /* The window's one focus ring: 1.5 px, 2 px off its control. */
+        --k-ring-w: calc(var(--px) * 1.5);
+        --k-ring-off: calc(var(--px) * 2);
+        /* A shape cut out of the plane round something seated on an edge. */
+        --k-cut: calc(var(--px) * 2);
+        /* An edge drawn inside its own shape. */
+        --k-inset: calc(var(--px) * -1);
+    }
+
+    :where([class^="armada-"]),
+    :where([class^="armada-"]) :where(*) {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+    }
+
+    :where(button[class^="armada-"], textarea[class^="armada-"]) {
+        all: unset;
+        box-sizing: border-box;
+        cursor: default;
+    }
+
+    /* Hidden is hidden, whatever display a component's own rule sets. */
+    [class^="armada-"][hidden] {
+        display: none;
+    }
+
+    :where(a[class^="armada-"]) {
+        color: inherit;
+        text-decoration: none;
+    }
+
+    :where(ul[class^="armada-"], ol[class^="armada-"]) {
+        list-style: none;
+    }
+
+    :where([class^="armada-"]):focus {
+        outline: none;
+    }
+
+    /* Keyboard focus is the window's one ring (motion/ring.ts). A still of
+       a focused control draws the same ring on it. */
+    :where(button, a, [tabindex])[class^="armada-"][data-force="focus"] {
+        outline: var(--k-ring-w) solid var(--ring);
+        outline-offset: var(--k-ring-off);
+    }
+
+    /* The plane of the kit: what a page or a pane sets once. */
+    .armada-kit {
+        font: var(--t-text);
+        color: var(--ink-1);
+        font-synthesis: none;
+        -webkit-font-smoothing: antialiased;
+        text-rendering: optimizelegibility;
+        cursor: default;
+    }
+
+    .armada-kit[data-plane="ground"] {
+        --plane: var(--ground);
+
+        background: var(--ground);
+    }
+
+    .armada-kit[data-plane="content"] {
+        --plane: var(--content);
+
+        background: var(--content);
+    }
+
+    /* The eleven styles. */
+    .armada-type-display {
+        font: var(--t-display);
+    }
+
+    .armada-type-title {
+        font: var(--t-title);
+    }
+
+    .armada-type-heading {
+        font: var(--t-heading);
+    }
+
+    .armada-type-talk {
+        font: var(--t-talk);
+    }
+
+    .armada-type-reading {
+        font: var(--t-reading);
+    }
+
+    .armada-type-strong {
+        font: var(--t-strong);
+    }
+
+    .armada-type-text {
+        font: var(--t-text);
+    }
+
+    .armada-type-label {
+        font: var(--t-label);
+    }
+
+    .armada-type-caption {
+        font: var(--t-caption);
+        font-variant-numeric: tabular-nums;
+    }
+
+    .armada-type-code {
+        font: var(--t-code);
+    }
+
+    .armada-type-code-small {
+        font: var(--t-code-s);
+    }
+
+    /* Inline code sets no line box of its own: a line that holds code is
+       the line's own height, 20 or 24. */
+    .armada-kit :where(code) {
+        font: var(--t-code);
+        line-height: 0;
+    }
+
+    .armada-kit :where(em) {
+        font-style: italic;
+    }
+
+    .armada-kit :where(strong, b) {
+        font-weight: var(--k-strong);
+    }
+
+    .armada-link,
+    .armada-kit :where(a[href]) {
+        color: var(--accent-text);
+        text-decoration: underline;
+        text-decoration-thickness: var(--px);
+        text-underline-offset: calc(var(--px) * 3);
+    }
+
+    /* The two inks below the first, and the three hues that mean news. */
+    .armada-ink-2 {
+        color: var(--ink-2);
+    }
+
+    .armada-dim {
+        color: var(--dim);
+    }
+
+    [class^="armada-"][data-tone="attention"] {
+        color: var(--attention);
+    }
+
+    [class^="armada-"][data-tone="failure"] {
+        color: var(--failure);
+    }
+
+    [class^="armada-"][data-tone="success"] {
+        color: var(--success);
+    }
+
+    /* What was added and what was removed, as counts. */
+    .armada-counts {
+        font: var(--t-caption);
+        color: var(--ink-2);
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+    }
+
+    .armada-count-added {
+        color: var(--add-ink);
+    }
+
+    .armada-count-removed {
+        color: var(--del-ink);
+    }
+}

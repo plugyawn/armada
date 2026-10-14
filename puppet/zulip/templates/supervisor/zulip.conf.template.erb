@@ -9,7 +9,7 @@
 
 [program:zulip-django]
 command=nice -n5 uv run --no-sync uwsgi --ini /etc/zulip/uwsgi.ini
-environment=HTTP_proxy="<%= @proxy %>",HTTPS_proxy="<%= @proxy %>"<%= @ca_bundle %>
+environment=HTTP_proxy="<%= @proxy %>",HTTPS_proxy="<%= @proxy %>"<%= @ca_bundle %><%= @codex_env %>
 priority=100                   ; the relative start priority (default 999)
 autostart=true                 ; start at supervisord start (default: true)
 autorestart=true               ; whether/when to restart (default: unexpected)
@@ -80,6 +80,7 @@ directory=/home/zulip/deployments/current/
 [program:zulip_events_<%= queue %>]
 <%-
   numprocs = 1
+  numprocs_start = 1
   term = "worker"
   if queue == "missedmessage_mobile_notifications"
     numprocs = @mobile_notification_shards
@@ -87,6 +88,12 @@ directory=/home/zulip/deployments/current/
   elsif queue == "user_activity"
     numprocs = @user_activity_shards
     term = "shard"
+  elsif queue == "pear_worker"
+    # One consumer per agent slot, numbered from 0 as
+    # PEAR_WORKER_QUEUE_NAMES in zerver/lib/pear_worker.py is.
+    numprocs = 2
+    numprocs_start = 0
+    term = "slot"
   elsif @worker_counts.has_key?(queue)
     numprocs = @worker_counts[queue]
   end -%>
@@ -95,12 +102,12 @@ process_name=zulip_events_<%= queue %>_<%= term %>%(process_num)s
 command=nice -n10 /home/zulip/deployments/current/manage.py process_queue --queue_name=<%= queue %> --skip-checks --worker_num %(process_num)s
 stdout_logfile=/var/log/zulip/events_<%= queue %>_<%= term %>%(process_num)s.log         ; stdout log path, NONE for none; default AUTO
 numprocs=<%= numprocs %>
-numprocs_start=1
+numprocs_start=<%= numprocs_start %>
 <% else -%>
 command=nice -n10 /home/zulip/deployments/current/manage.py process_queue --queue_name=<%= queue %> --skip-checks
 stdout_logfile=/var/log/zulip/events_<%= queue %>.log         ; stdout log path, NONE for none; default AUTO
 <%end -%>
-environment=HTTP_proxy="<%= @proxy %>",HTTPS_proxy="<%= @proxy %>"<%= @ca_bundle %>
+environment=HTTP_proxy="<%= @proxy %>",HTTPS_proxy="<%= @proxy %>"<%= @ca_bundle %><%= @codex_env %>
 priority=300                   ; the relative start priority (default 999)
 autostart=true                 ; start at supervisord start (default: true)
 autorestart=true               ; whether/when to restart (default: unexpected)
@@ -115,7 +122,7 @@ directory=/home/zulip/deployments/current/
 <% else %>
 [program:zulip_events]
 command=nice -n10 /home/zulip/deployments/current/manage.py process_queue --multi_threaded <%= @queues.join(' ') %> --skip-checks
-environment=HTTP_proxy="<%= @proxy %>",HTTPS_proxy="<%= @proxy %>"<%= @ca_bundle %>
+environment=HTTP_proxy="<%= @proxy %>",HTTPS_proxy="<%= @proxy %>"<%= @ca_bundle %><%= @codex_env %>
 priority=300                   ; the relative start priority (default 999)
 autostart=true                 ; start at supervisord start (default: true)
 autorestart=true               ; whether/when to restart (default: unexpected)

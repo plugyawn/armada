@@ -1,4 +1,5 @@
 {
+    "armada-beta": ["./src/armada/beta/index.js"],
     "activity": [
         "./third/bootstrap/css/bootstrap.portico.css",
         "./src/bundles/common.ts",

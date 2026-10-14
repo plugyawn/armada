@@ -1,8 +1,7 @@
 import "./common.ts";
 
-// Import third party jQuery plugins
+// Import the third party jQuery plugin
 import "jquery-caret-plugin/dist/jquery.caret";
-import "jquery-validation";
 
 // Import app JS
 import "../setup.ts";

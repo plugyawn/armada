@@ -2,10 +2,11 @@
     margin-top: 10px;
 }
 
+/* The document never scrolls: each pane of the frame owns its scroller
+   (web/src/armada/frame/frame.css). */
 html {
-    overflow: hidden scroll;
+    overflow: hidden;
     overscroll-behavior-y: none;
-    width: calc(100% - var(--disabled-scrollbar-width));
 }
 
 body,
@@ -38,79 +39,6 @@ body {
     font-family: "Source Sans 3 VF", sans-serif;
     color: var(--color-text-default);
     background-color: var(--color-background);
-
-    /* Implementation for fluid layout width setting. */
-    .header-main,
-    .app .app-main,
-    #compose-container {
-        max-width: calc(
-            var(--left-sidebar-max-width) + var(--message-area-max-width) +
-                var(--right-sidebar-max-width)
-        );
-    }
-
-    /* When sidebars are manually hidden, we set the max-width
-       for the layout to a different maximum width. This keeps
-       the message area predictably readable. */
-    &.hide-left-sidebar:not(.fluid_layout_width) {
-        .header-main,
-        .app .app-main,
-        #compose-container {
-            max-width: calc(
-                var(--message-area-max-width) + var(--right-sidebar-max-width)
-            );
-
-            /* When we're less than the xl_min breakpoint, we instead
-               constrain to just the message area's max-width, since
-               the right column will be hidden below that point. */
-            @container header-container (width < $cq_xl_min) {
-                max-width: var(--message-area-max-width);
-            }
-
-            @container app (width < $cq_xl_min) {
-                max-width: var(--message-area-max-width);
-            }
-        }
-    }
-
-    /* Fallback media query. */
-    @media (width < $xl_min) {
-        &.without-container-query-support.hide-left-sidebar:not(
-                .fluid_layout_width
-            ) {
-            .header-main,
-            .app .app-main,
-            #compose-container {
-                max-width: var(--message-area-max-width);
-            }
-        }
-    }
-
-    &.hide-right-sidebar:not(.fluid_layout_width) {
-        .header-main,
-        .app .app-main,
-        #compose-container {
-            max-width: calc(
-                var(--left-sidebar-max-width) + var(--message-area-max-width)
-            );
-        }
-    }
-
-    &.hide-left-sidebar.hide-right-sidebar:not(.fluid_layout_width) {
-        .header-main,
-        .app .app-main,
-        #compose-container {
-            max-width: var(--message-area-max-width);
-        }
-    }
-
-    &.fluid_layout_width {
-        .header-main,
-        .app .app-main,
-        #compose-container {
-            max-width: inherit;
-        }
-    }
 }
 
 input,
@@ -348,19 +276,6 @@ p.n-margin {
         align-items: center;
         margin-left: auto;
     }
-}
-
-#navbar-fixed-container {
-    position: fixed;
-    top: 0;
-    z-index: 102;
-}
-
-/* Adjust width of any fixed / absolute positioned elements that might be visible in
-   the background when a overlay / modal is open. */
-#navbar-fixed-container,
-#compose {
-    width: calc(100% - var(--disabled-scrollbar-width));
 }
 
 .header {
@@ -1217,7 +1132,6 @@ nav {
 
 #bottom_whitespace {
     display: block;
-    height: var(--max-unmaximized-compose-height);
 }
 
 .operator_value {
@@ -1745,16 +1659,6 @@ div.topic_edit_spinner .loading_indicator_spinner {
     }
 }
 
-/* Media-query fallback for the cinched-up logo presentation. */
-@media (width > $md_min) {
-    .without-container-query-support {
-        &.hide-left-sidebar {
-            #navbar-middle {
-                margin-left: var(--middle-column-left-margin-fluid-layout);
-            }
-        }
-    }
-}
 
 body:not(.hide-left-sidebar) {
     /* User can clearly see the unread count in the left sidebar. So,
@@ -1867,112 +1771,6 @@ body:not(.spectator-view) {
     }
 }
 
-/* Begin fallback media queries. */
-@media (width < $xl_min) {
-    .without-container-query-support {
-        .app-main {
-            @extend %hide-right-sidebar;
-
-            .column-middle {
-                margin-right: 7px;
-            }
-        }
-
-        #navbar-middle {
-            /* = (width of button, square with header) * 4 (number of buttons) + 3px extra margin. */
-            margin-right: calc(var(--header-height) * 4 + 3px);
-        }
-
-        #typing_notifications,
-        #scheduled_message_indicator,
-        #compose-content {
-            margin-right: 7px;
-        }
-
-        .hide-left-sidebar {
-            #compose-content,
-            .app-main .column-middle {
-                margin-left: 7px;
-            }
-
-            #top_navbar .column-left {
-                width: auto;
-            }
-        }
-    }
-}
-
-@media (width < $md_min) {
-    .without-container-query-support {
-        .app-main {
-            @extend %hide-left-sidebar;
-
-            .column-middle {
-                margin-left: 7px;
-                margin-right: 7px;
-            }
-
-            .column-middle .column-middle-inner {
-                margin-left: 0;
-                margin-right: 0;
-            }
-        }
-
-        .header-main .column-left {
-            display: none;
-        }
-
-        #navbar-middle {
-            margin-left: 0;
-        }
-
-        #streamlist-toggle {
-            display: block;
-        }
-
-        .top-navbar-container {
-            margin-left: 40px;
-        }
-
-        #feedback_container {
-            width: calc(90% - 30px);
-            left: 5%;
-            top: 5%;
-        }
-
-        #typing_notifications,
-        #scheduled_message_indicator,
-        #compose-content {
-            margin-left: 7px;
-        }
-    }
-}
-
-@media (width <= $ml_min) {
-    .without-container-query-support {
-        .column-right.expanded,
-        .column-left.expanded {
-            width: 100vw;
-            max-width: 100%;
-        }
-
-        .app-main .column-right.expanded .right-sidebar,
-        .app-main .column-left.expanded .left-sidebar {
-            width: 100vw;
-            max-width: 100%;
-        }
-    }
-}
-
-@media (width <= $sm_min) {
-    .without-container-query-support {
-        .narrow_description {
-            display: none;
-        }
-    }
-}
-
-/* End fallback media queries. */
 
 /* Begin viewport state queries. */
 
@@ -1999,13 +1797,6 @@ body:not(.spectator-view) {
     }
 }
 
-@media (width >= $md_min) {
-    .without-container-query-support {
-        .app-main::after {
-            content: "gte_md_min";
-        }
-    }
-}
 
 @container app (width >= $cq_xl_min) {
     .app-main::after {
@@ -2013,13 +1804,6 @@ body:not(.spectator-view) {
     }
 }
 
-@media (width >= $xl_min) {
-    .without-container-query-support {
-        .app-main::after {
-            content: "gte_md_min gte_xl_min";
-        }
-    }
-}
 
 /* End viewport state queries. */
 

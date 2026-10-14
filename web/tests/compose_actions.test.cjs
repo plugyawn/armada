@@ -48,14 +48,16 @@ set_global("document", {});
 
 set_global("requestAnimationFrame", (func) => func());
 
-const autosize = noop;
-autosize.update = noop;
-mock_esm("autosize", {default: autosize});
 mock_esm("../src/compose_tooltips", {
     initialize_compose_tooltips: noop,
     dismiss_intro_go_to_conversation_tooltip: noop,
 });
 const message_fetch_raw_content = mock_esm("../src/message_fetch_raw_content");
+// compose_reply looks quoted messages up in message_store (not only in
+// the current message list), so that messages shown only in a thread
+// pane can be quoted too. The mocked current list reads from the same
+// mocked store, as the real one does.
+const message_store = mock_esm("../src/message_store");
 
 const compose_fade = mock_esm("../src/compose_fade", {
     clear_compose: noop,
@@ -65,6 +67,7 @@ const compose_fade = mock_esm("../src/compose_fade", {
 const compose_pm_pill = mock_esm("../src/compose_pm_pill");
 const compose_ui = mock_esm("../src/compose_ui", {
     autosize_textarea: noop,
+    size_textarea_to_content: noop,
     is_expanded: () => false,
     set_focus: noop,
     compute_placeholder_text: noop,
@@ -91,6 +94,7 @@ mock_esm("../src/unread_ops", {
 mock_esm("../src/message_lists", {
     current: {
         can_mark_messages_read: () => true,
+        get: (message_id) => message_store.get(message_id),
     },
 });
 mock_esm("../src/resize", {
@@ -507,7 +511,7 @@ test("quote_messages", ({disallow, override, override_rewire}) => {
     override_private_message_recipient_ids({override});
 
     let selected_message;
-    override(message_lists.current, "get", (id) => (id === 100 ? selected_message : undefined));
+    override(message_store, "get", (id) => (id === 100 ? selected_message : undefined));
 
     let expected_replacement;
     let replaced;
@@ -709,7 +713,7 @@ test("quote_messages", ({disallow, override, override_rewire}) => {
         forward_message: true,
     };
     replaced = false;
-    override(message_lists.current, "get", (id) =>
+    override(message_store, "get", (id) =>
         id === selected_message.id ? selected_message : undefined,
     );
     quote_messages(opts);
@@ -743,7 +747,7 @@ test("quote_messages", ({disallow, override, override_rewire}) => {
         forward_message: true,
     };
     replaced = false;
-    override(message_lists.current, "get", (id) =>
+    override(message_store, "get", (id) =>
         id === selected_message.id ? selected_message : undefined,
     );
     quote_messages(opts);
@@ -777,7 +781,7 @@ test("quote_messages", ({disallow, override, override_rewire}) => {
         forward_message: true,
     };
     replaced = false;
-    override(message_lists.current, "get", (id) =>
+    override(message_store, "get", (id) =>
         id === selected_message.id ? selected_message : undefined,
     );
     quote_messages(opts);
@@ -811,7 +815,7 @@ test("quote_messages", ({disallow, override, override_rewire}) => {
         forward_message: true,
     };
     replaced = false;
-    override(message_lists.current, "get", (id) =>
+    override(message_store, "get", (id) =>
         id === selected_message.id ? selected_message : undefined,
     );
     quote_messages(opts);
@@ -845,7 +849,7 @@ test("quote_messages", ({disallow, override, override_rewire}) => {
         forward_message: true,
     };
     replaced = false;
-    override(message_lists.current, "get", (id) =>
+    override(message_store, "get", (id) =>
         id === selected_message.id ? selected_message : undefined,
     );
     quote_messages(opts);
@@ -879,7 +883,7 @@ test("quote_messages", ({disallow, override, override_rewire}) => {
         forward_message: true,
     };
     replaced = false;
-    override(message_lists.current, "get", (id) =>
+    override(message_store, "get", (id) =>
         id === selected_message.id ? selected_message : undefined,
     );
     quote_messages(opts);
@@ -917,7 +921,7 @@ ${fence}quote
 ${selected_message.raw_content}
 ${fence}`;
     replaced = false;
-    override(message_lists.current, "get", (id) =>
+    override(message_store, "get", (id) =>
         id === selected_message.id ? selected_message : undefined,
     );
     quote_messages(opts);
@@ -951,7 +955,7 @@ ${fence}`;
         fence: "```",
         content: "Hello world",
     });
-    override(message_lists.current, "get", (id) => (id === 50 ? highlighted_message : undefined));
+    override(message_store, "get", (id) => (id === 50 ? highlighted_message : undefined));
     quote_messages(opts);
     const {opts: opts_when_message_has_selection} = stub.get_args("opts");
     assert.equal(opts_when_message_has_selection.trigger, "hotkey");
@@ -964,7 +968,7 @@ ${fence}`;
     const message_with_pointer = highlighted_message;
     override_rewire(compose_reply, "get_highlighted_message_ids", () => undefined);
     override(message_lists.current, "selected_id", () => 100);
-    override(message_lists.current, "get", (id) => (id === 100 ? message_with_pointer : undefined));
+    override(message_store, "get", (id) => (id === 100 ? message_with_pointer : undefined));
     opts = {trigger: "hotkey"};
 
     expected_replacement = quote_message_template({

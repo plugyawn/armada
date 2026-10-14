@@ -113,13 +113,20 @@ export function create_pear_workspace_explorer(
         disclosure.className = "pear-workspace-tree-row__disclosure";
         disclosure.setAttribute("aria-hidden", "true");
         disclosure.dataset["role"] = "disclosure";
+        const chevron = document.createElement("i");
+        chevron.className = "zulip-icon zulip-icon-chevron-right";
+        disclosure.append(chevron);
+        const icon = document.createElement("i");
+        icon.className = "pear-workspace-tree-row__icon zulip-icon";
+        icon.setAttribute("aria-hidden", "true");
+        icon.dataset["role"] = "icon";
         const name = document.createElement("span");
         name.className = "pear-workspace-tree-row__name";
         name.dataset["role"] = "name";
         const status = document.createElement("span");
         status.className = "pear-workspace-tree-row__status";
         status.dataset["role"] = "entry-status";
-        element.append(disclosure, name, status);
+        element.append(disclosure, icon, name, status);
         return element;
     };
 
@@ -141,12 +148,31 @@ export function create_pear_workspace_explorer(
         } else {
             element.removeAttribute("aria-expanded");
         }
+        // A folder only reports loading once it is open: closed folders
+        // are fetched ahead of time and should not flicker while that
+        // happens.
         const disclosure = element.querySelector<HTMLElement>("[data-role='disclosure']")!;
-        disclosure.textContent =
-            entry.kind === "directory" ? (row.loading ? "…" : row.expanded ? "▾" : "▸") : "";
-        element.querySelector<HTMLElement>("[data-role='name']")!.textContent = entry.name;
-        element.querySelector<HTMLElement>("[data-role='entry-status']")!.textContent =
-            entry.status === "clean" ? "" : entry.status;
+        disclosure.dataset["state"] =
+            entry.kind !== "directory"
+                ? "none"
+                : row.expanded
+                  ? row.loading
+                      ? "loading"
+                      : "expanded"
+                  : "collapsed";
+        const icon = element.querySelector<HTMLElement>("[data-role='icon']")!;
+        icon.classList.toggle("zulip-icon-folder", entry.kind === "directory");
+        icon.classList.toggle("zulip-icon-file-text", entry.kind !== "directory");
+        const name = element.querySelector<HTMLElement>("[data-role='name']")!;
+        if (name.textContent !== entry.name) {
+            name.textContent = entry.name;
+        }
+        const status = element.querySelector<HTMLElement>("[data-role='entry-status']")!;
+        const status_text = entry.status === "clean" ? "" : entry.status;
+        if (status.textContent !== status_text) {
+            status.textContent = status_text;
+        }
+        status.dataset["status"] = entry.status;
 
         element.querySelector("[data-action='load-more']")?.remove();
         const directory = tree.directories.get(entry.entry_id);
@@ -191,7 +217,7 @@ export function create_pear_workspace_explorer(
                 visible.rows.find((row) => row.entry.entry_id === tree.selectedId)?.entry
                     .entry_id ?? visible.rows[0]?.entry.entry_id;
         }
-        const fragment = document.createDocumentFragment();
+        const next_children: Element[] = [];
         const live_ids = new Set<string>();
         if (visible.skipped > 0 && normalized_filter(current_filter) === "") {
             const previous = document.createElement("button");
@@ -201,7 +227,7 @@ export function create_pear_workspace_explorer(
             previous.setAttribute("role", "treeitem");
             previous.setAttribute("aria-level", "1");
             previous.tabIndex = -1;
-            fragment.append(previous);
+            next_children.push(previous);
         }
         for (const row of visible.rows) {
             const id = row.entry.entry_id;
@@ -210,7 +236,7 @@ export function create_pear_workspace_explorer(
             live_ids.add(id);
             update_row(element, row, tree);
             element.tabIndex = id === focused_entry_id ? 0 : -1;
-            fragment.append(element);
+            next_children.push(element);
         }
         if (visible.hasMore && normalized_filter(current_filter) === "") {
             const next = document.createElement("button");
@@ -220,7 +246,7 @@ export function create_pear_workspace_explorer(
             next.setAttribute("role", "treeitem");
             next.setAttribute("aria-level", "1");
             next.tabIndex = -1;
-            fragment.append(next);
+            next_children.push(next);
         }
         const root_directory = tree.directories.get(tree.rootId);
         if (
@@ -237,14 +263,23 @@ export function create_pear_workspace_explorer(
             load_more.textContent = "Load more workspace files";
             load_more.setAttribute("role", "treeitem");
             load_more.setAttribute("aria-level", "1");
-            fragment.append(load_more);
+            next_children.push(load_more);
         }
         for (const id of keyed_rows.keys()) {
             if (!live_ids.has(id)) {
                 keyed_rows.delete(id);
             }
         }
-        options.treeRoot.replaceChildren(fragment);
+        // Selecting, expanding and loading each re-render the tree. Most
+        // of those leave the row order untouched, and re-attaching every
+        // row then would cost a full layout for nothing.
+        const current_children = options.treeRoot.children;
+        const unchanged =
+            next_children.length === current_children.length &&
+            next_children.every((child, index) => child === current_children[index]);
+        if (!unchanged) {
+            options.treeRoot.replaceChildren(...next_children);
+        }
         options.treeRoot.setAttribute(
             "aria-busy",
             String([...tree.directories.values()].some((directory) => directory.loading)),

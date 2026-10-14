@@ -16,7 +16,7 @@ const message_edit = mock_esm("../src/message_edit", {
     start: noop,
 });
 const message_thread_hooks = mock_esm("../src/message_thread_hooks", {
-    get_compose_target: () => undefined,
+    get_compose_target: /* istanbul ignore next */ () => undefined,
 });
 const message_lists = mock_esm("../src/message_lists");
 mock_esm("../src/ui_util", {parse_html: (html) => html});
@@ -80,6 +80,7 @@ run_test(
         };
         message_lists.current = {
             view: {manages_primary_viewport: true},
+            /* istanbul ignore next */
             get_row() {
                 throw new Error("secondary action must not use message_lists.current");
             },

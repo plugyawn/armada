@@ -1,0 +1,220 @@
+/* The field: one raised field, one line at rest, 44 high. It spans the
+   gutter and the lane, as a turn does: Plus stands inside it on the faces'
+   axis and its words start on the text edge. At its far end: who will
+   answer (the sigil, whole, or its outline when the message is for people
+   only) and the default button. Only lines of text add height. */
+@layer armada.kit {
+    .armada-field {
+        display: flex;
+        align-items: flex-end;
+        position: relative;
+        width: calc(100% + calc(var(--px) * 48));
+        margin-left: calc(var(--px) * -48);
+        font: var(--t-talk);
+    }
+
+    .armada-field-shape {
+        --plane: var(--raised);
+
+        flex: 1;
+        min-width: 0;
+        min-height: var(--h-field);
+        border-radius: var(--r-field);
+        background: var(--raised);
+        /* prettier-ignore */
+        box-shadow: 0 0 0 1px var(--edge), var(--shadow-field);
+        display: flex;
+        align-items: flex-end;
+        gap: var(--s-1);
+        padding: var(--in-field);
+        position: relative;
+        transform-origin: 50% 50%;
+    }
+
+    /* Focus: the edge darkens on a fade; the caret says the rest. */
+    .armada-field-shape::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        border-radius: inherit;
+        pointer-events: none;
+        /* prettier-ignore */
+        box-shadow: 0 0 0 1px var(--edge-2), var(--shadow-field-focus);
+        opacity: 0;
+        transition: opacity var(--fade-out) linear;
+    }
+
+    .armada-field:where(:focus-within, [data-force="focus"])
+        .armada-field-shape::after {
+        opacity: 1;
+        transition-duration: var(--fade-in);
+    }
+
+    .armada-field-plus,
+    .armada-field-agent {
+        width: var(--h-k);
+        height: var(--h-k);
+        border-radius: var(--r-in-field);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        flex: none;
+    }
+
+    .armada-field-plus {
+        color: var(--ink-2);
+    }
+    /* Who will answer: the shape tells it, not the ink. */
+    .armada-field-agent {
+        color: var(--ink-1);
+    }
+
+    .armada-field-agent[aria-pressed="false"] {
+        color: var(--ink-2);
+    }
+
+    /* 6 + 32 + 4 + 22: the words start 16 px inside the lane. */
+    .armada-field-words {
+        flex: 1;
+        min-width: 0;
+        display: flex;
+        align-items: flex-start;
+        margin: 0 var(--s-1) 0 calc(var(--px) * 22);
+    }
+
+    .armada-field-text {
+        flex: 1;
+        min-width: 0;
+        position: relative;
+    }
+
+    .armada-field-input {
+        display: block;
+        width: 100%;
+        padding: var(--s-1) 0;
+        min-height: var(--h-k);
+        max-height: calc(var(--s-6) * 8 + var(--s-2));
+        font: inherit;
+        color: inherit;
+        white-space: pre-wrap;
+        overflow-wrap: break-word;
+        overflow-y: auto;
+        resize: none;
+        field-sizing: content;
+        cursor: text;
+        caret-color: var(--accent-text);
+        position: relative;
+    }
+
+    .armada-field-placeholder {
+        position: absolute;
+        left: 0;
+        top: var(--s-1);
+        color: var(--ink-2);
+        pointer-events: none;
+        white-space: nowrap;
+        transition: opacity var(--fade-in) linear;
+    }
+
+    .armada-field[data-filled] .armada-field-placeholder {
+        opacity: 0;
+        transition-duration: var(--k-now);
+    }
+    /* An empty field: the caret stands 3 px before the placeholder's first
+       letter and never on it. */
+    .armada-field:where(:not([data-filled])) .armada-field-input {
+        text-indent: calc(var(--px) * -3);
+    }
+
+    /* The model and effort for the next turn: out of the field, on the
+       band's line, ending on the field's right edge, on the plane's own
+       colour: a row rising out of the field passes behind it. */
+    .armada-field-mode {
+        position: absolute;
+        right: 0;
+        bottom: calc(100% + var(--s-2) + calc(var(--px) * 2));
+        height: var(--h-s);
+        padding: 0 var(--s-1) 0 var(--s-2);
+        gap: calc(var(--px) * 2);
+        border-radius: var(--r-ctl);
+        font: var(--t-text);
+        color: var(--ink-2);
+        display: inline-flex;
+        align-items: center;
+        white-space: nowrap;
+        background-color: var(--content);
+        outline: var(--in-field) solid var(--content);
+    }
+
+    .armada-field-mode[data-off] {
+        visibility: hidden;
+    }
+
+    .armada-field-mode[aria-expanded="true"] {
+        background-color: var(--fill-3);
+        color: var(--ink-1);
+    }
+
+    .armada-field-mode > .armada-glyph {
+        opacity: 0.7;
+    }
+
+    /* An attachment is a chip before the words. */
+    .armada-field-attachment {
+        display: inline-flex;
+        align-items: center;
+        gap: calc(var(--px) * 6);
+        height: var(--h-s);
+        padding: 0 var(--s-2) 0 calc(var(--px) * 6);
+        margin: var(--s-1) var(--s-2) 0 0;
+        border-radius: var(--r-ctl);
+        background: var(--fill-2);
+        font: var(--t-text);
+        flex: none;
+    }
+
+    .armada-field-attachment > .armada-glyph {
+        color: var(--ink-2);
+    }
+
+    /* Disabled: one sentence in place of the placeholder. */
+    .armada-field[data-disabled] {
+        pointer-events: none;
+    }
+
+    .armada-field[data-disabled] .armada-field-shape {
+        background: transparent;
+        box-shadow: 0 0 0 1px var(--edge);
+    }
+
+    .armada-field[data-disabled]
+        :is(
+            .armada-field-agent,
+            .armada-field-plus,
+            .armada-field-mode,
+            .armada-send
+        ) {
+        color: var(--dim);
+    }
+
+    /* A field that is not the pane's own (a thread's): flat, an edge and
+       no shadow, until it holds focus. */
+    .armada-field[data-flat] {
+        width: 100%;
+        margin-left: 0;
+    }
+
+    .armada-field[data-flat] .armada-field-shape {
+        box-shadow: 0 0 0 1px var(--edge);
+        background: transparent;
+    }
+
+    .armada-field[data-flat]:where(:focus-within, [data-force="focus"])
+        .armada-field-shape {
+        background: var(--raised);
+    }
+
+    .armada-field[data-flat] .armada-field-words {
+        margin-left: calc(var(--px) * 10);
+    }
+}

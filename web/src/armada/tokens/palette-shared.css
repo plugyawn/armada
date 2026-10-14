@@ -1,0 +1,27 @@
+/* Armada palettes: what follows from any palette's inks. Written by
+   tools/armada/palette.py; never edit it by hand. */
+@layer armada.tokens.palette {
+    :root {
+        /* Pressed: the deepest of the fills, in the frame of the press. */
+        --fill-press: color-mix(in srgb, var(--ink-1) 22%, transparent);
+        /* The plane a shape stands on; a surface that is not the content
+           plane sets it for what it holds. */
+        --plane: var(--content);
+    }
+}
+
+/* Increase Contrast: the second ink becomes the first, the fills deepen,
+   edges take the second ink. */
+@layer armada.tokens.contrast {
+    @media (prefers-contrast: more) {
+        :root {
+            --ink-2: var(--ink-1);
+            --fill-1: color-mix(in srgb, var(--ink-1) 10%, transparent);
+            --fill-2: color-mix(in srgb, var(--ink-1) 15%, transparent);
+            --fill-3: color-mix(in srgb, var(--ink-1) 20%, transparent);
+            --fill-press: color-mix(in srgb, var(--ink-1) 30%, transparent);
+            --edge: var(--ink-2);
+            --line: var(--ink-2);
+        }
+    }
+}

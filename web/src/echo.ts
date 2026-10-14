@@ -557,7 +557,6 @@ export function process_from_server(messages: ServerMessage[]): ServerMessage[] 
 
         if (client_message.content !== message.content) {
             message_store.update_message_content(client_message, message.content);
-            sent_messages.mark_disparity(local_id);
         }
         sent_messages.report_event_received(local_id);
 

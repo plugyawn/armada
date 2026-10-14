@@ -79,6 +79,7 @@ from zerver.lib.pear_worker import (
     pear_topic_isolation_user_exists,
     pear_topic_isolation_username_for_realm,
     pear_topic_os_user_isolation_enabled,
+    pear_user_is_trusted,
     pear_worker_model_for_topic,
     pear_worker_reasoning_effort_for_topic,
     pear_worker_sandbox_for_topic,
@@ -2005,6 +2006,11 @@ def post_pear_run_resume_backend(
     )
 
 
+def check_pear_user_may_start_runs(user_profile: UserProfile) -> None:
+    if not pear_user_is_trusted(user_profile):
+        raise JsonableError(_("You are not allowed to start agent runs."))
+
+
 def _dispatch_pear_monitor_run(
     user_profile: UserProfile,
     pear_bot: Service,
@@ -2192,6 +2198,7 @@ def post_pear_monitors_backend(
             raise JsonableError(_("Invalid artifact spec: {error}").format(error=error))
         return json_success(request, data={"pear_monitor": serialize_pear_monitor(monitor)})
 
+    check_pear_user_may_start_runs(user_profile)
     monitor = PearMonitor.objects.create(
         realm=user_profile.realm,
         bot_profile=pear_bot.user_profile,
@@ -2263,6 +2270,7 @@ def update_pear_monitor_backend(
             raise JsonableError(_("title is required."))
         monitor.title = title.strip()[:24]
     elif action == "rebuild":
+        check_pear_user_may_start_runs(user_profile)
         pear_bot = get_selected_pear_bot(user_profile)
         if pear_bot is None:
             raise JsonableError(_("Pear bot is not configured."))

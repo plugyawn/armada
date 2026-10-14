@@ -392,47 +392,49 @@ run_test("build_and_process_quote_assets_for_messages", ({override}) => {
     );
 });
 
-run_test("explicit thread quote targets the owning instance editor", () => {
-    const compose_ui = zrequire("compose_ui");
-    const $textarea = $.create("thread-compose-textarea");
-    const message = {
-        id: 901,
-        type: "stream",
-        stream_id: 10,
-        topic: "design",
-        sender_id: 5,
-        sender_full_name: "Iago",
-        timestamp: 1_700_000_000,
-        submessages: [],
-    };
-    message_store.set_messages_for_tests([{type: "server_message", message}]);
-    let insert_target;
-    let replace_target;
-    let content_change_count = 0;
-    compose_ui.rewire_insert_syntax_and_focus((_syntax, target) => {
-        insert_target = target;
-    });
-    compose_ui.rewire_replace_syntax((_old_syntax, _content, target) => {
-        replace_target = target;
-        return true;
-    });
-    compose_ui.rewire_autosize_textarea(() => {});
-    compose_reply.rewire_respond_to_message(() => {
-        throw new Error("thread quote must not open the primary compose box");
-    });
+run_test(
+    "explicit thread quote targets the owning instance editor",
+    ({override_rewire, disallow_rewire}) => {
+        const compose_ui = zrequire("compose_ui");
+        const $textarea = $.create("thread-compose-textarea");
+        const message = {
+            id: 901,
+            type: "stream",
+            stream_id: 10,
+            topic: "design",
+            sender_id: 5,
+            sender_full_name: "Iago",
+            timestamp: 1_700_000_000,
+            submessages: [],
+        };
+        message_store.set_messages_for_tests([{type: "server_message", message}]);
+        let insert_target;
+        let replace_target;
+        let content_change_count = 0;
+        override_rewire(compose_ui, "insert_syntax_and_focus", (_syntax, target) => {
+            insert_target = target;
+        });
+        override_rewire(compose_ui, "replace_syntax", (_old_syntax, _content, target) => {
+            replace_target = target;
+            return true;
+        });
+        override_rewire(compose_ui, "autosize_textarea", () => {});
+        // A thread quote must not open the primary compose box.
+        disallow_rewire(compose_reply, "respond_to_message");
 
-    compose_reply.quote_messages({
-        message_id: message.id,
-        quote_content: "quoted markdown",
-        thread_compose_target: {
-            textarea: $textarea.get(0),
-            notify_content_changed() {
-                content_change_count += 1;
+        compose_reply.quote_messages({
+            message_id: message.id,
+            quote_content: "quoted markdown",
+            thread_compose_target: {
+                textarea: $textarea.get(0),
+                notify_content_changed() {
+                    content_change_count += 1;
+                },
             },
-        },
-    });
+        });
 
-    assert.equal(insert_target.get(0), $textarea.get(0));
-    assert.equal(replace_target.get(0), $textarea.get(0));
-    assert.equal(content_change_count, 2);
-});
+        assert.equal(insert_target.get(0), $textarea.get(0));
+        assert.equal(replace_target.get(0), $textarea.get(0));
+        assert.equal(content_change_count, 2);
+    },
+);

@@ -46,6 +46,7 @@ run_test("secondary sender popover resolves its owning canonical message list", 
         },
     };
     message_lists.current = {
+        /* istanbul ignore next */
         get() {
             throw new Error("secondary user popover must not use message_lists.current");
         },

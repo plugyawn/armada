@@ -281,10 +281,15 @@ function save_data_to_ls(): void {
     ls.set(ls_collapsed_containers_key, [...collapsed_containers]);
 }
 
+// Inbox scrolls inside its pane of the frame; the document never does.
+function inbox_scroller(): HTMLElement {
+    return util.the($("#inbox-view"));
+}
+
 function save_channel_view_state(): void {
     channel_view_navigation_state.col_focus = col_focus;
     channel_view_navigation_state.row_focus = row_focus;
-    channel_view_navigation_state.last_scroll_offset = window.scrollY;
+    channel_view_navigation_state.last_scroll_offset = inbox_scroller().scrollTop;
     channel_view_navigation_state.channel_id = inbox_util.get_channel_id();
     per_channel_last_search_keyword.set(channel_view_navigation_state.channel_id, search_keyword);
 }
@@ -292,7 +297,7 @@ function save_channel_view_state(): void {
 function save_inbox_view_state(): void {
     inbox_view_navigation_state.col_focus = col_focus;
     inbox_view_navigation_state.row_focus = row_focus;
-    inbox_view_navigation_state.last_scroll_offset = window.scrollY;
+    inbox_view_navigation_state.last_scroll_offset = inbox_scroller().scrollTop;
     inbox_last_search_keyword = search_keyword;
 }
 
@@ -1198,8 +1203,7 @@ class InboxTopicListWidget extends topic_list.TopicListWidget {
                 );
                 return render_inbox_row(topic_context);
             },
-            $simplebar_container: $(":root"),
-            is_scroll_position_for_render: views_util.is_scroll_position_for_render,
+            $simplebar_container: $("#inbox-view"),
             get_min_load_count,
         });
 
@@ -1332,7 +1336,7 @@ export function complete_rerender(coming_from_other_views = false): void {
             // if the focus is not on the inbox rows, the inbox view scrolls
             // down when moving from other views to the inbox view. To avoid
             // this, we scroll to top before restoring focus via revive_current_focus.
-            window.scrollTo(0, last_scroll_offset);
+            inbox_scroller().scrollTop = last_scroll_offset;
         }
 
         revive_current_focus();
@@ -1882,7 +1886,7 @@ export function change_focused_element(input_key: string): boolean {
 
     if (is_first_user_keypress && !is_navigated_to_search()) {
         // User has barely scrolled the page.
-        if (window.scrollY < 30) {
+        if (inbox_scroller().scrollTop < 30) {
             // Find the first visible row and focus it.
             const no_headers = true;
             const $first_row = get_all_rows(no_headers).first();

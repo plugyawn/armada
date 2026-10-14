@@ -1,0 +1,769 @@
+/* Armada design language, third final: the complete token set and every component. Mock only.
+   The custom properties in :root are the specification's tokens (SPEC-DESIGN.md). Nothing below them names a colour,
+   a duration or a curve of its own. The colour block is the default palette (Lapis), written by tools/palette.py and
+   copied in by build.py; loading palette-tide.css, palette-citrine.css or palette-onyx.css after this file is the whole
+   of a palette swap (kit.js does it for ?p=).
+   Söhne here is Klim's TEST file (A-Z a-z 0-9 . , -): other glyphs fall back to Hanken Grotesk at size-adjust 106%
+   until the licensed files are dropped in. No system face is named anywhere; emoji are content and fall through to
+   the platform's emoji face. */
+@layer zulip.armada-beta {   /* see index.js: the beta's sheets sit at the bottom of the cascade */
+
+:root {
+  /* ---- faces: two. People, Onix and chrome speak Söhne; what a machine would accept is Geist Mono. */
+  --f-human: "Söhne", "Hanken Grotesk", sans-serif;
+  --f-code: "Geist Mono", monospace;
+  /* ---- the ten styles on five sizes: 12, 14, 16, 20, 28. What is said and what is read as a document is 16 on a 24
+     line; chrome, lists and code are 14 on a 20 line. No screen uses more than eight. */
+  --t-display: 600 28px/32px var(--f-human);   /* a document's h1; nothing in chrome */
+  --t-title: 600 20px/28px var(--f-human);     /* the pane's one name */
+  --t-heading: 600 16px/24px var(--f-human);
+  --t-talk: 400 16px/24px var(--f-human);      /* what is said: a bubble, Onix's words, the field; and a document's prose */
+  --t-reading: var(--t-talk);
+  --t-strong: 500 14px/20px var(--f-human);    /* a verb that is a control; a list's heading; a repository in the nav */
+  --t-text: 400 14px/20px var(--f-human);      /* every label, row and fact in chrome */
+  --t-label: 500 12px/16px var(--f-human);     /* a name over a turn, a day, initials in a face */
+  --t-caption: 400 12px/16px var(--f-human);   /* times, counts, durations, receipts */
+  --t-code: 400 14px/20px var(--f-code);       /* 80 columns in 672: a block of 80 columns and its insets is the conversation's 704 */
+  --t-code-s: 400 12px/20px var(--f-code);     /* a line number */
+  /* ---- space: unit 4 */
+  --s-1: 4px; --s-2: 8px; --s-3: 12px; --s-4: 16px; --s-5: 20px; --s-6: 24px; --s-8: 32px; --s-10: 40px;
+  --gap-same: 4px;      /* bubbles of one turn; a name and its first bubble; a bubble and its thread line or receipt */
+  --gap-part: 8px;      /* words and a block; two blocks; a turn's footer */
+  --gap-para: 12px;     /* paragraphs of one answer */
+  --gap-turn: 16px;     /* one turn and the next, whoever speaks */
+  --gap-group: 20px;    /* groups in the nav; sections in the column */
+  --gap-section: 32px;  /* a day; sections of a document or of Home */
+  /* ---- shape */
+  --r-mark: 4px; --r-ctl: 6px; --r-block: 10px; --r-pop: 14px; --r-bubble: 18px; --r-field: 22px; --r-round: 50%;
+  --r-chip: 10px;       /* a reaction: a 20 px bubble */
+  --r-in-field: 16px;   /* a control inside the field: the field's radius less its 6 px inset */
+  /* ---- sizes */
+  --h-chip: 20px; --h-s: 24px; --h-m: 28px; --h-k: 32px; --h-l: 36px; --h-field: 44px;
+  --h-line1: 52px; --h-line2: 36px; --h-band: 36px;
+  --avatar: 28px; --gutter: 40px;
+  --pad-x: 16px;        /* a shape's sideways inset: bubble, block. The text edge is the lane's edge plus this */
+  --pad-y: 6px;         /* a bubble's inset above and below its 24 px line: 36 for one line */
+  --in-field: 6px;      /* a control's inset inside the 44 px field */
+  --prose: 608px;       /* the widest line of talk, a person's or Onix's, and a document's measure */
+  --bubble-max: 640px;  /* prose plus two insets */
+  --doc: 608px;
+  --tree-w: 232px;
+  /* ---- the composition: the conversation and the column beside it, on every place. One continuous expression of the
+     pane's width W; centred in the pane and never less than 72 px from the nav. */
+  --nav-w: 248px;
+  --W: calc(100vw - var(--nav-w));
+  --col: min(704px, calc(var(--W) - 104px));
+  --side-w: 0px; --side-gap: 0px;
+  --comp: calc(var(--col) + var(--side-gap) + var(--side-w));
+  --lx: max(72px, round(down, calc((var(--W) - var(--comp)) / 2), 1px));
+  --rx: calc(var(--W) - var(--lx) - var(--comp));    /* what is left on the right */
+  --hx: 24px;                                        /* the header's right inset: the composition's edge when the column stands */
+  /* ---- motion: four springs (response s, damping), the fades, the agent's clock, thresholds, amplitudes */
+  --spring-touch: linear(0, 0.005 1.2%, 0.021 2.5%, 0.081 5.3%, 0.46 17.7%, 0.631 24.3%, 0.759 31.2%, 0.81 34.8%, 0.853 38.7%, 0.892 43.2%, 0.924 48.2%, 0.949 53.7%, 0.968 59.8%, 0.989 74.7%, 1);
+  --spring-move: linear(0, 0.005 1.2%, 0.02 2.5%, 0.081 5.5%, 0.46 18.2%, 0.63 25%, 0.755 31.8%, 0.806 35.5%, 0.849 39.3%, 0.888 43.8%, 0.92 48.8%, 0.946 54.3%, 0.965 60.7%, 0.988 75.3%, 1);
+  --spring-settle: linear(0, 0.005 1.2%, 0.02 2.5%, 0.083 5.5%, 0.456 17.8%, 0.628 24.7%, 0.755 31.5%, 0.806 35.2%, 0.85 39%, 0.889 43.5%, 0.921 48.5%, 0.947 54%, 0.966 60.3%, 0.989 75.2%, 1);
+  --spring-land: linear(0, 0.007 1.7%, 0.028 3.3%, 0.112 7.2%, 0.569 21.3%, 0.751 28%, 0.878 34.3%, 0.925 37.5%, 0.963 40.8%, 0.994 44.5%, 1.017 48.5%, 1.031 52.7%, 1.038 57.5%, 1.036 65.7%, 1.013 85%, 1);
+  --touch-r: 0.15; --touch-z: 1;    --touch-t: 210ms;    /* in place, under the pointer or the caret */
+  --move-r: 0.25;  --move-z: 1;     --move-t: 340ms;     /* what travels or opens because I acted */
+  --settle-r: 0.32; --settle-z: 1;  --settle-t: 440ms;   /* what arrives without my doing it */
+  --land-r: 0.30;  --land-z: 0.72;  --land-t: 360ms;     /* textless objects that arrive: 3.8% past the mark */
+  --fade-in: 80ms; --fade-out: 60ms;
+  --trail: 60ms;           /* a hover fill leaving: one row behind the pointer, not two */
+  --step: 100ms; --burst: 280ms; --shake: 200ms;
+  --tip-delay: 500ms; --tip-linger: 300ms; --caret-hold: 500ms; --caret-period: 1100ms;
+  --pending: 400ms;        /* a run this young and this quiet does not touch the band, the nav or the composer's verb */
+  --quiet-soft: 10s; --quiet: 40s;
+  --rise: 8px; --pane-rise: 4px; --dip: 0.96; --from: 0.7; --follow: 20px; --ring-near: 160px; --hover-first: 0.3;
+  --ic-w: 1; --ic-n: 0px;  /* glyph weight and nudge: 1 px at 1x; 1.5 px nudged a quarter pixel at 2x */
+  --caret-w: 1px;          /* 1 px at 1x, 1.5 px at 2x; one pixel clear of the glyph on either side */
+/*>>palette*/
+  color-scheme: light;
+  --ground: #eeede9; --content: #fbfbf8; --raised: #ffffff;
+  --ink-1: #111419; --ink-2: #4c5058; --dim: #9b9ea5;
+  --fill-1: rgb(17 20 25 / 0.06); --fill-2: rgb(17 20 25 / 0.1); --fill-3: rgb(17 20 25 / 0.14);
+  --block: #f0f1ee; --line: #e4e4e2; --edge: #e0e0e1; --edge-2: #bcbdbf; --edge-ctl: #868888;
+  --bubble: #e1e0db; --bubble-me: #0239b8; --on-me: #ffffff; --chip: #ffffff;
+  --b-moss: #d6e5d5; --b-larimar: #cde5e6; --b-lapis: #d3e1f1; --b-amethyst: #e3dcee; --b-rose: #efd9e0; --b-flint: #e1e0db;
+  --accent: #0239b8; --accent-hover: #0232a2; --accent-press: #022b8c; --on-accent: #ffffff; --accent-text: #0239b8;
+  --ring: rgb(2 57 184 / 1);
+  --success: #04665e; --attention: #996a05; --failure: #af023b;
+  --tint-add: #d0f2d8; --tint-del: #fdcfcc; --add-ink: #016430; --del-ink: #b31220;
+  --syn-k: #2a44bc; --syn-s: #914006; --syn-n: #01646d; --syn-c: #575b62;
+  --p-moss: #badeba; --p-moss-ink: #243c25; --p-larimar: #a2e0e3; --p-larimar-ink: #0c3d3f; --p-lapis: #b4d7fb; --p-lapis-ink: #21374e;
+  --p-amethyst: #dcc9f4; --p-amethyst-ink: #3b2f4a; --p-rose: #f5c2d5; --p-rose-ink: #4a2a37; --p-flint: #d5d2cd; --p-flint-ink: #383531;
+  --shadow-raised: 0 1px 1px rgb(0 0 0 / 0.06), 0 8px 24px rgb(0 0 0 / 0.12), 0 16px 32px rgb(0 0 0 / 0.08);
+  --shadow-field: 0 1px 2px rgb(0 0 0 / 0.06), 0 6px 12px -4px rgb(0 0 0 / 0.10); --shadow-field-focus: 0 1px 2px rgb(0 0 0 / 0.07), 0 8px 14px -5px rgb(0 0 0 / 0.18);
+/*<<palette*/
+  --plane: var(--content);
+}
+/*>>palette-dark*/
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  color-scheme: dark;
+  --ground: #0a0b0e; --content: #18191d; --raised: #2b2e32;
+  --ink-1: #edeef1; --ink-2: #b7bbc1; --dim: #606369;
+  --fill-1: rgb(237 238 241 / 0.06); --fill-2: rgb(237 238 241 / 0.105); --fill-3: rgb(237 238 241 / 0.15);
+  --block: #242529; --line: #323336; --edge: #525458; --edge-2: #717377; --edge-ctl: #828487;
+  --bubble: #323438; --bubble-me: #2559ca; --on-me: #ffffff; --chip: #3e4145;
+  --b-moss: #2b382b; --b-larimar: #22393a; --b-lapis: #293542; --b-amethyst: #373140; --b-rose: #402e35; --b-flint: #323438;
+  --accent: #2c62d7; --accent-hover: #2756bd; --accent-press: #214aa3; --on-accent: #ffffff; --accent-text: #88b0fe;
+  --ring: rgb(136 176 254 / 1);
+  --success: #23dbc1; --attention: #f0c551; --failure: #fd736d;
+  --tint-add: #21412b; --tint-del: #4e1d1f; --add-ink: #69d98d; --del-ink: #fe8a88;
+  --syn-k: #91b7fe; --syn-s: #f0b27d; --syn-n: #7ad2d5; --syn-c: #a1a5ac;
+  --p-moss: #3b5c3c; --p-moss-ink: #d4f1d4; --p-larimar: #1a5d61; --p-larimar-ink: #c2f3f5; --p-lapis: #365575; --p-lapis-ink: #d7eaff;
+  --p-amethyst: #5b496f; --p-amethyst-ink: #eee1ff; --p-rose: #6f4354; --p-rose-ink: #ffdee9; --p-flint: #55524e; --p-flint-ink: #ebe7e2;
+  --shadow-raised: 0 1px 2px rgb(0 0 0 / 0.30), 0 8px 22px rgb(0 0 0 / 0.36), 0 16px 32px rgb(0 0 0 / 0.36);
+  --shadow-field: inset 0 1px 0 rgb(255 255 255 / 0.05); --shadow-field-focus: inset 0 1px 0 rgb(255 255 255 / 0.07);
+} }
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --ground: #0a0b0e; --content: #18191d; --raised: #2b2e32;
+  --ink-1: #edeef1; --ink-2: #b7bbc1; --dim: #606369;
+  --fill-1: rgb(237 238 241 / 0.06); --fill-2: rgb(237 238 241 / 0.105); --fill-3: rgb(237 238 241 / 0.15);
+  --block: #242529; --line: #323336; --edge: #525458; --edge-2: #717377; --edge-ctl: #828487;
+  --bubble: #323438; --bubble-me: #2559ca; --on-me: #ffffff; --chip: #3e4145;
+  --b-moss: #2b382b; --b-larimar: #22393a; --b-lapis: #293542; --b-amethyst: #373140; --b-rose: #402e35; --b-flint: #323438;
+  --accent: #2c62d7; --accent-hover: #2756bd; --accent-press: #214aa3; --on-accent: #ffffff; --accent-text: #88b0fe;
+  --ring: rgb(136 176 254 / 1);
+  --success: #23dbc1; --attention: #f0c551; --failure: #fd736d;
+  --tint-add: #21412b; --tint-del: #4e1d1f; --add-ink: #69d98d; --del-ink: #fe8a88;
+  --syn-k: #91b7fe; --syn-s: #f0b27d; --syn-n: #7ad2d5; --syn-c: #a1a5ac;
+  --p-moss: #3b5c3c; --p-moss-ink: #d4f1d4; --p-larimar: #1a5d61; --p-larimar-ink: #c2f3f5; --p-lapis: #365575; --p-lapis-ink: #d7eaff;
+  --p-amethyst: #5b496f; --p-amethyst-ink: #eee1ff; --p-rose: #6f4354; --p-rose-ink: #ffdee9; --p-flint: #55524e; --p-flint-ink: #ebe7e2;
+  --shadow-raised: 0 1px 2px rgb(0 0 0 / 0.30), 0 8px 22px rgb(0 0 0 / 0.36), 0 16px 32px rgb(0 0 0 / 0.36);
+  --shadow-field: inset 0 1px 0 rgb(255 255 255 / 0.05); --shadow-field-focus: inset 0 1px 0 rgb(255 255 255 / 0.07);
+}
+/*<<palette-dark*/
+/* The column stands beside the conversation, on every place, when the window is 1408 px or wider. */
+@media (min-width: 1408px) { :root.col {
+  --col: clamp(704px, round(down, calc(var(--W) * 0.56), 1px), 840px);
+  --side-w: clamp(320px, round(down, calc(var(--W) * 0.265), 1px), 440px);
+  --side-gap: clamp(40px, round(down, calc(var(--W) * 0.033), 1px), 56px);
+  --hx: var(--rx); } }
+@media (min-resolution: 1.5dppx) { :root { --ic-w: 1.5; --ic-n: 0.25px; --caret-w: 1.5px; } }
+/* Reduced motion: the spring durations and one-shots collapse, the fades stay, loops hold a frame. No blanket rule. */
+@media (prefers-reduced-motion: reduce) { :root { --touch-t: 1ms; --move-t: 1ms; --settle-t: 1ms; --land-t: 1ms; --burst: 1ms; --shake: 1ms; } }
+:root[data-motion="reduced"] { --touch-t: 1ms; --move-t: 1ms; --settle-t: 1ms; --land-t: 1ms; --burst: 1ms; --shake: 1ms; }
+/* Increase Contrast: the second ink becomes the first, the fills deepen, edges take the second ink. */
+@media (prefers-contrast: more) { :root { --ink-2: var(--ink-1); --fill-1: color-mix(in srgb, var(--ink-1) 10%, transparent); --fill-2: color-mix(in srgb, var(--ink-1) 15%, transparent); --fill-3: color-mix(in srgb, var(--ink-1) 20%, transparent); --edge: var(--ink-2); --line: var(--ink-2); } }
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; overflow: hidden; }
+body { font: var(--t-text); color: var(--ink-1); background: var(--ground); font-synthesis: none; -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; display: grid; grid-template-columns: var(--nav-w) minmax(0, 1fr); cursor: default; }
+button { font: inherit; color: inherit; background: none; border: 0; cursor: default; text-align: inherit; }
+ul, ol { list-style: none; }
+a { color: var(--accent-text); text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 3px; text-decoration-color: color-mix(in srgb, currentColor 38%, transparent); }
+:focus { outline: none; }
+:focus-visible, .focus { outline: 1.5px solid var(--ring); outline-offset: 2px; }   /* keyboard only. In the product one ring travels (motion.ts) */
+:root.m-on :focus-visible { outline: none; }
+[hidden] { display: none !important; }
+
+/* ---- type */
+.t-display { font: var(--t-display); } .t-title { font: var(--t-title); } .t-heading { font: var(--t-heading); } .t-strong { font: var(--t-strong); }
+.t-text { font: var(--t-text); } .t-talk, .t-reading { font: var(--t-talk); } .t-label { font: var(--t-label); }
+.t-caption { font: var(--t-caption); font-variant-numeric: tabular-nums; }
+pre, .t-code { font: var(--t-code); }
+/* inline code sets no line box of its own: a line that holds code is the line's own height, 20 or 24, never 21 */
+code { font-family: var(--f-code); font-size: 14px; line-height: 0; }
+em { font-style: italic; } strong, b { font-weight: 500; }
+.i2 { color: var(--ink-2); } .dim { color: var(--dim); }
+.c-att { color: var(--attention); } .c-fail { color: var(--failure); } .c-ok { color: var(--success); }
+/* code is coloured, on its own surface: four roles, the same in both themes */
+:is(pre, code, .src, .dl) .k { color: var(--syn-k); } :is(pre, code, .src, .dl) .s { color: var(--syn-s); }
+:is(pre, code, .src, .dl) .n { color: var(--syn-n); } :is(pre, code, .src, .dl) .c { color: var(--syn-c); }
+/* what was added and what was removed, as counts */
+.m .a, .a.m { color: var(--add-ink); } .m .d, .d.m { color: var(--del-ink); }
+
+/* ---- drawn marks. Strokes are for what people use; pixels are for Onix and what it is doing. */
+.ic { width: 16px; height: 16px; flex: none; display: block; overflow: visible; fill: none; stroke: currentColor; stroke-width: var(--ic-w); stroke-linecap: butt; stroke-linejoin: round; }
+.ic .n { transform: translate(var(--ic-n), var(--ic-n)); } .ic .f { fill: currentColor; stroke: none; }
+.ic.s8 { width: 8px; height: 8px; } .ic.s18 { width: 18px; height: 18px; }
+.mk { width: 14px; height: 14px; flex: none; display: block; fill: currentColor; }
+.mk.s28 { width: 28px; height: 28px; }
+.sigil { flex: none; display: block; fill: currentColor; width: 14px; height: 14px; }
+.sigil.s20 { width: 20px; height: 20px; } .sigil.s28 { width: 28px; height: 28px; } .sigil.s64 { width: 64px; height: 64px; }
+/* Onix working: the one loop. A small stone with a bed stepping down through it, at the head of the stream. One sprite
+   of four drawings side by side, moved in steps: no frame can be blank. */
+.wk { overflow: hidden; }
+.wk > g { transform: translateX(-21px); }                       /* at rest: the whole stone, the last drawing */
+.wk.live > g { animation: wk calc(var(--step) * 8) steps(4, jump-none) infinite; }
+@keyframes wk { from { transform: translateX(0); } to { transform: translateX(-21px); } }
+.head { display: inline-block; width: 0; height: 0; position: relative; vertical-align: baseline; }
+.head > .mk { position: absolute; left: 6px; top: -13px; }
+.head.first > .mk { left: 0; }
+/* a person typing: three round dots take turns to grow and darken */
+.dots { display: block; width: 26px; height: 6px; fill: var(--ink-2); overflow: visible; }
+.dots circle { transform-box: fill-box; transform-origin: 50% 50%; opacity: 0.35; animation: dot var(--caret-period) var(--spring-settle) infinite; }
+.dots circle:nth-child(2) { animation-delay: calc(var(--caret-period) * 0.15); } .dots circle:nth-child(3) { animation-delay: calc(var(--caret-period) * 0.3); }
+@keyframes dot { 0%, 60%, 100% { opacity: 0.35; transform: scale(0.83); } 30% { opacity: 1; transform: scale(1.17); } }
+.dots.s { width: 13px; height: 3px; }
+@media (prefers-reduced-motion: reduce) { .wk.live > g, .dots circle, .m-caret.idle, .idle > .cur { animation: none; } .dots circle { opacity: 0.7; transform: none; } }
+:root[data-motion="reduced"] :is(.wk.live > g, .dots circle, .m-caret.idle, .idle > .cur) { animation: none; }
+:root[data-motion="reduced"] .dots circle { opacity: 0.7; transform: none; }
+.off .dots circle, [inert] .wk > g { animation: none; }   /* a loop on a thing that is not shown does not run */
+
+/* ================= motion, the stylesheet half. motion.js is the only file that calls element.animate. =================
+   Hover and press: the fill is a layer behind the label, so it settles in from a slightly smaller box while the label
+   never scales. In: 30% in the frame of the input, the rest on --fade-in. Out: a --trail fade. Press: Fill-2 in the
+   frame, arriving at 0.96 of the box. */
+.mh { position: relative; isolation: isolate; --m-in: scale(0.98, 0.86); }
+.mh.sq { --m-in: scale(0.86); } .mh.w { --m-in: scale(0.94, 0.86); }
+.mh::before { content: ""; position: absolute; inset: 0; border-radius: inherit; z-index: -1; pointer-events: none; background-color: var(--fill-1); opacity: 0; transform: var(--m-in);
+  transition: opacity var(--trail) linear, transform 0s linear var(--trail), background-color var(--fade-out) linear; }
+.mh:is(:hover, .hov, :active, .press)::before { opacity: 1; transform: none;
+  transition: opacity calc(var(--fade-in) / (1 - var(--hover-first))) linear calc(var(--fade-in) / (1 - var(--hover-first)) * var(--hover-first) * -1), transform var(--touch-t) var(--spring-touch), background-color var(--fade-out) linear; }
+.mh:is(:active, .press)::before { background-color: var(--fill-press); transition-duration: 0s, 0s, 0s; animation: m-press var(--touch-t) var(--spring-touch); }
+@keyframes m-press { from { transform: scale(var(--dip)); } }
+.mh:is(.sel, .on, .off, :disabled)::before { display: none; }
+.dip { transition: transform var(--touch-t) var(--spring-touch); }
+.dip:is(:active, .press) { transform: scale(var(--dip)); transition-duration: 0s; }
+/* selection: one thumb a list, moved by motion.js. A static screen draws the same fill on the selected thing. */
+.thumb { position: absolute; left: 0; top: 0; width: var(--w, 0); height: var(--h, 0); transform: translate(var(--x, 0), var(--y, 0)); transform-origin: 0 0; border-radius: var(--r-ctl); background: var(--fill-3); pointer-events: none; z-index: 0; }
+.thumb[data-off] { opacity: 0; }
+#m-ring { position: fixed; left: 0; top: 0; z-index: 90; pointer-events: none; opacity: 0; transform-origin: 0 0; box-shadow: 0 0 0 1.5px var(--ring); }
+#m-tip, .tip { font: var(--t-caption); color: var(--ink-1); background: var(--raised); border-radius: var(--r-ctl); padding: var(--s-1) var(--s-2); white-space: nowrap; box-shadow: 0 0 0 1px var(--edge), var(--shadow-field); }
+#m-tip { position: fixed; left: 0; top: 0; z-index: 91; pointer-events: none; opacity: 0; }
+#m-tip kbd, .tip kbd { font: inherit; color: var(--ink-2); margin-left: var(--s-2); }
+/* a figure that changes: each character in a fixed cell; a glyph or word that changes in a fixed cell */
+.fig { display: inline-flex; font-variant-numeric: tabular-nums; }
+.fig > span { display: inline-block; width: 0.6em; text-align: center; position: relative; }
+.fig > span.p { width: 0.3em; } .fig > span.w { width: auto; }
+.fig > span > i { position: absolute; inset: 0; font-style: normal; pointer-events: none; }
+/* pressed is the deepest of the three fills: a step from hover (1.42 light, 1.62 dark) and from selected (1.20, 1.24) on every surface */
+:root { --fill-press: color-mix(in srgb, var(--ink-1) 22%, transparent); }
+@media (prefers-contrast: more) { :root { --fill-press: color-mix(in srgb, var(--ink-1) 30%, transparent); } }
+.cell { position: relative; display: inline-grid; place-items: center; } .cell > * { grid-area: 1 / 1; } .cell > .gone { pointer-events: none; } .cell > .sz { visibility: hidden; font-style: normal; }
+/* the caret: solid while typing, then a fade, never a jump */
+.m-caret { caret-color: var(--accent-text); caret-animation: manual; }
+.m-caret.idle:focus { animation: m-caret var(--caret-period) linear infinite; }
+@keyframes m-caret { 0%, 40% { caret-color: var(--accent-text); } 52%, 88% { caret-color: transparent; } 100% { caret-color: var(--accent-text); } }
+.cur { display: inline-block; width: var(--caret-w); height: 20px; background: var(--accent-text); vertical-align: -4px; margin: 0 1px; border-radius: 1px; }
+.idle > .cur { animation: m-cur var(--caret-period) linear infinite; }
+@keyframes m-cur { 0%, 40% { opacity: 1; } 52%, 88% { opacity: 0; } 100% { opacity: 1; } }
+/* a fill that grows without bending its corners (nine slices), a thing in flight above every pane, particles */
+.growing { background: transparent !important; isolation: isolate; }
+.m-nine { position: absolute; inset: 0; z-index: -1; pointer-events: none; } .m-nine > i { position: absolute; background: var(--nine); transform-origin: 0 0; }
+[popover].m-fly { position: fixed; inset: auto; margin: 0; border: 0; overflow: visible; color: inherit; max-width: none; } [popover].m-fly::backdrop { display: none; }
+.m-bit { position: fixed; left: 0; top: 0; pointer-events: none; z-index: 92; font: 12px/12px var(--f-human); }
+
+/* ---------- nav: Ground. One kind glyph, a label, one trailing slot. No group names, no lines. ---------- */
+nav { --plane: var(--ground); padding: 0 var(--s-2) var(--s-2); display: flex; flex-direction: column; position: relative; min-width: 0; }
+/* the window's drag strip. In Electron the system's buttons take its first 72 px. Its words sit on the header's baseline */
+nav .top { height: var(--h-line1); display: flex; align-items: flex-start; justify-content: space-between; flex: none; padding: 14px 0 0 var(--s-2); }
+nav .wk-name { font: var(--t-strong); height: var(--h-m); display: inline-flex; align-items: center; gap: var(--s-1); padding: 0 var(--s-2); margin-left: calc(-1 * var(--s-2)); border-radius: var(--r-ctl); }
+nav .wk-name .ic { color: var(--ink-2); }
+.row { height: var(--h-m); display: flex; align-items: center; gap: var(--s-2); padding: 0 var(--s-2); border-radius: var(--r-ctl); color: var(--ink-2); flex: none; width: 100%; transition: color var(--fade-out) linear; }
+.row.t { padding-left: var(--s-8); }
+.row.new-in, .row.repo { color: var(--ink-1); }
+.row.repo > .lab { font-weight: 500; }                  /* a repository is its section's name: Strong, always */
+.row.sel { background-color: var(--fill-3); color: var(--ink-1); }
+.row > .lab { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* a count ends on the marks' right edge, whatever its digits */
+.row > .n { flex: none; font: var(--t-caption); font-variant-numeric: tabular-nums; min-width: 14px; justify-content: flex-end; text-align: right; color: var(--accent-text); height: 16px; }
+.row > .ic { color: var(--ink-2); } .row.new-in > .ic, .row.repo > .ic, .row.sel > .ic { color: var(--ink-1); }
+nav .gap { height: var(--gap-group); flex: none; }
+nav .kids { display: flex; flex-direction: column; }
+nav .me { margin-top: auto; color: var(--ink-1); }
+/* a face: a photo, or initials on the person's stone. 28 in the conversation, 20 in lists, 18 in a line. */
+.av { width: var(--avatar); height: var(--avatar); border-radius: var(--r-round); display: grid; place-items: center; background: var(--p-flint); color: var(--p-flint-ink); font: var(--t-label); font-style: normal; flex: none; position: relative; }
+.av.s20 { width: 20px; height: 20px; } .av.s18 { width: 18px; height: 18px; }
+.av.p-moss { background: var(--p-moss); color: var(--p-moss-ink); } .av.p-larimar { background: var(--p-larimar); color: var(--p-larimar-ink); }
+.av.p-lapis { background: var(--p-lapis); color: var(--p-lapis-ink); } .av.p-amethyst { background: var(--p-amethyst); color: var(--p-amethyst-ink); }
+.av.p-rose { background: var(--p-rose); color: var(--p-rose-ink); } .av.p-me { background: var(--bubble-me); color: var(--on-me); }
+.row > .av { margin: 0 -2px; }                         /* a 20 px face on the 16 px glyph axis */
+.av.on::after, .av.away::after { content: ""; position: absolute; right: -1.5px; bottom: -1.5px; width: 7px; height: 7px; border-radius: var(--r-round); background: var(--ink-1); box-shadow: 0 0 0 2px var(--plane); }
+.av.away::after { background: linear-gradient(90deg, var(--ink-1) 50%, var(--plane) 50%); box-shadow: inset 0 0 0 1.5px var(--ink-1), 0 0 0 2px var(--plane); }
+/* a group is two overlapped discs. The one beneath is notched by 1.5 px round the one above: a gap cut with a mask, not a ring */
+.avs { display: inline-flex; flex: none; } .avs .av + .av { margin-left: -4px; }
+.av { --d: 28px; } .av.s20 { --d: 20px; } .av.s18 { --d: 18px; } .av.s14 { --d: 14px; width: 14px; height: 14px; }
+.avs .av:not(:last-child) { -webkit-mask-image: radial-gradient(circle at calc(100% + var(--d) / 2 - 4px) 50%, transparent calc(var(--d) / 2 + 1px), #000 calc(var(--d) / 2 + 1.5px)); mask-image: radial-gradient(circle at calc(100% + var(--d) / 2 - 4px) 50%, transparent calc(var(--d) / 2 + 1px), #000 calc(var(--d) / 2 + 1.5px)); }
+.row > .avs { margin: 0 -6px 0 -2px; }                  /* two 14 px discs take 24: the label still starts where every label starts */
+
+/* ---------- content plane: one grid, the same rows on every place and every view ---------- */
+main { background: var(--content); display: grid; grid-template-rows: calc(var(--h-line1) + var(--h-line2)) minmax(0, 1fr) var(--h-band) auto; min-width: 0; height: 100vh; position: relative; overflow: hidden; }
+main.bare { grid-template-rows: calc(var(--h-line1) + var(--h-line2)) minmax(0, 1fr); }
+main > header { grid-row: 1; } main > .feed, main > .pane { grid-row: 2; grid-column: 1; } main > .band { grid-row: 3; } main > .dock { grid-row: 4; }
+/* the lane: the conversation's column. Every shape of the conversation starts on its left edge or ends on its right. */
+.lane { margin-left: var(--lx); width: var(--col); position: relative; }
+.lane.wide { width: var(--comp); }                      /* Files and Changes take the whole composition */
+
+/* ---------- the header: a repository header. One fixed piece, two lines, the same bounds on every place and view.
+   Line 1 is facts: the path and the place's one Title; on a worktree the branch, a pull request once there is one,
+   and at the far end the latest commit. Line 2 is the place's views, More, and over the column its first heading.
+   Under scrolled content it draws one line; at rest it draws none. ---------- */
+header.hd { display: grid; grid-template-rows: var(--h-line1) var(--h-line2); position: relative; z-index: 4; min-width: 0; }
+header.hd::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 1px; background: var(--line); opacity: 0; transition: opacity var(--fade-out) linear; pointer-events: none; }
+main:has(> .pane.cut) > header.hd::after { opacity: 1; transition-duration: var(--fade-in); }   /* a document pane scrolled under it. The conversation draws no line: it fades out under the header (.feed, below) */
+.hd .l1 { display: flex; align-items: baseline; padding: var(--s-3) var(--hx) 0 calc(var(--lx) + var(--pad-x)); white-space: nowrap; min-width: 0; overflow: hidden; color: var(--ink-2); }
+.hd .repo { flex: none; text-decoration: none; color: inherit; border-radius: var(--r-ctl); }
+.hd .sl { flex: none; padding: 0 var(--s-2); }
+.hd .title { font: var(--t-title); color: var(--ink-1); flex: 0 1 auto; min-width: 96px; overflow: hidden; text-overflow: ellipsis; }   /* gives way last */
+.hd .fact { display: inline-flex; align-items: baseline; gap: 6px; margin-left: var(--s-6); border-radius: var(--r-ctl); min-width: 0; color: inherit; }
+.hd .fact > :is(.ic, .mk, .av) { align-self: center; flex: none; }
+.hd .branch { flex: 0 10000 auto; } .hd .branch > code { overflow: hidden; text-overflow: ellipsis; min-width: 72px; }   /* a branch's name gives way second */
+.hd .branch > .dist { flex: none; justify-items: start; }
+.hd .pr { flex: none; } .hd .pr .st { color: var(--ink-1); }
+/* the latest commit: a cell of fixed bounds at the line's far end, from the lane's right edge to the composition's. Who
+   wrote it and its subject read from the cell's leading edge; the sha and the age stand on its trailing edge in cells of
+   their own. A commit landing changes the words and moves none of the four: the subject ends in an ellipsis inside the
+   cell. Where the line is short the cell gives way first; under 260 px the commit is its sha and age. */
+.hd .commit { flex: 0 100000000 calc(max(360px, var(--side-gap) + var(--side-w)) + var(--s-6)); margin-left: auto; padding-left: var(--s-6); justify-content: flex-start; container-type: inline-size; min-width: 96px; gap: var(--s-2); }
+.hd .commit .by { flex: none; } .hd .commit code { flex: none; margin-left: auto; }
+.hd .commit .subj { overflow: hidden; text-overflow: ellipsis; min-width: 0; color: var(--ink-1); }
+.hd .commit .age { flex: none; font-variant-numeric: tabular-nums; justify-items: end; }
+@container (max-width: 260px) { .hd .commit :is(.by, .subj) { display: none; } }
+.hd .l2 { display: flex; align-items: flex-start; min-width: 0; padding-left: calc(var(--lx) + var(--pad-x) - var(--s-3)); width: calc(var(--lx) + var(--col)); }
+.hd .l2 .say { height: var(--h-m); line-height: var(--h-m); padding-left: var(--s-3); margin-right: var(--s-4); color: var(--ink-2); min-width: 0; flex: 0 1 auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }   /* a place with no views says one sentence where views would stand */
+.hd .l2 .say b { color: var(--ink-1); font-weight: 400; }
+.tabs { display: flex; gap: var(--s-1); position: relative; flex: none; }
+/* a view is chosen, not done: a selector is Text, a verb is Strong */
+.tab { height: var(--h-m); padding: 0 var(--s-3); border-radius: var(--r-ctl); display: flex; align-items: center; gap: var(--s-1); color: var(--ink-2); position: relative; flex: none; }
+.tab:not(.on) { transition: color var(--fade-out) linear; }   /* first ink arrives in the frame of the press and leaves on the fade */
+.tab.on { background-color: var(--fill-3); color: var(--ink-1); }
+.tab .n { font: var(--t-caption); color: var(--ink-2); font-variant-numeric: tabular-nums; min-width: 16px; text-align: left; }   /* the count stands against its word; the cell's slack falls after it, so the tab is one width at 3 and at 12 */
+.hd .l2 .end { margin-left: auto; display: flex; align-items: center; gap: var(--s-1); flex: none; }
+/* the checklist's standing home, folded: a word, the checklist's marks on their side, one caption. It sits at the
+   conversation's right edge while there is no column beside it; with the column it is that column's first heading. */
+.prog { height: var(--h-m); display: flex; align-items: center; gap: var(--s-2); padding: 0 var(--s-2); border-radius: var(--r-ctl); flex: none; }
+.prog .w { font: var(--t-strong); }
+.prog .pm { display: flex; gap: var(--s-1); color: var(--ink-2); } .prog .pm .live { color: var(--ink-1); }
+.prog .pc { font: var(--t-caption); font-variant-numeric: tabular-nums; color: var(--ink-2); display: inline-grid; justify-items: end; white-space: nowrap; }
+.prog .pc > * { grid-area: 1 / 1; } .prog .pc > i { visibility: hidden; font-style: normal; }
+.prog.open { background-color: var(--fill-3); }
+/* folded in the header it is one width whatever its marks and caption, so More, to its left, keeps its place on every worktree */
+.hd .l2 .prog { width: 296px; } .hd .l2 .prog .pc { margin-left: auto; }
+@media (min-width: 1408px) { :root.col .hd .l2 .prog { display: none; } }
+
+/* ---------- controls ---------- */
+.c { height: var(--h-m); padding: 0 var(--s-2); display: inline-flex; align-items: center; gap: var(--s-2); border-radius: var(--r-ctl); white-space: nowrap; color: var(--ink-2); flex: none; }
+.c.sq { width: var(--h-m); padding: 0; justify-content: center; } .c.sq.s { width: var(--h-s); height: var(--h-s); }
+.c.on, .c.open { background-color: var(--fill-3); color: var(--ink-1); }
+.c.off, .c:disabled { color: var(--dim); }
+/* a text control: a verb in Strong, always, so it is never mistaken for the sentence beside it. Outdented by its
+   padding so its letters align with what is above and below it. */
+.lk { font: var(--t-strong); color: var(--ink-1); height: var(--h-s); padding: 0 var(--s-2); margin: 0 calc(-1 * var(--s-2)); border-radius: var(--r-ctl); display: inline-flex; align-items: center; gap: var(--s-1); flex: none; white-space: nowrap; }
+.lk.on { background-color: var(--fill-3); } .lk.off, .lk:disabled { color: var(--dim); }
+.slot { display: inline-grid; } .slot > * { grid-area: 1 / 1; } .slot > i { visibility: hidden; font-style: normal; }
+/* the default button where there is no field (Home, a dialog, Changes): a word on the accent */
+.go { height: var(--h-m); padding: 0 var(--s-3); border-radius: var(--r-ctl); background: var(--accent); color: var(--on-accent); display: inline-grid; place-items: center; font: var(--t-strong); flex: none; transition: background-color var(--fade-out) linear; }
+.go > * { grid-area: 1 / 1; } .go > i { visibility: hidden; font-style: normal; }
+.go:is(:hover, .hov) { background: var(--accent-hover); } .go:is(:active, .press) { background: var(--accent-press); transition-duration: 0s; }
+.go.idle { background: var(--fill-2); color: var(--ink-2); }
+.btn { height: var(--h-m); padding: 0 var(--s-3); border-radius: var(--r-ctl); display: inline-flex; align-items: center; font: var(--t-strong); background: var(--fill-1); flex: none; }
+.btn:is(:hover, .hov) { background: var(--fill-2); } .btn:is(:active, .press) { background: var(--fill-3); }
+.btn.off { color: var(--dim); } .btn.danger { color: var(--failure); }
+.seg { display: flex; gap: var(--s-1); position: relative; flex: none; } .seg button { height: var(--h-m); padding: 0 var(--s-3); border-radius: var(--r-ctl); color: var(--ink-2); display: inline-flex; align-items: center; transition: color var(--fade-out) linear; }
+.seg button.on { background-color: var(--fill-3); color: var(--ink-1); }
+.switch { width: 36px; height: 20px; border-radius: 10px; background: var(--fill-3); position: relative; flex: none; display: block; }
+.switch::after { content: ""; position: absolute; left: 2px; top: 2px; width: 16px; height: 16px; border-radius: var(--r-round); background: var(--ink-2); transition: transform var(--touch-t) var(--spring-touch); }
+.switch.on { background: var(--ink-1); } .switch.on::after { transform: translateX(16px); background: var(--content); }
+/* a checkbox has an edge at 3:1: its boundary is told without its fill */
+.check { width: 16px; height: 16px; border-radius: var(--r-mark); box-shadow: inset 0 0 0 1px var(--edge-ctl); display: grid; place-items: center; flex: none; color: var(--on-accent); }
+.check .ic { display: none; width: 12px; height: 12px; } .check.on { background: var(--accent); box-shadow: none; } .check.on .ic { display: block; }
+
+/* ---------- the conversation ---------- */
+.feed { overflow: hidden; min-height: 0; display: flex; flex-direction: column; justify-content: flex-end; position: relative; }
+/* what runs on above the pane fades out under the header over 20 px, so no bubble, face or line of words is cut hard by
+   the header's edge. --cut is 0 while nothing is above (kit.js in a still, the scroll offset in the product). */
+.feed { -webkit-mask-image: linear-gradient(transparent, #000 var(--cut, 0px)); mask-image: linear-gradient(transparent, #000 var(--cut, 0px)); }
+.feed.top { justify-content: flex-start; }
+.pane.cutb { -webkit-mask-image: linear-gradient(#000 calc(100% - 24px), transparent); mask-image: linear-gradient(#000 calc(100% - 24px), transparent); }
+.feed > .clip { overflow: clip; display: flex; flex-direction: column; justify-content: flex-end; flex: none; }
+.feed .lane { padding-bottom: calc(var(--h-band) + var(--s-3)); display: flex; flex-direction: column; }
+/* a turn that is still being written holds, under its last line, the room its footer will take (a line and its gap):
+   Stop, a failure or the run's own end lands the footer in that room and the conversation does not move */
+.feed .lane:has(> .cl.onyx.live:last-child) { padding-bottom: calc(var(--h-band) + var(--s-3) + var(--h-s) + var(--gap-same)); }
+/* The band lies over the feed's last 36 px. A row that has just been written is born in that slot, in view, and rises
+   to its place: the answer's row and its working mark are on screen in the frame of the send. */
+main > .feed { margin-bottom: calc(-1 * var(--h-band)); }
+/* a turn: one speaker's run of bubbles, words and blocks. 16 between turns whoever speaks; 4 inside one. */
+.cl { margin-top: var(--gap-turn); display: flex; flex-direction: column; align-items: flex-start; position: relative; font: var(--t-talk); }
+.cl.me { align-items: flex-end; }
+.cl.onyx { align-items: stretch; }
+.who { font: var(--t-label); color: var(--ink-2); padding-left: var(--pad-x); margin-bottom: var(--gap-same); height: 16px; white-space: nowrap; }
+/* the gutter: one column of speakers. A person's face and Onix's sigil are the same size on the same axis. */
+.cl > .av { position: absolute; left: calc(-1 * var(--gutter)); top: var(--s-1); }
+.cl.lab > .av { top: var(--s-6); }
+.cl.onyx > .sigil { position: absolute; left: calc(-1 * var(--gutter)); top: -2px; color: var(--ink-1); }   /* 28 px on a 24 px line */
+.cl.onyx.lab > .sigil { top: 18px; }
+/* a bubble: the unit of a person's talk. Mine has my colour; everyone else's is stone with a hint of their own. Never a state. */
+.bl { display: flex; align-items: flex-end; gap: var(--s-2); max-width: 100%; position: relative; }
+.cl.me .bl { flex-direction: row-reverse; }
+.cl > * + * { margin-top: var(--gap-part); }
+.cl > .bl + .bl, .cl > .bl + .rcpt, .cl > .bl + .tl, .cl > .bl + .pv, .cl > .bl + .blk { margin-top: var(--gap-same); }
+.cl > .who + *, .cl > .av + *, .cl > .sigil + * { margin-top: 0; }
+.b { max-width: min(var(--bubble-max), calc(var(--col) * 0.78)); min-height: var(--h-l); padding: var(--pad-y) var(--pad-x); border-radius: var(--r-bubble); background: var(--bubble); position: relative; overflow-wrap: break-word; transform-origin: 0 0; }
+.s-moss .b { background: var(--b-moss); } .s-larimar .b { background: var(--b-larimar); } .s-lapis .b { background: var(--b-lapis); }
+.s-amethyst .b { background: var(--b-amethyst); } .s-rose .b { background: var(--b-rose); } .s-flint .b { background: var(--b-flint); }
+.cl.me .b { background: var(--bubble-me); color: var(--on-me); }
+.b.t { border-top-left-radius: var(--r-ctl); } .b.u { border-bottom-left-radius: var(--r-ctl); }
+.cl.me .b.t { border-top-left-radius: var(--r-bubble); border-top-right-radius: var(--r-ctl); }
+.cl.me .b.u { border-bottom-left-radius: var(--r-bubble); border-bottom-right-radius: var(--r-ctl); }
+.b a { color: inherit; }
+.cl .b.jumbo { background: none; padding: 0 2px; font: var(--t-display); }   /* one to three emoji and nothing else */
+.b.gone { background: none; box-shadow: inset 0 0 0 1px var(--fill-3); color: var(--ink-2); }           /* deleted by someone else, until I leave */
+.cl.me .b.unsent { background: color-mix(in srgb, var(--bubble-me) 55%, var(--content)); }
+.b.img { padding: 0; min-height: 0; line-height: 0; overflow: hidden; }
+.em { line-height: 24px; }
+/* a mention is Strong. A mention of me is Strong in my colour: no fill inside a fill */
+.mention { font-weight: 500; }
+.mention.you { color: var(--accent-text); }
+:root.mask :is(.b, .rc, .tyb) { background: transparent !important; box-shadow: none !important; }   /* the review sheet's mask: bubbles and the reactions on them */
+:root.mask .b.liked::after { display: none; }
+.bl > time, .bl > .meta, .tl time { font: var(--t-caption); color: var(--ink-2); font-variant-numeric: tabular-nums; flex: none; white-space: nowrap; height: 16px; margin-bottom: 10px; }   /* on the last line's centre */
+.bl > .meta.bad { color: var(--failure); }
+.bl > .lk { align-self: flex-end; margin-bottom: 6px; }
+/* reactions: real emoji in a 20 px chip seated on the bubble's outer edge, on its last line, cut in by 2 px of the
+   plane. A chip overlaps only its own bubble. It stands in the row's slack: the first one adds no height. The time
+   follows it. Mine wears my colour, and the bubble I reacted to keeps a faint wash from where the chip sits. */
+.rcs { display: flex; gap: var(--s-1); height: var(--h-chip); z-index: 2; white-space: nowrap; flex: none; }
+.bl > .rcs { margin: 0 0 var(--s-2) -14px; }                                      /* 14 of the bubble's 16 px inset: a chip never reaches a word */
+.cl.me .bl > .rcs { margin: 0 -14px var(--s-2) 0; flex-direction: row-reverse; }
+.b > .rcs { position: absolute; bottom: var(--s-2); left: calc(100% - 14px); } .cl.me .b > .rcs { left: auto; right: calc(100% - 14px); flex-direction: row-reverse; }
+.rc { height: var(--h-chip); min-width: 28px; padding: 0 6px; border-radius: var(--r-chip); display: inline-flex; align-items: center; justify-content: center; gap: var(--s-1); flex: none; background: var(--chip); box-shadow: 0 0 0 2px var(--plane), inset 0 0 0 1px var(--edge); font: var(--t-caption); line-height: 20px; color: var(--ink-2); font-variant-numeric: tabular-nums; transition: background-color var(--fade-out) linear; }
+.rc .e { font: var(--t-text); line-height: 20px; display: block; height: 20px; }
+.rc.mine { background: var(--bubble-me); color: var(--on-me); box-shadow: 0 0 0 2px var(--plane); }
+.rc:is(:hover, .hov) { box-shadow: 0 0 0 2px var(--plane), inset 0 0 0 1px var(--edge), inset 0 0 0 100px var(--fill-1); } .rc:is(:active, .press) { box-shadow: 0 0 0 2px var(--plane), inset 0 0 0 1px var(--edge), inset 0 0 0 100px var(--fill-press); }
+.b.liked::after { content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; background: radial-gradient(120% 150% at 100% 100%, color-mix(in srgb, var(--bubble-me) 20%, transparent), transparent 60%); }
+/* on Onix's words there is no edge to sit on: the chips follow the last word of the turn, 12 px after it, on its line.
+   Anywhere under the turn they would add a row or stand on the next speaker's name. */
+.rca { display: inline-block; width: 0; height: 0; position: relative; vertical-align: top; }
+.rca .rcs { position: absolute; left: var(--s-3); top: 2px; }
+.rcb { position: relative; height: 0; margin-top: 0 !important; align-self: stretch; z-index: 2; } .rcb .rcs { position: absolute; top: -2px; right: var(--s-3); }   /* a turn that ends in a block: the block's top right corner */
+.rcb + .blk { margin-top: var(--gap-part); }
+/* small lines under a bubble, on the plane */
+.rcpt { font: var(--t-caption); color: var(--ink-2); padding: 0 var(--pad-x); height: 16px; font-variant-numeric: tabular-nums; }
+.tl { font: var(--t-text); padding-left: var(--pad-x); height: var(--h-s); display: flex; align-items: center; gap: var(--s-2); max-width: var(--bubble-max); min-width: 0; }
+.cl.me .tl { padding: 0 var(--pad-x) 0 0; }
+.tl .sn { color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.tl .lk { margin: 0 calc(-1 * var(--s-1)); padding: 0 var(--s-1); }
+.day, .unread { align-self: stretch; text-align: center; font: var(--t-label); color: var(--ink-2); margin-top: var(--gap-section); height: 16px; }
+.unread { color: var(--accent-text); }
+.day + .cl, .unread + .cl, .day + .unread { margin-top: var(--gap-para); }
+/* an empty worktree: Onix at its one large size, standing on the band with the feed's own gap */
+.hello { display: flex; flex-direction: column; align-items: flex-start; gap: var(--s-4); padding: 0 var(--pad-x) var(--s-2); }
+/* a thread opened where it is: its replies stand under the root bubble, set in from it, on one stone line */
+.thr-in { align-self: stretch; margin: var(--gap-same) 0 0 var(--pad-x); padding: 0 0 0 calc(var(--gutter) + var(--s-3)); position: relative; display: flex; flex-direction: column; }
+.thr-in::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 2px; border-radius: 1px; background: var(--fill-3); }
+.thr-in > .cl:first-child { margin-top: 0; } .thr-in > .cl { margin-top: var(--gap-part); }
+.thr-in .b { max-width: min(var(--bubble-max), calc(var(--col) * 0.66)); }
+.thr-in .cz { width: 100%; margin: var(--gap-part) 0 0 0; }
+/* Onix's words: on the plane, at the text edge where the words in everyone's bubbles start. No fill, no frame and no
+   padding of a bubble it does not have: the gaps are measured from its lines. */
+.ans { padding: 0 0 0 var(--pad-x); max-width: calc(var(--prose) + var(--pad-x)); overflow-wrap: break-word; }
+.cl.onyx > * + * { margin-top: var(--gap-part); }
+.cl.onyx > .who + *, .cl.onyx > .sigil + * { margin-top: 0; }
+.ans > * + * { margin-top: var(--gap-para); }
+.ans h3 { font: var(--t-heading); margin-top: var(--s-5); } .ans h4 { font: 500 16px/24px var(--f-human); margin-top: var(--s-4); }
+.ans :is(h3, h4):first-child { margin-top: 0; } .ans :is(h3, h4) + * { margin-top: var(--gap-same); }
+.ans p + :is(ul, ol) { margin-top: var(--gap-same); }
+.ans li { display: grid; grid-template-columns: 20px minmax(0, 1fr); } .ans li + li { margin-top: var(--gap-same); }
+.ans ul li::before { content: ""; width: 4px; height: 4px; border-radius: var(--r-round); background: var(--ink-2); margin: 10px 0 0 3px; }
+.ans ol { counter-reset: n; } .ans ol li::before { counter-increment: n; content: counter(n); color: var(--ink-2); font-variant-numeric: tabular-nums; }
+/* a run's footer: one line under a turn that did work. It is the record the conversation keeps: what was done, and
+   one verb that opens that run's checklist beside it. Second ink; the failed and the stopped keep their mark. */
+.line { font: var(--t-text); padding-left: var(--pad-x); display: flex; align-items: center; gap: var(--s-2); min-height: var(--h-s); color: var(--ink-2); }
+.line .lk { margin-left: var(--s-1); }
+.cl.onyx > .ans + .line, .cl.onyx > .blk + .line { margin-top: var(--gap-same); }
+/* blocks: what a machine would accept, and artifacts. One quiet opaque fill, lighter than a bubble; the lane's width;
+   beside talk and never inside it. Inside a block nothing has a resting fill. */
+.blk { width: 100%; background: var(--block); border-radius: var(--r-block); padding: var(--s-2) var(--pad-x); position: relative; font: var(--t-text); }
+pre.blk, .blk pre { font: var(--t-code); white-space: pre; overflow: hidden; }
+.cl.them > .bl + :is(.blk, .pv) { border-top-left-radius: var(--r-ctl); } .cl.me > .bl + :is(.blk, .pv) { border-top-right-radius: var(--r-ctl); }
+.blk table { border-collapse: collapse; width: 100%; }
+.blk th, .blk td { text-align: left; padding: 0 var(--s-4) 0 0; font-weight: 400; white-space: nowrap; height: 20px; }
+.blk th { color: var(--ink-2); padding-bottom: var(--s-1); height: 24px; } .blk thead tr { box-shadow: inset 0 -1px 0 var(--fill-3); }
+.blk tbody tr:first-child td { padding-top: var(--s-1); height: 24px; }
+.blk td.r, .blk th.r { text-align: right; padding-right: 0; padding-left: var(--s-4); font-variant-numeric: tabular-nums; }
+.blk td.r .fig { justify-content: flex-end; }
+.blk.art { display: flex; align-items: center; gap: var(--s-2); min-height: var(--h-l); padding-top: 0; padding-bottom: 0; }
+.blk.art > .ic { color: var(--ink-2); } .blk.art .k { color: var(--ink-2); font: var(--t-caption); margin-left: var(--s-1); }
+.blk.art .lk { margin-left: auto; margin-right: calc(-1 * var(--s-2)); }
+/* a question: its options are buttons, not lines of code. Each has an edge and its number; the block has no fill */
+.blk.ask { padding: 0; background: none; display: flex; flex-wrap: wrap; gap: var(--s-2); }
+.opt { height: var(--h-k); display: inline-flex; align-items: center; gap: var(--s-2); padding: 0 var(--s-3) 0 var(--s-2); border-radius: var(--r-ctl); box-shadow: inset 0 0 0 1px var(--edge-2); font: var(--t-strong); }
+.opt .k { min-width: 16px; height: 20px; border-radius: var(--r-mark); background: var(--fill-2); color: var(--ink-2); font: var(--t-label); line-height: 20px; text-align: center; font-variant-numeric: tabular-nums; flex: none; }
+.opt.sel { background-color: var(--fill-3); } .opt:disabled { color: var(--dim); }
+/* a diff: one grid for every line: old number, new number, a sign cell, then the code. An added line has a green
+   ground and a plus; a removed line a red ground and a minus. The added ground is the lighter of the two. */
+.blk.diff { padding: var(--s-1) 0; overflow: hidden; }
+.dl { display: grid; grid-template-columns: 40px 40px 20px minmax(0, 1fr); align-items: baseline; padding: 0 var(--pad-x) 0 0; white-space: pre; font: var(--t-code); }
+.dl.bare { grid-template-columns: 20px minmax(0, 1fr); padding-left: var(--s-3); }
+.dl > i { font: var(--t-code-s); font-style: normal; color: var(--ink-2); text-align: right; padding-right: var(--s-2); }
+.dl > b { font-weight: 400; color: var(--ink-2); text-align: center; }
+.dl.add { background: var(--tint-add); } .dl.add > b { color: var(--add-ink); }
+.dl.del { background: var(--tint-del); } .dl.del > b { color: var(--del-ink); }
+.dl.hunk { color: var(--ink-2); padding: var(--s-1) var(--pad-x); display: flex; gap: var(--s-2); align-items: center; }
+.dl.sel { box-shadow: inset 0 0 0 100px var(--fill-2), inset 2px 0 0 var(--accent-text); }
+.dl.hunk .lk { color: var(--ink-2); margin: 0; padding: 0 var(--s-1); }
+/* a link's preview and a picture: blocks of their own under the bubble, never inside it. 368 wide: the one block that
+   is not the lane's width, because it belongs to the bubble above it */
+.pv { width: min(368px, 100%); min-height: 56px; border-radius: var(--r-block); background: var(--block); padding: var(--s-2) var(--pad-x); display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: var(--s-3); align-items: center; font: var(--t-text); }
+.pv b { font: var(--t-strong); display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pv span { font: var(--t-caption); color: var(--ink-2); display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
+.pv .tn { width: 40px; height: 40px; border-radius: var(--r-ctl); display: grid; place-items: center; color: var(--ink-2); margin-right: calc(-1 * var(--s-2)); }
+/* hover overlay: raised, at most four targets, never in flow */
+.over { position: absolute; top: -16px; left: calc(100% - 20px); display: flex; padding: var(--s-1); border-radius: var(--r-block); background: var(--raised); box-shadow: 0 0 0 1px var(--edge), var(--shadow-raised); z-index: 5; color: var(--ink-2); }
+.cl.me .over { left: auto; right: calc(100% - 20px); }
+.cl.onyx > .over { left: auto; right: 0; top: -6px; }
+.over .c { width: var(--h-s); height: var(--h-s); padding: 0; justify-content: center; }
+
+/* ---------- the band: the 36 px between the feed and the field, on every view. One line, 28 high, standing 8 px
+   clear of the field. Fixed cells: the typing person's face in the gutter where their message will be, the run's
+   state with its clock and Stop at the text edge, Jump to latest, and at the far end Onix's model for the next turn
+   (drawn by the composer, which owns it). No cell moves when another fills. ---------- */
+.band { min-width: 0; position: relative; z-index: 2; }
+.band .lane { display: flex; align-items: center; height: var(--h-m); }
+.band .ty { position: absolute; left: 0; top: 0; height: var(--h-m); display: flex; align-items: center; gap: var(--s-2); }
+.band .ty > .avs, .band .ty > .av { position: absolute; right: calc(100% + var(--s-3)); top: 0; }
+.band .ty.off { display: flex; }
+.band .ty > .avs .av { box-shadow: 0 0 0 2px var(--plane); } .band .ty > .avs .av + .av { margin-left: -12px; }
+.tyb { width: 44px; height: var(--h-m); border-radius: var(--r-pop) var(--r-pop) var(--r-pop) var(--r-ctl); background: var(--bubble); display: grid; place-items: center; flex: none; }
+.tyb.s-moss { background: var(--b-moss); } .tyb.s-larimar { background: var(--b-larimar); } .tyb.s-lapis { background: var(--b-lapis); }
+.tyb.s-amethyst { background: var(--b-amethyst); } .tyb.s-rose { background: var(--b-rose); }
+.band .ty .nm { font: var(--t-caption); color: var(--ink-2); white-space: nowrap; }
+/* while a run holds the band's line the face stays where it was and the dots ride on it */
+.band .ty.chip > .tyb { position: absolute; right: calc(100% + 3px); top: 16px; width: 22px; height: 14px; border-radius: 7px; box-shadow: 0 0 0 2px var(--plane); }
+.band .ty.chip > .tyb .dots { width: 13px; height: 3px; } .band .ty.chip > .nm { display: none; }
+/* the run: its mark, the state word in a cell of its longest form, the clock 8 px after it, then Stop. All slack falls after */
+.band .run { display: flex; align-items: center; gap: var(--s-2); padding-left: var(--pad-x); min-width: 0; flex: 1; }
+/* the word and its clock are one group, the clock 8 px after the word; the group is as wide as its longest common form, so Stop keeps its place and all slack falls after the clock */
+.band .run .sg { display: inline-flex; align-items: center; gap: var(--s-2); min-width: 112px; flex: none; }
+.band .run .sw { font: var(--t-strong); white-space: nowrap; justify-items: start; }
+.band .run .clock { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.band .run.quiet .clock { color: var(--ink-2); }
+.band .run.att :is(.sw, .mk) { color: var(--attention); }
+.band .run.att .stop { display: none; }                          /* a run that waits for my answer does not hold Stop over the field: it is in More, and on its key */
+@media (min-width: 1408px) { :root.col:not(.folded) .band .act { display: none; } }
+.band .act { color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; margin-left: var(--s-2); }
+.stop { height: var(--h-s); padding: 0 var(--s-2) 0 6px; border-radius: var(--r-ctl); display: inline-flex; align-items: center; gap: var(--s-1); background: var(--fill-1); font: var(--t-strong); flex: none; white-space: nowrap; }
+.band .run { margin-right: 176px; }
+.band .jump { position: absolute; right: 176px; top: 2px; height: var(--h-s); padding: 0 var(--s-2) 0 6px; border-radius: var(--r-ctl); display: inline-flex; align-items: center; gap: var(--s-1); background: var(--fill-1); font: var(--t-strong); flex: none; white-space: nowrap; }
+.band .off { opacity: 0; pointer-events: none; }
+.band:has(.jump:not(.off)) .act, .band.more .act { visibility: hidden; }   /* Jump to latest takes the activity's far end while it shows */
+.band .undo { padding-left: var(--pad-x); color: var(--ink-2); display: flex; gap: var(--s-3); align-items: center; }
+
+/* ---------- the composer: one raised field, one line at rest. It spans the gutter and the lane, as a turn does: Plus
+   stands inside it on the faces' axis and its words start on the text edge. At its far end: who will answer (Onix,
+   lit, or hollow when the message is for people only) and the default button, a small bubble of mine that says what
+   Return does now. Only lines of text add height. ---------- */
+.dock { padding-bottom: var(--s-5); min-width: 0; position: relative; z-index: 2; }
+.cz { display: flex; align-items: flex-end; position: relative; width: calc(100% + 48px); margin-left: -48px; font: var(--t-talk); }
+.cz button { display: inline-flex; align-items: center; justify-content: center; flex: none; white-space: nowrap; }
+.cz .sh { flex: 1; min-width: 0; min-height: var(--h-field); border-radius: var(--r-field); background: var(--raised); box-shadow: 0 0 0 1px var(--edge), var(--shadow-field); display: flex; align-items: flex-end; gap: var(--s-1); padding: var(--in-field); position: relative; transform-origin: 50% 50%; --plane: var(--raised); }
+.cz .sh::after { content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; box-shadow: 0 0 0 1px var(--edge-2), var(--shadow-field-focus); opacity: 0; transition: opacity var(--fade-out) linear; }
+.cz:focus-within .sh::after, .cz.is-focus .sh::after { opacity: 1; transition-duration: var(--fade-in); }   /* focus: the edge darkens on a fade; the caret says the rest */
+.cz .out { width: var(--h-k); height: var(--h-k); border-radius: var(--r-in-field); color: var(--ink-2); }
+.cz .txw { flex: 1; min-width: 0; position: relative; margin: 0 var(--s-1) 0 22px; }                   /* 6 + 32 + 4 + 22: the words start 16 px inside the lane */
+.cz .tx { padding: var(--s-1) 0; min-height: var(--h-k); white-space: pre-wrap; overflow-wrap: break-word; outline: none; position: relative; }
+.cz .ph { position: absolute; left: 0; top: var(--s-1); color: var(--ink-2); pointer-events: none; white-space: nowrap; justify-items: start; transition: opacity var(--fade-in) linear; }
+.cz.has-text .ph { opacity: 0; transition-duration: 0s; }
+.cz:not(.has-text) .tx { text-indent: -3px; }                                                            /* an empty field: the caret, drawn or real, stands 3 px before the placeholder's first letter and never on it */
+.cz:not(.has-text) .tx > .cur { margin-left: 0; margin-right: 2px; }                                   /* an empty field: the caret stands clear before the placeholder */
+.cz .k { height: var(--h-k); color: var(--ink-2); border-radius: var(--r-in-field); gap: 6px; }
+/* who will answer: Onix's sigil, whole when the message will reach it, an outline when it will not. The shape tells it, not the ink */
+.cz .k.to { width: var(--h-k); padding: 0; color: var(--ink-1); }
+.cz .k.to .hol { display: none; } .cz .k.to.off .sol { display: none; } .cz .k.to.off .hol { display: block; color: var(--ink-2); }
+/* Onix's model and effort for the next turn: out of the field, on the band's line, ending on the field's right edge */
+.cz .k.mode { position: absolute; right: 0; bottom: calc(100% + var(--s-2) + 2px); height: var(--h-s); padding: 0 var(--s-1) 0 var(--s-2); gap: 2px; border-radius: var(--r-ctl); font: var(--t-text); color: var(--ink-2); z-index: 3; }
+.cz .k.mode { background: var(--content); box-shadow: 0 0 6px 6px var(--content); }   /* it stands on the plane's own colour with a soft edge: a row rising out of the field passes behind it, never under its words */
+.cz .k.mode.off { visibility: hidden; } .cz .k.mode.open { background: var(--fill-3); color: var(--ink-1); }
+.cz .k.mode .slot { justify-items: end; } .cz .k.mode .ic { opacity: 0.7; }
+.cz .att { display: inline-flex; align-items: center; gap: 6px; height: var(--h-s); padding: 0 var(--s-2) 0 6px; margin: 0 var(--s-2) 0 0; border-radius: var(--r-ctl); background: var(--fill-2); vertical-align: top; font: var(--t-text); }
+.cz .att .ic { color: var(--ink-2); }
+/* the default button: a word, the verb Return performs now, in a small bubble of mine. Idle it is the word alone in the
+   second ink; it takes my colour on a fade when its field holds text and focus. Its cell holds its longest verb. */
+.disc { height: var(--h-k); min-width: 44px; padding: 0 var(--s-3); border-radius: var(--r-in-field); color: var(--ink-2); font: var(--t-strong); overflow: hidden; flex: none; display: inline-flex; align-items: center; justify-content: center; transition: transform var(--touch-t) var(--spring-touch), background-color var(--fade-out) linear, color var(--fade-out) linear; }
+.disc .cell { height: var(--h-k); }
+.cz.is-focus.has-text .disc, .cz.has-text:focus-within .disc, .disc.armed { background: var(--accent); color: var(--on-accent); transition-duration: var(--touch-t), var(--fade-in), var(--fade-in); }
+:is(.cz.is-focus.has-text, .cz.has-text:focus-within) .disc:is(:hover, .hov), .disc.armed:is(:hover, .hov) { background: var(--accent-hover); }
+:is(.cz.is-focus.has-text, .cz.has-text:focus-within) .disc:is(:active, .press), .disc.armed:is(:active, .press) { background: var(--accent-press); transition-duration: 0s; }   /* pressed in the frame of the press */
+.cz.has-text:not(.is-focus):not(:focus-within) .disc:not(.armed) { color: var(--ink-1); background: var(--fill-2); }   /* a draft that is not being written: its button waits, without colour */
+.cz.is-off { pointer-events: none; } .cz.is-off .sh { background: transparent; box-shadow: 0 0 0 1px var(--edge); } .cz.is-off :is(.k, .k.to, .out, .disc) { color: var(--dim); }
+/* a field that is not the pane's own (a thread's): flat, an edge and no shadow, until it holds focus */
+.cz.flat .sh { box-shadow: 0 0 0 1px var(--edge); background: transparent; } .cz.flat:is(.is-focus, :focus-within) .sh { background: var(--raised); }
+.cz.flat { width: 100%; margin-left: 0; } .cz.flat .txw { margin-left: 10px; }
+@media (prefers-contrast: more) { .cz .sh { box-shadow: 0 0 0 1.5px var(--ink-1), var(--shadow-field); } }
+
+/* ---------- the column: what stands beside the conversation, on every place. On the content plane with no fill, no
+   line and no box: plain lists under plain headings. Its first heading is on the header's second line and is the
+   checklist's standing home on a worktree. A list's row is a nav row's grammar: one leading thing (a mark, a glyph, a
+   face), a label, one trailing thing. The last section stands on the column's foot, level with the field. When a
+   thread or a trace is opened it takes this column and the first heading stays as the way back. ---------- */
+aside.side { position: absolute; z-index: 3; top: var(--h-line1); bottom: var(--s-5); left: calc(var(--lx) + var(--col) + var(--side-gap)); width: var(--side-w); display: none; flex-direction: column; min-height: 0; }
+@media (min-width: 1408px) { :root.col aside.side { display: flex; } }
+aside.side .hdg { height: var(--h-line2); display: flex; align-items: flex-start; gap: var(--s-2); flex: none; }
+aside.side .hdg .prog { padding: 0; width: 100%; height: var(--h-m); }
+aside.side .hdg .prog .pc { margin-left: auto; }
+aside.side .hdg .prog .pm { display: none; } :root.folded aside.side .hdg .prog .pm, aside.side.folded .hdg .prog .pm { display: flex; }
+aside.side > .out, aside.side > .thr, aside.side > .trc { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+aside.side > .out { padding-top: var(--s-3); position: relative; }
+/* The column's lists do not push each other. Each has a height that does not depend on what it holds: the checklist is
+   seven rows, Changes four, People its own, and Runs takes what is left in whole rows. A row that has no slot is
+   counted in a quiet "n more" that stands in the gap under its list (kit.js fitLists); pressing it opens the rest. */
+main > aside.side > .out > .chk { height: calc(7 * var(--h-m)); overflow: hidden; flex: none; }
+main > aside.side > .out > .chk.all { height: auto; overflow: visible; }
+main > aside.side > .out > .sec.slots > .ls { height: calc(var(--slots) * var(--h-m)); overflow: hidden; }
+main > aside.side > .out > .sec.slots.all > .ls { height: auto; overflow: visible; }
+aside.side > .out li.xr, aside.side > .out .sec:not(.all) > .ls > li.late { display: none; }   /* .late: a run that left the head of Runs while the list was in sight; it takes its place in the order when the list is next opened or drawn */
+.mo { position: absolute; left: calc(20px + var(--s-2)); height: var(--gap-group); padding: 0 var(--s-2); margin-left: calc(-1 * var(--s-2)); border-radius: var(--r-ctl); font: var(--t-caption); color: var(--ink-2); display: inline-flex; align-items: center; white-space: nowrap; }
+.mo[hidden] { display: none; }
+.sheet-chk .mo { display: none; }
+.sec .sh .tot { justify-items: end; }                    /* the totals change in a cell of fixed bounds, read from its trailing edge: Review never moves */
+/* one row for every list in the column: 28 high, a 20 px leading cell, the label, one trailing cell */
+.chk > li, .ls > li { display: grid; grid-template-columns: 20px minmax(0, 1fr) auto; column-gap: var(--s-2); align-items: center; min-height: var(--h-m); }
+.chk > li > :first-child, .ls > li > :first-child { justify-self: center; }
+.chk > li > .t, .ls > li > .t { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--ink-2); }
+.chk > li.wrap > .t { white-space: normal; padding: var(--s-1) 0; }
+.chk > li:is(.now, .needs, .failed) > .t, .ls > li.on > .t { color: var(--ink-1); }
+.chk > li > .mk, .ls > li > .mk { color: var(--ink-2); } .chk > li.now > .mk, .ls > li.on > .mk { color: var(--ink-1); }
+.chk > li > .mk.c-att, .ls > li > .mk.c-att { color: var(--attention); } .chk > li > .mk.c-fail, .ls > li > .mk.c-fail { color: var(--failure); } .ls > li > .mk.c-ok { color: var(--success); }
+.ls > li > .ic { color: var(--ink-2); }
+.chk > li > .e, .ls > li > .e { display: flex; align-items: center; justify-content: flex-end; gap: var(--s-3); white-space: nowrap; }
+/* what a step is doing, and what happened in it: second ink, at the label's edge, its mark beside its words and never in the steps' column */
+.chk > li.ev > .t { display: flex; align-items: center; gap: 6px; } .chk > li.ev > .t > .mk { flex: none; }
+.chk > li.ev:not(.wrap) > .t > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }   /* .t is a flex row, so its own ellipsis never drew: the words are cut at one, before the verb */
+.chk > li.ev.wrap > .t { align-items: flex-start; } .chk > li.ev.wrap > .t > .mk { margin-top: 3px; }
+.chk > li.ev > .t b { font-weight: 400; color: var(--ink-1); }
+.chk > li.fresh > .t::after { content: ""; flex: none; width: 4px; height: 4px; border-radius: var(--r-round); background: var(--accent-text); margin-left: 2px; }   /* new since I last looked: a dot, not the line's ink */
+.chk .d, .chk .m, .ls .d, .ls .m, .sec .sh .m { font: var(--t-caption); color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.chk .lk, .ls .lk, .sec .sh .lk { margin-right: 0; padding-right: 0; }            /* outdented on the left only: a verb's last letter ends on the column's edge */
+.chk > li.gap { min-height: var(--gap-group); }
+.chk code, .ls code { font-size: 14px; }
+/* a section: a heading in Strong with at most one trailing thing, then its rows. 20 px from the section above */
+.sec { margin-top: var(--gap-group); display: flex; flex-direction: column; flex: none; }
+.sec.foot { margin-top: auto; padding-top: var(--gap-group); }
+.sec .sh { height: var(--h-m); display: flex; align-items: center; gap: var(--s-2); font: var(--t-strong); }
+.sec .sh .e { margin-left: auto; display: flex; align-items: center; gap: var(--s-3); }
+.ls > li > .av { margin: 0; }
+.ls > li > .t code { color: inherit; }
+.ls .sub { font: var(--t-caption); color: var(--ink-2); display: block; }
+aside.side .empty { color: var(--ink-2); max-width: 288px; }
+/* an opened thing in the column: a title row with its close control, then its body */
+aside.side .ch { height: var(--h-m); display: flex; align-items: center; justify-content: space-between; flex: none; margin-top: var(--s-3); font: var(--t-strong); }
+aside.side .ch .c { margin-right: -6px; }
+aside.side .pb { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; justify-content: flex-start; }
+aside.side .cl { margin-top: var(--gap-part); } aside.side .cl.lab { margin-top: var(--s-4); }
+aside.side .who { padding-left: 0; display: flex; align-items: center; gap: var(--s-2); height: 20px; }
+aside.side .b { max-width: min(var(--bubble-max), calc(var(--side-w) * 0.82)); }
+.trc .tr { display: grid; grid-template-columns: 20px minmax(0, 1fr) auto; column-gap: var(--s-2); align-items: center; }
+.trc .tr > li { display: contents; } .trc .tr > li > * { min-height: var(--h-m); display: flex; align-items: center; }
+.trc .tr > li > .ic { color: var(--ink-2); min-height: 0; display: block; align-self: center; justify-self: center; } .trc .tr code { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; line-height: 28px; min-width: 0; }
+.trc .tr .d { font: var(--t-caption); color: var(--ink-2); font-variant-numeric: tabular-nums; justify-content: flex-end; }
+.trc .sec { font: var(--t-strong); color: var(--ink-1); height: var(--h-m); display: flex; flex-direction: row; align-items: center; margin-top: var(--s-3); }
+.trc .sec:first-of-type { margin-top: var(--s-1); }
+.trc .sum { display: flex; justify-content: space-between; font: var(--t-caption); color: var(--ink-2); font-variant-numeric: tabular-nums; height: var(--h-s); align-items: center; }
+/* below 1408 there is no column: the same checklist opens from its standing home as a raised sheet */
+.sheet-chk { position: absolute; z-index: 7; top: calc(var(--h-line1) + var(--h-m) + var(--s-1)); left: calc(var(--lx) + var(--col) - 344px); width: 344px; border-radius: var(--r-pop); padding: var(--s-2) var(--s-4) var(--s-3); transform-origin: 100% 0; }
+
+/* ---------- workspace panes: README, Files, Changes. The same header, band and composer. ---------- */
+.pane { overflow: hidden; min-height: 0; position: relative; }
+.pane > .lane { transform-origin: 0 0; }
+.prow { min-height: var(--h-m); display: flex; align-items: center; gap: var(--s-4); margin-top: var(--s-3); padding-left: var(--pad-x); }
+.prow .end { margin-left: auto; display: flex; align-items: center; gap: var(--s-4); flex: none; }
+.prow .lk { margin: 0; }
+/* a document: its prose at 16 on 24 on a 608 measure; its blocks span the conversation, as blocks do in talk */
+.doc { padding: 0 0 0 var(--pad-x); font: var(--t-talk); }
+.doc .dh { display: flex; align-items: flex-end; justify-content: space-between; margin-top: var(--s-3); min-height: var(--h-l); }   /* the document's name and its switch share a baseline row */
+.doc h1 { font: var(--t-display); }
+.doc h2 { font: var(--t-title); margin-top: var(--gap-section); }
+.doc h3 { font: var(--t-heading); margin-top: var(--s-6); }
+.doc p, .doc ul { max-width: var(--doc); margin-top: var(--gap-para); }
+.doc .dh + p, .doc h2 + :is(p, ul, .blk) { margin-top: var(--gap-part); } .doc h3 + p { margin-top: var(--gap-same); }
+.doc ul li { display: grid; grid-template-columns: 20px minmax(0, 1fr); } .doc ul li + li { margin-top: var(--gap-same); }
+.doc ul li::before { content: ""; width: 4px; height: 4px; border-radius: var(--r-round); background: var(--ink-2); margin: 10px 0 0 3px; }
+.doc .blk { margin: var(--gap-para) 0 0 calc(-1 * var(--pad-x)); width: calc(100% + var(--pad-x)); }
+.files { display: grid; grid-template-columns: var(--tree-w) minmax(0, 1fr); column-gap: var(--s-6); margin-top: var(--s-3); height: 100%; }
+/* the tree: a row's selection starts on the lane's edge and its first glyph stands on the text edge */
+.tree { position: relative; } .tree .row { color: var(--ink-1); padding-left: var(--pad-x); }
+.tree .row.d1 { padding-left: var(--s-10); } .tree .row.d2 { padding-left: 64px; }
+.tree .row .m { flex: none; font: var(--t-caption); color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.fv { min-width: 0; }
+.fv .fn { height: var(--h-m); display: flex; align-items: center; gap: var(--s-4); justify-items: start; } .fv .fn code { color: var(--ink-1); } .fv .fn .m { font: var(--t-caption); color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.fv .fn .seg { margin-left: auto; }
+/* source: a number in the code face at 12, then the code. A changed line's ground is a shape like every other fill: set in 4 px, radius 4 */
+.src { margin-top: var(--s-2); font: var(--t-code); white-space: pre; }
+.src .sl { display: grid; grid-template-columns: 44px minmax(0, 1fr); height: 20px; margin-left: calc(-1 * var(--s-1)); padding-left: var(--s-1); border-radius: var(--r-mark); }
+.src .sl > i { font: var(--t-code-s); font-style: normal; color: var(--ink-2); text-align: right; padding-right: var(--s-4); }
+.src .sl.add { background: var(--tint-add); } .src .sl.add + .sl.add { border-top-left-radius: 0; border-top-right-radius: 0; } .src .sl.add:has(+ .sl.add) { border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
+.fh { display: flex; align-items: center; gap: var(--s-2); margin-top: var(--gap-group); min-height: var(--h-m); padding-left: var(--pad-x); }
+.fh > .ic { color: var(--ink-2); margin-left: -24px; } .fh code { color: var(--ink-1); }
+.fh .m { font: var(--t-caption); color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.fh .end { margin-left: auto; display: flex; align-items: center; gap: var(--s-2); color: var(--ink-2); font: var(--t-caption); padding-right: var(--pad-x); }
+.fh + .blk { margin-top: var(--gap-same); }
+.split { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s-2); }
+.lsel { position: absolute; z-index: 6; display: flex; gap: var(--s-1); padding: var(--s-1); border-radius: var(--r-block); background: var(--raised); box-shadow: 0 0 0 1px var(--edge), var(--shadow-raised); }
+.lsel .lk { margin: 0; height: var(--h-s); }
+
+/* ---------- home: one ordered list of sentences, in the conversation's lane ---------- */
+.home { margin-top: var(--s-2); }
+.home .gh { font: var(--t-strong); padding-left: var(--pad-x); margin-top: var(--s-6); height: var(--h-m); display: flex; align-items: center; }
+.home .gh:first-child { margin-top: 0; }
+.hrow { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: var(--s-4); padding: var(--s-2) var(--pad-x); border-radius: var(--r-block); position: relative; align-items: center; width: 100%; min-height: 52px; }
+.hrow > .g { position: absolute; left: calc(-1 * var(--gutter)); top: var(--s-3); width: var(--avatar); height: var(--avatar); display: grid; place-items: center; }
+.hrow .tx { min-width: 0; } .hrow p { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font: var(--t-talk); } .hrow.act p { font-weight: 500; }
+.hrow .wh { font: var(--t-caption); color: var(--ink-2); display: block; }
+.hrow time { font: var(--t-caption); color: var(--ink-2); font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+.hrow .v { display: flex; justify-content: flex-end; }
+.hrow .v .lk { margin: 0; padding: 0 0 0 var(--s-2); }
+.hrow.sel { background-color: var(--fill-3); }
+
+/* ---------- raised things: opaque, the only plane with a shadow; a 1 px edge so the shape holds without it ---------- */
+.raised { background: var(--raised); box-shadow: 0 0 0 1px var(--edge), var(--shadow-raised); --plane: var(--raised); }
+.menu { border-radius: var(--r-block); padding: var(--s-1); min-width: 208px; width: max-content; position: relative; }
+.mi { height: var(--h-m); display: flex; align-items: center; gap: var(--s-4); padding: 0 var(--s-2); border-radius: var(--r-ctl); width: 100%; white-space: nowrap; }
+.mi .k { margin-left: auto; color: var(--ink-2); display: inline-flex; align-items: center; gap: var(--s-2); }
+.mi.hl { background: var(--fill-2); }                       /* the highlighted row is a neutral fill: a resting selection is not news */
+.mi.off { color: var(--dim); }
+.msep { height: var(--s-2); }
+/* the picker: every row, the caption and the first and last effort word stand on the popover's 8 px inset */
+.pop { border-radius: var(--r-pop); padding: var(--s-2); width: 280px; position: relative; }
+.pop .mi small { font: var(--t-caption); color: var(--ink-2); }
+.pop .steps { display: flex; justify-content: space-between; margin-top: var(--s-2); position: relative; }
+.pop .steps button { padding: 0 var(--s-2); height: var(--h-m); border-radius: var(--r-ctl); color: var(--ink-2); display: inline-flex; align-items: center; }
+.pop .steps button.on { background: var(--fill-3); color: var(--ink-1); }
+.pop .cap { font: var(--t-caption); color: var(--ink-2); padding: var(--s-2) var(--s-2) 0; display: block; }
+.dlg { border-radius: var(--r-bubble); padding: var(--s-5); width: 400px; }
+.dlg .btns { display: flex; justify-content: flex-end; gap: var(--s-2); margin-top: var(--s-5); }
+.pal { border-radius: var(--r-bubble); padding: var(--s-2); width: 560px; }
+.pal .in { height: var(--h-l); padding: 0 var(--s-2); display: flex; align-items: center; gap: var(--s-2); }
+.float { position: absolute; z-index: 8; }
+
+/* ---------- the component sheet ---------- */
+body.sheet { display: block; overflow: visible; height: auto; background: var(--content); padding: var(--s-10) 48px 56px; width: 1616px; --col: 704px; --lx: 0px; --side-w: 320px; --W: 1520px; --rx: 0px; --hx: 0px; --comp: 704px; }
+html:has(body.sheet) { overflow: visible; height: auto; }
+.sheet h1 { font: var(--t-display); }
+.sheet h2 { font: var(--t-title); margin: var(--s-6) 0 var(--s-3); }
+.sheet h3 { font: var(--t-strong); margin: 0 0 var(--s-2); }
+.sheet .cols { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--s-8) var(--s-10); align-items: start; }
+.sheet .cols.two { grid-template-columns: repeat(2, minmax(0, 1fr)); } .sheet .cols.four { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.sheet .cap { font: var(--t-caption); color: var(--ink-2); display: block; max-width: 440px; }
+.sheet .spec { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--s-2) var(--s-4); align-items: baseline; }
+.sheet .rowx { display: flex; flex-wrap: wrap; gap: var(--s-3) var(--s-4); align-items: center; }
+.sheet .st { display: flex; flex-direction: column; gap: var(--s-2); align-items: flex-start; min-width: 0; }
+.sheet .sw-c { width: 56px; height: 36px; border-radius: var(--r-ctl); display: block; }
+.sheet .navbox { background: var(--ground); padding: var(--s-2); border-radius: var(--r-block); width: 248px; --plane: var(--ground); position: relative; }
+.sheet .stage { position: relative; width: 100%; padding: var(--s-4) 0 var(--s-3); }
+.sheet .stage .lane { width: 392px; margin-left: var(--gutter); --col: 392px; }
+.sheet .stage.w .lane { width: 620px; --col: 620px; }
+.sheet .stage .cl:first-child, .sheet .stage .lane > :first-child { margin-top: 0 !important; }
+.sheet .dockbox { position: relative; padding-left: 48px; width: 752px; } .sheet .dockbox .lane { margin-left: 0; width: 704px; }
+.sheet .dockbox .band { margin-top: var(--s-2); }
+.sheet .cbox { gap: var(--s-1); } .sheet .hdbox { width: 100%; } .sheet .hdbox header.hd { width: 736px; background: var(--content); } .sheet .hdbox .hd .l2 { width: 704px; }
+.sheet .dockbox .bounds { position: absolute; right: 0; top: -20px; font: var(--t-caption); color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.sheet aside.side { position: static; display: flex; width: 320px; }
+.sheet .ics { display: grid; grid-template-columns: repeat(10, 1fr); gap: var(--s-4) var(--s-2); }
+.sheet .ics > div { display: flex; flex-direction: column; align-items: center; gap: 6px; font: var(--t-caption); color: var(--ink-2); }
+.sheet .ics > div .ic { color: var(--ink-1); }
+.sheet .strip { display: flex; gap: var(--s-2); align-items: center; }
+.sheet .onbar .mk { color: var(--ink-1) !important; }
+.sheet .onbar { background: var(--ground); border-radius: var(--r-block); padding: var(--s-3) var(--s-4); display: flex; gap: var(--s-4); align-items: center; color: var(--ink-2); --plane: var(--ground); }
+/* the section that holds a history (runs, commits, what was shared) takes the room that is left and shows as many rows
+   as fit; its last row fades under the section that stands on the foot */
+.sec.grow { flex: 1 1 0; min-height: 0; }
+.sec.grow > .ls { flex: 1 1 0; min-height: 0; overflow: hidden; }
+.sec.grow.all > .ls { overflow-y: auto; scrollbar-width: none; overscroll-behavior: contain; }
+.sec.grow + .sec.foot { margin-top: var(--gap-group); padding-top: 0; }
+/* a row with a second line under its label: where it is */
+.ls > li.two { min-height: 44px; } .ls > li.two > :first-child { align-self: start; margin-top: 7px; } .ls > li.two > .e { align-self: start; margin-top: 6px; }
+}   /* @layer zulip.armada-beta */

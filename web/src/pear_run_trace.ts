@@ -75,9 +75,7 @@ type PearRunTraceControllerOptions = {
     on_state_change?: ((controller: PearRunTraceController) => void) | undefined;
 };
 
-export function create_controller(
-    options: PearRunTraceControllerOptions,
-): PearRunTraceController {
+export function create_controller(options: PearRunTraceControllerOptions): PearRunTraceController {
     let request: JQuery.jqXHR<unknown> | undefined;
     let request_generation = 0;
     let destroyed = false;

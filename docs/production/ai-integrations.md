@@ -219,9 +219,12 @@ under `PEAR_TOPIC_WORKDIR_ROOT`, not from the host Zulip checkout. Use
 `danger-full-access` for topic workdirs and refuses to launch Codex when the
 resolved workdir is outside the Pear topic workspace root.
 
-For hosted friend/multi-user servers, set
-`PEAR_TOPIC_ISOLATION_BACKEND = "os-user"` and provision
-`PEAR_TOPIC_ISOLATION_HELPER` as the root-owned `pear-topic-isolate` helper.
+For a hosted server, follow "Security" in `docs/armada/deploy.md`, which
+supersedes this section: keep the default `codex-sandbox` isolation with
+`workspace-write` and restrict who drives the agent. The
+`PEAR_TOPIC_ISOLATION_BACKEND = "os-user"` backend below runs agents
+without Codex's sandbox (so with network access), and its root-owned
+`pear-topic-isolate` helper is not packaged for a production install.
 That backend creates a stable `pear-<topic digest>` Unix user per Zulip topic,
 copies the worker Codex login into that user's private home, chowns the topic
 workdir to that user, and launches Codex through `sudo -u <topic user>`.

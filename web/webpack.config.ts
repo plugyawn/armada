@@ -1,5 +1,6 @@
 /// <reference types="webpack-dev-server" />
 
+import child_process from "node:child_process";
 import path from "node:path";
 
 import type {ZopfliOptions} from "@gfx/zopfli";
@@ -14,6 +15,31 @@ import BundleTracker from "webpack-bundle-tracker";
 import DebugRequirePlugin from "./debug-require-webpack-plugin.ts";
 import assets from "./webpack.assets.json" with {type: "json"};
 import dev_assets from "./webpack.dev-assets.json" with {type: "json"};
+
+// The licensed typeface's files are outside git, in a directory that may
+// be elsewhere (ARMADA_FONT_DIR). tools/setup/build_armada_fonts turns
+// whatever is there into web/generated/armada_fonts.css; running it at the
+// start of every build, and watching the directory, makes dropping the
+// files in the whole installation.
+class ArmadaFontsPlugin implements webpack.WebpackPluginInstance {
+    apply(compiler: webpack.Compiler): void {
+        const fontDir = path.resolve(
+            process.env["ARMADA_FONT_DIR"] ?? path.join(import.meta.dirname, "fonts/licensed"),
+        );
+        const build = (): void => {
+            child_process.execFileSync(
+                path.resolve(import.meta.dirname, "../tools/setup/build_armada_fonts"),
+                ["--quiet"],
+                {stdio: "inherit"},
+            );
+        };
+        compiler.hooks.beforeRun.tap("ArmadaFontsPlugin", build);
+        compiler.hooks.watchRun.tap("ArmadaFontsPlugin", build);
+        compiler.hooks.afterCompile.tap("ArmadaFontsPlugin", (compilation) => {
+            compilation.contextDependencies.add(fontDir);
+        });
+    }
+}
 
 const config = (
     env: {
@@ -43,6 +69,7 @@ const config = (
             ZULIP_VERSION: JSON.stringify(env.ZULIP_VERSION ?? "development"),
         }),
         new DebugRequirePlugin(),
+        new ArmadaFontsPlugin(),
         new BundleTracker({
             path: path.join(import.meta.dirname, production ? ".." : "../var"),
             filename: production ? "webpack-stats-production.json" : "webpack-stats-dev.json",
@@ -68,6 +95,12 @@ const config = (
             }),
         );
     }
+
+    // Everything that is not the rebuilt frontend goes into the cascade
+    // layer `zulip`, below it; see zulip-layer-loader.ts.
+    const armadaDir = path.resolve(import.meta.dirname, "src/armada");
+    const stylesDir = path.resolve(import.meta.dirname, "styles");
+    const zulipLayerLoader = path.resolve(import.meta.dirname, "zulip-layer-loader.ts");
 
     const frontendConfig: webpack.Configuration = {
         ...baseConfig,
@@ -105,6 +138,7 @@ const config = (
                                 url: false, // webfonts-loader generates public relative URLs
                             },
                         },
+                        zulipLayerLoader,
                         {
                             loader: "webfonts-loader",
                             options: {
@@ -117,19 +151,37 @@ const config = (
                     ],
                     type: "javascript/auto",
                 },
-                // Transpile .js and .ts files with Babel
+                // Transpile .js, .ts and .tsx files with Babel
                 {
-                    test: /\.[cm]?[jt]s$/,
+                    test: /\.[cm]?[jt]sx?$/,
                     include: [path.resolve(import.meta.dirname, "src")],
                     loader: "babel-loader",
                 },
-                // regular css files
+                // Styles written at run time: CodeMirror's, by style-mod, and
+                // the altcha widget's own.
+                {
+                    test: /[/\\]style-mod[/\\](src|dist)[/\\]style-mod\.c?js$/,
+                    loader: zulipLayerLoader,
+                    options: {injectedStyle: ["this.styleTag.textContent", "text"]},
+                },
+                {
+                    test: /[/\\]altcha[/\\]dist[/\\]altcha\.js$/,
+                    loader: zulipLayerLoader,
+                    options: {injectedStyle: ["r.textContent", "e"]},
+                },
+                // The emoji sprite sheets are imported in emojisets.ts with
+                // inline loaders, which skip the rules below but not a
+                // pre-loader.
+                {
+                    test: /[/\\]generated[/\\]emoji-styles[/\\][^/\\]+\.css$/,
+                    enforce: "pre",
+                    loader: zulipLayerLoader,
+                },
+                // The rebuilt frontend's stylesheets: native CSS, layered
+                // by their own @layer statements.
                 {
                     test: /\.css$/,
-                    exclude: path.resolve(import.meta.dirname, "styles"),
-                    // Bare CSS imports are loaded for their effect; without
-                    // this, packages shipping "sideEffects": false (e.g.
-                    // @milkdown/crepe) get their stylesheets tree-shaken.
+                    include: armadaDir,
                     sideEffects: true,
                     use: [
                         MiniCssExtractPlugin.loader,
@@ -141,19 +193,43 @@ const config = (
                         },
                     ],
                 },
-                // PostCSS loader
+                // regular css files
                 {
                     test: /\.css$/,
-                    include: path.resolve(import.meta.dirname, "styles"),
+                    exclude: [stylesDir, armadaDir],
+                    // Bare CSS imports are loaded for their effect; without
+                    // this, packages shipping "sideEffects": false (e.g.
+                    // @milkdown/crepe) get their stylesheets tree-shaken.
+                    sideEffects: true,
                     use: [
                         MiniCssExtractPlugin.loader,
                         {
                             loader: "css-loader",
                             options: {
+                                // A sheet that another @imports is wrapped too.
                                 importLoaders: 1,
                                 sourceMap: true,
                             },
                         },
+                        zulipLayerLoader,
+                    ],
+                },
+                // PostCSS loader
+                {
+                    test: /\.css$/,
+                    include: stylesDir,
+                    use: [
+                        MiniCssExtractPlugin.loader,
+                        {
+                            loader: "css-loader",
+                            options: {
+                                importLoaders: 2,
+                                sourceMap: true,
+                            },
+                        },
+                        // After PostCSS, so that postcss-preset-env never
+                        // sees the layer and cannot try to polyfill it.
+                        zulipLayerLoader,
                         {
                             loader: "postcss-loader",
                             options: {

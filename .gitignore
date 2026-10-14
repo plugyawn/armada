@@ -89,6 +89,18 @@ core
 # Static generated files for landing page.
 /static/images/landing-page/hello/generated
 
+# Armada: the licensed typeface. No font file of Klim's is ever committed;
+# see web/fonts/licensed/README.md.
+/web/fonts/licensed/*
+!/web/fonts/licensed/README.md
+# Written by tools/setup/build_armada_fonts from that directory.
+/web/generated/armada_fonts.css
+# Armada: Pokémon sprites and species data for the team's theme. They are
+# Nintendo / Game Freak's and are never committed; see web/sprites/licensed/README.md.
+/web/sprites/licensed/*
+!/web/sprites/licensed/README.md
+!/web/sprites/licensed/smogon-gen9.txt
+
 ## Miscellaneous
 # (Ideally this section is empty.)
 .transifexrc

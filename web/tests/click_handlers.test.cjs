@@ -21,6 +21,7 @@ set_global("document", {
     getSelection: () => null,
     to_$: () => $document,
 });
+/* istanbul ignore next */
 set_global("window", {getSelection: () => null});
 
 mock_esm("../src/util", {is_mobile: () => false});
@@ -68,6 +69,7 @@ run_test(
         };
         message_lists.current = {
             view: {manages_primary_viewport: true},
+            /* istanbul ignore next */
             select_id() {
                 throw new Error("secondary row click must not select message_lists.current");
             },
@@ -130,9 +132,48 @@ run_test(
         $target.set_parents_result(".todo-widget label.checkbox", []);
         $target.set_closest_results(".reveal-hidden-message", []);
         $target.set_closest_results(".rehide-muted-user-message", []);
+        const thread_previews =
+            ".message-thread-reply-preview, .message-thread-agent-preview, .message-thread-strip";
+        $target.set_closest_results(thread_previews, []);
+
+        // A click on a thread's preview under its root opens the thread
+        // and does not also start a reply.
+        const $preview_target = $.create("secondary-thread-preview-target");
+        $preview_target.set_closest_results("a", []);
+        for (const selector of [
+            "textarea",
+            "input",
+            "button.message_expander",
+            "button.message_condenser",
+            ".media-image-element",
+            ".message_inline_animated_image_still",
+            "video",
+            ".message_inline_video",
+            "img.twitter-avatar",
+            ".media-audio-element",
+            "i.edit_message_button",
+            ".message_edit_notice",
+            ".edit-notifications",
+            ".spoiler-header",
+            ".pear-artifact-pin, .pear-artifact-action",
+            ".copy_codeblock",
+        ]) {
+            $preview_target.set_matches(selector, false);
+        }
+        $preview_target.set_parents_result(".spoiler-header", []);
+        $preview_target.set_parents_result(".pear-artifact-pin, .pear-artifact-action", []);
+        $preview_target.set_parents_result(".copy_codeblock", []);
+        $preview_target.set_parents_result(".message_controls", []);
+        $preview_target.set_closest_results(thread_previews, [$.create("thread-preview")]);
+        $interaction_root
+            .get_on_handler("click", ".message_row .messagebox")
+            .call($messagebox.get(0), {...event, target: new FakeElement($preview_target)});
+        assert.equal(selected_id, undefined);
+        assert.equal(focused_message_id, undefined);
+
         const target = new FakeElement($target);
         $interaction_root
-            .get_on_handler("click", ".messagebox")
+            .get_on_handler("click", ".message_row .messagebox")
             .call($messagebox.get(0), {...event, target});
         assert.equal(selected_id, 41);
         assert.equal(focused_message_id, 41);

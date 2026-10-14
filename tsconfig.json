@@ -27,6 +27,10 @@
         /* JavaScript support */
         "allowJs": true,
 
+        /* JSX: the rebuilt chrome under web/src/armada/ is Preact .tsx */
+        "jsx": "react-jsx",
+        "jsxImportSource": "preact",
+
         /* Interop Constraints */
         "erasableSyntaxOnly": true,
         "esModuleInterop": true,

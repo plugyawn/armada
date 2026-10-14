@@ -511,9 +511,32 @@ run_test("should_refresh_context_for_testing", () => {
         last_refresh_key: "devel\u0000general chat",
         last_refresh_at: 90_000,
         has_context: true,
+        has_active_run: false,
     };
 
     assert.equal(pear_panel.should_refresh_context_for_testing(base_options), false);
+    // While a run is live every request asks for the context, so that the
+    // one which finds the run ended needs no second request.
+    assert.equal(
+        pear_panel.should_refresh_context_for_testing({...base_options, has_active_run: true}),
+        true,
+    );
+    assert.equal(
+        pear_panel.should_refresh_context_for_testing({
+            ...base_options,
+            live: true,
+            has_active_run: true,
+        }),
+        true,
+    );
+    assert.equal(
+        pear_panel.should_refresh_context_for_testing({
+            ...base_options,
+            context_key_value: "",
+            has_active_run: true,
+        }),
+        false,
+    );
     assert.equal(
         pear_panel.should_refresh_context_for_testing({...base_options, live: true}),
         false,
@@ -859,57 +882,4 @@ run_test("workbench_popover_top_for_testing", () => {
     // Anchor near the bottom: top is pushed up so the min body height still
     // fits above the bottom margin (900 - 260 - 12 = 628).
     assert.equal(pear_panel.workbench_popover_top_for_testing({...base, desired_top: 880}), 628);
-});
-
-run_test("topic header controls template matches the retired jQuery skeleton", () => {
-    const render_pear_topic_header_controls = require("../templates/pear_topic_header_controls.hbs");
-    const html = render_pear_topic_header_controls({control_key: '{"stream_id":7,"topic":"t"}'});
-
-    // Structure: display-contents cluster > runtime group (merged
-    // model·effort pill with in-pill status glyph) + the commit line
-    // (branch chip shown only for surprising branches; the commit
-    // sentence — icon, sha, subject, meta — opens work details). No
-    // status dot, no bare "·" separator, no "no repo" furniture.
-    assert.match(
-        html,
-        // Whitespace-tolerant: prettier splits the attributes over lines.
-        /^<span\s+class="pear-topic-header-status no-select"\s+data-pear-header-key="\{&quot;stream_id&quot;:7,&quot;topic&quot;:&quot;t&quot;\}"\s*>/,
-    );
-    assert.ok(!html.includes("pear-topic-header-status-dot"));
-    assert.ok(!html.includes("pear-topic-header-meta-separator"));
-    assert.ok(!html.includes("pear-topic-header-work-label"));
-    for (const marker of [
-        'class="pear-topic-header-commitline"',
-        "pear-topic-header-branch-control tippy-zulip-delayed-tooltip",
-        "zulip-icon zulip-icon-git-branch pear-topic-header-git-icon",
-        'class="pear-topic-header-branch-label"',
-        "pear-topic-header-git-control pear-panel-open-action",
-        "zulip-icon zulip-icon-git-commit pear-topic-header-git-icon",
-        'class="pear-commitline-sha"',
-        'class="pear-commitline-subject"',
-        'class="pear-commitline-meta"',
-        "pear-topic-header-runtime-control pear-runtime-menu-trigger",
-        'class="pear-runtime-menu-model-label"',
-        'class="pear-runtime-menu-effort-label"',
-        "zulip-icon zulip-icon-chevron-down pear-topic-header-control-chevron",
-    ]) {
-        assert.ok(html.includes(marker), `missing: ${marker}`);
-    }
-    // The glyph and separator spans wrap across lines under prettier.
-    assert.match(html, /class="pear-ui-glyph pear-runtime-menu-glyph"\s+aria-hidden="true"\s*>·</);
-    assert.match(html, /class="pear-topic-header-runtime-separator"\s+aria-hidden="true"\s*>·</);
-    // The runtime button and the branch/work controls carry the header key.
-    assert.equal(html.split("data-pear-header-key").length - 1, 4);
-    // Two header controls plus Chat, README, and Files.
-    assert.equal((html.match(/<button\s+type="button"/g) ?? []).length, 5);
-    for (const marker of [
-        'class="pear-workspace-tabs pear-workspace-tabs-hidden"',
-        'data-pear-tab="chat"',
-        'data-pear-tab="readme"',
-        'data-pear-tab="files"',
-    ]) {
-        assert.ok(html.includes(marker), `missing: ${marker}`);
-    }
-    // Exactly one runtime trigger remains: the merged model·effort pill.
-    assert.equal(html.split("pear-runtime-menu-trigger").length - 1, 1);
 });

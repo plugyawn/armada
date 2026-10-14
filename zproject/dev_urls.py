@@ -33,6 +33,7 @@ from zerver.views.development.registration import (
     register_development_user,
 )
 from zerver.views.development.showroom import (
+    showroom_armada,
     showroom_component_banners,
     showroom_component_buttons,
     showroom_component_inputs,
@@ -107,6 +108,7 @@ urls = [
     path("devtools/buttons/", showroom_component_buttons),
     path("devtools/banners/", showroom_component_banners),
     path("devtools/inputs/", showroom_component_inputs),
+    path("devtools/armada/", showroom_armada),
     # Development server for the help center in not run by default, we
     # show this page with zulip.com and view source links instead.
     path("help", help_dev_mode_view),

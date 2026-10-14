@@ -551,7 +551,8 @@
     /* This width is updated with an exact pixel
        width upon UI initialization. */
     --message-box-timestamp-column-width: 0;
-    --last-message-row-border-radius: 0 0 var(--pear-radius-card) var(--pear-radius-card);
+    --last-message-row-border-radius: 0 0 var(--pear-radius-card)
+        var(--pear-radius-card);
 
     /* This length is the primary reference for height
        and image width on URL preview embeds. 112px
@@ -902,14 +903,15 @@
     --pear-diff-del: var(--pear-danger);
     --pear-diff-del-fill: var(--pear-danger-fill);
 
-    /* Type system: the machine speaks in pixels; the room is set in
-       Hanken; code content is Geist Mono. Pixel sizes are pinned px by
-       design — pixel faces go mushy at arbitrary scales. */
-    --pear-font-ui: "Hanken Grotesk VF", "Source Sans 3 VF", sans-serif;
-    --pear-font-pixel: "Geist Pixel", "Geist Mono VF", ui-monospace, monospace;
-    --pear-font-display: "Geist Pixel", "Geist Mono VF", ui-monospace, monospace;
-    --pear-font-mono:
-        "Geist Mono VF", ui-monospace, "SFMono-Regular", monospace;
+    /* Type: the two faces of the design language
+       (web/src/armada/tokens/tokens.css). People, the agent and chrome
+       speak the human face; what a machine would accept is the code face.
+       There is no agent face: the two names that used to hold one now hold
+       the human face, until the old sheets that use them are deleted. */
+    --pear-font-ui: var(--f-human);
+    --pear-font-pixel: var(--f-human);
+    --pear-font-display: var(--f-human);
+    --pear-font-mono: var(--f-code);
 
     /* Spacing — 4px grid, the only spacing vocabulary on Pear surfaces. */
     --pear-space-1: 4px;
@@ -919,20 +921,25 @@
     --pear-space-5: 24px;
     --pear-space-6: 32px;
 
-    /* Shape & elevation. */
-    --pear-radius-px: 2px;
-    --pear-radius-chip: 4px;
-    --pear-radius-card: 8px;
-    --pear-shadow-pop: light-dark(
-        0 8px 24px hsl(240deg 8% 12% / 14%),
-        0 8px 24px hsl(0deg 0% 0% / 32%)
-    );
+    /* Shape & elevation. Corners are soft and nest: a control sits
+       inside a card sits inside a panel, each one step rounder. Floating
+       surfaces carry a hairline ring plus a near and a far shadow, so
+       they read as lifted in both themes without a visible border. */
+    --pear-radius-px: 5px;
+    --pear-radius-chip: 7px;
+    --pear-radius-card: 12px;
+    --pear-shadow-pop:
+        0 0 0 0.5px
+            light-dark(hsl(240deg 8% 12% / 14%), hsl(0deg 0% 100% / 14%)),
+        0 2px 6px light-dark(hsl(240deg 8% 12% / 7%), hsl(0deg 0% 0% / 28%)),
+        0 14px 36px light-dark(hsl(240deg 8% 12% / 16%), hsl(0deg 0% 0% / 46%));
 
-    /* Motion — macOS fluid, GPU-cheap. */
+    /* Motion — macOS fluid, GPU-cheap. Feedback to a click or hover is
+       near-instant; only things that travel take longer. */
     --pear-ease: cubic-bezier(0.22, 1, 0.36, 1);
-    --pear-dur-1: 150ms;
-    --pear-dur-2: 220ms;
-    --pear-dur-3: 350ms;
+    --pear-dur-1: 110ms;
+    --pear-dur-2: 180ms;
+    --pear-dur-3: 280ms;
 
     /* Pear message rows sit one tone below the page surface. */
     --color-background-pear-message-content: var(--pear-surface-1);

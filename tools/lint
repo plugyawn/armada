@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import argparse
 import os
+import subprocess
 import sys
 
 tools_dir = os.path.dirname(os.path.abspath(__file__))
@@ -12,9 +13,33 @@ from tools.lib import sanity_check
 
 sanity_check.check_venv(__file__)
 
+from zulint import lister
 from zulint.command import LinterConfig, add_default_linter_arguments
 
 from tools.linter_lib.custom_check import non_py_rules, python_rules
+
+
+def add_untracked_files(
+    by_lang: dict[str, list[str]], targets: list[str], file_types: set[str], exclude: list[str]
+) -> None:
+    """Armada's rebuild is uncommitted work shared by several agents, and
+    zulint only lists files that git tracks; without this a new file
+    would pass lint by not being looked at.  Files that .gitignore
+    matches stay out."""
+    untracked = subprocess.check_output(
+        ["git", "ls-files", "-z", "--others", "--exclude-standard", "--", *targets], text=True
+    ).split("\0")
+    for path in untracked:
+        if not path or os.path.islink(path) or not os.path.isfile(path):
+            continue
+        if any(path == excluded or path.startswith(excluded + "/") for excluded in exclude):
+            continue
+        try:
+            file_type = lister.get_ftype(path, use_shebang=True)
+        except (OSError, UnicodeDecodeError):
+            continue
+        if file_type in file_types and path not in by_lang[file_type]:
+            by_lang[file_type].append(path)
 
 
 def run() -> None:
@@ -40,37 +65,42 @@ def run() -> None:
 
     linter_config = LinterConfig(args)
 
-    by_lang = linter_config.list_files(
-        groups={
-            "backend": [
-                "bash",
-                "json",
-                "md",
-                "pp",
-                "py",
-                "pyi",
-                "sh",
-                "text",
-                "txt",
-                "yaml",
-                "yml",
-            ],
-            "frontend": [
-                "astro",
-                "cjs",
-                "css",
-                "cts",
-                "hbs",
-                "html",
-                "js",
-                "mdx",
-                "mjs",
-                "mts",
-                "svg",
-                "ts",
-            ],
-        },
-        exclude=EXCLUDED_FILES,
+    groups = {
+        "backend": [
+            "bash",
+            "json",
+            "md",
+            "pp",
+            "py",
+            "pyi",
+            "sh",
+            "text",
+            "txt",
+            "yaml",
+            "yml",
+        ],
+        "frontend": [
+            "astro",
+            "cjs",
+            "css",
+            "cts",
+            "hbs",
+            "html",
+            "js",
+            "mdx",
+            "mjs",
+            "mts",
+            "svg",
+            "ts",
+            "tsx",
+        ],
+    }
+    by_lang = linter_config.list_files(groups=groups, exclude=EXCLUDED_FILES)
+    add_untracked_files(
+        by_lang,
+        args.targets,
+        {file_type for group in (args.groups or groups) for file_type in groups[group]},
+        EXCLUDED_FILES,
     )
 
     linter_config.external_linter(
@@ -83,7 +113,7 @@ def run() -> None:
     linter_config.external_linter(
         "eslint",
         ["node_modules/.bin/eslint", "--max-warnings=0", "--cache"],
-        ["astro", "cjs", "cts", "js", "mdx", "mjs", "mts", "ts"],
+        ["astro", "cjs", "cts", "js", "mdx", "mjs", "mts", "ts", "tsx"],
         fix_arg="--fix",
         description="Standard JavaScript style and formatting linter (config: eslint.config.js).",
     )
@@ -155,7 +185,7 @@ def run() -> None:
     linter_config.external_linter(
         "tsc",
         ["tools/run-tsc"],
-        ["ts"],
+        ["ts", "tsx"],
         pass_targets=False,
         description="TypeScript compiler (config: tsconfig.json)",
     )
@@ -179,6 +209,7 @@ def run() -> None:
             "mjs",
             "mts",
             "ts",
+            "tsx",
             "yaml",
             "yml",
         ],
@@ -215,6 +246,16 @@ def run() -> None:
         description="Check that .mailmap is sorted",
     )
     linter_config.external_linter(
+        "fork-ledger",
+        ["tools/armada/fork_ledger", "--check"],
+        description="Every Zulip file the fork changed is accounted for (docs/armada/fork-ledger.md)",
+    )
+    linter_config.external_linter(
+        "armada-palette",
+        ["tools/armada/palette.py", "--check", "--quiet"],
+        description="The palette files are what tools/armada/palette.py writes, and pass its gates",
+    )
+    linter_config.external_linter(
         "thirdparty",
         ["tools/check-thirdparty"],
         description="Check docs/THIRDPARTY copyright file syntax",
@@ -239,7 +280,9 @@ def run() -> None:
         """Runs custom checks for non-python files (config: tools/linter_lib/custom_check.py)"""
         failed = False
         for rule in non_py_rules:
-            failed = failed or rule.check(by_lang, verbose=args.verbose)
+            # Every language's rules run, so that one failure does not
+            # hide the others.
+            failed = rule.check(by_lang, verbose=args.verbose) or failed
         return 1 if failed else 0
 
     linter_config.do_lint()

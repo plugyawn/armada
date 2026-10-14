@@ -244,7 +244,10 @@ ${$t({defaultMessage: "Last task"})}`,
     },
 ];
 
-export function set_up_toggler(): void {
+// Fills in the rendering of each example that has none yet. An example
+// with math waits for KaTeX, which is fetched on first use, and is filled
+// in by a later call (fill_in_math_examples).
+function render_markdown_help_examples(): void {
     const helper_config: markdown.MarkdownHelpers = {
         ...markdown.web_app_helpers!,
         get_actual_name_from_user_id() {
@@ -268,6 +271,11 @@ export function set_up_toggler(): void {
     };
     for (const row of markdown_help_rows) {
         if (row.markdown && !row.output_html) {
+            if (markdown.needs_backend_for_math(row.markdown)) {
+                // Empty until KaTeX is here; the template needs a value.
+                row.output_html = "";
+                continue;
+            }
             const message = {
                 raw_content: row.markdown,
                 ...markdown.render(row.markdown, helper_config),
@@ -299,7 +307,38 @@ export function set_up_toggler(): void {
             row.output_html = postprocess_content(message.content);
         }
     }
+}
 
+let waiting_for_katex = false;
+
+async function fill_in_math_examples(): Promise<void> {
+    if (waiting_for_katex || markdown_help_rows.every((row) => !row.markdown || row.output_html)) {
+        return;
+    }
+    waiting_for_katex = true;
+    try {
+        await markdown.try_to_load_katex();
+    } finally {
+        waiting_for_katex = false;
+    }
+    if (!markdown.katex_is_loaded()) {
+        // Offline, or the chunk is gone after a deploy: the math examples
+        // stay empty, and the next opening of the help tries again.
+        return;
+    }
+    render_markdown_help_examples();
+    const $rows = $(render_markdown_help({markdown_help_rows})).find(
+        "#markdown-instructions tbody",
+    );
+    $rows.find(".rendered_markdown").each(function () {
+        rendered_markdown.update_elements($(this));
+    });
+    $("#markdown-instructions tbody").replaceWith($rows);
+    common.adjust_mac_kbd_tags("#markdown-instructions kbd");
+}
+
+export function set_up_toggler(): void {
+    render_markdown_help_examples();
     const $markdown_help = $(render_markdown_help({markdown_help_rows}));
     $markdown_help.find(".rendered_markdown").each(function () {
         rendered_markdown.update_elements($(this));
@@ -379,6 +418,7 @@ export function show(target: string | undefined): void {
     if (!toggler) {
         set_up_toggler();
     }
+    void fill_in_math_examples();
 
     if (target) {
         toggler!.goto(target);

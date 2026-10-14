@@ -2,17 +2,22 @@ import $ from "jquery";
 import assert from "minimalistic-assert";
 
 import render_message_view_header from "../templates/message_view_header.hbs";
+import render_pear_topic_header_controls from "../templates/pear_topic_header_controls.hbs";
 
+import * as armada_narrow from "./armada/hooks/narrow.ts"; // armada:
 import type {Filter} from "./filter.ts";
 import * as hash_util from "./hash_util.ts";
 import {$t} from "./i18n.ts";
 import * as inbox_util from "./inbox_util.ts";
 import * as narrow_state from "./narrow_state.ts";
 import {page_params} from "./page_params.ts";
+import * as pear_panel from "./pear_panel.ts";
+import * as pear_workspace from "./pear_workspace.ts";
 import * as peer_data from "./peer_data.ts";
 import * as recent_view_util from "./recent_view_util.ts";
 import * as rendered_markdown from "./rendered_markdown.ts";
 import * as search from "./search.ts";
+import * as state_data from "./state_data.ts";
 import {current_user} from "./state_data.ts";
 import * as stream_data from "./stream_data.ts";
 import type {StreamSubscription} from "./sub_store.ts";
@@ -220,9 +225,83 @@ export function initialize(): void {
     });
 }
 
+// The kind of place in front, for the frame: Home is Inbox and Recent; a
+// topic of a channel bound to a repository is a worktree; any other list
+// of conversations is drawn as a channel.
+function current_place(filter: Filter | undefined): string {
+    if (
+        recent_view_util.is_visible() ||
+        (inbox_util.is_visible() && !inbox_util.is_channel_view())
+    ) {
+        return "home";
+    }
+    if (filter === undefined) {
+        return "home";
+    }
+    if (filter.has_operator("dm")) {
+        return "dm";
+    }
+    const stream_id = narrow_state.stream_id(filter);
+    const topic = narrow_state.topic(filter);
+    if (
+        stream_id !== undefined &&
+        topic !== undefined &&
+        state_data.stream_has_pear_project(stream_id)
+    ) {
+        return "worktree";
+    }
+    return "channel";
+}
+
+// The header's facts belong to the worktree in front. Its views are drawn
+// in the task that changes place, before the worktree's context arrives;
+// pear_panel.ts fills the same element in place when it does.
+function render_worktree_facts(filter: Filter | undefined, place: string): void {
+    const $facts = $("[data-armada=header-facts]");
+    const stream_id = filter && narrow_state.stream_id(filter);
+    const topic = filter && narrow_state.topic(filter);
+    if (place !== "worktree" || stream_id === undefined || topic === undefined) {
+        $facts.removeAttr("data-stream-id data-topic-name");
+        $facts.find(".pear-topic-header-status").remove();
+        // Leaving a worktree closes its document views: nothing of it is
+        // left in the pane of the place in front.
+        pear_workspace.sync({stream: undefined, topic: undefined, workspaceId: undefined});
+        return;
+    }
+    $facts.attr({"data-stream-id": stream_id, "data-topic-name": topic});
+    const control_key = JSON.stringify({stream_id, topic});
+    $facts
+        .find(".pear-topic-header-status")
+        .filter((_index, element) => $(element).attr("data-pear-header-key") !== control_key)
+        .remove();
+    if ($facts.find(".pear-topic-header-status").length === 0) {
+        $facts
+            .find(".recipient_bar_controls")
+            .before($(render_pear_topic_header_controls({control_key})));
+        pear_workspace.refresh_tab_strips();
+        // A worktree already known fills its values in the same task.
+        pear_panel.refresh_topic_header_controls();
+    }
+}
+
+// Line 2 of the header, where a worktree has its views: one sentence, the
+// channel's description or what the view is.
+function render_sentence(filter: Filter | undefined, place: string): void {
+    let sentence = "";
+    if (place !== "worktree" && (filter === undefined || filter.is_common_narrow())) {
+        const context = get_message_view_header_context(filter);
+        sentence = context.stream?.description ?? context.description ?? context.title ?? "";
+    }
+    $("[data-armada=sentence]").text(sentence);
+}
+
 export function render_title_area(): void {
     const filter = narrow_state.filter();
     build_message_view_header(filter);
+    const place = current_place(filter);
+    render_worktree_facts(filter, place);
+    render_sentence(filter, place);
+    armada_narrow.on_place(place);
 }
 
 // This function checks if "modified_sub" which is the stream whose values

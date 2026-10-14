@@ -1,4 +1,3 @@
-import autosize from "autosize";
 import ClipboardJS from "clipboard";
 import $ from "jquery";
 import _ from "lodash";
@@ -164,7 +163,7 @@ export function maybe_autosize_message_edit_box(): void {
     for (const message_id of message_ids) {
         const $edit_container = currently_editing_messages.get(message_id);
         if ($edit_container) {
-            autosize($edit_container);
+            compose_ui.size_textarea_to_content($edit_container);
         }
     }
     resized_edit_box_height.clear();

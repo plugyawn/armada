@@ -5,7 +5,6 @@ import * as condense from "./condense.ts";
 import * as message_lists from "./message_lists.ts";
 import * as message_viewport from "./message_viewport.ts";
 import * as resize from "./resize.ts";
-import * as scroll_bar from "./scroll_bar.ts";
 import * as sidebar_ui from "./sidebar_ui.ts";
 import * as util from "./util.ts";
 
@@ -30,7 +29,6 @@ export function handler(): void {
     compose_ui.maybe_show_scrolling_formatting_buttons(".message-edit-feature-group");
     const rerender_view_if_needed = true;
     resize.update_recent_view(rerender_view_if_needed);
-    scroll_bar.handle_overlay_scrollbars();
 
     // Re-compute and display/remove 'Show more' buttons to messages
     condense.condense_and_collapse(message_lists.all_current_message_rows());

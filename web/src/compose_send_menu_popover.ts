@@ -1,4 +1,3 @@
-import autosize from "autosize";
 import $ from "jquery";
 import assert from "minimalistic-assert";
 import * as tippy from "tippy.js";
@@ -10,6 +9,7 @@ import * as blueslip from "./blueslip.ts";
 import * as channel from "./channel.ts";
 import * as compose from "./compose.ts";
 import * as compose_state from "./compose_state.ts";
+import * as compose_ui from "./compose_ui.ts";
 import * as compose_validate from "./compose_validate.ts";
 import * as drafts from "./drafts.ts";
 import * as flatpickr from "./flatpickr.ts";
@@ -89,11 +89,10 @@ export function open_schedule_message_menu(
             );
 
             if ($reminder_note_textarea.length > 0) {
-                $reminder_note_textarea.off("autosize:resized").on("autosize:resized", () => {
+                compose_ui.size_textarea_to_content($reminder_note_textarea, () => {
                     // Keep popper visible in viewport when textarea height increases.
                     void instance.popperInstance?.update();
                 });
-                autosize($reminder_note_textarea);
             }
 
             const message_schedule_callback = (time: string | number): void => {

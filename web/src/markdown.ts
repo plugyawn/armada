@@ -1,5 +1,5 @@
 import {getUnixTime, isValid} from "date-fns";
-import katex from "katex";
+import type katex_module from "katex";
 import _ from "lodash";
 import assert from "minimalistic-assert";
 import type {Matcher, RE2JS} from "re2js";
@@ -46,11 +46,70 @@ function contains_topic_wildcard_mention(content: string): boolean {
     return content.includes("@**topic**");
 }
 
+// KaTeX (265 kB minified) is not part of the first load. It is fetched the
+// first time something in the page needs a formula rendered here; until it
+// has arrived, the server renders math, as it does media links.
+let katex: typeof katex_module | undefined;
+let katex_loading: Promise<void> | undefined;
+
+export let fetch_katex = async (): Promise<typeof katex_module> => {
+    const module = await import(/* webpackChunkName: "katex" */ "katex");
+    return module.default;
+};
+
+export function rewire_fetch_katex(value: typeof fetch_katex): void {
+    fetch_katex = value;
+}
+
+export async function load_katex(): Promise<void> {
+    katex_loading ??= (async () => {
+        katex = await fetch_katex();
+        fenced_code.set_katex(katex);
+    })();
+    try {
+        await katex_loading;
+    } catch (error) {
+        // Let a later formula try again, for example once back online.
+        katex_loading = undefined;
+        throw error;
+    }
+}
+
+// For callers that render without KaTeX when it cannot be fetched.
+export async function try_to_load_katex(): Promise<void> {
+    try {
+        await load_katex();
+    } catch {
+        // Offline, or the chunk is gone after a deploy: the server
+        // renders math until a later attempt succeeds.
+    }
+}
+
+export function katex_is_loaded(): boolean {
+    return katex !== undefined;
+}
+
+// `$$…$$`, or a fenced block whose language is math.
+const math_syntax = /\$\$|^[ ]*(?:~{3,}|`{3,})[ ]*\{?\.?math\b/m;
+
+export function needs_backend_for_math(content: string): boolean {
+    if (katex !== undefined || !math_syntax.test(content)) {
+        return false;
+    }
+    // Fetch it now, so that the next formula is rendered here.
+    void try_to_load_katex();
+    return true;
+}
+
 export function contains_backend_only_syntax(content: string): boolean {
     // Try to guess whether or not a message contains syntax that only the
     // backend Markdown processor can correctly handle.
     // If it doesn't, we can immediately render it client-side for local echo.
-    return contains_preview_link(content) || contains_topic_wildcard_mention(content);
+    return (
+        contains_preview_link(content) ||
+        contains_topic_wildcard_mention(content) ||
+        needs_backend_for_math(content)
+    );
 }
 
 export let web_app_helpers: MarkdownHelpers | undefined;
@@ -675,6 +734,12 @@ function handleStreamTopicMessage({
 }
 
 function handleTex(tex: string, fullmatch: string): string {
+    if (katex === undefined) {
+        // Callers ask contains_backend_only_syntax first, so this is what
+        // a caller that did not ask gets: the source, as text.
+        void try_to_load_katex();
+        return _.escape(fullmatch);
+    }
     try {
         return katex.renderToString(tex);
     } catch (error) {

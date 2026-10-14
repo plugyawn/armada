@@ -1,0 +1,162 @@
+/* The band: the line between the feed and the field, on every view, 28
+   high. Fixed cells: the typing person's face in the gutter where their
+   message will be, the run's state with its clock and Stop at the text
+   edge, Jump to latest, and at the far end the model for the next turn
+   (drawn by the field, which owns it). No cell moves when another fills. */
+@layer armada.kit {
+    .armada-band {
+        min-width: 0;
+        position: relative;
+        display: flex;
+        align-items: center;
+        height: var(--h-m);
+        font: var(--t-text);
+    }
+
+    .armada-band-typing {
+        position: absolute;
+        left: 0;
+        top: 0;
+        height: var(--h-m);
+        display: flex;
+        align-items: center;
+        gap: var(--s-2);
+    }
+
+    .armada-band-typing > :is(.armada-faces, .armada-face) {
+        position: absolute;
+        right: calc(100% + var(--s-3));
+        top: 0;
+    }
+
+    .armada-faces[data-overlap="deep"] > .armada-face {
+        outline: var(--k-cut) solid var(--plane);
+        mask-image: none;
+    }
+
+    .armada-faces[data-overlap="deep"] > :where(.armada-face) + .armada-face {
+        margin-left: calc(var(--px) * -12);
+    }
+
+    .armada-typing-bubble {
+        width: calc(var(--px) * 44);
+        height: var(--h-m);
+        border-radius: var(--r-pop) var(--r-pop) var(--r-pop) var(--r-ctl);
+        background: var(--bubble);
+        display: grid;
+        place-items: center;
+        flex: none;
+    }
+
+    .armada-typing-bubble[data-stone="moss"] {
+        background: var(--b-moss);
+    }
+
+    .armada-typing-bubble[data-stone="larimar"] {
+        background: var(--b-larimar);
+    }
+
+    .armada-typing-bubble[data-stone="lapis"] {
+        background: var(--b-lapis);
+    }
+
+    .armada-typing-bubble[data-stone="amethyst"] {
+        background: var(--b-amethyst);
+    }
+
+    .armada-typing-bubble[data-stone="rose"] {
+        background: var(--b-rose);
+    }
+
+    .armada-band-name {
+        font: var(--t-caption);
+        color: var(--ink-2);
+        white-space: nowrap;
+    }
+    /* While a run holds the band's line the face stays where it was and
+       the dots ride on it. */
+    .armada-band-typing[data-chip] > .armada-typing-bubble {
+        position: absolute;
+        right: calc(100% + calc(var(--px) * 3));
+        top: var(--s-4);
+        width: calc(var(--px) * 22);
+        height: calc(var(--px) * 14);
+        border-radius: var(--r-chip);
+        outline: var(--k-cut) solid var(--plane);
+    }
+
+    .armada-band-typing[data-chip] > .armada-band-name {
+        display: none;
+    }
+
+    /* The run: its mark, the state word, the clock 8 px after it, then
+       Stop. The word and its clock are one group as wide as its longest
+       common form, so Stop keeps its place and all slack falls after. */
+    .armada-band-run {
+        display: flex;
+        align-items: center;
+        gap: var(--s-2);
+        padding-left: var(--pad-x);
+        min-width: 0;
+        flex: 1;
+        margin-right: calc(var(--px) * 176);
+    }
+
+    .armada-band-state {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--s-2);
+        min-width: calc(var(--px) * 112);
+        flex: none;
+    }
+
+    .armada-band-word {
+        font: var(--t-strong);
+        white-space: nowrap;
+    }
+
+    .armada-band-clock {
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+    }
+
+    .armada-band-run[data-run="quiet"] .armada-band-clock {
+        color: var(--ink-2);
+    }
+
+    .armada-band-run[data-run="asks"] :is(.armada-band-word, .armada-mark) {
+        color: var(--attention);
+    }
+
+    .armada-band-activity {
+        color: var(--ink-2);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        min-width: 0;
+        margin-left: var(--s-2);
+    }
+
+    .armada-band > .armada-stop[data-role="jump"] {
+        position: absolute;
+        right: calc(var(--px) * 176);
+        top: calc(var(--px) * 2);
+    }
+
+    .armada-band > .armada-stop[data-off] {
+        opacity: 0;
+        pointer-events: none;
+    }
+    /* Jump to latest takes the activity's far end while it shows. */
+    .armada-band[data-jump] .armada-band-activity {
+        visibility: hidden;
+    }
+
+    .armada-band-undo {
+        padding-left: var(--pad-x);
+        color: var(--ink-2);
+        display: flex;
+        gap: var(--s-3);
+        align-items: center;
+    }
+}

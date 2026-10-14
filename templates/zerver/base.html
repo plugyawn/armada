@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang='{{LANGUAGE_CODE}}' {% if color_scheme == 1 %} class="color-scheme-automatic" {% elif color_scheme == 2 %} class="dark-theme" {% endif %}>
+<html lang='{{LANGUAGE_CODE}}' data-palette="{{ armada_palette(request|default(none)) }}" {% if color_scheme == 1 %} class="color-scheme-automatic" {% elif color_scheme == 2 %} class="dark-theme" {% endif %}>
 
     {# Base template for the whole site. #}
 
@@ -26,6 +26,11 @@
         {% if sentry_params is defined %}
         <script id="sentry-params" type="text/json">{{ sentry_params|tojson }}</script>
         {% endif %}
+
+        {# Every face a first paint uses is fetched before it, so that no text is painted twice. #}
+        {% for font in font_preloads(entrypoint|default("common")) -%}
+            <link rel="preload" href="{{ font }}" as="font" type="font/woff2" crossorigin="anonymous" />
+        {% endfor %}
 
         {% block webpack %}
             {% for filename in webpack_entry(entrypoint) -%}

@@ -14,7 +14,6 @@ import * as gif_state from "./gif_state.ts";
 import * as giphy_network from "./giphy_network.ts";
 import * as klipy_network from "./klipy_network.ts";
 import * as modals from "./modals.ts";
-import * as overlay_util from "./overlay_util.ts";
 import * as overlays from "./overlays.ts";
 import * as popover_menus from "./popover_menus.ts";
 import * as scroll_util from "./scroll_util.ts";
@@ -246,7 +245,6 @@ function toggle_picker_popover(target: HTMLElement): void {
                 // should never show the picker with one open.
                 assert(!overlays.any_active());
                 assert(!modals.any_active());
-                overlay_util.disable_scrolling();
                 const $popper = $(instance.popper).trigger("focus");
                 const debounced_search = _.debounce((search_term: string) => {
                     update_grid_with_search_term(search_term);
@@ -364,7 +362,6 @@ function toggle_picker_popover(target: HTMLElement): void {
                 hide_picker_popover();
                 resizable_grid_cleanup?.();
                 resizable_grid_cleanup = undefined;
-                overlay_util.enable_scrolling();
             },
         },
         {

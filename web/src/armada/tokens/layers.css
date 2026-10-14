@@ -1,0 +1,11 @@
+/* The cascade's order, stated once. Every stylesheet that is not under
+   web/src/armada/ is wrapped in `zulip` by the build
+   (web/zulip-layer-loader.ts), so a rule of the rebuilt frontend wins over
+   an old one by its layer and never by weight. This is the first armada
+   sheet a page loads. */
+@layer zulip, armada.tokens, armada.base, armada.kit, armada.surfaces;
+
+/* Within the tokens: values, then the palette's colours, then what
+   Increase Contrast changes of either, whichever palette and theme is
+   chosen. */
+@layer armada.tokens.values, armada.tokens.palette, armada.tokens.contrast;

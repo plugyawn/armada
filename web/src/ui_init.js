@@ -14,6 +14,7 @@ import * as activity from "./activity.ts";
 import * as activity_ui from "./activity_ui.ts";
 import * as add_stream_options_popover from "./add_stream_options_popover.ts";
 import * as alert_words from "./alert_words.ts";
+import * as armada_boot from "./armada/boot.ts"; // armada:
 import * as audible_notifications from "./audible_notifications.ts";
 import * as banners from "./banners.ts";
 import * as blueslip from "./blueslip.ts";
@@ -117,7 +118,6 @@ import * as saved_snippets from "./saved_snippets.ts";
 import * as scheduled_messages from "./scheduled_messages.ts";
 import * as scheduled_messages_overlay_ui from "./scheduled_messages_overlay_ui.ts";
 import * as scheduled_messages_ui from "./scheduled_messages_ui.ts";
-import * as scroll_bar from "./scroll_bar.ts";
 import * as scroll_util from "./scroll_util.ts";
 import * as search from "./search.ts";
 import {FETCH_EVENT_TYPES} from "./server_event_types.ts";
@@ -277,7 +277,7 @@ export function initialize_kitchen_sink_stuff() {
         message_viewport.set_last_movement_direction(delta);
     }, 50);
 
-    message_viewport.$scroll_container.on("wheel", (e) => {
+    message_viewport.$scroll_container().on("wheel", (e) => {
         const delta = e.originalEvent.deltaY;
         if (
             !popovers.any_active() &&
@@ -544,6 +544,7 @@ export async function initialize_everything(state_data) {
     // expect DOM elements to always exist (As that did before these
     // modules were migrated from Django templates to Handlebars).
     initialize_bottom_whitespace();
+    armada_boot.initialize();
     sidebar_ui.initialize_left_sidebar();
     sidebar_ui.initialize_right_sidebar();
     initialize_compose_box();
@@ -588,7 +589,6 @@ export async function initialize_everything(state_data) {
     alert_words.initialize(state_data.alert_words);
     saved_snippets.initialize(state_data.saved_snippets);
     emojisets.initialize(user_settings.emojiset);
-    scroll_bar.initialize();
     message_viewport.initialize();
     banners.initialize();
     navbar_alerts.initialize();

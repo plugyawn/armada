@@ -213,9 +213,9 @@ loops](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Stateme
 [`Object.{assign, entries, keys, values}`](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object),
 [spread
 syntax](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/Spread_syntax),
-and so on. Our Babel configuration automatically transpiles and
-polyfills these using [`core-js`](https://github.com/zloirock/core-js)
-when necessary. We used to use the
+and so on. Our Babel configuration transpiles syntax for the browsers
+named in `web/.browserslistrc` and adds no polyfills, so use only
+methods those browsers have. We used to use the
 [Underscore](https://underscorejs.org/) library, but that should be
 avoided in new code.
 

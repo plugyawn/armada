@@ -119,7 +119,6 @@ export function open_overlay(opts: OverlayOptions): void {
     if (document.activeElement) {
         $(document.activeElement).trigger("blur");
     }
-    overlay_util.disable_scrolling();
     opts.$overlay.addClass("show");
     opts.$overlay.attr("aria-hidden", "false");
     $(".app").attr("aria-hidden", "true");
@@ -156,7 +155,6 @@ export function close_overlay(name: string): void {
     $(".settings-section").removeClass("show");
 
     active_overlay.close_handler();
-    overlay_util.enable_scrolling();
 }
 
 export function close_active(): void {

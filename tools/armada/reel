@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# The sound reel: see reel.mjs. Kept as a plain command, so that it reads
+# as the other tools in this directory do.
+exec node "$(dirname "$0")/reel.mjs" "$@"

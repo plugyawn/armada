@@ -1,0 +1,93 @@
+/* The old title, search and menus on the header's first line
+   (legacy_header.ts; deleted by B2, search by D1, the menus by C5). The
+   worktree's controls the old panel draws there are placed by the frame
+   rules at the end of the old panel stylesheet (web/styles/, F5's
+   section), which name its classes. */
+@layer armada.surfaces {
+    #header-container > #top_navbar {
+        display: flex;
+        align-items: center;
+        gap: var(--s-3);
+        flex: 1;
+        min-width: 0;
+        height: var(--h-line1);
+        max-width: none;
+        margin: 0;
+        position: static;
+    }
+
+    #top_navbar #message_view_header {
+        flex: 0 1 auto;
+        width: fit-content;
+        min-width: 0;
+        height: auto;
+        line-height: inherit;
+        background-color: transparent;
+        box-shadow: none;
+    }
+
+    #top_navbar .legacy-header-facts {
+        flex: 1 1 0;
+        min-width: 0;
+        display: flex;
+        align-items: center;
+        gap: var(--s-3);
+        overflow: hidden;
+    }
+
+    /* The title's first glyph stands on the text edge, as the path will. */
+    #top_navbar #message_view_header > :first-child {
+        padding-inline-start: 0;
+    }
+
+    #top_navbar #message_view_header .navbar-icon {
+        margin-inline-start: 0;
+    }
+
+    /* The channel's description is line 2's sentence now. */
+    #top_navbar #message_view_header .narrow_description {
+        display: none;
+    }
+
+    #top_navbar .legacy-header-facts .recipient_bar_controls {
+        display: none;
+    }
+
+    /* The search box keeps its old pill, anchored to its own cell; while
+       a search is being typed it takes the line from the title on. */
+    #top_navbar #searchbox {
+        flex: none;
+        width: calc(var(--s-10) * 4);
+        height: var(--h-k);
+        position: relative;
+        -webkit-app-region: no-drag;
+    }
+
+    #top_navbar:has(.navbar-search.expanded) #searchbox {
+        flex: 1 1 0;
+    }
+
+    #top_navbar:has(.navbar-search.expanded) .legacy-header-facts {
+        display: none;
+    }
+
+    #top_navbar .legacy-header-end {
+        flex: none;
+        display: flex;
+        align-items: center;
+        gap: var(--s-1);
+        -webkit-app-region: no-drag;
+    }
+
+    #top_navbar :is(a, button, [role="button"], [tabindex]) {
+        -webkit-app-region: no-drag;
+    }
+
+    /* The old navbar's alerts, raised under the header across the
+       composition (frame.css places their host): over the conversation's
+       top, never over the header's controls. */
+    #navbar_alerts_wrapper .banner {
+        margin-top: var(--s-2);
+        box-shadow: var(--shadow-raised);
+    }
+}

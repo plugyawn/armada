@@ -15,12 +15,8 @@ const sent_messages = mock_esm("../src/sent_messages", {
     start_tracking_message: noop,
     get_message_state: () => ({
         report_server_ack: noop,
-        report_error: noop,
         saw_event: true,
     }),
-    wrap_send(_local_id, callback) {
-        callback();
-    },
 });
 const server_events_state = mock_esm("../src/server_events_state");
 
@@ -158,7 +154,7 @@ run_test("reply_message_stream", ({override}) => {
     override(channel, "post", ({data}) => {
         send_message_args = data;
     });
-    override(sent_messages, "start_tracking_message", ({local_id}) => {
+    override(sent_messages, "start_tracking_message", (local_id) => {
         tracked_local_ids.push(local_id);
     });
 

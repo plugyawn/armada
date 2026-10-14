@@ -1,4 +1,3 @@
-import autosize from "autosize";
 import {isSameDay} from "date-fns";
 import $ from "jquery";
 import _ from "lodash";
@@ -16,6 +15,7 @@ import * as activity from "./activity.ts";
 import * as blueslip from "./blueslip.ts";
 import * as channel from "./channel.ts";
 import * as compose_fade from "./compose_fade.ts";
+import * as compose_ui from "./compose_ui.ts";
 import * as condense from "./condense.ts";
 import * as hash_util from "./hash_util.ts";
 import {$t} from "./i18n.ts";
@@ -3231,7 +3231,9 @@ export class MessageListView {
         }
 
         // After all the messages are rendered, resize any message edit textarea if required.
-        autosize.update(this.$list.find(".message_edit_content"));
+        compose_ui.resize_textarea_to_content(
+            this.$list.find<HTMLTextAreaElement>("textarea.message_edit_content"),
+        );
         if (this.manages_primary_viewport) {
             maybe_restore_focus_to_message_edit_form();
         }
@@ -3517,7 +3519,10 @@ export class MessageListView {
     set_message_offset(offset: number): void {
         const $msg = this.selected_row();
         assert($msg !== undefined);
-        message_viewport.scrollTop($msg.offset()!.top - offset);
+        // `offset` is from the window's top; the feed scrolls in its pane.
+        message_viewport.scrollTop(
+            message_viewport.scrollTop() + $msg.get_offset_to_window().top - offset,
+        );
     }
 
     rerender_with_target_scrolltop(target_offset: number | undefined): void {

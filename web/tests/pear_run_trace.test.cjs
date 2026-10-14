@@ -8,7 +8,9 @@ const {JSDOM} = require("jsdom");
 const {mock_esm, mock_jquery, set_global, zrequire} = require("./lib/namespace.cjs");
 const {run_test} = require("./lib/test.cjs");
 
-const dom = new JSDOM("<!doctype html><html><body><div id='host'></div><span id='status'></span></body></html>");
+const dom = new JSDOM(
+    "<!doctype html><html><body><div id='host'></div><span id='status'></span></body></html>",
+);
 const {window} = dom;
 for (const [name, value] of Object.entries({
     window,

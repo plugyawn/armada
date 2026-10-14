@@ -3,7 +3,7 @@
 const assert = require("node:assert/strict");
 
 const {make_stream} = require("./lib/example_stream.cjs");
-const {mock_esm, zrequire} = require("./lib/namespace.cjs");
+const {mock_esm, set_global, zrequire} = require("./lib/namespace.cjs");
 const {run_test, noop} = require("./lib/test.cjs");
 const $ = require("./lib/zjquery.cjs");
 
@@ -232,7 +232,7 @@ run_test("update_tooltip_for_folder_filter - Any folder", () => {
     let tippy_target;
 
     const body_stub = {};
-    global.document = {body: body_stub};
+    set_global("document", {body: body_stub});
 
     tippy_default_stub = (element, options) => {
         tippy_target = element;

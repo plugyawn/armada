@@ -1,0 +1,10 @@
+# F0, pins before change, and the uncommitted work that preceded it.
+kept tools/test-js-with-node  # runs web/tests/armada/; Armada's exempt list
+kept web/src/zulip_test.ts  # one export, inject_events, for the checks
+kept web/tests/clipboard_handler.test.cjs  # test isolation, before F0
+kept web/tests/compose_actions.test.cjs  # test isolation, before F0
+kept web/tests/compose_paste.test.cjs  # test isolation, before F0
+kept web/tests/compose_ui.test.cjs  # test isolation, before F0
+kept web/tests/folder_dropdown_widget.test.cjs  # test isolation, before F0
+kept web/tests/message_list_view.test.cjs  # F0 deleted its tests that read CSS source
+kept web/tests/typeahead_helper.test.cjs  # test isolation, before F0

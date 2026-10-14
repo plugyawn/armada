@@ -67,7 +67,7 @@
        interaction, so they share one adaptive violet family. */
     --color-selected-message-outline: color-mix(
         in srgb,
-        var(--pear-interaction) 55%,
+        var(--pear-interaction) 34%,
         transparent
     );
     --color-unread-marker: var(--pear-interaction);
@@ -212,6 +212,26 @@
     border-color: var(--pear-hairline);
 }
 
+/* Messages keep one inset from the card's edge on both sides, so the
+   selection outline sits inside the card instead of touching it. */
+.message_row .messagebox {
+    /* The row keeps 3px on the left for the unread marker. */
+    padding-inline: 5px 8px;
+}
+
+.message_row .messagebox-content {
+    padding-left: 8px;
+    border-radius: var(--pear-radius-chip);
+}
+
+/* Sidebar rows on both rails share one soft, inset shape and answer the
+   pointer without a visible delay. */
+#left-sidebar .bottom_left_row,
+#right-sidebar .user_sidebar_entry {
+    border-radius: var(--pear-radius-chip);
+    transition: background-color var(--pear-dur-1) var(--pear-ease);
+}
+
 /* The room is set in Hanken. Form controls inherit so inputs match. */
 body,
 input,
@@ -221,9 +241,15 @@ textarea {
     font-family: var(--pear-font-ui);
 }
 
-/* Digits line up wherever they count. */
+/* Digits line up wherever they count. Text renders the way native
+   macOS apps render it: grayscale antialiasing keeps light-on-dark type
+   from looking heavier than dark-on-light, and kerning and ligatures
+   stay on at every size. */
 body {
     font-variant-numeric: tabular-nums;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizelegibility;
 }
 
 /* Tooltip motion: a minimal fade+settle keyed by tippyjs.ts's

@@ -303,7 +303,7 @@ function render(): void {
     }
     const context = wall_context();
     if (context === undefined) {
-        for (const host of $wall.find<HTMLElement>("[data-pear-artifact-host]")) {
+        for (const host of $wall.find("[data-pear-artifact-host]")) {
             unmount_pear_artifact(host);
         }
         $wall.attr("hidden", "hidden");
@@ -323,7 +323,7 @@ function render(): void {
     const input_value = $input.val() ?? "";
     const input_focused = $input.is(":focus");
 
-    for (const host of $wall.find<HTMLElement>("[data-pear-artifact-host]")) {
+    for (const host of $wall.find("[data-pear-artifact-host]")) {
         unmount_pear_artifact(host);
     }
     $wall.html(render_pear_wall(template_context));
@@ -354,20 +354,42 @@ function poll_delay_ms(): number {
     return Math.max(POLL_MIN_MS, Math.min(POLL_MAX_MS, fastest));
 }
 
-function schedule_poll(delay_ms = poll_delay_ms()): void {
+function cancel_poll(): void {
     if (poll_timer !== undefined) {
         clearTimeout(poll_timer);
+        poll_timer = undefined;
     }
+}
+
+function schedule_poll(delay_ms = poll_delay_ms()): void {
+    cancel_poll();
     poll_timer = setTimeout(refresh, delay_ms);
 }
 
+function wall_context_key(): string {
+    const context = wall_context();
+    return context === undefined ? "" : `${context.stream}>${context.topic}`;
+}
+
+// Called from the narrow hook, which also fires for re-renders of the
+// topic already on screen; only an actual change of topic costs a fetch.
+export function handle_narrow_changed(): void {
+    if (wall_context_key() !== last_context_key) {
+        refresh();
+    }
+}
+
+// The wall only polls while it has something to keep fresh. A hidden
+// tab, a view with no topic, and a topic with no monitors all go fully
+// quiet; visibility, the narrow hook, and creating or pinning a monitor
+// wake it again.
 export function refresh(): void {
     if (document.hidden) {
-        schedule_poll(POLL_MAX_MS);
+        cancel_poll();
         return;
     }
     const context = wall_context();
-    const context_key = context === undefined ? "" : `${context.stream}>${context.topic}`;
+    const context_key = wall_context_key();
     if (context_key !== last_context_key) {
         last_context_key = context_key;
         monitors = [];
@@ -378,7 +400,7 @@ export function refresh(): void {
         render();
     }
     if (context === undefined) {
-        schedule_poll(POLL_MAX_MS);
+        cancel_poll();
         return;
     }
     void channel.get({
@@ -396,7 +418,11 @@ export function refresh(): void {
             backoff_ms = xhr.status === 429 ? Math.max(backoff_ms * 2, 15000) : 0;
         },
         complete() {
-            schedule_poll();
+            if (monitors.length > 0 || backoff_ms > 0) {
+                schedule_poll();
+            } else {
+                cancel_poll();
+            }
         },
     });
 }
@@ -527,23 +553,11 @@ export function initialize(): void {
             refresh();
         }
     });
-    // Zulip narrows without firing hashchange on a fresh load, and the
-    // wall must never lag a topic switch by a poll interval — so watch
-    // the narrow with a string compare each second; the network is only
-    // touched when the context actually changed.
+    // Leaving a topic for Inbox or Recent changes the hash; entering one
+    // arrives through pear_panel's narrow hook (handle_narrow_changed).
     window.addEventListener("hashchange", () => {
-        refresh();
+        handle_narrow_changed();
     });
-    setInterval(() => {
-        if (document.hidden) {
-            return;
-        }
-        const context = wall_context();
-        const context_key = context === undefined ? "" : `${context.stream}>${context.topic}`;
-        if (context_key !== last_context_key) {
-            refresh();
-        }
-    }, 1000);
 
     refresh();
 }

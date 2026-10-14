@@ -1,0 +1,360 @@
+/* The showroom's own page: the component sheet's layout. The components it
+   shows are the kit's; nothing here styles one. The sheet stands on the
+   content plane, 1616 wide, and gives the composition's variables the
+   values of one conversation 704 wide with a 320 column. */
+@layer armada.surfaces {
+    /* The page under the sheet is the sheet's own plane. */
+    body:has(> .armada-showroom) {
+        margin: 0;
+        background: var(--content);
+    }
+
+    .armada-showroom {
+        --col: calc(var(--px) * 704);
+        --lx: calc(var(--px) * 0);
+        --side-w: calc(var(--px) * 320);
+        --side-gap: calc(var(--px) * 40);
+        --rx: calc(var(--px) * 0);
+        --hx: calc(var(--px) * 0);
+        --comp: calc(var(--px) * 704);
+
+        padding: var(--s-10) calc(var(--px) * 48) calc(var(--px) * 56);
+        width: calc(var(--px) * 1616);
+    }
+
+    .armada-showroom[data-embedded] {
+        padding: 0;
+        width: auto;
+        min-height: 0;
+    }
+
+    /* In flow above the sections, so that no picture of a section has it
+       painted over its top. */
+    .armada-showroom-toolbar {
+        display: flex;
+        gap: var(--s-4);
+        align-items: center;
+        padding: var(--s-1) var(--s-2);
+        border-radius: var(--r-block);
+        width: max-content;
+        margin-bottom: var(--s-4);
+    }
+
+    .armada-showroom-title {
+        font: var(--t-display);
+    }
+
+    .armada-showroom-section {
+        font: var(--t-title);
+        margin: var(--s-6) 0 var(--s-3);
+    }
+
+    .armada-showroom-group {
+        font: var(--t-strong);
+        margin: 0 0 var(--s-2);
+    }
+
+    .armada-showroom-caption {
+        font: var(--t-caption);
+        color: var(--ink-2);
+        display: block;
+        max-width: calc(var(--px) * 440);
+    }
+
+    .armada-showroom-caption[data-wide] {
+        max-width: none;
+    }
+
+    .armada-showroom-columns {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: var(--s-8) var(--s-10);
+        align-items: start;
+    }
+
+    .armada-showroom-columns[data-columns="1"] {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .armada-showroom-columns[data-columns="2"] {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .armada-showroom-columns[data-columns="4"] {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+
+    .armada-showroom-columns[data-gap="tight"] {
+        gap: var(--s-5) var(--s-4);
+    }
+
+    .armada-showroom-columns[data-gap="lists"] {
+        gap: var(--s-5) var(--s-8);
+    }
+
+    .armada-showroom-spec {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: var(--s-2) var(--s-4);
+        align-items: baseline;
+    }
+
+    .armada-showroom-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--s-3) var(--s-4);
+        align-items: center;
+    }
+
+    .armada-showroom-row[data-gap="wide"] {
+        gap: var(--s-4) calc(var(--px) * 28);
+    }
+
+    .armada-showroom-row[data-align="start"] {
+        align-items: flex-start;
+    }
+
+    .armada-showroom-row[data-align="end"] {
+        align-items: flex-end;
+    }
+
+    .armada-showroom-stack {
+        display: flex;
+        flex-direction: column;
+        gap: var(--s-2);
+        align-items: flex-start;
+        min-width: 0;
+    }
+
+    .armada-showroom-stack[data-gap="loose"] {
+        gap: var(--s-3);
+    }
+
+    .armada-showroom-stack[data-gap="tight"] {
+        gap: var(--s-1);
+    }
+
+    .armada-showroom-stack[data-align="center"] {
+        align-items: center;
+    }
+
+    .armada-showroom-stack[data-fill] {
+        align-items: stretch;
+    }
+
+    .armada-showroom-swatch {
+        width: calc(var(--px) * 56);
+        height: var(--h-l);
+        border-radius: var(--r-ctl);
+        display: block;
+        outline: var(--px) solid var(--fill-3);
+        outline-offset: var(--k-inset);
+    }
+
+    .armada-showroom-swatch[data-shape="bubble"] {
+        border-radius: var(--r-bubble);
+    }
+
+    .armada-showroom-shape {
+        display: block;
+        background: var(--fill-3);
+    }
+
+    .armada-showroom-navbox {
+        --plane: var(--ground);
+        background: var(--ground);
+        padding: var(--s-2);
+        border-radius: var(--r-block);
+        width: calc(var(--px) * 248);
+        position: relative;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .armada-showroom-stage {
+        position: relative;
+        width: 100%;
+        padding: var(--s-4) 0 var(--s-3);
+    }
+
+    .armada-showroom-stage > .armada-lane {
+        --col: calc(var(--px) * 392);
+        width: calc(var(--px) * 392);
+        margin-left: var(--gutter);
+    }
+
+    .armada-showroom-stage[data-wide] > .armada-lane {
+        --col: calc(var(--px) * 620);
+        width: calc(var(--px) * 620);
+    }
+
+    .armada-showroom-stage > .armada-lane > :first-child {
+        margin-top: 0;
+    }
+
+    .armada-showroom-dock {
+        position: relative;
+        padding-left: calc(var(--px) * 48);
+        width: calc(var(--px) * 752);
+        display: flex;
+        flex-direction: column;
+    }
+
+    .armada-showroom-dock > .armada-band {
+        margin: var(--s-2) 0;
+    }
+
+    .armada-showroom-dock > .armada-field {
+        align-self: flex-start;
+        width: calc(var(--px) * 752);
+    }
+
+    .armada-showroom-bounds {
+        position: absolute;
+        right: 0;
+        top: calc(var(--px) * -20);
+        font: var(--t-caption);
+        color: var(--ink-2);
+        font-variant-numeric: tabular-nums;
+    }
+
+    .armada-showroom-header {
+        width: calc(var(--px) * 736);
+    }
+
+    .armada-showroom-header .armada-header-line2 {
+        width: calc(var(--px) * 704);
+    }
+
+    .armada-showroom-icons {
+        display: grid;
+        grid-template-columns: repeat(8, 1fr);
+        gap: var(--s-4) var(--s-2);
+        width: 100%;
+    }
+
+    .armada-showroom-icon {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: calc(var(--px) * 6);
+        font: var(--t-caption);
+        color: var(--ink-2);
+    }
+
+    .armada-showroom-icon > .armada-glyph {
+        color: var(--ink-1);
+    }
+
+    .armada-showroom-onbar {
+        --plane: var(--ground);
+        background: var(--ground);
+        border-radius: var(--r-block);
+        padding: var(--s-3) var(--s-4);
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--s-4);
+        align-items: center;
+        color: var(--ink-1);
+    }
+
+    /* A fixture drawn by the DOM builder stands in a host that takes no
+       room of its own. */
+    .armada-showroom-built {
+        display: contents;
+    }
+
+    .armada-showroom-pair {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        gap: var(--s-4);
+        align-items: start;
+        width: 100%;
+    }
+
+    .armada-showroom-pair > div {
+        min-width: 0;
+    }
+
+    .armada-showroom-frame {
+        width: 100%;
+        height: calc(var(--px) * 960);
+        display: block;
+    }
+
+    .armada-showroom-table {
+        font: var(--t-caption);
+        font-variant-numeric: tabular-nums;
+    }
+
+    .armada-showroom-table :where(td, th) {
+        padding: calc(var(--px) * 2) var(--s-3) calc(var(--px) * 2) 0;
+        text-align: left;
+        font-weight: var(--k-regular);
+        white-space: nowrap;
+    }
+
+    .armada-showroom-table :where(th) {
+        color: var(--ink-2);
+    }
+
+    .armada-showroom-bench {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--s-6) var(--s-8);
+        align-items: flex-start;
+        margin-top: var(--s-6);
+    }
+
+    .armada-showroom-bench-item {
+        display: flex;
+        flex-direction: column;
+        gap: var(--s-2);
+        align-items: flex-start;
+        width: calc(var(--px) * 280);
+        position: relative;
+    }
+
+    .armada-showroom-box {
+        width: calc(var(--px) * 120);
+        height: var(--h-l);
+        border-radius: var(--r-bubble);
+        background: var(--bubble-me);
+        color: var(--on-me);
+        display: grid;
+        place-items: center;
+        font: var(--t-talk);
+    }
+
+    .armada-showroom-list {
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        width: calc(var(--px) * 200);
+    }
+
+    .armada-showroom-track {
+        position: relative;
+        height: calc(var(--px) * 120);
+        width: calc(var(--px) * 280);
+    }
+
+    .armada-showroom-track > .armada-showroom-box {
+        position: absolute;
+        left: 0;
+        bottom: 0;
+    }
+
+    .armada-showroom-track[data-end] > .armada-showroom-box {
+        left: calc(var(--px) * 160);
+        bottom: calc(var(--px) * 80);
+    }
+
+    /* The keys bench's surfaces stand in the middle of the window. */
+    [data-armada="bench-keys"] :is(.armada-raised[popover], .armada-dialog) {
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        translate: -50% -50%;
+    }
+}

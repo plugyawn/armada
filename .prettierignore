@@ -15,3 +15,6 @@ pnpm-lock.yaml
 /zerver/webhooks/*/doc.md
 /zerver/webhooks/github/githubsponsors.md
 /zerver/webhooks/*/fixtures
+# INTERIM BETA (/beta/): the prototype's kit and a spike, moved in whole and
+# deleted when the rebuild's conversation lands (web/src/armada/beta/README.md).
+/web/src/armada/beta

@@ -1258,9 +1258,22 @@
     color: var(--pear-ink-2);
 }
 
-.pear-rail-glyph {
+/* Worktree state at a glance: green is clean, amber has local changes. */
+.pear-rail-dot {
     flex: 0 0 auto;
-    color: var(--pear-ink-3);
+    width: 7px;
+    height: 7px;
+    margin-inline: 2px 1px;
+    border-radius: 50%;
+    background: var(--pear-accent);
+}
+
+.pear-rail-dot-dirty {
+    background: var(--pear-warn);
+}
+
+.pear-rail-repo {
+    color: var(--pear-ink-1);
 }
 
 .pear-rail-repo,
@@ -1421,12 +1434,12 @@
 .pear-workspace-tabs {
     display: inline-flex;
     min-width: 0;
-    flex: 1 0 100%;
+    flex: 0 0 auto;
     align-items: center;
-    gap: 22px;
-    margin: 0 42px 2px 26px;
-    /* Lay out after the bar's controls, like the commit line. */
-    order: 11;
+    gap: 18px;
+    margin-inline-start: var(--pear-topic-bar-inset);
+    /* Row two of the topic bar, ahead of the commit line. */
+    order: 10;
 }
 
 .pear-workspace-tabs-hidden {
@@ -1463,7 +1476,7 @@
 
 .pear-workspace-mode-tab {
     appearance: none;
-    padding: 3px 1px 4px;
+    padding: 5px 1px 6px;
     border: 0;
     border-bottom: 2px solid transparent;
     background: transparent;
@@ -1489,65 +1502,6 @@
 
 .pear-workspace-mode-tab:focus:not(:focus-visible) {
     outline: none;
-}
-
-/* The topic bar: the chat's recipient bar promoted to page chrome.
-   One sticky instance above both the feed and the workspace pane; it
-   never re-renders or moves on tab switch. The feed's own per-day
-   bars slim to date rules underneath (scoped below), so the page has
-   exactly one topic header. */
-/* In pane views the feed itself becomes the topic bar: clamped to
-   one header's height, pinned sticky at the chat bar's position, and
-   scrolled to its newest group — Zulip's own recipient bar (date,
-   controls, pill, commit line, tabs) stays on screen, the same
-   component chat shows, maintained by the same code. */
-#message_feed_container.pear-feed-clamped {
-    position: sticky;
-    z-index: 5;
-    /* Chat's pinned header sits flush at the navbar edge (measured);
-       the clamp matches it exactly. */
-    top: var(--navbar-fixed-height);
-    overflow: hidden;
-    height: var(--pear-topic-bar-height, 0);
-    padding-top: 0;
-
-    /* The sticky offset belongs to the clamped container now; its
-       headers pin to the container's own top, and the contents drop
-       their navbar-gap margin — the clamp's own top offset already
-       provides it, so the bar sits at the exact pixel chat pins to. */
-    & .message_header {
-        top: 0;
-
-        & .message-header-contents {
-            margin-top: 0;
-        }
-    }
-}
-
-/* The bar's navbar clearance lives on the column as padding: a top
-   margin on the bar collapses out through .column-middle/.app-main
-   and shifts the whole app 50px below the fixed sidebars' alignment
-   (live report: the 'weird green padding'). */
-.column-middle-inner.pear-topic-bar-active {
-    /* Exactly the navbar: the clamped bar's flow slot must sit at
-       the pixel chat's pinned header occupies (sticky cannot pin
-       above its flow position). */
-    padding-top: var(--navbar-fixed-height);
-}
-
-/* Workspace mode keeps the same topic header pinned above the lazy shell. */
-.pear-topic-bar-active #pear-workspace-pane {
-    overflow: hidden;
-    block-size: max(
-        0px,
-        calc(
-            100dvh - var(--navbar-fixed-height) -
-                var(--pear-topic-bar-height, 0px) -
-                var(--pear-workspace-compose-height, 0px)
-        )
-    );
-    min-block-size: 0;
-    padding-top: 0;
 }
 
 .pear-rail-runs {
@@ -4216,4 +4170,38 @@ body.message-thread-pane-open #pear-agent-roster {
     #message-lists-container .message_row.pear-message .message_content {
         max-width: min(100%, calc(var(--base-font-size-px) * 72));
     }
+}
+
+/* The frame (F5): the worktree's controls stand in the header, not in the
+   feed's topic bar (web/src/armada/bridge/legacy_header.ts). This file is
+   in @layer zulip, so these hold by their ids. Deleted by B2 with the old
+   panel. */
+#top_navbar .pear-topic-header-status {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
+    position: static;
+}
+
+#top_navbar .pear-topic-header-commitline {
+    min-width: 0;
+    overflow: hidden;
+}
+
+/* The views, Chat, README and Files, on the header's second line, with
+   the first word on the text edge (each view keeps 1 px of inset). */
+#top_navbar .pear-workspace-tabs {
+    position: absolute;
+    top: var(--h-line1);
+    left: calc(var(--lx) + var(--pad-x) - 1px);
+    height: var(--h-m);
+    margin: 0;
+    -webkit-app-region: no-drag;
+}
+
+/* A worktree's controls are drawn in the header; the copy the old panel
+   also puts in the feed's own topic bar would be a second set. */
+#message-lists-container .message_header_stream .pear-topic-header-status {
+    display: none;
 }

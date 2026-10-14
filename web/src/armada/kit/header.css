@@ -1,0 +1,226 @@
+/* The header: a repository header. One fixed piece, two lines, the same
+   bounds on every place and view. Line 1 is facts: the path and the place's
+   one Title; on a worktree the branch, a pull request once there is one,
+   and at the far end the latest commit. Line 2 is the place's views, More,
+   and the column's first heading. Under scrolled content it draws one
+   line; at rest it draws none. */
+@layer armada.kit {
+    .armada-header {
+        display: grid;
+        grid-template-rows: var(--h-line1) var(--h-line2);
+        position: relative;
+        min-width: 0;
+    }
+
+    .armada-header::after {
+        content: "";
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        height: var(--px);
+        background: var(--line);
+        opacity: 0;
+        transition: opacity var(--fade-out) linear;
+        pointer-events: none;
+    }
+
+    .armada-header[data-cut]::after {
+        opacity: 1;
+        transition-duration: var(--fade-in);
+    }
+
+    .armada-header-line1 {
+        display: flex;
+        align-items: baseline;
+        padding: var(--s-3) var(--hx) 0 calc(var(--lx) + var(--pad-x));
+        white-space: nowrap;
+        min-width: 0;
+        overflow: hidden;
+        color: var(--ink-2);
+    }
+
+    .armada-header-path {
+        flex: none;
+        color: inherit;
+        border-radius: var(--r-ctl);
+        /* Its hit area is 24 high on a 20 px line; the line does not move. */
+        padding: calc(var(--px) * 2) 0;
+        margin: calc(var(--px) * -2) 0;
+    }
+
+    .armada-header-slash {
+        flex: none;
+        padding: 0 var(--s-2);
+    }
+    /* The Title gives way last. */
+    .armada-header-title {
+        font: var(--t-title);
+        color: var(--ink-1);
+        flex: 0 1 auto;
+        min-width: calc(var(--px) * 96);
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .armada-header-fact {
+        display: inline-flex;
+        align-items: baseline;
+        gap: calc(var(--px) * 6);
+        margin: calc(var(--px) * -2) 0 calc(var(--px) * -2) var(--s-6);
+        padding: calc(var(--px) * 2) 0;
+        border-radius: var(--r-ctl);
+        min-width: 0;
+        color: inherit;
+    }
+
+    .armada-header-fact > :is(.armada-glyph, .armada-mark, .armada-face) {
+        align-self: center;
+        flex: none;
+    }
+    /* A branch's name gives way second. */
+    .armada-header-fact[data-fact="branch"] {
+        flex: 0 10000 auto;
+    }
+
+    .armada-header-fact[data-fact="branch"] > code {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        min-width: calc(var(--px) * 72);
+    }
+
+    .armada-header-distance {
+        flex: none;
+    }
+
+    .armada-header-fact[data-fact="pull"] {
+        flex: none;
+    }
+
+    .armada-header-pull-state {
+        color: var(--ink-1);
+    }
+
+    /* The latest commit: a cell of fixed bounds at the line's far end.
+       Who wrote it and its subject read from the leading edge; the sha and
+       the age stand on its trailing edge in cells of their own, so a commit
+       landing moves none of the four. The cell gives way first; under 260
+       it is its sha and age. */
+    .armada-header-fact[data-fact="commit"] {
+        flex: 0 100000000
+            calc(
+                max(calc(var(--px) * 360), var(--side-gap) + var(--side-w)) +
+                    var(--s-6)
+            );
+        margin-left: auto;
+        padding-left: var(--s-6);
+        justify-content: flex-start;
+        container-type: inline-size;
+        min-width: calc(var(--px) * 96);
+        gap: var(--s-2);
+    }
+
+    .armada-header-by {
+        flex: none;
+    }
+
+    .armada-header-fact[data-fact="commit"] > code {
+        flex: none;
+        margin-left: auto;
+    }
+
+    .armada-header-summary {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        min-width: 0;
+        color: var(--ink-1);
+    }
+
+    .armada-header-age {
+        flex: none;
+        font-variant-numeric: tabular-nums;
+    }
+
+    /* stylelint-disable-next-line unit-disallowed-list -- a breakpoint cannot be a custom property */
+    @container (max-width: 260px) {
+        .armada-header-by,
+        .armada-header-summary {
+            display: none;
+        }
+    }
+
+    .armada-header-line2 {
+        display: flex;
+        align-items: flex-start;
+        min-width: 0;
+        padding-left: calc(var(--lx) + var(--pad-x) - var(--s-3));
+        width: calc(var(--lx) + var(--col));
+    }
+
+    /* A place with no views says one sentence where views would stand. */
+    .armada-header-say {
+        height: var(--h-m);
+        font: var(--t-text);
+        line-height: var(--h-m);
+        padding-left: var(--s-3);
+        margin-right: var(--s-4);
+        color: var(--ink-2);
+        min-width: 0;
+        flex: 0 1 auto;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .armada-header-end {
+        margin-left: auto;
+        display: flex;
+        align-items: center;
+        gap: var(--s-1);
+        flex: none;
+    }
+
+    /* The column's heading, and the checklist's standing home: a word, the
+       marks of its steps while it is folded, one caption in a cell that
+       holds every form. */
+    .armada-heading {
+        height: var(--h-m);
+        display: flex;
+        align-items: center;
+        gap: var(--s-2);
+        padding: 0 var(--s-2);
+        border-radius: var(--r-ctl);
+        flex: none;
+    }
+
+    .armada-heading-word {
+        font: var(--t-strong);
+    }
+
+    .armada-heading-marks {
+        display: flex;
+        gap: var(--s-1);
+        color: var(--ink-2);
+    }
+
+    .armada-heading-marks > :where([data-mark="live"]) {
+        color: var(--ink-1);
+    }
+
+    .armada-heading-caption {
+        font: var(--t-caption);
+        font-variant-numeric: tabular-nums;
+        color: var(--ink-2);
+        white-space: nowrap;
+        margin-left: auto;
+    }
+
+    .armada-heading[aria-expanded="true"] {
+        background-color: var(--fill-3);
+    }
+    /* Folded in the header it is one width whatever its marks and caption,
+       so More, before it, keeps its place on every worktree. */
+    .armada-header-line2 .armada-heading {
+        width: calc(var(--px) * 296);
+    }
+}

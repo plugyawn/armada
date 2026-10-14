@@ -1,0 +1,124 @@
+#!/usr/bin/env python3
+"""Declare whichever files of the licensed typeface this machine has.
+
+Armada's human face is Söhne. It is licensed, so its files are not in the
+repository: they are dropped into web/fonts/licensed/ (ignored by git), or
+into the directory named by ARMADA_FONT_DIR. This script looks there and
+writes web/generated/armada_fonts.css, the @font-face rules of the family
+"Söhne" for the files it found. With none, the file holds no rule and text
+is set in the next face of the stack, Hanken Grotesk.
+
+Four faces are used and every other file is ignored:
+
+    soehne-buch.woff2           400
+    soehne-buch-kursiv.woff2    400 italic
+    soehne-kraftig.woff2        500
+    soehne-halbfett.woff2       600
+
+"test" and "web" may appear in a name (test-soehne-buch.woff2,
+soehne-web-buch.woff2). Where a face has both a test file and a licensed
+one, the licensed one is used.
+
+It is run by tools/provision, by tools/update-prod-static, and by webpack
+at the start of every build (web/webpack.config.ts), so a change to the
+directory is picked up by the next build.
+"""
+
+from __future__ import annotations
+
+import os
+import sys
+
+ZULIP_PATH = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+GENERATED_DIR = os.path.join(ZULIP_PATH, "web", "generated")
+OUT_PATH = os.path.join(GENERATED_DIR, "armada_fonts.css")
+
+# The faces of the design, by the name Klim gives each: weight and style.
+FACES = {
+    "soehne-buch": (400, "normal"),
+    "soehne-buch-kursiv": (400, "italic"),
+    "soehne-kraftig": (500, "normal"),
+    "soehne-halbfett": (600, "normal"),
+}
+
+
+def font_dir() -> str:
+    return os.environ.get("ARMADA_FONT_DIR") or os.path.join(ZULIP_PATH, "web", "fonts", "licensed")
+
+
+def face_of(filename: str) -> tuple[str, bool] | None:
+    """The face a file holds and whether it is a test file, or None."""
+    stem, extension = os.path.splitext(filename.lower())
+    if extension != ".woff2":
+        return None
+    parts = stem.split("-")
+    face = "-".join(part for part in parts if part not in ("test", "web"))
+    if face not in FACES:
+        return None
+    return face, "test" in parts
+
+
+def find_faces(directory: str) -> dict[str, str]:
+    """Each face found, and the file that holds it."""
+    found: dict[str, tuple[bool, str]] = {}
+    try:
+        filenames = sorted(os.listdir(directory))
+    except (FileNotFoundError, NotADirectoryError):
+        filenames = []
+    for filename in filenames:
+        match = face_of(filename)
+        if match is None:
+            continue
+        face, is_test = match
+        # A licensed file wins over a test file of the same face.
+        if face not in found or (found[face][0] and not is_test):
+            found[face] = (is_test, filename)
+    return {face: found[face][1] for face in FACES if face in found}
+
+
+def stylesheet(directory: str, faces: dict[str, str]) -> str:
+    lines = [
+        "/* Written by tools/setup/build_armada_fonts from the files in the licensed",
+        "   font directory; never edit it. See web/fonts/licensed/README.md. */",
+    ]
+    for face, filename in faces.items():
+        weight, style = FACES[face]
+        # A path relative to this stylesheet, so that webpack resolves it
+        # wherever the directory is.
+        url = os.path.relpath(os.path.join(directory, filename), GENERATED_DIR).replace(os.sep, "/")
+        lines += [
+            "@font-face {",
+            '    font-family: "Söhne";',
+            f"    font-style: {style};",
+            f"    font-weight: {weight};",
+            # A swap moves text, and nothing may move.
+            "    font-display: block;",
+            f'    src: url("{url}") format("woff2");',
+            "}",
+        ]
+    return "\n".join(lines) + "\n"
+
+
+def main() -> int:
+    directory = os.path.abspath(font_dir())
+    faces = find_faces(directory)
+    content = stylesheet(directory, faces)
+    os.makedirs(GENERATED_DIR, exist_ok=True)
+    try:
+        with open(OUT_PATH, encoding="utf-8") as f:
+            unchanged = f.read() == content
+    except FileNotFoundError:
+        unchanged = False
+    # Leave an up-to-date file alone, so that a build which runs this does
+    # not see its own output as a change.
+    if not unchanged:
+        with open(OUT_PATH, "w", encoding="utf-8") as f:
+            f.write(content)
+    if "--quiet" not in sys.argv:
+        found = ", ".join(faces.values()) or "none; text is set in Hanken Grotesk"
+        print(f"Söhne in {directory}: {found}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

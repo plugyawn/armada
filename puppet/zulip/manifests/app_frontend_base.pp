@@ -162,6 +162,7 @@ class zulip::app_frontend_base {
     'missedmessage_mobile_notifications',
     'outgoing_webhooks',
     'pear_addressing',
+    'pear_monitor_worker',
     'pear_presentation',
     'pear_worker',
     'thumbnail',
@@ -229,6 +230,10 @@ class zulip::app_frontend_base {
   } else {
     $ca_bundle=''
   }
+  # Armada's agent runs the Codex CLI as zulip, signed in under
+  # /home/zulip/.codex.  supervisord passes its own HOME down, which is
+  # /root when it was started from a root shell, so name both here.
+  $codex_env=',HOME="/home/zulip",CODEX_HOME="/home/zulip/.codex"'
   file { "${zulip::common::supervisor_conf_dir}/zulip.conf":
     ensure  => file,
     require => [Package[supervisor], Exec['stage_updated_sharding']],

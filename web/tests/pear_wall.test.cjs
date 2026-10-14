@@ -59,7 +59,8 @@ run_test("unchanged monitor versions skip artifact serialization, validation, an
             artifact.className = "pear-artifact";
             artifact.dataset.lifecycle = "ready";
             artifact.textContent = document_value.blocks[0].body;
-            $host.empty().append(artifact);
+            $host.empty();
+            $host[0].append(artifact);
             return artifact;
         },
     };

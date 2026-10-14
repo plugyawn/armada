@@ -10,7 +10,6 @@ import render_decorated_channel_name from "../templates/decorated_channel_name.h
 import * as compose_banner from "./compose_banner.ts";
 import * as compose_fade from "./compose_fade.ts";
 import * as compose_pm_pill from "./compose_pm_pill.ts";
-import * as pear_run_state from "./pear_run_state.ts";
 import * as compose_state from "./compose_state.ts";
 import * as compose_tooltips from "./compose_tooltips.ts";
 import * as compose_ui from "./compose_ui.ts";
@@ -22,6 +21,7 @@ import type {DropdownWidget, Option} from "./dropdown_widget.ts";
 import {$t} from "./i18n.ts";
 import * as narrow_state from "./narrow_state.ts";
 import * as onboarding_steps from "./onboarding_steps.ts";
+import * as pear_run_state from "./pear_run_state.ts";
 import * as pm_conversations from "./pm_conversations.ts";
 import {realm} from "./state_data.ts";
 import * as stream_color from "./stream_color.ts";

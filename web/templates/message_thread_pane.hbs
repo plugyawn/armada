@@ -1,82 +1,78 @@
 <header class="message-thread-pane-header">
     <div class="message-thread-pane-heading">
         <span
-            class="message-thread-pane-stream-icon"
-            aria-hidden="true"
-        >#</span>
+          class="message-thread-pane-stream-icon"
+          aria-hidden="true"
+          >#</span>
         <h2 id="message-thread-pane-title"></h2>
     </div>
     <button
-        type="button"
-        class="message-thread-pane-close"
-        aria-label="{{t 'Close thread'}}"
-    >
+      type="button"
+      class="message-thread-pane-close"
+      aria-label="{{t 'Close thread'}}"
+      >
         <i class="zulip-icon zulip-icon-close" aria-hidden="true"></i>
     </button>
 </header>
 <section class="message-thread-pane-body">
     <div class="message-thread-root"></div>
     <div
-        class="message-thread-agent-bar"
-        role="group"
-        aria-label="{{t 'Message threads'}}"
-        hidden
-    >
+      class="message-thread-agent-bar"
+      role="group"
+      aria-label="{{t 'Message threads'}}"
+      hidden
+      >
         <button
-            type="button"
-            class="message-thread-agent-cycle message-thread-agent-cycle-prev"
-            aria-label="{{t 'Previous thread'}}"
-        >
+          type="button"
+          class="message-thread-agent-cycle message-thread-agent-cycle-prev"
+          aria-label="{{t 'Previous thread'}}"
+          >
             <i
-                class="zulip-icon zulip-icon-chevron-left"
-                aria-hidden="true"
-            ></i>
+              class="zulip-icon zulip-icon-chevron-left"
+              aria-hidden="true"
+              ></i>
         </button>
         <button
-            type="button"
-            class="message-thread-agent-current"
-            aria-live="polite"
-        ></button>
+          type="button"
+          class="message-thread-agent-current"
+          aria-live="polite"
+          ></button>
         <button
-            type="button"
-            class="message-thread-agent-cycle message-thread-agent-cycle-next"
-            aria-label="{{t 'Next thread'}}"
-        >
+          type="button"
+          class="message-thread-agent-cycle message-thread-agent-cycle-next"
+          aria-label="{{t 'Next thread'}}"
+          >
             <i
-                class="zulip-icon zulip-icon-chevron-right"
-                aria-hidden="true"
-            ></i>
+              class="zulip-icon zulip-icon-chevron-right"
+              aria-hidden="true"
+              ></i>
         </button>
     </div>
     <div class="message-thread-pane-activity" aria-live="polite" hidden></div>
     <div
-        class="message-thread-pane-panel"
-        id="message-thread-pane-panel"
-        role="region"
-        aria-label="{{t 'Thread content'}}"
-    >
+      class="message-thread-pane-panel"
+      id="message-thread-pane-panel"
+      role="region"
+      aria-label="{{t 'Thread content'}}"
+      >
         <div class="message-thread-replies">
             <div class="message-thread-reply-separator" hidden></div>
-            <div
-                class="message-thread-reply-status"
-                role="status"
-                aria-live="polite"
-            ></div>
+            <div class="message-thread-reply-status" role="status" aria-live="polite"></div>
             <button type="button" class="message-thread-load-older" hidden>{{t
                     "Load earlier replies"
                 }}</button>
             <div class="message-thread-reply-list"></div>
         </div>
         <div
-            class="message-thread-agent-trace pear-message-surface pear-message"
-            hidden
-        >
+          class="message-thread-agent-trace pear-message-surface pear-message"
+          hidden
+          >
             <div class="message-thread-agent-message message_content">
                 <span
-                    class="pear-run-trace-status"
-                    aria-live="polite"
-                    role="status"
-                ></span>
+                  class="pear-run-trace-status"
+                  aria-live="polite"
+                  role="status"
+                  ></span>
                 <div class="pear-run-trace"></div>
             </div>
         </div>

@@ -1,0 +1,435 @@
+/* The frame: one grid, written once, the same on every place
+   (SPEC-ENGINEERING section 2; SPEC-DESIGN section 3 and appendix B).
+
+   The window is the nav and the content plane. The plane's rows are the
+   header (88: line 1 of 52 and line 2 of 36), the pane, the band (36) and
+   the field's track (auto: the field and 20 under it). The column is not a
+   track: it is placed over the plane, so nothing in the grid knows whether
+   it is there. The document never scrolls; each pane owns its scroller.
+
+   The composition (the conversation and the column) is computed here from
+   the plane's own width, `100cqi`, and from nothing a script writes. Its
+   figures are the design's table, so this file holds them as literals; the
+   stylelint override for this file allows `px` and `cqi` for that reason.
+
+   In the surfaces' layer, because the frame places the kit's components in
+   its cells (the column, More) and must win over their own widths. */
+
+/* Registered, so that each is a length computed where it is set (a child
+   of the plane, against the plane's width) and inherited as that length:
+   unregistered, `100cqi` would be resolved again against whichever old
+   element that reads it happens to be a container. */
+@property --col {
+    syntax: "<length>";
+    inherits: true;
+    initial-value: 704px;
+}
+
+@property --side-w {
+    syntax: "<length>";
+    inherits: true;
+    initial-value: 0;
+}
+
+@property --side-gap {
+    syntax: "<length>";
+    inherits: true;
+    initial-value: 0;
+}
+
+@property --comp {
+    syntax: "<length>";
+    inherits: true;
+    initial-value: 704px;
+}
+
+@property --lx {
+    syntax: "<length>";
+    inherits: true;
+    initial-value: 72px;
+}
+
+@property --rx {
+    syntax: "<length>";
+    inherits: true;
+    initial-value: 72px;
+}
+
+@layer armada.surfaces {
+    :root {
+        /* The five layers. The pane is the ground; the header, band and
+           field stand over the conversation that runs under the band; the
+           column over the pane; a sheet over all of them; an alert over
+           the sheet. Old overlays and popovers keep their own (above). */
+        --z-pane: 0;
+        --z-chrome: 1;
+        --z-column: 2;
+        --z-sheet: 3;
+        --z-alert: 4;
+
+        /* The window's buttons in Electron (titleBarStyle: hiddenInset)
+           take the start of the nav's top row; 0 in a browser. */
+        --frame-inset-start: 0px;
+
+        /* Where the column cannot stand, its first heading is a row of
+           this width at the lane's right edge, with More 4 px before it;
+           its contents open as a sheet this wide. */
+        --fold-w: 296px;
+        --sheet-w: 344px;
+    }
+
+    :root[data-electron] {
+        --frame-inset-start: 72px;
+    }
+
+    html,
+    body {
+        width: auto;
+        height: 100dvh;
+        overflow: hidden;
+        overscroll-behavior: none;
+    }
+
+    .armada-frame {
+        display: grid;
+        grid-template-columns: var(--nav-w) minmax(0, 1fr);
+        height: 100dvh;
+        min-width: 0;
+        min-height: 0;
+        overflow: hidden;
+        /* The old sticky offsets were the navbar's height on a scrolling
+           document; inside a pane's own scroller they are 0. */
+        --navbar-fixed-height: 0px;
+    }
+
+    /* ---- The nav: the workspace's row, then the list of places. */
+
+    .armada-frame-nav {
+        grid-column: 1;
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        background-color: var(--ground);
+    }
+
+    .armada-frame-nav-top {
+        height: var(--h-line1);
+        flex: none;
+        display: flex;
+        align-items: center;
+        padding-inline: calc(var(--frame-inset-start) + var(--s-6)) var(--s-4);
+        -webkit-app-region: drag;
+    }
+
+    .armada-frame-workspace {
+        font: var(--t-strong);
+        color: var(--ink-1);
+        text-decoration: none;
+        -webkit-app-region: no-drag;
+    }
+
+    /* ---- The plane, and the composition. */
+
+    .armada-plane {
+        grid-column: 2;
+        container: plane / inline-size;
+        display: grid;
+        grid-template-rows:
+            calc(var(--h-line1) + var(--h-line2)) minmax(0, 1fr)
+            var(--h-band) auto;
+        grid-template-columns: minmax(0, 1fr);
+        position: relative;
+        min-width: 0;
+        min-height: 0;
+        background-color: var(--content);
+        isolation: isolate;
+    }
+
+    .armada-plane > * {
+        --side-w: 0px;
+        --side-gap: 0px;
+        --col: min(704px, 100cqi - 104px);
+        --comp: calc(var(--col) + var(--side-gap) + var(--side-w));
+        --lx: max(72px, round(down, (100cqi - var(--comp)) / 2, 1px));
+        --rx: calc(100cqi - var(--lx) - var(--comp));
+    }
+
+    /* 1160 is a 1408 window at the nav's 248: a nav dragged wider folds the
+       column instead of crushing it. */
+    @container plane (width >= 1160px) {
+        .armada-plane > * {
+            --col: clamp(704px, round(down, 56cqi, 1px), 840px);
+            --side-w: clamp(320px, round(down, 26.5cqi, 1px), 440px);
+            --side-gap: clamp(40px, round(down, 3.3cqi, 1px), 56px);
+        }
+    }
+
+    /* Home is not a conversation: no band, no field. */
+    .armada-plane[data-place="home"] {
+        grid-template-rows:
+            calc(var(--h-line1) + var(--h-line2)) minmax(0, 1fr)
+            0 auto;
+    }
+
+    /* ---- The header: line 1 (52) and line 2 (36), on every place. */
+
+    .armada-frame-header {
+        grid-row: 1;
+        grid-column: 1;
+        position: relative;
+        z-index: var(--z-chrome);
+        display: grid;
+        grid-template-rows: var(--h-line1) var(--h-line2);
+        grid-template-columns: minmax(0, 1fr);
+        height: auto;
+        min-width: 0;
+        background-color: var(--content);
+        box-shadow: none;
+    }
+
+    /* The scroll edge: while content lies above the pane, one line on the
+       header's lower edge, on the fade. The scroll handler writes the
+       attribute only when it changes (frame/after_layout.ts). */
+    .armada-frame-header::after {
+        content: "";
+        position: absolute;
+        inset: auto 0 0;
+        height: 1px;
+        background-color: var(--line);
+        opacity: 0;
+        transition: opacity var(--fade-out) linear;
+        pointer-events: none;
+    }
+
+    .armada-frame-header[data-edge]::after {
+        opacity: 1;
+        transition-duration: var(--fade-in);
+    }
+
+    /* Line 1 starts on the text edge and ends on the composition's edge;
+       outside its controls it is the window's drag region. */
+    .armada-frame-line1 {
+        grid-row: 1;
+        min-width: 0;
+        display: flex;
+        align-items: center;
+        padding-inline: calc(var(--lx) + var(--pad-x)) var(--rx);
+        -webkit-app-region: drag;
+    }
+
+    .armada-frame-line2 {
+        grid-row: 2;
+        min-width: 0;
+        display: flex;
+        align-items: flex-start;
+        padding-inline-start: calc(var(--lx) + var(--pad-x));
+    }
+
+    /* Where a worktree has its views, any other place has one sentence. */
+    .armada-frame-sentence {
+        height: var(--h-m);
+        max-width: calc(
+            var(--col) - var(--pad-x) - var(--fold-w) - var(--s-1) - var(--h-m)
+        );
+        display: flex;
+        align-items: center;
+        overflow: hidden;
+        font: var(--t-text);
+        color: var(--ink-2);
+        white-space: nowrap;
+        text-overflow: ellipsis;
+    }
+
+    .armada-frame-more {
+        position: absolute;
+        top: var(--h-line1);
+        left: calc(var(--lx) + var(--col) - var(--h-m));
+        width: var(--h-m);
+        height: var(--h-m);
+        display: flex;
+        -webkit-app-region: no-drag;
+    }
+
+    .armada-frame-more > * {
+        width: 100%;
+        height: 100%;
+    }
+
+    /* ---- The pane: one cell, its views stacked in it, each its own
+       scroller. The conversation's runs on under the band; the others end
+       on it. */
+
+    .armada-frame-pane {
+        grid-row: 2 / 4;
+        grid-column: 1;
+        position: relative;
+        z-index: var(--z-pane);
+        min-width: 0;
+        min-height: 0;
+        isolation: isolate;
+    }
+
+    :is(
+        [data-armada="feed-scroller"],
+        [data-armada="inbox-scroller"],
+        [data-armada="recent-scroller"],
+        [data-armada="workspace-scroller"]
+    ) {
+        position: absolute;
+        inset: 0 0 var(--h-band);
+        overflow: hidden auto;
+        overscroll-behavior: contain;
+    }
+
+    [data-armada="feed-scroller"] {
+        inset: 0;
+        overflow-anchor: none;
+        padding-bottom: var(--h-band);
+    }
+
+    .armada-plane[data-place="home"]
+        :is([data-armada="inbox-scroller"], [data-armada="recent-scroller"]) {
+        inset: 0;
+    }
+
+    /* A view that is not in front keeps its layout, and so its scroll
+       position, under the one that is (the kept pane of
+       SPEC-ENGINEERING section 2, for the chat and the worktree's
+       document views). */
+    .armada-plane:is(
+            [data-view="readme"],
+            [data-view="files"],
+            [data-view="changes"]
+        )
+        [data-armada="feed-scroller"] {
+        visibility: hidden;
+    }
+
+    /* A worktree's document views: README on the lane, Files and Changes
+       on the whole composition. */
+    [data-armada="workspace-scroller"] > * {
+        width: var(--comp);
+        margin-inline-start: var(--lx);
+    }
+
+    .armada-plane[data-view="readme"] [data-armada="workspace-scroller"] > * {
+        width: var(--col);
+    }
+
+    /* The lane: the conversation's width at the composition's left. */
+    [data-armada="lane"] {
+        width: var(--col);
+        margin-inline-start: var(--lx);
+    }
+
+    /* ---- The band and the field's track, under the pane. */
+
+    .armada-frame-foot {
+        grid-row: 3 / 5;
+        grid-column: 1;
+        display: grid;
+        grid-template-rows: subgrid;
+        min-width: 0;
+        z-index: var(--z-chrome);
+        pointer-events: none;
+    }
+
+    .armada-frame-band {
+        grid-row: 1;
+        min-width: 0;
+    }
+
+    .armada-plane[data-place="home"] .armada-frame-band {
+        visibility: hidden;
+    }
+
+    .armada-frame-composer {
+        grid-row: 2;
+        position: relative;
+        min-width: 0;
+        padding-bottom: var(--s-5);
+        pointer-events: auto;
+        background-color: var(--content);
+    }
+
+    /* ---- The column: placed over the plane from the header's second line
+       to the field's foot, beside the conversation. */
+
+    .armada-frame-column {
+        position: absolute;
+        z-index: var(--z-column);
+        top: var(--h-line1);
+        bottom: var(--s-5);
+        left: calc(var(--lx) + var(--col) + var(--side-gap));
+        width: var(--side-w);
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+    }
+
+    .armada-frame-column > * {
+        flex: 1;
+        width: 100%;
+        min-height: 0;
+    }
+
+    /* Files and Changes take the whole composition: the column folds into
+       its heading, which does not move. */
+    .armada-plane:is([data-view="files"], [data-view="changes"])
+        > .armada-frame-column {
+        bottom: auto;
+        height: var(--h-m);
+        overflow: clip;
+    }
+
+    /* Under the threshold the column is its first heading, at the lane's
+       right edge, More 4 px before it, on every place. */
+    @container plane (width < 1160px) {
+        .armada-frame-column {
+            bottom: auto;
+            left: calc(var(--lx) + var(--col) - var(--fold-w));
+            width: var(--fold-w);
+            height: var(--h-m);
+            overflow: clip;
+        }
+
+        .armada-frame-more {
+            left: calc(
+                var(--lx) + var(--col) - var(--fold-w) - var(--s-1) - var(--h-m)
+            );
+        }
+    }
+
+    /* ---- Raised over the pane: the old rail's sheet from the window's
+       right edge, and the old alerts under the header, across the
+       composition. Neither moves anything under it. */
+
+    [data-armada="sheet"] {
+        position: absolute;
+        z-index: var(--z-sheet);
+        top: 0;
+        right: 0;
+        bottom: 0;
+        width: var(--sheet-w);
+        display: none;
+        background-color: var(--raised);
+        box-shadow: var(--shadow-raised);
+        overflow: hidden;
+    }
+
+    [data-armada="sheet"][data-state="open"] {
+        display: block;
+    }
+
+    [data-armada="alerts"] {
+        position: absolute;
+        z-index: var(--z-alert);
+        top: calc(var(--h-line1) + var(--h-line2));
+        left: var(--lx);
+        width: var(--comp);
+    }
+
+    [data-armada="failure"] {
+        display: none;
+    }
+}

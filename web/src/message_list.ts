@@ -1,4 +1,3 @@
-import autosize from "autosize";
 import $ from "jquery";
 import assert from "minimalistic-assert";
 
@@ -623,9 +622,9 @@ export class MessageList {
         $row.find(".message_content, .status-message, .message_controls").hide();
         $row.find(".messagebox-content").addClass("content_edit_mode");
         if (do_autosize) {
-            // autosize will not change the height of the textarea if the `$row` is not
-            // rendered in DOM yet. So, we call `autosize.update` post render.
-            autosize($row.find(".message_edit_content"));
+            compose_ui.size_textarea_to_content(
+                $row.find<HTMLTextAreaElement>("textarea.message_edit_content"),
+            );
         }
         compose_ui.maybe_show_scrolling_formatting_buttons(".message-edit-feature-group");
     }

@@ -1,0 +1,83 @@
+/* Home: one ordered list of sentences, in the conversation's lane. A row
+   is 56 high: a 28 px gutter object, a sentence in Talk with its place in
+   Caption under it, and one trailing thing: the verb on a row that needs
+   me, the time on the rest. */
+@layer armada.kit {
+    .armada-home-heading {
+        font: var(--t-strong);
+        padding-left: var(--pad-x);
+        margin-top: var(--s-6);
+        height: var(--h-m);
+        display: flex;
+        align-items: center;
+    }
+
+    .armada-home-heading:first-child {
+        margin-top: 0;
+    }
+
+    .armada-home-row {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        column-gap: var(--s-4);
+        padding: var(--s-2) var(--pad-x);
+        border-radius: var(--r-block);
+        position: relative;
+        align-items: center;
+        width: 100%;
+        min-height: calc(var(--px) * 56);
+    }
+
+    .armada-home-row > .armada-home-gutter {
+        position: absolute;
+        left: calc(-1 * var(--gutter));
+        top: calc(var(--px) * 14);
+        width: var(--avatar);
+        height: var(--avatar);
+        display: grid;
+        place-items: center;
+    }
+
+    .armada-home-words {
+        min-width: 0;
+    }
+
+    .armada-home-sentence {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        font: var(--t-talk);
+    }
+
+    .armada-home-row[data-needs] .armada-home-sentence {
+        font-weight: var(--k-strong);
+    }
+
+    .armada-home-place {
+        font: var(--t-caption);
+        color: var(--ink-2);
+        display: block;
+    }
+
+    .armada-home-time {
+        font: var(--t-caption);
+        color: var(--ink-2);
+        font-variant-numeric: tabular-nums;
+        text-align: right;
+        white-space: nowrap;
+    }
+
+    .armada-home-verb {
+        display: flex;
+        justify-content: flex-end;
+    }
+
+    .armada-home-verb > .armada-text-control {
+        margin: 0;
+        padding: 0 0 0 var(--s-2);
+    }
+
+    .armada-home-row[aria-selected="true"] {
+        background-color: var(--fill-3);
+    }
+}

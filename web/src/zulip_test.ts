@@ -23,3 +23,6 @@ export {is_in_progress, is_pending} from "./reload_state.ts";
 export {show_reaction_data} from "./emoji_frequency_data.ts";
 export {num_unread_for_topic} from "./unread.ts";
 export {mark_topic_as_unread} from "./unread_ops.ts";
+// Feeds a list of events through the same code as a /json/events
+// response; tools/armada-checks replays recorded runs with it.
+export {_get_events_success as inject_events} from "./server_events.js";

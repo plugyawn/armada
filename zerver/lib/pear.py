@@ -2359,6 +2359,24 @@ class PearEmbeddedBotHandler:
         except Exception:
             return None
 
+    def requesting_user_may_drive_runs(
+        self,
+        bot_handler: Any,
+        requesting_user_id: int | None,
+    ) -> bool:
+        from zerver.lib.pear_worker import pear_runs_restricted, pear_user_is_trusted
+        from zerver.models import UserProfile
+
+        if not pear_runs_restricted():
+            return True
+        if requesting_user_id is None:
+            return False
+        requesting_user = UserProfile.objects.filter(
+            id=requesting_user_id,
+            realm_id=bot_handler.user_profile.realm_id,
+        ).first()
+        return requesting_user is not None and pear_user_is_trusted(requesting_user)
+
     def worker_start_blocked_reason(
         self,
         bot_handler: Any,
@@ -2834,6 +2852,16 @@ class PearEmbeddedBotHandler:
             if blocked_reason is not None:
                 response = build_pear_worker_start_blocked_message(blocked_reason)
                 should_start_worker = False
+
+        if should_steer_active_run and not self.requesting_user_may_drive_runs(
+            bot_handler, requesting_user_id
+        ):
+            # Steering, and answering a run's question, is driving the
+            # agent as much as starting a run is.
+            should_steer_active_run = False
+            response = build_pear_worker_start_blocked_message(
+                "This user is not allowed to steer Pear worker runs."
+            )
 
         if should_steer_active_run and active_run_message_id is not None:
             assert steering_event is not None

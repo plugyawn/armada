@@ -6,10 +6,18 @@
 // in order to be able to report exceptions that occur during their
 // execution.
 
-import * as Sentry from "@sentry/browser";
 import $ from "jquery";
 
-import {BlueslipError, display_stacktrace} from "./blueslip_stacktrace.ts";
+export class BlueslipError extends Error {
+    override name = "BlueslipError";
+    more_info?: object;
+    constructor(msg: string, more_info?: object, cause?: unknown) {
+        super(msg, {cause});
+        if (more_info !== undefined) {
+            this.more_info = more_info;
+        }
+    }
+}
 
 if (Error.stackTraceLimit !== undefined) {
     Error.stackTraceLimit = 100000;
@@ -93,15 +101,6 @@ export function error(
     more_info?: Record<string, unknown>,
     original_error?: unknown,
 ): void {
-    // Log the Sentry error before the console warning, so we don't
-    // end up with a doubled message in the Sentry logs.
-    Sentry.setContext("more_info", more_info ?? null);
-
-    // Note that original_error could be of any type, because you can "raise"
-    // any type -- something we do see in practice with the error
-    // object being "dead": https://github.com/zulip/zulip/issues/18374
-    Sentry.captureException(new Error(msg, {cause: original_error}));
-
     const args = build_arg_list(msg, more_info);
     logger.error(...args);
 
@@ -116,6 +115,12 @@ export function error(
 // Install a window-wide onerror handler in development to display the stacktraces, to make them
 // hard to miss
 if (DEVELOPMENT) {
+    // The display and its source-map reader are a chunk of their own,
+    // which a production build does not contain.
+    const display_stacktrace = async (ex: unknown, message?: string): Promise<void> => {
+        const blueslip_stacktrace = await import("./blueslip_stacktrace.ts");
+        await blueslip_stacktrace.display_stacktrace(ex, message);
+    };
     $(window).on("error", (event: JQuery.TriggeredEvent) => {
         const {originalEvent} = event;
         if (originalEvent instanceof ErrorEvent) {

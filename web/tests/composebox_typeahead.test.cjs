@@ -3372,16 +3372,18 @@ test("topic_reference_candidates", ({override, override_rewire}) => {
 
     const input_element = {
         $element: {
-            closest: () => [],
+            closest: /* istanbul ignore next */ () => [],
         },
         type: "textarea",
     };
+    /* istanbul ignore next */
     input_element.$element.caret = function (...args) {
         if (args.length === 0) {
             return 0;
         }
         return this;
     };
+    /* istanbul ignore next */
     input_element.$element.range = function () {
         return this;
     };

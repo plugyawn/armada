@@ -1,6 +1,5 @@
 /* Module primarily for opening/closing the compose box. */
 
-import autosize from "autosize";
 import $ from "jquery";
 import _ from "lodash";
 
@@ -117,7 +116,12 @@ function show_compose_box(opts: ComposeActionsOpts): void {
     }
     compose_recipient.update_compose_for_message_type(opts_by_message_type);
     // When changing this, edit the 42px in _maybe_autoscroll
-    $(".new_message_textarea").css("min-height", "3em");
+    // Three lines' worth, less the room compose.css leaves under the
+    // last line of a field that is sized to its text.
+    $(".new_message_textarea").css(
+        "min-height",
+        "calc(3em - var(--message-field-bottom-room, 0em))",
+    );
     // Under certain circumstances, such as focusing in the
     // automatically-opened compose box in DMs, we want to
     // defer running the focus logic.
@@ -169,27 +173,41 @@ function clear_box(): void {
 }
 
 let autosize_callback_opts: ComposeActionsStartOpts;
+let compose_textarea_sized_once = false;
+let compose_textarea_height: number | undefined;
+
+function compose_textarea_height_changed(textarea: HTMLTextAreaElement): void {
+    if (compose_ui.is_expanded()) {
+        return;
+    }
+    const height = $(textarea).height()!;
+    if (height === compose_textarea_height) {
+        // Only the width changed, or the composer was opened again at
+        // the height it had.
+        return;
+    }
+    compose_textarea_height = height;
+    if (!compose_textarea_sized_once) {
+        compose_textarea_sized_once = true;
+        maybe_scroll_up_selected_message(autosize_callback_opts);
+    }
+    const max_height = Number.parseFloat($(textarea).css("max-height"));
+    // We add 5px to account for minor differences in height detected in Chrome.
+    if (height + 5 >= max_height) {
+        $("#compose").addClass("automatically-expanded");
+    } else {
+        $("#compose").removeClass("automatically-expanded");
+    }
+}
+
 export let autosize_message_content = (opts: ComposeActionsStartOpts): void => {
     if (!compose_ui.is_expanded()) {
         autosize_callback_opts = opts;
-        let has_resized_once = false;
-        $("textarea#compose-textarea")
-            .off("autosize:resized")
-            .on("autosize:resized", (e) => {
-                if (!has_resized_once) {
-                    has_resized_once = true;
-                    maybe_scroll_up_selected_message(autosize_callback_opts);
-                }
-                const height = $(e.currentTarget).height()!;
-                const max_height = Number.parseFloat($(e.currentTarget).css("max-height"));
-                // We add 5px to account for minor differences in height detected in Chrome.
-                if (height + 5 >= max_height) {
-                    $("#compose").addClass("automatically-expanded");
-                } else {
-                    $("#compose").removeClass("automatically-expanded");
-                }
-            });
-        autosize($("textarea#compose-textarea"));
+        compose_textarea_sized_once = false;
+        compose_ui.size_textarea_to_content(
+            $("textarea#compose-textarea"),
+            compose_textarea_height_changed,
+        );
     }
 };
 

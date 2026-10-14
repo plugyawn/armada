@@ -1,0 +1,147 @@
+/* The nav: Ground. One kind glyph, a label, one trailing thing. No group
+   names, no lines; groups are 20 apart. The file tree is the same row. */
+@layer armada.kit {
+    .armada-nav {
+        --plane: var(--ground);
+        padding: 0 var(--s-2) var(--s-2);
+        display: flex;
+        flex-direction: column;
+        position: relative;
+        min-width: 0;
+    }
+
+    .armada-nav-top {
+        height: var(--h-line1);
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        flex: none;
+        padding: calc(var(--px) * 14) 0 0 var(--s-2);
+    }
+
+    .armada-nav-name {
+        font: var(--t-strong);
+        height: var(--h-m);
+        display: inline-flex;
+        align-items: center;
+        gap: var(--s-1);
+        padding: 0 var(--s-2);
+        margin-left: calc(-1 * var(--s-2));
+        border-radius: var(--r-ctl);
+    }
+
+    .armada-nav-name > .armada-glyph {
+        color: var(--ink-2);
+    }
+
+    .armada-nav-row {
+        height: var(--h-m);
+        display: flex;
+        align-items: center;
+        gap: var(--s-2);
+        padding: 0 var(--s-2);
+        border-radius: var(--r-ctl);
+        color: var(--ink-2);
+        flex: none;
+        width: 100%;
+        transition: color var(--fade-out) linear;
+    }
+
+    .armada-nav-row[data-nested] {
+        padding-left: var(--s-8);
+    }
+
+    .armada-nav-row:is([data-fresh], [data-repo]) {
+        color: var(--ink-1);
+    }
+    /* A repository is its section's name: Strong, always. */
+    .armada-nav-row[data-repo] > .armada-nav-label {
+        font: var(--t-strong);
+    }
+
+    .armada-nav-row[aria-current] {
+        background-color: var(--fill-3);
+        color: var(--ink-1);
+    }
+
+    :where(.armada-nav[data-thumb]) .armada-nav-row[aria-current] {
+        background-color: transparent;
+    }
+
+    .armada-nav-label {
+        flex: 1;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    /* A count ends on the marks' right edge, whatever its digits. */
+    .armada-nav-count {
+        flex: none;
+        display: inline-flex;
+        align-items: center;
+        justify-content: flex-end;
+        font: var(--t-caption);
+        font-variant-numeric: tabular-nums;
+        min-width: calc(var(--px) * 14);
+        color: var(--accent-text);
+        height: var(--s-4);
+    }
+
+    .armada-nav-row > :where(.armada-glyph) {
+        color: var(--ink-2);
+    }
+
+    .armada-nav-row:is([data-fresh], [data-repo], [aria-current])
+        > :where(.armada-glyph) {
+        color: var(--ink-1);
+    }
+    /* A 20 px face on the 16 px glyph axis; two 14 px discs take 24. */
+    .armada-nav-row > .armada-face {
+        margin: 0 calc(var(--px) * -2);
+    }
+
+    .armada-nav-row > .armada-faces {
+        margin: 0 calc(var(--px) * -6) 0 calc(var(--px) * -2);
+    }
+
+    .armada-nav-gap {
+        height: var(--gap-group);
+        flex: none;
+    }
+
+    .armada-nav-kids {
+        display: flex;
+        flex-direction: column;
+    }
+
+    .armada-nav-kids[hidden] {
+        display: none;
+    }
+
+    .armada-nav-account {
+        margin-top: auto;
+        color: var(--ink-1);
+    }
+
+    /* The file tree: a row's selection starts on the lane's edge and its
+       first glyph stands on the text edge. */
+    .armada-tree {
+        position: relative;
+        width: var(--tree-w);
+    }
+
+    .armada-nav-row[data-tree] {
+        color: var(--ink-1);
+        padding-left: var(--pad-x);
+    }
+
+    .armada-nav-row[data-depth="1"] {
+        padding-left: var(--s-10);
+    }
+
+    .armada-nav-row[data-depth="2"] {
+        padding-left: calc(var(--px) * 64);
+    }
+}

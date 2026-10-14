@@ -1,0 +1,258 @@
+/* The column: plain lists under plain headings, on the content plane with
+   no fill, no line and no box. One row for every list in the column and in
+   a sheet: 28 high, a 20 px leading cell (a mark, a glyph, a face), the
+   label, one trailing thing; 44 with a second line under its label. */
+@layer armada.kit {
+    .armada-column {
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        width: var(--side-w);
+        font: var(--t-text);
+    }
+
+    .armada-column-heading {
+        height: var(--h-line2);
+        display: flex;
+        align-items: flex-start;
+        gap: var(--s-2);
+        flex: none;
+    }
+
+    .armada-column-heading > .armada-heading {
+        padding: 0;
+        width: 100%;
+        height: var(--h-m);
+    }
+
+    .armada-column-heading .armada-heading-marks {
+        display: none;
+    }
+
+    .armada-column[data-folded] .armada-heading-marks {
+        display: flex;
+    }
+
+    .armada-column-body {
+        flex: 1;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+        padding-top: var(--s-3);
+        position: relative;
+    }
+
+    .armada-step,
+    .armada-list-row {
+        display: grid;
+        grid-template-columns: var(--s-5) minmax(0, 1fr) auto;
+        column-gap: var(--s-2);
+        align-items: center;
+        min-height: var(--h-m);
+        border-radius: var(--r-ctl);
+    }
+
+    :is(.armada-step, .armada-list-row) > :first-child {
+        justify-self: center;
+    }
+
+    .armada-list-label {
+        min-width: 0;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        color: var(--ink-2);
+    }
+
+    .armada-step[data-wrap] > .armada-list-label {
+        white-space: normal;
+        align-items: flex-start;
+        padding: var(--s-1) 0;
+    }
+    /* First ink for what is live or needs me. */
+    .armada-step:is(
+            [data-state="live"],
+            [data-state="needs"],
+            [data-state="failed"]
+        )
+        > .armada-list-label,
+    .armada-list-row[data-live] > .armada-list-label {
+        color: var(--ink-1);
+    }
+
+    :is(.armada-step, .armada-list-row) > :where(.armada-mark, .armada-glyph) {
+        color: var(--ink-2);
+    }
+
+    :is(.armada-step[data-state="live"], .armada-list-row[data-live])
+        > :where(.armada-mark) {
+        color: var(--ink-1);
+    }
+
+    .armada-list-trailing {
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        gap: var(--s-3);
+        white-space: nowrap;
+    }
+
+    .armada-list-figure {
+        font: var(--t-caption);
+        color: var(--ink-2);
+        font-variant-numeric: tabular-nums;
+    }
+
+    .armada-list-label code {
+        color: inherit;
+    }
+
+    .armada-list-sub {
+        font: var(--t-caption);
+        color: var(--ink-2);
+        display: block;
+    }
+
+    .armada-list-row[data-lines="2"] {
+        min-height: calc(var(--px) * 44);
+    }
+
+    .armada-list-row[data-lines="2"] > :first-child {
+        align-self: start;
+        margin-top: calc(var(--px) * 7);
+    }
+
+    .armada-list-row[data-lines="2"] > .armada-list-trailing {
+        align-self: start;
+        margin-top: calc(var(--px) * 6);
+    }
+
+    .armada-list-row > .armada-face {
+        margin: 0;
+    }
+
+    /* What a step is doing, and what happened in it: second ink, at the
+       label's edge, its mark beside its words and never in the steps'
+       column. A dot marks what is new since I looked. */
+    .armada-step[data-state="event"] > .armada-list-label {
+        display: flex;
+        align-items: center;
+        gap: calc(var(--px) * 6);
+    }
+
+    .armada-step:where([data-state="event"])
+        > .armada-list-label
+        > .armada-mark {
+        flex: none;
+    }
+
+    .armada-step:where([data-state="event"]:not([data-wrap]))
+        > .armada-list-label
+        > span {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .armada-step:where([data-wrap]) > .armada-list-label > .armada-mark {
+        margin-top: calc(var(--px) * 3);
+    }
+
+    .armada-step:where([data-state="event"]) > .armada-list-label b {
+        font-weight: var(--k-regular);
+        color: var(--ink-1);
+    }
+
+    .armada-step:where([data-fresh]) > .armada-list-label::after {
+        content: "";
+        flex: none;
+        width: var(--s-1);
+        height: var(--s-1);
+        border-radius: var(--r-round);
+        background: var(--accent-text);
+        margin-left: calc(var(--px) * 2);
+    }
+    /* Outdented on the left only: a verb's last letter ends on the
+       column's edge. */
+    :is(.armada-step, .armada-list-row, .armada-section-heading)
+        .armada-text-control {
+        margin-right: 0;
+        padding-right: 0;
+    }
+
+    /* A section: a heading in Strong with at most one trailing thing, then
+       its rows. 20 from the section above. Its list is as many rows high
+       as it has slots, whatever it holds, so lists never push each other;
+       a row with no slot is counted in a quiet caption in the gap under
+       the list. */
+    .armada-section {
+        margin-top: var(--gap-group);
+        display: flex;
+        flex-direction: column;
+        flex: none;
+        position: relative;
+    }
+
+    .armada-section[data-foot] {
+        margin-top: auto;
+        padding-top: var(--gap-group);
+    }
+
+    .armada-section[data-grow] {
+        flex: 1 1 0;
+        min-height: 0;
+    }
+
+    .armada-section[data-grow] > .armada-list {
+        flex: 1 1 0;
+        min-height: 0;
+        overflow: hidden;
+    }
+
+    .armada-section-heading {
+        height: var(--h-m);
+        display: flex;
+        align-items: center;
+        gap: var(--s-2);
+        font: var(--t-strong);
+    }
+
+    .armada-section-trailing {
+        margin-left: auto;
+        display: flex;
+        align-items: center;
+        gap: var(--s-3);
+    }
+
+    :is(.armada-checklist, .armada-list)[data-slots] {
+        height: calc(var(--slots) * var(--h-m));
+        overflow: hidden;
+        flex: none;
+    }
+
+    .armada-checklist-host {
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        flex: none;
+    }
+
+    .armada-more {
+        position: absolute;
+        top: 100%;
+        left: var(--s-5);
+        height: var(--gap-group);
+        padding: 0 var(--s-2);
+        border-radius: var(--r-ctl);
+        font: var(--t-caption);
+        color: var(--ink-2);
+        display: inline-flex;
+        align-items: center;
+        white-space: nowrap;
+    }
+
+    .armada-empty {
+        color: var(--ink-2);
+        max-width: calc(var(--px) * 288);
+    }
+}

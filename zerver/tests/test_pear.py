@@ -124,6 +124,7 @@ from zerver.worker import pear_worker as pear_worker_module
 from zerver.worker.embedded_bots import EmbeddedBotWorker
 from zerver.worker.pear_addressing import PearAddressingWorker
 from zproject import computed_settings as pear_computed_settings
+from zproject import configured_settings
 
 
 class FakePearWorkerRunStore:
@@ -228,7 +229,7 @@ class PearComputedSettingsEnvTest(TestCase):
             "PEAR_WORKER_MODEL_CHOICES": "gpt-5.5,gpt-5.4-mini gpt-5.3-codex-spark",
             "PEAR_WORKER_FAST_MODE": "off",
             "PEAR_WORKER_TIMEOUT_SECONDS": "42",
-            "PEAR_WORKER_CODEX_EXTRA_ARGS": "--ignore-rules --foo",
+            "PEAR_WORKER_TRUSTED_USERS_ONLY": "yes",
             "PEAR_WORKER_TRUSTED_USER_IDS": "1, 2 3",
         }
 
@@ -246,7 +247,7 @@ class PearComputedSettingsEnvTest(TestCase):
         )
         self.assertFalse(values["PEAR_WORKER_FAST_MODE"])
         self.assertEqual(values["PEAR_WORKER_TIMEOUT_SECONDS"], 42)
-        self.assertEqual(values["PEAR_WORKER_CODEX_EXTRA_ARGS"], ["--ignore-rules", "--foo"])
+        self.assertTrue(values["PEAR_WORKER_TRUSTED_USERS_ONLY"])
         self.assertEqual(values["PEAR_WORKER_TRUSTED_USER_IDS"], [1, 2, 3])
 
     def test_pear_env_override_table_uses_gemini_key_aliases(self) -> None:
@@ -257,13 +258,54 @@ class PearComputedSettingsEnvTest(TestCase):
 
         self.assertEqual(api_key, "gemini-key")
 
-    def test_pear_model_choices_default_to_configured_worker_model(self) -> None:
-        with patch.dict("os.environ", {"PEAR_WORKER_MODEL": "gpt-5.4-mini"}, clear=True):
+    def parse_model_choices(self, env: dict[str, str], **configured: Any) -> list[str]:
+        with (
+            patch.dict("os.environ", env, clear=True),
+            patch.multiple(configured_settings, **configured),
+        ):
             choices = pear_computed_settings._PEAR_ENV_OVERRIDES["PEAR_WORKER_MODEL_CHOICES"](
                 "PEAR_WORKER_MODEL_CHOICES"
             )
+        assert isinstance(choices, list)
+        return choices
 
-        self.assertEqual(choices, ["gpt-5.4-mini"])
+    def test_pear_model_choices_come_from_settings_file(self) -> None:
+        # A production server has no environment variables, so the
+        # list in /etc/zulip/settings.py is what the picker offers.
+        self.assertEqual(
+            self.parse_model_choices(
+                {},
+                PEAR_WORKER_MODEL="gpt-6-astra",
+                PEAR_WORKER_MODEL_CHOICES=["gpt-6-astra", "gpt-6-sol", "gpt-5.6-sol"],
+            ),
+            ["gpt-6-astra", "gpt-6-sol", "gpt-5.6-sol"],
+        )
+
+    def test_pear_model_choices_always_include_default_model(self) -> None:
+        self.assertEqual(
+            self.parse_model_choices(
+                {},
+                PEAR_WORKER_MODEL="gpt-6-astra",
+                PEAR_WORKER_MODEL_CHOICES=["gpt-6-sol"],
+            ),
+            ["gpt-6-astra", "gpt-6-sol"],
+        )
+        self.assertEqual(
+            self.parse_model_choices(
+                {"PEAR_WORKER_MODEL": "gpt-5.4-mini"},
+                PEAR_WORKER_MODEL="gpt-6-astra",
+                PEAR_WORKER_MODEL_CHOICES=["gpt-6-astra", "gpt-6-sol"],
+            ),
+            ["gpt-5.4-mini", "gpt-6-astra", "gpt-6-sol"],
+        )
+        self.assertEqual(
+            self.parse_model_choices(
+                {"PEAR_WORKER_MODEL_CHOICES": ""},
+                PEAR_WORKER_MODEL="gpt-6-astra",
+                PEAR_WORKER_MODEL_CHOICES=["gpt-6-sol"],
+            ),
+            ["gpt-6-astra"],
+        )
 
     def test_pear_env_bool_rejects_invalid_value(self) -> None:
         with (

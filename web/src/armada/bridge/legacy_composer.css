@@ -1,0 +1,28 @@
+/* The old compose box in the field's track (legacy_composer.ts; deleted
+   by B3). It no longer floats over the document: the track is `auto`, so
+   the box growing shrinks the pane and nothing is covered. It takes the
+   field's place, the gutter and the lane. */
+@layer armada.surfaces {
+    #compose > #compose-container {
+        width: calc(var(--col) + var(--gutter) + var(--s-2));
+        max-width: none;
+        margin-inline-start: calc(var(--lx) - var(--gutter) - var(--s-2));
+    }
+
+    #compose #compose-content {
+        margin: 0;
+    }
+
+    /* Closed, the box is the field's 44: its row of buttons and 2 above
+       and below. */
+    #compose:not(.compose-box-open) #compose-content {
+        box-sizing: border-box;
+        height: var(--h-field);
+        padding-block: calc(var(--s-1) / 2);
+    }
+
+    /* Home is not a conversation: the box is there only while it is open. */
+    [data-place="home"] #compose:not(.compose-box-open) {
+        display: none;
+    }
+}

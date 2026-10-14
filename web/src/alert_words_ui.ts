@@ -1,4 +1,4 @@
-import Handlebars from "handlebars";
+import Handlebars from "handlebars/runtime.js";
 import $ from "jquery";
 
 import render_add_alert_word from "../templates/settings/add_alert_word.hbs";

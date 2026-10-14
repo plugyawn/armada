@@ -869,8 +869,17 @@ test("sort broadcast mentions for stream message type", () => {
     );
 });
 
-test("sort broadcast mentions for direct message type", () => {
+function compose_to_direct_message() {
+    // A direct message composer has no channel selected; earlier tests
+    // leave a channel selected, which is not a state the app can be in
+    // while the message type is "private".
     compose_state.set_message_type("private");
+    compose_state.set_selected_recipient_id(compose_state.DIRECT_MESSAGE_ID);
+}
+
+test("sort broadcast mentions for direct message type", () => {
+    const previous_recipient_id = compose_state.selected_recipient_id;
+    compose_to_direct_message();
     const mentions = ct.broadcast_mentions().toReversed();
     const broadcast_items = mentions.map((broadcast) => broadcast_item(broadcast));
     const results = th.sort_people_for_relevance(broadcast_items, "", "");
@@ -894,6 +903,7 @@ test("sort broadcast mentions for direct message type", () => {
         results2.map((r) => r.user.email),
         [a_user.email, zman.email, "all", "everyone"],
     );
+    compose_state.set_selected_recipient_id(previous_recipient_id);
 });
 
 test("test compare directly for stream message type", () => {
@@ -910,13 +920,15 @@ test("test compare directly for stream message type", () => {
 });
 
 test("test compare directly for direct message", () => {
-    compose_state.set_message_type("private");
+    const previous_recipient_id = compose_state.selected_recipient_id;
+    compose_to_direct_message();
     const all_obj = ct.broadcast_mentions()[0];
     const all_obj_item = broadcast_item(all_obj);
 
     assert.equal(th.compare_people_for_relevance(all_obj_item, all_obj_item), 0);
     assert.equal(th.compare_people_for_relevance(all_obj_item, zman_item), 1);
     assert.equal(th.compare_people_for_relevance(zman_item, all_obj_item), -1);
+    compose_state.set_selected_recipient_id(previous_recipient_id);
 });
 
 test("render_person when emails hidden", ({mock_template, override}) => {

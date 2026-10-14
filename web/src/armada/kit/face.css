@@ -1,0 +1,111 @@
+/* A face: a photograph, or initials on the person's stone. 28 in the
+   conversation and on Home, 20 in lists and the nav, 18 in a line, 14 for a
+   group in the nav, with no letter. */
+@layer armada.kit {
+    .armada-face {
+        --k-face: var(--avatar);
+
+        width: var(--k-face);
+        height: var(--k-face);
+        border-radius: var(--r-round);
+        display: grid;
+        place-items: center;
+        background: var(--p-flint);
+        color: var(--p-flint-ink);
+        font: var(--t-label);
+        font-style: normal;
+        flex: none;
+        position: relative;
+    }
+
+    .armada-face[data-size="20"] {
+        --k-face: var(--s-5);
+    }
+
+    .armada-face[data-size="18"] {
+        --k-face: calc(var(--px) * 18);
+    }
+
+    .armada-face[data-size="14"] {
+        --k-face: calc(var(--px) * 14);
+    }
+
+    .armada-face[data-stone="moss"] {
+        background: var(--p-moss);
+        color: var(--p-moss-ink);
+    }
+
+    .armada-face[data-stone="larimar"] {
+        background: var(--p-larimar);
+        color: var(--p-larimar-ink);
+    }
+
+    .armada-face[data-stone="lapis"] {
+        background: var(--p-lapis);
+        color: var(--p-lapis-ink);
+    }
+
+    .armada-face[data-stone="amethyst"] {
+        background: var(--p-amethyst);
+        color: var(--p-amethyst-ink);
+    }
+
+    .armada-face[data-stone="rose"] {
+        background: var(--p-rose);
+        color: var(--p-rose-ink);
+    }
+
+    .armada-face[data-stone="mine"] {
+        background: var(--bubble-me);
+        color: var(--on-me);
+    }
+
+    .armada-face > img {
+        width: 100%;
+        height: 100%;
+        border-radius: inherit;
+        display: block;
+    }
+
+    /* Present: a dot. Away: half a dot. Neither: no dot. */
+    .armada-face[data-presence]::after {
+        content: "";
+        position: absolute;
+        right: calc(var(--px) * -1.5);
+        bottom: calc(var(--px) * -1.5);
+        width: calc(var(--px) * 7);
+        height: calc(var(--px) * 7);
+        border-radius: var(--r-round);
+        background: var(--ink-1);
+        outline: var(--k-cut) solid var(--plane);
+    }
+
+    .armada-face[data-presence="away"]::after {
+        background:
+            radial-gradient(
+                circle closest-side,
+                transparent calc(100% - var(--k-ring-w)),
+                var(--ink-1) calc(100% - var(--k-ring-w))
+            ),
+            linear-gradient(90deg, var(--ink-1) 50%, var(--plane) 50%);
+    }
+
+    /* A group is overlapped discs. The one beneath is notched round the
+       one above: a gap cut with a mask, not a ring. */
+    .armada-faces {
+        display: inline-flex;
+        flex: none;
+    }
+
+    .armada-faces > .armada-face + .armada-face {
+        margin-left: calc(var(--px) * -4);
+    }
+
+    .armada-faces > .armada-face:not(:last-child) {
+        mask-image: radial-gradient(
+            circle at calc(100% + var(--k-face) / 2 - calc(var(--px) * 4)) 50%,
+            transparent calc(var(--k-face) / 2 + calc(var(--px) * 1)),
+            var(--ink-1) calc(var(--k-face) / 2 + calc(var(--px) * 1.5))
+        );
+    }
+}

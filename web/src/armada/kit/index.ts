@@ -1,0 +1,77 @@
+// The kit, for chrome: every component of the design language as a Preact
+// component over the one description of it. The feed imports dom.ts.
+
+import "./base.css";
+import "./icons.css";
+import "./marks.css";
+import "./hover.css";
+import "./face.css";
+import "./controls.css";
+import "./nav.css";
+import "./header.css";
+import "./conversation.css";
+import "./block.css";
+import "./code.css";
+import "./table.css";
+import "./band.css";
+import "./field.css";
+import "./list.css";
+import "./raised.css";
+import "./home.css";
+
+import * as blocks from "./blocks.ts";
+import * as chrome from "./chrome.ts";
+import * as controls from "./controls.ts";
+import * as conversation from "./conversation.ts";
+import * as lists from "./lists.ts";
+import * as raised from "./raised.ts";
+import {component} from "./view.tsx";
+
+export * as recipes from "./recipes.ts";
+export {View, component, to_vnode} from "./view.tsx";
+export {build, forced, n} from "./tree.ts";
+export {close_raised, open_raised} from "./keys.ts";
+export type {Child, Force, Handler, Tree} from "./tree.ts";
+export type {GlyphName, MarkName, SigilName} from "./icons/names.ts";
+
+export const GlyphControl = component(controls.glyph_control);
+export const TextControl = component(controls.text_control);
+export const SendButton = component(controls.send_button);
+export const AccentButton = component(controls.accent_button);
+export const Button = component(controls.button);
+export const Segments = component(controls.segments);
+export const Views = component(controls.views);
+export const Toggle = component(controls.toggle);
+export const Checkbox = component(controls.checkbox);
+export const StopControl = component(controls.stop_control);
+export const Option = component(controls.option);
+export const NavRow = component(chrome.nav_row);
+export const NavTop = component(chrome.nav_top);
+export const TreeRow = component(chrome.tree_row);
+export const Counts = component(chrome.counts);
+export const Heading = component(chrome.heading);
+export const Header = component(chrome.header);
+export const Band = component(chrome.band);
+export const Field = component(chrome.field);
+export const Turn = component(conversation.turn);
+export const Bubble = component(conversation.bubble);
+export const ThreadLine = component(conversation.thread_line);
+export const RunFooter = component(conversation.run_footer);
+export const LinkPreview = component(conversation.link_preview);
+export const DiffBlock = component(blocks.diff_block);
+export const CodeBlock = component(blocks.code_block);
+export const TableBlock = component(blocks.table_block);
+export const Artifact = component(blocks.artifact);
+export const Question = component(blocks.question);
+export const Source = component(blocks.source);
+export const ListRow = component(lists.list_row);
+export const Checklist = component(lists.checklist);
+export const Section = component(lists.section);
+export const Column = component(lists.column);
+export const HomeRow = component(lists.home_row);
+export const Menu = component(raised.menu);
+export const Picker = component(raised.picker);
+export const Tooltip = component(raised.tooltip);
+export const Dialog = component(raised.dialog);
+export const Palette = component(raised.palette);
+export const Sheet = component(raised.sheet);

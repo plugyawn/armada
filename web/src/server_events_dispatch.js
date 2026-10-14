@@ -63,7 +63,6 @@ import * as scheduled_messages from "./scheduled_messages.ts";
 import * as scheduled_messages_feed_ui from "./scheduled_messages_feed_ui.ts";
 import * as scheduled_messages_overlay_ui from "./scheduled_messages_overlay_ui.ts";
 import * as scheduled_messages_ui from "./scheduled_messages_ui.ts";
-import * as scroll_bar from "./scroll_bar.ts";
 import * as settings_account from "./settings_account.ts";
 import * as settings_bots from "./settings_bots.ts";
 import * as settings_components from "./settings_components.ts";
@@ -1131,9 +1130,6 @@ export function dispatch_normal_event(event) {
                 !user_settings.receives_typing_notifications
             ) {
                 typing_events.disable_typing_notification();
-            }
-            if (event.property === "fluid_layout_width") {
-                scroll_bar.set_layout_width();
             }
             if (event.property === "default_language") {
                 // TODO: Make this change the view immediately rather than

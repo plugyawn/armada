@@ -174,6 +174,7 @@ ALL_ZULIP_TABLES = {
     "zerver_huddle",
     "zerver_imageattachment",
     "zerver_message",
+    "zerver_messageclientkey",
     "zerver_missedmessageemailaddress",
     "zerver_multiuseinvite",
     "zerver_multiuseinvite_streams",
@@ -299,6 +300,9 @@ NON_EXPORTED_TABLES = {
     "zerver_defaultstreamgroup_streams",
     # Drafts don't need to be exported as they are supposed to be more ephemeral.
     "zerver_draft",
+    # A send's client key answers a repeat of that send for a day; a
+    # client on the new server has signed in again and sends afresh.
+    "zerver_messageclientkey",
     # The importer cannot trust ImageAttachment objects anyway and needs to check
     # and process images for thumbnailing on its own.
     "zerver_imageattachment",

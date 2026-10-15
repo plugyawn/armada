@@ -10,6 +10,7 @@ from django.utils.translation import gettext as _
 from pydantic import Json, PositiveInt
 
 from zerver.actions.message_send import (
+    SentMessageResult,
     check_send_message,
     compute_irc_user_fullname,
     compute_jabber_user_fullname,
@@ -17,6 +18,7 @@ from zerver.actions.message_send import (
     extract_private_recipients,
     extract_stream_indicator,
 )
+from zerver.lib.armada_client_keys import send_once
 from zerver.lib.exceptions import JsonableError
 from zerver.lib.markdown import render_message_markdown
 from zerver.lib.message import access_message
@@ -24,6 +26,7 @@ from zerver.lib.request import RequestNotes
 from zerver.lib.response import json_success
 from zerver.lib.typed_endpoint import (
     DOCUMENTATION_PENDING,
+    INTENTIONALLY_UNDOCUMENTED,
     ApiParamConfig,
     OptionalTopic,
     typed_endpoint,
@@ -108,6 +111,9 @@ def send_message_backend(
     request: HttpRequest,
     user_profile: UserProfile,
     *,
+    client_key: Annotated[
+        str | None, ApiParamConfig("client_key", documentation_status=INTENTIONALLY_UNDOCUMENTED)
+    ] = None,
     forged_str: Annotated[
         str | None, ApiParamConfig("forged", documentation_status=DOCUMENTATION_PENDING)
     ] = None,
@@ -230,25 +236,35 @@ def send_message_backend(
         # automatically marked as read for yourself.
         read_by_sender = client.default_read_by_sender()
 
+    def send() -> SentMessageResult:
+        return check_send_message(
+            sender,
+            client,
+            recipient_type_name,
+            message_to,
+            topic_name,
+            message_content,
+            forged=forged,
+            forged_timestamp=time,
+            forwarder_user_profile=user_profile,
+            realm=realm,
+            local_id=local_id,
+            sender_queue_id=queue_id,
+            widget_content=widget_content,
+            read_by_sender=read_by_sender,
+            agent_followup=bool(agent_followup),
+            thread_root_message=thread_root_message,
+        )
+
     data: dict[str, int] = {}
-    sent_message_result = check_send_message(
-        sender,
-        client,
-        recipient_type_name,
-        message_to,
-        topic_name,
-        message_content,
-        forged=forged,
-        forged_timestamp=time,
-        forwarder_user_profile=user_profile,
-        realm=realm,
-        local_id=local_id,
-        sender_queue_id=queue_id,
-        widget_content=widget_content,
-        read_by_sender=read_by_sender,
-        agent_followup=bool(agent_followup),
-        thread_root_message=thread_root_message,
-    )
+    if client_key is None:
+        sent_message_result = send()
+    else:
+        # armada: a repeat of a keyed send answers with the first message.
+        sent_once = send_once(user_profile, client_key, send)
+        if isinstance(sent_once, int):
+            return json_success(request, data={"id": sent_once})
+        sent_message_result = sent_once
     data["id"] = sent_message_result.message_id
     if sent_message_result.automatic_new_visibility_policy:
         data["automatic_new_visibility_policy"] = (

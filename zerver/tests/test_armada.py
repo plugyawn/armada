@@ -2491,6 +2491,20 @@ class ArmadaSessionDefaultsTest(TestCase):
         self.assertNotIn(instructions, build_armada_codex_turn_prompt(active_session_a, "fix"))
         self.assertNotIn(instructions, build_armada_codex_turn_prompt(active_session_b, "fix"))
 
+    def test_codex_developer_instructions_ask_for_a_checklist_and_real_mentions(self) -> None:
+        instructions = build_armada_codex_developer_instructions()
+
+        self.assertIn(
+            "Before your first tool call on any task of more than two steps, "
+            "make a checklist with your plan tool, and keep it current",
+            instructions,
+        )
+        self.assertIn("mention them as @**Full Name**", instructions)
+        self.assertIn(
+            "If two people's instructions conflict, say so in one line, mention both",
+            instructions,
+        )
+
     def test_resumed_codex_prompt_contains_only_unseen_messages_and_current_request(self) -> None:
         active_session = build_armada_active_session_summary_from_messages(
             armada_session=get_armada_session_payload(),
@@ -3061,6 +3075,8 @@ class ArmadaSessionDefaultsTest(TestCase):
                 "features.fast_mode=true",
                 "--config",
                 "features.memories=true",
+                "--config",
+                "tools.update_plan={enabled=true}",
                 "--config",
                 'model_reasoning_effort="medium"',
             ],

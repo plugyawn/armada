@@ -34,8 +34,15 @@ function placeFromKey(key) {
   return null;
 }
 const hashOf = (p) => (p.kind === "home" ? "#home" : p.kind === "partner" ? "#partner" : p.kind === "topic" ? `#c/${p.stream_id}/${encodeURIComponent(p.topic)}` : `#d/${p.ids.join(",")}`);
-function placeFromHash() { const h = location.hash; if (h === "#home") return HOME; if (h === "#partner") return pack ? PARTNER : null; let m = /^#c\/(\d+)\/(.*)$/.exec(h); if (m && streams.has(+m[1])) { let t = m[2]; try { t = decodeURIComponent(t); } catch (e) {} const p = placeFromKey(tkey(+m[1], t)); if (p) p.topic = (topicsOf.get(+m[1]) || []).find((x) => x.name.toLowerCase() === t.toLowerCase())?.name ?? t; return p; }
+function placeFromHash() { const h = location.hash; if (h === "#home") return HOME; if (h.startsWith("#narrow/")) return placeFromNarrow(h); if (h === "#partner") return pack ? PARTNER : null; let m = /^#c\/(\d+)\/(.*)$/.exec(h); if (m && streams.has(+m[1])) { let t = m[2]; try { t = decodeURIComponent(t); } catch (e) {} const p = placeFromKey(tkey(+m[1], t)); if (p) p.topic = (topicsOf.get(+m[1]) || []).find((x) => x.name.toLowerCase() === t.toLowerCase())?.name ?? t; return p; }
   m = /^#d\/([\d,]*)$/.exec(h); if (m) return placeFromKey(dkey(m[1].split(",").filter(Boolean).map(Number))); return null; }
+/* a link written for the old interface (a notification email, a link someone pasted): #narrow/channel/<id>-<name>/topic/<topic>
+   (with /near/<id> or /with/<id> after it), or #narrow/dm/<ids>-<name>, opens the place it names; any other narrow, none */
+function placeFromNarrow(h) { const parts = h.slice(1).split("/"), dec = (s) => { try { return decodeURIComponent(s.replaceAll(".", "%")); } catch (e) { return null; } };
+  const term = (...ops) => { for (let i = 1; i + 1 < parts.length; i += 2) if (ops.includes(dec(parts[i]))) return dec(parts[i + 1]); return null; };
+  const ch = term("channel", "stream"), topic = term("topic", "subject"), dm = term("dm", "pm-with");
+  if (ch !== null && topic !== null) { const sid = parseInt(ch, 10); if (!streams.has(sid)) return null; const p = placeFromKey(tkey(sid, topic)); if (p) p.topic = (topicsOf.get(sid) || []).find((x) => x.name.toLowerCase() === topic.toLowerCase())?.name ?? topic; return p; }
+  const ids = dm !== null && /^([\d,]+)/.exec(dm); return ids ? placeFromKey(dkey(ids[1].split(",").map(Number).filter((i) => i && i !== state.ME))) : null; }
 const cacheOf = (p) => { let c = places.get(p.key); if (!c) { c = {place: p, msgs: [], byId: new Map(), loaded: false, oldest: false, loading: false, runs: [], ctx: null, typers: new Map(), open: new Set()}; places.set(p.key, c); } return c; };
 const narrowOf = (p) => (p.kind === "topic" ? [{operator: "channel", operand: p.stream_id}, {operator: "topic", operand: p.topic}] : [{operator: "dm", operand: p.ids.length ? p.ids : [state.ME]}]);
 const placeOfMsg = (m) => (m.type === "stream" ? tkey(m.stream_id, m.subject ?? m.topic ?? "") : dkey((m.display_recipient || []).map((u) => u.id).filter((i) => i !== state.ME)));

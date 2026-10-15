@@ -37,6 +37,8 @@ set_global("localStorage", dom.window.localStorage);
 set_global("addEventListener", (...args) => dom.window.addEventListener(...args));
 set_global("removeEventListener", (...args) => dom.window.removeEventListener(...args));
 set_global("getSelection", () => dom.window.getSelection());
+set_global("innerWidth", 1440);
+set_global("innerHeight", 900);
 set_global("requestAnimationFrame", (f) => setTimeout(f, 16));
 set_global(
     "ResizeObserver",
@@ -279,6 +281,12 @@ async function openMore(id) {
     dom.click(door.parentElement.querySelector('[aria-label="More"]'));
     return find('[role="menu"]');
 }
+// host.js hands a key to an open menu before the rest of the page sees it.
+dom.window.addEventListener("keydown", (e) => {
+    if (hover.menu) {
+        hover.menu._key(e);
+    }
+});
 // An item of the menu, pressed.
 function choose(menu, label) {
     dom.click([...menu.querySelectorAll("button")].find((b) => b.textContent.startsWith(label)));
@@ -455,6 +463,31 @@ run_test("an edit gives back the draft the field held, saved or refused", async 
     assert.equal(field.textContent, "another of mine");
     hover.endEdit();
     assert.equal(field.textContent, "fifth words");
+});
+
+run_test("a card opened from More gives focus back to More when Esc closes it", async () => {
+    serve();
+    // Iago's message, reached from the keyboard; More, then Card, its last item.
+    await openMore(125);
+    const more = document.activeElement;
+    assert.equal(more.getAttribute("aria-label"), "More");
+    dom.press("ArrowDown");
+    dom.press("ArrowDown");
+    dom.press("ArrowDown");
+    dom.press("Enter");
+    await settle();
+    const open = find('[role="dialog"]');
+    assert.equal(open.getAttribute("aria-label"), "Iago");
+    assert.equal(document.activeElement, open);
+
+    dom.press("Escape");
+    assert.equal(find('[role="dialog"]'), null);
+    // Focus is on More again, and its controls are back up around it.
+    assert.equal(document.activeElement, more);
+    for (let node = more; node; node = node.parentElement) {
+        assert.ok(!node.inert);
+    }
+    closeMore();
 });
 
 run_test("Up edits my latest message only inside the limit", async () => {

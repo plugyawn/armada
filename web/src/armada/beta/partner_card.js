@@ -6,7 +6,7 @@ import {age, now} from "./time.js";
 import {api, signOut} from "./connection.js";
 import {nav, tx} from "./frame.js";
 import {bigFaceOf, faceOf, isOnix, nameOf, person, presOf} from "./faces.js";
-import {note, syncField} from "./composer.js";
+import {note, ready, syncField} from "./composer.js";
 import {info} from "./receipts.js";
 import {dialogOpen, menu} from "./hover.js";
 import {pop} from "./model_picker.js";
@@ -58,19 +58,32 @@ async function loadProfile(uid) { const had = profiles.get(uid); if (had && perf
   if (card && +card.dataset.uid === uid) drawFacts(); }
 
 function openCard(uid = state.ME, from = null) { if (moment) return; if (card && +card.dataset.uid === uid) { closeCard(); return; } if (card) closeCard(); if (!(uid > 0) || isOnix(uid)) return;
-  const c = card = el("div", "pcard raised float"); card.dataset.uid = uid; card.setAttribute("role", "dialog"); card.setAttribute("aria-label", uid === state.ME ? "You" : nameOf(uid)); card.tabIndex = -1; document.body.append(card); drawCard(); placeCard(from);
-  card.addEventListener("keydown", cardTab); M.release(card, {y: T["pane-rise"] || 4}, "move"); M.appear(card); if (uid !== state.ME) loadProfile(uid);
+  const c = card = el("div", "pcard raised float"); card.dataset.uid = uid; card.setAttribute("role", "dialog"); card.setAttribute("aria-label", uid === state.ME ? "You" : nameOf(uid)); card.tabIndex = -1;
+  c.opener = {back: document.activeElement, from}; document.body.append(card); drawCard(); placeCard(from);   /* what had focus, for when the card closes (closeCard) */
+  card.addEventListener("keydown", cardKey); M.release(card, {y: T["pane-rise"] || 4}, "move"); M.appear(card); if (uid !== state.ME) loadProfile(uid);
   /* a dialog takes focus, on the card itself so that Return presses nothing; after the press that opened it has ended */
   setTimeout(() => { if (card === c) c.focus({preventScroll: true}); }, 0); }
-/* Tab goes round the card's buttons while it is open; Esc closes it and gives the caret back to the field (host.js) */
-function cardTab(e) { if (e.key !== "Tab" || e.metaKey || e.ctrlKey || e.altKey || !card) return; const b = $$("button:not([disabled])", card); if (!b.length) return;
+/* Tab goes round the card's buttons while it is open; Esc closes it, and focus goes back to what had it (closeCard). Esc
+   with focus outside the card is host.js's. */
+function cardKey(e) { if (!card || moment || e.metaKey || e.ctrlKey || e.altKey) return;
+  if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); closeCard(); return; }
+  if (e.key !== "Tab") return; const b = $$("button:not([disabled])", card); if (!b.length) return;
   e.preventDefault(); const i = b.indexOf(document.activeElement); b[i < 0 ? (e.shiftKey ? b.length - 1 : 0) : (i + (e.shiftKey ? b.length - 1 : 1)) % b.length].focus(); }
 /* beside the face that was pressed, its top a little above the face's, inside the window; my own card keeps its place in CSS,
    above the account row */
 function placeCard(from) { if (!card || !from || !from.isConnected) return; card.classList.add("at"); const r = from.getBoundingClientRect(), w = card.offsetWidth, h = card.offsetHeight, gap = 8;
   let left = r.right + gap; if (left + w > innerWidth - gap) left = r.left - w - gap; const top = Math.max(gap, Math.min(innerHeight - h - gap, r.top - gap));
   card.style.left = `${Math.round(Math.max(gap, left))}px`; card.style.top = `${Math.round(top)}px`; }
-function closeCard() { if (!card || card.classList.contains("moment")) return; const c = card; card = null; c.inert = true; M.leave(c); }
+function closeCard() { if (!card || card.classList.contains("moment")) return; const c = card, held = c.contains(document.activeElement); card = null; c.inert = true; M.leave(c); if (held) giveFocusBack(c); }
+/* a dialog's rule: a card closed while it holds focus gives it back to what had it when the card opened (the field, the account
+   row, More). More's controls went with its menu, so the message it was opened from takes focus first, which brings them back up.
+   Anything else, or nothing, and the field takes it (ready). A closing card is inert but holds focus until the browser moves it to
+   the page, so it lets go first. */
+const inertAt = (x) => { for (let n = x; n; n = n.parentElement) if (n.inert) return true; return false; };
+function giveFocusBack(c) { const {back, from} = c.opener || {}, live = (x) => !!x && x.isConnected && x !== document.body;
+  if (live(back) && inertAt(back) && live(from) && from.tabIndex >= 0) from.focus({preventScroll: true});
+  if (live(back) && !inertAt(back)) back.focus({preventScroll: true});
+  if (c.contains(document.activeElement)) { document.activeElement.blur(); ready(); } }
 function drawCard() { if (!card || card.classList.contains("moment")) return; const uid = +card.dataset.uid, within = card.contains(document.activeElement); card.innerHTML = uid === state.ME ? myCardHTML() : theirCardHTML(uid); host(card); drawFacts();
   if (within && !card.contains(document.activeElement)) card.focus({preventScroll: true}); }   /* a redraw does not drop the focus out of the card */
 const head = (uid, name) => `<div class="ih"><b>${esc(name)}</b><span class="e">${esc(presenceWords(uid))}</span></div><div class="stage">${bigFaceOf(uid, CARD_FACE)}</div>`;

@@ -391,6 +391,31 @@ run_test("a card takes focus when it opens, and Tab goes round its buttons", asy
     beta_state.state.place = null;
 });
 
+run_test("Esc closes a card and gives focus back to what had it", async () => {
+    beta_state.state.place = {key: "s:10:option-groups", kind: "topic"};
+    // Opened from a face while I was writing: the field has the caret again.
+    const field = shown(`<div class="tx" contenteditable="true">hi</div>`);
+    field.focus();
+    dom.click(shown(faces.faceOf(IAGO)));
+    await settle();
+    clock.tick(0);
+    assert.equal(document.activeElement, document.querySelector('[role="dialog"]'));
+    dom.press("Escape");
+    assert.equal(document.querySelector('[role="dialog"]'), null);
+    assert.equal(document.activeElement, field);
+
+    // My own card, opened from the account row with the keyboard: the row.
+    const row = shown(`<button class="row me">Desdemona</button>`);
+    row.focus();
+    card.openCard();
+    clock.tick(0);
+    assert.equal(document.activeElement, document.querySelector('[role="dialog"]'));
+    dom.press("Escape");
+    assert.equal(document.querySelector('[role="dialog"]'), null);
+    assert.equal(document.activeElement, row);
+    beta_state.state.place = null;
+});
+
 run_test("a face in the nav opens no card", () => {
     const nav = shown(`<nav>${faces.faceOf(IAGO, "s20")}</nav>`);
     dom.click(nav.firstElementChild);

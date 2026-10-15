@@ -4328,6 +4328,15 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
                 }
             ],
         )
+        # Nothing is pending past the last steer.
+        self.assertEqual(
+            control_store.steering_events_after(
+                bot_handler,
+                run.trigger_message_id,
+                after_event_id=steering_event.id,
+            ),
+            [],
+        )
         run.refresh_from_db()
         self.assertEqual(run.attempts, 7)
         self.assertEqual(run.result_message_id, 4002)

@@ -6,9 +6,10 @@ import json
 import queue
 import threading
 from pathlib import Path
+from subprocess import Popen
 from tempfile import TemporaryDirectory
 from types import SimpleNamespace
-from typing import Any, NoReturn
+from typing import Any, NoReturn, cast
 from unittest import TestCase
 from unittest.mock import Mock, call, patch
 
@@ -51,11 +52,14 @@ from zerver.lib.armada import (
     ArmadaActiveSessionSummary,
     ArmadaAmbientDecision,
     ArmadaEmbeddedBotHandler,
+    ArmadaPendingSteeringEvent,
     ArmadaReferencedThread,
     ArmadaWorkerLeaseLostError,
     ArmadaWorkerRunResult,
     ArmadaWorkerRuntime,
+    ArmadaWorkerToolResult,
     ArmadaWorkerTranscriptCallback,
+    ArmadaWorkerTranscriptEvent,
     armada_distinct_transcript_tool_events,
     armada_normalize_token_usage,
     armada_sanitized_child_agent_event,
@@ -2565,8 +2569,7 @@ class ArmadaSessionDefaultsTest(TestCase):
                 }
             ]
         )
-        self.assertIn("Steering update:", steering_task)
-        self.assertIn("Use the linked parser discussion.", steering_task)
+        self.assertTrue(steering_task.startswith("Use the linked parser discussion."))
         self.assertIn("--- Referenced thread: #research > parser ---", steering_task)
 
     def test_codex_skills_are_provisioned_into_codex_home(self) -> None:
@@ -2821,6 +2824,103 @@ class ArmadaSessionDefaultsTest(TestCase):
                 "total_tokens": 115,
                 "cache_percent": 60.0,
             },
+        )
+
+    def test_codex_app_server_steer_awaits_codex_reply(self) -> None:
+        active_session = build_armada_active_session_summary_from_messages(
+            armada_session=get_armada_session_payload(),
+            source="server",
+            stream_exists=True,
+            messages=[(10, "@Onix fix the checkout test", False)],
+        )
+        active_session["client_user_message_id"] = "205"
+        processes = []
+
+        class FakeStdin:
+            def __init__(self) -> None:
+                self.lines: list[dict[str, Any]] = []
+
+            def write(self, value: str) -> int:
+                self.lines.append(json.loads(value))
+                return len(value)
+
+            def flush(self) -> None:
+                pass
+
+        class FakeProcess:
+            def __init__(self) -> None:
+                self.stdin = FakeStdin()
+                self.stdout = iter(
+                    [
+                        '{"id":1,"result":{"userAgent":"armada-test"}}\n',
+                        '{"id":2,"result":{"thread":{"id":"thread-app"}}}\n',
+                        '{"id":3,"result":{"turn":{"id":"turn-app"}}}\n',
+                        (
+                            '{"method":"item/started","params":{"threadId":"thread-app",'
+                            '"turnId":"turn-app","item":{"id":"cmd-1",'
+                            '"type":"commandExecution","command":"pytest",'
+                            '"status":"inProgress"}}}\n'
+                        ),
+                        (
+                            '{"id":4,"error":{"code":-32600,'
+                            '"message":"active turn is not steerable"}}\n'
+                        ),
+                        '{"id":5,"result":{"turnId":"turn-app"}}\n',
+                        (
+                            '{"method":"turn/completed","params":{"threadId":"thread-app",'
+                            '"turn":{"id":"turn-app"}}}\n'
+                        ),
+                    ]
+                )
+
+            def poll(self) -> None:
+                return None
+
+            def terminate(self) -> None:
+                pass
+
+        def fake_popen(command: list[str], **kwargs: object) -> Popen[str]:
+            process = FakeProcess()
+            processes.append(process)
+            return cast(Popen[str], process)
+
+        runner = ArmadaCodexAppServerToolRunner(
+            codex_bin="codex",
+            workdir="/workspace",
+            model="gpt-5.5",
+            sandbox="danger-full-access",
+            approval_policy="never",
+            timeout_seconds=30,
+            output_limit=200,
+            popen_command=fake_popen,
+        )
+        steer_results: list[bool] = []
+
+        def record_event(event: ArmadaWorkerTranscriptEvent) -> None:
+            if event["kind"] == "command" and event["status"] == "running":
+                steer_results.append(runner.steer("Iago: first", client_user_message_id="301"))
+                steer_results.append(runner.steer("Iago: second", client_user_message_id="302"))
+
+        runner(active_session, "fix the checkout test", event_callback=record_event)
+
+        # The refused steer is reported, so the caller can give it to
+        # the next turn; the accepted one is reported as applied.
+        self.assertEqual(steer_results, [False, True])
+        sent = processes[0].stdin.lines
+        self.assertEqual(sent[3]["method"], "turn/start")
+        self.assertEqual(sent[3]["params"], {**sent[3]["params"], "clientUserMessageId": "205"})
+        steers = [line["params"] for line in sent if line.get("method") == "turn/steer"]
+        self.assertEqual(
+            steers,
+            [
+                {
+                    "threadId": "thread-app",
+                    "expectedTurnId": "turn-app",
+                    "input": [{"type": "text", "text": f"Iago: {text}"}],
+                    "clientUserMessageId": client_user_message_id,
+                }
+                for text, client_user_message_id in [("first", "301"), ("second", "302")]
+            ],
         )
 
     def test_codex_app_server_tool_runner_reuses_process_and_steers_turn(self) -> None:
@@ -6227,10 +6327,7 @@ class ArmadaSessionDefaultsTest(TestCase):
 
         self.assertEqual(
             tool_seen_tasks,
-            [
-                "fix the checkout test",
-                "Steering update:\n- stop and summarize the current result",
-            ],
+            ["fix the checkout test", "stop and summarize the current result"],
         )
         self.assertEqual(tool_seen_threads, [None, "thread-1"])
         self.assertEqual([result["label"] for result in attached_artifacts], ["Artifact"])
@@ -6253,6 +6350,192 @@ class ArmadaSessionDefaultsTest(TestCase):
             recorded_events,
         )
         self.assertEqual(updated_messages[-1]["content"], "steered result")
+
+    def run_turn_with_steering(
+        self, steering_events: list[ArmadaPendingSteeringEvent]
+    ) -> tuple[list[tuple[str | None, str]], list[tuple[str | None, str]], list[tuple[str, bool]]]:
+        """Run a turn whose runtime accepts the first steer of each turn
+        and refuses the second. Returns each turn's (client message id,
+        input), each accepted steer's, and each applied steer's
+        (instruction, whether it joined a live turn)."""
+        recorded_events: list[tuple[str, str, dict[str, object]]] = []
+        turn_inputs: list[tuple[str | None, str]] = []
+        steer_inputs: list[tuple[str | None, str]] = []
+
+        class SteeringRunStore(FakeArmadaWorkerRunStore):
+            def record_event(
+                self,
+                bot_handler: object,
+                message_id: int,
+                event_type: str,
+                *,
+                summary: str = "",
+                payload: dict[str, object] | None = None,
+            ) -> None:
+                recorded_events.append((event_type, summary, payload or {}))
+
+            def steering_events_after(
+                self,
+                bot_handler: object,
+                message_id: int,
+                *,
+                after_event_id: int,
+            ) -> list[ArmadaPendingSteeringEvent]:
+                return [event for event in steering_events if event["event_id"] > after_event_id]
+
+        class RacingToolRunner:
+            """Accepts the first steer of each turn and refuses the
+            second, as Codex does when the turn ends under it."""
+
+            def __init__(self) -> None:
+                self.steers_this_turn = 0
+
+            def __call__(
+                self,
+                active_session: ArmadaActiveSessionSummary,
+                task: str,
+                *,
+                event_callback: ArmadaWorkerTranscriptCallback | None = None,
+                user_input_provider: object = None,
+            ) -> list[ArmadaWorkerToolResult]:
+                turn_inputs.append((active_session.get("client_user_message_id"), task))
+                self.steers_this_turn = 0
+                assert event_callback is not None
+                event_callback({"kind": "command", "status": "done", "title": "Ran tests."})
+                return [{"label": "Result", "value": "done"}]
+
+            def steer(self, instruction: str, *, client_user_message_id: str | None = None) -> bool:
+                self.steers_this_turn += 1
+                if self.steers_this_turn > 1:
+                    return False
+                steer_inputs.append((client_user_message_id, instruction))
+                return True
+
+            def codex_thread_id(self) -> str:
+                return "thread-1"
+
+        class FakeBotHandler:
+            def send_reply(self, message: dict[str, object], response: str) -> None:
+                raise AssertionError("progress message should be edited in place")
+
+            def update_message(self, message: dict[str, object]) -> None:
+                pass
+
+        active_session = build_armada_active_session_summary_from_messages(
+            armada_session=get_armada_session_payload(),
+            source="server",
+            stream_exists=True,
+            messages=[(10, "@Onix fix the checkout test", False)],
+        )
+        message = {
+            "id": 205,
+            "type": "stream",
+            "display_recipient": ARMADA_DEFAULT_STREAM,
+            "topic": ARMADA_DEFAULT_TOPIC,
+            "content": "@Onix fix the checkout test",
+        }
+        make_test_armada_handler(
+            worker_runtime=ArmadaWorkerRuntime(RacingToolRunner()),
+            worker_run_store=SteeringRunStore(),
+        ).run_worker_turn(
+            message,
+            FakeBotHandler(),
+            content="@Onix fix the checkout test",
+            active_session=active_session,
+            message_id=205,
+            stream=ARMADA_DEFAULT_STREAM,
+            topic=ARMADA_DEFAULT_TOPIC,
+            post_started_progress=True,
+            progress_message_id=501,
+        )
+        return (
+            turn_inputs,
+            steer_inputs,
+            [
+                (summary, bool(payload.get("same_turn", False)))
+                for event_type, summary, payload in recorded_events
+                if event_type == "steering_applied"
+            ],
+        )
+
+    def test_run_worker_turn_delivers_every_steer_once_with_its_author(self) -> None:
+        """Six steers in one run: a steer Codex refuses because the turn
+        is ending starts the next turn, so each message reaches exactly
+        one turn's input, in order, under its author's name."""
+        steering_events: list[ArmadaPendingSteeringEvent] = [
+            {
+                "event_id": index,
+                "message_id": 300 + index,
+                "instruction": f"step {index}",
+                "sender_full_name": "Iago" if index % 2 else "Cordelia",
+            }
+            for index in range(1, 7)
+        ]
+        turn_inputs, steer_inputs, applied = self.run_turn_with_steering(steering_events)
+
+        self.assertEqual(
+            turn_inputs,
+            [
+                ("205", "fix the checkout test"),
+                ("302", "Cordelia: step 2"),
+                ("304", "Cordelia: step 4"),
+                ("306", "Cordelia: step 6"),
+            ],
+        )
+        self.assertEqual(
+            steer_inputs,
+            [("301", "Iago: step 1"), ("303", "Iago: step 3"), ("305", "Iago: step 5")],
+        )
+        delivered = sorted(
+            str(client_user_message_id)
+            for client_user_message_id, _input in [*turn_inputs[1:], *steer_inputs]
+        )
+        self.assertEqual(delivered, [str(300 + index) for index in range(1, 7)])
+        self.assertEqual(
+            applied,
+            [
+                ("step 1", True),
+                ("step 2", False),
+                ("step 3", True),
+                ("step 4", False),
+                ("step 5", True),
+                ("step 6", False),
+            ],
+        )
+
+    def test_run_worker_turn_steers_without_a_message_send_no_client_id(self) -> None:
+        """A steer with no message reaches Codex without a client message
+        id, and a turn it starts does not keep the previous turn's."""
+        turn_inputs, steer_inputs, applied = self.run_turn_with_steering(
+            [
+                {"event_id": 1, "message_id": 0, "instruction": "first"},
+                {"event_id": 2, "message_id": 0, "instruction": "second"},
+            ]
+        )
+
+        self.assertEqual(steer_inputs, [(None, "first")])
+        self.assertEqual(turn_inputs, [("205", "fix the checkout test"), (None, "second")])
+        self.assertEqual(applied, [("first", True), ("second", False)])
+
+    def test_steering_task_names_each_author(self) -> None:
+        self.assertEqual(
+            build_armada_steering_task(
+                [
+                    {
+                        "event_id": 1,
+                        "message_id": 50,
+                        "instruction": " keep the patch small ",
+                        "sender_full_name": "Iago",
+                    },
+                    {"event_id": 2, "message_id": 0, "instruction": "and add a test"},
+                ]
+            ),
+            "Iago: keep the patch small\nand add a test",
+        )
+        self.assertEqual(
+            build_armada_steering_task([{"event_id": 1, "message_id": 50, "instruction": " "}]),
+            "Steering update: continue the active task.",
+        )
 
     def test_embedded_bot_obeys_injected_worker_run_duplicate_claim(self) -> None:
         sent_replies: list[str] = []

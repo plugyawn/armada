@@ -1414,6 +1414,7 @@ class ArmadaAppServerTurnContext:
 
 
 ARMADA_APP_SERVER_ACTIVITY: Final = object()
+ARMADA_APP_SERVER_STEER_REPLY_TIMEOUT_SECONDS: Final = 30
 
 
 class ArmadaCodexAppServerToolRunner:
@@ -2247,10 +2248,13 @@ class ArmadaCodexAppServerToolRunner:
             params["developerInstructions"] = build_armada_codex_developer_instructions()
         return {key: value for key, value in params.items() if value is not None}
 
-    def turn_params(self, thread_id: str, prompt: str) -> dict[str, Any]:
+    def turn_params(
+        self, thread_id: str, prompt: str, *, client_user_message_id: str | None = None
+    ) -> dict[str, Any]:
         params: dict[str, Any] = {
             "threadId": thread_id,
             "input": [{"type": "text", "text": prompt}],
+            "clientUserMessageId": client_user_message_id,
             "approvalPolicy": self.approval_policy,
             "cwd": self.workdir,
             "serviceTier": self.service_tier,
@@ -2848,7 +2852,11 @@ class ArmadaCodexAppServerToolRunner:
                 prompt = build_armada_codex_turn_prompt(active_session, task)
                 result = self.request(
                     "turn/start",
-                    self.turn_params(thread_id, prompt),
+                    self.turn_params(
+                        thread_id,
+                        prompt,
+                        client_user_message_id=active_session.get("client_user_message_id"),
+                    ),
                     event_callback=run_event_callback,
                 )
                 turn_id = armada_app_server_turn_id_from_result(result)
@@ -2881,7 +2889,7 @@ class ArmadaCodexAppServerToolRunner:
             return results
 
     def consume_background_response(self, message: dict[str, Any]) -> bool:
-        """Swallow responses to fire-and-forget requests (steer/interrupt):
+        """Swallow responses to fire-and-forget requests (interrupt):
         a late error reply must not fail an unrelated wait loop."""
         message_id = message.get("id")
         with self.state_lock:
@@ -2896,27 +2904,37 @@ class ArmadaCodexAppServerToolRunner:
             )
         return True
 
-    def steer(self, instruction: str) -> bool:
+    def steer(self, instruction: str, *, client_user_message_id: str | None = None) -> bool:
+        """Steer the live turn, and say whether Codex took the input.
+
+        Codex answers `turn/steer` with the turn's id, or with an error
+        when the turn has just ended or cannot be steered. The caller
+        keeps a refused instruction and gives it to the next turn, so it
+        is never lost."""
         with self.lock:
             if self.process is None or self.process.poll() is not None:
                 return False
             if self.active_thread_id is None or self.active_turn_id is None:
                 return False
-            request_id = self.next_id()
-            with self.state_lock:
-                self.background_request_ids.add(request_id)
-            self.send_message(
-                {
-                    "id": request_id,
-                    "method": "turn/steer",
-                    "params": {
-                        "threadId": self.active_thread_id,
-                        "expectedTurnId": self.active_turn_id,
-                        "input": [{"type": "text", "text": instruction}],
-                    },
-                }
+            params: dict[str, Any] = {
+                "threadId": self.active_thread_id,
+                "expectedTurnId": self.active_turn_id,
+                "input": [{"type": "text", "text": instruction}],
+            }
+        if client_user_message_id is not None:
+            params["clientUserMessageId"] = client_user_message_id
+        # The reply arrives through the reader thread; turn notifications
+        # wait on the turn's own queue meanwhile, in order.
+        try:
+            self.request(
+                "turn/steer",
+                params,
+                timeout_seconds=ARMADA_APP_SERVER_STEER_REPLY_TIMEOUT_SECONDS,
             )
-            return True
+        except ArmadaAgentRuntimeError as error:
+            logger.info("Codex refused a steer: %s", trim_armada_agent_text(str(error), limit=300))
+            return False
+        return True
 
     def interrupt(self) -> bool:
         with self.lock:

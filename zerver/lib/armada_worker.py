@@ -3938,11 +3938,27 @@ class ArmadaDatabaseWorkerRunStore:
         if run is None:
             return []
 
-        events = AgentRunEvent.objects.filter(
-            run=run,
-            event_type="steering",
-            id__gt=after_event_id,
-        ).order_by("id")
+        events = list(
+            AgentRunEvent.objects.filter(
+                run=run,
+                event_type="steering",
+                id__gt=after_event_id,
+            ).order_by("id")
+        )
+        if not events:
+            return []
+        steering_message_ids = {
+            event.payload["message_id"]
+            for event in events
+            if isinstance(event.payload, dict) and isinstance(event.payload.get("message_id"), int)
+        }
+        steering_messages = {
+            steering_message.id: steering_message
+            for steering_message in Message.objects.select_related("sender").filter(
+                id__in=steering_message_ids,
+                realm_id=user_profile.realm_id,
+            )
+        }
         pending_events: list[ArmadaPendingSteeringEvent] = []
         for event in events:
             payload = event.payload
@@ -3964,17 +3980,10 @@ class ArmadaDatabaseWorkerRunStore:
                 "message_id": message_id_value,
                 "instruction": instruction,
             }
-            steering_message = None
-            if "#**" in instruction:
-                steering_message = (
-                    Message.objects.select_related("sender")
-                    .filter(
-                        id=message_id_value,
-                        realm_id=user_profile.realm_id,
-                    )
-                    .first()
-                )
+            steering_message = steering_messages.get(message_id_value)
             if steering_message is not None:
+                pending_event["sender_full_name"] = steering_message.sender.full_name
+            if steering_message is not None and "#**" in instruction:
                 referenced_threads = load_armada_referenced_threads(
                     steering_message.sender if steering_message.sender.is_active else None,
                     content=steering_message.content,

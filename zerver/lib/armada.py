@@ -73,7 +73,6 @@ ARMADA_SELECTED_BOT_CONFIG_VALUE: Final = "true"
 ARMADA_QUESTION_TIMEOUT_SECONDS: Final = 600
 ARMADA_QUESTION_POLL_SECONDS: Final = 2.0
 
-ARMADA_MAX_STEERING_SEGMENTS: Final = 4
 # This is visible only during the short message-event/run-event handoff before
 # the client mounts the animated live-progress chrome. Keep it visually
 # identical to that chrome instead of flashing a second placeholder design.
@@ -163,6 +162,8 @@ class ArmadaPendingSteeringEvent(TypedDict):
     event_id: int
     message_id: int
     instruction: str
+    # Who sent the message, so the agent can tell people apart.
+    sender_full_name: NotRequired[str]
     referenced_threads: NotRequired[list["ArmadaReferencedThread"]]
 
 
@@ -219,6 +220,9 @@ class ArmadaWorkspaceContext(TypedDict, total=False):
 
 class ArmadaActiveSessionSummary(TypedDict):
     state: ArmadaActiveSessionState
+    # The id of the message the next turn answers, sent to Codex as the
+    # turn's clientUserMessageId.
+    client_user_message_id: NotRequired[str]
     stream: str
     topic: str
     source: ArmadaActiveSessionSource
@@ -1258,21 +1262,26 @@ def build_armada_ack_message(task: str = "") -> str:
 def build_armada_steering_task(
     steering_events: Sequence[ArmadaPendingSteeringEvent],
 ) -> str:
+    """The input a person's steer gives the agent: each line starts with
+    its author's name, so the agent knows who asked for what."""
     instructions = [
-        event["instruction"].strip() for event in steering_events if event["instruction"].strip()
+        f"{event['sender_full_name']}: {event['instruction'].strip()}"
+        if event.get("sender_full_name")
+        else event["instruction"].strip()
+        for event in steering_events
+        if event["instruction"].strip()
     ]
     if not instructions:
         return "Steering update: continue the active task."
     referenced_threads = [
         thread for event in steering_events for thread in event.get("referenced_threads", [])
     ]
-    return "\n".join(
-        [
-            "Steering update:",
-            *[f"- {instruction}" for instruction in instructions],
-            *format_armada_referenced_threads(referenced_threads),
-        ]
-    )
+    return "\n".join([*instructions, *format_armada_referenced_threads(referenced_threads)])
+
+
+def armada_steering_client_user_message_id(event: ArmadaPendingSteeringEvent) -> str | None:
+    """Codex's `clientUserMessageId` for a steer: the Zulip message's id."""
+    return str(event["message_id"]) if event["message_id"] > 0 else None
 
 
 def format_armada_referenced_threads(
@@ -1914,13 +1923,16 @@ class ArmadaWorkerRuntime:
             }
         ]
 
-    def steer(self, instruction: str) -> bool:
+    def steer(self, instruction: str, *, client_user_message_id: str | None = None) -> bool:
+        """Steer the live turn; True only when the runtime took the input."""
         if self.tool_runner is None:
             return False
         steer = getattr(self.tool_runner, "steer", None)
         if not callable(steer):
             return False
-        return bool(steer(instruction))
+        if client_user_message_id is None:
+            return bool(steer(instruction))
+        return bool(steer(instruction, client_user_message_id=client_user_message_id))
 
     def interrupt(self) -> bool:
         if self.tool_runner is None:
@@ -3078,6 +3090,9 @@ class ArmadaWorkerTurn:
         self.steering_events_after: Any = None
         self.last_steering_event_id = 0
         self.steering_segment_count = 0
+        # Set when Codex refuses a steer: the live turn has ended or cannot
+        # be steered, so pending steers wait for the next turn instead.
+        self.steering_refused_this_turn = False
         self.worker_result: dict[str, Any] = {}
         self.artifact_tool_results: list[ArmadaWorkerToolResult] = []
         self.codex_thread_id: str | None = None
@@ -3256,42 +3271,56 @@ class ArmadaWorkerTurn:
         }
 
     def maybe_apply_same_turn_steering(self) -> None:
+        """Steer the live turn with each pending message, in order.
+
+        A steer counts as applied only once Codex accepts it. A refused
+        steer stays pending, and the loop in run() starts the next turn
+        with it, so no message is lost and there is no cap."""
         if (
             self.active_session is None
             or not callable(self.steering_events_after)
-            or self.steering_segment_count >= ARMADA_MAX_STEERING_SEGMENTS
+            or self.steering_refused_this_turn
         ):
             return
-        pending_steering_events = self.steering_events_after(
+        pending_steering_events: list[ArmadaPendingSteeringEvent] = self.steering_events_after(
             self.bot_handler,
             self.message_id,
             after_event_id=self.last_steering_event_id,
         )
-        if not pending_steering_events:
-            return
-        latest_steering = "; ".join(event["instruction"] for event in pending_steering_events)
-        steering_task = build_armada_steering_task(pending_steering_events)
-        if not self.handler.worker_runtime.steer(steering_task):
-            return
-        self.last_steering_event_id = pending_steering_events[-1]["event_id"]
+        for steering_event in pending_steering_events:
+            if not self.handler.worker_runtime.steer(
+                build_armada_steering_task([steering_event]),
+                client_user_message_id=armada_steering_client_user_message_id(steering_event),
+            ):
+                self.steering_refused_this_turn = True
+                return
+            self.last_steering_event_id = steering_event["event_id"]
+            self.record_steering_applied(steering_event, same_turn=True)
+
+    def record_steering_applied(
+        self, steering_event: ArmadaPendingSteeringEvent, *, same_turn: bool
+    ) -> None:
         self.steering_segment_count += 1
+        instruction = steering_event["instruction"]
+        payload: dict[str, object] = {
+            "segment_index": self.steering_segment_count,
+            "steering_events": [steering_event],
+        }
+        if same_turn:
+            payload["same_turn"] = True
         self.handler.record_worker_event(
             self.bot_handler,
             self.message_id,
             "steering_applied",
-            summary=trim_armada_text(latest_steering, limit=500),
-            payload={
-                "segment_index": self.steering_segment_count,
-                "steering_events": pending_steering_events,
-                "same_turn": True,
-            },
+            summary=trim_armada_text(instruction, limit=500),
+            payload=payload,
         )
         self.transcript_events.append(
             {
                 "kind": "steering",
                 "status": "done",
                 "title": "Steering applied",
-                "body": latest_steering,
+                "body": instruction,
             }
         )
         self.update_volatile_run_state("running")
@@ -3463,6 +3492,7 @@ class ArmadaWorkerTurn:
     def run_runtime_segment(self, segment_task: str, *, segment_index: int) -> dict[str, Any]:
         self.raise_if_cancel_requested()
         segment_event_start = len(self.transcript_events)
+        self.steering_refused_this_turn = False
         run_runtime = (
             self.handler.worker_runtime.run_side
             if self.session_kind == "side"
@@ -3648,59 +3678,47 @@ class ArmadaWorkerTurn:
                 None,
             )
 
+            if self.session_kind == "shared" and self.message_id > 0:
+                self.active_session["client_user_message_id"] = str(self.message_id)
             self.worker_result = self.run_runtime_segment(self.task, segment_index=0)
             self.codex_thread_id = self.worker_result["codex_thread_id"]
             while (
                 self.worker_result["worker_can_run"]
                 and self.session_kind == "shared"
                 and callable(self.steering_events_after)
-                and self.steering_segment_count < ARMADA_MAX_STEERING_SEGMENTS
             ):
-                pending_steering_events = self.steering_events_after(
-                    self.bot_handler,
-                    self.message_id,
-                    after_event_id=self.last_steering_event_id,
+                # A steer that arrived as the turn ended, or that Codex
+                # refused, starts the next turn under its own message id;
+                # any others steer that turn once it is live.
+                pending_steering_events: list[ArmadaPendingSteeringEvent] = (
+                    self.steering_events_after(
+                        self.bot_handler,
+                        self.message_id,
+                        after_event_id=self.last_steering_event_id,
+                    )
                 )
                 if not pending_steering_events:
                     break
-                self.last_steering_event_id = pending_steering_events[-1]["event_id"]
-                self.steering_segment_count += 1
-                steering_task = build_armada_steering_task(pending_steering_events)
-                latest_steering = "; ".join(
-                    event["instruction"] for event in pending_steering_events
-                )
+                next_event = pending_steering_events[0]
+                self.last_steering_event_id = next_event["event_id"]
                 if self.codex_thread_id:
                     self.active_session["latest_codex_thread_id"] = self.codex_thread_id
                 self.handler.update_worker_metadata(
                     self.bot_handler,
                     self.message_id,
                     current_activity=trim_armada_text(
-                        f"Applying steering: {latest_steering}",
+                        f"Applying steering: {next_event['instruction']}",
                         limit=500,
                     ),
                 )
-                self.handler.record_worker_event(
-                    self.bot_handler,
-                    self.message_id,
-                    "steering_applied",
-                    summary=trim_armada_text(latest_steering, limit=500),
-                    payload={
-                        "segment_index": self.steering_segment_count,
-                        "steering_events": pending_steering_events,
-                    },
-                )
-                self.transcript_events.append(
-                    {
-                        "kind": "steering",
-                        "status": "done",
-                        "title": "Steering applied",
-                        "body": latest_steering,
-                    }
-                )
-                self.update_volatile_run_state("running")
-                self.update_live_transcript("running", force=True)
+                self.record_steering_applied(next_event, same_turn=False)
+                client_user_message_id = armada_steering_client_user_message_id(next_event)
+                if client_user_message_id is not None:
+                    self.active_session["client_user_message_id"] = client_user_message_id
+                else:
+                    self.active_session.pop("client_user_message_id", None)
                 self.worker_result = self.run_runtime_segment(
-                    steering_task,
+                    build_armada_steering_task([next_event]),
                     segment_index=self.steering_segment_count,
                 )
                 self.codex_thread_id = self.worker_result["codex_thread_id"] or self.codex_thread_id

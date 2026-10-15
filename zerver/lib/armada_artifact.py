@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import re
 from collections.abc import Iterable
-from typing import Any
+from typing import Any, TypedDict
 
 from zerver.lib.armada_artifact_contract import ARMADA_ARTIFACT_SCHEMA
 
@@ -458,7 +458,12 @@ def armada_artifact_node_count(document: dict[str, Any]) -> int:
     )
 
 
-def artifact_tool_result(encoded: str) -> dict[str, str]:
+class ArmadaArtifactToolResult(TypedDict):
+    label: str
+    value: str
+
+
+def artifact_tool_result(encoded: str) -> ArmadaArtifactToolResult:
     return {"label": ARMADA_ARTIFACT_TOOL_RESULT_LABEL, "value": encoded}
 
 

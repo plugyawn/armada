@@ -118,7 +118,7 @@ def load_armada_agent_thread_events(run_ids: Iterable[int]) -> list[AgentRunEven
         if isinstance((thread_id := armada_agent_event_metadata(event).get("codex_thread_id")), str)
     }
     if not thread_ids:
-        return sessions
+        return list(sessions)
 
     reducer_events = list(
         AgentRunEvent.objects.filter(
@@ -160,21 +160,23 @@ def load_armada_agent_thread_events(run_ids: Iterable[int]) -> list[AgentRunEven
     return [*sessions, *reducer_events]
 
 
+def _descriptor_creation_order(descriptor: dict[str, object]) -> tuple[float, int, str]:
+    date_created = descriptor.get("date_created")
+    session_event_id = descriptor.get("session_event_id")
+    return (
+        float(date_created) if isinstance(date_created, int | float) else 0.0,
+        session_event_id if isinstance(session_event_id, int) else 0,
+        str(descriptor["thread_id"]),
+    )
+
+
 def _complete_visible_descriptor_ids(
     descriptors: dict[str, dict[str, object]], root_thread_id: str
 ) -> set[str]:
     """Choose newest descendants without returning an orphaned nested child."""
 
     selected: set[str] = set()
-    newest_first = sorted(
-        descriptors.values(),
-        key=lambda descriptor: (
-            float(descriptor.get("date_created") or 0),
-            int(descriptor.get("session_event_id") or 0),
-            str(descriptor["thread_id"]),
-        ),
-        reverse=True,
-    )
+    newest_first = sorted(descriptors.values(), key=_descriptor_creation_order, reverse=True)
     for descriptor in newest_first:
         chain: list[str] = []
         thread_id = str(descriptor["thread_id"])
@@ -253,8 +255,8 @@ def serialize_armada_agent_threads(
                     "session_event_id": event.id,
                 }
 
-        thread_id = metadata.get("codex_thread_id")
-        descriptor = descriptors.get(thread_id) if isinstance(thread_id, str) else None
+        event_thread_id = metadata.get("codex_thread_id")
+        descriptor = descriptors.get(event_thread_id) if isinstance(event_thread_id, str) else None
         if descriptor is None:
             continue
         method = metadata.get("codex_method")
@@ -278,13 +280,7 @@ def serialize_armada_agent_threads(
 
     selected_ids = _complete_visible_descriptor_ids(descriptors, run.codex_thread_id)
     visible = [descriptor for key, descriptor in descriptors.items() if key in selected_ids]
-    visible.sort(
-        key=lambda descriptor: (
-            float(descriptor.get("date_created") or 0),
-            int(descriptor.get("session_event_id") or 0),
-            str(descriptor["thread_id"]),
-        )
-    )
+    visible.sort(key=_descriptor_creation_order)
     return [
         ArmadaRunAgent.model_validate(
             {

@@ -2881,6 +2881,28 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
         self.assertIn("status 128", log_output)
         self.assertIn("fatal: not a git repository", log_output)
 
+    def test_armada_git_output_logs_stderr_on_timeout(self) -> None:
+        # TimeoutExpired carries the captured output as bytes, even with
+        # text=True.
+        timeout = subprocess.TimeoutExpired(
+            ["git"], 2, output=b"", stderr=b"fatal: index.lock is held\n"
+        )
+
+        with tempfile.TemporaryDirectory() as workdir:
+            Path(workdir, ".git").touch()
+            with (
+                patch("zerver.lib.armada_worker.subprocess.run", side_effect=timeout),
+                self.assertLogs("zerver.lib.armada_worker", level="WARNING") as logs,
+            ):
+                self.assertEqual(armada_git_output(workdir, ["status"]), "")
+
+        self.assertTrue(
+            logs.output[0].startswith(
+                f"WARNING:zerver.lib.armada_worker:Git command timed out in {workdir} "
+                "with args ['status']: fatal: index.lock is held\n"
+            )
+        )
+
     def test_armada_git_output_skips_missing_workdir_without_warning(self) -> None:
         with (
             tempfile.TemporaryDirectory() as parent,

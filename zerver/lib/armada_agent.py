@@ -1012,7 +1012,9 @@ class ArmadaCodexAppServerTranscriptTranslator:
                 status_type = "idle"
 
             previous = self.thread_descriptors.get(thread_id)
-            descriptor = dict(previous) if previous is not None else {"id": thread_id}
+            descriptor: dict[str, Any] = (
+                dict(previous) if previous is not None else {"id": thread_id}
+            )
             descriptor.setdefault("parent_thread_id", sender_thread_id.strip())
             descriptor.setdefault("agent_nickname", None)
             descriptor.setdefault("agent_role", None)
@@ -1326,10 +1328,14 @@ class ArmadaCodexAppServerTranscriptTranslator:
             and thread_id in self.thread_descriptors
         ):
             for event in item_events:
-                body = event.get("body")
-                if event.get("kind") == "assistant" and isinstance(body, str) and body.strip():
+                item_body = event.get("body")
+                if (
+                    event.get("kind") == "assistant"
+                    and isinstance(item_body, str)
+                    and item_body.strip()
+                ):
                     self.latest_direct_assistant_body[thread_id] = trim_armada_agent_text(
-                        body, limit=4000
+                        item_body, limit=4000
                     )
         return [*collaboration_events, *item_events]
 
@@ -1574,7 +1580,7 @@ class ArmadaCodexAppServerToolRunner:
         process: subprocess.Popen[str],
         messages: queue.Queue[dict[str, Any] | None],
     ) -> None:
-        if process is None or process.stdout is None:
+        if process.stdout is None:
             messages.put(None)
             return
         try:
@@ -2704,9 +2710,10 @@ class ArmadaCodexAppServerToolRunner:
                     # it as a completed command/file/tool action.
                     continue
             else:
-                message = self.next_message(self.timeout_seconds)
-                if message is None:
+                next_message = self.next_message(self.timeout_seconds)
+                if next_message is None:
                     raise ArmadaAgentRuntimeError("Codex app-server stopped unexpectedly.")
+                message = next_message
                 if self.handle_server_request(message, event_callback=event_callback):
                     continue
                 if "method" not in message:

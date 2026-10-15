@@ -37,6 +37,7 @@ from zerver.lib.armada import (
     ArmadaWorkerLeaseLostError,
     ArmadaWorkerRunStatus,
     ArmadaWorkerRuntime,
+    ArmadaWorkspaceContext,
     armada_message_id,
     armada_message_stream,
     armada_message_topic,
@@ -83,7 +84,7 @@ ARMADA_WORKER_RUN_TERMINAL_STATUSES = frozenset((AgentRun.DONE, AgentRun.CANCELL
 ARMADA_WORKER_MAX_CLAIM_ATTEMPTS = 2
 ARMADA_WORKER_HEARTBEAT_INTERVAL_SECONDS = 15
 ARMADA_WORKER_STALE_HEARTBEAT_MISSES = 4
-ARMADA_RUN_LEGAL_TRANSITIONS: dict[ArmadaWorkerRunStatus, frozenset[ArmadaWorkerRunStatus]] = {
+ARMADA_RUN_LEGAL_TRANSITIONS: dict[str, frozenset[ArmadaWorkerRunStatus]] = {
     AgentRun.QUEUED: frozenset((AgentRun.RUNNING, AgentRun.FAILED, AgentRun.CANCELLED)),
     AgentRun.RUNNING: frozenset((AgentRun.DONE, AgentRun.FAILED, AgentRun.CANCELLED)),
     AgentRun.FAILED: frozenset((AgentRun.QUEUED,)),
@@ -619,8 +620,16 @@ def armada_default_worker_model() -> str:
     return str(settings.ARMADA_WORKER_MODEL or "")
 
 
+def armada_setting_text(value: object, default: str) -> str:
+    """A setting's text, or the default when a deployment leaves it empty.
+
+    The settings are typed as literals, but environment overrides can
+    still deliver an empty string."""
+    return str(value or default)
+
+
 def armada_default_worker_reasoning_effort() -> str:
-    effort = str(settings.ARMADA_WORKER_REASONING_EFFORT or "").strip()
+    effort = armada_setting_text(settings.ARMADA_WORKER_REASONING_EFFORT, "").strip()
     if effort in ARMADA_REASONING_EFFORTS:
         return effort
     return "medium"
@@ -631,7 +640,7 @@ def armada_default_worker_workdir() -> str:
 
 
 def armada_configured_worker_sandbox() -> str:
-    return str(settings.ARMADA_WORKER_SANDBOX or "read-only")
+    return armada_setting_text(settings.ARMADA_WORKER_SANDBOX, "read-only")
 
 
 def armada_runs_restricted() -> bool:
@@ -652,7 +661,7 @@ def armada_user_is_trusted(user_profile: UserProfile) -> bool:
 
 
 def armada_topic_isolation_backend() -> str:
-    return str(settings.ARMADA_TOPIC_ISOLATION_BACKEND or "codex-sandbox")
+    return armada_setting_text(settings.ARMADA_TOPIC_ISOLATION_BACKEND, "codex-sandbox")
 
 
 def armada_topic_os_user_isolation_enabled() -> bool:
@@ -1416,7 +1425,7 @@ def ensure_armada_workspace_node(
         },
     )
     update_fields = []
-    if project is not None and workspace_node.project_id != project.id:
+    if workspace_node.project_id != project.id:
         workspace_node.project = project
         update_fields.append("project")
     if armada_workspace_workdir_needs_repair(workspace_node):
@@ -1455,9 +1464,7 @@ def ensure_armada_workspace_node(
         base_ref=project.default_base_ref,
         isolation_username=existing_isolation_username,
     )
-    effective_branch_name = (
-        armada_topic_branch_name(effective_branch) if isinstance(effective_branch, str) else ""
-    )
+    effective_branch_name = armada_topic_branch_name(effective_branch)
     if effective_branch_name and workspace_node.branch_name != effective_branch_name:
         workspace_node.branch_name = effective_branch_name
         workspace_node.date_updated = timezone_now()
@@ -2064,7 +2071,7 @@ def maybe_refactor_armada_workspace_on_move(
         if workspace_node is not None
         else None
     )
-    if target is not None and target.id != workspace_node.id:
+    if target is not None and workspace_node is not None and target.id != workspace_node.id:
         monitor_count = monitors.update(
             stream_name=new_stream_name,
             topic_name=new_topic_name,
@@ -2236,11 +2243,8 @@ def armada_git_output(
         )
     except subprocess.TimeoutExpired as error:
         stderr = error.stderr
-        stderr_text = (
-            stderr.decode(errors="replace").strip()
-            if isinstance(stderr, bytes)
-            else (stderr or "").strip()
-        )
+        # Captured output is always bytes here, even with text=True.
+        stderr_text = stderr.decode(errors="replace").strip() if isinstance(stderr, bytes) else ""
         logger.warning(
             "Git command timed out in %s with args %s: %s",
             workdir,
@@ -2458,14 +2462,11 @@ def build_armada_workspace_context(
     *,
     stream: str,
     topic: str,
-) -> dict[str, str]:
+) -> ArmadaWorkspaceContext:
     workspace_node = ensure_armada_workspace_node(user_profile, stream=stream, topic=topic)
     workdir = workspace_node.workdir.strip() or armada_default_worker_workdir()
-    workspace_repo = (
-        workspace_node.project.repository_url.strip()
-        if workspace_node.project_id is not None
-        else ""
-    )
+    project = workspace_node.project
+    workspace_repo = project.repository_url.strip() if project is not None else ""
     repository = armada_logical_repository_label(
         stream=stream,
         context_repo=workspace_repo,
@@ -2610,7 +2611,9 @@ def build_armada_worker_runtime_from_settings(
     process_isolation_override: ArmadaProcessIsolation | None = None,
     process_isolation_error: str | None = None,
 ) -> ArmadaWorkerRuntime:
-    runtime = settings.ARMADA_WORKER_AGENT_RUNTIME
+    # A string, not the setting's literal type: an environment override
+    # can name a runtime this build does not know.
+    runtime: str = settings.ARMADA_WORKER_AGENT_RUNTIME
     model = model_override if model_override is not None else settings.ARMADA_WORKER_MODEL
     workdir = workdir_override if workdir_override is not None else settings.ARMADA_WORKER_WORKDIR
     sandbox = (
@@ -4178,7 +4181,7 @@ class ArmadaDatabaseWorkerRunStore:
                 )
 
     def _runtime_label(self) -> str:
-        return str(settings.ARMADA_WORKER_AGENT_RUNTIME or "")
+        return armada_setting_text(settings.ARMADA_WORKER_AGENT_RUNTIME, "")
 
     def _model_label(
         self,
@@ -4199,7 +4202,7 @@ class ArmadaDatabaseWorkerRunStore:
         return armada_worker_sandbox_for_topic(user_profile, stream=stream, topic=topic)
 
     def _approval_policy_label(self) -> str:
-        return str(settings.ARMADA_WORKER_APPROVAL_POLICY or "")
+        return armada_setting_text(settings.ARMADA_WORKER_APPROVAL_POLICY, "")
 
     def _workdir_label(
         self,

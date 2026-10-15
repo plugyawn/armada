@@ -1,4 +1,5 @@
 import uuid
+from typing import Final
 
 from django.db import models
 from django.db.models import CASCADE, SET_NULL
@@ -86,11 +87,12 @@ class BotConfigData(models.Model):
 
 
 class AgentRun(models.Model):
-    QUEUED = "queued"
-    RUNNING = "running"
-    DONE = "done"
-    FAILED = "failed"
-    CANCELLED = "cancelled"
+    # Final, so type checkers read each status as its literal value.
+    QUEUED: Final = "queued"
+    RUNNING: Final = "running"
+    DONE: Final = "done"
+    FAILED: Final = "failed"
+    CANCELLED: Final = "cancelled"
 
     SHARED = "shared"
     SIDE = "side"

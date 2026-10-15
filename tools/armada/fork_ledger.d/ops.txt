@@ -1,0 +1,3 @@
+# Operations: backups, monitoring and the server's configuration as code
+# (puppet/armada/, Armada's own). Zulip files it changes:
+kept puppet/zulip/files/postgresql/pg_backup_and_purge  # parses backup times with fractional seconds (Spaces reports them)

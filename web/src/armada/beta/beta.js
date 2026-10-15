@@ -192,6 +192,21 @@ function echoHTML(text) {
 
 /* ---------- the frame ---------- */
 let main, feed, lane, nav, navScroll, navFixed, side, outline, band, cz, tx, sh, go, goc, ph, toBtn, modeBtn, panes;
+/* the frame the kit draws, found once at boot: its elements, the band's line for the picker, and the nav's rows */
+function bindFrame() {
+  frame({nav: "", path: "", title: "", dist: "", commit: {who: "", sha: "", subj: "", age: ""}, tab: "Chat", checklist: {title: "Checklist"}, band: {}, composer: {text: "", verb: "Send", mode: "", focus: false}});
+  main = $("main"); feed = $("#pane"); lane = $("#col"); nav = $("nav"); side = $("#side"); outline = $("#outline"); state.hd = $("main > header.hd");
+  band = {el: $("main > .band"), ty: $("#ty"), run: $("#run"), jump: $("#jump"), clock: $("#clock"), st: $("#run-st"), act: $("#act"), stop: $("#stop")};
+  band.pk = el("p", "pkb"); band.pk.hidden = true; $(".lane", band.el).append(band.pk);   /* the picker's one sentence */
+  cz = $("main > .dock .cz"); tx = $(".tx", cz); sh = $(".sh", cz); go = $(".disc", cz); goc = $(".disc .cell", cz); ph = $(".ph", cz); toBtn = $(".k.to", cz); modeBtn = $(".k.mode", cz);
+  panes = {Chat: feed}; $$("main > .pane[data-pane]").forEach((x) => (panes[x.dataset.pane] = x));
+  $$(".slot > i, .pc > i").forEach((i) => i.classList.add("sz"));
+  [band.run, band.ty, band.jump].forEach((e) => e && (e.inert = e.classList.contains("off")));
+  /* the nav: the kit's top row, a scroller of real places, and me */
+  const top = $(".top", nav); nav.textContent = ""; navScroll = el("div", "scroll"); navFixed = el("div", "fixed", `<button class="row" data-k="jump" data-tip="Jump to" data-key="⌘K">${ic("search")}<span class="lab">Jump to</span></button><button class="row" data-k="home">${ic("home")}<span class="lab">Home</span></button><a class="row old" href="/" data-tip="The old interface, with everything the beta does not have yet">${ic("open")}<span class="lab">Old interface</span></a>`);
+  nav.append(top, navFixed, navScroll); const meRow = el("button", "row me", `${faceOf(state.ME, "s20")}<span class="lab">${esc(state.meName)}</span>`); nav.append(meRow); host(nav);
+  $(".wk-name", top).dataset.tip = "The workspace menu is in the old interface"; $(".new", top).dataset.tip = "New: in the old interface for now"; meRow.dataset.tip = "Signed in as " + state.meName; drawMeRow();
+}
 let verb = "Send";
 /* Onix answers what I send in a place only where I turned it on there: off until then, kept in this browser for each place,
    never on outside a repository. Words that name @Onix address it whatever the switch says. */
@@ -1462,18 +1477,7 @@ async function boot() {
   const bootEl = el("div", "", "Loading"); bootEl.id = "boot"; document.body.append(bootEl);
   try { await Promise.all([register(), loadThemedMarks(), loadPartners()]); api("GET", "armada/session").then((r) => { if (r.armada_session && r.armada_session.agent_mention) state.agentMention = r.armada_session.agent_mention; }).catch(() => {}); }
   catch (e) { if (signedOut.done) { bootEl.remove(); return; } bootEl.innerHTML = `<p>The beta could not load: ${esc(e.message)}. <a href="/">Open the old interface</a></p>`; return; }
-  frame({nav: "", path: "", title: "", dist: "", commit: {who: "", sha: "", subj: "", age: ""}, tab: "Chat", checklist: {title: "Checklist"}, band: {}, composer: {text: "", verb: "Send", mode: "", focus: false}});
-  main = $("main"); feed = $("#pane"); lane = $("#col"); nav = $("nav"); side = $("#side"); outline = $("#outline"); state.hd = $("main > header.hd");
-  band = {el: $("main > .band"), ty: $("#ty"), run: $("#run"), jump: $("#jump"), clock: $("#clock"), st: $("#run-st"), act: $("#act"), stop: $("#stop")};
-  band.pk = el("p", "pkb"); band.pk.hidden = true; $(".lane", band.el).append(band.pk);   /* the picker's one sentence */
-  cz = $("main > .dock .cz"); tx = $(".tx", cz); sh = $(".sh", cz); go = $(".disc", cz); goc = $(".disc .cell", cz); ph = $(".ph", cz); toBtn = $(".k.to", cz); modeBtn = $(".k.mode", cz);
-  panes = {Chat: feed}; $$("main > .pane[data-pane]").forEach((x) => (panes[x.dataset.pane] = x));
-  $$(".slot > i, .pc > i").forEach((i) => i.classList.add("sz"));
-  [band.run, band.ty, band.jump].forEach((e) => e && (e.inert = e.classList.contains("off")));
-  /* the nav: the kit's top row, a scroller of real places, and me */
-  const top = $(".top", nav); nav.textContent = ""; navScroll = el("div", "scroll"); navFixed = el("div", "fixed", `<button class="row" data-k="jump" data-tip="Jump to" data-key="⌘K">${ic("search")}<span class="lab">Jump to</span></button><button class="row" data-k="home">${ic("home")}<span class="lab">Home</span></button><a class="row old" href="/" data-tip="The old interface, with everything the beta does not have yet">${ic("open")}<span class="lab">Old interface</span></a>`);
-  nav.append(top, navFixed, navScroll); const meRow = el("button", "row me", `${faceOf(state.ME, "s20")}<span class="lab">${esc(state.meName)}</span>`); nav.append(meRow); host(nav);
-  $(".wk-name", top).dataset.tip = "The workspace menu is in the old interface"; $(".new", top).dataset.tip = "New: in the old interface for now"; meRow.dataset.tip = "Signed in as " + state.meName; drawMeRow();
+  bindFrame();
   /* my face opens my partner's card (or the picker, before I have one); the picker's switch, Later, its cells; the card's controls */
   press(nav, ".row.me", () => { if (pack) openCard(); ready(); });
   press(main, "[data-seg]", (b) => { pick.seg = b.dataset.seg; if (pick.q) { pick.q = ""; tx.textContent = ""; syncField(); } pick.sel = null; state.hd._sig = ""; drawHeader(); drawPicker(); drawPickerBand(); panes.Partner.scrollTop = 0; ready(); });

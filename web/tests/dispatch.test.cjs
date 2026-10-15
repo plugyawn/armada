@@ -54,9 +54,9 @@ const muted_users_ui = mock_esm("../src/muted_users_ui");
 const narrow_title = mock_esm("../src/narrow_title");
 const navbar_alerts = mock_esm("../src/navbar_alerts");
 const pm_list = mock_esm("../src/pm_list");
-const pear_panel = mock_esm("../src/pear_panel");
-const pear_run_state = mock_esm("../src/pear_run_state");
-const pear_workspace_events = mock_esm("../src/pear_workspace_events");
+const pear_panel = mock_esm("../src/legacy_panel");
+const pear_run_state = mock_esm("../src/legacy_run_state");
+const pear_workspace_events = mock_esm("../src/legacy_workspace_events");
 const reactions = mock_esm("../src/reactions", {
     generate_clean_reactions() {},
 });

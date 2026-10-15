@@ -3,15 +3,15 @@ from typing import Any
 
 from typing_extensions import override
 
-from zerver.lib.bot_lib import EmbeddedBotHandler
-from zerver.lib.pear import PearEmbeddedBotHandler
-from zerver.lib.pear_worker import (
+from zerver.lib.armada import PearEmbeddedBotHandler
+from zerver.lib.armada_worker import (
     PEAR_ADDRESSING_QUEUE_NAME,
     PearDatabaseWorkerRunStore,
     PearQueueWorkerDispatcher,
     build_pear_addressing_intent_classifier_from_settings,
     load_pear_active_session_from_zulip,
 )
+from zerver.lib.bot_lib import EmbeddedBotHandler
 from zerver.models.users import get_user_profile_by_id
 from zerver.worker.base import QueueProcessingWorker, assign_queue
 

@@ -11,7 +11,7 @@ import threading
 from django.db import reset_queries
 from typing_extensions import override
 
-from zerver.lib.pear_monitor import pear_run_due_monitor_ticks
+from zerver.lib.armada_monitor import pear_run_due_monitor_ticks
 from zerver.worker.base import assign_queue
 from zerver.worker.pear_worker import PearWorker
 

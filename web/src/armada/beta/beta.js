@@ -314,7 +314,7 @@ async function fetchMsgs(c, older) {
 }
 async function fetchRuns(c) { const p = c.place; if (p.kind !== "topic" || !p.repo) return; try { const r = await api("GET", "pear/runs", {stream: p.stream, topic: p.topic}); if (r.runtime_config) runtimeCfg = r.runtime_config; c.runs = r.pear_runs.filter((x) => x.session_kind !== "side"); c.runs.forEach(askState); runsSeen.set(p.key, c.runs); c.runsLoaded = true; } catch (e) {} }
 /* a run that waits for a person: the server's live state says it is on a question (request_user_input); the answer is
-   any message that names the agent while the run waits (zerver/lib/pear.py, request_user_answers) */
+   any message that names the agent while the run waits (zerver/lib/armada.py, request_user_answers) */
 function askState(r) { if (r.waiting === undefined) r.waiting = !!(r.live && r.live.operation && r.live.operation.kind === "question" && (r.status === "running" || r.status === "queued")); return r; }
 /* the live state can be gone (it is a cache entry), so the conversation says it too: a run waits when Onix's question is
    the last word after its trigger and no one has named Onix since */

@@ -39,8 +39,8 @@ class EmbeddedBotWorker(QueueProcessingWorker):
             service_message = dict(message)
             try:
                 if service.name == "pear":
-                    from zerver.lib.pear import PEAR_TRIGGER_MESSAGE_KEY
-                    from zerver.lib.pear_worker import PEAR_ADDRESSING_QUEUE_NAME
+                    from zerver.lib.armada import PEAR_TRIGGER_MESSAGE_KEY
+                    from zerver.lib.armada_worker import PEAR_ADDRESSING_QUEUE_NAME
 
                     service_message[PEAR_TRIGGER_MESSAGE_KEY] = event["trigger"]
                 if event["trigger"] == "mention":

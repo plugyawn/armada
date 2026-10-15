@@ -858,8 +858,8 @@ def add_subscriptions_backend(
             raise JsonableError(
                 _("Repository URLs can only be set when creating a single new channel.")
             )
-        from zerver.lib.pear_worker import clean_pear_repository_url as clean_pear_repo_url
-        from zerver.lib.pear_worker import pear_user_is_trusted
+        from zerver.lib.armada_worker import clean_pear_repository_url as clean_pear_repo_url
+        from zerver.lib.armada_worker import pear_user_is_trusted
 
         if not pear_user_is_trusted(user_profile):
             raise JsonableError(_("You are not allowed to give a channel a Git repository."))
@@ -966,7 +966,7 @@ def add_subscriptions_backend(
     result["already_subscribed"] = dict(result["already_subscribed"])
 
     if clean_pear_repository_url:
-        from zerver.lib.pear_worker import configure_pear_channel_repository_workspace
+        from zerver.lib.armada_worker import configure_pear_channel_repository_workspace
 
         try:
             configure_pear_channel_repository_workspace(

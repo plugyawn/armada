@@ -1,18 +1,18 @@
 import $ from "jquery";
 import assert from "minimalistic-assert";
 
+import render_pear_topic_header_controls from "../templates/legacy_topic_header_controls.hbs";
 import render_message_view_header from "../templates/message_view_header.hbs";
-import render_pear_topic_header_controls from "../templates/pear_topic_header_controls.hbs";
 
 import * as armada_narrow from "./armada/hooks/narrow.ts"; // armada:
 import type {Filter} from "./filter.ts";
 import * as hash_util from "./hash_util.ts";
 import {$t} from "./i18n.ts";
 import * as inbox_util from "./inbox_util.ts";
+import * as pear_panel from "./legacy_panel.ts";
+import * as pear_workspace from "./legacy_workspace.ts";
 import * as narrow_state from "./narrow_state.ts";
 import {page_params} from "./page_params.ts";
-import * as pear_panel from "./pear_panel.ts";
-import * as pear_workspace from "./pear_workspace.ts";
 import * as peer_data from "./peer_data.ts";
 import * as recent_view_util from "./recent_view_util.ts";
 import * as rendered_markdown from "./rendered_markdown.ts";
@@ -255,7 +255,7 @@ function current_place(filter: Filter | undefined): string {
 
 // The header's facts belong to the worktree in front. Its views are drawn
 // in the task that changes place, before the worktree's context arrives;
-// pear_panel.ts fills the same element in place when it does.
+// legacy_panel.ts fills the same element in place when it does.
 function render_worktree_facts(filter: Filter | undefined, place: string): void {
     const $facts = $("[data-armada=header-facts]");
     const stream_id = filter && narrow_state.stream_id(filter);

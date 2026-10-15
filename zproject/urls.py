@@ -20,6 +20,28 @@ from zerver.lib.rest import rest_path
 from zerver.lib.url_redirects import DOCUMENTATION_REDIRECTS, get_integration_category_redirects
 from zerver.views.alert_words import add_alert_words, list_alert_words, remove_alert_words
 from zerver.views.antispam import get_challenge
+from zerver.views.armada import (
+    delete_pear_monitor_backend,
+    get_pear_active_session_backend,
+    get_pear_config_backend,
+    get_pear_monitors_backend,
+    get_pear_run_backend,
+    get_pear_run_trace_backend,
+    get_pear_runs_backend,
+    get_pear_session_backend,
+    get_pear_topic_context_backend,
+    get_pear_workspace_topics_backend,
+    post_pear_config_backend,
+    post_pear_first_run_backend,
+    post_pear_monitors_backend,
+    post_pear_run_attention_backend,
+    post_pear_run_cancel_backend,
+    post_pear_run_not_for_pear_backend,
+    post_pear_run_pause_backend,
+    post_pear_run_resume_backend,
+    post_pear_topic_context_backend,
+    update_pear_monitor_backend,
+)
 from zerver.views.armada_beta import (
     armada_beta,
     armada_beta_sprite,
@@ -27,6 +49,19 @@ from zerver.views.armada_beta import (
     post_armada_partner,
     post_armada_partner_evolve,
     post_armada_partner_fold,
+)
+from zerver.views.armada_workspace import (
+    delete_pear_workspace_entry_backend,
+    get_pear_workspace_descriptor_backend,
+    get_pear_workspace_history_backend,
+    get_pear_workspace_raw_backend,
+    get_pear_workspace_resource_file_backend,
+    get_pear_workspace_search_backend,
+    get_pear_workspace_tree_backend,
+    patch_pear_workspace_entry_backend,
+    post_pear_workspace_entry_backend,
+    post_pear_workspace_refresh_backend,
+    put_pear_workspace_resource_file_backend,
 )
 from zerver.views.attachments import list_by_user, remove
 from zerver.views.auth import (
@@ -103,41 +138,6 @@ from zerver.views.navigation_views import (
     update_navigation_view,
 )
 from zerver.views.onboarding_steps import mark_onboarding_step_as_read
-from zerver.views.pear import (
-    delete_pear_monitor_backend,
-    get_pear_active_session_backend,
-    get_pear_config_backend,
-    get_pear_monitors_backend,
-    get_pear_run_backend,
-    get_pear_run_trace_backend,
-    get_pear_runs_backend,
-    get_pear_session_backend,
-    get_pear_topic_context_backend,
-    get_pear_workspace_topics_backend,
-    post_pear_config_backend,
-    post_pear_first_run_backend,
-    post_pear_monitors_backend,
-    post_pear_run_attention_backend,
-    post_pear_run_cancel_backend,
-    post_pear_run_not_for_pear_backend,
-    post_pear_run_pause_backend,
-    post_pear_run_resume_backend,
-    post_pear_topic_context_backend,
-    update_pear_monitor_backend,
-)
-from zerver.views.pear_workspace import (
-    delete_pear_workspace_entry_backend,
-    get_pear_workspace_descriptor_backend,
-    get_pear_workspace_history_backend,
-    get_pear_workspace_raw_backend,
-    get_pear_workspace_resource_file_backend,
-    get_pear_workspace_search_backend,
-    get_pear_workspace_tree_backend,
-    patch_pear_workspace_entry_backend,
-    post_pear_workspace_entry_backend,
-    post_pear_workspace_refresh_backend,
-    put_pear_workspace_resource_file_backend,
-)
 from zerver.views.presence import (
     get_presence_backend,
     get_status_backend,

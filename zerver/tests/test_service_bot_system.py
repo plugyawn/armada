@@ -12,6 +12,7 @@ from typing_extensions import ParamSpec, override
 
 from zerver.actions.create_user import do_create_user
 from zerver.actions.message_send import get_service_bot_events
+from zerver.lib.armada import PEAR_EMBEDDED_BOT_SERVICE, PEAR_FOLLOWUP_TRIGGER
 from zerver.lib.bot_config import (
     ConfigError,
     get_bot_configs,
@@ -20,7 +21,6 @@ from zerver.lib.bot_config import (
 )
 from zerver.lib.bot_lib import EmbeddedBotEmptyRecipientsListError, EmbeddedBotHandler, StateHandler
 from zerver.lib.bot_storage import StateError
-from zerver.lib.pear import PEAR_EMBEDDED_BOT_SERVICE, PEAR_FOLLOWUP_TRIGGER
 from zerver.lib.test_classes import ZulipTestCase
 from zerver.lib.test_helpers import mock_queue_publish
 from zerver.lib.validator import check_string
@@ -551,7 +551,7 @@ class TestServiceBotBasics(ZulipTestCase):
         )
 
         with mock.patch(
-            "zerver.lib.pear.build_pear_active_session_summary_from_messages",
+            "zerver.lib.armada.build_pear_active_session_summary_from_messages",
             side_effect=AssertionError("send gate must not parse topic history"),
         ):
             event_dict = get_service_bot_events(

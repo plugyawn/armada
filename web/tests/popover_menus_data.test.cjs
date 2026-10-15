@@ -13,7 +13,7 @@ const {page_params} = require("./lib/zpage_params.cjs");
 const {Filter} = zrequire("filter");
 const {MessageList} = zrequire("message_list");
 const message_lists = zrequire("message_lists");
-const pear_run_state = zrequire("pear_run_state");
+const pear_run_state = zrequire("legacy_run_state");
 
 const popover_menus_data = zrequire("popover_menus_data");
 const people = zrequire("people");

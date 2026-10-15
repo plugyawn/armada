@@ -25,6 +25,7 @@ from zerver.actions.user_topics import (
 )
 from zerver.lib.addressee import Addressee
 from zerver.lib.alert_words import get_alert_word_automaton
+from zerver.lib.armada_gate import get_pear_followup_service_bot_event
 from zerver.lib.cache import cache_with_key, user_profile_delivery_email_cache_key
 from zerver.lib.create_user import create_user
 from zerver.lib.exceptions import (
@@ -63,7 +64,6 @@ from zerver.lib.notification_data import (
     get_user_group_mentions_data,
     user_allows_notifications_in_StreamTopic,
 )
-from zerver.lib.pear_gate import get_pear_followup_service_bot_event
 from zerver.lib.query_helpers import query_for_ids
 from zerver.lib.queue import queue_event_on_commit
 from zerver.lib.recipient_users import recipient_for_user_profiles

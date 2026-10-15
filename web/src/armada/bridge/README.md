@@ -10,7 +10,7 @@ To add one: name it `legacy_<area>.ts`, add a line here (`- legacy_<area>.ts: wh
 
 - legacy_feed.ts (+ .css): the old message view in the frame's pane, its rows in the new faces and inks; deleted by D1
 - legacy_nav.ts (+ .css): the old left sidebar in the nav column; deleted by B1
-- legacy_header.ts (+ .css): the old title, search and menus on the header's first line and the worktree's controls (runtime, branch, commit, views) that pear_panel.ts draws into it; deleted by B2 (the search box by D1, the menus by C5)
+- legacy_header.ts (+ .css): the old title, search and menus on the header's first line and the worktree's controls (runtime, branch, commit, views) that legacy_panel.ts draws into it; deleted by B2 (the search box by D1, the menus by C5)
 - legacy_composer.ts (+ .css): the old compose box in the field's track; deleted by B3
 - legacy_column.ts (+ .css): the old right rail (wall, roster, people, thread pane) in a sheet from the window's right edge, closed at rest; deleted by B4 (B8 for the wall and the people). While the sheet is closed the wall draws nothing, so `idle-cost/wall-monitors.*` left `known.json` at F5 for that reason, not because the wall got cheaper: B8 meets them again when it draws monitors in the column
 - legacy_home.ts (+ .css): Inbox and Recent as panes, each its own scroller; deleted by B5

@@ -4,12 +4,12 @@ from unittest import mock
 import orjson
 from django.utils.timezone import now as timezone_now
 
+from zerver.lib.armada import PEAR_EMBEDDED_BOT_SERVICE
 from zerver.lib.cache import cache_delete, to_dict_cache_key_id
 from zerver.lib.display_recipient import get_display_recipient
 from zerver.lib.markdown import version as markdown_version
 from zerver.lib.message import messages_for_ids
 from zerver.lib.message_cache import MessageDict, sew_messages_and_reactions
-from zerver.lib.pear import PEAR_EMBEDDED_BOT_SERVICE
 from zerver.lib.per_request_cache import flush_per_request_caches
 from zerver.lib.test_classes import ZulipTestCase
 from zerver.lib.test_helpers import make_client

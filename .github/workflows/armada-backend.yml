@@ -1,0 +1,59 @@
+name: Pear backend
+
+on:
+  pull_request:
+  push:
+    branches:
+      - pear-main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  pear-backend:
+    name: Pear backend tests
+    runs-on: ubuntu-latest
+    container: zulip/ci:noble
+    env:
+      # Match Zulip's main CI setup so PostgreSQL writes ~/.pgpass where psql expects it.
+      HOME: /home/github/
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Restore uv cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/uv
+          key: pear-uv-noble-${{ hashFiles('uv.lock') }}
+          restore-keys: pear-uv-noble-
+
+      - name: Install backend dependencies
+        run: ./tools/ci/setup-backend --skip-dev-db-build
+
+      - name: Run Pear backend tests
+        run: |
+          source tools/ci/activate-venv
+          ./tools/test-backend \
+            zerver.tests.test_armada \
+            zerver.tests.test_armada_endpoint \
+            zerver.tests.test_armada_workspace_io \
+            zerver.tests.test_armada_workspace_index \
+            zerver.tests.test_armada_workspace_resources \
+            zerver.tests.test_message_threads \
+            --ban-console-output
+
+      - name: Test production deployment tooling
+        run: |
+          source tools/ci/activate-venv
+          python -m unittest tools.armada_deploy.test_production_runtime
+
+      - name: Check for untracked files
+        run: |
+          source tools/ci/activate-venv
+          untracked="$(git ls-files --exclude-standard --others)"
+          if [ -n "$untracked" ]; then
+            printf >&2 "Error: untracked files:\n%s\n" "$untracked"
+            exit 1
+          fi

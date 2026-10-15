@@ -164,6 +164,7 @@ from zerver.actions.users import (
     do_update_outgoing_webhook_service,
 )
 from zerver.actions.video_calls import do_set_video_call_provider_token
+from zerver.lib.armada import PEAR_EMBEDDED_BOT_SERVICE
 from zerver.lib.drafts import DraftData, do_create_drafts, do_delete_draft, do_edit_draft
 from zerver.lib.event_schema import (
     check_alert_words,
@@ -258,7 +259,6 @@ from zerver.lib.events import apply_events, fetch_initial_state_data, post_proce
 from zerver.lib.markdown import render_message_markdown
 from zerver.lib.mention import MentionBackend, MentionData
 from zerver.lib.muted_users import get_mute_object
-from zerver.lib.pear import PEAR_EMBEDDED_BOT_SERVICE
 from zerver.lib.streams import check_update_all_streams_active_status, user_has_metadata_access
 from zerver.lib.test_classes import ZulipTestCase
 from zerver.lib.test_helpers import (

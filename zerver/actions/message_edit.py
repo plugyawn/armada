@@ -26,6 +26,7 @@ from zerver.actions.message_send import (
 from zerver.actions.uploads import AttachmentChangeResult, check_attachment_reference_change
 from zerver.actions.user_topics import bulk_do_set_user_topic_visibility_policy
 from zerver.lib import utils
+from zerver.lib.armada_worker import maybe_refactor_pear_workspace_on_move
 from zerver.lib.cache import cache_delete_many, to_dict_cache_key_id
 from zerver.lib.exceptions import (
     JsonableError,
@@ -50,7 +51,6 @@ from zerver.lib.message import (
     truncate_topic,
 )
 from zerver.lib.message_cache import update_message_cache
-from zerver.lib.pear_worker import maybe_refactor_pear_workspace_on_move
 from zerver.lib.queue import queue_event_on_commit
 from zerver.lib.stream_subscription import get_active_subscriptions_for_stream_id
 from zerver.lib.stream_topic import StreamTopicTarget

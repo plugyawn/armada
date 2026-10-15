@@ -104,4 +104,4 @@ core
 ## Miscellaneous
 # (Ideally this section is empty.)
 .transifexrc
-/tools/pear_deploy/pear_roster.local.py
+/tools/armada_deploy/pear_roster.local.py

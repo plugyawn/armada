@@ -1,7 +1,7 @@
 import assert from "minimalistic-assert";
 
+import * as pear_workspace_marks from "./legacy_workspace_marks.ts";
 import * as narrow_state from "./narrow_state.ts";
-import * as pear_workspace_marks from "./pear_workspace_marks.ts";
 import * as resolved_topic from "./resolved_topic.ts";
 import * as stream_topic_history from "./stream_topic_history.ts";
 import * as sub_store from "./sub_store.ts";

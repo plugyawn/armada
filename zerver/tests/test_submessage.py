@@ -7,9 +7,9 @@ from typing import Any
 from unittest import mock
 
 from zerver.actions.submessage import do_add_submessage
+from zerver.lib.armada import PEAR_EMBEDDED_BOT_SERVICE, attach_pear_artifact_to_message
+from zerver.lib.armada_generated_vector import sanitize_pear_generated_vector
 from zerver.lib.message_cache import MessageDict
-from zerver.lib.pear import PEAR_EMBEDDED_BOT_SERVICE, attach_pear_artifact_to_message
-from zerver.lib.pear_generated_vector import sanitize_pear_generated_vector
 from zerver.lib.test_classes import ZulipTestCase
 from zerver.models import Attachment, Message, SubMessage, UserProfile
 
@@ -236,11 +236,11 @@ class TestBasics(ZulipTestCase):
             )
             with (
                 mock.patch(
-                    "zerver.lib.pear_worker.pear_resolve_file_path",
+                    "zerver.lib.armada_worker.pear_resolve_file_path",
                     return_value=media_path.resolve(),
                 ) as resolve_path,
                 mock.patch(
-                    "zerver.lib.pear_worker.pear_read_bytes_path",
+                    "zerver.lib.armada_worker.pear_read_bytes_path",
                     return_value=media_bytes,
                 ) as read_path,
             ):

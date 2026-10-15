@@ -1,0 +1,18 @@
+[Unit]
+Description=Pear Zulip server with production assets
+After=network-online.target postgresql.service rabbitmq-server.service redis-server.service memcached.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=zulipdev
+WorkingDirectory=/home/zulipdev/zulip
+EnvironmentFile=/home/zulipdev/pear.env
+ExecStart=/usr/local/bin/armada-run-zulip-dev
+Restart=always
+RestartSec=5
+KillSignal=SIGINT
+TimeoutStopSec=30
+
+[Install]
+WantedBy=multi-user.target

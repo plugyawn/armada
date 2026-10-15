@@ -122,7 +122,7 @@ system_face_rule: "Rule" = {
     "pattern": r"system-ui|-apple-system|BlinkMacSystemFont|\bui-(sans-serif|serif|monospace|rounded)\b|Helvetica Neue|\bMenlo\b|\bSF ?(Pro|Mono)",
     "include_only": {"web/"},
     "exclude": {
-        "web/src/pear_signature.ts",
+        "web/src/legacy_signature.ts",
         "web/styles/app_variables.css",
         "web/styles/portico/activity.css",
         "web/styles/portico/email_log.css",
@@ -196,9 +196,9 @@ js_rules = RuleList(
                 "web/src/state_data.ts",
                 # These use subject in the git sense (the first line of a
                 # commit message); it is the field name in the Pear API.
-                "web/src/pear_panel.ts",
-                "web/src/pear_workspace_api.ts",
-                "web/src/pear_workspace_files.ts",
+                "web/src/legacy_panel.ts",
+                "web/src/legacy_workspace_api.ts",
+                "web/src/legacy_workspace_files.ts",
                 "web/tests/",
             },
             "exclude_pattern": "emails",

@@ -1,0 +1,16 @@
+[Unit]
+Description=Pear presentation queue
+After=network-online.target armada-zulip-dev.service
+Wants=armada-zulip-dev.service
+
+[Service]
+Type=simple
+User=zulipdev
+WorkingDirectory=/home/zulipdev/zulip
+EnvironmentFile=/home/zulipdev/pear.env
+ExecStart=/bin/bash -lc 'cd /home/zulipdev/zulip && exec /home/zulipdev/zulip/.venv/bin/python3 /home/zulipdev/zulip/manage.py process_queue --queue_name pear_presentation --automated'
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

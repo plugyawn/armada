@@ -20,6 +20,17 @@ import * as condense from "./condense.ts";
 import * as hash_util from "./hash_util.ts";
 import {$t} from "./i18n.ts";
 import * as internal_url from "./internal_url.ts";
+import {unmount_pear_artifact} from "./legacy_artifact_lifecycle.ts";
+import {
+    pear_live_overview_key,
+    pear_live_progress_matches,
+    pear_live_progress_signature,
+    preserve_unchanged_pear_overview,
+} from "./legacy_live_dom.ts";
+import * as pear_panel from "./legacy_panel.ts";
+import * as pear_run_state from "./legacy_run_state.ts";
+import * as pear_run_trace from "./legacy_run_trace.ts";
+import {active_plan_presentation} from "./legacy_runtime_shared.ts";
 import * as message_edit from "./message_edit.ts";
 import type {MessageList} from "./message_list.ts";
 import * as message_list_hover from "./message_list_hover.ts";
@@ -34,17 +45,6 @@ import type {MessageViewportInfo} from "./message_viewport.ts";
 import * as muted_users from "./muted_users.ts";
 import * as narrow_state from "./narrow_state.ts";
 import {page_params} from "./page_params.ts";
-import {unmount_pear_artifact} from "./pear_artifact_lifecycle.ts";
-import {
-    pear_live_overview_key,
-    pear_live_progress_matches,
-    pear_live_progress_signature,
-    preserve_unchanged_pear_overview,
-} from "./pear_live_dom.ts";
-import * as pear_panel from "./pear_panel.ts";
-import * as pear_run_state from "./pear_run_state.ts";
-import * as pear_run_trace from "./pear_run_trace.ts";
-import {active_plan_presentation} from "./pear_runtime_shared.ts";
 import * as people from "./people.ts";
 import * as popovers from "./popovers.ts";
 import * as reactions from "./reactions.ts";
@@ -567,7 +567,7 @@ function mark_pear_thinking_markers(
 
 function update_pear_thinking_glyphs(): void {
     // The frame cycle itself runs in CSS (pear-thinking-frames in
-    // pear.css, mirroring pear_thinking_glyphs): JS marks each active
+    // legacy.css, mirroring pear_thinking_glyphs): JS marks each active
     // marker once, clearing its text so the animated ::before frames are
     // not doubled next to a static glyph. Typed terminal events own
     // deactivation; there is no client-side liveness timeout.

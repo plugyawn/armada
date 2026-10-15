@@ -41,7 +41,7 @@ const {MessageListData} = zrequire("message_list_data");
 const message_lists = zrequire("message_lists");
 const message_store = zrequire("message_store");
 const muted_users = zrequire("muted_users");
-const pear_run_state = zrequire("../src/pear_run_state");
+const pear_run_state = zrequire("../src/legacy_run_state");
 const state_data = zrequire("state_data");
 
 let next_timestamp = 1500000000;

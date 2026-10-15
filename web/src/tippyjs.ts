@@ -77,7 +77,7 @@ tippy.default.setDefaultProps({
     maxWidth: "21.4286em",
     delay: INSTANT_HOVER_DELAY,
     placement: "top",
-    // A minimal fade+settle (see pear_theme.css) — snappy, not abrupt.
+    // A minimal fade+settle (see legacy_theme.css) — snappy, not abrupt.
     animation: "pear",
     duration: [120, 80],
     // Show tooltips on long press on touch based devices.

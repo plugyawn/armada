@@ -19,6 +19,7 @@ from zerver.decorator import (
     zulip_login_required,
     zulip_otp_required_if_logged_in,
 )
+from zerver.lib.armada import PEAR_QUESTION_TIMEOUT_SECONDS
 from zerver.lib.partner import (
     armada_sprite_dir,
     choose_partner,
@@ -27,7 +28,6 @@ from zerver.lib.partner import (
     partners_state,
     put_off_choice,
 )
-from zerver.lib.pear import PEAR_QUESTION_TIMEOUT_SECONDS
 from zerver.lib.response import json_success
 from zerver.lib.stream_subscription import get_subscribed_stream_ids_for_user
 from zerver.lib.typed_endpoint import (

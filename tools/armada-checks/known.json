@@ -445,7 +445,7 @@
         "measured": 20.02,
         "unit": "px",
         "threshold": "<= 0.5",
-        "audit": "var/armada-overhaul/maps/left-sidebar.md, Instability #4: topic text shifts +20px when the worktree icon arrives from /json/pear/workspace-topics (pear_workspace_marks.ts:39-66).",
+        "audit": "var/armada-overhaul/maps/left-sidebar.md, Instability #4: topic text shifts +20px when the worktree icon arrives from /json/pear/workspace-topics (legacy_workspace_marks.ts:39-66).",
         "since": "2026-10-13"
     },
     "size/initial-css.minified-kb": {
@@ -507,7 +507,7 @@
         "measured": 38,
         "unit": "",
         "threshold": "<= 0",
-        "audit": "var/armada-overhaul/design/final/SPEC-ENGINEERING.md, sections 6 and 8 (Stream): today an answer arrives as whole-message edits every 200 ms (zerver/lib/pear.py, PEAR_PERSISTENT_ASSISTANT_FLUSH_INTERVAL_SECONDS) and each one re-renders the row (var/armada-overhaul/maps/feed-agent.md, Instability). Fixed by C2 (stream writer), on B6's deltas. It was 34 to 53 over fifteen runs; the ceiling stops it from growing.",
+        "audit": "var/armada-overhaul/design/final/SPEC-ENGINEERING.md, sections 6 and 8 (Stream): today an answer arrives as whole-message edits every 200 ms (zerver/lib/armada.py, PEAR_PERSISTENT_ASSISTANT_FLUSH_INTERVAL_SECONDS) and each one re-renders the row (var/armada-overhaul/maps/feed-agent.md, Instability). Fixed by C2 (stream writer), on B6's deltas. It was 34 to 53 over fifteen runs; the ceiling stops it from growing.",
         "since": "2026-10-13",
         "max": 60
     },
@@ -515,7 +515,7 @@
         "measured": 188,
         "unit": "",
         "threshold": "<= 0",
-        "audit": "var/armada-overhaul/design/final/SPEC-ENGINEERING.md, sections 6 and 8 (Stream): today an answer arrives as whole-message edits every 200 ms (zerver/lib/pear.py, PEAR_PERSISTENT_ASSISTANT_FLUSH_INTERVAL_SECONDS) and each one re-renders the row (var/armada-overhaul/maps/feed-agent.md, Instability). Found by this check: once the answer is longer than the condense limit the live message is cut by \"Show more\" (condense.ts), so the newest words are not on screen while they stream. Fixed by C2; CUTS.md removes condensing.",
+        "audit": "var/armada-overhaul/design/final/SPEC-ENGINEERING.md, sections 6 and 8 (Stream): today an answer arrives as whole-message edits every 200 ms (zerver/lib/armada.py, PEAR_PERSISTENT_ASSISTANT_FLUSH_INTERVAL_SECONDS) and each one re-renders the row (var/armada-overhaul/maps/feed-agent.md, Instability). Found by this check: once the answer is longer than the condense limit the live message is cut by \"Show more\" (condense.ts), so the newest words are not on screen while they stream. Fixed by C2; CUTS.md removes condensing.",
         "since": "2026-10-13"
     },
     "stream-cost/1200wps.layouts-per-event": {
@@ -530,7 +530,7 @@
         "measured": 80.274,
         "unit": "",
         "threshold": "<= 2",
-        "audit": "var/armada-overhaul/design/final/SPEC-ENGINEERING.md, sections 6 and 8 (Stream): today an answer arrives as whole-message edits every 200 ms (zerver/lib/pear.py, PEAR_PERSISTENT_ASSISTANT_FLUSH_INTERVAL_SECONDS) and each one re-renders the row (var/armada-overhaul/maps/feed-agent.md, Instability). A word waits up to the 200 ms between edits plus the re-render. Fixed by B6 (deltas) and C2.",
+        "audit": "var/armada-overhaul/design/final/SPEC-ENGINEERING.md, sections 6 and 8 (Stream): today an answer arrives as whole-message edits every 200 ms (zerver/lib/armada.py, PEAR_PERSISTENT_ASSISTANT_FLUSH_INTERVAL_SECONDS) and each one re-renders the row (var/armada-overhaul/maps/feed-agent.md, Instability). A word waits up to the 200 ms between edits plus the re-render. Fixed by B6 (deltas) and C2.",
         "since": "2026-10-13"
     },
     "stream-cost/1200wps.writes-per-event": {
@@ -545,7 +545,7 @@
         "measured": 34,
         "unit": "",
         "threshold": "<= 0",
-        "audit": "var/armada-overhaul/design/final/SPEC-ENGINEERING.md, sections 6 and 8 (Stream): today an answer arrives as whole-message edits every 200 ms (zerver/lib/pear.py, PEAR_PERSISTENT_ASSISTANT_FLUSH_INTERVAL_SECONDS) and each one re-renders the row (var/armada-overhaul/maps/feed-agent.md, Instability). Fixed by C2 (stream writer), on B6's deltas. It was 34 to 53 over fifteen runs; the ceiling stops it from growing.",
+        "audit": "var/armada-overhaul/design/final/SPEC-ENGINEERING.md, sections 6 and 8 (Stream): today an answer arrives as whole-message edits every 200 ms (zerver/lib/armada.py, PEAR_PERSISTENT_ASSISTANT_FLUSH_INTERVAL_SECONDS) and each one re-renders the row (var/armada-overhaul/maps/feed-agent.md, Instability). Fixed by C2 (stream writer), on B6's deltas. It was 34 to 53 over fifteen runs; the ceiling stops it from growing.",
         "since": "2026-10-13",
         "max": 60
     },
@@ -561,7 +561,7 @@
         "measured": 81.927,
         "unit": "",
         "threshold": "<= 2",
-        "audit": "var/armada-overhaul/design/final/SPEC-ENGINEERING.md, sections 6 and 8 (Stream): today an answer arrives as whole-message edits every 200 ms (zerver/lib/pear.py, PEAR_PERSISTENT_ASSISTANT_FLUSH_INTERVAL_SECONDS) and each one re-renders the row (var/armada-overhaul/maps/feed-agent.md, Instability). A word waits up to the 200 ms between edits plus the re-render. Fixed by B6 (deltas) and C2.",
+        "audit": "var/armada-overhaul/design/final/SPEC-ENGINEERING.md, sections 6 and 8 (Stream): today an answer arrives as whole-message edits every 200 ms (zerver/lib/armada.py, PEAR_PERSISTENT_ASSISTANT_FLUSH_INTERVAL_SECONDS) and each one re-renders the row (var/armada-overhaul/maps/feed-agent.md, Instability). A word waits up to the 200 ms between edits plus the re-render. Fixed by B6 (deltas) and C2.",
         "since": "2026-10-13"
     },
     "stream-cost/400wps.writes-per-event": {
@@ -590,14 +590,14 @@
         "measured": 3,
         "unit": "",
         "threshold": "== 0",
-        "audit": "PLAN.md, F5 and Appendix A: the header's values (branch, distance, commit) replace the old rail card, whose railCard.frames-late F5 retired with it. Until B2 draws them the old panel fills the commit line one context fetch after the header is shown (pear_panel.ts), so they are late by that fetch; B2 turns this to fixed.",
+        "audit": "PLAN.md, F5 and Appendix A: the header's values (branch, distance, commit) replace the old rail card, whose railCard.frames-late F5 retired with it. Until B2 draws them the old panel fills the commit line one context fetch after the header is shown (legacy_panel.ts), so they are late by that fetch; B2 turns this to fixed.",
         "since": "2026-10-14"
     },
     "topic-entry-stability/switch-first-visit.headerValues.frames-late": {
         "measured": 28,
         "unit": "",
         "threshold": "== 0",
-        "audit": "PLAN.md, F5 and Appendix A: the header's values (branch, distance, commit) replace the old rail card, whose railCard.frames-late F5 retired with it. Until B2 draws them the old panel fills the commit line one context fetch after the header is shown (pear_panel.ts), so they are late by that fetch; B2 turns this to fixed.",
+        "audit": "PLAN.md, F5 and Appendix A: the header's values (branch, distance, commit) replace the old rail card, whose railCard.frames-late F5 retired with it. Until B2 draws them the old panel fills the commit line one context fetch after the header is shown (legacy_panel.ts), so they are late by that fetch; B2 turns this to fixed.",
         "since": "2026-10-14"
     },
     "topic-switch-cost/revisit-long.requests-per-switch": {
@@ -690,7 +690,7 @@
         "measured": 8217,
         "unit": "",
         "threshold": "<= 2500",
-        "audit": "New in F2 (2026-10-14). var/armada-overhaul/maps/lean-weight.md, Runtime weight: 9,811 rules on 13 October. F2 no longer loads the emoji sprite's 1,913 rules before an emoji is shown, and the check counts that sheet apart (its note says whether it was loaded), so an emoji in the fixture topic does not move the figure; the sprites are cut with K-66. F2b (2026-10-14) set the browser targets (K-95): 257 fewer rules in the app's stylesheets on the same tree (8,241 to 7,984, var/armada-overhaul/build/F2b.md), which put the old sheets at 7,720. The page reads 8,213 because the kit's stylesheet (src_armada_kit_index_ts.css, 493 rules) now loads with the app entry, imported by F5's frame (var/armada-overhaul/build/F2b-verify/sheets.txt); the ceiling is that reading, and those 493 rules are the kit's and the frame's, not the old sheets'. F5 (2026-10-14): rules for the old scroll-to-bottom button in the band (bridge/legacy_composer.css) and for Inbox and Recent on the plane's ground (bridge/legacy_home.css): 8,218. F5-verify (2026-10-15): one rule more, which keeps the old thread pane inside the sheet under the old xl breakpoint (bridge/legacy_column.css): 8,219. F5 after verification (2026-10-15): that rule now holds the thread over the whole sheet at every width, one more ends the old alerts where the open sheet starts (bridge/legacy_column.css), and the three old thread-pane rules it made dead are deleted from web/styles/pear.css: 8,217.",
+        "audit": "New in F2 (2026-10-14). var/armada-overhaul/maps/lean-weight.md, Runtime weight: 9,811 rules on 13 October. F2 no longer loads the emoji sprite's 1,913 rules before an emoji is shown, and the check counts that sheet apart (its note says whether it was loaded), so an emoji in the fixture topic does not move the figure; the sprites are cut with K-66. F2b (2026-10-14) set the browser targets (K-95): 257 fewer rules in the app's stylesheets on the same tree (8,241 to 7,984, var/armada-overhaul/build/F2b.md), which put the old sheets at 7,720. The page reads 8,213 because the kit's stylesheet (src_armada_kit_index_ts.css, 493 rules) now loads with the app entry, imported by F5's frame (var/armada-overhaul/build/F2b-verify/sheets.txt); the ceiling is that reading, and those 493 rules are the kit's and the frame's, not the old sheets'. F5 (2026-10-14): rules for the old scroll-to-bottom button in the band (bridge/legacy_composer.css) and for Inbox and Recent on the plane's ground (bridge/legacy_home.css): 8,218. F5-verify (2026-10-15): one rule more, which keeps the old thread pane inside the sheet under the old xl breakpoint (bridge/legacy_column.css): 8,219. F5 after verification (2026-10-15): that rule now holds the thread over the whole sheet at every width, one more ends the old alerts where the open sheet starts (bridge/legacy_column.css), and the three old thread-pane rules it made dead are deleted from web/styles/legacy.css: 8,217.",
         "since": "2026-10-14",
         "max": 8217
     },

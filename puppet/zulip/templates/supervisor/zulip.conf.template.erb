@@ -90,7 +90,7 @@ directory=/home/zulip/deployments/current/
     term = "shard"
   elsif queue == "pear_worker"
     # One consumer per agent slot, numbered from 0 as
-    # PEAR_WORKER_QUEUE_NAMES in zerver/lib/pear_worker.py is.
+    # PEAR_WORKER_QUEUE_NAMES in zerver/lib/armada_worker.py is.
     numprocs = 2
     numprocs_start = 0
     term = "slot"

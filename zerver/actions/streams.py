@@ -14,6 +14,7 @@ from zerver.actions.default_streams import (
     do_remove_streams_from_default_stream_group,
 )
 from zerver.actions.message_send import maybe_send_channel_events_notice
+from zerver.lib.armada_worker import maybe_refactor_pear_stream_workspaces_on_rename
 from zerver.lib.cache import (
     cache_delete_many,
     cache_set,
@@ -23,7 +24,6 @@ from zerver.lib.cache import (
 from zerver.lib.exceptions import JsonableError
 from zerver.lib.mention import silent_mention_syntax_for_user, silent_mention_syntax_for_user_group
 from zerver.lib.message import get_last_message_id
-from zerver.lib.pear_worker import maybe_refactor_pear_stream_workspaces_on_rename
 from zerver.lib.queue import queue_event_on_commit
 from zerver.lib.stream_color import pick_colors
 from zerver.lib.stream_subscription import (

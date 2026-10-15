@@ -3,12 +3,12 @@ import * as z from "zod/mini";
 
 import * as blueslip from "./blueslip.ts";
 import * as channel from "./channel.ts";
+import {mount_pear_artifact_lifecycle} from "./legacy_artifact_lifecycle.ts";
 import type {MessageList} from "./message_list.ts";
 import * as message_lists from "./message_lists.ts";
 import * as message_store from "./message_store.ts";
 import type {Message} from "./message_store.ts";
 import * as message_viewport from "./message_viewport.ts";
-import {mount_pear_artifact_lifecycle} from "./pear_artifact_lifecycle.ts";
 import {any_widget_data_schema} from "./widget_schema.ts";
 import type {WidgetOutboundData} from "./widget_schema.ts";
 import * as widgetize from "./widgetize.ts";
@@ -236,7 +236,7 @@ async function load_and_render_pear_artifact(
         anchor_top = selected_row.getBoundingClientRect().top;
     };
     try {
-        const pear_artifact = await import("./pear_artifact.ts");
+        const pear_artifact = await import("./legacy_artifact.ts");
         if (!is_current()) {
             return;
         }
@@ -272,7 +272,7 @@ async function load_and_render_pear_artifact(
                 void (async () => {
                     try {
                         const [pear_artifact_actions, stream_data] = await Promise.all([
-                            import("./pear_artifact_actions.ts"),
+                            import("./legacy_artifact_actions.ts"),
                             import("./stream_data.ts"),
                         ]);
                         const subscription = stream_data.get_sub_by_id(message.stream_id);
@@ -359,7 +359,7 @@ async function load_and_render_pear_artifact(
 
 async function refresh_pear_wall(): Promise<void> {
     try {
-        const pear_wall = await import("./pear_wall.ts");
+        const pear_wall = await import("./legacy_wall.ts");
         pear_wall.refresh();
     } catch (error) {
         blueslip.error("Could not refresh the Pear wall", undefined, error);

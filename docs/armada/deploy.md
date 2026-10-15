@@ -242,10 +242,10 @@ Unix user, created by a root helper (`PEAR_TOPIC_ISOLATION_HELPER`) through
 sudo, so topics cannot read each other's worktrees or the server's secrets.
 In this tree:
 
-- The backend is in the code (`zerver/lib/pear_worker.py`) and its unit tests
+- The backend is in the code (`zerver/lib/armada_worker.py`) and its unit tests
   pass, with sudo and the helper mocked.
 - The helper is not a file in the tree. It exists only as text inside
-  `tools/pear_deploy/bootstrap_remote.sh`, the proof of concept's hosted dev
+  `tools/armada_deploy/bootstrap_remote.sh`, the proof of concept's hosted dev
   server, written for the user `zulipdev`; `tools/` is not in the release
   tarball. It is not installed in the dev VM, and has never run on a
   production layout.
@@ -808,7 +808,7 @@ you choose git's:
    ```bash
    cd /home/zulip/deployments/current
    ./manage.py shell -c "
-   from zerver.lib.pear_worker import configure_pear_channel_repository_workspace
+   from zerver.lib.armada_worker import configure_pear_channel_repository_workspace
    from zerver.models import UserProfile
    user = UserProfile.objects.get(delivery_email='YOU@example.com', realm_id=REALM_ID)
    configure_pear_channel_repository_workspace(

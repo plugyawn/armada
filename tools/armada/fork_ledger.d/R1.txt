@@ -1,0 +1,29 @@
+# The rename (var/armada-overhaul/design/r4/rename/RENAME-PLAN.md): the old
+# code name leaves the server, the old interface and the tools. The modules
+# it named are renamed (armada_* on the server, legacy_* in the old
+# interface); these Zulip files only follow them.
+kept tools/run-dev  # runs the deploy directory's production_assets.py by its new path
+kept web/src/compose_recipient.ts  # imports the renamed modules by their new paths
+kept web/src/compose_setup.ts  # imports the renamed modules by their new paths
+kept web/src/popover_menus_data.ts  # imports the renamed modules by their new paths
+kept web/src/sidebar_ui.ts  # imports the renamed modules by their new paths
+kept web/src/submessage.ts  # imports the renamed modules by their new paths
+kept web/src/tippyjs.ts  # a comment names the old theme sheet by its new name
+kept web/src/topic_list.ts  # imports the renamed modules by their new paths
+kept web/src/topic_list_data.ts  # imports the renamed modules by their new paths
+kept web/templates/settings/bot_list_admin.hbs  # includes the renamed settings partial
+kept web/tests/popover_menus_data.test.cjs  # requires the renamed module
+kept zerver/actions/message_edit.py  # imports the renamed modules by their new paths
+kept zerver/actions/message_send.py  # imports the renamed modules by their new paths
+kept zerver/actions/streams.py  # imports the renamed modules by their new paths
+kept zerver/lib/bot_lib.py  # imports the renamed modules by their new paths
+kept zerver/lib/events.py  # imports the renamed modules by their new paths
+kept zerver/lib/message_cache.py  # imports the renamed modules by their new paths
+kept zerver/tests/test_event_system.py  # imports the renamed modules by their new paths
+kept zerver/tests/test_events.py  # imports the renamed modules by their new paths
+kept zerver/tests/test_message_dict.py  # imports the renamed modules by their new paths
+kept zerver/tests/test_service_bot_system.py  # imports the renamed modules by their new paths
+kept zerver/tests/test_submessage.py  # imports the renamed modules by their new paths
+kept zerver/views/submessage.py  # imports the renamed modules by their new paths
+kept zerver/views/users.py  # imports the renamed modules by their new paths
+kept zerver/worker/embedded_bots.py  # imports the renamed modules by their new paths

@@ -17,10 +17,10 @@ from zerver.actions.message_send import check_send_message
 from zerver.actions.presence import do_update_user_presence
 from zerver.actions.streams import do_change_stream_folder
 from zerver.actions.user_settings import do_change_avatar_fields, do_change_user_setting
+from zerver.lib.armada import PEAR_EMBEDDED_BOT_SERVICE
 from zerver.lib.event_schema import check_web_reload_client_event
 from zerver.lib.events import fetch_initial_state_data, post_process_state
 from zerver.lib.exceptions import AccessDeniedError
-from zerver.lib.pear import PEAR_EMBEDDED_BOT_SERVICE
 from zerver.lib.request import RequestVariableMissingError
 from zerver.lib.test_classes import ZulipTestCase
 from zerver.lib.test_helpers import (

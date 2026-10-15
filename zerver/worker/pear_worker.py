@@ -9,9 +9,7 @@ from typing import Any
 from django.db import close_old_connections, reset_queries
 from typing_extensions import override
 
-from zerver.lib.bot_lib import EmbeddedBotHandler
-from zerver.lib.message_cache import MessageDict
-from zerver.lib.pear import (
+from zerver.lib.armada import (
     PearEmbeddedBotHandler,
     PearWorkerLeaseLostError,
     PearWorkerRuntime,
@@ -19,9 +17,9 @@ from zerver.lib.pear import (
     pear_message_stream,
     pear_message_topic,
 )
-from zerver.lib.pear_agent import PearProcessIsolation
-from zerver.lib.pear_monitor import pear_apply_monitor_setup_result
-from zerver.lib.pear_worker import (
+from zerver.lib.armada_agent import PearProcessIsolation
+from zerver.lib.armada_monitor import pear_apply_monitor_setup_result
+from zerver.lib.armada_worker import (
     PEAR_WORKER_HEARTBEAT_INTERVAL_SECONDS,
     PEAR_WORKER_QUEUE_NAMES,
     PearDatabaseWorkerRunStore,
@@ -38,6 +36,8 @@ from zerver.lib.pear_worker import (
     reap_stale_pear_worker_runs,
     wait_for_redelivered_pear_worker_run,
 )
+from zerver.lib.bot_lib import EmbeddedBotHandler
+from zerver.lib.message_cache import MessageDict
 from zerver.lib.queue import QUEUE_REDELIVERED_EVENT_KEY, QueueEventDiscardError, SimpleQueueClient
 from zerver.models.bots import PearWorkerRun
 from zerver.models.messages import Message

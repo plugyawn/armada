@@ -22,6 +22,8 @@ from typing_extensions import override
 
 from zerver.actions.create_user import do_create_user
 from zerver.actions.users import do_deactivate_user
+from zerver.lib.armada import PEAR_QUESTION_TIMEOUT_SECONDS
+from zerver.lib.armada_gate import invalidate_pear_selected_bot_cache
 from zerver.lib.exceptions import JsonableError
 from zerver.lib.initial_password import initial_password
 from zerver.lib.partner import (
@@ -35,10 +37,8 @@ from zerver.lib.partner import (
     stone_for_species,
     user_zone,
 )
-from zerver.lib.pear import PEAR_QUESTION_TIMEOUT_SECONDS
-from zerver.lib.pear_gate import invalidate_pear_selected_bot_cache
-from zerver.lib.templates import font_preloads
 from zerver.lib.rate_limiter import RateLimitedUser
+from zerver.lib.templates import font_preloads
 from zerver.lib.test_classes import ZulipTestCase
 from zerver.lib.test_helpers import ratelimit_rule
 from zerver.models import BotStorageData, Message, PearWorkerRun, Reaction, UserProfile

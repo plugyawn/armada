@@ -257,7 +257,7 @@ def validate_production_assets() -> None:
     subprocess.check_call(
         [
             sys.executable,
-            "./tools/pear_deploy/production_assets.py",
+            "./tools/armada_deploy/production_assets.py",
             "--repo-root",
             os.getcwd(),
         ]

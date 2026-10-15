@@ -130,7 +130,7 @@ topics show every agent-run state without calling a model:
 `demo-paused-topic`, `demo-artifacts`, `demo-wall-monitors`,
 `demo-threads`, `demo-dirty-worktree`, `demo-long-topic`
 (`var/armada-overhaul/SEED.md`). Reload them with
-`limactl shell armada -- arm manage pear_demo_data` (about 40 s), never
+`limactl shell armada -- arm manage armada_demo_data` (about 40 s), never
 while another agent is taking screenshots. Do not send messages to the
 agent to make a screenshot: a real run spends the user's quota.
 

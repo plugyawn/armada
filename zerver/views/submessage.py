@@ -6,9 +6,9 @@ from django.utils.translation import gettext as _
 from pydantic import Json
 
 from zerver.actions.submessage import do_add_submessage, verify_submessage_sender
+from zerver.lib.armada_artifact import PEAR_ARTIFACT_SUBMESSAGE_TYPE
 from zerver.lib.exceptions import JsonableError
 from zerver.lib.message import access_message
-from zerver.lib.pear_artifact import PEAR_ARTIFACT_SUBMESSAGE_TYPE
 from zerver.lib.response import json_success
 from zerver.lib.typed_endpoint import typed_endpoint
 from zerver.lib.validator import validate_poll_data, validate_todo_data

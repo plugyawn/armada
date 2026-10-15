@@ -209,7 +209,7 @@ mock_esm("../src/modals", {register_pre_open_hook() {}});
 mock_esm("../src/overlays", {register_pre_open_hook() {}});
 mock_esm("../src/timerender", {relative_time_string_from_date: () => "2h ago"});
 mock_esm("../src/ui_util", {matches_viewport_state: () => desktop_viewport});
-mock_esm("../src/pear_run_trace", {
+mock_esm("../src/legacy_run_trace", {
     create_controller(options) {
         controller_options = options;
         return {
@@ -228,7 +228,7 @@ mock_esm("../src/pear_run_trace", {
     },
 });
 
-const pear_run_state = zrequire("pear_run_state");
+const pear_run_state = zrequire("legacy_run_state");
 const message_store = zrequire("message_store");
 const message_threads = zrequire("message_threads");
 

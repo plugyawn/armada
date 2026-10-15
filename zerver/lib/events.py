@@ -22,6 +22,12 @@ from zerver.actions.user_settings import do_change_user_setting
 from zerver.actions.users import get_owned_bot_dicts
 from zerver.lib import emoji
 from zerver.lib.alert_words import user_alert_words
+from zerver.lib.armada import PEAR_EMBEDDED_BOT_SERVICE
+from zerver.lib.armada_identity import (
+    pear_bot_user_id_has_pear_service,
+    pear_bot_user_ids_for_realm,
+)
+from zerver.lib.armada_workspace_map import pear_project_stream_ids_for_realm
 from zerver.lib.avatar import avatar_url
 from zerver.lib.bot_config import load_bot_config_template
 from zerver.lib.channel_folders import (
@@ -55,9 +61,6 @@ from zerver.lib.narrow_helpers import NeverNegatedNarrowTerm, read_stop_words
 from zerver.lib.narrow_predicate import check_narrow_for_events
 from zerver.lib.navigation_views import get_navigation_views_for_user
 from zerver.lib.onboarding_steps import get_next_onboarding_steps
-from zerver.lib.pear import PEAR_EMBEDDED_BOT_SERVICE
-from zerver.lib.pear_identity import pear_bot_user_id_has_pear_service, pear_bot_user_ids_for_realm
-from zerver.lib.pear_workspace_map import pear_project_stream_ids_for_realm
 from zerver.lib.presence import get_presence_for_user, get_presences_for_realm
 from zerver.lib.realm_icon import realm_icon_url
 from zerver.lib.realm_logo import get_realm_logo_source, get_realm_logo_url

@@ -6,6 +6,7 @@ from typing import Any, TypedDict
 
 import orjson
 
+from zerver.lib.armada_identity import pear_bot_user_ids_from_user_ids
 from zerver.lib.avatar import get_avatar_field, get_avatar_for_inaccessible_user
 from zerver.lib.cache import cache_set_many, cache_with_key, to_dict_cache_key, to_dict_cache_key_id
 from zerver.lib.display_recipient import bulk_fetch_display_recipients
@@ -15,7 +16,6 @@ from zerver.lib.message_threads import (
     bulk_message_thread_summaries,
     message_ids_with_accessible_thread_roots,
 )
-from zerver.lib.pear_identity import pear_bot_user_ids_from_user_ids
 from zerver.lib.query_helpers import query_for_ids
 from zerver.lib.timestamp import datetime_to_timestamp
 from zerver.lib.topic import DB_TOPIC_NAME, TOPIC_LINKS, TOPIC_NAME

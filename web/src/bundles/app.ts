@@ -47,7 +47,7 @@ import "../../styles/search.css";
 import "../../styles/user_circles.css";
 import "../../styles/left_sidebar.css";
 import "../../styles/right_sidebar.css";
-import "../../styles/pear.css";
+import "../../styles/legacy.css";
 import "../../styles/lightbox.css";
 import "../../styles/box_resize.css";
 import "../../styles/popovers.css";
@@ -60,7 +60,7 @@ import "../../styles/print.css";
 import "../../styles/inbox.css";
 import "../../styles/color_picker.css";
 import "../../styles/animate.css";
-import "../../styles/pear_theme.css";
+import "../../styles/legacy_theme.css";
 import "@uppy/core/css/style.min.css";
 import "@uppy/image-editor/css/style.min.css";
 

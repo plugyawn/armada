@@ -30,8 +30,8 @@ from zerver.models.users import get_active_user
 
 def get_bot_handler(service_name: str) -> Any:
     if service_name == "pear":
-        from zerver.lib.pear import PearEmbeddedBotHandler
-        from zerver.lib.pear_worker import (
+        from zerver.lib.armada import PearEmbeddedBotHandler
+        from zerver.lib.armada_worker import (
             PearDatabaseWorkerRunStore,
             PearQueueWorkerDispatcher,
             build_pear_addressing_intent_classifier_from_settings,

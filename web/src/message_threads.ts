@@ -6,6 +6,13 @@ import * as compose_editor from "./compose_editor.ts";
 import type {ResolvedComposeRecipient} from "./compose_send.ts";
 import {Filter} from "./filter.ts";
 import {$t} from "./i18n.ts";
+import {
+    create_sigil,
+    display_name_for_testing,
+    status_tone_for_testing,
+} from "./legacy_agent_sigil.ts";
+import * as pear_run_state from "./legacy_run_state.ts";
+import * as pear_run_trace from "./legacy_run_trace.ts";
 import * as message_fetch from "./message_fetch.ts";
 import {MessageList} from "./message_list.ts";
 import {MessageListData} from "./message_list_data.ts";
@@ -14,13 +21,6 @@ import * as message_store from "./message_store.ts";
 import * as message_thread_hooks from "./message_thread_hooks.ts";
 import * as modals from "./modals.ts";
 import * as overlays from "./overlays.ts";
-import {
-    create_sigil,
-    display_name_for_testing,
-    status_tone_for_testing,
-} from "./pear_agent_sigil.ts";
-import * as pear_run_state from "./pear_run_state.ts";
-import * as pear_run_trace from "./pear_run_trace.ts";
 import * as people from "./people.ts";
 import * as right_sidebar_tabs from "./right_sidebar_tabs.ts";
 import type {UpdateMessageEvent} from "./server_event_types.ts";
@@ -101,7 +101,7 @@ export {
     display_name_for_testing,
     sigil_cells_for_testing,
     status_tone_for_testing,
-} from "./pear_agent_sigil.ts";
+} from "./legacy_agent_sigil.ts";
 
 export function selection_after_update_for_testing(
     agents: pear_run_state.PearAgentThread[],

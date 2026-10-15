@@ -35,8 +35,8 @@ from django.db import transaction
 from django.utils.timezone import now as timezone_now
 from django.utils.translation import gettext as _
 
+from zerver.lib.armada_gate import get_selected_pear_bot_user_id_for_realm
 from zerver.lib.exceptions import JsonableError
-from zerver.lib.pear_gate import get_selected_pear_bot_user_id_for_realm
 from zerver.lib.users import (
     check_can_access_user,
     check_user_can_access_all_users,

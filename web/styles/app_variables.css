@@ -831,7 +831,7 @@
     /* ============================================================
        Pear design language — "Terminal Romantic"
        (pear/PEAR_DESIGN_LANGUAGE.md). Primitives → semantics; every
-       Pear surface and the pear_theme.css host retheme consume ONLY
+       Pear surface and the legacy_theme.css host retheme consume ONLY
        these. Both themes derive from the same scales via light-dark().
        ============================================================ */
 

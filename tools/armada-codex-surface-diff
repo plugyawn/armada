@@ -1,0 +1,101 @@
+#!/usr/bin/env python3
+"""Diff Codex's generated app-server method surface against the baseline.
+
+The codexification doctrine: Pear replicates Codex, so every Codex
+upgrade should answer "what did the engine add?" in one command. This
+asks Codex to generate its authoritative experimental JSON schemas and diffs
+their four wire surfaces against tools/armada-codex-surface-baseline.txt.
+
+Usage:
+    tools/armada-codex-surface-diff --binary /path/to/codex [--write]
+
+Run it wherever the real (vendored) codex binary lives; --write updates
+the baseline after reviewing the additions.
+"""
+
+import argparse
+import json
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+SCHEMA_SURFACES = (
+    "ClientRequest.json",
+    "ClientNotification.json",
+    "ServerRequest.json",
+    "ServerNotification.json",
+)
+BASELINE_PATH = Path(__file__).parent / "armada-codex-surface-baseline.txt"
+
+
+def extract_methods_from_schema(schema_root: Path) -> set[str]:
+    methods: set[str] = set()
+    for filename in SCHEMA_SURFACES:
+        schema = json.loads((schema_root / filename).read_text())
+        variants = schema.get("oneOf")
+        if not isinstance(variants, list):
+            raise ValueError(f"{filename} has no oneOf wire variants")
+        for variant in variants:
+            if not isinstance(variant, dict):
+                raise ValueError(f"{filename} contains an invalid wire variant")
+            properties = variant.get("properties")
+            method_schema = properties.get("method") if isinstance(properties, dict) else None
+            enum = method_schema.get("enum") if isinstance(method_schema, dict) else None
+            if (
+                not isinstance(enum, list)
+                or len(enum) != 1
+                or not isinstance(enum[0], str)
+                or not enum[0]
+            ):
+                raise ValueError(f"{filename} contains an invalid method discriminator")
+            methods.add(enum[0])
+    return methods
+
+
+def extract_methods(binary_path: Path) -> set[str]:
+    with tempfile.TemporaryDirectory(prefix="pear-codex-schema-") as temporary_directory:
+        subprocess.run(
+            [
+                binary_path,
+                "app-server",
+                "generate-json-schema",
+                "--experimental",
+                "--out",
+                temporary_directory,
+            ],
+            check=True,
+            stdout=subprocess.DEVNULL,
+            timeout=60,
+        )
+        return extract_methods_from_schema(Path(temporary_directory))
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--binary", required=True, type=Path)
+    parser.add_argument("--write", action="store_true", help="update the baseline")
+    args = parser.parse_args()
+
+    try:
+        methods = extract_methods(args.binary)
+    except (OSError, subprocess.SubprocessError, ValueError, json.JSONDecodeError) as error:
+        print(f"could not generate Codex app-server surface: {error}", file=sys.stderr)
+        return 2
+    baseline = set(BASELINE_PATH.read_text().split()) if BASELINE_PATH.exists() else set()
+    added = sorted(methods - baseline)
+    removed = sorted(baseline - methods)
+    for method in added:
+        print(f"+ {method}")
+    for method in removed:
+        print(f"- {method}")
+    if not added and not removed:
+        print("surface unchanged")
+    if args.write:
+        BASELINE_PATH.write_text("\n".join(sorted(methods)) + "\n")
+        print(f"baseline updated ({len(methods)} methods)")
+    return 1 if (added or removed) and not args.write else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

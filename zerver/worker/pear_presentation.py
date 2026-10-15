@@ -6,15 +6,15 @@ from django.conf import settings
 from django.db import transaction
 from typing_extensions import override
 
-from zerver.actions.pear import send_pear_run_event
-from zerver.lib.pear_agent import PearAgentRuntimeError, PearGeminiInteractionsClient
-from zerver.lib.pear_presentation import (
+from zerver.actions.armada import send_pear_run_event
+from zerver.lib.armada_agent import PearAgentRuntimeError, PearGeminiInteractionsClient
+from zerver.lib.armada_presentation import (
     build_pear_presentation_input,
     pear_presentation_current_step,
     pear_presentation_plan,
     request_pear_presentation_overview,
 )
-from zerver.lib.pear_worker import PEAR_PRESENTATION_QUEUE_NAME, pear_run_is_attended
+from zerver.lib.armada_worker import PEAR_PRESENTATION_QUEUE_NAME, pear_run_is_attended
 from zerver.models.bots import PearWorkerRun, PearWorkerRunEvent
 from zerver.worker.base import QueueProcessingWorker, assign_queue
 

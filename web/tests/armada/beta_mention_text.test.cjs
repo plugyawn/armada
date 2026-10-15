@@ -2,8 +2,8 @@
 
 // The interim beta's field words (web/src/armada/beta/mention_text.js):
 // what a field with pills sends, how a typed agent name becomes its
-// mention in place (statement 27), the pickers' triggers and order and a
-// reply's quote.
+// mention in place (statement 27), the pickers' triggers and order, a
+// reply's quote and the client key of contract C4.
 
 const assert = require("node:assert/strict");
 
@@ -268,4 +268,10 @@ run_test("a reply quotes one line, and is read back from the server's form", () 
         ),
         null,
     );
+});
+
+run_test("a send's client key fits contract C4", () => {
+    const key = words.clientKey((a) => a.fill(171));
+    assert.match(key, /^[\w-]{1,64}$/);
+    assert.equal(key, "ab".repeat(16));
 });

@@ -1,5 +1,5 @@
 /* INTERIM BETA (README.md): what the field's words become on the wire, and back: mentions, links to places, a reply's
-   quote. Pure: it imports nothing and reads no global but the elements it is given, so node tests
+   quote, a send's client key. Pure: it imports nothing and reads no global but the elements it is given, so node tests
    load it (web/tests/armada/beta_mention_text.test.cjs).
 
    The field holds the words as typed, with a mention or a link as a pill: an element that stands for its wire text
@@ -139,5 +139,8 @@ function quoteOf(children) {
   return {uid: +who.dataset.userId, name: who.textContent.replace(/^@/, ""), id: +near[1], line: q.textContent.replace(/\s+/g, " ").trim()};
 }
 
-export {echoRefs, fieldEmpty, fillField, outsideCode, pillFor, pillNode, quoteLine, quoteOf, quoteWire, rankPeople,
+/* ---------- contract C4: a send's key, the same on every retry of it ---------- */
+const clientKey = (rand) => [...rand(new Uint8Array(16))].map((b) => b.toString(16).padStart(2, "0")).join("");
+
+export {clientKey, echoRefs, fieldEmpty, fillField, outsideCode, pillFor, pillNode, quoteLine, quoteOf, quoteWire, rankPeople,
   rankPlaces, seedOf, splitQuoteWire, triggerAt, typedAliases, wireOf, withPath};

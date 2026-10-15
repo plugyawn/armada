@@ -23,6 +23,8 @@ import {choosePick} from "./partner_picker.js";
 import {drawLab} from "./lab.js";
 
 /* ---------- sending ---------- */
+/* the failed mark's undoing, when a retry starts or when the message's own event shows it arrived after all */
+function clearFailMark(cl, id) { $$(`[data-mid="${id}"] .b`, cl).forEach((b) => b.classList.remove("unsent")); $$(`.bl[data-mid="${id}"] > .meta, .bl[data-mid="${id}"] > .lk`, cl).forEach((x) => x.remove()); }
 function failMark(cl, m) { $$(`.bl[data-mid="${m.id}"] > .meta, .bl[data-mid="${m.id}"] > .lk`, cl).forEach((x) => x.remove()); const bl = $$(`.bl[data-mid="${m.id}"]`, cl).pop(); if (!bl) return;
   const meta = el("span", "meta bad", esc(m.failed === true ? "Not sent" : "Not sent: " + m.failed)), b = el("button", "lk", "Retry"); b.dataset.retry = m.id; bl.append(meta, b); host(bl); hush(bl); }
 function send(o = {}) {
@@ -58,6 +60,6 @@ function send(o = {}) {
   transmit(c, m, ph);
   requestAnimationFrame(() => setTimeout(() => { if (state.P === c) drawSide(); }, 0));   /* the column learns I spoke after the frame that shows my bubble, never inside the send task */
 }
-function retry(id) { const m = state.P.byId.get(id); if (!m || !m.failed) return; m.failed = false; m.pending = true; const cl = sectionOf(m.id); if (cl) { $$(`[data-mid="${m.id}"] .b`, cl).forEach((b) => b.classList.remove("unsent")); $$(`.bl[data-mid="${m.id}"] > .meta, .bl[data-mid="${m.id}"] > .lk`, cl).forEach((x) => x.remove()); } S.play("send"); transmit(state.P, m, null); ready(); }
+function retry(id) { const m = state.P.byId.get(id); if (!m || !m.failed) return; m.failed = false; m.pending = true; const cl = sectionOf(m.id); if (cl) clearFailMark(cl, m.id); S.play("send"); transmit(state.P, m, null); ready(); }
 
-export {failMark, retry, send};
+export {clearFailMark, failMark, retry, send};

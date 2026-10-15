@@ -18,4 +18,10 @@ pre.blk > .code { display: block; overflow-x: auto; scrollbar-width: none; }
 pre.blk > .cp { position: absolute; top: calc(var(--s-3) - 2px); right: var(--s-2); background-color: var(--block); opacity: 0; transition: opacity var(--fade-out) linear; }
 pre.blk:hover > .cp, pre.blk > .cp:focus-visible { opacity: 1; transition-duration: var(--fade-in); }
 
+/* long output, folded (code_blocks.js, FOLD_AT 16): fifteen lines of code, the last fading, then the line that says how
+   much more there is, one code line high, so that a folded block is as tall as one of sixteen lines */
+pre.blk[data-fold="closed"] > .code { max-height: calc(15 * 20px); overflow-y: hidden; -webkit-mask-image: linear-gradient(#000 calc(100% - 20px), transparent); mask-image: linear-gradient(#000 calc(100% - 20px), transparent); }
+pre.blk > .fold { display: flex; align-items: center; gap: var(--s-3); height: 20px; font: var(--t-text); white-space: normal; color: var(--ink-2); }
+pre.blk > .fold > .lk { height: 20px; }
+
 }   /* @layer zulip.armada-beta */

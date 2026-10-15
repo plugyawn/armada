@@ -158,7 +158,7 @@ export function process_submessages(message: Message): void {
 export function do_process_submessages(message: Message): void {
     const artifacts = submessages_of_type(message, ARMADA_ARTIFACT_SUBMESSAGE_TYPE);
     if (artifacts.some((artifact) => artifact.sender_id !== message.sender_id)) {
-        blueslip.warn(`A user tried to attach a Pear artifact to message ${message.id}`);
+        blueslip.warn(`A user tried to attach an agent artifact to message ${message.id}`);
     }
     const events = get_message_events(message);
 
@@ -252,7 +252,7 @@ async function load_and_render_armada_artifact(
             return;
         }
         if (document_value === undefined) {
-            blueslip.warn(`Invalid Pear artifact on message ${message.id}`);
+            blueslip.warn(`Invalid agent artifact on message ${message.id}`);
             show_failure("artifact could not be rendered");
             return;
         }
@@ -295,7 +295,7 @@ async function load_and_render_armada_artifact(
                             },
                         );
                     } catch (error) {
-                        blueslip.error("Could not load Pear artifact actions", undefined, error);
+                        blueslip.error("Could not load artifact actions", undefined, error);
                         button.disabled = false;
                         button.removeAttribute("aria-busy");
                         button.textContent = original;
@@ -342,7 +342,7 @@ async function load_and_render_armada_artifact(
                             },
                         });
                     } catch (error) {
-                        blueslip.error("Could not load Pear pin action", undefined, error);
+                        blueslip.error("Could not load the pin action", undefined, error);
                         button.disabled = false;
                         button.removeAttribute("aria-busy");
                         button.textContent = original;
@@ -352,7 +352,7 @@ async function load_and_render_armada_artifact(
         });
         preserve_message_anchor(rendered_artifact);
     } catch (error) {
-        blueslip.error("Could not load the Pear artifact renderer", undefined, error);
+        blueslip.error("Could not load the artifact renderer", undefined, error);
         show_failure("artifact renderer unavailable");
     }
 }
@@ -362,7 +362,7 @@ async function refresh_armada_wall(): Promise<void> {
         const legacy_wall = await import("./legacy_wall.ts");
         legacy_wall.refresh();
     } catch (error) {
-        blueslip.error("Could not refresh the Pear wall", undefined, error);
+        blueslip.error("Could not refresh the wall", undefined, error);
     }
 }
 

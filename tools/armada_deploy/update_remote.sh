@@ -89,7 +89,7 @@ usage() {
     cat <<EOF
 Usage: tools/armada_deploy/update_remote.sh [options] [state.json]
 
-Safely update an already-bootstrapped Pear VM from this clean pear-main
+Safely update an already-bootstrapped Armada VM from this clean pear-main
 checkout. The script performs read-only gates by default. Mutating deploy steps
 require --yes.
 
@@ -311,9 +311,9 @@ verify_remote_quiescence() {
     local services="${2:-${ARMADA_DEPLOY_SERVICES[*]}}"
     local queues="${3:-${ARMADA_DEPLOY_QUEUES[*]}}"
 
-    echo "$phase: Pear run health"
+    echo "$phase: Armada run health"
     if ! ssh_zulip "$REMOTE_PATH/tools/armada-health-report --max-active-runs 0 --max-stale-active-runs 0"; then
-        fail "$phase failed: Pear has active or stale work"
+        fail "$phase failed: Armada has active or stale work"
     fi
 
     echo "$phase: service health"
@@ -332,13 +332,13 @@ wait_for_remote_drain() {
     local attempt
     local worker_services="${1:-${ARMADA_DEPLOY_WORKER_SERVICES[*]}}"
     local queues="${2:-${ARMADA_DEPLOY_QUEUES[*]}}"
-    echo "Maintenance drain: waiting for Pear runs and queues to become idle..."
+    echo "Maintenance drain: waiting for Armada runs and queues to become idle..."
     for attempt in $(seq 1 60); do
         if ssh_root "systemctl is-active $worker_services" >/dev/null 2>&1 &&
             ssh_zulip "$REMOTE_PATH/tools/armada-health-report --max-active-runs 0 --max-stale-active-runs 0" >/dev/null 2>&1 &&
             ssh_root "rabbitmqctl list_queues name messages_ready messages_unacknowledged consumers" 2>/dev/null |
                 validate_armada_deploy_queue_snapshot "$queues" >/dev/null; then
-            echo "Maintenance drain: Pear runs and queues are idle."
+            echo "Maintenance drain: Armada runs and queues are idle."
             return 0
         fi
         sleep 2
@@ -353,9 +353,9 @@ wait_for_remote_drain() {
 
 verify_remote_stopped_quiescence() {
     local queues="${1:-${ARMADA_DEPLOY_QUEUES[*]}}"
-    echo "Stopped-state gate: Pear run health"
+    echo "Stopped-state gate: Armada run health"
     if ! ssh_zulip "$REMOTE_PATH/tools/armada-health-report --max-active-runs 0 --max-stale-active-runs 0"; then
-        fail "stopped-state gate failed: Pear has active or stale work"
+        fail "stopped-state gate failed: Armada has active or stale work"
     fi
     echo "Stopped-state gate: queue emptiness"
     if ! ssh_root "rabbitmqctl list_queues name messages_ready messages_unacknowledged consumers" |
@@ -370,9 +370,9 @@ verify_remote_readiness() {
     local queues="${3:-${ARMADA_DEPLOY_QUEUES[*]}}"
     local queue_snapshot
 
-    echo "$phase: Pear stale-run health"
+    echo "$phase: Armada stale-run health"
     if ! ssh_zulip "$REMOTE_PATH/tools/armada-health-report --allow-active-runs --max-stale-active-runs 0"; then
-        fail "$phase failed: Pear has stale work"
+        fail "$phase failed: Armada has stale work"
     fi
 
     echo "$phase: service health"
@@ -389,7 +389,7 @@ verify_remote_readiness() {
         fail "$phase failed: one or more deploy-managed queues are missing or unconsumed"
     fi
     if ! printf '%s\n' "$queue_snapshot" | validate_armada_worker_pool_snapshot; then
-        fail "$phase failed: the two-slot Pear worker pool is not fully connected"
+        fail "$phase failed: the two-slot Armada worker pool is not fully connected"
     fi
 
     echo "$phase: worker delivery policy"
@@ -530,9 +530,9 @@ verify_remote_disk_capacity() {
 run_local_compat() {
     local checker="$ARMADA_ROOT/tools/check_armada_compat.py"
     if [[ ! -f "$checker" ]]; then
-        fail "local Pear compatibility checker is missing: $checker"
+        fail "local Armada compatibility checker is missing: $checker"
     fi
-    echo "Running local Pear contract compatibility check..."
+    echo "Running local Armada contract compatibility check..."
     (cd "$ARMADA_ROOT" && python3 tools/check_armada_compat.py)
 }
 
@@ -1031,7 +1031,7 @@ REMOTE_VERIFY
     fi
 
     if ! ssh_zulip "$REMOTE_PATH/tools/armada-health-report --max-active-runs 0 --max-stale-active-runs 0"; then
-        echo "independent rollback Pear health check failed" >&2
+        echo "independent rollback Armada health check failed" >&2
         return 1
     fi
     if ! ssh_root "rabbitmqctl list_queues name messages_ready messages_unacknowledged consumers" |
@@ -1155,7 +1155,7 @@ if [[ -n "$LOCAL_UNTRACKED_SOURCE" ]]; then
     fail "local source tree has untracked files that rsync would omit; add, ignore, or remove them before deploying"
 fi
 if [[ ! -d "$LOCAL_ARMADA_SKILLS_DIR" ]]; then
-    fail "local Pear skills directory is missing: $LOCAL_ARMADA_SKILLS_DIR"
+    fail "local Armada skills directory is missing: $LOCAL_ARMADA_SKILLS_DIR"
 fi
 if [[ -n "$LOCAL_ARMADA_SKILLS_STATUS" ]]; then
     echo "$LOCAL_ARMADA_SKILLS_STATUS" >&2
@@ -1176,7 +1176,7 @@ fi
 echo "Preflight: parent $LOCAL_PARENT_BRANCH $LOCAL_PARENT_SHA is tracked-clean."
 echo "Preflight: parent pins Zulip $LOCAL_SHA and Zulip Terminal $LOCAL_TERMINAL_SHA."
 echo "Preflight: local armada/skills is tracked-clean."
-echo "Preflight: Pear contract version is $LOCAL_CONTRACT_VERSION."
+echo "Preflight: Armada contract version is $LOCAL_CONTRACT_VERSION."
 echo "Preflight: committed Workspace helper SHA-256 is $LOCAL_WORKSPACE_HELPER_SHA."
 
 PREV_SHA="$(ssh_zulip "git rev-parse HEAD")"
@@ -1224,16 +1224,16 @@ echo "Preflight: remote tracked/untracked source tree is clean and not ahead of 
 REMOTE_ARMADA_SCHEMA_STATE="$(detect_remote_armada_schema_state | tail -n 1)"
 case "$REMOTE_ARMADA_SCHEMA_STATE" in
     current)
-        echo "Preflight: Pear database already uses the current migration baseline."
+        echo "Preflight: Armada database already uses the current migration baseline."
         ;;
     empty)
-        echo "Preflight: Pear database has no applied Pear migration; normal migrate will create it."
+        echo "Preflight: Armada database has no applied Armada migration; normal migrate will create it."
         ;;
     unexpected)
-        fail "remote database contains a superseded or mixed Pear migration baseline"
+        fail "remote database contains a superseded or mixed Armada migration baseline"
         ;;
     *)
-        fail "could not classify remote Pear migration baseline: $REMOTE_ARMADA_SCHEMA_STATE"
+        fail "could not classify remote Armada migration baseline: $REMOTE_ARMADA_SCHEMA_STATE"
         ;;
 esac
 classify_production_asset_requirement
@@ -1412,7 +1412,7 @@ rsync -az --delete \
     "$REPO_ROOT/" \
     "armada-staging:$REMOTE_PATH/"
 
-echo "Syncing Pear Codex skills to $REMOTE_ARMADA_SKILLS_DIR..."
+echo "Syncing Armada Codex skills to $REMOTE_ARMADA_SKILLS_DIR..."
 ssh -F "$SSH_CONFIG" armada-staging "install -d -m 755 $REMOTE_ARMADA_SKILLS_DIR"
 rsync -az --delete \
     -e "ssh -F $SSH_CONFIG" \
@@ -1444,7 +1444,7 @@ ssh_root "systemctl enable ${ARMADA_DEPLOY_SERVICES[*]}"
 echo "Applying zerver migrations..."
 ssh_zulip "$REMOTE_PATH/.venv/bin/python3 $REMOTE_PATH/manage.py migrate zerver --noinput"
 
-echo "Restarting Pear services..."
+echo "Restarting Armada services..."
 ssh_root "systemctl restart caddy ${ARMADA_DEPLOY_SERVICES[*]}"
 SERVICE_RESTART_REQUIRED=false
 wait_for_remote_armada_worker_consumer_timeout_queues
@@ -1472,7 +1472,7 @@ if ! ssh_zulip_clean "test -x node_modules/jdenticon/bin/jdenticon.js"; then
 fi
 ssh_zulip_clean "test -x node_modules/jdenticon/bin/jdenticon.js"
 
-echo "Running Pear backend tests on the box..."
+echo "Running Armada backend tests on the box..."
 ssh_zulip_clean "./tools/test-backend \
     zerver.tests.test_armada \
     zerver.tests.test_armada_artifact \
@@ -1511,7 +1511,7 @@ runtime_smoke_args=(
 if [[ -n "$RUNTIME_SMOKE_ADMIN_EMAIL" ]]; then
     runtime_smoke_args+=(--admin-email "$RUNTIME_SMOKE_ADMIN_EMAIL")
 fi
-echo "Running required Pear runtime smoke..."
+echo "Running required Armada runtime smoke..."
 (cd "$REPO_ROOT/.." && python3 "${runtime_smoke_args[@]}")
 
 echo "Migration tail:"
@@ -1520,7 +1520,7 @@ ssh_zulip "$REMOTE_PATH/.venv/bin/python3 $REMOTE_PATH/manage.py showmigrations 
 echo "Service status:"
 ssh_root "systemctl --no-pager --full status ${ARMADA_DEPLOY_SERVICES[*]}" | sed -n "1,120p"
 
-echo "Pear worker pool log tail:"
+echo "Armada worker pool log tail:"
 ssh_root 'journalctl -u armada-worker -u armada-worker-1 -n 80 --no-pager'
 
 echo "armada-addressing log tail:"

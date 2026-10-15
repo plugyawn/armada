@@ -107,10 +107,10 @@ function get_users_typing_for_narrow(): number[] {
 }
 
 export function render_notifications_for_narrow(): void {
-    // Pear's stream-typing signal is tracked but deliberately not rendered
-    // here: while Pear works, the streaming transcript already shows the
+    // The agent's stream-typing signal is tracked but deliberately not rendered
+    // here: while the agent works, the streaming transcript already shows the
     // animated "Thinking ✦" line and the topic header shows the active
-    // state, so a "Pear is working…" row would just say it a third time.
+    // state, so an "is working…" row would just say it a third time.
     const users_typing = get_users_typing_for_narrow()
         .filter((user_id) => !is_armada_bot_user_id(user_id))
         .map((user_id) => people.get_user_by_id_assert_valid(user_id))
@@ -186,8 +186,8 @@ export function hide_message_edit_notification(event: TypingMessageEditEvent): v
 
 export function display_notification(event: TypingEvent): void {
     const sender_id = event.sender.user_id;
-    // Pear's stream-typing is tracked like anyone's; the renderer filters
-    // Pear out of the display entirely (the transcript's "Thinking ✦" and
+    // The agent's stream-typing is tracked like anyone's; the renderer filters
+    // the agent out of the display entirely (the transcript's "Thinking ✦" and
     // the topic header carry the live state).
     const key = get_key(event);
     typing_data.add_typist(key, sender_id);
@@ -221,8 +221,8 @@ export function display_message_edit_notification(event: TypingMessageEditEvent)
 }
 
 export function clear_armada_typists_for_topic(stream_id: number, topic: string): void {
-    // The Pear worker signals a typing stop when its run ends, but the
-    // "Pear is working…" line must not outlive the run if that event is
+    // The agent's worker signals a typing stop when its run ends, but the
+    // "is working…" line must not outlive the run if that event is
     // lost — the client-side expiry is 45s of false status. The panel
     // calls this whenever the topic has no active run.
     const key = typing_data.get_topic_key(stream_id, topic);

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Report whether the live Pear worker state is plausibly stuck."""
+"""Report whether the live Armada worker state is plausibly stuck."""
 
 from __future__ import annotations
 
@@ -90,7 +90,7 @@ def collect_health(*, stale_run_age_seconds: int | None, sample_limit: int) -> A
 
 def render_report(report: ArmadaHealthReport) -> str:
     lines = [
-        "Pear live health:",
+        "Armada live health:",
         f"active_runs={report.active_run_count}",
         f"stale_active_runs={report.stale_active_run_count}",
         f"stale_run_age_seconds={report.stale_run_age_seconds}",
@@ -106,7 +106,7 @@ def render_report(report: ArmadaHealthReport) -> str:
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Report live Pear worker health.")
+    parser = argparse.ArgumentParser(description="Report live Armada worker health.")
     active_run_limit = parser.add_mutually_exclusive_group()
     active_run_limit.add_argument("--max-active-runs", type=int, default=0)
     active_run_limit.add_argument(
@@ -146,7 +146,7 @@ def main() -> int:
             f"{report.stale_active_run_count} exceeds {args.max_stale_active_runs}"
         )
     if violations:
-        print("Pear health check failed:", file=sys.stderr)
+        print("Armada health check failed:", file=sys.stderr)
         for violation in violations:
             print(f"- {violation}", file=sys.stderr)
         return 1

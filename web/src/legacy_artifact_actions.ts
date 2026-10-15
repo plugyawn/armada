@@ -3,7 +3,7 @@ import * as server_events_state from "./server_events_state.ts";
 import {current_user} from "./state_data.ts";
 import * as transmit from "./transmit.ts";
 
-const ARMADA_AGENT_MENTION = "@**Pear**";
+const ARMADA_AGENT_MENTION = "@**Onix**";
 const ARMADA_ARTIFACT_ACTION_PROMPT_LIMIT = 1000;
 
 export type ArmadaArtifactActionTarget = {

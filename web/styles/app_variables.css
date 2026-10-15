@@ -829,9 +829,9 @@
         hsl(0deg 0% 13.5%)
     );
     /* ============================================================
-       Pear design language — "Terminal Romantic"
+       The old interface's design language — "Terminal Romantic"
        (armada/ARMADA_DESIGN_LANGUAGE.md). Primitives → semantics; every
-       Pear surface and the legacy_theme.css host retheme consume ONLY
+       legacy surface and the legacy_theme.css host retheme consume ONLY
        these. Both themes derive from the same scales via light-dark().
        ============================================================ */
 
@@ -850,7 +850,7 @@
     );
 
     /* Anjou accent scale — reserved for live/presence/success state
-       and the Pear ✦ identity cycle. Ordinary interaction is violet. */
+       and the agent's ✦ identity cycle. Ordinary interaction is violet. */
     --legacy-a300: hsl(140deg 42% 68%);
     --legacy-a400: hsl(140deg 44% 56%);
     --legacy-a500: hsl(141deg 48% 42%);
@@ -860,7 +860,7 @@
     --legacy-accent-fill: hsl(141deg 48% 42% / 12%);
     --legacy-accent-fill-strong: hsl(141deg 48% 42% / 20%);
 
-    /* Generic interaction is violet. Pear green is presence/live/success
+    /* Generic interaction is violet. Legacy green is presence/live/success
        only; using it for ordinary buttons and selection caused the old
        Zulip/Armada green-purple collision. */
     --legacy-interaction: light-dark(hsl(252deg 52% 48%), hsl(252deg 72% 74%));
@@ -886,7 +886,7 @@
         hsl(36deg 74% 34% / 10%),
         hsl(38deg 66% 66% / 12%)
     );
-    /* Categorical drawing hues stay distinct from Pear's accent and
+    /* Categorical drawing hues stay distinct from the legacy accent and
        semantic state colors in both themes. */
     --legacy-cat-1: light-dark(hsl(190deg 55% 32%), hsl(190deg 45% 62%));
     --legacy-cat-2: light-dark(hsl(225deg 50% 42%), hsl(225deg 55% 72%));
@@ -913,7 +913,7 @@
     --legacy-font-display: var(--f-human);
     --legacy-font-mono: var(--f-code);
 
-    /* Spacing — 4px grid, the only spacing vocabulary on Pear surfaces. */
+    /* Spacing — 4px grid, the only spacing vocabulary on legacy surfaces. */
     --legacy-space-1: 4px;
     --legacy-space-2: 8px;
     --legacy-space-3: 12px;
@@ -941,7 +941,7 @@
     --legacy-dur-2: 180ms;
     --legacy-dur-3: 280ms;
 
-    /* Pear message rows sit one tone below the page surface. */
+    /* Agent message rows sit one tone below the page surface. */
     --color-background-legacy-message-content: var(--legacy-surface-1);
     --color-selected-message-outline: color-mix(
         in srgb,

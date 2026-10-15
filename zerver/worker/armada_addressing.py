@@ -18,7 +18,7 @@ from zerver.worker.base import QueueProcessingWorker, assign_queue
 
 @assign_queue(ARMADA_ADDRESSING_QUEUE_NAME)
 class ArmadaAddressingWorker(QueueProcessingWorker):
-    """Route Pear messages without blocking Zulip's shared bot queue."""
+    """Route messages for the agent without blocking Zulip's shared bot queue."""
 
     PREFETCH = 10
     MAX_CONSUME_SECONDS = 10

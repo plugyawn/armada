@@ -195,7 +195,7 @@ js_rules = RuleList(
                 "web/src/server_message.ts",
                 "web/src/state_data.ts",
                 # These use subject in the git sense (the first line of a
-                # commit message); it is the field name in the Pear API.
+                # commit message); it is the field name in the Armada API.
                 "web/src/legacy_panel.ts",
                 "web/src/legacy_workspace_api.ts",
                 "web/src/legacy_workspace_files.ts",

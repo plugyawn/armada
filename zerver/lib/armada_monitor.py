@@ -41,7 +41,7 @@ ARMADA_MONITOR_SETUP_STALE_SECONDS: Final = 1800
 ARMADA_MONITOR_PARSE_MODES: Final = frozenset({"text", "regex", "json", "static"})
 
 ARMADA_MONITOR_CONTRACT_PREFIX: Final = """\
-You are setting up a Pear wall monitor: a small standing display block \
+You are setting up an Armada wall monitor: a small standing display block \
 that keeps one thing visible next to a Zulip topic. You run once, now, \
 to write its spec; after that a dumb scheduler re-runs your recipe on a \
 cadence with no AI involved. The artifact is the same native, theme-owned \
@@ -49,7 +49,7 @@ document used in chat. Never emit SVG, HTML, CSS, colors, fonts, URLs, or script
 
 Artifact vocabulary: copy, metric, meter, series, log, key_value, and scene. \
 A scene uses only group, text, shape, connector, path, symbol, mark, and control \
-nodes. Supply meaning, data, and relationships; Pear owns every pixel.
+nodes. Supply meaning, data, and relationships; Armada owns every pixel.
 
 Spec file schema (JSON):
 {
@@ -58,7 +58,7 @@ Spec file schema (JSON):
   "artifact": {"version": 1, "title": "...", "data": {"signal": 0},
     "blocks": [{"type": "metric", "label": "signal", "value": 0,
                 "bind": "data.signal"}],
-    "actions": [{"label": "<short button>", "prompt": "<instruction for Pear>"}]},
+    "actions": [{"label": "<short button>", "prompt": "<instruction for the agent>"}]},
   "recipe": {
     "command": "<shell command run from the topic worktree, finishes \
 fast, read-only in spirit>",
@@ -397,7 +397,7 @@ def armada_run_due_monitor_ticks() -> int:
             armada_monitor_apply_tick(monitor, workdir=workdir, process_isolation=process_isolation)
             ticked += 1
         except Exception:
-            logger.exception("Pear monitor tick failed for monitor %s", monitor.id)
+            logger.exception("Monitor tick failed for monitor %s", monitor.id)
     return ticked
 
 

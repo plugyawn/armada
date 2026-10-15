@@ -64,7 +64,7 @@ run_test("get_message_events", () => {
     ]);
 });
 
-run_test("typed dispatch keeps Pear artifacts out of widget replay", () => {
+run_test("typed dispatch keeps Onix artifacts out of widget replay", () => {
     const message = {
         id: 77,
         sender_id: 33,

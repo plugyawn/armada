@@ -28,7 +28,7 @@ def process_submessage(
     msg_type: str,
 ) -> HttpResponse:
     if msg_type == ARMADA_ARTIFACT_SUBMESSAGE_TYPE:
-        raise JsonableError(_("Pear artifacts can only be attached by the Pear runtime."))
+        raise JsonableError(_("Artifacts can only be attached by the agent's runtime."))
     message = access_message(user_profile, message_id, lock_message=True, is_modifying_message=True)
 
     verify_submessage_sender(

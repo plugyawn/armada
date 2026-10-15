@@ -789,7 +789,7 @@ function render_armada_bot_options(armada_config: ArmadaConfigPayload): void {
     if (armada_config.bot_identities.length === 0) {
         $("<option>")
             .attr("value", "")
-            .text($t({defaultMessage: "No Pear bot configured"}))
+            .text($t({defaultMessage: "No Onix bot configured"}))
             .appendTo($select);
         $select.prop("disabled", true);
         return;
@@ -826,7 +826,7 @@ function render_armada_runtime_login(armada_config: ArmadaConfigPayload): void {
         armada_config.worker_runtime_login_command ?? $t({defaultMessage: "none"});
     const login_instructions =
         armada_config.worker_runtime_login_instructions ??
-        $t({defaultMessage: "Select a supported Pear worker runtime before logging in."});
+        $t({defaultMessage: "Select a supported Onix worker runtime before logging in."});
 
     $("#legacy-config-runtime-login").text(
         $t(

@@ -1,4 +1,4 @@
-"""Contained filesystem I/O for Pear workspaces.
+"""Contained filesystem I/O for agent workspaces.
 
 This module is deliberately independent of Django so the same implementation
 can run inside the web process for ordinary workspaces and as the owning
@@ -2094,7 +2094,7 @@ def _helper_command(
 ) -> list[str]:
     if isolation_username is not None:
         if ARMADA_ISOLATION_USERNAME_RE.fullmatch(isolation_username) is None:
-            raise ValueError("Invalid Pear isolation username")
+            raise ValueError("Invalid isolation username")
         executable = os.fspath(python_executable or "python3")
         path = os.fspath(helper_path or DEFAULT_ISOLATED_HELPER_PATH)
         return [
@@ -2849,7 +2849,7 @@ def _stream_cli_request() -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Perform contained Pear workspace I/O.")
+    parser = argparse.ArgumentParser(description="Perform contained workspace I/O.")
     parser.add_argument("--stdio", action="store_true", help="use the internal JSON/stdio protocol")
     parser.add_argument("--stream", action="store_true", help="stream one contained file")
     args = parser.parse_args(argv)

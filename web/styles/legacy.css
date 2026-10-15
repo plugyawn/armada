@@ -1027,7 +1027,7 @@
     }
 }
 
-/* Pear runtime popover menu; mirrors the radio-list layout used by
+/* The agent's runtime popover menu; mirrors the radio-list layout used by
    #buddy-list-actions-menu-popover in right_sidebar.css. */
 #legacy-runtime-menu-popover {
     --legacy-runtime-menu-width: 236px;
@@ -1200,7 +1200,7 @@
     }
 }
 
-/* Every interactive Pear control eases its surface changes together so
+/* Every interactive legacy control eases its surface changes together so
    hovers and state flips read as engineered motion, not an abrupt swap.
    Sub-150ms color transitions are gentle enough to keep under
    prefers-reduced-motion. */
@@ -1659,7 +1659,7 @@
     line-height: 1.2;
 }
 
-/* Native Pear artifacts. Authors provide structure and meaning; every visual
+/* Native agent artifacts. Authors provide structure and meaning; every visual
    decision is owned here so chat and Wall remain identical across themes. */
 .legacy-artifact-message-host {
     grid-area: artifact;
@@ -4113,7 +4113,7 @@ body.message-thread-pane-open #legacy-agent-roster {
     }
 }
 
-/* Pear workbench geometry: the right rail widens for the thread pane and
+/* The legacy workbench geometry: the right rail widens for the thread pane and
    workbench cards, and sidebar insets tighten. The widening applies only
    at and above lg, where the room exists; the left sidebar keeps its
    stock width (slimming it mangled topic names). On wide monitors the

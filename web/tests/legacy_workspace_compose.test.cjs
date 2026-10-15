@@ -27,7 +27,7 @@ run_test("file context is formatted without sending a message", () => {
         path: "docs/README.md",
         selectedText: "",
     });
-    assert.equal(text, "Ask Pear about this workspace file.\n\nPath: `docs/README.md`");
+    assert.equal(text, "Ask Onix about this workspace file.\n\nPath: `docs/README.md`");
 
     workspace_compose.fill_armada_compose_with_workspace_context({
         path: "docs/README.md",
@@ -49,7 +49,7 @@ run_test("selection context includes lines and uses a collision-safe fence", () 
             endLine: 9,
         }),
         [
-            "Ask Pear about this workspace selection.",
+            "Ask Onix about this workspace selection.",
             "",
             "Path: ``src/`parser`.ts``",
             "Lines: 7-9",

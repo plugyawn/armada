@@ -10,9 +10,9 @@ ARMADA_ARTIFACT_TOOL_SPEC: Final[dict[str, Any]] = {
     "type": "function",
     "name": "armada_artifact",
     "description": (
-        "Create one Pear explainer or live-capable artifact. Use native semantic "
+        "Create one Armada explainer or live-capable artifact. Use native semantic "
         "blocks by default, or attach one bounded generated visual through a media "
-        "source under .armada/artifacts. Pear owns the frame, themes, and accessibility."
+        "source under .armada/artifacts. Armada owns the frame, themes, and accessibility."
     ),
     "inputSchema": ARMADA_ARTIFACT_SCHEMA,
 }

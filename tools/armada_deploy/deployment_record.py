@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Write the Pear deployment record without following attacker-controlled links."""
+"""Write the Armada deployment record without following attacker-controlled links."""
 
 from __future__ import annotations
 

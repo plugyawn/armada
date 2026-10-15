@@ -156,7 +156,9 @@ def armada_worker_runtime_auth_status(
     codex_bin = settings.ARMADA_WORKER_CODEX_BIN
     login_command = armada_codex_login_command()
     codex_logged_in = armada_codex_login_available(codex_bin)
-    codex_login_instructions = "Run Codex CLI login inside the worker environment used by Pear."
+    codex_login_instructions = (
+        f"Run Codex CLI login inside the worker environment used by {ARMADA_AGENT_NAME}."
+    )
 
     if worker_agent_runtime == "codex-app-server":
         if codex_logged_in:
@@ -220,16 +222,16 @@ def get_selected_armada_bot(user_profile: UserProfile) -> Service | None:
 def clean_armada_model_slug(model: str) -> str:
     model = model.strip()
     if not model:
-        raise JsonableError(_("Pear model cannot be empty."))
+        raise JsonableError(_("Model cannot be empty."))
     if len(model) > ARMADA_MODEL_SLUG_LIMIT or any(character.isspace() for character in model):
-        raise JsonableError(_("Pear model must be a short model slug without whitespace."))
+        raise JsonableError(_("Model must be a short model slug without whitespace."))
     return model
 
 
 def clean_armada_reasoning_effort(reasoning_effort: str) -> str:
     reasoning_effort = reasoning_effort.strip()
     if reasoning_effort not in ARMADA_REASONING_EFFORTS:
-        raise JsonableError(_("Pear reasoning effort must be low, medium, high, or xhigh."))
+        raise JsonableError(_("Reasoning effort must be low, medium, high, or xhigh."))
     return reasoning_effort
 
 
@@ -932,10 +934,10 @@ def check_can_access_armada_worker_run(
     run: AgentRun,
 ) -> None:
     if run.realm_id != user_profile.realm_id:
-        raise JsonableError(_("Pear run not found."))
+        raise JsonableError(_("Run not found."))
     if run.session_kind == AgentRun.SIDE:
         if run.requesting_user_id != user_profile.id:
-            raise JsonableError(_("Pear run not found."))
+            raise JsonableError(_("Run not found."))
         return
     stream_name = (
         run.workspace_node.stream_name
@@ -956,7 +958,7 @@ def get_visible_armada_worker_run(
             "workspace_node",
         ).get(id=run_id, realm=user_profile.realm)
     except AgentRun.DoesNotExist as error:
-        raise JsonableError(_("Pear run not found.")) from error
+        raise JsonableError(_("Run not found.")) from error
     check_can_access_armada_worker_run(user_profile, run)
     return run
 
@@ -967,9 +969,9 @@ def get_visible_armada_worker_runs_by_id(
 ) -> list[AgentRun]:
     normalized_run_ids = list(dict.fromkeys(run_ids))
     if len(normalized_run_ids) > ARMADA_RUN_IDS_FILTER_LIMIT:
-        raise JsonableError(_("Too many Pear runs requested."))
+        raise JsonableError(_("Too many runs requested."))
     if any(run_id <= 0 for run_id in normalized_run_ids):
-        raise JsonableError(_("Pear run not found."))
+        raise JsonableError(_("Run not found."))
 
     runs = list(
         AgentRun.objects.select_related(
@@ -980,7 +982,7 @@ def get_visible_armada_worker_runs_by_id(
     )
     runs_by_id = {run.id: run for run in runs}
     if len(runs_by_id) != len(normalized_run_ids):
-        raise JsonableError(_("Pear run not found."))
+        raise JsonableError(_("Run not found."))
     for run in runs_by_id.values():
         check_can_access_armada_worker_run(user_profile, run)
     return list(runs_by_id.values())
@@ -1005,7 +1007,7 @@ def set_selected_armada_bot(user_profile: UserProfile, selected_bot_user_id: int
         )
         selected_bot_user_id = selected_bot.user_profile_id
     elif selected_bot_user_id not in armada_bot_by_user_id:
-        raise JsonableError(_("Invalid Pear bot selection."))
+        raise JsonableError(_("Invalid bot selection."))
 
     changed = False
     bot_configs = get_bot_configs(list(armada_bot_by_user_id))
@@ -1035,7 +1037,7 @@ def ensure_armada_configured_bot(
     armada_config = build_armada_config_for_user(user_profile)
     created = False
     if not armada_config["configured"] and selected_bot_user_id is not None:
-        raise JsonableError(_("Invalid Pear bot selection."))
+        raise JsonableError(_("Invalid bot selection."))
     if not armada_config["configured"]:
         add_bot_backend(
             request,
@@ -1054,7 +1056,7 @@ def ensure_armada_configured_bot(
     armada_config = build_armada_config_for_user(user_profile)
     armada_bot = get_selected_armada_bot(user_profile)
     if armada_bot is None:
-        raise JsonableError(_("Pear bot is not configured."))
+        raise JsonableError(_("{agent} is not configured.").format(agent=ARMADA_AGENT_NAME))
     return armada_bot, armada_config, created, selection_changed
 
 
@@ -1115,7 +1117,7 @@ def post_armada_first_run_backend(
     stream, stream_created = create_stream_if_needed(
         user_profile.realm,
         ARMADA_FIRST_RUN_STREAM,
-        stream_description="Pear sandbox for first-run Codex sessions.",
+        stream_description="Armada sandbox for first-run Codex sessions.",
         acting_user=user_profile,
     )
     bulk_add_subscriptions(
@@ -1146,7 +1148,7 @@ def post_armada_first_run_backend(
             acting_user=user_profile,
         )
         if starter_message_id is None:
-            raise JsonableError(_("Pear could not post the first-run message."))
+            raise JsonableError(_("Could not post the first-run message."))
         message_created = True
     else:
         starter_message_id = existing_message.id
@@ -1271,7 +1273,7 @@ def post_armada_topic_context_backend(
         clean_armada_reasoning_effort(reasoning_effort) if reasoning_effort is not None else None
     )
     if response_policy is not None and response_policy not in {"ambient", "mentions_only"}:
-        raise JsonableError(_("Invalid Pear response policy."))
+        raise JsonableError(_("Invalid response policy."))
     clean_response_policy = response_policy
     workspace_node = ensure_armada_workspace_node(
         user_profile, stream=stream_name, topic=topic_name
@@ -1412,7 +1414,7 @@ def get_armada_active_session_backend(
 
         # Once routing has accepted a request, AgentRun is the durable
         # source of truth. The message check only covers the short interval
-        # before an explicit @Pear request has been claimed by the queue.
+        # before an explicit request to the agent has been claimed by the queue.
         latest_persisted_trigger_id = latest_run.trigger_message_id if latest_run else 0
         pending_explicit_request_ids = [
             message_id
@@ -1507,7 +1509,7 @@ def get_armada_runs_backend(
             id=workspace_id,
         ).first()
         if workspace_node is None:
-            raise JsonableError(_("Pear workspace not found."))
+            raise JsonableError(_("Workspace not found."))
         if workspace_node.stream_name:
             access_stream_by_name(user_profile, workspace_node.stream_name)
         topic_runs = list(
@@ -1781,7 +1783,7 @@ def get_armada_run_trace_backend(
             str(agent["thread_id"]) for agent in serialize_armada_agent_threads(run)
         }
         if thread_id not in visible_thread_ids:
-            raise JsonableError(_("Pear agent thread not found."))
+            raise JsonableError(_("Agent thread not found."))
         events = run.events.filter(
             event_type="agent",
             payload__metadata__codex_thread_id=thread_id,
@@ -1945,14 +1947,14 @@ def post_armada_run_not_for_agent_backend(
 ) -> HttpResponse:
     visible_run = get_visible_armada_worker_run(user_profile, run_id)
     if not visible_run.ambient_triggered:
-        raise JsonableError(_("This Pear response was explicitly requested."))
+        raise JsonableError(_("This response was explicitly requested."))
 
     if visible_run.status in {AgentRun.QUEUED, AgentRun.RUNNING}:
         visible_run = update_armada_run_control_event(
             user_profile,
             run_id,
             "cancel",
-            "Cancelled after Not for Pear feedback.",
+            f"Cancelled after Not for {ARMADA_AGENT_NAME} feedback.",
         )
 
     with transaction.atomic(savepoint=False):
@@ -1962,7 +1964,7 @@ def post_armada_run_not_for_agent_backend(
             AgentRunEvent.objects.create(
                 run=run,
                 event_type="routing_feedback",
-                summary="Not for Pear.",
+                summary=f"Not for {ARMADA_AGENT_NAME}.",
                 payload={
                     "label": "false_positive",
                     "trigger_message_id": run.trigger_message_id,
@@ -2031,7 +2033,7 @@ def _dispatch_armada_monitor_run(
     )
     dm_intro = "\n".join(
         [
-            "Pear monitor setup started.",
+            "Monitor setup started.",
             "",
             f"Topic: {stream_name} > {topic_name}",
             f"Monitor: {monitor.ask}",
@@ -2044,7 +2046,7 @@ def _dispatch_armada_monitor_run(
         disable_external_notifications=True,
     )
     if dm_message_id is None:
-        raise JsonableError(_("Pear could not open the monitor transcript."))
+        raise JsonableError(_("Could not open the monitor transcript."))
     monitor.anchor_message_id = dm_message_id
     monitor.status = AgentMonitor.PROVISIONING
     monitor.date_updated = timezone_now()
@@ -2163,12 +2165,12 @@ def post_armada_monitors_backend(
 ) -> HttpResponse:
     ask_request = ask_request.strip()
     if not ask_request:
-        raise JsonableError(_("Pear monitor request cannot be empty."))
+        raise JsonableError(_("Monitor request cannot be empty."))
     access_stream_by_name(user_profile, stream_name)
     stream_name, topic_name = armada_topic_scope(stream_name, topic_name)
     armada_bot = get_selected_armada_bot(user_profile)
     if armada_bot is None:
-        raise JsonableError(_("Pear bot is not configured."))
+        raise JsonableError(_("{agent} is not configured.").format(agent=ARMADA_AGENT_NAME))
     topic_count = AgentMonitor.objects.filter(
         realm=user_profile.realm,
         stream_name__iexact=stream_name,
@@ -2217,7 +2219,7 @@ def _get_accessible_armada_monitor(user_profile: UserProfile, monitor_id: int) -
     try:
         monitor = AgentMonitor.objects.get(id=monitor_id, realm=user_profile.realm)
     except AgentMonitor.DoesNotExist as error:
-        raise JsonableError(_("Pear monitor not found.")) from error
+        raise JsonableError(_("Monitor not found.")) from error
     access_stream_by_name(user_profile, monitor.stream_name)
     return monitor
 
@@ -2273,7 +2275,7 @@ def update_armada_monitor_backend(
         check_armada_user_may_start_runs(user_profile)
         armada_bot = get_selected_armada_bot(user_profile)
         if armada_bot is None:
-            raise JsonableError(_("Pear bot is not configured."))
+            raise JsonableError(_("{agent} is not configured.").format(agent=ARMADA_AGENT_NAME))
         monitor.date_updated = now
         monitor.save(update_fields=["date_updated"])
         _dispatch_armada_monitor_run(

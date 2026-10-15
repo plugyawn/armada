@@ -839,8 +839,7 @@ SOCIAL_AUTH_SAML_SUPPORT_CONTACT = {
 ################
 ## Armada: repositories, worktrees and the coding agent.
 ##
-## Armada's agent (named Onyx; the code and these settings still say
-## Pear) is an embedded bot driven by the Codex CLI. See
+## Armada's agent, Onix, is an embedded bot driven by the Codex CLI. See
 ## docs/armada/deploy.md for the whole setup: the Codex login, the
 ## worker queues, the worktree directory and git access.
 ##

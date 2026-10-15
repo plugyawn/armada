@@ -1,5 +1,5 @@
 [Unit]
-Description=Pear Zulip server with production assets
+Description=Armada Zulip server with production assets
 After=network-online.target postgresql.service rabbitmq-server.service redis-server.service memcached.service
 Wants=network-online.target
 

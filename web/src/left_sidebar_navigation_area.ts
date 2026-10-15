@@ -31,7 +31,7 @@ export function restore_views_state(): void {
     }
 
     const views_state = ls.get(ls_key);
-    // Pear defaults to the condensed strip (design §8.3: the views
+    // Armada defaults to the condensed strip (design §8.3: the views
     // fold behind Inbox/Mentions/Drafts); expanded is the stored
     // exception.
     if (views_state !== STATES.EXPANDED) {

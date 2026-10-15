@@ -1,4 +1,4 @@
-"""Realm-wide maps of Pear workspace bindings, for sidebar affordances.
+"""Realm-wide maps of workspace bindings, for sidebar affordances.
 
 The heavyweight per-topic context lives in zerver.lib.armada_worker; this
 module answers only the cheap realm- and stream-scoped questions the web

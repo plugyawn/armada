@@ -2,7 +2,7 @@
 
 One function per topic.  Each reads as the conversation it produces:
 `seeder.post` is a person talking, `seeder.request` is a person asking
-Pear, and the script handed to `request` is what the stand-in agent does
+the agent, and the script handed to `request` is what the stand-in agent does
 during that turn (see `ScriptedTurn` in `armada_demo.py`).
 
 To add a state: write a `seed_*` function and list it in `SCENARIOS`.
@@ -516,7 +516,7 @@ def seed_paused_topic(seeder: DemoSeeder) -> None:
         ),
     )
     assert run is not None
-    seeder.post("desdemona", PAUSED, "Pausing Pear here while we talk through the release plan.")
+    seeder.post("desdemona", PAUSED, "Pausing Onix here while we talk through the release plan.")
     update_armada_run_control_event(seeder.user("desdemona"), run.id, "pause", "Paused by user.")
     seeder.shift(60)
     seeder.post("othello", PAUSED, "Fine by me. I would cut 8.6 after the completion fix lands.")
@@ -1093,7 +1093,7 @@ def seed_threads(seeder: DemoSeeder) -> None:
         ("othello", "Could it be default-on only when a command declares at least one group?"),
         ("cordelia", "That is opt-in with extra steps, which I like. No groups, no change."),
         ("iago", "Fair. Then the proposal is really just: add the API, keep the default."),
-        ("desdemona", "+1 to Othello's version. I will ask Pear to pressure-test it."),
+        ("desdemona", "+1 to Othello's version. I will ask Onix to pressure-test it."),
         ("hamlet", "Works for me. Can we get numbers on how many projects snapshot help text?"),
     ]:
         seeder.post(sender, THREADS, text, thread_root=root, wait=95)
@@ -1183,7 +1183,7 @@ def seed_dirty_worktree(seeder: DemoSeeder) -> None:
 
 # --- 8. a long, busy topic ------------------------------------------------------------------------------
 
-# (sender, text) is a person talking; (sender, question, answer, *commands) asks Pear.
+# (sender, text) is a person talking; (sender, question, answer, *commands) asks the agent.
 LONG_CONVERSATION: list[tuple[str, ...]] = [
     ("iago", "Kicking off 8.6 triage. I will go through the milestone top to bottom."),
     ("hamlet", "I have the morning free, send things my way."),
@@ -1367,7 +1367,7 @@ SCENARIOS = [
     Scenario(CANCELLED, "run cancelled from the panel mid-turn", seed_cancelled_run),
     Scenario(
         PAUSED,
-        "paused topic: pause control on the last run, and Pear refusing a new request",
+        "paused topic: pause control on the last run, and Onix refusing a new request",
         seed_paused_topic,
     ),
     Scenario(

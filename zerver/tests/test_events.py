@@ -739,9 +739,9 @@ class NormalActionsTest(BaseAction):
 
     def test_armada_send_message_event_is_flagged(self) -> None:
         armada_bot = self.create_test_bot(
-            "pear",
+            "onix",
             self.user_profile,
-            full_name="Pear",
+            full_name="Onix",
             bot_type=UserProfile.EMBEDDED_BOT,
             service_name=ARMADA_EMBEDDED_BOT_SERVICE,
             config_data=orjson.dumps({}).decode(),
@@ -751,7 +751,7 @@ class NormalActionsTest(BaseAction):
             self.send_stream_message(
                 armada_bot,
                 "Denmark",
-                content="armada status",
+                content="run status",
                 skip_capture_on_commit_callbacks=True,
             )
 
@@ -3551,8 +3551,8 @@ class NormalActionsTest(BaseAction):
 
         with self.verify_action(num_events=4) as events:
             armada_bot = self.create_bot(
-                "pear",
-                full_name="Pear",
+                "onix",
+                full_name="Onix",
                 service_name=ARMADA_EMBEDDED_BOT_SERVICE,
                 config_data=orjson.dumps({}).decode(),
                 bot_type=UserProfile.EMBEDDED_BOT,

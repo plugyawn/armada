@@ -374,7 +374,7 @@ run_test("entry history serializes pagination and rejects malformed commits", ()
                 {
                     commit: "abc123",
                     authored_at: 1_700_000_000,
-                    author_name: "Pear",
+                    author_name: "Onix",
                     subject: "Document the workspace",
                 },
             ],

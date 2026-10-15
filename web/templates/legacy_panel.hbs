@@ -13,7 +13,7 @@
         <div class="legacy-panel-actions">
             {{#if has_panel_menu}}
             <details class="legacy-run-actions legacy-panel-run-actions" data-run-id="{{active_run.id}}">
-                <summary class="legacy-run-actions-summary legacy-icon-button icon-button icon-button-square icon-button-neutral tippy-zulip-delayed-tooltip" aria-label="{{t 'Pear work menu' }}" data-tippy-content="{{t 'Pear work menu' }}">
+                <summary class="legacy-run-actions-summary legacy-icon-button icon-button icon-button-square icon-button-neutral tippy-zulip-delayed-tooltip" aria-label="{{t 'Onix work menu' }}" data-tippy-content="{{t 'Onix work menu' }}">
                     <i class="zulip-icon zulip-icon-more-vertical" aria-hidden="true"></i>
                 </summary>
                 <div class="legacy-run-actions-menu">
@@ -52,7 +52,7 @@
     {{#if has_topic}}
         {{#if topic_context}}
             <section class="legacy-context-section">
-                <div class="legacy-workbench" role="dialog" aria-modal="true" aria-label="{{t 'Pear work details' }}" tabindex="-1">
+                <div class="legacy-workbench" role="dialog" aria-modal="true" aria-label="{{t 'Onix work details' }}" tabindex="-1">
                     <div class="legacy-workbench-header">
                         <div class="legacy-workbench-context-strip">
                             <div class="legacy-workbench-context-item legacy-workbench-context-repo">
@@ -76,14 +76,14 @@
                                 <span class="legacy-workbench-meta" title="{{topic_context.workbench_meta}}">{{topic_context.workbench_meta}}</span>
                             {{/if}}
                             {{#if panel_can_close}}
-                                <button type="button" class="legacy-panel-close-action legacy-workbench-close legacy-icon-button icon-button icon-button-square icon-button-neutral tippy-zulip-delayed-tooltip" aria-label="{{t 'Hide Pear work details' }}" data-tippy-content="{{t 'Hide Pear work details' }}">
+                                <button type="button" class="legacy-panel-close-action legacy-workbench-close legacy-icon-button icon-button icon-button-square icon-button-neutral tippy-zulip-delayed-tooltip" aria-label="{{t 'Hide Onix work details' }}" data-tippy-content="{{t 'Hide Onix work details' }}">
                                     <i class="zulip-icon zulip-icon-close" aria-hidden="true"></i>
                                 </button>
                             {{/if}}
                         </div>
                         <div class="legacy-workbench-scope-note">{{topic_context.workbench_scope_note}}</div>
                         <div class="legacy-workbench-context-row">
-                            <div class="legacy-workbench-tabs" role="tablist" aria-label="{{t 'Pear work views' }}">
+                            <div class="legacy-workbench-tabs" role="tablist" aria-label="{{t 'Onix work views' }}">
                                 <button type="button" id="legacy-workbench-tab-diff" role="tab" aria-controls="legacy-workbench-panel" aria-selected="{{#if topic_context.workbench_diff_selected}}true{{else}}false{{/if}}" tabindex="{{#if topic_context.workbench_diff_selected}}0{{else}}-1{{/if}}" class="legacy-workbench-tab {{#if topic_context.workbench_diff_selected}}legacy-workbench-tab-selected{{/if}}" data-legacy-workbench-view="diff" {{#if topic_context.workbench_diff_disabled}}disabled{{/if}}>
                                     {{topic_context.diff_tab_label}}
                                 </button>
@@ -151,13 +151,13 @@
         {{else}}
             <div class="legacy-empty-state">
                 <span class="legacy-ui-glyph legacy-empty-state-glyph legacy-braille-spinner" aria-hidden="true"></span>
-                <span>{{t "Pear context is loading." }}</span>
+                <span>{{t "Onix context is loading." }}</span>
             </div>
         {{/if}}
     {{else}}
         <div class="legacy-empty-state">
             <span class="legacy-ui-glyph legacy-empty-state-glyph" aria-hidden="true">·</span>
-            <span>{{t "Open a topic to see Pear context." }}</span>
+            <span>{{t "Open a topic to see Onix context." }}</span>
         </div>
     {{/if}}
     {{/if}}
@@ -168,7 +168,7 @@
     <div class="legacy-panel-error" role="status">
         <span class="legacy-ui-glyph legacy-panel-error-glyph" aria-hidden="true">✷</span>
         <span>{{error}}</span>
-        <button type="button" class="legacy-panel-error-dismiss legacy-icon-button icon-button icon-button-square icon-button-neutral" aria-label="{{t 'Dismiss Pear status error' }}">
+        <button type="button" class="legacy-panel-error-dismiss legacy-icon-button icon-button icon-button-square icon-button-neutral" aria-label="{{t 'Dismiss Onix status error' }}">
             <i class="zulip-icon zulip-icon-close" aria-hidden="true"></i>
         </button>
     </div>

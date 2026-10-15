@@ -90,7 +90,7 @@ ssh_root() {
 
 validate_local_deploy_git_metadata
 if [[ ! -d "$LOCAL_ARMADA_SKILLS_DIR" ]]; then
-    fail "local Pear skills directory is missing: $LOCAL_ARMADA_SKILLS_DIR"
+    fail "local Armada skills directory is missing: $LOCAL_ARMADA_SKILLS_DIR"
 fi
 LOCAL_GIT_COMMON_DIR="$(git -C "$REPO_ROOT" rev-parse --git-common-dir)"
 LOCAL_SHA="$(git -C "$REPO_ROOT" rev-parse HEAD)"
@@ -193,7 +193,7 @@ rsync -az --delete \
     "$REPO_ROOT/" \
     "root@$IP_ADDRESS:/home/zulipdev/zulip/"
 
-echo "Syncing Pear Codex skills to $REMOTE_ARMADA_SKILLS_DIR..."
+echo "Syncing Armada Codex skills to $REMOTE_ARMADA_SKILLS_DIR..."
 ssh_root "install -d -m 755 $REMOTE_ARMADA_SKILLS_DIR"
 rsync -az --delete \
     -e "ssh -F $SSH_CONFIG" \
@@ -260,10 +260,10 @@ if [[ -f "$HOME/.codex/auth.json" ]]; then
         "root@$IP_ADDRESS:/home/zulipdev/.codex/auth.json"
     ssh_root 'chown zulipdev:zulipdev /home/zulipdev/.codex/auth.json && chmod 600 /home/zulipdev/.codex/auth.json'
 else
-    echo "WARNING: $HOME/.codex/auth.json is missing; run codex login on the server before using Pear." >&2
+    echo "WARNING: $HOME/.codex/auth.json is missing; run codex login on the server before using Onix." >&2
 fi
 
-echo "Writing Pear environment and queue-worker systemd config..."
+echo "Writing Armada environment and queue-worker systemd config..."
 ssh -F "$SSH_CONFIG" armada-staging-root bash -s <<'REMOTE'
 set -euo pipefail
 
@@ -333,7 +333,7 @@ args = parser.parse_args()
 if os.geteuid() != 0:
     fail("armada-topic-isolate must run as root")
 if re.fullmatch(r"armada-[0-9a-f]{24}", args.user) is None:
-    fail("invalid Pear topic user")
+    fail("invalid Armada topic user")
 
 topic_root = resolve(args.topic_root)
 workdir = resolve(args.workdir)
@@ -427,7 +427,7 @@ chmod 440 /etc/sudoers.d/91-armada-topic-isolation
 
 cat >/etc/systemd/system/armada-embedded-bots.service <<'EOF'
 [Unit]
-Description=Pear Zulip embedded bot queue
+Description=Armada Zulip embedded bot queue
 After=network-online.target armada-zulip-dev.service
 Wants=armada-zulip-dev.service
 
@@ -446,7 +446,7 @@ EOF
 
 cat >/etc/systemd/system/armada-thumbnail.service <<'EOF'
 [Unit]
-Description=Pear Zulip thumbnail queue
+Description=Armada Zulip thumbnail queue
 After=network-online.target armada-zulip-dev.service
 Wants=armada-zulip-dev.service
 
@@ -465,7 +465,7 @@ EOF
 
 cat >/etc/systemd/system/armada-monitor-worker.service <<'EOF'
 [Unit]
-Description=Pear standing-monitor queue
+Description=Armada standing-monitor queue
 After=network-online.target armada-zulip-dev.service
 Wants=armada-zulip-dev.service
 
@@ -521,7 +521,7 @@ else
     echo "WARNING: No Gemini key found in local env; addressing and live summaries will fail closed." >&2
 fi
 
-echo "Ensuring Pear embedded bot is configured..."
+echo "Ensuring the embedded bot for Onix is configured..."
 ssh -F "$SSH_CONFIG" armada-staging-root \
     "sudo -Hu zulipdev bash -lc 'cd /home/zulipdev/zulip && set -a && . /home/zulipdev/armada.env && set +a && /home/zulipdev/zulip/.venv/bin/python3 /home/zulipdev/zulip/manage.py shell'" <<'PY'
 from django.test import RequestFactory
@@ -556,11 +556,11 @@ request = RequestFactory().post("/json/armada/config")
 request.user = owner
 response = post_armada_config_backend(request, owner)
 if response.status_code != 200:
-    raise SystemExit(f"Pear config failed with HTTP {response.status_code}: {response.content!r}")
+    raise SystemExit(f"Armada config failed with HTTP {response.status_code}: {response.content!r}")
 
 config = build_armada_config_for_user(owner)
 print(
-    "Pear configured:",
+    "Armada configured:",
     {
         "enabled": config["enabled"],
         "bot_user_id": config["bot_user_id"],

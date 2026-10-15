@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Install and verify the isolated Pear workspace I/O helper."""
+"""Install and verify the isolated Armada workspace I/O helper."""
 
 from __future__ import annotations
 

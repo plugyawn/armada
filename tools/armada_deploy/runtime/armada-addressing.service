@@ -1,5 +1,5 @@
 [Unit]
-Description=Pear ambient addressing queue
+Description=Armada ambient addressing queue
 After=network-online.target armada-zulip-dev.service
 Wants=armada-zulip-dev.service
 

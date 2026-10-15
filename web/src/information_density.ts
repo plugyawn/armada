@@ -14,7 +14,7 @@ import * as util from "./util.ts";
 // Source Sans Prof VF reports an em size of 1000, which is
 // necessary to know to calculate proper em units.
 const BODY_FONT_EM_SIZE = 1000;
-// Pear sets the body in Hanken Grotesk VF (design spec §1); these are
+// The old interface sets the body in Hanken Grotesk VF (design spec §1); these are
 // its font metrics, not Source Sans 3's. The Typo Ascender: the portion
 // of the content box above the baseline.
 const BODY_FONT_ASCENT = 1000;

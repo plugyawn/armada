@@ -348,7 +348,7 @@ export const update_elements = ($content: JQuery): void => {
         $(this).find("p").addClass("spoiler-header-text");
 
         // Add the expand/collapse button to spoiler blocks. Guarded so
-        // re-running update_elements on live content (Pear's streaming
+        // re-running update_elements on live content (the agent's streaming
         // morph) doesn't stack a button per pass.
         if ($(this).find(".spoiler-button").length === 0) {
             const toggle_button_html =

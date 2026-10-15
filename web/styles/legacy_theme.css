@@ -1,6 +1,6 @@
-/* Pear host retheme — "Terminal Romantic" (armada/ARMADA_DESIGN_LANGUAGE.md
+/* Legacy host retheme — "Terminal Romantic" (armada/ARMADA_DESIGN_LANGUAGE.md
    §4.3). This layer redefines the small set of Zulip variables the app's
-   shared surfaces sit on, entirely from Pear semantic tokens (which are
+   shared surfaces sit on, entirely from legacy semantic tokens (which are
    light-dark() aware, so one block serves both themes). Structural and
    IA changes to each surface land in their own batch; this file owns
    only the color world and the body voice. */
@@ -29,7 +29,7 @@
     --color-border-popover-menu: var(--legacy-hairline);
     --box-shadow-popover-menu: var(--legacy-shadow-pop);
 
-    /* Ordinary interaction is violet; Pear green is reserved for
+    /* Ordinary interaction is violet; legacy green is reserved for
        running, presence, and success state. */
     --color-outline-focus: var(--legacy-interaction);
     --color-outline-button-focus: var(--legacy-interaction);
@@ -97,7 +97,7 @@
     );
 
     /* Composer and message-expansion controls inherit the same fabric
-       instead of mixing Zulip indigo, Pear green, and raw greys. */
+       instead of mixing Zulip indigo, legacy green, and raw greys. */
     --color-compose-box-background: var(--legacy-surface-1);
     --color-border-compose-content: var(--legacy-hairline);
     --color-compose-message-content-background: var(--legacy-surface-0);
@@ -150,7 +150,7 @@
     );
 }
 
-/* Pear selection is a quiet adaptive wash across the whole row -- the
+/* Legacy selection is a quiet adaptive wash across the whole row -- the
    avatar gutter too, so nothing reads as a gap at the left. The same
    wash, quieter, on hover. */
 .selected_message .message_row {
@@ -200,14 +200,14 @@
 }
 
 /* The prose measure caps near 72ch (design §8.1): full-width lines
-   are the single biggest "unstyled" tell in a wide feed. Pear's own
+   are the single biggest "unstyled" tell in a wide feed. The old interface's own
    blocks carry their tighter cap in message_row.css. */
 .message_row .messagebox-content .message_content:not(.status-message) {
     max-width: min(100%, 72ch);
 }
 
 /* Zulip normally paints stream recipient bars from the stream's arbitrary
-   color via an inline style. In Pear that turns the entire topic header into
+   color via an inline style. In the old interface that turns the entire topic header into
    a competing green/blue/etc. surface beside violet interaction controls.
    Keep channel identity in the icon and text; the structural surface stays
    on the same adaptive graphite ramp as the rest of the room. */

@@ -705,7 +705,7 @@ export async function initialize_everything(state_data) {
     unread_ops.initialize();
     gear_menu.initialize();
     navbar_help_menu.initialize();
-    // Registers delegated handlers for Pear panel runtime controls.
+    // Registers delegated handlers for the agent panel's runtime controls.
     legacy_runtime_menu.initialize();
     gif_picker_ui.initialize();
     presence.initialize(state_data.presence);

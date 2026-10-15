@@ -264,7 +264,7 @@ test("my_message_all_actions", ({override}) => {
     assert.equal(child_response.move_message_menu_item, undefined);
 });
 
-test("ambient Pear response offers Not for Pear feedback", ({override}) => {
+test("ambient Onix response offers Not for Onix feedback", ({override}) => {
     set_page_params_no_edit_restrictions({override});
     override(realm, "realm_can_delete_any_message_group", everyone.id);
     override(realm, "realm_can_delete_own_message_group", everyone.id);

@@ -272,7 +272,7 @@ function root_message() {
         stream_id: 9,
         topic: "native threads",
         sender_id: 5,
-        sender_full_name: "Pear",
+        sender_full_name: "Onix",
         avatar_url: "/avatar/5",
         content: "<p>Original thread message</p>",
         timestamp: 90,

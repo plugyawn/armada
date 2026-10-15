@@ -191,9 +191,9 @@ class TestServiceBotBasics(ZulipTestCase):
         sender = self.example_user("hamlet")
         owner = self.example_user("cordelia")
         armada_bot = self.create_test_bot(
-            "pear",
+            "onix",
             owner,
-            full_name="Pear",
+            full_name="Onix",
             bot_type=UserProfile.EMBEDDED_BOT,
             service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
@@ -260,9 +260,9 @@ class TestServiceBotBasics(ZulipTestCase):
         sender = self.example_user("hamlet")
         owner = self.example_user("cordelia")
         armada_bot = self.create_test_bot(
-            "pear",
+            "onix",
             owner,
-            full_name="Pear",
+            full_name="Onix",
             bot_type=UserProfile.EMBEDDED_BOT,
             service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
@@ -277,7 +277,7 @@ class TestServiceBotBasics(ZulipTestCase):
             recipient_id=stream.recipient_id,
             stream_name=stream.name,
             topic_name="plain alias",
-            content="Hi @Pear",
+            content="Hi @Onix",
         )
         self.assertEqual(
             event_dict,
@@ -300,7 +300,7 @@ class TestServiceBotBasics(ZulipTestCase):
             recipient_id=stream.recipient_id,
             stream_name=stream.name,
             topic_name="plain alias",
-            content="@**Pear** hi",
+            content="@**Onix** hi",
         )
         self.assertEqual(event_dict["embedded_bots"], [])
 
@@ -312,9 +312,9 @@ class TestServiceBotBasics(ZulipTestCase):
         sender = self.example_user("hamlet")
         owner = self.example_user("cordelia")
         armada_bot = self.create_test_bot(
-            "pear",
+            "onix",
             owner,
-            full_name="Pear",
+            full_name="Onix",
             bot_type=UserProfile.EMBEDDED_BOT,
             service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
@@ -353,7 +353,7 @@ class TestServiceBotBasics(ZulipTestCase):
             recipient_id=stream.recipient_id,
             stream_name=stream.name,
             topic_name="compose armada",
-            content="@**Pear** can you check the current UI state?",
+            content="@**Onix** can you check the current UI state?",
             agent_followup=True,
         )
         self.assertEqual(
@@ -376,9 +376,9 @@ class TestServiceBotBasics(ZulipTestCase):
         sender = self.example_user("hamlet")
         owner = self.example_user("cordelia")
         self.create_test_bot(
-            "pear",
+            "onix",
             owner,
-            full_name="Pear",
+            full_name="Onix",
             bot_type=UserProfile.EMBEDDED_BOT,
             service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
@@ -405,9 +405,9 @@ class TestServiceBotBasics(ZulipTestCase):
         sender = self.example_user("hamlet")
         owner = self.example_user("cordelia")
         armada_bot = self.create_test_bot(
-            "pear",
+            "onix",
             owner,
-            full_name="Pear",
+            full_name="Onix",
             bot_type=UserProfile.EMBEDDED_BOT,
             service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
@@ -452,9 +452,9 @@ class TestServiceBotBasics(ZulipTestCase):
         sender = self.example_user("hamlet")
         owner = self.example_user("cordelia")
         armada_bot = self.create_test_bot(
-            "pear",
+            "onix",
             owner,
-            full_name="Pear",
+            full_name="Onix",
             bot_type=UserProfile.EMBEDDED_BOT,
             service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
@@ -536,9 +536,9 @@ class TestServiceBotBasics(ZulipTestCase):
         sender = self.example_user("hamlet")
         owner = self.example_user("cordelia")
         armada_bot = self.create_test_bot(
-            "pear",
+            "onix",
             owner,
-            full_name="Pear",
+            full_name="Onix",
             bot_type=UserProfile.EMBEDDED_BOT,
             service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )

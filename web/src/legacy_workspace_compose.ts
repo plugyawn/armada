@@ -20,14 +20,14 @@ export function format_armada_workspace_compose_context(
             ? `\nLines: ${context.startLine === context.endLine ? context.startLine : `${context.startLine}-${context.endLine}`}`
             : "";
     if (context.selectedText === "") {
-        return `Ask Pear about this workspace file.\n\nPath: ${inline_code(context.path)}`;
+        return `Ask Onix about this workspace file.\n\nPath: ${inline_code(context.path)}`;
     }
     const longest_run = Math.max(
         0,
         ...[...context.selectedText.matchAll(/`+/g)].map((match) => match[0].length),
     );
     const fence = "`".repeat(Math.max(3, longest_run + 1));
-    return `Ask Pear about this workspace selection.\n\nPath: ${inline_code(context.path)}${lines}\n\n${fence}\n${context.selectedText}\n${fence}`;
+    return `Ask Onix about this workspace selection.\n\nPath: ${inline_code(context.path)}${lines}\n\n${fence}\n${context.selectedText}\n${fence}`;
 }
 
 export function fill_armada_compose_with_workspace_context(

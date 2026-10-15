@@ -200,8 +200,8 @@ class Message(AbstractMessage):
 
     # Name to be used for the empty topic with clients that have not
     # yet migrated to have the `empty_topic_name` client capability.
-    # Pear renames upstream's "general chat" to "main": the empty topic
-    # is the channel's trunk conversation, and its Pear workspace works
+    # Armada renames upstream's "general chat" to "main": the empty topic
+    # is the channel's trunk conversation, and its agent workspace works
     # on the trunk branch of the same name.
     EMPTY_TOPIC_FALLBACK_NAME = "main"
 

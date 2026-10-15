@@ -823,7 +823,7 @@ test("armada_message_vars", () => {
     );
     assert.equal(result.is_agent_message, true);
     assert.equal(result.is_armada_active_message, true);
-    // Ambient voice: Pear rows never include sender chrome.
+    // Ambient voice: Onix rows never include sender chrome.
     assert.equal(result.include_sender, false);
 
     result = calculate_variables(
@@ -835,7 +835,7 @@ test("armada_message_vars", () => {
     );
     assert.equal(result.is_agent_message, true);
     assert.equal(result.is_armada_active_message, false);
-    // Ambient voice: Pear rows never include sender chrome.
+    // Ambient voice: Onix rows never include sender chrome.
     assert.equal(result.include_sender, false);
 
     result = calculate_variables(
@@ -847,7 +847,7 @@ test("armada_message_vars", () => {
     );
     assert.equal(result.is_agent_message, true);
     assert.equal(result.is_armada_active_message, false);
-    // Ambient voice: Pear rows never include sender chrome.
+    // Ambient voice: Onix rows never include sender chrome.
     assert.equal(result.include_sender, false);
 
     legacy_run_state.set_active_run_result_messages([{status: "running", result_message_id: 1005}]);
@@ -860,7 +860,7 @@ test("armada_message_vars", () => {
     );
     assert.equal(result.is_agent_message, true);
     assert.equal(result.is_armada_active_message, true);
-    // Ambient voice: Pear rows never include sender chrome.
+    // Ambient voice: Onix rows never include sender chrome.
     assert.equal(result.include_sender, false);
 
     legacy_run_state.set_active_run_result_messages([]);
@@ -873,7 +873,7 @@ test("armada_message_vars", () => {
     );
     assert.equal(result.is_agent_message, true);
     assert.equal(result.is_armada_active_message, false);
-    // Ambient voice: Pear rows never include sender chrome.
+    // Ambient voice: Onix rows never include sender chrome.
     assert.equal(result.include_sender, false);
 
     result = calculate_variables(
@@ -884,13 +884,13 @@ test("armada_message_vars", () => {
     );
     assert.equal(result.is_agent_message, true);
     assert.equal(result.is_armada_active_message, false);
-    // Ambient voice: Pear rows never include sender chrome.
+    // Ambient voice: Onix rows never include sender chrome.
     assert.equal(result.include_sender, false);
 
     result = calculate_variables(
         build_message_context({
             sender_email: "armada@zulip.com",
-            sender_full_name: "Pear",
+            sender_full_name: "Onix",
             sender_id: 25,
         }),
     );
@@ -903,7 +903,7 @@ test("armada_message_vars", () => {
         build_message_context({
             id: 1001,
             sender_email: "armada@zulip.com",
-            sender_full_name: "Pear",
+            sender_full_name: "Onix",
             sender_id: 25,
             content: "<p><em>Thinking</em> <em>✦</em></p>",
             is_agent_message: undefined,
@@ -912,13 +912,13 @@ test("armada_message_vars", () => {
     );
     assert.equal(result.is_agent_message, true);
     assert.equal(result.is_armada_active_message, false);
-    // Ambient voice: Pear rows never include sender chrome.
+    // Ambient voice: Onix rows never include sender chrome.
     assert.equal(result.include_sender, false);
     assert.equal(result.edited, false);
     assert.equal(result.last_edit_timestamp, undefined);
 
-    // A bot that is neither flagged by the server nor in the Pear bot-id
-    // set is NOT Pear, even when its content carries the ✦ glyph — content
+    // A bot that is neither flagged by the server nor in the Onix bot-id
+    // set is NOT Onix, even when its content carries the ✦ glyph — content
     // sniffing used to suppress sender chrome for any bot echoing ✦.
     result = calculate_real_variables(
         build_message_context({

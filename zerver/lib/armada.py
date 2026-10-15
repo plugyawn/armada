@@ -15,15 +15,17 @@ from django.utils.translation import gettext as _
 from zerver.lib.armada_constants import ARMADA_SERVER_CONTRACT_VERSION
 from zerver.lib.exceptions import JsonableError
 
-ARMADA_AGENT_NAME: Final = "Pear"
-ARMADA_BOT_SHORT_NAME: Final = "pear"
+ARMADA_AGENT_NAME: Final = "Onix"
+ARMADA_BOT_SHORT_NAME: Final = "onix"
 ARMADA_EMBEDDED_BOT_SERVICE: Final = "armada"
 ARMADA_EXPLICIT_MENTION_MESSAGE_KEY: Final = "agent_explicit_mention"
 ARMADA_TRIGGER_MESSAGE_KEY: Final = "agent_trigger"
 ARMADA_FOLLOWUP_TRIGGER: Final = "agent_followup"
 ARMADA_ADDRESSING_FAILURE_NOTICE_COOLDOWN_SECONDS: Final = 5 * 60
-ARMADA_AGENT_MENTION: Final = "@**Pear**"
-ARMADA_PLAIN_AGENT_MENTION_RE: Final = compile(r"(?<![\w@])@Pear(?![\w-])", IGNORECASE)
+ARMADA_AGENT_MENTION: Final = f"@**{ARMADA_AGENT_NAME}**"
+ARMADA_PLAIN_AGENT_MENTION_RE: Final = compile(
+    rf"(?<![\w@])@{re.escape(ARMADA_AGENT_NAME)}(?![\w-])", IGNORECASE
+)
 ARMADA_DEFAULT_STREAM: Final = "pair-programming"
 ARMADA_TOPIC_PREFIX: Final = "armada/"
 ARMADA_DEFAULT_TOPIC: Final = "armada/session"
@@ -76,7 +78,14 @@ ARMADA_MAX_STEERING_SEGMENTS: Final = 4
 # the client mounts the animated live-progress chrome. Keep it visually
 # identical to that chrome instead of flashing a second placeholder design.
 ARMADA_WORKING_MESSAGE: Final = "· Working"
-ARMADA_NO_VISIBLE_RESPONSE_MESSAGE: Final = "Pear worker completed without a visible response."
+# The agent's fixed phrases. 0812_rename_agent_data rewrites the ones
+# stored under an earlier name; a change here needs the same there.
+ARMADA_AGENT_FAILED_MESSAGE: Final = f"{ARMADA_AGENT_NAME} failed."
+ARMADA_AGENT_STOPPED_MESSAGE: Final = "Stopped."
+ARMADA_AGENT_WORKING_SUMMARY: Final = "Working."
+ARMADA_NO_VISIBLE_RESPONSE_MESSAGE: Final = (
+    f"{ARMADA_AGENT_NAME} completed without a visible response."
+)
 ARMADA_PERSISTENT_ASSISTANT_FLUSH_INTERVAL_SECONDS: Final = 0.2
 ARMADA_TYPING_REFRESH_INTERVAL_SECONDS: Final = 10.0
 ARMADA_LIVE_RUN_CACHE_KEY_PREFIX: Final = "armada:live-run:"
@@ -997,7 +1006,7 @@ def armada_embed_workspace_images(
                 file_name, content_type, data, bot_profile
             )
         except Exception:
-            logger.warning("Pear image embed upload failed for %s.", relative_path)
+            logger.warning("Artifact image embed upload failed for %s.", relative_path)
             continue
         links.append(f"[{uploaded_name}]({url})")
     if links:
@@ -1082,7 +1091,7 @@ def attach_armada_artifact_to_message(
     with transaction.atomic(savepoint=False):
         message = Message.objects.select_for_update().get(id=message_id)
         if message.sender_id != user_profile.id:
-            raise JsonableError(_("Pear cannot attach an artifact to another sender's message."))
+            raise JsonableError(_("An artifact cannot be attached to another sender's message."))
         if SubMessage.objects.filter(
             message=message,
             msg_type=ARMADA_ARTIFACT_SUBMESSAGE_TYPE,
@@ -1097,7 +1106,7 @@ def attach_armada_artifact_to_message(
             content=content,
         )
         if path_ids and not do_claim_attachments(message, path_ids):
-            raise JsonableError(_("Pear could not claim generated artifact media."))
+            raise JsonableError(_("Could not claim generated artifact media."))
     return True
 
 
@@ -1152,9 +1161,9 @@ def armada_visible_response_text(
     if diagnostic_text:
         return diagnostic_text
     if status == "failed":
-        return "Pear worker failed."
+        return ARMADA_AGENT_FAILED_MESSAGE
     if status == "cancelled":
-        return "Pear worker cancelled."
+        return ARMADA_AGENT_STOPPED_MESSAGE
     if status == "done":
         return ARMADA_NO_VISIBLE_RESPONSE_MESSAGE
     return ""
@@ -1173,7 +1182,7 @@ def build_armada_live_transcript_message(
                 continue
             error = trim_armada_text(event.get("body", "").strip(), limit=4500)
             if error:
-                return f"Pear worker failed.\n\nError: {error}"
+                return f"{ARMADA_AGENT_FAILED_MESSAGE}\n\nError: {error}"
     assistant_texts = armada_visible_assistant_texts(transcript_events)
     visible_response = armada_visible_response_text(
         status=status,
@@ -1316,7 +1325,7 @@ def normalize_armada_response_policy(value: str | None) -> ArmadaResponsePolicy:
         return "ambient"
     if value == "mentions_only":
         return "mentions_only"
-    raise ValueError(f"Invalid Pear response policy: {value!r}")
+    raise ValueError(f"Invalid response policy: {value!r}")
 
 
 def clean_armada_task_text(content: str = "") -> str:
@@ -1333,7 +1342,7 @@ def normalize_armada_explicit_request_content(
 ) -> str:
     content = content.strip()
     if explicitly_addressed and not is_armada_request_message(content):
-        return f"@Pear {content}".strip()
+        return f"@{ARMADA_AGENT_NAME} {content}".strip()
     return content
 
 
@@ -1372,10 +1381,10 @@ def armada_worker_should_start(
 
 
 def build_armada_worker_blocked_message(active_session: ArmadaActiveSessionSummary) -> str:
-    reason = active_session["worker_blocked_reason"] or "Pear worker is not ready."
+    reason = active_session["worker_blocked_reason"] or f"{ARMADA_AGENT_NAME} is not ready."
     return "\n".join(
         [
-            "Pear worker is not starting.",
+            f"{ARMADA_AGENT_NAME} is not starting.",
             "",
             f"Reason: {reason}",
         ]
@@ -1385,7 +1394,7 @@ def build_armada_worker_blocked_message(active_session: ArmadaActiveSessionSumma
 def build_armada_worker_start_blocked_message(reason: str) -> str:
     return "\n".join(
         [
-            "Pear worker is not starting.",
+            f"{ARMADA_AGENT_NAME} is not starting.",
             "",
             f"Reason: {reason}",
         ]
@@ -1395,7 +1404,7 @@ def build_armada_worker_start_blocked_message(reason: str) -> str:
 def build_armada_worker_failed_message(error: str) -> str:
     return "\n".join(
         [
-            "Pear worker failed before posting progress.",
+            f"{ARMADA_AGENT_NAME} failed before posting progress.",
             "",
             f"Error: {error}",
         ]
@@ -1405,7 +1414,7 @@ def build_armada_worker_failed_message(error: str) -> str:
 def build_armada_worker_failed_after_progress_message(error: str) -> str:
     return "\n".join(
         [
-            "Pear worker failed after posting progress.",
+            f"{ARMADA_AGENT_NAME} failed after posting progress.",
             "",
             f"Error: {error}",
         ]
@@ -1608,14 +1617,14 @@ def update_armada_worker_status_message(
         update_message(update_payload)
     except JsonableError as error:
         logger.warning(
-            "Pear progress message update was rejected for message %s: %s",
+            "Progress message update was rejected for message %s: %s",
             progress_message_id,
             error.msg,
         )
         return False
     except Exception:
         logger.exception(
-            "Pear progress message update failed for message %s.",
+            "Progress message update failed for message %s.",
             progress_message_id,
         )
         return False
@@ -1629,9 +1638,9 @@ def send_armada_worker_typing_notification(
     topic: str,
     operator: str,
 ) -> bool:
-    """Best-effort topic-level "Pear is working" signal (design R1).
+    """Best-effort topic-level "the agent is working" signal (design R1).
 
-    Emits a stream-typing start/stop from the Pear bot so every client
+    Emits a stream-typing start/stop from the agent's bot so every client
     shows Zulip's native typing dots for the topic while a run is live.
     Typing is decoration: failures are logged and never affect the run.
     """
@@ -1648,7 +1657,7 @@ def send_armada_worker_typing_notification(
         do_send_stream_typing_notification(user_profile, operator, stream_object, topic)
         return True
     except Exception:
-        logger.warning("Pear typing notification failed.", exc_info=True)
+        logger.warning("Agent typing notification failed.", exc_info=True)
         return False
 
 
@@ -1844,7 +1853,7 @@ class ArmadaWorkerRuntime:
             tool_results: list[ArmadaWorkerToolResult] = [
                 {
                     "label": "Error",
-                    "value": "Pear cannot start a side conversation without Codex app-server.",
+                    "value": f"{ARMADA_AGENT_NAME} cannot start a side conversation without Codex app-server.",
                 }
             ]
         else:
@@ -1853,7 +1862,7 @@ class ArmadaWorkerRuntime:
                 tool_results = [
                     {
                         "label": "Error",
-                        "value": "Pear's configured runtime does not support native side conversations.",
+                        "value": f"{ARMADA_AGENT_NAME}'s configured runtime does not support native side conversations.",
                     }
                 ]
             else:
@@ -1870,7 +1879,7 @@ class ArmadaWorkerRuntime:
             "content": armada_result_tool_text(tool_results, limit=None)
             or build_armada_worker_completed_message(task=task, tool_results=tool_results),
             # A /btw fork is ephemeral. The durable identity remains its
-            # parent Codex thread; Pear never advertises a discarded fork as a
+            # parent Codex thread; the agent never advertises a discarded fork as a
             # resumable conversation.
             "codex_thread_id": self.codex_thread_id(),
             "tool_count": len(tool_results),
@@ -1901,7 +1910,7 @@ class ArmadaWorkerRuntime:
         return [
             {
                 "label": "Verification",
-                "value": "Pear worker runtime accepted this session.",
+                "value": f"{ARMADA_AGENT_NAME}'s runtime accepted this session.",
             }
         ]
 
@@ -2063,7 +2072,7 @@ def build_armada_recent_messages(
             continue
         clean_sender = (sender_name or "").strip()
         if not clean_sender:
-            clean_sender = "Pear" if sender_is_bot else "User"
+            clean_sender = ARMADA_AGENT_NAME if sender_is_bot else "User"
         recent_messages.append(
             {
                 "message_id": message_id,
@@ -2107,16 +2116,16 @@ def build_armada_active_session_summary(
 
     if not stream_exists:
         worker_state: ArmadaWorkerState = "blocked_missing_stream"
-        worker_blocked_reason = "Pear stream is not accessible."
+        worker_blocked_reason = "The channel is not accessible."
     elif state == "paused":
         worker_state = "blocked_paused"
-        worker_blocked_reason = "Pear session is paused."
+        worker_blocked_reason = "The session is paused."
     elif state == "not_started":
         # A fresh topic is not blocked — the worker runs as soon as the
         # first request arrives — but showing "ready" for a topic with no
         # request yet contradicted the terminal's cache-path summary.
         worker_state = "waiting_for_request"
-        worker_blocked_reason = "No Pear request has been posted in this topic."
+        worker_blocked_reason = f"No request for {ARMADA_AGENT_NAME} has been posted in this topic."
     else:
         worker_state = "ready"
         worker_blocked_reason = None
@@ -2264,7 +2273,7 @@ def build_armada_config_payload(
     if worker_runtime_login_instructions is None:
         if worker_agent_runtime == "codex-app-server":
             worker_runtime_login_instructions = (
-                "Run Codex CLI login inside the worker environment used by Pear."
+                f"Run Codex CLI login inside the worker environment used by {ARMADA_AGENT_NAME}."
             )
         else:
             worker_runtime_login_instructions = None
@@ -2282,15 +2291,15 @@ def build_armada_config_payload(
             "complete": embedded_bots_enabled,
             "detail": "Zulip embedded bot services are enabled."
             if embedded_bots_enabled
-            else "Enable EMBEDDED_BOTS_ENABLED before Pear can receive topic events.",
+            else f"Enable EMBEDDED_BOTS_ENABLED before {ARMADA_AGENT_NAME} can receive topic events.",
         },
         {
             "key": "armada_bot",
-            "label": "Pear bot selected",
+            "label": f"{ARMADA_AGENT_NAME} bot selected",
             "complete": bot_selected,
             "detail": f"{selected_bot_full_name} ({selected_bot_user_id})"
             if bot_selected
-            else "Provision or select a Pear embedded bot.",
+            else f"Provision or select the embedded bot for {ARMADA_AGENT_NAME}.",
         },
         {
             "key": "worker_runtime",
@@ -2421,7 +2430,7 @@ class ArmadaEmbeddedBotHandler:
             None,
         )
         if not callable(start_blocked_reason):
-            return "Pear's run store does not support native side conversations."
+            return "The run store does not support native side conversations."
         reason = start_blocked_reason(
             bot_handler,
             message_id,
@@ -2479,7 +2488,7 @@ class ArmadaEmbeddedBotHandler:
                 bot_handler=bot_handler,
             )
         except Exception:
-            logger.warning("Pear addressing router failed.", exc_info=True)
+            logger.warning("Addressing router failed.", exc_info=True)
             user_profile_id = getattr(getattr(bot_handler, "user_profile", None), "id", 0)
             failure_stream, failure_topic = armada_topic_scope(
                 armada_message_stream(message),
@@ -2501,13 +2510,11 @@ class ArmadaEmbeddedBotHandler:
                 try:
                     bot_handler.send_reply(
                         message,
-                        "Pear couldn't determine whether that message was meant for it. "
-                        "Address it as `@Pear` to bypass ambient routing.",
+                        f"{ARMADA_AGENT_NAME} couldn't determine whether that message was meant for it. "
+                        f"Address it as `@{ARMADA_AGENT_NAME}` to bypass ambient routing.",
                     )
                 except Exception:
-                    logger.warning(
-                        "Pear addressing failure notice could not be sent.", exc_info=True
-                    )
+                    logger.warning("Addressing failure notice could not be sent.", exc_info=True)
             return ignored
 
     def record_worker_event(
@@ -2686,7 +2693,7 @@ class ArmadaEmbeddedBotHandler:
 
     def handle_message(self, message: dict[str, Any], bot_handler: Any) -> None:
         if self.worker_dispatcher is None:
-            raise RuntimeError("Pear message routing requires an injected worker dispatcher")
+            raise RuntimeError("Message routing requires an injected worker dispatcher")
         raw_content = str(message.get("content", "")).strip()
         raw_thread_root_message_id = message.get("thread_root_message_id")
         thread_root_message_id = (
@@ -2766,7 +2773,7 @@ class ArmadaEmbeddedBotHandler:
             if ambient_decision["addressee"] == "agent" and requested_action != "ignore":
                 ambient_decision["action"] = "steer" if active_run_message_id is not None else "run"
             logger.info(
-                "Pear ambient router decision: message_id=%s stream=%r topic=%r "
+                "Ambient router decision: message_id=%s stream=%r topic=%r "
                 "addressee=%s requested_action=%s effective_action=%s",
                 message_id,
                 stream,
@@ -2815,7 +2822,7 @@ class ArmadaEmbeddedBotHandler:
             and active_session.get("latest_codex_thread_id")
         )
         if threaded_explicit_request:
-            # A reply addressed to Pear is a sibling inquiry against the
+            # A reply addressed to the agent is a sibling inquiry against the
             # exact parent Codex context, not steering for another topic run.
             # With no exact parent, normal shared-run admission either starts
             # a fresh thread or explains why the topic is currently busy.
@@ -2868,7 +2875,7 @@ class ArmadaEmbeddedBotHandler:
             # agent as much as starting a run is.
             should_steer_active_run = False
             response = build_armada_worker_start_blocked_message(
-                "This user is not allowed to steer Pear worker runs."
+                f"This user is not allowed to steer {ARMADA_AGENT_NAME}'s runs."
             )
 
         if should_steer_active_run and active_run_message_id is not None:
@@ -3013,7 +3020,7 @@ class ArmadaEmbeddedBotHandler:
 
 
 class ArmadaWorkerTurn:
-    """A single Pear worker run: transcript streaming, same-turn steering
+    """A single agent run: transcript streaming, same-turn steering
     segments, and settlement for one request.
 
     Extracted from the former 600-line run_worker_turn closure nest; the
@@ -3079,7 +3086,7 @@ class ArmadaWorkerTurn:
         self.last_typing_signal_at = 0.0
 
     def signal_typing(self, operator: str, *, force: bool = True) -> None:
-        """Topic-level "Pear is working" dots (design R1), throttled below
+        """Topic-level "the agent is working" dots (design R1), throttled below
         the server's typing-start expiry so long runs keep the signal
         alive without spamming events."""
         if operator == "stop" and not self.typing_started:
@@ -3166,7 +3173,7 @@ class ArmadaWorkerTurn:
         Returns per-question answers, or None on timeout/cancel."""
         if not questions or not callable(self.steering_events_after):
             return None
-        question_lines = ["Pear needs your input to continue:", ""]
+        question_lines = [f"{ARMADA_AGENT_NAME} needs your input to continue:", ""]
         for question in questions:
             header = str(question.get("header") or "").strip()
             text = str(question.get("question") or "").strip()
@@ -3468,7 +3475,7 @@ class ArmadaWorkerTurn:
         }
         if self.session_kind == "side":
             if self.source_message_id is None:
-                raise RuntimeError("Pear side conversation has no durable message root.")
+                raise RuntimeError("Side conversation has no durable message root.")
             runtime_kwargs["conversation_key"] = str(self.source_message_id)
         segment_result = run_runtime(**runtime_kwargs)
         self.raise_if_cancel_requested()
@@ -3483,7 +3490,7 @@ class ArmadaWorkerTurn:
             self.bot_handler,
             self.message_id,
             "tool_results",
-            summary=segment_summary or "Pear worker returned results.",
+            summary=segment_summary or "The run returned results.",
             payload={
                 "segment_index": segment_index,
                 "tool_count": segment_result["tool_count"],
@@ -3549,7 +3556,7 @@ class ArmadaWorkerTurn:
                             self.bot_handler,
                         )
                     except Exception as error:
-                        raise RuntimeError("Pear active session loader failed.") from error
+                        raise RuntimeError("Active session loader failed.") from error
                 self.active_session = (
                     loaded_active_session
                     or self.active_session
@@ -3576,7 +3583,7 @@ class ArmadaWorkerTurn:
                 source_stream=self.source_stream,
                 source_topic=self.source_topic,
                 source_message_id=self.source_message_id,
-                summary="Running Pear worker.",
+                summary=ARMADA_AGENT_WORKING_SUMMARY,
                 current_activity=self.task,
                 runtime_label=runtime_label,
             )
@@ -3584,7 +3591,7 @@ class ArmadaWorkerTurn:
                 self.bot_handler,
                 self.message_id,
                 "running",
-                summary="Started Pear worker runtime.",
+                summary="Started the agent runtime.",
                 payload={
                     "task": self.task,
                     "runtime": runtime_label,
@@ -3784,7 +3791,7 @@ class ArmadaWorkerTurn:
                     isolation_username=artifact_isolation_username,
                 )
                 if has_artifact and not artifact_attached:
-                    raise RuntimeError("Pear artifact could not be attached to the result message.")
+                    raise RuntimeError("The artifact could not be attached to the result message.")
                 self.handler.update_worker_metadata(
                     self.bot_handler,
                     self.message_id,
@@ -3820,7 +3827,7 @@ class ArmadaWorkerTurn:
                 {
                     "kind": "status",
                     "status": "cancelled",
-                    "title": "Pear worker cancelled.",
+                    "title": ARMADA_AGENT_STOPPED_MESSAGE,
                     "body": str(error),
                 }
             )
@@ -3862,12 +3869,12 @@ class ArmadaWorkerTurn:
             except ArmadaWorkerLeaseLostError:
                 pass
         except Exception as error:
-            logger.exception("Pear worker failed for request message %s.", self.message_id)
+            logger.exception("Agent run failed for request message %s.", self.message_id)
             self.transcript_events.append(
                 {
                     "kind": "error",
                     "status": "failed",
-                    "title": "Pear worker failed.",
+                    "title": ARMADA_AGENT_FAILED_MESSAGE,
                     "body": str(error),
                 }
             )

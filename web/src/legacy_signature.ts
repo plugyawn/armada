@@ -1,4 +1,4 @@
-// The Pear console signature — flavor register item, printed once at
+// The old interface's console signature — flavor register item, printed once at
 // boot (armada/ARMADA_DESIGN_LANGUAGE.md §11). Decoration only; must never
 // throw or block.
 export function print_armada_signature(): void {

@@ -22,7 +22,7 @@ usage() {
     cat <<EOF
 Usage: tools/armada_deploy/verify_remote.sh [options] [state.json]
 
-Read-only verification for the hosted Pear/Zulip dev server.
+Read-only verification for the hosted Armada/Zulip dev server.
 
 Options:
   --state PATH  Use a specific armada_do.py state file.
@@ -222,7 +222,7 @@ ssh -F "$SSH_CONFIG" armada-staging-root \
     "systemctl --no-pager --full status caddy ${ARMADA_DEPLOY_SERVICES[*]}" | sed -n '1,260p'
 
 echo
-echo "Pear config:"
+echo "Armada config:"
 ssh -F "$SSH_CONFIG" armada-staging-root \
     "sudo -Hu zulipdev bash -lc 'cd /home/zulipdev/zulip && set -a && . /home/zulipdev/armada.env && set +a && /home/zulipdev/zulip/.venv/bin/python3 /home/zulipdev/zulip/manage.py shell'" <<'PY'
 from zerver.models.bots import Service
@@ -294,12 +294,12 @@ print(
 PY
 
 echo
-echo "Pear live health:"
+echo "Armada live health:"
 ssh -F "$SSH_CONFIG" armada-staging-root \
     "sudo -Hu zulipdev bash -lc 'cd /home/zulipdev/zulip && set -a && . /home/zulipdev/armada.env && set +a && /home/zulipdev/zulip/tools/armada-health-report --max-active-runs 0 --max-stale-active-runs 0'"
 
 echo
-echo "Pear queue health:"
+echo "Armada queue health:"
 queue_snapshot="$(
     ssh_root 'rabbitmqctl list_queues name messages_ready messages_unacknowledged consumers'
 )"
@@ -308,5 +308,5 @@ printf '%s\n' "$queue_snapshot" | validate_armada_worker_pool_snapshot
 remote_armada_worker_pool_topology_snapshot | validate_armada_worker_pool_topology_snapshot
 
 echo
-echo "Pear worker delivery policy:"
+echo "Armada worker delivery policy:"
 verify_remote_armada_worker_consumer_timeout_policy

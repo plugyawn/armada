@@ -245,7 +245,7 @@ export function initialize({
                     },
                     error(xhr) {
                         ui_report.error(
-                            $t({defaultMessage: "Could not record Pear feedback."}),
+                            $t({defaultMessage: "Could not record Onix feedback."}),
                             xhr,
                             $("#home-error"),
                             2000,

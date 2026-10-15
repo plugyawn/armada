@@ -1,5 +1,5 @@
 [Unit]
-Description=Pear presentation queue
+Description=Armada presentation queue
 After=network-online.target armada-zulip-dev.service
 Wants=armada-zulip-dev.service
 

@@ -385,20 +385,20 @@ main:has(> .pane.cut) > header.hd::after { opacity: 1; transition-duration: var(
 .feed .lane { padding-bottom: calc(var(--h-band) + var(--s-3)); display: flex; flex-direction: column; }
 /* a turn that is still being written holds, under its last line, the room its footer will take (a line and its gap):
    Stop, a failure or the run's own end lands the footer in that room and the conversation does not move */
-.feed .lane:has(> .cl.onyx.live:last-child) { padding-bottom: calc(var(--h-band) + var(--s-3) + var(--h-s) + var(--gap-same)); }
+.feed .lane:has(> .cl.onix.live:last-child) { padding-bottom: calc(var(--h-band) + var(--s-3) + var(--h-s) + var(--gap-same)); }
 /* The band lies over the feed's last 36 px. A row that has just been written is born in that slot, in view, and rises
    to its place: the answer's row and its working mark are on screen in the frame of the send. */
 main > .feed { margin-bottom: calc(-1 * var(--h-band)); }
 /* a turn: one speaker's run of bubbles, words and blocks. 16 between turns whoever speaks; 4 inside one. */
 .cl { margin-top: var(--gap-turn); display: flex; flex-direction: column; align-items: flex-start; position: relative; font: var(--t-talk); }
 .cl.me { align-items: flex-end; }
-.cl.onyx { align-items: stretch; }
+.cl.onix { align-items: stretch; }
 .who { font: var(--t-label); color: var(--ink-2); padding-left: var(--pad-x); margin-bottom: var(--gap-same); height: 16px; white-space: nowrap; }
 /* the gutter: one column of speakers. A person's face and Onix's sigil are the same size on the same axis. */
 .cl > .av { position: absolute; left: calc(-1 * var(--gutter)); top: var(--s-1); }
 .cl.lab > .av { top: var(--s-6); }
-.cl.onyx > .sigil { position: absolute; left: calc(-1 * var(--gutter)); top: -2px; color: var(--ink-1); }   /* 28 px on a 24 px line */
-.cl.onyx.lab > .sigil { top: 18px; }
+.cl.onix > .sigil { position: absolute; left: calc(-1 * var(--gutter)); top: -2px; color: var(--ink-1); }   /* 28 px on a 24 px line */
+.cl.onix.lab > .sigil { top: 18px; }
 /* a bubble: the unit of a person's talk. Mine has my colour; everyone else's is stone with a hint of their own. Never a state. */
 .bl { display: flex; align-items: flex-end; gap: var(--s-2); max-width: 100%; position: relative; }
 .cl.me .bl { flex-direction: row-reverse; }
@@ -465,8 +465,8 @@ main > .feed { margin-bottom: calc(-1 * var(--h-band)); }
 /* Onix's words: on the plane, at the text edge where the words in everyone's bubbles start. No fill, no frame and no
    padding of a bubble it does not have: the gaps are measured from its lines. */
 .ans { padding: 0 0 0 var(--pad-x); max-width: calc(var(--prose) + var(--pad-x)); overflow-wrap: break-word; }
-.cl.onyx > * + * { margin-top: var(--gap-part); }
-.cl.onyx > .who + *, .cl.onyx > .sigil + * { margin-top: 0; }
+.cl.onix > * + * { margin-top: var(--gap-part); }
+.cl.onix > .who + *, .cl.onix > .sigil + * { margin-top: 0; }
 .ans > * + * { margin-top: var(--gap-para); }
 .ans h3 { font: var(--t-heading); margin-top: var(--s-5); } .ans h4 { font: 500 16px/24px var(--f-human); margin-top: var(--s-4); }
 .ans :is(h3, h4):first-child { margin-top: 0; } .ans :is(h3, h4) + * { margin-top: var(--gap-same); }
@@ -478,7 +478,7 @@ main > .feed { margin-bottom: calc(-1 * var(--h-band)); }
    one verb that opens that run's checklist beside it. Second ink; the failed and the stopped keep their mark. */
 .line { font: var(--t-text); padding-left: var(--pad-x); display: flex; align-items: center; gap: var(--s-2); min-height: var(--h-s); color: var(--ink-2); }
 .line .lk { margin-left: var(--s-1); }
-.cl.onyx > .ans + .line, .cl.onyx > .blk + .line { margin-top: var(--gap-same); }
+.cl.onix > .ans + .line, .cl.onix > .blk + .line { margin-top: var(--gap-same); }
 /* blocks: what a machine would accept, and artifacts. One quiet opaque fill, lighter than a bubble; the lane's width;
    beside talk and never inside it. Inside a block nothing has a resting fill. */
 .blk { width: 100%; background: var(--block); border-radius: var(--r-block); padding: var(--s-2) var(--pad-x); position: relative; font: var(--t-text); }
@@ -519,7 +519,7 @@ pre.blk, .blk pre { font: var(--t-code); white-space: pre; overflow: hidden; }
 /* hover overlay: raised, at most four targets, never in flow */
 .over { position: absolute; top: -16px; left: calc(100% - 20px); display: flex; padding: var(--s-1); border-radius: var(--r-block); background: var(--raised); box-shadow: 0 0 0 1px var(--edge), var(--shadow-raised); z-index: 5; color: var(--ink-2); }
 .cl.me .over { left: auto; right: calc(100% - 20px); }
-.cl.onyx > .over { left: auto; right: 0; top: -6px; }
+.cl.onix > .over { left: auto; right: 0; top: -6px; }
 .over .c { width: var(--h-s); height: var(--h-s); padding: 0; justify-content: center; }
 
 /* ---------- the band: the 36 px between the feed and the field, on every view. One line, 28 high, standing 8 px

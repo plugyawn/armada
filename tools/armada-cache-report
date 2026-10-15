@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Report Pear Codex prompt-cache usage from worker run events."""
+"""Report Armada Codex prompt-cache usage from worker run events."""
 
 from __future__ import annotations
 
@@ -219,7 +219,7 @@ def render_table(rows: list[RunUsage]) -> str:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
-            "Report cached-input token rates for recent Pear worker runs. "
+            "Report cached-input token rates for recent Armada worker runs. "
             "Run this inside the Zulip checkout, usually with armada.env loaded on the box."
         )
     )
@@ -246,7 +246,7 @@ def main() -> int:
     elif rows:
         print(render_table(rows))
     else:
-        print("No Pear usage events found.")
+        print("No Armada usage events found.")
 
     if args.min_last_cache_percent is not None:
         if not rows:

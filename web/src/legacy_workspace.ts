@@ -230,7 +230,7 @@ async function mount_shell(): Promise<void> {
         });
         failure.append(message, retry);
         host.replaceChildren(failure);
-        blueslip.error("Pear workspace shell failed to load", {error});
+        blueslip.error("Workspace shell failed to load", {error});
     }
 }
 

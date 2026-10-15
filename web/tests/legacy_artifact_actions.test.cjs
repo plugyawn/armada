@@ -47,7 +47,7 @@ run_test("sends a visible topic message through the normal transmit path", () =>
         queue_id: "queue-1",
         to: "devel",
         topic: "attention",
-        content: "@**Pear** Explain the highlighted edge",
+        content: "@**Onix** Explain the highlighted edge",
     });
     on_success();
     assert.equal(result, "success");

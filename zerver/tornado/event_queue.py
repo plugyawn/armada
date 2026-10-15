@@ -778,7 +778,7 @@ def send_web_reload_client_events(immediate: bool = False, count: int | None = N
 
 def reload_clients_immediately_after_restart() -> bool:
     # Normal Zulip production deployments stagger browser reloads to protect
-    # large installations from a synchronized reconnect.  Pear deployments
+    # large installations from a synchronized reconnect.  Armada deployments
     # are intentionally small pre-release instances, where leaving an open tab
     # on a superseded hashed bundle is both more disruptive and more confusing.
     # The existing immediate reload path preserves compose and scroll state.

@@ -363,7 +363,7 @@ class PartnerTest(ZulipTestCase):
             "armada-agent-bot@zulip.testserver",
             None,
             self.realm,
-            "Pear",
+            "Onix",
             bot_type=UserProfile.EMBEDDED_BOT,
             bot_owner=self.example_user("iago"),
             acting_user=None,
@@ -476,7 +476,7 @@ class PartnerTest(ZulipTestCase):
         )
         self.assert_json_error(self.choose(cordelia, "999"), "There is no such partner.")
         self.assert_json_error(self.choose(cordelia, "31"), "There is no such partner.")
-        self.assert_json_error(self.choose(cordelia, "95"), "This line is Pear's.")
+        self.assert_json_error(self.choose(cordelia, "95"), "This line is Onix's.")
 
         state = self.assert_json_success(self.choose(cordelia, "1"))
         self.assertEqual(state["me"]["species"], "1")

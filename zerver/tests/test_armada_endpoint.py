@@ -127,7 +127,7 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
         super().setUp()
         # Every run/store path now resolves a per-channel Repository, which
         # requires the channel to exist; most tests in this class act on the
-        # default Pear channel without creating it first.
+        # default Onix channel without creating it first.
         self.subscribe(self.example_user("hamlet"), ARMADA_DEFAULT_STREAM)
         # Topic workdirs would persist on disk across tests in this class while
         # the database resets, and the strict channel-repository attach check
@@ -153,7 +153,7 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
                 "-c",
                 "user.email=armada@example.com",
                 "-c",
-                "user.name=Pear",
+                "user.name=Onix",
                 "commit",
                 "--quiet",
                 "-m",
@@ -181,7 +181,7 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
         armada_bot = self.create_test_bot(
             "armada-push",
             owner,
-            full_name="Pear",
+            full_name="Onix",
             bot_type=UserProfile.EMBEDDED_BOT,
             service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
@@ -193,7 +193,7 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
                 owner,
                 ARMADA_DEFAULT_STREAM,
                 topic_name=ARMADA_DEFAULT_TOPIC,
-                content="@**Pear** check the repository",
+                content="@**Onix** check the repository",
             )
         run = AgentRun.objects.create(
             realm=owner.realm,
@@ -381,10 +381,10 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
 
         result_dict = self.assert_json_success(result)
         armada_session = result_dict["armada_session"]
-        self.assertEqual(armada_session["agent_name"], "Pear")
+        self.assertEqual(armada_session["agent_name"], "Onix")
         self.assertEqual(armada_session["stream"], ARMADA_DEFAULT_STREAM)
         self.assertEqual(armada_session["topic"], ARMADA_DEFAULT_TOPIC)
-        self.assertIn("@**Pear**", armada_session["seed_message"])
+        self.assertIn("@**Onix**", armada_session["seed_message"])
         self.assertIn("Fix bug:", armada_session["fix_bug_message"])
         self.assertIn("Status check:", armada_session["status_check_message"])
         self.assertIn("Handoff summary:", armada_session["handoff_message"])
@@ -426,7 +426,7 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
         )
 
         result_dict = self.assert_json_success(result)
-        self.assertEqual(result_dict["armada_session"]["agent_name"], "Pear")
+        self.assertEqual(result_dict["armada_session"]["agent_name"], "Onix")
 
     def test_get_armada_config_without_bot(self) -> None:
         self.login("hamlet")
@@ -438,7 +438,7 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
 
         result_dict = self.assert_json_success(result)
         armada_config = result_dict["armada_config"]
-        self.assertEqual(armada_config["bot_short_name"], "pear")
+        self.assertEqual(armada_config["bot_short_name"], "onix")
         self.assertEqual(armada_config["embedded_bot_service"], ARMADA_EMBEDDED_BOT_SERVICE)
         self.assertFalse(armada_config["configured"])
         self.assertEqual(armada_config["worker_agent_runtime"], "disabled")
@@ -479,14 +479,14 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
                     "codex-cli",
                     "codex login",
                     "worker-environment",
-                    "Run Codex CLI login inside the worker environment used by Pear.",
+                    "Run Codex CLI login inside the worker environment used by Onix.",
                 ),
             ),
         ):
             armada_bot = self.create_test_bot(
-                "pear",
+                "onix",
                 owner,
-                full_name="Pear",
+                full_name="Onix",
                 bot_type=UserProfile.EMBEDDED_BOT,
                 service_name=ARMADA_EMBEDDED_BOT_SERVICE,
             )
@@ -505,8 +505,8 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
         self.assertEqual(armada_config["bot_count"], 1)
         self.assertEqual(armada_config["bot_user_id"], armada_bot.id)
         self.assertEqual(armada_config["selected_bot_user_id"], armada_bot.id)
-        self.assertEqual(armada_config["selected_bot_full_name"], "Pear")
-        self.assertEqual(armada_config["bot_full_name"], "Pear")
+        self.assertEqual(armada_config["selected_bot_full_name"], "Onix")
+        self.assertEqual(armada_config["bot_full_name"], "Onix")
         self.assertEqual(armada_config["worker_agent_runtime"], "codex-app-server")
         self.assertTrue(armada_config["worker_runtime_ready"])
         self.assertTrue(armada_config["worker_runtime_auth_ready"])
@@ -527,7 +527,7 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
             [
                 {
                     "bot_user_id": armada_bot.id,
-                    "bot_full_name": "Pear",
+                    "bot_full_name": "Onix",
                     "bot_email": armada_bot.email,
                     "selected": True,
                 }
@@ -553,14 +553,14 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
                     "codex-cli",
                     "codex login",
                     "worker-environment",
-                    "Run Codex CLI login inside the worker environment used by Pear.",
+                    "Run Codex CLI login inside the worker environment used by Onix.",
                 ),
             ),
         ):
             armada_bot = self.create_test_bot(
-                "pear",
+                "onix",
                 owner,
-                full_name="Pear",
+                full_name="Onix",
                 bot_type=UserProfile.EMBEDDED_BOT,
                 service_name=ARMADA_EMBEDDED_BOT_SERVICE,
             )
@@ -653,9 +653,9 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
     def test_serialize_armada_worker_run_includes_usage_summary(self) -> None:
         user = self.example_user("hamlet")
         armada_bot = self.create_test_bot(
-            "pear",
+            "onix",
             user,
-            full_name="Pear",
+            full_name="Onix",
             bot_type=UserProfile.EMBEDDED_BOT,
             service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
@@ -810,9 +810,9 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
     def test_serialize_armada_worker_run_hides_stale_active_live_state(self) -> None:
         user = self.example_user("hamlet")
         armada_bot = self.create_test_bot(
-            "pear",
+            "onix",
             user,
-            full_name="Pear",
+            full_name="Onix",
             bot_type=UserProfile.EMBEDDED_BOT,
             service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
@@ -841,9 +841,9 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
     def test_run_summary_events_are_batched_for_polling(self) -> None:
         user = self.example_user("hamlet")
         armada_bot = self.create_test_bot(
-            "pear",
+            "onix",
             user,
-            full_name="Pear",
+            full_name="Onix",
             bot_type=UserProfile.EMBEDDED_BOT,
             service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
@@ -904,9 +904,9 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
     def test_run_summary_keeps_each_agent_latest_lifecycle_event(self) -> None:
         user = self.example_user("hamlet")
         armada_bot = self.create_test_bot(
-            "pear",
+            "onix",
             user,
-            full_name="Pear",
+            full_name="Onix",
             bot_type=UserProfile.EMBEDDED_BOT,
             service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
@@ -1001,9 +1001,9 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
         owner = self.example_user("hamlet")
         self.subscribe(owner, ARMADA_DEFAULT_STREAM)
         armada_bot = self.create_test_bot(
-            "pear",
+            "onix",
             owner,
-            full_name="Pear",
+            full_name="Onix",
             bot_type=UserProfile.EMBEDDED_BOT,
             service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
@@ -1054,7 +1054,7 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
         armada_bot = self.create_test_bot(
             "armada-watermark",
             owner,
-            full_name="Pear",
+            full_name="Onix",
             bot_type=UserProfile.EMBEDDED_BOT,
             service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
@@ -1119,9 +1119,9 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
         owner = self.example_user("hamlet")
         other_user = self.example_user("othello")
         armada_bot = self.create_test_bot(
-            "pear",
+            "onix",
             owner,
-            full_name="Pear",
+            full_name="Onix",
             bot_type=UserProfile.EMBEDDED_BOT,
             service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
@@ -1148,7 +1148,7 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
             intentionally_undocumented=True,
         )
 
-        self.assert_json_error(result, "Pear run not found.")
+        self.assert_json_error(result, "Run not found.")
 
     def test_get_armada_runs_limits_requested_run_ids(self) -> None:
         owner = self.example_user("hamlet")
@@ -1163,7 +1163,7 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
             intentionally_undocumented=True,
         )
 
-        self.assert_json_error(result, "Too many Pear runs requested.")
+        self.assert_json_error(result, "Too many runs requested.")
 
     def test_post_armada_config_creates_bot(self) -> None:
         owner = self.example_user("iago")
@@ -1184,10 +1184,10 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
             armada_config = result_dict["armada_config"]
             self.assertTrue(result_dict["created"])
             self.assertTrue(armada_config["enabled"])
-            self.assertEqual(armada_config["bot_short_name"], "pear")
+            self.assertEqual(armada_config["bot_short_name"], "onix")
             self.assertEqual(armada_config["embedded_bot_service"], ARMADA_EMBEDDED_BOT_SERVICE)
             self.assertEqual(armada_config["bot_count"], 1)
-            self.assertEqual(armada_config["bot_full_name"], "Pear")
+            self.assertEqual(armada_config["bot_full_name"], "Onix")
             self.assertEqual(armada_config["worker_agent_runtime"], "disabled")
             self.assertFalse(armada_config["worker_runtime_ready"])
             self.assertEqual(
@@ -1221,9 +1221,9 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
     def test_armada_followup_gate_defaults_new_topics_to_ambient(self) -> None:
         owner = self.example_user("iago")
         armada_bot = self.create_test_bot(
-            "pear",
+            "onix",
             owner,
-            full_name="Pear",
+            full_name="Onix",
             bot_type=UserProfile.EMBEDDED_BOT,
             service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
@@ -1360,16 +1360,16 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
         owner = self.example_user("iago")
         with self.settings(EMBEDDED_BOTS_ENABLED=True):
             armada_bot = self.create_test_bot(
-                "pear",
+                "onix",
                 owner,
-                full_name="Pear",
+                full_name="Onix",
                 bot_type=UserProfile.EMBEDDED_BOT,
                 service_name=ARMADA_EMBEDDED_BOT_SERVICE,
             )
             armada_infra_bot = self.create_test_bot(
                 "armada-infra",
                 owner,
-                full_name="Pear Infra",
+                full_name="Onix Infra",
                 bot_type=UserProfile.EMBEDDED_BOT,
                 service_name=ARMADA_EMBEDDED_BOT_SERVICE,
             )
@@ -1396,19 +1396,19 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
         self.assertEqual(armada_config["bot_count"], 2)
         self.assertEqual(armada_config["bot_user_id"], armada_infra_bot.id)
         self.assertEqual(armada_config["selected_bot_user_id"], armada_infra_bot.id)
-        self.assertEqual(armada_config["selected_bot_full_name"], "Pear Infra")
+        self.assertEqual(armada_config["selected_bot_full_name"], "Onix Infra")
         self.assertEqual(
             armada_config["bot_identities"],
             [
                 {
                     "bot_user_id": armada_bot.id,
-                    "bot_full_name": "Pear",
+                    "bot_full_name": "Onix",
                     "bot_email": armada_bot.email,
                     "selected": False,
                 },
                 {
                     "bot_user_id": armada_infra_bot.id,
-                    "bot_full_name": "Pear Infra",
+                    "bot_full_name": "Onix Infra",
                     "bot_email": armada_infra_bot.email,
                     "selected": True,
                 },
@@ -1436,7 +1436,7 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
                 intentionally_undocumented=True,
             )
 
-        self.assert_json_error(result, "Invalid Pear bot selection.")
+        self.assert_json_error(result, "Invalid bot selection.")
 
     def test_get_armada_topic_context_is_read_only_without_existing_context(self) -> None:
         owner = self.example_user("hamlet")
@@ -1725,9 +1725,9 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
     def test_shared_pool_startup_reap_preserves_fresh_running_lease(self) -> None:
         user = self.example_user("hamlet")
         armada_bot = self.create_test_bot(
-            "pear",
+            "onix",
             user,
-            full_name="Pear",
+            full_name="Onix",
             bot_type=UserProfile.EMBEDDED_BOT,
             service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
@@ -1751,9 +1751,9 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
     def test_redelivered_run_waits_for_the_database_lease(self) -> None:
         user = self.example_user("hamlet")
         armada_bot = self.create_test_bot(
-            "pear",
+            "onix",
             user,
-            full_name="Pear",
+            full_name="Onix",
             bot_type=UserProfile.EMBEDDED_BOT,
             service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
@@ -1783,9 +1783,9 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
     def test_worker_run_store_links_runs_to_workspace_node(self) -> None:
         owner = self.example_user("hamlet")
         armada_bot = self.create_test_bot(
-            "pear",
+            "onix",
             owner,
-            full_name="Pear",
+            full_name="Onix",
             bot_type=UserProfile.EMBEDDED_BOT,
             service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
@@ -1818,9 +1818,9 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
     def test_worker_run_store_starts_side_run_beside_active_shared_run(self) -> None:
         owner = self.example_user("hamlet")
         armada_bot = self.create_test_bot(
-            "pear",
+            "onix",
             owner,
-            full_name="Pear",
+            full_name="Onix",
             bot_type=UserProfile.EMBEDDED_BOT,
             service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
@@ -1885,9 +1885,9 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
     def test_shared_run_redelivery_reuses_queued_run_and_progress_message(self) -> None:
         owner = self.example_user("hamlet")
         armada_bot = self.create_test_bot(
-            "pear",
+            "onix",
             owner,
-            full_name="Pear",
+            full_name="Onix",
             bot_type=UserProfile.EMBEDDED_BOT,
             service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
@@ -1897,7 +1897,7 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
             owner,
             ARMADA_DEFAULT_STREAM,
             topic_name="shared-redelivery",
-            content="@Pear inspect this",
+            content="@Onix inspect this",
         )
         trigger_message = Message.objects.get(id=trigger_message_id)
         message = MessageDict.wide_dict(trigger_message)
@@ -1972,9 +1972,9 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
     def test_side_run_redelivery_reuses_queued_run_and_progress_message(self) -> None:
         owner = self.example_user("hamlet")
         armada_bot = self.create_test_bot(
-            "pear",
+            "onix",
             owner,
-            full_name="Pear",
+            full_name="Onix",
             bot_type=UserProfile.EMBEDDED_BOT,
             service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
@@ -1990,7 +1990,7 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
             owner,
             ARMADA_DEFAULT_STREAM,
             topic_name="side-redelivery",
-            content="@Pear side question",
+            content="@Onix side question",
         )
         Message.objects.filter(id=trigger_message_id).update(thread_root_id=root_message_id)
         trigger_message = Message.objects.get(id=trigger_message_id)
@@ -2078,9 +2078,9 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
     def test_side_parent_resolution_never_borrows_an_unrelated_topic_run(self) -> None:
         owner = self.example_user("hamlet")
         armada_bot = self.create_test_bot(
-            "pear",
+            "onix",
             owner,
-            full_name="Pear",
+            full_name="Onix",
             bot_type=UserProfile.EMBEDDED_BOT,
             service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
@@ -2150,7 +2150,7 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
         armada_bot = self.create_test_bot(
             "armada-missing-side-trigger",
             owner,
-            full_name="Pear",
+            full_name="Onix",
             bot_type=UserProfile.EMBEDDED_BOT,
             service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
@@ -2165,7 +2165,7 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
         trigger_message_id = self.send_stream_message(
             owner,
             ARMADA_DEFAULT_STREAM,
-            "@Pear what does that mean?",
+            "@Onix what does that mean?",
             topic_name=ARMADA_DEFAULT_TOPIC,
         )
         result_message_id = self.send_stream_message(
@@ -2217,7 +2217,7 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
         self.assertEqual(run.status, AgentRun.FAILED)
         self.assertEqual(
             run.error,
-            f"Pear side run trigger message {trigger_message_id} no longer exists.",
+            f"Side run trigger message {trigger_message_id} no longer exists.",
         )
         self.assertEqual(
             result_message.content,
@@ -2335,7 +2335,7 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
                 armada_session=get_armada_session_payload(),
                 source="server",
                 stream_exists=True,
-                messages=[(10, "@Pear edit the control plane", False)],
+                messages=[(10, "@Onix edit the control plane", False)],
             )
 
             with self.settings(
@@ -2353,7 +2353,7 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
                 )
 
             self.assertEqual(tool_results[0]["label"], "Error")
-            self.assertIn("outside the Pear topic workspace root", tool_results[0]["value"])
+            self.assertIn("outside the topic workspace root", tool_results[0]["value"])
 
     def test_os_user_topic_context_uses_independent_repository_clone(self) -> None:
         owner = self.example_user("hamlet")
@@ -3212,9 +3212,9 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
         owner = self.example_user("hamlet")
         stream = self.subscribe(owner, ARMADA_DEFAULT_STREAM)
         armada_bot = self.create_test_bot(
-            "pear",
+            "onix",
             owner,
-            full_name="Pear",
+            full_name="Onix",
             bot_type=UserProfile.EMBEDDED_BOT,
             service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
@@ -3290,7 +3290,7 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
             monitor.refresh_from_db()
 
             self.assertEqual(result.topic_name, "new topic")
-            self.assertEqual(result.message, "Pear workspace label moved with this topic.")
+            self.assertEqual(result.message, "The workspace label moved with this topic.")
             self.assertNotIn("Worktree:", result.message)
             self.assertNotIn(topic_root, result.message)
             self.assertEqual(context.topic_name, "new topic")
@@ -3325,9 +3325,9 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
         owner = self.example_user("hamlet")
         stream = self.subscribe(owner, ARMADA_DEFAULT_STREAM)
         armada_bot = self.create_test_bot(
-            "pear",
+            "onix",
             owner,
-            full_name="Pear",
+            full_name="Onix",
             bot_type=UserProfile.EMBEDDED_BOT,
             service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
@@ -3375,9 +3375,9 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
     def test_stream_context_refactor_updates_channel_rename_metadata(self) -> None:
         owner = self.example_user("hamlet")
         armada_bot = self.create_test_bot(
-            "pear",
+            "onix",
             owner,
-            full_name="Pear",
+            full_name="Onix",
             bot_type=UserProfile.EMBEDDED_BOT,
             service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
@@ -3430,7 +3430,7 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
         )
 
         assert message is not None
-        self.assertIn("Pear channel context renamed", message)
+        self.assertIn("Channel context renamed", message)
         self.assertEqual(
             Workspace.objects.filter(
                 realm=owner.realm,
@@ -3480,9 +3480,9 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
     def test_worker_start_allows_same_user_in_different_topics(self) -> None:
         owner = self.example_user("hamlet")
         armada_bot = self.create_test_bot(
-            "pear",
+            "onix",
             owner,
-            full_name="Pear",
+            full_name="Onix",
             bot_type=UserProfile.EMBEDDED_BOT,
             service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
@@ -3509,9 +3509,9 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
     def test_worker_start_blocks_parallel_shared_run_in_same_topic(self) -> None:
         owner = self.example_user("hamlet")
         armada_bot = self.create_test_bot(
-            "pear",
+            "onix",
             owner,
-            full_name="Pear",
+            full_name="Onix",
             bot_type=UserProfile.EMBEDDED_BOT,
             service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
@@ -3533,14 +3533,14 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
             requesting_user_id=owner.id,
         )
 
-        self.assertEqual(reason, "This topic already has an active Pear worker run.")
+        self.assertEqual(reason, "This topic already has an active run.")
 
     def test_worker_start_serializes_case_variants_of_the_same_topic(self) -> None:
         owner = self.example_user("hamlet")
         armada_bot = self.create_test_bot(
-            "pear",
+            "onix",
             owner,
-            full_name="Pear",
+            full_name="Onix",
             bot_type=UserProfile.EMBEDDED_BOT,
             service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
@@ -3595,9 +3595,9 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
     def test_worker_start_and_claim_serialize_in_the_same_topic(self) -> None:
         owner = self.example_user("hamlet")
         armada_bot = self.create_test_bot(
-            "pear",
+            "onix",
             owner,
-            full_name="Pear",
+            full_name="Onix",
             bot_type=UserProfile.EMBEDDED_BOT,
             service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
@@ -3651,9 +3651,9 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
     def test_streamless_runs_are_rejected(self) -> None:
         owner = self.example_user("hamlet")
         armada_bot = self.create_test_bot(
-            "pear",
+            "onix",
             owner,
-            full_name="Pear",
+            full_name="Onix",
             bot_type=UserProfile.EMBEDDED_BOT,
             service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
@@ -3668,7 +3668,7 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
                 topic="",
                 requesting_user_id=owner.id,
             ),
-            "Pear Codex runs currently require a channel topic.",
+            "Codex runs currently require a channel topic.",
         )
         self.assertFalse(store.start(bot_handler, 957, stream="", topic=""))
         self.assertFalse(store.claim_for_run(bot_handler, 957, stream="", topic=""))
@@ -3677,9 +3677,9 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
     def test_worker_claims_in_different_topics_are_independent(self) -> None:
         owner = self.example_user("hamlet")
         armada_bot = self.create_test_bot(
-            "pear",
+            "onix",
             owner,
-            full_name="Pear",
+            full_name="Onix",
             bot_type=UserProfile.EMBEDDED_BOT,
             service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
@@ -3721,9 +3721,9 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
     def test_worker_run_store_rejects_illegal_terminal_transitions(self) -> None:
         owner = self.example_user("hamlet")
         armada_bot = self.create_test_bot(
-            "pear",
+            "onix",
             owner,
-            full_name="Pear",
+            full_name="Onix",
             bot_type=UserProfile.EMBEDDED_BOT,
             service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
@@ -3787,9 +3787,9 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
     def test_worker_run_store_observes_workspace_once_on_terminal_transition(self) -> None:
         owner = self.example_user("hamlet")
         armada_bot = self.create_test_bot(
-            "pear",
+            "onix",
             owner,
-            full_name="Pear",
+            full_name="Onix",
             bot_type=UserProfile.EMBEDDED_BOT,
             service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
@@ -3852,9 +3852,9 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
     def test_worker_run_store_only_requeues_failed_runs_explicitly(self) -> None:
         owner = self.example_user("hamlet")
         armada_bot = self.create_test_bot(
-            "pear",
+            "onix",
             owner,
-            full_name="Pear",
+            full_name="Onix",
             bot_type=UserProfile.EMBEDDED_BOT,
             service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
@@ -3905,9 +3905,9 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
     def test_worker_run_store_claims_queued_run_once(self) -> None:
         owner = self.example_user("hamlet")
         armada_bot = self.create_test_bot(
-            "pear",
+            "onix",
             owner,
-            full_name="Pear",
+            full_name="Onix",
             bot_type=UserProfile.EMBEDDED_BOT,
             service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
@@ -3959,9 +3959,9 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
     def test_stale_worker_attempt_rejects_every_worker_owned_store_path(self) -> None:
         owner = self.example_user("hamlet")
         armada_bot = self.create_test_bot(
-            "pear",
+            "onix",
             owner,
-            full_name="Pear",
+            full_name="Onix",
             bot_type=UserProfile.EMBEDDED_BOT,
             service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
@@ -4035,9 +4035,9 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
     def test_record_event_rechecks_attempt_inside_its_durable_transaction(self) -> None:
         owner = self.example_user("hamlet")
         armada_bot = self.create_test_bot(
-            "pear",
+            "onix",
             owner,
-            full_name="Pear",
+            full_name="Onix",
             bot_type=UserProfile.EMBEDDED_BOT,
             service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
@@ -4088,9 +4088,9 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
     def test_worker_completion_rejects_terminal_run_with_the_same_attempt(self) -> None:
         owner = self.example_user("hamlet")
         armada_bot = self.create_test_bot(
-            "pear",
+            "onix",
             owner,
-            full_name="Pear",
+            full_name="Onix",
             bot_type=UserProfile.EMBEDDED_BOT,
             service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
@@ -4127,9 +4127,9 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
     def test_claimed_cancel_check_distinguishes_cancelled_from_failed_run(self) -> None:
         owner = self.example_user("hamlet")
         armada_bot = self.create_test_bot(
-            "pear",
+            "onix",
             owner,
-            full_name="Pear",
+            full_name="Onix",
             bot_type=UserProfile.EMBEDDED_BOT,
             service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
@@ -4171,9 +4171,9 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
     def test_unclaimed_control_store_keeps_preclaim_paths_unfenced(self) -> None:
         owner = self.example_user("hamlet")
         armada_bot = self.create_test_bot(
-            "pear",
+            "onix",
             owner,
-            full_name="Pear",
+            full_name="Onix",
             bot_type=UserProfile.EMBEDDED_BOT,
             service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
@@ -4249,9 +4249,9 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
     def test_worker_run_store_drops_completed_redelivery(self) -> None:
         owner = self.example_user("hamlet")
         armada_bot = self.create_test_bot(
-            "pear",
+            "onix",
             owner,
-            full_name="Pear",
+            full_name="Onix",
             bot_type=UserProfile.EMBEDDED_BOT,
             service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
@@ -4287,9 +4287,9 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
     def test_worker_run_store_reclaims_stale_running_once(self) -> None:
         owner = self.example_user("hamlet")
         armada_bot = self.create_test_bot(
-            "pear",
+            "onix",
             owner,
-            full_name="Pear",
+            full_name="Onix",
             bot_type=UserProfile.EMBEDDED_BOT,
             service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
@@ -4342,7 +4342,7 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
         self.assertEqual(run.status, AgentRun.FAILED)
         self.assertEqual(
             run.error,
-            "Pear worker run exceeded its stale-claim retry limit.",
+            "The run exceeded its stale-claim retry limit.",
         )
         self.assertEqual(
             AgentRunEvent.objects.filter(run=run, event_type="claim_dropped")
@@ -4354,9 +4354,9 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
     def test_redelivery_reclaims_a_run_after_the_reaper_wins_the_race(self) -> None:
         owner = self.example_user("hamlet")
         armada_bot = self.create_test_bot(
-            "pear",
+            "onix",
             owner,
-            full_name="Pear",
+            full_name="Onix",
             bot_type=UserProfile.EMBEDDED_BOT,
             service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
@@ -4400,9 +4400,9 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
     def test_worker_run_store_busy_reader_reaps_stale_running_run(self) -> None:
         owner = self.example_user("hamlet")
         armada_bot = self.create_test_bot(
-            "pear",
+            "onix",
             owner,
-            full_name="Pear",
+            full_name="Onix",
             bot_type=UserProfile.EMBEDDED_BOT,
             service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
@@ -4431,7 +4431,7 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
 
         run.refresh_from_db()
         self.assertEqual(run.status, AgentRun.FAILED)
-        self.assertEqual(run.error, "Pear worker run became stale and was recovered.")
+        self.assertEqual(run.error, "The run became stale and was recovered.")
         self.assertEqual(
             AgentRunEvent.objects.get(run=run, event_type="stale_reaped").payload[
                 "stale_after_seconds"
@@ -4444,9 +4444,9 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
     ) -> None:
         owner = self.example_user("hamlet")
         armada_bot = self.create_test_bot(
-            "pear",
+            "onix",
             owner,
-            full_name="Pear",
+            full_name="Onix",
             bot_type=UserProfile.EMBEDDED_BOT,
             service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
@@ -4499,9 +4499,9 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
     def test_worker_liveness_renewal_requires_the_matching_claim_attempt(self) -> None:
         owner = self.example_user("hamlet")
         armada_bot = self.create_test_bot(
-            "pear",
+            "onix",
             owner,
-            full_name="Pear",
+            full_name="Onix",
             bot_type=UserProfile.EMBEDDED_BOT,
             service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
@@ -4547,9 +4547,9 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
     def test_worker_liveness_ignores_the_exact_attempt_after_it_settles(self) -> None:
         owner = self.example_user("hamlet")
         armada_bot = self.create_test_bot(
-            "pear",
+            "onix",
             owner,
-            full_name="Pear",
+            full_name="Onix",
             bot_type=UserProfile.EMBEDDED_BOT,
             service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
@@ -4577,9 +4577,9 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
     def test_worker_run_store_events_refresh_heartbeat_when_due(self) -> None:
         owner = self.example_user("hamlet")
         armada_bot = self.create_test_bot(
-            "pear",
+            "onix",
             owner,
-            full_name="Pear",
+            full_name="Onix",
             bot_type=UserProfile.EMBEDDED_BOT,
             service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
@@ -4624,9 +4624,9 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
     def test_worker_run_store_refuses_paused_topic_at_start_and_claim(self) -> None:
         owner = self.example_user("hamlet")
         armada_bot = self.create_test_bot(
-            "pear",
+            "onix",
             owner,
-            full_name="Pear",
+            full_name="Onix",
             bot_type=UserProfile.EMBEDDED_BOT,
             service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
@@ -4648,7 +4648,7 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
                 topic="topic-a",
                 requesting_user_id=owner.id,
             ),
-            "Pear session is paused until a resume control is posted.",
+            "The session is paused until a resume control is posted.",
         )
         run = AgentRun.objects.create(
             realm=owner.realm,
@@ -4669,7 +4669,7 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
         )
         run.refresh_from_db()
         self.assertEqual(run.status, AgentRun.FAILED)
-        self.assertEqual(run.error, "Pear topic is paused.")
+        self.assertEqual(run.error, "The topic is paused.")
         self.assertEqual(
             AgentRunEvent.objects.get(run=run, event_type="claim_dropped").payload["reason"],
             "topic_paused",
@@ -4701,9 +4701,9 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
         owner = self.example_user("hamlet")
         self.subscribe(owner, ARMADA_DEFAULT_STREAM)
         armada_bot = self.create_test_bot(
-            "pear",
+            "onix",
             owner,
-            full_name="Pear",
+            full_name="Onix",
             bot_type=UserProfile.EMBEDDED_BOT,
             service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
@@ -4763,7 +4763,7 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
         armada_bot = self.create_test_bot(
             "armada-lock-order",
             owner,
-            full_name="Pear",
+            full_name="Onix",
             bot_type=UserProfile.EMBEDDED_BOT,
             service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
@@ -4803,9 +4803,9 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
         owner = self.example_user("hamlet")
         self.subscribe(owner, ARMADA_DEFAULT_STREAM)
         armada_bot = self.create_test_bot(
-            "pear",
+            "onix",
             owner,
-            full_name="Pear",
+            full_name="Onix",
             bot_type=UserProfile.EMBEDDED_BOT,
             service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
@@ -4837,7 +4837,7 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
         armada_bot = self.create_test_bot(
             "armada-commit-order",
             owner,
-            full_name="Pear",
+            full_name="Onix",
             bot_type=UserProfile.EMBEDDED_BOT,
             service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
@@ -4848,7 +4848,7 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
                 owner,
                 ARMADA_DEFAULT_STREAM,
                 topic_name="topic-a",
-                content="@**Pear** inspect commit ordering",
+                content="@**Onix** inspect commit ordering",
             )
         run = AgentRun.objects.create(
             realm=owner.realm,
@@ -4887,7 +4887,7 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
         armada_bot = self.create_test_bot(
             "armada-trace",
             owner,
-            full_name="Pear",
+            full_name="Onix",
             bot_type=UserProfile.EMBEDDED_BOT,
             service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
@@ -5089,7 +5089,7 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
             f"/json/armada/runs/{run.id}/trace?thread_id=unrelated-thread",
             intentionally_undocumented=True,
         )
-        self.assert_json_error(missing_child_result, "Pear agent thread not found.")
+        self.assert_json_error(missing_child_result, "Agent thread not found.")
 
         run_payload = self.assert_json_success(
             self.client_get(
@@ -5127,9 +5127,9 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
         owner = self.example_user("hamlet")
         self.subscribe(owner, ARMADA_DEFAULT_STREAM)
         armada_bot = self.create_test_bot(
-            "pear",
+            "onix",
             owner,
-            full_name="Pear",
+            full_name="Onix",
             bot_type=UserProfile.EMBEDDED_BOT,
             service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
@@ -5195,14 +5195,14 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
             f"/json/armada/runs/{explicit_run.id}/not-for-agent",
             intentionally_undocumented=True,
         )
-        self.assert_json_error(explicit_result, "This Pear response was explicitly requested.")
+        self.assert_json_error(explicit_result, "This response was explicitly requested.")
 
     def test_worker_run_store_sets_topic_response_policy(self) -> None:
         owner = self.example_user("hamlet")
         armada_bot = self.create_test_bot(
-            "pear",
+            "onix",
             owner,
-            full_name="Pear",
+            full_name="Onix",
             bot_type=UserProfile.EMBEDDED_BOT,
             service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
@@ -5278,9 +5278,9 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
     def test_post_armada_topic_context_changes_model_without_posting(self) -> None:
         owner = self.example_user("hamlet")
         armada_bot = self.create_test_bot(
-            "pear",
+            "onix",
             owner,
-            full_name="Pear",
+            full_name="Onix",
             bot_type=UserProfile.EMBEDDED_BOT,
             service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
@@ -5402,7 +5402,7 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
         self.assertIsNone(active_session["latest_request_message_id"])
         self.assertEqual(active_session["worker_state"], "blocked_missing_stream")
         self.assertFalse(active_session["worker_can_run"])
-        self.assertIn("stream", active_session["worker_blocked_reason"])
+        self.assertIn("channel", active_session["worker_blocked_reason"])
 
     def test_get_armada_active_session_from_request_message(self) -> None:
         user = self.example_user("hamlet")
@@ -5410,7 +5410,7 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
         request_message_id = self.send_stream_message(
             user,
             ARMADA_DEFAULT_STREAM,
-            "@Pear please debug the flaky parser test.",
+            "@Onix please debug the flaky parser test.",
             topic_name=ARMADA_DEFAULT_TOPIC,
         )
         self.login_user(user)
@@ -5433,9 +5433,9 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
     def test_get_armada_active_session_uses_ambient_run_state(self) -> None:
         user = self.example_user("hamlet")
         armada_bot = self.create_test_bot(
-            "pear",
+            "onix",
             user,
-            full_name="Pear",
+            full_name="Onix",
             bot_type=UserProfile.EMBEDDED_BOT,
             service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
@@ -5484,9 +5484,9 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
     def test_worker_loader_uses_prior_run_as_thread_ingestion_cursor(self) -> None:
         owner = self.example_user("hamlet")
         armada_bot = self.create_test_bot(
-            "pear",
+            "onix",
             owner,
-            full_name="Pear",
+            full_name="Onix",
             bot_type=UserProfile.EMBEDDED_BOT,
             service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
@@ -5565,9 +5565,9 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
         owner = self.example_user("hamlet")
         berry = self.example_user("othello")
         armada_bot = self.create_test_bot(
-            "pear",
+            "onix",
             owner,
-            full_name="Pear",
+            full_name="Onix",
             bot_type=UserProfile.EMBEDDED_BOT,
             service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
@@ -5576,7 +5576,7 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
         first_message_id = self.send_stream_message(
             owner,
             ARMADA_DEFAULT_STREAM,
-            "@Pear inspect the parser",
+            "@Onix inspect the parser",
             topic_name=ARMADA_DEFAULT_TOPIC,
         )
         AgentRun.objects.create(
@@ -5598,14 +5598,14 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
         child_message_id = self.send_stream_message(
             owner,
             ARMADA_DEFAULT_STREAM,
-            "@Pear /btw what does that mean?",
+            "@Onix /btw what does that mean?",
             topic_name=ARMADA_DEFAULT_TOPIC,
         )
         Message.objects.filter(id=child_message_id).update(thread_root_id=parent_message_id)
         trigger_message_id = self.send_stream_message(
             owner,
             ARMADA_DEFAULT_STREAM,
-            "@Pear continue the parent task",
+            "@Onix continue the parent task",
             topic_name=ARMADA_DEFAULT_TOPIC,
         )
 
@@ -5615,7 +5615,7 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
                 "type": "stream",
                 "display_recipient": ARMADA_DEFAULT_STREAM,
                 "topic": ARMADA_DEFAULT_TOPIC,
-                "content": "@Pear continue the parent task",
+                "content": "@Onix continue the parent task",
             },
             SimpleNamespace(user_profile=armada_bot),
         )
@@ -5626,16 +5626,16 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
             ["The shared parser fixture changed."],
         )
         self.assertIn(
-            "@Pear /btw what does that mean?",
+            "@Onix /btw what does that mean?",
             [message["content"] for message in active_session["routing_messages"]],
         )
 
     def test_worker_loader_uses_replied_to_message_to_select_side_parent(self) -> None:
         owner = self.example_user("hamlet")
         armada_bot = self.create_test_bot(
-            "pear",
+            "onix",
             owner,
-            full_name="Pear",
+            full_name="Onix",
             bot_type=UserProfile.EMBEDDED_BOT,
             service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
@@ -5644,7 +5644,7 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
         old_trigger_message_id = self.send_stream_message(
             owner,
             ARMADA_DEFAULT_STREAM,
-            "@Pear explain the parser",
+            "@Onix explain the parser",
             topic_name=ARMADA_DEFAULT_TOPIC,
         )
         old_result_message_id = self.send_stream_message(
@@ -5668,7 +5668,7 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
         new_trigger_message_id = self.send_stream_message(
             owner,
             ARMADA_DEFAULT_STREAM,
-            "@Pear inspect the renderer",
+            "@Onix inspect the renderer",
             topic_name=ARMADA_DEFAULT_TOPIC,
         )
         new_result_message_id = self.send_stream_message(
@@ -5692,7 +5692,7 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
         side_trigger_message_id = self.send_stream_message(
             owner,
             ARMADA_DEFAULT_STREAM,
-            "@Pear what do you mean by two phases?",
+            "@Onix what do you mean by two phases?",
             topic_name=ARMADA_DEFAULT_TOPIC,
         )
 
@@ -5702,7 +5702,7 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
                 "type": "stream",
                 "display_recipient": ARMADA_DEFAULT_STREAM,
                 "topic": ARMADA_DEFAULT_TOPIC,
-                "content": "@Pear what do you mean by two phases?",
+                "content": "@Onix what do you mean by two phases?",
                 "sender_full_name": owner.full_name,
                 "thread_root_message_id": old_result_message_id,
             },
@@ -5728,9 +5728,9 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
         owner = self.example_user("hamlet")
         berry = self.example_user("othello")
         armada_bot = self.create_test_bot(
-            "pear",
+            "onix",
             owner,
-            full_name="Pear",
+            full_name="Onix",
             bot_type=UserProfile.EMBEDDED_BOT,
             service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
@@ -5750,7 +5750,7 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
             "This message must remain private.",
             topic_name="hidden-topic",
         )
-        trigger_content = f"@Pear compare #**{ARMADA_DEFAULT_STREAM}>source-topic** with #**sekrit>hidden-topic**."
+        trigger_content = f"@Onix compare #**{ARMADA_DEFAULT_STREAM}>source-topic** with #**sekrit>hidden-topic**."
         trigger_message_id = self.send_stream_message(
             owner,
             ARMADA_DEFAULT_STREAM,
@@ -5832,9 +5832,9 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
         owner = self.example_user("hamlet")
         berry = self.example_user("othello")
         armada_bot = self.create_test_bot(
-            "pear",
+            "onix",
             owner,
-            full_name="Pear",
+            full_name="Onix",
             bot_type=UserProfile.EMBEDDED_BOT,
             service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
@@ -5850,7 +5850,7 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
         trigger_message_id = self.send_stream_message(
             owner,
             ARMADA_DEFAULT_STREAM,
-            "armada, did you hear what berry said?",
+            "onix, did you hear what berry said?",
             topic_name="",
         )
         self.send_stream_message(
@@ -5866,7 +5866,7 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
                 "type": "stream",
                 "display_recipient": ARMADA_DEFAULT_STREAM,
                 "topic": "",
-                "content": "armada, did you hear what berry said?",
+                "content": "onix, did you hear what berry said?",
                 "sender_full_name": owner.full_name,
             },
             SimpleNamespace(user_profile=armada_bot),
@@ -5941,13 +5941,13 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
         request_message_id = self.send_stream_message(
             user,
             target_stream,
-            "@Pear please debug the checkout regression.",
+            "@Onix please debug the checkout regression.",
             topic_name=target_topic,
         )
         self.send_stream_message(
             user,
             ARMADA_DEFAULT_STREAM,
-            "@Pear this default session should not be counted.",
+            "@Onix this default session should not be counted.",
             topic_name=ARMADA_DEFAULT_TOPIC,
         )
         self.login_user(user)
@@ -5976,7 +5976,7 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
         self.send_stream_message(
             user,
             ARMADA_DEFAULT_STREAM,
-            "@**Pear** fix checkout latency.",
+            "@**Onix** fix checkout latency.",
             topic_name=ARMADA_DEFAULT_TOPIC,
         )
         self.send_stream_message(
@@ -5994,7 +5994,7 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
         latest_request_message_id = self.send_stream_message(
             user,
             ARMADA_DEFAULT_STREAM,
-            "@**Pear** Pause session:\n\nReason: waiting for CI",
+            "@**Onix** Pause session:\n\nReason: waiting for CI",
             topic_name=ARMADA_DEFAULT_TOPIC,
         )
         self.login_user(user)
@@ -6180,9 +6180,9 @@ class ArmadaWorkspaceMapTest(ZulipTestCase):
 class ArmadaMonitorTest(ZulipTestCase):
     def create_armada_bot(self, owner: UserProfile) -> UserProfile:
         return self.create_test_bot(
-            "pear",
+            "onix",
             owner,
-            full_name="Pear",
+            full_name="Onix",
             bot_type=UserProfile.EMBEDDED_BOT,
             service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
@@ -6717,9 +6717,9 @@ class ArmadaTrustedUsersTest(ZulipTestCase):
 
     def create_armada_bot(self, owner: UserProfile) -> UserProfile:
         return self.create_test_bot(
-            "pear",
+            "onix",
             owner,
-            full_name="Pear",
+            full_name="Onix",
             bot_type=UserProfile.EMBEDDED_BOT,
             service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
@@ -6749,7 +6749,7 @@ class ArmadaTrustedUsersTest(ZulipTestCase):
                 requesting_user_id=user.id,
             )
 
-        refused = "This user is not allowed to start Pear worker runs."
+        refused = "This user is not allowed to start Onix's runs."
         self.assertIsNone(start_reason(hamlet))
         with self.settings(ARMADA_WORKER_TRUSTED_USERS_ONLY=True):
             self.assertEqual(start_reason(hamlet), refused)
@@ -6771,7 +6771,7 @@ class ArmadaTrustedUsersTest(ZulipTestCase):
             source="server",
             stream_exists=True,
             messages=[
-                (10, "@Pear fix the checkout test", False),
+                (10, "@Onix fix the checkout test", False),
                 (11, ARMADA_WORKING_MESSAGE, True),
             ],
         )
@@ -6825,12 +6825,12 @@ class ArmadaTrustedUsersTest(ZulipTestCase):
                     "display_recipient": ARMADA_DEFAULT_STREAM,
                     "topic": ARMADA_DEFAULT_TOPIC,
                     "sender_id": sender_id,
-                    "content": "@Pear make it the 30th",
+                    "content": "@Onix make it the 30th",
                 },
                 FakeBotHandler(),
             )
 
-        refused = "This user is not allowed to steer Pear worker runs."
+        refused = "This user is not allowed to steer Onix's runs."
         with self.settings(ARMADA_WORKER_TRUSTED_USERS_ONLY=True):
             steer_as(hamlet.id)
             steer_as(None)

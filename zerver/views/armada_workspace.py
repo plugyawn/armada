@@ -159,12 +159,12 @@ def _access_workspace_node(
         .first()
     )
     if node is None:
-        raise JsonableError(_("Pear workspace not found."))
+        raise JsonableError(_("Workspace not found."))
     if not node.stream_name:
-        raise JsonableError(_("Pear workspace has no channel."))
+        raise JsonableError(_("Workspace has no channel."))
     access_stream_by_name(user_profile, node.stream_name)
     if not node.workdir.strip():
-        raise JsonableError(_("Pear workspace storage is unavailable."))
+        raise JsonableError(_("Workspace storage is unavailable."))
     return node
 
 
@@ -1653,7 +1653,7 @@ def put_armada_workspace_resource_file_backend(
         result_entry_id=saved_entry.entry_id,
     )
     logger.info(
-        "Pear workspace file saved workspace=%s revision=%s entry=%s actor=%s changed=%s",
+        "Workspace file saved workspace=%s revision=%s entry=%s actor=%s changed=%s",
         saved_snapshot.workspace_uuid,
         saved_snapshot.revision,
         saved_entry.entry_id,
@@ -1851,7 +1851,7 @@ def post_armada_workspace_entry_backend(
             revision=int(node.content_revision),
         )
     logger.info(
-        "Pear workspace entry created workspace=%s revision=%s entry=%s actor=%s kind=%s",
+        "Workspace entry created workspace=%s revision=%s entry=%s actor=%s kind=%s",
         saved_snapshot.workspace_uuid,
         saved_snapshot.revision,
         saved_entry.entry_id,
@@ -2117,7 +2117,7 @@ def patch_armada_workspace_entry_backend(
             revision=int(node.content_revision),
         )
     logger.info(
-        "Pear workspace entry renamed workspace=%s revision=%s old_entry=%s new_entry=%s actor=%s",
+        "Workspace entry renamed workspace=%s revision=%s old_entry=%s new_entry=%s actor=%s",
         saved_snapshot.workspace_uuid,
         saved_snapshot.revision,
         entry_id,
@@ -2379,7 +2379,7 @@ def delete_armada_workspace_entry_backend(
             revision=int(node.content_revision),
         )
     logger.info(
-        "Pear workspace entry deleted workspace=%s revision=%s old_entry=%s actor=%s kind=%s recursive=%s removed=%s",
+        "Workspace entry deleted workspace=%s revision=%s old_entry=%s actor=%s kind=%s recursive=%s removed=%s",
         saved_snapshot.workspace_uuid,
         saved_snapshot.revision,
         entry_id,

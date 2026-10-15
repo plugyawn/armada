@@ -210,7 +210,7 @@ let last_context_refresh_at = 0;
 const work_panel_open_by_context = new Map<string, boolean>();
 const dismissed_error_by_context = new Map<string, string>();
 // Contexts whose last runs payload included an active run; used to detect
-// the active→idle transition that retires the Pear typing line.
+// the active→idle transition that retires the agent's typing line.
 const contexts_with_active_run = new Set<string>();
 const workbench_view_by_context = new Map<string, ArmadaWorkbenchView>();
 const topic_context_by_context = new Map<string, ArmadaWorkspaceContext>();
@@ -1016,16 +1016,16 @@ function render_topic_header_controls(options: {
     }
     const runtime_label = first_nonempty(
         topic_context.panel_runtime_label,
-        $t({defaultMessage: "Pear"}),
+        $t({defaultMessage: "Onix"}),
     );
     const runtime_status = options.active_run_status ?? "done";
     const runtime_active = runtime_status === "running" || runtime_status === "queued";
     const runtime_title = $t(
-        {defaultMessage: "Pear runtime: {runtime_label}"},
+        {defaultMessage: "Onix runtime: {runtime_label}"},
         {runtime_label: first_nonempty(topic_context.panel_header_runtime_label, runtime_label)},
     );
     const branch_title = $t(
-        {defaultMessage: "Pear topic branch: {branch_label}"},
+        {defaultMessage: "Onix topic branch: {branch_label}"},
         {branch_label: topic_context.panel_header_branch_label},
     );
     const work_label = topic_header_work_label(topic_context);
@@ -1148,7 +1148,7 @@ function render_topic_header_controls(options: {
             )
             .addClass(`legacy-topic-header-work-${topic_context.panel_git_status_class}`);
         $work_control.attr({
-            "aria-label": $t({defaultMessage: "Open Pear Git details: {work_label}"}, {work_label}),
+            "aria-label": $t({defaultMessage: "Open Onix Git details: {work_label}"}, {work_label}),
             title: first_nonempty(work_title, work_label),
             "data-legacy-workbench-view": topic_context.has_workbench_diff ? "diff" : "history",
         });
@@ -1989,7 +1989,7 @@ function render(
     const active_run = active_display_run(runs);
     arm_liveness_reconciliation(active_run);
     if (has_topic && active_run === undefined && contexts_with_active_run.has(next_context_key)) {
-        // The run just ended; make sure the "Pear is working…" typing
+        // The run just ended; make sure the "agent is working…" typing
         // line dies with it even if the worker's typing-stop event was
         // lost — the client-side expiry would otherwise show 45s of
         // false status. Clearing only on the active→idle transition
@@ -2193,7 +2193,7 @@ export function refresh(options: RefreshOptions = {}): void {
                 return;
             }
             if (!is_armada_runs_response(raw_data)) {
-                last_error = $t({defaultMessage: "Pear returned an invalid runs payload."});
+                last_error = $t({defaultMessage: "The server returned an invalid runs payload."});
                 render();
                 return;
             }
@@ -2232,11 +2232,10 @@ export function refresh(options: RefreshOptions = {}): void {
             last_error =
                 xhr.status === 429
                     ? $t({
-                          defaultMessage:
-                              "Pear status is rate limited; waiting for the next event.",
+                          defaultMessage: "Run status is rate limited; waiting for the next event.",
                       })
-                    : $t({defaultMessage: "Pear status is unavailable."});
-            blueslip.warn(`Failed to fetch Pear runs: ${xhr.responseText}`);
+                    : $t({defaultMessage: "Run status is unavailable."});
+            blueslip.warn(`Failed to fetch agent runs: ${xhr.responseText}`);
             render();
         },
         complete() {
@@ -2260,7 +2259,7 @@ function post_run_action(run_id: string, action: string): void {
         },
         error(xhr) {
             if (xhr.readyState !== 0) {
-                blueslip.warn(`Failed to ${action} Pear run: ${xhr.responseText}`);
+                blueslip.warn(`Failed to ${action} agent run: ${xhr.responseText}`);
             }
         },
     });
@@ -2405,7 +2404,7 @@ export function initialize(): void {
         // Ignore clicks inside the workbench itself.  Using a target check here
         // instead of stopPropagation on #legacy-panel means other delegated
         // document handlers (e.g. Zulip's own popovers closing on outside
-        // click) still see clicks that land inside the Pear panel.
+        // click) still see clicks that land inside the agent panel.
         if ($(e.target).closest("#legacy-panel").length > 0) {
             return;
         }

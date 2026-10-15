@@ -285,11 +285,11 @@ function message_is_armada_message(message: Message, is_hidden: boolean): boolea
     if (is_hidden) {
         return false;
     }
-    // Pear identity is structured: the server stamps is_agent_message on
-    // every serialized message and the client tracks the Pear bot ids.
+    // The agent's identity is structured: the server stamps is_agent_message on
+    // every serialized message and the client tracks the agent's bot ids.
     // Content sniffing for the \u2726 glyph is deliberately NOT a fallback
     // here — any third-party bot posting the glyph would have its sender
-    // chrome suppressed and Pear styling applied.
+    // chrome suppressed and the agent's styling applied.
     return message.is_agent_message || is_armada_bot_user_id(message.sender_id);
 }
 
@@ -938,7 +938,7 @@ function render_armada_live_progress($row: JQuery): void {
             progress,
             message_id,
             "working",
-            $t({defaultMessage: "Pear is working"}),
+            $t({defaultMessage: "Onix is working"}),
         );
         progress.classList.add("legacy-live-progress-planless");
         const working = document.createElementNS("http://www.w3.org/1999/xhtml", "span");
@@ -963,7 +963,7 @@ function render_armada_live_progress($row: JQuery): void {
             message_id,
             presentation.current_key,
             $t(
-                {defaultMessage: "Pear work in progress: {step}"},
+                {defaultMessage: "Onix work in progress: {step}"},
                 {step: plan[presentation.current_index]!.step},
             ),
         );
@@ -1209,7 +1209,7 @@ function ensure_armada_run_trace(content: HTMLElement, run_id: number): ArmadaTr
     reveal.setAttribute("data-legacy-run-id", `${run_id}`);
     reveal.setAttribute("data-expanded", "false");
     reveal.setAttribute("aria-hidden", "true");
-    reveal.setAttribute("aria-label", $t({defaultMessage: "Pear work trace"}));
+    reveal.setAttribute("aria-label", $t({defaultMessage: "Onix work trace"}));
     reveal.setAttribute("role", "region");
     reveal.setAttribute("inert", "");
     const trace_status = document.createElementNS("http://www.w3.org/1999/xhtml", "span");
@@ -1778,7 +1778,7 @@ function post_armada_attention_if_visible(): void {
                 armada_attention_backoff_until = Date.now() + armada_attention_backoff_ms;
             }
             if (xhr.readyState !== 0) {
-                blueslip.warn("Could not update Pear viewer attention.");
+                blueslip.warn("Could not update the run's viewer attention.");
             }
         },
         complete() {
@@ -2395,7 +2395,7 @@ export class MessageListView {
         const is_agent_message = message_is_armada_message(message, is_hidden);
         // The agent is ambient: its rows carry no sender chrome at all —
         // the tinted block and the pixel voice are the identity — so
-        // every Pear row renders as a continuation row, prose starting
+        // every agent row renders as a continuation row, prose starting
         // beside the timestamp instead of under an empty sender band.
         if (is_agent_message) {
             include_sender = false;
@@ -3821,7 +3821,7 @@ export class MessageListView {
             this._rerender_header(group);
         }
         if (this.list === message_lists.current && rerendered_group_ids.size > 0) {
-            // Rebuilding a recipient bar discards the injected Pear status
+            // Rebuilding a recipient bar discards the injected agent status
             // cluster; re-inject it in the same pass so the header does
             // not flicker for every streaming transcript edit.
             legacy_panel.refresh_topic_header_controls();

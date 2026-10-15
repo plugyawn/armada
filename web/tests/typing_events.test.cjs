@@ -108,7 +108,7 @@ run_test("render_notifications_for_narrow", ({override, mock_template}) => {
     assert.ok(!$typing_notifications.visible());
 });
 
-run_test("display_notification tracks Pear typists without a working line", ({override}) => {
+run_test("display_notification tracks Onix typists without a working line", ({override}) => {
     override(current_user, "user_id", anna.user_id);
     const group = [anna.user_id, vronsky.user_id];
     message_lists.set_current(make_message_list([{operator: "dm", operand: group}]));
@@ -131,7 +131,7 @@ run_test("display_notification tracks Pear typists without a working line", ({ov
         ],
     });
 
-    // Pear's typing signal is tracked (it drives run-state cleanup) but
+    // Onix's typing signal is tracked (it drives run-state cleanup) but
     // deliberately renders nothing: the streaming transcript's animated
     // "Thinking ✦" line and the topic header already show the live state.
     assert.ok(!$typing_notifications.visible());
@@ -140,7 +140,7 @@ run_test("display_notification tracks Pear typists without a working line", ({ov
 });
 
 run_test(
-    "render_notifications_for_narrow keeps Pear out of the people list",
+    "render_notifications_for_narrow keeps Onix out of the people list",
     ({override, mock_template}) => {
         override(current_user, "user_id", anna.user_id);
         override(settings_data, "user_can_access_all_other_users", () => true);
@@ -160,7 +160,7 @@ run_test(
         typing_data.add_typist(conversation_key, anna.user_id);
         typing_events.render_notifications_for_narrow();
 
-        // Only the human typist renders; the Pear bot is filtered out.
+        // Only the human typist renders; the Onix bot is filtered out.
         assert.ok($typing_notifications.visible());
         assert.equal(rendered_context.users.length, 1);
         assert.equal(rendered_context.users[0].user_id, anna.user_id);

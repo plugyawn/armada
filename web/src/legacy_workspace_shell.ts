@@ -173,7 +173,7 @@ const default_dependencies: ArmadaWorkspaceShellDependencies = {
 function required_element(root: ParentNode, selector: string): HTMLElement {
     const element = root.querySelector<HTMLElement>(selector);
     if (element === null) {
-        throw new Error(`Pear workspace shell is missing ${selector}.`);
+        throw new Error(`Workspace shell is missing ${selector}.`);
     }
     return element;
 }
@@ -185,7 +185,7 @@ function required_typed_element<T extends HTMLElement>(
 ): T {
     const element = required_element(root, selector);
     if (!expected(element)) {
-        throw new Error(`Pear workspace shell has the wrong element for ${selector}.`);
+        throw new Error(`Workspace shell has the wrong element for ${selector}.`);
     }
     return element;
 }

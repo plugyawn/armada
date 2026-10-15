@@ -536,7 +536,7 @@ export function compute_placeholder_text(opts: ComposePlaceholderOptions): strin
                 // Steering already works by just typing (the worker
                 // threads mid-run messages into the turn); while a run
                 // is live, the surface says so (design §8.3).
-                return $t({defaultMessage: "Steer Pear…"});
+                return $t({defaultMessage: "Steer Onix…"});
             }
             return $t(
                 {defaultMessage: "Message #{channel_name} > {topic_name}"},

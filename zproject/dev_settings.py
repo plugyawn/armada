@@ -9,7 +9,7 @@ ZULIP_ADMINISTRATOR = "desdemona+admin@zulip.com"
 # Initiatize TEST_SUITE early, so other code can rely on the setting.
 TEST_SUITE = os.getenv("ZULIP_TEST_SUITE") == "true"
 
-# Pear's hosted development deployment intentionally keeps DEVELOPMENT=True so
+# Armada's hosted development deployment intentionally keeps DEVELOPMENT=True so
 # that devlogin and the development realm remain available, while serving a
 # production-built, content-hashed asset graph with Django DEBUG disabled.
 # tools/run-dev owns this environment variable; accepting only 0/1 keeps a

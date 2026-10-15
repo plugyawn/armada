@@ -8,7 +8,7 @@ import {dispatches, start_trace, stop_trace} from "../lib/trace.mjs";
 export const name = "send-cost";
 export const order = 60;
 export const description =
-    "Return to the row on screen: handler time, forced layouts, whether the server echo replaces or moves the row, compose height; plain, @Pear, and the cases that are not echoed today";
+    "Return to the row on screen: handler time, forced layouts, whether the server echo replaces or moves the row, compose height; plain, @Onix, and the cases that are not echoed today";
 
 const PX = {unit: "px"};
 const WATCH_MS = 2500;
@@ -368,7 +368,7 @@ export async function run(ctx) {
         await plain_sends(ctx);
     });
     await ctx.scenario("agent", async () => {
-        await held_send(ctx, "agent", ctx.topics.short, "@**Pear** armada-checks TOKEN", {
+        await held_send(ctx, "agent", ctx.topics.short, "@**Onix** armada-checks TOKEN", {
             expect_ack: true,
         });
     });

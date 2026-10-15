@@ -353,7 +353,7 @@
         "measured": 0,
         "unit": "",
         "threshold": "== 1",
-        "audit": "var/armada-overhaul/maps/perf-input.md, Send: \"@Pear: 0 of 12 sends produced any client-side Pear indicator before server data\"; the working line appears only on the agent_run server event.",
+        "audit": "var/armada-overhaul/maps/perf-input.md, Send: \"@[Onix]: 0 of 12 sends produced any client-side [Onix] indicator before server data\"; the working line appears only on the agent_run server event.",
         "since": "2026-10-13"
     },
     "send-cost/plain.content-replaced-by-server-echo": {
@@ -576,14 +576,14 @@
         "measured": 55,
         "unit": "",
         "threshold": "<= 0",
-        "audit": "var/armada-overhaul/maps/perf-input.md, Send: \"@Pear: 0 of 12 sends produced any client-side Pear indicator before server data\"; SPEC-ENGINEERING.md section 8, Onyx acknowledged. Fixed by C2.",
+        "audit": "var/armada-overhaul/maps/perf-input.md, Send: \"@[Onix]: 0 of 12 sends produced any client-side [Onix] indicator before server data\"; SPEC-ENGINEERING.md section 8, Onix acknowledged. Fixed by C2.",
         "since": "2026-10-13"
     },
     "stream-cost/ack.same-element": {
         "measured": 0,
         "unit": "",
         "threshold": "== 1",
-        "audit": "var/armada-overhaul/maps/perf-input.md, Send: \"@Pear: 0 of 12 sends produced any client-side Pear indicator before server data\"; SPEC-ENGINEERING.md section 8, Onyx acknowledged: the acknowledging element must be the one that later holds the answer. Today there is no such element. The assertion reads 0 until C2, which owns stream-cost.mjs, writes the half that follows the acknowledging element to the first words.",
+        "audit": "var/armada-overhaul/maps/perf-input.md, Send: \"@[Onix]: 0 of 12 sends produced any client-side [Onix] indicator before server data\"; SPEC-ENGINEERING.md section 8, Onix acknowledged: the acknowledging element must be the one that later holds the answer. Today there is no such element. The assertion reads 0 until C2, which owns stream-cost.mjs, writes the half that follows the acknowledging element to the first words.",
         "since": "2026-10-13"
     },
     "topic-entry-stability/first-visit.headerValues.frames-late": {

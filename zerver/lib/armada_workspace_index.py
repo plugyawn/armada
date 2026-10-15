@@ -1,4 +1,4 @@
-"""Revision-bound path indexes for Pear workspaces.
+"""Revision-bound path indexes for agent workspaces.
 
 The filesystem layer validates individual operations.  This module supplies the
 authorization snapshot above it: every entry exposed to a client receives an

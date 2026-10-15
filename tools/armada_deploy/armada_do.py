@@ -373,7 +373,7 @@ def destroy(args: argparse.Namespace) -> None:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Create the Pear Zulip staging server.")
+    parser = argparse.ArgumentParser(description="Create the Armada Zulip staging server.")
     parser.add_argument(
         "--env-file",
         action="append",

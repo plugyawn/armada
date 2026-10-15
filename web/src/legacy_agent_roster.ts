@@ -221,7 +221,7 @@ export function render(): void {
         empty.textContent =
             roster_filter_query === ""
                 ? $t({
-                      defaultMessage: "No agents in this topic yet. Ask @**Pear** for a few.",
+                      defaultMessage: "No agents in this topic yet. Ask @**Onix** for a few.",
                   })
                 : $t({defaultMessage: "No agents match the filter."});
         host.append(empty);

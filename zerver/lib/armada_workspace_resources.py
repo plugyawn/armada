@@ -1,4 +1,4 @@
-"""Backend primitives for Pear's UUID-addressed workspace resources."""
+"""Backend primitives for the agent's UUID-addressed workspace resources."""
 
 from __future__ import annotations
 
@@ -291,7 +291,7 @@ def get_workspace_file_observation(
     try:
         version = cache.get(_file_observation_cache_key(workspace_uuid, revision, entry_id))
     except Exception:
-        logger.warning("Could not read Pear workspace file observation", exc_info=True)
+        logger.warning("Could not read workspace file observation", exc_info=True)
         return None
     if not isinstance(version, str) or len(version) != 64:
         return None
@@ -311,7 +311,7 @@ def record_workspace_file_observation(
             timeout=ARMADA_WORKSPACE_FILE_OBSERVATION_SECONDS,
         )
     except Exception:
-        logger.warning("Could not store Pear workspace file observation", exc_info=True)
+        logger.warning("Could not store workspace file observation", exc_info=True)
 
 
 def _mutation_receipt_cache_key(
@@ -384,7 +384,7 @@ def _store_workspace_mutation_receipt(
     except Exception:
         # Losing a receipt makes a later retry fail closed as stale; it never
         # broadens mutation authority.
-        logger.warning("Could not store Pear workspace mutation receipt", exc_info=True)
+        logger.warning("Could not store workspace mutation receipt", exc_info=True)
 
 
 def record_pending_workspace_mutation(
@@ -477,7 +477,7 @@ def get_workspace_mutation_receipt(
     try:
         payload = cache.get(key)
     except Exception:
-        logger.warning("Could not read Pear workspace mutation receipt", exc_info=True)
+        logger.warning("Could not read workspace mutation receipt", exc_info=True)
         return None
     if not isinstance(payload, dict) or set(payload) != {
         "state",

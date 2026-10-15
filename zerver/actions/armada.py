@@ -57,7 +57,7 @@ def _armada_agent_event_needs_snapshot(
 
 
 def send_armada_run_event(run: AgentRun, run_event: AgentRunEvent) -> None:
-    """Push one reducer-friendly Pear run delta to users who can see its trigger."""
+    """Push one reducer-friendly agent run delta to users who can see its trigger."""
     try:
         trigger_message = Message.objects.only("id", "is_channel_message").get(
             id=run.trigger_message_id

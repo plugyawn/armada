@@ -315,7 +315,7 @@ export function create_armada_workspace_source_editor(
 
     function assert_live(): void {
         if (destroyed) {
-            throw new Error("The Pear workspace Source editor has been destroyed.");
+            throw new Error("The workspace Source editor has been destroyed.");
         }
     }
 

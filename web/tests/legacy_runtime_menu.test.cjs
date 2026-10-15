@@ -194,9 +194,9 @@ run_test("presence_choices", () => {
 
 run_test("runtime_summary", () => {
     assert.deepEqual(legacy_runtime_menu.runtime_summary(undefined), {
-        model_label: "translated: Pear",
+        model_label: "translated: Onix",
         effort_label: "",
-        compact_label: "translated: Pear",
+        compact_label: "translated: Onix",
     });
 
     assert.deepEqual(
@@ -479,7 +479,7 @@ run_test("runtime popover uses compact radio menu rows", () => {
     assert.match(html, /legacy-runtime-model-menu-choice[^>]+data-model="gpt-5.5"/);
     assert.match(html, /legacy-runtime-effort-menu-choice[^>]+data-effort="high"/);
     assert.match(html, /legacy-runtime-presence-menu-choice[^>]+data-policy="ambient"/);
-    assert.match(html, />translated: @Pear always works<\/div>/);
+    assert.match(html, />translated: @Onix always works<\/div>/);
     assert.match(
         html,
         /class="legacy-runtime-model-choice" name="legacy-runtime-model" value="gpt-5.5" checked/,

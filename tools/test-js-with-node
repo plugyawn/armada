@@ -334,7 +334,7 @@ EXEMPT_FILES = make_set(
     ]
 )
 
-# Armada (Pear) modules and their tests. The proof-of-concept UI was
+# Armada's modules and their tests. The proof-of-concept UI was
 # written without the 100% line coverage that upstream modules have, and
 # it is being rebuilt; these files are exempt until their replacements
 # land with tests. Remove a file from this list when it is deleted or

@@ -881,11 +881,11 @@ def fetch_initial_state_data(
         state["subscriptions"] = sub_info.subscriptions
         state["unsubscribed"] = sub_info.unsubscribed
         state["never_subscribed"] = sub_info.never_subscribed
-        # Which channels are bound to a Pear repository, for the left
+        # Which channels are bound to a repository, for the left
         # sidebar's workspace marks — restricted to channels the user
         # can already see. Like realm_embedded_bots, this has no
         # apply_event counterpart yet: bindings change rarely (a
-        # channel's first Pear run), and the client patches its local
+        # channel's first agent run), and the client patches its local
         # copy when its own topic context reports a pinned repo.
         accessible_stream_ids = {
             sub["stream_id"]
@@ -2109,7 +2109,7 @@ def apply_event(
         # The Tornado process restarted.  This has no effect; we ignore it.
         pass
     elif event["type"] in {"agent_run", "workspace_changed"}:
-        # Pear deltas update dedicated client-side reducers; they do not mutate
+        # Agent run deltas update dedicated client-side reducers; they do not mutate
         # the initial-state payload assembled by this module.
         pass
     elif event["type"] == "message_thread_summary":

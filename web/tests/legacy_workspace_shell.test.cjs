@@ -447,7 +447,7 @@ run_test("Rich failures are explained beside a retryable mode control", async ()
     test.root.remove();
 });
 
-run_test("Ask Pear fills the existing compose with active file context", async () => {
+run_test("Ask Onix fills the existing compose with active file context", async () => {
     const test = harness("workspace-compose");
     const current = descriptor("workspace-compose");
     test.send_descriptor(current);

@@ -101,22 +101,22 @@ run_test("rail queue depth excludes the currently displayed active run", () => {
 
 run_test("dismissed status errors stay quiet until server truth changes", () => {
     assert.equal(
-        legacy_panel.visible_panel_error_for_testing("Pear status is unavailable.", undefined),
-        "Pear status is unavailable.",
+        legacy_panel.visible_panel_error_for_testing("Run status is unavailable.", undefined),
+        "Run status is unavailable.",
     );
     assert.equal(
         legacy_panel.visible_panel_error_for_testing(
-            "Pear status is unavailable.",
-            "Pear status is unavailable.",
+            "Run status is unavailable.",
+            "Run status is unavailable.",
         ),
         "",
     );
     assert.equal(
         legacy_panel.visible_panel_error_for_testing(
-            "Pear returned an invalid runs payload.",
-            "Pear status is unavailable.",
+            "The server returned an invalid runs payload.",
+            "Run status is unavailable.",
         ),
-        "Pear returned an invalid runs payload.",
+        "The server returned an invalid runs payload.",
     );
 });
 

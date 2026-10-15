@@ -17,8 +17,8 @@ function update_controls(): void {
     const active = followup_enabled && is_stream_compose();
     $("#compose").toggleClass("legacy-compose-active", active);
     const label = active
-        ? $t({defaultMessage: "Pear will respond to this message"})
-        : $t({defaultMessage: "Ask Pear in this topic"});
+        ? $t({defaultMessage: "Onix will respond to this message"})
+        : $t({defaultMessage: "Ask Onix in this topic"});
     $(".compose-legacy-button")
         .toggleClass("active", active)
         .attr("aria-pressed", active ? "true" : "false")
@@ -27,14 +27,14 @@ function update_controls(): void {
     if (active) {
         $("textarea#compose-textarea").attr(
             "placeholder",
-            $t({defaultMessage: "Ask Pear in this topic"}),
+            $t({defaultMessage: "Ask Onix in this topic"}),
         );
     }
 }
 
 function focus_compose_box(): void {
     $("textarea#compose-textarea").trigger("focus");
-    // Apply the Pear labels now for the current frame, and once more after
+    // Apply the agent labels now for the current frame, and once more after
     // compose_actions.start()'s own recipient-row updates land (they run
     // between this call and the next paint and reset the placeholder).
     update_controls();
@@ -48,9 +48,9 @@ export function is_followup_enabled(): boolean {
 export function clear(): void {
     followup_enabled = false;
     update_controls();
-    // Pear mode owns the placeholder only while enabled. Hand it back to the
+    // Agent mode owns the placeholder only while enabled. Hand it back to the
     // canonical compose recipient logic immediately on exit instead of
-    // leaving "Ask Pear in this topic" behind until the next recipient edit.
+    // leaving "Ask Onix in this topic" behind until the next recipient edit.
     compose_recipient.update_compose_area_placeholder_text();
 }
 

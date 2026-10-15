@@ -96,7 +96,7 @@ class TestBasics(ZulipTestCase):
 
         payload = dict(message_id=message_id, msg_type="artifact", content="{}")
         result = self.client_post("/json/submessage", payload)
-        self.assert_json_error(result, "Pear artifacts can only be attached by the Pear runtime.")
+        self.assert_json_error(result, "Artifacts can only be attached by the agent's runtime.")
 
         hamlet = self.example_user("hamlet")
         bad_message_id = self.send_personal_message(
@@ -114,9 +114,9 @@ class TestBasics(ZulipTestCase):
     def test_armada_runtime_artifact_is_durable_and_emits_event(self) -> None:
         owner = self.example_user("hamlet")
         armada_bot = self.create_test_bot(
-            "pear",
+            "onix",
             owner,
-            full_name="Pear",
+            full_name="Onix",
             bot_type=UserProfile.EMBEDDED_BOT,
             service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
@@ -154,7 +154,7 @@ class TestBasics(ZulipTestCase):
         armada_bot = self.create_test_bot(
             "armada-media",
             owner,
-            full_name="Pear Media",
+            full_name="Onix Media",
             bot_type=UserProfile.EMBEDDED_BOT,
             service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
@@ -211,7 +211,7 @@ class TestBasics(ZulipTestCase):
         armada_bot = self.create_test_bot(
             "armada-isolated-media",
             owner,
-            full_name="Pear Isolated Media",
+            full_name="Onix Isolated Media",
             bot_type=UserProfile.EMBEDDED_BOT,
             service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
@@ -271,7 +271,7 @@ class TestBasics(ZulipTestCase):
         armada_bot = self.create_test_bot(
             "armada-vector-media",
             owner,
-            full_name="Pear Vector Media",
+            full_name="Onix Vector Media",
             bot_type=UserProfile.EMBEDDED_BOT,
             service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )

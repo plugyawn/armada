@@ -63,7 +63,7 @@ export function get_stream_privacy_icon_color(
 }
 
 export function get_recipient_bar_color(color: string): string {
-    // Recipient bars sit nearly flat on the moss surface (Pear design
+    // Recipient bars sit nearly flat on the moss surface (legacy design
     // §3: no tinted banners): the user-chosen stream color survives
     // only as a whisper, laundered into the theme's panel tone so no
     // pick can break the composition.

@@ -7,7 +7,7 @@ from collections.abc import Iterable
 
 # Keep this allowlist narrow: every unknown source path pays the full asset
 # build cost. These paths are either excluded from the production asset staging
-# tree or are server-only Pear modules with no generated/static output.
+# tree or are server-only Armada modules with no generated/static output.
 BACKEND_ONLY_PATTERNS = (
     "zerver/lib/armada.py",
     "zerver/lib/armada_*.py",

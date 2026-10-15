@@ -212,9 +212,9 @@ export function presence_choices(
 export function runtime_summary(context: ArmadaRuntimeContext | undefined): ArmadaRuntimeSummary {
     if (context === undefined) {
         return {
-            model_label: $t({defaultMessage: "Pear"}),
+            model_label: $t({defaultMessage: "Onix"}),
             effort_label: "",
-            compact_label: $t({defaultMessage: "Pear"}),
+            compact_label: $t({defaultMessage: "Onix"}),
         };
     }
     const catalog_entry = context.model_catalog?.find((entry) => entry.slug === context.model);
@@ -386,12 +386,12 @@ function popover_context(): {
     let status_message = "";
     let runtime_status = runtime_status_for_testing(undefined);
     if (stream === undefined || topic === undefined) {
-        status_message = $t({defaultMessage: "Open a topic to configure the Pear runtime."});
+        status_message = $t({defaultMessage: "Open a topic to configure the Onix runtime."});
     } else if (last_error !== "") {
         status_message = last_error;
         runtime_status = runtime_status_for_testing({status: "failed"});
     } else if (topic_context === undefined) {
-        status_message = $t({defaultMessage: "Pear runtime is loading."});
+        status_message = $t({defaultMessage: "Onix runtime is loading."});
         runtime_status = runtime_status_for_testing({status: "loading"});
     }
     if (status_message !== "") {
@@ -476,8 +476,8 @@ function update_runtime_button_label(): void {
     if ($button.length === 0) {
         return;
     }
-    let label = $t({defaultMessage: "Pear runtime"});
-    let compact_label = $t({defaultMessage: "Pear"});
+    let label = $t({defaultMessage: "Onix runtime"});
+    let compact_label = $t({defaultMessage: "Onix"});
     let model_label = "";
     let effort_label = "";
     const active_run = active_runtime_run(latest_runs);
@@ -493,7 +493,7 @@ function update_runtime_button_label(): void {
             ? $t(
                   {
                       defaultMessage:
-                          "Pear runtime: {model} ({effort}), {status}, {meter_label} {meter_value}",
+                          "Onix runtime: {model} ({effort}), {status}, {meter_label} {meter_value}",
                   },
                   {
                       model: summary.model_label,
@@ -504,7 +504,7 @@ function update_runtime_button_label(): void {
                   },
               )
             : $t(
-                  {defaultMessage: "Pear runtime: {model} ({effort}), {status}"},
+                  {defaultMessage: "Onix runtime: {model} ({effort}), {status}"},
                   {
                       model: summary.model_label,
                       effort: summary.effort_label,
@@ -642,8 +642,8 @@ function post_runtime_save(
         },
         error(xhr) {
             if (xhr.readyState !== 0) {
-                last_error = $t({defaultMessage: "Failed to update the Pear runtime."});
-                blueslip.warn(`Failed to update Pear runtime: ${xhr.responseText}`);
+                last_error = $t({defaultMessage: "Failed to update the Onix runtime."});
+                blueslip.warn(`Failed to update the agent runtime: ${xhr.responseText}`);
                 if (pending_runtime_save === undefined) {
                     topic_context = previous_context;
                     update_runtime_button_label();
@@ -732,7 +732,7 @@ export function initialize(): void {
     initialized = true;
 
     // register_popover_menu attaches body-delegated click handlers,
-    // so this works across Pear panel/header rerenders. Register each
+    // so this works across agent panel/header rerenders. Register each
     // selector separately; comma selectors have proved fragile for
     // dynamically injected message-header controls.
     const runtime_menu_popover_props: Partial<tippy.Props> = {

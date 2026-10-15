@@ -1,4 +1,4 @@
-// Deterministic presentation helpers shared by Pear runtime surfaces. Keep
+// Deterministic presentation helpers shared by the agent's runtime surfaces. Keep
 // model options, topic keys, and Codex plan projection here so chat, the rail,
 // and the runtime menu do not grow parallel interpretations of the same state.
 

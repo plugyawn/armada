@@ -201,7 +201,7 @@ run_test("Chat, README, and Files keep one warm shell with separate rooms", asyn
         workspaceId: "workspace-retry",
     });
     reject_next_ready = true;
-    blueslip.expect("error", "Pear workspace shell failed to load");
+    blueslip.expect("error", "Workspace shell failed to load");
     click('[data-legacy-tab="readme"]');
     await settle();
     assert.equal(mounts.length, 2);

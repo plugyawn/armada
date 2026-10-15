@@ -18,7 +18,7 @@ nav .grp { position: relative; }
 /* when the feed holds and text continues below the fold, its last line fades instead of being cut. The fade ends in the plane and runs on under the band's own row, so nothing reappears between the band and the field. */
 .band::before { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: calc(100% + var(--s-6)); background: linear-gradient(transparent, var(--content) var(--s-6)); pointer-events: none; opacity: 0; transition: opacity var(--fade-out) linear; }
 .band.more::before { opacity: 1; transition-duration: var(--fade-in); }
-.cl.onyx > .sigil, .rc, .mk { transform-origin: 50% 50%; }
+.cl.onix > .sigil, .rc, .mk { transform-origin: 50% 50%; }
 .cl > .who { transform-origin: 0 0; }
 
 /* ---- the column: the checklist and an opened thread share one place */

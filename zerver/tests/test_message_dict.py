@@ -25,9 +25,9 @@ class MessageDictTest(ZulipTestCase):
     def test_armada_message_flag(self) -> None:
         user_profile = self.example_user("hamlet")
         armada_bot = self.create_test_bot(
-            "pear",
+            "onix",
             user_profile,
-            full_name="Pear",
+            full_name="Onix",
             bot_type=UserProfile.EMBEDDED_BOT,
             service_name=ARMADA_EMBEDDED_BOT_SERVICE,
             config_data=orjson.dumps({}).decode(),

@@ -15,7 +15,7 @@ mock_esm("../src/compose_recipient", {
 
 const legacy_agent_toggle = zrequire("legacy_agent_toggle");
 
-run_test("leaving Pear mode restores the canonical compose placeholder", () => {
+run_test("leaving Onix mode restores the canonical compose placeholder", () => {
     placeholder_refreshes = 0;
     legacy_agent_toggle.clear();
     assert.equal(placeholder_refreshes, 1);

@@ -800,7 +800,7 @@ PARTNER_SHINY_LEVEL = 50
 PARTNER_AGENT_RUNS = 1000
 PARTNER_AGENT_HANDS = 3
 
-# Pear pair-programming worker runtime. Use "codex-app-server" for direct Codex
+# The agent's pair-programming worker runtime. Use "codex-app-server" for direct Codex
 # app-server control with persistent threads, streaming events, and same-turn
 # steering. Ambient addressing is configured separately with
 # ARMADA_ADDRESSING_ROUTER_RUNTIME.

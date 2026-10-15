@@ -197,7 +197,7 @@ class EmbeddedBotHandler:
             )
 
             update_rendered_message = check_update_message_rendering_only
-            # Pear serializes completion against cancellation in a caller-owned
+            # The agent serializes completion against cancellation in a caller-owned
             # transaction. In that case the message update must participate in
             # the existing transaction rather than opening a nested durable one.
             if transaction.get_connection().in_atomic_block:

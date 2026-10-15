@@ -1,5 +1,5 @@
 [Unit]
-Description=Pear Codex worker slot 1
+Description=Armada Codex worker slot 1
 After=network-online.target armada-zulip-dev.service
 Wants=armada-zulip-dev.service
 

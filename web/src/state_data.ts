@@ -766,7 +766,7 @@ export function is_armada_bot_user_id(user_id: number): boolean {
     return agent_user_ids.includes(user_id);
 }
 
-// Channels bound to a Pear repository, for the sidebar's workspace
+// Channels bound to a repository, for the sidebar's workspace
 // marks. Register-supplied; the client adds entries locally when its
 // own topic context reports a pinned repo (there is no server event
 // stream for project bindings yet).

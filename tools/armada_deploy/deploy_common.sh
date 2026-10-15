@@ -112,7 +112,7 @@ ARMADA_DEPLOY_QUEUES=(
     thumbnail
 )
 
-# Pear keeps RabbitMQ deliveries unacknowledged for the duration of a Codex
+# Armada keeps RabbitMQ deliveries unacknowledged for the duration of a Codex
 # turn so a dead worker can be retried.  The broker's 30-minute default would
 # otherwise redeliver a healthy, active long turn.  This policy is deliberately
 # broker-owned additive state: code rollback leaves it in place, where it is
@@ -189,7 +189,7 @@ $1 in required {
 END {
     for (queue in required) {
         if (!(queue in seen)) {
-            print "missing Pear queue: " queue > "/dev/stderr"
+            print "missing Armada queue: " queue > "/dev/stderr"
             bad = 1
         }
     }
@@ -220,7 +220,7 @@ $1 == "armada_worker" || $1 == "armada_worker_1" {
         next
     }
     if ($4 != 2) {
-        print "Pear worker queue must have exactly two consumers: " $1 > "/dev/stderr"
+        print "Armada worker queue must have exactly two consumers: " $1 > "/dev/stderr"
         bad = 1
     }
 }
@@ -245,15 +245,15 @@ import sys
 separator = "\n-- armada-worker-channels --\n"
 payload = sys.stdin.read()
 if payload.count(separator) != 1:
-    raise SystemExit("invalid Pear worker topology snapshot envelope")
+    raise SystemExit("invalid Armada worker topology snapshot envelope")
 consumer_text, channel_text = payload.split(separator, 1)
 try:
     consumers = json.loads(consumer_text)
     channels = json.loads(channel_text)
 except (json.JSONDecodeError, UnicodeDecodeError) as error:
-    raise SystemExit(f"invalid Pear worker topology JSON: {error}")
+    raise SystemExit(f"invalid Armada worker topology JSON: {error}")
 if not isinstance(consumers, list) or not isinstance(channels, list):
-    raise SystemExit("Pear worker topology snapshots must be lists")
+    raise SystemExit("Armada worker topology snapshots must be lists")
 
 expected_queues = {"armada_worker", "armada_worker_1"}
 worker_consumers = [
@@ -262,7 +262,7 @@ worker_consumers = [
     if isinstance(row, dict) and row.get("queue_name") in expected_queues
 ]
 if len(worker_consumers) != 4:
-    raise SystemExit(f"expected four Pear worker consumers, found {len(worker_consumers)}")
+    raise SystemExit(f"expected four Armada worker consumers, found {len(worker_consumers)}")
 
 def arguments_dict(value: object) -> dict[str, object]:
     if isinstance(value, dict):
@@ -287,7 +287,7 @@ for row in worker_consumers:
         raise SystemExit(f"{queue} consumer has no consumer tag")
     consumer_key = (channel_pid, consumer_tag)
     if consumer_key in consumer_keys:
-        raise SystemExit("duplicate Pear worker consumer identity")
+        raise SystemExit("duplicate Armada worker consumer identity")
     consumer_keys.add(consumer_key)
     if row.get("ack_required") is not True:
         raise SystemExit(f"{queue} consumer is not using manual acknowledgements")
@@ -311,12 +311,12 @@ for queue, rows in by_queue.items():
     if len(rows) != 2 or any(row["_armada_priority"] not in (0, 10) for row in rows):
         raise SystemExit(f"{queue} does not have two valid pool consumers")
 if len(by_channel) != 2:
-    raise SystemExit(f"expected two Pear worker channels, found {len(by_channel)}")
+    raise SystemExit(f"expected two Armada worker channels, found {len(by_channel)}")
 for channel_pid, rows in by_channel.items():
     if {row["queue_name"] for row in rows} != expected_queues:
-        raise SystemExit(f"Pear worker channel {channel_pid} is not subscribed to both queues")
+        raise SystemExit(f"Armada worker channel {channel_pid} is not subscribed to both queues")
     if any(row["_armada_priority"] not in (0, 10) for row in rows):
-        raise SystemExit(f"Pear worker channel {channel_pid} has invalid affinity priorities")
+        raise SystemExit(f"Armada worker channel {channel_pid} has invalid affinity priorities")
 
 channel_rows: dict[str, dict[str, object]] = {}
 for row in channels:
@@ -327,16 +327,16 @@ for row in channels:
         raise SystemExit(f"duplicate channel snapshot row for {pid}")
     channel_rows[pid] = row
 if set(channel_rows) != set(by_channel):
-    raise SystemExit("missing Pear worker channel details")
+    raise SystemExit("missing Armada worker channel details")
 for pid, row in channel_rows.items():
     if row.get("vhost") != "/":
-        raise SystemExit(f"Pear worker channel {pid} is on the wrong vhost")
+        raise SystemExit(f"Armada worker channel {pid} is on the wrong vhost")
     if row.get("consumer_count") != 2:
-        raise SystemExit(f"Pear worker channel {pid} does not have two consumers")
+        raise SystemExit(f"Armada worker channel {pid} does not have two consumers")
     if row.get("prefetch_count") != 1:
-        raise SystemExit(f"Pear worker channel {pid} does not have consumer prefetch 1")
+        raise SystemExit(f"Armada worker channel {pid} does not have consumer prefetch 1")
     if row.get("global_prefetch_count") != 1:
-        raise SystemExit(f"Pear worker channel {pid} does not have global prefetch 1")
+        raise SystemExit(f"Armada worker channel {pid} does not have global prefetch 1")
 '
 }
 
@@ -398,7 +398,7 @@ if not isinstance(rows, list):
 matched = [row for row in rows if isinstance(row, dict) and row.get("name") in expected]
 names = [row["name"] for row in matched]
 if set(names) != expected or len(names) != len(expected):
-    raise SystemExit("RabbitMQ queue snapshot does not contain exactly both Pear worker queues")
+    raise SystemExit("RabbitMQ queue snapshot does not contain exactly both Armada worker queues")
 for row in matched:
     name = row["name"]
     definition = row.get("effective_policy_definition")
@@ -426,12 +426,12 @@ for row in matched:
 install_remote_armada_worker_consumer_timeout_policy() {
     local remote_command
 
-    echo "Installing the Pear worker delivery timeout policy..."
+    echo "Installing the Armada worker delivery timeout policy..."
     printf -v remote_command '%q ' "${ARMADA_WORKER_CONSUMER_TIMEOUT_POLICY_COMMAND[@]}"
     ssh_root "$remote_command"
     if ! ssh_root "rabbitmqctl list_policies -p / --formatter json" |
         validate_armada_worker_consumer_timeout_policy_snapshot; then
-        fail "Pear worker delivery timeout policy verification failed"
+        fail "Armada worker delivery timeout policy verification failed"
     fi
 }
 
@@ -439,7 +439,7 @@ wait_for_remote_armada_worker_consumer_timeout_queues() {
     local attempt
     local snapshot=""
 
-    echo "Verifying the delivery timeout on both Pear worker queues..."
+    echo "Verifying the delivery timeout on both Armada worker queues..."
     for attempt in $(seq 1 30); do
         snapshot="$(
             ssh_root "rabbitmqctl list_queues -p / name type durable policy effective_policy_definition arguments --formatter json" 2>/dev/null || true
@@ -451,17 +451,17 @@ wait_for_remote_armada_worker_consumer_timeout_queues() {
         sleep 1
     done
     printf '%s\n' "$snapshot" | validate_armada_worker_consumer_timeout_queue_snapshot || true
-    fail "Pear worker queues did not acquire the required delivery timeout policy"
+    fail "Armada worker queues did not acquire the required delivery timeout policy"
 }
 
 verify_remote_armada_worker_consumer_timeout_policy() {
     if ! ssh_root "rabbitmqctl list_policies -p / --formatter json" |
         validate_armada_worker_consumer_timeout_policy_snapshot; then
-        fail "Pear worker delivery timeout policy verification failed"
+        fail "Armada worker delivery timeout policy verification failed"
     fi
     if ! ssh_root "rabbitmqctl list_queues -p / name type durable policy effective_policy_definition arguments --formatter json" |
         validate_armada_worker_consumer_timeout_queue_snapshot; then
-        fail "Pear worker queues do not have the required delivery timeout policy"
+        fail "Armada worker queues do not have the required delivery timeout policy"
     fi
 }
 
@@ -482,7 +482,7 @@ wait_for_remote_armada_worker_pool_topology() {
     local attempt
     local snapshot=""
 
-    echo "Verifying both consumers and channels in the Pear worker pool..."
+    echo "Verifying both consumers and channels in the Armada worker pool..."
     for attempt in $(seq 1 30); do
         snapshot="$(remote_armada_worker_pool_topology_snapshot 2>/dev/null || true)"
         if printf '%s' "$snapshot" |
@@ -492,7 +492,7 @@ wait_for_remote_armada_worker_pool_topology() {
         sleep 1
     done
     printf '%s' "$snapshot" | validate_armada_worker_pool_topology_snapshot || true
-    fail "Pear worker pool did not reach the required two-slot topology"
+    fail "Armada worker pool did not reach the required two-slot topology"
 }
 
 stage_remote_armada_deploy_bundle() {

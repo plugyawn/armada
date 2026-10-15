@@ -339,7 +339,7 @@ async function acknowledgement(ctx) {
     const sends = await ctx.hold_sends();
     try {
         const token = `ac-ack-${Date.now().toString(36)}`;
-        await ctx.fill_compose(`@**Pear** armada-checks ${token}`);
+        await ctx.fill_compose(`@**Onix** armada-checks ${token}`);
         await ctx.page.evaluate(() => {
             const ac = window.__ac;
             const before = new Set(ac.all("agentAck"));

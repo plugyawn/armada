@@ -915,7 +915,7 @@ run_test("realm_bot update", ({override}) => {
     assert_same(args.bot, event.bot);
 });
 
-run_test("realm_bot events keep the Pear bot ids current", ({override}) => {
+run_test("realm_bot events keep the Onix bot ids current", ({override}) => {
     const armada_bot_id = test_user.user_id;
     override(bot_data, "add", noop);
     override(bot_data, "update", noop);

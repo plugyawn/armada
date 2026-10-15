@@ -14,11 +14,11 @@ usage() {
     cat <<EOF
 Usage: tools/armada_deploy/reset_remote_dev_data.sh [options] [state.json]
 
-Reset the hosted Pear/Zulip dev database to a quiet six-user demo realm.
+Reset the hosted Armada/Zulip dev database to a quiet six-user demo realm.
 This is destructive and requires --yes.
 
 Options:
-  --yes         Stop Pear services, reset the dev database, recreate demo users, restart services.
+  --yes         Stop Armada services, reset the dev database, recreate demo users, restart services.
   --state PATH  Use a specific armada_do.py state file.
   -h, --help    Show this help.
 EOF
@@ -99,7 +99,7 @@ Target: https://$FQDN
 State:  $STATE_PATH
 Roster: $ROSTER_STATUS
 
-This command will delete hosted dev conversation history, Pear worker runs,
+This command will delete hosted dev conversation history, Armada worker runs,
 workspace runtime state, sessions, drafts, scheduled messages, extra generated users,
 all topic worktrees and project caches under /srv/armada-workspaces, and the
 per-topic isolation OS users.
@@ -127,7 +127,7 @@ ssh_root python3 "$REMOTE_TRUSTED_RUNTIME/tools/armada_deploy/runtime_config.py"
     --repo-root "$REMOTE_TRUSTED_RUNTIME" \
     --fqdn "$FQDN"
 
-echo "Stopping Pear/Zulip services..."
+echo "Stopping Armada/Zulip services..."
 ssh_root "systemctl stop ${ARMADA_DEPLOY_SERVICES[*]}"
 
 # Topic worktrees must not survive the database reset: workdir slugs are
@@ -136,7 +136,7 @@ ssh_root "systemctl stop ${ARMADA_DEPLOY_SERVICES[*]}"
 # provisioning short-circuits on an existing worktree. Project clone caches
 # live under the same root. The per-topic isolation OS users are recreated
 # on demand by the isolation helper, so they go too.
-echo "Removing Pear topic worktrees, project caches, and isolation users..."
+echo "Removing Armada topic worktrees, project caches, and isolation users..."
 ssh_root 'rm -rf /srv/armada-workspaces/* || true'
 ssh_root "getent passwd | awk -F: '/^armada-[0-9a-f]{24}:/ {print \$1}' | xargs -r -n1 userdel || true"
 
@@ -237,7 +237,7 @@ request = RequestFactory().post("/json/armada/config")
 request.user = owner
 response = post_armada_config_backend(request, owner)
 if response.status_code != 200:
-    raise SystemExit(f"Pear config failed with HTTP {response.status_code}: {response.content!r}")
+    raise SystemExit(f"Armada config failed with HTTP {response.status_code}: {response.content!r}")
 
 Session.objects.all().delete()
 

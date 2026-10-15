@@ -85,7 +85,7 @@ def armada_followup_topic_context_allows_candidate(
     )
     if workspace is None:
         # Ambient is the product default. A topic row is created only after
-        # Pear has state worth persisting, so a missing row must not make a
+        # the agent has state worth persisting, so a missing row must not make a
         # brand-new topic silently mentions-only.
         return True
     if workspace["is_paused"]:

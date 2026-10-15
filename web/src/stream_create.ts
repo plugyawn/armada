@@ -416,7 +416,7 @@ function create_stream(): void {
                 ui_report.client_error(
                     $t_html({
                         defaultMessage:
-                            "Channel created, but Pear could not clone the Git repository.",
+                            "Channel created, but the Git repository could not be cloned.",
                     }),
                     $(".stream_create_info"),
                 );

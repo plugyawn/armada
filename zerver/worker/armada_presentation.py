@@ -79,7 +79,7 @@ class ArmadaPresentationWorker(QueueProcessingWorker):
                 input_text=input_text,
             )
         except ArmadaAgentRuntimeError:
-            logger.warning("Pear presentation update failed", exc_info=True)
+            logger.warning("Presentation update failed", exc_info=True)
             return
         if not overview:
             return

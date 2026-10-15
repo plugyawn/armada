@@ -611,7 +611,7 @@ def check_update_message_rendering_only_in_transaction(
 ) -> None:
     """Update rendered content as part of a caller-owned transaction."""
     assert transaction.get_connection().in_atomic_block
-    # Keep this operation isolated behind a savepoint. Callers such as Pear may
+    # Keep this operation isolated behind a savepoint. Callers such as the agent may
     # recover by posting a new message if this edit fails; they must not commit
     # a partial edit and its fallback together.
     with transaction.atomic():

@@ -7,14 +7,18 @@ kept scripts/lib/check_rabbitmq_queue.py  # the agent's queues and stats files a
 kept tools/run-dev  # runs the deploy directory's production_assets.py by its new path
 kept web/src/compose_recipient.ts  # follows the renamed modules: their paths, armada_* names and wire names
 kept web/src/compose_setup.ts  # follows the renamed modules: their paths, armada_* names and wire names
+kept web/src/information_density.ts  # a comment names the old interface, not the agent
+kept web/src/left_sidebar_navigation_area.ts  # a comment names the product, not the agent
 kept web/src/message_actions_popover.ts  # follows the renamed modules, classes and wire names
 kept web/src/message_report.ts  # follows the renamed modules, classes and wire names
 kept web/src/message_store.ts  # follows the renamed modules, classes and wire names
 kept web/src/popover_menus.ts  # follows the renamed modules, classes and wire names
 kept web/src/popover_menus_data.ts  # follows the renamed modules: their paths, armada_* names and wire names
+kept web/src/rendered_markdown.ts  # a comment names the agent by its role
 kept web/src/settings_bots.ts  # follows the renamed modules, classes and wire names
 kept web/src/sidebar_ui.ts  # follows the renamed modules: their paths, armada_* names and wire names
 kept web/src/state_data.ts  # follows the renamed modules, classes and wire names
+kept web/src/stream_color.ts  # a comment names the old interface's design
 kept web/src/stream_create.ts  # follows the renamed modules, classes and wire names
 kept web/src/stream_list.ts  # follows the renamed modules, classes and wire names
 kept web/src/submessage.ts  # follows the renamed modules: their paths, armada_* names and wire names
@@ -69,8 +73,10 @@ kept zerver/lib/events.py  # follows the renamed modules: their paths, armada_* 
 kept zerver/lib/integrations.py  # the agent's embedded bot service is named armada
 kept zerver/lib/message.py  # the message field is is_agent_message
 kept zerver/lib/message_cache.py  # follows the renamed modules: their paths, armada_* names and wire names
+kept zerver/lib/upload/__init__.py  # a comment names the agent by its role
 kept zerver/models/__init__.py  # exports the agent's models by their plain nouns (AgentRun, Repository, Workspace, ...)
 kept zerver/models/bots.py  # the agent's six models take plain nouns; 0810_rename_agent_models moves the tables
+kept zerver/models/messages.py  # comments name the product and the agent's workspace
 kept zerver/openapi/zulip.yaml  # documents the message field is_agent_message (API changelog ZF-092e84)
 kept zerver/tests/test_checks.py  # tests the check that refuses the agent's settings under their old names
 kept zerver/tests/test_event_system.py  # follows the renamed modules: their paths, armada_* names and wire names

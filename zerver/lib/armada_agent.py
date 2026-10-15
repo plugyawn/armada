@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 from typing import Any, Final, Literal, cast
 
 from zerver.lib.armada import (
+    ARMADA_AGENT_NAME,
     ArmadaActiveSessionSummary,
     ArmadaAmbientAction,
     ArmadaAmbientAddressee,
@@ -154,13 +155,13 @@ def build_armada_addressing_router_prompt(
 
     return "\n".join(
         [
-            "You are Pear's low-latency routing layer for a Zulip coding agent.",
+            f"You are {ARMADA_AGENT_NAME}'s low-latency routing layer for a Zulip coding agent.",
             "Classify one new untagged message. Do not answer it.",
             "Do not answer the user. Do not run commands or use tools.",
             "Return only the JSON object required by the response schema.",
             "",
-            "addressee: agent only when the request is for Pear, Codex, the agent, or the assistant; other for a named/recent human; general for team chatter; uncertain otherwise.",
-            "action: ignore for chatter, ambiguity, acknowledgements, and messages for humans; when active_run=yes, steer if this changes or continues Pear's current work; when active_run=no, run for a concrete request or a correction/follow-up to Pear's latest reply.",
+            f"addressee: agent only when the request is for {ARMADA_AGENT_NAME}, Codex, the agent, or the assistant; other for a named/recent human; general for team chatter; uncertain otherwise.",
+            f"action: ignore for chatter, ambiguity, acknowledgements, and messages for humans; when active_run=yes, steer if this changes or continues {ARMADA_AGENT_NAME}'s current work; when active_run=no, run for a concrete request or a correction/follow-up to {ARMADA_AGENT_NAME}'s latest reply.",
             "presentation: choose the likely final UI shape: compact, prose, status, explainer, or diff.",
             "Treat a repeated concrete request as intentional. Exact transport duplicates are handled outside this model.",
             "When uncertain, use addressee=uncertain and action=ignore.",
@@ -383,7 +384,7 @@ class ArmadaGeminiInteractionsAddressingIntentClassifier:
 
 
 def build_armada_codex_developer_instructions() -> str:
-    return "You are Pear, a Codex-powered pair-programming agent working from a Zulip topic.\nUse the repository and tools available in this runtime to make concrete progress.\nTreat the runtime cwd as the isolated topic worktree; the Pear/Zulip server checkout is not the user's target repo unless the topic context explicitly pins it.\nREADME.md and other workspace files are ordinary project content; inspect or edit them only when the task calls for it, never as hidden Pear state.\nUse Codex-native skills from CODEX_HOME/skills when a relevant SKILL.md applies.\nTrack multi-step work with your plan tool and update step statuses as you go — the plan renders live for the people in the topic.\nKeep changes focused on the user's request and verify them before finishing.\nFor casual, conversational, choice-only, or answer-only requests, respond directly.\nDo not run repository/session checks just to make a casual reply sound grounded.\nUse tools only when the request needs workspace facts, code changes, external lookup, or verification.\nResolve references like 'above', 'that', 'what did I ask', and 'who is here' from the recent Zulip transcript below.\nDo not claim you cannot see recent topic history when the transcript below contains the answer.\nFinal response requirements:\n- Keep the response concise and suitable for posting back into the Zulip topic.\n- Report evidence in ordinary prose; Pear never parses your wording into hidden state.\n- Use registered native tools for structured UI artifacts when they materially help."
+    return f"You are {ARMADA_AGENT_NAME}, a Codex-powered pair-programming agent working from a Zulip topic.\nUse the repository and tools available in this runtime to make concrete progress.\nTreat the runtime cwd as the isolated topic worktree; the Armada server checkout is not the user's target repo unless the topic context explicitly pins it.\nREADME.md and other workspace files are ordinary project content; inspect or edit them only when the task calls for it, never as hidden Armada state.\nUse Codex-native skills from CODEX_HOME/skills when a relevant SKILL.md applies.\nTrack multi-step work with your plan tool and update step statuses as you go — the plan renders live for the people in the topic.\nKeep changes focused on the user's request and verify them before finishing.\nFor casual, conversational, choice-only, or answer-only requests, respond directly.\nDo not run repository/session checks just to make a casual reply sound grounded.\nUse tools only when the request needs workspace facts, code changes, external lookup, or verification.\nResolve references like 'above', 'that', 'what did I ask', and 'who is here' from the recent Zulip transcript below.\nDo not claim you cannot see recent topic history when the transcript below contains the answer.\nFinal response requirements:\n- Keep the response concise and suitable for posting back into the Zulip topic.\n- Report evidence in ordinary prose; Armada never parses your wording into hidden state.\n- Use registered native tools for structured UI artifacts when they materially help."
 
 
 def build_armada_codex_turn_prompt(active_session: ArmadaActiveSessionSummary, task: str) -> str:
@@ -1116,7 +1117,7 @@ class ArmadaCodexAppServerTranscriptTranslator:
         if method in self.reported_unknown_methods or "elta" in method:
             return []
         self.reported_unknown_methods.add(method)
-        logger.info("Pear observed untranslated app-server method: %s", method)
+        logger.info("Observed untranslated app-server method: %s", method)
         return [
             {
                 "kind": "status",
@@ -1153,7 +1154,7 @@ class ArmadaCodexAppServerTranscriptTranslator:
             if descriptor is not None:
                 descriptor["status"] = {"type": status_type}
             if descriptor is None or not isinstance(descriptor.get("parent_thread_id"), str):
-                # Root thread liveness already has a typed Pear run state.
+                # Root thread liveness already has a typed agent run state.
                 # Only child status belongs in the native-agent surface.
                 return []
             return self.contextualize_events(
@@ -1460,9 +1461,9 @@ class ArmadaCodexAppServerToolRunner:
         self.side_thread_ids: set[str] = set()
         # Native /btw conversations are ephemeral, but not one-shot.  Keep
         # their app-server identity for as long as this warm worktree runtime
-        # lives so repeated @Pear replies under one durable Zulip root remain
+        # lives so repeated replies to the agent under one durable Zulip root remain
         # one native side conversation.  The map deliberately dies with the
-        # app-server generation; Zulip messages remain durable, while Pear
+        # app-server generation; Zulip messages remain durable, while Armada
         # adds no replay or parallel memory layer for ephemeral Codex state.
         # Like the active-context maps above, this is owned by state_lock.
         self.side_thread_ids_by_conversation_key: dict[str, str] = {}
@@ -1556,7 +1557,7 @@ class ArmadaCodexAppServerToolRunner:
             {
                 "clientInfo": {
                     "name": "armada",
-                    "title": "Pear",
+                    "title": "Armada",
                     "version": "0.1.0",
                 },
                 # experimentalApi unlocks the interactive tool surface
@@ -2032,7 +2033,7 @@ class ArmadaCodexAppServerToolRunner:
                 try:
                     answers = provider(questions)
                 except Exception:
-                    logger.exception("Pear user-input provider failed.")
+                    logger.exception("User-input provider failed.")
                     answers = None
             if answers is not None:
                 return (
@@ -2119,7 +2120,7 @@ class ArmadaCodexAppServerToolRunner:
                     "contentItems": [
                         {
                             "type": "inputText",
-                            "text": "Artifact accepted and attached to the final Pear message.",
+                            "text": "Artifact accepted and attached to the final message.",
                         }
                     ],
                 },
@@ -2149,7 +2150,7 @@ class ArmadaCodexAppServerToolRunner:
             None,
             {
                 "code": -32601,
-                "message": f"Pear does not implement app-server request {method}.",
+                "message": f"Armada does not implement app-server request {method}.",
             },
             event,
         )
@@ -2186,7 +2187,7 @@ class ArmadaCodexAppServerToolRunner:
         with self.state_lock:
             if context.thread_id in self.turn_contexts_by_thread_id:
                 raise ArmadaAgentRuntimeError(
-                    f"Codex thread {context.thread_id} already has an active Pear turn."
+                    f"Codex thread {context.thread_id} already has an active agent turn."
                 )
             self.turn_contexts_by_thread_id[context.thread_id] = context
             if not context.is_main:
@@ -2306,12 +2307,12 @@ class ArmadaCodexAppServerToolRunner:
             )
             if cleanup_error is not None:
                 logger.warning(
-                    "Pear could not unsubscribe evicted Codex side thread %s: %s",
+                    "Could not unsubscribe evicted Codex side thread %s: %s",
                     side_thread_id,
                     cleanup_error,
                 )
             return
-        raise ArmadaAgentRuntimeError("Pear has too many active native side conversations.")
+        raise ArmadaAgentRuntimeError("Too many active native side conversations.")
 
     def run_side(
         self,
@@ -2462,7 +2463,7 @@ class ArmadaCodexAppServerToolRunner:
             )
             if cleanup_error is not None:
                 logger.warning(
-                    "Pear could not unsubscribe ephemeral Codex side thread %s: %s",
+                    "Could not unsubscribe ephemeral Codex side thread %s: %s",
                     side_thread_id,
                     cleanup_error,
                 )
@@ -2555,7 +2556,7 @@ class ArmadaCodexAppServerToolRunner:
         """Restore native child identities after an app-server restart.
 
         This is one runtime reconciliation request, never a frontend poller.
-        The durable Pear event log remains the browser's source of truth.
+        The durable run event log remains the browser's source of truth.
         """
         result = self.request(
             "thread/list",
@@ -2882,7 +2883,7 @@ class ArmadaCodexAppServerToolRunner:
             self.background_request_ids.discard(message_id)
         if "error" in message:
             logger.info(
-                "Pear background app-server request %s failed: %s",
+                "Background app-server request %s failed: %s",
                 message_id,
                 trim_armada_agent_text(str(message["error"]), limit=300),
             )

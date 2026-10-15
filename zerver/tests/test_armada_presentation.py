@@ -32,7 +32,7 @@ class ArmadaPresentationTest(ZulipTestCase):
         armada_bot = self.create_test_bot(
             "armada-presentation",
             owner,
-            full_name="Pear",
+            full_name="Onix",
             bot_type=UserProfile.EMBEDDED_BOT,
             service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )

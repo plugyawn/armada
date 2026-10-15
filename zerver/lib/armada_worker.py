@@ -25,6 +25,7 @@ from django.utils.timezone import now as timezone_now
 from django.utils.translation import gettext as _
 
 from zerver.lib.armada import (
+    ARMADA_AGENT_NAME,
     ARMADA_DEFAULT_RESPONSE_POLICY,
     ARMADA_REASONING_EFFORTS,
     ArmadaActiveSessionSummary,
@@ -110,7 +111,7 @@ def armada_referenced_conversations(content: str) -> list[tuple[str, str | None]
         return []
     # Import lazily: the Markdown engine is intentionally not part of the
     # ordinary worker startup path. These are the canonical Zulip link
-    # patterns, so Pear cannot drift into accepting a second reference syntax.
+    # patterns, so the worker cannot drift into accepting a second reference syntax.
     from zerver.lib.markdown import (
         get_compiled_stream_link_regex,
         get_compiled_stream_topic_link_regex,
@@ -281,7 +282,7 @@ def refresh_armada_workspace_after_terminal_run(workspace_node_id: int) -> None:
         # Run settlement is authoritative even if the secondary Workspace
         # observer fails. A later explicit refresh still repairs the revision.
         logger.exception(
-            "Could not refresh Pear Workspace %s after a terminal run",
+            "Could not refresh workspace %s after a terminal run",
             workspace_node_id,
         )
 
@@ -453,7 +454,7 @@ def settle_armada_run_result_message(run: AgentRun, *, content: str) -> None:
         )
     except Exception:
         logging.getLogger(__name__).warning(
-            "Failed to settle Pear run result message %s.", message_id, exc_info=True
+            "Failed to settle run result message %s.", message_id, exc_info=True
         )
 
 
@@ -513,14 +514,14 @@ def reap_stale_armada_worker_runs(
                 stream=run.stream_name,
                 topic=run.topic_name,
                 result_message_id=run.result_message_id,
-                error="Pear worker run became stale and was recovered.",
+                error="The run became stale and was recovered.",
                 allow_requeue=False,
             ):
                 continue
             store._record_event(
                 run,
                 "stale_reaped",
-                summary="Recovered stale Pear worker run.",
+                summary="Recovered a stale run.",
                 payload={
                     "stale_after_seconds": armada_worker_stale_after_seconds(),
                     "heartbeat_at": run.heartbeat_at.isoformat()
@@ -551,9 +552,7 @@ def maintain_armada_worker_run_liveness(
     """
     if active_run_id is not None:
         if active_run_attempt is None:
-            raise ArmadaWorkerLeaseLostError(
-                f"Pear worker run {active_run_id} has no active claim attempt."
-            )
+            raise ArmadaWorkerLeaseLostError(f"Run {active_run_id} has no active claim attempt.")
         current_time = timezone_now()
         renewed_count = AgentRun.objects.filter(
             id=active_run_id,
@@ -572,7 +571,7 @@ def maintain_armada_worker_run_liveness(
                 # have its now-warm Codex process aborted.
                 return reap_stale_armada_worker_runs(session_kinds=session_kinds)
             raise ArmadaWorkerLeaseLostError(
-                f"Pear worker run {active_run_id} attempt {active_run_attempt} lost its lease."
+                f"Run {active_run_id} attempt {active_run_attempt} lost its lease."
             )
     return reap_stale_armada_worker_runs(session_kinds=session_kinds)
 
@@ -926,11 +925,11 @@ def armada_workdir_uses_shared_git_admin(workdir: str | Path) -> bool:
 
 def armada_worker_runtime_isolation_error(workdir: str | None) -> str | None:
     if workdir is None or not workdir.strip():
-        return "Pear refused to start Codex because no isolated topic worktree was selected."
+        return "Refused to start Codex because no isolated topic worktree was selected."
     if armada_workdir_is_under_topic_root(workdir):
         return None
     return (
-        "Pear refused to start Codex outside the Pear topic workspace root. "
+        "Refused to start Codex outside the topic workspace root. "
         "Pick or create a topic-scoped worktree before starting the agent."
     )
 
@@ -955,15 +954,15 @@ def armada_worker_process_isolation_error(
         return None
     helper = str(settings.ARMADA_TOPIC_ISOLATION_HELPER or "")
     if not helper:
-        return "Pear per-topic OS-user isolation is enabled, but no isolation helper is configured."
+        return "Per-topic OS-user isolation is enabled, but no isolation helper is configured."
     if armada_worker_runtime_isolation_error(workdir) is not None:
         return (
-            "Pear per-topic OS-user isolation refused to prepare a workdir outside "
-            "the Pear topic workspace root."
+            "Per-topic OS-user isolation refused to prepare a workdir outside "
+            "the topic workspace root."
         )
     if armada_workdir_uses_shared_git_admin(workdir):
         return (
-            "Pear per-topic OS-user isolation refused to launch from a shared Git "
+            "Per-topic OS-user isolation refused to launch from a shared Git "
             "worktree. Recreate this topic workspace as an independent clone first."
         )
 
@@ -971,7 +970,7 @@ def armada_worker_process_isolation_error(
     try:
         armada_provision_codex_skills(codex_home_source)
     except OSError as error:
-        return f"Pear Codex skills provisioning failed: {error}"
+        return f"Codex skills provisioning failed: {error}"
     return armada_prepare_isolated_workdir(
         isolation_username=process_isolation.username,
         workdir=workdir,
@@ -992,9 +991,7 @@ def armada_prepare_isolated_workdir(
     ownership guard for those consumers."""
     helper = str(settings.ARMADA_TOPIC_ISOLATION_HELPER or "")
     if not helper:
-        return (
-            "Pear per-topic OS-user isolation is enabled, but no isolation helper is configured."
-        )
+        return "Per-topic OS-user isolation is enabled, but no isolation helper is configured."
     if codex_home_source is None:
         codex_home_source = str(armada_shared_codex_home())
     command = [
@@ -1020,15 +1017,15 @@ def armada_prepare_isolated_workdir(
         )
     except FileNotFoundError:
         return (
-            "Pear per-topic OS-user isolation is enabled, but sudo or the isolation "
+            "Per-topic OS-user isolation is enabled, but sudo or the isolation "
             "helper is not installed."
         )
     except (OSError, subprocess.TimeoutExpired) as error:
-        return f"Pear per-topic OS-user isolation setup failed: {error}"
+        return f"Per-topic OS-user isolation setup failed: {error}"
     if completed.returncode != 0:
         output = "\n".join(part for part in (completed.stdout, completed.stderr) if part).strip()
         return (
-            "Pear per-topic OS-user isolation setup failed: "
+            "Per-topic OS-user isolation setup failed: "
             f"{output or f'exit code {completed.returncode}'}"
         )
     return None
@@ -2077,8 +2074,8 @@ def maybe_refactor_armada_workspace_on_move(
             stream_name=new_stream.name,
             topic_name=new_topic,
             message=(
-                "Pear workspace warning: I did not move the Pear workspace context "
-                "because the destination topic already has its own Pear context. "
+                "Workspace warning: I did not move the workspace context "
+                "because the destination topic already has its own context. "
                 + (
                     f"I moved {monitor_count} wall monitor(s) with the topic. "
                     if monitor_count
@@ -2093,9 +2090,9 @@ def maybe_refactor_armada_workspace_on_move(
             stream_name=new_stream.name,
             topic_name=new_topic,
             message=(
-                "Pear workspace warning: I did not move the Pear workspace context "
+                "Workspace warning: I did not move the workspace context "
                 "because only part of the topic was moved. The old topic keeps the existing "
-                "Codex thread/worktree; this topic will get a fresh context when Pear is used."
+                f"Codex thread/worktree; this topic will get a fresh context when {ARMADA_AGENT_NAME} is used."
             ),
         )
 
@@ -2124,9 +2121,9 @@ def maybe_refactor_armada_workspace_on_move(
             stream_name=new_stream.name,
             topic_name=new_topic,
             message=(
-                "Pear workspace warning: I did not rename the Pear workspace context "
-                "because the old topic still has an active Pear worker run. Wait for it to "
-                "finish, then ask Pear to pin or migrate the workspace explicitly."
+                "Workspace warning: I did not rename the workspace context "
+                "because the old topic still has an active run. Wait for it to "
+                f"finish, then ask {ARMADA_AGENT_NAME} to pin or migrate the workspace explicitly."
             ),
         )
 
@@ -2146,9 +2143,9 @@ def maybe_refactor_armada_workspace_on_move(
         stream_name=new_stream.name,
         topic_name=new_topic,
         message=(
-            "Pear workspace label moved with this topic."
+            "The workspace label moved with this topic."
             if workspace_node is not None
-            else f"Pear wall moved {monitor_count} monitor(s) with this topic."
+            else f"The wall moved {monitor_count} monitor(s) with this topic."
         ),
     )
 
@@ -2184,8 +2181,8 @@ def maybe_refactor_armada_stream_workspaces_on_rename(
             date_updated=timezone_now(),
         )
         return (
-            "Pear workspace warning: I did not rename Pear channel context "
-            "because the destination channel name already has Pear context. "
+            "Workspace warning: I did not rename the channel context "
+            "because the destination channel name already has its own context. "
             + (
                 f"I moved {monitor_count} wall monitor(s) with the channel. "
                 if monitor_count
@@ -2199,7 +2196,7 @@ def maybe_refactor_armada_stream_workspaces_on_rename(
     monitor_count = monitors.update(stream_name=new_scope_stream, date_updated=timestamp)
 
     return (
-        f"Pear channel context renamed from `{old_stream_name}` to `{new_stream_name}` "
+        f"Channel context renamed from `{old_stream_name}` to `{new_stream_name}` "
         f"for {workspace_count} workspace layer(s) and {monitor_count} wall monitor(s). "
         "Existing worktree paths were kept unchanged; "
         "check the sidebar before starting Codex work."
@@ -2245,7 +2242,7 @@ def armada_git_output(
             else (stderr or "").strip()
         )
         logger.warning(
-            "Pear git command timed out in %s with args %s: %s",
+            "Git command timed out in %s with args %s: %s",
             workdir,
             args,
             stderr_text,
@@ -2254,7 +2251,7 @@ def armada_git_output(
         return ""
     except (FileNotFoundError, OSError):
         logger.warning(
-            "Pear git command failed to start in %s with args %s.",
+            "Git command failed to start in %s with args %s.",
             workdir,
             args,
             exc_info=True,
@@ -2262,7 +2259,7 @@ def armada_git_output(
         return ""
     if completed.returncode != 0:
         logger.warning(
-            "Pear git command exited with status %s in %s with args %s: %s",
+            "Git command exited with status %s in %s with args %s: %s",
             completed.returncode,
             workdir,
             args,
@@ -2636,7 +2633,7 @@ def build_armada_worker_runtime_from_settings(
             armada_provision_codex_skills(armada_shared_codex_home())
         except OSError as error:
             return ArmadaWorkerRuntime(
-                ArmadaDisabledAgentRunner(f"Pear Codex skills provisioning failed: {error}")
+                ArmadaDisabledAgentRunner(f"Codex skills provisioning failed: {error}")
             )
     if runtime == "codex-app-server":
         return ArmadaWorkerRuntime(
@@ -2659,14 +2656,14 @@ def build_armada_worker_runtime_from_settings(
     if runtime != "disabled":
         return ArmadaWorkerRuntime(
             ArmadaDisabledAgentRunner(
-                f"Pear worker agent runtime is unsupported: {runtime!r}. "
+                f"The agent runtime is unsupported: {runtime!r}. "
                 "Use codex-app-server for worker turns; configure ambient "
                 "message routing with ARMADA_ADDRESSING_ROUTER_RUNTIME."
             )
         )
     return ArmadaWorkerRuntime(
         ArmadaDisabledAgentRunner(
-            "Pear worker agent runtime is disabled. Set ARMADA_WORKER_AGENT_RUNTIME "
+            "The agent runtime is disabled. Set ARMADA_WORKER_AGENT_RUNTIME "
             "to 'codex-app-server' for direct Codex app-server control."
         )
     )
@@ -2724,7 +2721,7 @@ class ArmadaDatabaseWorkerRunStore:
             or (require_running and run.status != AgentRun.RUNNING)
         ):
             raise ArmadaWorkerLeaseLostError(
-                f"Pear worker run for message {message_id} lost attempt {claimed_attempt}."
+                f"Run for message {message_id} lost attempt {claimed_attempt}."
             )
 
     @contextlib.contextmanager
@@ -2937,7 +2934,7 @@ class ArmadaDatabaseWorkerRunStore:
             result = bot_handler.send_reply(message, content)
             progress_message_id = result.get("id") if isinstance(result, dict) else None
             if not isinstance(progress_message_id, int):
-                raise RuntimeError("Pear progress message send returned no message id.")
+                raise RuntimeError("Progress message send returned no message id.")
             run.result_message_id = progress_message_id
             run.date_updated = timezone_now()
             run.save(update_fields=["result_message_id", "date_updated"])
@@ -2959,7 +2956,7 @@ class ArmadaDatabaseWorkerRunStore:
         requesting_user_id: int | None,
     ) -> str | None:
         if not stream:
-            return "Pear Codex runs currently require a channel topic."
+            return "Codex runs currently require a channel topic."
         if message_id <= 0 or requesting_user_id is None:
             return None
         stream, topic = armada_topic_scope(stream, topic)
@@ -2974,12 +2971,12 @@ class ArmadaDatabaseWorkerRunStore:
                 realm=user_profile.realm,
             )
         except UserProfile.DoesNotExist:
-            return "Pear could not identify the requesting user."
+            return "Could not identify the requesting user."
 
         if not armada_user_is_trusted(requesting_user):
-            return "This user is not allowed to start Pear worker runs."
+            return f"This user is not allowed to start {ARMADA_AGENT_NAME}'s runs."
         if armada_workspace_is_paused(user_profile, stream=stream, topic=topic):
-            return "Pear session is paused until a resume control is posted."
+            return "The session is paused until a resume control is posted."
 
         queued_run = AgentRun.objects.filter(
             bot_profile=user_profile,
@@ -3008,9 +3005,11 @@ class ArmadaDatabaseWorkerRunStore:
             ).count()
             >= topic_limit
         ):
-            return "This topic already has an active Pear worker run."
+            return "This topic already has an active run."
         if realm_limit > 0 and busy_runs.count() >= realm_limit:
-            return "Pear already has the maximum number of active worker runs in this realm."
+            return (
+                f"{ARMADA_AGENT_NAME} already has the maximum number of active runs in this realm."
+            )
         return None
 
     def side_start_blocked_reason(
@@ -3024,7 +3023,7 @@ class ArmadaDatabaseWorkerRunStore:
     ) -> str | None:
         """Apply run admission without treating a native /btw as a main turn."""
         if not stream:
-            return "Pear Codex runs currently require a channel topic."
+            return "Codex runs currently require a channel topic."
         if message_id <= 0 or requesting_user_id is None:
             return None
         stream, topic = armada_topic_scope(stream, topic)
@@ -3038,11 +3037,11 @@ class ArmadaDatabaseWorkerRunStore:
                 realm=user_profile.realm,
             )
         except UserProfile.DoesNotExist:
-            return "Pear could not identify the requesting user."
+            return "Could not identify the requesting user."
         if not armada_user_is_trusted(requesting_user):
-            return "This user is not allowed to start Pear worker runs."
+            return f"This user is not allowed to start {ARMADA_AGENT_NAME}'s runs."
         if armada_workspace_is_paused(user_profile, stream=stream, topic=topic):
-            return "Pear session is paused until a resume control is posted."
+            return "The session is paused until a resume control is posted."
         if AgentRun.objects.filter(
             bot_profile=user_profile,
             trigger_message_id=message_id,
@@ -3058,7 +3057,9 @@ class ArmadaDatabaseWorkerRunStore:
             status__in=ARMADA_WORKER_RUN_BUSY_STATUSES,
         )
         if realm_limit > 0 and busy_runs.count() >= realm_limit:
-            return "Pear already has the maximum number of active worker runs in this realm."
+            return (
+                f"{ARMADA_AGENT_NAME} already has the maximum number of active runs in this realm."
+            )
         return None
 
     def start(
@@ -3139,7 +3140,7 @@ class ArmadaDatabaseWorkerRunStore:
                     self._record_event(
                         run,
                         "queued",
-                        summary="Queued Pear worker run.",
+                        summary="Queued the run.",
                         payload={"stream": stream, "topic": topic},
                     )
                     return True
@@ -3168,7 +3169,7 @@ class ArmadaDatabaseWorkerRunStore:
                 self._record_event(
                     run,
                     "queued",
-                    summary="Re-queued Pear worker run.",
+                    summary="Re-queued the run.",
                     payload={"stream": stream, "topic": topic},
                 )
                 return True
@@ -3367,7 +3368,7 @@ class ArmadaDatabaseWorkerRunStore:
                     self._record_event(
                         run,
                         "claimed",
-                        summary="Claimed Pear worker run.",
+                        summary="Claimed the run.",
                         payload={
                             "stream": stream,
                             "topic": topic,
@@ -3385,7 +3386,7 @@ class ArmadaDatabaseWorkerRunStore:
                             stream=stream,
                             topic=topic,
                             result_message_id=run.result_message_id,
-                            error="Pear topic is paused.",
+                            error="The topic is paused.",
                             allow_requeue=False,
                         )
                     self._record_claim_dropped(
@@ -3434,7 +3435,7 @@ class ArmadaDatabaseWorkerRunStore:
                             stream=stream,
                             topic=topic,
                             result_message_id=run.result_message_id,
-                            error="Pear worker run exceeded its stale-claim retry limit.",
+                            error="The run exceeded its stale-claim retry limit.",
                             allow_requeue=False,
                         )
                         self._record_claim_dropped(
@@ -3617,7 +3618,7 @@ class ArmadaDatabaseWorkerRunStore:
                 self._record_event(
                     run,
                     status,
-                    summary=f"Recorded Pear worker status: {status}.",
+                    summary=f"Recorded run status: {status}.",
                     payload={"stream": stream, "topic": topic},
                 )
                 return
@@ -3633,7 +3634,7 @@ class ArmadaDatabaseWorkerRunStore:
             self._record_event(
                 run,
                 status,
-                summary=f"Recorded Pear worker status: {status}.",
+                summary=f"Recorded run status: {status}.",
                 payload={
                     "stream": stream,
                     "topic": topic,
@@ -3670,7 +3671,7 @@ class ArmadaDatabaseWorkerRunStore:
         self._record_event(
             run,
             "claimed",
-            summary="Claimed Pear worker run.",
+            summary="Claimed the run.",
             payload={
                 "stream": stream,
                 "topic": topic,
@@ -3691,7 +3692,7 @@ class ArmadaDatabaseWorkerRunStore:
         self._record_event(
             run,
             "claim_dropped",
-            summary="Dropped duplicate Pear worker delivery.",
+            summary="Dropped a duplicate delivery.",
             payload={
                 "stream": stream,
                 "topic": topic,
@@ -3865,7 +3866,7 @@ class ArmadaDatabaseWorkerRunStore:
         claimed_attempt = self._claimed_attempt(user_profile.id, message_id)
         if claimed_attempt is not None and run.attempts != claimed_attempt:
             raise ArmadaWorkerLeaseLostError(
-                f"Pear worker run for message {message_id} lost attempt {claimed_attempt}."
+                f"Run for message {message_id} lost attempt {claimed_attempt}."
             )
         if run.status == AgentRun.CANCELLED:
             return True
@@ -4016,7 +4017,7 @@ class ArmadaDatabaseWorkerRunStore:
         ):
             return False
         run.cancel_requested_at = run.date_updated
-        run.current_activity = "Cancelled from the Pear panel."
+        run.current_activity = "Cancelled from the run panel."
         run.summary = summary
         run.save(update_fields=["cancel_requested_at", "current_activity", "summary"])
         return True
@@ -4106,7 +4107,7 @@ class ArmadaDatabaseWorkerRunStore:
         self._record_event(
             run,
             "transition_rejected",
-            summary=f"Rejected Pear worker status transition: {old_status} -> {new_status}.",
+            summary=f"Rejected run status transition: {old_status} -> {new_status}.",
             payload={
                 "old_status": old_status,
                 "new_status": new_status,
@@ -4232,7 +4233,7 @@ class ArmadaQueueWorkerDispatcher:
     ) -> None:
         user_profile_id = getattr(bot_handler.user_profile, "id", None)
         if not isinstance(user_profile_id, int):
-            raise AssertionError("Pear queue warm requires a bot user id")
+            raise AssertionError("Queue warm requires a bot user id")
         queue_json_publish_rollback_unsafe(
             armada_worker_queue_name(user_profile_id, stream=stream, topic=topic),
             {
@@ -4266,9 +4267,9 @@ class ArmadaQueueWorkerDispatcher:
     ) -> None:
         user_profile_id = getattr(bot_handler.user_profile, "id", None)
         if not isinstance(user_profile_id, int):
-            raise AssertionError("Pear queue dispatch requires a bot user id")
+            raise AssertionError("Queue dispatch requires a bot user id")
         if session_kind == AgentRun.SHARED and not stream:
-            raise AssertionError("Pear shared queue dispatch requires a channel topic")
+            raise AssertionError("Shared queue dispatch requires a channel topic")
         worker_message = dict(message)
         worker_message["content"] = content
         # Monitor turns ride their own queue/consumer: a provisioning
@@ -4381,7 +4382,7 @@ def load_armada_active_session_from_zulip(
         prompt_message_query = prompt_message_query.filter(id__lt=trigger_message_id)
     if latest_codex_run is not None:
         # Codex owns the durable thread, including every prior request and its
-        # own replies. Pear transports only Zulip messages that arrived since
+        # own replies. Armada transports only Zulip messages that arrived since
         # the run which last carried this thread; this is a message boundary,
         # not a second context cache.
         prompt_message_query = prompt_message_query.filter(

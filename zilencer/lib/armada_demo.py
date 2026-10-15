@@ -36,6 +36,7 @@ from zerver.actions.message_delete import do_delete_messages
 from zerver.actions.message_send import do_send_messages, internal_prep_stream_message
 from zerver.actions.streams import bulk_add_subscriptions, bulk_remove_subscriptions
 from zerver.lib.armada import (
+    ARMADA_AGENT_MENTION,
     ARMADA_EXPLICIT_MENTION_MESSAGE_KEY,
     ARMADA_TRIGGER_MESSAGE_KEY,
     ArmadaEmbeddedBotHandler,
@@ -468,7 +469,7 @@ class ScriptedTurn:
     # --- people and controls --------------------------------------------
 
     def steer(self, sender: str, text: str) -> None:
-        """Someone addresses Pear mid-run; admission records it as steering."""
+        """Someone addresses the agent mid-run; admission records it as steering."""
         self.seeder.request(sender, self.runner.topic, text)
         self.wait(2)
 
@@ -590,7 +591,7 @@ class DemoSeeder:
             .first()
         )
         if service is None:
-            raise RuntimeError("The Pear bot does not exist in this realm.")
+            raise RuntimeError("The agent's bot does not exist in this realm.")
         self.bot: UserProfile = service.user_profile
         self.users = {
             name: get_user_by_delivery_email(email, realm) for name, email in DEMO_CAST.items()
@@ -642,7 +643,7 @@ class DemoSeeder:
         """An ordinary message, sent through the ordinary send path.
 
         The one difference from a browser send: the service-bot fan-out is
-        dropped, so the dev server's own Pear workers never see fixture
+        dropped, so the dev server's own agent workers never see fixture
         requests (they would answer that the runtime is disabled).
         """
         request = internal_prep_stream_message(
@@ -669,14 +670,16 @@ class DemoSeeder:
         *,
         thread_root: Message | None = None,
     ) -> AgentRun | None:
-        """`@Pear <content>` from a person, then whatever Pear does with it.
+        """A mention of the agent from a person, then whatever the agent does with it.
 
         Admission runs for real, so the outcome is the product's: a queued
         run and its "Working" message, steering for a run already live in
         the topic, or a refusal (paused topic).  With a `script` the queued
         run is then claimed and its turn executed in-process.
         """
-        message = self.post(sender, topic, f"@**Pear** {content}", thread_root=thread_root, wait=1)
+        message = self.post(
+            sender, topic, f"{ARMADA_AGENT_MENTION} {content}", thread_root=thread_root, wait=1
+        )
         bot_handler = EmbeddedBotHandler(self.bot)
         service_message = MessageDict.wide_dict(message, self.realm.id)
         service_message[ARMADA_TRIGGER_MESSAGE_KEY] = "mention"

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# Restore a drained Pear deployment snapshot. This script is copied into the
+# Restore a drained Armada deployment snapshot. This script is copied into the
 # root-owned snapshot before cutover and executed by systemd, so its lifecycle
 # does not depend on the SSH connection that requested the rollback.
 
@@ -304,7 +304,7 @@ for _ in $(seq 1 45); do
     sleep 2
 done
 if [[ "$rollback_ready" != true ]]; then
-    echo "restored Pear runtime did not remain healthy after rollback" >&2
+    echo "restored Armada runtime did not remain healthy after rollback" >&2
     echo "stable rollback samples: $rollback_stable_samples/10; public HTTPS: ${rollback_public_status:-unavailable}" >&2
     systemctl --no-pager --full status caddy $PREDEPLOY_SERVICES || true
     sudo -Hu zulipdev bash -lc "cd '$REMOTE_PATH' && set -a && . /home/zulipdev/armada.env && set +a && tools/armada-health-report --max-active-runs 0 --max-stale-active-runs 0" || true

@@ -27,7 +27,7 @@ def removable_snapshots(root: Path, keep: int) -> list[Path]:
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Prune old Pear deploy snapshots; dry-run unless --yes is passed."
+        description="Prune old Armada deploy snapshots; dry-run unless --yes is passed."
     )
     parser.add_argument("--root", type=Path, required=True)
     parser.add_argument("--keep", type=int, default=10)

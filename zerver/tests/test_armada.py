@@ -15,6 +15,7 @@ from unittest.mock import Mock, call, patch
 from zerver.lib.armada import (
     ARMADA_ACTIVE_SESSION_ENDPOINT,
     ARMADA_AGENT_MENTION,
+    ARMADA_AGENT_NAME,
     ARMADA_AGENT_RUNTIME_PACKAGES,
     ARMADA_APPLY_PLAN_PROMPT,
     ARMADA_BOT_SHORT_NAME,
@@ -327,7 +328,9 @@ class ArmadaSessionDefaultsTest(TestCase):
         self.assertEqual(defaults.stream, ARMADA_DEFAULT_STREAM)
         self.assertEqual(defaults.topic, ARMADA_DEFAULT_TOPIC)
         self.assertEqual(defaults.topic_prefix, ARMADA_TOPIC_PREFIX)
-        self.assertEqual(ARMADA_BOT_SHORT_NAME, "pear")
+        self.assertEqual(ARMADA_AGENT_NAME, "Onix")
+        self.assertEqual(ARMADA_AGENT_MENTION, "@**Onix**")
+        self.assertEqual(ARMADA_BOT_SHORT_NAME, "onix")
         self.assertEqual(ARMADA_EMBEDDED_BOT_SERVICE, "armada")
         self.assertEqual(ARMADA_FIX_BUG_PROMPT, "Fix bug:")
 
@@ -335,7 +338,7 @@ class ArmadaSessionDefaultsTest(TestCase):
         self.assertEqual(normalize_armada_response_policy(None), "ambient")
         self.assertEqual(normalize_armada_response_policy("ambient"), "ambient")
         self.assertEqual(normalize_armada_response_policy("mentions_only"), "mentions_only")
-        with self.assertRaisesRegex(ValueError, "Invalid Pear response policy"):
+        with self.assertRaisesRegex(ValueError, "Invalid response policy"):
             normalize_armada_response_policy("ambien")
 
     def test_structured_artifacts_never_enter_run_telemetry_or_summary(self) -> None:
@@ -425,17 +428,17 @@ class ArmadaSessionDefaultsTest(TestCase):
     def test_build_seed_message(self) -> None:
         seed_message = build_armada_seed_message("fix the failing checkout test")
 
-        self.assertEqual(seed_message, "@**Pear** fix the failing checkout test")
+        self.assertEqual(seed_message, "@**Onix** fix the failing checkout test")
 
     def test_build_seed_message_with_empty_task(self) -> None:
         seed_message = build_armada_seed_message()
 
-        self.assertEqual(seed_message, "@**Pear** Start the topic Codex thread:")
+        self.assertEqual(seed_message, "@**Onix** Start the topic Codex thread:")
 
     def test_build_fix_bug_message(self) -> None:
         fix_message = build_armada_fix_bug_message("checkout crashes on empty cart")
 
-        self.assertIn("@**Pear** Fix bug:", fix_message)
+        self.assertIn("@**Onix** Fix bug:", fix_message)
         self.assertIn("Bug: checkout crashes on empty cart", fix_message)
         self.assertIn("Observed behavior: ", fix_message)
         self.assertIn("Expected behavior: ", fix_message)
@@ -448,7 +451,7 @@ class ArmadaSessionDefaultsTest(TestCase):
     def test_build_status_check_message(self) -> None:
         status_message = build_armada_status_check_message("checkout flow")
 
-        self.assertIn("@**Pear** Status check:", status_message)
+        self.assertIn("@**Onix** Status check:", status_message)
         self.assertIn("Focus: checkout flow", status_message)
         self.assertIn("Completed since last update: ", status_message)
         self.assertIn("Still in progress: ", status_message)
@@ -459,7 +462,7 @@ class ArmadaSessionDefaultsTest(TestCase):
     def test_build_handoff_message(self) -> None:
         handoff_message = build_armada_handoff_message("next developer")
 
-        self.assertIn("@**Pear** Handoff summary:", handoff_message)
+        self.assertIn("@**Onix** Handoff summary:", handoff_message)
         self.assertIn("Audience: next developer", handoff_message)
         self.assertIn("Goal and scope: ", handoff_message)
         self.assertIn("Current state: ", handoff_message)
@@ -471,7 +474,7 @@ class ArmadaSessionDefaultsTest(TestCase):
     def test_build_catch_up_message(self) -> None:
         catch_up_message = build_armada_catch_up_message("yesterday")
 
-        self.assertIn("@**Pear** Catch up:", catch_up_message)
+        self.assertIn("@**Onix** Catch up:", catch_up_message)
         self.assertIn("Since: yesterday", catch_up_message)
         self.assertIn("Summarize changes: ", catch_up_message)
         self.assertIn("Decisions made: ", catch_up_message)
@@ -483,7 +486,7 @@ class ArmadaSessionDefaultsTest(TestCase):
     def test_build_triage_message(self) -> None:
         triage_message = build_armada_triage_message("checkout failures")
 
-        self.assertIn("@**Pear** Triage request:", triage_message)
+        self.assertIn("@**Onix** Triage request:", triage_message)
         self.assertIn("Request: checkout failures", triage_message)
         self.assertIn("Possible duplicate or related work:", triage_message)
         self.assertIn("Answer if already known:", triage_message)
@@ -496,7 +499,7 @@ class ArmadaSessionDefaultsTest(TestCase):
     def test_build_find_answer_message(self) -> None:
         find_answer_message = build_armada_find_answer_message("Where is auth configured?")
 
-        self.assertIn("@**Pear** Find answer:", find_answer_message)
+        self.assertIn("@**Onix** Find answer:", find_answer_message)
         self.assertIn("Question: Where is auth configured?", find_answer_message)
         self.assertIn("Search scope:", find_answer_message)
         self.assertIn("Evidence to cite:", find_answer_message)
@@ -506,7 +509,7 @@ class ArmadaSessionDefaultsTest(TestCase):
     def test_build_review_message(self) -> None:
         review_message = build_armada_review_message("current branch")
 
-        self.assertIn("@**Pear** Review changes:", review_message)
+        self.assertIn("@**Onix** Review changes:", review_message)
         self.assertIn("Scope: current branch", review_message)
         self.assertIn("Review focus: correctness", review_message)
         self.assertIn("Diff or files to inspect: use the typed workspace context", review_message)
@@ -517,7 +520,7 @@ class ArmadaSessionDefaultsTest(TestCase):
     def test_build_plan_message(self) -> None:
         plan_message = build_armada_plan_message("refactor checkout flow")
 
-        self.assertIn("@**Pear** Implementation plan:", plan_message)
+        self.assertIn("@**Onix** Implementation plan:", plan_message)
         self.assertIn("Goal: refactor checkout flow", plan_message)
         self.assertIn("Constraints: ", plan_message)
         self.assertIn("Files to inspect: ", plan_message)
@@ -529,7 +532,7 @@ class ArmadaSessionDefaultsTest(TestCase):
     def test_build_checkpoint_message(self) -> None:
         checkpoint_message = build_armada_checkpoint_message("checkout regression")
 
-        self.assertIn("@**Pear** Checkpoint:", checkpoint_message)
+        self.assertIn("@**Onix** Checkpoint:", checkpoint_message)
         self.assertIn("Focus: checkout regression", checkpoint_message)
         self.assertIn("current branch, diff summary", checkpoint_message)
         self.assertIn("summarize the exact diff and verification", checkpoint_message)
@@ -538,7 +541,7 @@ class ArmadaSessionDefaultsTest(TestCase):
     def test_build_apply_plan_message(self) -> None:
         apply_plan_message = build_armada_apply_plan_message("checkout regression")
 
-        self.assertIn("@**Pear** Apply plan:", apply_plan_message)
+        self.assertIn("@**Onix** Apply plan:", apply_plan_message)
         self.assertIn("Scope: checkout regression", apply_plan_message)
         self.assertIn("latest Implementation plan", apply_plan_message)
         self.assertIn("make the scoped edits now", apply_plan_message)
@@ -547,7 +550,7 @@ class ArmadaSessionDefaultsTest(TestCase):
     def test_build_save_work_message(self) -> None:
         save_work_message = build_armada_save_work_message("checkout regression")
 
-        self.assertIn("@**Pear** Save work:", save_work_message)
+        self.assertIn("@**Onix** Save work:", save_work_message)
         self.assertIn("Scope: checkout regression", save_work_message)
         self.assertIn("branch, draft PR, patch", save_work_message)
         self.assertIn("report the exact saved branch, PR, diff, or document", save_work_message)
@@ -556,7 +559,7 @@ class ArmadaSessionDefaultsTest(TestCase):
     def test_build_verify_changes_message(self) -> None:
         verify_message = build_armada_verify_changes_message("checkout regression")
 
-        self.assertIn("@**Pear** Verify changes:", verify_message)
+        self.assertIn("@**Onix** Verify changes:", verify_message)
         self.assertIn("Target: checkout regression", verify_message)
         self.assertIn("Checks to run: use the planned verification", verify_message)
         self.assertIn("Fix policy: if a check fails", verify_message)
@@ -565,7 +568,7 @@ class ArmadaSessionDefaultsTest(TestCase):
     def test_build_draft_artifact_message(self) -> None:
         artifact_message = build_armada_draft_artifact_message("issue for flaky tests")
 
-        self.assertIn("@**Pear** Draft artifact:", artifact_message)
+        self.assertIn("@**Onix** Draft artifact:", artifact_message)
         self.assertIn("Artifact: issue for flaky tests", artifact_message)
         self.assertIn("Source context: use this Zulip topic", artifact_message)
         self.assertIn("Must include: scope, decisions", artifact_message)
@@ -577,19 +580,19 @@ class ArmadaSessionDefaultsTest(TestCase):
 
         self.assertEqual(ARMADA_WORKING_MESSAGE, "· Working")
         self.assertEqual(ack_message, ARMADA_WORKING_MESSAGE)
-        self.assertNotIn("Open the Pear panel", ack_message)
+        self.assertNotIn("Open the Onix panel", ack_message)
         self.assertNotIn("Confirm repo, branch, and target runtime", ack_message)
 
     def test_build_ack_message_strips_armada_mention(self) -> None:
-        ack_message = build_armada_ack_message("@**Pear** debug the flaky parser test")
+        ack_message = build_armada_ack_message("@**Onix** debug the flaky parser test")
 
         self.assertEqual(ack_message, ARMADA_WORKING_MESSAGE)
-        self.assertNotIn("Task: @**Pear**", ack_message)
+        self.assertNotIn("Task: @**Onix**", ack_message)
 
     def test_session_payload(self) -> None:
         payload = get_armada_session_payload()
 
-        self.assertEqual(payload["agent_name"], "Pear")
+        self.assertEqual(payload["agent_name"], "Onix")
         self.assertEqual(payload["stream"], ARMADA_DEFAULT_STREAM)
         self.assertEqual(payload["topic"], ARMADA_DEFAULT_TOPIC)
         self.assertEqual(payload["fix_bug_message"], build_armada_fix_bug_message())
@@ -661,7 +664,7 @@ class ArmadaSessionDefaultsTest(TestCase):
             bot_count=0,
         )
 
-        self.assertEqual(config["bot_short_name"], "pear")
+        self.assertEqual(config["bot_short_name"], "onix")
         self.assertEqual(config["embedded_bot_service"], "armada")
         self.assertTrue(config["embedded_bots_enabled"])
         self.assertFalse(config["configured"])
@@ -691,13 +694,13 @@ class ArmadaSessionDefaultsTest(TestCase):
             embedded_bots_enabled=True,
             bot_count=1,
             bot_user_id=7,
-            bot_full_name="Pear",
-            bot_email="pear-bot@example.com",
+            bot_full_name="Onix",
+            bot_email="onix-bot@example.com",
             bot_identities=[
                 {
                     "bot_user_id": 7,
-                    "bot_full_name": "Pear",
-                    "bot_email": "pear-bot@example.com",
+                    "bot_full_name": "Onix",
+                    "bot_email": "onix-bot@example.com",
                     "selected": True,
                 }
             ],
@@ -722,18 +725,18 @@ class ArmadaSessionDefaultsTest(TestCase):
             config["worker_runtime_login_instructions"],
         )
         self.assertEqual(config["bot_user_id"], 7)
-        self.assertEqual(config["bot_full_name"], "Pear")
-        self.assertEqual(config["bot_email"], "pear-bot@example.com")
+        self.assertEqual(config["bot_full_name"], "Onix")
+        self.assertEqual(config["bot_email"], "onix-bot@example.com")
         self.assertEqual(config["selected_bot_user_id"], 7)
-        self.assertEqual(config["selected_bot_full_name"], "Pear")
-        self.assertEqual(config["selected_bot_email"], "pear-bot@example.com")
+        self.assertEqual(config["selected_bot_full_name"], "Onix")
+        self.assertEqual(config["selected_bot_email"], "onix-bot@example.com")
         self.assertEqual(
             config["bot_identities"],
             [
                 {
                     "bot_user_id": 7,
-                    "bot_full_name": "Pear",
-                    "bot_email": "pear-bot@example.com",
+                    "bot_full_name": "Onix",
+                    "bot_email": "onix-bot@example.com",
                     "selected": True,
                 }
             ],
@@ -753,8 +756,8 @@ class ArmadaSessionDefaultsTest(TestCase):
             embedded_bots_enabled=True,
             bot_count=1,
             bot_user_id=7,
-            bot_full_name="Pear",
-            bot_email="pear-bot@example.com",
+            bot_full_name="Onix",
+            bot_email="onix-bot@example.com",
             worker_agent_runtime="codex-app-server",
             worker_runtime_available=False,
             worker_runtime_detail="Missing codex executable.",
@@ -776,33 +779,33 @@ class ArmadaSessionDefaultsTest(TestCase):
             embedded_bots_enabled=True,
             bot_count=2,
             bot_user_id=7,
-            bot_full_name="Pear",
-            bot_email="pear-bot@example.com",
+            bot_full_name="Onix",
+            bot_email="onix-bot@example.com",
             bot_identities=[
                 {
                     "bot_user_id": 7,
-                    "bot_full_name": "Pear",
-                    "bot_email": "pear-bot@example.com",
+                    "bot_full_name": "Onix",
+                    "bot_email": "onix-bot@example.com",
                     "selected": False,
                 },
                 {
                     "bot_user_id": 8,
-                    "bot_full_name": "Pear Infra",
+                    "bot_full_name": "Onix Infra",
                     "bot_email": "armada-infra@example.com",
                     "selected": True,
                 },
             ],
             selected_bot_user_id=8,
-            selected_bot_full_name="Pear Infra",
+            selected_bot_full_name="Onix Infra",
             selected_bot_email="armada-infra@example.com",
         )
 
         self.assertEqual(config["bot_count"], 2)
         self.assertEqual(config["bot_user_id"], 7)
         self.assertEqual(config["selected_bot_user_id"], 8)
-        self.assertEqual(config["selected_bot_full_name"], "Pear Infra")
+        self.assertEqual(config["selected_bot_full_name"], "Onix Infra")
         self.assertEqual(len(config["bot_identities"]), 2)
-        self.assertEqual(config["bot_identities"][1]["bot_full_name"], "Pear Infra")
+        self.assertEqual(config["bot_identities"][1]["bot_full_name"], "Onix Infra")
         self.assertTrue(config["bot_identities"][1]["selected"])
 
     def test_build_config_payload_disabled_server(self) -> None:
@@ -810,8 +813,8 @@ class ArmadaSessionDefaultsTest(TestCase):
             embedded_bots_enabled=False,
             bot_count=1,
             bot_user_id=7,
-            bot_full_name="Pear",
-            bot_email="pear-bot@example.com",
+            bot_full_name="Onix",
+            bot_email="onix-bot@example.com",
         )
 
         self.assertTrue(config["configured"])
@@ -822,7 +825,7 @@ class ArmadaSessionDefaultsTest(TestCase):
     def test_build_armada_explicit_steering_event(self) -> None:
         self.assertEqual(
             build_armada_explicit_steering_event(
-                "@**Pear** keep the fix minimal",
+                "@**Onix** keep the fix minimal",
                 82,
                 sender_is_bot=False,
                 session_started=True,
@@ -851,7 +854,7 @@ class ArmadaSessionDefaultsTest(TestCase):
         )
         self.assertIsNone(
             build_armada_explicit_steering_event(
-                "@Pear start a new pairing session",
+                "@Onix start a new pairing session",
                 85,
                 sender_is_bot=False,
                 session_started=False,
@@ -859,36 +862,37 @@ class ArmadaSessionDefaultsTest(TestCase):
         )
 
     def test_is_armada_request_message(self) -> None:
-        self.assertTrue(is_armada_request_message("@**Pear** fix the checkout test"))
-        self.assertTrue(is_armada_request_message("@Pear fix the checkout test"))
-        self.assertTrue(is_armada_request_message("Hi @Pear"))
-        self.assertTrue(is_armada_request_message("@pear, are you there?"))
+        self.assertTrue(is_armada_request_message("@**Onix** fix the checkout test"))
+        self.assertTrue(is_armada_request_message("@Onix fix the checkout test"))
+        self.assertTrue(is_armada_request_message("Hi @Onix"))
+        self.assertTrue(is_armada_request_message("@onix, are you there?"))
         self.assertFalse(is_armada_request_message("@**Other** fix the checkout test"))
         self.assertFalse(is_armada_request_message("@Pearl fix the checkout test"))
+        self.assertFalse(is_armada_request_message("@Onixes fix the checkout test"))
 
     def test_clean_armada_task_text_removes_mentions_anywhere(self) -> None:
         self.assertEqual(
-            clean_armada_task_text("@Pear fix the checkout test"), "fix the checkout test"
+            clean_armada_task_text("@Onix fix the checkout test"), "fix the checkout test"
         )
-        self.assertEqual(clean_armada_task_text("Hi @Pear"), "Hi")
-        self.assertEqual(clean_armada_task_text("Hi @**Pear**"), "Hi")
+        self.assertEqual(clean_armada_task_text("Hi @Onix"), "Hi")
+        self.assertEqual(clean_armada_task_text("Hi @**Onix**"), "Hi")
 
     def test_is_armada_thread_request_message(self) -> None:
-        self.assertTrue(is_armada_thread_request_message("@Pear debug the flaky parser test"))
-        self.assertTrue(is_armada_thread_request_message("@Pear implement the login view"))
-        self.assertTrue(is_armada_thread_request_message("@Pear start a new pairing session"))
+        self.assertTrue(is_armada_thread_request_message("@Onix debug the flaky parser test"))
+        self.assertTrue(is_armada_thread_request_message("@Onix implement the login view"))
+        self.assertTrue(is_armada_thread_request_message("@Onix start a new pairing session"))
         self.assertTrue(
-            is_armada_thread_request_message("@Pear every weekday at 9am, check the linked PRs")
+            is_armada_thread_request_message("@Onix every weekday at 9am, check the linked PRs")
         )
-        self.assertTrue(is_armada_thread_request_message("@Pear hi"))
-        self.assertTrue(is_armada_thread_request_message("@Pear Hello."))
-        self.assertTrue(is_armada_thread_request_message("@Pear What's up!"))
-        self.assertTrue(is_armada_thread_request_message("@Pear hey tell me something"))
-        self.assertTrue(is_armada_thread_request_message("@Pear tell me a story"))
-        self.assertTrue(is_armada_thread_request_message("@Pear find answer to question"))
-        self.assertTrue(is_armada_thread_request_message("@Pear thanks!"))
-        self.assertTrue(is_armada_thread_request_message("@Pear thank you."))
-        self.assertTrue(is_armada_thread_request_message("@Pear What can you access?"))
+        self.assertTrue(is_armada_thread_request_message("@Onix hi"))
+        self.assertTrue(is_armada_thread_request_message("@Onix Hello."))
+        self.assertTrue(is_armada_thread_request_message("@Onix What's up!"))
+        self.assertTrue(is_armada_thread_request_message("@Onix hey tell me something"))
+        self.assertTrue(is_armada_thread_request_message("@Onix tell me a story"))
+        self.assertTrue(is_armada_thread_request_message("@Onix find answer to question"))
+        self.assertTrue(is_armada_thread_request_message("@Onix thanks!"))
+        self.assertTrue(is_armada_thread_request_message("@Onix thank you."))
+        self.assertTrue(is_armada_thread_request_message("@Onix What can you access?"))
         self.assertFalse(is_armada_thread_request_message("debug the flaky parser test"))
 
     def test_build_active_session_summary(self) -> None:
@@ -924,7 +928,7 @@ class ArmadaSessionDefaultsTest(TestCase):
             stream_exists=True,
             topic_message_count=10,
             messages=[
-                (10, "@**Pear** fix the checkout test", False),
+                (10, "@**Onix** fix the checkout test", False),
                 (11, "- [ ] Confirm repo, branch, and target runtime.", True),
                 (12, "Fold in the failing terminal UI test too.", False),
                 (
@@ -970,7 +974,7 @@ class ArmadaSessionDefaultsTest(TestCase):
             stream_exists=True,
             messages=[
                 (10, "Choose a number from 1 to 240", False, "plugyawn"),
-                (11, "Session context recorded.", True, "Pear"),
+                (11, "Session context recorded.", True, "Onix"),
                 (12, "Agent, do the above", False, "plugyawn"),
             ],
         )
@@ -986,7 +990,7 @@ class ArmadaSessionDefaultsTest(TestCase):
                 },
                 {
                     "message_id": 11,
-                    "sender": "Pear",
+                    "sender": "Onix",
                     "sender_is_bot": True,
                     "content": "Session context recorded.",
                 },
@@ -1012,7 +1016,7 @@ class ArmadaSessionDefaultsTest(TestCase):
         self.assertEqual(summary["worker_state"], "waiting_for_request")
         self.assertEqual(
             summary["worker_blocked_reason"],
-            "No Pear request has been posted in this topic.",
+            "No request for Onix has been posted in this topic.",
         )
         # A fresh topic is not blocked: the worker runs on the first request.
         self.assertTrue(summary["worker_can_run"])
@@ -1025,7 +1029,7 @@ class ArmadaSessionDefaultsTest(TestCase):
             source="server",
             stream_exists=True,
             messages=[
-                (10, "@**Pear** fix the checkout test", False),
+                (10, "@**Onix** fix the checkout test", False),
                 (11, "- [~] State the first concrete edit before changing files.", True),
             ],
             is_paused=True,
@@ -1044,7 +1048,7 @@ class ArmadaSessionDefaultsTest(TestCase):
             armada_session=payload,
             source="server",
             stream_exists=True,
-            messages=[(12, "@**Pear** Pause session: waiting for CI", False)],
+            messages=[(12, "@**Onix** Pause session: waiting for CI", False)],
         )
 
         self.assertEqual(summary["state"], "requested")
@@ -1058,7 +1062,7 @@ class ArmadaSessionDefaultsTest(TestCase):
             armada_session=payload,
             source="server",
             stream_exists=True,
-            messages=[(13, "@Pear start a new pairing session")],
+            messages=[(13, "@Onix start a new pairing session")],
         )
 
         self.assertEqual(summary["state"], "requested")
@@ -1076,7 +1080,7 @@ class ArmadaSessionDefaultsTest(TestCase):
             armada_session=payload,
             source="server",
             stream_exists=True,
-            messages=[(13, "@Pear What can you access from this topic?", False)],
+            messages=[(13, "@Onix What can you access from this topic?", False)],
         )
 
         self.assertEqual(summary["state"], "requested")
@@ -1092,7 +1096,7 @@ class ArmadaSessionDefaultsTest(TestCase):
             armada_session=payload,
             source="server",
             stream_exists=True,
-            messages=[(13, "@Pear hey tell me something", False)],
+            messages=[(13, "@Onix hey tell me something", False)],
         )
 
         self.assertEqual(summary["state"], "requested")
@@ -1109,8 +1113,8 @@ class ArmadaSessionDefaultsTest(TestCase):
             source="server",
             stream_exists=True,
             messages=[
-                (13, "@Pear reply with only ok", False),
-                (14, "ok", True, "Pear"),
+                (13, "@Onix reply with only ok", False),
+                (14, "ok", True, "Onix"),
             ],
         )
 
@@ -1129,7 +1133,7 @@ class ArmadaSessionDefaultsTest(TestCase):
             source="server",
             stream_exists=True,
             messages=[
-                (10, "@Pear fix the checkout test", False),
+                (10, "@Onix fix the checkout test", False),
                 (11, "- [~] State the first concrete edit before changing files.", True),
                 (13, "Fold in the failing terminal UI test too.", False),
             ],
@@ -1158,15 +1162,15 @@ class ArmadaSessionDefaultsTest(TestCase):
             )
         )
         self.assertTrue(
-            armada_worker_should_start("@Pear debug the flaky parser test", active_session)
+            armada_worker_should_start("@Onix debug the flaky parser test", active_session)
         )
-        self.assertTrue(armada_worker_should_start("@Pear Hi", active_session))
-        self.assertTrue(armada_worker_should_start("Hi @Pear", active_session))
-        self.assertTrue(armada_worker_should_start("@Pear What's up!", active_session))
-        # Explicit mentions are always delivered to Codex; Pear must not
+        self.assertTrue(armada_worker_should_start("@Onix Hi", active_session))
+        self.assertTrue(armada_worker_should_start("Hi @Onix", active_session))
+        self.assertTrue(armada_worker_should_start("@Onix What's up!", active_session))
+        # Explicit mentions are always delivered to Codex; Onix must not
         # suppress them with a lexical "trivial acknowledgement" filter.
-        self.assertTrue(armada_worker_should_start("@Pear thanks!", active_session))
-        self.assertTrue(armada_worker_should_start("thank you @Pear", active_session))
+        self.assertTrue(armada_worker_should_start("@Onix thanks!", active_session))
+        self.assertTrue(armada_worker_should_start("thank you @Onix", active_session))
         self.assertTrue(
             armada_worker_should_start(
                 "Hi, agent, how are you?",
@@ -1174,9 +1178,9 @@ class ArmadaSessionDefaultsTest(TestCase):
                 explicitly_addressed=True,
             )
         )
-        self.assertTrue(armada_worker_should_start("@Pear hey tell me something", active_session))
-        self.assertTrue(armada_worker_should_start("@Pear tell me a story", active_session))
-        self.assertTrue(armada_worker_should_start("@Pear find answer to question", active_session))
+        self.assertTrue(armada_worker_should_start("@Onix hey tell me something", active_session))
+        self.assertTrue(armada_worker_should_start("@Onix tell me a story", active_session))
+        self.assertTrue(armada_worker_should_start("@Onix find answer to question", active_session))
         self.assertTrue(
             armada_worker_should_start(
                 build_armada_status_check_message("checkout flow"),
@@ -1248,7 +1252,7 @@ class ArmadaSessionDefaultsTest(TestCase):
             source="server",
             stream_exists=True,
             messages=[
-                (10, "@Pear fix the checkout test", False),
+                (10, "@Onix fix the checkout test", False),
                 (11, "- [~] State the first concrete edit before changing files.", True),
             ],
             response_policy="mentions_only",
@@ -1260,7 +1264,7 @@ class ArmadaSessionDefaultsTest(TestCase):
             )
         )
         self.assertTrue(
-            armada_worker_should_start("@Pear continue the checkout fix", mentions_only_session)
+            armada_worker_should_start("@Onix continue the checkout fix", mentions_only_session)
         )
         self.assertTrue(
             armada_worker_should_start(
@@ -1307,7 +1311,7 @@ class ArmadaSessionDefaultsTest(TestCase):
         self.assertEqual(summary["state"], "not_started")
         self.assertEqual(summary["worker_state"], "blocked_missing_stream")
         self.assertFalse(summary["worker_can_run"])
-        self.assertIn("stream", summary["worker_blocked_reason"])
+        self.assertIn("channel", summary["worker_blocked_reason"])
 
     def test_build_worker_progress_message(self) -> None:
         progress_message = build_armada_worker_progress_message(
@@ -1622,7 +1626,7 @@ class ArmadaSessionDefaultsTest(TestCase):
             armada_session=payload,
             source="server",
             stream_exists=True,
-            messages=[(10, "@Pear fix the checkout test", False)],
+            messages=[(10, "@Onix fix the checkout test", False)],
         )
         seen_worker_states: list[str] = []
         seen_tasks: list[str] = []
@@ -1955,7 +1959,7 @@ class ArmadaSessionDefaultsTest(TestCase):
         )
         stop_liveness_loop.assert_called_once_with()
         runtime.abort.assert_called_once()
-        self.assertEqual(str(runtime.abort.call_args.args[0]), "Pear worker is shutting down.")
+        self.assertEqual(str(runtime.abort.call_args.args[0]), "The worker is shutting down.")
         close_runtimes.assert_called_once_with()
         super_stop.assert_called_once_with()
 
@@ -2102,12 +2106,12 @@ class ArmadaSessionDefaultsTest(TestCase):
             tool_results=[
                 {
                     "label": "Error",
-                    "value": "Pear worker agent runtime is disabled.",
+                    "value": "The agent runtime is disabled.",
                 },
             ],
         )
 
-        self.assertEqual(completed_message, "Pear worker agent runtime is disabled.")
+        self.assertEqual(completed_message, "The agent runtime is disabled.")
 
     def test_worker_completed_message_preserves_prose_without_duplicate_result(self) -> None:
         completed_message = build_armada_worker_completed_message(
@@ -2331,8 +2335,8 @@ class ArmadaSessionDefaultsTest(TestCase):
             source="server",
             stream_exists=True,
             messages=[
-                (10, "@Pear fix the checkout test", False),
-                (11, "@Pear Pause session:\n\nReason: waiting for CI", False),
+                (10, "@Onix fix the checkout test", False),
+                (11, "@Onix Pause session:\n\nReason: waiting for CI", False),
             ],
             is_paused=True,
         )
@@ -2355,7 +2359,7 @@ class ArmadaSessionDefaultsTest(TestCase):
         self.assertEqual(result["tool_count"], 0)
         self.assertFalse(tool_was_called)
         self.assertIsNotNone(result["content"])
-        self.assertIn("Pear worker is not starting.", result["content"])
+        self.assertIn("Onix is not starting.", result["content"])
         self.assertIn("paused", result["content"])
 
     def test_codex_prompt_includes_task_and_session_context(self) -> None:
@@ -2365,8 +2369,8 @@ class ArmadaSessionDefaultsTest(TestCase):
             source="server",
             stream_exists=True,
             messages=[
-                (10, "@Pear fix the checkout test", False, "plugyawn"),
-                (11, "Verification: pytest zerver/tests/test_armada.py", True, "Pear"),
+                (10, "@Onix fix the checkout test", False, "plugyawn"),
+                (11, "Verification: pytest zerver/tests/test_armada.py", True, "Onix"),
                 (13, "Memory: Prefer small focused PRs", False, "plugyawn"),
                 (14, "Routine: Watch PR status for armada/runtime", False, "plugyawn"),
                 (15, "Done: Tests pass and draft PR is posted", False, "plugyawn"),
@@ -2374,7 +2378,7 @@ class ArmadaSessionDefaultsTest(TestCase):
                 (17, "Memory forgotten: Run terminal tests first", False, "plugyawn"),
                 (
                     18,
-                    "@Pear Steering update:\n\nRequest: keep the patch small",
+                    "@Onix Steering update:\n\nRequest: keep the patch small",
                     False,
                     "plugyawn",
                 ),
@@ -2394,7 +2398,7 @@ class ArmadaSessionDefaultsTest(TestCase):
         self.assertIn("Task: fix the checkout test", prompt)
         self.assertIn(f"Zulip stream: {ARMADA_DEFAULT_STREAM}", prompt)
         self.assertIn(f"Zulip topic: {ARMADA_DEFAULT_TOPIC}", prompt)
-        self.assertIn("@Pear Steering update:", prompt)
+        self.assertIn("@Onix Steering update:", prompt)
         self.assertIn("Request: keep the patch small", prompt)
         self.assertIn("Workspace context:", prompt)
         self.assertIn("- repository: zulip/zulip", prompt)
@@ -2425,12 +2429,12 @@ class ArmadaSessionDefaultsTest(TestCase):
         )
         self.assertIn("Visible recent human participants:\n- plugyawn", prompt)
         self.assertIn("Recent Zulip topic transcript, oldest to newest:", prompt)
-        self.assertIn("#10 plugyawn (human): @Pear fix the checkout test", prompt)
+        self.assertIn("#10 plugyawn (human): @Onix fix the checkout test", prompt)
         self.assertIn(
-            "#11 Pear (bot): Verification: pytest zerver/tests/test_armada.py",
+            "#11 Onix (bot): Verification: pytest zerver/tests/test_armada.py",
             prompt,
         )
-        self.assertNotIn("Pear agent skill definitions:", prompt)
+        self.assertNotIn("Onix agent skill definitions:", prompt)
         self.assertNotIn("\nChannel memory:\n", prompt)
         self.assertNotIn("\nForgotten memory:\n", prompt)
         self.assertNotIn("\nDefinition of done:\n", prompt)
@@ -2458,14 +2462,14 @@ class ArmadaSessionDefaultsTest(TestCase):
             armada_session=payload,
             source="server",
             stream_exists=True,
-            messages=[(10, "@Pear fix checkout", False)],
+            messages=[(10, "@Onix fix checkout", False)],
         )
         active_session_b = build_armada_active_session_summary_from_messages(
             armada_session=payload,
             source="server",
             stream_exists=True,
             messages=[
-                (20, "@Pear remember this decision", False),
+                (20, "@Onix remember this decision", False),
                 (21, "Memory: Prefer small PRs", False),
                 (22, "Routine: Check the PR every weekday", False),
             ],
@@ -2474,11 +2478,11 @@ class ArmadaSessionDefaultsTest(TestCase):
         instructions = build_armada_codex_developer_instructions()
 
         self.assertEqual(instructions, build_armada_codex_developer_instructions())
-        self.assertNotIn("Memory: <channel-scoped note Pear should remember>", instructions)
+        self.assertNotIn("Memory: <channel-scoped note Onix should remember>", instructions)
         self.assertNotIn("Routine: <standing follow-up", instructions)
         self.assertNotIn("Repo: <repository path or remote>", instructions)
         self.assertNotIn("Include artifact lines", instructions)
-        self.assertIn("Pear never parses your wording into hidden state", instructions)
+        self.assertIn("Armada never parses your wording into hidden state", instructions)
         self.assertIn("README.md", instructions)
         self.assertNotIn(instructions, build_armada_codex_turn_prompt(active_session_a, "fix"))
         self.assertNotIn(instructions, build_armada_codex_turn_prompt(active_session_b, "fix"))
@@ -2597,7 +2601,7 @@ class ArmadaSessionDefaultsTest(TestCase):
             )
 
     def test_agent_text_results_preserve_final_prose_as_one_result(self) -> None:
-        final_text = "Verification: pytest zerver/tests/test_armada.py\nDiff: updated Pear runtime"
+        final_text = "Verification: pytest zerver/tests/test_armada.py\nDiff: updated Onix runtime"
         results = armada_worker_results_from_final_text(
             final_text,
             output_limit=200,
@@ -2674,7 +2678,7 @@ class ArmadaSessionDefaultsTest(TestCase):
             armada_session=payload,
             source="server",
             stream_exists=True,
-            messages=[(10, "@Pear fix the checkout test", False)],
+            messages=[(10, "@Onix fix the checkout test", False)],
         )
         calls = []
 
@@ -2724,7 +2728,7 @@ class ArmadaSessionDefaultsTest(TestCase):
 
         self.assertEqual(
             classifier(
-                content="hey armada, can you check this?",
+                content="hey onix, can you check this?",
                 active_session=active_session,
                 active_run=False,
                 message={
@@ -2757,8 +2761,8 @@ class ArmadaSessionDefaultsTest(TestCase):
         )
         self.assertIn("Do not answer the user.", request_payload["input"])
         self.assertIn("Recent topic messages", request_payload["input"])
-        self.assertIn("@Pear fix the checkout test", request_payload["input"])
-        self.assertIn("New message:\nhey armada, can you check this?", request_payload["input"])
+        self.assertIn("@Onix fix the checkout test", request_payload["input"])
+        self.assertIn("New message:\nhey onix, can you check this?", request_payload["input"])
         self.assertIn("Treat a repeated concrete request as intentional", request_payload["input"])
 
     def test_parse_armada_addressing_router_output_defaults_to_ignore(self) -> None:
@@ -2777,7 +2781,7 @@ class ArmadaSessionDefaultsTest(TestCase):
             armada_session=payload,
             source="server",
             stream_exists=True,
-            messages=[(10, "@Pear fix the checkout test", False)],
+            messages=[(10, "@Onix fix the checkout test", False)],
         )
         prompt = build_armada_addressing_router_prompt(
             content="hey agent, can you check?",
@@ -2825,7 +2829,7 @@ class ArmadaSessionDefaultsTest(TestCase):
             armada_session=payload,
             source="server",
             stream_exists=True,
-            messages=[(10, "@Pear fix the checkout test", False)],
+            messages=[(10, "@Onix fix the checkout test", False)],
         )
         calls = []
         processes = []
@@ -3004,7 +3008,7 @@ class ArmadaSessionDefaultsTest(TestCase):
             armada_session=payload,
             source="server",
             stream_exists=True,
-            messages=[(10, "@Pear fix the first topic", False)],
+            messages=[(10, "@Onix fix the first topic", False)],
         )
         second_session = build_armada_active_session_summary_from_messages(
             armada_session={
@@ -3014,7 +3018,7 @@ class ArmadaSessionDefaultsTest(TestCase):
             },
             source="server",
             stream_exists=True,
-            messages=[(20, "@Pear fix the second topic", False)],
+            messages=[(20, "@Onix fix the second topic", False)],
         )
         calls = []
         processes = []
@@ -3120,7 +3124,7 @@ class ArmadaSessionDefaultsTest(TestCase):
             armada_session=payload,
             source="server",
             stream_exists=True,
-            messages=[(10, "@Pear fix the checkout test", False)],
+            messages=[(10, "@Onix fix the checkout test", False)],
         )
 
         results = list(ArmadaDisabledAgentRunner("disabled by admin")(active_session, "fix"))
@@ -3134,7 +3138,7 @@ class ArmadaSessionDefaultsTest(TestCase):
 
     def test_embedded_bot_handler_replies_with_ack(self) -> None:
         sent_replies = self.run_embedded_bot_handler(
-            "@**Pear** debug the flaky parser test",
+            "@**Onix** debug the flaky parser test",
         )
 
         self.assertEqual(sent_replies[0], ARMADA_WORKING_MESSAGE)
@@ -3149,7 +3153,7 @@ class ArmadaSessionDefaultsTest(TestCase):
             source="server",
             stream_exists=True,
             messages=[
-                (10, "@Pear fix the checkout test", False),
+                (10, "@Onix fix the checkout test", False),
                 (11, "- [~] State the first concrete edit before changing files.", True),
                 (13, "Fold in the failing terminal UI test too.", False),
             ],
@@ -3253,7 +3257,7 @@ class ArmadaSessionDefaultsTest(TestCase):
             source="server",
             stream_exists=True,
             messages=[
-                (10, "@Pear fix the checkout test", False),
+                (10, "@Onix fix the checkout test", False),
             ],
             response_policy="ambient",
         )
@@ -3315,7 +3319,7 @@ class ArmadaSessionDefaultsTest(TestCase):
             source="server",
             stream_exists=True,
             messages=[
-                (10, "@Pear fix the checkout test", False),
+                (10, "@Onix fix the checkout test", False),
                 (11, "- [~] State the first concrete edit before changing files.", True),
             ],
         )
@@ -3399,7 +3403,7 @@ class ArmadaSessionDefaultsTest(TestCase):
             "display_recipient": ARMADA_DEFAULT_STREAM,
             "topic": ARMADA_DEFAULT_TOPIC,
             "sender_id": 9,
-            "content": "@Pear can i interrupt? You can stop",
+            "content": "@Onix can i interrupt? You can stop",
         }
 
         make_test_armada_handler(
@@ -3433,7 +3437,7 @@ class ArmadaSessionDefaultsTest(TestCase):
             source="server",
             stream_exists=True,
             messages=[
-                (100, "@Pear investigate the parser", False),
+                (100, "@Onix investigate the parser", False),
                 (101, "I am checking the parser now.", True),
             ],
             latest_codex_thread_id="root-thread",
@@ -3480,7 +3484,7 @@ class ArmadaSessionDefaultsTest(TestCase):
                 "display_recipient": ARMADA_DEFAULT_STREAM,
                 "topic": ARMADA_DEFAULT_TOPIC,
                 "sender_id": 9,
-                "content": "@Pear what does that finding mean?",
+                "content": "@Onix what does that finding mean?",
                 "thread_root_message_id": 101,
             },
             FakeBotHandler(),
@@ -3510,7 +3514,7 @@ class ArmadaSessionDefaultsTest(TestCase):
             armada_session=get_armada_session_payload(),
             source="server",
             stream_exists=True,
-            messages=[(102, "@Pear unrelated child question", False)],
+            messages=[(102, "@Onix unrelated child question", False)],
             latest_codex_thread_id=None,
             current_trigger_message_id=102,
         )
@@ -3558,7 +3562,7 @@ class ArmadaSessionDefaultsTest(TestCase):
                 "display_recipient": ARMADA_DEFAULT_STREAM,
                 "topic": ARMADA_DEFAULT_TOPIC,
                 "sender_id": 9,
-                "content": "@Pear unrelated child question",
+                "content": "@Onix unrelated child question",
                 "thread_root_message_id": 777,
             },
             FakeBotHandler(),
@@ -3617,7 +3621,7 @@ class ArmadaSessionDefaultsTest(TestCase):
                 "display_recipient": ARMADA_DEFAULT_STREAM,
                 "topic": ARMADA_DEFAULT_TOPIC,
                 "sender_id": 9,
-                "content": "@Pear recover this queued delivery",
+                "content": "@Onix recover this queued delivery",
             },
             FakeBotHandler(),
         )
@@ -3633,7 +3637,7 @@ class ArmadaSessionDefaultsTest(TestCase):
             source="server",
             stream_exists=True,
             messages=[
-                (10, "@Pear fix the checkout test", False),
+                (10, "@Onix fix the checkout test", False),
                 (11, ARMADA_WORKING_MESSAGE, True),
             ],
         )
@@ -3687,7 +3691,7 @@ class ArmadaSessionDefaultsTest(TestCase):
                 "display_recipient": ARMADA_DEFAULT_STREAM,
                 "topic": ARMADA_DEFAULT_TOPIC,
                 "sender_id": 9,
-                "content": "@Pear make it the 30th",
+                "content": "@Onix make it the 30th",
             },
             FakeBotHandler(),
         )
@@ -3704,7 +3708,7 @@ class ArmadaSessionDefaultsTest(TestCase):
             source="server",
             stream_exists=True,
             messages=[
-                (10, "@Pear fix the checkout test", False),
+                (10, "@Onix fix the checkout test", False),
                 (11, "- [~] State the first concrete edit before changing files.", True),
             ],
         )
@@ -3757,7 +3761,7 @@ class ArmadaSessionDefaultsTest(TestCase):
                 return {"id": 400 + len(sent_replies)}
 
         run_store = FakeRunStore()
-        content = "@Pear every weekday at 9am, check the linked PRs and post a one-line status"
+        content = "@Onix every weekday at 9am, check the linked PRs and post a one-line status"
         message = {
             "id": 204,
             "type": "stream",
@@ -3790,7 +3794,7 @@ class ArmadaSessionDefaultsTest(TestCase):
             source="server",
             stream_exists=True,
             messages=[
-                (10, "@Pear fix the checkout test", False),
+                (10, "@Onix fix the checkout test", False),
                 (11, "- [~] State the first concrete edit before changing files.", True),
             ],
             response_policy="mentions_only",
@@ -3868,7 +3872,7 @@ class ArmadaSessionDefaultsTest(TestCase):
         self.assertEqual(sent_replies, [])
 
         message["id"] = 205
-        message["content"] = "@Pear continue with the terminal UI test"
+        message["content"] = "@Onix continue with the terminal UI test"
         handler.handle_message(message, FakeBotHandler())
 
         self.assertEqual(run_store.starts, [205])
@@ -3883,7 +3887,7 @@ class ArmadaSessionDefaultsTest(TestCase):
             source="server",
             stream_exists=True,
             messages=[
-                (10, "@Pear fix the checkout test", False),
+                (10, "@Onix fix the checkout test", False),
                 (11, "- [~] State the first concrete edit before changing files.", True),
             ],
             response_policy="mentions_only",
@@ -3967,7 +3971,7 @@ class ArmadaSessionDefaultsTest(TestCase):
             source="server",
             stream_exists=True,
             messages=[
-                (10, "@Pear fix the checkout test", False),
+                (10, "@Onix fix the checkout test", False),
                 (11, "- [~] State the first concrete edit before changing files.", True),
             ],
         )
@@ -4049,7 +4053,7 @@ class ArmadaSessionDefaultsTest(TestCase):
             source="server",
             stream_exists=True,
             messages=[
-                (10, "@Pear fix the checkout test", False),
+                (10, "@Onix fix the checkout test", False),
             ],
             response_policy="ambient",
         )
@@ -4152,7 +4156,7 @@ class ArmadaSessionDefaultsTest(TestCase):
             source="server",
             stream_exists=True,
             messages=[
-                (10, "@Pear fix the checkout test", False),
+                (10, "@Onix fix the checkout test", False),
             ],
             latest_codex_thread_id="thread-existing",
             response_policy="ambient",
@@ -4240,7 +4244,7 @@ class ArmadaSessionDefaultsTest(TestCase):
             armada_session=get_armada_session_payload(),
             source="server",
             stream_exists=True,
-            messages=[(10, "@Pear fix the checkout test", False)],
+            messages=[(10, "@Onix fix the checkout test", False)],
             response_policy="ambient",
         )
         sent_replies: list[str] = []
@@ -4271,7 +4275,7 @@ class ArmadaSessionDefaultsTest(TestCase):
             handler.handle_message(message, FakeBotHandler())
 
         self.assertEqual(len(sent_replies), 1)
-        self.assertIn("@Pear", sent_replies[0])
+        self.assertIn("@Onix", sent_replies[0])
 
     def test_embedded_bot_worker_dispatches_armada_to_dedicated_queue(self) -> None:
         user_profile = SimpleNamespace(id=99)
@@ -4330,7 +4334,7 @@ class ArmadaSessionDefaultsTest(TestCase):
             source="server",
             stream_exists=True,
             messages=[
-                (10, "@Pear fix the checkout test", False),
+                (10, "@Onix fix the checkout test", False),
                 (11, "- [~] State the first concrete edit before changing files.", True),
             ],
         )
@@ -4437,7 +4441,7 @@ class ArmadaSessionDefaultsTest(TestCase):
             source="server",
             stream_exists=True,
             messages=[
-                (10, "@Pear fix the checkout test", False),
+                (10, "@Onix fix the checkout test", False),
                 (11, "- [~] State the first concrete edit before changing files.", True),
             ],
             is_paused=True,
@@ -4459,7 +4463,7 @@ class ArmadaSessionDefaultsTest(TestCase):
             "type": "stream",
             "display_recipient": ARMADA_DEFAULT_STREAM,
             "topic": ARMADA_DEFAULT_TOPIC,
-            "content": "@Pear resume after deploy",
+            "content": "@Onix resume after deploy",
         }
 
         make_test_armada_handler(active_session_loader=active_session_loader).handle_message(
@@ -4469,7 +4473,7 @@ class ArmadaSessionDefaultsTest(TestCase):
 
         self.assertEqual(loaded_messages, [message, message])
         self.assertEqual(len(sent_replies), 2)
-        self.assertIn("Pear worker is not starting.", sent_replies[1])
+        self.assertIn("Onix is not starting.", sent_replies[1])
         self.assertIn("paused", sent_replies[1])
 
     def test_embedded_bot_suppresses_duplicate_worker_post(self) -> None:
@@ -4492,7 +4496,7 @@ class ArmadaSessionDefaultsTest(TestCase):
             "type": "stream",
             "display_recipient": ARMADA_DEFAULT_STREAM,
             "topic": ARMADA_DEFAULT_TOPIC,
-            "content": "@Pear fix the checkout test",
+            "content": "@Onix fix the checkout test",
         }
 
         run_store = FakeArmadaWorkerRunStore()
@@ -4510,7 +4514,7 @@ class ArmadaSessionDefaultsTest(TestCase):
         )
         self.assertEqual(
             sent_replies[1],
-            "Pear worker is not starting.\n\n"
+            "Onix is not starting.\n\n"
             "Reason: This request was already handled or is no longer claimable.",
         )
         self.assertEqual(run_store.runs[201]["status"], "done")
@@ -4577,7 +4581,7 @@ class ArmadaSessionDefaultsTest(TestCase):
             "type": "stream",
             "display_recipient": ARMADA_DEFAULT_STREAM,
             "topic": ARMADA_DEFAULT_TOPIC,
-            "content": "@Pear fix the checkout test",
+            "content": "@Onix fix the checkout test",
         }
 
         make_test_armada_handler(worker_run_store=run_store).handle_message(
@@ -4644,7 +4648,7 @@ class ArmadaSessionDefaultsTest(TestCase):
             "type": "stream",
             "display_recipient": ARMADA_DEFAULT_STREAM,
             "topic": ARMADA_DEFAULT_TOPIC,
-            "content": "@Pear fix the checkout test",
+            "content": "@Onix fix the checkout test",
         }
 
         make_test_armada_handler(
@@ -4658,7 +4662,7 @@ class ArmadaSessionDefaultsTest(TestCase):
         self.assertEqual(
             sent_replies,
             [
-                "Pear worker is not starting.\n\n"
+                "Onix is not starting.\n\n"
                 "Reason: This request was already handled or is no longer claimable."
             ],
         )
@@ -4679,7 +4683,7 @@ class ArmadaSessionDefaultsTest(TestCase):
             ) -> str:
                 self.stream = stream
                 self.topic = topic
-                return "Pear Codex runs currently require a channel topic."
+                return "Codex runs currently require a channel topic."
 
             def start(self, *args: object, **kwargs: object) -> bool:
                 raise AssertionError("a blocked direct message must not start a run")
@@ -4702,7 +4706,7 @@ class ArmadaSessionDefaultsTest(TestCase):
                 "type": "private",
                 "display_recipient": [],
                 "sender_id": 7,
-                "content": "@Pear fix the checkout test",
+                "content": "@Onix fix the checkout test",
             },
             FakeBotHandler(),
         )
@@ -4757,7 +4761,7 @@ class ArmadaSessionDefaultsTest(TestCase):
             "id": 205,
             "type": "private",
             "display_recipient": [],
-            "content": "@Pear fix the checkout test",
+            "content": "@Onix fix the checkout test",
         }
         bot_handler = SimpleNamespace(user_profile=SimpleNamespace(id=17))
 
@@ -4796,7 +4800,7 @@ class ArmadaSessionDefaultsTest(TestCase):
                 SimpleNamespace(),
                 bot_handler,
                 message,
-                content="@Pear what's up, bot?",
+                content="@Onix what's up, bot?",
                 active_session=None,
                 message_id=205,
                 stream=ARMADA_DEFAULT_STREAM,
@@ -4805,8 +4809,8 @@ class ArmadaSessionDefaultsTest(TestCase):
             )
 
         _queue_name, event = publish.call_args.args
-        self.assertEqual(event["content"], "@Pear what's up, bot?")
-        self.assertEqual(event["message"]["content"], "@Pear what's up, bot?")
+        self.assertEqual(event["content"], "@Onix what's up, bot?")
+        self.assertEqual(event["message"]["content"], "@Onix what's up, bot?")
         self.assertEqual(message["content"], "what's up, bot?")
 
     def test_queue_worker_dispatcher_enqueues_background_warm(self) -> None:
@@ -4878,12 +4882,12 @@ class ArmadaSessionDefaultsTest(TestCase):
         event = {
             "user_profile_id": 17,
             "message_id": 205,
-            "content": "@Pear run this privately",
+            "content": "@Onix run this privately",
             "message": {
                 "id": 205,
                 "type": "private",
                 "display_recipient": [],
-                "content": "@Pear run this privately",
+                "content": "@Onix run this privately",
             },
         }
 
@@ -4995,7 +4999,7 @@ class ArmadaSessionDefaultsTest(TestCase):
             armada_session=payload,
             source="server",
             stream_exists=True,
-            messages=[(10, "@Pear fix the checkout test", False)],
+            messages=[(10, "@Onix fix the checkout test", False)],
         )
         run_store = FakeRunStore()
         message = {
@@ -5003,7 +5007,7 @@ class ArmadaSessionDefaultsTest(TestCase):
             "type": "stream",
             "display_recipient": ARMADA_DEFAULT_STREAM,
             "topic": ARMADA_DEFAULT_TOPIC,
-            "content": "@Pear fix the checkout test",
+            "content": "@Onix fix the checkout test",
         }
 
         make_test_armada_handler(
@@ -5012,7 +5016,7 @@ class ArmadaSessionDefaultsTest(TestCase):
         ).run_worker_turn(
             message,
             FakeBotHandler(),
-            content="@Pear fix the checkout test",
+            content="@Onix fix the checkout test",
             active_session=active_session,
             message_id=205,
             stream=ARMADA_DEFAULT_STREAM,
@@ -5075,7 +5079,7 @@ class ArmadaSessionDefaultsTest(TestCase):
             "subject": ARMADA_DEFAULT_TOPIC,
             "sender_id": 21,
             "sender_full_name": "plugyawn",
-            "content": "@**Pear** run the typing check",
+            "content": "@**Onix** run the typing check",
         }
         handler = make_test_armada_handler(
             worker_runtime=ArmadaWorkerRuntime(tool_runner),
@@ -5099,7 +5103,7 @@ class ArmadaSessionDefaultsTest(TestCase):
                 post_started_progress=True,
             )
 
-        # The run brackets the topic-level "Pear is working" dots: one
+        # The run brackets the topic-level "Onix is working" dots: one
         # start when the runtime begins, one stop when the turn settles.
         self.assertEqual(typing_signals[0], "start")
         self.assertEqual(typing_signals[-1], "stop")
@@ -5186,7 +5190,7 @@ class ArmadaSessionDefaultsTest(TestCase):
             armada_session=payload,
             source="server",
             stream_exists=True,
-            messages=[(10, "@Pear run quietly", False)],
+            messages=[(10, "@Onix run quietly", False)],
         )
         trigger_message_id = 9207
         message = {
@@ -5194,7 +5198,7 @@ class ArmadaSessionDefaultsTest(TestCase):
             "type": "stream",
             "display_recipient": ARMADA_DEFAULT_STREAM,
             "topic": ARMADA_DEFAULT_TOPIC,
-            "content": "@Pear run quietly",
+            "content": "@Onix run quietly",
         }
 
         make_test_armada_handler(
@@ -5203,7 +5207,7 @@ class ArmadaSessionDefaultsTest(TestCase):
         ).run_worker_turn(
             message,
             FakeBotHandler(),
-            content="@Pear run quietly",
+            content="@Onix run quietly",
             active_session=active_session,
             message_id=trigger_message_id,
             stream=ARMADA_DEFAULT_STREAM,
@@ -5306,7 +5310,7 @@ class ArmadaSessionDefaultsTest(TestCase):
             armada_session=payload,
             source="server",
             stream_exists=True,
-            messages=[(10, "@Pear run quietly", False)],
+            messages=[(10, "@Onix run quietly", False)],
         )
         trigger_message_id = 9208
         message = {
@@ -5314,7 +5318,7 @@ class ArmadaSessionDefaultsTest(TestCase):
             "type": "stream",
             "display_recipient": ARMADA_DEFAULT_STREAM,
             "topic": ARMADA_DEFAULT_TOPIC,
-            "content": "@Pear run quietly",
+            "content": "@Onix run quietly",
         }
 
         make_test_armada_handler(
@@ -5323,7 +5327,7 @@ class ArmadaSessionDefaultsTest(TestCase):
         ).run_worker_turn(
             message,
             FakeBotHandler(),
-            content="@Pear run quietly",
+            content="@Onix run quietly",
             active_session=active_session,
             message_id=trigger_message_id,
             stream=ARMADA_DEFAULT_STREAM,
@@ -5379,14 +5383,14 @@ class ArmadaSessionDefaultsTest(TestCase):
             armada_session=payload,
             source="server",
             stream_exists=True,
-            messages=[(10, "@Pear summarize the links", False)],
+            messages=[(10, "@Onix summarize the links", False)],
         )
         message = {
             "id": 206,
             "type": "stream",
             "display_recipient": ARMADA_DEFAULT_STREAM,
             "topic": ARMADA_DEFAULT_TOPIC,
-            "content": "@Pear summarize the links",
+            "content": "@Onix summarize the links",
         }
 
         make_test_armada_handler(
@@ -5395,7 +5399,7 @@ class ArmadaSessionDefaultsTest(TestCase):
         ).run_worker_turn(
             message,
             FakeBotHandler(),
-            content="@Pear summarize the links",
+            content="@Onix summarize the links",
             active_session=active_session,
             message_id=206,
             stream=ARMADA_DEFAULT_STREAM,
@@ -5506,7 +5510,7 @@ class ArmadaSessionDefaultsTest(TestCase):
             armada_session=payload,
             source="server",
             stream_exists=True,
-            messages=[(10, "@Pear write two letters", False)],
+            messages=[(10, "@Onix write two letters", False)],
         )
         trigger_message_id = 9206
         message = {
@@ -5514,7 +5518,7 @@ class ArmadaSessionDefaultsTest(TestCase):
             "type": "stream",
             "display_recipient": ARMADA_DEFAULT_STREAM,
             "topic": ARMADA_DEFAULT_TOPIC,
-            "content": "@Pear write two letters",
+            "content": "@Onix write two letters",
         }
 
         make_test_armada_handler(
@@ -5523,7 +5527,7 @@ class ArmadaSessionDefaultsTest(TestCase):
         ).run_worker_turn(
             message,
             FakeBotHandler(),
-            content="@Pear write two letters",
+            content="@Onix write two letters",
             active_session=active_session,
             message_id=trigger_message_id,
             stream=ARMADA_DEFAULT_STREAM,
@@ -5629,14 +5633,14 @@ class ArmadaSessionDefaultsTest(TestCase):
             armada_session=payload,
             source="server",
             stream_exists=True,
-            messages=[(10, "@Pear run a script", False)],
+            messages=[(10, "@Onix run a script", False)],
         )
         message = {
             "id": 9207,
             "type": "stream",
             "display_recipient": ARMADA_DEFAULT_STREAM,
             "topic": ARMADA_DEFAULT_TOPIC,
-            "content": "@Pear run a script",
+            "content": "@Onix run a script",
         }
 
         make_test_armada_handler(
@@ -5645,7 +5649,7 @@ class ArmadaSessionDefaultsTest(TestCase):
         ).run_worker_turn(
             message,
             FakeBotHandler(),
-            content="@Pear run a script",
+            content="@Onix run a script",
             active_session=active_session,
             message_id=9207,
             stream=ARMADA_DEFAULT_STREAM,
@@ -5713,14 +5717,14 @@ class ArmadaSessionDefaultsTest(TestCase):
             armada_session=get_armada_session_payload(),
             source="server",
             stream_exists=True,
-            messages=[(10, "@Pear finish the fenced turn", False)],
+            messages=[(10, "@Onix finish the fenced turn", False)],
         )
         message = {
             "id": 9208,
             "type": "stream",
             "display_recipient": ARMADA_DEFAULT_STREAM,
             "topic": ARMADA_DEFAULT_TOPIC,
-            "content": "@Pear finish the fenced turn",
+            "content": "@Onix finish the fenced turn",
         }
         tool_runner = CloseableToolRunner()
 
@@ -5730,7 +5734,7 @@ class ArmadaSessionDefaultsTest(TestCase):
         ).run_worker_turn(
             message,
             FakeBotHandler(),
-            content="@Pear finish the fenced turn",
+            content="@Onix finish the fenced turn",
             active_session=active_session,
             message_id=9208,
             stream=ARMADA_DEFAULT_STREAM,
@@ -5831,7 +5835,7 @@ class ArmadaSessionDefaultsTest(TestCase):
             armada_session=payload,
             source="server",
             stream_exists=True,
-            messages=[(10, "@Pear run a script", False)],
+            messages=[(10, "@Onix run a script", False)],
         )
         trigger_message_id = 9210
         message = {
@@ -5839,7 +5843,7 @@ class ArmadaSessionDefaultsTest(TestCase):
             "type": "stream",
             "display_recipient": ARMADA_DEFAULT_STREAM,
             "topic": ARMADA_DEFAULT_TOPIC,
-            "content": "@Pear run a script",
+            "content": "@Onix run a script",
         }
         run_store = FakeRunStore()
         tool_runner = InterruptibleToolRunner()
@@ -5850,7 +5854,7 @@ class ArmadaSessionDefaultsTest(TestCase):
         ).run_worker_turn(
             message,
             FakeBotHandler(),
-            content="@Pear run a script",
+            content="@Onix run a script",
             active_session=active_session,
             message_id=trigger_message_id,
             stream=ARMADA_DEFAULT_STREAM,
@@ -5871,7 +5875,7 @@ class ArmadaSessionDefaultsTest(TestCase):
         )
         self.assertEqual(updated_messages[-1]["message_id"], 502)
         self.assertIs(updated_messages[-1]["rendering_only"], True)
-        self.assertIn("Pear worker cancelled.", str(updated_messages[-1]["content"]))
+        self.assertIn("Stopped.", str(updated_messages[-1]["content"]))
         live_state = get_armada_live_run_state(trigger_message_id)
         self.assertIsNotNone(live_state)
         assert live_state is not None
@@ -5936,7 +5940,7 @@ class ArmadaSessionDefaultsTest(TestCase):
             "type": "stream",
             "display_recipient": ARMADA_DEFAULT_STREAM,
             "topic": ARMADA_DEFAULT_TOPIC,
-            "content": "@Pear run a script",
+            "content": "@Onix run a script",
         }
 
         make_test_armada_handler(
@@ -5946,7 +5950,7 @@ class ArmadaSessionDefaultsTest(TestCase):
         ).run_worker_turn(
             message,
             FakeBotHandler(),
-            content="@Pear run a script",
+            content="@Onix run a script",
             active_session=None,
             message_id=9211,
             stream=ARMADA_DEFAULT_STREAM,
@@ -5956,12 +5960,12 @@ class ArmadaSessionDefaultsTest(TestCase):
 
         self.assertEqual(
             recorded_statuses,
-            [("failed", 801, "Pear active session loader failed.")],
+            [("failed", 801, "Active session loader failed.")],
         )
         self.assertEqual(recorded_events, [])
         self.assertEqual(len(sent_replies), 1)
-        self.assertIn("Pear worker failed.", sent_replies[0])
-        self.assertIn("Pear active session loader failed.", sent_replies[0])
+        self.assertIn("Onix failed.", sent_replies[0])
+        self.assertIn("Active session loader failed.", sent_replies[0])
         live_state = get_armada_live_run_state(9211)
         self.assertIsNotNone(live_state)
         assert live_state is not None
@@ -6018,7 +6022,7 @@ class ArmadaSessionDefaultsTest(TestCase):
             source="server",
             stream_exists=True,
             messages=[
-                (135, "@Pear set up work in Megatron-LM git", False, "plugyawn"),
+                (135, "@Onix set up work in Megatron-LM git", False, "plugyawn"),
                 (
                     138,
                     "hello armada. what is the difference between load factor and occupancy?",
@@ -6193,14 +6197,14 @@ class ArmadaSessionDefaultsTest(TestCase):
             armada_session=payload,
             source="server",
             stream_exists=True,
-            messages=[(10, "@Pear fix the checkout test", False)],
+            messages=[(10, "@Onix fix the checkout test", False)],
         )
         message = {
             "id": 205,
             "type": "stream",
             "display_recipient": ARMADA_DEFAULT_STREAM,
             "topic": ARMADA_DEFAULT_TOPIC,
-            "content": "@Pear fix the checkout test",
+            "content": "@Onix fix the checkout test",
         }
 
         with patch(
@@ -6212,7 +6216,7 @@ class ArmadaSessionDefaultsTest(TestCase):
             ).run_worker_turn(
                 message,
                 FakeBotHandler(),
-                content="@Pear fix the checkout test",
+                content="@Onix fix the checkout test",
                 active_session=active_session,
                 message_id=205,
                 stream=ARMADA_DEFAULT_STREAM,
@@ -6286,7 +6290,7 @@ class ArmadaSessionDefaultsTest(TestCase):
             "type": "stream",
             "display_recipient": ARMADA_DEFAULT_STREAM,
             "topic": ARMADA_DEFAULT_TOPIC,
-            "content": "@Pear fix the checkout test",
+            "content": "@Onix fix the checkout test",
         }
 
         make_test_armada_handler(worker_run_store=DuplicateRunStore()).handle_message(
@@ -6297,7 +6301,7 @@ class ArmadaSessionDefaultsTest(TestCase):
         self.assertEqual(len(sent_replies), 1)
         self.assertEqual(
             sent_replies[0],
-            "Pear worker is not starting.\n\n"
+            "Onix is not starting.\n\n"
             "Reason: This request was already handled or is no longer claimable.",
         )
 
@@ -6317,7 +6321,7 @@ class ArmadaSessionDefaultsTest(TestCase):
             "type": "stream",
             "display_recipient": ARMADA_DEFAULT_STREAM,
             "topic": ARMADA_DEFAULT_TOPIC,
-            "content": "@Pear fix the checkout test",
+            "content": "@Onix fix the checkout test",
         }
 
         run_store = FakeArmadaWorkerRunStore()
@@ -6331,12 +6335,12 @@ class ArmadaSessionDefaultsTest(TestCase):
             )
 
         self.assertEqual(len(sent_replies), 2)
-        self.assertEqual(sent_replies[1], "Pear worker failed.\n\nError: codex adapter failed")
+        self.assertEqual(sent_replies[1], "Onix failed.\n\nError: codex adapter failed")
         self.assertEqual(run_store.runs[202]["status"], "failed")
         self.assertEqual(run_store.runs[202]["error"], "codex adapter failed")
         self.assertEqual(
             logs.records[0].getMessage(),
-            "Pear worker failed for request message 202.",
+            "Agent run failed for request message 202.",
         )
         self.assertIsNotNone(logs.records[0].exc_info)
 
@@ -6810,7 +6814,7 @@ class ArmadaAppServerProtocolCitizenTest(TestCase):
             armada_session=get_armada_session_payload(),
             source="server",
             stream_exists=True,
-            messages=[(12, "@Pear continue", False)],
+            messages=[(12, "@Onix continue", False)],
             latest_codex_thread_id="root-1",
             latest_codex_trigger_message_id=11,
             current_trigger_message_id=12,
@@ -6871,7 +6875,7 @@ class ArmadaAppServerProtocolCitizenTest(TestCase):
             armada_session=get_armada_session_payload(),
             source="server",
             stream_exists=True,
-            messages=[(12, "@Pear answer directly", False)],
+            messages=[(12, "@Onix answer directly", False)],
             latest_codex_thread_id="root-1",
             latest_codex_trigger_message_id=11,
             current_trigger_message_id=12,
@@ -6897,7 +6901,7 @@ class ArmadaAppServerProtocolCitizenTest(TestCase):
             armada_session=get_armada_session_payload(),
             source="server",
             stream_exists=True,
-            messages=[(12, "@Pear explain that", False)],
+            messages=[(12, "@Onix explain that", False)],
             latest_codex_thread_id="root-1",
             latest_codex_trigger_message_id=11,
             current_trigger_message_id=12,
@@ -6958,7 +6962,7 @@ class ArmadaAppServerProtocolCitizenTest(TestCase):
             armada_session=get_armada_session_payload(),
             source="server",
             stream_exists=True,
-            messages=[(12, "@Pear explain that", False)],
+            messages=[(12, "@Onix explain that", False)],
             latest_codex_thread_id="root-1",
             latest_codex_trigger_message_id=11,
             current_trigger_message_id=12,
@@ -7017,7 +7021,7 @@ class ArmadaAppServerProtocolCitizenTest(TestCase):
             armada_session=get_armada_session_payload(),
             source="server",
             stream_exists=True,
-            messages=[(12, "@Pear explain that", False)],
+            messages=[(12, "@Onix explain that", False)],
             latest_codex_thread_id="root-1",
             latest_codex_trigger_message_id=11,
             current_trigger_message_id=12,
@@ -7073,7 +7077,7 @@ class ArmadaAppServerProtocolCitizenTest(TestCase):
             armada_session=get_armada_session_payload(),
             source="server",
             stream_exists=True,
-            messages=[(12, "@Pear new side question", False)],
+            messages=[(12, "@Onix new side question", False)],
             latest_codex_thread_id="main-1",
             latest_codex_trigger_message_id=11,
             current_trigger_message_id=12,
@@ -7121,7 +7125,7 @@ class ArmadaAppServerProtocolCitizenTest(TestCase):
             armada_session=get_armada_session_payload(),
             source="server",
             stream_exists=True,
-            messages=[(12, "@Pear /btw explain that", False)],
+            messages=[(12, "@Onix /btw explain that", False)],
             current_trigger_message_id=12,
         )
         requests: list[tuple[str, dict[str, Any]]] = []
@@ -7170,7 +7174,7 @@ class ArmadaAppServerProtocolCitizenTest(TestCase):
             armada_session=get_armada_session_payload(),
             source="server",
             stream_exists=True,
-            messages=[(12, "@Pear /btw explain that", False)],
+            messages=[(12, "@Onix /btw explain that", False)],
             current_trigger_message_id=12,
             latest_codex_thread_id="root-live",
             latest_codex_trigger_message_id=11,
@@ -7422,7 +7426,7 @@ class ArmadaAppServerProtocolCitizenTest(TestCase):
             armada_session=get_armada_session_payload(),
             source="server",
             stream_exists=True,
-            messages=[(12, "@Pear explain that", False)],
+            messages=[(12, "@Onix explain that", False)],
             latest_codex_thread_id="root-1",
             latest_codex_trigger_message_id=11,
             current_trigger_message_id=12,
@@ -7461,7 +7465,7 @@ class ArmadaAppServerProtocolCitizenTest(TestCase):
             armada_session=get_armada_session_payload(),
             source="server",
             stream_exists=True,
-            messages=[(12, "@Pear start", False)],
+            messages=[(12, "@Onix start", False)],
         )
         events: list[dict[str, object]] = []
         with patch.object(
@@ -7490,7 +7494,7 @@ class ArmadaAppServerProtocolCitizenTest(TestCase):
             armada_session=get_armada_session_payload(),
             source="server",
             stream_exists=True,
-            messages=[(12, "@Pear delegate", False)],
+            messages=[(12, "@Onix delegate", False)],
             latest_codex_thread_id="root-1",
             latest_codex_trigger_message_id=11,
             current_trigger_message_id=12,
@@ -7533,7 +7537,7 @@ class ArmadaAppServerProtocolCitizenTest(TestCase):
             armada_session=get_armada_session_payload(),
             source="server",
             stream_exists=True,
-            messages=[(12, "@Pear answer", False)],
+            messages=[(12, "@Onix answer", False)],
             latest_codex_thread_id="root-1",
             latest_codex_trigger_message_id=11,
             current_trigger_message_id=12,

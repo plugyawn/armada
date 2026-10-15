@@ -8,7 +8,7 @@
 # Each row maps one of populate_db's canonical dev users onto a demo
 # identity: (populate_db email, full name, new email, role, is_staff).
 # Exactly one row must carry UserProfile.ROLE_REALM_OWNER; the reset
-# script uses it to run the Pear config bootstrap.
+# script uses it to run the Armada config bootstrap.
 users = [
     ("desdemona@zulip.com", "demo-owner", "demo-owner@example.com", UserProfile.ROLE_REALM_OWNER, False),
     ("iago@zulip.com", "demo-admin", "demo-admin@example.com", UserProfile.ROLE_REALM_ADMINISTRATOR, True),

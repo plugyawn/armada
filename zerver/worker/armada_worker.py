@@ -72,7 +72,7 @@ def close_armada_worker_runtime(runtime: ArmadaWorkerRuntime) -> None:
     try:
         runtime.close()
     except Exception:
-        logger.exception("Failed to close Pear worker runtime.")
+        logger.exception("Failed to close the agent runtime.")
 
 
 def close_armada_worker_runtimes() -> None:
@@ -183,7 +183,7 @@ class ArmadaWorker(QueueProcessingWorker):
         if self.POOL_QUEUE_NAMES:
             worker_slot = self.worker_num if self.worker_num is not None else 0
             if worker_slot < 0 or worker_slot >= len(self.POOL_QUEUE_NAMES):
-                raise ValueError(f"invalid Pear worker slot: {worker_slot}")
+                raise ValueError(f"invalid worker slot: {worker_slot}")
             self.worker_slot = worker_slot
         super().setup()
         # The two worker slots share ownership.  Startup therefore obeys the
@@ -244,7 +244,7 @@ class ArmadaWorker(QueueProcessingWorker):
             if self.active_side_run_id == side_run_id:
                 self.active_side_run_id = None
                 self.active_side_run_attempt = None
-            logger.warning("Pear side-run lease was lost: %s", error)
+            logger.warning("Side-run lease was lost: %s", error)
         return reaped_count + reap_stale_armada_worker_runs(session_kinds=self.OWNED_SESSION_KINDS)
 
     def run_liveness_loop(self) -> None:  # nocoverage
@@ -257,11 +257,9 @@ class ArmadaWorker(QueueProcessingWorker):
                     runtime = self.active_runtime
                     if runtime is not None:
                         runtime.abort(error)
-                    logger.warning(
-                        "Pear worker lease was lost; aborting its Codex runtime: %s", error
-                    )
+                    logger.warning("Worker lease was lost; aborting its Codex runtime: %s", error)
                 except Exception:
-                    logger.exception("Pear run liveness pass failed.")
+                    logger.exception("Run liveness pass failed.")
                 finally:
                     reset_queries()
                     close_old_connections()
@@ -274,7 +272,7 @@ class ArmadaWorker(QueueProcessingWorker):
         self.run_liveness_stop.set()
         self.run_liveness_thread.join(timeout=ARMADA_WORKER_HEARTBEAT_INTERVAL_SECONDS)
         if self.run_liveness_thread.is_alive():
-            logger.warning("Pear run liveness thread did not stop before worker shutdown.")
+            logger.warning("Run liveness thread did not stop before worker shutdown.")
 
     def stop_side_pump(self, *, wait: bool, timeout: float | None = None) -> None:
         stop = getattr(self, "side_pump_stop", None)
@@ -284,7 +282,7 @@ class ArmadaWorker(QueueProcessingWorker):
         if wait and thread is not None and thread is not threading.current_thread():
             thread.join(timeout=timeout)
             if timeout is not None and thread.is_alive():
-                logger.warning("Pear side-turn pump did not stop before worker shutdown.")
+                logger.warning("Side-turn pump did not stop before worker shutdown.")
         if thread is None or not thread.is_alive():
             self.side_pump_stop = None
             self.side_pump_thread = None
@@ -300,7 +298,7 @@ class ArmadaWorker(QueueProcessingWorker):
                 # so closing the warm-runtime cache alone is not a complete
                 # shutdown. Abort wakes both the parent and any native /btw
                 # fork without waiting for either turn lock.
-                runtime.abort(RuntimeError("Pear worker is shutting down."))
+                runtime.abort(RuntimeError("The worker is shutting down."))
         finally:
             try:
                 close_armada_worker_runtimes()
@@ -340,23 +338,23 @@ class ArmadaWorker(QueueProcessingWorker):
             or isinstance(user_profile_id, bool)
             or user_profile_id <= 0
         ):
-            raise QueueEventDiscardError("Pear worker event has no valid bot user id.")
+            raise QueueEventDiscardError("Worker event has no valid bot user id.")
         try:
             user_profile = get_user_profile_by_id(user_profile_id)
         except UserProfile.DoesNotExist as error:
             raise QueueEventDiscardError(
-                f"Pear worker event references deleted bot user {user_profile_id}."
+                f"Worker event references deleted bot user {user_profile_id}."
             ) from error
         bot_handler = EmbeddedBotHandler(user_profile)
         message = event.get("message")
         if not isinstance(message, dict):
-            raise QueueEventDiscardError("Pear worker event has no message object.")
+            raise QueueEventDiscardError("Worker event has no message object.")
         content = str(event.get("content", "")).strip()
         message_id = event.get("message_id")
         if not isinstance(message_id, int):
             message_id = armada_message_id(message)
         if message_id <= 0:
-            raise QueueEventDiscardError("Pear worker event has no valid trigger message id.")
+            raise QueueEventDiscardError("Worker event has no valid trigger message id.")
         stream = str(event.get("stream") or armada_message_stream(message))
         topic = str(event.get("topic") or armada_message_topic(message))
         requesting_user_id = event.get("requesting_user_id")
@@ -365,7 +363,7 @@ class ArmadaWorker(QueueProcessingWorker):
         session_kind = str(event.get("session_kind") or "shared")
         if session_kind not in self.OWNED_SESSION_KINDS:
             raise QueueEventDiscardError(
-                f"Pear worker queue cannot consume session kind {session_kind!r}."
+                f"Worker queue cannot consume session kind {session_kind!r}."
             )
         source_stream = str(event.get("source_stream") or "")
         source_topic = str(event.get("source_topic") or "")
@@ -378,7 +376,7 @@ class ArmadaWorker(QueueProcessingWorker):
         context_stream = stream or source_stream
         context_topic = topic or source_topic
         if not context_stream:
-            raise QueueEventDiscardError("Pear worker event has no channel context.")
+            raise QueueEventDiscardError("Worker event has no channel context.")
         if session_kind == AgentRun.SIDE and side_runtime is None:
             # Never let an orphaned shared lease suppress this delivery. If
             # the parent really is live, its in-process pump owns the durable
@@ -449,7 +447,7 @@ class ArmadaWorker(QueueProcessingWorker):
                 runtime.warm(active_session)
             except Exception:
                 logger.warning(
-                    "Failed to warm Pear Codex thread for %s > %s.",
+                    "Failed to warm the Codex thread for %s > %s.",
                     context_stream,
                     context_topic,
                     exc_info=True,
@@ -567,7 +565,7 @@ class ArmadaWorker(QueueProcessingWorker):
                         ),
                     )
                 except Exception:
-                    logger.exception("Pear monitor setup application failed.")
+                    logger.exception("Monitor setup application failed.")
 
         try:
             if session_kind == AgentRun.SHARED and side_runtime is None:
@@ -611,9 +609,9 @@ class ArmadaWorker(QueueProcessingWorker):
     def side_event_for_run(self, run: AgentRun) -> dict[str, Any] | None:
         message = Message.objects.filter(id=run.trigger_message_id).first()
         if message is None:
-            error = f"Pear side run trigger message {run.trigger_message_id} no longer exists."
+            error = f"Side run trigger message {run.trigger_message_id} no longer exists."
             logger.warning(
-                "Pear side run %s references missing trigger message %s; settling it.",
+                "Side run %s references missing trigger message %s; settling it.",
                 run.id,
                 run.trigger_message_id,
             )
@@ -667,7 +665,7 @@ class ArmadaWorker(QueueProcessingWorker):
                 try:
                     self._consume(event, side_runtime=runtime)
                 except Exception:
-                    logger.exception("Pear native side turn failed in the shared runtime pump.")
+                    logger.exception("Native side turn failed in the shared runtime pump.")
                     if propagate_errors:
                         raise
                     return

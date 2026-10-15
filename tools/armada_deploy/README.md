@@ -1,4 +1,4 @@
-# Pear staging deployment
+# Armada staging deployment
 
 This directory contains the reproducible path for hosting this checkout as a
 friends-only Zulip development server at `https://armada.backpropaganda.net`.
@@ -12,7 +12,7 @@ The deployment is intentionally a normal VM, not a tunnel:
 - `tools/run-dev --production-assets` serves prebuilt, content-hashed assets
   with `DEVELOPMENT=True` and `DEBUG=False`; webpack/HMR and web-process
   autoreload are not present on the hosted runtime.
-- Codex auth is copied from this Mac to the `zulipdev` account, so Pear can use
+- Codex auth is copied from this Mac to the `zulipdev` account, so Onix can use
   the same ChatGPT-authenticated Codex CLI session without an API key.
 
 ## Required secrets
@@ -67,7 +67,7 @@ tools/armada_deploy/bootstrap_remote.sh
 This installs base packages, syncs this checkout, provisions Zulip,
 installs the same Codex CLI version as this Mac when possible, copies Codex
 auth, builds and validates production assets, creates/selects the embedded
-`Pear` bot in the dev realm, installs public Caddy/systemd config, and
+`Onix` bot in the dev realm, installs public Caddy/systemd config, and
 starts:
 
 - `armada-zulip-dev.service`
@@ -104,10 +104,10 @@ tools/armada_deploy/reset_remote_dev_data.sh --yes
 ```
 
 The first command is a read-only dry run. The `--yes` run removes generated
-message history, Pear worker runs, topic contexts, sessions, drafts, scheduled
+message history, Armada worker runs, topic contexts, sessions, drafts, scheduled
 messages, and extra generated users; keeps only `plugyawn`, `sidbing`,
 `jayesh`, `berry`, `glitchfix`, and `ritvi` as active human devlogin users; and
-re-creates the embedded `Pear` bot.
+re-creates the embedded `Onix` bot.
 
 ## SSH
 
@@ -138,16 +138,16 @@ worktree, the remote tracked tree is clean, and the remote HEAD is not ahead of
 the local `pear-main` history. The `--yes` run classifies the committed delta.
 Frontend, template, asset-tooling, and unknown changes build production assets
 in an isolated sibling checkout while the old app remains live. A narrow
-allowlist of server-only Pear and test changes instead reuses the already
+allowlist of server-only Armada and test changes instead reuses the already
 validated hashed graph; unknown paths fail closed to a rebuild. It then stops
 app ingress, drains and stops the queue workers, copies only regular single-link
 generated outputs into a root-owned frozen tree when rebuilding, and snapshots
-the drained source, prior assets, Git metadata, Pear skills, Caddy auth/config, `armada.env`,
+the drained source, prior assets, Git metadata, Armada skills, Caddy auth/config, `armada.env`,
 privileged helper, deployment record, wrapper, and systemd units. Privileged
 deployment managers, templates, and helper source are staged directly from the
 pinned local commit in a root-only directory; root never executes tooling from
 the service-user-owned checkout. The cutover source-syncs with generated
-outputs excluded, applies `zerver` migrations, restarts Caddy and all Pear
+outputs excluded, applies `zerver` migrations, restarts Caddy and all Armada
 services, verifies the
 backend tests, rejects webpack/autoreload processes and the legacy `/webpack/`
 route, checks live worker/queue health, and records the coordinated SHA,

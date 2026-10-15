@@ -281,7 +281,7 @@ def upload_message_attachment(
             target_realm,
         )
 
-    # Pear's worker completion publishes final results inside a caller-owned
+    # The agent's worker completion publishes final results inside a caller-owned
     # transaction. In that case the upload must participate in the existing
     # transaction rather than opening a nested durable one.
     if transaction.get_connection().in_atomic_block:

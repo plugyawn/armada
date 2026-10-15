@@ -46,7 +46,7 @@ class ArmadaMonitorWorker(ArmadaWorker):
             try:
                 armada_run_due_monitor_ticks()
             except Exception:
-                logger.exception("Pear monitor tick pass failed.")
+                logger.exception("Monitor tick pass failed.")
             finally:
                 reset_queries()
 

@@ -56,7 +56,7 @@ No model is called and nothing touches the network.  Development only.
             raise CommandError("armada_demo_data only runs in a development environment.")
 
         # Imported here: these modules pull in test-only dependencies and
-        # the whole Pear runtime, which no production command should load.
+        # the whole agent runtime, which no production command should load.
         import time_machine
 
         from zilencer.lib.armada_demo import DEMO_STREAM, DemoSeeder, remove_demo_data
@@ -65,14 +65,14 @@ No model is called and nothing touches the network.  Development only.
         realm = get_realm("zulip")
         if options["reset"]:
             counts = remove_demo_data(realm, remove_workspaces=True)
-            self.stdout.write(f"Removed Pear demo data: {counts}")
+            self.stdout.write(f"Removed Armada demo data: {counts}")
             return
 
         if not options["no_load"]:
             started = time.monotonic()
             counts = remove_demo_data(realm, remove_workspaces=False)
             if any(counts.values()):
-                self.stdout.write(f"Replacing earlier Pear demo data: {counts}")
+                self.stdout.write(f"Replacing earlier Armada demo data: {counts}")
             # Fixture time runs on its own clock: each scenario starts some
             # minutes in the past and scripts advance it, so messages, run
             # durations and event timestamps are mutually consistent without
@@ -99,7 +99,7 @@ No model is called and nothing touches the network.  Development only.
                 turn_logger.setLevel(previous_level)
             self.stdout.write(
                 self.style.SUCCESS(
-                    f"Loaded Pear demo data in {time.monotonic() - started:.1f}s. "
+                    f"Loaded Armada demo data in {time.monotonic() - started:.1f}s. "
                     f"Topics in #{DEMO_STREAM}:"
                 )
             )

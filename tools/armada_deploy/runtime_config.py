@@ -235,14 +235,14 @@ def upsert_armada_env(path: Path) -> None:
         payload, old_stat = _read_regular_file_nofollow(path, required_mode=0o600)
         lines = payload.decode("utf-8").splitlines()
     except UnicodeDecodeError as exc:
-        raise RuntimeConfigError(f"invalid Pear environment encoding: {path}") from exc
+        raise RuntimeConfigError(f"invalid Armada environment encoding: {path}") from exc
     if os.geteuid() == 0:
         try:
             zulipdev = pwd.getpwnam("zulipdev")
         except KeyError as exc:
             raise RuntimeConfigError("required zulipdev account is missing") from exc
         if old_stat.st_uid != zulipdev.pw_uid or old_stat.st_gid != zulipdev.pw_gid:
-            raise RuntimeConfigError("Pear environment must be owned by zulipdev:zulipdev")
+            raise RuntimeConfigError("Armada environment must be owned by zulipdev:zulipdev")
 
     prefix = f"{PRODUCTION_ASSET_ENV}="
     lines = [line for line in lines if not line.startswith(prefix)]
@@ -322,11 +322,11 @@ def verify_armada_env(path: Path) -> None:
         except KeyError as exc:
             raise RuntimeConfigError("required zulipdev account is missing") from exc
         if path_stat.st_uid != zulipdev.pw_uid or path_stat.st_gid != zulipdev.pw_gid:
-            raise RuntimeConfigError("Pear environment must be owned by zulipdev:zulipdev")
+            raise RuntimeConfigError("Armada environment must be owned by zulipdev:zulipdev")
     try:
         lines = payload.decode("utf-8").splitlines()
     except UnicodeDecodeError as exc:
-        raise RuntimeConfigError(f"invalid Pear environment encoding: {path}") from exc
+        raise RuntimeConfigError(f"invalid Armada environment encoding: {path}") from exc
     matches = [line for line in lines if line.startswith(f"{PRODUCTION_ASSET_ENV}=")]
     if matches != [f"{PRODUCTION_ASSET_ENV}=1"]:
         raise RuntimeConfigError(

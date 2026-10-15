@@ -14,8 +14,8 @@ any Ubuntu 24.04 machine.
 Armada is a Zulip server, so it installs the way Zulip does (a release
 tarball and `scripts/setup/install`), plus the things this file adds for the
 agent. Zulip's own production documentation (`docs/production/`) is right for
-everything that is not marked as Armada's. The agent is named Onix in the
-interface; its bot account still says Pear until the rename's last step.
+everything that is not marked as Armada's. The agent is named Onix; its bot
+account is `onix-bot@` on the server's host.
 
 **What was tested and what was not.** On 14 October 2026, on the Armada dev
 VM (Ubuntu 24.04.5, 6 vCPU, 10 GB): the production asset build of the
@@ -228,7 +228,7 @@ documentation. After writing it, restart the server (6.7) and check both:
 sudo -u zulip -H /opt/codex/bin/codex login status    # still "Logged in"
 ```
 
-and, in a test topic, `@**Pear** run cat /etc/zulip/zulip-secrets.conf >
+and, in a test topic, `@**Onix** run cat /etc/zulip/zulip-secrets.conf >
 /dev/null && echo readable || echo denied, and reply with that one word`.
 Only "denied" means the layer works. If the login stops working, remove the
 `auth.json` line. Do not rely on this layer until that test passes on your
@@ -581,7 +581,7 @@ ARMADA_WORKER_REASONING_EFFORT = "medium"
 worktree, with no network; the approval policy stays at its default,
 `on-request`. Leave `ARMADA_ADDRESSING_ROUTER_RUNTIME` off unless you want a
 Gemini model to guess which unmentioned messages are meant for the agent;
-without it, mention the agent (`@**Pear**`) to start a run.
+without it, mention the agent (`@**Onix**`) to start a run.
 
 The user ids exist only after step 5. Come back then and print them, as
 `zulip`:
@@ -686,7 +686,7 @@ sysctl --system
 ```
 
 This turns off a hardening Ubuntu applies to every program on the machine;
-the dev VM and the earlier hosted Pear server run with it. Tested here: with
+the dev VM and the earlier hosted server run with it. Tested here: with
 it, `codex sandbox` runs, and a write outside the allowed directories fails
 with "Read-only file system". The narrower way Ubuntu documents is an
 AppArmor profile that allows user namespaces for `/usr/bin/bwrap` alone.
@@ -845,7 +845,7 @@ A run keeps its queue message unacknowledged until it ends, so a dead
 worker's run is retried. RabbitMQ cancels a consumer that holds a message
 longer than its consumer timeout, 30 minutes by default; the message is then
 delivered again and the run starts over (each run is tried twice at most,
-`ARMADA_WORKER_MAX_CLAIM_ATTEMPTS`). Pear itself sets no limit on a run's
+`ARMADA_WORKER_MAX_CLAIM_ATTEMPTS`). Armada itself sets no limit on a run's
 length: `ARMADA_WORKER_TIMEOUT_SECONDS` (5.5 hours) is an **idle** timeout, a
 turn that produces nothing for that long. So the consumer timeout is the
 longest a run may take. Puppet raises it to six hours for the agent queues
@@ -887,17 +887,17 @@ curl -sS -X POST -u YOUR_EMAIL https://armada-beta.<tailnet>.ts.net/api/v1/armad
 
 The answer's `armada_config` should say `"enabled": true`,
 `"worker_runtime_ready": true` and `"worker_runtime_auth_ready": true`. The
-bot is called Pear; the interface shows it as Onix.
+bot is called Onix.
 
 ### 6.8 Check it
 
 - Make a test channel that is a repository (in the old interface, create a
   channel and fill in its repository URL), open a topic in it and post
-  `@**Pear** say hello in one line`. A run should start within seconds and
+  `@**Onix** say hello in one line`. A run should start within seconds and
   answer in the topic; its log is in
   `/var/log/zulip/events_armada_worker_slot*.log`.
 - As a member who is not trusted, the same message gets "This user is not
-  allowed to start Pear worker runs."
+  allowed to start Onix's runs."
 - Signed in, `/beta/` loads; signed out, it sends you to `/login/`. The old
   interface's top bar has "Try the beta", and the beta has "Old interface".
 
@@ -1119,7 +1119,7 @@ running at once in the organization; beyond it a new request is refused.
   (6.3), or `ARMADA_WORKER_CODEX_BIN` is not the path you installed.
 - A run fails at once with a sandbox error: the sysctl of 6.1 is not applied
   (`sysctl kernel.apparmor_restrict_unprivileged_userns` must print 0).
-- "This user is not allowed to start Pear worker runs" (or "to steer"): the
+- "This user is not allowed to start Onix's runs" (or "to steer"): the
   person is not an administrator and not in `ARMADA_WORKER_TRUSTED_USER_IDS`
   (step 4).
 - "Could not clone the Git repository": as `zulip`, `git ls-remote` the URL

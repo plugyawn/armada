@@ -1,6 +1,6 @@
-"""Reconcile the small set of Codex skills managed by Pear.
+"""Reconcile the small set of Codex skills managed by Armada.
 
-The manifest records ownership so removing or renaming a Pear skill deletes its
+The manifest records ownership so removing or renaming an Armada skill deletes its
 provisioned copy without touching user- or plugin-managed skills in the same
 CODEX_HOME.
 """
@@ -20,7 +20,7 @@ ARMADA_MANAGED_SKILL_NAME_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127
 
 def _read_managed_skills_manifest(manifest_path: Path) -> set[str]:
     if manifest_path.is_symlink():
-        raise OSError("Pear managed-skills manifest must not be a symbolic link.")
+        raise OSError("Managed-skills manifest must not be a symbolic link.")
     try:
         raw_manifest = manifest_path.read_text(encoding="utf-8")
     except FileNotFoundError:
@@ -28,15 +28,15 @@ def _read_managed_skills_manifest(manifest_path: Path) -> set[str]:
     try:
         manifest = json.loads(raw_manifest)
     except (json.JSONDecodeError, UnicodeDecodeError) as error:
-        raise OSError("Pear managed-skills manifest is invalid.") from error
+        raise OSError("Managed-skills manifest is invalid.") from error
     if not isinstance(manifest, dict) or manifest.get("version") != 1:
-        raise OSError("Pear managed-skills manifest has an unsupported format.")
+        raise OSError("Managed-skills manifest has an unsupported format.")
     raw_skills = manifest.get("skills")
     if not isinstance(raw_skills, list) or any(
         not isinstance(name, str) or ARMADA_MANAGED_SKILL_NAME_PATTERN.fullmatch(name) is None
         for name in raw_skills
     ):
-        raise OSError("Pear managed-skills manifest contains an invalid skill name.")
+        raise OSError("Managed-skills manifest contains an invalid skill name.")
     return set(raw_skills)
 
 
@@ -101,7 +101,7 @@ def _write_managed_skills_manifest(manifest_path: Path, skills: list[str]) -> No
 
 def reconcile_armada_codex_skills(source_dir: Path, codex_home: str | Path) -> list[str]:
     if not source_dir.is_dir():
-        raise OSError("Pear skills source directory is unavailable.")
+        raise OSError("Skills source directory is unavailable.")
 
     skills_home = Path(codex_home).expanduser() / "skills"
     skills_home.mkdir(parents=True, exist_ok=True)
@@ -112,7 +112,7 @@ def reconcile_armada_codex_skills(source_dir: Path, codex_home: str | Path) -> l
         if not source_skill_dir.is_dir() or not (source_skill_dir / "SKILL.md").is_file():
             continue
         if ARMADA_MANAGED_SKILL_NAME_PATTERN.fullmatch(source_skill_dir.name) is None:
-            raise OSError("Pear skills source contains an invalid skill directory name.")
+            raise OSError("Skills source contains an invalid skill directory name.")
         source_skills.append((source_skill_dir.name, source_skill_dir))
 
     provisioned_skills = [name for name, _source in source_skills]

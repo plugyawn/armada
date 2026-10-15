@@ -400,9 +400,6 @@ main:has(> .pane.cut) > header.hd::after { opacity: 1; transition-duration: var(
 .pane.cutb { -webkit-mask-image: linear-gradient(#000 calc(100% - 24px), transparent); mask-image: linear-gradient(#000 calc(100% - 24px), transparent); }
 .feed > .clip { overflow: clip; display: flex; flex-direction: column; justify-content: flex-end; flex: none; }
 .feed .lane { padding-bottom: calc(var(--h-band) + var(--s-3)); display: flex; flex-direction: column; }
-/* a turn that is still being written holds, under its last line, the room its footer will take (a line and its gap):
-   Stop, a failure or the run's own end lands the footer in that room and the conversation does not move */
-.feed .lane:has(> .cl.onix.live:last-child) { padding-bottom: calc(var(--h-band) + var(--s-3) + var(--h-s) + var(--gap-same)); }
 /* The band lies over the feed's last 36 px. A row that has just been written is born in that slot, in view, and rises
    to its place: the answer's row and its working mark are on screen in the frame of the send. */
 main > .feed { margin-bottom: calc(-1 * var(--h-band)); }
@@ -491,8 +488,9 @@ main > .feed { margin-bottom: calc(-1 * var(--h-band)); }
 .ans li { display: grid; grid-template-columns: 20px minmax(0, 1fr); } .ans li + li { margin-top: var(--gap-same); }
 .ans ul li::before { content: ""; width: 4px; height: 4px; border-radius: var(--r-round); background: var(--ink-2); margin: 10px 0 0 3px; }
 .ans ol { counter-reset: n; } .ans ol li::before { counter-increment: n; content: counter(n); color: var(--ink-2); font-variant-numeric: tabular-nums; }
-/* a run's footer: one line under a turn that did work. It is the record the conversation keeps: what was done, and
-   one verb that opens that run's checklist beside it. Second ink; the failed and the stopped keep their mark. */
+/* a run's footer: one line under its turn, there from the run's start ("Working · 2 tools") so that the run's end changes
+   its words and nothing else ("Ran 41s · 3 tools"). It is the record the conversation keeps. Second ink; the failed and
+   the stopped keep their mark. */
 .line { font: var(--t-text); padding-left: var(--pad-x); display: flex; align-items: center; gap: var(--s-2); min-height: var(--h-s); color: var(--ink-2); }
 .line .lk { margin-left: var(--s-1); }
 .cl.onix > .ans + .line, .cl.onix > .blk + .line { margin-top: var(--gap-same); }

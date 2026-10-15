@@ -120,8 +120,6 @@ nav > .fixed > .row.old { text-decoration: none; color: var(--ink-2); }
    states, so the field never changes width when it is pressed */
 .cz .k.to { width: auto; padding: 0 var(--s-2) 0 6px; gap: 6px; font: var(--t-strong); color: var(--ink-2); }
 .cz .k.to:not(.off) { background: var(--fill-2); color: var(--ink-1); }
-/* a run that settled with no footer keeps the footer's room while it is the last thing said (agent_turn.js, syncOnix) */
-.feed .lane:has(> .cl.onix.held:last-child) { padding-bottom: calc(var(--h-band) + var(--s-3) + var(--h-s) + var(--gap-same)); }
 /* a bubble's hover overlay stands in the bubble's row, on its open side, past the time and the reactions, inside the row's
    own height: it covers no word, time or reaction of this message or of the one above */
 .cl .bl > .over { top: 2px; left: calc(100% + 6px); right: auto; }

@@ -71,7 +71,7 @@ function onRun(ev) {
   if (runWindow && runWindow.run === r.id) { runWindow.events++; runWindow.msg = r.result_message_id; if (!live) { const secs = (performance.now() - runWindow.t0) / 1000, n = runWindow.events + runWindow.updates; stats.runs.push({run: r.id, seconds: Math.round(secs * 10) / 10, events: n, perSecond: Math.round(n / Math.max(secs, 0.001) * 10) / 10}); runWindow = null; drawLab(); } }
   if (c !== state.P) return;
   drawRunState(fresh); drawSide(); drawProg();
-  if (r.result_message_id) { const cl = sectionOf(r.result_message_id), m = c.byId.get(r.result_message_id); if (cl && m) { const before = feed.scrollHeight; syncOnix(cl, m); const d = feed.scrollHeight - before; if (d) follow(d, cl); } }   /* what the conversation grew by: a footer that lands in the room the live run kept grows nothing */
+  if (r.result_message_id) { const cl = sectionOf(r.result_message_id), m = c.byId.get(r.result_message_id); if (cl && m) { const before = feed.scrollHeight; syncOnix(cl, m); const d = feed.scrollHeight - before; if (d) follow(d, cl); } }   /* what the conversation grew by: the footer is there from the run's start, so its end grows nothing */
   if (wasLive && !live) { S.play(ev.status === "failed" ? "fail" : "done"); refreshCtx(c, 600); }
 }
 function onReaction(ev) { const c = msgIndex.get(ev.message_id); if (!c) return; const m = c.byId.get(ev.message_id); if (m) applyReaction(c, m, ev, false); if (c === state.P && ev.user_id !== state.ME) signOfLife(); }

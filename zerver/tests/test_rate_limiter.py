@@ -348,11 +348,22 @@ class EventQueueBudgetTest(ZulipTestCase):
         ):
             for _ in range(3):
                 self.assert_json_success(self.client_post("/json/register"))
-            self.assertEqual(self.client_post("/json/register").status_code, 429)
+            with self.assertLogs("zerver.lib.rate_limiter", level="WARNING") as logs:
+                result = self.client_post("/json/register")
+            self.assertEqual(result.status_code, 429)
+            self.assertEqual(
+                logs.output,
+                [
+                    "WARNING:zerver.lib.rate_limiter:429 to the web client:"
+                    f" user {hamlet.id}, POST /json/register, register_by_user,"
+                    " retry after 20.00s"
+                ],
+            )
 
             for _ in range(2):
                 self.assert_json_success(self.send_message())
-            self.assertEqual(self.send_message().status_code, 429)
+            with self.assertLogs("zerver.lib.rate_limiter", level="WARNING"):
+                self.assertEqual(self.send_message().status_code, 429)
 
     @ratelimit_rule(60, 2, domain="api_by_user")
     @ratelimit_rule(60, 2, domain="events_by_user")
@@ -370,10 +381,32 @@ class EventQueueBudgetTest(ZulipTestCase):
         with time_machine.travel(time.time(), tick=False):
             for _ in range(2):
                 self.assert_json_error(poll(), "User not authorized for this query")
-            self.assertEqual(poll().status_code, 429)
+            with self.assertLogs("zerver.lib.rate_limiter", level="WARNING") as logs:
+                self.assertEqual(poll().status_code, 429)
+            self.assertEqual(
+                logs.output,
+                [
+                    "WARNING:zerver.lib.rate_limiter:429 to the web client:"
+                    f" user {polonius.id}, GET /json/events, events_by_user,"
+                    " retry after 30.00s"
+                ],
+            )
 
             for _ in range(2):
                 self.assert_json_success(self.client_get("/json/users/me"))
+
+    @ratelimit_rule(60, 1, domain="register_by_user")
+    def test_429_to_an_api_client_is_not_logged(self) -> None:
+        hamlet = self.example_user("hamlet")
+        RateLimitedUser(hamlet, domain="register_by_user").clear_history()
+
+        with (
+            time_machine.travel(time.time(), tick=False),
+            mock.patch("zerver.views.events_register.do_events_register", return_value={}),
+            self.assertNoLogs("zerver.lib.rate_limiter", level="WARNING"),
+        ):
+            self.assert_json_success(self.api_post(hamlet, "/api/v1/register"))
+            self.assertEqual(self.api_post(hamlet, "/api/v1/register").status_code, 429)
 
 
 # Don't load the base class as a test: https://bugs.python.org/issue17519.

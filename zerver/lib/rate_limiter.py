@@ -384,7 +384,22 @@ def rate_limit_user(request: HttpRequest, user: UserProfile, domain: str) -> Non
     if not should_rate_limit(request):
         return
 
-    RateLimitedUser(user, domain=domain).rate_limit_request(request)
+    try:
+        RateLimitedUser(user, domain=domain).rate_limit_request(request)
+    except RateLimitedError as error:
+        if request.path.startswith("/json/"):
+            # The web client paces itself, so refusing it is a bug in the
+            # client, not a person going too fast; Armada's checks look
+            # for this line in the server log.
+            logger.warning(
+                "429 to the web client: user %s, %s %s, %s, retry after %.2fs",
+                user.id,
+                request.method,
+                request.path,
+                domain,
+                error.secs_to_freedom,
+            )
+        raise
 
 
 def rate_limit_request_by_ip(request: HttpRequest, domain: str) -> None:

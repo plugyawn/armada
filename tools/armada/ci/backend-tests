@@ -1,0 +1,165 @@
+#!/usr/bin/env python3
+"""Run the backend tests that Armada's CI runs, one shard at a time.
+
+Zulip's full backend suite takes half an hour on one runner and mostly
+tests code the fork has not touched.  CI runs instead every test module
+the fork added or changed, and the test module of every production file
+the fork added or changed, found by name (zerver/lib/topic.py has
+zerver/tests/test_topic.py) or by the short table below where Zulip
+names them differently.
+
+    tools/armada/ci/backend-tests                   run them all
+    tools/armada/ci/backend-tests --shard 2/4       run the second of four shards
+    tools/armada/ci/backend-tests --list [--shard]  print the modules instead
+
+Shards are balanced by the size of the test files, so that each runner
+takes about as long; the split is deterministic.
+
+The trunk had failing tests when CI began.  They are listed in
+backend-known-failures.txt, and this holds them from growing: a test that
+fails and is not listed fails the run; a listed test that passes is
+reported, so that its line can go.  At an empty list the file is deleted,
+with --ban-console-output restored (a test that logs an uncaught error
+today stops Zulip's runner when output is banned).
+"""
+
+import argparse
+import os
+import subprocess
+import sys
+
+import orjson
+
+FORK_BASE = "7813218321"
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+KNOWN_FAILURES = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "backend-known-failures.txt"
+)
+FAILED_TEST_PATH = os.path.join(ROOT, "var/last_test_failure.json")
+
+TEST_DIRS = ("zerver/tests", "zerver/transaction_tests")
+
+# Production modules whose tests Zulip files under another name.
+TESTED_BY = {
+    "bot_config": ["test_bots"],
+    "bot_lib": ["test_embedded_bot_system"],
+    "embedded_bots": ["test_embedded_bot_system"],
+    "base": ["test_queue_worker"],
+    "event_queue": ["test_event_queue"],
+    "event_schema": ["test_events"],
+    "event_types": ["test_events"],
+    "messages": ["test_messages"],
+    "narrow": ["test_message_fetch"],
+    "streams": ["test_subs"],
+    "topic": ["test_message_topics"],
+}
+
+
+def fork_changed_python_files() -> list[str]:
+    output = subprocess.check_output(
+        ["git", "diff", "-z", "--name-only", "--diff-filter=AMR", FORK_BASE, "HEAD", "--", "*.py"],
+        cwd=ROOT,
+        text=True,
+    )
+    return sorted(path for path in output.split("\0") if path and "/migrations/" not in path)
+
+
+def select_test_files(changed: list[str]) -> list[str]:
+    selected = set()
+    for path in changed:
+        directory, file_name = os.path.split(path)
+        name = file_name.removesuffix(".py")
+        if directory in TEST_DIRS:
+            if name.startswith("test_"):
+                selected.add(path)
+            continue
+        if name == "__init__":
+            name = os.path.basename(directory)
+        for test_name in TESTED_BY.get(name, [f"test_{name}"]):
+            for test_dir in TEST_DIRS:
+                candidate = f"{test_dir}/{test_name}.py"
+                if os.path.exists(os.path.join(ROOT, candidate)):
+                    selected.add(candidate)
+    return sorted(selected)
+
+
+def shard(paths: list[str], index: int, count: int) -> list[str]:
+    def weight(path: str) -> int:
+        return os.path.getsize(os.path.join(ROOT, path))
+
+    loads = [0] * count
+    shards: list[list[str]] = [[] for _ in range(count)]
+    for path in sorted(paths, key=lambda path: (-weight(path), path)):
+        lightest = loads.index(min(loads))
+        shards[lightest].append(path)
+        loads[lightest] += weight(path)
+    return sorted(shards[index - 1])
+
+
+def module_name(path: str) -> str:
+    return path.removesuffix(".py").replace("/", ".")
+
+
+def read_known_failures() -> set[str]:
+    with open(KNOWN_FAILURES) as f:
+        return {line.strip() for line in f if line.strip() and not line.startswith("#")}
+
+
+def judge(modules: list[str], failed: set[str], known: set[str]) -> tuple[list[str], list[str]]:
+    """Return the failures that are not known, and the known ones that passed."""
+
+    def in_modules(test: str) -> bool:
+        return any(test.startswith(module + ".") for module in modules)
+
+    known_here = {test for test in known if in_modules(test)}
+    return sorted(failed - known), sorted(known_here - failed)
+
+
+def run(modules: list[str]) -> None:
+    if not modules:
+        # tools/test-backend with no module runs Zulip's whole suite.
+        print("backend-tests: no test module in this shard")
+        return
+    if os.path.exists(FAILED_TEST_PATH):
+        os.remove(FAILED_TEST_PATH)
+    result = subprocess.run(["./tools/test-backend", *modules], cwd=ROOT, check=False)
+    if os.path.exists(FAILED_TEST_PATH):
+        with open(FAILED_TEST_PATH, "rb") as f:
+            failed = set(orjson.loads(f.read()))
+    elif result.returncode != 0:
+        sys.exit("backend-tests: the test runner failed before it ran the tests")
+    else:
+        failed = set()
+
+    unknown, now_passing = judge(modules, failed, read_known_failures())
+    for test in now_passing:
+        print(f"::notice::backend-tests: {test} passes; remove it from {KNOWN_FAILURES}")
+    if unknown:
+        print("backend-tests: these tests failed and are not known failures:", file=sys.stderr)
+        for test in unknown:
+            print(f"  {test}", file=sys.stderr)
+        sys.exit(1)
+    print(f"backend-tests: no failure beyond the {len(failed)} known in these modules")
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
+    parser.add_argument("--shard", metavar="I/N", help="only shard I of N (from 1)")
+    parser.add_argument("--list", action="store_true", help="print the modules, run nothing")
+    args = parser.parse_args()
+
+    paths = select_test_files(fork_changed_python_files())
+    if args.shard:
+        index, count = (int(part) for part in args.shard.split("/"))
+        if not 1 <= index <= count:
+            sys.exit(f"backend-tests: no shard {args.shard}")
+        paths = shard(paths, index, count)
+    modules = [module_name(path) for path in paths]
+    if args.list:
+        print("\n".join(modules))
+    else:
+        run(modules)
+
+
+if __name__ == "__main__":
+    main()

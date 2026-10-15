@@ -114,3 +114,58 @@ class LicensedGuardTest(unittest.TestCase):
         self.assertEqual(result.returncode, 1)
         for path in planted:
             self.assertIn(path, result.stderr)
+
+
+class BackendTestsTest(unittest.TestCase):
+    modules = load_script("backend-tests")
+
+    def test_changed_files_select_their_tests(self) -> None:
+        changed = [
+            "zerver/lib/topic.py",
+            "zerver/views/streams.py",
+            "zerver/lib/armada_worker.py",
+            "zerver/tests/test_armada.py",
+            "zerver/tests/fixtures_helper_that_is_not_a_test.py",
+            "zerver/lib/upload/__init__.py",
+        ]
+        self.assertEqual(
+            self.modules.select_test_files(changed),
+            [
+                "zerver/tests/test_armada.py",
+                "zerver/tests/test_message_topics.py",
+                "zerver/tests/test_subs.py",
+                "zerver/tests/test_upload.py",
+                "zerver/transaction_tests/test_armada_worker.py",
+            ],
+        )
+
+    def test_shards_cover_every_module_once(self) -> None:
+        paths = self.modules.select_test_files(self.modules.fork_changed_python_files())
+        shards = [self.modules.shard(paths, index, 4) for index in range(1, 5)]
+        self.assertEqual(sorted(path for shard in shards for path in shard), paths)
+        self.assertTrue(all(shards))
+
+    def test_only_unknown_failures_fail_and_passing_known_ones_are_reported(self) -> None:
+        modules = ["zerver.tests.test_subs", "zerver.tests.test_users"]
+        known = {
+            "zerver.tests.test_subs.SubscriptionAPITest.test_known_and_failing",
+            "zerver.tests.test_subs.SubscriptionAPITest.test_known_and_fixed",
+            "zerver.tests.test_events.NormalActionsTest.test_known_in_another_shard",
+        }
+        failed = {
+            "zerver.tests.test_subs.SubscriptionAPITest.test_known_and_failing",
+            "zerver.tests.test_users.UserTest.test_newly_broken",
+        }
+        self.assertEqual(
+            self.modules.judge(modules, failed, known),
+            (
+                ["zerver.tests.test_users.UserTest.test_newly_broken"],
+                ["zerver.tests.test_subs.SubscriptionAPITest.test_known_and_fixed"],
+            ),
+        )
+
+    def test_every_known_failure_names_a_selected_module(self) -> None:
+        paths = self.modules.select_test_files(self.modules.fork_changed_python_files())
+        modules = [self.modules.module_name(path) for path in paths]
+        for test in self.modules.read_known_failures():
+            self.assertTrue(any(test.startswith(module + ".") for module in modules), test)

@@ -11,6 +11,7 @@ from django.db import transaction
 from django.db.models import F, Max, Q, Window
 from django.db.models.functions import RowNumber
 from django.http import HttpRequest, HttpResponse
+from django.middleware.csrf import get_token
 from django.utils.timezone import now as timezone_now
 from django.utils.translation import gettext as _
 from pydantic import Json
@@ -1062,10 +1063,16 @@ def ensure_armada_configured_bot(
 
 @typed_endpoint_without_parameters
 def get_armada_session_backend(request: HttpRequest, user_profile: UserProfile) -> HttpResponse:
+    # The CSRF cookie is HttpOnly, and signing out and in again in
+    # another tab rotates it, so a page that has been open a while can
+    # only learn the current token by asking. A GET needs no token, which lets a client refused
+    # with CSRF_FAILED recover here.
     return json_success(
         request,
         data={
             "armada_session": get_armada_session_payload(),
+            "csrf_token": get_token(request),
+            "user_id": user_profile.id,
         },
     )
 

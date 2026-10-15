@@ -6,10 +6,11 @@ from collections.abc import Sequence
 from datetime import timedelta
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from unittest.mock import patch
 
 import orjson
+from django.conf import settings
 from django.core.cache import cache
 from django.db import transaction
 from django.utils.timezone import now as timezone_now
@@ -120,6 +121,9 @@ from zerver.views.armada import (
     update_armada_run_control_event,
 )
 from zerver.worker import armada_worker as armada_worker_module
+
+if TYPE_CHECKING:
+    from django.test.client import _MonkeyPatchedWSGIResponse as TestHttpResponse
 
 
 class ArmadaSessionEndpointTest(ZulipTestCase):
@@ -415,6 +419,68 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
             list(ARMADA_OFFICIAL_CODEX_SDK_PACKAGES),
         )
         self.assertEqual(armada_session["codex_mcp_tools"], list(ARMADA_CODEX_MCP_TOOLS))
+
+    def test_armada_session_csrf_token_and_user_id(self) -> None:
+        hamlet = self.example_user("hamlet")
+
+        def sign_in() -> str:
+            # Through the login form, as a browser does, so that the
+            # CSRF cookie is the one Django's login rotates. The forms'
+            # own CSRF checks are not what is tested here.
+            self.client.handler.enforce_csrf_checks = False
+            self.assertEqual(self.login_with_return(hamlet.delivery_email).status_code, 302)
+            self.client.handler.enforce_csrf_checks = True
+            return self.client.cookies[settings.CSRF_COOKIE_NAME].value
+
+        def sign_out() -> None:
+            self.client.handler.enforce_csrf_checks = False
+            self.assertEqual(self.client_post("/accounts/logout/").status_code, 302)
+            self.client.handler.enforce_csrf_checks = True
+
+        def send(csrf_token: str) -> "TestHttpResponse":
+            return self.client_post(
+                "/json/messages",
+                {
+                    "type": "stream",
+                    "to": orjson.dumps("Verona").decode(),
+                    "topic": "csrf",
+                    "content": "hello",
+                },
+                HTTP_X_CSRFTOKEN=csrf_token,
+            )
+
+        def session() -> dict[str, Any]:
+            result = self.client_get(
+                f"/json{ARMADA_SESSION_ENDPOINT}", intentionally_undocumented=True
+            )
+            return self.assert_json_success(result)
+
+        first_cookie = sign_in()
+        first = session()
+        self.assertEqual(first["user_id"], hamlet.id)
+        self.assert_json_success(send(first["csrf_token"]))
+
+        # Signing out and in again in another tab gives the browser a new
+        # CSRF secret, which the open page cannot read; the token it holds
+        # is refused, and the session endpoint answers with one that works.
+        # (Signing in while signed in only redirects, rotating nothing.)
+        sign_out()
+        self.assertNotEqual(sign_in(), first_cookie)
+        with self.assertLogs("django.security.csrf", "WARNING") as logs:
+            result = send(first["csrf_token"])
+        self.assertEqual(
+            logs.output,
+            [
+                "WARNING:django.security.csrf:Forbidden (CSRF token from the 'X-Csrftoken'"
+                " HTTP header incorrect.): /json/messages"
+            ],
+        )
+        self.assertEqual(result.status_code, 403)
+        self.assertEqual(result.json()["code"], "CSRF_FAILED")
+
+        second = session()
+        self.assertNotEqual(second["csrf_token"], first["csrf_token"])
+        self.assert_json_success(send(second["csrf_token"]))
 
     def test_api_v1_armada_session(self) -> None:
         user = self.example_user("hamlet")

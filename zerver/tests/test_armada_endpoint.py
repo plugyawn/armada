@@ -5720,6 +5720,8 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
         )
 
         self.assertEqual(active_session["latest_codex_thread_id"], "thread-first")
+        # The agent's page tools act as the person whose message started the run.
+        self.assertEqual(active_session.get("requesting_user_id"), owner.id)
         self.assertEqual(
             [message["content"] for message in active_session["recent_messages"]],
             [

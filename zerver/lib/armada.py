@@ -223,6 +223,9 @@ class ArmadaActiveSessionSummary(TypedDict):
     # The id of the message the next turn answers, sent to Codex as the
     # turn's clientUserMessageId.
     client_user_message_id: NotRequired[str]
+    # The person whose message the run answers; the agent's page tools act
+    # as them (zerver/lib/armada_page_tools.py).
+    requesting_user_id: NotRequired[int]
     stream: str
     topic: str
     source: ArmadaActiveSessionSource

@@ -4437,7 +4437,7 @@ def load_armada_active_session_from_zulip(
         stream=armada_session["stream"],
         topic=armada_session["topic"],
     )
-    return build_armada_active_session_summary_from_messages(
+    active_session = build_armada_active_session_summary_from_messages(
         armada_session=armada_session,
         source="server",
         stream_exists=True,
@@ -4462,3 +4462,6 @@ def load_armada_active_session_from_zulip(
             topic=armada_session["topic"],
         ),
     )
+    if requesting_user is not None:
+        active_session["requesting_user_id"] = requesting_user.id
+    return active_session

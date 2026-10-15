@@ -8593,7 +8593,7 @@ class ArmadaInteractiveTurnTest(TestCase):
 
     def test_thread_params_register_native_artifact_tool(self) -> None:
         params = self.make_runner().thread_params()
-        [tool] = params["dynamicTools"]
+        tool = params["dynamicTools"][0]
         self.assertEqual(tool["type"], "function")
         self.assertEqual(tool["name"], "armada_artifact")
         self.assertEqual(tool["inputSchema"]["$id"], "urn:armada:contract:artifact-v1")

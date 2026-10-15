@@ -31,6 +31,11 @@ from zerver.lib.armada_artifact import (
     canonicalize_armada_artifact,
 )
 from zerver.lib.armada_artifact_contract import ARMADA_ARTIFACT_TOOL_SPEC
+from zerver.lib.armada_page_tools import (
+    ARMADA_PAGE_TOOL_NAMES,
+    ARMADA_PAGE_TOOL_SPECS,
+    answer_armada_page_tool,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -384,7 +389,7 @@ class ArmadaGeminiInteractionsAddressingIntentClassifier:
 
 
 def build_armada_codex_developer_instructions() -> str:
-    return f"You are {ARMADA_AGENT_NAME}, a Codex-powered pair-programming agent working from a Zulip topic.\nUse the repository and tools available in this runtime to make concrete progress.\nTreat the runtime cwd as the isolated topic worktree; the Armada server checkout is not the user's target repo unless the topic context explicitly pins it.\nREADME.md and other workspace files are ordinary project content; inspect or edit them only when the task calls for it, never as hidden Armada state.\nUse Codex-native skills from CODEX_HOME/skills when a relevant SKILL.md applies.\nBefore your first tool call on any task of more than two steps, make a checklist with your plan tool, and keep it current: mark each step in progress as you start it and completed as you finish it. The checklist renders live for the people in the topic.\nWhen you need a person (an answer, a decision, a review), mention them as @**Full Name**, with their full name exactly as the transcript shows it; that notifies them.\nSeveral people can talk to you; each message is signed with its author's name. Follow the latest instruction. If two people's instructions conflict, say so in one line, mention both, and continue with the latest until one of them answers.\nKeep changes focused on the user's request and verify them before finishing.\nFor casual, conversational, choice-only, or answer-only requests, respond directly.\nDo not run repository/session checks just to make a casual reply sound grounded.\nUse tools only when the request needs workspace facts, code changes, external lookup, or verification.\nResolve references like 'above', 'that', 'what did I ask', and 'who is here' from the recent Zulip transcript below.\nDo not claim you cannot see recent topic history when the transcript below contains the answer.\nFinal response requirements:\n- Keep the response concise and suitable for posting back into the Zulip topic.\n- Report evidence in ordinary prose; Armada never parses your wording into hidden state.\n- Use registered native tools for structured UI artifacts when they materially help."
+    return f"You are {ARMADA_AGENT_NAME}, a Codex-powered pair-programming agent working from a Zulip topic.\nUse the repository and tools available in this runtime to make concrete progress.\nTreat the runtime cwd as the isolated topic worktree; the Armada server checkout is not the user's target repo unless the topic context explicitly pins it.\nREADME.md and other workspace files are ordinary project content; inspect or edit them only when the task calls for it, never as hidden Armada state.\nUse Codex-native skills from CODEX_HOME/skills when a relevant SKILL.md applies.\nBefore your first tool call on any task of more than two steps, make a checklist with your plan tool, and keep it current: mark each step in progress as you start it and completed as you finish it. The checklist renders live for the people in the topic.\nWhen you need a person (an answer, a decision, a review), mention them as @**Full Name**, with their full name exactly as the transcript shows it; that notifies them.\nSeveral people can talk to you; each message is signed with its author's name. Follow the latest instruction. If two people's instructions conflict, say so in one line, mention both, and continue with the latest until one of them answers.\nEveryone in the organization has a personal page of posts. Read pages with armada_page_read when they help. Draft a post with armada_page_draft only when the person asks for one: it lands as a draft on their own page, which only they see until they publish it, and you say in your reply that you drafted it.\nKeep changes focused on the user's request and verify them before finishing.\nFor casual, conversational, choice-only, or answer-only requests, respond directly.\nDo not run repository/session checks just to make a casual reply sound grounded.\nUse tools only when the request needs workspace facts, code changes, external lookup, or verification.\nResolve references like 'above', 'that', 'what did I ask', and 'who is here' from the recent Zulip transcript below.\nDo not claim you cannot see recent topic history when the transcript below contains the answer.\nFinal response requirements:\n- Keep the response concise and suitable for posting back into the Zulip topic.\n- Report evidence in ordinary prose; Armada never parses your wording into hidden state.\n- Use registered native tools for structured UI artifacts when they materially help."
 
 
 def build_armada_codex_turn_prompt(active_session: ArmadaActiveSessionSummary, task: str) -> str:
@@ -1409,6 +1414,8 @@ class ArmadaAppServerTurnContext:
     user_input_provider: ArmadaUserInputProvider | None
     is_main: bool
     turn_id: str | None = None
+    # The person whose message started the turn: the page tools act as them.
+    requesting_user_id: int | None = None
     messages: queue.Queue[object] = field(default_factory=queue.Queue)
     pending_artifacts: list[str] = field(default_factory=list)
 
@@ -1995,6 +2002,34 @@ class ArmadaCodexAppServerToolRunner:
             callback(contextualized_event)
         return True
 
+    def answer_page_tool_call(
+        self,
+        params: dict[str, Any],
+        *,
+        turn_context: ArmadaAppServerTurnContext | None,
+    ) -> tuple[dict[str, Any], None, ArmadaWorkerTranscriptEvent]:
+        tool_name = str(params["tool"])
+        call_id = params.get("callId")
+        answer = answer_armada_page_tool(
+            turn_context.requesting_user_id if turn_context is not None else None,
+            tool_name,
+            params.get("arguments"),
+        )
+        return (
+            {
+                "success": answer["success"],
+                "contentItems": [{"type": "inputText", "text": answer["text"]}],
+            },
+            None,
+            {
+                "kind": "tool",
+                "status": "done" if answer["success"] else "failed",
+                "title": answer["title"],
+                **({"item_id": call_id} if isinstance(call_id, str) else {}),
+                "metadata": {"tool_name": tool_name, "human_tool_result": True},
+            },
+        )
+
     def answer_for_server_request(
         self,
         method: str,
@@ -2071,6 +2106,12 @@ class ArmadaCodexAppServerToolRunner:
                 {"code": -32601, "message": "No user answer was available."},
                 event,
             )
+        if (
+            method == "item/tool/call"
+            and params.get("tool") in ARMADA_PAGE_TOOL_NAMES
+            and params.get("namespace") in {None, ""}
+        ):
+            return self.answer_page_tool_call(params, turn_context=turn_context)
         if method == "item/tool/call":
             tool_name = params.get("tool")
             call_id = params.get("callId")
@@ -2242,7 +2283,7 @@ class ArmadaCodexAppServerToolRunner:
             "model": self.model,
             "sandbox": self.sandbox,
             "personality": "pragmatic",
-            "dynamicTools": [ARMADA_ARTIFACT_TOOL_SPEC],
+            "dynamicTools": [ARMADA_ARTIFACT_TOOL_SPEC, *ARMADA_PAGE_TOOL_SPECS],
         }
         if existing_thread_id is not None:
             params["threadId"] = existing_thread_id
@@ -2419,6 +2460,7 @@ class ArmadaCodexAppServerToolRunner:
                 event_callback=event_callback,
                 user_input_provider=user_input_provider,
                 is_main=False,
+                requesting_user_id=active_session.get("requesting_user_id"),
             )
             self.register_turn_context(side_context)
         assert side_context is not None
@@ -2843,6 +2885,7 @@ class ArmadaCodexAppServerToolRunner:
                 event_callback=run_event_callback,
                 user_input_provider=user_input_provider,
                 is_main=True,
+                requesting_user_id=active_session.get("requesting_user_id"),
             )
             self.register_turn_context(turn_context)
             try:

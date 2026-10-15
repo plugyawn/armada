@@ -2,8 +2,7 @@
 
 import {$, el, sleep} from "./util.js";
 import {armadaBots, people, places, repoStreams, state, stats, streams, unread} from "./state.js";
-import {dkey, openPlace, refreshCtx, tkey} from "./routing.js";
-import {onDelete, onFlags, onMessage, onReaction, onRun, onTyping, onUpdate} from "./events.js";
+import {dkey, openPlace, tkey} from "./routing.js";
 import {closeMenu, overHide} from "./hover.js";
 import {closePicker} from "./model_picker.js";
 import {palette} from "./palette.js";
@@ -27,13 +26,14 @@ async function api(method, path, params = {}, o = {}) {
   if (j.result !== "success") throw Object.assign(new Error(j.msg || "The request failed"), {code: j.code, status: r.status});
   return j;
 }
+/* what each event type does: host.js names the handler for every type the page registers for (on() is called there,
+   at load, after this module has run) */
+const handlers = new Map();
+function on(type, fn) { handlers.set(type, fn); }
 function handle(ev, at) {
   stats.events++; if (ev.type === "agent_run" || ev.type === "update_message") { stats.log.push([Math.round(at), ev.type === "agent_run" ? `run:${ev.event_type}:${ev.status}` : `edit:${(ev.rendered_content || "").length}`]); if (stats.log.length > 600) stats.log.shift(); }
-  try {
-    if (ev.type === "message") onMessage(ev); else if (ev.type === "update_message") onUpdate(ev, at); else if (ev.type === "agent_run") onRun(ev); else if (ev.type === "reaction") onReaction(ev);
-    else if (ev.type === "update_message_flags") onFlags(ev); else if (ev.type === "delete_message") onDelete(ev); else if (ev.type === "typing") onTyping(ev);
-    else if (ev.type === "workspace_changed") { if (state.P && state.P.ctx && state.P.ctx.workspace_uuid === ev.workspace_id) refreshCtx(state.P); }
-  } catch (e) { console.error("event", ev.type, e); }
+  try { const fn = handlers.get(ev.type); if (fn) fn(ev, at); }
+  catch (e) { console.error("event", ev.type, e); }
 }
 async function poll() { let wait = 0;
   while (!signedOut.done) {
@@ -64,4 +64,4 @@ async function register() {
   unread.clear(); const u = r.unread_msgs || {}; for (const s of u.streams || []) unread.set(tkey(s.stream_id, s.topic), new Set(s.unread_message_ids)); for (const d of u.pms || []) unread.set(dkey([d.other_user_id]), new Set(d.unread_message_ids)); for (const d of u.huddles || []) unread.set(dkey(d.user_ids_string.split(",").map(Number).filter((i) => i !== state.ME)), new Set(d.unread_message_ids));
 }
 
-export {api, askSession, handle, poll, register, signedOut};
+export {api, askSession, handle, on, poll, register, signedOut};

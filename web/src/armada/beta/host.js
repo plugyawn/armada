@@ -9,7 +9,7 @@
 
 import {$, $$, clamp, el, esc, press, store, T} from "./util.js";
 import {allKids, expanded, marks, QUESTION_TIMEOUT, state, stats, streams, topicsOf, unread} from "./state.js";
-import {api, askSession, handle, poll, register, signedOut} from "./connection.js";
+import {api, askSession, handle, on, poll, register, signedOut} from "./connection.js";
 import {cacheOf, dkey, fetchMsgs, markRead, openPlace, placeFromHash, placeFromKey, tkey} from "./routing.js";
 import {band, bindFrame, cz, feed, go, lane, main, nav, navFixed, navScroll, outline, panes, side, toBtn, tx} from "./frame.js";
 import {answering, drawAtts, drawComposer, onixHere, onixKey, ready, syncField, upload, verb} from "./composer.js";
@@ -21,6 +21,7 @@ import {react} from "./reactions.js";
 import {closeInfo, fetchReceipts, info, openInfo, pollReceipts, RCPT_POLL, RECEIPTS, signOfLife, toggleInfo} from "./receipts.js";
 import {openThread} from "./threads.js";
 import {retry, send} from "./send.js";
+import {onDelete, onFlags, onMessage, onReaction, onRun, onTyping, onUpdate, onWorkspaceChanged} from "./events.js";
 import {drawRunState, stop, tick} from "./band.js";
 import {pickEntry, setTab} from "./views.js";
 import {buildOver, closeMenu, confirmDelete, editing, endEdit, menu, msgOf, over, overAt, startEdit} from "./hover.js";
@@ -33,6 +34,9 @@ import {choosePick, drawPicker, drawPickerBand, drawPickerSide, movePick, openPi
 import {card, closeCard, cutMoment, holdMoment, moment, momentDue, openCard, playMoment} from "./partner_card.js";
 import {buildLab, lab} from "./lab.js";
 
+/* event dispatch (connection.js): what each event type the page registers for does; a module's own types are named here */
+on("message", onMessage); on("update_message", onUpdate); on("agent_run", onRun); on("reaction", onReaction);
+on("update_message_flags", onFlags); on("delete_message", onDelete); on("typing", onTyping); on("workspace_changed", onWorkspaceChanged);
 let fileIn = null;
 /* what Tab stops on, in document order: what the browser would stop on, shown and not inert */
 const tabStops = () => $$("a[href], button, input, [tabindex], [contenteditable]").filter((x) => x.tabIndex >= 0 && !x.disabled && !x.hidden && !x.closest("[inert], [hidden]") && x.getClientRects().length > 0 && getComputedStyle(x).visibility !== "hidden");
@@ -172,4 +176,4 @@ window.armadaBeta = {get partners() { return partners; }, get pack() { return !!
 document.addEventListener("DOMContentLoaded", boot);
 
 /* the seams (README.md): what a module built on this page relies on; it imports each from the module that holds it */
-export {api, handle, openPlace, ready, register, send, state, tx};
+export {api, handle, on, openPlace, ready, register, send, state, tx};

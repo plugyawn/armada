@@ -37,7 +37,7 @@ into the engineered client deletes the module it replaces.
 | `state.js` | `state` (the values more than one module replaces), the server's data (people, streams, unread, marks, places, ...), `DATA`, `stats` | host |
 | `time.js` | the server's clock (`now`) and the ways a time is written | host |
 | `frame.js` | the elements of the frame the kit draws (`main`, `feed`, `lane`, `nav`, `band`, the field's `tx`, ...), found by `bindFrame()` | host |
-| `connection.js` | `api()`, `register()`, the event queue (`poll`), event dispatch (`handle`), signing out | connection |
+| `connection.js` | `api()`, `register()`, the event queue (`poll`), event dispatch (`handle`, `on`), signing out | connection |
 | `routing.js` | place keys and addresses, the place caches and what fills them, `openPlace()`, marking read | connection |
 | `outbox.js` | a message on its way (`transmit`), the server's copy taking its place (`adopt`), a local row dropped | connection |
 | `faces.js` | names, initials, stones, presence, `faceOf()` | faces |
@@ -79,7 +79,9 @@ below), so a module imports each from the module named beside it.
   (`state.ME`, `state.queue`, ...), the feed's scroll, the field's attachments. The maps exported beside it (`people`,
   `streams`, `unread`, `marks`, `places`, ...) are changed in place, never replaced.
 - `api(method, path, params, options)` (`connection.js`): every request to `/json/`.
-- `handle(event, at)` (`connection.js`): event dispatch; `poll()` calls it for each event the queue returns.
+- `handle(event, at)` and `on(type, handler)` (`connection.js`): event dispatch. `poll()` hands each event the queue
+  returns to `handle`, which calls the handler `on` named for its type. `host.js` names them all, so a module that
+  needs a new event type adds one line there (and the type to `register()`'s `event_types`).
 - `register()` (`connection.js`): registers the event queue and applies what the server returns.
 - `openPlace(place, options)` (`routing.js`): place drawing. A place is made from its key by `routing.js`'s
   `placeFromKey(key)`.

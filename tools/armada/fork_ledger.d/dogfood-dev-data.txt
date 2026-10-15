@@ -1,0 +1,3 @@
+# Dogfood fix: the development data turns the agent on, as a realm owner
+# does in the app, so a new development environment has it from the start.
+kept zilencer/management/commands/populate_db.py  # the dev realm's agent bot, made beside the other dev-only bots

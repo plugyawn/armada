@@ -88,6 +88,7 @@ from zerver.models.realms import get_realm
 from zerver.models.recipients import get_or_create_direct_message_group
 from zerver.models.streams import get_stream
 from zerver.models.users import get_user, get_user_by_delivery_email, get_user_profile_by_id
+from zerver.views.armada import ensure_armada_configured_bot
 from zilencer.models import RemoteRealm, RemoteZulipServer, RemoteZulipServerAuditLog
 from zilencer.views import update_remote_realm_data_for_server
 
@@ -1268,6 +1269,12 @@ class Command(ZulipBaseCommand):
                     bot_type=UserProfile.DEFAULT_BOT,
                     bot_owner=desdemona,
                 )
+
+                # Turn the agent on as the realm's owner does in the app.
+                # The test suite's realm has no agent: its tests make
+                # their own, and a fixture bot would change what every
+                # test of the realm's users and bots sees.
+                ensure_armada_configured_bot(desdemona)
 
             mark_all_messages_as_read()
             self.stdout.write("Successfully populated test database.\n")

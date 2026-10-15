@@ -326,7 +326,7 @@ main > .pane[data-pane="Partner"] { overflow-y: auto; scrollbar-width: none; }
 .pcard .btns { display: flex; gap: var(--s-2); margin-top: var(--s-3); justify-content: flex-end; }
 
 
-/* ---------- mentions, links to places (mentions.js) ----------
+/* ---------- mentions, links to places, replies (mentions.js) ----------
    A mention is a pill: the name on a light fill of the words' own colour, so it reads on any bubble. A mention of me, or of
    everyone, is in my colour. A silent mention (the name in a reply's quote) is the name alone. */
 .mention, .cz .tx .pill:not(.chip) { padding: 0 3px; margin: 0 1px; border-radius: var(--r-mark); background: color-mix(in srgb, currentColor 12%, transparent); font-weight: 500; white-space: nowrap; }
@@ -352,5 +352,17 @@ a.placelink:hover { background: color-mix(in srgb, currentColor 18%, transparent
 /* the field with the switch's pill: its placeholder stands after the pill */
 .cz.seeded:not(.has-text) .tx { text-indent: 0; }
 .cz.seeded:not(.has-text) .ph { left: var(--seed-w, 0px); }
+/* a reply: the line it quotes stands above my words in the field, and above my bubble once sent */
+.cz .txw > .rq { display: flex; align-items: center; gap: var(--s-2); height: var(--h-s); margin-top: var(--s-1); padding-left: var(--s-2); border-radius: var(--r-ctl); box-shadow: inset 2px 0 0 var(--fill-3); font: var(--t-text); color: var(--ink-2); min-width: 0; }
+.cz.replying:not(.has-text) .ph { top: calc(var(--s-1) * 2 + var(--h-s)); }
+.rq .rqn { color: var(--ink-1); font-weight: 500; flex: none; }
+.rq .q { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rq > .ic { flex: none; color: var(--ink-2); }
+.cz .rq .x { width: 20px; height: 20px; flex: none; display: inline-grid; place-items: center; margin-left: auto; border-radius: var(--r-ctl); }
+.cz .rq .x:hover { background: var(--fill-2); }
+.cl > button.rq { display: flex; align-items: center; gap: var(--s-2); height: var(--h-s); max-width: min(var(--bubble-max), calc(var(--col) * 0.78)); padding: 0 var(--s-2); border-radius: var(--r-ctl); box-shadow: inset 2px 0 0 var(--fill-3); font: var(--t-text); color: var(--ink-2); text-align: left; }
+.cl > button.rq:hover { background: var(--fill-1); }
+.cl.me > button.rq { align-self: flex-end; }
+.cl > button.rq + .bl { margin-top: var(--gap-same); }
 
 }   /* @layer zulip.armada-beta */

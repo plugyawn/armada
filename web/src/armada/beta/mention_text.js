@@ -1,5 +1,5 @@
-/* INTERIM BETA (README.md): what the field's words become on the wire, and back: mentions and links to places.
-   Pure: it imports nothing and reads no global but the elements it is given, so node tests
+/* INTERIM BETA (README.md): what the field's words become on the wire, and back: mentions, links to places, a reply's
+   quote. Pure: it imports nothing and reads no global but the elements it is given, so node tests
    load it (web/tests/armada/beta_mention_text.test.cjs).
 
    The field holds the words as typed, with a mention or a link as a pill: an element that stands for its wire text
@@ -119,5 +119,25 @@ function echoRefs(html, look) {
     return gt >= 0 ? `<a class="stream-topic" data-stream-id="${s}">#${ref.slice(0, gt)} &gt; ${ref.slice(gt + 4)}</a>` : `<a class="stream" data-stream-id="${s}">#${ref}</a>`; });
 }
 
-export {echoRefs, fieldEmpty, fillField, outsideCode, pillFor, pillNode, rankPeople,
-  rankPlaces, seedOf, triggerAt, typedAliases, wireOf, withPath};
+/* ---------- a reply: one line of the message replied to, in Zulip's own quote form, so every client reads it ---------- */
+/* the line: the first that has words, with no mention in it (a quoted "@Onix" must not address the agent again) */
+function quoteLine(text, max = 100) { const line = (String(text).split("\n").map((l) => l.trim()).find(Boolean) || "").replace(/\s+/g, " ").replace(/@(?=[\w*_])/g, "");
+  return line.length > max ? line.slice(0, max - 1).trimEnd() + "…" : line; }
+function quoteWire(r) { const runs = String(r.line).match(/`+/g) || [], fence = "`".repeat(Math.max(3, ...runs.map((x) => x.length + 1)));
+  return `@_**${r.name}|${r.uid}** [said](${r.link}):\n${fence}quote\n${r.line}\n${fence}\n`; }
+/* the reverse of quoteWire, for editing a reply: its quote and the words after it; null for a message that is not a reply */
+const QUOTE_WIRE = /^@_\*\*([^*|\n]+)\|(\d+)\*\* \[said\]\(([^)\s]+)\):\n(`{3,})quote\n([\s\S]*?)\n\4(?:\n|$)/;
+function splitQuoteWire(wire) { const m = QUOTE_WIRE.exec(wire), near = m && /\/near\/(\d+)/.exec(m[3]); if (!m || !near) return null;
+  return {quote: {name: m[1], uid: +m[2], link: m[3], id: +near[1], line: m[5]}, rest: wire.slice(m[0].length)}; }
+/* a rendered message that starts with a reply's quote: who said it, the message, the line; null otherwise. The server's
+   form is a paragraph of a silent mention, a "said" link to the message and a colon, then a quote; it is read before or
+   after clean() (parts.js), which keeps the mention's user id. */
+function quoteOf(children) {
+  const [p, q] = children; if (!p || !q || p.tagName !== "P" || q.tagName !== "BLOCKQUOTE") return null;
+  const who = p.querySelector(".user-mention.silent, .mention.silent"), a = p.querySelector("a[href]"), near = a && /\/near\/(\d+)/.exec(a.getAttribute("href"));
+  if (!who || !near || !/:\s*$/.test(p.textContent)) return null;
+  return {uid: +who.dataset.userId, name: who.textContent.replace(/^@/, ""), id: +near[1], line: q.textContent.replace(/\s+/g, " ").trim()};
+}
+
+export {echoRefs, fieldEmpty, fillField, outsideCode, pillFor, pillNode, quoteLine, quoteOf, quoteWire, rankPeople,
+  rankPlaces, seedOf, splitQuoteWire, triggerAt, typedAliases, wireOf, withPath};

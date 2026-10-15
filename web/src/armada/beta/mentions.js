@@ -1,15 +1,16 @@
-/* INTERIM BETA (README.md): the field's mentions and links: the @ and # pickers, pills, the switch's pill.
+/* INTERIM BETA (README.md): the field's mentions and links: the @ and # pickers, pills, the switch's pill, a reply's quote.
    The words are mention_text.js's; this module is what a person sees and presses. */
 
-import {el, esc, press} from "./util.js";
+import {$, el, esc, press} from "./util.js";
 import {armadaBots, marks, people, repoStreams, state, streams, topicsOf, worktrees} from "./state.js";
-import {cz, main, tx} from "./frame.js";
-import {faceOf, presOf} from "./faces.js";
-import {onixNow, syncField} from "./composer.js";
+import {cz, feed, lane, main, tx} from "./frame.js";
+import {faceOf, nameOf, presOf} from "./faces.js";
+import {note, onixNow, ready, syncField} from "./composer.js";
 import {loadTopics, subs} from "./nav.js";
-import {tkey} from "./routing.js";
+import {fetchMsgs, tkey} from "./routing.js";
+import {dist, drawLane, edge, haltLane, syncJump} from "./feed.js";
 import {editing} from "./hover.js";
-import {fillField, pillFor, pillNode, rankPeople, rankPlaces, seedOf, triggerAt} from "./mention_text.js";
+import {fillField, pillFor, pillNode, quoteLine, quoteOf, quoteWire, rankPeople, rankPlaces, seedOf, triggerAt} from "./mention_text.js";
 
 const agentId = () => [...armadaBots][0];
 const inWorktree = () => !!state.place && state.place.kind === "topic" && !!state.place.repo;
@@ -86,7 +87,38 @@ function onKey(e) {
     if ((e.key === "Enter" || e.key === "Tab") && !e.shiftKey) { stop(); choose(pk.hi); return; }
     if (e.key === "Escape") { stop(); dismissed = {node: pk.node, start: pk.start}; closePk(); return; }
   }
+  if (e.key === "Escape" && replyTo && e.target === tx && !editing && !e.defaultPrevented) { e.preventDefault(); e.stopImmediatePropagation(); clearReply(); ready(); }   /* Esc gives the reply up first */
 }
+
+/* ---------- a reply: one line of a message, quoted above my words ---------- */
+let replyTo = null;
+const tplQ = document.createElement("template");
+/* the message's words without its own reply quote and with no mention marks */
+function wordsOf(m) { tplQ.innerHTML = m.content || ""; const kids = [...tplQ.content.children]; if (quoteOf(kids)) { kids[0].remove(); kids[1].remove(); }
+  tplQ.content.querySelectorAll(".user-mention, .topic-mention, .user-group-mention").forEach((s) => s.replaceWith(s.textContent.replace(/^@/, "")));
+  return [...tplQ.content.children].map((x) => x.textContent).join("\n") || tplQ.content.textContent; }
+function linkOf(m) { const p = state.place; return p.kind === "topic" ? `${location.origin}/#narrow/channel/${p.stream_id}/topic/${encodeURIComponent(p.topic)}/near/${m.id}` : `${location.origin}/#narrow/near/${m.id}`; }
+function startReply(m) { if (!m || typeof m.id !== "number") return; replyTo = {id: m.id, uid: m.sender_id, name: nameOf(m.sender_id), line: quoteLine(wordsOf(m)), link: linkOf(m), key: state.place.key}; state.threadTx = null; drawReply(); ready(); }
+function clearReply() { if (!replyTo) return; replyTo = null; drawReply(); }
+/* a reply belongs to its place: another place's field does not carry it */
+const syncReply = () => { if (replyTo && (!state.place || state.place.key !== replyTo.key)) clearReply(); };
+function drawReply() { let box = $(":scope .txw > .rq", cz); cz.classList.toggle("replying", !!replyTo);
+  if (!replyTo) { if (box) box.remove(); return; } if (!box) { box = el("span", "rq"); $(".txw", cz).prepend(box); }
+  box.innerHTML = `${ic("answer")}<span class="rqn">${esc(replyTo.name)}</span><span class="q">${esc(replyTo.line)}</span><button class="x" data-unreply aria-label="Cancel the reply" data-tip="Cancel the reply" data-key="Esc">${ic("x")}</button>`; host(box); }
+/* the quote to send before my words, once: the reply is used up */
+function takeReply() { if (!replyTo) return ""; const q = quoteWire(replyTo); clearReply(); return q; }
+/* editing a reply: its quote stands in the strip while its words are in the field, and goes back before them on save; the
+   reply the draft had before comes back when the edit ends */
+function holdReply(quote) { const was = replyTo; replyTo = quote ? {...quote, key: state.place.key} : null; drawReply(); return was; }
+function restoreReply(was) { replyTo = was && state.place && was.key === state.place.key ? was : null; drawReply(); }
+/* the quote above a bubble: pressed, the conversation goes to the message it quotes */
+async function jumpTo(id) {
+  const c = state.P, find = () => $(`[data-part][data-mid="${id}"]:not(.rq)`, lane);
+  let n = find(); for (let i = 0; !n && i < 4 && c.loaded && !c.oldest && state.P === c; i++) { await fetchMsgs(c, true); if (c.byId.has(id)) { drawLane({keep: true}); n = find(); } }
+  if (state.P !== c) return; if (!n) { note("That message is not in this conversation"); ready(); return; }
+  haltLane(); const r = n.getBoundingClientRect(), fr = feed.getBoundingClientRect(); feed.scrollTop += r.top - fr.top - fr.height / 3; state.lastSet = feed.scrollTop; state.pinned = dist() < 4; edge(); syncJump(); M.appear(n, 0.3); ready();
+}
+const quoteHTML = (q) => `${ic("answer")}<span class="rqn">${esc(nameOf(q.uid) || q.name)}</span><span class="q">${esc(q.line)}</span>`;
 
 /* ---------- an edit: wire text back into pills; what the echo looks names up ---------- */
 const personByName = (name) => { const low = name.toLowerCase(); if (state.agentMention.toLowerCase() === `@**${low}**` || low === "onix") return agentId() ?? null; for (const p of people.values()) if (p.name.toLowerCase() === low) return p.id; return null; };
@@ -109,6 +141,9 @@ function wireMentions() {
   /* the caret moved away from what the picker is for (an arrow, a click): it closes; typing redraws it from input */
   document.addEventListener("selectionchange", () => { if (!pk) return; const t = readTrigger(pk.field); if (!t || t.node !== pk.node || t.start !== pk.start) closePk(); });
   document.addEventListener("focusout", (e) => { if (pk && e.target === pk.field) closePk(); });
+  press(cz, "[data-unreply]", () => { clearReply(); ready(); });
+  press(lane, ".rq[data-quote]", (b) => jumpTo(+b.dataset.quote));
 }
 
-export {fillFromWire, refLook, reseed, seedField, wireMentions};
+export {fillFromWire, holdReply, quoteHTML, refLook, reseed, restoreReply, seedField, startReply, syncReply, takeReply,
+  wireMentions};

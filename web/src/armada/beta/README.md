@@ -48,8 +48,8 @@ into the engineered client deletes the module it replaces.
 | `composer.js` | the field: the agent switch, the verb, the placeholder, attachments, `note()`, `ready()` | composer |
 | `send.js` | sending: the words addressed and echoed, `send()`, `retry()` | composer |
 | `model_picker.js` | the model and effort picker | composer |
-| `mentions.js` | the `@` and `#` pickers, pills in the field, the switch's `@Onix` pill | composer |
-| `mention_text.js` | pure: the field's words on the wire and back (mentions in place, `@onix` typed by hand), the pickers' order, the echo of a mention; node tests in `web/tests/armada/beta_mention_text.test.cjs` | composer |
+| `mentions.js` | the `@` and `#` pickers, pills in the field, the switch's `@Onix` pill, a reply's quote (in the field and above a bubble) | composer |
+| `mention_text.js` | pure: the field's words on the wire and back (mentions in place, `@onix` typed by hand), the pickers' order, the echo of a mention, a reply's quote; node tests in `web/tests/armada/beta_mention_text.test.cjs` | composer |
 | `parts.js` | the rule: server HTML becomes bubbles and blocks (`partsOf`); the local echo (`echoHTML`) | feed |
 | `feed.js` | the conversation: its scroll, its turns, `drawLane()` | feed |
 | `agent_turn.js` | the agent's turn: the working mark, the footer, the streamed words followed in place | feed |

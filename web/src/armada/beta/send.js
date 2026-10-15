@@ -7,7 +7,7 @@ import {addMsg} from "./routing.js";
 import {lane, nav, sh, tx} from "./frame.js";
 import {echoHTML} from "./parts.js";
 import {drawAtts, note, ready, syncField} from "./composer.js";
-import {seedField} from "./mentions.js";
+import {seedField, takeReply} from "./mentions.js";
 import {wireOf, withPath} from "./mention_text.js";
 import {appendMessage, grown, haltLane, hush, sectionOf} from "./feed.js";
 import {drawTrail} from "./nav.js";
@@ -42,6 +42,7 @@ function send(o = {}) {
      to each other here do not answer a run that waits. */
   const p = state.place, c = state.P, live = liveRun(c), ask = waitingRun(c), toOnix = p.kind === "topic" && !!p.repo && (!!o.onix || text.includes(state.agentMention)), starts = toOnix && !live;
   if (inView && toOnix && o.text == null) text = withPath(text, inView, state.agentMention);
+  if (o.text == null) text = takeReply() + text;   /* a reply: its one-line quote goes first */
   const raw = text, shown = echoHTML(text);
   const m = {id: "L" + ++state.localSeq, local: true, pending: true, sender_id: state.ME, timestamp: Math.floor(now() / 1000), content: shown, raw, toOnix, reactions: []};
   let ph = null; if (starts) ph = {id: "O" + state.localSeq, local: true, onix: true, sender_id: [...armadaBots][0], timestamp: m.timestamp, content: "", reactions: [], is_agent_message: true, for: m.id};

@@ -11,8 +11,8 @@ import {react} from "./reactions.js";
 import {openInfo, RECEIPTS} from "./receipts.js";
 import {openThread} from "./threads.js";
 import {updateMessage} from "./agent_turn.js";
-import {fillFromWire} from "./mentions.js";
-import {fieldEmpty} from "./mention_text.js";
+import {fillFromWire, holdReply, restoreReply, startReply, takeReply} from "./mentions.js";
+import {fieldEmpty, splitQuoteWire} from "./mention_text.js";
 import {drawRunState} from "./band.js";
 import {openCard} from "./partner_card.js";
 
@@ -56,8 +56,9 @@ function act(name, t, btn, kbd) { const m = msgOf(t); if (!m) return;   /* from 
   else if (name === "thread") { overHide(); openThread(m.thread_root_message_id || m.id, false, {focus: true}); }
   else if (name === "copy") { try { navigator.clipboard.writeText(plainText(t.matches(".b") ? t : t)).catch(() => {}); } catch (e) {} M.say(btn, "Copied", 1200); if (!kbd) ready(); }
   else if (name === "more") openMenu(m, btn); }
-/* More: what can be done to this message. Mine can be edited and deleted; any can be linked or copied. */
+/* More: what can be done to this message. Any sent one can be replied to; mine can be edited and deleted; any can be linked or copied. */
 function openMenu(m, btn) { closeMenu(); const mine = m.sender_id === state.ME && typeof m.id === "number", items = [];
+  if (typeof m.id === "number") items.push(["reply", "Reply", "R"]);
   if (mine && !isOnix(m.sender_id)) items.push(["edit", "Edit", "E"], ["delete", "Delete", ""]);
   items.push(["copy", "Copy text", "C"], ["link", "Copy link", ""]); if (RECEIPTS && typeof m.id === "number") items.push(["info", "Info", "I"]);
   if (m.sender_id > 0 && m.sender_id !== state.ME && !isOnix(m.sender_id)) items.push(["card", "Card", ""]);   /* the sender's card, which a face opens to the pointer */
@@ -68,7 +69,7 @@ function openMenu(m, btn) { closeMenu(); const mine = m.sender_id === state.ME &
     const hot = items.findIndex(([, , key]) => key && key.toLowerCase() === e.key.toLowerCase()); if (hot >= 0 && !e.metaKey && !e.ctrlKey) { e.preventDefault(); $$(".mi", menu)[hot].click(); return true; } return false; };
   menu._t = overAt;
   press(menu, ".mi", (b, e, ptr) => { const k = b.dataset.mi, t = menu._t; closeMenu(); overHide();
-    if (k === "edit") startEdit(m); else if (k === "delete") confirmDelete(m); else if (k === "info") openInfo(m.id, t, !ptr); else if (k === "card") openCard(m.sender_id, t);
+    if (k === "reply") startReply(m); else if (k === "edit") startEdit(m); else if (k === "delete") confirmDelete(m); else if (k === "info") openInfo(m.id, t, !ptr); else if (k === "card") openCard(m.sender_id, t);
     else if (k === "copy") { try { navigator.clipboard.writeText(plainText(t)).catch(() => {}); } catch (e) {} note("Copied"); ready(); }
     else if (k === "link") { const p = state.place, u = p.kind === "topic" ? `${location.origin}/#narrow/channel/${p.stream_id}/topic/${encodeURIComponent(p.topic)}/near/${m.id}` : `${location.origin}/#narrow/near/${m.id}`; try { navigator.clipboard.writeText(u).catch(() => {}); } catch (e) {} note("Link copied"); ready(); } });
   M.release(menu, {y: -(T["pane-rise"] || 4)}, "touch"); }
@@ -77,14 +78,16 @@ function closeMenu() { if (!menu) return; const x = menu; menu = null; x.inert =
 async function startEdit(m) { if (!m || m.sender_id !== state.ME || typeof m.id !== "number") return; if (editing) endEdit();
   let raw; try { raw = (await api("GET", `messages/${m.id}`, {apply_markdown: false})).message.content; } catch (e) { note(e.message); return; }
   /* the draft (with its pills) is kept as it was, and comes back when the edit ends; the message's mentions come back as pills */
-  editing = {m, was: [...tx.childNodes]}; $$(`[data-mid="${m.id}"] .b`, lane).forEach((b) => b.classList.add("unsent"));
-  state.threadTx = null; fillFromWire(tx, raw); syncField(); go.classList.add("armed"); drawRunState(); ready();
+  /* a reply's quote goes to the strip above the field, not into it as Zulip's markup */
+  const split = splitQuoteWire(raw);
+  editing = {m, was: [...tx.childNodes], reply: holdReply(split && split.quote)}; $$(`[data-mid="${m.id}"] .b`, lane).forEach((b) => b.classList.add("unsent"));
+  state.threadTx = null; fillFromWire(tx, split ? split.rest : raw); syncField(); go.classList.add("armed"); drawRunState(); ready();
   if (document.activeElement === tx) { const s = getSelection(); s.selectAllChildren(tx); s.collapseToEnd(); } }   /* written after its words, as Up promises */
-function endEdit() { if (!editing) return; const {m, was} = editing; editing = null; $$(`[data-mid="${m.id}"] .b`, lane).forEach((b) => b.classList.remove("unsent")); tx.replaceChildren(...was); syncField(); go.classList.toggle("armed", !fieldEmpty(tx)); drawRunState(); }
+function endEdit() { if (!editing) return; const {m, was, reply} = editing; editing = null; $$(`[data-mid="${m.id}"] .b`, lane).forEach((b) => b.classList.remove("unsent")); tx.replaceChildren(...was); restoreReply(reply); syncField(); go.classList.toggle("armed", !fieldEmpty(tx)); drawRunState(); }
 /* `text` is the field's wire text (send.js), mentions in Zulip's syntax where they were written */
 async function saveEdit(text, at) { const {m} = editing; if (!text) { endEdit(); confirmDelete(m); return; }
-  const raw = text, c = msgIndex.get(m.id) || state.P;
-  tx.textContent = ""; editing.was = []; endEdit(); m.content = echoHTML(text); m.edited = true; updateMessage(c, m); S.play("send", 0, at); ready();
+  const raw = takeReply() + text, c = msgIndex.get(m.id) || state.P;
+  tx.textContent = ""; editing.was = []; endEdit(); m.content = echoHTML(raw); m.edited = true; updateMessage(c, m); S.play("send", 0, at); ready();
   try { await api("PATCH", `messages/${m.id}`, {content: raw}); } catch (e) { note(e.message); } }
 /* deleting cannot be undone, so it asks once, in a dialog; the server's event takes the message away */
 function confirmDelete(m) { if (dialogOpen) return; dialogOpen = true; const d = el("div", "dlg raised float", `<p style="font:var(--t-strong)">Delete this message?</p><p style="color:var(--ink-2);margin-top:var(--s-2)">It is removed for everyone, and cannot be brought back.</p><div class="btns"><button class="btn" data-no>Cancel</button><button class="go" data-yes>Delete</button></div>`); d.setAttribute("role", "dialog"); d.setAttribute("aria-modal", "true");

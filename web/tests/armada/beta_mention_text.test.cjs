@@ -2,7 +2,8 @@
 
 // The interim beta's field words (web/src/armada/beta/mention_text.js):
 // what a field with pills sends, how a typed agent name becomes its
-// mention in place (statement 27), the pickers' triggers and order.
+// mention in place (statement 27), the pickers' triggers and order and a
+// reply's quote.
 
 const assert = require("node:assert/strict");
 
@@ -221,5 +222,50 @@ run_test("the echo renders mentions and links as the server does", () => {
     assert.equal(
         words.echoRefs("#**armada&gt;fix it** #**armada**", look),
         '<a class="stream-topic" data-stream-id="1">#armada &gt; fix it</a> <a class="stream" data-stream-id="1">#armada</a>',
+    );
+});
+
+run_test("a reply quotes one line, and is read back from the server's form", () => {
+    assert.equal(words.quoteLine("\n\n  @Onix please   fix\nsecond line"), "Onix please fix");
+    assert.equal(words.quoteLine("x".repeat(150)).length, 100);
+    const wire = words.quoteWire({
+        name: "Iago",
+        uid: 5,
+        link: "https://a.b/#narrow/near/42",
+        line: "uses ``` fences",
+    });
+    assert.equal(
+        wire,
+        "@_**Iago|5** [said](https://a.b/#narrow/near/42):\n````quote\nuses ``` fences\n````\n",
+    );
+    // What the server renders for it.
+    const dom = make_real_dom(
+        `<div id="m"><p><span class="user-mention silent" data-user-id="5">Iago</span> <a href="#narrow/channel/1/topic/x/near/42">said</a>:</p><blockquote><p>uses fences</p></blockquote><p>mine</p></div>`,
+    );
+    assert.deepEqual(words.quoteOf([...dom.find("#m").children]), {
+        uid: 5,
+        name: "Iago",
+        id: 42,
+        line: "uses fences",
+    });
+    const plain = make_real_dom(`<div id="m"><p>said:</p><blockquote><p>q</p></blockquote></div>`);
+    assert.equal(words.quoteOf([...plain.find("#m").children]), null);
+    // Editing a reply splits the quote from the words again.
+    assert.deepEqual(words.splitQuoteWire(wire + "mine\nand more"), {
+        quote: {
+            name: "Iago",
+            uid: 5,
+            link: "https://a.b/#narrow/near/42",
+            id: 42,
+            line: "uses ``` fences",
+        },
+        rest: "mine\nand more",
+    });
+    assert.equal(words.splitQuoteWire("mine"), null);
+    assert.equal(
+        words.splitQuoteWire(
+            "@_**Iago|5** [said](https://a.b/#narrow/channel/1):\n```quote\nq\n```\nmine",
+        ),
+        null,
     );
 });

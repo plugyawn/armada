@@ -4,8 +4,8 @@ import {$$, el, esc} from "./util.js";
 import {marks, people, repoStreams, state, streams} from "./state.js";
 import {dayLabel, hhmm} from "./time.js";
 import {isOnix, nameOf} from "./faces.js";
-import {echoRefs} from "./mention_text.js";
-import {refLook} from "./mentions.js";
+import {echoRefs, quoteOf} from "./mention_text.js";
+import {quoteHTML, refLook} from "./mentions.js";
 import {tkey} from "./routing.js";
 
 /* ---------- the rule: a server-rendered message becomes bubbles and blocks ----------
@@ -26,7 +26,7 @@ function clean(root) {
   $$("script, style, iframe, object, .message_length_controller, .message_expander, .message_condenser", root).forEach((x) => x.remove());
   $$("span.emoji", root).forEach((s) => { const m = /emoji-([0-9a-f-]+)/.exec(s.className); if (!m) return; let ch = ""; try { ch = String.fromCodePoint(...m[1].split("-").map((h) => parseInt(h, 16))); } catch (e) { return; } const e = el("span", "em"); e.textContent = ch; e.title = s.getAttribute("title") || ""; s.replaceWith(e); });
   $$(".user-mention, .user-group-mention, .topic-mention", root).forEach((s) => { const id = +s.dataset.userId, silent = s.classList.contains("silent"), all = s.classList.contains("topic-mention") || s.dataset.userId === "*";
-    const e = el("span", "mention" + (silent ? " silent" : "") + (id === state.ME || all ? " you" : "")); e.textContent = (silent ? "" : "@") + (id && people.has(id) ? nameOf(id) : s.textContent.replace(/^@/, "")); s.replaceWith(e); });
+    const e = el("span", "mention" + (silent ? " silent" : "") + (id === state.ME || all ? " you" : "")); e.textContent = (silent ? "" : "@") + (id && people.has(id) ? nameOf(id) : s.textContent.replace(/^@/, "")); if (s.dataset.userId) e.dataset.userId = s.dataset.userId; s.replaceWith(e); });
   $$("a.stream, a.stream-topic", root).forEach((a) => { const sid = +a.dataset.streamId, st = streams.get(sid); if (!st) return; const pre = `#${st.name} > `, topic = a.classList.contains("stream-topic") && a.textContent.startsWith(pre) ? a.textContent.slice(pre.length) : null;
     const e = el(topic != null ? "a" : "span", "placelink"), live = topic != null && marks.get(tkey(sid, topic)) === "live"; if (topic != null) e.href = `#c/${sid}/${encodeURIComponent(topic)}`; if (live) e.dataset.state = "live";
     e.innerHTML = `${ic(topic != null ? "branch" : repoStreams.has(sid) ? "repo" : "hash")}<span>${esc(st.name)}</span>${topic != null ? `<span class="sep">\u203a</span><span>${esc(topic)}</span>` : ""}`; a.replaceWith(e); });
@@ -59,6 +59,8 @@ function partsOf(m) {
     else if (run.length === 1 && run[0].tagName === "P") { const p = run[0], txt = p.textContent.trim(), ems = $$(".em, img.emoji", p).length; out.push({t: "b", tag: "p", html: p.innerHTML, jumbo: ems >= 1 && ems <= 3 && JUMBO.test(txt.replace(/\s/g, ""))}); }
     else { const box = el("div"); box.append(...run); out.push({t: "b", tag: "div", html: box.innerHTML}); }
     run = []; };
+  const quote = onix ? null : quoteOf([...root.children]);   /* a reply: its one-line quote stands above the words */
+  if (quote) { root.firstElementChild.remove(); root.firstElementChild.remove(); out.push({t: "rq", html: quoteHTML(quote), ref: quote.id}); }
   const asking = onix && QUESTION.test(root.textContent);
   for (const n of [...root.children]) { if (n.tagName === "HR") continue;
     if (asking && n.tagName === "UL") { flush(); out.push(askPart(n)); continue; }   /* the question's options are buttons, under the question */
@@ -66,7 +68,7 @@ function partsOf(m) {
     if (asking && n.tagName === "P" && /^_?Reply in this thread to answer/.test(n.textContent.trim())) { const m_ = /waiting up to (\d+) minutes/.exec(n.textContent); n.className = "askcap"; n.innerHTML = `<em>Press an answer, or write your own to @Onix. The run waits${m_ ? ` up to ${m_[1]} minutes` : ""}.</em>`; }   /* in words, the answer names Onix (or the place's switch is on): people talking here do not answer it */
     if (BLOCK(n)) { flush(); out.push(blockPart(n)); } else run.push(n); }
   flush();
-  if (!out.length && !onix) { const t = (root.textContent || "").trim(); out.push({t: "b", tag: "p", html: esc(t || " ")}); }
+  if (!out.some((x) => x.t !== "rq") && !onix) { const t = (root.textContent || "").trim(); out.push({t: "b", tag: "p", html: esc(t || " ")}); }
   return out;
 }
 const plainOf = (html) => { tpl.innerHTML = html || ""; return tpl.content.textContent; };
@@ -78,6 +80,7 @@ function partEl(p, m) {
   else if (p.t === "tbl") e = el("div", "blk tbl", p.html);
   else if (p.t === "ask") e = el("div", "blk ask", p.html);
   else if (p.t === "pic") e = el("div", "blk pic", p.html);
+  else if (p.t === "rq") { e = el("button", "rq", p.html); e.dataset.quote = p.ref; e.setAttribute("aria-label", "Go to the message this replies to"); }
   else e = el("div", "blk", p.html);
   e.dataset.mid = m.id; e.dataset.part = p.t; e._src = p.html; loadPics(e); return e;
 }
@@ -97,6 +100,7 @@ function echoHTML(text) {
       while (k < ls.length && !/^\s*([-*+] |\d+[.)] |> ?)/.test(ls[k])) blk.push(inlineEcho(ls[k++])); out.push("<p>" + blk.join("<br>") + "</p>"); } };
   let buf = [];
   while (i < lines.length) { const l = lines[i], f = /^\s*(```+|~~~+)/.exec(l);
+    if (f && /^\s*(```+|~~~+)\s*quote\s*$/.test(l)) { para(buf); buf = []; const q = []; i++; while (i < lines.length && lines[i].trim() !== f[1]) q.push(lines[i++]); i++; out.push("<blockquote>" + echoHTML(q.join("\n")) + "</blockquote>"); continue; }   /* a reply's quote */
     if (f) { para(buf); buf = []; const code = []; i++; while (i < lines.length && !lines[i].trim().startsWith(f[1])) code.push(lines[i++]); i++; out.push(`<div class="codehilite"><pre><span></span><code>${esc(code.join("\n"))}\n</code></pre></div>`); continue; }
     if (!l.trim()) { para(buf); buf = []; i++; continue; }
     const img = /^\[([^\]]+)\]\((\/user_uploads\/[^)\s]+\.(?:png|jpe?g|gif|webp))\)$/i.exec(l.trim());

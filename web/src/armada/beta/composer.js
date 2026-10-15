@@ -11,7 +11,7 @@ import {dialogOpen} from "./hover.js";
 import {modeLabel, pop} from "./model_picker.js";
 import {pal} from "./palette.js";
 import {pack} from "./partners.js";
-import {reseed, seedField} from "./mentions.js";
+import {reseed, seedField, syncReply} from "./mentions.js";
 import {fieldEmpty, seedOf} from "./mention_text.js";
 import {drawRunState} from "./band.js";
 
@@ -38,7 +38,7 @@ function setVerb(v, cut) { const cur = $(":scope > span:not(.gone)", ph), same =
 function drawComposer() { const wt = state.place.kind === "topic" && state.place.repo, on = onixHere(), ctx = state.P.ctx; toBtn.hidden = !wt; modeBtn.hidden = !wt; modeBtn.classList.remove("off");
   toBtn.classList.toggle("off", !on); toBtn.setAttribute("aria-pressed", on); toBtn.dataset.tip = on ? "Onix answers what you send here. Press to talk to people only" : "What you send here goes to people. Press to have Onix answer";
   if (wt && ctx) { const label = modeLabel(ctx); const sl = $(".slot", modeBtn); if (sl && sl._v !== label) { sl._v = label; sl.innerHTML = `<span>${esc(label)}</span><i class="sz">${esc(label)}</i>`; } }
-  modeBtn.dataset.tip = "Model, speed and effort for this worktree"; modeBtn.dataset.key = "⌘/"; seedField(); setVerb(verb, true); placeJump(); }
+  modeBtn.dataset.tip = "Model, speed and effort for this worktree"; modeBtn.dataset.key = "⌘/"; syncReply(); seedField(); setVerb(verb, true); placeJump(); }
 /* Jump to latest stands left of the model label, whose width follows the model's name */
 function placeJump() { if (!band || !band.el || !band.jump || !modeBtn) return; const box = band.jump.offsetParent || band.el, r = modeBtn.hidden ? null : modeBtn.getBoundingClientRect(), b = box.getBoundingClientRect(); band.el.style.setProperty("--jump-right", r && r.width ? `${Math.ceil(b.right - r.left) + 8}px` : ""); }
 /* the switch's pill draws its name from CSS, so a field that holds only it has no text and shows its placeholder */

@@ -50,9 +50,34 @@ Output is one line per assertion:
     INFO       ...      a number recorded for the report; never gates anything
     ERROR      ...      the check itself crashed
 
-The exit status is 0 only when there is no `FAIL`, `FIXED`, `STALE` or `ERROR`.
+    ENV-ERROR  ...      something other than the tree changed or was wrong; see below
+
+The exit status is 0 only when there is no `FAIL`, `FIXED`, `STALE` or
+`ERROR`, 1 when the suite is red, and 3 when the run is `ENV-ERROR`.
 The report (`var/armada-checks/report.json` unless `--json` is given) holds
 every assertion and measurement with its value, threshold and note.
+
+### When a line says ENV-ERROR
+
+A result must be a function of the tree and the recipe only. Before the run
+and after every check, `lib/health.mjs` looks at the environment; any
+breach turns the whole run into `ENV-ERROR`, which is neither red nor
+green, rewrites no `known.json`, and is rerun:
+
+- the server's `/health` does not answer 200;
+- when the server runs on this machine, from `ARMADA_SERVED_TREE` (default:
+  the checkout `run.mjs` is in, which `arm check` runs from): Django,
+  Tornado or the queue processor is missing or a zombie, any of them
+  restarted (a save makes them reload), the machine rebooted, less than
+  2 GiB of disk or 512 MiB of memory is left, or a file of the served
+  tree's source changed (its change time, which a sync moves too);
+- in the checks' pages: a 429 or a 5xx the check did not answer itself, a
+  lost event queue (Tornado restarts inside one process, so only its
+  clients see it), or a message, edit, reaction or typing by another
+  person reaching the checks' user.
+
+The report holds the problems (`env_errors`) and both snapshots (`health`).
+For a server elsewhere only `/health` and the pages are looked at.
 
 ### When a line says FIXED
 
@@ -361,8 +386,8 @@ The logic that decides a result is tested like the product's pure code:
 
 runs `test/*.test.mjs` with node's test runner and fails unless every
 module listed in `FULLY_COVERED` in `selftest.mjs` (the ratchet in
-`lib/classify.mjs`, the `known.json` lint, the lock, `lib/stats.mjs`,
-`lib/mutate.mjs`) has 100% of its
+`lib/classify.mjs`, the `known.json` lint, the lock, the health checks,
+`lib/stats.mjs`, `lib/mutate.mjs`) has 100% of its
 lines, branches and functions covered. It needs no browser and no
 server, and takes about a second.
 
@@ -379,6 +404,7 @@ server, and takes about a second.
     lib/known.mjs        what a known.json entry holds; the rule that it only improves
     lib/known_lint.mjs   that rule against git (known-lint.mjs runs it)
     lib/lock.mjs         one run at a time, under /tmp/armada-check.lock
+    lib/health.mjs       what makes a run ENV-ERROR
     lib/fixtures.mjs     the checks' own topic; events for messages and edits
     lib/mutate.mjs       deliberate breakage of the application, by name
     lib/prove.mjs        runs every mutation; the pins must turn red

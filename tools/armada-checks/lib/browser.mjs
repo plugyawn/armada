@@ -25,6 +25,7 @@ export async function launch() {
 
 // Log in through the development login page. The session cookie lives in the
 // browser's default context, so every page opened afterwards is logged in.
+// Returns the user's id.
 export async function login(browser, email = USER) {
     const page = await browser.newPage();
     await page.setViewport(VIEWPORT);
@@ -40,5 +41,9 @@ export async function login(browser, email = USER) {
         }, email),
     ]);
     await page.waitForSelector("#left-sidebar", {visible: true});
+    const user_id = await page.evaluate(
+        async () => (await (await fetch("/json/users/me")).json()).user_id,
+    );
     await page.close();
+    return user_id;
 }

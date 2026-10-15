@@ -15,7 +15,7 @@ import * as os from "node:os";
 import path from "node:path";
 import {fileURLToPath} from "node:url";
 
-import {run_under_lock} from "./lock.mjs";
+import {ENV_ERROR_STATUS, run_under_lock} from "./lock.mjs";
 import {MUTATIONS, REPLACED_BY} from "./mutate.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -41,6 +41,8 @@ const names = wanted.length > 0 ? wanted : Object.keys(MUTATIONS);
 const results = [];
 let failed = 0;
 let by_precondition_only = 0;
+// Mutations whose run reported ENV-ERROR: neither proved nor not proved.
+const env_errors = [];
 
 for (const name of names) {
     const mutation = MUTATIONS[name];
@@ -59,6 +61,15 @@ for (const name of names) {
         fs.unlinkSync(report_file);
     } catch {
         report = undefined;
+    }
+    if (report?.verdict === "ENV-ERROR") {
+        env_errors.push(name);
+        results.push({name, env_errors: report.env_errors});
+        console.log(`ENV-ERROR  ${name}: the environment changed during its run`);
+        for (const {problem} of report.env_errors) {
+            console.log(`             ${problem}`);
+        }
+        continue;
     }
     const check = report?.checks[0];
     const applied =
@@ -111,8 +122,9 @@ for (const name of names) {
 
 const summary = {
     finished: new Date().toISOString(),
-    proved: names.length - failed,
+    proved: names.length - failed - env_errors.length,
     failed,
+    env_errors,
     by_precondition_only,
     results,
 };
@@ -127,7 +139,15 @@ for (const target of new Set([
         // The host checkout is not mounted here.
     }
 }
-console.log(
-    `\n${failed === 0 ? "ALL PROVED" : "NOT ALL PROVED"}: ${names.length - failed} of ${names.length} mutations turn their assertions red; ${by_precondition_only} of them only by making an assertion unmeasurable ("PROVED n/a": that assertion still needs an edit that gives it a failing value)`,
-);
-process.exitCode = failed === 0 ? 0 : 1;
+const proved = names.length - failed - env_errors.length;
+if (env_errors.length > 0) {
+    console.log(
+        `\nENV-ERROR: ${env_errors.length} of ${names.length} mutations ran while the environment changed (${env_errors.join(", ")}); run them again. ${proved} proved, ${failed} not proved.`,
+    );
+    process.exitCode = ENV_ERROR_STATUS;
+} else {
+    console.log(
+        `\n${failed === 0 ? "ALL PROVED" : "NOT ALL PROVED"}: ${proved} of ${names.length} mutations turn their assertions red; ${by_precondition_only} of them only by making an assertion unmeasurable ("PROVED n/a": that assertion still needs an edit that gives it a failing value)`,
+    );
+    process.exitCode = failed === 0 ? 0 : 1;
+}

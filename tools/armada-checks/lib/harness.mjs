@@ -4,6 +4,7 @@
 /* global window, document */
 
 import {BASE, VIEWPORT, sleep} from "./browser.mjs";
+import {foreign_events, response_problem} from "./health.mjs";
 import {mutate_script, mutation_applied, requested_mutation} from "./mutate.mjs";
 import {install_page_helpers} from "./page.mjs";
 import {PROBE, SELECTORS, TOPICS} from "./selectors.mjs";
@@ -23,10 +24,16 @@ const IGNORED_CONSOLE = [/\[webpack-dev-server\]/, /\[HMR\]/, /Download the Reac
 // one run is one process, shared by every check of the run.
 let probe_ready = false;
 
+// At most this many environment problems are kept per check: the first
+// already says the run must be repeated.
+const MAX_ENV_EVENTS = 10;
+
 export class CheckContext {
-    constructor(browser, name) {
+    constructor(browser, name, {user_id} = {}) {
         this.browser = browser;
         this.name = name;
+        // The checks' own user: events it did not cause are someone else's.
+        this.user_id = user_id;
         this.base = BASE;
         this.topics = TOPICS;
         this.assertions = [];
@@ -35,6 +42,13 @@ export class CheckContext {
         this.page_errors = [];
         this.requests = [];
         this.failed_responses = [];
+        // What tells that the server was not all this run's (lib/health.mjs):
+        // the run reports ENV-ERROR when a check leaves anything here.
+        this.env_events = [];
+        // Requests the check answered itself, by network id.
+        this.answered = new Set();
+        this.event_responses = new Set();
+        this.reading_events = [];
         this.page = undefined;
         this.client = undefined;
         this.routes = [];
@@ -74,6 +88,20 @@ export class CheckContext {
             await this.client.send("Network.setCacheDisabled", {cacheDisabled: true});
             await this.intercept();
         }
+        this.client.on("Network.responseReceived", (event) => {
+            const url = event.response.url.replace(this.base, "");
+            if (!this.answered.has(event.requestId)) {
+                this.env_event(response_problem(event.response.status, url));
+            }
+            if (url.startsWith("/json/events") && event.response.status === 200) {
+                this.event_responses.add(event.requestId);
+            }
+        });
+        this.client.on("Network.loadingFinished", (event) => {
+            if (this.event_responses.delete(event.requestId)) {
+                this.reading_events.push(this.read_events(event.requestId));
+            }
+        });
         this.client.on("Network.requestWillBeSent", (event) => {
             this.requests.push({
                 id: event.requestId,
@@ -96,7 +124,33 @@ export class CheckContext {
         });
     }
 
+    env_event(problem) {
+        if (
+            problem &&
+            this.env_events.length < MAX_ENV_EVENTS &&
+            !this.env_events.includes(problem)
+        ) {
+            this.env_events.push(problem);
+        }
+    }
+
+    // The events a /json/events response handed the page: any that another
+    // person caused (lib/health.mjs) changed what the check measured.
+    async read_events(request_id) {
+        try {
+            const {body} = await this.client.send("Network.getResponseBody", {
+                requestId: request_id,
+            });
+            for (const line of foreign_events(JSON.parse(body).events, this.user_id)) {
+                this.env_event(line);
+            }
+        } catch {
+            // The page went away with the response.
+        }
+    }
+
     async close() {
+        await Promise.allSettled(this.reading_events);
         if (this.mutation) {
             this.info(`mutation.${this.mutation.name}.applied`, mutation_applied(this.mutation), {
                 note: `edits made per pattern: ${this.mutation.applied.join(", ")}`,
@@ -141,6 +195,7 @@ export class CheckContext {
             }
             const request = {
                 id: event.requestId,
+                network_id: event.networkId,
                 method: event.request.method,
                 url: event.request.url.replace(this.base, ""),
                 body: event.request.postData ?? "",
@@ -181,6 +236,7 @@ export class CheckContext {
     }
 
     async fulfil(request, data, status = 200) {
+        this.answered.add(request.network_id);
         await this.client.send("Fetch.fulfillRequest", {
             requestId: request.id,
             responseCode: status,

@@ -16,7 +16,8 @@ import {fileURLToPath} from "node:url";
 import {BASE, USER, VIEWPORT, launch, login} from "./lib/browser.mjs";
 import {classify, rewrite_known, stale_ids} from "./lib/classify.mjs";
 import {CheckContext} from "./lib/harness.mjs";
-import {run_under_lock} from "./lib/lock.mjs";
+import {changed_files, changes, describe_changed_files, problems, snapshot} from "./lib/health.mjs";
+import {ENV_ERROR_STATUS, run_under_lock} from "./lib/lock.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO = path.resolve(HERE, "../..");
@@ -25,6 +26,10 @@ const REPO = path.resolve(HERE, "../..");
 // keep (known.json, the report) therefore also go to the host checkout when
 // it is mounted.
 const HOST_REPO = process.env.ARMADA_HOST_CHECKOUT ?? "/Users/progyan/runix/zulip";
+// The tree the server under test runs from, whose processes and files the
+// health checks watch (lib/health.mjs); `arm check` runs from it.
+const SERVED_TREE = process.env.ARMADA_SERVED_TREE ?? REPO;
+const HEALTH_IO = {fetch, proc: "/proc", statfs: fs.statfsSync};
 const KNOWN_FILE = "tools/armada-checks/known.json";
 const DEFAULT_REPORT = "var/armada-checks/report.json";
 
@@ -118,8 +123,8 @@ function print_line(status, id, detail) {
     console.log(`${status.padEnd(10)} ${id}  ${detail}`);
 }
 
-async function run_check(browser, check) {
-    const context = new CheckContext(browser, check.name);
+async function run_check(browser, check, user_id) {
+    const context = new CheckContext(browser, check.name, {user_id});
     const started = Date.now();
     let error;
     try {
@@ -140,7 +145,19 @@ async function run_check(browser, check) {
         error,
         assertions: context.assertions,
         measurements: context.measurements,
+        env_events: context.env_events,
     };
+}
+
+// Everything that changed around a check while it ran, from the snapshot
+// before it to the one after, and in its pages.
+function env_errors_of(result, before, after, files) {
+    return [
+        ...result.env_events,
+        ...problems(after, SERVED_TREE),
+        ...changes(before, after),
+        ...describe_changed_files(files),
+    ];
 }
 
 async function main() {
@@ -181,30 +198,52 @@ async function main() {
 
     const known = read_known();
     const started = new Date();
-    const browser = await launch();
     const results = [];
     const totals = {pass: 0, known_fail: 0, fail: 0, fixed: 0, error: 0, stale: 0};
     const seen = new Set();
+    // Problems of the environment, as {check, problem}; a null check is the
+    // run's own.
+    const env_errors = [];
+    let since = Date.now();
+    const health_before = await snapshot({base: BASE, tree: SERVED_TREE, io: HEALTH_IO});
+    let health_after = health_before;
+    for (const problem of problems(health_before, SERVED_TREE)) {
+        env_errors.push({check: null, problem});
+        print_line("ENV-ERROR", "before the run", problem);
+    }
     let chrome;
-    try {
-        chrome = await browser.version();
-        await login(browser);
-        for (const check of checks) {
-            console.log(`\n== ${check.name}: ${check.description}`);
-            const result = await run_check(browser, check);
-            results.push(result);
-            const counts = classify(result, known, seen, print_line);
-            for (const [key, value] of Object.entries(counts)) {
-                totals[key] += value;
+    if (env_errors.length === 0) {
+        const browser = await launch();
+        try {
+            chrome = await browser.version();
+            const user_id = await login(browser);
+            for (const check of checks) {
+                console.log(`\n== ${check.name}: ${check.description}`);
+                const result = await run_check(browser, check, user_id);
+                results.push(result);
+                const counts = classify(result, known, seen, print_line);
+                for (const [key, value] of Object.entries(counts)) {
+                    totals[key] += value;
+                }
+                if (result.error) {
+                    totals.error += 1;
+                    print_line("ERROR", check.name, result.error);
+                }
+                const scan_from = since;
+                since = Date.now();
+                const now = await snapshot({base: BASE, tree: SERVED_TREE, io: HEALTH_IO});
+                const files = now.local ? changed_files(SERVED_TREE, scan_from) : [];
+                result.env_errors = env_errors_of(result, health_after, now, files);
+                health_after = now;
+                for (const problem of result.env_errors) {
+                    env_errors.push({check: check.name, problem});
+                    print_line("ENV-ERROR", check.name, problem);
+                }
+                console.log(`   (${(result.duration_ms / 1000).toFixed(1)} s)`);
             }
-            if (result.error) {
-                totals.error += 1;
-                print_line("ERROR", check.name, result.error);
-            }
-            console.log(`   (${(result.duration_ms / 1000).toFixed(1)} s)`);
+        } finally {
+            await browser.close();
         }
-    } finally {
-        await browser.close();
     }
 
     const stale = stale_ids(known, results, seen);
@@ -216,7 +255,10 @@ async function main() {
         print_line("STALE", id, "listed in known.json but no such assertion ran");
     }
 
-    if (options.update_known || options.accept_failures) {
+    const env_error = env_errors.length > 0;
+    if (env_error && (options.update_known || options.accept_failures)) {
+        console.log("\nknown.json not rewritten: the run says nothing about the tree (ENV-ERROR)");
+    } else if (options.update_known || options.accept_failures) {
         const sorted = rewrite_known(
             known,
             results,
@@ -232,7 +274,15 @@ async function main() {
     }
 
     const green =
-        totals.fail === 0 && totals.fixed === 0 && totals.error === 0 && totals.stale === 0;
+        !env_error &&
+        totals.fail === 0 &&
+        totals.fixed === 0 &&
+        totals.error === 0 &&
+        totals.stale === 0;
+    let verdict = green ? "GREEN" : "RED";
+    if (env_error) {
+        verdict = "ENV-ERROR";
+    }
     const report = {
         started: started.toISOString(),
         finished: new Date().toISOString(),
@@ -240,8 +290,11 @@ async function main() {
         user: USER,
         viewport: VIEWPORT,
         chrome,
+        verdict,
         green,
         totals,
+        env_errors,
+        health: {served_tree: SERVED_TREE, before: health_before, after: health_after},
         checks: results,
     };
     const report_targets = options.json
@@ -252,9 +305,17 @@ async function main() {
     }
 
     console.log(
-        `\n${green ? "GREEN" : "RED"}: ${totals.pass} pass, ${totals.known_fail} known-fail, ${totals.fail} fail, ${totals.fixed} fixed-not-promoted, ${totals.stale} stale, ${totals.error} check errors`,
+        `\n${verdict}: ${totals.pass} pass, ${totals.known_fail} known-fail, ${totals.fail} fail, ${totals.fixed} fixed-not-promoted, ${totals.stale} stale, ${totals.error} check errors, ${env_errors.length} environment problems`,
     );
+    if (env_error) {
+        console.log(
+            "These results say nothing about the tree: the ENV-ERROR lines above say what else changed or was wrong. Run the whole suite again once it is not.",
+        );
+    }
     console.log(`report: ${report_targets.at(-1)}`);
+    if (env_error) {
+        return ENV_ERROR_STATUS;
+    }
     return green ? 0 : 1;
 }
 

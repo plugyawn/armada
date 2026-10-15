@@ -8,7 +8,7 @@ it can see. This file applies to every change.
   statement coverage from its first file. Enforced by:
   `tools/test-js-with-node --coverage` (`ARMADA_FULLY_COVERED_GLOBS`).
 - The harness's own logic (the ratchet, its statistics, the mutations, the
-  `known.json` lint, the lock) has tests in `tools/armada-checks/test/` at 100% of lines, branches and
+  `known.json` lint, the lock, the health checks) has tests in `tools/armada-checks/test/` at 100% of lines, branches and
   functions.
   Enforced by: `node tools/armada-checks/selftest.mjs` (`FULLY_COVERED`).
 - Components are tested for behaviour with a real DOM
@@ -28,6 +28,10 @@ it can see. This file applies to every change.
   `armada-known` linter, `tools/armada-checks/known-lint.mjs`). Only
   Foundation packages and stage closes edit the file: that is the plan's
   rule 5, not a check.
+- A run during which anything but the tree changed (a restart, a save,
+  someone else's traffic, a dead queue processor) is `ENV-ERROR`: neither
+  red nor green, and rerun. Enforced by: `run.mjs` (`lib/health.mjs`, exit
+  status 3).
 - Counts gate; a time gates only at three times its budget. Run the checks
   your change names three times and require identical statuses.
   Enforced by: `arm check` thresholds; your report shows the three runs.

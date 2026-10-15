@@ -11,7 +11,9 @@ comes from). The script reads, and never executes:
 - pokesprite/data/pokemon.json: the sprite slug of each species of
   generations 1 to 8;
 - the sprites themselves: pokesprite/pokemon-gen8/{regular,shiny}/ and
-  smogon-gen9/, whose content boxes it measures.
+  smogon-gen9/, whose content boxes it measures;
+- sv/: the Scarlet/Violet menu icons, one a species, named by Pokédex
+  number (PokéAPI's), which faces draw; their content boxes too.
 
 and writes DIR/species.json. The output names Pokémon, which are
 trademarks, so it lives in the ignored directory with the sprites and is
@@ -26,15 +28,22 @@ species.json:
         "line": <the root's id>, "first": bool, "offer": bool,
         "sprite": null | {"regular": path, "shiny": path | null,
                           "size": [w, h], "box": [x, y, w, h],
-                          "shiny_box": [x, y, w, h] | null}}}}
+                          "shiny_box": [x, y, w, h] | null},
+        "sv": null | {"path": path, "size": [w, h], "box": [x, y, w, h]}}}}
 
 An id is the national number ("4") or the number and a regional form
 ("37-alola"). "how" says how a form is reached from its prevo, as the
 games do it ({"type": "level", "level": 16}, {"type": "useItem", "item":
 "Fire Stone"}, ...); Armada's own levels do not use it. A form with no
 sprite is kept (its line needs it) and is never offered; "offer" marks
-the forms the picker offers: drawn, with nothing drawn before them in
-their line.
+the forms the picker offers: a first form (one with no prevo, as the
+server requires) with both a sprite and a Scarlet/Violet icon, since a
+face is drawn from the icon. Regional forms have no icon here (PokéAPI
+names them by its own ids, which nothing maps), so none is offered.
+
+The icons are smooth renders, so their content boxes count a pixel only
+from alpha SV_ALPHA_MIN up: the faint edge of the antialiasing would
+otherwise stand a creature a pixel off its feet.
 
 Content boxes are measured with a small PNG reader below (the standard
 library only), so the script runs on any machine with Python 3.
@@ -75,10 +84,16 @@ STARTERS = [
 ]  # fmt: skip
 
 
-def read_png_alpha_box(path: str) -> tuple[tuple[int, int], tuple[int, int, int, int]]:
-    """The image's size and the box of its pixels that are not fully
-    transparent, as (x, y, w, h). An image with no transparency is its
-    whole canvas; an empty one is (0, 0, 0, 0)."""
+SV_ALPHA_MIN = 25
+
+
+def read_png_alpha_box(
+    path: str, alpha_min: int = 1
+) -> tuple[tuple[int, int], tuple[int, int, int, int]]:
+    """The image's size and the box of its pixels whose alpha is at least
+    alpha_min (8-bit; any pixel that is not fully transparent by default),
+    as (x, y, w, h). An image with no transparency is its whole canvas; an
+    empty one is (0, 0, 0, 0)."""
     with open(path, "rb") as f:
         data = f.read()
     if data[:8] != b"\x89PNG\r\n\x1a\n":
@@ -146,15 +161,16 @@ def read_png_alpha_box(path: str) -> tuple[tuple[int, int], tuple[int, int, int,
 
     def opaque(values: list[int], x: int) -> bool:
         if color == 6:
-            return values[x * 4 + 3] > 0
+            return values[x * 4 + 3] >= threshold
         if color == 4:
-            return values[x * 2 + 1] > 0
+            return values[x * 2 + 1] >= threshold
         if color == 3:
             index = values[x]
-            return index >= len(palette_alpha) or palette_alpha[index] > 0
+            return index >= len(palette_alpha) or palette_alpha[index] >= alpha_min
         pixel = tuple(values[x * channels : (x + 1) * channels])
         return transparent is None or pixel != transparent
 
+    threshold = alpha_min if depth == 8 else alpha_min * 257
     left_most, top_most, right_most, bottom_most = width, height, -1, -1
     for y, line in enumerate(rows):
         values = samples(line)
@@ -276,6 +292,17 @@ def build(directory: str) -> dict[str, Any]:
             return out
         return None
 
+    def sv_icon(e: dict[str, Any]) -> dict[str, Any] | None:
+        if e["forme"]:
+            return None
+        path = f"sv/{e['num']}.png"
+        if not os.path.isfile(os.path.join(directory, path)):
+            return None
+        size, box = read_png_alpha_box(os.path.join(directory, path), SV_ALPHA_MIN)
+        if box[2] == 0:
+            return None
+        return {"path": path, "size": list(size), "box": list(box)}
+
     species: dict[str, dict[str, Any]] = {}
     for e in kept:
         name = e["name"]
@@ -305,21 +332,18 @@ def build(directory: str) -> dict[str, Any]:
             "evos": [id_of[x] for x in e["evos"] if x in id_of],
             "how": how,
             "sprite": sprite(e),
+            "sv": sv_icon(e),
         }
 
     # A line is named by its root's id, so a regional first form (Alolan
-    # Vulpix) is a line of its own beside its species' (Vulpix). A form is
-    # offered when it can be drawn and nothing before it in its line can:
-    # Clodsire, whose Paldean Wooper the pack does not draw, is offered.
+    # Vulpix) is a line of its own beside its species' (Vulpix).
     for key, s in species.items():
         root = key
-        drawn_before = False
         while species[root]["prevo"] is not None:
             root = species[root]["prevo"]
-            drawn_before = drawn_before or species[root]["sprite"] is not None
         s["line"] = root
         s["first"] = s["prevo"] is None
-        s["offer"] = s["sprite"] is not None and not drawn_before
+        s["offer"] = s["first"] and s["sprite"] is not None and s["sv"] is not None
 
     return {
         "version": 1,
@@ -345,6 +369,7 @@ def main() -> None:
     print(
         f"{len(pack['species'])} species and forms ({pack['count']} species), "
         f"{len(drawn)} with a sprite, {sum(1 for s in drawn if s['sprite']['shiny'])} with a shiny, "
+        f"{sum(1 for s in species if s['sv'])} with a Scarlet/Violet icon, "
         f"{sum(1 for s in drawn if s['offer'])} offered; wrote {args.dir}/species.json",
         file=sys.stderr,
     )

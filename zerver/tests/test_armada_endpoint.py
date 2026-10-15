@@ -109,6 +109,7 @@ from zerver.lib.bot_lib import EmbeddedBotHandler
 from zerver.lib.event_schema import check_armada_run_event, check_armada_workspace_changed_event
 from zerver.lib.events import fetch_initial_state_data
 from zerver.lib.message_cache import MessageDict
+from zerver.lib.partner import get_agent_bot
 from zerver.lib.test_classes import ZulipTestCase
 from zerver.models import Message, Recipient, Subscription, UserProfile
 from zerver.models.bots import AgentMonitor, AgentRun, AgentRunEvent, Repository, Workspace
@@ -117,6 +118,7 @@ from zerver.views.armada import (
     armada_worker_run_summary_events,
     armada_workspace_isolation_username,
     build_armada_git_context,
+    ensure_armada_configured_bot,
     extract_armada_codex_model_catalog,
     serialize_armada_worker_run,
     serialize_armada_workspace_context,
@@ -1302,6 +1304,48 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
             second_result_dict["armada_config"]["selected_bot_user_id"],
             armada_config["selected_bot_user_id"],
         )
+
+    def test_ensure_armada_configured_bot_without_a_request(self) -> None:
+        # populate_db turns the agent on for the development realm this
+        # way, with no request at hand.
+        owner = self.example_user("desdemona")
+
+        with self.settings(EMBEDDED_BOTS_ENABLED=True):
+            service, armada_config, created, _selection_changed = ensure_armada_configured_bot(
+                owner
+            )
+            second_service, _second_config, second_created, _second_selection_changed = (
+                ensure_armada_configured_bot(owner)
+            )
+
+        armada_bot = service.user_profile
+        self.assertTrue(created)
+        self.assertEqual(service.name, ARMADA_EMBEDDED_BOT_SERVICE)
+        self.assertEqual(armada_bot.bot_type, UserProfile.EMBEDDED_BOT)
+        self.assertEqual(armada_bot.full_name, "Onix")
+        self.assertEqual(armada_bot.bot_owner_id, owner.id)
+        self.assertEqual(armada_config["bot_user_id"], armada_bot.id)
+        self.assertEqual(get_agent_bot(owner.realm_id), armada_bot)
+        self.assertFalse(second_created)
+        self.assertEqual(second_service.user_profile_id, armada_bot.id)
+
+    def test_post_armada_config_makes_bot_from_its_own_fields(self) -> None:
+        owner = self.example_user("iago")
+        self.login_user(owner)
+
+        with self.settings(EMBEDDED_BOTS_ENABLED=True):
+            result = self.client_post(
+                f"/json{ARMADA_CONFIG_ENDPOINT}",
+                {"default_sending_stream": "Verona"},
+                intentionally_undocumented=True,
+            )
+
+        result_dict = self.assert_json_success(
+            result, ignored_parameters=["default_sending_stream"]
+        )
+        self.assertTrue(result_dict["created"])
+        armada_bot = UserProfile.objects.get(id=result_dict["armada_config"]["bot_user_id"])
+        self.assertIsNone(armada_bot.default_sending_stream)
 
     def test_armada_followup_gate_defaults_new_topics_to_ambient(self) -> None:
         owner = self.example_user("iago")

@@ -1031,7 +1031,6 @@ def set_selected_armada_bot(user_profile: UserProfile, selected_bot_user_id: int
 
 
 def ensure_armada_configured_bot(
-    request: HttpRequest,
     user_profile: UserProfile,
     *,
     selected_bot_user_id: int | None = None,
@@ -1041,8 +1040,12 @@ def ensure_armada_configured_bot(
     if not armada_config["configured"] and selected_bot_user_id is not None:
         raise JsonableError(_("Invalid bot selection."))
     if not armada_config["configured"]:
+        # add_bot_backend is where a bot is made and checked. It also
+        # reads optional fields and an avatar from the request it is
+        # given, so it gets an empty one: the agent's bot has only the
+        # fields named here, whoever turns the agent on.
         add_bot_backend(
-            request,
+            HttpRequest(),
             user_profile,
             bot_type=UserProfile.EMBEDDED_BOT,
             config_data={ARMADA_SELECTED_BOT_CONFIG_KEY: ARMADA_SELECTED_BOT_CONFIG_VALUE},
@@ -1097,7 +1100,6 @@ def post_armada_config_backend(
     selected_bot_user_id: Json[int] | None = None,
 ) -> HttpResponse:
     _armada_bot, armada_config, created, selection_changed = ensure_armada_configured_bot(
-        request,
         user_profile,
         selected_bot_user_id=selected_bot_user_id,
     )
@@ -1119,8 +1121,7 @@ def post_armada_first_run_backend(
     user_profile: UserProfile,
 ) -> HttpResponse:
     armada_bot, armada_config, bot_created, selection_changed = ensure_armada_configured_bot(
-        request,
-        user_profile,
+        user_profile
     )
     stream, stream_created = create_stream_if_needed(
         user_profile.realm,

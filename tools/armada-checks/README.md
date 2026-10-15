@@ -27,9 +27,21 @@ The dev server must be up (`http://localhost:9991`). From the host:
 anywhere the repository's `puppeteer` and a Chromium are available:
 `CHROME=/path/to/chromium node tools/armada-checks/run.mjs`. Environment:
 `ARMADA_BASE` (default `http://localhost:9991`), `ARMADA_USER` (default
-`desdemona@zulip.com`, the realm owner the fixtures are written for),
+`armada-checks@zulip.com`, the checks' own user, see below),
 `ARMADA_CHECKS_SHOTS=<directory>` to get a screenshot of the page whenever a
 scenario or a tour step gives up.
+
+The checks log in as a user nobody else signs in as, so that no one
+else's session spends its rate limit or posts into the pages it measures.
+Create it once in the development realm, and again after a database reset:
+
+    limactl shell armada -- arm manage armada_checks_user
+
+It takes the role and the channels of `desdemona@zulip.com`, whom the
+fixtures were written for (`--like <email>` names another), with
+onboarding done, a direct message from King Hamlet and a rate limit no run
+reaches (`zilencer/lib/armada_checks_user.py`). A run that cannot log in
+ends with `ENV-ERROR`.
 
 One run at a time: `run.mjs` and `lib/prove.mjs` take
 `/tmp/armada-check.lock` themselves (`lib/lock.mjs`), by running again
@@ -130,8 +142,8 @@ a regression go away.
 
 ## What is measured
 
-All checks run as `desdemona@zulip.com` at 1440x900, device scale 1, each in
-its own page with a clean `localStorage`. The notification banner a fresh
+All checks run as `armada-checks@zulip.com` at 1440x900, device scale 1,
+each in its own page with a clean `localStorage`. The notification banner a fresh
 profile shows is closed first, so vertical positions are those of a settled
 session. Fixture topics are the ones in `var/armada-overhaul/SEED.md`
 (channel `click`: `option-groups` is the short worktree topic, `demo-long-topic`

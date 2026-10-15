@@ -216,8 +216,16 @@ async function main() {
         const browser = await launch();
         try {
             chrome = await browser.version();
-            const user_id = await login(browser);
-            for (const check of checks) {
+            let user_id;
+            try {
+                user_id = await login(browser);
+            } catch (error) {
+                // No checks' user: nothing this run measures would be about the tree.
+                const problem = String(error?.message ?? error);
+                env_errors.push({check: null, problem});
+                print_line("ENV-ERROR", "login", problem);
+            }
+            for (const check of user_id === undefined ? [] : checks) {
                 console.log(`\n== ${check.name}: ${check.description}`);
                 const result = await run_check(browser, check, user_id);
                 results.push(result);

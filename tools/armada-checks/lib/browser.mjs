@@ -3,7 +3,9 @@ import {launch as launch_chromium} from "puppeteer";
 
 export const BASE = process.env.ARMADA_BASE ?? "http://localhost:9991";
 export const VIEWPORT = {width: 1440, height: 900, deviceScaleFactor: 1};
-export const USER = process.env.ARMADA_USER ?? "desdemona@zulip.com";
+// The checks' own user, which nobody else signs in as: `./manage.py
+// armada_checks_user` creates it in the development realm.
+export const USER = process.env.ARMADA_USER ?? "armada-checks@zulip.com";
 
 export async function sleep(ms) {
     await new Promise((resolve) => {
@@ -30,15 +32,25 @@ export async function login(browser, email = USER) {
     const page = await browser.newPage();
     await page.setViewport(VIEWPORT);
     await page.goto(`${BASE}/devlogin/`, {waitUntil: "networkidle2"});
+    const pick = (address, click) => {
+        /* global document */
+        const button = [...document.querySelectorAll("button, input[type=submit]")].find(
+            (candidate) => (candidate.value || candidate.textContent || "").includes(address),
+        );
+        if (button && click) {
+            button.click();
+        }
+        return button !== undefined;
+    };
+    if (!(await page.evaluate(pick, email, false))) {
+        await page.close();
+        throw new Error(
+            `${email} has no development login at ${BASE}/devlogin/: create the checks' user with ./manage.py armada_checks_user (ARMADA_USER names another user)`,
+        );
+    }
     await Promise.all([
         page.waitForNavigation({waitUntil: "networkidle2"}),
-        page.evaluate((address) => {
-            /* global document */
-            const button = [...document.querySelectorAll("button, input[type=submit]")].find(
-                (candidate) => (candidate.value || candidate.textContent || "").includes(address),
-            );
-            button.click();
-        }, email),
+        page.evaluate(pick, email, true),
     ]);
     await page.waitForSelector("#left-sidebar", {visible: true});
     const user_id = await page.evaluate(

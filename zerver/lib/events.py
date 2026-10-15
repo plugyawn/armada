@@ -2112,6 +2112,10 @@ def apply_event(
         # Agent run deltas update dedicated client-side reducers; they do not mutate
         # the initial-state payload assembled by this module.
         pass
+    elif event["type"] == "read_receipts":
+        # Read receipts are fetched per message, not held in the register
+        # state; clients apply these pushes to the receipts they show.
+        pass
     elif event["type"] == "message_thread_summary":
         # Thread summaries are hydrated per message fetch, not held in the
         # register state; clients apply these pushes to their message store.

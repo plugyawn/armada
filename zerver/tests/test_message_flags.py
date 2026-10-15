@@ -663,7 +663,8 @@ class UnreadCountTests(ZulipTestCase):
         message_id = self.send_stream_message(cordelia, "test_stream", "hello")
         unrelated_message_id = self.send_stream_message(cordelia, "Denmark", "hello")
 
-        with self.capture_send_event_calls(expected_num_events=1) as events:
+        # The second event is cordelia's read receipt.
+        with self.capture_send_event_calls(expected_num_events=2) as events:
             result = self.client_post(
                 "/json/mark_stream_as_read",
                 {
@@ -672,6 +673,17 @@ class UnreadCountTests(ZulipTestCase):
             )
 
         self.assert_json_success(result)
+        self.assertEqual(
+            events[1],
+            {
+                "event": {
+                    "type": "read_receipts",
+                    "message_ids": [message_id],
+                    "user_id": hamlet.id,
+                },
+                "users": [cordelia.id],
+            },
+        )
 
         event = events[0]["event"]
         expected = dict(
@@ -732,7 +744,8 @@ class UnreadCountTests(ZulipTestCase):
 
         message_id = self.send_stream_message(cordelia, "test_stream", "hello", "test_topic")
         unrelated_message_id = self.send_stream_message(cordelia, "Denmark", "hello", "Denmark2")
-        with self.capture_send_event_calls(expected_num_events=1) as events:
+        # The second event is cordelia's read receipt.
+        with self.capture_send_event_calls(expected_num_events=2) as events:
             result = self.client_post(
                 "/json/mark_topic_as_read",
                 {
@@ -742,6 +755,17 @@ class UnreadCountTests(ZulipTestCase):
             )
 
         self.assert_json_success(result)
+        self.assertEqual(
+            events[1],
+            {
+                "event": {
+                    "type": "read_receipts",
+                    "message_ids": [message_id],
+                    "user_id": hamlet.id,
+                },
+                "users": [cordelia.id],
+            },
+        )
 
         event = events[0]["event"]
         expected = dict(
@@ -2565,7 +2589,8 @@ class MarkUnreadTest(ZulipTestCase):
         # have UserMessage rows will be ignored.
         message_ids = before_subscribe_stream_message_ids + message_ids
         self.login("hamlet")
-        with self.capture_send_event_calls(expected_num_events=1) as events:
+        # The second event is the sender's read receipt.
+        with self.capture_send_event_calls(expected_num_events=2) as events:
             result = self.client_post(
                 "/json/messages/flags",
                 {"messages": orjson.dumps(message_ids).decode(), "op": "add", "flag": "read"},
@@ -2573,6 +2598,8 @@ class MarkUnreadTest(ZulipTestCase):
         self.assert_json_success(result)
         event = events[0]["event"]
         self.assertEqual(event["messages"], subscribed_stream_message_ids)
+        self.assertEqual(events[1]["event"]["message_ids"], subscribed_stream_message_ids)
+        self.assertEqual(events[1]["users"], [sender.id])
 
         for message_id in subscribed_stream_message_ids + unsubscribed_stream_message_ids:
             um = UserMessage.objects.get(

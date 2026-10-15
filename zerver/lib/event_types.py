@@ -1369,3 +1369,9 @@ class ArmadaWorkspaceChangedEvent(BaseEvent):
     type: Literal["workspace_changed"]
     workspace_id: str
     revision: int
+
+
+class ArmadaReadReceiptsEvent(BaseEvent):
+    type: Literal["read_receipts"]
+    message_ids: list[int]
+    user_id: int

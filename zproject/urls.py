@@ -50,6 +50,7 @@ from zerver.views.armada_beta import (
     post_armada_partner_evolve,
     post_armada_partner_fold,
 )
+from zerver.views.armada_read_receipts import get_armada_read_receipts_backend
 from zerver.views.armada_workspace import (
     delete_armada_workspace_entry_backend,
     get_armada_workspace_descriptor_backend,
@@ -441,6 +442,10 @@ v1_api_and_json_patterns = [
     ),
     rest_path(
         "armada/partner/fold", POST=(post_armada_partner_fold, {"intentionally_undocumented"})
+    ),
+    rest_path(
+        "armada/read_receipts",
+        GET=(get_armada_read_receipts_backend, {"intentionally_undocumented"}),
     ),
     rest_path(
         "armada/session",

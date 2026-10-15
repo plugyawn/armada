@@ -8,6 +8,7 @@ from django.utils.timezone import now as timezone_now
 from django.utils.translation import gettext as _
 
 from analytics.lib.counts import COUNT_STATS, do_increment_logging_stat
+from zerver.actions.armada_read_receipts import send_armada_read_receipts_events
 from zerver.lib.exceptions import JsonableError
 from zerver.lib.message import (
     bulk_access_messages,
@@ -55,18 +56,25 @@ def do_mark_all_as_read(user_profile: UserProfile, *, timeout: float | None = No
             return None
 
         with transaction.atomic(durable=True):
-            query = (
+            # UPDATE queries don't support LIMIT, so we select a batch
+            # of rows, which also gives the message ids that the senders'
+            # read receipts need.
+            batch = list(
                 UserMessage.select_for_update_query()
                 .filter(user_profile=user_profile)
-                .extra(where=[UserMessage.where_unread()])[:batch_size]  # noqa: S610
+                .extra(where=[UserMessage.where_unread()])  # noqa: S610
+                .values_list("id", "message_id")[:batch_size]
             )
             # This updated_count is the same as the number of UserMessage
             # rows selected, because due to the FOR UPDATE lock, we're guaranteed
             # that all the selected rows will indeed be updated.
-            # UPDATE queries don't support LIMIT, so we have to use a subquery
-            # to do batching.
-            updated_count = UserMessage.objects.filter(id__in=query).update(
+            updated_count = UserMessage.objects.filter(
+                id__in=[user_message_id for user_message_id, _message_id in batch]
+            ).update(
                 flags=F("flags").bitor(UserMessage.flags.read),
+            )
+            send_armada_read_receipts_events(
+                user_profile, [message_id for _user_message_id, message_id in batch]
             )
 
             event_time = timezone_now()
@@ -139,6 +147,7 @@ def do_mark_stream_messages_as_read(
     event_time = timezone_now()
 
     send_event_on_commit(user_profile.realm, event, [user_profile.id])
+    send_armada_read_receipts_events(user_profile, message_ids)
     do_clear_mobile_push_notifications_for_ids([user_profile.id], message_ids)
 
     do_increment_logging_stat(
@@ -154,6 +163,8 @@ def do_mark_stream_messages_as_read(
     return count
 
 
+# Sends no read receipts: a sender the reader muted never learns that
+# the reader read them (get_armada_read_receipt_recipients).
 @transaction.atomic(savepoint=False)
 def do_mark_muted_user_messages_as_read(
     user_profile: UserProfile,
@@ -439,6 +450,7 @@ def do_update_message_flags(
 
         if flag == "read" and is_adding:
             event_time = timezone_now()
+            send_armada_read_receipts_events(user_profile, messages)
             do_clear_mobile_push_notifications_for_ids([user_profile.id], messages)
 
             do_increment_logging_stat(

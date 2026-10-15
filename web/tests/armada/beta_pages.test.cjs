@@ -23,23 +23,24 @@ set_global("window", dom.window);
 set_global("location", dom.window.location);
 set_global("history", dom.window.history);
 set_global("localStorage", dom.window.localStorage);
-set_global("getSelection", () => dom.window.getSelection());
-set_global("requestAnimationFrame", (fn) => setTimeout(fn, 0));
 set_global("addEventListener", (...args) => dom.window.addEventListener(...args));
 set_global("removeEventListener", (...args) => dom.window.removeEventListener(...args));
 set_global("FormData", dom.window.FormData);
+// The tabs of this browser (connection.js) hear nothing here: Node's own
+// BroadcastChannel would keep the test process alive after the last test.
+set_global(
+    "BroadcastChannel",
+    class {
+        postMessage() {}
+    },
+);
 const DOMParser = dom.window.DOMParser;
 const noop = () => {};
-const said = [];
 set_global("M", {
     T: {},
     SLOW: 1,
-    reduced: () => true,
     release: noop,
     appear: noop,
-    say(_element, text) {
-        said.push(text);
-    },
     leave(element, done) {
         element.remove();
         if (done) {
@@ -51,7 +52,6 @@ set_global("S", {play: noop});
 set_global("host", noop);
 set_global("fig", String);
 set_global("ic", (name) => `<svg class="ic ${name}"></svg>`);
-set_global("mk", (name) => `<svg class="mk ${name}"></svg>`);
 set_global(
     "face",
     (spec, cls) => `<i class="av ${cls || ""}">${spec.split(" ")[0].split(":")[0]}</i>`,
@@ -78,7 +78,6 @@ set_global("fetch", async (url, init = {}) => {
     return {
         ok: true,
         status: reply.status ?? 200,
-        headers: {get: () => null},
         json: async () => reply,
     };
 });

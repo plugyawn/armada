@@ -19,15 +19,22 @@ set_global("window", dom.window);
 set_global("location", dom.window.location);
 set_global("history", dom.window.history);
 set_global("HTMLImageElement", dom.window.HTMLImageElement);
-set_global("getSelection", () => dom.window.getSelection());
-set_global("requestAnimationFrame", (fn) => setTimeout(fn, 0));
+// What connection.js (which partners.js imports for its requests) listens to
+// while the page loads. The tabs of this browser hear nothing here: Node's own
+// BroadcastChannel would keep the test process alive after the last test.
+set_global("addEventListener", (...args) => dom.window.addEventListener(...args));
+set_global(
+    "BroadcastChannel",
+    class {
+        postMessage() {}
+    },
+);
 set_global("innerWidth", 1440);
 set_global("innerHeight", 900);
 const noop = () => {};
 set_global("M", {
     T: {},
     SLOW: 1,
-    reduced: () => true,
     release: noop,
     appear: noop,
     leave(element) {
@@ -37,8 +44,6 @@ set_global("M", {
 set_global("S", {play: noop});
 set_global("host", noop);
 set_global("fig", String);
-set_global("ic", (name) => `<svg class="ic ${name}"></svg>`);
-set_global("mk", (name) => `<svg class="mk ${name}" data-mark="${name}"></svg>`);
 // The kit's initials face, as the kit draws it (kit/kit.js).
 set_global(
     "face",
@@ -179,7 +184,7 @@ set_global("fetch", async (url) => {
     const answer = ANSWERS.find(([pattern]) => pattern.test(url));
     assert.ok(answer, `no stand-in answer for ${url}`);
     const body = answer[1](url);
-    return {ok: true, status: 200, headers: {get: () => null}, json: async () => body};
+    return {ok: true, status: 200, json: async () => body};
 });
 
 const beta_state = zrequire("armada/beta/state.js");

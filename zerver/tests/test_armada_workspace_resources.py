@@ -5,7 +5,7 @@ import os
 import subprocess
 import tempfile
 import threading
-from collections.abc import Iterable, Mapping
+from collections.abc import Mapping
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Protocol, TypedDict, cast
@@ -693,8 +693,8 @@ class ArmadaWorkspaceResourceEndpointTest(ZulipTestCase):
                 {"entry_id": raw_id, "download": orjson.dumps(True).decode()},
                 intentionally_undocumented=True,
             )
-            assert isinstance(raw_result, StreamingHttpResponse)
-            raw_content = b"".join(cast(Iterable[bytes], raw_result.streaming_content))
+            self.assertTrue(raw_result.streaming)
+            raw_content = raw_result.getvalue()
 
         text = self.assert_json_success(text_result)["armada_workspace_file"]
         self.assertEqual(text["content"].encode(), b"\xef\xbb\xbf# Notes\r\n\r\ntrailing  \r\n")
@@ -751,10 +751,8 @@ class ArmadaWorkspaceResourceEndpointTest(ZulipTestCase):
                     {"entry_id": raw_entry["entry_id"]},
                     intentionally_undocumented=True,
                 )
-                assert isinstance(result, StreamingHttpResponse)
-                chunk_sizes = [
-                    len(chunk) for chunk in cast(Iterable[bytes], result.streaming_content)
-                ]
+                self.assertTrue(result.streaming)
+                chunk_sizes = [len(chunk) for chunk in cast(StreamingHttpResponse, result)]
             with (repo / "raw.bin").open("rb") as raw_file:
                 expected_etag = hashlib.file_digest(raw_file, "sha256").hexdigest()
 

@@ -1,10 +1,8 @@
-from collections.abc import Callable
-from typing import Any, cast
+from typing import Any
 from unittest import mock
 
 import orjson
 from django.test import override_settings
-from pika.adapters.blocking_connection import BlockingChannel
 from pika.exceptions import AMQPConnectionError, ConnectionClosed
 from typing_extensions import override
 
@@ -128,7 +126,7 @@ class TestQueueImplementation(ZulipTestCase):
         client.is_consuming = False
         callbacks: dict[str, Any] = {}
 
-        def ensure_queue(_queue_name: str, callback: Any) -> None:
+        def ensure_queue(queue_name: str, callback: Any) -> None:
             callback(channel)
 
         def basic_consume(*, queue: str, on_message_callback: Any, **_kwargs: Any) -> None:
@@ -142,10 +140,7 @@ class TestQueueImplementation(ZulipTestCase):
                 orjson.dumps({"run_id": 11}),
             )
 
-        # Mypy cannot model instance method replacement; calls here are positional.
-        client.ensure_queue = cast(  # type: ignore[method-assign]
-            Callable[[str, Callable[[BlockingChannel], object]], None], ensure_queue
-        )
+        client.ensure_queue = ensure_queue  # type: ignore[method-assign]
         channel.basic_consume.side_effect = basic_consume
         channel.start_consuming.side_effect = start_consuming
 
@@ -164,27 +159,24 @@ class TestQueueImplementation(ZulipTestCase):
         client.channel = channel
         client.prefetch = 1
         client.is_consuming = False
-        callback: Any = None
+        on_message: Any = None
 
-        def ensure_queue(_queue_name: str, register: Any) -> None:
-            register(channel)
+        def ensure_queue(queue_name: str, callback: Any) -> None:
+            callback(channel)
 
         def basic_consume(*, on_message_callback: Any, **_kwargs: Any) -> None:
-            nonlocal callback
-            callback = on_message_callback
+            nonlocal on_message
+            on_message = on_message_callback
 
         def start_consuming() -> None:
-            callback(
+            on_message(
                 channel,
                 mock.Mock(delivery_tag=44, redelivered=False),
                 mock.Mock(),
                 b"not-json",
             )
 
-        # Mypy cannot model instance method replacement; calls here are positional.
-        client.ensure_queue = cast(  # type: ignore[method-assign]
-            Callable[[str, Callable[[BlockingChannel], object]], None], ensure_queue
-        )
+        client.ensure_queue = ensure_queue  # type: ignore[method-assign]
         channel.basic_consume.side_effect = basic_consume
         channel.start_consuming.side_effect = start_consuming
 

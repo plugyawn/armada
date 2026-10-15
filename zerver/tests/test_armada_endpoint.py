@@ -40,7 +40,6 @@ from zerver.lib.armada import (
     ArmadaLiveRunState,
     ArmadaTokenUsage,
     ArmadaWorkerLeaseLostError,
-    ArmadaWorkerRunStatus,
     ArmadaWorkerRuntime,
     build_armada_active_session_summary_from_messages,
     get_armada_session_payload,
@@ -916,7 +915,7 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
         )
         write_armada_live_run_state(
             run.trigger_message_id,
-            status=cast(ArmadaWorkerRunStatus, AgentRun.RUNNING),
+            status=AgentRun.RUNNING,
         )
 
         serialized_run = serialize_armada_worker_run(run)
@@ -3860,14 +3859,14 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
         store.record(
             bot_handler,
             done_run.trigger_message_id,
-            cast(ArmadaWorkerRunStatus, AgentRun.RUNNING),
+            AgentRun.RUNNING,
             stream=ARMADA_DEFAULT_STREAM,
             topic="topic-a",
         )
         store.record(
             bot_handler,
             cancelled_run.trigger_message_id,
-            cast(ArmadaWorkerRunStatus, AgentRun.DONE),
+            AgentRun.DONE,
             stream=ARMADA_DEFAULT_STREAM,
             topic="topic-a",
         )
@@ -3929,14 +3928,14 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
             store.record(
                 bot_handler,
                 run.trigger_message_id,
-                cast(ArmadaWorkerRunStatus, AgentRun.RUNNING),
+                AgentRun.RUNNING,
                 stream=ARMADA_DEFAULT_STREAM,
                 topic="workspace-observer",
             )
             store.record(
                 bot_handler,
                 run.trigger_message_id,
-                cast(ArmadaWorkerRunStatus, AgentRun.RUNNING),
+                AgentRun.RUNNING,
                 stream=ARMADA_DEFAULT_STREAM,
                 topic="workspace-observer",
             )
@@ -3944,14 +3943,14 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
             store.record(
                 bot_handler,
                 run.trigger_message_id,
-                cast(ArmadaWorkerRunStatus, AgentRun.DONE),
+                AgentRun.DONE,
                 stream=ARMADA_DEFAULT_STREAM,
                 topic="workspace-observer",
             )
             store.record(
                 bot_handler,
                 run.trigger_message_id,
-                cast(ArmadaWorkerRunStatus, AgentRun.DONE),
+                AgentRun.DONE,
                 stream=ARMADA_DEFAULT_STREAM,
                 topic="workspace-observer",
             )
@@ -3983,7 +3982,7 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
         store.record(
             bot_handler,
             run.trigger_message_id,
-            cast(ArmadaWorkerRunStatus, AgentRun.QUEUED),
+            AgentRun.QUEUED,
             stream=ARMADA_DEFAULT_STREAM,
             topic="topic-a",
         )
@@ -4100,7 +4099,7 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
             "status": lambda: store.record(
                 bot_handler,
                 run.trigger_message_id,
-                cast(ArmadaWorkerRunStatus, AgentRun.DONE),
+                AgentRun.DONE,
                 stream=ARMADA_DEFAULT_STREAM,
                 topic="fenced-store",
                 result_message_id=4001,
@@ -4374,7 +4373,7 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
         control_store.record(
             bot_handler,
             run.trigger_message_id,
-            cast(ArmadaWorkerRunStatus, AgentRun.RUNNING),
+            AgentRun.RUNNING,
             stream=ARMADA_DEFAULT_STREAM,
             topic="control-store",
             result_message_id=4002,

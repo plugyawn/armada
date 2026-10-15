@@ -1,13 +1,12 @@
 import threading
 from collections.abc import Callable
 from types import SimpleNamespace
-from typing import cast
 from unittest import mock
 
 from django.db import OperationalError, connection, connections, transaction
 from typing_extensions import override
 
-from zerver.lib.armada import ArmadaWorkerLeaseLostError, ArmadaWorkerRunStatus
+from zerver.lib.armada import ArmadaWorkerLeaseLostError
 from zerver.lib.armada_worker import ArmadaDatabaseWorkerRunStore
 from zerver.lib.test_classes import ZulipTransactionTestCase
 from zerver.models import AgentRun, Workspace
@@ -100,7 +99,7 @@ class ArmadaWorkerCompletionRaceTest(ZulipTransactionTestCase):
                 completion_store.record(
                     self.bot_handler,
                     completion_run.trigger_message_id,
-                    cast(ArmadaWorkerRunStatus, AgentRun.DONE),
+                    AgentRun.DONE,
                     stream=completion_run.stream_name,
                     topic=completion_run.topic_name,
                 )

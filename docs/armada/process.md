@@ -101,7 +101,7 @@ jobs**, which passes only when every job below passed:
   fixup commits (`tools/armada/ci/commit-lint <base> HEAD`); every other
   linter over the files it changes
   (`tools/armada/ci/lint-changed <base> HEAD`); mypy over the project
-  (`tools/armada/ci/mypy-ratchet`); the tools' own tests
+  (`tools/run-mypy`), which finds no error; the tools' own tests
   (`./tools/test-tools`).
 - **Node tests**: `./tools/test-js-with-node --coverage`.
 - **Backend tests**, in four shards: every test module the fork added or
@@ -113,14 +113,14 @@ jobs**, which passes only when every job below passed:
   serves one of its own.
 
 Each command runs the same on a builder's tree (in the VM, through the
-helper above). Three of them hold what was wrong on the trunk when CI
-began, so that the first run is green and nothing new gets in: mypy may
-not find more errors than `ALLOWED_ERRORS` in `mypy-ratchet`; a backend
-test may fail only if `tools/armada/ci/backend-known-failures.txt`
+helper above). Two of them hold what was wrong on the trunk when CI
+began, so that the first run is green and nothing new gets in: a
+backend test may fail only if `tools/armada/ci/backend-known-failures.txt`
 lists it; and the files in `tools/armada/ci/lint-known-findings.txt`
-are not linted. All three only fall: CI says when a number can be
-lowered or a test's line removed, a fix lowers or removes it in the same
-commit, and each goes when it reaches zero (W2).
+are not linted. Both only shrink: CI says when a line can be removed,
+a fix removes it in the same commit, and each list goes when it is
+empty (W2). mypy had a third, a ceiling on its count of errors, until
+the sprint brought the count to zero.
 
 Zulip's own CI, which tests Zulip's distribution on five operating
 systems, is gone, and so are the workflows that served Zulip's

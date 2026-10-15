@@ -89,7 +89,7 @@ jobs:
       - name: Run mypy
         run: |
           source tools/ci/activate-venv
-          tools/armada/ci/mypy-ratchet
+          tools/run-mypy
 
       - name: Test the tools
         run: |

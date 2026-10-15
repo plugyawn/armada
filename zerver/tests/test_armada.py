@@ -1,6 +1,4 @@
-# Test-local protocol doubles deliberately use structural duck typing; adding
-# `Any` to every fake callback would not increase coverage or type safety.
-# ruff: noqa: ANN001, ANN002, ANN003, ANN202, ANN204, S108
+# ruff: noqa: S108
 
 import json
 import queue
@@ -2298,6 +2296,16 @@ class ArmadaSessionDefaultsTest(TestCase):
         )
 
     def test_worker_completed_message_preserves_final_answer_after_long_tool_details(self) -> None:
+        command_events: list[ArmadaWorkerTranscriptEvent] = [
+            {
+                "kind": "command",
+                "status": "done",
+                "title": f"/bin/bash -lc 'echo {index} {'x' * 220}'",
+                "body": "",
+                "item_id": f"cmd-{index}",
+            }
+            for index in range(80)
+        ]
         transcript_events: list[ArmadaWorkerTranscriptEvent] = [
             {
                 "kind": "assistant",
@@ -2306,16 +2314,7 @@ class ArmadaSessionDefaultsTest(TestCase):
                 "body": "I'll inspect the runtime state first.",
                 "item_id": "msg-1",
             },
-            *[
-                {
-                    "kind": "command",
-                    "status": "done",
-                    "title": f"/bin/bash -lc 'echo {index} {'x' * 220}'",
-                    "body": "",
-                    "item_id": f"cmd-{index}",
-                }
-                for index in range(80)
-            ],
+            *command_events,
             {
                 "kind": "assistant",
                 "status": "done",
@@ -2801,7 +2800,7 @@ class ArmadaSessionDefaultsTest(TestCase):
         )
         self.assertEqual(len(calls), 1)
         request, kwargs = calls[0]
-        assert request.data is not None
+        assert isinstance(request.data, bytes)
         request_payload = json.loads(request.data.decode())
         self.assertEqual(kwargs["timeout"], 7)
         self.assertEqual(request.full_url, "https://example.test/interactions")

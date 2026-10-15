@@ -12,4 +12,5 @@ class armada::profile::standalone {
   include armada::nginx_brotli
   include armada::patching
   include armada::backups
+  include armada::ops_check
 }

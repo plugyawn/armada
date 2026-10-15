@@ -1,3 +1,4 @@
+import io
 import os
 import sys
 import tempfile
@@ -5,6 +6,8 @@ from importlib.machinery import SourceFileLoader
 from importlib.util import module_from_spec, spec_from_loader
 from types import ModuleType
 from unittest import TestCase, mock
+
+from typing_extensions import override
 
 ARMADA_FILES = os.path.join(
     os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
@@ -23,6 +26,7 @@ def load_script(name: str) -> ModuleType:
 
 
 settings_apply = load_script("armada-settings-apply")
+ops_check = load_script("armada-ops-check")
 
 
 class SettingsBlockTests(TestCase):
@@ -63,3 +67,96 @@ class SettingsBlockTests(TestCase):
             with open(block, "w") as f:
                 f.write("ARMADA_WORKER_MODEL = 'b'\n")
             self.assertEqual(run("--check", block, settings), 1)
+
+
+class OpsCheckTests(TestCase):
+    @override
+    def setUp(self) -> None:
+        self.directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
+        state_file = os.path.join(self.directory.name, "state.json")
+        self.status = {"disk": ops_check.OK, "codex-login": ops_check.OK}
+        self.codex_runs = 0
+
+        def disk() -> object:
+            return ops_check.Result(self.status["disk"], "/ 50% used", "disk")
+
+        def codex_login() -> object:
+            self.codex_runs += 1
+            return ops_check.Result(self.status["codex-login"], "Logged in", "codex-login")
+
+        self.posts: list[tuple[str, str, str]] = []
+        self.post_fails = False
+
+        def post(check: str, result: object, previous: str) -> None:
+            if self.post_fails:
+                raise OSError("the server is down")
+            self.posts.append((check, result.status, previous))  # type: ignore[attr-defined]
+
+        for patch in (
+            mock.patch.object(ops_check, "STATE_FILE", state_file),
+            mock.patch.dict(
+                ops_check.CHECKS, {"disk": disk, "codex-login": codex_login}, clear=True
+            ),
+            mock.patch.object(ops_check, "post", post),
+            mock.patch.object(sys, "argv", ["armada-ops-check"]),
+            mock.patch.object(sys, "stderr", io.StringIO()),
+        ):
+            patch.start()
+            self.addCleanup(patch.stop)
+
+    def test_posts_only_when_a_status_changes(self) -> None:
+        self.assertEqual(ops_check.main(), 0)
+        self.assertEqual(self.posts, [])
+
+        self.status["disk"] = ops_check.CRITICAL
+        ops_check.main()
+        ops_check.main()
+        self.assertEqual(self.posts, [("disk", ops_check.CRITICAL, ops_check.OK)])
+
+        self.status["disk"] = ops_check.OK
+        ops_check.main()
+        self.assertEqual(
+            self.posts,
+            [
+                ("disk", ops_check.CRITICAL, ops_check.OK),
+                ("disk", ops_check.OK, ops_check.CRITICAL),
+            ],
+        )
+
+    def test_a_failed_post_is_tried_again(self) -> None:
+        self.status["disk"] = ops_check.WARN
+        self.post_fails = True
+        ops_check.main()
+        self.assertEqual(self.posts, [])
+        self.post_fails = False
+        ops_check.main()
+        self.assertEqual(self.posts, [("disk", ops_check.WARN, ops_check.OK)])
+
+    def test_slow_checks_run_at_most_every_ten_minutes(self) -> None:
+        with mock.patch.object(ops_check.time, "time", return_value=1000.0):
+            ops_check.main()
+        with mock.patch.object(ops_check.time, "time", return_value=1300.0):
+            ops_check.main()
+        self.assertEqual(self.codex_runs, 1)
+        with mock.patch.object(ops_check.time, "time", return_value=1700.0):
+            ops_check.main()
+        self.assertEqual(self.codex_runs, 2)
+
+    def test_a_broken_check_warns_and_the_others_still_run(self) -> None:
+        def broken() -> object:
+            raise ValueError("unexpected output")
+
+        with mock.patch.dict(ops_check.CHECKS, {"disk": broken}):
+            ops_check.main()
+        self.assertEqual(self.posts, [("disk", ops_check.WARN, ops_check.OK)])
+        self.assertEqual(self.codex_runs, 1)
+
+    def test_disk_thresholds(self) -> None:
+        usage = mock.Mock(total=100, used=85)
+        with mock.patch.object(ops_check.shutil, "disk_usage", return_value=usage):
+            self.assertEqual(ops_check.check_disk().status, ops_check.WARN)
+            usage.used = 91
+            self.assertEqual(ops_check.check_disk().status, ops_check.CRITICAL)
+            usage.used = 40
+            self.assertEqual(ops_check.check_disk().status, ops_check.OK)

@@ -1,0 +1,53 @@
+#!/bin/bash
+# Armada: create the ops bot and the #ops channel armada-ops-check posts to,
+# once per server, after the organization exists. Safe to run again: it
+# reuses the bot and the channel, and only refreshes the settings.
+#
+#   armada-ops-bot-setup OWNER_EMAIL
+#
+# OWNER_EMAIL is an organization owner, who owns the bot. Every active
+# person in the organization is subscribed to the channel. The bot's
+# address goes in /etc/zulip/zulip.conf ([armada] ops_bot_email) and its
+# API key in /etc/zulip/zulip-secrets.conf (armada_ops_bot_api_key); the key
+# is never printed.
+set -euo pipefail
+owner="${1:?usage: armada-ops-bot-setup OWNER_EMAIL}"
+stream="$(crudini --get /etc/zulip/zulip.conf armada ops_stream 2>/dev/null || echo ops)"
+handoff="$(mktemp -d)"
+chown zulip:zulip "$handoff"
+chmod 700 "$handoff"
+trap 'rm -rf "$handoff"' EXIT
+
+cd /home/zulip/deployments/current
+su zulip -c "./manage.py shell" <<EOF
+from zerver.actions.create_user import do_create_user
+from zerver.actions.streams import bulk_add_subscriptions
+from zerver.lib.streams import ensure_stream
+from zerver.models import UserProfile
+
+owner = UserProfile.objects.get(delivery_email__iexact="$owner", is_active=True, role=UserProfile.ROLE_REALM_OWNER)
+realm = owner.realm
+bot_email = f"ops-bot@{realm.host.split(':')[0]}"
+bot = UserProfile.objects.filter(realm=realm, delivery_email=bot_email).first()
+if bot is None:
+    bot = do_create_user(
+        bot_email, None, realm, "Ops", bot_type=UserProfile.DEFAULT_BOT,
+        bot_owner=owner, acting_user=owner,
+    )
+stream = ensure_stream(
+    realm, "$stream",
+    stream_description="Server health and backups, posted by the ops check when something changes.",
+    acting_user=owner,
+)
+people = list(UserProfile.objects.filter(realm=realm, is_active=True, is_bot=False))
+bulk_add_subscriptions(realm, [stream], [*people, bot], acting_user=owner)
+with open("$handoff/key", "w") as f:
+    f.write(f"[secrets]\narmada_ops_bot_api_key = {bot.api_key}\n")
+with open("$handoff/email", "w") as f:
+    f.write(bot.delivery_email)
+EOF
+
+crudini --merge /etc/zulip/zulip-secrets.conf <"$handoff/key"
+crudini --set /etc/zulip/zulip.conf armada ops_bot_email "$(cat "$handoff/email")"
+crudini --set /etc/zulip/zulip.conf armada ops_stream "$stream"
+echo "armada-ops-bot-setup: $(cat "$handoff/email") posts to #$stream"

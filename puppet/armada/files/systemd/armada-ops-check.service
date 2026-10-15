@@ -1,0 +1,8 @@
+[Unit]
+Description=Armada: ops check, posting changes to the #ops channel
+Documentation=file:///home/zulip/deployments/current/docs/armada/operations.md
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/armada-ops-check
+Nice=10

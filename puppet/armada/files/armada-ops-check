@@ -1,0 +1,406 @@
+#!/usr/bin/env python3
+"""Armada's ops check: is the server well, and are its backups current?
+
+Run every minute by armada-ops-check.timer, as root (puppet/armada). Each
+check reports ok, warn or critical; when a check's status changes, the
+check posts one message to the #ops channel through the organization's ops
+bot, and nothing while it stays the same. A post that fails (the server
+itself down) is tried again the next minute; DigitalOcean's uptime check
+and alerts cover a server that cannot post at all.
+
+    armada-ops-check            run the checks, post the changes
+    armada-ops-check --print    run the checks, print every result, post nothing
+
+Settings, in /etc/zulip/zulip.conf:
+
+    [armada]
+    ops_stream = ops                       # the channel posts go to
+    ops_bot_email = ops-bot@example.com    # the bot that posts them
+    ops_host = chat.example.com            # optional; EXTERNAL_HOST otherwise
+
+and the bot's API key in /etc/zulip/zulip-secrets.conf as
+armada_ops_bot_api_key. Each message names its runbook section in
+docs/armada/operations.md.
+"""
+
+import argparse
+import base64
+import configparser
+import functools
+import json
+import os
+import pwd
+import shutil
+import subprocess
+import sys
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
+from collections.abc import Callable
+from dataclasses import dataclass
+from datetime import datetime, timezone
+
+STATE_FILE = "/var/lib/armada-ops/state.json"
+BACKUP_STAMPS = "/var/lib/armada-backup"
+CERTIFICATE = "/etc/ssl/certs/zulip.combined-chain.crt"
+CODEX = "/opt/codex/bin/codex"
+RUNBOOK = "docs/armada/operations.md"
+
+OK, WARN, CRITICAL = "ok", "warn", "critical"
+ORDER = {OK: 0, WARN: 1, CRITICAL: 2}
+# A check that is slow or costs a process start runs at most this often;
+# between runs its last result stands.
+CACHED_SECONDS = {"codex-login": 600, "updates": 3600}
+
+
+@dataclass
+class Result:
+    status: str
+    detail: str
+    runbook: str
+
+
+def as_user(user: str, *command: str) -> list[str]:
+    # setpriv rather than sudo: no PAM session, so a check every minute
+    # leaves nothing in the auth log.
+    home = pwd.getpwnam(user).pw_dir
+    return [
+        "setpriv",
+        f"--reuid={user}",
+        f"--regid={user}",
+        "--init-groups",
+        "env",
+        f"HOME={home}",
+        *command,
+    ]
+
+
+def run(command: list[str], timeout: int = 30) -> str:
+    return subprocess.run(
+        command, capture_output=True, text=True, timeout=timeout, check=True
+    ).stdout
+
+
+def age_hours(path: str) -> float | None:
+    try:
+        return (time.time() - os.stat(path).st_mtime) / 3600
+    except FileNotFoundError:
+        return None
+
+
+def check_supervisor() -> Result:
+    # supervisorctl exits non-zero whenever a program is not running.
+    output = subprocess.run(
+        ["supervisorctl", "status"], capture_output=True, text=True, timeout=30, check=False
+    ).stdout
+    down = [line.split()[0] for line in output.splitlines() if line and "RUNNING" not in line]
+    if not output.strip():
+        return Result(CRITICAL, "supervisorctl answered nothing", "processes")
+    if down:
+        return Result(CRITICAL, "not running: " + ", ".join(sorted(down)), "processes")
+    return Result(OK, f"{len(output.splitlines())} programs running", "processes")
+
+
+def check_health() -> Result:
+    host = external_host()
+    url = f"https://{host}/health"
+    # Ask the local nginx, which only answers /health to this machine.
+    resolve = f"{host}:443:127.0.0.1"
+    try:
+        status = run(
+            [
+                "curl",
+                "-s",
+                "-o",
+                "/dev/null",
+                "-w",
+                "%{http_code}",
+                "-m",
+                "10",
+                "--resolve",
+                resolve,
+                url,
+            ]
+        ).strip()
+    except subprocess.CalledProcessError as error:
+        return Result(CRITICAL, f"/health did not answer ({error.returncode})", "processes")
+    if status != "200":
+        return Result(CRITICAL, f"/health answered {status}", "processes")
+    return Result(OK, "/health answered 200", "processes")
+
+
+def check_queues() -> Result:
+    # As rabbitmq itself: run as root, rabbitmqctl switches user through su
+    # and a systemd user session, every minute.
+    output = run(
+        as_user(
+            "rabbitmq",
+            "rabbitmqctl",
+            "list_queues",
+            "-q",
+            "--no-table-headers",
+            "name",
+            "messages",
+            "consumers",
+        )
+    )
+    stalled = []
+    backlog = []
+    for line in output.splitlines():
+        parts = line.split()
+        if len(parts) != 3 or not parts[1].isdigit():
+            continue
+        name, messages, consumers = parts[0], int(parts[1]), int(parts[2])
+        if messages > 0 and consumers == 0:
+            stalled.append(f"{name} ({messages} waiting, no consumer)")
+        elif messages >= 100:
+            backlog.append(f"{name} ({messages} waiting)")
+    if stalled:
+        return Result(CRITICAL, "; ".join(stalled), "queues")
+    if backlog:
+        return Result(WARN, "; ".join(backlog), "queues")
+    return Result(OK, "every queue has a consumer and no backlog", "queues")
+
+
+def check_codex_login() -> Result:
+    if not os.path.exists(CODEX):
+        return Result(WARN, f"{CODEX} is not installed", "codex-login")
+    # Codex answers on stderr, and exits non-zero when signed out.
+    checked = subprocess.run(
+        as_user("zulip", CODEX, "login", "status"),
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+    output = checked.stdout + checked.stderr
+    if "Logged in" in output:
+        return Result(OK, output.strip().splitlines()[0], "codex-login")
+    first_line = output.strip().splitlines()[0] if output.strip() else "no answer"
+    return Result(CRITICAL, f"Codex is not signed in: {first_line}", "codex-login")
+
+
+def check_certificate() -> Result:
+    try:
+        end = run(["openssl", "x509", "-enddate", "-noout", "-in", CERTIFICATE]).strip()
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return Result(CRITICAL, f"cannot read {CERTIFICATE}", "certificate")
+    expires = datetime.strptime(end.removeprefix("notAfter="), "%b %d %H:%M:%S %Y %Z").replace(
+        tzinfo=timezone.utc
+    )
+    days = (expires - datetime.now(timezone.utc)).days
+    if days < 7:
+        return Result(CRITICAL, f"the certificate expires in {days} days", "certificate")
+    if days < 21:
+        return Result(WARN, f"the certificate expires in {days} days", "certificate")
+    return Result(OK, f"the certificate is valid for {days} more days", "certificate")
+
+
+def check_disk() -> Result:
+    worst = OK
+    details = []
+    seen_devices = set()
+    for path in ("/", "/srv/armada", "/var/lib/postgresql"):
+        # The paths usually share one filesystem; report each one once.
+        if not os.path.exists(path) or os.stat(path).st_dev in seen_devices:
+            continue
+        seen_devices.add(os.stat(path).st_dev)
+        usage = shutil.disk_usage(path)
+        percent = round(100 * usage.used / usage.total)
+        details.append(f"{path} {percent}% used")
+        status = CRITICAL if percent >= 90 else WARN if percent >= 80 else OK
+        if ORDER[status] > ORDER[worst]:
+            worst = status
+    return Result(worst, ", ".join(details), "disk")
+
+
+def check_database_backup() -> Result:
+    try:
+        row = run(
+            as_user(
+                "postgres",
+                "psql",
+                "-Atc",
+                "SELECT coalesce(extract(epoch FROM last_archived_time), 0),"
+                " coalesce(extract(epoch FROM last_failed_time), 0) FROM pg_stat_archiver",
+            )
+        ).strip()
+    except subprocess.CalledProcessError:
+        return Result(CRITICAL, "cannot read pg_stat_archiver", "database-backup")
+    archived, failed = (float(value) for value in row.split("|"))
+    problems = []
+    if failed > archived:
+        problems.append("WAL archiving to Spaces is failing")
+    base = age_hours("/var/log/pg_backup_and_purge.log")
+    if base is None or base > 26:
+        problems.append("no base backup in 26 hours")
+    else:
+        with open("/var/log/pg_backup_and_purge.log") as log:
+            if "Traceback" in log.read():
+                problems.append("the last base backup run failed")
+    if problems:
+        return Result(CRITICAL, "; ".join(problems), "database-backup")
+    return Result(OK, "WAL archiving works; last base backup within 26 hours", "database-backup")
+
+
+def check_file_backup() -> Result:
+    files = age_hours(f"{BACKUP_STAMPS}/files.ok")
+    nightly = age_hours(f"{BACKUP_STAMPS}/nightly.ok")
+    problems = []
+    if files is None or files > 2:
+        problems.append("no file snapshot in 2 hours")
+    if nightly is None or nightly > 26:
+        problems.append("no nightly backup in 26 hours")
+    if problems or files is None:
+        return Result(CRITICAL, "; ".join(problems), "file-backup")
+    return Result(OK, f"last file snapshot {files * 60:.0f} minutes ago", "file-backup")
+
+
+def check_updates() -> Result:
+    problems = []
+    reboot = age_hours("/var/run/reboot-required")
+    if reboot is not None and reboot > 7 * 24:
+        problems.append(f"a reboot has been required for {reboot / 24:.0f} days")
+    # apt-check prints "<updates>;<security updates>" on stderr.
+    checked = subprocess.run(
+        ["/usr/lib/update-notifier/apt-check"],
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=False,
+    )
+    counts = checked.stderr.strip().split(";")
+    if len(counts) == 2 and counts[1].isdigit() and int(counts[1]) > 0:
+        problems.append(f"{counts[1]} security updates are waiting")
+    if problems:
+        return Result(WARN, "; ".join(problems), "patching")
+    return Result(OK, "no security update waiting", "patching")
+
+
+CHECKS: dict[str, Callable[[], Result]] = {
+    "processes": check_supervisor,
+    "health": check_health,
+    "queues": check_queues,
+    "codex-login": check_codex_login,
+    "certificate": check_certificate,
+    "disk": check_disk,
+    "database-backup": check_database_backup,
+    "file-backup": check_file_backup,
+    "updates": check_updates,
+}
+
+
+zulip_conf = configparser.RawConfigParser()
+zulip_conf.read("/etc/zulip/zulip.conf")
+secrets_conf = configparser.RawConfigParser()
+secrets_conf.read("/etc/zulip/zulip-secrets.conf")
+
+
+def zulip_conf_get(section: str, key: str) -> str:
+    return zulip_conf.get(section, key, fallback="")
+
+
+@functools.cache
+def external_host() -> str:
+    if host := zulip_conf_get("armada", "ops_host"):
+        return host
+    output = run(
+        as_user(
+            "zulip", "/home/zulip/deployments/current/scripts/get-django-setting", "EXTERNAL_HOST"
+        )
+    )
+    return output.strip()
+
+
+def post(check: str, result: Result, previous: str) -> None:
+    email = zulip_conf_get("armada", "ops_bot_email")
+    api_key = secrets_conf.get("secrets", "armada_ops_bot_api_key", fallback="")
+    stream = zulip_conf_get("armada", "ops_stream") or "ops"
+    if not email or not api_key:
+        raise RuntimeError("no [armada] ops_bot_email or armada_ops_bot_api_key")
+    host = external_host()
+    if result.status == OK:
+        content = f"**Recovered** ({previous} before): {result.detail}."
+    else:
+        content = (
+            f"**{result.status.capitalize()}**: {result.detail}.\n"
+            f'Runbook: `{RUNBOOK}`, section "{result.runbook}".'
+        )
+    body = urllib.parse.urlencode(
+        {"type": "stream", "to": stream, "topic": check, "content": content}
+    ).encode()
+    request = urllib.request.Request(f"https://{host}/api/v1/messages", data=body, method="POST")
+    token = f"{email}:{api_key}".encode()
+    request.add_header("Authorization", "Basic " + base64.b64encode(token).decode())
+    with urllib.request.urlopen(request, timeout=20) as response:
+        response.read()
+
+
+def load_state() -> dict[str, dict[str, object]]:
+    try:
+        with open(STATE_FILE) as f:
+            state: dict[str, dict[str, object]] = json.load(f)
+            return state
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {}
+
+
+def save_state(state: dict[str, dict[str, object]]) -> None:
+    os.makedirs(os.path.dirname(STATE_FILE), mode=0o700, exist_ok=True)
+    with open(STATE_FILE + ".new", "w") as f:
+        json.dump(state, f, indent=1, sort_keys=True)
+    os.replace(STATE_FILE + ".new", STATE_FILE)
+
+
+def evaluate(name: str, entry: dict[str, object], now: float) -> tuple[Result, float]:
+    """The check's result, and when it was computed."""
+    checked = float(str(entry.get("checked", 0)))
+    if now - checked < CACHED_SECONDS.get(name, 0):
+        return Result(str(entry["status"]), str(entry["detail"]), str(entry["runbook"])), checked
+    try:
+        return CHECKS[name](), now
+    except Exception as error:  # A broken check must not hide the others.
+        return Result(WARN, f"the check itself failed: {type(error).__name__}: {error}", name), now
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--print", action="store_true", help="print every result; post nothing")
+    args = parser.parse_args()
+
+    state = load_state()
+    now = time.time()
+    worst = OK
+    for name in CHECKS:
+        entry = state.get(name, {})
+        result, checked = evaluate(name, entry, now)
+        if ORDER[result.status] > ORDER[worst]:
+            worst = result.status
+        if args.print:
+            print(f"{result.status:8} {name:16} {result.detail}")
+            continue
+        # A check seen for the first time is assumed to have been ok, so a
+        # problem present at the first run is still posted.
+        posted = str(entry.get("posted", OK))
+        if result.status != posted:
+            try:
+                post(name, result, posted)
+                posted = result.status
+            except (OSError, RuntimeError, urllib.error.URLError) as error:
+                print(f"armada-ops-check: could not post {name}: {error}", file=sys.stderr)
+        state[name] = {
+            "status": result.status,
+            "detail": result.detail,
+            "runbook": result.runbook,
+            "posted": posted,
+            "checked": checked,
+        }
+    if args.print:
+        return 2 if worst == CRITICAL else 1 if worst == WARN else 0
+    save_state(state)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

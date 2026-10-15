@@ -1,6 +1,6 @@
 /* INTERIM BETA (README.md): partners: the sprite pack, the team's partners, faces redrawn. */
 
-import {$$, el, esc, sleep, T} from "./util.js";
+import {$$, el, esc, T} from "./util.js";
 import {DATA, msgIndex, state} from "./state.js";
 import {api} from "./connection.js";
 import {faceOf, faceSize, isOnix, stoneOf} from "./faces.js";
@@ -75,23 +75,18 @@ async function loadPartners() { if (!SPRITE_V) return;
     OFFERED.length = 0; for (const [sid, s] of Object.entries(pack.species)) if (s.first && s.sprite && s.sv && s.line !== agentLine()) OFFERED.push(sid);
     OFFERED.sort((a, b) => pack.species[a].num - pack.species[b].num || a.localeCompare(b, "en", {numeric: true})); }
   catch (e) { pack = null; partners = null; } }
-/* the team's partners change rarely (a choice, an evolution): they are asked for again every two minutes, on coming back to
-   the page, a little after someone speaks, and after my own send and reaction (which count, so mine are folded then) */
+/* the team's partners come from the server as they change (the armada_partner event, contract C3); mine are folded after my
+   own send and reaction, which count */
 let partnerTimer = 0;
 async function fetchPartners(fold) { partnersAt = performance.now(); try { applyPartners(await api(fold ? "POST" : "GET", fold ? "armada/partner/fold" : "armada/partners")); } catch (e) {} }
 function refreshPartners(o = {}) { if (!pack) return; clearTimeout(partnerTimer); partnerTimer = setTimeout(() => {
     if (!o.force && performance.now() - partnersAt < 30000) return; fetchPartners(o.fold); }, o.wait ?? 1500); }
-/* the caption "Evolved into X" is laid out with its bubble, never added under a bubble already drawn. So a batch of events
-   that brings a message from someone who can evolve their partner now (the server's may_change), or that comes while what
-   the page knows of partners is over PARTNERS_STALE_MS old, waits for the team's partners first: one request, at most
-   PARTNERS_FIRST_MS. Messages from Onix and my own never wait (my bubble was drawn when I pressed Return). Four seconds
-   after someone else's message the page asks again, after the fold their own page makes two seconds after their send:
-   a level that a message crossed is known before that person's next message comes. */
-const PARTNERS_FIRST_MS = 400, PARTNERS_STALE_MS = 15000;
-async function partnersFirst(events) { if (!pack || !partners) return;
-  const stale = performance.now() - partnersAt > PARTNERS_STALE_MS;
-  const due = events.some((ev) => { if (ev.type !== "message") return false; const id = ev.message.sender_id; if (id === state.ME || isOnix(id)) return false; const p = partners.partners[id]; return stale || !!(p && p.may_change); });
-  if (due) await Promise.race([fetchPartners(false), sleep(PARTNERS_FIRST_MS)]); }
+/* someone's partner changed. The server publishes it ahead of the message that caused an evolution, so the caption
+   "Evolved into X" is laid out with that message's bubble, never added under one already drawn. Mine carries what only I
+   see (experience, an evolution ready), so it is asked for in full. */
+function onPartner(ev) { if (!pack || !partners || ev.op !== "update") return; const {user_id: id, ...row} = ev.partner;
+  if (id === state.ME) { fetchPartners(false); return; }
+  applyPartners({...partners, partners: {...partners.partners, [id]: row}}); }
 function applyPartners(st) { if (!st || !st.on || !pack) return; const before = JSON.stringify(partners && partners.partners) + JSON.stringify(partners && partners.agent); partners = st; partnersAt = performance.now();
   if (before !== JSON.stringify(st.partners) + JSON.stringify(st.agent)) refreshFaces();
   drawMeRow(); if (card) drawCard(); if (state.place && state.place.kind === "partner") { drawPicker(); drawSide(); drawPickerBand(); } momentDue(); }
@@ -113,5 +108,5 @@ function evoCaption(m) { if (typeof m.sender_id !== "number" || isOnix(m.sender_
   const e = el("div", "evo", `${faceOf(m.sender_id, "s18")}<span>${p.evolved_kind === "shiny" ? esc(`${speciesName(p.species)} turned shiny`) : esc(`Evolved into ${speciesName(p.species)}`)}</span>`); e.dataset.mid = m.id; return e; }
 
 export {agentLine, applyPartners, brokenSprites, evoCaption, fetchPartners, hopOnce, loadPartners, me_, OFFERED,
-  pack, partnerOf, partners, partnersFirst, pkBig, pkCell, pkFace, refreshPartners, speciesName, spriteSrc, svFace, svOf,
+  onPartner, pack, partnerOf, partners, pkBig, pkCell, pkFace, refreshPartners, speciesName, spriteSrc, svFace, svOf,
   svPlace, svSrc, typeOf, withIcons};

@@ -20,7 +20,7 @@ import {adopt} from "./outbox.js";
 import {drawRunState} from "./band.js";
 import {drawSide} from "./column.js";
 import {drawHomeRow, mentions, questionOf} from "./home.js";
-import {hopOnce, refreshPartners} from "./partners.js";
+import {hopOnce} from "./partners.js";
 import {drawLab} from "./lab.js";
 
 /* ---------- live events: one queue ---------- */
@@ -46,7 +46,7 @@ function onMessage(ev) {
   if (state.tab !== "Chat") { $$(":scope > .empty", lane).forEach((x) => x.remove()); appendMessage(lane, m); return; }
   const row = grown(() => { $$(":scope > .empty", lane).forEach((x) => x.remove()); return appendMessage(lane, m); }, "settle");
   if (state.pinned) { const last = row.parts[row.parts.length - 1], b = last && ($(".b", last) || last); if (b && !isOnix(m.sender_id)) { M.release(b, {y: T.rise || 6}, "settle", {id: "in"}); M.appear(b); } else if (isOnix(m.sender_id)) M.appear(row.cl, 0.3); }
-  if (!mine && !isOnix(m.sender_id)) { S.play("arrive"); signOfLife(); hopOnce(row.cl); refreshPartners({wait: 4000, force: true}); }
+  if (!mine && !isOnix(m.sender_id)) { S.play("arrive"); signOfLife(); hopOnce(row.cl); }
 }
 function onUpdate(ev, at) {
   const c = msgIndex.get(ev.message_id); if (!c) return; const m = c.byId.get(ev.message_id); if (!m) return;

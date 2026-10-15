@@ -28,7 +28,7 @@ import {buildOver, closeMenu, confirmDelete, editing, endEdit, menu, msgOf, over
 import {closePicker, focusPop, pop, togglePicker} from "./model_picker.js";
 import {pal, palette} from "./palette.js";
 import {drawHome, drawHomeRow, fetchMentions, HOME, scanAll} from "./home.js";
-import {applyPartners, hopOnce, loadPartners, me_, pack, partners, refreshPartners} from "./partners.js";
+import {applyPartners, hopOnce, loadPartners, me_, onPartner, pack, partners, refreshPartners} from "./partners.js";
 import {choosePick, drawPicker, drawPickerBand, drawPickerSide, movePick, openPicker, PARTNER, pick, putOff,
   selectCell, selectMine} from "./partner_picker.js";
 import {card, closeCard, cutMoment, faceAt, holdMoment, moment, momentDue, openCard, playMoment, wireCard} from "./partner_card.js";
@@ -38,6 +38,7 @@ import {wireMentions} from "./mentions.js";
 /* event dispatch (connection.js): what each event type the page registers for does; a module's own types are named here */
 on("message", onMessage); on("update_message", onUpdate); on("agent_run", onRun); on("reaction", onReaction);
 on("update_message_flags", onFlags); on("delete_message", onDelete); on("typing", onTyping); on("workspace_changed", onWorkspaceChanged);
+on("armada_partner", onPartner);
 let fileIn = null;
 /* what Tab stops on, in document order: what the browser would stop on, shown and not inert */
 const tabStops = () => $$("a[href], button, input, [tabindex], [contenteditable]").filter((x) => x.tabIndex >= 0 && !x.disabled && !x.hidden && !x.closest("[inert], [hidden]") && x.getClientRects().length > 0 && getComputedStyle(x).visibility !== "hidden");
@@ -148,8 +149,7 @@ async function boot() {
     if (!mod && !e.altKey && e.key.length === 1 && state.tab === "Chat" && document.activeElement !== tx && !(document.activeElement && document.activeElement.closest("#lab, input, textarea"))) ready(); });   /* a letter typed anywhere goes to the field */
   addEventListener("popstate", () => { const p = placeFromHash(); if (p) openPlace(p, {keepHash: true}); });
   addEventListener("hashchange", () => { const p = placeFromHash(); if (p && (!state.place || p.key !== state.place.key)) openPlace(p, {keepHash: true}); });
-  document.addEventListener("visibilitychange", () => { if (document.hidden) return; askSession(); if (state.P) markRead(state.P); signOfLife(); refreshPartners({wait: 500}); });
-  setInterval(() => refreshPartners({wait: 0}), 120000);   /* the team's partners: a choice or an evolution elsewhere shows here within two minutes */
+  document.addEventListener("visibilitychange", () => { if (document.hidden) return; askSession(); if (state.P) markRead(state.P); signOfLife(); });
   addEventListener("focus", () => { askSession(); signOfLife(); });
   setInterval(() => pollReceipts(), RCPT_POLL);
   setInterval(() => tick(false), 500);

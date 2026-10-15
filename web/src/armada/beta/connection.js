@@ -6,7 +6,7 @@ import {dkey, openPlace, tkey} from "./routing.js";
 import {closeMenu, overHide} from "./hover.js";
 import {closePicker} from "./model_picker.js";
 import {palette} from "./palette.js";
-import {partnersFirst} from "./partners.js";
+import {fetchPartners} from "./partners.js";
 
 /* ---------- the server ---------- */
 const CSRF = ($('input[name="csrfmiddlewaretoken"]') || {}).value || "";   /* the session's token, written into the page by the server */
@@ -38,8 +38,8 @@ function handle(ev, at) {
 async function poll() { let wait = 0;
   while (!signedOut.done) {
     const open = setTimeout(() => setDown(false), 3000);   /* a long-poll still open after 3 s is an answering server: without this the label said "not answering" until the next event or heartbeat */
-    try { const r = await api("GET", "events", {queue_id: state.queue, last_event_id: state.lastEvent}); const at = performance.now(); clearTimeout(open); setDown(false); wait = 0; await partnersFirst(r.events); for (const ev of r.events) { state.lastEvent = Math.max(state.lastEvent, ev.id); handle(ev, at); } }
-    catch (e) { clearTimeout(open); if (signedOut.done) return; if (e.code === "BAD_EVENT_QUEUE_ID") { try { await api("GET", "users/me"); await register(); for (const c of places.values()) { c.loaded = false; c.msgs = c.msgs.filter((m) => m.local); c.byId = new Map(c.msgs.map((m) => [m.id, m])); c.oldest = false; } if (state.place) openPlace(state.place, {force: true, keepHash: true}); } catch (x) {} } else { setDown(true); wait = Math.min(15000, wait ? wait * 2 : 1000); await sleep(wait); } }
+    try { const r = await api("GET", "events", {queue_id: state.queue, last_event_id: state.lastEvent}); const at = performance.now(); clearTimeout(open); setDown(false); wait = 0; for (const ev of r.events) { state.lastEvent = Math.max(state.lastEvent, ev.id); handle(ev, at); } }
+    catch (e) { clearTimeout(open); if (signedOut.done) return; if (e.code === "BAD_EVENT_QUEUE_ID") { try { await api("GET", "users/me"); await register(); for (const c of places.values()) { c.loaded = false; c.msgs = c.msgs.filter((m) => m.local); c.byId = new Map(c.msgs.map((m) => [m.id, m])); c.oldest = false; } if (state.place) openPlace(state.place, {force: true, keepHash: true}); fetchPartners(false); } catch (x) {} } else { setDown(true); wait = Math.min(15000, wait ? wait * 2 : 1000); await sleep(wait); } }
   }
 }
 function setDown(d) { const l = $("#lab"); if (l && l.classList.contains("down") !== d) { l.classList.toggle("down", d); $("#lab-t").textContent = d ? "Beta · offline" : "Beta"; } }
@@ -52,7 +52,7 @@ function signedOut() { if (signedOut.done) return; signedOut.done = true; palett
 let sessionAsked = -1e9;
 function askSession() { if (signedOut.done || document.hidden || performance.now() - sessionAsked < 5000) return; sessionAsked = performance.now(); api("GET", "users/me").catch(() => {}); }
 async function register() {
-  const r = await api("POST", "register", {fetch_event_types: ["muted_users", "subscription", "realm_user", "presence", "update_message_flags", "message", "recent_private_conversations", "realm_bot", "stream"], event_types: ["message", "update_message", "reaction", "agent_run", "workspace_changed", "typing", "delete_message", "update_message_flags"], apply_markdown: true, client_gravatar: false,
+  const r = await api("POST", "register", {fetch_event_types: ["muted_users", "subscription", "realm_user", "presence", "update_message_flags", "message", "recent_private_conversations", "realm_bot", "stream"], event_types: ["message", "update_message", "reaction", "agent_run", "workspace_changed", "typing", "delete_message", "update_message_flags", "armada_partner"], apply_markdown: true, client_gravatar: false,
     client_capabilities: {notification_settings_null: true, bulk_message_deletion: true, user_avatar_url_field_optional: false, stream_typing_notifications: true, user_settings_object: true, linkifier_url_template: true, user_list_incomplete: false, include_deactivated_groups: false, archived_channels: false, empty_topic_name: true}});
   if (!r.user_id || (state.ME && r.user_id !== state.ME)) { signedOut(); throw Object.assign(new Error("Signed out"), {status: 401}); }   /* no session: the server registered a spectator */
   state.queue = r.queue_id; state.lastEvent = r.last_event_id; state.skew = r.server_timestamp * 1000 - Date.now(); state.ME = r.user_id; state.meName = r.full_name; state.presences = r.presences || {};

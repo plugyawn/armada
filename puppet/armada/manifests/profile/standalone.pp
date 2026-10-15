@@ -10,4 +10,5 @@ class armada::profile::standalone {
   include armada::agent_runtime
   include armada::hooks
   include armada::nginx_brotli
+  include armada::patching
 }

@@ -66,7 +66,9 @@ from zerver.models import (
     NavigationView,
     OnboardingStep,
     OnboardingUserMessage,
+    Page,
     Partner,
+    Post,
     Reaction,
     Realm,
     RealmAuditLog,
@@ -183,7 +185,9 @@ ALL_ZULIP_TABLES = {
     "zerver_navigationview",
     "zerver_onboardingstep",
     "zerver_onboardingusermessage",
+    "zerver_page",
     "zerver_partner",
+    "zerver_post",
     "zerver_preregistrationrealm",
     "zerver_preregistrationuser",
     "zerver_preregistrationuser_streams",
@@ -1235,6 +1239,30 @@ def custom_process_partner(partners: Iterable[Record], context: Context) -> Iter
         yield partner
 
 
+def custom_process_post(posts: Iterable[Record], context: Context) -> Iterator[Record]:
+    """A published post is readable by everyone who can see its author,
+    so it is exported as public data is; a draft is seen by its author
+    alone, so it is exported as private data is."""
+    if "user" in context:
+        # A single user's export holds their own posts, drafts included.
+        yield from posts
+        return
+
+    export_type = context["export_type"]
+    if export_type == RealmExport.EXPORT_FULL_WITHOUT_CONSENT:
+        yield from posts
+        return
+    if export_type == RealmExport.EXPORT_FULL_WITH_CONSENT:
+        consenting_user_ids = context["exportable_user_ids"]
+    else:
+        assert export_type == RealmExport.EXPORT_PUBLIC
+        consenting_user_ids = set()
+
+    for post in posts:
+        if not post["draft"] or post["author"] in consenting_user_ids:
+            yield post
+
+
 def add_user_profile_child_configs(user_profile_config: Config) -> None:
     """
     We add tables here that are keyed by user, and for which
@@ -1292,6 +1320,15 @@ def add_user_profile_child_configs(user_profile_config: Config) -> None:
     )
 
     Config(
+        table="zerver_page",
+        model=Page,
+        normal_parent=user_profile_config,
+        include_rows="user_profile_id__in",
+        # A person's page is readable by everyone who can see them.
+        limit_to_consenting_users=False,
+    )
+
+    Config(
         table="zerver_partner",
         model=Partner,
         normal_parent=user_profile_config,
@@ -1299,6 +1336,17 @@ def add_user_profile_child_configs(user_profile_config: Config) -> None:
         # A person's partner is shown to everyone who can see them.
         limit_to_consenting_users=False,
         custom_process_results=custom_process_partner,
+    )
+
+    Config(
+        table="zerver_post",
+        model=Post,
+        normal_parent=user_profile_config,
+        include_rows="author_id__in",
+        # It is custom_process_post that keeps a draft out without
+        # its author's consent.
+        limit_to_consenting_users=False,
+        custom_process_results=custom_process_post,
     )
 
     Config(

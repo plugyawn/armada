@@ -50,6 +50,15 @@ from zerver.views.armada_beta import (
     post_armada_partner_evolve,
     post_armada_partner_fold,
 )
+from zerver.views.armada_pages import (
+    delete_armada_post,
+    get_armada_page,
+    get_armada_pages,
+    get_armada_post,
+    patch_armada_my_page,
+    patch_armada_post,
+    post_armada_post,
+)
 from zerver.views.armada_read_receipts import get_armada_read_receipts_backend
 from zerver.views.armada_workspace import (
     delete_armada_workspace_entry_backend,
@@ -432,6 +441,17 @@ v1_api_and_json_patterns = [
     rest_path("drafts/<int:draft_id>", PATCH=edit_draft, DELETE=delete_draft),
     # navigation_views -> zerver.views.navigation_views
     rest_path("navigation_views", GET=get_navigation_views, POST=add_navigation_view),
+    # Personal pages (zerver/lib/armada_pages.py).
+    rest_path("armada/pages", GET=(get_armada_pages, {"intentionally_undocumented"})),
+    rest_path("armada/pages/me", PATCH=(patch_armada_my_page, {"intentionally_undocumented"})),
+    rest_path("armada/pages/<int:user_id>", GET=(get_armada_page, {"intentionally_undocumented"})),
+    rest_path("armada/posts", POST=(post_armada_post, {"intentionally_undocumented"})),
+    rest_path(
+        "armada/posts/<int:post_id>",
+        GET=(get_armada_post, {"intentionally_undocumented"}),
+        PATCH=(patch_armada_post, {"intentionally_undocumented"}),
+        DELETE=(delete_armada_post, {"intentionally_undocumented"}),
+    ),
     # INTERIM BETA: partners (zerver/lib/partner.py).
     rest_path("armada/partners", GET=(get_armada_partners, {"intentionally_undocumented"})),
     rest_path("armada/partner", POST=(post_armada_partner, {"intentionally_undocumented"})),

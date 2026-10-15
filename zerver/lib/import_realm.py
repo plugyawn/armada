@@ -94,7 +94,9 @@ from zerver.models import (
     NavigationView,
     OnboardingStep,
     OnboardingUserMessage,
+    Page,
     Partner,
+    Post,
     Reaction,
     Realm,
     RealmAuditLog,
@@ -194,7 +196,9 @@ ID_MAP: dict[str, dict[int, int]] = {
     "realmuserdefault": {},
     "scheduledmessage": {},
     "onboardingusermessage": {},
+    "page": {},
     "partner": {},
+    "post": {},
     "savedsnippet": {},
     "channelfolder": {},
     "navigationview": {},
@@ -2095,6 +2099,25 @@ def do_import_realm(
         fix_partner_watermarks(data)
         update_model_ids(Partner, data, "partner")
         bulk_import_model(data, Partner)
+
+    if "zerver_page" in data:
+        fix_datetime_fields(data, "zerver_page")
+        re_map_foreign_keys(data, "zerver_page", "user_profile", related_table="user_profile")
+        re_map_foreign_keys(data, "zerver_page", "realm", related_table="realm")
+        update_model_ids(Page, data, "page")
+        bulk_import_model(data, Page)
+
+    if "zerver_post" in data:
+        fix_datetime_fields(data, "zerver_post")
+        re_map_foreign_keys(data, "zerver_post", "author", related_table="user_profile")
+        re_map_foreign_keys(data, "zerver_post", "realm", related_table="realm")
+        # A post is rendered as a message is, so it keeps its rendering
+        # as a message does, with the ids in its mentions brought along.
+        fix_message_content_attributes(
+            realm=realm, sender_map=sender_map, messages=data["zerver_post"]
+        )
+        update_model_ids(Post, data, "post")
+        bulk_import_model(data, Post)
 
     # Similarly, we need to recalculate the first_message_id for stream objects.
     update_first_message_id_query = SQL(

@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import shutil
 import uuid
 from collections import defaultdict
@@ -43,6 +44,7 @@ from zerver.actions.user_status import do_update_user_status
 from zerver.actions.user_topics import do_set_user_topic_visibility_policy
 from zerver.actions.users import do_deactivate_user
 from zerver.lib import upload
+from zerver.lib.armada_pages import create_post, update_bio
 from zerver.lib.avatar_hash import user_avatar_path
 from zerver.lib.bot_config import set_bot_config
 from zerver.lib.bot_lib import StateHandler
@@ -92,7 +94,9 @@ from zerver.models import (
     NavigationView,
     OnboardingStep,
     OnboardingUserMessage,
+    Page,
     Partner,
+    Post,
     Reaction,
     Realm,
     RealmAuditLog,
@@ -891,6 +895,10 @@ class RealmImportExportTest(ExportFile):
         # be exported regardless of consent - even in a public export.
         iago_presence = UserPresence.objects.create(user_profile=iago, realm=realm)
 
+        # A published post is public; a draft is private, even with consent.
+        published_post = create_post(hamlet, "Published", "for everyone", draft=False)
+        create_post(hamlet, "Draft", "for hamlet", draft=True)
+
         self.export_realm_and_create_auditlog(realm, export_type=RealmExport.EXPORT_PUBLIC)
 
         realm_data = read_json("realm.json")
@@ -905,6 +913,9 @@ class RealmImportExportTest(ExportFile):
 
         exported_user_presence_ids = self.get_set(realm_data["zerver_userpresence"], "id")
         self.assertIn(iago_presence.id, exported_user_presence_ids)
+
+        exported_post_ids = self.get_set(realm_data["zerver_post"], "id")
+        self.assertEqual(exported_post_ids, {published_post.id})
 
         exported_huddle_ids = self.get_set(realm_data["zerver_huddle"], "id")
         self.assertEqual(exported_huddle_ids, set())
@@ -1038,6 +1049,10 @@ class RealmImportExportTest(ExportFile):
         cordelia_saved_snippet = do_create_saved_snippet(
             "test", "test", self.example_user("cordelia")
         )
+        # A draft post is private too; a published one is not.
+        iago_draft = create_post(self.example_user("iago"), "Draft", "words", draft=True)
+        cordelia_draft = create_post(self.example_user("cordelia"), "Draft", "words", draft=True)
+        cordelia_post = create_post(self.example_user("cordelia"), "Post", "words", draft=False)
 
         # Iago and Hamlet consented to export their private data.
         do_change_user_setting(
@@ -1267,6 +1282,10 @@ class RealmImportExportTest(ExportFile):
             deactivated_non_consented_user_saved_snippet.id, exported_saved_snippet_ids
         )
         self.assertEqual(exported_saved_snippet_ids, {iago_saved_snippet.id})
+
+        exported_post_ids = self.get_set(realm_data["zerver_post"], "id")
+        self.assertNotIn(cordelia_draft.id, exported_post_ids)
+        self.assertEqual(exported_post_ids, {iago_draft.id, cordelia_post.id})
 
         exported_direct_message_group_ids = self.get_set(realm_data["zerver_huddle"], "id")
         self.assertNotIn(direct_message_group_c.id, exported_direct_message_group_ids)
@@ -1630,6 +1649,11 @@ class RealmImportExportTest(ExportFile):
         )
         # A partner whose experience was never counted counts from the start.
         Partner.objects.create(user_profile=othello, realm=original_realm)
+
+        # data to test import of pages and posts
+        update_bio(hamlet, "Prince of Denmark")
+        create_post(hamlet, "To be", "@**Cordelia, Lear's daughter**, or not to be", draft=False)
+        create_post(hamlet, "Notes", "a draft", draft=True)
 
         # data to test import of onboaring step
         OnboardingStep.objects.filter(user=sample_user).delete()
@@ -2271,6 +2295,28 @@ class RealmImportExportTest(ExportFile):
                     ).count(),
                 )
                 for partner in Partner.objects.filter(realm=r).select_related("user_profile")
+            }
+
+        @getter
+        def get_pages(r: Realm) -> set[tuple[str, str]]:
+            return {
+                (page.user_profile.full_name, page.bio)
+                for page in Page.objects.filter(realm=r).select_related("user_profile")
+            }
+
+        @getter
+        def get_posts(r: Realm) -> set[tuple[object, ...]]:
+            def mentioned(post: Post) -> frozenset[str]:
+                user_ids = re.findall(r'data-user-id="(\d+)"', post.rendered_content)
+                return frozenset(
+                    UserProfile.objects.filter(realm=r, id__in=user_ids).values_list(
+                        "full_name", flat=True
+                    )
+                )
+
+            return {
+                (post.author.full_name, post.title, post.content, post.draft, mentioned(post))
+                for post in Post.objects.filter(realm=r).select_related("author")
             }
 
         @getter
@@ -3808,6 +3854,14 @@ class SingleUserExportTest(ExportFile):
         def zerver_onboardingstep(records: list[Record]) -> None:
             self.assertEqual(records[-1]["onboarding_step"], "topics")
 
+        update_bio(cordelia, "Lear's daughter")
+        update_bio(othello, "bogus")
+
+        @checker
+        def zerver_page(records: list[Record]) -> None:
+            (rec,) = records
+            self.assertEqual(rec["bio"], "Lear's daughter")
+
         Partner.objects.create(user_profile=cordelia, realm=realm, species="7", xp=12)
         Partner.objects.create(user_profile=othello, realm=realm, species="4")
 
@@ -3816,6 +3870,17 @@ class SingleUserExportTest(ExportFile):
             (rec,) = records
             self.assertEqual(
                 (rec["user_profile"], rec["species"], rec["xp"]), (cordelia.id, "7", 12)
+            )
+
+        create_post(cordelia, "Published", "words", draft=False)
+        create_post(cordelia, "Draft", "words", draft=True)
+        create_post(othello, "Bogus", "words", draft=False)
+
+        @checker
+        def zerver_post(records: list[Record]) -> None:
+            self.assertEqual(
+                [(rec["author"], rec["title"]) for rec in records],
+                [(cordelia.id, "Published"), (cordelia.id, "Draft")],
             )
 
         """

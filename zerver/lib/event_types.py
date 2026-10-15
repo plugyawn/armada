@@ -1392,3 +1392,17 @@ class ArmadaPartnerEvent(BaseEvent):
     type: Literal["armada_partner"]
     op: Literal["update"]
     partner: ArmadaPartner
+
+
+class ArmadaPost(BaseModel):
+    id: int
+    user_id: int
+    title: str
+    updated: int
+    draft: bool
+
+
+class ArmadaPostEvent(BaseEvent):
+    type: Literal["armada_post"]
+    op: Literal["add", "update", "remove"]
+    post: ArmadaPost

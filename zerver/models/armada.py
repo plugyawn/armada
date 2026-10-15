@@ -60,3 +60,43 @@ class MessageClientKey(models.Model):
                 fields=["user_profile", "client_key"], name="zerver_messageclientkey_user_key"
             ),
         ]
+
+
+class Page(models.Model):
+    """A person's page: a short bio over their posts
+    (zerver/lib/armada_pages.py). A person with no row has an empty
+    bio."""
+
+    MAX_BIO_LENGTH = 280
+
+    user_profile = models.OneToOneField(UserProfile, on_delete=CASCADE, related_name="+")
+    realm = models.ForeignKey(Realm, on_delete=CASCADE, related_name="+")
+    bio = models.CharField(max_length=MAX_BIO_LENGTH, default="")
+    date_updated = models.DateTimeField(default=timezone_now)
+
+
+class Post(models.Model):
+    """A post on its author's page, in Markdown and rendered as messages
+    are. A draft is seen only by its author."""
+
+    MAX_TITLE_LENGTH = 200
+    MAX_CONTENT_LENGTH = 50000
+
+    realm = models.ForeignKey(Realm, on_delete=CASCADE, related_name="+")
+    author = models.ForeignKey(UserProfile, on_delete=CASCADE, related_name="+")
+    title = models.CharField(max_length=MAX_TITLE_LENGTH)
+    content = models.TextField()
+    rendered_content = models.TextField()
+    draft = models.BooleanField(default=False)
+    # Drafted by the agent for its author, who publishes it or not.
+    drafted_by_agent = models.BooleanField(default=False)
+    date_created = models.DateTimeField(default=timezone_now)
+    date_updated = models.DateTimeField(default=timezone_now)
+
+    class Meta:
+        indexes = [
+            models.Index(
+                fields=["author", "-date_created"],
+                name="zerver_post_author_created",
+            ),
+        ]

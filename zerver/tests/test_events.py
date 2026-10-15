@@ -165,9 +165,11 @@ from zerver.actions.users import (
 )
 from zerver.actions.video_calls import do_set_video_call_provider_token
 from zerver.lib.armada import ARMADA_EMBEDDED_BOT_SERVICE
+from zerver.lib.armada_pages import create_post
 from zerver.lib.drafts import DraftData, do_create_drafts, do_delete_draft, do_edit_draft
 from zerver.lib.event_schema import (
     check_alert_words,
+    check_armada_post_event,
     check_attachment_add,
     check_attachment_remove,
     check_attachment_update,
@@ -3605,6 +3607,31 @@ class NormalActionsTest(BaseAction):
         )
 
         self.assertEqual(state["agent_user_ids"], [])
+
+    def test_apply_armada_post_events(self) -> None:
+        # The beta's events are not in the API documentation, which
+        # verify_action checks every event against, so this one is
+        # applied directly. Pages are not in the register state.
+        with self.capture_send_event_calls(expected_num_events=1) as sent:
+            create_post(self.user_profile, "Notes", "words", draft=True)
+        event = {**sent[0]["event"], "id": 0}
+        check_armada_post_event("events[0]", event)
+        state: dict[str, Any] = {}
+
+        apply_events(
+            self.user_profile,
+            state=state,
+            events=[event],
+            fetch_event_types=None,
+            client_gravatar=True,
+            slim_presence=False,
+            include_subscribers=True,
+            linkifier_url_template=True,
+            user_list_incomplete=False,
+            include_deactivated_groups=False,
+        )
+
+        self.assertEqual(state, {})
 
     def test_change_bot_full_name(self) -> None:
         bot = self.create_bot("test")

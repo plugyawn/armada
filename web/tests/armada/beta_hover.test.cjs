@@ -186,6 +186,7 @@ const feed = zrequire("armada/beta/feed.js");
 const events = zrequire("armada/beta/events.js");
 const send = zrequire("armada/beta/send.js");
 const hover = zrequire("armada/beta/hover.js");
+const mentions = zrequire("armada/beta/mentions.js");
 
 beta_state.state.ME = ME;
 beta_state.state.meName = "Shiva";
@@ -488,6 +489,28 @@ run_test("a card opened from More gives focus back to More when Esc closes it", 
         assert.ok(!node.inert);
     }
     closeMore();
+});
+
+run_test("More's arrows go round: Up from the first item, Down from the last", async () => {
+    serve();
+    // Iago's message: Reply, Copy text, Copy link, Card. Up from Reply is Card.
+    await openMore(125);
+    const more = document.activeElement;
+    dom.press("ArrowUp");
+    dom.press("Enter");
+    await settle();
+    assert.equal(find('[role="dialog"]').getAttribute("aria-label"), "Iago");
+    dom.press("Escape");
+    assert.equal(document.activeElement, more);
+
+    // Down from Card is Reply: the field quotes Iago's words.
+    dom.click(more);
+    dom.press("ArrowUp");
+    dom.press("ArrowDown");
+    dom.press("Enter");
+    assert.equal(find('[role="dialog"]'), null);
+    assert.match(find(".cz").textContent, /Iago.*that looks saved/);
+    mentions.takeReply();
 });
 
 run_test("Up edits my latest message only inside the limit", async () => {

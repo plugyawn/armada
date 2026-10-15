@@ -93,7 +93,8 @@ function openMenu(m, btn) { closeMenu(); const mine = m.sender_id === state.ME &
   menu = el("div", "menu raised float", items.map(([k, label, key]) => `<button class="mi" data-mi="${k}" tabindex="-1">${label}<span class="k">${key}</span></button>`).join("")); menu.setAttribute("role", "menu");
   const r = btn.getBoundingClientRect(), mr = main.getBoundingClientRect(); menu.style.cssText = `position:absolute;left:${Math.round(r.left - mr.left)}px;top:${Math.round(r.bottom - mr.top + 4)}px`; main.append(menu); host(menu);
   let hi = 0; const mark = () => $$(".mi", menu).forEach((x, i) => x.classList.toggle("hl", i === hi)); mark();
-  menu._key = (e) => { const d = {ArrowDown: 1, ArrowUp: -1}[e.key]; if (d) { e.preventDefault(); hi = clamp(hi + d, 0, items.length - 1); mark(); return true; } if (e.key === "Enter") { e.preventDefault(); $$(".mi", menu)[hi].click(); return true; } if (e.key === "Escape") { e.preventDefault(); closeMenu(); ready(); return true; }
+  /* the arrows go round, as a menu's do: Up from the first item is the last */
+  menu._key = (e) => { const d = {ArrowDown: 1, ArrowUp: -1}[e.key]; if (d) { e.preventDefault(); hi = (hi + d + items.length) % items.length; mark(); return true; } if (e.key === "Enter") { e.preventDefault(); $$(".mi", menu)[hi].click(); return true; } if (e.key === "Escape") { e.preventDefault(); closeMenu(); ready(); return true; }
     const hot = items.findIndex(([, , key]) => key && key.toLowerCase() === e.key.toLowerCase()); if (hot >= 0 && !e.metaKey && !e.ctrlKey) { e.preventDefault(); $$(".mi", menu)[hot].click(); return true; } return false; };
   menu._t = overAt;
   press(menu, ".mi", (b, e, ptr) => { const k = b.dataset.mi, t = menu._t; closeMenu(); overHide();

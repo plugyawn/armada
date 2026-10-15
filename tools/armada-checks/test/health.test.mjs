@@ -4,12 +4,14 @@ import * as os from "node:os";
 import path from "node:path";
 import {afterEach, beforeEach, test} from "node:test";
 
+import {verdict_of} from "../lib/classify.mjs";
 import {
     MIN_AVAILABLE_MEMORY,
     MIN_FREE_DISK,
     WATCHED,
     changed_files,
     changes,
+    check_env_errors,
     describe_changed_files,
     foreign_events,
     is_local,
@@ -256,4 +258,148 @@ test("foreign_events: what another person did reaches the page", () => {
         "typing from user 10",
     ]);
     assert.deepEqual(foreign_events(undefined, me), []);
+});
+
+// Each failure the health checks exist for, planted where run.mjs looks for
+// it, ends the run ENV-ERROR with status 3: never RED, even when a check
+// failed because of it, and never GREEN.
+const RED = {pass: 3, known_fail: 0, fail: 1, fixed: 0, error: 1, stale: 0};
+const GREEN = {pass: 3, known_fail: 1, fail: 0, fixed: 0, error: 0, stale: 0};
+
+function assert_env_error(lines) {
+    assert.ok(lines.length > 0, "the planted failure was not seen");
+    for (const totals of [RED, GREEN]) {
+        assert.deepEqual(verdict_of(totals, lines.length), {
+            verdict: "ENV-ERROR",
+            green: false,
+            status: 3,
+        });
+    }
+}
+
+test("verdict_of: green, red, and ENV-ERROR over both", () => {
+    assert.deepEqual(verdict_of(GREEN, 0), {verdict: "GREEN", green: true, status: 0});
+    assert.deepEqual(verdict_of(RED, 0), {verdict: "RED", green: false, status: 1});
+    for (const key of ["fail", "fixed", "error", "stale"]) {
+        assert.equal(verdict_of({...GREEN, [key]: 1}, 0).verdict, "RED");
+    }
+    assert.equal(verdict_of(GREEN, 1).verdict, "ENV-ERROR");
+});
+
+test("planted before the run: each makes the run ENV-ERROR", async () => {
+    dev_server();
+    const base = "http://localhost:9991";
+    const healthy = await snapshot({base, tree, io: io()});
+    assert.deepEqual(problems(healthy, tree), []);
+    const planted = [
+        [
+            "the server answers /health with 502",
+            async () => problems(await snapshot({base, tree, io: io({status: 502})}), tree),
+        ],
+        [
+            "the server does not answer /health",
+            async () =>
+                problems(
+                    await snapshot({base, tree, io: io({error: new Error("ECONNREFUSED")})}),
+                    tree,
+                ),
+        ],
+        [
+            "the disk is nearly full",
+            async () => problems(await snapshot({base, tree, io: io({bavail: 1024})}), tree),
+        ],
+        [
+            "memory is nearly gone",
+            async () => {
+                fs.writeFileSync(path.join(proc, "meminfo"), "MemAvailable: 1000 kB\n");
+                return problems(await snapshot({base, tree, io: io()}), tree);
+            },
+        ],
+        [
+            "Tornado is a zombie",
+            async () => {
+                fs.rmSync(path.join(proc, "11"), {recursive: true});
+                add_process(11, "python3 ./manage.py runtornado", {state: "Z"});
+                return problems(await snapshot({base, tree, io: io()}), tree);
+            },
+        ],
+        [
+            "the queue processor is gone",
+            async () => {
+                fs.rmSync(path.join(proc, "12"), {recursive: true});
+                return problems(await snapshot({base, tree, io: io()}), tree);
+            },
+        ],
+        [
+            "Django is gone",
+            async () => {
+                fs.rmSync(path.join(proc, "10"), {recursive: true});
+                return problems(await snapshot({base, tree, io: io()}), tree);
+            },
+        ],
+        [
+            "the server runs from another tree",
+            async () => {
+                const other = path.join(root, "other");
+                const statfs = () => ({bavail: 1e9, bsize: 4096});
+                return problems(await snapshot({base, tree: other, io: {...io(), statfs}}), other);
+            },
+        ],
+    ];
+    for (const [name, plant] of planted) {
+        fs.rmSync(proc, {recursive: true});
+        fs.mkdirSync(proc);
+        dev_server();
+        const lines = await plant();
+        assert.ok(lines.length > 0, name);
+        assert_env_error(lines);
+    }
+});
+
+test("planted during a check: each makes the run ENV-ERROR", async () => {
+    dev_server();
+    fs.mkdirSync(path.join(tree, "web/src"), {recursive: true});
+    fs.writeFileSync(path.join(tree, "web/src/a.ts"), "a");
+    const base = "http://localhost:9991";
+    const before = await snapshot({base, tree, io: io()});
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    const since = Date.now();
+    const quiet = {env_events: [], before, after: before, files: [], tree};
+    assert.deepEqual(check_env_errors(quiet), []);
+    assert.deepEqual(verdict_of(RED, check_env_errors(quiet).length).verdict, "RED");
+
+    // What the pages saw (lib/harness.mjs keeps these lines).
+    for (const line of [
+        response_problem(429, "/json/messages"),
+        response_problem(502, "/json/messages"),
+        response_problem(400, "/json/events?queue_id=1"),
+        ...foreign_events([{type: "typing", sender: {user_id: 9}}], 8),
+    ]) {
+        assert_env_error(check_env_errors({...quiet, env_events: [line]}));
+    }
+
+    // A save to the served tree while the check ran.
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    fs.writeFileSync(path.join(tree, "web/src/a.ts"), "saved");
+    const saved = check_env_errors({...quiet, files: changed_files(tree, since)});
+    assert.deepEqual(saved, ["the served tree changed during the check: web/src/a.ts"]);
+    assert_env_error(saved);
+
+    // Django reloaded.
+    fs.rmSync(path.join(proc, "10"), {recursive: true});
+    add_process(31, "python3 ./manage.py rundjangoserver");
+    const restarted = await snapshot({base, tree, io: io()});
+    assert_env_error(check_env_errors({...quiet, after: restarted}));
+
+    // The machine rebooted.
+    fs.writeFileSync(path.join(proc, "sys/kernel/random/boot_id"), "boot-9\n");
+    assert_env_error(check_env_errors({...quiet, after: await snapshot({base, tree, io: io()})}));
+
+    // The server went down after the check.
+    assert_env_error(
+        check_env_errors({
+            ...quiet,
+            after: await snapshot({base, tree, io: io({status: 503})}),
+        }),
+    );
 });

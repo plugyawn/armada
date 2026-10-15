@@ -208,6 +208,19 @@ export function changes(before, after) {
     return found;
 }
 
+// Everything that changed around one check while it ran: what its pages
+// saw (`env_events`), what is wrong with the environment after it, what
+// changed since the snapshot before it, and the served tree's `files` that
+// changed. Any line makes the run ENV-ERROR (lib/classify.mjs, verdict_of).
+export function check_env_errors({env_events, before, after, files, tree}) {
+    return [
+        ...env_events,
+        ...problems(after, tree),
+        ...changes(before, after),
+        ...describe_changed_files(files),
+    ];
+}
+
 export function describe_changed_files(files) {
     if (files.length === 0) {
         return [];

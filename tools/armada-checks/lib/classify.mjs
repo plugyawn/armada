@@ -3,6 +3,7 @@
 // harness's own tests (tools/armada-checks/test/) can hold it at 100%.
 
 import {beyond_max} from "./known.mjs";
+import {ENV_ERROR_STATUS} from "./lock.mjs";
 
 export function format_value(value, unit) {
     return value === null ? "n/a" : `${value}${unit}`;
@@ -133,4 +134,16 @@ export function rewrite_known(known, results, stale, options, totals, today) {
     }
     // Ids are unique, so no two compare equal.
     return Object.fromEntries([...next].toSorted(([a], [b]) => (a < b ? -1 : 1)));
+}
+
+// A run's verdict and exit status. Any problem of the environment
+// (lib/health.mjs) makes it ENV-ERROR whatever its assertions said: they
+// say nothing about the tree, so neither red nor green counts.
+export function verdict_of(totals, env_error_count) {
+    if (env_error_count > 0) {
+        return {verdict: "ENV-ERROR", green: false, status: ENV_ERROR_STATUS};
+    }
+    const green =
+        totals.fail === 0 && totals.fixed === 0 && totals.error === 0 && totals.stale === 0;
+    return {verdict: green ? "GREEN" : "RED", green, status: green ? 0 : 1};
 }

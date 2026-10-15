@@ -407,7 +407,11 @@ module listed in `FULLY_COVERED` in `selftest.mjs` (the ratchet in
 `lib/classify.mjs`, the `known.json` lint, the lock, the health checks,
 `lib/host.mjs`, `lib/stats.mjs`, `lib/mutate.mjs`) has 100% of its
 lines, branches and functions covered. It needs no browser and no
-server, and takes about a second.
+server, and takes about a second. Every failure the health checks exist
+for is planted there, before the run and during a check (in
+`CheckContext`, through a stand-in for the browser's DevTools session),
+and must end the run `ENV-ERROR` with status 3, over a red result as
+well as a green one.
 
 ## Files
 

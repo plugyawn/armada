@@ -14,11 +14,11 @@ import path from "node:path";
 import {fileURLToPath} from "node:url";
 
 import {APP, BASE, USER, VIEWPORT, launch, login} from "./lib/browser.mjs";
-import {classify, rewrite_known, stale_ids} from "./lib/classify.mjs";
+import {classify, rewrite_known, stale_ids, verdict_of} from "./lib/classify.mjs";
 import {CheckContext} from "./lib/harness.mjs";
-import {changed_files, changes, describe_changed_files, problems, snapshot} from "./lib/health.mjs";
+import {changed_files, check_env_errors, problems, snapshot} from "./lib/health.mjs";
 import {REPO, keep_targets} from "./lib/host.mjs";
-import {ENV_ERROR_STATUS, run_under_lock} from "./lib/lock.mjs";
+import {run_under_lock} from "./lib/lock.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 // The tree the server under test runs from, whose processes and files the
@@ -136,17 +136,6 @@ async function run_check(browser, check, user_id) {
     };
 }
 
-// Everything that changed around a check while it ran, from the snapshot
-// before it to the one after, and in its pages.
-function env_errors_of(result, before, after, files) {
-    return [
-        ...result.env_events,
-        ...problems(after, SERVED_TREE),
-        ...changes(before, after),
-        ...describe_changed_files(files),
-    ];
-}
-
 async function main() {
     const options = parse_arguments(process.argv.slice(2));
     const all_checks = await load_checks();
@@ -228,7 +217,13 @@ async function main() {
                 since = Date.now();
                 const now = await snapshot({base: BASE, tree: SERVED_TREE, io: HEALTH_IO});
                 const files = now.local ? changed_files(SERVED_TREE, scan_from) : [];
-                result.env_errors = env_errors_of(result, health_after, now, files);
+                result.env_errors = check_env_errors({
+                    env_events: result.env_events,
+                    before: health_after,
+                    after: now,
+                    files,
+                    tree: SERVED_TREE,
+                });
                 health_after = now;
                 for (const problem of result.env_errors) {
                     env_errors.push({check: check.name, problem});
@@ -268,16 +263,8 @@ async function main() {
         console.log(`\nknown.json rewritten (${Object.keys(sorted).length} entries)`);
     }
 
-    const green =
-        !env_error &&
-        totals.fail === 0 &&
-        totals.fixed === 0 &&
-        totals.error === 0 &&
-        totals.stale === 0;
-    let verdict = green ? "GREEN" : "RED";
-    if (env_error) {
-        verdict = "ENV-ERROR";
-    }
+    // After the rewrite, which turns what it records into passes.
+    const {verdict, green, status} = verdict_of(totals, env_errors.length);
     const report = {
         started: started.toISOString(),
         finished: new Date().toISOString(),
@@ -309,10 +296,7 @@ async function main() {
         );
     }
     console.log(`report: ${report_targets.at(-1)}`);
-    if (env_error) {
-        return ENV_ERROR_STATUS;
-    }
-    return green ? 0 : 1;
+    return status;
 }
 
 process.exitCode = await main();

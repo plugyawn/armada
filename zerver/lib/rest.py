@@ -114,6 +114,19 @@ def get_target_view_function_or_response(
     return json_method_not_allowed(list(supported_methods.keys()))
 
 
+# A view flag "rate_limit_domain=<domain>" counts the view's requests
+# against that per-user budget (a key of RATE_LIMITING_RULES) instead of
+# the general api_by_user one.
+RATE_LIMIT_DOMAIN_FLAG = "rate_limit_domain="
+
+
+def get_rate_limit_domain(view_flags: set[str]) -> str:
+    for flag in view_flags:
+        if flag.startswith(RATE_LIMIT_DOMAIN_FLAG):
+            return flag.removeprefix(RATE_LIMIT_DOMAIN_FLAG)
+    return "api_by_user"
+
+
 @default_never_cache_responses
 @csrf_exempt
 def rest_dispatch(request: HttpRequest, /, **kwargs: object) -> HttpResponse:
@@ -147,6 +160,7 @@ def rest_dispatch(request: HttpRequest, /, **kwargs: object) -> HttpResponse:
         return result
     target_function, view_flags = result
     request_notes = RequestNotes.get_notes(request)
+    rate_limit_domain = get_rate_limit_domain(view_flags)
 
     # Set request_notes.query for update_activity_user(), which is called
     # by some of the later wrappers.
@@ -183,10 +197,13 @@ def rest_dispatch(request: HttpRequest, /, **kwargs: object) -> HttpResponse:
     # /json views (web client) validate with a session token (cookie)
     elif not request.path.startswith("/api") and check_is_authenticated(request):
         # Authenticated via sessions framework, only CSRF check needed
-        auth_kwargs = {}
-        if "override_api_url_scheme" in view_flags:
-            auth_kwargs["skip_rate_limiting"] = True
-        target_function = csrf_protect(authenticated_json_view(target_function, **auth_kwargs))
+        target_function = csrf_protect(
+            authenticated_json_view(
+                target_function,
+                skip_rate_limiting="override_api_url_scheme" in view_flags,
+                rate_limit_domain=rate_limit_domain,
+            )
+        )
 
     # most clients (mobile, bots, etc) use HTTP basic auth and REST calls, where instead of
     # username:password, we use email:apiKey
@@ -195,6 +212,7 @@ def rest_dispatch(request: HttpRequest, /, **kwargs: object) -> HttpResponse:
         # proceeding
         target_function = authenticated_rest_api_view(
             allow_webhook_access="allow_incoming_webhooks" in view_flags,
+            rate_limit_domain=rate_limit_domain,
         )(target_function)
     elif (
         request.path.startswith(("/json", "/avatar", "/user_uploads", "/thumbnail"))

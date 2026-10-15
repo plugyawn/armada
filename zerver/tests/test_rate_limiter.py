@@ -1,8 +1,11 @@
 import secrets
 import time
 from abc import ABC, abstractmethod
+from typing import TYPE_CHECKING
 from unittest import mock
 
+import orjson
+import time_machine
 from typing_extensions import override
 
 from zerver.lib.rate_limiter import (
@@ -16,6 +19,9 @@ from zerver.lib.rate_limiter import (
 )
 from zerver.lib.test_classes import ZulipTestCase
 from zerver.lib.test_helpers import ratelimit_rule
+
+if TYPE_CHECKING:
+    from django.test.client import _MonkeyPatchedWSGIResponse as TestHttpResponse
 
 RANDOM_KEY_PREFIX = secrets.token_hex(16)
 
@@ -310,6 +316,64 @@ class RateLimiterStringFormattingTest(ZulipTestCase):
         self.assertEqual(readable_expiry_string_for_plaintext(121), "2 minutes")
         self.assertEqual(readable_expiry_string_for_plaintext(86400), "23 hours, 59 minutes")
         self.assertEqual(readable_expiry_string_for_plaintext(90000), "1 day")
+
+
+class EventQueueBudgetTest(ZulipTestCase):
+    """Long polls and registers count against their own per-user
+    budgets, so that a client stuck in a loop of either cannot use up
+    the budget its person needs for sending and everything else."""
+
+    def send_message(self) -> "TestHttpResponse":
+        return self.client_post(
+            "/json/messages",
+            {
+                "type": "stream",
+                "to": orjson.dumps("Verona").decode(),
+                "topic": "budget",
+                "content": "still sending",
+            },
+        )
+
+    @ratelimit_rule(60, 2, domain="api_by_user")
+    @ratelimit_rule(60, 3, domain="register_by_user")
+    def test_register_storm_cannot_block_sends(self) -> None:
+        hamlet = self.example_user("hamlet")
+        for domain in ("api_by_user", "register_by_user"):
+            RateLimitedUser(hamlet, domain=domain).clear_history()
+        self.login_user(hamlet)
+
+        with (
+            time_machine.travel(time.time(), tick=False),
+            mock.patch("zerver.views.events_register.do_events_register", return_value={}),
+        ):
+            for _ in range(3):
+                self.assert_json_success(self.client_post("/json/register"))
+            self.assertEqual(self.client_post("/json/register").status_code, 429)
+
+            for _ in range(2):
+                self.assert_json_success(self.send_message())
+            self.assertEqual(self.send_message().status_code, 429)
+
+    @ratelimit_rule(60, 2, domain="api_by_user")
+    @ratelimit_rule(60, 2, domain="events_by_user")
+    def test_long_polls_have_their_own_budget(self) -> None:
+        # A guest asking for every public channel's events is refused
+        # before any queue is touched, after the rate limit is applied.
+        polonius = self.example_user("polonius")
+        for domain in ("api_by_user", "events_by_user"):
+            RateLimitedUser(polonius, domain=domain).clear_history()
+        self.login_user(polonius)
+
+        def poll() -> "TestHttpResponse":
+            return self.client_get("/json/events", {"all_public_streams": "true"})
+
+        with time_machine.travel(time.time(), tick=False):
+            for _ in range(2):
+                self.assert_json_error(poll(), "User not authorized for this query")
+            self.assertEqual(poll().status_code, 429)
+
+            for _ in range(2):
+                self.assert_json_success(self.client_get("/json/users/me"))
 
 
 # Don't load the base class as a test: https://bugs.python.org/issue17519.

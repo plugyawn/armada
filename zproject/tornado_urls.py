@@ -18,8 +18,11 @@ from zerver.tornado.views import (
 api_and_json_patterns = [
     rest_path(
         "events",
-        GET=(get_events, {"narrow_user_session_cache"}),
-        DELETE=(cleanup_event_queue, {"narrow_user_session_cache"}),
+        GET=(get_events, {"narrow_user_session_cache", "rate_limit_domain=events_by_user"}),
+        DELETE=(
+            cleanup_event_queue,
+            {"narrow_user_session_cache", "rate_limit_domain=events_by_user"},
+        ),
     ),
 ]
 

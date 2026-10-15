@@ -1,0 +1,7 @@
+# Sprint package server-events: read receipts pushed, the event queue's
+# own rate limits, and the log line for a 429 sent to the web client.
+kept zerver/decorator.py  # authenticated views take the rate limit domain of their route
+kept zerver/lib/rest.py  # the rate_limit_domain= view flag
+kept zerver/tests/test_rate_limiter.py  # the event queue's budgets and the 429 log line
+kept zproject/test_extra_settings.py  # events_by_user and register_by_user are off in tests, like api_by_user
+kept zproject/tornado_urls.py  # GET and DELETE /events count against events_by_user

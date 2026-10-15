@@ -281,6 +281,8 @@ SOCIAL_AUTH_SAML_ENABLED_IDPS: dict[str, SAMLIdPConfigDict] = {
 
 RATE_LIMITING_RULES: dict[str, list[tuple[int, int]]] = {
     "api_by_user": [],
+    "events_by_user": [],
+    "register_by_user": [],
     "api_by_ip": [],
     "api_by_remote_server": [],
     "authenticate_by_username": [],

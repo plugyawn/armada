@@ -294,6 +294,19 @@ DEFAULT_RATE_LIMITING_RULES = {
         # 200 requests per minute
         (60, 200),
     ],
+    # The event queue's own traffic: long polls (GET and DELETE
+    # /events) and registering a queue (POST /register). These count
+    # here instead of in api_by_user, so that a client polling or
+    # re-registering in a loop cannot use up the budget its person
+    # needs to send messages and everything else.
+    "events_by_user": [
+        # 120 long polls per minute
+        (60, 120),
+    ],
+    "register_by_user": [
+        # 20 queues registered per minute
+        (60, 20),
+    ],
     # Limits total number of unauthenticated API requests (primarily
     # used by the public access option). Since these are
     # unauthenticated requests, each IPv4 address is a separate bucket.

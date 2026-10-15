@@ -786,6 +786,7 @@ def authenticated_rest_api_view(
     webhook_client_name: str | None = None,
     allow_webhook_access: bool = False,
     skip_rate_limiting: bool = False,
+    rate_limit_domain: str = "api_by_user",
     beanstalk_email_decode: bool = False,
 ) -> Callable[
     [Callable[Concatenate[HttpRequest, UserProfile, ParamT], HttpResponse]],
@@ -824,7 +825,7 @@ def authenticated_rest_api_view(
                 raise UnauthorizedError(e.msg)
             try:
                 if not skip_rate_limiting:
-                    rate_limit_user(request, user_profile, domain="api_by_user")
+                    rate_limit_user(request, user_profile, domain=rate_limit_domain)
                 return view_func(request, user_profile, *args, **kwargs)
             except Exception as err:
                 if not webhook_client_name:
@@ -929,6 +930,7 @@ def public_json_view(
 def authenticated_json_view(
     view_func: Callable[Concatenate[HttpRequest, UserProfile, ParamT], HttpResponse],
     skip_rate_limiting: bool = False,
+    rate_limit_domain: str = "api_by_user",
 ) -> Callable[Concatenate[HttpRequest, ParamT], HttpResponse]:
     @wraps(view_func)
     def _wrapped_view_func(
@@ -942,7 +944,7 @@ def authenticated_json_view(
 
         user_profile = request.user
         if not skip_rate_limiting:
-            rate_limit_user(request, user_profile, domain="api_by_user")
+            rate_limit_user(request, user_profile, domain=rate_limit_domain)
 
         validate_account_and_subdomain(request, user_profile)
 

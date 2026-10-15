@@ -753,7 +753,13 @@ v1_api_and_json_patterns = [
     # user-muting -> zerver.views.user_mutes
     rest_path("users/me/muted_users/<int:muted_user_id>", POST=mute_user, DELETE=unmute_user),
     # used to register for an event queue in tornado
-    rest_path("register", POST=(events_register_backend, {"allow_anonymous_user_web"})),
+    rest_path(
+        "register",
+        POST=(
+            events_register_backend,
+            {"allow_anonymous_user_web", "rate_limit_domain=register_by_user"},
+        ),
+    ),
     # Used to generate a Zoom video call URL
     rest_path("calls/zoom/create", POST=make_zoom_video_call),
     rest_path("calls/webex/create", POST=make_webex_video_call),

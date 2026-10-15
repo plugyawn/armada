@@ -325,4 +325,32 @@ main > .pane[data-pane="Partner"] { overflow-y: auto; scrollbar-width: none; }
 .pcard p:not(.cap, .say, .pkline) { font: var(--t-text); margin-top: var(--s-2); }
 .pcard .btns { display: flex; gap: var(--s-2); margin-top: var(--s-3); justify-content: flex-end; }
 
+
+/* ---------- mentions, links to places (mentions.js) ----------
+   A mention is a pill: the name on a light fill of the words' own colour, so it reads on any bubble. A mention of me, or of
+   everyone, is in my colour. A silent mention (the name in a reply's quote) is the name alone. */
+.mention, .cz .tx .pill:not(.chip) { padding: 0 3px; margin: 0 1px; border-radius: var(--r-mark); background: color-mix(in srgb, currentColor 12%, transparent); font-weight: 500; white-space: nowrap; }
+.mention.you, .cz .tx .pill.you { background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--accent-text); }
+.cl.me .b .mention.you { color: inherit; background: color-mix(in srgb, currentColor 22%, transparent); }
+.mention.silent { padding: 0; margin: 0; background: none; }
+.cz .tx .pill { cursor: default; user-select: all; }
+.cz .tx .pill[data-seed]::before { content: attr(data-label); }   /* the switch's pill: its name is drawn, not typed, so the field stays empty */
+/* a link to a repository or a worktree is a chip; pressed, it opens the worktree here */
+.placelink, .cz .tx .pill.chip { display: inline-flex; align-items: center; gap: 3px; height: var(--h-chip); padding: 0 6px 0 4px; border-radius: var(--r-mark); background: color-mix(in srgb, currentColor 12%, transparent); font-weight: 500; vertical-align: -4px; white-space: nowrap; text-decoration: none; color: inherit; }
+.placelink .ic { width: 14px; height: 14px; opacity: 0.7; }
+.placelink .sep { opacity: 0.5; }
+a.placelink:hover { background: color-mix(in srgb, currentColor 18%, transparent); }
+.placelink[data-state="live"]::after { content: ""; width: 6px; height: 6px; margin-left: 2px; border-radius: var(--r-round); background: var(--accent-text); }
+/* the pickers: above their field, a face (or a mark), the name, what is known of them */
+.mpk { min-width: 240px; max-width: 360px; padding: var(--s-1); }
+.mpk .mi { gap: var(--s-2); }
+.mpk .mi .lab { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
+.mpk .mi .k { font: var(--t-caption); }
+.mpk .mi > .ic { color: var(--ink-2); }
+.mpk .pk-at { width: 20px; height: 20px; flex: none; display: grid; place-items: center; border-radius: var(--r-round); background: var(--fill-2); font: var(--t-strong); color: var(--ink-2); }
+.mpk .sep { color: var(--ink-2); }
+/* the field with the switch's pill: its placeholder stands after the pill */
+.cz.seeded:not(.has-text) .tx { text-indent: 0; }
+.cz.seeded:not(.has-text) .ph { left: var(--seed-w, 0px); }
+
 }   /* @layer zulip.armada-beta */

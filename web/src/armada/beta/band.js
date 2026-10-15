@@ -5,7 +5,7 @@ import {state} from "./state.js";
 import {dayLabel, hhmm, mmss, now} from "./time.js";
 import {api} from "./connection.js";
 import {band} from "./frame.js";
-import {note, onixHere, onixNow, ready, setVerb} from "./composer.js";
+import {note, onixHere, onixNow, ready, setVerb, switchHolds} from "./composer.js";
 import {show} from "./feed.js";
 import {askedAt, drawAsks, liveRun, runMark, waitingRun} from "./runs.js";
 import {editing} from "./hover.js";
@@ -26,7 +26,7 @@ function drawRunState(cut) {
     tick(true); const act = quiet ? `No word from this run since ${dayLabel(lastSign(r))} ${hhmm(lastSign(r))}. The server still lists it as running.` : actOf(state.P, r); if (b.act.textContent !== act) b.act.textContent = act; b.stop.setAttribute("aria-disabled", stopping === r.id); }
   if (cut) { b.run.classList.toggle("off", !raised); b.run.inert = !raised; b.run.style.opacity = ""; } else show(b.run, raised);
   b.ty.classList.toggle("chip", raised && state.P.typers.size > 0);
-  setVerb(state.place.kind === "partner" ? "Choose" : editing ? "Save" : ask && onixNow() ? "Answer" : raised && wt && onixHere() ? "Steer" : "Send", cut);   /* with the switch off a waiting run is answered by its options or by naming @Onix */
+  setVerb(state.place.kind === "partner" ? "Choose" : editing ? "Save" : ask && onixNow() && switchHolds() ? "Answer" : raised && wt && onixHere() && switchHolds() ? "Steer" : "Send", cut);   /* with the switch off a waiting run is answered by its options or by naming @Onix */
   if (!r) stopping = 0;
   drawAsks();
 }

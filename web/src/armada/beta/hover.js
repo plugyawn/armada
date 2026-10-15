@@ -11,7 +11,8 @@ import {react} from "./reactions.js";
 import {openInfo, RECEIPTS} from "./receipts.js";
 import {openThread} from "./threads.js";
 import {updateMessage} from "./agent_turn.js";
-import {addressedEcho, ONIX_AT} from "./send.js";
+import {fillFromWire} from "./mentions.js";
+import {fieldEmpty} from "./mention_text.js";
 import {drawRunState} from "./band.js";
 import {openCard} from "./partner_card.js";
 
@@ -75,13 +76,15 @@ function closeMenu() { if (!menu) return; const x = menu; menu = null; x.inert =
 /* editing my message: its words go back to the field, Return saves them into the same message, Esc gives the draft up */
 async function startEdit(m) { if (!m || m.sender_id !== state.ME || typeof m.id !== "number") return; if (editing) endEdit();
   let raw; try { raw = (await api("GET", `messages/${m.id}`, {apply_markdown: false})).message.content; } catch (e) { note(e.message); return; }
-  raw = raw.split(state.agentMention).join("@Onix");
-  editing = {m, was: tx.textContent}; $$(`[data-mid="${m.id}"] .b`, lane).forEach((b) => b.classList.add("unsent"));
-  state.threadTx = null; tx.textContent = raw; syncField(); go.classList.add("armed"); drawRunState(); ready(); }
-function endEdit() { if (!editing) return; const {m, was} = editing; editing = null; $$(`[data-mid="${m.id}"] .b`, lane).forEach((b) => b.classList.remove("unsent")); tx.textContent = was; syncField(); go.classList.toggle("armed", !!was.trim()); drawRunState(); }
+  /* the draft (with its pills) is kept as it was, and comes back when the edit ends; the message's mentions come back as pills */
+  editing = {m, was: [...tx.childNodes]}; $$(`[data-mid="${m.id}"] .b`, lane).forEach((b) => b.classList.add("unsent"));
+  state.threadTx = null; fillFromWire(tx, raw); syncField(); go.classList.add("armed"); drawRunState(); ready();
+  if (document.activeElement === tx) { const s = getSelection(); s.selectAllChildren(tx); s.collapseToEnd(); } }   /* written after its words, as Up promises */
+function endEdit() { if (!editing) return; const {m, was} = editing; editing = null; $$(`[data-mid="${m.id}"] .b`, lane).forEach((b) => b.classList.remove("unsent")); tx.replaceChildren(...was); syncField(); go.classList.toggle("armed", !fieldEmpty(tx)); drawRunState(); }
+/* `text` is the field's wire text (send.js), mentions in Zulip's syntax where they were written */
 async function saveEdit(text, at) { const {m} = editing; if (!text) { endEdit(); confirmDelete(m); return; }
-  const named_ = ONIX_AT.test(text); ONIX_AT.lastIndex = 0; const raw = text.replace(ONIX_AT, state.agentMention), c = msgIndex.get(m.id) || state.P;
-  tx.textContent = ""; editing.was = ""; endEdit(); m.content = named_ ? addressedEcho(text.replace(ONIX_AT, "").trim()) : echoHTML(text); m.edited = true; updateMessage(c, m); S.play("send", 0, at); ready();
+  const raw = text, c = msgIndex.get(m.id) || state.P;
+  tx.textContent = ""; editing.was = []; endEdit(); m.content = echoHTML(text); m.edited = true; updateMessage(c, m); S.play("send", 0, at); ready();
   try { await api("PATCH", `messages/${m.id}`, {content: raw}); } catch (e) { note(e.message); } }
 /* deleting cannot be undone, so it asks once, in a dialog; the server's event takes the message away */
 function confirmDelete(m) { if (dialogOpen) return; dialogOpen = true; const d = el("div", "dlg raised float", `<p style="font:var(--t-strong)">Delete this message?</p><p style="color:var(--ink-2);margin-top:var(--s-2)">It is removed for everyone, and cannot be brought back.</p><div class="btns"><button class="btn" data-no>Cancel</button><button class="go" data-yes>Delete</button></div>`); d.setAttribute("role", "dialog"); d.setAttribute("aria-modal", "true");

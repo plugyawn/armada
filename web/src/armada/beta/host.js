@@ -33,6 +33,7 @@ import {choosePick, drawPicker, drawPickerBand, drawPickerSide, movePick, openPi
   selectCell, selectMine} from "./partner_picker.js";
 import {card, closeCard, cutMoment, faceAt, holdMoment, moment, momentDue, openCard, playMoment, wireCard} from "./partner_card.js";
 import {buildLab, lab} from "./lab.js";
+import {wireMentions} from "./mentions.js";
 
 /* event dispatch (connection.js): what each event type the page registers for does; a module's own types are named here */
 on("message", onMessage); on("update_message", onUpdate); on("agent_run", onRun); on("reaction", onReaction);
@@ -64,7 +65,7 @@ async function boot() {
   addEventListener("dragover", (e) => { if (e.dataTransfer && [...e.dataTransfer.types].includes("Files")) e.preventDefault(); });
   addEventListener("drop", (e) => { const f = [...(e.dataTransfer && e.dataTransfer.files || [])]; if (!f.length) return; e.preventDefault(); if (state.place && state.place.kind !== "home") f.forEach(upload); });
   tx.addEventListener("focus", () => { state.threadTx = null; });
-  buildOver();
+  buildOver(); wireMentions();
   /* the field */
   toBtn.insertAdjacentHTML("beforeend", '<span class="tl">Onix</span>'); toBtn.classList.replace("sq", "w");   /* the switch says its name, in both states */
   cz.classList.remove("is-focus", "has-text", "is-off"); tx.innerHTML = ""; tx.contentEditable = "plaintext-only"; tx.classList.add("m-caret", "idle"); go.classList.remove("armed");
@@ -75,7 +76,7 @@ async function boot() {
       if (e.key === "Escape" && tx.textContent) { e.preventDefault(); e.stopPropagation(); tx.textContent = ""; tx.dispatchEvent(new Event("input")); return; } }
     if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); send({at: e.timeStamp}); if (!(state.place && state.place.kind === "partner")) go.classList.remove("armed"); return; }
     if (e.key === "Escape" && editing) { e.preventDefault(); e.stopPropagation(); endEdit(); return; }
-    if (e.key === "ArrowUp" && !tx.textContent && !editing && !e.shiftKey && !state.atts.length && !pop) { const m = state.P && state.P.msgs.filter((x) => x.sender_id === state.ME && typeof x.id === "number" && !x.thread_root_message_id).pop(); if (m) { e.preventDefault(); startEdit(m); } } });   /* Up in an empty field edits my last message */
+    if (e.key === "ArrowUp" && !tx.textContent.trim() && !editing && !e.shiftKey && !state.atts.length && !pop) { const m = state.P && state.P.msgs.filter((x) => x.sender_id === state.ME && typeof x.id === "number" && !x.thread_root_message_id).pop(); if (m) { e.preventDefault(); startEdit(m); } } });   /* Up in an empty field (the switch's pill alone is empty) edits my last message */
   go.addEventListener("click", (e) => { send({at: e.timeStamp}); go.classList.remove("armed"); });
   /* a press on a control does not take focus from the field */
   const KEEP = ".tab, nav .row, nav .mo, .cz button, .rc, .jump, .stop, .prog, .sec .lk, .ls > li, [data-thread], .tree .row, .line .lk, .bl > .lk, .hd button, .mo, .over .c, .menu .mi, .pop button, .pal .mi, .opt, .hrow, .dlg button, .rt, .info button, .pcard button, .pkc, .pkseg button, [data-later], [data-pick]";

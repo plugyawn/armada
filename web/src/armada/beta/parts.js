@@ -1,9 +1,12 @@
 /* INTERIM BETA (README.md): the rule: a server-rendered message becomes bubbles and blocks; the local echo of what I type. */
 
 import {$$, el, esc} from "./util.js";
-import {people, state} from "./state.js";
+import {marks, people, repoStreams, state, streams} from "./state.js";
 import {dayLabel, hhmm} from "./time.js";
 import {isOnix, nameOf} from "./faces.js";
+import {echoRefs} from "./mention_text.js";
+import {refLook} from "./mentions.js";
+import {tkey} from "./routing.js";
 
 /* ---------- the rule: a server-rendered message becomes bubbles and blocks ----------
    The message's rendered HTML is read as a list of its top-level elements. Each is prose or a block.
@@ -12,8 +15,9 @@ import {isOnix, nameOf} from "./faces.js";
    - A person's message: each run of consecutive prose elements is one bubble; each block stands as a block in the
      turn, between the bubbles, at the lane's width. A message that is one to three emoji and nothing else is jumbo.
    - Onix's message: each run of prose is ambient text on the page (no bubble); blocks are the same blocks.
-   Inside prose: an emoji span becomes its character, a mention becomes the person's name in the mention weight (the
-   agent's is always "Onix"), a link opens in a new tab, a timestamp is printed in local time. Code keeps the server's
+   Inside prose: an emoji span becomes its character, a mention becomes a pill with the person's name (the agent's is
+   always "Onix"; a mention of me, or of everyone, is mine; a silent one is the name alone), a link to a repository or a
+   worktree becomes a chip that opens it here, any other link opens in a new tab, a timestamp is printed in local time. Code keeps the server's
    highlighting, mapped onto the four syntax inks the design has (keyword, string, number, comment). */
 const PYG = {}; "k kn kd kc kr kt kp ow".split(" ").forEach((c) => (PYG[c] = "sx-k")); "s s1 s2 sa sb sc sd se sh si sx sr ss dl".split(" ").forEach((c) => (PYG[c] = "sx-s")); "m mi mf mh mo mb il".split(" ").forEach((c) => (PYG[c] = "sx-n")); "c c1 cm ch cp cs cpf".split(" ").forEach((c) => (PYG[c] = "sx-c"));
 const tpl = document.createElement("template");
@@ -21,8 +25,12 @@ const BLOCK = (n) => n.matches("div.codehilite, pre, table, div.message_inline_i
 function clean(root) {
   $$("script, style, iframe, object, .message_length_controller, .message_expander, .message_condenser", root).forEach((x) => x.remove());
   $$("span.emoji", root).forEach((s) => { const m = /emoji-([0-9a-f-]+)/.exec(s.className); if (!m) return; let ch = ""; try { ch = String.fromCodePoint(...m[1].split("-").map((h) => parseInt(h, 16))); } catch (e) { return; } const e = el("span", "em"); e.textContent = ch; e.title = s.getAttribute("title") || ""; s.replaceWith(e); });
-  $$(".user-mention, .user-group-mention, .topic-mention", root).forEach((s) => { const id = +s.dataset.userId, e = el("span", "mention" + (id === state.ME ? " you" : "")); e.textContent = id && people.has(id) ? nameOf(id) : s.textContent.replace(/^@/, ""); s.replaceWith(e); });
-  $$("a[href]", root).forEach((a) => { const h = a.getAttribute("href"); if (h[0] === "#") a.href = "/" + h; a.target = "_blank"; a.rel = "noopener noreferrer"; });   /* a link to a narrow opens it in the old interface */
+  $$(".user-mention, .user-group-mention, .topic-mention", root).forEach((s) => { const id = +s.dataset.userId, silent = s.classList.contains("silent"), all = s.classList.contains("topic-mention") || s.dataset.userId === "*";
+    const e = el("span", "mention" + (silent ? " silent" : "") + (id === state.ME || all ? " you" : "")); e.textContent = (silent ? "" : "@") + (id && people.has(id) ? nameOf(id) : s.textContent.replace(/^@/, "")); s.replaceWith(e); });
+  $$("a.stream, a.stream-topic", root).forEach((a) => { const sid = +a.dataset.streamId, st = streams.get(sid); if (!st) return; const pre = `#${st.name} > `, topic = a.classList.contains("stream-topic") && a.textContent.startsWith(pre) ? a.textContent.slice(pre.length) : null;
+    const e = el(topic != null ? "a" : "span", "placelink"), live = topic != null && marks.get(tkey(sid, topic)) === "live"; if (topic != null) e.href = `#c/${sid}/${encodeURIComponent(topic)}`; if (live) e.dataset.state = "live";
+    e.innerHTML = `${ic(topic != null ? "branch" : repoStreams.has(sid) ? "repo" : "hash")}<span>${esc(st.name)}</span>${topic != null ? `<span class="sep">\u203a</span><span>${esc(topic)}</span>` : ""}`; a.replaceWith(e); });
+  $$("a[href]:not(.placelink)", root).forEach((a) => { const h = a.getAttribute("href"); if (h[0] === "#") a.href = "/" + h; a.target = "_blank"; a.rel = "noopener noreferrer"; });   /* a link to a narrow opens it in the old interface */
   $$("time[datetime]", root).forEach((t) => { const d = new Date(t.getAttribute("datetime")); if (!isNaN(d)) t.textContent = `${dayLabel(d / 1000)} ${hhmm(d / 1000)}`; });
   $$("img:not(.emoji)", root).forEach((i) => { i.removeAttribute("width"); i.removeAttribute("height"); i.loading = "lazy"; });   /* uploads load with the session's cookie */
   return root;
@@ -78,7 +86,8 @@ function loadPics() {}
 /* the local echo: the words as typed, with the Markdown the field's words usually carry, cut into the same parts the
    server's rendering will be cut into (a fenced block is a block, a list or a quote stays in its bubble), so the
    server's copy replaces it without changing its shape. The server's rendering replaces it only where it differs. */
-const inlineEcho = (t) => esc(t).replace(/`([^`\n]+)`/g, "<code>$1</code>").replace(/\*\*([^*\n]+)\*\*/g, "<strong>$1</strong>").replace(/\[([^\]\n]+)\]\((\/user_uploads\/[^)\s]+|https?:\/\/[^)\s]+)\)/g, '<a href="$2">$1</a>');
+/* a mention or a place link is echoed as the server renders it; never inside code */
+const inlineEcho = (t) => esc(t).split(/(`[^`\n]+`)/).map((x, i) => (i % 2 ? `<code>${x.slice(1, -1)}</code>` : echoRefs(x, refLook).replace(/\*\*([^*\n]+)\*\*/g, "<strong>$1</strong>").replace(/\[([^\]\n]+)\]\((\/user_uploads\/[^)\s]+|https?:\/\/[^)\s]+)\)/g, '<a href="$2">$1</a>'))).join("");
 function echoHTML(text) {
   const out = [], lines = text.replace(/\r/g, "").split("\n"); let i = 0;
   const para = (ls) => { if (!ls.length) return; let k = 0; while (k < ls.length) { const blk = [];

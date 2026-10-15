@@ -10,7 +10,7 @@ import {faceOf, nameOf} from "./faces.js";
 import {echoHTML, plainOf} from "./parts.js";
 import {ready} from "./composer.js";
 import {appendMessage, dist, edge, grown, haltLane, hugAll, sectionOf, syncJump} from "./feed.js";
-import {addressedEcho, ONIX_AT} from "./send.js";
+import {wireOf} from "./mention_text.js";
 import {transmit} from "./outbox.js";
 
 /* ----- threads: the root says how many replies it has; a press opens them under it, in the conversation ----- */
@@ -55,10 +55,10 @@ function threadField(id) {
   return cz_;
 }
 function replyThread(id, tx_, at = performance.now()) {
-  const t0 = performance.now(), text = tx_.textContent.trim(), c = state.P, root = c.byId.get(id), box = tx_.closest(".thr-in");
+  const t0 = performance.now(), text = wireOf(tx_, state.agentMention), c = state.P, root = c.byId.get(id), box = tx_.closest(".thr-in");
   if (!text || !root || !box) { M.refuse(tx_.closest(".sh")); S.play("nope", 0, at); return; }
-  const named_ = ONIX_AT.test(text); ONIX_AT.lastIndex = 0;
-  const m = {id: "L" + ++state.localSeq, local: true, pending: true, sender_id: state.ME, timestamp: Math.floor(now() / 1000), content: named_ ? addressedEcho(text.replace(ONIX_AT, "").trim()) : echoHTML(text), raw: text.replace(ONIX_AT, state.agentMention), toOnix: named_ && state.place.kind === "topic" && !!state.place.repo, thread_root_message_id: id, reactions: []};
+  /* the words as written, mentions in place: a reply that mentions Onix is for it */
+  const m = {id: "L" + ++state.localSeq, local: true, pending: true, sender_id: state.ME, timestamp: Math.floor(now() / 1000), content: echoHTML(text), raw: text, toOnix: text.includes(state.agentMention) && state.place.kind === "topic" && !!state.place.repo, thread_root_message_id: id, reactions: []};
   root.reply_summary = root.reply_summary || {reply_count: 0, participants: []}; root.reply_summary.reply_count = (root.reply_summary.reply_count || 0) + 1;
   if (!root.reply_summary.participants.some((x) => x.user_id === state.ME)) root.reply_summary.participants.push({user_id: state.ME});
   const row = grown(() => { addMsg(c, m); tx_.textContent = ""; const cl = sectionOf(id); if (cl) drawThreadLine(cl, root); const r = {cl: null, parts: []}; const f = $(":scope > .cz", box); Object.assign(r, appendMessage(box, m, {thread: true})); if (f) box.append(f); return r; }, "touch");

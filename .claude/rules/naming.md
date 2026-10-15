@@ -1,22 +1,34 @@
 # Naming
 
 **Armada** is the product and the home of new code: `web/src/armada/`,
-`armada-` classes, `docs/armada/`, `tools/armada*`. **Onyx** is the agent, to
-people only; the server still names it Pear until the rename package (D3).
-**pear** is the wire and server namespace until its own rename, a later
-step with migrations. **Zulip** appears nowhere in the interface. This file
-applies to every change.
+`armada-` classes, `docs/armada/`, `tools/armada*`; it is also the server and
+wire namespace (`zerver/lib/armada.py`, `/json/armada/`, `ARMADA_*`
+settings), where a plain noun does not fit better (`AgentRun`, `Repository`,
+`agent_run`). **Onix** is the agent, to people only; the server holds the
+name in one constant, `ARMADA_AGENT_NAME`. The old interface, which the
+rebuild deletes, says `legacy` (`web/src/legacy_*.ts`, `.legacy-*` classes),
+so that `armada-` stays the kit's. **Zulip** appears nowhere in the
+interface. This file applies to every change.
 
-- No file, class, token or identifier is named after the agent (it was
-  renamed once already): code says `agent`, `run`, `worktree`, `repository`.
+- No file, class, token or identifier is named after the agent (it has
+  been renamed twice): code says `agent`, `run`, `worktree`, `repository`.
   Enforced by: eslint `no-restricted-syntax` and `armada/file-name`
   ("The agent's name is never a literal": strings, identifiers, JSX names
   and script file names); custom check "No class, token or attribute" for
-  stylesheets. `tokens/` is exempt: one palette is called Onyx. A
+  stylesheets. Both also refuse Onyx, the agent's earlier name; `tokens/` is
+  exempt, because one palette is called Onyx, after the stone. A
   stylesheet's own file name is not checked.
-- New frontend code never says `pear` outside `web/src/armada/api/`.
-  Enforced by: the same rules ("The wire name appears only under"); a word
-  that merely contains the letters, such as "Appearance", passes.
+- The old code name is gone (statement 24, package R1) and does not come
+  back, in code, strings, settings, routes, docs or file names: say
+  `armada`, or `agent`, `run`, `worktree`, `repository`. Only history keeps
+  it: the migrations that created the agent's tables and those that renamed
+  them, the git branch on GitHub (only the user can rename it), and a fruit
+  and a PHP library in Zulip's emoji data and test fixtures. Enforced by:
+  custom check "The old code name is gone" (every file `tools/lint` lists),
+  eslint `no-restricted-syntax` and `armada/file-name` under
+  `web/src/armada/` ("The old code name is gone"); a word that merely
+  contains the letters, such as "Appearance", passes. Nothing checks file
+  names outside `web/src/armada/`.
 - Classes are `armada-<component>` or `armada-<component>-<part>`, flat and
   spelled out. Enforced by: stylelint `selector-class-pattern`.
 - State is an attribute (`aria-current`, `aria-pressed`, `data-state`,

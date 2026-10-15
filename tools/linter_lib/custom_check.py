@@ -140,6 +140,58 @@ system_face_rule: "Rule" = {
     ],
 }
 
+# The agent's old code name, which the rename (package R1) took out of the
+# tree. It is written in two pieces so that this file does not hold it.
+old_code_name = "p" + "ear"
+Old_code_name, OLD_CODE_NAME = old_code_name.capitalize(), old_code_name.upper()
+old_code_name_rule: "Rule" = {
+    # As a name of its own ("appear", "spear" and "pearl" are other words),
+    # except for the git branch on GitHub, which only the user can rename;
+    # as a part of a camel-case name; as a constant's prefix after an escape
+    # ("\nX_"); and in the lowercase model names Django writes.
+    "pattern": (
+        rf"(?<![A-Za-z])({old_code_name}|{Old_code_name}|{OLD_CODE_NAME})(?![a-z])(?!-main(?![\w-]))"
+        rf"|(?<=[a-z0-9]){Old_code_name}(?![a-z])"
+        rf"|(?<=[A-Za-z]){OLD_CODE_NAME}_"
+        rf"|(?<![A-Za-z]){old_code_name}(workerrun|workspacenode|workspaceentry|project|monitor)"
+    ),
+    "exclude": {
+        # The migrations that created the agent's tables, and those that
+        # renamed them, which must name what they rename: history.
+        "zerver/migrations/0805_pear_runtime.py",
+        "zerver/migrations/0806_pear_workspace_scope_casefold.py",
+        "zerver/migrations/0807_message_threads.py",
+        "zerver/migrations/0809_remove_pearworkspacenode_legacy_relationships.py",
+        "zerver/migrations/0810_rename_agent_models.py",
+        "zerver/migrations/0811_rename_agent_stored_names.py",
+        "zerver/migrations/0812_rename_agent_data.py",
+        # The fruit, in Zulip's emoji data.
+        "tools/setup/emoji/custom_emoji_names.py",
+        "tools/setup/emoji/emoji_map.json",
+        "tools/setup/emoji/emoji_names.py",
+        "zerver/management/data/unified_reactions.json",
+    },
+    # A line that names one of those migrations keeps its name.
+    "exclude_pattern": r"(?<!\w)080[5-9]_\w",
+    # The fruit, in a word list.
+    "exclude_line": {("web/tests/typeahead.test.cjs", f'"{old_code_name}",')},
+    "description": "The old code name is gone (package R1): say armada, agent, run, worktree or repository.",
+    "good_lines": [
+        "opacity: var(--appear);",
+        "spear, pearl",
+        f"git push origin {old_code_name}-main",
+        "from zerver.lib import armada_worker",
+    ],
+    "bad_lines": [
+        f"from zerver.lib import {old_code_name}_worker",
+        f"class Fake{Old_code_name}RunStore:",
+        f'"\\n{OLD_CODE_NAME}_WORKER_MODEL"',
+        f"zerver_{old_code_name}workerrun",
+        f"/json/{old_code_name}/runs",
+        f"@**{Old_code_name}** hello",
+    ],
+}
+
 # The six stones a person's face and bubble are drawn in
 # (docs/armada/design-language.md, "Faces").
 ARMADA_STONES = "moss|larimar|lapis|amethyst|rose|flint"
@@ -573,6 +625,7 @@ python_rules = RuleList(
                 ),
             },
         },
+        old_code_name_rule,
         *whitespace_rules,
         *shebang_rules,
     ],
@@ -627,13 +680,14 @@ css_rules = RuleList(
             ],
         },
         {
-            "pattern": r"(?i)(?<![a-z])pear|(?-i:[a-z]Pear)|onyx",
+            # The agent's name, and Onyx, its name before.
+            "pattern": r"(?i)on[iy]x",
             "include_only": {"web/src/armada/"},
             # One of the four palettes is called Onyx, after the stone.
             "exclude": {"web/src/armada/tokens/"},
-            "description": "No class, token or attribute is named after the agent or the wire namespace.",
-            "good_lines": [".armada-turn[data-speaker='agent'] {", "    opacity: var(--appear);"],
-            "bad_lines": [".armada-onyx-row {", "    --pear-gap: var(--s-2);", "[data-pear] {"],
+            "description": "No class, token or attribute is named after the agent.",
+            "good_lines": [".armada-turn[data-speaker='agent'] {", "    --p-gap: var(--s-2);"],
+            "bad_lines": [".armada-onix-row {", "    --onix-gap: var(--s-2);", "[data-onyx] {"],
         },
         *whitespace_rules,
     ],
@@ -1114,7 +1168,47 @@ svg_rules = RuleList(
     ],
 )
 
+# The old code name's rule, for every language tools/lint lists but Python,
+# whose rules hold it above.
+old_code_name_rules = RuleList(
+    langs=[
+        "astro",
+        "bash",
+        "cfg",
+        "cjs",
+        "conf",
+        "css",
+        "cts",
+        "erb",
+        "hbs",
+        "hook",
+        "html",
+        "ini-template",
+        "js",
+        "json",
+        "md",
+        "mdx",
+        "mjs",
+        "mts",
+        "pp",
+        "pyi",
+        "service",
+        "sh",
+        "sql",
+        "svg",
+        "text",
+        "toml",
+        "ts",
+        "tsx",
+        "txt",
+        "yaml",
+        "yml",
+    ],
+    rules=[old_code_name_rule],
+)
+
 non_py_rules = [
+    old_code_name_rules,
     handlebars_rules,
     jinja2_rules,
     css_rules,

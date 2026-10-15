@@ -36,15 +36,17 @@ const layoutReads =
     "offset(Top|Left|Width|Height|Parent)|client(Top|Left|Width|Height)|scroll(Top|Left|Width|Height)|inner(Width|Height)|outer(Width|Height)|scroll[XY]|page[XY]Offset";
 const layoutReadMessage =
     "No layout read here: measure in the after-layout phase (motion/, frame/after_layout.ts, feed/scroll.ts, surfaces/composer/origin.ts).";
-const notAnImportSource =
-    ":not(ImportDeclaration > .source, ImportExpression > .source, ExportNamedDeclaration > .source, ExportAllDeclaration > .source)";
 
-// `pear` as a name of its own: at the start of a word in either case, as
-// a capitalised part of a camel-case name, or in capitals. "Appearance",
-// "disappear" and "spear" are not the wire name.
-const wireName = "(?<![A-Za-z])[Pp]ear|[a-z]Pear|PEAR";
-const wireNameMessage =
-    "The wire name appears only under web/src/armada/api/; elsewhere say agent, run, worktree, repository.";
+// The agent's old code name, which the rename (package R1) took out of the
+// tree: as a name of its own ("appear", "spear" and "pearl" are other
+// words), as a part of a camel-case name, or as a constant's prefix. The
+// custom check "The old code name is gone" holds it out of every file; this
+// rule also sees the rebuild's file names. The brackets keep the letters
+// apart so that this file does not hold the name.
+const oldCodeName =
+    "(?<![A-Za-z])([Pp]ear|[P]EAR)(?![a-z])|(?<=[a-z0-9])[P]ear(?![a-z])|(?<=[A-Za-z])[P]EAR_";
+const oldCodeNameMessage =
+    "The old code name is gone (package R1): say armada, agent, run, worktree or repository.";
 const agentNameMessage =
     "The agent's name is never a literal and nothing is named after it: it arrives from the server; strings say {agent}.";
 
@@ -180,24 +182,25 @@ const armadaSyntax = {
             message: untaggedMessage,
         },
     ],
-    wire_name: [
+    old_code_name: [
         {
-            selector: `:matches(Literal[value=/${wireName}/], TemplateElement[value.raw=/${wireName}/], JSXText[value=/${wireName}/])${notAnImportSource}`,
-            message: wireNameMessage,
+            selector: `:matches(Literal[value=/${oldCodeName}/], TemplateElement[value.raw=/${oldCodeName}/], JSXText[value=/${oldCodeName}/])`,
+            message: oldCodeNameMessage,
         },
         {
-            selector: `:matches(Identifier, JSXIdentifier)[name=/${wireName}/]`,
-            message: wireNameMessage,
+            selector: `:matches(Identifier, JSXIdentifier)[name=/${oldCodeName}/]`,
+            message: oldCodeNameMessage,
         },
     ],
+    // The agent's name, Onix, and Onyx, its name before.
     agent_name: [
         {
             selector:
-                ":matches(Literal[value=/onyx/i], TemplateElement[value.raw=/onyx/i], JSXText[value=/onyx/i])",
+                ":matches(Literal[value=/on[iy]x/i], TemplateElement[value.raw=/on[iy]x/i], JSXText[value=/on[iy]x/i])",
             message: agentNameMessage,
         },
         {
-            selector: ":matches(Identifier, JSXIdentifier)[name=/onyx/i]",
+            selector: ":matches(Identifier, JSXIdentifier)[name=/on[iy]x/i]",
             message: agentNameMessage,
         },
     ],
@@ -210,7 +213,7 @@ const armadaSyntaxZones = [
     {files: [`${armada}/**`], off: ["timers", "raw_elements"]},
     {files: [`${armada}/motion/**`], off: ["timers", "raw_elements", "animate", "layout_read"]},
     {files: [`${armada}/sound/**`], off: ["timers", "raw_elements", "audio"]},
-    {files: [`${armada}/api/**`], off: ["timers", "raw_elements", "wire_name", "network"]},
+    {files: [`${armada}/api/**`], off: ["timers", "raw_elements", "network"]},
     // One of the four palettes is called Onyx, after the stone.
     {files: [`${armada}/tokens/**`], off: ["timers", "raw_elements", "agent_name"]},
     {files: [`${armada}/frame/after_layout.ts`], off: ["timers", "raw_elements", "layout_read"]},
@@ -324,7 +327,7 @@ const armadaPlugin = {
             meta: {
                 type: "problem",
                 schema: [],
-                messages: {wire_name: wireNameMessage, agent_name: agentNameMessage},
+                messages: {old_code_name: oldCodeNameMessage, agent_name: agentNameMessage},
             },
             create(context) {
                 const name = path
@@ -332,10 +335,10 @@ const armadaPlugin = {
                     .replaceAll(path.sep, "/");
                 return {
                     Program(node) {
-                        if (new RegExp(wireName).test(name) && !name.startsWith("api/")) {
-                            context.report({node, messageId: "wire_name"});
+                        if (new RegExp(oldCodeName).test(name)) {
+                            context.report({node, messageId: "old_code_name"});
                         }
-                        if (/onyx/i.test(name) && !name.startsWith("tokens/")) {
+                        if (/on[iy]x/i.test(name) && !name.startsWith("tokens/")) {
                             context.report({node, messageId: "agent_name"});
                         }
                     },

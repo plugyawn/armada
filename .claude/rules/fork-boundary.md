@@ -2,11 +2,12 @@
 
 Armada is a fork of Zulip (fork base `7813218321`). The branch is not
 rebased on or merged with upstream; the data layer and the server outside
-`pear` stay close enough to Zulip's that an upstream fix can still be
-brought in. This file applies to every change. The one exception to the
-rules of `web/src/armada/` is `web/src/armada/beta/`, the interim beta:
-eslint, stylelint, prettier and the custom checks ignore it, and it is
-deleted when the rebuild's conversation lands.
+Armada's own modules (`zerver/lib/armada*.py`, `zerver/views/armada*.py`,
+the agent's models) stay close enough to Zulip's that an upstream fix can
+still be brought in. This file applies to every change. The one exception
+to the rules of `web/src/armada/` is `web/src/armada/beta/`, the interim
+beta: eslint, stylelint, prettier and the custom checks ignore it, and it
+is deleted when the rebuild's conversation lands.
 
 - New frontend code lives under `web/src/armada/`; do not add a module to
   `web/src/`, a sheet to `web/styles/` or a template to `web/templates/`.
@@ -44,9 +45,10 @@ deleted when the rebuild's conversation lands.
   `fork-ledger` linter holds its count in `counts.json`);
   `tools/test-js-with-node --coverage` (a fully covered file still listed in
   `ARMADA_EXEMPT_FILES` fails; a missing one is noted).
-- Server code for Armada stays in the `pear` namespace until its own
-  rename; do not rename models, routes or settings in passing.
-  Enforced by: review; the rename is one planned step with migrations.
+- Server code for Armada lives in the `armada` namespace (or a plain noun
+  such as `AgentRun`); a rename of a model, route or setting is a planned
+  step with its migrations, never done in passing. Enforced by: review;
+  `./manage.py makemigrations --check` catches a model renamed without one.
 - Say what a deep change to a Zulip file gives up and what it buys. Do not
   fetch from, merge or rebase on upstream Zulip. An upstream fix, a security
   fix above all, comes in deliberately: a cherry-pick in a task that says

@@ -78,6 +78,16 @@ def run() -> None:
             "txt",
             "yaml",
             "yml",
+            # Configuration that no linter reads; only the custom check
+            # that keeps the old code name out looks at it.
+            "cfg",
+            "conf",
+            "erb",
+            "hook",
+            "ini-template",
+            "service",
+            "sql",
+            "toml",
         ],
         "frontend": [
             "astro",

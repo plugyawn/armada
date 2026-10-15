@@ -1,8 +1,8 @@
 # F1, toolchain, lint and guidance.
 kept eslint.config.js  # .tsx; the rules of web/src/armada/
 kept stylelint.config.js  # the rules of web/src/armada/
-kept tools/lint  # .tsx; untracked files; the fork ledger
-kept tools/linter_lib/custom_check.py  # system typefaces; motion literals
+kept tools/lint  # .tsx; untracked files; the fork ledger; configuration files for the old code name's check (R1)
+kept tools/linter_lib/custom_check.py  # system typefaces; motion literals; the old code name (R1)
 kept tsconfig.json  # JSX for Preact
 kept web/babel.config.js  # the JSX transform
 kept web/tests/lib/index.cjs  # .tsx in node tests

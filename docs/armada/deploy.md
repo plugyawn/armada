@@ -261,10 +261,10 @@ sandbox kept on.
 
 ## 0. Commit the work
 
-_Needs a decision by you._ Deploying needs the work committed. On 14
-October at 19:21 a checkpoint of `ui-overhaul` was committed
-(`89fb6f54e4`, "Checkpoint the interface rebuild before the rename"); the
-work since then, this guide's own changes included, is not, and several
+_Needs a decision by you._ Deploying needs the work committed. On
+`ui-overhaul`, two checkpoints were committed (`89fb6f54e4` on 14 October,
+`0e53081710` on 15 October), then the rename of the old code name in five
+commits (15 October). Work done after a commit is not in it, and several
 people are still editing the tree. Decide:
 
 - **The branch** the server is built from (`ui-overhaul`, or a deploy branch
@@ -1050,6 +1050,25 @@ the `npm install` line of 6.2 and a new version number.
      that an earlier version of this guide set by hand matches only the
      old queues: find it with `rabbitmqctl list_policies` and remove it
      with `rabbitmqctl clear_policy NAME`.
+
+- **15 October 2026: the agent's data was renamed.** Three migrations
+  (`0810` to `0812`) rename the agent's six tables with their indexes and
+  sequences, set the embedded bot's service to `armada`, and rename the bot
+  to Onix with the address `onix-bot@<host>` (only when that address is free
+  in the realm; otherwise the bot keeps its address and the migration says
+  so). They also rewrite the agent's mentions, and the fixed phrases it
+  writes, in stored messages; what people wrote is left as it is. They run
+  with the rest of the upgrade's migrations. Three kinds of stored text
+  keep the old name:
+  - Scheduled messages and drafts. A scheduled mention of the agent by its
+    old name is sent as text that mentions no one, so it starts no run:
+    edit those before they are sent.
+  - Deleted messages, kept in the archive for restoring: a restored message
+    comes back with its old text. Its artifacts' submessages are renamed
+    (`0811`), so that they still display.
+  - A message whose text and rendering disagree on where the mentions or
+    phrases are (mention syntax in code that the migration cannot place,
+    for example). The migration leaves it whole and prints its id.
 
 ## Back up
 

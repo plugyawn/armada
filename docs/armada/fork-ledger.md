@@ -25,34 +25,30 @@ The first three must reach 0 at the final close.
 
 ## Zulip files that differ from the fork base
 
-275 files.
+279 files.
 
-- Changed by the proof of concept, not yet dealt with by the rebuild: 171
+- Changed by the proof of concept, not yet dealt with by the rebuild: 86
 - Hooked: upstream file with marked calls into `web/src/armada/hooks/`: 2
 - Bridged: old code kept alive until a named package replaces it: 29
 - Absorbed: deleted and rewritten under `web/src/armada/`: 0
 - Deleted: 3
-- Changed in place and staying (toolchain, configuration, server code, tests): 70
+- Changed in place and staying (toolchain, configuration, server code, tests): 159
 - Unaccounted for (lint fails): 0
 
 ### Changed by the proof of concept, not yet dealt with by the rebuild
 
 - `README.md`
-- `scripts/lib/check_rabbitmq_queue.py`
 - `static/images/favicon.png`
 - `static/images/favicon.svg`
 - `static/images/logo/apple-touch-icon-precomposed.png`
 - `templates/zerver/development/dev_login.html`
 - `templates/zerver/login.html`
-- `tools/run-dev`
 - `web/src/animate.ts`
 - `web/src/bootstrap_typeahead.ts`
 - `web/src/bot_helper.ts`
 - `web/src/buddy_list.ts`
 - `web/src/compose_notifications.ts`
-- `web/src/compose_recipient.ts`
 - `web/src/compose_reply.ts`
-- `web/src/compose_setup.ts`
 - `web/src/compose_validate.ts`
 - `web/src/composebox_typeahead.ts`
 - `web/src/condense.ts`
@@ -60,154 +56,73 @@ The first three must reach 0 at the final close.
 - `web/src/drafts_overlay_ui.ts`
 - `web/src/emoji_picker.ts`
 - `web/src/filter.ts`
-- `web/src/information_density.ts`
-- `web/src/left_sidebar_navigation_area.ts`
 - `web/src/lightbox.ts`
-- `web/src/message_actions_popover.ts`
 - `web/src/message_edit_history.ts`
 - `web/src/message_fetch.ts`
 - `web/src/message_helper.ts`
 - `web/src/message_list_hover.ts`
 - `web/src/message_lists.ts`
-- `web/src/message_report.ts`
-- `web/src/message_store.ts`
 - `web/src/narrow_title.ts`
 - `web/src/navigation_views.ts`
 - `web/src/playground_links_popover.ts`
 - `web/src/pm_list.ts`
-- `web/src/popover_menus.ts`
-- `web/src/popover_menus_data.ts`
-- `web/src/rendered_markdown.ts`
 - `web/src/scroll_util.ts`
 - `web/src/search_pill.ts`
 - `web/src/search_suggestion.ts`
 - `web/src/server_events.js`
 - `web/src/server_message.ts`
-- `web/src/settings_bots.ts`
 - `web/src/settings_components.ts`
 - `web/src/settings_config.ts`
 - `web/src/settings_realm_domains.ts`
-- `web/src/sidebar_ui.ts`
-- `web/src/state_data.ts`
-- `web/src/stream_color.ts`
-- `web/src/stream_create.ts`
 - `web/src/stream_edit.ts`
-- `web/src/stream_list.ts`
 - `web/src/stream_list_sort.ts`
-- `web/src/submessage.ts`
-- `web/src/tippyjs.ts`
-- `web/src/topic_list.ts`
-- `web/src/topic_list_data.ts`
 - `web/src/typeahead.ts`
 - `web/src/typeahead_helper.ts`
 - `web/src/typing.ts`
-- `web/src/typing_events.ts`
 - `web/src/ui_report.ts`
 - `web/src/unread_ops.ts`
 - `web/src/upload.ts`
 - `web/src/user_card_popover.ts`
 - `web/src/user_group_popover.ts`
 - `web/src/user_profile.ts`
-- `web/styles/app_components.css`
-- `web/styles/banners.css`
-- `web/styles/blueslip.css`
-- `web/styles/buttons.css`
 - `web/styles/dark_theme.css`
-- `web/styles/inbox.css`
-- `web/styles/input_pill.css`
-- `web/styles/inputs.css`
-- `web/styles/left_sidebar.css`
 - `web/styles/message_view_header.css`
-- `web/styles/modal.css`
-- `web/styles/popovers.css`
-- `web/styles/progress_bar.css`
-- `web/styles/recent_view.css`
-- `web/styles/right_sidebar.css`
-- `web/styles/search.css`
-- `web/styles/settings.css`
-- `web/styles/subscriptions.css`
-- `web/styles/tooltips.css`
 - `web/templates/about_zulip.hbs`
-- `web/templates/compose.hbs`
-- `web/templates/compose_control_buttons.hbs`
 - `web/templates/favicon.svg.hbs`
 - `web/templates/inline_topic_link_label.hbs`
 - `web/templates/left_sidebar.hbs`
 - `web/templates/login_to_access.hbs`
-- `web/templates/message_body.hbs`
-- `web/templates/message_controls.hbs`
 - `web/templates/message_edit_history.hbs`
 - `web/templates/message_group.hbs`
 - `web/templates/message_list.hbs`
-- `web/templates/popovers/message_actions_popover.hbs`
 - `web/templates/popovers/navbar/navbar_help_menu_popover.hbs`
-- `web/templates/right_sidebar.hbs`
-- `web/templates/settings/bot_list_admin.hbs`
-- `web/templates/single_message.hbs`
 - `web/templates/stream_settings/stream_creation_form.hbs`
-- `web/templates/stream_sidebar_row.hbs`
-- `web/templates/topic_list_item.hbs`
 - `web/templates/typeahead_list_item.hbs`
 - `web/tests/compose_reply.test.cjs`
 - `web/tests/composebox_typeahead.test.cjs`
 - `web/tests/filter.test.cjs`
-- `web/tests/message_events.test.cjs`
 - `web/tests/message_fetch.test.cjs`
 - `web/tests/message_list_data.test.cjs`
-- `web/tests/message_store.test.cjs`
-- `web/tests/popover_menus_data.test.cjs`
 - `web/tests/rendered_markdown.test.cjs`
 - `web/tests/server_events.test.cjs`
-- `web/tests/stream_list.test.cjs`
 - `web/tests/stream_list_sort.test.cjs`
-- `web/tests/submessage.test.cjs`
-- `web/tests/topic_list_data.test.cjs`
 - `web/tests/typeahead.test.cjs`
-- `web/tests/typing_events.test.cjs`
 - `zerver/actions/message_delete.py`
-- `zerver/actions/message_edit.py`
-- `zerver/actions/message_send.py`
 - `zerver/actions/message_summary.py`
-- `zerver/actions/streams.py`
 - `zerver/actions/users.py`
-- `zerver/lib/bot_config.py`
-- `zerver/lib/bot_lib.py`
-- `zerver/lib/event_schema.py`
-- `zerver/lib/event_types.py`
-- `zerver/lib/events.py`
-- `zerver/lib/integrations.py`
-- `zerver/lib/message.py`
-- `zerver/lib/message_cache.py`
 - `zerver/lib/narrow.py`
 - `zerver/lib/queue.py`
 - `zerver/lib/realm_logo.py`
 - `zerver/lib/retention.py`
 - `zerver/lib/topic.py`
-- `zerver/lib/upload/__init__.py`
-- `zerver/models/__init__.py`
-- `zerver/models/bots.py`
-- `zerver/models/messages.py`
-- `zerver/openapi/zulip.yaml`
 - `zerver/tests/fixtures/llm/summary.json`
 - `zerver/tests/test_bots.py`
-- `zerver/tests/test_event_system.py`
-- `zerver/tests/test_events.py`
-- `zerver/tests/test_home.py`
-- `zerver/tests/test_message_dict.py`
 - `zerver/tests/test_openapi.py`
-- `zerver/tests/test_queue.py`
-- `zerver/tests/test_service_bot_system.py`
-- `zerver/tests/test_submessage.py`
 - `zerver/tests/test_upload.py`
-- `zerver/tornado/event_queue.py`
 - `zerver/views/llms_txt.py`
 - `zerver/views/message_edit.py`
 - `zerver/views/message_fetch.py`
-- `zerver/views/message_send.py`
-- `zerver/views/submessage.py`
-- `zerver/views/users.py`
 - `zerver/worker/base.py`
-- `zerver/worker/embedded_bots.py`
 
 ### Hooked: upstream file with marked calls into `web/src/armada/hooks/`
 
@@ -259,20 +174,23 @@ The first three must reach 0 at the final close.
 - `.gitignore`: web/fonts/licensed/ and the generated font sheet
 - `.prettierignore`: interim beta: web/src/armada/beta is not formatted
 - `docs/contributing/code-style.md`: Babel adds no polyfills (K-95)
-- `docs/production/ai-integrations.md`: hosted servers pointed at docs/armada/deploy.md instead of os-user isolation
+- `docs/production/ai-integrations.md`: hosted servers pointed at docs/armada/deploy.md instead of os-user isolation; the agent is Onix and the product Armada (R1)
 - `eslint.config.js`: .tsx; the rules of web/src/armada/
 - `package.json`: @babel/plugin-transform-react-jsx; preact at run time
 - `pnpm-lock.yaml`
 - `pnpm-workspace.yaml`: the autosize patch is gone with the package; core-js is no longer installed
-- `puppet/zulip/manifests/app_frontend_base.pp`: pear\_\* queues, pear_monitor_worker among them
-- `puppet/zulip/templates/supervisor/zulip.conf.template.erb`: pear_worker runs as slots 0 and 1
+- `puppet/zulip/manifests/app_frontend_base.pp`: armada\_\* queues, armada_monitor_worker among them
+- `puppet/zulip/manifests/profile/rabbitmq.pp`: sets the consumer-timeout policy of the agent's armada\_\* queues
+- `puppet/zulip/templates/supervisor/zulip.conf.template.erb`: armada_worker runs as slots 0 and 1
+- `scripts/lib/check_rabbitmq_queue.py`: the agent's queues and stats files are armada\_\*
 - `stylelint.config.js`: the rules of web/src/armada/
 - `templates/zerver/app/index.html`: the frame, the inlined sprite; the splash and both logos deleted
 - `templates/zerver/base.html`: font preloads; data-palette
 - `tools/lib/provision_inner.py`: one call: tools/setup/build_armada_fonts
-- `tools/lint`: .tsx; untracked files; the fork ledger
-- `tools/linter_lib/custom_check.py`: system typefaces; motion literals
+- `tools/lint`: .tsx; untracked files; the fork ledger; configuration files for the old code name's check (R1)
+- `tools/linter_lib/custom_check.py`: system typefaces; motion literals; the old code name (R1)
 - `tools/linter_lib/exclude.py`: interim beta: web/src/armada/beta is not linted
+- `tools/run-dev`: runs the deploy directory's production_assets.py by its new path
 - `tools/test-js-with-node`: runs web/tests/armada/; Armada's exempt list
 - `tools/update-prod-static`: one call: tools/setup/build_armada_fonts
 - `tsconfig.json`: JSX for Preact
@@ -284,16 +202,64 @@ The first three must reach 0 at the final close.
 - `web/src/blueslip_stacktrace.ts`: BlueslipError moved to blueslip.ts, which loads this module on demand
 - `web/src/bundles/app.ts`: no jquery-validation in the app (K-92)
 - `web/src/bundles/common.ts`: the tokens, palettes and faces; three font packages out
+- `web/src/compose_recipient.ts`: follows the renamed modules: their paths, armada\_\* names and wire names
+- `web/src/compose_setup.ts`: follows the renamed modules: their paths, armada\_\* names and wire names
 - `web/src/gif_picker_ui.ts`: the overlay scroll lock deleted
+- `web/src/information_density.ts`: a comment names the old interface, not the agent
+- `web/src/left_sidebar_navigation_area.ts`: a comment names the product, not the agent
+- `web/src/message_actions_popover.ts`: follows the renamed modules, classes and wire names
+- `web/src/message_report.ts`: follows the renamed modules, classes and wire names
+- `web/src/message_store.ts`: follows the renamed modules, classes and wire names
 - `web/src/modals.ts`: the overlay scroll lock deleted
 - `web/src/overlay_util.ts`: the overlay scroll lock deleted
 - `web/src/overlays.ts`: the overlay scroll lock deleted
+- `web/src/popover_menus.ts`: follows the renamed modules, classes and wire names
+- `web/src/popover_menus_data.ts`: follows the renamed modules: their paths, armada\_\* names and wire names
+- `web/src/rendered_markdown.ts`: a comment names the agent by its role
 - `web/src/resize_handler.ts`: scroll_bar.ts gone
 - `web/src/server_events_dispatch.js`: the fluid layout width setting no longer lays anything out
+- `web/src/settings_bots.ts`: follows the renamed modules, classes and wire names
+- `web/src/sidebar_ui.ts`: follows the renamed modules: their paths, armada\_\* names and wire names
+- `web/src/state_data.ts`: follows the renamed modules, classes and wire names
+- `web/src/stream_color.ts`: a comment names the old interface's design
+- `web/src/stream_create.ts`: follows the renamed modules, classes and wire names
+- `web/src/stream_list.ts`: follows the renamed modules, classes and wire names
+- `web/src/submessage.ts`: follows the renamed modules: their paths, armada\_\* names and wire names
+- `web/src/tippyjs.ts`: a comment names the old theme sheet by its new name; the tooltip animation is "armada"
+- `web/src/topic_list.ts`: follows the renamed modules: their paths, armada\_\* names and wire names
+- `web/src/topic_list_data.ts`: follows the renamed modules: their paths, armada\_\* names and wire names
+- `web/src/typing_events.ts`: follows the renamed modules, classes and wire names
 - `web/src/zulip_test.ts`: one export, inject_events, for the checks
+- `web/styles/app_components.css`: the old interface's classes and attributes are legacy-\*
+- `web/styles/banners.css`: the old interface's classes and attributes are legacy-\*
+- `web/styles/blueslip.css`: the old interface's classes and attributes are legacy-\*
+- `web/styles/buttons.css`: the old interface's classes and attributes are legacy-\*
+- `web/styles/inbox.css`: the old interface's classes and attributes are legacy-\*
+- `web/styles/input_pill.css`: the old interface's classes and attributes are legacy-\*
+- `web/styles/inputs.css`: the old interface's classes and attributes are legacy-\*
+- `web/styles/left_sidebar.css`: the old interface's classes and attributes are legacy-\*
 - `web/styles/message_header.css`: the container-query fallback deleted
+- `web/styles/modal.css`: the old interface's classes and attributes are legacy-\*
+- `web/styles/popovers.css`: the old interface's classes and attributes are legacy-\*
+- `web/styles/progress_bar.css`: the old interface's classes and attributes are legacy-\*
+- `web/styles/recent_view.css`: the old interface's classes and attributes are legacy-\*
+- `web/styles/right_sidebar.css`: the old interface's classes and attributes are legacy-\*
+- `web/styles/search.css`: the old interface's classes and attributes are legacy-\*
+- `web/styles/settings.css`: the old interface's classes and attributes are legacy-\*
+- `web/styles/subscriptions.css`: the old interface's classes and attributes are legacy-\*
+- `web/styles/tooltips.css`: the old interface's classes and attributes are legacy-\*
 - `web/styles/zulip.css`: no document scroll; the three-column max-width rules and their fallbacks deleted
+- `web/templates/compose.hbs`: the old interface's classes and attributes are legacy-\*
+- `web/templates/compose_control_buttons.hbs`: the old interface's classes and attributes are legacy-\*
+- `web/templates/message_body.hbs`: the old interface's classes and attributes are legacy-\*
+- `web/templates/message_controls.hbs`: the old interface's classes and attributes are legacy-\*
 - `web/templates/navbar.hbs`: the bar, its sidebar toggles and the logo deleted (K-77, K-37): the old title, facts, search and menus on line 1; also the interim beta's "Try the beta" link, which goes with the beta
+- `web/templates/popovers/message_actions_popover.hbs`: the old interface's classes and attributes are legacy-\*
+- `web/templates/right_sidebar.hbs`: the old interface's classes and attributes are legacy-\*
+- `web/templates/settings/bot_list_admin.hbs`: includes the renamed settings partial
+- `web/templates/single_message.hbs`: the old interface's classes and attributes are legacy-\*
+- `web/templates/stream_sidebar_row.hbs`: the old interface's classes and attributes are legacy-\*
+- `web/templates/topic_list_item.hbs`: the old interface's classes and attributes are legacy-\*
 - `web/tests/clipboard_handler.test.cjs`: test isolation, before F0
 - `web/tests/compose.test.cjs`: no autosize to stand in for
 - `web/tests/compose_actions.test.cjs`: test isolation, before F0
@@ -306,38 +272,74 @@ The first three must reach 0 at the final close.
 - `web/tests/hotkey.test.cjs`: Esc and Ctrl+[ with a thread open
 - `web/tests/lib/index.cjs`: .tsx in node tests
 - `web/tests/markdown.test.cjs`: KaTeX is fetched on first use
+- `web/tests/message_events.test.cjs`: follows the renamed modules, classes and wire names
 - `web/tests/message_list_view.test.cjs`: F0 deleted its tests that read CSS source
+- `web/tests/message_store.test.cjs`: follows the renamed modules, classes and wire names
+- `web/tests/popover_menus_data.test.cjs`: requires the renamed module
+- `web/tests/stream_list.test.cjs`: follows the renamed modules, classes and wire names
+- `web/tests/submessage.test.cjs`: follows the renamed modules, classes and wire names
+- `web/tests/topic_list_data.test.cjs`: follows the renamed modules, classes and wire names
 - `web/tests/transmit.test.cjs`: no span wrapper to stand in for
 - `web/tests/typeahead_helper.test.cjs`: test isolation, before F0
+- `web/tests/typing_events.test.cjs`: follows the renamed modules, classes and wire names
 - `web/webpack.assets.json`: interim beta: the armada-beta entry
 - `web/webpack.config.ts`: .tsx; the zulip cascade layer
 - `web/webpack.dev-assets.json`: the armada-showroom entry
+- `zerver/actions/message_edit.py`: follows the renamed modules: their paths, armada\_\* names and wire names
+- `zerver/actions/message_send.py`: follows the renamed modules: their paths, armada\_\* names and wire names
+- `zerver/actions/streams.py`: follows the renamed modules: their paths, armada\_\* names and wire names
+- `zerver/apps.py`: registers the check that refuses the agent's settings under their old names
+- `zerver/checks.py`: the check that refuses the agent's settings under their old names
+- `zerver/lib/bot_config.py`: the agent's embedded bot service is named armada
+- `zerver/lib/bot_lib.py`: follows the renamed modules: their paths, armada\_\* names and wire names
+- `zerver/lib/event_schema.py`: the agent's events are agent_run and workspace_changed
+- `zerver/lib/event_types.py`: the agent's events are agent_run and workspace_changed
+- `zerver/lib/events.py`: follows the renamed modules: their paths, armada\_\* names and wire names
+- `zerver/lib/integrations.py`: the agent's embedded bot service is named armada
+- `zerver/lib/message.py`: the message field is is_agent_message
+- `zerver/lib/message_cache.py`: follows the renamed modules: their paths, armada\_\* names and wire names
 - `zerver/lib/templates.py`: font_preloads, armada_palette
+- `zerver/lib/upload/__init__.py`: a comment names the agent by its role
 - `zerver/management/commands/makemessages.py`: extract from .tsx
+- `zerver/models/__init__.py`: exports the agent's models by their plain nouns (AgentRun, Repository, Workspace, ...)
+- `zerver/models/bots.py`: the agent's six models take plain nouns; 0810_rename_agent_models moves the tables
+- `zerver/models/messages.py`: comments name the product and the agent's workspace
+- `zerver/openapi/zulip.yaml`: documents the message field is_agent_message (API changelog ZF-092e84)
+- `zerver/tests/test_checks.py`: tests the check that refuses the agent's settings under their old names
+- `zerver/tests/test_event_system.py`: follows the renamed modules: their paths, armada\_\* names and wire names
+- `zerver/tests/test_events.py`: follows the renamed modules: their paths, armada\_\* names and wire names
+- `zerver/tests/test_home.py`: the register keys are agent_user_ids and repository_stream_ids
+- `zerver/tests/test_message_dict.py`: follows the renamed modules: their paths, armada\_\* names and wire names
+- `zerver/tests/test_queue.py`: the agent's queues are armada\_\*
+- `zerver/tests/test_service_bot_system.py`: follows the renamed modules: their paths, armada\_\* names and wire names, and the agent's models by their plain nouns
+- `zerver/tests/test_submessage.py`: follows the renamed modules: their paths, armada\_\* names and wire names
 - `zerver/tests/test_templates.py`: tests of font_preloads and armada_palette
+- `zerver/tornado/event_queue.py`: the agent's events are agent_run and workspace_changed
 - `zerver/views/development/showroom.py`: showroom_armada: /devtools/armada/
-- `zerver/views/streams.py`: a channel's repository URL only from a trusted user (PEAR_WORKER_TRUSTED_USERS_ONLY)
-- `zproject/computed_settings.py`: PEAR_WORKER_MODEL_CHOICES honoured from settings.py; PEAR_WORKER_TRUSTED_USERS_ONLY; PEAR_WORKER_CODEX_MEMORIES
+- `zerver/views/message_send.py`: the send parameter is agent_followup
+- `zerver/views/streams.py`: a channel's repository URL only from a trusted user (ARMADA_WORKER_TRUSTED_USERS_ONLY)
+- `zerver/views/submessage.py`: follows the renamed modules: their paths, armada\_\* names and wire names
+- `zerver/views/users.py`: follows the renamed modules: their paths, armada\_\* names and wire names
+- `zerver/worker/embedded_bots.py`: follows the renamed modules: their paths, armada\_\* names and wire names
+- `zproject/computed_settings.py`: ARMADA_WORKER_MODEL_CHOICES honoured from settings.py; ARMADA_WORKER_TRUSTED_USERS_ONLY; ARMADA_WORKER_CODEX_MEMORIES
 - `zproject/default_settings.py`: ARMADA_PALETTE
-- `zproject/dev_settings.py`: PEAR_WORKER_TRUSTED_USERS_ONLY off and PEAR_WORKER_CODEX_MEMORIES on in development and tests
+- `zproject/dev_settings.py`: ARMADA_WORKER_TRUSTED_USERS_ONLY off and ARMADA_WORKER_CODEX_MEMORIES on in development and tests
 - `zproject/dev_urls.py`: the route to it
 - `zproject/jinja2/__init__.py`: font_preloads, armada_palette
-- `zproject/prod_settings_template.py`: the Armada section: EMBEDDED*BOTS_ENABLED and every PEAR*\* setting
+- `zproject/prod_settings_template.py`: the Armada section: EMBEDDED*BOTS_ENABLED and every ARMADA*\* setting
 - `zproject/urls.py`: interim beta: the /beta/ route, its sprites and the partner routes
 
 ## Old Armada frontend modules
 
+- `web/src/armada_artifact_contract_generated.ts`
 - `web/src/compose_controller.ts`
 - `web/src/compose_editor.ts`
-- `web/src/legacy_agent_toggle.ts`
 - `web/src/compose_send.ts`
-- `web/src/message_thread_hooks.ts`
-- `web/src/message_threads.ts`
 - `web/src/legacy_agent_roster.ts`
 - `web/src/legacy_agent_sigil.ts`
+- `web/src/legacy_agent_toggle.ts`
 - `web/src/legacy_artifact.ts`
 - `web/src/legacy_artifact_actions.ts`
-- `web/src/armada_artifact_contract_generated.ts`
 - `web/src/legacy_artifact_lifecycle.ts`
 - `web/src/legacy_live_dom.ts`
 - `web/src/legacy_moments.ts`
@@ -368,6 +370,8 @@ The first three must reach 0 at the final close.
 - `web/src/legacy_workspace_source_language.ts`
 - `web/src/legacy_workspace_store.ts`
 - `web/src/legacy_workspace_tree.ts`
+- `web/src/message_thread_hooks.ts`
+- `web/src/message_threads.ts`
 - `web/src/right_sidebar_tabs.ts`
 
 ## Files that name a system typeface

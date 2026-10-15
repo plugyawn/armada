@@ -21,8 +21,8 @@ is `tools/linter_lib/custom_check.py`; both run in `arm lint`.
   `kit/hover.css` and `kit/header.css` (`build/F4-verify.md`, defect 6).
 - Never edit a palette file by hand; change `tools/armada/palette.json` and
   run `tools/armada/palette.py`. Enforced by: `arm lint` (`armada-palette`).
-- Two faces: `--f-human` (Söhne, Hanken Grotesk behind it) for people, Onyx
-  and chrome; `--f-code` (Geist Mono) for what a machine would accept (Onyx
+- Two faces: `--f-human` (Söhne, Hanken Grotesk behind it) for people, Onix
+  and chrome; `--f-code` (Geist Mono) for what a machine would accept (Onix
   in the human face follows statement 20, which the user offered as a
   "maybe"). No pixel face, and no system typeface in `web/` outside the
   custom check's exempt old files. Enforced by: custom check "Do not name a

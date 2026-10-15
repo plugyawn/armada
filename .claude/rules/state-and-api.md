@@ -28,9 +28,9 @@ plan builds them. The fences below are already lint errors.
 - Every response has a schema in `api/schemas.ts`, written with `zod/mini`.
   Enforced by: eslint `@typescript-eslint/no-restricted-imports` (plain
   `zod` is banned); that every response has one is review.
-- The wire name `pear` appears only under `api/`, which translates it into
-  agent, run, worktree and repository. Enforced by: eslint
-  `no-restricted-syntax` ("The wire name appears only under").
+- `api/` translates the server's wire names (`armada_*` keys,
+  `/json/armada/` routes) into the words the rest of the tree uses: agent,
+  run, worktree, repository. Enforced by: review.
 - The agent's name is never a literal; it arrives from the server and
   strings say `{agent}`. Enforced by: eslint `no-restricted-syntax`
   ("The agent's name is never a literal").
@@ -47,7 +47,7 @@ plan builds them. The fences below are already lint errors.
   stays with Retry, and unsent text survives a reload. Enforced by:
   `arm check echo-semantics` (`echo.failed.stays-with-retry`,
   `echo.unsent.survives-reload`, `echo.rapid.order`).
-- Server work for Armada stays in the `pear` namespace and has tests in
+- Server work for Armada stays in the `armada` namespace and has tests in
   `zerver/tests/`; run them one at a time
   (`flock /tmp/armada-backend.lock ./tools/test-backend <modules>`).
   Enforced by: `./tools/test-backend` and its coverage check.

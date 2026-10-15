@@ -10,10 +10,10 @@ contributors.
 Armada is a fork of Zulip: a Codex client attached to a team chat. A
 channel is a git repository, a topic is a worktree with its own warm agent
 runtime, and a reply steers the live turn. The product is **Armada**; its
-agent is **Onyx**. `pear` is the old code name: it survives as the server
-and wire namespace (`Pear*` models, `/json/pear/` routes, `PEAR_*`
-settings), and the server still calls the agent Pear, until the rename
-package (D3 of the plan).
+agent is **Onix** (statement 23). The old code name is gone (statement
+24, package R1): the server and the wire say `armada` or a plain noun
+(`AgentRun`, `Repository`, `/json/armada/` routes, `ARMADA_*` settings,
+the `agent_run` event), and a lint guard keeps the old name out.
 
 The frontend is being rebuilt. This section says what the user has
 decided, where the build is and how to work here. The rest of the file
@@ -38,15 +38,15 @@ earlier ones.
 - One design language, Armada's own, written down in
   `docs/armada/design-language.md`: Apple's principles, not Apple's
   assets, and not Zulip's look. People talk in bubbles (statement 17).
-  Onyx's words are ambient, on the page with no bubble, and set in Söhne
+  Onix's words are ambient, on the page with no bubble, and set in Söhne
   like everyone's: the user offered that as a "maybe", to be shown and
   judged (statement 20); the design follows it and F3 built it, and the
-  brief records no verdict yet. People, Onyx and chrome are set in Söhne,
+  brief records no verdict yet. People, Onix and chrome are set in Söhne,
   code in Geist Mono, with Hanken Grotesk as the open fallback behind
   Söhne. Söhne is licensed: its files live in the git-ignored
   `web/fonts/licensed/` and are never committed. There is no pixel
   typeface (Geist Pixel is gone); in the design, pixels are drawings:
-  Onyx's sigil and the marks of a run. No new code names a system
+  Onix's sigil and the marks of a run. No new code names a system
   typeface (a few old portico sheets and one test still do; the fork
   ledger counts them down).
 - Motion and sound are part of the product, everywhere, and never cost
@@ -71,7 +71,7 @@ earlier ones.
 - The base model for new topics is `gpt-6-astra` on the ultrafast tier
   (the user's choice on 14 October; their "sol 6.1" is not in the Codex
   catalog). Effort defaults to medium; `gpt-6-sol` and `gpt-5.6-sol`
-  stay selectable. See `PEAR_WORKER_*` in `zproject/default_settings.py`.
+  stay selectable. See `ARMADA_WORKER_*` in `zproject/default_settings.py`.
 - Maintainability for future agents is a goal in itself: less code, one
   obvious place for each thing.
 
@@ -85,7 +85,7 @@ say so.
   second, production VM, so the user has been asked to free space, use
   the dev server as a stopgap, or take a VPS. Do not create a VM until
   that is answered.
-- **Onyx's ambient words** (statement 20, a "maybe"): built, with no
+- **Onix's ambient words** (statement 20, a "maybe"): built, with no
   verdict from the user recorded.
 - **The design's five questions** (palette, the composer's button,
   threads in place, the column's four lists, the two-line header): the
@@ -100,9 +100,10 @@ say so.
 The plan is `var/armada-overhaul/design/final3/PLAN.md`: 35 packages in
 five stages. Each package's report is
 `var/armada-overhaul/build/<id>.md`, with its verification beside it.
-A checkpoint of the work is committed and pushed on `ui-overhaul`
-(`89fb6f54e4`, 14 October, before the rename of "pear"); work since then
-is uncommitted on top of it. Built so far, the Foundation packages:
+The work is committed on `ui-overhaul`: two checkpoints (`89fb6f54e4`,
+14 October; `0e53081710`, 15 October), then the rename of the old code
+name in five commits (package R1, `build/R1.md`). Built so far, the
+Foundation packages:
 
 - **F0, pins**: the behaviour checks in `tools/armada-checks/` (feed,
   echo, keyboard, stream, parts, interaction stability), the breakages
@@ -140,7 +141,7 @@ conversation lands.
 
 - `web/src/armada/`: the rebuilt frontend. Every directory has a README
   of a few lines saying what belongs there. New frontend code goes here
-  and nowhere else; the old `web/src/pear_*.ts` modules, `web/styles/`
+  and nowhere else; the old `web/src/legacy_*.ts` modules, `web/styles/`
   and `web/templates/` are deleted surface by surface, not extended.
 - `.claude/rules/`: the rules of the rebuild, each with the lint or
   check that enforces it, or a plain statement that nothing does.

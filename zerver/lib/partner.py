@@ -8,9 +8,10 @@ web/sprites/licensed/), and tools/armada/sprites.py writes species.json
 there. Without it the feature is off: nobody can choose, and faces stay
 initials.
 
-Storage, for now. Until the Partner model arrives with the rename step's
-migration, each person's row is JSON in a BotStorageData row under the
-agent's bot, key "partner:<user_id>" (the study's interim, section 4).
+Storage, for now. Until a Partner model arrives with its own migration
+(the package after the rename), each person's row is JSON in a
+BotStorageData row under the agent's bot, key "partner:<user_id>" (the
+study's interim, section 4).
 Only this module writes those rows, always under a lock on the agent's
 bot row, so two people cannot take one evolution line and two folds of
 one person cannot count the same message twice.

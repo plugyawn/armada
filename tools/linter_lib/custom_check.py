@@ -1090,6 +1090,7 @@ puppet_rules = RuleList(
             "exclude": {
                 "puppet/zulip/manifests/profile/",
                 "puppet/kandra/manifests/",
+                "puppet/armada/manifests/profile/",
                 "puppet/zulip/manifests/dockervoyager.pp",
             },
             "description": "Abstraction layering violation; only profiles should reference profiles or zulip::base",

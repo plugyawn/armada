@@ -27,7 +27,13 @@ The dev server must be up (`http://localhost:9991`). From the host:
 anywhere the repository's `puppeteer` and a Chromium are available:
 `CHROME=/path/to/chromium node tools/armada-checks/run.mjs`. Environment:
 `ARMADA_BASE` (default `http://localhost:9991`), `ARMADA_USER` (default
-`armada-checks@zulip.com`, the checks' own user, see below),
+`armada-checks@zulip.com`, the checks' own user, see below), `ARMADA_APP`
+(default `/`: the client under test, as a path on that server, so that
+`ARMADA_APP=/beta/` points every check at the beta; views are hashes after
+it), `ARMADA_HOST_CHECKOUT` (the checkout people edit, as the VM mounts it:
+`known.json`, the reports and accepted pictures are written there too; the
+VM's copy is overwritten from it), `ARMADA_SERVED_TREE` (the tree the server
+runs from, default this checkout),
 `ARMADA_CHECKS_SHOTS=<directory>` to get a screenshot of the page whenever a
 scenario or a tour step gives up.
 
@@ -399,7 +405,7 @@ The logic that decides a result is tested like the product's pure code:
 runs `test/*.test.mjs` with node's test runner and fails unless every
 module listed in `FULLY_COVERED` in `selftest.mjs` (the ratchet in
 `lib/classify.mjs`, the `known.json` lint, the lock, the health checks,
-`lib/stats.mjs`, `lib/mutate.mjs`) has 100% of its
+`lib/host.mjs`, `lib/stats.mjs`, `lib/mutate.mjs`) has 100% of its
 lines, branches and functions covered. It needs no browser and no
 server, and takes about a second.
 
@@ -417,6 +423,7 @@ server, and takes about a second.
     lib/known_lint.mjs   that rule against git (known-lint.mjs runs it)
     lib/lock.mjs         one run at a time, under /tmp/armada-check.lock
     lib/health.mjs       what makes a run ENV-ERROR
+    lib/host.mjs         where files people keep are written (ARMADA_HOST_CHECKOUT)
     lib/fixtures.mjs     the checks' own topic; events for messages and edits
     lib/mutate.mjs       deliberate breakage of the application, by name
     lib/prove.mjs        runs every mutation; the pins must turn red

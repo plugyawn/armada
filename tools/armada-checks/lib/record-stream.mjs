@@ -17,10 +17,10 @@ import {fileURLToPath} from "node:url";
 
 import {launch, login} from "./browser.mjs";
 import {CheckContext} from "./harness.mjs";
+import {keep_targets} from "./host.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const FIXTURES = path.resolve(HERE, "../fixtures");
-const HOST_FIXTURES = "/Users/progyan/runix/zulip/tools/armada-checks/fixtures";
 const FLUSH_MS = 200;
 const SECONDS = 2;
 
@@ -82,10 +82,8 @@ try {
     for (const rate of [400, 1200]) {
         const run = await record(ctx, source, rate);
         const text = `${JSON.stringify(run, null, 4)}\n`;
-        for (const directory of new Set([FIXTURES, HOST_FIXTURES])) {
-            if (fs.existsSync(directory)) {
-                fs.writeFileSync(path.join(directory, `stream-${rate}.json`), text);
-            }
+        for (const target of keep_targets(`tools/armada-checks/fixtures/stream-${rate}.json`)) {
+            fs.writeFileSync(target, text);
         }
         console.log(
             `stream-${rate}.json: ${run.edits.length} events, ${run.words} words, ${text.length} bytes`,

@@ -14,9 +14,9 @@
 
 import * as fs from "node:fs";
 import path from "node:path";
-import {fileURLToPath} from "node:url";
 
 import {sleep} from "../lib/browser.mjs";
+import {keep_targets} from "../lib/host.mjs";
 import {SECTIONS, open_showroom, percent_differing} from "../lib/showroom.mjs";
 
 export const name = "kit";
@@ -24,18 +24,10 @@ export const order = 20;
 export const description =
     "showroom: the field's rectangle in every state, hit areas and names, Preact and DOM alike, the sprite, and every section against its accepted picture";
 
-const HERE = path.dirname(fileURLToPath(import.meta.url));
-const HOST = process.env.ARMADA_HOST_CHECKOUT ?? "/Users/progyan/runix/zulip";
 const BASELINE = "tools/armada-checks/baseline/kit";
-// Pictures people keep are written to the host checkout when it is
-// mounted; the VM's copy is overwritten from it.
-const baseline_dirs = () => {
-    const local = path.resolve(HERE, "../baseline/kit");
-    const host = path.join(HOST, BASELINE);
-    return fs.existsSync(path.join(HOST, "tools/armada-checks")) && host !== local
-        ? [host, local]
-        : [local];
-};
+// Pictures people keep are written to the host checkout too (lib/host.mjs);
+// the VM's copy is overwritten from it.
+const baseline_dirs = () => keep_targets(BASELINE).toReversed();
 const LIGHTER_DIAGONALS = new Set(["clip", "link", "edit", "expand"]);
 
 async function field_geometry(ctx) {
@@ -540,7 +532,7 @@ async function pictures(ctx) {
                     worst_id = index === -1 ? id : `${id} specimen ${index + 1}`;
                 }
                 if (section_worst > 0.1) {
-                    const out = path.join(HOST, "var/armada-checks/kit");
+                    const [out] = keep_targets("var/armada-checks/kit").toReversed();
                     fs.mkdirSync(out, {recursive: true});
                     fs.writeFileSync(path.join(out, file), Buffer.from(shot, "base64"));
                 }

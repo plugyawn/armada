@@ -626,7 +626,9 @@ async function first_paint(ctx) {
         page: page_symbols.length,
         generated: file_symbols.length,
         differing: file_symbols.filter((symbol, index) => symbol !== page_symbols[index]).length,
-        example: file_symbols.find((symbol, index) => symbol !== page_symbols[index])?.slice(0, 120),
+        example: file_symbols
+            .find((symbol, index) => symbol !== page_symbols[index])
+            ?.slice(0, 120),
     };
     ctx.assert("first-paint.sprite-symbols", sprite.page, "==", sprite.generated, {
         note: "symbols inlined in the page against web/src/armada/kit/icons/sprite.svg",
@@ -639,7 +641,7 @@ async function first_paint(ctx) {
     // its final geometry, and no splash.
     await ctx.page.setJavaScriptEnabled(false);
     try {
-        await ctx.page.goto(`${ctx.base}/`, {waitUntil: "load"});
+        await ctx.page.goto(ctx.app, {waitUntil: "load"});
         const raw = await ctx.page.evaluate(() => {
             const box = (selector) => {
                 const element = document.querySelector(selector);

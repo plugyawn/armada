@@ -2,6 +2,10 @@
 import {launch as launch_chromium} from "puppeteer";
 
 export const BASE = process.env.ARMADA_BASE ?? "http://localhost:9991";
+// The client under test, as a path on the server: "/" is the application at
+// the root; ARMADA_APP=/beta/ points every check at the beta. Its views are
+// addressed by hash after it (`${APP}#inbox`).
+export const APP = new URL(process.env.ARMADA_APP ?? "/", `${BASE}/`).href;
 export const VIEWPORT = {width: 1440, height: 900, deviceScaleFactor: 1};
 // The checks' own user, which nobody else signs in as: `./manage.py
 // armada_checks_user` creates it in the development realm.
@@ -52,10 +56,14 @@ export async function login(browser, email = USER) {
         page.waitForNavigation({waitUntil: "networkidle2"}),
         page.evaluate(pick, email, true),
     ]);
-    await page.waitForSelector("#left-sidebar", {visible: true});
+    // Whichever client the login lands on, the session is what matters.
     const user_id = await page.evaluate(
         async () => (await (await fetch("/json/users/me")).json()).user_id,
     );
+    if (typeof user_id !== "number") {
+        await page.close();
+        throw new Error(`the development login as ${email} at ${BASE} did not start a session`);
+    }
     await page.close();
     return user_id;
 }

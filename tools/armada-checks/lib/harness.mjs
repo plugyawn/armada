@@ -3,7 +3,7 @@
 
 /* global window, document */
 
-import {BASE, VIEWPORT, sleep} from "./browser.mjs";
+import {APP, BASE, VIEWPORT, sleep} from "./browser.mjs";
 import {foreign_events, response_problem} from "./health.mjs";
 import {mutate_script, mutation_applied, requested_mutation} from "./mutate.mjs";
 import {install_page_helpers} from "./page.mjs";
@@ -35,6 +35,8 @@ export class CheckContext {
         // The checks' own user: events it did not cause are someone else's.
         this.user_id = user_id;
         this.base = BASE;
+        // The client under test (ARMADA_APP); views are hashes after it.
+        this.app = APP;
         this.topics = TOPICS;
         this.assertions = [];
         this.measurements = [];
@@ -379,7 +381,7 @@ export class CheckContext {
         if (fresh) {
             await this.page.goto("about:blank");
         }
-        await this.page.goto(`${this.base}/${hash}`, {waitUntil: "load"});
+        await this.page.goto(`${this.app}${hash}`, {waitUntil: "load"});
         await this.app_ready();
         if (hash === TOPICS.probe) {
             await this.ensure_probe();

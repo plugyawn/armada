@@ -41,7 +41,7 @@ async function load(ctx, hash) {
     ctx.client.on("Network.requestWillBeSent", on_request);
     ctx.client.on("Network.dataReceived", on_data);
     ctx.client.on("Network.loadingFinished", on_finished);
-    await ctx.page.goto(`${ctx.base}/${hash}`, {waitUntil: "load"});
+    await ctx.page.goto(`${ctx.app}${hash}`, {waitUntil: "load"});
     await ctx.wait_for_rows();
     await ctx.sleep(3500);
     ctx.client.off("Network.requestWillBeSent", on_request);

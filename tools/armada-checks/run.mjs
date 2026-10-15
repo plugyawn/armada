@@ -13,19 +13,14 @@ import * as fs from "node:fs";
 import path from "node:path";
 import {fileURLToPath} from "node:url";
 
-import {BASE, USER, VIEWPORT, launch, login} from "./lib/browser.mjs";
+import {APP, BASE, USER, VIEWPORT, launch, login} from "./lib/browser.mjs";
 import {classify, rewrite_known, stale_ids} from "./lib/classify.mjs";
 import {CheckContext} from "./lib/harness.mjs";
 import {changed_files, changes, describe_changed_files, problems, snapshot} from "./lib/health.mjs";
+import {REPO, keep_targets} from "./lib/host.mjs";
 import {ENV_ERROR_STATUS, run_under_lock} from "./lib/lock.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-const REPO = path.resolve(HERE, "../..");
-// The suite runs from the VM's copy of the checkout, which a sync loop
-// overwrites from the host checkout. Files the suite writes for people to
-// keep (known.json, the report) therefore also go to the host checkout when
-// it is mounted.
-const HOST_REPO = process.env.ARMADA_HOST_CHECKOUT ?? "/Users/progyan/runix/zulip";
 // The tree the server under test runs from, whose processes and files the
 // health checks watch (lib/health.mjs); `arm check` runs from it.
 const SERVED_TREE = process.env.ARMADA_SERVED_TREE ?? REPO;
@@ -96,14 +91,6 @@ async function load_checks() {
     return checks.toSorted((a, b) => (a.order ?? 100) - (b.order ?? 100));
 }
 
-function repo_targets(relative) {
-    const targets = [path.join(REPO, relative)];
-    if (HOST_REPO !== REPO && fs.existsSync(path.join(HOST_REPO, "tools/armada-checks"))) {
-        targets.push(path.join(HOST_REPO, relative));
-    }
-    return targets;
-}
-
 function write_json(target, data) {
     fs.mkdirSync(path.dirname(target), {recursive: true});
     fs.writeFileSync(target, `${JSON.stringify(data, null, 4)}\n`);
@@ -111,7 +98,7 @@ function write_json(target, data) {
 
 function read_known() {
     // Prefer the host copy: it is the one people edit.
-    for (const target of repo_targets(KNOWN_FILE).toReversed()) {
+    for (const target of keep_targets(KNOWN_FILE).toReversed()) {
         if (fs.existsSync(target)) {
             return JSON.parse(fs.readFileSync(target, "utf8"));
         }
@@ -275,7 +262,7 @@ async function main() {
             totals,
             started.toISOString().slice(0, 10),
         );
-        for (const target of repo_targets(KNOWN_FILE)) {
+        for (const target of keep_targets(KNOWN_FILE)) {
             write_json(target, sorted);
         }
         console.log(`\nknown.json rewritten (${Object.keys(sorted).length} entries)`);
@@ -295,6 +282,7 @@ async function main() {
         started: started.toISOString(),
         finished: new Date().toISOString(),
         base: BASE,
+        app: APP,
         user: USER,
         viewport: VIEWPORT,
         chrome,
@@ -307,7 +295,7 @@ async function main() {
     };
     const report_targets = options.json
         ? [path.resolve(options.json)]
-        : repo_targets(DEFAULT_REPORT);
+        : keep_targets(DEFAULT_REPORT);
     for (const target of report_targets) {
         write_json(target, report);
     }

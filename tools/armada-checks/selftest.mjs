@@ -15,6 +15,7 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 export const FULLY_COVERED = [
     "lib/classify.mjs",
     "lib/health.mjs",
+    "lib/host.mjs",
     "lib/known.mjs",
     "lib/known_lint.mjs",
     "lib/lock.mjs",

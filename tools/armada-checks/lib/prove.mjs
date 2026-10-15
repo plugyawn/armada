@@ -15,12 +15,12 @@ import * as os from "node:os";
 import path from "node:path";
 import {fileURLToPath} from "node:url";
 
+import {keep_targets} from "./host.mjs";
 import {ENV_ERROR_STATUS, run_under_lock} from "./lock.mjs";
 import {MUTATIONS, REPLACED_BY} from "./mutate.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const RUNNER = path.resolve(HERE, "../run.mjs");
-const HOST_REPORT = "/Users/progyan/runix/zulip/var/armada-checks/prove.json";
 
 const wanted = process.argv.slice(2);
 const unknown = wanted.filter((name) => !(name in MUTATIONS));
@@ -128,16 +128,9 @@ const summary = {
     by_precondition_only,
     results,
 };
-for (const target of new Set([
-    path.resolve(HERE, "../../../var/armada-checks/prove.json"),
-    HOST_REPORT,
-])) {
-    try {
-        fs.mkdirSync(path.dirname(target), {recursive: true});
-        fs.writeFileSync(target, `${JSON.stringify(summary, null, 4)}\n`);
-    } catch {
-        // The host checkout is not mounted here.
-    }
+for (const target of keep_targets("var/armada-checks/prove.json")) {
+    fs.mkdirSync(path.dirname(target), {recursive: true});
+    fs.writeFileSync(target, `${JSON.stringify(summary, null, 4)}\n`);
 }
 const proved = names.length - failed - env_errors.length;
 if (env_errors.length > 0) {

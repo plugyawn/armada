@@ -1,0 +1,3 @@
+# Process (var/armada-overhaul/design/r6/process.md, W1 and W3): Armada's
+# own CI and pull request workflow (docs/armada/process.md) replace Zulip's.
+kept zerver/lib/test_runner.py  # records a failing subtest under its test, so --rerun and CI's known-failure list see it

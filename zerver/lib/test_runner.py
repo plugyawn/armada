@@ -4,6 +4,7 @@ import random
 import shutil
 import unittest
 from collections.abc import Callable, Iterable
+from types import TracebackType
 from typing import Any, TypeAlias
 from unittest import TestSuite, runner
 from unittest.result import TestResult
@@ -96,6 +97,21 @@ class TextTestResult(runner.TextTestResult):
         TestResult.addFailure(self, *args, **kwargs)
         test_name = args[0].id()
         self.failed_tests.append(test_name)
+
+    @override
+    def addSubTest(
+        self,
+        test: unittest.TestCase,
+        subtest: unittest.TestCase,
+        err: tuple[type[BaseException], BaseException, TracebackType]
+        | tuple[None, None, None]
+        | None,
+    ) -> None:
+        super().addSubTest(test, subtest, err)
+        # A failing subtest is recorded under its test, which --rerun
+        # can run again by name.
+        if err is not None and test.id() not in self.failed_tests:
+            self.failed_tests.append(test.id())
 
     @override
     def addSkip(self, test: unittest.TestCase, reason: str) -> None:

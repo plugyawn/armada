@@ -1,0 +1,21 @@
+## Armada: repositories, worktrees and the coding agent.
+## Kept by puppet (puppet/armada/templates/settings.py.erb); change a value
+## for this server in the [armada] section of /etc/zulip/zulip.conf, never
+## here. docs/armada/deploy.md says what each one does.
+## Everyone on the beta is fully trusted (the user, 15 October 2026): anyone
+## may start agent runs; private and public channels are the boundary.
+EMBEDDED_BOTS_ENABLED = True
+ARMADA_WORKER_AGENT_RUNTIME = "<%= @settings['worker_agent_runtime'] %>"
+ARMADA_WORKER_CODEX_BIN = "<%= @settings['codex_bin'] %>"
+ARMADA_TOPIC_WORKDIR_ROOT = "<%= @settings['worktree_root'] %>"
+ARMADA_WORKER_WORKDIR = "<%= @settings['worktree_root'] %>/_scratch"
+ARMADA_WORKER_SANDBOX = "<%= @settings['worker_sandbox'] %>"
+ARMADA_WORKER_TRUSTED_USERS_ONLY = <%= @settings['trusted_users_only'] %>
+## Codex's memories are shared by every topic on one login, so content from
+## a private channel could reach a run in another channel: keep them off.
+ARMADA_WORKER_CODEX_MEMORIES = False
+ARMADA_WORKER_MAX_ACTIVE_RUNS_PER_REALM = <%= @settings['max_active_runs_per_realm'] %>
+ARMADA_WORKER_MODEL = "<%= @settings['worker_model'] %>"
+ARMADA_WORKER_MODEL_CHOICES = [<%= @settings['worker_model_choices'].split(',').map { |m| "\"#{m.strip}\"" }.join(', ') %>]
+ARMADA_WORKER_SERVICE_TIER = "<%= @settings['worker_service_tier'] %>"
+ARMADA_WORKER_REASONING_EFFORT = "<%= @settings['worker_reasoning_effort'] %>"

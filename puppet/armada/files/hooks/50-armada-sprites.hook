@@ -1,0 +1,16 @@
+#!/bin/bash
+# Armada: the Pokémon sprites live in /srv/armada/sprites, outside every
+# deployment and never in git. Link them in as the new deployment's
+# web/sprites/licensed before the server restarts onto it. The sprite view
+# requires every file to resolve inside that directory, so the directory
+# itself is the link.
+set -e
+deploy="$(pwd)"
+if [ ! -f "$deploy/version.py" ] || [ ! -d /srv/armada/sprites ]; then
+    echo "armada-sprites: skipped (deployment $deploy)"
+    exit 0
+fi
+mkdir -p "$deploy/web/sprites"
+rm -rf "$deploy/web/sprites/licensed"
+ln -s /srv/armada/sprites "$deploy/web/sprites/licensed"
+echo "armada-sprites: linked $deploy/web/sprites/licensed"

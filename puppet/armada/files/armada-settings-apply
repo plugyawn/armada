@@ -1,0 +1,57 @@
+#!/usr/bin/env python3
+"""Put Armada's settings block into /etc/zulip/settings.py.
+
+    armada-settings-apply BLOCK SETTINGS            write the block in
+    armada-settings-apply --check BLOCK SETTINGS    exit 1 if it is not there as it is
+
+The block sits between two marker lines at the end of settings.py, so it
+wins over anything above it; every run replaces what is between the
+markers and leaves the rest of the file as the operator wrote it. Run by
+puppet (puppet/armada/manifests/settings.pp).
+"""
+
+import argparse
+import os
+import shutil
+import sys
+
+BEGIN = "## BEGIN Armada settings (puppet/armada; do not edit between these lines)\n"
+END = "## END Armada settings\n"
+
+
+def with_block(settings: str, block: str) -> str:
+    managed = BEGIN + block.rstrip("\n") + "\n" + END
+    start = settings.find(BEGIN)
+    if start == -1:
+        return settings.rstrip("\n") + "\n\n" + managed
+    end = settings.index(END, start) + len(END)
+    return settings[:start] + managed + settings[end:]
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--check", action="store_true")
+    parser.add_argument("block")
+    parser.add_argument("settings")
+    args = parser.parse_args()
+
+    with open(args.block) as f:
+        block = f.read()
+    with open(args.settings) as f:
+        settings = f.read()
+    wanted = with_block(settings, block)
+    if args.check:
+        return 0 if wanted == settings else 1
+    if wanted != settings:
+        new = args.settings + ".armada-new"
+        with open(new, "w") as f:
+            f.write(wanted)
+        shutil.copystat(args.settings, new)
+        stat = os.stat(args.settings)
+        os.chown(new, stat.st_uid, stat.st_gid)
+        os.replace(new, args.settings)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

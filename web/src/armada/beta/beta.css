@@ -15,8 +15,9 @@ nav .kids > .none { height: var(--h-m); padding: 0 var(--s-2) 0 var(--s-8); font
 
 /* a message of several paragraphs is one bubble */
 div.b > * + * { margin-top: var(--s-2); }
-.b ul, .b ol { padding-left: 20px; } .b ul { list-style: disc; } .b ol { list-style: decimal; }
-.b blockquote, .ans blockquote, .doc blockquote { padding-left: var(--s-3); box-shadow: inset 2px 0 0 var(--fill-3); color: var(--ink-2); }
+.b ul, .b ol { padding-inline-start: 20px; } .b ul { list-style: disc; } .b ol { list-style: decimal; }
+.b blockquote, .ans blockquote, .doc blockquote { padding-inline-start: var(--s-3); box-shadow: inset 2px 0 0 var(--fill-3); color: var(--ink-2); }
+.b blockquote:dir(rtl) { box-shadow: inset -2px 0 0 var(--fill-3); }   /* a bubble written right to left (parts.js): the bar stands at the quote's start */
 .b img.emoji, .ans img.emoji { height: 20px; width: 20px; vertical-align: -4px; }
 .b code { font: var(--t-code); }
 .ans a, .doc a { color: var(--accent-text); }

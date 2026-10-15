@@ -16,6 +16,10 @@ import {tkey} from "./routing.js";
    - A person's message: each run of consecutive prose elements is one bubble; each block stands as a block in the
      turn, between the bubbles, at the lane's width. A message that is one to three emoji and nothing else is jumbo.
    - Onix's message: each run of prose is ambient text on the page (no bubble); blocks are the same blocks.
+   A bubble takes its direction from its first strong letter (dir=auto), so words written right to left read right to
+   left; which side the bubble stands on is the turn's (mine right, everyone else's left), not the words'. A mention and
+   inline code are tokens set left to right in any bubble (dir=ltr), and an element with its own dir is no part of the
+   bubble's guess: "@Iago" never reads "Iago@", "--fix" never reads "fix--", and a name does not set a message's direction.
    Inside prose: an emoji span becomes its character, a mention becomes a pill with the person's name (the agent's is
    always "Onix"; a mention of me, or of everyone, is mine; a silent one is the name alone), a link to a repository or a
    worktree becomes a chip that opens it here, any other link opens in a new tab, a timestamp is printed in local time. Code keeps the server's
@@ -27,7 +31,7 @@ function clean(root) {
   $$("script, style, iframe, object, .message_length_controller, .message_expander, .message_condenser", root).forEach((x) => x.remove());
   $$("span.emoji", root).forEach((s) => { const m = /emoji-([0-9a-f-]+)/.exec(s.className); if (!m) return; let ch = ""; try { ch = String.fromCodePoint(...m[1].split("-").map((h) => parseInt(h, 16))); } catch (e) { return; } const e = el("span", "em"); e.textContent = ch; e.title = s.getAttribute("title") || ""; s.replaceWith(e); });
   $$(".user-mention, .user-group-mention, .topic-mention", root).forEach((s) => { const id = +s.dataset.userId, silent = s.classList.contains("silent"), all = s.classList.contains("topic-mention") || s.dataset.userId === "*";
-    const e = el("span", "mention" + (silent ? " silent" : "") + (id === state.ME || all ? " you" : "")); e.textContent = (silent ? "" : "@") + (id && people.has(id) ? nameOf(id) : s.textContent.replace(/^@/, "")); if (s.dataset.userId) e.dataset.userId = s.dataset.userId; s.replaceWith(e); });
+    const e = el("span", "mention" + (silent ? " silent" : "") + (id === state.ME || all ? " you" : "")); e.dir = "ltr"; e.textContent = (silent ? "" : "@") + (id && people.has(id) ? nameOf(id) : s.textContent.replace(/^@/, "")); if (s.dataset.userId) e.dataset.userId = s.dataset.userId; s.replaceWith(e); });
   $$("a.stream, a.stream-topic", root).forEach((a) => { const sid = +a.dataset.streamId, st = streams.get(sid); if (!st) return; const pre = `#${st.name} > `, topic = a.classList.contains("stream-topic") && a.textContent.startsWith(pre) ? a.textContent.slice(pre.length) : null;
     const e = el(topic != null ? "a" : "span", "placelink"), live = topic != null && marks.get(tkey(sid, topic)) === "live"; if (topic != null) e.href = `#c/${sid}/${encodeURIComponent(topic)}`; if (live) e.dataset.state = "live";
     e.innerHTML = `${ic(topic != null ? "branch" : repoStreams.has(sid) ? "repo" : "hash")}<span>${esc(st.name)}</span>${topic != null ? `<span class="sep">\u203a</span><span>${esc(topic)}</span>` : ""}`; a.replaceWith(e); });
@@ -52,7 +56,7 @@ function partsOf(m) {
   const onix = isOnix(m.sender_id), out = []; let run = [];
   if (onix && /^·\s*Working\s*$/.test((m.content || "").replace(/<[^>]+>/g, "").trim())) return out;   /* the server's placeholder: Onix has no words yet */
   tpl.innerHTML = m.content || ""; const root = clean(tpl.content);
-  $$("code", root).forEach((x) => { if (!x.closest("pre") && x.textContent.length <= 32) x.classList.add("nw"); });   /* a short flag or path does not break at its own hyphen */
+  $$("code", root).forEach((x) => { if (x.closest("pre")) return; x.dir = "ltr"; if (x.textContent.length <= 32) x.classList.add("nw"); });   /* a short flag or path does not break at its own hyphen */
   if (onix) [...root.children].filter((x) => x.tagName === "P").forEach((x) => { if (x.childNodes.length === 1 && x.firstChild.tagName === "STRONG") { const h = el("h4"); h.append(...x.firstChild.childNodes); x.replaceWith(h); } });   /* "**What changed**" alone on its line is a heading. The fragment's own children: ":scope" matches nothing in a DocumentFragment */
   const flush = () => { if (!run.length) return;
     if (onix) { run.forEach((n) => { if (/^H[12]$/.test(n.tagName)) { const h = el("h3"); h.append(...n.childNodes); n.replaceWith(h); run[run.indexOf(n)] = h; } else if (/^H[3-6]$/.test(n.tagName)) { const h = el("h4"); h.append(...n.childNodes); n.replaceWith(h); run[run.indexOf(n)] = h; } });
@@ -75,7 +79,7 @@ function partsOf(m) {
 const plainOf = (html) => { tpl.innerHTML = html || ""; return tpl.content.textContent; };
 function partEl(p, m) {
   let e;
-  if (p.t === "b") { const b = el(p.tag, "b" + (p.jumbo ? " jumbo" : ""), p.html); e = el("div", "bl"); e.append(b); }
+  if (p.t === "b") { const b = el(p.tag, "b" + (p.jumbo ? " jumbo" : ""), p.html); b.dir = "auto"; e = el("div", "bl"); e.append(b); }
   else if (p.t === "ans") { e = el("div", "ans"); setAns(e, p.html); }
   else if (p.t === "pre") e = codeBlock(p.html);
   else if (p.t === "tbl") e = el("div", "blk tbl", p.html);

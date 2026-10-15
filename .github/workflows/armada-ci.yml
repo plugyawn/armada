@@ -1,0 +1,198 @@
+# Armada's checks: what every pull request and every push to the trunk
+# must pass. docs/armada/process.md says how a package reaches the
+# trunk; every step here is a command a builder can run on its own tree.
+# "Required jobs" is the one status that branch protection requires.
+
+name: Armada CI
+
+on:
+  pull_request:
+  push:
+    branches: [main, pear-main]
+  workflow_dispatch:
+
+concurrency:
+  group: "${{ github.workflow }}-${{ github.head_ref || github.run_id }}"
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+permissions:
+  contents: read
+
+jobs:
+  guard:
+    name: Guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          # secrets-scan reads every commit since the fork base.
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: No licensed file is tracked
+        run: tools/armada/ci/licensed-guard
+
+      - name: No commit of the fork adds a credential
+        run: tools/armada/ci/secrets-scan
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    container: zulip/ci:noble
+    env:
+      # PostgreSQL's setup writes ~/.pgpass where psql expects it only
+      # with this HOME, as in Zulip's own CI.
+      HOME: /home/github/
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          # The commits and files of the pull request or the push.
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Restore pnpm store
+        uses: actions/cache@v4
+        with:
+          path: /__w/.pnpm-store
+          key: armada-pnpm-noble-${{ hashFiles('pnpm-lock.yaml') }}
+
+      - name: Restore uv cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/uv
+          key: armada-uv-noble-${{ hashFiles('uv.lock') }}
+          restore-keys: armada-uv-noble-
+
+      - name: Install dependencies
+        run: ./tools/ci/setup-backend --skip-dev-db-build
+
+      - name: Lint commit messages
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          source tools/ci/activate-venv
+          tools/armada/ci/commit-lint "$BASE_SHA" "$HEAD_SHA"
+
+      - name: Run linters
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          source tools/ci/activate-venv
+          tools/armada/ci/lint-changed "$BASE_SHA" "$HEAD_SHA"
+
+      - name: Run mypy
+        run: |
+          source tools/ci/activate-venv
+          tools/armada/ci/mypy-ratchet
+
+      - name: Test the tools
+        run: |
+          source tools/ci/activate-venv
+          ./tools/test-tools
+          python -m unittest tools.armada_deploy.test_production_runtime
+
+  node:
+    name: Node tests
+    runs-on: ubuntu-latest
+    container: zulip/ci:noble
+    env:
+      HOME: /home/github/
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Restore pnpm store
+        uses: actions/cache@v4
+        with:
+          path: /__w/.pnpm-store
+          key: armada-pnpm-noble-${{ hashFiles('pnpm-lock.yaml') }}
+
+      - name: Restore uv cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/uv
+          key: armada-uv-noble-${{ hashFiles('uv.lock') }}
+          restore-keys: armada-uv-noble-
+
+      - name: Install dependencies
+        run: ./tools/ci/setup-backend --skip-dev-db-build
+
+      - name: Run node tests
+        run: |
+          source tools/ci/activate-venv
+          ./tools/test-js-with-node --coverage --parallel=1
+
+  backend:
+    name: Backend tests (${{ matrix.shard }}/4)
+    runs-on: ubuntu-latest
+    container: zulip/ci:noble
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    env:
+      HOME: /home/github/
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          # backend-tests diffs against the fork base.
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Restore pnpm store
+        uses: actions/cache@v4
+        with:
+          path: /__w/.pnpm-store
+          key: armada-pnpm-noble-${{ hashFiles('pnpm-lock.yaml') }}
+
+      - name: Restore uv cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/uv
+          key: armada-uv-noble-${{ hashFiles('uv.lock') }}
+          restore-keys: armada-uv-noble-
+
+      - name: Install dependencies
+        run: ./tools/ci/setup-backend --skip-dev-db-build
+
+      - name: Run backend tests
+        env:
+          SHARD: ${{ matrix.shard }}
+        run: |
+          source tools/ci/activate-venv
+          tools/armada/ci/backend-tests --shard "$SHARD/4"
+
+      - name: Check for untracked files
+        run: |
+          untracked="$(git ls-files --exclude-standard --others)"
+          if [ -n "$untracked" ]; then
+            printf >&2 "Error: untracked files:\n%s\n" "$untracked"
+            exit 1
+          fi
+
+  checks:
+    name: Behaviour checks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Placeholder until the checks run hermetically
+        run: |
+          echo "::notice::The behaviour checks (tools/armada-checks/, arm check) need a running server;"
+          echo "::notice::they run at integration on the preview until CI serves one of its own."
+
+  required:
+    name: Required jobs
+    if: always()
+    needs: [guard, lint, node, backend, checks]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check required jobs
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: jq 'with_entries(.value |= .result | select(.value | IN("success", "skipped") | not)) | if . != {} then halt_error end' <<<"$NEEDS"

@@ -22,7 +22,7 @@ BACKEND_ONLY_PATTERNS = (
     "corporate/tests/*",
     "web/tests/*",
     "zilencer/tests/*",
-    ".github/workflows/armada-backend.yml",
+    ".github/workflows/armada-ci.yml",
     "tools/armada-health-report",
     "tools/armada_deploy/README.md",
     "tools/armada_deploy/asset_reuse_policy.py",

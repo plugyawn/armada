@@ -865,7 +865,10 @@ class StaticRuntimeContractTest(unittest.TestCase):
         ).read_text()
         visual_runtime = (REPO_ROOT / "tools/armada_deploy/provision_visual_runtime.sh").read_text()
         helper_runtime = (REPO_ROOT / "tools/armada_deploy/workspace_helper_runtime.py").read_text()
-        backend_workflow = (REPO_ROOT / ".github/workflows/armada-backend.yml").read_text()
+        ci_workflow = (REPO_ROOT / ".github/workflows/armada-ci.yml").read_text()
+        ci_backend_modules = subprocess.check_output(
+            [REPO_ROOT / "tools/armada/ci/backend-tests", "--list"], cwd=REPO_ROOT, text=True
+        ).split()
         self.assertIn("--production-assets", run_dev)
         self.assertIn(
             """runtornado_command = [
@@ -1143,7 +1146,7 @@ class StaticRuntimeContractTest(unittest.TestCase):
             "zerver.tests.test_message_threads",
         ):
             self.assertIn(suite, update)
-            self.assertIn(suite, backend_workflow)
+            self.assertIn(suite, ci_backend_modules)
         self.assertIn(
             "zerver.tests.test_openapi.OpenAPIToolsTest.test_get_messages_accepts_thread_metadata",
             update,
@@ -1152,7 +1155,7 @@ class StaticRuntimeContractTest(unittest.TestCase):
             "zerver.tests.test_event_system.ClientDescriptorsTest.test_process_message_event_projects_hidden_thread_root_per_viewer",
             update,
         )
-        self.assertIn("tools.armada_deploy.test_production_runtime", backend_workflow)
+        self.assertIn("tools.armada_deploy.test_production_runtime", ci_workflow)
         self.assertIn("-type d ! -perm -0005", visual_runtime)
         self.assertIn("-type f ! -perm -0004", visual_runtime)
         self.assertIn("-perm /022", visual_runtime)

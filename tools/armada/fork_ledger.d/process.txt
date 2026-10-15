@@ -1,3 +1,10 @@
 # Process (var/armada-overhaul/design/r6/process.md, W1 and W3): Armada's
 # own CI and pull request workflow (docs/armada/process.md) replace Zulip's.
+deleted .github/workflows/api-docs-update-check.yml  # reports Zulip's API changes to chat.zulip.org
+deleted .github/workflows/auto-add-parent-label.yml  # Zulip's issue labels
+deleted .github/workflows/update-oneclick-apps.yml  # Zulip's DigitalOcean one-click app
+deleted .github/workflows/zulip-ci.yml  # Zulip's distribution on five systems; armada-ci.yml runs Armada's checks
+deleted .github/workflows/zulip-cloud-deploy.yaml  # Zulip Cloud's deploy notices
+kept .github/workflows/codeql-analysis.yml  # scans Armada's trunk and its pull requests
+kept .github/workflows/production-suite.yml  # runs on release tags only
 kept zerver/lib/test_runner.py  # records a failing subtest under its test, so --rerun and CI's known-failure list see it

@@ -1,30 +1,10 @@
 name: Zulip production suite
 
+# Armada runs the production build and install on release tags only:
+# its pull requests and trunk run .github/workflows/armada-ci.yml.
 on:
   push:
-    branches: ["*.x", chat.zulip.org, main]
     tags: ["*"]
-  pull_request:
-    paths:
-      - .github/workflows/production-suite.yml
-      - "**/migrations/**"
-      - manage.py
-      - pnpm-lock.yaml
-      - puppet/**
-      - scripts/**
-      - tools/**
-      - uv.lock
-      - web/babel.config.js
-      - web/postcss.config.js
-      - web/third/**
-      - web/webpack.config.ts
-      - zerver/apps.py
-      - zerver/checks.py
-      - zerver/worker/queue_processors.py
-      - zerver/lib/push_notifications.py
-      - zerver/lib/storage.py
-      - zerver/decorator.py
-      - zproject/**
   workflow_dispatch:
 
 concurrency:

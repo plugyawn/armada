@@ -16,6 +16,7 @@ from pydantic import BaseModel
 from zerver.lib.event_types import (
     AlertWordsEvent,
     AllowMessageEditingData,
+    ArmadaPartnerEvent,
     ArmadaReadReceiptsEvent,
     ArmadaRunEvent,
     ArmadaWorkspaceChangedEvent,
@@ -249,6 +250,7 @@ check_user_group_remove_subgroups = make_checker(UserGroupRemoveSubgroupsEvent)
 check_user_topic = make_checker(UserTopicEvent)
 check_web_reload_client_event = make_checker(WebReloadClientEvent)
 check_armada_read_receipts_event = make_checker(ArmadaReadReceiptsEvent)
+check_armada_partner_event = make_checker(ArmadaPartnerEvent)
 check_armada_run_event = make_checker(ArmadaRunEvent)
 check_armada_workspace_changed_event = make_checker(ArmadaWorkspaceChangedEvent)
 

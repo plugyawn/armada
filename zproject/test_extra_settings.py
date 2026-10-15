@@ -143,6 +143,13 @@ if "LOCAL_UPLOADS_DIR" in os.environ:
     LOCAL_FILES_DIR = os.path.join(LOCAL_UPLOADS_DIR, "files")
 # Otherwise, we use the default value from dev_settings.py
 
+# Tests never read the partner pack a developer may have downloaded into
+# the git-ignored web/sprites/licensed/ (zerver/lib/partner.py): with one
+# there, every message send would look for its sender's partner, and
+# query counts would depend on the machine. Tests that need a pack make
+# their own.
+os.environ.setdefault("ARMADA_SPRITE_DIR", "/nonexistent/armada-sprites")
+
 S3_KEY = "test-key"
 S3_SECRET_KEY = "test-secret-key"
 S3_AUTH_UPLOADS_BUCKET = "test-authed-bucket"

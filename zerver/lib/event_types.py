@@ -1375,3 +1375,20 @@ class ArmadaReadReceiptsEvent(BaseEvent):
     type: Literal["read_receipts"]
     message_ids: list[int]
     user_id: int
+
+
+class ArmadaPartner(BaseModel):
+    user_id: int
+    species: str
+    shiny: bool
+    level: int
+    stone: str
+    evolved_at: float | None
+    evolved_kind: Literal["evolve", "shiny"] | None
+    may_change: bool
+
+
+class ArmadaPartnerEvent(BaseEvent):
+    type: Literal["armada_partner"]
+    op: Literal["update"]
+    partner: ArmadaPartner

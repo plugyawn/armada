@@ -6,7 +6,7 @@ import os
 import struct
 import tempfile
 import zlib
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -26,6 +26,7 @@ from zerver.actions.create_user import do_create_user
 from zerver.actions.users import do_deactivate_user
 from zerver.lib.armada import ARMADA_QUESTION_TIMEOUT_SECONDS
 from zerver.lib.armada_gate import invalidate_armada_selected_bot_cache
+from zerver.lib.event_schema import check_armada_partner_event
 from zerver.lib.exceptions import JsonableError
 from zerver.lib.initial_password import initial_password
 from zerver.lib.partner import (
@@ -42,6 +43,7 @@ from zerver.lib.rate_limiter import RateLimitedUser
 from zerver.lib.templates import font_preloads
 from zerver.lib.test_classes import ZulipTestCase
 from zerver.lib.test_helpers import ratelimit_rule
+from zerver.lib.users import get_user_ids_who_can_access_user
 from zerver.models import AgentRun, BotStorageData, Message, Partner, Reaction, UserProfile
 from zerver.models.bots import Service
 from zerver.views.armada_beta import live_run_ids_for_user
@@ -712,6 +714,134 @@ class PartnerTest(ZulipTestCase):
         # A refusal names the holder only to someone who can see them.
         self.assert_json_error(self.choose(polonius, "10"), "Someone else has this line.")
         self.assert_json_error(self.choose(polonius, "1"), "King Hamlet has this line.")
+
+    def partner_events(self, events: list[Mapping[str, Any]]) -> list[Mapping[str, Any]]:
+        found = [e for e in events if e["event"]["type"] == "armada_partner"]
+        for e in found:
+            # The queue gives each event its id on the way out.
+            check_armada_partner_event("events[0]", {**e["event"], "id": 0})
+        return found
+
+    def test_a_choice_and_an_evolution_are_pushed(self) -> None:
+        cordelia = self.new_person("cordelia2")
+        self.login_user(cordelia)
+        with self.capture_send_event_calls(expected_num_events=1) as events:
+            self.assert_json_success(self.choose(cordelia, "10"))
+        [pushed] = self.partner_events(events)
+        self.assertEqual(
+            pushed["event"]["partner"],
+            {
+                "user_id": cordelia.id,
+                **self.partners(cordelia)["partners"][str(cordelia.id)],
+            },
+        )
+        self.assertEqual(set(pushed["users"]), set(get_user_ids_who_can_access_user(cordelia)))
+
+        # Holding changes nothing the team sees, so nothing is pushed.
+        self.set_xp(cordelia, 1024)
+        self.login_user(cordelia)
+        with self.capture_send_event_calls(expected_num_events=0):
+            self.assert_json_success(
+                self.client_post("/json/armada/partner/evolve", {"hold": "true"})
+            )
+        with self.capture_send_event_calls(expected_num_events=1) as events:
+            self.assert_json_success(
+                self.client_post("/json/armada/partner/evolve", {"into": "11"})
+            )
+        [pushed] = self.partner_events(events)
+        self.assertEqual(
+            (pushed["event"]["partner"]["species"], pushed["event"]["partner"]["evolved_kind"]),
+            ("11", "evolve"),
+        )
+        # Putting the choice off is mine alone.
+        with self.capture_send_event_calls(expected_num_events=0):
+            self.assert_json_success(self.client_post("/json/armada/partner", {"later": "true"}))
+
+    def test_a_level_crossed_by_a_message_is_pushed_ahead_of_it(self) -> None:
+        cordelia = self.new_person("cordelia2")
+        self.assert_json_success(self.choose(cordelia, "10"))
+        # Level 15, one short of 16 (1024): the day's first message gives
+        # the day's 25 and its own 1.
+        self.set_xp(cordelia, 1000)
+        self.subscribe(cordelia, "Verona")
+        self.login_user(cordelia)
+
+        def send(content: str) -> int:
+            result = self.client_post(
+                "/json/messages",
+                {
+                    "type": "stream",
+                    "to": orjson.dumps("Verona").decode(),
+                    "topic": "levels",
+                    "content": content,
+                },
+            )
+            return self.assert_json_success(result)["id"]
+
+        # Her first message in a topic also follows it for her.
+        with self.capture_send_event_calls(expected_num_events=4) as events:
+            message_id = send("over the line")
+        self.assertEqual(
+            [e["event"]["type"] for e in events],
+            ["armada_partner", "muted_topics", "user_topic", "message"],
+        )
+        [pushed] = self.partner_events(events)
+        self.assertEqual(
+            (pushed["event"]["partner"]["level"], pushed["event"]["partner"]["may_change"]),
+            (16, True),
+        )
+        self.assertEqual(events[3]["event"]["message"], message_id)
+        row = get_row(cordelia)
+        self.assertEqual((row["xp"], row["message_watermark"]), (1026, message_id))
+
+        # The next message counts, crosses nothing and pushes nothing; a
+        # fold soon after finds nothing new.
+        with self.capture_send_event_calls(expected_num_events=1) as events:
+            send("still level 16")
+        self.assertEqual(self.partner_events(events), [])
+        self.assertEqual(get_row(cordelia)["xp"], 1027)
+        self.assertEqual(self.partners(cordelia)["me"]["xp"], 1027)
+
+    def test_sending_costs_a_query_only_with_a_pack(self) -> None:
+        hamlet = self.example_user("hamlet")
+
+        def partner_queries() -> int:
+            with CaptureQueriesContext(connection) as queries:
+                self.send_stream_message(hamlet, "Verona", "hello")
+            return sum('"zerver_partner"' in q["sql"] for q in queries.captured_queries)
+
+        # Someone with no partner: one look.
+        self.assertEqual(partner_queries(), 1)
+        os.remove(os.path.join(self.sprites.name, "species.json"))
+        self.assertEqual(partner_queries(), 0)
+        # The agent's own messages never fold.
+        self.assertEqual(Partner.objects.filter(user_profile=self.agent).count(), 0)
+
+    def test_a_broken_pack_never_stops_a_send(self) -> None:
+        cordelia = self.example_user("cordelia")
+        self.assert_json_success(self.choose(cordelia, "1"))
+        with open(os.path.join(self.sprites.name, "species.json"), "w") as f:
+            f.write("{not json")
+        with self.assertLogs(level="ERROR") as logs:
+            message_id = self.send_stream_message(cordelia, "Verona", "still sent")
+        self.assertEqual(
+            logs.output[0].splitlines()[0], "ERROR:root:The partner pack could not be read"
+        )
+        self.assertEqual(Message.objects.get(id=message_id).content, "still sent")
+
+    def test_pushes_follow_user_access(self) -> None:
+        self.set_up_db_for_testing_user_access()
+        polonius = self.example_user("polonius")
+        othello = self.example_user("othello")
+        hamlet = self.example_user("hamlet")
+        with self.capture_send_event_calls(expected_num_events=1) as events:
+            choose_partner(othello, "10", [])
+        [pushed] = self.partner_events(events)
+        self.assertNotIn(polonius.id, pushed["users"])
+        self.assertIn(hamlet.id, pushed["users"])
+        with self.capture_send_event_calls(expected_num_events=1) as events:
+            choose_partner(hamlet, "1", [])
+        self.assertIn(polonius.id, self.partner_events(events)[0]["users"])
 
     def test_a_pack_missing_a_sprite_file(self) -> None:
         # species.json names made/1.png, which this directory does not hold.

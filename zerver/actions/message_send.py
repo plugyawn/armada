@@ -64,6 +64,7 @@ from zerver.lib.notification_data import (
     get_user_group_mentions_data,
     user_allows_notifications_in_StreamTopic,
 )
+from zerver.lib.partner import fold_partners_of_senders
 from zerver.lib.query_helpers import query_for_ids
 from zerver.lib.queue import queue_event_on_commit
 from zerver.lib.recipient_users import recipient_for_user_profiles
@@ -1087,6 +1088,12 @@ def do_send_messages(
 
     for send_request in send_message_requests:
         do_widget_post_save_actions(send_request)
+
+    # armada: a sender's partner may cross a level with these messages;
+    # its push is queued here, ahead of the messages' own events.
+    fold_partners_of_senders(
+        [send_request.message.sender for send_request in send_message_requests]
+    )
 
     # This next loop is responsible for notifying other parts of the
     # Zulip system about the messages we just committed to the database:

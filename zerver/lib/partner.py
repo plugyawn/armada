@@ -16,6 +16,12 @@ locked for its transaction, so two folds of one person cannot count the
 same message twice; a choice also holds the agent's bot row, so two
 people cannot take one evolution line.
 
+Pushes. A change to a partner as the team sees it (a choice, an
+evolution, a level crossed) goes to everyone who can see its person as
+an armada_partner event. A level crossed by a message is pushed in that
+message's transaction, ahead of the message's own event, so a page
+knows the partner's new state before it draws the message.
+
 Experience. fold_partner_xp brings a row up to date from what the server
 already has: my messages, my runs that ended, reactions others put on my
 messages. It reads only what is past the row's watermarks, so after the
@@ -24,6 +30,7 @@ Levels are computed from experience when read, never stored.
 """
 
 import json
+import logging
 import math
 import os
 import zoneinfo
@@ -42,8 +49,10 @@ from zerver.lib.users import (
     check_can_access_user,
     check_user_can_access_all_users,
     get_accessible_user_ids,
+    get_user_ids_who_can_access_user,
 )
 from zerver.models import AgentRun, Message, Partner, Reaction, UserProfile
+from zerver.tornado.django_api import send_event_on_commit
 
 # A person's experience is folded at most this often; a fold asked for
 # sooner returns the row as it stands.
@@ -280,15 +289,22 @@ def add_day(row: dict[str, Any], day: date, messages: int, runs: int, reactions:
     row["xp"] += gain
 
 
-def fold_partner_xp(user: UserProfile, row: dict[str, Any], now: datetime) -> bool:
+def fold_partner_xp(
+    user: UserProfile, row: dict[str, Any], now: datetime, *, every_time: bool = False
+) -> bool:
     """Bring the row's experience up to date. Returns whether it read
-    anything (False when the last fold was under PARTNER_FOLD_SECONDS ago).
+    anything (False when the last fold was under PARTNER_FOLD_SECONDS ago,
+    unless every_time).
 
     A day on which I sent a message is active. Messages count on the day
     they were sent and runs on the day they ended, in my time zone.
     Reaction rows have no time: on the first count each is dated by its
     message, and after that it counts on the day of the fold."""
-    if row["folded_at"] is not None and now.timestamp() - row["folded_at"] < PARTNER_FOLD_SECONDS:
+    if (
+        not every_time
+        and row["folded_at"] is not None
+        and now.timestamp() - row["folded_at"] < PARTNER_FOLD_SECONDS
+    ):
         return False
     tz = user_zone(user)
     first_count = row["folded_at"] is None
@@ -411,6 +427,59 @@ def team_view(pack: Pack, row: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def shown_view(pack: Pack, row: dict[str, Any]) -> dict[str, Any] | None:
+    """The team's view of a partner the pack can draw, else None: a person
+    without one is not listed."""
+    if row["species"] is None or not pack.drawable(row["species"]):
+        return None
+    return team_view(pack, row)
+
+
+def push_partner_change(
+    pack: Pack, user: UserProfile, before: dict[str, Any] | None, row: dict[str, Any]
+) -> None:
+    """Tell everyone who can see this person that their partner changed,
+    when the commit lands; the partner is the row GET
+    /json/armada/partners lists, with its person's id."""
+    after = shown_view(pack, row)
+    if after is None or after == before:
+        return
+    event = {"type": "armada_partner", "op": "update", "partner": {"user_id": user.id, **after}}
+    send_event_on_commit(user.realm, event, get_user_ids_who_can_access_user(user))
+
+
+def fold_partners_of_senders(senders: list[UserProfile]) -> None:
+    """Count the messages being sent into their senders' partners, inside
+    the send's transaction. do_send_messages calls this before it queues
+    the messages' events, so a level crossed is pushed ahead of the
+    message that crossed it. Bots and people without a partner cost
+    nothing, and without a pack, nobody costs a query."""
+    people = {sender.id: sender for sender in senders if not sender.is_bot}
+    if not people:
+        return
+    try:
+        pack = load_pack()
+    except (OSError, ValueError, KeyError):
+        # A pack the server cannot read is for its operator to fix; it
+        # never stops a message from being sent.
+        logging.exception("The partner pack could not be read")
+        return
+    if pack is None:
+        return
+    now = timezone_now()
+    for partner in (
+        Partner.objects.select_for_update(no_key=True)
+        .filter(user_profile_id__in=list(people), species__isnull=False)
+        .order_by("user_profile_id")
+    ):
+        user = people[partner.user_profile_id]
+        row = row_of(partner)
+        before = shown_view(pack, row)
+        fold_partner_xp(user, row, now, every_time=True)
+        Partner.objects.filter(id=partner.id).update(**columns_of(row))
+        push_partner_change(pack, user, before, row)
+
+
 def my_view(
     pack: Pack, row: dict[str, Any], now: datetime, tz: zoneinfo.ZoneInfo | timezone
 ) -> dict[str, Any]:
@@ -454,8 +523,10 @@ def partners_state(user: UserProfile, *, fold: bool = True) -> dict[str, Any]:
     if fold:
         with transaction.atomic(savepoint=False):
             mine = lock_row(user)
+            before = shown_view(pack, mine)
             if fold_partner_xp(user, mine, now):
                 save_row(user, mine)
+                push_partner_change(pack, user, before, mine)
     rows = get_rows(user.realm_id)
     mine = rows.get(user.id, new_row())
     shown = set(
@@ -472,9 +543,9 @@ def partners_state(user: UserProfile, *, fold: bool = True) -> dict[str, Any]:
         "on": True,
         "version": pack.version,
         "partners": {
-            str(user_id): team_view(pack, row)
+            str(user_id): view
             for user_id, row in rows.items()
-            if user_id in shown and row["species"] is not None and pack.drawable(row["species"])
+            if user_id in shown and (view := shown_view(pack, row)) is not None
         },
         "agent": {"user_id": agent.id, **agent_partner(pack, user.realm_id)},
         "me": my_view(pack, mine, now, user_zone(user)),
@@ -531,6 +602,7 @@ def choose_partner(user: UserProfile, species: str, picks: list[str]) -> None:
                 freed.update(species=None, chosen=None, shiny=False, held=False)
                 save_row(people[holder_id], freed)
             mine = lock_row(user)
+            before = shown_view(pack, mine)
             fold_partner_xp(user, mine, now)
             arrived, shiny = arrival(pack, species, mine["xp"], picks)
             mine.update(
@@ -544,6 +616,7 @@ def choose_partner(user: UserProfile, species: str, picks: list[str]) -> None:
                 evolved_kind=None,
             )
             save_row(user, mine)
+            push_partner_change(pack, user, before, mine)
     if taken_by is not None:
         if not check_can_access_user(taken_by, user):
             raise JsonableError(_("Someone else has this line."))
@@ -568,6 +641,7 @@ def evolve_partner(user: UserProfile, into: str | None, hold: bool) -> None:
     error = None
     with transaction.atomic(savepoint=False):
         mine = lock_row(user)
+        before = shown_view(pack, mine)
         fold_partner_xp(user, mine, now)
         change = ready_change(pack, mine)
         if change is None:
@@ -581,5 +655,6 @@ def evolve_partner(user: UserProfile, into: str | None, hold: bool) -> None:
         else:
             mine.update(species=into, held=False, evolved_at=now.timestamp(), evolved_kind="evolve")
         save_row(user, mine)
+        push_partner_change(pack, user, before, mine)
     if error is not None:
         raise JsonableError(error)

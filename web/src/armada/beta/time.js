@@ -7,7 +7,7 @@ const now = () => Date.now() + state.skew;
 /* ---------- time ---------- */
 const p2 = (n) => String(n).padStart(2, "0");
 const hhmm = (ts) => { const d = new Date(ts * 1000); return `${d.getHours()}:${p2(d.getMinutes())}`; };
-const dayKey = (ts) => { const d = new Date(ts * 1000); return d.getFullYear() * 10000 + d.getMonth() * 100 + d.getDate(); };
+const dayKey = (ts) => { const d = new Date(ts * 1000); return d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate(); };   /* the local date as a number: 16 October 2026 is 20261016 */
 const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"], DOW = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const dayLabel = (ts) => { const d = new Date(ts * 1000), t = new Date(now()), days = Math.round((new Date(t.getFullYear(), t.getMonth(), t.getDate()) - new Date(d.getFullYear(), d.getMonth(), d.getDate())) / 864e5);
   return days === 0 ? "Today" : days === 1 ? "Yesterday" : days > 1 && days < 7 ? DOW[d.getDay()] : `${d.getDate()} ${MON[d.getMonth()]}${d.getFullYear() !== t.getFullYear() ? " " + d.getFullYear() : ""}`; };

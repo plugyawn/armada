@@ -34,7 +34,7 @@ into the engineered client deletes the module it replaces.
 | `host.js` | boot: the frame bound, every listener wired, the first place opened; the seams (below); `window.armadaBeta` for checks | host (one owner a wave) |
 | `util.js` | `$`, `$$`, `el`, `esc`, `clamp`, `sleep`, `store` (this browser's storage), `press`, `mid`, `inlineMd` | host |
 | `state.js` | `state` (the values more than one module replaces), the server's data (people, streams, unread, marks, places, ...), `DATA`, `stats` | host |
-| `time.js` | the server's clock (`now`) and the ways a time is written | host |
+| `time.js` | the server's clock (`now`) and the ways a time is written; the day key (the local date as a number, 20261016) has node tests in `web/tests/armada/beta_time.test.cjs` | host |
 | `frame.js` | the elements of the frame the kit draws (`main`, `feed`, `lane`, `nav`, `band`, the field's `tx`, ...), found by `bindFrame()` | host |
 | `connection.js` | `api()`, `register()`, the event queue (`poll`), event dispatch (`handle`, `on`), the session (`session`), signing out, the tabs of this browser told of each other's session, reloading for new code | connection |
 | `link.js` | the connection's rules, with nothing of the page in them: one register in flight, backoff with jitter, the long poll's 65 s deadline, the CSRF token mended from `GET armada/session`, signed out and signed in elsewhere (resilience.md R1); tested by `web/tests/armada/beta_link.test.cjs` | connection |

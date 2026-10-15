@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+# Run every linter but gitlint and mypy over the files a pull request
+# or a push changes.
+#
+#   tools/armada/ci/lint-changed <base> <head>
+#
+# Reads the files changed from the merge base of <base> and <head> to
+# <head>, or since the fork base when there is no base (the first push
+# of a branch). The files listed in lint-known-findings.txt had findings
+# when CI began and are left out until they are cleaned; the linters
+# that check the whole project (TypeScript, the fork ledger) run anyway.
+set -euo pipefail
+cd "$(dirname "$0")/../../.."
+
+fork_base=7813218321
+base="${1:-}"
+head="${2:-HEAD}"
+if [[ -z "$base" || "$base" =~ ^0+$ ]]; then
+    base="$fork_base"
+fi
+from="$(git merge-base "$base" "$head")"
+
+mapfile -t files < <(
+    comm -23 \
+        <(git diff --name-only --diff-filter=d "$from" "$head" | sort) \
+        <(grep -v '^#' tools/armada/ci/lint-known-findings.txt | sort)
+)
+if [ "${#files[@]}" = 0 ]; then
+    echo "lint-changed: no file to lint in $from..$head"
+    exit 0
+fi
+echo "lint-changed: ${#files[@]} files changed in $from..$head"
+./tools/lint --skip=gitlint,mypy "${files[@]}"

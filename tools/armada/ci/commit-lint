@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+# Lint the messages of the commits a pull request or a push brings.
+#
+#   tools/armada/ci/commit-lint <base> <head>
+#
+# Reads the commits from the merge base of <base> and <head> to <head>,
+# so a pull request whose base moved on is judged by its own commits
+# only. A fixup commit must be folded into the commit it fixes before
+# the series lands (CLAUDE.md, "Commit Discipline"). With no base (the
+# first push of a branch) there is nothing to read.
+set -euo pipefail
+cd "$(dirname "$0")/../../.."
+
+base="${1:-}"
+head="${2:-HEAD}"
+if [[ -z "$base" || "$base" =~ ^0+$ ]]; then
+    echo "commit-lint: no base commit, nothing to lint"
+    exit 0
+fi
+
+range="$(git merge-base "$base" "$head")..$head"
+if [ "$(git rev-list --count "$range")" = 0 ]; then
+    echo "commit-lint: no commits in $range"
+    exit 0
+fi
+
+fixups="$(git log --format='%h %s' "$range" | grep -E '^[0-9a-f]+ (fixup|squash|amend)! ' || true)"
+if [ -n "$fixups" ]; then
+    printf >&2 'commit-lint: fold these into the commits they fix:\n%s\n' "$fixups"
+    exit 1
+fi
+
+gitlint --commits "$range"
+echo "commit-lint: every message in $range passes"

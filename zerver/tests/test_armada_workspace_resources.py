@@ -5,13 +5,17 @@ import os
 import subprocess
 import tempfile
 import threading
+from collections.abc import Iterable, Mapping
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Protocol, TypedDict, cast
 from unittest.mock import patch
 from uuid import UUID
 
 import orjson
 from django.core.cache import cache
+from django.http import HttpResponse, StreamingHttpResponse
+from typing_extensions import override
 
 from zerver.lib.armada_workspace_index import WorkspaceIndex, WorkspacePath
 from zerver.lib.armada_workspace_io import (
@@ -52,7 +56,44 @@ from zerver.models.bots import Workspace, WorkspaceEntryMutationReceipt
 from zerver.models.users import UserProfile
 
 
+class WorkspaceEntryPayload(TypedDict):
+    entry_id: str
+    path: str
+    kind: str
+    has_children: bool
+
+
+class WorkspaceDescriptorPayload(TypedDict):
+    workspace_revision: int
+    default_path: str | None
+    default_entry: WorkspaceEntryPayload | None
+    dirty_count: int
+
+
+class WorkspaceTreePayload(TypedDict):
+    entries: list[WorkspaceEntryPayload]
+    next_cursor: str | None
+
+
+class WorkspaceMutationPayload(TypedDict):
+    workspace_revision: int
+    previous_entry_id: str | None
+    entry: WorkspaceEntryPayload | None
+
+
+class WorkspaceClientPut(Protocol):
+    # client_put forwards this boolean through **extra despite its str-only annotation.
+    def __call__(
+        self,
+        url: str,
+        info: Mapping[str, object],
+        *,
+        intentionally_undocumented: bool,
+    ) -> HttpResponse: ...
+
+
 class ArmadaWorkspaceResourceEndpointTest(ZulipTestCase):
+    @override
     def setUp(self) -> None:
         super().setUp()
         clear_workspace_snapshot_cache()
@@ -102,7 +143,7 @@ class ArmadaWorkspaceResourceEndpointTest(ZulipTestCase):
             branch_name="topic",
         )
 
-    def descriptor(self, node: Workspace) -> dict[str, object]:
+    def descriptor(self, node: Workspace) -> WorkspaceDescriptorPayload:
         result = self.client_get(
             f"/json/armada/workspaces/{node.uuid}",
             intentionally_undocumented=True,
@@ -116,7 +157,7 @@ class ArmadaWorkspaceResourceEndpointTest(ZulipTestCase):
         directory_id: str | None = None,
         cursor: str | None = None,
         page_size: int = 200,
-    ) -> dict[str, object]:
+    ) -> WorkspaceTreePayload:
         parameters: dict[str, object] = {"page_size": page_size}
         if directory_id is not None:
             parameters["directory_id"] = directory_id
@@ -137,7 +178,7 @@ class ArmadaWorkspaceResourceEndpointTest(ZulipTestCase):
         kind: str,
         workspace_revision: int,
         content: str = "",
-    ) -> dict[str, object]:
+    ) -> WorkspaceMutationPayload:
         result = self.client_post(
             f"/json/armada/workspaces/{node.uuid}/entries",
             {
@@ -158,7 +199,7 @@ class ArmadaWorkspaceResourceEndpointTest(ZulipTestCase):
         expected_path: str,
         destination_path: str,
         workspace_revision: int,
-    ) -> dict[str, object]:
+    ) -> WorkspaceMutationPayload:
         result = self.client_patch(
             f"/json/armada/workspaces/{node.uuid}/entry",
             {
@@ -180,7 +221,7 @@ class ArmadaWorkspaceResourceEndpointTest(ZulipTestCase):
         workspace_revision: int,
         recursive: bool = False,
         confirm_irreversible: bool = False,
-    ) -> dict[str, object]:
+    ) -> WorkspaceMutationPayload:
         result = self.client_delete(
             f"/json/armada/workspaces/{node.uuid}/entry",
             {
@@ -456,6 +497,7 @@ class ArmadaWorkspaceResourceEndpointTest(ZulipTestCase):
                 )
             node = self.make_node(user, stream.name, repo)
             descriptor = self.descriptor(node)
+            assert descriptor["default_entry"] is not None
             entry_id = descriptor["default_entry"]["entry_id"]
             first_result = self.client_get(
                 f"/json/armada/workspaces/{node.uuid}/history",
@@ -493,6 +535,7 @@ class ArmadaWorkspaceResourceEndpointTest(ZulipTestCase):
             node = self.make_node(user, stream.name, repo)
             descriptor = self.descriptor(node)
             readme_entry = descriptor["default_entry"]
+            assert readme_entry is not None
             renamed = self.rename_entry(
                 node,
                 entry_id=readme_entry["entry_id"],
@@ -530,6 +573,7 @@ class ArmadaWorkspaceResourceEndpointTest(ZulipTestCase):
             node = self.make_node(user, stream.name, repo)
             descriptor = self.descriptor(node)
             readme_entry = descriptor["default_entry"]
+            assert readme_entry is not None
             read_result = self.client_get(
                 f"/json/armada/workspaces/{node.uuid}/file",
                 {"entry_id": readme_entry["entry_id"]},
@@ -558,7 +602,7 @@ class ArmadaWorkspaceResourceEndpointTest(ZulipTestCase):
                 workspace_revision=renamed["workspace_revision"],
                 content="replacement after rename\n",
             )
-            delayed_rename_result = self.client_put(
+            delayed_rename_result = cast(WorkspaceClientPut, self.client_put)(
                 f"/json/armada/workspaces/{node.uuid}/file",
                 delayed_rename_put,
                 intentionally_undocumented=True,
@@ -601,7 +645,7 @@ class ArmadaWorkspaceResourceEndpointTest(ZulipTestCase):
                 workspace_revision=deleted["workspace_revision"],
                 content="replacement after delete\n",
             )
-            delayed_delete_result = self.client_put(
+            delayed_delete_result = cast(WorkspaceClientPut, self.client_put)(
                 f"/json/armada/workspaces/{node.uuid}/file",
                 delayed_delete_put,
                 intentionally_undocumented=True,
@@ -628,6 +672,7 @@ class ArmadaWorkspaceResourceEndpointTest(ZulipTestCase):
             repo = self.make_workspace(Path(temp_dir).resolve())
             node = self.make_node(user, stream.name, repo)
             descriptor = self.descriptor(node)
+            assert descriptor["default_entry"] is not None
             readme_id = descriptor["default_entry"]["entry_id"]
             root = self.tree(node)
             raw_id = next(
@@ -648,7 +693,8 @@ class ArmadaWorkspaceResourceEndpointTest(ZulipTestCase):
                 {"entry_id": raw_id, "download": orjson.dumps(True).decode()},
                 intentionally_undocumented=True,
             )
-            raw_content = b"".join(raw_result.streaming_content)
+            assert isinstance(raw_result, StreamingHttpResponse)
+            raw_content = b"".join(cast(Iterable[bytes], raw_result.streaming_content))
 
         text = self.assert_json_success(text_result)["armada_workspace_file"]
         self.assertEqual(text["content"].encode(), b"\xef\xbb\xbf# Notes\r\n\r\ntrailing  \r\n")
@@ -674,6 +720,7 @@ class ArmadaWorkspaceResourceEndpointTest(ZulipTestCase):
             repo = self.make_workspace(Path(temp_dir).resolve())
             node = self.make_node(user, stream.name, repo)
             descriptor = self.descriptor(node)
+            assert descriptor["default_entry"] is not None
             with patch("zerver.lib.armada_workspace_resources._enumerate_workspace") as enumerate:
                 result = self.client_get(
                     f"/json/armada/workspaces/{node.uuid}/file",
@@ -704,7 +751,10 @@ class ArmadaWorkspaceResourceEndpointTest(ZulipTestCase):
                     {"entry_id": raw_entry["entry_id"]},
                     intentionally_undocumented=True,
                 )
-                chunk_sizes = [len(chunk) for chunk in result.streaming_content]
+                assert isinstance(result, StreamingHttpResponse)
+                chunk_sizes = [
+                    len(chunk) for chunk in cast(Iterable[bytes], result.streaming_content)
+                ]
             with (repo / "raw.bin").open("rb") as raw_file:
                 expected_etag = hashlib.file_digest(raw_file, "sha256").hexdigest()
 
@@ -1252,6 +1302,7 @@ class ArmadaWorkspaceResourceEndpointTest(ZulipTestCase):
             node = self.make_node(user, stream.name, repo)
             descriptor = self.descriptor(node)
             entry = descriptor["default_entry"]
+            assert entry is not None
             get_result = self.client_get(
                 f"/json/armada/workspaces/{node.uuid}/file",
                 {"entry_id": entry["entry_id"]},
@@ -1267,13 +1318,13 @@ class ArmadaWorkspaceResourceEndpointTest(ZulipTestCase):
                 "workspace_revision": descriptor["workspace_revision"],
                 "edit_revision": 7,
             }
-            mismatched_path_result = self.client_put(
+            mismatched_path_result = cast(WorkspaceClientPut, self.client_put)(
                 f"/json/armada/workspaces/{node.uuid}/file",
                 {**request, "expected_path": "docs/guide.md"},
                 intentionally_undocumented=True,
             )
             self.assertEqual((repo / "README.md").read_bytes(), original["content"].encode())
-            put_result = self.client_put(
+            put_result = cast(WorkspaceClientPut, self.client_put)(
                 f"/json/armada/workspaces/{node.uuid}/file",
                 request,
                 intentionally_undocumented=True,
@@ -1281,21 +1332,21 @@ class ArmadaWorkspaceResourceEndpointTest(ZulipTestCase):
             saved = self.assert_json_success(put_result)["armada_workspace_file"]
             node.refresh_from_db()
             revision_after_save = node.content_revision
-            retry_result = self.client_put(
+            retry_result = cast(WorkspaceClientPut, self.client_put)(
                 f"/json/armada/workspaces/{node.uuid}/file",
                 request,
                 intentionally_undocumented=True,
             )
             retry = self.assert_json_success(retry_result)["armada_workspace_file"]
             node.refresh_from_db()
-            stale_result = self.client_put(
+            stale_result = cast(WorkspaceClientPut, self.client_put)(
                 f"/json/armada/workspaces/{node.uuid}/file",
                 {**request, "content": "must not land", "edit_revision": 8},
                 intentionally_undocumented=True,
             )
             remote_content = "# Remote\n"
             (repo / "README.md").write_text(remote_content, encoding="utf-8")
-            conflict_result = self.client_put(
+            conflict_result = cast(WorkspaceClientPut, self.client_put)(
                 f"/json/armada/workspaces/{node.uuid}/file",
                 {
                     "entry_id": saved["entry_id"],
@@ -1308,6 +1359,7 @@ class ArmadaWorkspaceResourceEndpointTest(ZulipTestCase):
                 intentionally_undocumented=True,
             )
             conflict_descriptor = self.descriptor(node)
+            assert conflict_descriptor["default_entry"] is not None
 
             self.assertEqual((repo / "README.md").read_text(), remote_content)
 
@@ -1352,6 +1404,7 @@ class ArmadaWorkspaceResourceEndpointTest(ZulipTestCase):
             node = self.make_node(user, stream.name, repo)
             descriptor = self.descriptor(node)
             entry = descriptor["default_entry"]
+            assert entry is not None
             get_result = self.client_get(
                 f"/json/armada/workspaces/{node.uuid}/file",
                 {"entry_id": entry["entry_id"]},
@@ -1378,7 +1431,7 @@ class ArmadaWorkspaceResourceEndpointTest(ZulipTestCase):
                 result_version=hashlib.sha256(desired).hexdigest(),
                 result_identity=result_identity,
             )
-            result = self.client_put(
+            result = cast(WorkspaceClientPut, self.client_put)(
                 f"/json/armada/workspaces/{node.uuid}/file",
                 {
                     "entry_id": entry["entry_id"],
@@ -1409,6 +1462,7 @@ class ArmadaWorkspaceResourceEndpointTest(ZulipTestCase):
             node = self.make_node(user, stream.name, repo)
             descriptor = self.descriptor(node)
             entry = descriptor["default_entry"]
+            assert entry is not None
             get_result = self.client_get(
                 f"/json/armada/workspaces/{node.uuid}/file",
                 {"entry_id": entry["entry_id"]},
@@ -1419,7 +1473,7 @@ class ArmadaWorkspaceResourceEndpointTest(ZulipTestCase):
             replacement = repo / ".replacement"
             replacement.write_bytes(delayed_content)
             os.replace(replacement, repo / "README.md")
-            put_result = self.client_put(
+            put_result = cast(WorkspaceClientPut, self.client_put)(
                 f"/json/armada/workspaces/{node.uuid}/file",
                 {
                     "entry_id": entry["entry_id"],
@@ -1480,6 +1534,7 @@ class ArmadaWorkspaceResourceEndpointTest(ZulipTestCase):
             node = self.make_node(user, stream.name, repo)
             descriptor = self.descriptor(node)
             entry = descriptor["default_entry"]
+            assert entry is not None
             get_result = self.client_get(
                 f"/json/armada/workspaces/{node.uuid}/file",
                 {"entry_id": entry["entry_id"]},
@@ -1515,7 +1570,7 @@ class ArmadaWorkspaceResourceEndpointTest(ZulipTestCase):
                 "zerver.lib.armada_workspace_resources.write_workspace_node_file",
                 side_effect=race_write,
             ):
-                conflict_result = self.client_put(
+                conflict_result = cast(WorkspaceClientPut, self.client_put)(
                     f"/json/armada/workspaces/{node.uuid}/file",
                     {
                         "entry_id": entry["entry_id"],
@@ -1528,6 +1583,7 @@ class ArmadaWorkspaceResourceEndpointTest(ZulipTestCase):
                     intentionally_undocumented=True,
                 )
             current_descriptor = self.descriptor(node)
+            assert current_descriptor["default_entry"] is not None
 
         conflict = orjson.loads(conflict_result.content)
         self.assertEqual(conflict["error_code"], "version_conflict")
@@ -1804,6 +1860,7 @@ class ArmadaWorkspaceResourceEndpointTest(ZulipTestCase):
 
 
 class ArmadaWorkspaceResourcePayloadTest(ZulipTestCase):
+    @override
     def setUp(self) -> None:
         super().setUp()
         clear_workspace_snapshot_cache()

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from typing import cast
 from unittest import TestCase
 
 from zerver.lib.armada_artifact import ArmadaArtifactError, canonicalize_armada_artifact
@@ -51,7 +52,7 @@ class ArmadaArtifactValidationTest(TestCase):
         ]:
             document = valid_document()
             root = document["blocks"][0]["root"]  # type: ignore[index]
-            root[key] = value  # type: ignore[index]
+            root[key] = value
             with self.assertRaises(ArmadaArtifactError):
                 canonicalize_armada_artifact(document)
 
@@ -82,21 +83,21 @@ class ArmadaArtifactValidationTest(TestCase):
     def test_duplicate_ids_and_missing_connector_targets_are_rejected(self) -> None:
         document = valid_document()
         children = document["blocks"][0]["root"]["children"]  # type: ignore[index]
-        children[1]["id"] = "a"  # type: ignore[index]
+        children[1]["id"] = "a"
         with self.assertRaisesRegex(ArmadaArtifactError, "duplicate"):
             canonicalize_armada_artifact(document)
 
         document = valid_document()
         children = document["blocks"][0]["root"]["children"]  # type: ignore[index]
-        children[2]["to"] = "missing"  # type: ignore[index]
+        children[2]["to"] = "missing"
         with self.assertRaisesRegex(ArmadaArtifactError, "missing node"):
             canonicalize_armada_artifact(document)
 
     def test_graph_layout_and_semantic_connector_state_are_canonical(self) -> None:
         document = valid_document()
         root = document["blocks"][0]["root"]  # type: ignore[index]
-        root["layout"] = "graph"  # type: ignore[index]
-        root["children"][2]["state"] = "selected"  # type: ignore[index]
+        root["layout"] = "graph"
+        root["children"][2]["state"] = "selected"
         canonical, _encoded = canonicalize_armada_artifact(document)
         canonical_root = canonical["blocks"][0]["root"]
         self.assertEqual(canonical_root["layout"], "graph")
@@ -105,23 +106,23 @@ class ArmadaArtifactValidationTest(TestCase):
     def test_circle_labels_stay_compact(self) -> None:
         document = valid_document()
         shape = document["blocks"][0]["root"]["children"][0]  # type: ignore[index]
-        shape["label"] = "retract\n$$x_{k+1}=R_{x_k}(v_k)$$"  # type: ignore[index]
+        shape["label"] = "retract\n$$x_{k+1}=R_{x_k}(v_k)$$"
         with self.assertRaisesRegex(ArmadaArtifactError, "circle labels must be compact"):
             canonicalize_armada_artifact(document)
 
     def test_coordinate_free_layout_is_rejected(self) -> None:
         document = valid_document()
         root = document["blocks"][0]["root"]  # type: ignore[index]
-        root["layout"] = "free"  # type: ignore[index]
+        root["layout"] = "free"
         with self.assertRaisesRegex(ArmadaArtifactError, "expected one of.*overlay"):
             canonicalize_armada_artifact(document)
 
     def test_scene_steps_are_bounded_and_reference_typed_targets(self) -> None:
         document = valid_document()
         block = document["blocks"][0]  # type: ignore[index]
-        children = block["root"]["children"]  # type: ignore[index]
-        children[2]["id"] = "force_edge"  # type: ignore[index]
-        block["steps"] = [  # type: ignore[index]
+        children = block["root"]["children"]
+        children[2]["id"] = "force_edge"
+        block["steps"] = [
             {
                 "label": "Start at A",
                 "changes": [
@@ -140,23 +141,23 @@ class ArmadaArtifactValidationTest(TestCase):
         canonical, _encoded = canonicalize_armada_artifact(document)
         self.assertEqual(canonical["blocks"][0]["steps"][1]["label"], "Reach B")
 
-        block["steps"][1]["changes"][0]["target"] = "missing"  # type: ignore[index]
+        block["steps"][1]["changes"][0]["target"] = "missing"
         with self.assertRaisesRegex(ArmadaArtifactError, "missing target"):
             canonicalize_armada_artifact(document)
 
-        block["steps"][1]["changes"][0] = {  # type: ignore[index]
+        block["steps"][1]["changes"][0] = {
             "target": "force_edge",
             "label": "not a shape",
         }
         with self.assertRaisesRegex(ArmadaArtifactError, "shape target"):
             canonicalize_armada_artifact(document)
 
-        block["steps"][1]["changes"][0] = {"target": "force_edge"}  # type: ignore[index]
+        block["steps"][1]["changes"][0] = {"target": "force_edge"}
         with self.assertRaisesRegex(ArmadaArtifactError, "at least 2 properties"):
             canonicalize_armada_artifact(document)
 
-        children.append({"type": "text", "id": "caption", "text": "caption"})  # type: ignore[union-attr]
-        block["steps"][1]["changes"][0] = {  # type: ignore[index]
+        children.append({"type": "text", "id": "caption", "text": "caption"})
+        block["steps"][1]["changes"][0] = {
             "target": "caption",
             "state": "warning",
         }
@@ -166,11 +167,11 @@ class ArmadaArtifactValidationTest(TestCase):
     def test_scene_and_step_text_share_one_budget(self) -> None:
         document = valid_document()
         block = document["blocks"][0]  # type: ignore[index]
-        children = block["root"]["children"]  # type: ignore[index]
-        children.extend(  # type: ignore[union-attr]
+        children = block["root"]["children"]
+        children.extend(
             {"type": "text", "id": f"copy_{index}", "text": "x" * 1000} for index in range(11)
         )
-        block["steps"] = [  # type: ignore[index]
+        block["steps"] = [
             {"label": "One", "changes": [{"target": "copy_0", "text": "y" * 1000}]},
             {"label": "Two", "changes": [{"target": "copy_1", "text": "z" * 1000}]},
         ]
@@ -185,7 +186,7 @@ class ArmadaArtifactValidationTest(TestCase):
         ):
             document = valid_document()
             shape = document["blocks"][0]["root"]["children"][0]  # type: ignore[index]
-            shape.update(ignored)  # type: ignore[union-attr]
+            shape.update(ignored)
             with (
                 self.subTest(ignored=ignored),
                 self.assertRaisesRegex(ArmadaArtifactError, "unsupported properties"),
@@ -197,7 +198,7 @@ class ArmadaArtifactValidationTest(TestCase):
         root = document["blocks"][0]["root"]  # type: ignore[index]
         for _index in range(9):
             child = {"type": "group", "layout": "column", "children": []}
-            root["children"] = [child]  # type: ignore[index]
+            root["children"] = [child]
             root = child
         root["children"] = [{"type": "text", "text": "end"}]
         with self.assertRaisesRegex(ArmadaArtifactError, "depth"):
@@ -307,7 +308,7 @@ class ArmadaArtifactValidationTest(TestCase):
         }
         canonicalize_armada_artifact(vector, allow_unresolved_media=True)
 
-        del vector["blocks"][0]["sourceDark"]
+        del cast(list[dict[str, str]], vector["blocks"])[0]["sourceDark"]
         with self.assertRaisesRegex(ArmadaArtifactError, "light and dark sources"):
             canonicalize_armada_artifact(vector, allow_unresolved_media=True)
 

@@ -14,6 +14,8 @@ from tempfile import TemporaryDirectory
 from unittest import TestCase
 from unittest.mock import patch
 
+from typing_extensions import override
+
 from zerver.lib import armada_workspace_io
 from zerver.lib.armada_workspace_io import (
     InvalidWorkspacePathError,
@@ -21,7 +23,9 @@ from zerver.lib.armada_workspace_io import (
     WorkspaceDirectoryNotEmptyError,
     WorkspaceEntryChangedError,
     WorkspaceEntryExistsError,
+    WorkspaceEntryIdentity,
     WorkspaceEntryNotFoundError,
+    WorkspaceFile,
     WorkspaceFileTooLargeError,
     WorkspaceHelperError,
     WorkspaceInvalidUTF8Error,
@@ -50,6 +54,7 @@ from zerver.lib.armada_workspace_io import (
 
 
 class ArmadaWorkspaceIOTest(TestCase):
+    @override
     def setUp(self) -> None:
         self.temporary_directory = TemporaryDirectory()
         # macOS exposes /var through a symlink. The production helper refuses
@@ -57,6 +62,7 @@ class ArmadaWorkspaceIOTest(TestCase):
         self.root = Path(self.temporary_directory.name).resolve() / "workspace"
         self.root.mkdir()
 
+    @override
     def tearDown(self) -> None:
         self.temporary_directory.cleanup()
 
@@ -801,12 +807,25 @@ class ArmadaWorkspaceIOTest(TestCase):
                 raise WorkspaceIOError("simulated rollback failure")
             original_exchange(left_parent_fd, left_name, right_parent_fd, right_name)
 
-        def fail_acknowledgement(*args: object, **kwargs: object) -> object:
+        def fail_acknowledgement(
+            parent_fd: int,
+            name: str,
+            *,
+            root_device: int,
+            max_bytes: int,
+            expected_identity: WorkspaceEntryIdentity | None = None,
+        ) -> tuple[WorkspaceFile, os.stat_result]:
             nonlocal read_calls
             read_calls += 1
             if read_calls == 4:
                 raise WorkspaceEntryChangedError("simulated acknowledgement race")
-            return original_read(*args, **kwargs)
+            return original_read(
+                parent_fd,
+                name,
+                root_device=root_device,
+                max_bytes=max_bytes,
+                expected_identity=expected_identity,
+            )
 
         with (
             patch("zerver.lib.armada_workspace_io._rename_exchange", fail_rollback),

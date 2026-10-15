@@ -5,7 +5,7 @@ orphan: true
 # Deploying Armada
 
 How to go from an Ubuntu 24.04 machine to a working Armada that a team uses
-every day: the old interface at `/`, the beta at `/beta/`, real sign-in, and
+every day: the new interface at `/`, real sign-in, and
 the coding agent running on the server. The host chosen for the first beta
 is this Mac, in a Linux VM of its own, shared with the team over Tailscale
 ([Hosting on this Mac](#hosting-on-this-mac)); everything else applies to
@@ -877,8 +877,8 @@ supervisorctl status | grep armada
 Expect `zulip-workers:zulip_events_armada_worker_slot0` and `…_slot1`,
 `zulip-workers:zulip_events_armada_monitor_worker`, and the two Gemini
 programs, all `RUNNING`. Then create the agent's bot account, once, as an
-organization administrator. Your API key is in the old interface under
-Personal settings, "Account & privacy", "Manage your API key":
+organization administrator. Your API key is in the old interface (`/legacy/`)
+under Personal settings, "Account & privacy", "Manage your API key":
 
 ```bash
 curl -sS -X POST -u YOUR_EMAIL https://armada-beta.<tailnet>.ts.net/api/v1/armada/config
@@ -891,15 +891,15 @@ bot is called Onix.
 
 ### 6.8 Check it
 
-- Make a test channel that is a repository (in the old interface, create a
-  channel and fill in its repository URL), open a topic in it and post
+- Make a test channel that is a repository (in the old interface at
+  `/legacy/`, create a channel and fill in its repository URL), open a topic in it and post
   `@**Onix** say hello in one line`. A run should start within seconds and
   answer in the topic; its log is in
   `/var/log/zulip/events_armada_worker_slot*.log`.
 - As a member who is not trusted, the same message gets "This user is not
   allowed to start Onix's runs."
-- Signed in, `/beta/` loads; signed out, it sends you to `/login/`. The old
-  interface's top bar has "Try the beta", and the beta has "Old interface".
+- Signed in, `/` loads the new interface; signed out, it sends you to
+  `/login/`. Nothing in either interface links to the other.
 
 ## Fonts
 
@@ -927,12 +927,15 @@ them (seen here: a build without fonts after one with them).
 
 ## The two interfaces
 
-- `/` is the old interface: everything Zulip and Armada do today, the
-  settings and the administration included.
-- `/beta/` is the new interface (interim, while the rebuild lands). It uses
-  the same session: sign in at `/`, then open `/beta/`. Signed out, it sends
-  you to the login page. The old interface's top bar has "Try the beta" and
-  the beta has "Old interface".
+- `/` is the new interface (interim, while the rebuild lands) for everyone
+  signed in; signed out, it sends you to the login page. `/beta/`, its
+  earlier address, still serves it.
+- `/legacy/` is the old interface: everything Zulip and Armada do today, the
+  settings and the administration included. Nothing links to it; an
+  administrator opens it by its address. Setting
+  `ARMADA_NEW_INTERFACE_AT_ROOT = False` in `/etc/zulip/settings.py` puts it
+  back at `/` (a restart, no rebuild), the way back if the new interface
+  fails.
 
 Electron is the main target for the finished app; until Armada's own shell
 exists, the Zulip desktop app can be pointed at the server.

@@ -321,6 +321,10 @@ KATEX_SERVER = False
 
 ROOT_DOMAIN_LANDING_PAGE = False
 
+# The old interface's own tests read it at /; the new interface's tests
+# (zerver/tests/test_armada_beta.py) turn this on.
+ARMADA_NEW_INTERFACE_AT_ROOT = False
+
 # Disable verifying webhook signatures in tests by default.
 # Tests that intend to verify webhook signatures should override this setting.
 VERIFY_WEBHOOK_SIGNATURES = False

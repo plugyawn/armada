@@ -113,7 +113,13 @@ from zerver.views.documentation import MarkdownDirectoryView, integrations_catal
 from zerver.views.drafts import create_drafts, delete_draft, edit_draft, fetch_drafts
 from zerver.views.events_register import events_register_backend
 from zerver.views.health import health
-from zerver.views.home import accounts_accept_terms, desktop_home, doc_permalinks_view, home
+from zerver.views.home import (
+    accounts_accept_terms,
+    desktop_home,
+    doc_permalinks_view,
+    home,
+    legacy_home,
+)
 from zerver.views.invite import (
     generate_multiuse_invite_backend,
     get_user_invites,
@@ -808,8 +814,11 @@ v1_api_and_json_patterns = [
 # endpoint for use by code), you should add it here.
 i18n_urls = [
     path("", home, name="home"),
-    # INTERIM BETA: the second interface, and its partner sprites and
-    # species (served to signed-in people only); removed with
+    # The old interface, for what the new one at / cannot do yet; linked
+    # from nowhere (ARMADA_NEW_INTERFACE_AT_ROOT).
+    path("legacy/", legacy_home),
+    # INTERIM BETA: the new interface's earlier address, and its partner
+    # sprites and species (served to signed-in people only); removed with
     # web/src/armada/beta/.
     path("beta/", armada_beta),
     path("beta/sprites/<path:path>", armada_beta_sprite),

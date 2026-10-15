@@ -83,29 +83,36 @@ def live_run_ids_for_user(user_profile: UserProfile) -> list[int]:
     return ids
 
 
-@zulip_login_required
-def armada_beta(request: HttpRequest) -> HttpResponse:
+def armada_beta_page(request: HttpRequest, user_profile: UserProfile) -> HttpResponse:
     """The new design on this server's real data, for the signed-in
-    person. It registers an event queue over the session (/json/register)
-    like the old interface, and every write goes through /json/ with the
-    session's CSRF token. The page is given two facts it cannot ask for:
-    how long a run waits for an answer to its question, and which runs
-    are live now; and the version of the partner pack, so that its
-    species.json can be kept for good under each version."""
-    user_profile = request.user
-    assert isinstance(user_profile, UserProfile)
+    person: what / serves them (zerver/views/home.py) and /beta/ too. It
+    registers an event queue over the session (/json/register) like the
+    old interface, and every write goes through /json/ with the session's
+    CSRF token. The page is given two facts it cannot ask for: how long a
+    run waits for an answer to its question, and which runs are live now;
+    and the version of the partner pack, so that its species.json can be
+    kept for good under each version."""
     pack = load_pack()
     return render(
         request,
         "zerver/armada_beta.html",
         context={
-            "doc_root_title": "Armada beta",
+            "doc_root_title": "Armada",
             "question_timeout_seconds": ARMADA_QUESTION_TIMEOUT_SECONDS,
             "live_run_ids": orjson.dumps(live_run_ids_for_user(user_profile)).decode(),
             "read_receipts": user_profile.realm.enable_read_receipts,
             "sprite_version": pack.version if pack is not None else "",
         },
     )
+
+
+@zulip_login_required
+def armada_beta(request: HttpRequest) -> HttpResponse:
+    """The address the new interface had before / served it, kept so
+    that links to it keep working."""
+    user_profile = request.user
+    assert isinstance(user_profile, UserProfile)
+    return armada_beta_page(request, user_profile)
 
 
 def sprite_login_required(

@@ -1,0 +1,4 @@
+# Sprint package beta-connection: the new interface at / for signed-in
+# people, the old one at /legacy/ (linked from nowhere).
+kept zerver/views/home.py  # / serves the new interface to signed-in people (ARMADA_NEW_INTERFACE_AT_ROOT); /legacy/ serves the old one
+kept zproject/test_extra_settings.py  # the old interface's own tests read it at /: ARMADA_NEW_INTERFACE_AT_ROOT off

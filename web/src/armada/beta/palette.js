@@ -25,7 +25,7 @@ function places_() { const out = [{key: "home", label: "Home", glyph: ic("home")
   if (state.place && state.place.repo) for (const v of ["README", "Files", "Changes"]) out.push({cmd: () => setTab(v), label: `Open ${v}`, glyph: ic(v === "README" ? "doc" : v === "Files" ? "folder" : "diff"), cap: topicLabel(state.place.topic)});
   if (state.P && liveRun(state.P)) out.push({cmd: stop, label: "Stop the run", glyph: ic("stop"), cap: "⌘."});
   if (pack) out.push({cmd: openPicker, label: me_() && me_().species ? "Change partner" : "Choose your partner", glyph: faceOf(state.ME, "s20"), cap: ""});
-  out.push({cmd: () => S.set(!S.on()), label: S.on() ? "Turn sound off" : "Turn sound on", glyph: ic(S.on() ? "mute" : "sound"), cap: ""}, {cmd: () => (location.href = "/"), label: "Open the old interface", glyph: ic("open"), cap: ""});
+  out.push({cmd: () => S.set(!S.on()), label: S.on() ? "Turn sound off" : "Turn sound on", glyph: ic(S.on() ? "mute" : "sound"), cap: ""});
   return out; }
 function score(it, q) { if (!q) return it.key === "home" ? 0 : 1; const l = it.label.toLowerCase(), h = (it.hay || it.label + " " + it.cap).toLowerCase(); if (l.startsWith(q)) return 0; if (new RegExp("(^|[\\s/_-])" + q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).test(l)) return 1; if (l.includes(q)) return 2; if (h.includes(q)) return 3; const words = q.split(/\s+/).filter(Boolean); return words.length > 1 && words.every((w) => h.includes(w)) ? 4 : -1; }
 function palette(open = !pal) { if (!open) { if (pal) { const p = pal; pal = null; p.inert = true; M.leave(p, () => p.remove()); ready(); } return; } if (pal) return; closePicker(); closeMenu(); overHide();

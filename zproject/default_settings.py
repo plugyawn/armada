@@ -790,6 +790,11 @@ TOPIC_SUMMARIZATION_PARAMETERS: dict[str, Any] = {}
 # element, so changing it needs no rebuild of the frontend.
 ARMADA_PALETTE: Literal["lapis", "tide", "citrine", "onyx"] = "lapis"
 
+# What / serves signed-in people: the new interface, or (False) the old
+# one, which is otherwise at /legacy/ and linked from nowhere. Turning it
+# off needs no rebuild; it is the way back if the new interface fails.
+ARMADA_NEW_INTERFACE_AT_ROOT = True
+
 # Partners (zerver/lib/partner.py): how use becomes experience, and the
 # levels at which a partner changes. Levels are computed from experience
 # when they are read, so retuning these needs no migration.

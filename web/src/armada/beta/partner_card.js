@@ -3,7 +3,7 @@
 import {$, $$, el, esc, press, T} from "./util.js";
 import {marks, people, state, streams} from "./state.js";
 import {age, now} from "./time.js";
-import {api} from "./connection.js";
+import {api, signOut} from "./connection.js";
 import {nav, tx} from "./frame.js";
 import {bigFaceOf, faceOf, isOnix, nameOf, person, presOf} from "./faces.js";
 import {note, syncField} from "./composer.js";
@@ -101,9 +101,6 @@ function drawFacts() { if (!card) return; const uid = +card.dataset.uid, prof = 
 /* the card's controls */
 function mention(uid) { const f = state.threadTx && state.threadTx.isConnected ? state.threadTx : tx, text = f.textContent; f.textContent = text + (text && !/\s$/.test(text) ? " " : "") + mentionOf(uid) + " "; if (f === tx) syncField();
   closeCard(); f.focus({preventScroll: true}); const s = getSelection(); s.selectAllChildren(f); s.collapseToEnd(); }
-/* signing out is Zulip's own form: a POST with the session's token, which ends the session and goes to the sign-in page */
-function signOut() { const f = el("form"); f.method = "POST"; f.action = "/accounts/logout/"; f.hidden = true;
-  const t = el("input"); t.type = "hidden"; t.name = "csrfmiddlewaretoken"; t.value = ($('input[name="csrfmiddlewaretoken"]') || {}).value || ""; f.append(t); document.body.append(f); f.submit(); }
 /* a press on a face, anywhere but in the nav, the palette, the picker and a card, opens that person's card. It is taken
    before the row around the face sees it (a Home row, a person in the column), so the face's press is the card's alone. */
 const FACE = "[data-uid][data-fs]";

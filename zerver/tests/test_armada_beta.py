@@ -46,6 +46,7 @@ from zerver.lib.test_helpers import ratelimit_rule
 from zerver.lib.users import get_user_ids_who_can_access_user
 from zerver.models import AgentRun, BotStorageData, Message, Partner, Reaction, UserProfile
 from zerver.models.bots import Service
+from zerver.tornado.django_api import EventQueueData
 from zerver.views.armada_beta import live_run_ids_for_user
 
 
@@ -156,6 +157,50 @@ class ArmadaBetaTest(ZulipTestCase):
         # The page signs in by the session alone: no API key is ever
         # written into it.
         self.assertNotIn(hamlet.api_key, html)
+
+    def get_old_interface(self, url: str) -> str:
+        queue_data = EventQueueData(queue_id="test-queue-id", idle_queue_timeout_secs=600)
+        with (
+            mock.patch("zerver.lib.events.request_event_queue", return_value=queue_data),
+            mock.patch("zerver.lib.events.get_user_events", return_value=[]),
+        ):
+            return self.client_get(url).content.decode()
+
+    @override_settings(ARMADA_NEW_INTERFACE_AT_ROOT=True)
+    def test_root_serves_the_new_interface_and_the_old_one_moves(self) -> None:
+        # Signed out, the old interface's address sends you to sign in,
+        # and / never serves the new interface (this realm is web-public,
+        # so / shows its spectator view).
+        result = self.client_get("/legacy/")
+        self.assertEqual(result.status_code, 302)
+        self.assertIn("/login/", result["Location"])
+        self.assertNotIn('id="beta-data"', self.get_old_interface("/"))
+
+        self.login("hamlet")
+        html = self.client_get("/").content.decode()
+        self.assertIn('id="beta-data"', html)
+        self.assertIn("<title>Armada</title>", html)
+        self.assertNotIn('id="app-loading"', html)
+        # Nothing in the new interface links to the old one.
+        self.assertNotIn("/legacy/", html)
+        self.assertNotIn("old interface", html.lower())
+
+        html = self.get_old_interface("/legacy/")
+        self.assertIn('id="app-loading"', html)
+        self.assertNotIn('id="beta-data"', html)
+
+        # The terms of service still come first.
+        with self.settings(TERMS_OF_SERVICE_VERSION="99.99"):
+            html = self.client_get("/").content.decode()
+        self.assertIn("Accept the Terms of Service", html)
+        self.assertNotIn('id="beta-data"', html)
+
+    def test_root_serves_the_old_interface_when_turned_off(self) -> None:
+        self.assertFalse(settings.ARMADA_NEW_INTERFACE_AT_ROOT)
+        self.login("hamlet")
+        html = self.get_old_interface("/")
+        self.assertIn('id="app-loading"', html)
+        self.assertNotIn('id="beta-data"', html)
 
     def make_run(
         self,

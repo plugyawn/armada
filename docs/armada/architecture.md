@@ -96,7 +96,7 @@ web/src/armada/
   showroom/             index.tsx, fixtures.ts, bench.ts, showroom.css: the dev page /devtools/armada/ (every component
                         in every state, Preact and DOM side by side, the four palettes, the motion and sound benches)
   bridge/               temporary hosts and styles for old surfaces; README.md lists each with its deleter
-  beta/                 INTERIM: the hosted beta at /beta/, the design's prototype on real data; outside every rule
+  beta/                 INTERIM: the hosted beta at / (and /beta/), the design's prototype on real data; outside every rule
                         above (no lint applies), built by the armada-beta entry, deleted when the conversation lands
                         (beta/README.md lists what goes with it)
 web/tests/armada/       node tests

@@ -28,7 +28,8 @@ anywhere the repository's `puppeteer` and a Chromium are available:
 `CHROME=/path/to/chromium node tools/armada-checks/run.mjs`. Environment:
 `ARMADA_BASE` (default `http://localhost:9991`), `ARMADA_USER` (default
 `armada-checks@zulip.com`, the checks' own user, see below), `ARMADA_APP`
-(default `/`: the client under test, as a path on that server, so that
+(default `/legacy/`, the old interface the checks pin, since `/` serves the
+new one: the client under test, as a path on that server, so that
 `ARMADA_APP=/beta/` points every check at the beta; views are hashes after
 it), `ARMADA_HOST_CHECKOUT` (the checkout people edit, as the VM mounts it:
 `known.json`, the reports and accepted pictures are written there too; the

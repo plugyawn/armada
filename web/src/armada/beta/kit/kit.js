@@ -80,7 +80,7 @@
   const outer = (li) => li.offsetHeight + (parseFloat(getComputedStyle(li).marginBottom) || 0);
   window.fitLists = (root = document) => root.querySelectorAll("aside.side > .out").forEach((out) => {
     const H = parseFloat(getComputedStyle(out).getPropertyValue("--h-m")) || 28;
-    // A row marked "keep" (the Runs list's last row, which opens the old interface) is never folded. When rows are folded
+    // A row marked "keep" is never folded. When rows are folded
     // the "n more" line needs a slot of its own: in a growing list it takes the last row's room (or, before a kept row,
     // the room above that row), so it never stands on what follows the list.
     const fit = (ul, host, head) => { if (!ul) return; const open = host.classList.contains("all"), rows = [...ul.children].filter((x) => x.tagName === "LI"), keep = rows.filter((x) => x.classList.contains("keep")), grow = host.classList.contains("grow");

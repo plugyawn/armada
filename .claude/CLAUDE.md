@@ -126,12 +126,13 @@ Foundation packages:
 
 The frame (F5) and everything after it are not built: `frame/`, `feed/`,
 `state/`, `api/`, `commands/` and each `surfaces/<name>/` hold only a
-README. The screens people use are still the old interface, set in the
-new faces.
+README. The screens people use are the interim beta below; the old
+interface, set in the new faces, stays for what the beta cannot do yet.
 
-An interim hosted beta is being built beside the plan, at `/beta/`
-(`web/src/armada/beta/`, served by `zerver/views/armada_beta.py`, linked
-from the navbar): the design's prototype run on the server's real data.
+An interim hosted beta is being built beside the plan, served at `/` to
+signed-in people (and at `/beta/`; `web/src/armada/beta/`, served by
+`zerver/views/armada_beta.py`; the old interface is at `/legacy/`, linked
+from nowhere): the design's prototype run on the server's real data.
 It is outside the rebuild's rules: eslint, stylelint, prettier and the
 custom checks all ignore `web/src/armada/beta/`, so no rule in
 `.claude/rules/` holds there, and it is deleted when the rebuild's

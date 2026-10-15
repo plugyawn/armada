@@ -24,6 +24,7 @@ from zerver.lib.request import RequestNotes
 from zerver.lib.streams import access_stream_by_name
 from zerver.lib.subdomains import get_subdomain
 from zerver.models import Realm, RealmUserDefault, Stream, UserProfile
+from zerver.views.armada_beta import armada_beta_page
 
 
 def need_accept_tos(user_profile: UserProfile | None) -> bool:
@@ -196,7 +197,7 @@ def home(request: HttpRequest) -> HttpResponse:
     return zulip_login_required(home_real)(request)
 
 
-def home_real(request: HttpRequest) -> HttpResponse:
+def home_real(request: HttpRequest, old_interface: bool = False) -> HttpResponse:
     # Before we do any real work, check if the app is banned.
     client_user_agent = request.headers.get("User-Agent", "")
     (insecure_desktop_app, banned_desktop_app, auto_update_broken) = is_outdated_desktop_app(
@@ -240,6 +241,13 @@ def home_real(request: HttpRequest) -> HttpResponse:
     # If a user hasn't signed the current Terms of Service, send them there
     if need_accept_tos(user_profile):
         return accounts_accept_terms(request)
+
+    # Armada: signed-in people are served the new interface. The old one
+    # stays reachable at /legacy/, linked from nowhere, for what the new
+    # one cannot do yet (settings above all); spectators of a web-public
+    # realm still get it here.
+    if user_profile is not None and settings.ARMADA_NEW_INTERFACE_AT_ROOT and not old_interface:
+        return armada_beta_page(request, user_profile)
 
     narrow, narrow_stream, narrow_topic_name = detect_narrowed_window(request, user_profile)
 
@@ -285,6 +293,13 @@ def home_real(request: HttpRequest) -> HttpResponse:
 @zulip_login_required
 def desktop_home(request: HttpRequest) -> HttpResponse:
     return redirect(home)
+
+
+@zulip_login_required
+def legacy_home(request: HttpRequest) -> HttpResponse:
+    """The old interface, for signed-in people who ask for it by its
+    address; nothing links here."""
+    return home_real(request, old_interface=True)
 
 
 def doc_permalinks_view(request: HttpRequest, doc_id: str) -> HttpResponse:

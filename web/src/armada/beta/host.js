@@ -48,7 +48,7 @@ async function boot() {
   store.del("onix");   /* the old switch for every place */
   const bootEl = el("div", "", "Loading"); bootEl.id = "boot"; document.body.append(bootEl);
   try { await Promise.all([register(), loadPartners()]); session().then((r) => { if (r.armada_session && r.armada_session.agent_mention) state.agentMention = r.armada_session.agent_mention; }).catch(() => {}); }
-  catch (e) { if (e.stopped) { bootEl.remove(); return; } bootEl.innerHTML = `<p>The beta could not load: ${esc(e.message)}. <a href="/">Open the old interface</a></p>`; return; }
+  catch (e) { if (e.stopped) { bootEl.remove(); return; } bootEl.innerHTML = `<p>Armada could not load: ${esc(e.message)}. <a href="">Try again</a></p>`; return; }
   bindFrame();
   /* my face opens my card, any other face that person's (partner_card.js); the picker's switch, Later, its cells; the card's controls */
   press(nav, ".row.me", () => { openCard(); ready(); }); wireCard();

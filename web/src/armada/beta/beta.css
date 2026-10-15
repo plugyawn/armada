@@ -45,7 +45,7 @@ pre.blk { overflow-x: auto; scrollbar-width: none; font: var(--t-code); white-sp
 .ch-list .fh .k { font: var(--t-caption); color: var(--ink-2); margin-left: var(--s-2); }
 .sec .ls .kd { font: var(--t-caption); color: var(--ink-2); }
 
-/* the standing label: this is the beta. It opens the beta's panel; beside it, a plain link to the old interface. */
+/* the standing label: this is the beta. It opens the beta's panel. */
 #lab .pn a { color: var(--accent-text); }
 /* the label sits beside the workspace's name, out of the way of the field and the column at every width */
 #lab { left: 92px; top: 16px; right: auto; bottom: auto; align-items: flex-start; }
@@ -111,7 +111,6 @@ nav > .fixed > .row.sel { background-color: var(--fill-3); }
 .pop .steps { gap: var(--s-1); }
 /* a bubble never gives up its width to a reaction or a time beside it: what it holds stays where it was read */
 .bl > .b { flex-shrink: 0; }
-nav > .fixed > .row.old { text-decoration: none; color: var(--ink-2); }
 .opt[aria-disabled="true"] { color: var(--dim); }
 .opt[aria-disabled="true"] .d { color: var(--dim); }
 
@@ -175,8 +174,6 @@ nav > .scroll.more { -webkit-mask-image: linear-gradient(#000 calc(100% - var(--
 #home .home .gh + .note { padding-top: 0; margin-top: var(--s-1); height: var(--h-m); display: flex; align-items: center; }
 
 /* A9. The beta's note is the last row of Runs; an empty sentence in the column stands on the labels' edge. */
-aside.side .ls > li.old > .t { color: var(--ink-2); }
-aside.side .ls > li.old .lk { text-decoration: none; }
 aside.side > .out > .note { padding: 0 0 0 calc(20px + var(--s-2)); min-height: var(--h-m); display: flex; align-items: center; }
 
 /* A10. The place's Title in Kräftig. */

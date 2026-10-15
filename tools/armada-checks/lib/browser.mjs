@@ -2,10 +2,11 @@
 import {launch as launch_chromium} from "puppeteer";
 
 export const BASE = process.env.ARMADA_BASE ?? "http://localhost:9991";
-// The client under test, as a path on the server: "/" is the application at
-// the root; ARMADA_APP=/beta/ points every check at the beta. Its views are
-// addressed by hash after it (`${APP}#inbox`).
-export const APP = new URL(process.env.ARMADA_APP ?? "/", `${BASE}/`).href;
+// The client under test, as a path on the server. The checks pin the old
+// interface, at /legacy/ since "/" serves the new one to signed-in people
+// (ARMADA_NEW_INTERFACE_AT_ROOT); ARMADA_APP=/beta/ points every check at
+// the beta. Its views are addressed by hash after it (`${APP}#inbox`).
+export const APP = new URL(process.env.ARMADA_APP ?? "/legacy/", `${BASE}/`).href;
 export const VIEWPORT = {width: 1440, height: 900, deviceScaleFactor: 1};
 // The checks' own user, which nobody else signs in as: `./manage.py
 // armada_checks_user` creates it in the development realm.

@@ -1,6 +1,6 @@
 # web/src/armada/beta — INTERIM
 
-The hosted beta at `/beta/`: the design's prototype (`var/armada-overhaul/design/final3/mock/`) running on this
+The interface signed-in people get at `/` (and at its earlier address, `/beta/`): the design's prototype (`var/armada-overhaul/design/final3/mock/`) running on this
 server's real data, for the team to use every day ahead of the rebuild. It is not the rebuild and is not written to
 its rules: eslint, stylelint, prettier and the custom checks ignore this directory. Nothing outside it imports it.
 Delete it when the rebuild's conversation lands.
@@ -98,8 +98,9 @@ Three rules keep the modules apart:
 - A module assigns only its own `let`s (an import is read-only) and `state`'s properties.
 - No module imports `host.js`; only the entry, `index.js`, does.
 
-Served by `zerver/views/armada_beta.py` (`@zulip_login_required`) through `templates/zerver/armada_beta.html`; its
-sprites by the same file's `armada_beta_sprite`.
+Served by `zerver/views/armada_beta.py` (`armada_beta_page`, which `/` calls from `zerver/views/home.py` while
+`ARMADA_NEW_INTERFACE_AT_ROOT` is on, and `/beta/`) through `templates/zerver/armada_beta.html`; its sprites by the same
+file's `armada_beta_sprite`. The old interface is at `/legacy/`, linked from nowhere.
 
 To delete the beta, remove all of these in one change:
 
@@ -110,7 +111,8 @@ To delete the beta, remove all of these in one change:
   `armada/partner...` routes, with their comments (`zerver/lib/partner.py` stays for the rebuild, which moves its rows into
   the Partner model)
 - in `web/webpack.assets.json`, the `"armada-beta"` entry
-- in `web/templates/navbar.hbs`, the `armada-beta-link` anchor and its comment
+- in `zerver/views/home.py`, the import of `armada_beta_page` and the branch of `home_real` that serves it (the rebuild's
+  client takes its place at `/`)
 - the `web/src/armada/beta` lines (and their comments) in `eslint.config.js`, `stylelint.config.js`
   (`ignoreFiles`), `.prettierignore` and `tools/linter_lib/exclude.py`
 - `tools/armada/fork_ledger.d/beta.txt` and the `beta/` lines in `docs/armada/architecture.md`

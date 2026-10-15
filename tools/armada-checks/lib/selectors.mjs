@@ -136,7 +136,6 @@ export const SELECTORS = {
     // Header controls (the old navbar's, on the header's first line).
     helpMenu: ["#help-menu .header-button", "#help-menu"],
     gearMenu: ["#settings-dropdown", "#gear-menu"],
-    beta: ["[data-armada=header] .armada-beta-link"],
     personalMenu: ["#personal-menu .header-button", "#personal-menu"],
 
     // Anything that counts as an open menu or popover.

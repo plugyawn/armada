@@ -59,7 +59,7 @@ function appendMessage(c, m, o = {}) {
   cl.dataset.ts = m.timestamp;
   const parts = partsOf(m).map((p) => partEl(p, m)); cl.append(...parts); const evo = evoCaption(m); if (evo) cl.append(evo);
   if (kind === "onix") { cl.dataset.mid = m.id; if (!parts.length) cl.append(placeholderAns(m)); syncOnix(cl, m); }
-  if (kind === "onix" && m.submessages && m.submessages.length) cl.append(el("div", "note nw", 'This answer carries an artifact, which the beta does not draw yet. <a href="/#narrow/near/' + m.id + '">Open it in the old interface</a>.'));
+  if (kind === "onix" && m.submessages && m.submessages.length) cl.append(el("div", "note nw", 'This answer carries an artifact, which the beta does not draw yet.'));
   if (m.failed) failMark(cl, m); if (m.pending || m.failed) $$(`[data-mid="${m.id}"] .b`, cl).forEach((b) => b.classList.toggle("unsent", !!m.failed));
   drawReactions(cl, m); if (!o.thread) drawThreadLine(cl, m);
   finish(cl); hush(cl); toHug.add(cl); return {cl, parts};

@@ -602,17 +602,18 @@ const BUILT_IN = {
 // replaces an earlier one's entry too.
 const OVERRIDES = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../mutations");
 
-async function load_overrides() {
+// The built-in mutations with the files of `directory` loaded over them.
+export async function load_overrides(directory) {
     const merged = {...BUILT_IN};
     const replaced = {};
-    const files = fs.existsSync(OVERRIDES)
+    const files = fs.existsSync(directory)
         ? fs
-              .readdirSync(OVERRIDES)
+              .readdirSync(directory)
               .filter((file) => file.endsWith(".mjs"))
               .toSorted()
         : [];
     for (const file of files) {
-        const module = await import(pathToFileURL(path.join(OVERRIDES, file)).href);
+        const module = await import(pathToFileURL(path.join(directory, file)).href);
         for (const [name, mutation] of Object.entries(module.MUTATIONS ?? {})) {
             merged[name] = mutation;
             replaced[name] = file;
@@ -621,7 +622,7 @@ async function load_overrides() {
     return {merged, replaced};
 }
 
-const loaded = await load_overrides();
+const loaded = await load_overrides(OVERRIDES);
 
 export const MUTATIONS = loaded.merged;
 

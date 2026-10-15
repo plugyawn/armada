@@ -109,5 +109,6 @@ export function rewrite_known(known, results, stale, options, totals, today) {
             totals.stale -= 1;
         }
     }
-    return Object.fromEntries([...next].toSorted(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)));
+    // Ids are unique, so no two compare equal.
+    return Object.fromEntries([...next].toSorted(([a], [b]) => (a < b ? -1 : 1)));
 }

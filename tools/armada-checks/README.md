@@ -326,13 +326,28 @@ yet. Until this directory is committed, lint it directly in the VM:
 ESLint (the repository's `eslint.config.js`) and Prettier are the linters that
 apply to `.mjs` files under `tools/`.
 
+## The harness's own tests
+
+The logic that decides a result is tested like the product's pure code:
+
+    limactl shell armada -- arm sh "node tools/armada-checks/selftest.mjs"
+
+runs `test/*.test.mjs` with node's test runner and fails unless every
+module listed in `FULLY_COVERED` in `selftest.mjs` (the ratchet in
+`lib/classify.mjs`, `lib/stats.mjs`, `lib/mutate.mjs`) has 100% of its
+lines, branches and functions covered. It needs no browser and no
+server, and takes about a second.
+
 ## Files
 
     run.mjs              runner: arguments, known.json, report, exit status
+    selftest.mjs         the harness's own tests, at 100% coverage
+    test/                those tests
     known.json           assertions that fail today, with value and explanation
     checks/*.mjs         one file per check
     fixtures/            recorded runs, their source text, the corpus list
     lib/browser.mjs      launch, dev login, viewport
+    lib/classify.mjs     the ratchet: a run against known.json, and its rewrite
     lib/fixtures.mjs     the checks' own topic; events for messages and edits
     lib/mutate.mjs       deliberate breakage of the application, by name
     lib/prove.mjs        runs every mutation; the pins must turn red

@@ -7,6 +7,10 @@ it can see. This file applies to every change.
   registry, `feed/parts.ts`) has node tests in `web/tests/armada/` and 100%
   statement coverage from its first file. Enforced by:
   `tools/test-js-with-node --coverage` (`ARMADA_FULLY_COVERED_GLOBS`).
+- The harness's own logic (the ratchet, its statistics, the mutations) has
+  tests in `tools/armada-checks/test/` at 100% of lines, branches and
+  functions.
+  Enforced by: `node tools/armada-checks/selftest.mjs` (`FULLY_COVERED`).
 - Components are tested for behaviour with a real DOM
   (`web/tests/lib/real_dom.cjs`): press, type, read the result back. Never
   assert on markup, class names or CSS text. Enforced by: review; F0 deleted

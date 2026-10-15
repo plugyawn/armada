@@ -42,7 +42,7 @@ from zerver.lib.users import (
     check_user_can_access_all_users,
     get_accessible_user_ids,
 )
-from zerver.models import BotStorageData, Message, PearWorkerRun, Reaction, UserProfile
+from zerver.models import AgentRun, BotStorageData, Message, Reaction, UserProfile
 
 PARTNER_KEY_PREFIX = "partner:"
 # A person's experience is folded at most this often; a fold asked for
@@ -284,9 +284,9 @@ def fold_partner_xp(user: UserProfile, row: dict[str, Any], now: datetime) -> bo
         count(local_date(date_sent, tz), 0)
         row["message_watermark"] = message_id
 
-    runs = PearWorkerRun.objects.filter(
+    runs = AgentRun.objects.filter(
         requesting_user_id=user.id,
-        status__in=[PearWorkerRun.DONE, PearWorkerRun.FAILED],
+        status__in=[AgentRun.DONE, AgentRun.FAILED],
         date_finished__isnull=False,
     )
     if row["runs_watermark"] is not None:
@@ -362,7 +362,7 @@ def agent_partner(pack: Pack, realm_id: int) -> dict[str, Any]:
     in enough hands: PARTNER_AGENT_RUNS runs done, started by at least
     PARTNER_AGENT_HANDS people (or by every active person, in a smaller
     team). Its name stays Onix."""
-    done = PearWorkerRun.objects.filter(realm_id=realm_id, status=PearWorkerRun.DONE)
+    done = AgentRun.objects.filter(realm_id=realm_id, status=AgentRun.DONE)
     evolved = False
     if done.count() >= settings.PARTNER_AGENT_RUNS:
         people = UserProfile.objects.filter(realm_id=realm_id, is_active=True, is_bot=False)

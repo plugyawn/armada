@@ -3,12 +3,12 @@ from typing import Any
 
 from zerver.lib.armada import trim_pear_text
 from zerver.lib.armada_agent import PearGeminiInteractionsClient
-from zerver.models.bots import PearWorkerRun, PearWorkerRunEvent
+from zerver.models.bots import AgentRun, AgentRunEvent
 
 PEAR_PRESENTATION_OVERVIEW_MAX_CHARS = 48
 
 
-def pear_presentation_plan(run: PearWorkerRun) -> list[dict[str, str]] | None:
+def pear_presentation_plan(run: AgentRun) -> list[dict[str, str]] | None:
     for event in run.events.filter(event_type="transcript", payload__kind="plan").order_by("-id")[
         :1
     ]:
@@ -37,7 +37,7 @@ def pear_presentation_current_step(plan: list[dict[str, str]]) -> str:
     return trim_pear_text(str(current_step["step"]), limit=120)
 
 
-def pear_presentation_event(event: PearWorkerRunEvent) -> dict[str, str] | None:
+def pear_presentation_event(event: AgentRunEvent) -> dict[str, str] | None:
     payload = event.payload if isinstance(event.payload, dict) else {}
     if event.event_type == "transcript":
         kind = payload.get("kind")
@@ -65,7 +65,7 @@ def pear_presentation_event(event: PearWorkerRunEvent) -> dict[str, str] | None:
 def build_pear_presentation_input(
     *,
     plan: list[dict[str, str]],
-    events: list[PearWorkerRunEvent],
+    events: list[AgentRunEvent],
 ) -> str:
     # A plan update changes the visible headline immediately. Events from the
     # previous step must not leak underneath it while the new step has not yet

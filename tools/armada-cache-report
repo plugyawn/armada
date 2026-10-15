@@ -112,15 +112,15 @@ def setup_django_models() -> tuple[Any, Any]:
 
     django.setup()
 
-    from zerver.models.bots import PearWorkerRun, PearWorkerRunEvent
+    from zerver.models.bots import AgentRun, AgentRunEvent
 
-    return PearWorkerRun, PearWorkerRunEvent
+    return AgentRun, AgentRunEvent
 
 
 def collect_run_usage(*, stream: str | None, topic: str | None, limit: int) -> list[RunUsage]:
-    PearWorkerRun, PearWorkerRunEvent = setup_django_models()
+    AgentRun, AgentRunEvent = setup_django_models()
     runs = (
-        PearWorkerRun.objects.select_related("realm", "bot_profile", "requesting_user")
+        AgentRun.objects.select_related("realm", "bot_profile", "requesting_user")
         .order_by("-date_created")
         .all()
     )
@@ -132,7 +132,7 @@ def collect_run_usage(*, stream: str | None, topic: str | None, limit: int) -> l
     result: list[RunUsage] = []
     for run in runs[: max(limit * 5, limit)]:
         events = list(
-            PearWorkerRunEvent.objects.filter(run=run)
+            AgentRunEvent.objects.filter(run=run)
             .filter(event_type__in=("usage", "transcript"))
             .order_by("date_created")
         )

@@ -9,7 +9,7 @@ from typing_extensions import override
 from zerver.lib.armada import PearWorkerLeaseLostError
 from zerver.lib.armada_worker import PearDatabaseWorkerRunStore
 from zerver.lib.test_classes import ZulipTransactionTestCase
-from zerver.models import PearWorkerRun, PearWorkspaceNode
+from zerver.models import AgentRun, Workspace
 
 
 class RacingThread(threading.Thread):
@@ -39,8 +39,8 @@ class PearWorkerCompletionRaceTest(ZulipTransactionTestCase):
 
     @override
     def tearDown(self) -> None:
-        PearWorkerRun.objects.filter(id__in=self.created_run_ids).delete()
-        PearWorkspaceNode.objects.filter(id__in=self.created_workspace_ids).delete()
+        AgentRun.objects.filter(id__in=self.created_run_ids).delete()
+        Workspace.objects.filter(id__in=self.created_workspace_ids).delete()
         super().tearDown()
 
     def create_claimed_run(
@@ -48,13 +48,13 @@ class PearWorkerCompletionRaceTest(ZulipTransactionTestCase):
         *,
         message_id: int,
         topic: str,
-    ) -> tuple[PearDatabaseWorkerRunStore, PearWorkerRun]:
-        workspace = PearWorkspaceNode.objects.create(
+    ) -> tuple[PearDatabaseWorkerRunStore, AgentRun]:
+        workspace = Workspace.objects.create(
             realm=self.owner.realm,
             stream_name="pear-lock-race",
             topic_name=topic,
         )
-        run = PearWorkerRun.objects.create(
+        run = AgentRun.objects.create(
             realm=self.owner.realm,
             bot_profile=self.owner,
             requesting_user=self.owner,
@@ -62,7 +62,7 @@ class PearWorkerCompletionRaceTest(ZulipTransactionTestCase):
             stream_name=workspace.stream_name,
             topic_name=workspace.topic_name,
             workspace_node=workspace,
-            status=PearWorkerRun.RUNNING,
+            status=AgentRun.RUNNING,
             attempts=1,
         )
         store = PearDatabaseWorkerRunStore()
@@ -99,7 +99,7 @@ class PearWorkerCompletionRaceTest(ZulipTransactionTestCase):
                 completion_store.record(
                     self.bot_handler,
                     completion_run.trigger_message_id,
-                    PearWorkerRun.DONE,
+                    AgentRun.DONE,
                     stream=completion_run.stream_name,
                     topic=completion_run.topic_name,
                 )
@@ -111,7 +111,7 @@ class PearWorkerCompletionRaceTest(ZulipTransactionTestCase):
             with self.assertRaises(OperationalError), transaction.atomic(savepoint=False):
                 with connection.cursor() as cursor:
                     cursor.execute("SET LOCAL lock_timeout = '250ms'")
-                locked_run = PearWorkerRun.objects.select_for_update().get(id=completion_run.id)
+                locked_run = AgentRun.objects.select_for_update().get(id=completion_run.id)
                 PearDatabaseWorkerRunStore().cancel_locked_run(
                     locked_run,
                     summary="Cancelled.",
@@ -121,9 +121,9 @@ class PearWorkerCompletionRaceTest(ZulipTransactionTestCase):
 
         self.assert_thread_finished(completion_thread)
         completion_run.refresh_from_db()
-        self.assertEqual(completion_run.status, PearWorkerRun.DONE)
+        self.assertEqual(completion_run.status, AgentRun.DONE)
         with transaction.atomic(savepoint=False):
-            locked_run = PearWorkerRun.objects.select_for_update().get(id=completion_run.id)
+            locked_run = AgentRun.objects.select_for_update().get(id=completion_run.id)
             self.assertFalse(
                 PearDatabaseWorkerRunStore().cancel_locked_run(
                     locked_run,
@@ -140,7 +140,7 @@ class PearWorkerCompletionRaceTest(ZulipTransactionTestCase):
 
         def hold_cancel_lock() -> None:
             with transaction.atomic(savepoint=False):
-                locked_run = PearWorkerRun.objects.select_for_update().get(id=cancelled_run.id)
+                locked_run = AgentRun.objects.select_for_update().get(id=cancelled_run.id)
                 if not PearDatabaseWorkerRunStore().cancel_locked_run(
                     locked_run,
                     summary="Cancelled.",
@@ -177,4 +177,4 @@ class PearWorkerCompletionRaceTest(ZulipTransactionTestCase):
             entered_completion = True
         self.assertFalse(entered_completion)
         cancelled_run.refresh_from_db()
-        self.assertEqual(cancelled_run.status, PearWorkerRun.CANCELLED)
+        self.assertEqual(cancelled_run.status, AgentRun.CANCELLED)

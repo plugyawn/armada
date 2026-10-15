@@ -85,7 +85,7 @@ class BotConfigData(models.Model):
         unique_together = ("bot_profile", "key")
 
 
-class PearWorkerRun(models.Model):
+class AgentRun(models.Model):
     QUEUED = "queued"
     RUNNING = "running"
     DONE = "done"
@@ -116,7 +116,7 @@ class PearWorkerRun(models.Model):
         UserProfile,
         null=True,
         on_delete=SET_NULL,
-        related_name="pear_requested_runs",
+        related_name="requested_agent_runs",
     )
     trigger_message_id = models.IntegerField()
     stream_name = models.CharField(max_length=60)
@@ -136,7 +136,7 @@ class PearWorkerRun(models.Model):
     approval_policy = models.CharField(max_length=64, blank=True)
     workdir = models.TextField(blank=True)
     workspace_node = models.ForeignKey(
-        "zerver.PearWorkspaceNode",
+        "zerver.Workspace",
         null=True,
         on_delete=SET_NULL,
         related_name="worker_runs",
@@ -158,21 +158,21 @@ class PearWorkerRun(models.Model):
         indexes = [
             models.Index(
                 fields=["realm", "status", "date_created"],
-                name="zerver_pear_run_realm_status",
+                name="zerver_agentrun_realm_status",
             ),
             models.Index(
                 fields=["realm", "session_kind", "date_created"],
-                name="zerver_pear_run_realm_kind",
+                name="zerver_agentrun_realm_kind",
             ),
             models.Index(
                 fields=["realm", "status", "heartbeat_at"],
-                name="zerver_pear_run_st_hb",
+                name="zerver_agentrun_st_hb",
             ),
         ]
 
 
-class PearWorkerRunEvent(models.Model):
-    run = models.ForeignKey(PearWorkerRun, on_delete=CASCADE, related_name="events")
+class AgentRunEvent(models.Model):
+    run = models.ForeignKey(AgentRun, on_delete=CASCADE, related_name="events")
     event_type = models.CharField(max_length=64, db_index=True)
     summary = models.TextField(blank=True)
     payload = models.JSONField(default=dict)
@@ -182,12 +182,12 @@ class PearWorkerRunEvent(models.Model):
         indexes = [
             models.Index(
                 fields=["run", "date_created"],
-                name="zerver_pear_run_event_run_date",
+                name="zerver_agentrunevent_run_date",
             ),
         ]
 
 
-class PearMonitor(models.Model):
+class AgentMonitor(models.Model):
     PROVISIONING = "provisioning"
     LIVE = "live"
     PAUSED = "paused"
@@ -204,13 +204,13 @@ class PearMonitor(models.Model):
     bot_profile = models.ForeignKey(
         UserProfile,
         on_delete=CASCADE,
-        related_name="pear_bot_monitors",
+        related_name="agent_bot_monitors",
     )
     creator = models.ForeignKey(
         UserProfile,
         null=True,
         on_delete=SET_NULL,
-        related_name="pear_monitors",
+        related_name="agent_monitors",
     )
     stream_name = models.CharField(max_length=60)
     topic_name = models.CharField(max_length=MAX_TOPIC_NAME_LENGTH)
@@ -238,16 +238,16 @@ class PearMonitor(models.Model):
         indexes = [
             models.Index(
                 fields=["realm", "stream_name", "topic_name", "position"],
-                name="zerver_pear_monitor_topic",
+                name="zerver_agentmonitor_topic",
             ),
             models.Index(
                 fields=["status", "next_due_at"],
-                name="zerver_pear_monitor_due",
+                name="zerver_agentmonitor_due",
             ),
         ]
 
 
-class PearProject(models.Model):
+class Repository(models.Model):
     UNCONFIGURED = "unconfigured"
     READY = "ready"
     FAILED = "failed"
@@ -279,16 +279,16 @@ class PearProject(models.Model):
         indexes = [
             models.Index(
                 fields=["realm", "stream"],
-                name="zerver_pear_project_stream",
+                name="zerver_repository_stream",
             ),
             models.Index(
                 fields=["realm", "date_updated"],
-                name="zerver_pear_project_updated",
+                name="zerver_repository_updated",
             ),
         ]
 
 
-class PearWorkspaceNode(models.Model):
+class Workspace(models.Model):
     ACTIVE = "active"
     ARCHIVED = "archived"
     BLOCKED = "blocked"
@@ -301,7 +301,7 @@ class PearWorkspaceNode(models.Model):
 
     realm = models.ForeignKey("zerver.Realm", on_delete=CASCADE)
     project = models.ForeignKey(
-        PearProject,
+        Repository,
         null=True,
         on_delete=SET_NULL,
         related_name="workspace_nodes",
@@ -338,22 +338,22 @@ class PearWorkspaceNode(models.Model):
                 "realm",
                 Lower("stream_name"),
                 Lower("topic_name"),
-                name="zerver_pear_ws_scope_ci_uniq",
+                name="zerver_workspace_scope_ci_uniq",
             ),
         ]
         indexes = [
             models.Index(
                 fields=["project", "date_updated"],
-                name="zerver_pear_ws_project_upd",
+                name="zerver_workspace_project_upd",
             ),
             models.Index(
                 fields=["realm", "lifecycle_status"],
-                name="zerver_pear_ws_lifecycle",
+                name="zerver_workspace_lifecycle",
             ),
         ]
 
 
-class PearWorkspaceEntryMutationReceipt(models.Model):
+class WorkspaceEntryMutationReceipt(models.Model):
     PREPARED = "prepared"
     STAGED = "staged"
     APPLIED = "applied"
@@ -374,14 +374,14 @@ class PearWorkspaceEntryMutationReceipt(models.Model):
     ]
 
     workspace_node = models.ForeignKey(
-        PearWorkspaceNode,
+        Workspace,
         on_delete=CASCADE,
         related_name="entry_mutation_receipts",
     )
     actor = models.ForeignKey(
         UserProfile,
         on_delete=CASCADE,
-        related_name="pear_workspace_entry_mutation_receipts",
+        related_name="workspace_entry_mutation_receipts",
     )
     lookup_digest = models.CharField(max_length=64, unique=True)
     request_digest = models.CharField(max_length=64, unique=True)
@@ -398,10 +398,10 @@ class PearWorkspaceEntryMutationReceipt(models.Model):
         indexes = [
             models.Index(
                 fields=["workspace_node", "date_created"],
-                name="zerver_pear_ws_mut_created",
+                name="zerver_wsreceipt_created",
             ),
             models.Index(
                 fields=["workspace_node", "state", "date_updated"],
-                name="zerver_pear_ws_mut_state",
+                name="zerver_wsreceipt_state",
             ),
         ]

@@ -15,7 +15,7 @@ from zerver.lib.armada_presentation import (
     request_pear_presentation_overview,
 )
 from zerver.lib.armada_worker import PEAR_PRESENTATION_QUEUE_NAME, pear_run_is_attended
-from zerver.models.bots import PearWorkerRun, PearWorkerRunEvent
+from zerver.models.bots import AgentRun, AgentRunEvent
 from zerver.worker.base import QueueProcessingWorker, assign_queue
 
 logger = logging.getLogger(__name__)
@@ -46,10 +46,10 @@ class PearPresentationWorker(QueueProcessingWorker):
             return
         if not self.client.api_key:
             return
-        run = PearWorkerRun.objects.filter(id=run_id).first()
+        run = AgentRun.objects.filter(id=run_id).first()
         if (
             run is None
-            or run.status not in {PearWorkerRun.QUEUED, PearWorkerRun.RUNNING}
+            or run.status not in {AgentRun.QUEUED, AgentRun.RUNNING}
             or not pear_run_is_attended(run.id)
         ):
             return
@@ -86,16 +86,16 @@ class PearPresentationWorker(QueueProcessingWorker):
         if previous is not None and previous.summary == overview:
             return
         with transaction.atomic(savepoint=False):
-            run = PearWorkerRun.objects.select_for_update().get(id=run.id)
+            run = AgentRun.objects.select_for_update().get(id=run.id)
             if run.status not in {
-                PearWorkerRun.QUEUED,
-                PearWorkerRun.RUNNING,
+                AgentRun.QUEUED,
+                AgentRun.RUNNING,
             } or not pear_run_is_attended(run.id):
                 return
             latest_plan = pear_presentation_plan(run)
             if latest_plan is None or pear_presentation_current_step(latest_plan) != current_step:
                 return
-            presentation_event = PearWorkerRunEvent.objects.create(
+            presentation_event = AgentRunEvent.objects.create(
                 run=run,
                 event_type="presentation",
                 summary=overview,

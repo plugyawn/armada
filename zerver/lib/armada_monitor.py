@@ -24,7 +24,7 @@ from django.utils.timezone import now as timezone_now
 from zerver.lib.armada import pear_topic_scope
 from zerver.lib.armada_agent import PearProcessIsolation, pear_isolated_command
 from zerver.lib.armada_artifact import PearArtifactError, canonicalize_pear_artifact
-from zerver.models import PearMonitor, UserProfile
+from zerver.models import AgentMonitor, UserProfile
 
 logger = logging.getLogger(__name__)
 
@@ -297,7 +297,7 @@ def pear_monitor_bind_data(recipe: dict[str, Any], output: str) -> dict[str, Any
 
 
 def pear_monitor_apply_tick(
-    monitor: PearMonitor,
+    monitor: AgentMonitor,
     *,
     workdir: str,
     process_isolation: PearProcessIsolation | None,
@@ -319,7 +319,7 @@ def pear_monitor_apply_tick(
         monitor.consecutive_failures += 1
         monitor.last_error = str(error)[:500]
         if monitor.consecutive_failures >= PEAR_MONITOR_FAILURE_LIMIT:
-            monitor.status = PearMonitor.ERROR
+            monitor.status = AgentMonitor.ERROR
             monitor.next_due_at = None
         else:
             monitor.next_due_at = now + timedelta(seconds=monitor.cadence_seconds)
@@ -370,13 +370,13 @@ def pear_run_due_monitor_ticks() -> int:
 
     now = timezone_now()
     stale_setup_cutoff = now - timedelta(seconds=PEAR_MONITOR_SETUP_STALE_SECONDS)
-    PearMonitor.objects.filter(
-        status=PearMonitor.PROVISIONING, date_created__lt=stale_setup_cutoff
-    ).update(status=PearMonitor.ERROR, last_error="Setup never completed.", date_updated=now)
+    AgentMonitor.objects.filter(
+        status=AgentMonitor.PROVISIONING, date_created__lt=stale_setup_cutoff
+    ).update(status=AgentMonitor.ERROR, last_error="Setup never completed.", date_updated=now)
 
     due = list(
-        PearMonitor.objects.select_related("bot_profile")
-        .filter(status=PearMonitor.LIVE, next_due_at__lte=now)
+        AgentMonitor.objects.select_related("bot_profile")
+        .filter(status=AgentMonitor.LIVE, next_due_at__lte=now)
         .order_by("next_due_at")[:PEAR_MONITOR_TICK_BATCH_LIMIT]
     )
     ticked = 0
@@ -411,9 +411,9 @@ def pear_apply_monitor_setup_result(
     """Post-turn hook: after a MONITOR run settles, read the spec file
     the agent wrote in the worktree and bring the monitor live."""
     from zerver.lib.armada_worker import pear_read_bytes_path
-    from zerver.models import PearWorkerRun
+    from zerver.models import AgentRun
 
-    monitor = PearMonitor.objects.filter(
+    monitor = AgentMonitor.objects.filter(
         bot_profile=bot_profile, anchor_message_id=anchor_message_id
     ).first()
     if monitor is None:
@@ -428,20 +428,20 @@ def pear_apply_monitor_setup_result(
             raise PearMonitorSpecError("The agent did not write the spec file.")
         spec = pear_validate_monitor_spec(json.loads(raw_bytes))
     except (OSError, json.JSONDecodeError, PearMonitorSpecError) as error:
-        monitor.status = PearMonitor.ERROR
+        monitor.status = AgentMonitor.ERROR
         monitor.last_error = f"Setup failed: {error}"[:500]
         monitor.date_updated = now
         monitor.save(update_fields=["status", "last_error", "date_updated"])
         return
 
-    run = PearWorkerRun.objects.filter(
+    run = AgentRun.objects.filter(
         bot_profile=bot_profile, trigger_message_id=anchor_message_id
     ).first()
     monitor.title = spec["title"] or monitor.title
     monitor.cadence_seconds = spec["cadence_seconds"]
     monitor.artifact_spec = spec["artifact_spec"]
     monitor.recipe = spec["recipe"]
-    monitor.status = PearMonitor.LIVE
+    monitor.status = AgentMonitor.LIVE
     monitor.consecutive_failures = 0
     monitor.last_error = ""
     monitor.next_due_at = now
@@ -474,13 +474,13 @@ def pear_create_monitor_from_spec(
     ask: str,
     raw_spec: Any,
     position: int,
-) -> PearMonitor:
+) -> AgentMonitor:
     """Create a LIVE monitor directly from a validated spec — the
     pin-to-wall path: an artifact the agent already composed in chat needs
     no setup run, no DM anchor, no provisioning state."""
     spec = pear_validate_monitor_spec(raw_spec)
     stream_name, topic_name = pear_topic_scope(stream_name, topic_name)
-    return PearMonitor.objects.create(
+    return AgentMonitor.objects.create(
         realm=realm,
         bot_profile=bot_profile,
         creator=creator,
@@ -491,13 +491,13 @@ def pear_create_monitor_from_spec(
         artifact_spec=spec["artifact_spec"],
         recipe=spec["recipe"],
         cadence_seconds=spec["cadence_seconds"],
-        status=PearMonitor.LIVE,
+        status=AgentMonitor.LIVE,
         next_due_at=timezone_now(),
         position=position,
     )
 
 
-def serialize_pear_monitor(monitor: PearMonitor) -> dict[str, Any]:
+def serialize_pear_monitor(monitor: AgentMonitor) -> dict[str, Any]:
     return {
         "id": monitor.id,
         "title": monitor.title,

@@ -39,7 +39,7 @@ from zerver.lib.armada_worker import (
 from zerver.lib.bot_lib import EmbeddedBotHandler
 from zerver.lib.message_cache import MessageDict
 from zerver.lib.queue import QUEUE_REDELIVERED_EVENT_KEY, QueueEventDiscardError, SimpleQueueClient
-from zerver.models.bots import PearWorkerRun
+from zerver.models.bots import AgentRun
 from zerver.models.messages import Message
 from zerver.models.users import UserProfile, get_user_profile_by_id
 from zerver.worker.base import QueueProcessingWorker, assign_queue
@@ -379,7 +379,7 @@ class PearWorker(QueueProcessingWorker):
         context_topic = topic or source_topic
         if not context_stream:
             raise QueueEventDiscardError("Pear worker event has no channel context.")
-        if session_kind == PearWorkerRun.SIDE and side_runtime is None:
+        if session_kind == AgentRun.SIDE and side_runtime is None:
             # Never let an orphaned shared lease suppress this delivery. If
             # the parent really is live, its in-process pump owns the durable
             # side row and will use the exact same app-server instance.
@@ -387,14 +387,14 @@ class PearWorker(QueueProcessingWorker):
                 bot_profile=user_profile,
                 stream=context_stream,
                 topic=context_topic,
-                session_kinds=(PearWorkerRun.SHARED,),
+                session_kinds=(AgentRun.SHARED,),
             )
-            if PearWorkerRun.objects.filter(
+            if AgentRun.objects.filter(
                 bot_profile=user_profile,
                 stream_name__iexact=context_stream,
                 topic_name__iexact=context_topic,
-                session_kind=PearWorkerRun.SHARED,
-                status=PearWorkerRun.RUNNING,
+                session_kind=AgentRun.SHARED,
+                status=AgentRun.RUNNING,
             ).exists():
                 # A competing Rabbit consumer may acknowledge its duplicate
                 # delivery, but must not create a second process-local runtime
@@ -471,10 +471,10 @@ class PearWorker(QueueProcessingWorker):
         active_run_id, active_run_attempt = (
             # claim_for_run just committed the row protected by this model's
             # (bot_profile, trigger_message_id) uniqueness constraint.
-            PearWorkerRun.objects.filter(
+            AgentRun.objects.filter(
                 bot_profile=user_profile,
                 trigger_message_id=message_id,
-                status=PearWorkerRun.RUNNING,
+                status=AgentRun.RUNNING,
             )
             .values_list("id", "attempts")
             .get()
@@ -570,7 +570,7 @@ class PearWorker(QueueProcessingWorker):
                     logger.exception("Pear monitor setup application failed.")
 
         try:
-            if session_kind == PearWorkerRun.SHARED and side_runtime is None:
+            if session_kind == AgentRun.SHARED and side_runtime is None:
                 self.run_parent_with_side_pump(
                     runtime=runtime,
                     bot_profile_id=user_profile.id,
@@ -595,20 +595,20 @@ class PearWorker(QueueProcessingWorker):
         bot_profile_id: int,
         stream: str,
         topic: str,
-    ) -> PearWorkerRun | None:
+    ) -> AgentRun | None:
         return (
-            PearWorkerRun.objects.filter(
+            AgentRun.objects.filter(
                 bot_profile_id=bot_profile_id,
                 stream_name__iexact=stream,
                 topic_name__iexact=topic,
-                session_kind=PearWorkerRun.SIDE,
-                status=PearWorkerRun.QUEUED,
+                session_kind=AgentRun.SIDE,
+                status=AgentRun.QUEUED,
             )
             .order_by("date_created", "id")
             .first()
         )
 
-    def side_event_for_run(self, run: PearWorkerRun) -> dict[str, Any] | None:
+    def side_event_for_run(self, run: AgentRun) -> dict[str, Any] | None:
         message = Message.objects.filter(id=run.trigger_message_id).first()
         if message is None:
             error = f"Pear side run trigger message {run.trigger_message_id} no longer exists."
@@ -630,7 +630,7 @@ class PearWorker(QueueProcessingWorker):
             "content": message.content,
             "message": MessageDict.wide_dict(message),
             "requesting_user_id": run.requesting_user_id,
-            "session_kind": PearWorkerRun.SIDE,
+            "session_kind": AgentRun.SIDE,
             "source_stream": run.source_stream_name,
             "source_topic": run.source_topic_name,
             "source_message_id": run.source_message_id,

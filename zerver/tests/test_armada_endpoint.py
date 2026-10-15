@@ -108,13 +108,7 @@ from zerver.lib.events import fetch_initial_state_data
 from zerver.lib.message_cache import MessageDict
 from zerver.lib.test_classes import ZulipTestCase
 from zerver.models import Message, Recipient, Subscription, UserProfile
-from zerver.models.bots import (
-    PearMonitor,
-    PearProject,
-    PearWorkerRun,
-    PearWorkerRunEvent,
-    PearWorkspaceNode,
-)
+from zerver.models.bots import AgentMonitor, AgentRun, AgentRunEvent, Repository, Workspace
 from zerver.models.streams import get_stream
 from zerver.views.armada import (
     build_pear_git_context,
@@ -131,7 +125,7 @@ from zerver.worker import pear_worker as pear_worker_module
 class PearSessionEndpointTest(ZulipTestCase):
     def setUp(self) -> None:
         super().setUp()
-        # Every run/store path now resolves a per-channel PearProject, which
+        # Every run/store path now resolves a per-channel Repository, which
         # requires the channel to exist; most tests in this class act on the
         # default Pear channel without creating it first.
         self.subscribe(self.example_user("hamlet"), PEAR_DEFAULT_STREAM)
@@ -201,19 +195,19 @@ class PearSessionEndpointTest(ZulipTestCase):
                 topic_name=PEAR_DEFAULT_TOPIC,
                 content="@**Pear** check the repository",
             )
-        run = PearWorkerRun.objects.create(
+        run = AgentRun.objects.create(
             realm=owner.realm,
             bot_profile=pear_bot,
             requesting_user=owner,
             trigger_message_id=trigger_message_id,
             result_message_id=trigger_message_id,
-            status=PearWorkerRun.RUNNING,
+            status=AgentRun.RUNNING,
             stream_name=PEAR_DEFAULT_STREAM,
             topic_name=PEAR_DEFAULT_TOPIC,
             current_activity="Running tests",
             tool_count=2,
         )
-        run_event = PearWorkerRunEvent.objects.create(
+        run_event = AgentRunEvent.objects.create(
             run=run,
             event_type="transcript",
             summary="Plan updated",
@@ -247,7 +241,7 @@ class PearSessionEndpointTest(ZulipTestCase):
 
         run.codex_thread_id = "root-thread"
         run.save(update_fields=["codex_thread_id"])
-        agent_event = PearWorkerRunEvent.objects.create(
+        agent_event = AgentRunEvent.objects.create(
             run=run,
             event_type="agent",
             summary="Started Scout",
@@ -285,7 +279,7 @@ class PearSessionEndpointTest(ZulipTestCase):
         )
         self.assertNotIn("agent", agent_push)
 
-        activity_event = PearWorkerRunEvent.objects.create(
+        activity_event = AgentRunEvent.objects.create(
             run=run,
             event_type="agent",
             summary="Inspect files",
@@ -318,7 +312,7 @@ class PearSessionEndpointTest(ZulipTestCase):
         )
         self.assertNotIn("agents", activity_push)
 
-        turn_event = PearWorkerRunEvent.objects.create(
+        turn_event = AgentRunEvent.objects.create(
             run=run,
             event_type="agent",
             summary="Agent turn started",
@@ -666,7 +660,7 @@ class PearSessionEndpointTest(ZulipTestCase):
             service_name=PEAR_EMBEDDED_BOT_SERVICE,
         )
         self.addCleanup(invalidate_pear_selected_bot_cache, user.realm_id)
-        run = PearWorkerRun.objects.create(
+        run = AgentRun.objects.create(
             realm=user.realm,
             bot_profile=pear_bot,
             trigger_message_id=1,
@@ -678,7 +672,7 @@ class PearSessionEndpointTest(ZulipTestCase):
             model="gpt-5.5",
             workdir="/workspace",
         )
-        PearWorkerRunEvent.objects.create(
+        AgentRunEvent.objects.create(
             run=run,
             event_type="usage",
             summary="Token usage: 80/100 cached (80.0%); 4 output; 2 reasoning.",
@@ -721,7 +715,7 @@ class PearSessionEndpointTest(ZulipTestCase):
         # the serializer must scan back to the usage-bearing event
         # rather than trust the single latest one (a live regression:
         # every run reported usage=None once "turn completed" landed).
-        PearWorkerRunEvent.objects.create(
+        AgentRunEvent.objects.create(
             run=run,
             event_type="transcript",
             summary="Codex turn completed.",
@@ -734,19 +728,19 @@ class PearSessionEndpointTest(ZulipTestCase):
 
         # The run footer sums tool_count across the per-segment
         # tool_results events; malformed payloads are skipped.
-        PearWorkerRunEvent.objects.create(
+        AgentRunEvent.objects.create(
             run=run,
             event_type="tool_results",
             summary="Ran 2 tools",
             payload={"tool_count": 2, "tool_results": []},
         )
-        PearWorkerRunEvent.objects.create(
+        AgentRunEvent.objects.create(
             run=run,
             event_type="tool_results",
             summary="Ran 3 tools",
             payload={"tool_count": 3, "tool_results": []},
         )
-        PearWorkerRunEvent.objects.create(
+        AgentRunEvent.objects.create(
             run=run,
             event_type="tool_results",
             summary="Malformed",
@@ -756,7 +750,7 @@ class PearSessionEndpointTest(ZulipTestCase):
 
         # The rail's plan card takes the newest plan_update; the scan
         # must skip past newer non-plan transcript events.
-        PearWorkerRunEvent.objects.create(
+        AgentRunEvent.objects.create(
             run=run,
             event_type="transcript",
             summary="Plan",
@@ -771,7 +765,7 @@ class PearSessionEndpointTest(ZulipTestCase):
                 },
             },
         )
-        PearWorkerRunEvent.objects.create(
+        AgentRunEvent.objects.create(
             run=run,
             event_type="transcript",
             summary="Codex turn completed.",
@@ -786,7 +780,7 @@ class PearSessionEndpointTest(ZulipTestCase):
                 {"step": "Verify", "status": "pending"},
             ],
         )
-        PearWorkerRunEvent.objects.create(
+        AgentRunEvent.objects.create(
             run=run,
             event_type="presentation",
             summary="Committing focused fix",
@@ -796,7 +790,7 @@ class PearSessionEndpointTest(ZulipTestCase):
             },
         )
         self.assertEqual(serialize_pear_worker_run(run)["overview"], "Committing focused fix")
-        PearWorkerRunEvent.objects.create(
+        AgentRunEvent.objects.create(
             run=run,
             event_type="transcript",
             summary="Plan advanced",
@@ -822,12 +816,12 @@ class PearSessionEndpointTest(ZulipTestCase):
             bot_type=UserProfile.EMBEDDED_BOT,
             service_name=PEAR_EMBEDDED_BOT_SERVICE,
         )
-        run = PearWorkerRun.objects.create(
+        run = AgentRun.objects.create(
             realm=user.realm,
             bot_profile=pear_bot,
             trigger_message_id=1,
             requesting_user=user,
-            status=PearWorkerRun.DONE,
+            status=AgentRun.DONE,
             stream_name="devel",
             topic_name="cache test",
             runtime_label="Codex app-server",
@@ -836,12 +830,12 @@ class PearSessionEndpointTest(ZulipTestCase):
         )
         write_pear_live_run_state(
             run.trigger_message_id,
-            status=PearWorkerRun.RUNNING,
+            status=AgentRun.RUNNING,
         )
 
         serialized_run = serialize_pear_worker_run(run)
 
-        self.assertEqual(serialized_run["status"], PearWorkerRun.DONE)
+        self.assertEqual(serialized_run["status"], AgentRun.DONE)
         self.assertIsNone(serialized_run["live"])
 
     def test_run_summary_events_are_batched_for_polling(self) -> None:
@@ -854,23 +848,23 @@ class PearSessionEndpointTest(ZulipTestCase):
             service_name=PEAR_EMBEDDED_BOT_SERVICE,
         )
         runs = [
-            PearWorkerRun.objects.create(
+            AgentRun.objects.create(
                 realm=user.realm,
                 bot_profile=pear_bot,
                 trigger_message_id=100 + index,
                 requesting_user=user,
-                status=PearWorkerRun.RUNNING,
+                status=AgentRun.RUNNING,
                 tool_count=index + 2,
             )
             for index in range(5)
         ]
         for index, run in enumerate(runs):
-            PearWorkerRunEvent.objects.create(
+            AgentRunEvent.objects.create(
                 run=run,
                 event_type="usage",
                 payload={"usage": {"input_tokens": index + 1, "total_tokens": index + 1}},
             )
-            PearWorkerRunEvent.objects.create(
+            AgentRunEvent.objects.create(
                 run=run,
                 event_type="transcript",
                 payload={
@@ -878,7 +872,7 @@ class PearSessionEndpointTest(ZulipTestCase):
                     "metadata": {"steps": [{"step": f"Step {index}", "status": "in_progress"}]},
                 },
             )
-            PearWorkerRunEvent.objects.create(
+            AgentRunEvent.objects.create(
                 run=run,
                 event_type="presentation",
                 payload={
@@ -916,19 +910,19 @@ class PearSessionEndpointTest(ZulipTestCase):
             bot_type=UserProfile.EMBEDDED_BOT,
             service_name=PEAR_EMBEDDED_BOT_SERVICE,
         )
-        run = PearWorkerRun.objects.create(
+        run = AgentRun.objects.create(
             realm=user.realm,
             bot_profile=pear_bot,
             trigger_message_id=710,
             requesting_user=user,
-            status=PearWorkerRun.RUNNING,
+            status=AgentRun.RUNNING,
             codex_thread_id="root-thread",
         )
         for thread_id, nickname in (
             ("quiet-child", "  Quiet\nScout  "),
             ("noisy-child", "Builder"),
         ):
-            PearWorkerRunEvent.objects.create(
+            AgentRunEvent.objects.create(
                 run=run,
                 event_type="agent",
                 summary=f"Started {nickname}",
@@ -947,7 +941,7 @@ class PearSessionEndpointTest(ZulipTestCase):
                     },
                 },
             )
-        PearWorkerRunEvent.objects.create(
+        AgentRunEvent.objects.create(
             run=run,
             event_type="agent",
             summary="Quiet child failed",
@@ -962,9 +956,9 @@ class PearSessionEndpointTest(ZulipTestCase):
                 },
             },
         )
-        PearWorkerRunEvent.objects.bulk_create(
+        AgentRunEvent.objects.bulk_create(
             [
-                PearWorkerRunEvent(
+                AgentRunEvent(
                     run=run,
                     event_type="agent",
                     summary=f"Noisy activity {index}",
@@ -1013,24 +1007,24 @@ class PearSessionEndpointTest(ZulipTestCase):
             bot_type=UserProfile.EMBEDDED_BOT,
             service_name=PEAR_EMBEDDED_BOT_SERVICE,
         )
-        requested_run = PearWorkerRun.objects.create(
+        requested_run = AgentRun.objects.create(
             realm=owner.realm,
             bot_profile=pear_bot,
             requesting_user=owner,
             trigger_message_id=101,
             stream_name=PEAR_DEFAULT_STREAM,
             topic_name="pinned older run",
-            status=PearWorkerRun.DONE,
+            status=AgentRun.DONE,
         )
         topic_runs = [
-            PearWorkerRun.objects.create(
+            AgentRun.objects.create(
                 realm=owner.realm,
                 bot_profile=pear_bot,
                 requesting_user=owner,
                 trigger_message_id=200 + index,
                 stream_name=PEAR_DEFAULT_STREAM,
                 topic_name=PEAR_DEFAULT_TOPIC,
-                status=PearWorkerRun.DONE,
+                status=AgentRun.DONE,
             )
             for index in range(25)
         ]
@@ -1064,22 +1058,22 @@ class PearSessionEndpointTest(ZulipTestCase):
             bot_type=UserProfile.EMBEDDED_BOT,
             service_name=PEAR_EMBEDDED_BOT_SERVICE,
         )
-        run = PearWorkerRun.objects.create(
+        run = AgentRun.objects.create(
             realm=owner.realm,
             bot_profile=pear_bot,
             requesting_user=owner,
             trigger_message_id=251,
             stream_name=PEAR_DEFAULT_STREAM,
             topic_name=PEAR_DEFAULT_TOPIC,
-            status=PearWorkerRun.RUNNING,
+            status=AgentRun.RUNNING,
         )
-        first_event = PearWorkerRunEvent.objects.create(
+        first_event = AgentRunEvent.objects.create(
             run=run,
             event_type="running",
             summary="Started.",
             payload={},
         )
-        latest_event = PearWorkerRunEvent.objects.create(
+        latest_event = AgentRunEvent.objects.create(
             run=run,
             event_type="transcript",
             summary="Working.",
@@ -1131,17 +1125,17 @@ class PearSessionEndpointTest(ZulipTestCase):
             bot_type=UserProfile.EMBEDDED_BOT,
             service_name=PEAR_EMBEDDED_BOT_SERVICE,
         )
-        other_side_run = PearWorkerRun.objects.create(
+        other_side_run = AgentRun.objects.create(
             realm=owner.realm,
             bot_profile=pear_bot,
             requesting_user=other_user,
             trigger_message_id=301,
             stream_name="direct messages",
             topic_name="side",
-            session_kind=PearWorkerRun.SIDE,
+            session_kind=AgentRun.SIDE,
             source_stream_name=PEAR_DEFAULT_STREAM,
             source_topic_name=PEAR_DEFAULT_TOPIC,
-            status=PearWorkerRun.DONE,
+            status=AgentRun.DONE,
         )
         self.login_user(owner)
 
@@ -1248,7 +1242,7 @@ class PearSessionEndpointTest(ZulipTestCase):
                 content="can someone check the failing test?",
                 mentioned_user_ids=set(),
             )
-            PearWorkspaceNode.objects.create(
+            Workspace.objects.create(
                 realm=owner.realm,
                 stream_name=PEAR_DEFAULT_STREAM.upper(),
                 topic_name="Quiet-Context",
@@ -1480,7 +1474,7 @@ class PearSessionEndpointTest(ZulipTestCase):
             self.assertEqual(context_payload["workdir"], "")
             self.assertFalse(context_payload["git"]["available"])
             self.assertFalse(
-                PearWorkspaceNode.objects.filter(
+                Workspace.objects.filter(
                     realm=owner.realm,
                     stream_name=PEAR_DEFAULT_STREAM,
                     topic_name=PEAR_DEFAULT_TOPIC,
@@ -1571,7 +1565,7 @@ class PearSessionEndpointTest(ZulipTestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             base_workdir = str(Path(temp_dir) / "base")
             topic_root = str(Path(temp_dir) / "topics")
-            PearWorkspaceNode.objects.create(
+            Workspace.objects.create(
                 realm=owner.realm,
                 stream_name=PEAR_DEFAULT_STREAM,
                 topic_name=PEAR_DEFAULT_TOPIC,
@@ -1735,12 +1729,12 @@ class PearSessionEndpointTest(ZulipTestCase):
             bot_type=UserProfile.EMBEDDED_BOT,
             service_name=PEAR_EMBEDDED_BOT_SERVICE,
         )
-        run = PearWorkerRun.objects.create(
+        run = AgentRun.objects.create(
             realm=user.realm,
             bot_profile=pear_bot,
             trigger_message_id=4242,
             requesting_user=user,
-            status=PearWorkerRun.RUNNING,
+            status=AgentRun.RUNNING,
             stream_name=PEAR_DEFAULT_STREAM,
             topic_name=PEAR_DEFAULT_TOPIC,
             heartbeat_at=timezone_now(),
@@ -1750,7 +1744,7 @@ class PearSessionEndpointTest(ZulipTestCase):
         # heartbeat lease must therefore survive every startup reap.
         self.assertEqual(reap_stale_pear_worker_runs(), 0)
         run.refresh_from_db()
-        self.assertEqual(run.status, PearWorkerRun.RUNNING)
+        self.assertEqual(run.status, AgentRun.RUNNING)
 
     def test_redelivered_run_waits_for_the_database_lease(self) -> None:
         user = self.example_user("hamlet")
@@ -1761,12 +1755,12 @@ class PearSessionEndpointTest(ZulipTestCase):
             bot_type=UserProfile.EMBEDDED_BOT,
             service_name=PEAR_EMBEDDED_BOT_SERVICE,
         )
-        run = PearWorkerRun.objects.create(
+        run = AgentRun.objects.create(
             realm=user.realm,
             bot_profile=pear_bot,
             trigger_message_id=4343,
             requesting_user=user,
-            status=PearWorkerRun.RUNNING,
+            status=AgentRun.RUNNING,
             stream_name=PEAR_DEFAULT_STREAM,
             topic_name=PEAR_DEFAULT_TOPIC,
             heartbeat_at=timezone_now(),
@@ -1809,8 +1803,8 @@ class PearSessionEndpointTest(ZulipTestCase):
                 stream=PEAR_DEFAULT_STREAM,
                 topic=PEAR_DEFAULT_TOPIC,
             )
-            run = PearWorkerRun.objects.get(trigger_message_id=9876)
-            context = PearWorkspaceNode.objects.get(
+            run = AgentRun.objects.get(trigger_message_id=9876)
+            context = Workspace.objects.get(
                 realm=owner.realm,
                 stream_name=PEAR_DEFAULT_STREAM,
                 topic_name=PEAR_DEFAULT_TOPIC,
@@ -1869,9 +1863,9 @@ class PearSessionEndpointTest(ZulipTestCase):
                 )
             )
 
-        shared_run = PearWorkerRun.objects.get(trigger_message_id=9876)
-        side_run = PearWorkerRun.objects.get(trigger_message_id=9877)
-        self.assertEqual(side_run.session_kind, PearWorkerRun.SIDE)
+        shared_run = AgentRun.objects.get(trigger_message_id=9876)
+        side_run = AgentRun.objects.get(trigger_message_id=9877)
+        self.assertEqual(side_run.session_kind, AgentRun.SIDE)
         self.assertEqual(side_run.workspace_node_id, shared_run.workspace_node_id)
         self.assertEqual(side_run.workdir, shared_run.workdir)
         self.assertEqual(side_run.source_stream_name, PEAR_DEFAULT_STREAM)
@@ -2088,12 +2082,12 @@ class PearSessionEndpointTest(ZulipTestCase):
             bot_type=UserProfile.EMBEDDED_BOT,
             service_name=PEAR_EMBEDDED_BOT_SERVICE,
         )
-        workspace_node = PearWorkspaceNode.objects.create(
+        workspace_node = Workspace.objects.create(
             realm=owner.realm,
             stream_name=PEAR_DEFAULT_STREAM,
             topic_name="exact-side-parent",
         )
-        parent_run = PearWorkerRun.objects.create(
+        parent_run = AgentRun.objects.create(
             realm=owner.realm,
             bot_profile=pear_bot,
             requesting_user=owner,
@@ -2102,7 +2096,7 @@ class PearSessionEndpointTest(ZulipTestCase):
             stream_name=PEAR_DEFAULT_STREAM,
             topic_name="exact-side-parent",
             workspace_node=workspace_node,
-            status=PearWorkerRun.DONE,
+            status=AgentRun.DONE,
             codex_thread_id="thread-parent",
             source_stream_name=PEAR_DEFAULT_STREAM,
             source_topic_name="exact-side-parent",
@@ -2181,7 +2175,7 @@ class PearSessionEndpointTest(ZulipTestCase):
         Message.objects.filter(id__in=[trigger_message_id, result_message_id]).update(
             thread_root_id=root_message_id
         )
-        run = PearWorkerRun.objects.create(
+        run = AgentRun.objects.create(
             realm=owner.realm,
             bot_profile=pear_bot,
             requesting_user=owner,
@@ -2189,11 +2183,11 @@ class PearSessionEndpointTest(ZulipTestCase):
             result_message_id=result_message_id,
             stream_name=PEAR_DEFAULT_STREAM,
             topic_name=PEAR_DEFAULT_TOPIC,
-            session_kind=PearWorkerRun.SIDE,
+            session_kind=AgentRun.SIDE,
             source_stream_name=PEAR_DEFAULT_STREAM,
             source_topic_name=PEAR_DEFAULT_TOPIC,
             source_message_id=root_message_id,
-            status=PearWorkerRun.QUEUED,
+            status=AgentRun.QUEUED,
         )
         Message.objects.filter(id=trigger_message_id).delete()
         stop = threading.Event()
@@ -2218,7 +2212,7 @@ class PearSessionEndpointTest(ZulipTestCase):
 
         run.refresh_from_db()
         result_message = Message.objects.get(id=result_message_id)
-        self.assertEqual(run.status, PearWorkerRun.FAILED)
+        self.assertEqual(run.status, AgentRun.FAILED)
         self.assertEqual(
             run.error,
             f"Pear side run trigger message {trigger_message_id} no longer exists.",
@@ -2228,7 +2222,7 @@ class PearSessionEndpointTest(ZulipTestCase):
             "This side conversation could not start because its request message was deleted.",
         )
         self.assertNotEqual(result_message.content, PEAR_WORKING_MESSAGE)
-        failure_event = PearWorkerRunEvent.objects.get(run=run, event_type="failed")
+        failure_event = AgentRunEvent.objects.get(run=run, event_type="failed")
         self.assertEqual(failure_event.payload["reason"], "missing_trigger_message")
 
     def test_codex_memories_follow_the_setting(self) -> None:
@@ -2894,13 +2888,13 @@ class PearSessionEndpointTest(ZulipTestCase):
             # A pin is only a durable remote as a real URL; plain local paths
             # are (deliberately) treated as local topic paths instead.
             pinned_url = f"file://{external_origin}"
-            project, _created = PearProject.objects.update_or_create(
+            project, _created = Repository.objects.update_or_create(
                 realm=owner.realm,
                 stream=get_stream(PEAR_DEFAULT_STREAM, owner.realm),
                 defaults={
                     "repository_url": pinned_url,
                     "repo_cache_path": "",
-                    "clone_status": PearProject.UNCONFIGURED,
+                    "clone_status": Repository.UNCONFIGURED,
                 },
             )
             context.project = project
@@ -2988,7 +2982,7 @@ class PearSessionEndpointTest(ZulipTestCase):
             )
 
             result_dict = self.assert_json_success(result)
-            context = PearWorkspaceNode.objects.get(
+            context = Workspace.objects.get(
                 realm=owner.realm,
                 stream_name="megatron-lm",
                 topic_name="",
@@ -2997,7 +2991,7 @@ class PearSessionEndpointTest(ZulipTestCase):
             assert context.project is not None
             self.assertEqual(context.project.repository_url, repository_url)
             self.assertTrue(context.workdir.startswith(temp_dir))
-            project = PearProject.objects.get(
+            project = Repository.objects.get(
                 realm=owner.realm,
                 stream=get_stream("megatron-lm", owner.realm),
             )
@@ -3124,10 +3118,10 @@ class PearSessionEndpointTest(ZulipTestCase):
                 )
 
             self.assertEqual(fetch_timeouts, [3600])
-            project = PearProject.objects.get(
+            project = Repository.objects.get(
                 realm=owner.realm, stream=get_stream("megatron-lm", owner.realm)
             )
-            self.assertEqual(project.clone_status, PearProject.READY)
+            self.assertEqual(project.clone_status, Repository.READY)
             self.assertEqual(project.repository_url, repository_url)
             self.assertTrue(Path(channel_context.workdir, "README.md").exists())
 
@@ -3144,7 +3138,7 @@ class PearSessionEndpointTest(ZulipTestCase):
             self.subscribe(owner, "devel")
             parent_path = Path(temp_dir) / "devel-base"
             parent_path.mkdir()
-            general_context = PearWorkspaceNode.objects.create(
+            general_context = Workspace.objects.create(
                 realm=owner.realm,
                 stream_name="devel",
                 topic_name="",
@@ -3173,7 +3167,7 @@ class PearSessionEndpointTest(ZulipTestCase):
             ),
         ):
             workdir = Path(temp_dir) / "devel-general-chat"
-            context = PearWorkspaceNode.objects.create(
+            context = Workspace.objects.create(
                 realm=owner.realm,
                 stream_name="devel",
                 topic_name="general chat",
@@ -3246,7 +3240,7 @@ class PearSessionEndpointTest(ZulipTestCase):
                     text=True,
                     timeout=10,
                 ).stdout.strip()
-                run = PearWorkerRun.objects.create(
+                run = AgentRun.objects.create(
                     realm=owner.realm,
                     bot_profile=pear_bot,
                     requesting_user=owner,
@@ -3254,22 +3248,22 @@ class PearSessionEndpointTest(ZulipTestCase):
                     stream_name=PEAR_DEFAULT_STREAM,
                     topic_name="old topic",
                     workspace_node=context,
-                    status=PearWorkerRun.DONE,
+                    status=AgentRun.DONE,
                     codex_thread_id="thread-1",
                 )
-                side_run = PearWorkerRun.objects.create(
+                side_run = AgentRun.objects.create(
                     realm=owner.realm,
                     bot_profile=pear_bot,
                     requesting_user=owner,
                     trigger_message_id=3002,
                     stream_name=PEAR_DEFAULT_STREAM,
                     topic_name="side topic",
-                    session_kind=PearWorkerRun.SIDE,
+                    session_kind=AgentRun.SIDE,
                     source_stream_name=PEAR_DEFAULT_STREAM,
                     source_topic_name="old topic",
-                    status=PearWorkerRun.DONE,
+                    status=AgentRun.DONE,
                 )
-                monitor = PearMonitor.objects.create(
+                monitor = AgentMonitor.objects.create(
                     realm=owner.realm,
                     bot_profile=pear_bot,
                     creator=owner,
@@ -3318,7 +3312,7 @@ class PearSessionEndpointTest(ZulipTestCase):
             self.assertEqual(monitor.stream_name, PEAR_DEFAULT_STREAM.lower())
             self.assertEqual(monitor.topic_name, "new topic")
             self.assertFalse(
-                PearWorkspaceNode.objects.filter(
+                Workspace.objects.filter(
                     realm=owner.realm,
                     stream_name=PEAR_DEFAULT_STREAM,
                     topic_name="old topic",
@@ -3348,7 +3342,7 @@ class PearSessionEndpointTest(ZulipTestCase):
                 topic="old topic",
             )
             old_workdir = context.workdir
-            monitor = PearMonitor.objects.create(
+            monitor = AgentMonitor.objects.create(
                 realm=owner.realm,
                 bot_profile=pear_bot,
                 creator=owner,
@@ -3385,40 +3379,40 @@ class PearSessionEndpointTest(ZulipTestCase):
             bot_type=UserProfile.EMBEDDED_BOT,
             service_name=PEAR_EMBEDDED_BOT_SERVICE,
         )
-        PearWorkspaceNode.objects.create(
+        Workspace.objects.create(
             realm=owner.realm,
             stream_name="old-repo",
             topic_name="",
             workdir="/tmp/old-repo",  # noqa: S108
         )
-        PearWorkspaceNode.objects.create(
+        Workspace.objects.create(
             realm=owner.realm,
             stream_name="old-repo",
             topic_name="feature",
             workdir="/tmp/old-repo-feature",  # noqa: S108
         )
-        run = PearWorkerRun.objects.create(
+        run = AgentRun.objects.create(
             realm=owner.realm,
             bot_profile=pear_bot,
             requesting_user=owner,
             trigger_message_id=3101,
             stream_name="old-repo",
             topic_name="feature",
-            status=PearWorkerRun.RUNNING,
+            status=AgentRun.RUNNING,
         )
-        side_run = PearWorkerRun.objects.create(
+        side_run = AgentRun.objects.create(
             realm=owner.realm,
             bot_profile=pear_bot,
             requesting_user=owner,
             trigger_message_id=3102,
             stream_name="side",
             topic_name="private",
-            session_kind=PearWorkerRun.SIDE,
+            session_kind=AgentRun.SIDE,
             source_stream_name="old-repo",
             source_topic_name="feature",
-            status=PearWorkerRun.DONE,
+            status=AgentRun.DONE,
         )
-        monitor = PearMonitor.objects.create(
+        monitor = AgentMonitor.objects.create(
             realm=owner.realm,
             bot_profile=pear_bot,
             creator=owner,
@@ -3436,14 +3430,14 @@ class PearSessionEndpointTest(ZulipTestCase):
         assert message is not None
         self.assertIn("Pear channel context renamed", message)
         self.assertEqual(
-            PearWorkspaceNode.objects.filter(
+            Workspace.objects.filter(
                 realm=owner.realm,
                 stream_name="new-repo",
             ).count(),
             2,
         )
         self.assertFalse(
-            PearWorkspaceNode.objects.filter(
+            Workspace.objects.filter(
                 realm=owner.realm,
                 stream_name="old-repo",
             ).exists()
@@ -3460,7 +3454,7 @@ class PearSessionEndpointTest(ZulipTestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             source = Path(temp_dir) / "source"
             self.create_git_repository(source)
-            project = PearProject.objects.create(
+            project = Repository.objects.create(
                 realm=owner.realm,
                 stream=get_stream(PEAR_DEFAULT_STREAM, owner.realm),
                 repository_url=source.as_uri(),
@@ -3490,14 +3484,14 @@ class PearSessionEndpointTest(ZulipTestCase):
             bot_type=UserProfile.EMBEDDED_BOT,
             service_name=PEAR_EMBEDDED_BOT_SERVICE,
         )
-        PearWorkerRun.objects.create(
+        AgentRun.objects.create(
             realm=owner.realm,
             bot_profile=pear_bot,
             requesting_user=owner,
             trigger_message_id=901,
             stream_name=PEAR_DEFAULT_STREAM,
             topic_name="topic-a",
-            status=PearWorkerRun.RUNNING,
+            status=AgentRun.RUNNING,
         )
 
         reason = PearDatabaseWorkerRunStore().start_blocked_reason(
@@ -3519,14 +3513,14 @@ class PearSessionEndpointTest(ZulipTestCase):
             bot_type=UserProfile.EMBEDDED_BOT,
             service_name=PEAR_EMBEDDED_BOT_SERVICE,
         )
-        PearWorkerRun.objects.create(
+        AgentRun.objects.create(
             realm=owner.realm,
             bot_profile=pear_bot,
             requesting_user=owner,
             trigger_message_id=903,
             stream_name=PEAR_DEFAULT_STREAM,
             topic_name="topic-a",
-            status=PearWorkerRun.RUNNING,
+            status=AgentRun.RUNNING,
         )
 
         reason = PearDatabaseWorkerRunStore().start_blocked_reason(
@@ -3589,11 +3583,11 @@ class PearSessionEndpointTest(ZulipTestCase):
 
         self.assertEqual(
             list(
-                PearWorkerRun.objects.filter(topic_name="serialized-start").values_list(
+                AgentRun.objects.filter(topic_name="serialized-start").values_list(
                     "trigger_message_id", "status"
                 )
             ),
-            [(951, PearWorkerRun.QUEUED)],
+            [(951, AgentRun.QUEUED)],
         )
 
     def test_worker_start_and_claim_serialize_in_the_same_topic(self) -> None:
@@ -3645,12 +3639,12 @@ class PearSessionEndpointTest(ZulipTestCase):
         claim_lock.assert_called_once()
 
         self.assertTrue(
-            PearWorkerRun.objects.filter(
+            AgentRun.objects.filter(
                 trigger_message_id=953,
-                status=PearWorkerRun.QUEUED,
+                status=AgentRun.QUEUED,
             ).exists()
         )
-        self.assertFalse(PearWorkerRun.objects.filter(trigger_message_id=954).exists())
+        self.assertFalse(AgentRun.objects.filter(trigger_message_id=954).exists())
 
     def test_streamless_runs_are_rejected(self) -> None:
         owner = self.example_user("hamlet")
@@ -3676,7 +3670,7 @@ class PearSessionEndpointTest(ZulipTestCase):
         )
         self.assertFalse(store.start(bot_handler, 957, stream="", topic=""))
         self.assertFalse(store.claim_for_run(bot_handler, 957, stream="", topic=""))
-        self.assertFalse(PearWorkerRun.objects.filter(trigger_message_id=957).exists())
+        self.assertFalse(AgentRun.objects.filter(trigger_message_id=957).exists())
 
     def test_worker_claims_in_different_topics_are_independent(self) -> None:
         owner = self.example_user("hamlet")
@@ -3712,13 +3706,13 @@ class PearSessionEndpointTest(ZulipTestCase):
 
         self.assertEqual(
             set(
-                PearWorkerRun.objects.filter(trigger_message_id__in=(955, 956)).values_list(
+                AgentRun.objects.filter(trigger_message_id__in=(955, 956)).values_list(
                     "topic_name", "status", "attempts"
                 )
             ),
             {
-                ("independent-a", PearWorkerRun.RUNNING, 1),
-                ("independent-b", PearWorkerRun.RUNNING, 1),
+                ("independent-a", AgentRun.RUNNING, 1),
+                ("independent-b", AgentRun.RUNNING, 1),
             },
         )
 
@@ -3733,49 +3727,49 @@ class PearSessionEndpointTest(ZulipTestCase):
         )
         bot_handler = SimpleNamespace(user_profile=pear_bot)
         store = PearDatabaseWorkerRunStore()
-        done_run = PearWorkerRun.objects.create(
+        done_run = AgentRun.objects.create(
             realm=owner.realm,
             bot_profile=pear_bot,
             requesting_user=owner,
             trigger_message_id=905,
             stream_name=PEAR_DEFAULT_STREAM,
             topic_name="topic-a",
-            status=PearWorkerRun.DONE,
+            status=AgentRun.DONE,
         )
-        cancelled_run = PearWorkerRun.objects.create(
+        cancelled_run = AgentRun.objects.create(
             realm=owner.realm,
             bot_profile=pear_bot,
             requesting_user=owner,
             trigger_message_id=906,
             stream_name=PEAR_DEFAULT_STREAM,
             topic_name="topic-a",
-            status=PearWorkerRun.CANCELLED,
+            status=AgentRun.CANCELLED,
         )
 
         store.record(
             bot_handler,
             done_run.trigger_message_id,
-            PearWorkerRun.RUNNING,
+            AgentRun.RUNNING,
             stream=PEAR_DEFAULT_STREAM,
             topic="topic-a",
         )
         store.record(
             bot_handler,
             cancelled_run.trigger_message_id,
-            PearWorkerRun.DONE,
+            AgentRun.DONE,
             stream=PEAR_DEFAULT_STREAM,
             topic="topic-a",
         )
 
         done_run.refresh_from_db()
         cancelled_run.refresh_from_db()
-        self.assertEqual(done_run.status, PearWorkerRun.DONE)
-        self.assertEqual(cancelled_run.status, PearWorkerRun.CANCELLED)
-        done_rejection = PearWorkerRunEvent.objects.get(
+        self.assertEqual(done_run.status, AgentRun.DONE)
+        self.assertEqual(cancelled_run.status, AgentRun.CANCELLED)
+        done_rejection = AgentRunEvent.objects.get(
             run=done_run,
             event_type="transition_rejected",
         )
-        cancelled_rejection = PearWorkerRunEvent.objects.get(
+        cancelled_rejection = AgentRunEvent.objects.get(
             run=cancelled_run,
             event_type="transition_rejected",
         )
@@ -3785,7 +3779,7 @@ class PearSessionEndpointTest(ZulipTestCase):
         )
         self.assertEqual(
             cancelled_rejection.payload["new_status"],
-            PearWorkerRun.DONE,
+            AgentRun.DONE,
         )
 
     def test_worker_run_store_observes_workspace_once_on_terminal_transition(self) -> None:
@@ -3797,12 +3791,12 @@ class PearSessionEndpointTest(ZulipTestCase):
             bot_type=UserProfile.EMBEDDED_BOT,
             service_name=PEAR_EMBEDDED_BOT_SERVICE,
         )
-        workspace_node = PearWorkspaceNode.objects.create(
+        workspace_node = Workspace.objects.create(
             realm=owner.realm,
             stream_name=PEAR_DEFAULT_STREAM,
             topic_name="workspace-observer",
         )
-        run = PearWorkerRun.objects.create(
+        run = AgentRun.objects.create(
             realm=owner.realm,
             bot_profile=pear_bot,
             requesting_user=owner,
@@ -3810,7 +3804,7 @@ class PearSessionEndpointTest(ZulipTestCase):
             workspace_node=workspace_node,
             stream_name=PEAR_DEFAULT_STREAM,
             topic_name="workspace-observer",
-            status=PearWorkerRun.QUEUED,
+            status=AgentRun.QUEUED,
         )
         store = PearDatabaseWorkerRunStore()
         bot_handler = SimpleNamespace(user_profile=pear_bot)
@@ -3824,14 +3818,14 @@ class PearSessionEndpointTest(ZulipTestCase):
             store.record(
                 bot_handler,
                 run.trigger_message_id,
-                PearWorkerRun.RUNNING,
+                AgentRun.RUNNING,
                 stream=PEAR_DEFAULT_STREAM,
                 topic="workspace-observer",
             )
             store.record(
                 bot_handler,
                 run.trigger_message_id,
-                PearWorkerRun.RUNNING,
+                AgentRun.RUNNING,
                 stream=PEAR_DEFAULT_STREAM,
                 topic="workspace-observer",
             )
@@ -3839,14 +3833,14 @@ class PearSessionEndpointTest(ZulipTestCase):
             store.record(
                 bot_handler,
                 run.trigger_message_id,
-                PearWorkerRun.DONE,
+                AgentRun.DONE,
                 stream=PEAR_DEFAULT_STREAM,
                 topic="workspace-observer",
             )
             store.record(
                 bot_handler,
                 run.trigger_message_id,
-                PearWorkerRun.DONE,
+                AgentRun.DONE,
                 stream=PEAR_DEFAULT_STREAM,
                 topic="workspace-observer",
             )
@@ -3864,28 +3858,28 @@ class PearSessionEndpointTest(ZulipTestCase):
         )
         bot_handler = SimpleNamespace(user_profile=pear_bot)
         store = PearDatabaseWorkerRunStore()
-        run = PearWorkerRun.objects.create(
+        run = AgentRun.objects.create(
             realm=owner.realm,
             bot_profile=pear_bot,
             requesting_user=owner,
             trigger_message_id=907,
             stream_name=PEAR_DEFAULT_STREAM,
             topic_name="topic-a",
-            status=PearWorkerRun.FAILED,
+            status=AgentRun.FAILED,
             error="crashed",
         )
 
         store.record(
             bot_handler,
             run.trigger_message_id,
-            PearWorkerRun.QUEUED,
+            AgentRun.QUEUED,
             stream=PEAR_DEFAULT_STREAM,
             topic="topic-a",
         )
         run.refresh_from_db()
-        self.assertEqual(run.status, PearWorkerRun.FAILED)
+        self.assertEqual(run.status, AgentRun.FAILED)
         self.assertEqual(run.error, "crashed")
-        implicit_requeue_rejection = PearWorkerRunEvent.objects.get(
+        implicit_requeue_rejection = AgentRunEvent.objects.get(
             run=run,
             event_type="transition_rejected",
         )
@@ -3903,7 +3897,7 @@ class PearSessionEndpointTest(ZulipTestCase):
             )
         )
         run.refresh_from_db()
-        self.assertEqual(run.status, PearWorkerRun.QUEUED)
+        self.assertEqual(run.status, AgentRun.QUEUED)
         self.assertIsNone(run.error)
 
     def test_worker_run_store_claims_queued_run_once(self) -> None:
@@ -3917,14 +3911,14 @@ class PearSessionEndpointTest(ZulipTestCase):
         )
         bot_handler = SimpleNamespace(user_profile=pear_bot)
         store = PearDatabaseWorkerRunStore()
-        run = PearWorkerRun.objects.create(
+        run = AgentRun.objects.create(
             realm=owner.realm,
             bot_profile=pear_bot,
             requesting_user=owner,
             trigger_message_id=908,
             stream_name=PEAR_DEFAULT_STREAM,
             topic_name="topic-a",
-            status=PearWorkerRun.QUEUED,
+            status=AgentRun.QUEUED,
         )
 
         self.assertTrue(
@@ -3936,7 +3930,7 @@ class PearSessionEndpointTest(ZulipTestCase):
             )
         )
         run.refresh_from_db()
-        self.assertEqual(run.status, PearWorkerRun.RUNNING)
+        self.assertEqual(run.status, AgentRun.RUNNING)
         self.assertEqual(run.attempts, 1)
         self.assertIsNotNone(run.heartbeat_at)
 
@@ -3949,14 +3943,14 @@ class PearSessionEndpointTest(ZulipTestCase):
             )
         )
         run.refresh_from_db()
-        self.assertEqual(run.status, PearWorkerRun.RUNNING)
+        self.assertEqual(run.status, AgentRun.RUNNING)
         self.assertEqual(run.attempts, 1)
         self.assertEqual(
-            PearWorkerRunEvent.objects.filter(run=run, event_type="claimed").count(),
+            AgentRunEvent.objects.filter(run=run, event_type="claimed").count(),
             1,
         )
         self.assertEqual(
-            PearWorkerRunEvent.objects.get(run=run, event_type="claim_dropped").payload["reason"],
+            AgentRunEvent.objects.get(run=run, event_type="claim_dropped").payload["reason"],
             "already_running",
         )
 
@@ -3979,10 +3973,10 @@ class PearSessionEndpointTest(ZulipTestCase):
                 topic="fenced-store",
             )
         )
-        run = PearWorkerRun.objects.get(trigger_message_id=957)
+        run = AgentRun.objects.get(trigger_message_id=957)
         self.assertEqual(run.attempts, 1)
         event_count = run.events.count()
-        PearWorkerRun.objects.filter(id=run.id).update(attempts=2)
+        AgentRun.objects.filter(id=run.id).update(attempts=2)
 
         operations = {
             "progress": lambda: store.register_progress_message(
@@ -3995,7 +3989,7 @@ class PearSessionEndpointTest(ZulipTestCase):
             "status": lambda: store.record(
                 bot_handler,
                 run.trigger_message_id,
-                PearWorkerRun.DONE,
+                AgentRun.DONE,
                 stream=PEAR_DEFAULT_STREAM,
                 topic="fenced-store",
                 result_message_id=4001,
@@ -4030,7 +4024,7 @@ class PearSessionEndpointTest(ZulipTestCase):
                 operation()
 
         run.refresh_from_db()
-        self.assertEqual(run.status, PearWorkerRun.RUNNING)
+        self.assertEqual(run.status, AgentRun.RUNNING)
         self.assertEqual(run.attempts, 2)
         self.assertIsNone(run.result_message_id)
         self.assertEqual(run.summary, "")
@@ -4055,17 +4049,17 @@ class PearSessionEndpointTest(ZulipTestCase):
                 topic="fenced-event",
             )
         )
-        run = PearWorkerRun.objects.get(trigger_message_id=958)
+        run = AgentRun.objects.get(trigger_message_id=958)
         original_record_event = store._record_event
 
         def reclaim_before_durable_write(
-            locked_run: PearWorkerRun,
+            locked_run: AgentRun,
             event_type: str,
             *,
             summary: str,
             payload: dict[str, Any],
         ) -> None:
-            PearWorkerRun.objects.filter(id=locked_run.id).update(attempts=2)
+            AgentRun.objects.filter(id=locked_run.id).update(attempts=2)
             original_record_event(
                 locked_run,
                 event_type,
@@ -4102,8 +4096,8 @@ class PearSessionEndpointTest(ZulipTestCase):
         store = PearDatabaseWorkerRunStore()
 
         for message_id, status in (
-            (1961, PearWorkerRun.CANCELLED),
-            (1962, PearWorkerRun.FAILED),
+            (1961, AgentRun.CANCELLED),
+            (1962, AgentRun.FAILED),
         ):
             topic = f"terminal-fence-{status}"
             self.assertTrue(
@@ -4114,9 +4108,9 @@ class PearSessionEndpointTest(ZulipTestCase):
                     topic=topic,
                 )
             )
-            run = PearWorkerRun.objects.get(trigger_message_id=message_id)
+            run = AgentRun.objects.get(trigger_message_id=message_id)
             self.assertEqual(run.attempts, 1)
-            PearWorkerRun.objects.filter(id=run.id).update(status=status)
+            AgentRun.objects.filter(id=run.id).update(status=status)
 
             entered_completion = False
             with (
@@ -4149,9 +4143,9 @@ class PearSessionEndpointTest(ZulipTestCase):
                 topic="cancel-check-cancelled",
             )
         )
-        cancelled_run = PearWorkerRun.objects.get(trigger_message_id=1963)
-        PearWorkerRun.objects.filter(id=cancelled_run.id).update(
-            status=PearWorkerRun.CANCELLED,
+        cancelled_run = AgentRun.objects.get(trigger_message_id=1963)
+        AgentRun.objects.filter(id=cancelled_run.id).update(
+            status=AgentRun.CANCELLED,
             cancel_requested_at=None,
         )
         self.assertTrue(store.cancel_requested(bot_handler, 1963))
@@ -4164,9 +4158,9 @@ class PearSessionEndpointTest(ZulipTestCase):
                 topic="cancel-check-failed",
             )
         )
-        failed_run = PearWorkerRun.objects.get(trigger_message_id=1964)
-        PearWorkerRun.objects.filter(id=failed_run.id).update(
-            status=PearWorkerRun.FAILED,
+        failed_run = AgentRun.objects.get(trigger_message_id=1964)
+        AgentRun.objects.filter(id=failed_run.id).update(
+            status=AgentRun.FAILED,
             cancel_requested_at=cancelled_at,
         )
         with self.assertRaisesRegex(PearWorkerLeaseLostError, "lost attempt 1"):
@@ -4183,18 +4177,18 @@ class PearSessionEndpointTest(ZulipTestCase):
         )
         bot_handler = SimpleNamespace(user_profile=pear_bot)
         cancelled_at = timezone_now()
-        run = PearWorkerRun.objects.create(
+        run = AgentRun.objects.create(
             realm=owner.realm,
             bot_profile=pear_bot,
             requesting_user=owner,
             trigger_message_id=959,
             stream_name=PEAR_DEFAULT_STREAM,
             topic_name="control-store",
-            status=PearWorkerRun.RUNNING,
+            status=AgentRun.RUNNING,
             attempts=7,
             cancel_requested_at=cancelled_at,
         )
-        steering_event = PearWorkerRunEvent.objects.create(
+        steering_event = AgentRunEvent.objects.create(
             run=run,
             event_type="steering",
             summary="Continue carefully",
@@ -4212,7 +4206,7 @@ class PearSessionEndpointTest(ZulipTestCase):
         control_store.record(
             bot_handler,
             run.trigger_message_id,
-            PearWorkerRun.RUNNING,
+            AgentRun.RUNNING,
             stream=PEAR_DEFAULT_STREAM,
             topic="control-store",
             result_message_id=4002,
@@ -4261,14 +4255,14 @@ class PearSessionEndpointTest(ZulipTestCase):
         )
         bot_handler = SimpleNamespace(user_profile=pear_bot)
         store = PearDatabaseWorkerRunStore()
-        run = PearWorkerRun.objects.create(
+        run = AgentRun.objects.create(
             realm=owner.realm,
             bot_profile=pear_bot,
             requesting_user=owner,
             trigger_message_id=909,
             stream_name=PEAR_DEFAULT_STREAM,
             topic_name="topic-a",
-            status=PearWorkerRun.DONE,
+            status=AgentRun.DONE,
             result_message_id=400,
         )
 
@@ -4281,10 +4275,10 @@ class PearSessionEndpointTest(ZulipTestCase):
             )
         )
         run.refresh_from_db()
-        self.assertEqual(run.status, PearWorkerRun.DONE)
+        self.assertEqual(run.status, AgentRun.DONE)
         self.assertEqual(run.result_message_id, 400)
         self.assertEqual(
-            PearWorkerRunEvent.objects.get(run=run, event_type="claim_dropped").payload["reason"],
+            AgentRunEvent.objects.get(run=run, event_type="claim_dropped").payload["reason"],
             "terminal_or_finished_done",
         )
 
@@ -4300,14 +4294,14 @@ class PearSessionEndpointTest(ZulipTestCase):
         bot_handler = SimpleNamespace(user_profile=pear_bot)
         store = PearDatabaseWorkerRunStore()
         stale_time = timezone_now() - timedelta(seconds=400)
-        run = PearWorkerRun.objects.create(
+        run = AgentRun.objects.create(
             realm=owner.realm,
             bot_profile=pear_bot,
             requesting_user=owner,
             trigger_message_id=910,
             stream_name=PEAR_DEFAULT_STREAM,
             topic_name="topic-a",
-            status=PearWorkerRun.RUNNING,
+            status=AgentRun.RUNNING,
             attempts=1,
             heartbeat_at=stale_time,
             date_updated=stale_time,
@@ -4322,15 +4316,15 @@ class PearSessionEndpointTest(ZulipTestCase):
             )
         )
         run.refresh_from_db()
-        self.assertEqual(run.status, PearWorkerRun.RUNNING)
+        self.assertEqual(run.status, AgentRun.RUNNING)
         self.assertEqual(run.attempts, 2)
         self.assertGreater(run.heartbeat_at, stale_time)
         self.assertEqual(
-            PearWorkerRunEvent.objects.get(run=run, event_type="claimed").payload["stale_reclaim"],
+            AgentRunEvent.objects.get(run=run, event_type="claimed").payload["stale_reclaim"],
             True,
         )
 
-        PearWorkerRun.objects.filter(id=run.id).update(
+        AgentRun.objects.filter(id=run.id).update(
             heartbeat_at=stale_time,
             date_updated=stale_time,
         )
@@ -4343,13 +4337,13 @@ class PearSessionEndpointTest(ZulipTestCase):
             )
         )
         run.refresh_from_db()
-        self.assertEqual(run.status, PearWorkerRun.FAILED)
+        self.assertEqual(run.status, AgentRun.FAILED)
         self.assertEqual(
             run.error,
             "Pear worker run exceeded its stale-claim retry limit.",
         )
         self.assertEqual(
-            PearWorkerRunEvent.objects.filter(run=run, event_type="claim_dropped")
+            AgentRunEvent.objects.filter(run=run, event_type="claim_dropped")
             .latest("id")
             .payload["reason"],
             "stale_retry_limit",
@@ -4367,14 +4361,14 @@ class PearSessionEndpointTest(ZulipTestCase):
         bot_handler = SimpleNamespace(user_profile=pear_bot)
         store = PearDatabaseWorkerRunStore()
         stale_time = timezone_now() - timedelta(seconds=400)
-        run = PearWorkerRun.objects.create(
+        run = AgentRun.objects.create(
             realm=owner.realm,
             bot_profile=pear_bot,
             requesting_user=owner,
             trigger_message_id=911,
             stream_name=PEAR_DEFAULT_STREAM,
             topic_name="topic-a",
-            status=PearWorkerRun.RUNNING,
+            status=AgentRun.RUNNING,
             attempts=1,
             heartbeat_at=stale_time,
             date_updated=stale_time,
@@ -4384,7 +4378,7 @@ class PearSessionEndpointTest(ZulipTestCase):
             self.assertEqual(reap_stale_pear_worker_runs(bot_profile=pear_bot), 1)
 
         run.refresh_from_db()
-        self.assertEqual(run.status, PearWorkerRun.FAILED)
+        self.assertEqual(run.status, AgentRun.FAILED)
         self.assertEqual(run.events.latest("id").event_type, "stale_reaped")
         self.assertTrue(
             store.claim_for_run(
@@ -4396,7 +4390,7 @@ class PearSessionEndpointTest(ZulipTestCase):
             )
         )
         run.refresh_from_db()
-        self.assertEqual(run.status, PearWorkerRun.RUNNING)
+        self.assertEqual(run.status, AgentRun.RUNNING)
         self.assertEqual(run.attempts, 2)
         self.assertIsNone(run.error)
         self.assertEqual(run.events.latest("id").event_type, "claimed")
@@ -4412,14 +4406,14 @@ class PearSessionEndpointTest(ZulipTestCase):
         )
         bot_handler = SimpleNamespace(user_profile=pear_bot)
         stale_time = timezone_now() - timedelta(seconds=400)
-        run = PearWorkerRun.objects.create(
+        run = AgentRun.objects.create(
             realm=owner.realm,
             bot_profile=pear_bot,
             requesting_user=owner,
             trigger_message_id=911,
             stream_name=PEAR_DEFAULT_STREAM,
             topic_name="topic-a",
-            status=PearWorkerRun.RUNNING,
+            status=AgentRun.RUNNING,
             attempts=1,
             heartbeat_at=stale_time,
             date_updated=stale_time,
@@ -4434,10 +4428,10 @@ class PearSessionEndpointTest(ZulipTestCase):
         )
 
         run.refresh_from_db()
-        self.assertEqual(run.status, PearWorkerRun.FAILED)
+        self.assertEqual(run.status, AgentRun.FAILED)
         self.assertEqual(run.error, "Pear worker run became stale and was recovered.")
         self.assertEqual(
-            PearWorkerRunEvent.objects.get(run=run, event_type="stale_reaped").payload[
+            AgentRunEvent.objects.get(run=run, event_type="stale_reaped").payload[
                 "stale_after_seconds"
             ],
             60,
@@ -4455,26 +4449,26 @@ class PearSessionEndpointTest(ZulipTestCase):
             service_name=PEAR_EMBEDDED_BOT_SERVICE,
         )
         stale_time = timezone_now() - timedelta(seconds=61)
-        active_run = PearWorkerRun.objects.create(
+        active_run = AgentRun.objects.create(
             realm=owner.realm,
             bot_profile=pear_bot,
             requesting_user=owner,
             trigger_message_id=913,
             stream_name=PEAR_DEFAULT_STREAM,
             topic_name="topic-a",
-            status=PearWorkerRun.RUNNING,
+            status=AgentRun.RUNNING,
             attempts=1,
             heartbeat_at=stale_time,
             date_updated=stale_time,
         )
-        abandoned_run = PearWorkerRun.objects.create(
+        abandoned_run = AgentRun.objects.create(
             realm=owner.realm,
             bot_profile=pear_bot,
             requesting_user=owner,
             trigger_message_id=914,
             stream_name=PEAR_DEFAULT_STREAM,
             topic_name="topic-b",
-            status=PearWorkerRun.RUNNING,
+            status=AgentRun.RUNNING,
             heartbeat_at=stale_time,
             date_updated=stale_time,
         )
@@ -4483,18 +4477,18 @@ class PearSessionEndpointTest(ZulipTestCase):
             maintain_pear_worker_run_liveness(
                 active_run_id=active_run.id,
                 active_run_attempt=active_run.attempts,
-                session_kinds=(PearWorkerRun.SHARED,),
+                session_kinds=(AgentRun.SHARED,),
             ),
             1,
         )
 
         active_run.refresh_from_db()
         abandoned_run.refresh_from_db()
-        self.assertEqual(active_run.status, PearWorkerRun.RUNNING)
+        self.assertEqual(active_run.status, AgentRun.RUNNING)
         self.assertGreater(active_run.heartbeat_at, stale_time)
-        self.assertEqual(abandoned_run.status, PearWorkerRun.FAILED)
+        self.assertEqual(abandoned_run.status, AgentRun.FAILED)
         self.assertEqual(
-            PearWorkerRunEvent.objects.get(run=abandoned_run, event_type="stale_reaped").payload[
+            AgentRunEvent.objects.get(run=abandoned_run, event_type="stale_reaped").payload[
                 "stale_after_seconds"
             ],
             60,
@@ -4510,14 +4504,14 @@ class PearSessionEndpointTest(ZulipTestCase):
             service_name=PEAR_EMBEDDED_BOT_SERVICE,
         )
         old_heartbeat = timezone_now() - timedelta(seconds=20)
-        active_run = PearWorkerRun.objects.create(
+        active_run = AgentRun.objects.create(
             realm=owner.realm,
             bot_profile=pear_bot,
             requesting_user=owner,
             trigger_message_id=960,
             stream_name=PEAR_DEFAULT_STREAM,
             topic_name="attempt-liveness",
-            status=PearWorkerRun.RUNNING,
+            status=AgentRun.RUNNING,
             attempts=3,
             heartbeat_at=old_heartbeat,
             date_updated=old_heartbeat,
@@ -4531,7 +4525,7 @@ class PearSessionEndpointTest(ZulipTestCase):
                 maintain_pear_worker_run_liveness(
                     active_run_id=active_run.id,
                     active_run_attempt=stale_attempt,
-                    session_kinds=(PearWorkerRun.SHARED,),
+                    session_kinds=(AgentRun.SHARED,),
                 )
 
         active_run.refresh_from_db()
@@ -4541,7 +4535,7 @@ class PearSessionEndpointTest(ZulipTestCase):
             maintain_pear_worker_run_liveness(
                 active_run_id=active_run.id,
                 active_run_attempt=3,
-                session_kinds=(PearWorkerRun.SHARED,),
+                session_kinds=(AgentRun.SHARED,),
             ),
             0,
         )
@@ -4557,14 +4551,14 @@ class PearSessionEndpointTest(ZulipTestCase):
             bot_type=UserProfile.EMBEDDED_BOT,
             service_name=PEAR_EMBEDDED_BOT_SERVICE,
         )
-        settled_run = PearWorkerRun.objects.create(
+        settled_run = AgentRun.objects.create(
             realm=owner.realm,
             bot_profile=pear_bot,
             requesting_user=owner,
             trigger_message_id=961,
             stream_name=PEAR_DEFAULT_STREAM,
             topic_name="settled-liveness",
-            status=PearWorkerRun.DONE,
+            status=AgentRun.DONE,
             attempts=4,
             heartbeat_at=timezone_now(),
         )
@@ -4573,7 +4567,7 @@ class PearSessionEndpointTest(ZulipTestCase):
             maintain_pear_worker_run_liveness(
                 active_run_id=settled_run.id,
                 active_run_attempt=4,
-                session_kinds=(PearWorkerRun.SHARED,),
+                session_kinds=(AgentRun.SHARED,),
             ),
             0,
         )
@@ -4589,14 +4583,14 @@ class PearSessionEndpointTest(ZulipTestCase):
         )
         bot_handler = SimpleNamespace(user_profile=pear_bot)
         old_heartbeat = timezone_now() - timedelta(seconds=20)
-        run = PearWorkerRun.objects.create(
+        run = AgentRun.objects.create(
             realm=owner.realm,
             bot_profile=pear_bot,
             requesting_user=owner,
             trigger_message_id=912,
             stream_name=PEAR_DEFAULT_STREAM,
             topic_name="topic-a",
-            status=PearWorkerRun.RUNNING,
+            status=AgentRun.RUNNING,
             attempts=1,
             heartbeat_at=old_heartbeat,
             date_updated=old_heartbeat,
@@ -4654,14 +4648,14 @@ class PearSessionEndpointTest(ZulipTestCase):
             ),
             "Pear session is paused until a resume control is posted.",
         )
-        run = PearWorkerRun.objects.create(
+        run = AgentRun.objects.create(
             realm=owner.realm,
             bot_profile=pear_bot,
             requesting_user=owner,
             trigger_message_id=913,
             stream_name=PEAR_DEFAULT_STREAM,
             topic_name="topic-a",
-            status=PearWorkerRun.QUEUED,
+            status=AgentRun.QUEUED,
         )
         self.assertFalse(
             store.claim_for_run(
@@ -4672,10 +4666,10 @@ class PearSessionEndpointTest(ZulipTestCase):
             )
         )
         run.refresh_from_db()
-        self.assertEqual(run.status, PearWorkerRun.FAILED)
+        self.assertEqual(run.status, AgentRun.FAILED)
         self.assertEqual(run.error, "Pear topic is paused.")
         self.assertEqual(
-            PearWorkerRunEvent.objects.get(run=run, event_type="claim_dropped").payload["reason"],
+            AgentRunEvent.objects.get(run=run, event_type="claim_dropped").payload["reason"],
             "topic_paused",
         )
 
@@ -4716,14 +4710,14 @@ class PearSessionEndpointTest(ZulipTestCase):
             stream=PEAR_DEFAULT_STREAM,
             topic="topic-a",
         )
-        run = PearWorkerRun.objects.create(
+        run = AgentRun.objects.create(
             realm=owner.realm,
             bot_profile=pear_bot,
             requesting_user=owner,
             trigger_message_id=914,
             stream_name=PEAR_DEFAULT_STREAM,
             topic_name="topic-a",
-            status=PearWorkerRun.RUNNING,
+            status=AgentRun.RUNNING,
         )
         self.login_user(owner)
 
@@ -4758,7 +4752,7 @@ class PearSessionEndpointTest(ZulipTestCase):
             ["pause", "resume", "cancel"],
         )
         run.refresh_from_db()
-        self.assertEqual(run.status, PearWorkerRun.CANCELLED)
+        self.assertEqual(run.status, AgentRun.CANCELLED)
         self.assertIsNotNone(run.cancel_requested_at)
 
     def test_pause_locks_workspace_before_run(self) -> None:
@@ -4771,17 +4765,17 @@ class PearSessionEndpointTest(ZulipTestCase):
             bot_type=UserProfile.EMBEDDED_BOT,
             service_name=PEAR_EMBEDDED_BOT_SERVICE,
         )
-        run = PearWorkerRun.objects.create(
+        run = AgentRun.objects.create(
             realm=owner.realm,
             bot_profile=pear_bot,
             requesting_user=owner,
             trigger_message_id=916,
             stream_name=PEAR_DEFAULT_STREAM,
             topic_name="topic-lock-order",
-            status=PearWorkerRun.RUNNING,
+            status=AgentRun.RUNNING,
         )
         call_order: list[str] = []
-        real_select_for_update = PearWorkerRun.objects.select_for_update
+        real_select_for_update = AgentRun.objects.select_for_update
 
         def select_for_update(*args: Any, **kwargs: Any) -> Any:
             call_order.append("run")
@@ -4793,7 +4787,7 @@ class PearSessionEndpointTest(ZulipTestCase):
                 side_effect=lambda *args, **kwargs: call_order.append("workspace"),
             ),
             patch.object(
-                PearWorkerRun.objects,
+                AgentRun.objects,
                 "select_for_update",
                 side_effect=select_for_update,
             ),
@@ -4813,14 +4807,14 @@ class PearSessionEndpointTest(ZulipTestCase):
             bot_type=UserProfile.EMBEDDED_BOT,
             service_name=PEAR_EMBEDDED_BOT_SERVICE,
         )
-        run = PearWorkerRun.objects.create(
+        run = AgentRun.objects.create(
             realm=owner.realm,
             bot_profile=pear_bot,
             requesting_user=owner,
             trigger_message_id=915,
             stream_name=PEAR_DEFAULT_STREAM,
             topic_name="topic-a",
-            status=PearWorkerRun.DONE,
+            status=AgentRun.DONE,
         )
         self.login_user(owner)
 
@@ -4831,7 +4825,7 @@ class PearSessionEndpointTest(ZulipTestCase):
             )
 
         response = self.assert_json_success(result)
-        self.assertEqual(response["pear_run"]["status"], PearWorkerRun.DONE)
+        self.assertEqual(response["pear_run"]["status"], AgentRun.DONE)
         self.assertFalse(run.events.filter(event_type="cancel").exists())
         send_run_event.assert_not_called()
 
@@ -4854,14 +4848,14 @@ class PearSessionEndpointTest(ZulipTestCase):
                 topic_name="topic-a",
                 content="@**Pear** inspect commit ordering",
             )
-        run = PearWorkerRun.objects.create(
+        run = AgentRun.objects.create(
             realm=owner.realm,
             bot_profile=pear_bot,
             requesting_user=owner,
             trigger_message_id=trigger_message_id,
             stream_name=PEAR_DEFAULT_STREAM,
             topic_name="topic-a",
-            status=PearWorkerRun.RUNNING,
+            status=AgentRun.RUNNING,
         )
         store = PearDatabaseWorkerRunStore()
 
@@ -4895,7 +4889,7 @@ class PearSessionEndpointTest(ZulipTestCase):
             bot_type=UserProfile.EMBEDDED_BOT,
             service_name=PEAR_EMBEDDED_BOT_SERVICE,
         )
-        run = PearWorkerRun.objects.create(
+        run = AgentRun.objects.create(
             realm=owner.realm,
             bot_profile=pear_bot,
             requesting_user=owner,
@@ -4903,16 +4897,16 @@ class PearSessionEndpointTest(ZulipTestCase):
             result_message_id=920,
             stream_name=PEAR_DEFAULT_STREAM,
             topic_name="topic-a",
-            status=PearWorkerRun.RUNNING,
+            status=AgentRun.RUNNING,
             codex_thread_id="root-thread",
         )
-        PearWorkerRunEvent.objects.create(
+        AgentRunEvent.objects.create(
             run=run,
             event_type="transcript",
             summary="Hidden reasoning",
             payload={"kind": "reasoning", "body": "private chain of thought"},
         )
-        PearWorkerRunEvent.objects.create(
+        AgentRunEvent.objects.create(
             run=run,
             event_type="transcript",
             summary="Reading files",
@@ -4924,7 +4918,7 @@ class PearSessionEndpointTest(ZulipTestCase):
                 "status": "running",
             },
         )
-        PearWorkerRunEvent.objects.create(
+        AgentRunEvent.objects.create(
             run=run,
             event_type="transcript",
             summary="Read files",
@@ -4935,13 +4929,13 @@ class PearSessionEndpointTest(ZulipTestCase):
                 "status": "done",
             },
         )
-        PearWorkerRunEvent.objects.create(
+        AgentRunEvent.objects.create(
             run=run,
             event_type="transcript",
             summary="Codex",
             payload={"kind": "assistant", "body": "I’m checking the relevant files."},
         )
-        PearWorkerRunEvent.objects.create(
+        AgentRunEvent.objects.create(
             run=run,
             event_type="agent",
             summary="Codex thread child-thread",
@@ -4962,7 +4956,7 @@ class PearSessionEndpointTest(ZulipTestCase):
                 },
             },
         )
-        PearWorkerRunEvent.objects.create(
+        AgentRunEvent.objects.create(
             run=run,
             event_type="agent",
             summary="Hidden child reasoning",
@@ -4976,7 +4970,7 @@ class PearSessionEndpointTest(ZulipTestCase):
                 },
             },
         )
-        PearWorkerRunEvent.objects.create(
+        AgentRunEvent.objects.create(
             run=run,
             event_type="agent",
             summary="Inspect child files",
@@ -4992,7 +4986,7 @@ class PearSessionEndpointTest(ZulipTestCase):
                 },
             },
         )
-        PearWorkerRunEvent.objects.create(
+        AgentRunEvent.objects.create(
             run=run,
             event_type="agent",
             summary="Child result",
@@ -5007,7 +5001,7 @@ class PearSessionEndpointTest(ZulipTestCase):
                 },
             },
         )
-        PearWorkerRunEvent.objects.create(
+        AgentRunEvent.objects.create(
             run=run,
             event_type="agent",
             summary="Codex runtime error.",
@@ -5119,7 +5113,7 @@ class PearSessionEndpointTest(ZulipTestCase):
         mark_attended.assert_called_once_with(run.id)
         enqueue.assert_called_once()
 
-        run.status = PearWorkerRun.DONE
+        run.status = AgentRun.DONE
         run.save(update_fields=["status"])
         settled_result = self.client_post(
             f"/json/pear/runs/{run.id}/attention",
@@ -5137,7 +5131,7 @@ class PearSessionEndpointTest(ZulipTestCase):
             bot_type=UserProfile.EMBEDDED_BOT,
             service_name=PEAR_EMBEDDED_BOT_SERVICE,
         )
-        ambient_run = PearWorkerRun.objects.create(
+        ambient_run = AgentRun.objects.create(
             realm=owner.realm,
             bot_profile=pear_bot,
             requesting_user=owner,
@@ -5145,10 +5139,10 @@ class PearSessionEndpointTest(ZulipTestCase):
             result_message_id=916,
             stream_name=PEAR_DEFAULT_STREAM,
             topic_name="topic-a",
-            status=PearWorkerRun.RUNNING,
+            status=AgentRun.RUNNING,
             ambient_triggered=True,
         )
-        explicit_run = PearWorkerRun.objects.create(
+        explicit_run = AgentRun.objects.create(
             realm=owner.realm,
             bot_profile=pear_bot,
             requesting_user=owner,
@@ -5156,7 +5150,7 @@ class PearSessionEndpointTest(ZulipTestCase):
             result_message_id=918,
             stream_name=PEAR_DEFAULT_STREAM,
             topic_name="topic-a",
-            status=PearWorkerRun.DONE,
+            status=AgentRun.DONE,
         )
         self.login_user(owner)
 
@@ -5167,9 +5161,9 @@ class PearSessionEndpointTest(ZulipTestCase):
         first_payload = self.assert_json_success(first_result)
         self.assertTrue(first_payload["changed"])
         ambient_run.refresh_from_db()
-        self.assertEqual(ambient_run.status, PearWorkerRun.CANCELLED)
+        self.assertEqual(ambient_run.status, AgentRun.CANCELLED)
         self.assertEqual(
-            PearWorkerRunEvent.objects.get(
+            AgentRunEvent.objects.get(
                 run=ambient_run,
                 event_type="routing_feedback",
             ).payload,
@@ -5188,7 +5182,7 @@ class PearSessionEndpointTest(ZulipTestCase):
         second_payload = self.assert_json_success(second_result)
         self.assertFalse(second_payload["changed"])
         self.assertEqual(
-            PearWorkerRunEvent.objects.filter(
+            AgentRunEvent.objects.filter(
                 run=ambient_run,
                 event_type="routing_feedback",
             ).count(),
@@ -5226,7 +5220,7 @@ class PearSessionEndpointTest(ZulipTestCase):
                 topic=PEAR_DEFAULT_TOPIC,
                 response_policy="ambient",
             )
-            context = PearWorkspaceNode.objects.get(
+            context = Workspace.objects.get(
                 realm=owner.realm,
                 stream_name=PEAR_DEFAULT_STREAM,
                 topic_name=PEAR_DEFAULT_TOPIC,
@@ -5374,7 +5368,7 @@ class PearSessionEndpointTest(ZulipTestCase):
 
             result_dict = self.assert_json_success(result)
             active_session_dict = self.assert_json_success(active_session_result)
-            context = PearWorkspaceNode.objects.get(
+            context = Workspace.objects.get(
                 realm=owner.realm,
                 stream_name=PEAR_DEFAULT_STREAM,
                 topic_name=PEAR_DEFAULT_TOPIC,
@@ -5458,14 +5452,14 @@ class PearSessionEndpointTest(ZulipTestCase):
             "A hash map stores key-value pairs for fast lookup.",
             topic_name=PEAR_DEFAULT_TOPIC,
         )
-        PearWorkerRun.objects.create(
+        AgentRun.objects.create(
             realm=user.realm,
             bot_profile=pear_bot,
             requesting_user=user,
             trigger_message_id=request_message_id,
             stream_name=PEAR_DEFAULT_STREAM,
             topic_name=PEAR_DEFAULT_TOPIC,
-            status=PearWorkerRun.DONE,
+            status=AgentRun.DONE,
             codex_thread_id="thread-ambient",
             ambient_triggered=True,
             result_message_id=result_message_id,
@@ -5502,14 +5496,14 @@ class PearSessionEndpointTest(ZulipTestCase):
             "agent, Choose a random 15 digit number.",
             topic_name=PEAR_DEFAULT_TOPIC,
         )
-        PearWorkerRun.objects.create(
+        AgentRun.objects.create(
             realm=owner.realm,
             bot_profile=pear_bot,
             requesting_user=owner,
             trigger_message_id=first_message_id,
             stream_name=PEAR_DEFAULT_STREAM,
             topic_name=PEAR_DEFAULT_TOPIC,
-            status=PearWorkerRun.DONE,
+            status=AgentRun.DONE,
             codex_thread_id="thread-first",
         )
         self.send_stream_message(
@@ -5583,14 +5577,14 @@ class PearSessionEndpointTest(ZulipTestCase):
             "@Pear inspect the parser",
             topic_name=PEAR_DEFAULT_TOPIC,
         )
-        PearWorkerRun.objects.create(
+        AgentRun.objects.create(
             realm=owner.realm,
             bot_profile=pear_bot,
             requesting_user=owner,
             trigger_message_id=first_message_id,
             stream_name=PEAR_DEFAULT_STREAM,
             topic_name=PEAR_DEFAULT_TOPIC,
-            status=PearWorkerRun.DONE,
+            status=AgentRun.DONE,
             codex_thread_id="thread-first",
         )
         parent_message_id = self.send_stream_message(
@@ -5657,7 +5651,7 @@ class PearSessionEndpointTest(ZulipTestCase):
             "The parser has two phases.",
             topic_name=PEAR_DEFAULT_TOPIC,
         )
-        PearWorkerRun.objects.create(
+        AgentRun.objects.create(
             realm=owner.realm,
             bot_profile=pear_bot,
             requesting_user=owner,
@@ -5665,8 +5659,8 @@ class PearSessionEndpointTest(ZulipTestCase):
             result_message_id=old_result_message_id,
             stream_name=PEAR_DEFAULT_STREAM,
             topic_name=PEAR_DEFAULT_TOPIC,
-            session_kind=PearWorkerRun.SHARED,
-            status=PearWorkerRun.DONE,
+            session_kind=AgentRun.SHARED,
+            status=AgentRun.DONE,
             codex_thread_id="thread-old",
         )
         new_trigger_message_id = self.send_stream_message(
@@ -5681,7 +5675,7 @@ class PearSessionEndpointTest(ZulipTestCase):
             "The renderer is healthy.",
             topic_name=PEAR_DEFAULT_TOPIC,
         )
-        PearWorkerRun.objects.create(
+        AgentRun.objects.create(
             realm=owner.realm,
             bot_profile=pear_bot,
             requesting_user=owner,
@@ -5689,8 +5683,8 @@ class PearSessionEndpointTest(ZulipTestCase):
             result_message_id=new_result_message_id,
             stream_name=PEAR_DEFAULT_STREAM,
             topic_name=PEAR_DEFAULT_TOPIC,
-            session_kind=PearWorkerRun.SHARED,
-            status=PearWorkerRun.DONE,
+            session_kind=AgentRun.SHARED,
+            status=AgentRun.DONE,
             codex_thread_id="thread-new",
         )
         side_trigger_message_id = self.send_stream_message(
@@ -5912,7 +5906,7 @@ class PearSessionEndpointTest(ZulipTestCase):
                     topic="",
                 ).startswith(temp_dir)
             )
-            context = PearWorkspaceNode.objects.get(
+            context = Workspace.objects.get(
                 realm=owner.realm,
                 stream_name=PEAR_DEFAULT_STREAM,
                 topic_name="",
@@ -5920,14 +5914,14 @@ class PearSessionEndpointTest(ZulipTestCase):
             assert context.project is not None
             self.assertEqual(context.project.repository_url, "")
 
-            PearWorkerRun.objects.create(
+            AgentRun.objects.create(
                 realm=owner.realm,
                 bot_profile=pear_bot,
                 requesting_user=owner,
                 trigger_message_id=trigger_message_id,
                 stream_name=PEAR_DEFAULT_STREAM,
                 topic_name="",
-                status=PearWorkerRun.RUNNING,
+                status=AgentRun.RUNNING,
             )
             self.assertEqual(
                 PearDatabaseWorkerRunStore().active_worker_run_message_id(
@@ -6139,21 +6133,21 @@ class PearWorkspaceMapTest(ZulipTestCase):
         user = self.example_user("hamlet")
         self.login_user(user)
         stream = self.subscribe(user, "workmap")
-        project = PearProject.objects.create(realm=user.realm, stream=stream)
-        PearWorkspaceNode.objects.create(
+        project = Repository.objects.create(realm=user.realm, stream=stream)
+        Workspace.objects.create(
             realm=user.realm,
             project=project,
             stream_name=stream.name,
             topic_name="feature-a",
             branch_name="feature-a",
         )
-        PearWorkspaceNode.objects.create(
+        Workspace.objects.create(
             realm=user.realm,
             project=project,
             stream_name=stream.name,
             topic_name="retired",
             branch_name="retired",
-            lifecycle_status=PearWorkspaceNode.ARCHIVED,
+            lifecycle_status=Workspace.ARCHIVED,
         )
 
         result = self.client_get("/json/pear/workspace-topics", {"stream": stream.name})
@@ -6173,9 +6167,9 @@ class PearWorkspaceMapTest(ZulipTestCase):
     def test_register_reports_accessible_pear_project_stream_ids(self) -> None:
         user = self.example_user("hamlet")
         stream = self.subscribe(user, "workmap")
-        PearProject.objects.create(realm=user.realm, stream=stream)
+        Repository.objects.create(realm=user.realm, stream=stream)
         private_stream = self.make_stream("sekrit", invite_only=True)
-        PearProject.objects.create(realm=user.realm, stream=private_stream)
+        Repository.objects.create(realm=user.realm, stream=private_stream)
 
         state = fetch_initial_state_data(user, realm=user.realm)
         self.assertIn(stream.id, state["pear_project_stream_ids"])
@@ -6195,7 +6189,7 @@ class PearMonitorTest(ZulipTestCase):
 
     def create_live_monitor(
         self, owner: UserProfile, pear_bot: UserProfile, **overrides: object
-    ) -> PearMonitor:
+    ) -> AgentMonitor:
         fields: dict[str, object] = dict(
             realm=owner.realm,
             bot_profile=pear_bot,
@@ -6204,7 +6198,7 @@ class PearMonitorTest(ZulipTestCase):
             topic_name=PEAR_DEFAULT_TOPIC,
             title="loader",
             ask="training loader",
-            status=PearMonitor.LIVE,
+            status=AgentMonitor.LIVE,
             cadence_seconds=20,
             artifact_spec={
                 "version": 1,
@@ -6220,7 +6214,7 @@ class PearMonitorTest(ZulipTestCase):
             next_due_at=timezone_now(),
         )
         fields.update(overrides)
-        return PearMonitor.objects.create(**fields)
+        return AgentMonitor.objects.create(**fields)
 
     def test_create_monitor_queues_setup_run(self) -> None:
         owner = self.example_user("hamlet")
@@ -6244,17 +6238,17 @@ class PearMonitorTest(ZulipTestCase):
                 intentionally_undocumented=True,
             )
             result_dict = self.assert_json_success(result)
-            monitor = PearMonitor.objects.get(id=result_dict["pear_monitor"]["id"])
-            self.assertEqual(monitor.status, PearMonitor.PROVISIONING)
+            monitor = AgentMonitor.objects.get(id=result_dict["pear_monitor"]["id"])
+            self.assertEqual(monitor.status, AgentMonitor.PROVISIONING)
             self.assertEqual(monitor.ask, "training loader")
             self.assertIsNotNone(monitor.anchor_message_id)
 
-            run = PearWorkerRun.objects.get(
+            run = AgentRun.objects.get(
                 bot_profile=pear_bot, trigger_message_id=monitor.anchor_message_id
             )
-            self.assertEqual(run.session_kind, PearWorkerRun.MONITOR)
+            self.assertEqual(run.session_kind, AgentRun.MONITOR)
             kwargs = dispatch_mock.call_args.kwargs
-            self.assertEqual(kwargs["session_kind"], PearWorkerRun.MONITOR)
+            self.assertEqual(kwargs["session_kind"], AgentRun.MONITOR)
             self.assertIn("training loader", kwargs["content"])
             self.assertIn(pear_monitor_spec_relative_path(monitor.id), kwargs["content"])
 
@@ -6359,7 +6353,7 @@ class PearMonitorTest(ZulipTestCase):
             intentionally_undocumented=True,
         )
         self.assert_json_success(result)
-        self.assertFalse(PearMonitor.objects.filter(id=monitor.id).exists())
+        self.assertFalse(AgentMonitor.objects.filter(id=monitor.id).exists())
 
     def test_monitor_list_requires_stream_access(self) -> None:
         owner = self.example_user("hamlet")
@@ -6380,7 +6374,7 @@ class PearMonitorTest(ZulipTestCase):
             intentionally_undocumented=True,
         )
         self.assert_json_error(result, "Invalid channel name 'pear-private'")
-        self.assertTrue(PearMonitor.objects.filter(id=monitor.id).exists())
+        self.assertTrue(AgentMonitor.objects.filter(id=monitor.id).exists())
 
     def test_validate_monitor_spec(self) -> None:
         good = {
@@ -6543,7 +6537,7 @@ class PearMonitorTest(ZulipTestCase):
                         process_isolation=process_isolation,
                     )
                     monitor.refresh_from_db()
-            self.assertEqual(monitor.status, PearMonitor.ERROR)
+            self.assertEqual(monitor.status, AgentMonitor.ERROR)
             self.assertIn("recipe exited", monitor.last_error)
             # The sample from the good ticks is preserved on error.
             self.assertEqual(monitor.version, 1)
@@ -6578,7 +6572,7 @@ class PearMonitorTest(ZulipTestCase):
         monitor = self.create_live_monitor(
             owner,
             pear_bot,
-            status=PearMonitor.PROVISIONING,
+            status=AgentMonitor.PROVISIONING,
             anchor_message_id=987654,
             recipe={},
             artifact_spec={},
@@ -6607,21 +6601,21 @@ class PearMonitorTest(ZulipTestCase):
                 pear_bot, 987654, workdir=temp_dir, isolation_username=None
             )
             monitor.refresh_from_db()
-            self.assertEqual(monitor.status, PearMonitor.LIVE)
+            self.assertEqual(monitor.status, AgentMonitor.LIVE)
             self.assertEqual(monitor.title, "gpu credits")
             self.assertEqual(monitor.cadence_seconds, 30)
             self.assertEqual(monitor.recipe["command"], "echo 41")
             self.assertIsNotNone(monitor.next_due_at)
 
         # A run whose agent never wrote the file settles to error.
-        monitor.status = PearMonitor.PROVISIONING
+        monitor.status = AgentMonitor.PROVISIONING
         monitor.save(update_fields=["status"])
         with tempfile.TemporaryDirectory() as temp_dir:
             pear_apply_monitor_setup_result(
                 pear_bot, 987654, workdir=temp_dir, isolation_username=None
             )
         monitor.refresh_from_db()
-        self.assertEqual(monitor.status, PearMonitor.ERROR)
+        self.assertEqual(monitor.status, AgentMonitor.ERROR)
         self.assertIn("did not write the spec file", monitor.last_error)
 
     def test_monitor_dispatch_routes_to_monitor_queue(self) -> None:
@@ -6648,7 +6642,7 @@ class PearMonitorTest(ZulipTestCase):
             # Monitor turns ride their own consumer so a provisioning
             # wall block never queues ahead of a chat run.
             self.assertEqual(queue_name, "pear_monitor_worker")
-            self.assertEqual(event["session_kind"], PearWorkerRun.MONITOR)
+            self.assertEqual(event["session_kind"], AgentRun.MONITOR)
 
     def test_spec_direct_monitor_creation_pins_without_agent_run(self) -> None:
         owner = self.example_user("hamlet")
@@ -6666,7 +6660,7 @@ class PearMonitorTest(ZulipTestCase):
             },
             "recipe": {"command": "", "parse": {"mode": "static"}, "bindings": {}},
         }
-        runs_before = PearWorkerRun.objects.count()
+        runs_before = AgentRun.objects.count()
         messages_before = Message.objects.count()
         with patch("zerver.views.armada.PearQueueWorkerDispatcher.dispatch") as dispatch_mock:
             result = self.client_post(
@@ -6680,14 +6674,14 @@ class PearMonitorTest(ZulipTestCase):
                 intentionally_undocumented=True,
             )
         result_dict = self.assert_json_success(result)
-        monitor = PearMonitor.objects.get(id=result_dict["pear_monitor"]["id"])
+        monitor = AgentMonitor.objects.get(id=result_dict["pear_monitor"]["id"])
         # Pinning is instant: live monitor, no setup run, no DM anchor.
-        self.assertEqual(monitor.status, PearMonitor.LIVE)
+        self.assertEqual(monitor.status, AgentMonitor.LIVE)
         self.assertEqual(monitor.title, "gpu credits")
         self.assertIsNotNone(monitor.next_due_at)
         self.assertIsNone(monitor.anchor_message_id)
         dispatch_mock.assert_not_called()
-        self.assertEqual(PearWorkerRun.objects.count(), runs_before)
+        self.assertEqual(AgentRun.objects.count(), runs_before)
         self.assertEqual(Message.objects.count(), messages_before)
 
     def test_spec_direct_monitor_creation_rejects_bad_specs(self) -> None:
@@ -6711,7 +6705,7 @@ class PearMonitorTest(ZulipTestCase):
             intentionally_undocumented=True,
         )
         self.assert_json_error_contains(result, "Invalid artifact spec")
-        self.assertFalse(PearMonitor.objects.exists())
+        self.assertFalse(AgentMonitor.objects.exists())
 
 
 class PearTrustedUsersTest(ZulipTestCase):
@@ -6870,7 +6864,7 @@ class PearTrustedUsersTest(ZulipTestCase):
         self.subscribe(hamlet, PEAR_DEFAULT_STREAM)
         self.subscribe(pear_bot, PEAR_DEFAULT_STREAM)
         self.login_user(hamlet)
-        monitor = PearMonitor.objects.create(
+        monitor = AgentMonitor.objects.create(
             realm=hamlet.realm,
             bot_profile=pear_bot,
             creator=hamlet,
@@ -6878,7 +6872,7 @@ class PearTrustedUsersTest(ZulipTestCase):
             topic_name=PEAR_DEFAULT_TOPIC,
             title="loader",
             ask="training loader",
-            status=PearMonitor.ERROR,
+            status=AgentMonitor.ERROR,
         )
 
         with (
@@ -6903,5 +6897,5 @@ class PearTrustedUsersTest(ZulipTestCase):
             self.assert_json_error(result, "You are not allowed to start agent runs.")
 
         dispatch_mock.assert_not_called()
-        self.assertEqual(PearMonitor.objects.count(), 1)
-        self.assertFalse(PearWorkerRun.objects.filter(session_kind=PearWorkerRun.MONITOR).exists())
+        self.assertEqual(AgentMonitor.objects.count(), 1)
+        self.assertFalse(AgentRun.objects.filter(session_kind=AgentRun.MONITOR).exists())

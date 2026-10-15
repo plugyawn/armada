@@ -41,7 +41,7 @@ from zerver.lib.rate_limiter import RateLimitedUser
 from zerver.lib.templates import font_preloads
 from zerver.lib.test_classes import ZulipTestCase
 from zerver.lib.test_helpers import ratelimit_rule
-from zerver.models import BotStorageData, Message, PearWorkerRun, Reaction, UserProfile
+from zerver.models import AgentRun, BotStorageData, Message, Reaction, UserProfile
 from zerver.models.bots import Service
 from zerver.views.armada_beta import live_run_ids_for_user
 
@@ -159,12 +159,12 @@ class ArmadaBetaTest(ZulipTestCase):
         requester: UserProfile,
         stream_name: str,
         *,
-        status: str = PearWorkerRun.RUNNING,
-        session_kind: str = PearWorkerRun.SHARED,
+        status: str = AgentRun.RUNNING,
+        session_kind: str = AgentRun.SHARED,
         minutes_ago: int = 0,
-    ) -> PearWorkerRun:
+    ) -> AgentRun:
         trigger_message_id = self.send_stream_message(requester, stream_name, "a request")
-        return PearWorkerRun.objects.create(
+        return AgentRun.objects.create(
             realm=requester.realm,
             bot_profile=self.example_user("default_bot"),
             requesting_user=requester,
@@ -185,10 +185,10 @@ class ArmadaBetaTest(ZulipTestCase):
         self.subscribe(othello, "hamlet-not-here")
 
         older = self.make_run(othello, "Denmark", minutes_ago=5)
-        queued = self.make_run(othello, "Denmark", status=PearWorkerRun.QUEUED)
-        self.make_run(othello, "Denmark", status=PearWorkerRun.DONE)
-        self.make_run(othello, "Denmark", status=PearWorkerRun.FAILED)
-        self.make_run(othello, "Denmark", session_kind=PearWorkerRun.SIDE)
+        queued = self.make_run(othello, "Denmark", status=AgentRun.QUEUED)
+        self.make_run(othello, "Denmark", status=AgentRun.DONE)
+        self.make_run(othello, "Denmark", status=AgentRun.FAILED)
+        self.make_run(othello, "Denmark", session_kind=AgentRun.SIDE)
         self.make_run(othello, "hamlet-not-here")
 
         self.assertEqual(live_run_ids_for_user(hamlet), [queued.id, older.id])
@@ -410,7 +410,7 @@ class PartnerTest(ZulipTestCase):
     def finish_run(self, user: UserProfile, moment: datetime, status: str) -> None:
         trigger = self.send_stream_message(user, "Verona", "a request")
         Message.objects.filter(id=trigger).update(date_sent=moment)
-        PearWorkerRun.objects.create(
+        AgentRun.objects.create(
             realm=self.realm,
             bot_profile=self.agent,
             requesting_user=user,
@@ -543,15 +543,15 @@ class PartnerTest(ZulipTestCase):
         # Monday: 12 messages, a done run (its trigger is a 13th message), a
         # cancelled run (a 14th), a failed one (a 15th): 25 + 15 + 5 + 5.
         self.send_at(aaron, monday, 12)
-        self.finish_run(aaron, monday, PearWorkerRun.DONE)
-        self.finish_run(aaron, monday, PearWorkerRun.CANCELLED)
-        self.finish_run(aaron, monday, PearWorkerRun.FAILED)
+        self.finish_run(aaron, monday, AgentRun.DONE)
+        self.finish_run(aaron, monday, AgentRun.CANCELLED)
+        self.finish_run(aaron, monday, AgentRun.FAILED)
         # Tuesday: 40 messages (30 count), 11 runs ended (8 count), 12
         # reactions from others (10 count) and one of my own (none):
         # 25 + 30 + 40 + 10. The run triggers are among the 40 + 11 messages.
         self.send_at(aaron, tuesday, 40)
         for _ in range(11):
-            self.finish_run(aaron, tuesday, PearWorkerRun.DONE)
+            self.finish_run(aaron, tuesday, AgentRun.DONE)
         target = self.send_at(aaron, tuesday)[0]
         for i, person in enumerate(["hamlet", "othello", "cordelia", "iago"] * 3):
             Reaction.objects.create(
@@ -678,10 +678,10 @@ class PartnerTest(ZulipTestCase):
         moment = timezone_now()
         with override_settings(PARTNER_AGENT_RUNS=3, PARTNER_AGENT_HANDS=2):
             for _ in range(3):
-                self.finish_run(cordelia, moment, PearWorkerRun.DONE)
+                self.finish_run(cordelia, moment, AgentRun.DONE)
             # Three runs, but from one pair of hands.
             self.assertEqual(self.partners(cordelia)["agent"]["species"], "95")
-            self.finish_run(self.example_user("hamlet"), moment, PearWorkerRun.DONE)
+            self.finish_run(self.example_user("hamlet"), moment, AgentRun.DONE)
             self.assertEqual(self.partners(cordelia)["agent"]["species"], "208")
         # Without the drawing, the agent keeps its committed mark.
         PACK_WITHOUT = json.loads(json.dumps(PACK))

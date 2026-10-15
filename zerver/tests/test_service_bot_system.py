@@ -25,7 +25,7 @@ from zerver.lib.test_classes import ZulipTestCase
 from zerver.lib.test_helpers import mock_queue_publish
 from zerver.lib.validator import check_string
 from zerver.models import Message, Recipient, UserProfile
-from zerver.models.bots import PearWorkspaceNode
+from zerver.models.bots import Workspace
 from zerver.models.messages import UserMessage
 from zerver.models.realms import get_realm
 from zerver.models.scheduled_jobs import NotificationTriggers
@@ -198,7 +198,7 @@ class TestServiceBotBasics(ZulipTestCase):
             service_name=PEAR_EMBEDDED_BOT_SERVICE,
         )
         stream = get_stream("Denmark", sender.realm)
-        PearWorkspaceNode.objects.create(
+        Workspace.objects.create(
             realm=sender.realm,
             stream_name=stream.name,
             topic_name="followup",
@@ -412,7 +412,7 @@ class TestServiceBotBasics(ZulipTestCase):
             service_name=PEAR_EMBEDDED_BOT_SERVICE,
         )
         stream = get_stream("Denmark", sender.realm)
-        PearWorkspaceNode.objects.create(
+        Workspace.objects.create(
             realm=sender.realm,
             stream_name=stream.name,
             topic_name="followup",
@@ -460,7 +460,7 @@ class TestServiceBotBasics(ZulipTestCase):
         )
         stream = get_stream("Denmark", sender.realm)
 
-        PearWorkspaceNode.objects.create(
+        Workspace.objects.create(
             realm=sender.realm,
             stream_name=stream.name,
             topic_name="ambient",
@@ -489,7 +489,7 @@ class TestServiceBotBasics(ZulipTestCase):
             },
         )
 
-        PearWorkspaceNode.objects.create(
+        Workspace.objects.create(
             realm=sender.realm,
             stream_name=stream.name,
             topic_name="mentions only",
@@ -508,7 +508,7 @@ class TestServiceBotBasics(ZulipTestCase):
         )
         self.assertEqual(event_dict["embedded_bots"], [])
 
-        PearWorkspaceNode.objects.create(
+        Workspace.objects.create(
             realm=sender.realm,
             stream_name=stream.name,
             topic_name="paused",
@@ -543,7 +543,7 @@ class TestServiceBotBasics(ZulipTestCase):
             service_name=PEAR_EMBEDDED_BOT_SERVICE,
         )
         stream = get_stream("Denmark", sender.realm)
-        PearWorkspaceNode.objects.create(
+        Workspace.objects.create(
             realm=sender.realm,
             stream_name=stream.name,
             topic_name="followup",

@@ -5,7 +5,7 @@ from django.db.models.functions import RowNumber
 
 from zerver.lib.event_types import PearRunAgent, PearRunAgentDelta
 from zerver.lib.timestamp import datetime_to_timestamp
-from zerver.models.bots import PearWorkerRun, PearWorkerRunEvent
+from zerver.models.bots import AgentRun, AgentRunEvent
 
 PEAR_RUN_AGENT_THREAD_LIMIT = 16
 PEAR_RUN_AGENT_SESSION_CANDIDATE_LIMIT = 64
@@ -25,7 +25,7 @@ PEAR_AGENT_ACTIVITY_KINDS = (
 )
 
 
-def pear_agent_event_metadata(event: PearWorkerRunEvent) -> dict[str, object]:
+def pear_agent_event_metadata(event: AgentRunEvent) -> dict[str, object]:
     payload = event.payload if isinstance(event.payload, dict) else {}
     metadata = payload.get("metadata")
     return metadata if isinstance(metadata, dict) else {}
@@ -55,7 +55,7 @@ def normalize_pear_agent_status(value: object) -> str:
     return "idle"
 
 
-def pear_agent_delta_from_event(event: PearWorkerRunEvent) -> dict[str, object] | None:
+def pear_agent_delta_from_event(event: AgentRunEvent) -> dict[str, object] | None:
     if event.event_type != "agent":
         return None
     payload = event.payload if isinstance(event.payload, dict) else {}
@@ -85,7 +85,7 @@ def pear_agent_delta_from_event(event: PearWorkerRunEvent) -> dict[str, object] 
     return PearRunAgentDelta.model_validate(values).model_dump(exclude_unset=True)
 
 
-def load_pear_agent_thread_events(run_ids: Iterable[int]) -> list[PearWorkerRunEvent]:
+def load_pear_agent_thread_events(run_ids: Iterable[int]) -> list[AgentRunEvent]:
     """Load bounded descriptors and the latest reducer inputs for each child.
 
     Sessions establish the child graph.  The second query is partitioned by
@@ -97,7 +97,7 @@ def load_pear_agent_thread_events(run_ids: Iterable[int]) -> list[PearWorkerRunE
     if not normalized_run_ids:
         return []
     sessions = list(
-        PearWorkerRunEvent.objects.filter(
+        AgentRunEvent.objects.filter(
             run_id__in=normalized_run_ids,
             event_type="agent",
             payload__kind="session",
@@ -121,7 +121,7 @@ def load_pear_agent_thread_events(run_ids: Iterable[int]) -> list[PearWorkerRunE
         return sessions
 
     reducer_events = list(
-        PearWorkerRunEvent.objects.filter(
+        AgentRunEvent.objects.filter(
             Q(payload__metadata__codex_method__in=PEAR_AGENT_LIFECYCLE_METHODS)
             | Q(payload__kind__in=PEAR_AGENT_ACTIVITY_KINDS),
             run_id__in=normalized_run_ids,
@@ -205,8 +205,8 @@ def _complete_visible_descriptor_ids(
 
 
 def serialize_pear_agent_threads(
-    run: PearWorkerRun,
-    events: Iterable[PearWorkerRunEvent] | None = None,
+    run: AgentRun,
+    events: Iterable[AgentRunEvent] | None = None,
 ) -> list[dict[str, object]]:
     """Reconstruct the bounded native Codex child graph from durable events."""
 

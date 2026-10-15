@@ -7,7 +7,7 @@ from zerver.lib.armada_agent_threads import (
 from zerver.lib.message import event_recipient_ids_for_action_on_messages
 from zerver.lib.stream_subscription import get_user_ids_for_streams
 from zerver.models import Message, Stream
-from zerver.models.bots import PearWorkerRun, PearWorkerRunEvent, PearWorkspaceNode
+from zerver.models.bots import AgentRun, AgentRunEvent, Workspace
 from zerver.tornado.django_api import send_event_on_commit
 
 
@@ -56,7 +56,7 @@ def _pear_agent_event_needs_snapshot(
     return payload.get("kind") in {"error", "session"}
 
 
-def send_pear_run_event(run: PearWorkerRun, run_event: PearWorkerRunEvent) -> None:
+def send_pear_run_event(run: AgentRun, run_event: AgentRunEvent) -> None:
     """Push one reducer-friendly Pear run delta to users who can see its trigger."""
     try:
         trigger_message = Message.objects.only("id", "is_channel_message").get(
@@ -65,7 +65,7 @@ def send_pear_run_event(run: PearWorkerRun, run_event: PearWorkerRunEvent) -> No
     except Message.DoesNotExist:
         return
 
-    if run.session_kind == PearWorkerRun.SIDE and run.requesting_user_id is not None:
+    if run.session_kind == AgentRun.SIDE and run.requesting_user_id is not None:
         recipient_ids = {run.requesting_user_id}
     else:
         recipient_ids = event_recipient_ids_for_action_on_messages(
@@ -132,7 +132,7 @@ def send_pear_run_event(run: PearWorkerRun, run_event: PearWorkerRunEvent) -> No
     send_event_on_commit(run.realm, event, list(recipient_ids))
 
 
-def send_pear_workspace_changed_event(node: PearWorkspaceNode, revision: int) -> None:
+def send_pear_workspace_changed_event(node: Workspace, revision: int) -> None:
     """Notify subscribers after a new authoritative Workspace revision exists."""
     stream = Stream.objects.filter(
         realm=node.realm,

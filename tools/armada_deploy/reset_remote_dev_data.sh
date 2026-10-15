@@ -184,7 +184,7 @@ from django.test import RequestFactory
 from zerver.actions.user_settings import do_change_full_name, do_change_user_delivery_email
 from zerver.actions.users import do_change_user_role, do_deactivate_user
 from zerver.models import DirectMessageGroup, Draft, Message, Realm, Stream, UserProfile
-from zerver.models.bots import PearWorkerRun, Service
+from zerver.models.bots import AgentRun, Service
 from zerver.models.scheduled_jobs import ScheduledMessage
 from zerver.models.user_topics import UserTopic
 from zerver.models.users import get_user_by_delivery_email
@@ -194,7 +194,7 @@ realm = Realm.objects.get(string_id="zulip")
 
 # Keep generated channels/settings useful, but remove all generated conversation history.
 Message.objects.all().delete()
-PearWorkerRun.objects.all().delete()
+AgentRun.objects.all().delete()
 DirectMessageGroup.objects.all().delete()
 Draft.objects.all().delete()
 ScheduledMessage.objects.all().delete()

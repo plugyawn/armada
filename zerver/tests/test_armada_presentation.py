@@ -18,12 +18,12 @@ from zerver.lib.armada_worker import (
 )
 from zerver.lib.test_classes import ZulipTestCase
 from zerver.models import UserProfile
-from zerver.models.bots import PearWorkerRun, PearWorkerRunEvent
+from zerver.models.bots import AgentRun, AgentRunEvent
 from zerver.worker.pear_presentation import PearPresentationWorker
 
 
 class PearPresentationTest(ZulipTestCase):
-    def create_run(self) -> PearWorkerRun:
+    def create_run(self) -> AgentRun:
         owner = self.example_user("hamlet")
         pear_bot = self.create_test_bot(
             "pear-presentation",
@@ -32,7 +32,7 @@ class PearPresentationTest(ZulipTestCase):
             bot_type=UserProfile.EMBEDDED_BOT,
             service_name=PEAR_EMBEDDED_BOT_SERVICE,
         )
-        return PearWorkerRun.objects.create(
+        return AgentRun.objects.create(
             realm=owner.realm,
             bot_profile=pear_bot,
             requesting_user=owner,
@@ -40,7 +40,7 @@ class PearPresentationTest(ZulipTestCase):
             result_message_id=7002,
             stream_name=PEAR_DEFAULT_STREAM,
             topic_name=PEAR_DEFAULT_TOPIC,
-            status=PearWorkerRun.RUNNING,
+            status=AgentRun.RUNNING,
             current_activity="Reading files",
         )
 
@@ -132,7 +132,7 @@ class PearPresentationTest(ZulipTestCase):
 
     def test_worker_publishes_overview_only_for_active_run_with_real_plan(self) -> None:
         run = self.create_run()
-        PearWorkerRunEvent.objects.create(
+        AgentRunEvent.objects.create(
             run=run,
             event_type="transcript",
             summary="Plan updated",
@@ -141,7 +141,7 @@ class PearPresentationTest(ZulipTestCase):
                 "metadata": {"steps": [{"step": "Inspect", "status": "in_progress"}]},
             },
         )
-        source_event = PearWorkerRunEvent.objects.create(
+        source_event = AgentRunEvent.objects.create(
             run=run,
             event_type="transcript",
             summary="Read files",
@@ -164,7 +164,7 @@ class PearPresentationTest(ZulipTestCase):
                 json.loads(presentation_request["input_text"])["recent_events"],
                 [{"kind": "command", "text": "Reading four files"}],
             )
-            repeated_source_event = PearWorkerRunEvent.objects.create(
+            repeated_source_event = AgentRunEvent.objects.create(
                 run=run,
                 event_type="transcript",
                 summary="Read files again",
@@ -172,7 +172,7 @@ class PearPresentationTest(ZulipTestCase):
             )
             worker.consume({"run_id": run.id, "source_event_id": repeated_source_event.id})
 
-        presentation = PearWorkerRunEvent.objects.get(run=run, event_type="presentation")
+        presentation = AgentRunEvent.objects.get(run=run, event_type="presentation")
         self.assertEqual(presentation.payload["overview"], "Reading four files")
         self.assertEqual(presentation.payload["source_event_id"], source_event.id)
         self.assertEqual(presentation.payload["current_step"], "Inspect")
@@ -180,7 +180,7 @@ class PearPresentationTest(ZulipTestCase):
 
     def test_worker_drops_overview_if_plan_advances_during_request(self) -> None:
         run = self.create_run()
-        PearWorkerRunEvent.objects.create(
+        AgentRunEvent.objects.create(
             run=run,
             event_type="transcript",
             summary="Plan updated",
@@ -189,7 +189,7 @@ class PearPresentationTest(ZulipTestCase):
                 "metadata": {"steps": [{"step": "Inspect", "status": "in_progress"}]},
             },
         )
-        source_event = PearWorkerRunEvent.objects.create(
+        source_event = AgentRunEvent.objects.create(
             run=run,
             event_type="transcript",
             summary="Read files",
@@ -201,7 +201,7 @@ class PearPresentationTest(ZulipTestCase):
         worker.client.api_key = "test-key"
 
         def advance_plan(**kwargs: object) -> str:
-            PearWorkerRunEvent.objects.create(
+            AgentRunEvent.objects.create(
                 run=run,
                 event_type="transcript",
                 summary="Plan updated",
@@ -216,14 +216,12 @@ class PearPresentationTest(ZulipTestCase):
         with patch("zerver.worker.pear_presentation.send_pear_run_event") as send_event:
             worker.consume({"run_id": run.id, "source_event_id": source_event.id})
 
-        self.assertFalse(
-            PearWorkerRunEvent.objects.filter(run=run, event_type="presentation").exists()
-        )
+        self.assertFalse(AgentRunEvent.objects.filter(run=run, event_type="presentation").exists())
         send_event.assert_not_called()
 
     def test_worker_drops_overview_if_run_finishes_during_request(self) -> None:
         run = self.create_run()
-        PearWorkerRunEvent.objects.create(
+        AgentRunEvent.objects.create(
             run=run,
             event_type="transcript",
             summary="Plan updated",
@@ -232,7 +230,7 @@ class PearPresentationTest(ZulipTestCase):
                 "metadata": {"steps": [{"step": "Inspect", "status": "in_progress"}]},
             },
         )
-        source_event = PearWorkerRunEvent.objects.create(
+        source_event = AgentRunEvent.objects.create(
             run=run,
             event_type="transcript",
             summary="Read files",
@@ -244,21 +242,19 @@ class PearPresentationTest(ZulipTestCase):
         worker.client.api_key = "test-key"
 
         def finish_run(**kwargs: object) -> str:
-            PearWorkerRun.objects.filter(id=run.id).update(status=PearWorkerRun.DONE)
+            AgentRun.objects.filter(id=run.id).update(status=AgentRun.DONE)
             return '{"overview":"Reading four files."}'
 
         worker.client.interact.side_effect = finish_run
         with patch("zerver.worker.pear_presentation.send_pear_run_event") as send_event:
             worker.consume({"run_id": run.id, "source_event_id": source_event.id})
 
-        self.assertFalse(
-            PearWorkerRunEvent.objects.filter(run=run, event_type="presentation").exists()
-        )
+        self.assertFalse(AgentRunEvent.objects.filter(run=run, event_type="presentation").exists())
         send_event.assert_not_called()
 
     def test_worker_does_not_call_gemini_without_a_plan(self) -> None:
         run = self.create_run()
-        source_event = PearWorkerRunEvent.objects.create(
+        source_event = AgentRunEvent.objects.create(
             run=run,
             event_type="transcript",
             summary="Read files",
@@ -272,6 +268,4 @@ class PearPresentationTest(ZulipTestCase):
         worker.consume({"run_id": run.id, "source_event_id": source_event.id})
 
         worker.client.interact.assert_not_called()
-        self.assertFalse(
-            PearWorkerRunEvent.objects.filter(run=run, event_type="presentation").exists()
-        )
+        self.assertFalse(AgentRunEvent.objects.filter(run=run, event_type="presentation").exists())

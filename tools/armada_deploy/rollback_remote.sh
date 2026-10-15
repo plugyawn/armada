@@ -98,18 +98,18 @@ from django.db import transaction
 from django.utils.timezone import now
 
 from zerver.lib.armada_worker import settle_orphaned_pear_run_message
-from zerver.models.bots import PearWorkerRun
+from zerver.models.bots import AgentRun
 
 rollback_error = "Run interrupted by deployment rollback."
 with transaction.atomic():
     runs = list(
-        PearWorkerRun.objects.select_for_update()
+        AgentRun.objects.select_for_update()
         .select_related("bot_profile")
-        .filter(status__in=(PearWorkerRun.QUEUED, PearWorkerRun.RUNNING))
+        .filter(status__in=(AgentRun.QUEUED, AgentRun.RUNNING))
     )
     finished_at = now()
     for run in runs:
-        run.status = PearWorkerRun.FAILED
+        run.status = AgentRun.FAILED
         run.error = rollback_error
         run.current_activity = rollback_error
         run.summary = rollback_error

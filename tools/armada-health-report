@@ -50,9 +50,9 @@ def setup_django() -> tuple[Any, Any, int, Any]:
     from django.utils.timezone import now as timezone_now
 
     from zerver.lib.armada_worker import pear_worker_stale_after_seconds
-    from zerver.models.bots import PearWorkerRun
+    from zerver.models.bots import AgentRun
 
-    return PearWorkerRun, Q, pear_worker_stale_after_seconds(), timezone_now
+    return AgentRun, Q, pear_worker_stale_after_seconds(), timezone_now
 
 
 def run_sample(run: Any) -> dict[str, Any]:
@@ -68,9 +68,9 @@ def run_sample(run: Any) -> dict[str, Any]:
 
 
 def collect_health(*, stale_run_age_seconds: int | None, sample_limit: int) -> PearHealthReport:
-    PearWorkerRun, Q, default_stale_age, timezone_now = setup_django()
+    AgentRun, Q, default_stale_age, timezone_now = setup_django()
     stale_age = stale_run_age_seconds or default_stale_age
-    active_runs = PearWorkerRun.objects.filter(status__in=["queued", "running"]).order_by(
+    active_runs = AgentRun.objects.filter(status__in=["queued", "running"]).order_by(
         "-date_updated", "-id"
     )
     cutoff = timezone_now() - timedelta(seconds=stale_age)

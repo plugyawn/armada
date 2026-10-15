@@ -71,11 +71,11 @@ def pear_followup_topic_context_allows_candidate(
     topic_name: str,
 ) -> bool:
     from zerver.lib.armada import normalize_pear_response_policy, pear_topic_scope
-    from zerver.models.bots import PearWorkspaceNode
+    from zerver.models.bots import Workspace
 
     stream_name, topic_name = pear_topic_scope(stream_name, topic_name)
     workspace = (
-        PearWorkspaceNode.objects.filter(
+        Workspace.objects.filter(
             realm_id=realm_id,
             stream_name__iexact=stream_name,
             topic_name__iexact=topic_name,

@@ -102,13 +102,7 @@ from zerver.lib.typed_endpoint import (
 )
 from zerver.lib.url_encoding import topic_narrow_url
 from zerver.models import Message
-from zerver.models.bots import (
-    PearMonitor,
-    PearWorkerRun,
-    PearWorkerRunEvent,
-    PearWorkspaceNode,
-    Service,
-)
+from zerver.models.bots import AgentMonitor, AgentRun, AgentRunEvent, Service, Workspace
 from zerver.models.users import UserProfile
 from zerver.views.users import add_bot_backend
 
@@ -414,7 +408,7 @@ def build_pear_git_context(
 
 
 def pear_workspace_isolation_username(
-    workspace_node: PearWorkspaceNode | None,
+    workspace_node: Workspace | None,
     *,
     stream_name: str,
     topic_name: str,
@@ -441,10 +435,10 @@ def pear_workspace_for_request(
     *,
     stream_name: str,
     topic_name: str,
-) -> PearWorkspaceNode | None:
+) -> Workspace | None:
     stream_name, topic_name = pear_topic_scope(stream_name, topic_name)
     return (
-        PearWorkspaceNode.objects.select_related("project")
+        Workspace.objects.select_related("project")
         .filter(
             realm=user_profile.realm,
             stream_name__iexact=stream_name,
@@ -455,7 +449,7 @@ def pear_workspace_for_request(
 
 
 def serialize_pear_workspace_context(
-    workspace_node: PearWorkspaceNode | None,
+    workspace_node: Workspace | None,
     *,
     stream_name: str,
     topic_name: str,
@@ -673,7 +667,7 @@ def build_pear_config_for_user(user_profile: UserProfile) -> PearConfigPayload:
     )
 
 
-def serialize_pear_worker_run_event(event: PearWorkerRunEvent) -> dict[str, object]:
+def serialize_pear_worker_run_event(event: AgentRunEvent) -> dict[str, object]:
     return {
         "id": event.id,
         "event_type": event.event_type,
@@ -698,8 +692,8 @@ def pear_usage_from_event_payload(payload: object) -> PearTokenUsage | None:
 
 
 def pear_worker_run_summary_events(
-    runs: list[PearWorkerRun],
-) -> dict[int, list[PearWorkerRunEvent]]:
+    runs: list[AgentRun],
+) -> dict[int, list[AgentRunEvent]]:
     """Load bounded run-card state without issuing per-run queries.
 
     Run-list hydration must not issue per-run event queries. Detail
@@ -709,7 +703,7 @@ def pear_worker_run_summary_events(
     if not events_by_run_id:
         return events_by_run_id
     newest_usage_candidates = (
-        PearWorkerRunEvent.objects.filter(
+        AgentRunEvent.objects.filter(
             run_id__in=events_by_run_id,
             event_type__in=("usage", "transcript"),
         )
@@ -724,7 +718,7 @@ def pear_worker_run_summary_events(
         .only("id", "run_id", "event_type", "payload", "date_created")
     )
     newest_display_candidates = (
-        PearWorkerRunEvent.objects.filter(run_id__in=events_by_run_id)
+        AgentRunEvent.objects.filter(run_id__in=events_by_run_id)
         .filter(Q(event_type="presentation") | Q(event_type="transcript", payload__kind="plan"))
         .annotate(
             summary_rank=Window(
@@ -737,7 +731,7 @@ def pear_worker_run_summary_events(
         .only("id", "run_id", "event_type", "payload", "date_created")
     )
     agent_candidates = load_pear_agent_thread_events(events_by_run_id)
-    unique_events: dict[int, PearWorkerRunEvent] = {}
+    unique_events: dict[int, AgentRunEvent] = {}
     for event in [
         *newest_usage_candidates,
         *newest_display_candidates,
@@ -754,8 +748,8 @@ def pear_worker_run_summary_events(
 
 
 def serialize_pear_worker_run_usage(
-    run: PearWorkerRun,
-    summary_events: list[PearWorkerRunEvent] | None = None,
+    run: AgentRun,
+    summary_events: list[AgentRunEvent] | None = None,
 ) -> dict[str, object] | None:
     # The newest usage-bearing event wins, but the run's final events
     # are usually usage-less transcript markers ("Codex turn
@@ -780,7 +774,7 @@ def serialize_pear_worker_run_usage(
     duration_seconds = None
     if run.date_finished is not None:
         duration_seconds = round((run.date_finished - run.date_created).total_seconds(), 1)
-    elif run.status in {PearWorkerRun.QUEUED, PearWorkerRun.RUNNING}:
+    elif run.status in {AgentRun.QUEUED, AgentRun.RUNNING}:
         duration_seconds = round((timezone_now() - run.date_created).total_seconds(), 1)
     return {
         **usage,
@@ -791,8 +785,8 @@ def serialize_pear_worker_run_usage(
 
 
 def serialize_pear_worker_run_plan(
-    run: PearWorkerRun,
-    summary_events: list[PearWorkerRunEvent] | None = None,
+    run: AgentRun,
+    summary_events: list[AgentRunEvent] | None = None,
 ) -> list[dict[str, str]] | None:
     """The run's latest plan_update, for the rail's pinned plan card.
 
@@ -826,8 +820,8 @@ def serialize_pear_worker_run_plan(
 
 
 def serialize_pear_worker_run_tool_count(
-    run: PearWorkerRun,
-    summary_events: list[PearWorkerRunEvent] | None = None,
+    run: AgentRun,
+    summary_events: list[AgentRunEvent] | None = None,
 ) -> int:
     # The worker records one tool_results event per turn segment, each
     # carrying that segment's tool_count; the run's total is their sum.
@@ -841,8 +835,8 @@ def serialize_pear_worker_run_tool_count(
 
 
 def serialize_pear_worker_run_overview(
-    run: PearWorkerRun,
-    summary_events: list[PearWorkerRunEvent] | None = None,
+    run: AgentRun,
+    summary_events: list[AgentRunEvent] | None = None,
     *,
     plan: list[dict[str, str]] | None = None,
 ) -> str | None:
@@ -866,17 +860,17 @@ def serialize_pear_worker_run_overview(
 
 
 def serialize_pear_worker_run(
-    run: PearWorkerRun,
+    run: AgentRun,
     *,
     include_events: bool = False,
-    summary_events: list[PearWorkerRunEvent] | None = None,
+    summary_events: list[AgentRunEvent] | None = None,
 ) -> dict[str, object]:
     plan = serialize_pear_worker_run_plan(run, summary_events)
     live_state = get_pear_live_run_state(run.trigger_message_id)
     if (
-        run.status not in {PearWorkerRun.QUEUED, PearWorkerRun.RUNNING}
+        run.status not in {AgentRun.QUEUED, AgentRun.RUNNING}
         and live_state is not None
-        and live_state["status"] in {PearWorkerRun.QUEUED, PearWorkerRun.RUNNING}
+        and live_state["status"] in {AgentRun.QUEUED, AgentRun.RUNNING}
     ):
         live_state = None
     payload: dict[str, object] = {
@@ -931,11 +925,11 @@ def serialize_pear_worker_run(
 
 def check_can_access_pear_worker_run(
     user_profile: UserProfile,
-    run: PearWorkerRun,
+    run: AgentRun,
 ) -> None:
     if run.realm_id != user_profile.realm_id:
         raise JsonableError(_("Pear run not found."))
-    if run.session_kind == PearWorkerRun.SIDE:
+    if run.session_kind == AgentRun.SIDE:
         if run.requesting_user_id != user_profile.id:
             raise JsonableError(_("Pear run not found."))
         return
@@ -950,14 +944,14 @@ def check_can_access_pear_worker_run(
 def get_visible_pear_worker_run(
     user_profile: UserProfile,
     run_id: int,
-) -> PearWorkerRun:
+) -> AgentRun:
     try:
-        run = PearWorkerRun.objects.select_related(
+        run = AgentRun.objects.select_related(
             "bot_profile",
             "requesting_user",
             "workspace_node",
         ).get(id=run_id, realm=user_profile.realm)
-    except PearWorkerRun.DoesNotExist as error:
+    except AgentRun.DoesNotExist as error:
         raise JsonableError(_("Pear run not found.")) from error
     check_can_access_pear_worker_run(user_profile, run)
     return run
@@ -966,7 +960,7 @@ def get_visible_pear_worker_run(
 def get_visible_pear_worker_runs_by_id(
     user_profile: UserProfile,
     run_ids: list[int],
-) -> list[PearWorkerRun]:
+) -> list[AgentRun]:
     normalized_run_ids = list(dict.fromkeys(run_ids))
     if len(normalized_run_ids) > PEAR_RUN_IDS_FILTER_LIMIT:
         raise JsonableError(_("Too many Pear runs requested."))
@@ -974,7 +968,7 @@ def get_visible_pear_worker_runs_by_id(
         raise JsonableError(_("Pear run not found."))
 
     runs = list(
-        PearWorkerRun.objects.select_related(
+        AgentRun.objects.select_related(
             "bot_profile",
             "requesting_user",
             "workspace_node",
@@ -1395,9 +1389,9 @@ def get_pear_active_session_backend(
             ),
         )
         scope_stream, scope_topic = pear_topic_scope(pear_session["stream"], pear_session["topic"])
-        topic_runs = PearWorkerRun.objects.filter(
+        topic_runs = AgentRun.objects.filter(
             realm=user_profile.realm,
-            session_kind=PearWorkerRun.SHARED,
+            session_kind=AgentRun.SHARED,
             stream_name__iexact=scope_stream,
             topic_name__iexact=scope_topic,
         )
@@ -1406,7 +1400,7 @@ def get_pear_active_session_backend(
             topic_runs.exclude(codex_thread_id="").order_by("-trigger_message_id", "-id").first()
         )
 
-        # Once routing has accepted a request, PearWorkerRun is the durable
+        # Once routing has accepted a request, AgentRun is the durable
         # source of truth. The message check only covers the short interval
         # before an explicit @Pear request has been claimed by the queue.
         latest_persisted_trigger_id = latest_run.trigger_message_id if latest_run else 0
@@ -1494,11 +1488,11 @@ def get_pear_runs_backend(
     requested_runs = (
         get_visible_pear_worker_runs_by_id(user_profile, run_ids) if run_ids is not None else []
     )
-    topic_runs: list[PearWorkerRun]
-    workspace_node: PearWorkspaceNode | None = None
-    topic_workspace: PearWorkspaceNode | None = None
+    topic_runs: list[AgentRun]
+    workspace_node: Workspace | None = None
+    topic_workspace: Workspace | None = None
     if workspace_id is not None:
-        workspace_node = PearWorkspaceNode.objects.filter(
+        workspace_node = Workspace.objects.filter(
             realm=user_profile.realm,
             id=workspace_id,
         ).first()
@@ -1507,7 +1501,7 @@ def get_pear_runs_backend(
         if workspace_node.stream_name:
             access_stream_by_name(user_profile, workspace_node.stream_name)
         topic_runs = list(
-            PearWorkerRun.objects.select_related("bot_profile", "requesting_user", "workspace_node")
+            AgentRun.objects.select_related("bot_profile", "requesting_user", "workspace_node")
             .filter(realm=user_profile.realm, workspace_node=workspace_node)
             .order_by("-date_created", "-id")[:PEAR_RUN_LIST_LIMIT]
         )
@@ -1521,22 +1515,22 @@ def get_pear_runs_backend(
         )
         workspace_node = topic_workspace
         shared_run_filter = Q(
-            session_kind=PearWorkerRun.SHARED,
+            session_kind=AgentRun.SHARED,
             stream_name__iexact=scope_stream,
             topic_name__iexact=scope_topic,
         )
         if workspace_node is not None:
             shared_run_filter |= Q(
-                session_kind=PearWorkerRun.SHARED,
+                session_kind=AgentRun.SHARED,
                 workspace_node=workspace_node,
             )
         topic_runs = list(
-            PearWorkerRun.objects.select_related("bot_profile", "requesting_user", "workspace_node")
+            AgentRun.objects.select_related("bot_profile", "requesting_user", "workspace_node")
             .filter(realm=user_profile.realm)
             .filter(
                 shared_run_filter
                 | Q(
-                    session_kind=PearWorkerRun.SIDE,
+                    session_kind=AgentRun.SIDE,
                     requesting_user=user_profile,
                     source_stream_name__iexact=scope_stream,
                     source_topic_name__iexact=scope_topic,
@@ -1548,10 +1542,10 @@ def get_pear_runs_backend(
         topic_runs = []
     else:
         topic_runs = list(
-            PearWorkerRun.objects.select_related("bot_profile", "requesting_user", "workspace_node")
+            AgentRun.objects.select_related("bot_profile", "requesting_user", "workspace_node")
             .filter(
                 realm=user_profile.realm,
-                session_kind=PearWorkerRun.SIDE,
+                session_kind=AgentRun.SIDE,
                 requesting_user=user_profile,
             )
             .order_by("-date_created", "-id")[:PEAR_RUN_LIST_LIMIT]
@@ -1563,7 +1557,7 @@ def get_pear_runs_backend(
     # reject an older HTTP response after a newer push event has landed.
     snapshot_runs_by_id = {
         run.id: run
-        for run in PearWorkerRun.objects.select_related(
+        for run in AgentRun.objects.select_related(
             "bot_profile", "requesting_user", "workspace_node"
         )
         .filter(id__in=runs_by_id)
@@ -1622,7 +1616,7 @@ def get_pear_run_backend(
     )
 
 
-def serialize_pear_run_trace_event(event: PearWorkerRunEvent) -> dict[str, object] | None:
+def serialize_pear_run_trace_event(event: AgentRunEvent) -> dict[str, object] | None:
     payload = event.payload if isinstance(event.payload, dict) else {}
     if event.event_type in {"transcript", "agent"}:
         kind = payload.get("kind")
@@ -1858,7 +1852,7 @@ def post_pear_run_attention_backend(
     run_id: int,
 ) -> HttpResponse:
     run = get_visible_pear_worker_run(user_profile, run_id)
-    if run.status not in {PearWorkerRun.QUEUED, PearWorkerRun.RUNNING}:
+    if run.status not in {AgentRun.QUEUED, AgentRun.RUNNING}:
         return json_success(request, data={"attended": False})
     mark_pear_run_attended(run.id)
     latest_event_id = run.events.order_by("-id").values_list("id", flat=True).first()
@@ -1872,7 +1866,7 @@ def update_pear_run_control_event(
     run_id: int,
     event_type: str,
     summary: str,
-) -> PearWorkerRun:
+) -> AgentRun:
     visible_run = get_visible_pear_worker_run(user_profile, run_id)
     with transaction.atomic(savepoint=False):
         if event_type in {"pause", "resume"}:
@@ -1881,14 +1875,10 @@ def update_pear_run_control_event(
             # deadlock with a claim holding the workspace row while waiting for
             # this run row.
             control_stream = (
-                visible_run.source_stream_name
-                if visible_run.session_kind == PearWorkerRun.SIDE
-                else ""
+                visible_run.source_stream_name if visible_run.session_kind == AgentRun.SIDE else ""
             )
             control_topic = (
-                visible_run.source_topic_name
-                if visible_run.session_kind == PearWorkerRun.SIDE
-                else ""
+                visible_run.source_topic_name if visible_run.session_kind == AgentRun.SIDE else ""
             )
             set_pear_workspace_paused(
                 visible_run.bot_profile,
@@ -1896,11 +1886,11 @@ def update_pear_run_control_event(
                 topic=control_topic or visible_run.topic_name,
                 is_paused=event_type == "pause",
             )
-        run = PearWorkerRun.objects.select_for_update().get(id=visible_run.id)
+        run = AgentRun.objects.select_for_update().get(id=visible_run.id)
         record_control_event = True
         if event_type == "cancel" and run.status in {
-            PearWorkerRun.QUEUED,
-            PearWorkerRun.RUNNING,
+            AgentRun.QUEUED,
+            AgentRun.RUNNING,
         }:
             record_control_event = PearDatabaseWorkerRunStore().cancel_locked_run(
                 run, summary="Cancelled."
@@ -1912,7 +1902,7 @@ def update_pear_run_control_event(
             run.date_updated = timezone_now()
             run.save(update_fields=["current_activity", "date_updated"])
         if record_control_event:
-            run_event = PearWorkerRunEvent.objects.create(
+            run_event = AgentRunEvent.objects.create(
                 run=run,
                 event_type=event_type,
                 summary=summary,
@@ -1947,7 +1937,7 @@ def post_pear_run_not_for_pear_backend(
     if not visible_run.ambient_triggered:
         raise JsonableError(_("This Pear response was explicitly requested."))
 
-    if visible_run.status in {PearWorkerRun.QUEUED, PearWorkerRun.RUNNING}:
+    if visible_run.status in {AgentRun.QUEUED, AgentRun.RUNNING}:
         visible_run = update_pear_run_control_event(
             user_profile,
             run_id,
@@ -1956,10 +1946,10 @@ def post_pear_run_not_for_pear_backend(
         )
 
     with transaction.atomic(savepoint=False):
-        run = PearWorkerRun.objects.select_for_update().get(id=visible_run.id)
+        run = AgentRun.objects.select_for_update().get(id=visible_run.id)
         feedback_exists = run.events.filter(event_type="routing_feedback").exists()
         if not feedback_exists:
-            PearWorkerRunEvent.objects.create(
+            AgentRunEvent.objects.create(
                 run=run,
                 event_type="routing_feedback",
                 summary="Not for Pear.",
@@ -2014,12 +2004,12 @@ def check_pear_user_may_start_runs(user_profile: UserProfile) -> None:
 def _dispatch_pear_monitor_run(
     user_profile: UserProfile,
     pear_bot: Service,
-    monitor: PearMonitor,
+    monitor: AgentMonitor,
     *,
     repair_error: str = "",
 ) -> None:
     """Mint a DM anchor and queue the monitor's setup/repair agent run.
-    The run is a normal MONITOR-kind PearWorkerRun; ticks never are."""
+    The run is a normal MONITOR-kind AgentRun; ticks never are."""
     stream_name = monitor.stream_name
     topic_name = monitor.topic_name
     task = build_pear_monitor_contract(
@@ -2046,21 +2036,21 @@ def _dispatch_pear_monitor_run(
     if dm_message_id is None:
         raise JsonableError(_("Pear could not open the monitor transcript."))
     monitor.anchor_message_id = dm_message_id
-    monitor.status = PearMonitor.PROVISIONING
+    monitor.status = AgentMonitor.PROVISIONING
     monitor.date_updated = timezone_now()
     monitor.save(update_fields=["anchor_message_id", "status", "date_updated"])
 
-    run = PearWorkerRun.objects.create(
+    run = AgentRun.objects.create(
         realm=user_profile.realm,
         bot_profile=pear_bot.user_profile,
         requesting_user=user_profile,
         trigger_message_id=dm_message_id,
         stream_name=stream_name,
         topic_name=topic_name,
-        session_kind=PearWorkerRun.MONITOR,
+        session_kind=AgentRun.MONITOR,
         source_stream_name=stream_name,
         source_topic_name=topic_name,
-        status=PearWorkerRun.QUEUED,
+        status=AgentRun.QUEUED,
         summary="Queued monitor setup.",
         current_activity=trim_pear_text(monitor.ask, limit=200),
         runtime_label=str(settings.PEAR_WORKER_AGENT_RUNTIME or ""),
@@ -2075,7 +2065,7 @@ def _dispatch_pear_monitor_run(
             pear_bot.user_profile, stream=stream_name, topic=topic_name
         ),
     )
-    PearWorkerRunEvent.objects.create(
+    AgentRunEvent.objects.create(
         run=run,
         event_type="queued",
         summary="Queued monitor setup.",
@@ -2105,7 +2095,7 @@ def _dispatch_pear_monitor_run(
         stream=stream_name,
         topic=topic_name,
         requesting_user_id=user_profile.id,
-        session_kind=PearWorkerRun.MONITOR,
+        session_kind=AgentRun.MONITOR,
         source_stream=stream_name,
         source_topic=topic_name,
         progress_message_id=dm_message_id,
@@ -2128,7 +2118,7 @@ def get_pear_monitors_backend(
 ) -> HttpResponse:
     access_stream_by_name(user_profile, stream_name)
     stream_name, topic_name = pear_topic_scope(stream_name, topic_name)
-    monitors = PearMonitor.objects.filter(
+    monitors = AgentMonitor.objects.filter(
         realm=user_profile.realm,
         stream_name__iexact=stream_name,
         topic_name__iexact=topic_name,
@@ -2169,14 +2159,14 @@ def post_pear_monitors_backend(
     pear_bot = get_selected_pear_bot(user_profile)
     if pear_bot is None:
         raise JsonableError(_("Pear bot is not configured."))
-    topic_count = PearMonitor.objects.filter(
+    topic_count = AgentMonitor.objects.filter(
         realm=user_profile.realm,
         stream_name__iexact=stream_name,
         topic_name__iexact=topic_name,
     ).count()
     if topic_count >= PEAR_MONITOR_MAX_PER_TOPIC:
         raise JsonableError(_("This topic already has the maximum number of monitors."))
-    realm_count = PearMonitor.objects.filter(realm=user_profile.realm).count()
+    realm_count = AgentMonitor.objects.filter(realm=user_profile.realm).count()
     if realm_count >= PEAR_MONITOR_MAX_PER_REALM:
         raise JsonableError(_("This organization already has the maximum number of monitors."))
 
@@ -2199,7 +2189,7 @@ def post_pear_monitors_backend(
         return json_success(request, data={"pear_monitor": serialize_pear_monitor(monitor)})
 
     check_pear_user_may_start_runs(user_profile)
-    monitor = PearMonitor.objects.create(
+    monitor = AgentMonitor.objects.create(
         realm=user_profile.realm,
         bot_profile=pear_bot.user_profile,
         creator=user_profile,
@@ -2213,10 +2203,10 @@ def post_pear_monitors_backend(
     return json_success(request, data={"pear_monitor": serialize_pear_monitor(monitor)})
 
 
-def _get_accessible_pear_monitor(user_profile: UserProfile, monitor_id: int) -> PearMonitor:
+def _get_accessible_pear_monitor(user_profile: UserProfile, monitor_id: int) -> AgentMonitor:
     try:
-        monitor = PearMonitor.objects.get(id=monitor_id, realm=user_profile.realm)
-    except PearMonitor.DoesNotExist as error:
+        monitor = AgentMonitor.objects.get(id=monitor_id, realm=user_profile.realm)
+    except AgentMonitor.DoesNotExist as error:
         raise JsonableError(_("Pear monitor not found.")) from error
     access_stream_by_name(user_profile, monitor.stream_name)
     return monitor
@@ -2244,16 +2234,16 @@ def update_pear_monitor_backend(
     monitor = _get_accessible_pear_monitor(user_profile, monitor_id)
     now = timezone_now()
     if action == "pause":
-        monitor.status = PearMonitor.PAUSED
+        monitor.status = AgentMonitor.PAUSED
         monitor.next_due_at = None
     elif action == "resume":
         if not monitor.recipe:
             raise JsonableError(_("This monitor has no recipe to resume."))
-        monitor.status = PearMonitor.LIVE
+        monitor.status = AgentMonitor.LIVE
         monitor.consecutive_failures = 0
         monitor.next_due_at = now
     elif action == "refresh_now":
-        if monitor.status != PearMonitor.LIVE:
+        if monitor.status != AgentMonitor.LIVE:
             raise JsonableError(_("Only live monitors can refresh."))
         monitor.next_due_at = now
     elif action == "cadence":
@@ -2263,7 +2253,7 @@ def update_pear_monitor_backend(
             max(cadence_seconds, PEAR_MONITOR_MIN_CADENCE_SECONDS),
             PEAR_MONITOR_MAX_CADENCE_SECONDS,
         )
-        if monitor.status == PearMonitor.LIVE:
+        if monitor.status == AgentMonitor.LIVE:
             monitor.next_due_at = now
     elif action == "rename":
         if title is None or not title.strip():

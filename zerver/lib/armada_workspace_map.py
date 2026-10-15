@@ -7,17 +7,17 @@ repository, and which topics in a channel have a worktree.
 """
 
 from zerver.models import Realm
-from zerver.models.bots import PearProject, PearWorkspaceNode
+from zerver.models.bots import Repository, Workspace
 
 
 def pear_project_stream_ids_for_realm(realm: Realm) -> list[int]:
-    return sorted(PearProject.objects.filter(realm=realm).values_list("stream_id", flat=True))
+    return sorted(Repository.objects.filter(realm=realm).values_list("stream_id", flat=True))
 
 
 def pear_workspace_topics_for_stream(realm: Realm, stream_name: str) -> list[dict[str, str]]:
-    nodes = PearWorkspaceNode.objects.filter(
+    nodes = Workspace.objects.filter(
         realm=realm,
         stream_name__iexact=stream_name,
-        lifecycle_status=PearWorkspaceNode.ACTIVE,
+        lifecycle_status=Workspace.ACTIVE,
     ).order_by("topic_name")
     return [{"topic": node.topic_name, "branch": node.branch_name} for node in nodes]

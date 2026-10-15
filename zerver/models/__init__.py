@@ -1,16 +1,14 @@
 from zerver.models import lookups as lookups
 from zerver.models.alert_words import AlertWord as AlertWord
+from zerver.models.bots import AgentMonitor as AgentMonitor
+from zerver.models.bots import AgentRun as AgentRun
+from zerver.models.bots import AgentRunEvent as AgentRunEvent
 from zerver.models.bots import BotConfigData as BotConfigData
 from zerver.models.bots import BotStorageData as BotStorageData
-from zerver.models.bots import PearMonitor as PearMonitor
-from zerver.models.bots import PearProject as PearProject
-from zerver.models.bots import PearWorkerRun as PearWorkerRun
-from zerver.models.bots import PearWorkerRunEvent as PearWorkerRunEvent
-from zerver.models.bots import (
-    PearWorkspaceEntryMutationReceipt as PearWorkspaceEntryMutationReceipt,
-)
-from zerver.models.bots import PearWorkspaceNode as PearWorkspaceNode
+from zerver.models.bots import Repository as Repository
 from zerver.models.bots import Service as Service
+from zerver.models.bots import Workspace as Workspace
+from zerver.models.bots import WorkspaceEntryMutationReceipt as WorkspaceEntryMutationReceipt
 from zerver.models.channel_folders import ChannelFolder as ChannelFolder
 from zerver.models.clients import Client as Client
 from zerver.models.custom_profile_fields import CustomProfileField as CustomProfileField

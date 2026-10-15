@@ -35,7 +35,7 @@ from zerver.lib.typed_endpoint import (
     typed_endpoint,
     typed_endpoint_without_parameters,
 )
-from zerver.models import PearWorkerRun, Stream, UserProfile
+from zerver.models import AgentRun, Stream, UserProfile
 
 # The live runs the page is told about. pear/runs takes 20 ids a
 # request, so this is a handful of requests at most; a realm with more
@@ -67,11 +67,11 @@ def live_run_ids_for_user(user_profile: UserProfile) -> list[int]:
         ).values_list("name", flat=True)
     }
     runs = (
-        PearWorkerRun.objects.select_related("workspace_node")
+        AgentRun.objects.select_related("workspace_node")
         .filter(
             realm_id=user_profile.realm_id,
-            session_kind=PearWorkerRun.SHARED,
-            status__in=[PearWorkerRun.QUEUED, PearWorkerRun.RUNNING],
+            session_kind=AgentRun.SHARED,
+            status__in=[AgentRun.QUEUED, AgentRun.RUNNING],
         )
         .order_by("-date_created", "-id")
     )

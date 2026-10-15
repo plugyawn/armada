@@ -62,7 +62,7 @@ from zerver.lib.message import access_message
 from zerver.lib.message_cache import MessageDict
 from zerver.lib.topic import messages_for_topic
 from zerver.models import Message, Realm, Stream, UserMessage, UserProfile
-from zerver.models.bots import PearMonitor, PearWorkerRun, PearWorkspaceNode, Service
+from zerver.models.bots import AgentMonitor, AgentRun, Service, Workspace
 from zerver.models.streams import get_stream
 from zerver.models.users import get_user_by_delivery_email
 from zerver.views.armada import update_pear_run_control_event
@@ -514,8 +514,8 @@ class ScriptedRunner:
         self.root_thread_id = root_thread_id
         self.turn: Any = None
 
-    def run(self) -> PearWorkerRun:
-        return PearWorkerRun.objects.get(
+    def run(self) -> AgentRun:
+        return AgentRun.objects.get(
             bot_profile=self.seeder.bot, trigger_message_id=self.trigger_message_id
         )
 
@@ -622,7 +622,7 @@ class DemoSeeder:
             self.realm, [self.stream], list(self.users.values()), acting_user=None
         )
 
-    def workspace(self, topic: str) -> PearWorkspaceNode:
+    def workspace(self, topic: str) -> Workspace:
         """The topic's worktree, through the same call a first run makes."""
         return ensure_pear_workspace_node(self.bot, stream=DEMO_STREAM, topic=topic)
 
@@ -653,7 +653,7 @@ class DemoSeeder:
         self.shift(wait)
         return request.message
 
-    def result_message(self, run: PearWorkerRun) -> Message:
+    def result_message(self, run: AgentRun) -> Message:
         """The ordinary message that carries a run's answer."""
         assert run.result_message_id is not None
         return access_message(self.bot, run.result_message_id, is_modifying_message=False)
@@ -666,7 +666,7 @@ class DemoSeeder:
         script: Script | None = None,
         *,
         thread_root: Message | None = None,
-    ) -> PearWorkerRun | None:
+    ) -> AgentRun | None:
         """`@Pear <content>` from a person, then whatever Pear does with it.
 
         Admission runs for real, so the outcome is the product's: a queued
@@ -690,7 +690,7 @@ class DemoSeeder:
         delivery = dispatcher.dispatched
         if delivery is None:
             return None
-        run = PearWorkerRun.objects.get(bot_profile=self.bot, trigger_message_id=message.id)
+        run = AgentRun.objects.get(bot_profile=self.bot, trigger_message_id=message.id)
         if script is None:
             return run
 
@@ -702,7 +702,7 @@ class DemoSeeder:
         with transaction.atomic(durable=True):
             if not store.claim_for_run(bot_handler, message.id, stream=DEMO_STREAM, topic=topic):
                 raise RuntimeError(f"Could not claim the fixture run in {topic}.")
-            PearWorkerRun.objects.filter(id=run.id).update(heartbeat_at=DEMO_LEASE_UNTIL)
+            AgentRun.objects.filter(id=run.id).update(heartbeat_at=DEMO_LEASE_UNTIL)
         runner = ScriptedRunner(
             self,
             script,
@@ -736,12 +736,12 @@ class DemoSeeder:
         self._remember_bot_messages(topic)
         self.shift(30)
         run.refresh_from_db()
-        if frozen != (run.status == PearWorkerRun.RUNNING):
+        if frozen != (run.status == AgentRun.RUNNING):
             raise RuntimeError(f"The fixture run in {topic} ended as {run.status}: {run.error}")
         if frozen:
             self.keep_live_state(run)
         else:
-            PearWorkerRun.objects.filter(id=run.id).update(heartbeat_at=F("date_updated"))
+            AgentRun.objects.filter(id=run.id).update(heartbeat_at=F("date_updated"))
         return run
 
     def _remember_bot_messages(self, topic: str) -> None:
@@ -752,7 +752,7 @@ class DemoSeeder:
             .values_list("id", flat=True)
         )
 
-    def keep_live_state(self, run: PearWorkerRun) -> None:
+    def keep_live_state(self, run: AgentRun) -> None:
         """Keep a frozen run's volatile state for as long as its lease.
 
         A frozen run stays RUNNING because of the lease taken in `request`:
@@ -791,12 +791,12 @@ class DemoSeeder:
 
     # --- worktrees ------------------------------------------------------------------
 
-    def git(self, node: PearWorkspaceNode, *args: str) -> str:
+    def git(self, node: Workspace, *args: str) -> str:
         return subprocess.run(
             ["git", "-C", node.workdir, *args], check=True, capture_output=True, text=True
         ).stdout
 
-    def refresh_workspace(self, node: PearWorkspaceNode) -> None:
+    def refresh_workspace(self, node: Workspace) -> None:
         refresh_workspace_snapshot(node)
 
     # --- wall monitors -----------------------------------------------------------------
@@ -807,9 +807,9 @@ class DemoSeeder:
         ask: str,
         spec: dict[str, Any],
         *,
-        status: str = PearMonitor.LIVE,
+        status: str = AgentMonitor.LIVE,
         last_error: str = "",
-    ) -> PearMonitor:
+    ) -> AgentMonitor:
         """A wall monitor, created the way pinning an artifact creates one."""
         stream_name, topic_name = pear_topic_scope(DEMO_STREAM, topic)
         monitor = pear_create_monitor_from_spec(
@@ -820,7 +820,7 @@ class DemoSeeder:
             topic_name=topic_name,
             ask=ask,
             raw_spec=spec,
-            position=PearMonitor.objects.filter(
+            position=AgentMonitor.objects.filter(
                 realm=self.realm, stream_name=stream_name, topic_name=topic_name
             ).count(),
         )
@@ -830,21 +830,21 @@ class DemoSeeder:
         pear_monitor_apply_tick(
             monitor, workdir=self.workspace(topic).workdir, process_isolation=None
         )
-        if status == PearMonitor.PAUSED:
-            monitor.status = PearMonitor.PAUSED
+        if status == AgentMonitor.PAUSED:
+            monitor.status = AgentMonitor.PAUSED
             monitor.next_due_at = None
-        elif status == PearMonitor.ERROR:
-            monitor.status = PearMonitor.ERROR
+        elif status == AgentMonitor.ERROR:
+            monitor.status = AgentMonitor.ERROR
             monitor.next_due_at = None
             monitor.consecutive_failures = 5
             monitor.last_error = last_error
         monitor.save()
         return monitor
 
-    def provisioning_monitor(self, topic: str, ask: str) -> PearMonitor:
+    def provisioning_monitor(self, topic: str, ask: str) -> AgentMonitor:
         """A monitor whose setup agent has not written its spec yet."""
         stream_name, topic_name = pear_topic_scope(DEMO_STREAM, topic)
-        return PearMonitor.objects.create(
+        return AgentMonitor.objects.create(
             realm=self.realm,
             bot_profile=self.bot,
             creator=self.user(DEMO_CHANNEL_OWNER),
@@ -852,7 +852,7 @@ class DemoSeeder:
             topic_name=topic_name,
             title=ask[:24],
             ask=ask,
-            position=PearMonitor.objects.filter(
+            position=AgentMonitor.objects.filter(
                 realm=self.realm, stream_name=stream_name, topic_name=topic_name
             ).count(),
             # The monitor scheduler turns a setup older than 30 minutes into
@@ -900,7 +900,7 @@ def demo_topic_names(realm: Realm) -> list[str]:
         ).values_list("subject", flat=True)
     )
     names.update(
-        PearWorkspaceNode.objects.filter(
+        Workspace.objects.filter(
             realm=realm,
             stream_name__iexact=DEMO_STREAM,
             topic_name__istartswith=DEMO_TOPIC_PREFIX,
@@ -917,7 +917,7 @@ def remove_demo_data(realm: Realm, *, remove_workspaces: bool) -> dict[str, int]
     that crashed halfway.
     """
     stream = get_stream(DEMO_STREAM, realm)
-    runs = PearWorkerRun.objects.filter(
+    runs = AgentRun.objects.filter(
         realm=realm,
         stream_name__iexact=DEMO_STREAM,
         topic_name__istartswith=DEMO_TOPIC_PREFIX,
@@ -926,7 +926,7 @@ def remove_demo_data(realm: Realm, *, remove_workspaces: bool) -> dict[str, int]
         cache.delete(pear_live_run_cache_key(trigger_message_id))
     counts = {"runs": runs.count()}
     runs.delete()
-    monitors = PearMonitor.objects.filter(
+    monitors = AgentMonitor.objects.filter(
         realm=realm,
         stream_name__iexact=DEMO_STREAM,
         topic_name__istartswith=DEMO_TOPIC_PREFIX,
@@ -946,7 +946,7 @@ def remove_demo_data(realm: Realm, *, remove_workspaces: bool) -> dict[str, int]
     if messages:
         do_delete_messages(realm, messages, acting_user=None)
 
-    nodes = PearWorkspaceNode.objects.filter(
+    nodes = Workspace.objects.filter(
         realm=realm,
         stream_name__iexact=DEMO_STREAM,
         topic_name__istartswith=DEMO_TOPIC_PREFIX,
@@ -985,7 +985,7 @@ def remove_demo_data(realm: Realm, *, remove_workspaces: bool) -> dict[str, int]
                 check=True,
                 capture_output=True,
             )
-            PearWorkspaceNode.objects.filter(id=node.id).update(is_paused=False)
+            Workspace.objects.filter(id=node.id).update(is_paused=False)
             refresh_workspace_snapshot(node)
 
     if remove_workspaces:
@@ -1022,11 +1022,11 @@ def animate_live_run(realm: Realm, topic: str, *, interval_seconds: float = 4.0)
     from zerver.lib.armada import send_pear_worker_typing_notification
 
     run = (
-        PearWorkerRun.objects.filter(
+        AgentRun.objects.filter(
             realm=realm,
             stream_name__iexact=DEMO_STREAM,
             topic_name__iexact=topic,
-            status=PearWorkerRun.RUNNING,
+            status=AgentRun.RUNNING,
         )
         .order_by("-id")
         .first()

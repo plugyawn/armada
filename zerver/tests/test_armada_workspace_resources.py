@@ -48,7 +48,7 @@ from zerver.lib.armada_workspace_resources import (
     write_workspace_node_file,
 )
 from zerver.lib.test_classes import ZulipTestCase
-from zerver.models.bots import PearWorkspaceEntryMutationReceipt, PearWorkspaceNode
+from zerver.models.bots import Workspace, WorkspaceEntryMutationReceipt
 from zerver.models.users import UserProfile
 
 
@@ -93,8 +93,8 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
         user: UserProfile,
         stream_name: str,
         repo: Path,
-    ) -> PearWorkspaceNode:
-        return PearWorkspaceNode.objects.create(
+    ) -> Workspace:
+        return Workspace.objects.create(
             realm=user.realm,
             stream_name=stream_name,
             topic_name="workspace",
@@ -102,7 +102,7 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
             branch_name="topic",
         )
 
-    def descriptor(self, node: PearWorkspaceNode) -> dict[str, object]:
+    def descriptor(self, node: Workspace) -> dict[str, object]:
         result = self.client_get(
             f"/json/pear/workspaces/{node.uuid}",
             intentionally_undocumented=True,
@@ -111,7 +111,7 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
 
     def tree(
         self,
-        node: PearWorkspaceNode,
+        node: Workspace,
         *,
         directory_id: str | None = None,
         cursor: str | None = None,
@@ -131,7 +131,7 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
 
     def create_entry(
         self,
-        node: PearWorkspaceNode,
+        node: Workspace,
         *,
         destination_path: str,
         kind: str,
@@ -152,7 +152,7 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
 
     def rename_entry(
         self,
-        node: PearWorkspaceNode,
+        node: Workspace,
         *,
         entry_id: str,
         expected_path: str,
@@ -173,7 +173,7 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
 
     def delete_entry(
         self,
-        node: PearWorkspaceNode,
+        node: Workspace,
         *,
         entry_id: str,
         expected_path: str,
@@ -808,11 +808,11 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
         node.refresh_from_db()
         self.assertEqual(node.content_revision, revision + 3)
         receipts = list(
-            PearWorkspaceEntryMutationReceipt.objects.filter(workspace_node=node).order_by("id")
+            WorkspaceEntryMutationReceipt.objects.filter(workspace_node=node).order_by("id")
         )
         self.assertEqual(len(receipts), 3)
         self.assertTrue(
-            all(receipt.state == PearWorkspaceEntryMutationReceipt.COMPLETE for receipt in receipts)
+            all(receipt.state == WorkspaceEntryMutationReceipt.COMPLETE for receipt in receipts)
         )
         serialized_receipts = orjson.dumps(
             [
@@ -855,8 +855,8 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
             self.assertEqual((repo / "recovered.md").read_text(), "recover exactly\n")
             node.refresh_from_db()
             self.assertEqual(node.content_revision, revision)
-            receipt = PearWorkspaceEntryMutationReceipt.objects.get(workspace_node=node)
-            self.assertEqual(receipt.state, PearWorkspaceEntryMutationReceipt.APPLIED)
+            receipt = WorkspaceEntryMutationReceipt.objects.get(workspace_node=node)
+            self.assertEqual(receipt.state, WorkspaceEntryMutationReceipt.APPLIED)
 
             repaired = self.client_post(
                 f"/json/pear/workspaces/{node.uuid}/entries",
@@ -869,7 +869,7 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
         node.refresh_from_db()
         receipt.refresh_from_db()
         self.assertEqual(node.content_revision, revision + 1)
-        self.assertEqual(receipt.state, PearWorkspaceEntryMutationReceipt.COMPLETE)
+        self.assertEqual(receipt.state, WorkspaceEntryMutationReceipt.COMPLETE)
 
     def test_applied_create_receipt_rejects_same_bytes_replacement(self) -> None:
         user = self.example_user("hamlet")
@@ -907,8 +907,8 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
 
         self.assertEqual(retry.status_code, 409)
         self.assertEqual(orjson.loads(retry.content)["error_code"], "stale_workspace")
-        receipt = PearWorkspaceEntryMutationReceipt.objects.get(workspace_node=node)
-        self.assertEqual(receipt.state, PearWorkspaceEntryMutationReceipt.CONFLICTED)
+        receipt = WorkspaceEntryMutationReceipt.objects.get(workspace_node=node)
+        self.assertEqual(receipt.state, WorkspaceEntryMutationReceipt.CONFLICTED)
 
     def test_applied_directory_receipt_rejects_populated_directory(self) -> None:
         user = self.example_user("hamlet")
@@ -944,8 +944,8 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
 
         self.assertEqual(retry.status_code, 409)
         self.assertEqual(orjson.loads(retry.content)["error_code"], "stale_workspace")
-        receipt = PearWorkspaceEntryMutationReceipt.objects.get(workspace_node=node)
-        self.assertEqual(receipt.state, PearWorkspaceEntryMutationReceipt.CONFLICTED)
+        receipt = WorkspaceEntryMutationReceipt.objects.get(workspace_node=node)
+        self.assertEqual(receipt.state, WorkspaceEntryMutationReceipt.CONFLICTED)
 
     def test_applied_rename_and_delete_receipts_repair_once(self) -> None:
         user = self.example_user("hamlet")
@@ -980,11 +980,11 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
                     intentionally_undocumented=True,
                 )
             self.assertEqual(failed_rename.status_code, 503)
-            rename_receipt = PearWorkspaceEntryMutationReceipt.objects.get(
+            rename_receipt = WorkspaceEntryMutationReceipt.objects.get(
                 workspace_node=node,
                 operation="rename",
             )
-            self.assertEqual(rename_receipt.state, PearWorkspaceEntryMutationReceipt.APPLIED)
+            self.assertEqual(rename_receipt.state, WorkspaceEntryMutationReceipt.APPLIED)
             repaired_rename_response = self.client_patch(
                 f"/json/pear/workspaces/{node.uuid}/entry",
                 rename_request,
@@ -1013,11 +1013,11 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
                     intentionally_undocumented=True,
                 )
             self.assertEqual(failed_delete.status_code, 503)
-            delete_receipt = PearWorkspaceEntryMutationReceipt.objects.get(
+            delete_receipt = WorkspaceEntryMutationReceipt.objects.get(
                 workspace_node=node,
                 operation="delete",
             )
-            self.assertEqual(delete_receipt.state, PearWorkspaceEntryMutationReceipt.APPLIED)
+            self.assertEqual(delete_receipt.state, WorkspaceEntryMutationReceipt.APPLIED)
             repaired_delete_response = self.client_delete(
                 f"/json/pear/workspaces/{node.uuid}/entry",
                 delete_request,
@@ -1030,8 +1030,8 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
         self.assertIsNone(repaired_delete["entry"])
         rename_receipt.refresh_from_db()
         delete_receipt.refresh_from_db()
-        self.assertEqual(rename_receipt.state, PearWorkspaceEntryMutationReceipt.COMPLETE)
-        self.assertEqual(delete_receipt.state, PearWorkspaceEntryMutationReceipt.COMPLETE)
+        self.assertEqual(rename_receipt.state, WorkspaceEntryMutationReceipt.COMPLETE)
+        self.assertEqual(delete_receipt.state, WorkspaceEntryMutationReceipt.COMPLETE)
 
     def test_abandoned_applied_receipt_is_reconciled_by_descriptor(self) -> None:
         user = self.example_user("hamlet")
@@ -1057,8 +1057,8 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
                     intentionally_undocumented=True,
                 )
             self.assertEqual(failed.status_code, 503)
-            receipt = PearWorkspaceEntryMutationReceipt.objects.get(workspace_node=node)
-            self.assertEqual(receipt.state, PearWorkspaceEntryMutationReceipt.APPLIED)
+            receipt = WorkspaceEntryMutationReceipt.objects.get(workspace_node=node)
+            self.assertEqual(receipt.state, WorkspaceEntryMutationReceipt.APPLIED)
 
             descriptor = self.descriptor(node)
             receipt.refresh_from_db()
@@ -1070,7 +1070,7 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
                 content="workspace remains writable\n",
             )
 
-        self.assertEqual(receipt.state, PearWorkspaceEntryMutationReceipt.COMPLETE)
+        self.assertEqual(receipt.state, WorkspaceEntryMutationReceipt.COMPLETE)
         self.assertEqual(descriptor["workspace_revision"], revision + 1)
         self.assertEqual(created["workspace_revision"], revision + 2)
 
@@ -1098,8 +1098,8 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
                     intentionally_undocumented=True,
                 )
             self.assertEqual(failed.status_code, 503)
-            receipt = PearWorkspaceEntryMutationReceipt.objects.get(workspace_node=node)
-            self.assertEqual(receipt.state, PearWorkspaceEntryMutationReceipt.PREPARED)
+            receipt = WorkspaceEntryMutationReceipt.objects.get(workspace_node=node)
+            self.assertEqual(receipt.state, WorkspaceEntryMutationReceipt.PREPARED)
             staging_path = receipt.request_payload["recovery"]["staging_path"]
             self.assertEqual((repo / staging_path).read_text(), "staged exactly once\n")
 
@@ -1122,7 +1122,7 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
             repaired_descriptor["workspace_revision"],
             before["workspace_revision"] + 1,
         )
-        self.assertEqual(receipt.state, PearWorkspaceEntryMutationReceipt.COMPLETE)
+        self.assertEqual(receipt.state, WorkspaceEntryMutationReceipt.COMPLETE)
         self.assertFalse((repo / staging_path).exists())
 
     def test_conflicted_staged_create_cleans_only_exact_staging_identity(self) -> None:
@@ -1149,15 +1149,15 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
                     intentionally_undocumented=True,
                 )
             self.assertEqual(failed.status_code, 503)
-            receipt = PearWorkspaceEntryMutationReceipt.objects.get(workspace_node=node)
-            self.assertEqual(receipt.state, PearWorkspaceEntryMutationReceipt.STAGED)
+            receipt = WorkspaceEntryMutationReceipt.objects.get(workspace_node=node)
+            self.assertEqual(receipt.state, WorkspaceEntryMutationReceipt.STAGED)
             staging_path = receipt.request_payload["recovery"]["staging_path"]
             self.assertTrue((repo / staging_path).exists())
             (repo / "occupied.md").write_text("concurrent destination\n")
 
             descriptor = self.descriptor(node)
             receipt.refresh_from_db()
-            self.assertEqual(receipt.state, PearWorkspaceEntryMutationReceipt.CONFLICTED)
+            self.assertEqual(receipt.state, WorkspaceEntryMutationReceipt.CONFLICTED)
             self.assertFalse((repo / staging_path).exists())
             self.assertEqual((repo / "occupied.md").read_text(), "concurrent destination\n")
             created = self.create_entry(
@@ -1194,7 +1194,7 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
                     intentionally_undocumented=True,
                 )
             self.assertEqual(failed.status_code, 503)
-            receipt = PearWorkspaceEntryMutationReceipt.objects.get(workspace_node=node)
+            receipt = WorkspaceEntryMutationReceipt.objects.get(workspace_node=node)
             staging_path = receipt.request_payload["recovery"]["staging_path"]
             replacement = repo / ".replacement-stage"
             replacement.write_text("wrong replacement\n")
@@ -1204,7 +1204,7 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
             receipt.refresh_from_db()
             replaced_staging_content = (repo / staging_path).read_text()
 
-        self.assertEqual(receipt.state, PearWorkspaceEntryMutationReceipt.CONFLICTED)
+        self.assertEqual(receipt.state, WorkspaceEntryMutationReceipt.CONFLICTED)
         self.assertEqual(replaced_staging_content, "wrong replacement\n")
 
     def test_fresh_prepared_receipts_do_not_trigger_unbounded_recovery_work(self) -> None:
@@ -1495,7 +1495,7 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
             )
 
             def race_write(
-                _node: PearWorkspaceNode,
+                _node: Workspace,
                 _path: str,
                 _data: bytes,
                 *,
@@ -1505,7 +1505,7 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
                 self.assertEqual(expected_version, original["version"])
                 self.assertIsNotNone(expected_identity)
                 (repo / "README.md").write_bytes(remote_data)
-                PearWorkspaceNode.objects.filter(id=node.id).update(content_revision=1)
+                Workspace.objects.filter(id=node.id).update(content_revision=1)
                 raise WorkspaceVersionConflictError(
                     "agent won the race",
                     current=remote_file,
@@ -1634,7 +1634,7 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
             mode=0o600,
             identity=identity,
         )
-        node = PearWorkspaceNode(
+        node = Workspace(
             workdir="/canonical/workspace",
             isolation_username=username,
         )

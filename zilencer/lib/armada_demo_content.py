@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from zerver.models.bots import PearMonitor, PearWorkspaceNode
+from zerver.models.bots import AgentMonitor, Workspace
 from zerver.views.armada import update_pear_run_control_event
 from zilencer.lib.armada_demo import DemoSeeder, ScriptedTurn, png
 
@@ -199,7 +199,7 @@ def test_zsh_nested_group_descriptions(runner):
 """
 
 
-def apply_completion_fix(node: PearWorkspaceNode) -> None:
+def apply_completion_fix(node: Workspace) -> None:
     """The edits the completed and dirty scenarios talk about, made for real."""
     root = Path(node.workdir)
     source = root / "src/click/shell_completion.py"
@@ -215,7 +215,7 @@ def apply_completion_fix(node: PearWorkspaceNode) -> None:
     tests.write_text(tests.read_text() + NESTED_TEST)
 
 
-def apply_uncommitted_work(seeder: DemoSeeder, node: PearWorkspaceNode) -> None:
+def apply_uncommitted_work(seeder: DemoSeeder, node: Workspace) -> None:
     root = Path(node.workdir)
     changes = root / "CHANGES.md"
     changes.write_text(
@@ -988,7 +988,7 @@ def seed_wall_monitors(seeder: DemoSeeder) -> None:
                 ],
             },
         ),
-        status=PearMonitor.ERROR,
+        status=AgentMonitor.ERROR,
         last_error="recipe exited 1: tail: cannot open 'logs/server.log' for reading: "
         "No such file or directory",
     )
@@ -1013,7 +1013,7 @@ def seed_wall_monitors(seeder: DemoSeeder) -> None:
                 ],
             },
         ),
-        status=PearMonitor.PAUSED,
+        status=AgentMonitor.PAUSED,
     )
     seeder.post(
         "hamlet", WALL, "The server-log one is red for me: there is no `logs/` in this repo."

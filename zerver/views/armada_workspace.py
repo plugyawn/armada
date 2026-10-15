@@ -91,7 +91,7 @@ from zerver.lib.exceptions import JsonableError
 from zerver.lib.response import json_response, json_success
 from zerver.lib.streams import access_stream_by_name
 from zerver.lib.typed_endpoint import INTENTIONALLY_UNDOCUMENTED, ApiParamConfig, typed_endpoint
-from zerver.models.bots import PearWorkspaceEntryMutationReceipt, PearWorkspaceNode
+from zerver.models.bots import Workspace, WorkspaceEntryMutationReceipt
 from zerver.models.users import UserProfile
 
 logger = logging.getLogger(__name__)
@@ -152,9 +152,9 @@ def _workspace_error(
 def _access_workspace_node(
     user_profile: UserProfile,
     workspace_uuid: UUID,
-) -> PearWorkspaceNode:
+) -> Workspace:
     node = (
-        PearWorkspaceNode.objects.select_related("project")
+        Workspace.objects.select_related("project")
         .filter(realm=user_profile.realm, uuid=workspace_uuid)
         .first()
     )
@@ -181,7 +181,7 @@ def _entry_payload(entry: WorkspaceIndexEntry) -> dict[str, object]:
 
 
 def _workspace_descriptor_payload(
-    node: PearWorkspaceNode,
+    node: Workspace,
     snapshot: WorkspaceSnapshot,
 ) -> dict[str, object]:
     default_entry: WorkspaceIndexEntry | None
@@ -192,7 +192,7 @@ def _workspace_descriptor_payload(
         )
     except WorkspaceEntryIdError:
         default_entry = None
-    can_write = node.lifecycle_status == PearWorkspaceNode.ACTIVE
+    can_write = node.lifecycle_status == Workspace.ACTIVE
     mutation_capabilities = workspace_entry_mutation_capabilities(node)
     topic_label = node.topic_name or _("general chat")
     return {
@@ -222,7 +222,7 @@ def _workspace_descriptor_payload(
 
 
 def _snapshot_or_error(
-    node: PearWorkspaceNode,
+    node: Workspace,
     *,
     force: bool = False,
 ) -> WorkspaceSnapshot | HttpResponse:
@@ -308,7 +308,7 @@ def _resolve_mutable_entry(
 
 
 def _validate_destination_against_snapshot(
-    node: PearWorkspaceNode,
+    node: Workspace,
     snapshot: WorkspaceSnapshot,
     destination_path: str,
 ) -> str | HttpResponse:
@@ -363,7 +363,7 @@ def _validate_destination_against_snapshot(
 
 
 def _locked_mutation_error_response(
-    node: PearWorkspaceNode,
+    node: Workspace,
     error: WorkspaceMutationReadOnlyError | WorkspaceMutationStaleError,
 ) -> HttpResponse:
     if isinstance(error, WorkspaceMutationReadOnlyError):
@@ -404,11 +404,11 @@ def _entry_mutation_payload(
 
 def _terminal_entry_mutation_response(
     request: HttpRequest,
-    receipt: PearWorkspaceEntryMutationReceipt | None,
+    receipt: WorkspaceEntryMutationReceipt | None,
 ) -> HttpResponse | None:
     if receipt is None:
         return None
-    if receipt.state == PearWorkspaceEntryMutationReceipt.CONFLICTED:
+    if receipt.state == WorkspaceEntryMutationReceipt.CONFLICTED:
         revision = receipt.result_payload.get("workspace_revision")
         if isinstance(revision, bool) or not isinstance(revision, int) or revision < 0:
             raise WorkspaceMutationReceiptMismatchError(
@@ -420,7 +420,7 @@ def _terminal_entry_mutation_response(
             status=409,
             revision=revision,
         )
-    if receipt.state != PearWorkspaceEntryMutationReceipt.COMPLETE:
+    if receipt.state != WorkspaceEntryMutationReceipt.COMPLETE:
         return None
     if not isinstance(receipt.result_payload, dict) or not receipt.result_payload:
         raise WorkspaceMutationReceiptMismatchError(
@@ -433,7 +433,7 @@ def _terminal_entry_mutation_response(
 
 
 def _receipt_source_identity(
-    receipt: PearWorkspaceEntryMutationReceipt,
+    receipt: WorkspaceEntryMutationReceipt,
 ) -> WorkspaceEntryIdentity | None:
     return _validated_receipt_identity(
         receipt.request_payload.get("source_identity"),
@@ -442,7 +442,7 @@ def _receipt_source_identity(
 
 
 def _receipt_application_identity(
-    receipt: PearWorkspaceEntryMutationReceipt,
+    receipt: WorkspaceEntryMutationReceipt,
 ) -> WorkspaceEntryIdentity | None:
     return _validated_receipt_identity(
         receipt.application_payload.get("identity"),
@@ -503,8 +503,8 @@ def _has_live_descendants(snapshot: WorkspaceSnapshot, path: str) -> bool:
 
 
 def _finish_prepared_entry_mutation(
-    node: PearWorkspaceNode,
-    receipt: PearWorkspaceEntryMutationReceipt,
+    node: Workspace,
+    receipt: WorkspaceEntryMutationReceipt,
     observed_snapshot: WorkspaceSnapshot,
 ) -> WorkspaceSnapshot:
     revision = int(node.content_revision)
@@ -519,7 +519,7 @@ def _finish_prepared_entry_mutation(
 
 
 def _create_receipt_metadata(
-    receipt: PearWorkspaceEntryMutationReceipt,
+    receipt: WorkspaceEntryMutationReceipt,
 ) -> tuple[Literal["file", "directory"], str, str, str]:
     request_payload = receipt.request_payload
     options = request_payload.get("options")
@@ -576,7 +576,7 @@ def _create_receipt_metadata(
 
 
 def _inspect_created_path(
-    node: PearWorkspaceNode,
+    node: Workspace,
     path: str,
     *,
     kind: Literal["file", "directory"],
@@ -608,7 +608,7 @@ def _inspect_created_path(
 
 
 def _staged_create_application_payload(
-    receipt: PearWorkspaceEntryMutationReceipt,
+    receipt: WorkspaceEntryMutationReceipt,
     identity: WorkspaceEntryIdentity,
 ) -> dict[str, object]:
     kind, _destination, staging_path, content_sha256 = _create_receipt_metadata(receipt)
@@ -621,8 +621,8 @@ def _staged_create_application_payload(
 
 
 def _stage_prepared_create(
-    node: PearWorkspaceNode,
-    receipt: PearWorkspaceEntryMutationReceipt,
+    node: Workspace,
+    receipt: WorkspaceEntryMutationReceipt,
     content: bytes,
 ) -> None:
     kind, _destination, staging_path, content_sha256 = _create_receipt_metadata(receipt)
@@ -653,7 +653,7 @@ def _stage_prepared_create(
 
 
 def _validated_staged_create_identity(
-    receipt: PearWorkspaceEntryMutationReceipt,
+    receipt: WorkspaceEntryMutationReceipt,
 ) -> WorkspaceEntryIdentity:
     kind, _destination, staging_path, content_sha256 = _create_receipt_metadata(receipt)
     payload = receipt.application_payload
@@ -675,8 +675,8 @@ def _validated_staged_create_identity(
 
 
 def _publish_staged_create(
-    node: PearWorkspaceNode,
-    receipt: PearWorkspaceEntryMutationReceipt,
+    node: Workspace,
+    receipt: WorkspaceEntryMutationReceipt,
     observed_snapshot: WorkspaceSnapshot,
 ) -> None:
     kind, destination, staging_path, content_sha256 = _create_receipt_metadata(receipt)
@@ -742,8 +742,8 @@ def _publish_staged_create(
 
 
 def _remove_exact_create_staging(
-    node: PearWorkspaceNode,
-    receipt: PearWorkspaceEntryMutationReceipt,
+    node: Workspace,
+    receipt: WorkspaceEntryMutationReceipt,
 ) -> None:
     try:
         kind, _destination, staging_path, content_sha256 = _create_receipt_metadata(receipt)
@@ -781,8 +781,8 @@ def _remove_exact_create_staging(
 
 
 def _advance_snapshot_for_receipt_conflict(
-    node: PearWorkspaceNode,
-    receipt: PearWorkspaceEntryMutationReceipt,
+    node: Workspace,
+    receipt: WorkspaceEntryMutationReceipt,
     observed_snapshot: WorkspaceSnapshot,
 ) -> WorkspaceSnapshot:
     if int(node.content_revision) == int(receipt.requested_revision):
@@ -793,18 +793,18 @@ def _advance_snapshot_for_receipt_conflict(
 
 
 def _conflict_interrupted_entry_mutation(
-    node: PearWorkspaceNode,
-    receipt: PearWorkspaceEntryMutationReceipt,
+    node: Workspace,
+    receipt: WorkspaceEntryMutationReceipt,
     observed_snapshot: WorkspaceSnapshot,
 ) -> WorkspaceSnapshot:
     original_state = receipt.state
-    if receipt.operation == "create" and original_state == PearWorkspaceEntryMutationReceipt.STAGED:
+    if receipt.operation == "create" and original_state == WorkspaceEntryMutationReceipt.STAGED:
         _remove_exact_create_staging(node, receipt)
     snapshot = observed_snapshot
     if original_state in {
-        PearWorkspaceEntryMutationReceipt.PREPARED,
-        PearWorkspaceEntryMutationReceipt.STAGED,
-        PearWorkspaceEntryMutationReceipt.APPLIED,
+        WorkspaceEntryMutationReceipt.PREPARED,
+        WorkspaceEntryMutationReceipt.STAGED,
+        WorkspaceEntryMutationReceipt.APPLIED,
     }:
         snapshot = _advance_snapshot_for_receipt_conflict(node, receipt, observed_snapshot)
     conflict_workspace_entry_mutation_receipt(
@@ -815,8 +815,8 @@ def _conflict_interrupted_entry_mutation(
 
 
 def _complete_applied_entry_mutation(
-    node: PearWorkspaceNode,
-    receipt: PearWorkspaceEntryMutationReceipt,
+    node: Workspace,
+    receipt: WorkspaceEntryMutationReceipt,
     observed_snapshot: WorkspaceSnapshot,
 ) -> WorkspaceSnapshot:
     request_payload = receipt.request_payload
@@ -915,7 +915,7 @@ def _complete_applied_entry_mutation(
 
 
 def _reconcile_interrupted_entry_mutations(
-    node: PearWorkspaceNode,
+    node: Workspace,
 ) -> WorkspaceSnapshot | None:
     prepared_before = timezone_now() - timedelta(
         seconds=PEAR_WORKSPACE_PREPARED_RECOVERY_GRACE_SECONDS
@@ -930,7 +930,7 @@ def _reconcile_interrupted_entry_mutations(
                 return latest_snapshot
             observed_snapshot = get_workspace_snapshot(locked, force=True)
             try:
-                if receipt.state == PearWorkspaceEntryMutationReceipt.PREPARED:
+                if receipt.state == WorkspaceEntryMutationReceipt.PREPARED:
                     kind, _destination, staging_path, content_sha256 = _create_receipt_metadata(
                         receipt
                     )
@@ -950,10 +950,10 @@ def _reconcile_interrupted_entry_mutations(
                             _staged_create_application_payload(receipt, identity),
                         )
                     continue
-                if receipt.state == PearWorkspaceEntryMutationReceipt.STAGED:
+                if receipt.state == WorkspaceEntryMutationReceipt.STAGED:
                     _publish_staged_create(locked, receipt, observed_snapshot)
                     continue
-                if receipt.state == PearWorkspaceEntryMutationReceipt.APPLIED:
+                if receipt.state == WorkspaceEntryMutationReceipt.APPLIED:
                     latest_snapshot = _complete_applied_entry_mutation(
                         locked,
                         receipt,
@@ -1047,7 +1047,7 @@ def _unsupported_file_response(
 
 
 def _read_text_file(
-    node: PearWorkspaceNode,
+    node: Workspace,
     snapshot: WorkspaceSnapshot,
     entry: WorkspaceIndexEntry,
 ) -> tuple[WorkspaceFile, dict[str, object]] | HttpResponse:
@@ -1089,7 +1089,7 @@ def _read_text_file(
 
 
 def _check_and_record_file_observation(
-    node: PearWorkspaceNode,
+    node: Workspace,
     snapshot: WorkspaceSnapshot,
     entry: WorkspaceIndexEntry,
     file: WorkspaceFile,
@@ -1304,7 +1304,7 @@ def _stale_workspace_response(snapshot: WorkspaceSnapshot) -> HttpResponse:
 
 
 def _workspace_version_conflict_response(
-    node: PearWorkspaceNode,
+    node: Workspace,
     snapshot: WorkspaceSnapshot,
     entry: WorkspaceIndexEntry,
 ) -> HttpResponse:
@@ -1406,7 +1406,7 @@ def put_pear_workspace_resource_file_backend(
     snapshot = _snapshot_or_error(node)
     if isinstance(snapshot, HttpResponse):
         return snapshot
-    if node.lifecycle_status != PearWorkspaceNode.ACTIVE:
+    if node.lifecycle_status != Workspace.ACTIVE:
         return _workspace_error(
             code="workspace_read_only",
             message="Workspace is read-only.",
@@ -1761,7 +1761,7 @@ def post_pear_workspace_entry_backend(
                 return replay
             observed_snapshot = get_workspace_snapshot(locked, force=True)
             existing_entry = _live_entry_for_path(observed_snapshot, destination)
-            if locked_receipt.state == PearWorkspaceEntryMutationReceipt.PREPARED:
+            if locked_receipt.state == WorkspaceEntryMutationReceipt.PREPARED:
                 if existing_entry is not None or int(locked.content_revision) != workspace_revision:
                     raise WorkspaceMutationStaleError(int(locked.content_revision))
                 locked_destination = _validate_destination_against_snapshot(
@@ -1773,8 +1773,8 @@ def post_pear_workspace_entry_backend(
                     return locked_destination
                 _stage_prepared_create(locked, locked_receipt, content_bytes)
             elif locked_receipt.state not in {
-                PearWorkspaceEntryMutationReceipt.STAGED,
-                PearWorkspaceEntryMutationReceipt.APPLIED,
+                WorkspaceEntryMutationReceipt.STAGED,
+                WorkspaceEntryMutationReceipt.APPLIED,
             }:
                 raise WorkspaceMutationReceiptMismatchError(
                     "Workspace create receipt has an invalid state."
@@ -1788,9 +1788,9 @@ def post_pear_workspace_entry_backend(
             if replay is not None:
                 return replay
             observed_snapshot = get_workspace_snapshot(locked, force=True)
-            if locked_receipt.state == PearWorkspaceEntryMutationReceipt.STAGED:
+            if locked_receipt.state == WorkspaceEntryMutationReceipt.STAGED:
                 _publish_staged_create(locked, locked_receipt, observed_snapshot)
-            elif locked_receipt.state != PearWorkspaceEntryMutationReceipt.APPLIED:
+            elif locked_receipt.state != WorkspaceEntryMutationReceipt.APPLIED:
                 raise WorkspaceMutationReceiptMismatchError(
                     "Workspace create receipt has no staged application."
                 )
@@ -1803,7 +1803,7 @@ def post_pear_workspace_entry_backend(
             if replay is not None:
                 return replay
             observed_snapshot = get_workspace_snapshot(locked, force=True)
-            if locked_receipt.state != PearWorkspaceEntryMutationReceipt.APPLIED:
+            if locked_receipt.state != WorkspaceEntryMutationReceipt.APPLIED:
                 raise WorkspaceMutationReceiptMismatchError(
                     "Workspace create receipt has no durable application."
                 )
@@ -1983,7 +1983,7 @@ def patch_pear_workspace_entry_backend(
                 and _same_workspace_inode(observed_destination.identity, source_identity)
             )
             application_identity: WorkspaceEntryIdentity | None = None
-            if locked_receipt.state == PearWorkspaceEntryMutationReceipt.APPLIED:
+            if locked_receipt.state == WorkspaceEntryMutationReceipt.APPLIED:
                 application_identity = _receipt_application_identity(locked_receipt)
                 if (
                     application_identity is None
@@ -1993,7 +1993,7 @@ def patch_pear_workspace_entry_backend(
                     or not applied
                 ):
                     raise WorkspaceMutationStaleError(int(locked.content_revision))
-            elif locked_receipt.state == PearWorkspaceEntryMutationReceipt.PREPARED and not applied:
+            elif locked_receipt.state == WorkspaceEntryMutationReceipt.PREPARED and not applied:
                 if (
                     int(locked.content_revision) != workspace_revision
                     or observed_source is None
@@ -2017,11 +2017,11 @@ def patch_pear_workspace_entry_backend(
                     expected_identity=source_identity,
                 )
                 application_identity = result.identity
-            elif locked_receipt.state != PearWorkspaceEntryMutationReceipt.PREPARED:
+            elif locked_receipt.state != WorkspaceEntryMutationReceipt.PREPARED:
                 raise WorkspaceMutationReceiptMismatchError(
                     "Workspace rename receipt has an invalid state."
                 )
-            if locked_receipt.state == PearWorkspaceEntryMutationReceipt.PREPARED:
+            if locked_receipt.state == WorkspaceEntryMutationReceipt.PREPARED:
                 if applied:
                     assert observed_destination is not None
                     application_identity = observed_destination.identity
@@ -2049,7 +2049,7 @@ def patch_pear_workspace_entry_backend(
             source_identity = _receipt_source_identity(locked_receipt)
             application_identity = _receipt_application_identity(locked_receipt)
             if (
-                locked_receipt.state != PearWorkspaceEntryMutationReceipt.APPLIED
+                locked_receipt.state != WorkspaceEntryMutationReceipt.APPLIED
                 or source_identity is None
                 or application_identity is None
                 or not _same_workspace_inode(application_identity, source_identity)
@@ -2275,13 +2275,13 @@ def delete_pear_workspace_entry_backend(
                 )
             observed_snapshot = get_workspace_snapshot(locked, force=True)
             observed_source = _live_entry_for_path(observed_snapshot, normalized_expected_path)
-            if locked_receipt.state == PearWorkspaceEntryMutationReceipt.APPLIED:
+            if locked_receipt.state == WorkspaceEntryMutationReceipt.APPLIED:
                 if (
                     _receipt_application_identity(locked_receipt) != source_identity
                     or observed_source is not None
                 ):
                     raise WorkspaceMutationStaleError(int(locked.content_revision))
-            elif locked_receipt.state == PearWorkspaceEntryMutationReceipt.PREPARED:
+            elif locked_receipt.state == WorkspaceEntryMutationReceipt.PREPARED:
                 removed_entries = removed_entries_hint
                 if observed_source is not None:
                     if (
@@ -2322,7 +2322,7 @@ def delete_pear_workspace_entry_backend(
             application_identity = _receipt_application_identity(locked_receipt)
             removed_entries = locked_receipt.application_payload.get("removed_entries")
             if (
-                locked_receipt.state != PearWorkspaceEntryMutationReceipt.APPLIED
+                locked_receipt.state != WorkspaceEntryMutationReceipt.APPLIED
                 or source_identity is None
                 or application_identity != source_identity
                 or isinstance(removed_entries, bool)

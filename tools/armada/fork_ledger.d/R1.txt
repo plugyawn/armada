@@ -19,10 +19,12 @@ kept zerver/actions/streams.py  # imports the renamed modules by their new paths
 kept zerver/lib/bot_lib.py  # imports the renamed modules by their new paths
 kept zerver/lib/events.py  # imports the renamed modules by their new paths
 kept zerver/lib/message_cache.py  # imports the renamed modules by their new paths
+kept zerver/models/__init__.py  # exports the agent's models by their plain nouns (AgentRun, Repository, Workspace, ...)
+kept zerver/models/bots.py  # the agent's six models take plain nouns; 0810_rename_agent_models moves the tables
 kept zerver/tests/test_event_system.py  # imports the renamed modules by their new paths
 kept zerver/tests/test_events.py  # imports the renamed modules by their new paths
 kept zerver/tests/test_message_dict.py  # imports the renamed modules by their new paths
-kept zerver/tests/test_service_bot_system.py  # imports the renamed modules by their new paths
+kept zerver/tests/test_service_bot_system.py  # imports the renamed modules by their new paths, and the agent's models by their plain nouns
 kept zerver/tests/test_submessage.py  # imports the renamed modules by their new paths
 kept zerver/views/submessage.py  # imports the renamed modules by their new paths
 kept zerver/views/users.py  # imports the renamed modules by their new paths

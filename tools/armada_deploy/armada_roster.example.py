@@ -9,6 +9,11 @@
 # identity: (populate_db email, full name, new email, role, is_staff).
 # Exactly one row must carry UserProfile.ROLE_REALM_OWNER; the reset
 # script uses it to run the Armada config bootstrap.
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from zerver.models import UserProfile
+
 users = [
     ("desdemona@zulip.com", "demo-owner", "demo-owner@example.com", UserProfile.ROLE_REALM_OWNER, False),
     ("iago@zulip.com", "demo-admin", "demo-admin@example.com", UserProfile.ROLE_REALM_ADMINISTRATOR, True),

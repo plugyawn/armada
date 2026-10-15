@@ -79,7 +79,9 @@ def send_armada_run_event(run: AgentRun, run_event: AgentRunEvent) -> None:
         if run.date_finished is not None
         else None
     )
-    metadata = payload.get("metadata") if isinstance(payload.get("metadata"), dict) else {}
+    metadata = payload.get("metadata")
+    if not isinstance(metadata, dict):
+        metadata = {}
     agent_thread_id = metadata.get("codex_thread_id") if run_event.event_type == "agent" else None
     agents = (
         serialize_armada_agent_threads(run)

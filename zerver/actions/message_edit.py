@@ -1034,7 +1034,11 @@ def do_update_message(
     realm = user_profile.realm
     attachment_reference_change = AttachmentChangeResult(False, [])
 
-    if message_edit_request.is_message_moved and target_message.thread_root_id is not None:
+    if (
+        isinstance(message_edit_request, StreamMessageEditRequest)
+        and message_edit_request.is_message_moved
+        and target_message.thread_root_id is not None
+    ):
         raise JsonableError(_("Replies cannot be moved independently"))
 
     ums = UserMessage.objects.filter(message=target_message.id)

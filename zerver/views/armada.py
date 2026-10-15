@@ -1,10 +1,11 @@
 import json
 import subprocess
 import time
+from collections.abc import Sequence
 from pathlib import Path
 from shutil import which
 from types import SimpleNamespace
-from typing import Annotated, Any
+from typing import Annotated, Any, cast
 
 from django.conf import settings
 from django.db import transaction
@@ -481,7 +482,7 @@ def serialize_armada_workspace_context(
     )
     workspace_repo = (
         workspace_node.project.repository_url.strip()
-        if workspace_node is not None and workspace_node.project_id is not None
+        if workspace_node is not None and workspace_node.project is not None
         else ""
     )
     github_repo = next(
@@ -699,14 +700,14 @@ def armada_usage_from_event_payload(payload: object) -> ArmadaTokenUsage | None:
 
 
 def armada_worker_run_summary_events(
-    runs: list[AgentRun],
+    runs: Sequence[AgentRun],
 ) -> dict[int, list[AgentRunEvent]]:
     """Load bounded run-card state without issuing per-run queries.
 
     Run-list hydration must not issue per-run event queries. Detail
     serialization can still use the model managers when no batch was supplied.
     """
-    events_by_run_id = {run.id: [] for run in runs}
+    events_by_run_id: dict[int, list[AgentRunEvent]] = {run.id: [] for run in runs}
     if not events_by_run_id:
         return events_by_run_id
     newest_usage_candidates = (
@@ -942,7 +943,7 @@ def check_can_access_armada_worker_run(
         return
     stream_name = (
         run.workspace_node.stream_name
-        if run.workspace_node_id is not None and run.workspace_node.stream_name
+        if run.workspace_node is not None and run.workspace_node.stream_name
         else run.stream_name
     )
     access_stream_by_name(user_profile, stream_name)
@@ -2072,14 +2073,14 @@ def _dispatch_armada_monitor_run(
         status=AgentRun.QUEUED,
         summary="Queued monitor setup.",
         current_activity=trim_armada_text(monitor.ask, limit=200),
-        runtime_label=str(settings.ARMADA_WORKER_AGENT_RUNTIME or ""),
+        runtime_label=str(cast(str, settings.ARMADA_WORKER_AGENT_RUNTIME) or ""),
         model=armada_worker_model_for_topic(
             armada_bot.user_profile, stream=stream_name, topic=topic_name
         ),
         sandbox=armada_worker_sandbox_for_topic(
             armada_bot.user_profile, stream=stream_name, topic=topic_name
         ),
-        approval_policy=str(settings.ARMADA_WORKER_APPROVAL_POLICY or ""),
+        approval_policy=str(cast(str, settings.ARMADA_WORKER_APPROVAL_POLICY) or ""),
         workdir=armada_worker_workdir_for_topic(
             armada_bot.user_profile, stream=stream_name, topic=topic_name
         ),

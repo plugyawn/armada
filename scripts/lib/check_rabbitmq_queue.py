@@ -269,7 +269,7 @@ def check_rabbitmq_queues() -> None:
     results = armada_worker_health_results(armada_slot_stats, queue_counts_rabbitmqctl)
     for queue in queues_to_check:
         stats_files = queue_statistics_filenames(queue)
-        loaded_stats = []
+        loaded_stats: list[dict[str, Any]] = []
         for filename in stats_files:
             file_path = os.path.join(queue_stats_dir, filename)
             if not os.path.exists(file_path):

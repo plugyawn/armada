@@ -1244,7 +1244,7 @@ def find_first_unread_anchor(
         # the unread UserMessage belongs to a child.  A child whose protected
         # root is inaccessible remains a standalone row and anchors itself.
         query = annotate_thread_root_access(query, user_profile)
-        values_query = (
+        values_query: QuerySet[Message, int] = (
             query.annotate(
                 thread_feed_anchor=Case(
                     When(

@@ -17,8 +17,12 @@ import argparse
 import json
 import os
 import sys
+from typing import TYPE_CHECKING
 
-import icons_gen as g
+if TYPE_CHECKING:
+    from tools.armada import icons_gen as g
+else:
+    import icons_gen as g
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(HERE, "..", "..", "web", "src", "armada", "kit", "icons")

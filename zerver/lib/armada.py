@@ -7,7 +7,7 @@ from collections.abc import Callable, Sequence
 from contextlib import nullcontext
 from dataclasses import dataclass
 from re import IGNORECASE, compile, sub
-from typing import Any, Final, Literal, NotRequired, Protocol, TypedDict
+from typing import Any, Final, Literal, NotRequired, Protocol, TypedDict, cast
 
 from django.core.cache import cache
 from django.utils.translation import gettext as _
@@ -369,7 +369,16 @@ def armada_normalize_token_usage(value: object) -> ArmadaTokenUsage | None:
     if not isinstance(raw_usage, dict):
         return None
 
-    field_names = {
+    field_names: dict[
+        Literal[
+            "input_tokens",
+            "cached_input_tokens",
+            "output_tokens",
+            "reasoning_output_tokens",
+            "total_tokens",
+        ],
+        tuple[str, ...],
+    ] = {
         "input_tokens": ("input_tokens", "inputTokens", "prompt_tokens"),
         "cached_input_tokens": ("cached_input_tokens", "cachedInputTokens"),
         "output_tokens": ("output_tokens", "outputTokens", "completion_tokens"),
@@ -1080,7 +1089,10 @@ def attach_armada_artifact_to_message(
     )
     from zerver.models import Message, SubMessage, UserProfile
 
-    artifacts = artifacts_from_tool_results(tool_results, allow_unresolved_media=True)
+    # The helper only reads the string-valued label and value fields.
+    artifacts = artifacts_from_tool_results(
+        cast(Sequence[dict[str, str]], tool_results), allow_unresolved_media=True
+    )
     if not artifacts:
         return False
     user_profile = bot_handler.user_profile
@@ -2164,7 +2176,7 @@ def build_armada_active_session_summary(
         "recent_messages": list(recent_messages or []),
         "routing_messages": list(routing_messages or recent_messages or []),
         "referenced_threads": list(referenced_threads or []),
-        "workspace_context": dict(workspace_context or {}),
+        "workspace_context": cast(ArmadaWorkspaceContext, dict(workspace_context or {})),
     }
 
 
@@ -2174,7 +2186,7 @@ def build_armada_active_session_summary_from_messages(
     source: ArmadaActiveSessionSource,
     stream_exists: bool,
     messages: Sequence[ArmadaMessage],
-    prompt_messages: Sequence[ArmadaMessage] | None = None,
+    prompt_messages: Sequence[tuple[int, str, bool | None, str | None]] | None = None,
     referenced_threads: list[ArmadaReferencedThread] | None = None,
     topic_message_count: int | None = None,
     latest_codex_thread_id: str | None = None,
@@ -2581,7 +2593,7 @@ class ArmadaEmbeddedBotHandler:
         *,
         stream: str,
         topic: str,
-    ) -> str | None:
+    ) -> ArmadaResponsePolicy | None:
         topic_response_policy = getattr(self.worker_run_store, "topic_response_policy", None)
         if not callable(topic_response_policy):
             return None
@@ -3531,6 +3543,7 @@ class ArmadaWorkerTurn:
         return segment_result
 
     def artifact_workspace_context(self) -> tuple[str, str | None]:
+        assert self.active_session is not None
         workspace_context = self.active_session.get("workspace_context") or {}
         workdir = str(workspace_context.get("workdir") or "").strip()
         if not workdir.startswith("/"):

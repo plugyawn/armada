@@ -358,7 +358,7 @@ class RuntimeConfigTest(unittest.TestCase):
                 )
 
             with (
-                patch.object(runtime_config.os, "fstat", side_effect=changed_fstat),
+                patch.object(os, "fstat", side_effect=changed_fstat),
                 self.assertRaisesRegex(RuntimeConfigError, "changed while reading"),
             ):
                 runtime_config._read_regular_file_nofollow(changing, required_mode=0o600)

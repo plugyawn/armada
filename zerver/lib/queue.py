@@ -267,6 +267,7 @@ class SimpleQueueClient(QueueClient[BlockingChannel]):
             _properties: pika.BasicProperties,
             body: bytes,
         ) -> None:
+            assert method.delivery_tag is not None
             try:
                 event = orjson.loads(body)
             except orjson.JSONDecodeError:
@@ -294,14 +295,17 @@ class SimpleQueueClient(QueueClient[BlockingChannel]):
                 raise
 
         for queue_name, priority in queue_priorities.items():
-            self.ensure_queue(
-                queue_name,
-                lambda channel, queue_name=queue_name, priority=priority: channel.basic_consume(
+
+            def do_consume(
+                channel: BlockingChannel, queue_name: str = queue_name, priority: int = priority
+            ) -> str:
+                return channel.basic_consume(
                     queue=queue_name,
                     on_message_callback=on_message,
                     arguments={"x-priority": priority},
-                ),
-            )
+                )
+
+            self.ensure_queue(queue_name, do_consume)
         self.is_consuming = True
         self.channel.start_consuming()
 

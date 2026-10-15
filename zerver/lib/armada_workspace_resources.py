@@ -1419,6 +1419,7 @@ def get_workspace_snapshot(
         _set_workspace_cache_status("rebuild")
         paths, fingerprint, branch, head, dirty_count = _enumerate_workspace(node)
         latest = cache.get(_latest_fingerprint_cache_key(workspace_uuid))
+        previous_revision: int | None
         if (
             isinstance(latest, dict)
             and latest.get("revision") == node.content_revision

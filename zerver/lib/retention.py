@@ -32,7 +32,7 @@ import logging
 import time
 from collections.abc import Iterable, Mapping
 from datetime import timedelta
-from typing import Any
+from typing import Any, cast
 
 from django.conf import settings
 from django.contrib.postgres.aggregates import ArrayAgg
@@ -429,10 +429,13 @@ def _process_grouped_messages_deletion(
 
         # Deleted replies change their roots' reply summaries; capture the
         # roots now, since the reply rows are gone after the delete below.
-        deleted_reply_root_ids = list(
-            Message.objects.filter(id__in=message_ids, thread_root__isnull=False)
-            .values_list("thread_root_id", flat=True)
-            .distinct()
+        deleted_reply_root_ids = cast(
+            list[int],
+            list(
+                Message.objects.filter(id__in=message_ids, thread_root__isnull=False)
+                .values_list("thread_root_id", flat=True)
+                .distinct()
+            ),
         )
 
         acting_user_event: DeleteMessagesEvent | None = None

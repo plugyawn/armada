@@ -1,0 +1,23 @@
+#!/bin/bash
+# Armada: write a .br beside each text asset nginx serves, so it answers
+# with brotli without compressing on every request
+# (puppet/armada/files/nginx-brotli.conf). The upgrade has already copied
+# the new deployment's assets into /home/zulip/prod-static; only files
+# without a current .br are compressed. Runs as zulip, at idle priority; a
+# failure here never stops a deploy.
+static=/home/zulip/prod-static
+if [ ! -d "$static" ] || ! command -v brotli >/dev/null; then
+    echo "armada-brotli: skipped (no $static or no brotli)"
+    exit 0
+fi
+find "$static" -type f \( -name '*.js' -o -name '*.css' -o -name '*.svg' -o -name '*.json' \
+    -o -name '*.txt' -o -name '*.ttf' \) -size +1k -print0 |
+    while IFS= read -r -d '' file; do
+        if [ ! "$file.br" -nt "$file" ]; then
+            printf '%s\0' "$file"
+        fi
+    done |
+    nice -n 19 ionice -c 3 xargs -0 -r -P 4 -n 16 brotli --keep --force --quality=11 ||
+    echo "armada-brotli: some files were not compressed"
+echo "armada-brotli: text assets in $static have current .br files"
+exit 0

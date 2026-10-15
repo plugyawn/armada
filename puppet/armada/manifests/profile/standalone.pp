@@ -9,4 +9,5 @@ class armada::profile::standalone {
   include armada::settings
   include armada::agent_runtime
   include armada::hooks
+  include armada::nginx_brotli
 }

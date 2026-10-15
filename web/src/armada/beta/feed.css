@@ -10,4 +10,12 @@
 .plan > .chk { font: var(--t-text); }
 .chk > li.failed > .mk.sm { color: var(--failure); }
 
+/* a code block (code_blocks.js): the code scrolls sideways in its own span, so the copy button stays in the block's top
+   right corner, on the block's fill, over the end of the first line. It is shown while the pointer is on the block, or
+   when it has the keyboard's focus. */
+pre.blk { overflow: hidden; }
+pre.blk > .code { display: block; overflow-x: auto; scrollbar-width: none; }
+pre.blk > .cp { position: absolute; top: calc(var(--s-3) - 2px); right: var(--s-2); background-color: var(--block); opacity: 0; transition: opacity var(--fade-out) linear; }
+pre.blk:hover > .cp, pre.blk > .cp:focus-visible { opacity: 1; transition-duration: var(--fade-in); }
+
 }   /* @layer zulip.armada-beta */

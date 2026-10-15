@@ -4,6 +4,7 @@ import {$$, el, esc} from "./util.js";
 import {marks, people, repoStreams, state, streams} from "./state.js";
 import {dayLabel, hhmm} from "./time.js";
 import {isOnix, nameOf} from "./faces.js";
+import {codeBlock} from "./code_blocks.js";
 import {echoRefs, quoteOf} from "./mention_text.js";
 import {quoteHTML, refLook} from "./mentions.js";
 import {tkey} from "./routing.js";
@@ -76,7 +77,7 @@ function partEl(p, m) {
   let e;
   if (p.t === "b") { const b = el(p.tag, "b" + (p.jumbo ? " jumbo" : ""), p.html); e = el("div", "bl"); e.append(b); }
   else if (p.t === "ans") { e = el("div", "ans"); setAns(e, p.html); }
-  else if (p.t === "pre") e = el("pre", "blk", p.html);
+  else if (p.t === "pre") e = codeBlock(p.html);
   else if (p.t === "tbl") e = el("div", "blk tbl", p.html);
   else if (p.t === "ask") e = el("div", "blk ask", p.html);
   else if (p.t === "pic") e = el("div", "blk pic", p.html);

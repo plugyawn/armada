@@ -8,6 +8,7 @@ import {loadPics, partEl, partsOf, tpl} from "./parts.js";
 import {dist, drawLane, edge, finish, grown, hugAll, hush, pin, sectionOf, syncJump, toHug} from "./feed.js";
 import {runOfMsg} from "./runs.js";
 import {drawTurnPlan} from "./checklist.js";
+import {setCode} from "./code_blocks.js";
 import {drawReactions} from "./reactions.js";
 import {drawLab} from "./lab.js";
 
@@ -60,7 +61,7 @@ function morphOnix(cl, m) {
   const parts = partsOf(m), ex = $$(`:scope > [data-part][data-mid="${m.id}"]`, cl), head = $(".head:not(.gone)", cl), rca = $(".rca", cl); if (rca) rca.remove();
   let wrote = false, lastEl = null;
   parts.forEach((p, i) => { const old = ex[i];
-    if (old && old.dataset.part === p.t) { lastEl = old; if (old._src === p.html) return; wrote = true; if (p.t === "ans") morphAns(old, p.html, head); else { old.innerHTML = p.html; loadPics(old); } old._src = p.html; return; }
+    if (old && old.dataset.part === p.t) { lastEl = old; if (old._src === p.html) return; wrote = true; if (p.t === "ans") morphAns(old, p.html, head); else if (p.t === "pre") setCode(old, p.html); else { old.innerHTML = p.html; loadPics(old); } old._src = p.html; return; }
     const e = partEl(p, m); wrote = true; if (old) { if (head && old.contains(head)) head.remove(); old.replaceWith(e); } else if (lastEl) lastEl.after(e); else { const anchor = $(":scope > .plan", cl) || $(":scope > .who", cl) || $(":scope > .sigil", cl); anchor ? anchor.after(e) : cl.prepend(e); } lastEl = e; if (!M.reduced()) M.appear(e, 0.45); });
   ex.slice(parts.length).forEach((x) => { if (head && x.contains(head)) head.remove(); x.remove(); });
   return wrote;

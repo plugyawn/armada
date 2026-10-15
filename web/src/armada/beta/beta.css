@@ -120,7 +120,7 @@ nav > .fixed > .row.old { text-decoration: none; color: var(--ink-2); }
    states, so the field never changes width when it is pressed */
 .cz .k.to { width: auto; padding: 0 var(--s-2) 0 6px; gap: 6px; font: var(--t-strong); color: var(--ink-2); }
 .cz .k.to:not(.off) { background: var(--fill-2); color: var(--ink-1); }
-/* a run that settled with no footer keeps the footer's room while it is the last thing said (beta.js, syncOnix) */
+/* a run that settled with no footer keeps the footer's room while it is the last thing said (agent_turn.js, syncOnix) */
 .feed .lane:has(> .cl.onix.held:last-child) { padding-bottom: calc(var(--h-band) + var(--s-3) + var(--h-s) + var(--gap-same)); }
 /* a bubble's hover overlay stands in the bubble's row, on its open side, past the time and the reactions, inside the row's
    own height: it covers no word, time or reaction of this message or of the one above */
@@ -129,7 +129,7 @@ nav > .fixed > .row.old { text-decoration: none; color: var(--ink-2); }
 /* a message is a stop for the keyboard: the ring is the window's one ring (motion.js) */
 .b[tabindex], .cl.onix[tabindex] { outline: none; }
 /* Jump to latest stands left of the model label, whose width follows the model's name ("GPT-6 Astra · Ultrafast · Medium"
-   against the prototype's "Sol Fast · High"): placeJump() in beta.js measures it into --jump-right */
+   against the prototype's "Sol Fast · High"): placeJump() in composer.js measures it into --jump-right */
 .band .jump { right: var(--jump-right, 216px); }
 .band .run { margin-right: var(--jump-right, 216px); }
 /* in the picker the field is a search: Choose takes my colour only when Return would choose (.armed), never for the text */
@@ -138,8 +138,8 @@ nav > .fixed > .row.old { text-decoration: none; color: var(--ink-2); }
 #boot a { color: var(--accent-text); }
 
 /* ---------- round two: the r4 type and spacing pass (design/r4/type/TYPE-SPACING.md, A1 and A3 to A11) ----------
-   A2 (code comments drawn as a control) is fixed where it began: the syntax inks are .sx-* classes now (beta.js, PYG). */
-/* A1. The column: every heading's first row stands 4 under it; lists reserve the rows they hold (beta.js sets
+   A2 (code comments drawn as a control) is fixed where it began: the syntax inks are .sx-* classes now (parts.js, PYG). */
+/* A1. The column: every heading's first row stands 4 under it; lists reserve the rows they hold (column.js sets
    --rows and --slots); sections are 24 apart. */
 aside.side > .out { padding-top: 0; margin-top: calc(var(--h-m) + var(--s-1) - var(--h-line2)); }
 aside.side > .out > :first-child { margin-top: 0; }
@@ -156,10 +156,10 @@ aside.side:has(#sec-running) .sec.foot { margin-top: var(--s-6); padding-top: 0;
 
 /* A3. Code inside talk at 15: x-height 7.95 against Söhne's 8.37 at 16. Blocks and chrome keep 14. */
 .b code, .ans code, .hrow p code { font-size: 15px; line-height: 0; }
-/* A3b. Short inline code does not break at its own hyphens (beta.js marks it .nw). */
+/* A3b. Short inline code does not break at its own hyphens (parts.js marks it .nw). */
 :is(.b, .ans) code.nw { white-space: nowrap; }
 
-/* A4. A bold-only paragraph is rendered as h4 (beta.js): 20 above, 4 below. */
+/* A4. A bold-only paragraph is rendered as h4 (parts.js): 20 above, 4 below. */
 .ans h4 { margin-top: var(--s-5); }
 
 /* A5. A code block: 12 above and below its lines, 16 at the sides. */
@@ -169,7 +169,7 @@ pre.blk { padding-top: var(--s-3); padding-bottom: var(--s-3); }
 .ans p + :is(ul, ol) { margin-top: var(--gap-part); }
 
 /* A7. The nav: "n more" on the labels' edge; the list fades under the me row while there is more below
-   (beta.js toggles .more on nav > .scroll as it does for the band). */
+   (nav.js toggles .more on nav > .scroll as it does for the band). */
 nav .kids > .mo { margin-left: 0; }
 nav > .scroll.more { -webkit-mask-image: linear-gradient(#000 calc(100% - var(--s-5)), transparent); mask-image: linear-gradient(#000 calc(100% - var(--s-5)), transparent); }
 
@@ -209,7 +209,7 @@ aside.side > .out > .note { padding: 0 0 0 calc(20px + var(--s-2)); min-height: 
 .info .ls.agent { margin-top: var(--s-1); padding-top: var(--s-1); box-shadow: inset 0 1px 0 var(--line); }
 .info .bad { font: var(--t-caption); color: var(--failure); min-height: var(--h-m); display: flex; align-items: center; gap: var(--s-2); }
 
-/* ---------- partners (beta.js, "partners"; the r4 partner and sprite studies) ---------- */
+/* ---------- partners (partners.js, partner_picker.js, partner_card.js; the r4 partner and sprite studies) ---------- */
 /* a face is a sprite in the box the initials had, so nothing moves when one arrives or evolves. One sprite pixel a CSS pixel,
    never resampled; the sprite stands on the box's foot, overflows upward in the gutter (cut at the gutter's sides) and is cut
    by its window in lists; it never catches the pointer. */

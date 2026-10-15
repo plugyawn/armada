@@ -44,7 +44,7 @@ const RECIPE = {   /* [tier dBFS, priority, set, parts: [make, start s, relative
   react: [-36, 0, "default", [[() => bar(NOTE.B5, 0.06), 0, 0]]],
   /* a partner evolving (only for its person): one soft tick for each trade of outlines, faster and faster, then D5, F#5, A5 and a
      quiet D6 as the new form lands; about 1.4 s, between done and send. Its own drawing, none of the games' audio. */
-  evolve: [-28, 2, "default", [...[0.534, 0.696, 0.826, 0.923, 0.996, 1.053, 1.102].map((t) => [() => bar(NOTE.A5, 0.03, {lp: 2400, mallet: -90}), t, -16]),   /* the trades (beta.js, playMoment) */
+  evolve: [-28, 2, "default", [...[0.534, 0.696, 0.826, 0.923, 0.996, 1.053, 1.102].map((t) => [() => bar(NOTE.A5, 0.03, {lp: 2400, mallet: -90}), t, -16]),   /* the trades (partner_card.js, playMoment) */
     [() => bar(NOTE.D5, 0.3), 1.38, 0], [() => bar(NOTE.Fs5, 0.3), 1.44, -1], [() => bar(NOTE.A5, 0.32), 1.5, -2], [() => bar(NOTE.D6, 0.42), 1.56, -8]]],
 };
 const AUDITION = 12;   /* the reel's +12 dB, so laptop speakers carry it; the shipped levels are the tiers */

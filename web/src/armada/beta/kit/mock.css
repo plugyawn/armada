@@ -169,7 +169,7 @@ em { font-style: italic; } strong, b { font-weight: 500; }
 .i2 { color: var(--ink-2); } .dim { color: var(--dim); }
 .c-att { color: var(--attention); } .c-fail { color: var(--failure); } .c-ok { color: var(--success); }
 /* code is coloured, on its own surface: four roles, the same in both themes */
-/* the four syntax inks; beta.js maps the server's highlighting onto .sx-*, which no control uses (.c and .k are controls) */
+/* the four syntax inks; parts.js maps the server's highlighting onto .sx-*, which no control uses (.c and .k are controls) */
 :is(pre, code, .src, .dl) .sx-k { color: var(--syn-k); } :is(pre, code, .src, .dl) .sx-s { color: var(--syn-s); }
 :is(pre, code, .src, .dl) .sx-n { color: var(--syn-n); } :is(pre, code, .src, .dl) .sx-c { color: var(--syn-c); }
 /* what was added and what was removed, as counts */
@@ -189,7 +189,7 @@ em { font-style: italic; } strong, b { font-weight: 500; }
 .mk.left { color: var(--ink-2); opacity: 0.7; }                   /* a step not reached: a small ring, lighter than everything around it */
 .sigil { flex: none; display: block; fill: currentColor; width: 14px; height: 14px; }
 .sigil.s16 { width: 16px; height: 16px; } .sigil.s18 { width: 18px; height: 18px; } .sigil.s20 { width: 20px; height: 20px; } .sigil.s28 { width: 28px; height: 28px; } .sigil.s64 { width: 64px; height: 64px; }
-/* Onix's face (beta.js agentFace): boulders in a flint disc, as a person without a picture has initials in one */
+/* Onix's face (kit.js agentFace, which faces.js draws): boulders in a flint disc, as a person without a picture has initials in one */
 .sigil.agent > .disc { fill: var(--p-flint); } .sigil.agent.in-disc > g { fill: var(--p-flint-ink); }
 /* Onix working: the one loop, at the head of the stream and nowhere else. One strip of three drawings 14 px apart, moved a
    drawing at a time on --step (100 ms), twelve steps (1.2 s), resting inside the loop. Themed: the ball's capture wobble,

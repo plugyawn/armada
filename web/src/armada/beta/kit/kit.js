@@ -12,7 +12,7 @@
   // ---- the marks of a run and of a step (r4 marks study): 12 by 12 cells of one CSS pixel, in the 14 px box (28 on Home,
   // 2 px a cell). done, live, queued, needs, paused, failed, cancelled; "left" is a step not reached. Each state has its
   // own silhouette; a hue only on needs (attention) and failed (failure). Drawings: marks.js (plain, committed), and the
-  // themed ball and egg that beta.js puts in BETA_THEMED before the first draw when this server has them.
+  // themed ball and egg that runs.js puts in BETA_THEMED before the first draw when this server has them.
   const MKCLS = {needs: "c-att", failed: "c-fail"}, THEMED = window.BETA_THEMED = window.BETA_THEMED || {};
   const BOX = 'viewBox="-1 -1 14 14" shape-rendering="crispEdges"';
   window.mk = (n, cls) => `<svg class="mk ${n} ${MKCLS[n] || ""} ${cls || ""}" ${BOX} aria-hidden="true">${(THEMED[n] && THEMED[n].rest) || BETA_MARKS[n] || ""}</svg>`;

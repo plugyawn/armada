@@ -36,7 +36,8 @@ into the engineered client deletes the module it replaces.
 | `state.js` | `state` (the values more than one module replaces), the server's data (people, streams, unread, marks, places, ...), `DATA`, `stats` | host |
 | `time.js` | the server's clock (`now`) and the ways a time is written | host |
 | `frame.js` | the elements of the frame the kit draws (`main`, `feed`, `lane`, `nav`, `band`, the field's `tx`, ...), found by `bindFrame()` | host |
-| `connection.js` | `api()`, `register()`, the event queue (`poll`), event dispatch (`handle`, `on`), signing out | connection |
+| `connection.js` | `api()`, `register()`, the event queue (`poll`), event dispatch (`handle`, `on`), the session (`session`), signing out, the tabs of this browser told of each other's session, reloading for new code | connection |
+| `link.js` | the connection's rules, with nothing of the page in them: one register in flight, backoff with jitter, the long poll's 65 s deadline, the CSRF token mended from `GET armada/session`, signed out and signed in elsewhere (resilience.md R1); tested by `web/tests/armada/beta_link.test.cjs` | connection |
 | `routing.js` | place keys and addresses, the place caches and what fills them, `openPlace()`, marking read | connection |
 | `outbox.js` | a message on its way (`transmit`), the server's copy taking its place (`adopt`), a local row dropped | connection |
 | `faces.js` | names, initials, stones, presence, `faceOf()` | faces |
@@ -103,7 +104,8 @@ sprites by the same file's `armada_beta_sprite`.
 To delete the beta, remove all of these in one change:
 
 - this directory
-- `zerver/views/armada_beta.py`, `templates/zerver/armada_beta.html`, `zerver/tests/test_armada_beta.py`
+- `zerver/views/armada_beta.py`, `templates/zerver/armada_beta.html`, `zerver/tests/test_armada_beta.py`,
+  `web/tests/armada/beta_link.test.cjs`
 - in `zproject/urls.py`, the import from `zerver.views.armada_beta`, the two `beta/` paths and the four
   `armada/partner...` routes, with their comments (`zerver/lib/partner.py` stays for the rebuild, which moves its rows into
   the Partner model)

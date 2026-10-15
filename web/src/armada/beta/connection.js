@@ -1,31 +1,44 @@
-/* INTERIM BETA (README.md): the connection: requests, registering, the event queue and its dispatch, signing out. */
+/* INTERIM BETA (README.md): the connection: requests, registering, the event queue and its dispatch, signing out.
+   The rules (one register in flight, backoff, the long poll's deadline, the CSRF token mended, the states that stop
+   every request) are link.js's; this module gives them the page. */
 
-import {$, el, sleep} from "./util.js";
+import {$, el, esc} from "./util.js";
 import {armadaBots, people, places, repoStreams, state, stats, streams, unread} from "./state.js";
 import {dkey, openPlace, tkey} from "./routing.js";
 import {closeMenu, overHide} from "./hover.js";
 import {closePicker} from "./model_picker.js";
 import {palette} from "./palette.js";
 import {fetchPartners} from "./partners.js";
+import {tx} from "./frame.js";
+import {liveRun} from "./runs.js";
+import {createLink} from "./link.js";
 
-/* ---------- the server ---------- */
-const CSRF = ($('input[name="csrfmiddlewaretoken"]') || {}).value || "";   /* the session's token, written into the page by the server */
-async function api(method, path, params = {}, o = {}) {
-  const sp = new URLSearchParams(); for (const [k, v] of Object.entries(params)) if (v !== undefined && v !== null) sp.set(k, typeof v === "string" ? v : JSON.stringify(v));
-  let url = "/json/" + path, body = o.body; if (method === "GET" || method === "DELETE") { const s = sp.toString(); if (s) url += "?" + s; } else if (!body) body = sp;
-  stats.api++;
-  const headers = method === "GET" ? {} : {"X-CSRFToken": CSRF};
-  let r; try { r = await fetch(url, {method, body, headers, credentials: "same-origin", signal: o.signal}); } catch (e) { throw Object.assign(new Error("The server cannot be reached"), {net: true}); }
-  /* the server's rate limit (200 requests a minute a person): a read waits as long as the server says and asks again, up to
-     three times, instead of showing "API usage exceeded rate limit" or calling the server offline. A write is not repeated. */
-  if (r.status === 429 && method === "GET" && (o.tries || 0) < 3 && !(o.signal && o.signal.aborted)) { let wait = parseFloat(r.headers.get("Retry-After"));
-    if (!(wait >= 0)) { try { wait = +(await r.json())["retry-after"]; } catch (e) {} } stats.rateLimited = (stats.rateLimited || 0) + 1;
-    await sleep(Math.min(30, Math.max(0.5, wait || 1)) * 1000 + Math.random() * 250); return api(method, path, params, {...o, tries: (o.tries || 0) + 1}); }
-  if (r.status === 401) { signedOut(); throw Object.assign(new Error("Signed out"), {status: 401}); }
-  let j; try { j = await r.json(); } catch (e) { throw Object.assign(new Error(`The server answered ${r.status}`), {status: r.status, net: r.status >= 500}); }
-  if (j.result !== "success") throw Object.assign(new Error(j.msg || "The request failed"), {code: j.code, status: r.status});
-  return j;
-}
+/* the tabs of this browser tell each other whose session they hold, and when it ends (resilience.md 2.5) */
+const tabs = typeof BroadcastChannel === "function" ? new BroadcastChannel("armada") : null;
+const tell = (msg) => { if (tabs) tabs.postMessage(msg); };
+
+const link = createLink({
+  state,
+  csrf: ($('input[name="csrfmiddlewaretoken"]') || {}).value || "",   /* the session's token, written into the page by the server */
+  fetch: (url, init) => fetch(url, init),
+  now: () => performance.now(),
+  setTimeout: (f, ms) => setTimeout(f, ms),
+  clearTimeout: (t) => clearTimeout(t),
+  random: Math.random,
+  hidden: () => document.hidden,
+  online: () => navigator.onLine !== false,
+  registerParams: () => ({fetch_event_types: ["muted_users", "subscription", "realm_user", "presence", "update_message_flags", "message", "recent_private_conversations", "realm_bot", "stream"],
+    event_types: ["message", "update_message", "reaction", "agent_run", "workspace_changed", "typing", "delete_message", "update_message_flags", "armada_partner", "read_receipts", "restart"], apply_markdown: true, client_gravatar: false,
+    client_capabilities: {notification_settings_null: true, bulk_message_deletion: true, user_avatar_url_field_optional: false, stream_typing_notifications: true, user_settings_object: true, linkifier_url_template: true, user_list_incomplete: false, include_deactivated_groups: false, archived_channels: false, empty_topic_name: true}}),
+  onRegister: applyRegister,
+  onEvent: handle,
+  onResync: resync,
+  onStatus: drawStatus,
+  onToken: (token) => tell({type: "session", user_id: state.ME, csrf_token: token}),
+});
+stats.link = link.stats;
+const api = (method, path, params, o) => { stats.api++; return link.api(method, path, params, o); };
+
 /* what each event type does: host.js names the handler for every type the page registers for (on() is called there,
    at load, after this module has run) */
 const handlers = new Map();
@@ -35,27 +48,11 @@ function handle(ev, at) {
   try { const fn = handlers.get(ev.type); if (fn) fn(ev, at); }
   catch (e) { console.error("event", ev.type, e); }
 }
-async function poll() { let wait = 0;
-  while (!signedOut.done) {
-    const open = setTimeout(() => setDown(false), 3000);   /* a long-poll still open after 3 s is an answering server: without this the label said "not answering" until the next event or heartbeat */
-    try { const r = await api("GET", "events", {queue_id: state.queue, last_event_id: state.lastEvent}); const at = performance.now(); clearTimeout(open); setDown(false); wait = 0; for (const ev of r.events) { state.lastEvent = Math.max(state.lastEvent, ev.id); handle(ev, at); } }
-    catch (e) { clearTimeout(open); if (signedOut.done) return; if (e.code === "BAD_EVENT_QUEUE_ID") { try { await api("GET", "users/me"); await register(); for (const c of places.values()) { c.loaded = false; c.msgs = c.msgs.filter((m) => m.local); c.byId = new Map(c.msgs.map((m) => [m.id, m])); c.oldest = false; } if (state.place) openPlace(state.place, {force: true, keepHash: true}); fetchPartners(false); } catch (x) {} } else { setDown(true); wait = Math.min(15000, wait ? wait * 2 : 1000); await sleep(wait); } }
-  }
-}
-function setDown(d) { const l = $("#lab"); if (l && l.classList.contains("down") !== d) { l.classList.toggle("down", d); $("#lab-t").textContent = d ? "Beta · offline" : "Beta"; } }
-/* signed out (here, in another tab, or the session ended): the page says so at once and offers sign-in; it never goes on as
-   a spectator, which the realm would allow */
-function signedOut() { if (signedOut.done) return; signedOut.done = true; palette(false); closePicker(); closeMenu(); overHide();
-  const b = el("div", "", '<p>You are signed out. <a href="/login/?next=/beta/">Sign in again</a></p>'); b.id = "boot"; b.setAttribute("role", "alert"); document.body.append(b); $("a", b).focus(); }
-/* coming back to the page asks whether the session still stands: a sign-out in another tab shows here at once, not when the
-   long poll next returns */
-let sessionAsked = -1e9;
-function askSession() { if (signedOut.done || document.hidden || performance.now() - sessionAsked < 5000) return; sessionAsked = performance.now(); api("GET", "users/me").catch(() => {}); }
-async function register() {
-  const r = await api("POST", "register", {fetch_event_types: ["muted_users", "subscription", "realm_user", "presence", "update_message_flags", "message", "recent_private_conversations", "realm_bot", "stream"], event_types: ["message", "update_message", "reaction", "agent_run", "workspace_changed", "typing", "delete_message", "update_message_flags", "armada_partner", "read_receipts"], apply_markdown: true, client_gravatar: false,
-    client_capabilities: {notification_settings_null: true, bulk_message_deletion: true, user_avatar_url_field_optional: false, stream_typing_notifications: true, user_settings_object: true, linkifier_url_template: true, user_list_incomplete: false, include_deactivated_groups: false, archived_channels: false, empty_topic_name: true}});
-  if (!r.user_id || (state.ME && r.user_id !== state.ME)) { signedOut(); throw Object.assign(new Error("Signed out"), {status: 401}); }   /* no session: the server registered a spectator */
-  state.queue = r.queue_id; state.lastEvent = r.last_event_id; state.skew = r.server_timestamp * 1000 - Date.now(); state.ME = r.user_id; state.meName = r.full_name; state.presences = r.presences || {};
+
+/* at load: register (waiting out a server that is restarting), then say whose session this tab holds */
+async function register() { const r = await link.connect(); tell({type: "session", user_id: state.ME, csrf_token: link.csrf}); return r; }
+function applyRegister(r) {
+  state.skew = r.server_timestamp * 1000 - Date.now(); state.ME = r.user_id; state.meName = r.full_name; state.presences = r.presences || {};
   people.clear(); for (const u of [...(r.realm_users || []), ...(r.cross_realm_bots || [])]) people.set(u.user_id, {id: u.user_id, name: u.full_name, email: u.email, bot: u.is_bot, active: u.is_active !== false});
   armadaBots.clear(); (r.agent_user_ids || []).forEach((i) => armadaBots.add(i)); state.muted = new Set((r.muted_users || []).map((u) => u.id));
   streams.clear(); for (const s of r.subscriptions || []) if (!s.is_archived) streams.set(s.stream_id, s);
@@ -63,5 +60,65 @@ async function register() {
   state.dms = (r.recent_private_conversations || []).slice(0, 12);
   unread.clear(); const u = r.unread_msgs || {}; for (const s of u.streams || []) unread.set(tkey(s.stream_id, s.topic), new Set(s.unread_message_ids)); for (const d of u.pms || []) unread.set(dkey([d.other_user_id]), new Set(d.unread_message_ids)); for (const d of u.huddles || []) unread.set(dkey(d.user_ids_string.split(",").map(Number).filter((i) => i !== state.ME)), new Set(d.unread_message_ids));
 }
+/* the queue was lost and registered again: what the page holds may have missed events, so every place is asked again
+   (the open one now, the others when opened) and the team's partners with it. R5 makes this a diff in place. */
+function resync() {
+  for (const c of places.values()) { c.loaded = false; c.msgs = c.msgs.filter((m) => m.local); c.byId = new Map(c.msgs.map((m) => [m.id, m])); c.oldest = false; }
+  if (state.place) openPlace(state.place, {force: true, keepHash: true});
+  fetchPartners(false);
+}
+/* the queue, for as long as the session stands */
+function poll() { return link.run(); }
 
-export {api, askSession, handle, on, poll, register, signedOut};
+/* the standing label says so only after 5 s of trouble (a graceful restart takes 2 to 3); signed out and signed in as
+   someone else are a sheet over the page, which keeps the page, the field and what it holds */
+function drawStatus(s) {
+  const l = $("#lab"); if (l) { const down = s === "reconnecting" || s === "offline"; l.classList.toggle("down", down); $("#lab-t").textContent = s === "reconnecting" ? "Beta · reconnecting" : s === "offline" ? "Beta · offline" : "Beta"; }
+  if (s === "signed_out") { tell({type: "signed_out"}); sheet('<p>You are signed out. <a href="/login/" target="_blank">Sign in again</a></p>'); }
+  else if (s === "other_user") { const who = people.get(link.otherUserId); sheet(`<p>Signed in as ${esc(who ? who.name : "someone else")} in another tab. <a href="/">Switch to that account</a></p>`); }
+  else unsheet();
+}
+function sheet(html) { palette(false); closePicker(); closeMenu(); overHide(); unsheet();
+  const b = el("div", "", html); b.id = "boot"; b.dataset.connection = "1"; b.setAttribute("role", "alert"); document.body.append(b); $("a", b).focus(); }
+function unsheet() { const b = $("#boot[data-connection]"); if (b) b.remove(); }
+const signedOut = () => link.signedOut();
+/* signing out here: the other tabs hear it first, then the session ends */
+function signOut() { tell({type: "signed_out"}); const f = el("form"); f.method = "POST"; f.action = "/accounts/logout/"; f.hidden = true;
+  const t = el("input"); t.type = "hidden"; t.name = "csrfmiddlewaretoken"; t.value = link.csrf; f.append(t); document.body.append(f); f.submit(); }
+/* GET armada/session (contract C1): whose session this is, its CSRF token, and the agent's settings */
+const session = () => link.session();
+
+/* a server running new code: this page reloads when nobody would see it (hidden), or once it has been idle a minute
+   with no live run or selection in view; never while the field holds words or files, or a send is on its way, which a
+   reload would lose (nothing restores them yet). A restart of the same code needs nothing: the queue resumes. */
+const RELOAD_IDLE_MS = 60000;
+let lastInput = performance.now(), reloadDue = false;
+function onRestart(ev) { if (!link.isNewBuild(ev) || reloadDue) return; reloadDue = true; reloadWhenUnseen(); }
+function reloadWhenUnseen() {
+  if (!reloadDue) return;
+  const unsaved = (tx && tx.textContent.trim()) || state.atts.length || [...places.values()].some((c) => c.msgs.some((m) => m.pending));
+  const inView = (state.P && liveRun(state.P)) || !getSelection().isCollapsed;
+  if (!unsaved && (document.hidden || (!inView && performance.now() - lastInput >= RELOAD_IDLE_MS))) { location.reload(); return; }
+  setTimeout(reloadWhenUnseen, 10000);
+}
+
+/* the signs that the network or the person is back; a machine that slept shows as a timer that ran late. A hidden tab's
+   timers run late by design (Chrome wakes them once a minute), so there a late timer says nothing, and the clock starts
+   again when the tab is seen */
+let tickAt = Date.now();
+function listen() {
+  addEventListener("online", () => link.wake("online"));
+  addEventListener("pageshow", (e) => { if (e.persisted) link.wake("restored"); });
+  addEventListener("focus", () => link.wake("focus"));
+  document.addEventListener("visibilitychange", () => { if (document.hidden) { reloadWhenUnseen(); return; } tickAt = Date.now(); link.wake("visible"); });
+  for (const t of ["keydown", "pointerdown"]) addEventListener(t, () => { lastInput = performance.now(); }, {capture: true, passive: true});
+  setInterval(() => { const t = Date.now(); if (t - tickAt > 30000 && !document.hidden) link.wake("resumed"); tickAt = t; }, 10000);
+  /* the page going for good (not into the back-forward cache, from which it may come back to its queue) */
+  addEventListener("pagehide", (e) => { if (!e.persisted) link.leave(); });
+  /* a tab stopped before its first register has no page to resume (and no person to compare): another tab's session
+     loads it again */
+  if (tabs) tabs.onmessage = (e) => { const msg = e.data || {}; if (link.stopped && !state.ME && msg.type === "session") { location.reload(); return; } link.heard(msg); };
+}
+listen();
+
+export {api, handle, on, onRestart, poll, register, session, signOut, signedOut};

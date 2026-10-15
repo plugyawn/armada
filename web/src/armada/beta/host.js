@@ -9,7 +9,7 @@
 
 import {$, $$, clamp, el, esc, press, store, T} from "./util.js";
 import {allKids, expanded, marks, QUESTION_TIMEOUT, state, stats, streams, topicsOf, unread} from "./state.js";
-import {api, askSession, handle, on, poll, register, signedOut} from "./connection.js";
+import {api, handle, on, onRestart, poll, register, session} from "./connection.js";
 import {cacheOf, dkey, fetchMsgs, markRead, openPlace, placeFromHash, placeFromKey, tkey} from "./routing.js";
 import {band, bindFrame, cz, feed, go, lane, main, nav, navFixed, navScroll, outline, panes, side, toBtn, tx} from "./frame.js";
 import {answering, drawAtts, drawComposer, onixHere, onixKey, ready, syncField, upload, verb} from "./composer.js";
@@ -38,7 +38,7 @@ import {wireMentions} from "./mentions.js";
 /* event dispatch (connection.js): what each event type the page registers for does; a module's own types are named here */
 on("message", onMessage); on("update_message", onUpdate); on("agent_run", onRun); on("reaction", onReaction);
 on("update_message_flags", onFlags); on("delete_message", onDelete); on("typing", onTyping); on("workspace_changed", onWorkspaceChanged);
-on("armada_partner", onPartner); on("read_receipts", onReadReceipts);
+on("armada_partner", onPartner); on("read_receipts", onReadReceipts); on("restart", onRestart);
 let fileIn = null;
 /* what Tab stops on, in document order: what the browser would stop on, shown and not inert */
 const tabStops = () => $$("a[href], button, input, [tabindex], [contenteditable]").filter((x) => x.tabIndex >= 0 && !x.disabled && !x.hidden && !x.closest("[inert], [hidden]") && x.getClientRects().length > 0 && getComputedStyle(x).visibility !== "hidden");
@@ -47,8 +47,8 @@ const tabStops = () => $$("a[href], button, input, [tabindex], [contenteditable]
 async function boot() {
   store.del("onix");   /* the old switch for every place */
   const bootEl = el("div", "", "Loading"); bootEl.id = "boot"; document.body.append(bootEl);
-  try { await Promise.all([register(), loadPartners()]); api("GET", "armada/session").then((r) => { if (r.armada_session && r.armada_session.agent_mention) state.agentMention = r.armada_session.agent_mention; }).catch(() => {}); }
-  catch (e) { if (signedOut.done) { bootEl.remove(); return; } bootEl.innerHTML = `<p>The beta could not load: ${esc(e.message)}. <a href="/">Open the old interface</a></p>`; return; }
+  try { await Promise.all([register(), loadPartners()]); session().then((r) => { if (r.armada_session && r.armada_session.agent_mention) state.agentMention = r.armada_session.agent_mention; }).catch(() => {}); }
+  catch (e) { if (e.stopped) { bootEl.remove(); return; } bootEl.innerHTML = `<p>The beta could not load: ${esc(e.message)}. <a href="/">Open the old interface</a></p>`; return; }
   bindFrame();
   /* my face opens my card, any other face that person's (partner_card.js); the picker's switch, Later, its cells; the card's controls */
   press(nav, ".row.me", () => { openCard(); ready(); }); wireCard();
@@ -149,8 +149,7 @@ async function boot() {
     if (!mod && !e.altKey && e.key.length === 1 && state.tab === "Chat" && document.activeElement !== tx && !(document.activeElement && document.activeElement.closest("#lab, input, textarea"))) ready(); });   /* a letter typed anywhere goes to the field */
   addEventListener("popstate", () => { const p = placeFromHash(); if (p) openPlace(p, {keepHash: true}); });
   addEventListener("hashchange", () => { const p = placeFromHash(); if (p && (!state.place || p.key !== state.place.key)) openPlace(p, {keepHash: true}); });
-  document.addEventListener("visibilitychange", () => { if (document.hidden) return; askSession(); if (state.P) markRead(state.P); });
-  addEventListener("focus", () => { askSession(); });
+  document.addEventListener("visibilitychange", () => { if (document.hidden) return; if (state.P) markRead(state.P); });
   setInterval(() => tick(false), 500);
   setInterval(sweepAsks, 5000);   /* a question past the server's wait stops reading as waiting, with no event to say so */
   setInterval(() => { if (state.P && state.P.ctx && state.hd) { state.hd._sig = ""; drawHeader(); } }, 60000);

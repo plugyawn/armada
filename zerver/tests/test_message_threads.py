@@ -1,3 +1,5 @@
+from typing import cast
+
 import orjson
 from django.test import override_settings
 
@@ -74,6 +76,7 @@ class MessageThreadTest(ZulipTestCase):
         reply = Message.objects.get(id=reply_id)
         self.assertEqual(reply.thread_root_id, root_message_id)
         self.assertEqual(reply.content, "**hello** <script>alert(1)</script>")
+        assert reply.rendered_content is not None
         self.assertIn("<strong>hello</strong>", reply.rendered_content)
         self.assertNotIn("<script>", reply.rendered_content)
 
@@ -600,9 +603,12 @@ class MessageThreadTest(ZulipTestCase):
             )[root_message_id]
         self.assertEqual(summary["reply_count"], 5)
         self.assertEqual(summary["unread_reply_count"], 4)
-        self.assertEqual(summary["last_sender"]["user_id"], users[-1].id)
+        self.assertEqual(cast(dict[str, object], summary["last_sender"])["user_id"], users[-1].id)
         self.assertEqual(
-            [participant["user_id"] for participant in summary["participants"]],
+            [
+                participant["user_id"]
+                for participant in cast(list[dict[str, object]], summary["participants"])
+            ],
             [user.id for user in reversed(users[-4:])],
         )
 

@@ -1,8 +1,10 @@
-from typing import Any
+from collections.abc import Callable
+from typing import Any, cast
 from unittest import mock
 
 import orjson
 from django.test import override_settings
+from pika.adapters.blocking_connection import BlockingChannel
 from pika.exceptions import AMQPConnectionError, ConnectionClosed
 from typing_extensions import override
 
@@ -140,7 +142,10 @@ class TestQueueImplementation(ZulipTestCase):
                 orjson.dumps({"run_id": 11}),
             )
 
-        client.ensure_queue = ensure_queue  # type: ignore[method-assign]
+        # Mypy cannot model instance method replacement; calls here are positional.
+        client.ensure_queue = cast(  # type: ignore[method-assign]
+            Callable[[str, Callable[[BlockingChannel], object]], None], ensure_queue
+        )
         channel.basic_consume.side_effect = basic_consume
         channel.start_consuming.side_effect = start_consuming
 
@@ -176,7 +181,10 @@ class TestQueueImplementation(ZulipTestCase):
                 b"not-json",
             )
 
-        client.ensure_queue = ensure_queue  # type: ignore[method-assign]
+        # Mypy cannot model instance method replacement; calls here are positional.
+        client.ensure_queue = cast(  # type: ignore[method-assign]
+            Callable[[str, Callable[[BlockingChannel], object]], None], ensure_queue
+        )
         channel.basic_consume.side_effect = basic_consume
         channel.start_consuming.side_effect = start_consuming
 

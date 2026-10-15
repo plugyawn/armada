@@ -6,7 +6,7 @@ from collections.abc import Sequence
 from datetime import timedelta
 from pathlib import Path
 from types import SimpleNamespace
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, TypedDict, cast
 from unittest.mock import patch
 
 import orjson
@@ -37,7 +37,10 @@ from zerver.lib.armada import (
     ARMADA_TOPIC_CONTEXT_ENDPOINT,
     ARMADA_WORKING_MESSAGE,
     ArmadaEmbeddedBotHandler,
+    ArmadaLiveRunState,
+    ArmadaTokenUsage,
     ArmadaWorkerLeaseLostError,
+    ArmadaWorkerRunStatus,
     ArmadaWorkerRuntime,
     build_armada_active_session_summary_from_messages,
     get_armada_session_payload,
@@ -126,7 +129,21 @@ if TYPE_CHECKING:
     from django.test.client import _MonkeyPatchedWSGIResponse as TestHttpResponse
 
 
+class ArmadaWorkerRunUsage(ArmadaTokenUsage):
+    summary: str
+    duration_seconds: float | None
+    event_id: int | None
+
+
+class ArmadaMonitorSpec(TypedDict):
+    title: str
+    cadence_seconds: int
+    artifact: dict[str, object]
+    recipe: dict[str, object]
+
+
 class ArmadaSessionEndpointTest(ZulipTestCase):
+    @override
     def setUp(self) -> None:
         super().setUp()
         # Every run/store path now resolves a per-channel Repository, which
@@ -699,6 +716,7 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
             self.assertEqual(login_method, "codex-cli")
             self.assertEqual(login_command, "codex login")
             self.assertEqual(login_target, "worker-environment")
+            assert login_instructions is not None
             self.assertIn("worker environment", login_instructions)
 
             (
@@ -760,7 +778,7 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
         )
 
         serialized_run = serialize_armada_worker_run(run)
-        usage = serialized_run["usage"]
+        usage = cast(ArmadaWorkerRunUsage | None, serialized_run["usage"])
 
         self.assertIsNotNone(usage)
         assert usage is not None
@@ -768,7 +786,7 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
         self.assertEqual(usage["cached_input_tokens"], 80)
         self.assertEqual(usage["cache_percent"], 80.0)
         self.assertIn("80/100 cached", usage["summary"])
-        live = serialized_run["live"]
+        live = cast(ArmadaLiveRunState | None, serialized_run["live"])
         self.assertIsNotNone(live)
         assert live is not None
         self.assertEqual(live["status"], "running")
@@ -787,7 +805,9 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
             summary="Codex turn completed.",
             payload={"kind": "status", "title": "Codex turn completed.", "status": "done"},
         )
-        usage_after_completion = serialize_armada_worker_run(run)["usage"]
+        usage_after_completion = cast(
+            ArmadaWorkerRunUsage | None, serialize_armada_worker_run(run)["usage"]
+        )
         self.assertIsNotNone(usage_after_completion)
         assert usage_after_completion is not None
         self.assertEqual(usage_after_completion["total_tokens"], 106)
@@ -896,7 +916,7 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
         )
         write_armada_live_run_state(
             run.trigger_message_id,
-            status=AgentRun.RUNNING,
+            status=cast(ArmadaWorkerRunStatus, AgentRun.RUNNING),
         )
 
         serialized_run = serialize_armada_worker_run(run)
@@ -2566,6 +2586,7 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
                     workdir=str(workdir),
                 )
 
+        assert error is not None
         self.assertIn("shared Git worktree", error)
         run_mock.assert_not_called()
 
@@ -3839,14 +3860,14 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
         store.record(
             bot_handler,
             done_run.trigger_message_id,
-            AgentRun.RUNNING,
+            cast(ArmadaWorkerRunStatus, AgentRun.RUNNING),
             stream=ARMADA_DEFAULT_STREAM,
             topic="topic-a",
         )
         store.record(
             bot_handler,
             cancelled_run.trigger_message_id,
-            AgentRun.DONE,
+            cast(ArmadaWorkerRunStatus, AgentRun.DONE),
             stream=ARMADA_DEFAULT_STREAM,
             topic="topic-a",
         )
@@ -3908,14 +3929,14 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
             store.record(
                 bot_handler,
                 run.trigger_message_id,
-                AgentRun.RUNNING,
+                cast(ArmadaWorkerRunStatus, AgentRun.RUNNING),
                 stream=ARMADA_DEFAULT_STREAM,
                 topic="workspace-observer",
             )
             store.record(
                 bot_handler,
                 run.trigger_message_id,
-                AgentRun.RUNNING,
+                cast(ArmadaWorkerRunStatus, AgentRun.RUNNING),
                 stream=ARMADA_DEFAULT_STREAM,
                 topic="workspace-observer",
             )
@@ -3923,14 +3944,14 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
             store.record(
                 bot_handler,
                 run.trigger_message_id,
-                AgentRun.DONE,
+                cast(ArmadaWorkerRunStatus, AgentRun.DONE),
                 stream=ARMADA_DEFAULT_STREAM,
                 topic="workspace-observer",
             )
             store.record(
                 bot_handler,
                 run.trigger_message_id,
-                AgentRun.DONE,
+                cast(ArmadaWorkerRunStatus, AgentRun.DONE),
                 stream=ARMADA_DEFAULT_STREAM,
                 topic="workspace-observer",
             )
@@ -3962,7 +3983,7 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
         store.record(
             bot_handler,
             run.trigger_message_id,
-            AgentRun.QUEUED,
+            cast(ArmadaWorkerRunStatus, AgentRun.QUEUED),
             stream=ARMADA_DEFAULT_STREAM,
             topic="topic-a",
         )
@@ -4079,7 +4100,7 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
             "status": lambda: store.record(
                 bot_handler,
                 run.trigger_message_id,
-                AgentRun.DONE,
+                cast(ArmadaWorkerRunStatus, AgentRun.DONE),
                 stream=ARMADA_DEFAULT_STREAM,
                 topic="fenced-store",
                 result_message_id=4001,
@@ -4353,7 +4374,7 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
         control_store.record(
             bot_handler,
             run.trigger_message_id,
-            AgentRun.RUNNING,
+            cast(ArmadaWorkerRunStatus, AgentRun.RUNNING),
             stream=ARMADA_DEFAULT_STREAM,
             topic="control-store",
             result_message_id=4002,
@@ -4474,6 +4495,7 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
         run.refresh_from_db()
         self.assertEqual(run.status, AgentRun.RUNNING)
         self.assertEqual(run.attempts, 2)
+        assert run.heartbeat_at is not None
         self.assertGreater(run.heartbeat_at, stale_time)
         self.assertEqual(
             AgentRunEvent.objects.get(run=run, event_type="claimed").payload["stale_reclaim"],
@@ -4641,6 +4663,7 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
         active_run.refresh_from_db()
         abandoned_run.refresh_from_db()
         self.assertEqual(active_run.status, AgentRun.RUNNING)
+        assert active_run.heartbeat_at is not None
         self.assertGreater(active_run.heartbeat_at, stale_time)
         self.assertEqual(abandoned_run.status, AgentRun.FAILED)
         self.assertEqual(
@@ -4696,6 +4719,7 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
             0,
         )
         active_run.refresh_from_db()
+        assert active_run.heartbeat_at is not None
         self.assertGreater(active_run.heartbeat_at, old_heartbeat)
 
     def test_worker_liveness_ignores_the_exact_attempt_after_it_settles(self) -> None:
@@ -4763,6 +4787,7 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
         run.refresh_from_db()
         refreshed_heartbeat = run.heartbeat_at
         self.assertIsNotNone(refreshed_heartbeat)
+        assert refreshed_heartbeat is not None
         self.assertGreater(refreshed_heartbeat, old_heartbeat)
 
         store.record_event(
@@ -6396,6 +6421,7 @@ class ArmadaMonitorTest(ZulipTestCase):
             self.assertEqual(monitor.status, AgentMonitor.PROVISIONING)
             self.assertEqual(monitor.ask, "training loader")
             self.assertIsNotNone(monitor.anchor_message_id)
+            assert monitor.anchor_message_id is not None
 
             run = AgentRun.objects.get(
                 bot_profile=armada_bot, trigger_message_id=monitor.anchor_message_id
@@ -6531,7 +6557,7 @@ class ArmadaMonitorTest(ZulipTestCase):
         self.assertTrue(AgentMonitor.objects.filter(id=monitor.id).exists())
 
     def test_validate_monitor_spec(self) -> None:
-        good = {
+        good: ArmadaMonitorSpec = {
             "title": "training loader",
             "cadence_seconds": 15,
             "artifact": {

@@ -18,7 +18,8 @@ Delete it when the rebuild's conversation lands.
 - Partners (round three): the picker place (`#partner`), faces, the card and the evolution moment are in
   `partners.js`, `partner_picker.js` and `partner_card.js`; the sprites and `species.json` come from the git-ignored `web/sprites/licensed/` through
   `/beta/sprites/<path>`, partners from `/json/armada/partners` (`zerver/lib/partner.py`, in interim bot-storage rows).
-  With no pack, faces are initials and nothing else changes.
+  A face is the partner's Scarlet/Violet icon standing on a circle in its type's gradient (the r5 round-four study,
+  `sv.html`); Onix has no face. With no pack, or a partner with no icon, faces are initials and nothing else changes.
 - The page is ES modules, one for each part of it (below), wired by `host.js`. Reads and writes go to `/json/` with
   the session cookie and the page's CSRF token.
 - `beta.css`: what real data needs beyond the kit. Tokens only.

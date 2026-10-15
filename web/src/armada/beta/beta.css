@@ -210,30 +210,42 @@ aside.side > .out > .note { padding: 0 0 0 calc(20px + var(--s-2)); min-height: 
 .info .bad { font: var(--t-caption); color: var(--failure); min-height: var(--h-m); display: flex; align-items: center; gap: var(--s-2); }
 
 /* ---------- partners (partners.js, partner_picker.js, partner_card.js; the r4 partner and sprite studies) ---------- */
-/* a face is a sprite in the box the initials had, so nothing moves when one arrives or evolves. One sprite pixel a CSS pixel,
-   never resampled; the sprite stands on the box's foot, overflows upward in the gutter (cut at the gutter's sides) and is cut
-   by its window in lists; it never catches the pointer. */
+/* a face (the r5 round-four study, sv.html) is a circle in the gradient of the partner's type, in the box the initials had, so
+   nothing moves when one arrives or evolves; the partner's Scarlet/Violet icon stands whole on it, feet inside the rim and head
+   over it, placed in script by its measured content box (partners.js, svPlace). Nothing cuts it; it never catches the pointer. */
 .pk { position: relative; display: inline-block; flex: none; width: 28px; height: 28px; font-style: normal; }
 .pk.s20 { width: 20px; height: 20px; } .pk.s18 { width: 18px; height: 18px; }
-.pk > .win { position: absolute; overflow: clip; pointer-events: none; }
-.pk.s28 > .win { overflow: clip visible; }
-.pk.big > .win { overflow: visible; }
-.pk img { position: absolute; max-width: none; image-rendering: pixelated; pointer-events: none; user-select: none; }
+.pk > .rim { position: absolute; inset: 0; border-radius: var(--r-round); background: var(--ty, var(--fill-3)); }
+.pk img { position: absolute; max-width: none; pointer-events: none; user-select: none; }
+.pk.big.px img { image-rendering: pixelated; }   /* the old pack's pixel icon, where a form has no Scarlet/Violet one */
+/* the eighteen types, light to deep at 140 degrees, the same in both themes (the study's seven, and eleven more in kind) */
+.pk.ty-normal { --ty: linear-gradient(140deg, #efe8d8, #c3b79c); } .pk.ty-fire { --ty: linear-gradient(140deg, #ffbf7a, #ef5f4a); }
+.pk.ty-water { --ty: linear-gradient(140deg, #9fd0ff, #3d7fe0); } .pk.ty-grass { --ty: linear-gradient(140deg, #c4ea9b, #4fb37f); }
+.pk.ty-electric { --ty: linear-gradient(140deg, #fff08a, #f2b51c); } .pk.ty-ghost { --ty: linear-gradient(140deg, #c9b8ff, #6a55d9); }
+.pk.ty-poison { --ty: linear-gradient(140deg, #e3b6f0, #9b51c4); } .pk.ty-ice { --ty: linear-gradient(140deg, #d6f5f8, #6cc6d6); }
+.pk.ty-fighting { --ty: linear-gradient(140deg, #f5b39a, #c4473a); } .pk.ty-ground { --ty: linear-gradient(140deg, #f2dca4, #c99a4e); }
+.pk.ty-flying { --ty: linear-gradient(140deg, #d6e2ff, #8aa2ec); } .pk.ty-psychic { --ty: linear-gradient(140deg, #ffc1d6, #e8578a); }
+.pk.ty-bug { --ty: linear-gradient(140deg, #e2ef9a, #93b32c); } .pk.ty-rock { --ty: linear-gradient(140deg, #e6dcb4, #a8925a); }
+.pk.ty-dragon { --ty: linear-gradient(140deg, #c4c0ff, #5a4fd6); } .pk.ty-dark { --ty: linear-gradient(140deg, #c9bfb8, #5d4f48); }
+.pk.ty-steel { --ty: linear-gradient(140deg, #e1e5ee, #9aa4b8); } .pk.ty-fairy { --ty: linear-gradient(140deg, #ffd3ec, #e17bb8); }
 .cl > .pk { position: absolute; left: calc(-1 * var(--gutter)); top: var(--s-1); }
 .cl.lab > .pk { top: var(--s-6); }
-.cl.onix > .pk { top: -2px; } .cl.onix.lab > .pk { top: 18px; }
-.cl > .pk + *, .cl.onix > .pk + * { margin-top: 0; }
+.cl > .pk + * { margin-top: 0; }
 .row > .pk { margin: 0 -2px; } .ls > li > .pk { margin: 0; }
 .avs > .pk + :is(.pk, .av), .avs > .av + .pk { margin-left: -4px; }
 .band .ty > .pk { position: absolute; right: calc(100% + var(--s-3)); top: 0; }
 .pk.on::after, .pk.away::after { content: ""; position: absolute; right: -1.5px; bottom: -1.5px; width: 7px; height: 7px; border-radius: var(--r-round); background: var(--ink-1); box-shadow: 0 0 0 2px var(--plane); }
 .pk.away::after { background: linear-gradient(90deg, var(--ink-1) 50%, var(--plane) 50%); box-shadow: inset 0 0 0 1.5px var(--ink-1), 0 0 0 2px var(--plane); }
+/* Onix has no face (statement 28): in a list its row keeps an empty cell, so names stay on one axis; in the conversation its
+   words take the gutter and start at the edge where faces stand. A thread draws faces in the name line, at the words' edge,
+   so there Onix keeps that edge. */
+.av.none { background: none; }
+.feed .lane > .cl.onix { margin-left: calc(-1 * var(--gutter)); }
 
-/* the party hop: +1 px, then -3 px, 133 ms a step, by transform only. Under the pointer or focus, while its person types, on a
-   picker cell that is selected. Nothing hops at rest, and nothing with motion reduced. Onix's face stays still while its run
-   is live: the ball is the run's one loop (MARKS.md, direction A). */
-@keyframes pk-hop { 0% { transform: translateY(1px); } 50% { transform: translateY(-3px); } }
-:is(.cl > .pk:hover, nav .row:is(:hover, :focus-visible) > .pk, .ls > li:hover > .pk, .hrow:is(:hover, :focus-visible) .pk, .band .ty .pk, .pkc:is(:hover, .sel) .pk) img { animation: pk-hop 266ms step-end infinite; }
+/* the hop: up 3 px and down, by transform only. Under the pointer, while its person types, on a picker cell that is selected.
+   Nothing hops at rest, and nothing with motion reduced. */
+@keyframes pk-hop { 0%, 100% { transform: translateY(0); animation-timing-function: ease-out; } 40% { transform: translateY(-3px); animation-timing-function: ease-in; } 60% { transform: translateY(0); } }
+:is(.cl > .pk:hover, nav .row:is(:hover, :focus-visible) > .pk, .ls > li:hover > .pk, .hrow:is(:hover, :focus-visible) .pk, .band .ty .pk, .pkc:is(:hover, .sel) .pk) img { animation: pk-hop 560ms infinite; }
 :root[data-motion="reduced"] .pk img { animation: none !important; }   /* above every trigger's selector, whatever its weight */
 @media (prefers-reduced-motion: reduce) { .pk img { animation: none !important; } }
 
@@ -241,22 +253,21 @@ aside.side > .out > .note { padding: 0 0 0 calc(20px + var(--s-2)); min-height: 
 .cl > .evo { display: flex; align-items: center; gap: var(--s-2); height: 20px; margin-top: var(--gap-same); padding-left: var(--pad-x); font: var(--t-caption); color: var(--ink-2); white-space: nowrap; }
 .cl.me > .evo { align-self: flex-end; padding: 0 var(--pad-x) 0 0; }
 
-/* the picker: a place with the frame's header, band and field. Cells 88 by 100; a taken line's sprite at 38% */
+/* the picker: a place with the frame's header, band and field. Cells 96 wide; a taken line's face at 38% */
 main > .pane[data-pane="Partner"] { overflow-y: auto; scrollbar-width: none; }
 #picker .pkp { padding: var(--s-4) 0 var(--s-8); }
 #picker .pkintro { font: var(--t-text); color: var(--ink-2); padding-left: var(--pad-x); }
 #picker .pkh { font: var(--t-strong); height: var(--h-m); display: flex; align-items: center; padding-left: var(--pad-x); margin-top: var(--s-6); }
 #picker .pkhint { padding-top: 0; margin-bottom: var(--s-2); }   /* the form to choose, when the search found a later one */
-/* a cell draws its creature at two CSS px a sprite pixel, in a window as tall as the drawing: a row is as tall as its tallest
-   drawing, and the drawings of a row stand on one line above their names */
+/* a cell draws the face its creature would be, on a 48 px circle with room above it for the head: every row is as tall, and
+   the circles of a row stand on one line above their names */
 #picker .pkg { display: grid; grid-template-columns: repeat(auto-fill, 96px); gap: var(--s-1); padding-left: var(--s-1); }
 .pkc { width: 96px; border-radius: var(--r-ctl); display: grid; grid-template-rows: 1fr auto auto; justify-items: center; padding-top: var(--s-2); position: relative; }
-.pkc > .pk.big { align-self: end; }
-.pkc > .pk.big > .win { overflow: clip visible; }
+.pkc > .pkcf { align-self: end; display: grid; place-items: end center; width: 96px; height: 64px; }
 .pkc:hover { background: var(--fill-1); } .pkc.sel { background: var(--fill-3); }
 .pkc > .nm { font: var(--t-caption); color: var(--ink-1); max-width: 92px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
 .pkc > .cap { font: var(--t-caption); color: var(--ink-2); height: 16px; max-width: 92px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.pkc.taken > .pk { opacity: 0.38; }
+.pkc.taken > .pkcf { opacity: 0.38; }
 .hd .pkseg { flex: none; } .hd .pkseg button { font: var(--t-text); }
 .hd .l2 .end > .later { font: var(--t-strong); }
 .band .pkb { position: absolute; left: 0; right: 0; top: 0; height: var(--h-m); display: flex; align-items: center; font: var(--t-text); color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-left: var(--pad-x); }
@@ -267,7 +278,7 @@ main > .pane[data-pane="Partner"] { overflow-y: auto; scrollbar-width: none; }
 .pkdetail > .pkbig2 { grid-row: span 6; }
 .pkdetail > :is(.sh, .ls, .pksample) { display: none; }
 @media (min-width: 1408px) { :root.col .pkdetail { display: none; } }
-.pkbig2 { width: 136px; height: 112px; }
+.pkbig2 { width: 136px; height: 112px; display: grid; place-items: end center; }
 .pkno { font: var(--t-strong); margin-top: var(--s-2); } .pkno .fig { color: var(--ink-2); font: var(--t-text); margin-right: var(--s-1); }
 .pkty { font: var(--t-text); color: var(--ink-2); } .pkty.bad { color: var(--failure); }
 .pkcol .sh, .pkcol .pkbr { margin-top: var(--s-3); } .pkbr { font: var(--t-text); color: var(--ink-2); }

@@ -13,17 +13,19 @@ import {card, drawCard, drawMeRow, momentDue} from "./partner_card.js";
    The pack (species.json and the sprites) is not in git: the server serves it from its git-ignored sprite directory to
    signed-in people (zerver/views/armada_beta.py, /beta/sprites/...), and partners come from GET armada/partners. With no
    pack, or a server without the agent, every face stays initials and nothing here draws.
-   A face is a sprite at whole CSS pixels (one sprite pixel a CSS pixel; two in the picker's column and the card), in a box
-   the size of the face it replaces, so a partner arriving or evolving moves nothing. The sprite stands on its feet at the
-   box's foot, centred on what it draws (its content box, measured by tools/armada/sprites.py), in a window it may overflow
-   upward in the gutter and is cut by in lists; it never catches the pointer. Still at rest; it hops (+1, -3 px, 133 ms a
-   step) under the pointer or focus, while its person types, when their message lands, and on my send. Onix's face stays
-   still while its run is live: the ball is the run's one loop (MARKS.md, direction A). */
+   A face (the r5 round-four study, sv.html) is a circle filled with the gradient of the partner's type, in the box of the
+   face it replaces, so a partner arriving or evolving moves nothing; on it stands the partner's Scarlet/Violet menu icon,
+   whole (never cut), its feet inside the circle and its head over the rim. The icons are smooth renders on canvases of
+   their own sizes, so each is placed by its content box (measured by tools/armada/sprites.py): scaled to the circle plus a
+   peep, centred on what it draws. It never catches the pointer. Still at rest; it hops under the pointer or focus, while
+   its person types, when their message lands, and on my send. A species with no icon has no face: initials stand in. */
 const SPRITE_V = DATA.spriteVersion || "";
 let pack = null, partners = null, partnersAt = 0;
-const OFFERED = [];                                        /* species ids the picker offers: first forms the pack draws, Onix's line left out */
+const OFFERED = [];                                        /* species ids the picker offers: first forms with an icon, Onix's line left out */
 const spritePath = (path) => "/beta/sprites/" + path.split("/").map(encodeURIComponent).join("/");
 const spriteSrc = (sid, shiny) => { const sp = pack && pack.species[sid] && pack.species[sid].sprite; return !sp ? "" : spritePath(shiny && sp.shiny ? sp.shiny : sp.regular); };
+const svOf = (sid) => (pack && pack.species[sid] && pack.species[sid].sv) || null;
+const svSrc = (sid) => { const sv = svOf(sid); return sv ? spritePath(sv.path) : ""; };
 /* a sprite that does not load (a pack missing a file, a server that lost it) is never an empty box: every face drawn from it
    goes back to initials where it stands, and stays so on this page */
 const brokenSprites = new Set();
@@ -35,32 +37,42 @@ function partnerOf(id) { if (!pack || !partners) return null;
   if (isOnix(id)) { const a = partners.agent; return a && a.species && pack.species[a.species] ? {species: a.species, shiny: false, stone: "flint"} : null; }
   const p = partners.partners[id]; return p && pack.species[p.species] && pack.species[p.species].sprite ? p : null; }
 const speciesName = (sid) => (pack && pack.species[sid] ? pack.species[sid].name : "");
-/* the sprite in a window w by h (CSS px) at k CSS px a sprite pixel: feet on the window's foot, centred on the drawing */
-function spriteHTML(sid, shiny, k, w, h, lazy) { const s = pack.species[sid], sp = s && s.sprite; if (!sp) return "";
-  const useShiny = !!shiny && !!sp.shiny, box = useShiny ? sp.shiny_box : sp.box, [bx, by, bw, bh] = box;
-  const left = Math.round(w / 2 - (bx + bw / 2) * k), top = h - (by + bh) * k;
-  return `<img src="${esc(spriteSrc(sid, useShiny))}" alt="" draggable="false" decoding="async"${lazy ? ' loading="lazy"' : ""} style="left:${left}px;top:${top}px;width:${sp.size[0] * k}px;height:${sp.size[1] * k}px">`; }
-/* the windows: [box, window width, window height] by face size. 28 is the gutter's (40 wide, cut at the sides only, so a
-   face never reaches the lane); 20 and 18 are a list's and a caption's (cut on every side). */
-const PK = {28: [28, 40, 32], 20: [20, 28, 28], 18: [18, 22, 20]};
-function pkFace(p, size, cls, pres, uid) { const [b, w, h] = PK[size] || PK[28], img = spriteHTML(p.species, p.shiny, 1, w, h); if (!img) return "";
-  return `<i class="pk s${size} ${(cls || "").replace(/\bs\d+\b/g, "")} ${pres || ""}" data-uid="${uid}" data-fs="${esc(p.species)}:${p.shiny ? 1 : 0}" aria-hidden="true"><span class="win" style="left:${(b - w) / 2}px;top:${b - h}px;width:${w}px;height:${h}px">${img}</span></i>`; }
-/* a large drawing: the picker's cells (1x) and its column and the card (2x), the window the whole canvas */
-function pkBig(sid, shiny, k, cls = "", lazy = false) { const sp = pack.species[sid] && pack.species[sid].sprite, w = 68 * k, h = 56 * k; if (!sp) return "";
-  return `<i class="pk big ${cls}" style="width:${w}px;height:${h}px" aria-hidden="true"><span class="win" style="left:0;top:0;width:${w}px;height:${h}px">${spriteHTML(sid, shiny, k, w, h, lazy)}</span></i>`; }
-/* a picker cell's drawing: two CSS px a sprite pixel (SPRITES.md section 5), the cell's width, as tall as the drawing; a drawing
-   wider than the cell is cut at its sides, never scaled */
-const CELL_W = 96;
-function pkCell(sid) { const sp = pack.species[sid].sprite, h = sp.box[3] * 2;
-  return `<i class="pk big" style="width:${CELL_W}px;height:${h}px" aria-hidden="true"><span class="win" style="left:0;top:0;width:${CELL_W}px;height:${h}px">${spriteHTML(sid, false, 2, CELL_W, h, true)}</span></i>`; }
+/* the type whose colour a face takes: the first, except Normal, which yields to a second (as the server picks the stone) */
+const typeOf = (sid) => { const t = (pack && pack.species[sid] && pack.species[sid].types) || []; return (t[0] === "Normal" && t[1] ? t[1] : t[0] || "Normal").toLowerCase(); };
+/* where the icon stands on a circle of `size` px: as tall as the circle plus a peep (2 px on a small circle, a fifth on a
+   larger one), never wider than the circle and a little more, centred on its drawing, its feet 1 or 2 px inside the rim */
+function svPlace(sv, size) { const [bx, by, bw, bh] = sv.box, [W, H] = sv.size, small = size < 24;
+  const k = Math.min((small ? size + 2 : Math.round(size * 1.21)) / bh, (small ? size + 10 : Math.round(size * 1.36)) / bw), inset = small ? 1 : Math.max(2, Math.round(size / 14));
+  return {left: Math.round(size / 2 - (bx + bw / 2) * k), top: Math.round(size - inset - (by + bh) * k), width: Math.round(W * k), height: Math.round(H * k)}; }
+/* a face of `size` px for species `sid`: the circle and the icon standing on it. uid names its person (0 for a drawing of a
+   species alone, which no press opens); "" when the species has no icon. */
+function svFace(sid, size, cls, pres, uid, lazy) { const sv = svOf(sid); if (!sv) return ""; const at = svPlace(sv, size), std = size === 28 || size === 20 || size === 18;
+  const box = std ? "" : ` style="width:${size}px;height:${size}px"`, who = uid ? ` data-uid="${uid}" data-fs="sv:${esc(sid)}"` : "";
+  return `<i class="pk s${size} ty-${esc(typeOf(sid))} ${(cls || "").replace(/\bs\d+\b/g, "")} ${pres || ""}"${box}${who} aria-hidden="true"><span class="rim"></span>`
+    + `<img src="${esc(spritePath(sv.path))}" alt="" draggable="false" decoding="async"${lazy ? ' loading="lazy"' : ""} style="left:${at.left}px;top:${at.top}px;width:${at.width}px;height:${at.height}px"></i>`; }
+/* a partner's face in a list or the gutter (the picker's sample and its line use it with no person) */
+const pkFace = (p, size, cls, pres, uid) => svFace(p.species, size, cls, pres, uid);
+/* a large drawing with no circle, for the evolution moment's two forms trading places: the icon standing on the window's
+   foot, as tall as the window allows; the pixel icon of the old pack where a form has none */
+function pkBig(sid, shiny, k, cls = "", lazy = false) { const w = 68 * k, h = 56 * k, sv = svOf(sid);
+  if (sv) { const [bx, by, bw, bh] = sv.box, [W, H] = sv.size, q = Math.min((h - 4) / bh, (w - 8) / bw);
+    return `<i class="pk big ${cls}" style="width:${w}px;height:${h}px" aria-hidden="true"><img src="${esc(spritePath(sv.path))}" alt="" draggable="false" decoding="async"${lazy ? ' loading="lazy"' : ""} style="left:${Math.round(w / 2 - (bx + bw / 2) * q)}px;top:${Math.round(h - (by + bh) * q)}px;width:${Math.round(W * q)}px;height:${Math.round(H * q)}px"></i>`; }
+  const sp = pack.species[sid] && pack.species[sid].sprite; if (!sp) return "";
+  const useShiny = !!shiny && !!sp.shiny, [bx, by, bw, bh] = useShiny ? sp.shiny_box : sp.box;
+  return `<i class="pk big px ${cls}" style="width:${w}px;height:${h}px" aria-hidden="true"><img src="${esc(spriteSrc(sid, useShiny))}" alt="" draggable="false" decoding="async" style="left:${Math.round(w / 2 - (bx + bw / 2) * k)}px;top:${h - (by + bh) * k}px;width:${sp.size[0] * k}px;height:${sp.size[1] * k}px"></i>`; }
+/* a picker cell's drawing: the face it would be, on a 48 px circle, in a window that leaves its head room */
+const CELL_FACE = 48;
+const pkCell = (sid) => `<span class="pkcf">${svFace(sid, CELL_FACE, "", "", 0, true)}</span>`;
+/* the forms an evolution can reach that have an icon, so a partner never grows out of its face; all of them when none has */
+const withIcons = (forms) => { const drawn = forms.filter((sid) => svOf(sid)); return drawn.length ? drawn : forms; };
 /* one hop, two steps: for a message that lands and for my send. Reduced motion: none. */
 function hopOnce(face) { const img = face && face.querySelector && face.querySelector(".pk img"); if (!img || M.reduced()) return;
-  img.animate([{transform: "translateY(1px)", easing: "step-end"}, {transform: "translateY(-3px)", offset: 0.5, easing: "step-end"}, {transform: "translateY(0)"}], {duration: 266 * M.SLOW}); }
+  img.animate([{transform: "translateY(0)", easing: "ease-out"}, {transform: "translateY(-3px)", offset: 0.4, easing: "ease-in"}, {transform: "translateY(0)"}], {duration: 320 * M.SLOW}); }
 
 async function loadPartners() { if (!SPRITE_V) return;
   try { const [p, st] = await Promise.all([fetch(`/beta/sprites/species.json?v=${encodeURIComponent(SPRITE_V)}`, {credentials: "same-origin", redirect: "error"}).then((r) => (r.ok ? r.json() : null)), api("GET", "armada/partners")]);
     if (!p || !p.species || !st.on) return; pack = p; partners = st; partnersAt = performance.now();
-    OFFERED.length = 0; for (const [sid, s] of Object.entries(pack.species)) if (s.first && s.sprite && s.line !== agentLine()) OFFERED.push(sid);
+    OFFERED.length = 0; for (const [sid, s] of Object.entries(pack.species)) if (s.first && s.sprite && s.sv && s.line !== agentLine()) OFFERED.push(sid);
     OFFERED.sort((a, b) => pack.species[a].num - pack.species[b].num || a.localeCompare(b, "en", {numeric: true})); }
   catch (e) { pack = null; partners = null; } }
 /* the team's partners change rarely (a choice, an evolution): they are asked for again every two minutes, on coming back to
@@ -86,10 +98,10 @@ function applyPartners(st) { if (!st || !st.on || !pack) return; const before = 
 const me_ = () => (partners && partners.me) || null;
 /* every face on the page that is out of date is redrawn where it stands (same box), on the fade; bubbles take the new stone */
 function refreshFaces() {
-  for (const f of $$("[data-uid][data-fs]")) { if (!(+f.dataset.uid > 0)) continue; const uid = +f.dataset.uid, cls = f.getAttribute("class") || "", size = f.matches(".pk") ? +((/\bs(\d+)\b/.exec(cls) || [])[1] || 28) : f.matches("svg") ? (/\bs(\d+)\b/.exec(cls) ? +/\bs(\d+)\b/.exec(cls)[1] : 28) : faceSize(cls);
+  for (const f of $$("[data-uid][data-fs]")) { if (!(+f.dataset.uid > 0)) continue; const uid = +f.dataset.uid, cls = f.getAttribute("class") || "", size = f.matches(".pk") ? +((/\bs(\d+)\b/.exec(cls) || [])[1] || 28) : faceSize(cls);
     const pres = /\bon\b/.test(cls) ? "on" : /\baway\b/.test(cls) ? "away" : "", keep = cls.split(/\s+/).filter((c) => /^s\d+$/.test(c)).join(" ");
     const t = el("template"); t.innerHTML = faceOf(uid, keep || (size === 28 ? "" : "s" + size), pres); const neu = t.content.firstElementChild; if (!neu || neu.dataset.fs === f.dataset.fs) continue;
-    for (const c of cls.split(/\s+/)) if (c && !/^(av|pk|sigil|agent|in-disc|on|away|s\d+|p-\w+|big)$/.test(c) && !neu.classList.contains(c)) neu.classList.add(c);
+    for (const c of cls.split(/\s+/)) if (c && !/^(av|pk|on|away|s\d+|p-\w+|ty-\w+|big)$/.test(c) && !neu.classList.contains(c)) neu.classList.add(c);
     f.replaceWith(neu); if (!M.reduced()) M.appear(neu, 0, T["fade-in"]); }
   for (const cl of $$(".cl.them[data-sid]")) { const want = "s-" + stoneOf(+cl.dataset.sid); if (!cl.classList.contains(want)) { [...cl.classList].filter((c) => c.startsWith("s-")).forEach((c) => cl.classList.remove(c)); cl.classList.add(want); } }
   drawNav(); if (state.P && state.place && state.place.kind !== "home" && state.place.kind !== "partner") drawSide(); }
@@ -101,4 +113,5 @@ function evoCaption(m) { if (typeof m.sender_id !== "number" || isOnix(m.sender_
   const e = el("div", "evo", `${faceOf(m.sender_id, "s18")}<span>${p.evolved_kind === "shiny" ? esc(`${speciesName(p.species)} turned shiny`) : esc(`Evolved into ${speciesName(p.species)}`)}</span>`); e.dataset.mid = m.id; return e; }
 
 export {agentLine, applyPartners, brokenSprites, evoCaption, fetchPartners, hopOnce, loadPartners, me_, OFFERED,
-  pack, partnerOf, partners, partnersFirst, pkBig, pkCell, pkFace, refreshPartners, speciesName, spriteSrc};
+  pack, partnerOf, partners, partnersFirst, pkBig, pkCell, pkFace, refreshPartners, speciesName, spriteSrc, svFace, svOf,
+  svPlace, svSrc, typeOf, withIcons};

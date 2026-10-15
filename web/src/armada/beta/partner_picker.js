@@ -9,7 +9,7 @@ import {faceOf, nameOf} from "./faces.js";
 import {note, syncField} from "./composer.js";
 import {drawSide} from "./column.js";
 import {HOME} from "./home.js";
-import {agentLine, applyPartners, fetchPartners, me_, OFFERED, pack, partners, pkBig, pkCell, pkFace, speciesName} from "./partners.js";
+import {agentLine, applyPartners, fetchPartners, me_, OFFERED, pack, partners, pkCell, pkFace, speciesName, svFace, withIcons} from "./partners.js";
 import {closeCard} from "./partner_card.js";
 
 /* ----- the picker: a place (#partner), not a dialog. Starters first, then each generation; the field is its search ----- */
@@ -56,7 +56,9 @@ function movePick(key) { const cells = $$(".pkc", panes.Partner); if (!cells.len
 function lineOf(sid) { const out = [], L = (me_() && me_().evolve_levels) || [16, 30]; let cur = [sid];
   while (cur.length && out.length < 4) { out.push({forms: cur, level: out.length ? L[out.length - 1] || null : null}); cur = cur.length === 1 ? nextForms(cur[0]) : []; }
   return out; }
-function nextForms(sid) { const out = []; for (const e of (pack.species[sid] || {evos: []}).evos) { if (!pack.species[e]) continue; if (pack.species[e].sprite) out.push(e); else out.push(...nextForms(e).filter((x) => !out.includes(x))); } return out; }
+/* the forms a species grows into, as the server finds them (a form it cannot draw is passed over to the next), less the forms
+   with no icon where a branch offers one that has one: a partner never grows out of its face */
+function nextForms(sid) { const out = []; for (const e of (pack.species[sid] || {evos: []}).evos) { if (!pack.species[e]) continue; if (pack.species[e].sprite) out.push(e); else out.push(...nextForms(e).filter((x) => !out.includes(x))); } return withIcons(out); }
 /* what my level makes of a choice, as the server will: as far along the line as it allows, with my picks at branches */
 function arrivalOf(sid) { const me = me_(), L = (me && me.evolve_levels) || [16, 30], level = me ? me.level : 1, stages = L.filter((x) => level >= x).length; let cur = sid, branch = null;
   for (let i = 0; i < stages; i++) { const n = nextForms(cur); if (!n.length) break; if (n.length === 1) { cur = n[0]; continue; } const p = pick.picks[cur]; if (p && n.includes(p)) { cur = p; continue; } branch = {at: cur, choices: n}; break; }
@@ -70,7 +72,7 @@ function detailHTML() { const sid = pick.sel; if (!sid || !pack.species[sid]) re
   const line = lineOf(sid).map((st) => `<li>${st.forms.length === 1 ? pkFace({species: st.forms[0], shiny: false}, 20, "", "", 0) : ic("branch")}<span class="t">${st.forms.map((f) => esc(pack.species[f].name)).join(" or ")}</span><span class="e">${st.level ? `level ${st.level}` : "now"}</span></li>`).join("");
   const branch = arr.branch ? `<p class="pkbr">Your level passes ${esc(pack.species[arr.branch.at].name)}'s evolution. Choose what it becomes:</p><div class="seg pkpicks">${arr.branch.choices.map((c) => `<button data-pickfor="${esc(arr.branch.at)}" data-pick="${esc(c)}">${esc(pack.species[c].name)}</button>`).join("")}</div>` : "";
   const sample = `<div class="pksample cl them s-${stoneOfSpecies(arr.sid)}">${pkFace({species: arr.sid, shiny: false}, 28, "", "", 0)}<div class="bl"><p class="b">Morning, team.</p></div></div>`;
-  return `<div class="pkbig2">${pkBig(sid, false, 2)}</div><p class="pkno"><span class="fig">#${String(s.num).padStart(3, "0")}</span> ${esc(s.name)}</p><p class="pkty">${esc(typeWords(sid))}. Your bubbles would be ${stoneOfSpecies(arr.sid)}.</p>`
+  return `<div class="pkbig2">${svFace(sid, 80, "", "", 0)}</div><p class="pkno"><span class="fig">#${String(s.num).padStart(3, "0")}</span> ${esc(s.name)}</p><p class="pkty">${esc(typeWords(sid))}. Your bubbles would be ${stoneOfSpecies(arr.sid)}.</p>`
     + (holder != null && holder !== state.ME ? `<p class="pkty bad">${esc(nameOf(holder))} has this line.</p>` : "")
     + `<div class="sh"><span>Line</span></div><ul class="ls pkline">${line}</ul>${branch}<div class="sh"><span>How it looks</span></div>${sample}`; }
 function drawPickerSide() { const d = $(".pkdetail", panes.Partner); if (d) { d.innerHTML = detailHTML(); host(d); } if (state.place && state.place.kind === "partner") drawSide(); }

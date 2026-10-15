@@ -30,6 +30,11 @@ async function api(method, path, params = {}, o = {}) {
   stats.api++;
   const headers = method === "GET" ? {} : {"X-CSRFToken": CSRF};
   let r; try { r = await fetch(url, {method, body, headers, credentials: "same-origin", signal: o.signal}); } catch (e) { throw Object.assign(new Error("The server cannot be reached"), {net: true}); }
+  /* the server's rate limit (200 requests a minute a person): a read waits as long as the server says and asks again, up to
+     three times, instead of showing "API usage exceeded rate limit" or calling the server offline. A write is not repeated. */
+  if (r.status === 429 && method === "GET" && (o.tries || 0) < 3 && !(o.signal && o.signal.aborted)) { let wait = parseFloat(r.headers.get("Retry-After"));
+    if (!(wait >= 0)) { try { wait = +(await r.json())["retry-after"]; } catch (e) {} } stats.rateLimited = (stats.rateLimited || 0) + 1;
+    await sleep(Math.min(30, Math.max(0.5, wait || 1)) * 1000 + Math.random() * 250); return api(method, path, params, {...o, tries: (o.tries || 0) + 1}); }
   if (r.status === 401) { signedOut(); throw Object.assign(new Error("Signed out"), {status: 401}); }
   let j; try { j = await r.json(); } catch (e) { throw Object.assign(new Error(`The server answered ${r.status}`), {status: r.status, net: r.status >= 500}); }
   if (j.result !== "success") throw Object.assign(new Error(j.msg || "The request failed"), {code: j.code, status: r.status});
@@ -42,20 +47,32 @@ const people = new Map(), streams = new Map(), repoStreams = new Set(), pearBots
 const topicsOf = new Map();                                /* stream id -> [{name, max_id}] in the order first shown; null while loading */
 const worktrees = new Map();                               /* stream id -> Set of lower-cased topic names that have a worktree */
 const unread = new Map();                                  /* place key -> Set of message ids */
-const marks = new Map();                                   /* place key -> "live" | "failed" : a run's mark in the nav */
+const marks = new Map();                                   /* place key -> "needs" | "live" | "queued" | "failed" | "paused": a run's mark in the nav */
 const places = new Map();                                  /* place key -> what is known of it */
 const msgIndex = new Map();                                /* message id -> its place's cache */
 const expanded = new Set(JSON.parse(store.get("open") || "[]")), allKids = new Set();
 let dms = [], presences = {}, place = null, P = null, tab = "Chat", localSeq = 0, agentMention = "@**Pear**";
 const now = () => Date.now() + skew;
 const STONES = ["lapis", "larimar", "rose", "amethyst", "moss", "flint"];
-const stoneOf = (id) => (id === ME ? "me" : STONES[id % STONES.length]);
+/* a person's stone: mine is my colour; with a partner, the stone of its type (the server says which); else one by user id */
+const stoneOf = (id) => { if (id === ME) return "me"; const p = partnerOf(id); return p && p.stone ? p.stone : STONES[id % STONES.length]; };
 const person = (id) => people.get(id) || {id, name: "Someone", email: ""};
 const isOnix = (id) => pearBots.has(id);
 const nameOf = (id) => (isOnix(id) ? "Onix" : person(id).name);
-const initials = (name) => { const w = name.replace(/[^A-Za-z0-9 ]/g, "").split(/\s+/).filter(Boolean); if (!w.length) return "?"; return w.length > 1 && /^[A-Z]/.test(w[1]) ? w[0][0].toUpperCase() + w[1][0] : w[0][0].toUpperCase() + (w[0][1] || ""); };
+/* a face's initials: letters and figures of any script (a name in Devanagari keeps its first letter with its vowel sign),
+   cut by grapheme, so no name is drawn as "?" while it has a letter */
+const graphemes = (t) => { try { return [...new Intl.Segmenter(undefined, {granularity: "grapheme"}).segment(t)].map((x) => x.segment); } catch (e) { return [...t]; } };
+const initials = (name) => { const w = name.replace(/[^\p{L}\p{N}\p{M} ]/gu, "").split(/\s+/).filter(Boolean); if (!w.length) return "?"; const g = graphemes(w[0]);
+  if (!/^[\p{Script=Latin}0-9]/u.test(w[0])) return g[0];   /* another script: one letter, which fills the disc as two Latin letters do */
+  return w.length > 1 && /^\p{Lu}/u.test(w[1]) ? g[0].toUpperCase() + graphemes(w[1])[0] : g[0].toUpperCase() + (g[1] && /^[\p{Script=Latin}0-9]/u.test(g[1]) ? g[1] : ""); };
 const presOf = (id) => { const p = presences[person(id).email], a = p && p.aggregated; if (!a || now() / 1000 - a.timestamp > 300) return ""; return a.status === "active" ? "on" : a.status === "idle" ? "away" : ""; };
-const faceOf = (id, cls, pres) => (isOnix(id) ? sigil(/s14/.test(cls || "") ? 14 : /s18|s20/.test(cls || "") ? 20 : 28) : face(`${initials(person(id).name)}:${stoneOf(id)}${pres ? " " + pres : ""}`, cls));
+/* a face: the partner's sprite (partners section, below) wherever one is drawn at 18 px or more; else initials on the stone,
+   and Onix's boulder disc. Every face carries its person, so a partner that arrives or evolves is redrawn in place. */
+const faceSize = (cls) => (/s14/.test(cls || "") ? 14 : /s18/.test(cls || "") ? 18 : /s20/.test(cls || "") ? 20 : 28);
+const faceOf = (id, cls, pres) => { const size = faceSize(cls), p = size >= 18 ? partnerOf(id) : null;
+  if (p && !brokenSprites.has(spriteSrc(p.species, p.shiny))) { const h = pkFace(p, size, cls, pres, id); if (h) return h; }
+  if (isOnix(id)) return agentFace(size).replace("<svg ", `<svg data-uid="${id}" data-fs="mark" `);
+  return face(`${initials(person(id).name)}:${stoneOf(id)}${pres ? " " + pres : ""}`, cls).replace("<i ", `<i data-uid="${id}" data-fs="i" `); };
 const tkey = (sid, topic) => `s:${sid}:${topic.toLowerCase()}`, dkey = (ids) => "d:" + [...ids].sort((a, b) => a - b).join(",");
 const topicLabel = (t) => t || "general chat";
 
@@ -81,7 +98,7 @@ const mmss = (s) => (s < 600 ? `${Math.floor(s / 60)}:${p2(s % 60)}` : s < 6000 
    Inside prose: an emoji span becomes its character, a mention becomes the person's name in the mention weight (the
    agent's is always "Onix"), a link opens in a new tab, a timestamp is printed in local time. Code keeps the server's
    highlighting, mapped onto the four syntax inks the design has (keyword, string, number, comment). */
-const PYG = {}; "k kn kd kc kr kt kp ow".split(" ").forEach((c) => (PYG[c] = "k")); "s s1 s2 sa sb sc sd se sh si sx sr ss dl".split(" ").forEach((c) => (PYG[c] = "s")); "m mi mf mh mo mb il".split(" ").forEach((c) => (PYG[c] = "n")); "c c1 cm ch cp cs cpf".split(" ").forEach((c) => (PYG[c] = "c"));
+const PYG = {}; "k kn kd kc kr kt kp ow".split(" ").forEach((c) => (PYG[c] = "sx-k")); "s s1 s2 sa sb sc sd se sh si sx sr ss dl".split(" ").forEach((c) => (PYG[c] = "sx-s")); "m mi mf mh mo mb il".split(" ").forEach((c) => (PYG[c] = "sx-n")); "c c1 cm ch cp cs cpf".split(" ").forEach((c) => (PYG[c] = "sx-c"));
 const tpl = document.createElement("template");
 const BLOCK = (n) => n.matches("div.codehilite, pre, table, div.message_inline_image, div.spoiler-block, div.message_embed, div.inline-preview-twitter, div.youtube-video, div.message_inline_video, .katex-display") || (n.tagName === "P" && n.children.length === 1 && n.firstElementChild.matches(".katex-display") && !n.textContent.replace(n.firstElementChild.textContent, "").trim());
 function clean(root) {
@@ -109,6 +126,8 @@ function partsOf(m) {
   const onyx = isOnix(m.sender_id), out = []; let run = [];
   if (onyx && /^·\s*Working\s*$/.test((m.content || "").replace(/<[^>]+>/g, "").trim())) return out;   /* the server's placeholder: Onix has no words yet */
   tpl.innerHTML = m.content || ""; const root = clean(tpl.content);
+  $$("code", root).forEach((x) => { if (!x.closest("pre") && x.textContent.length <= 32) x.classList.add("nw"); });   /* a short flag or path does not break at its own hyphen */
+  if (onyx) [...root.children].filter((x) => x.tagName === "P").forEach((x) => { if (x.childNodes.length === 1 && x.firstChild.tagName === "STRONG") { const h = el("h4"); h.append(...x.firstChild.childNodes); x.replaceWith(h); } });   /* "**What changed**" alone on its line is a heading. The fragment's own children: ":scope" matches nothing in a DocumentFragment */
   const flush = () => { if (!run.length) return;
     if (onyx) { run.forEach((n) => { if (/^H[12]$/.test(n.tagName)) { const h = el("h3"); h.append(...n.childNodes); n.replaceWith(h); run[run.indexOf(n)] = h; } else if (/^H[3-6]$/.test(n.tagName)) { const h = el("h4"); h.append(...n.childNodes); n.replaceWith(h); run[run.indexOf(n)] = h; } });
       const box = el("div"); box.append(...run); $$("li", box).forEach((li) => { const s = el("span"); s.append(...li.childNodes); li.append(s); }); out.push({t: "ans", html: box.innerHTML}); }
@@ -119,7 +138,7 @@ function partsOf(m) {
   for (const n of [...root.children]) { if (n.tagName === "HR") continue;
     if (asking && n.tagName === "UL") { flush(); out.push(askPart(n)); continue; }   /* the question's options are buttons, under the question */
     if (asking && n.tagName === "P" && QUESTION.test(n.textContent)) { n.textContent = "Onix needs your answer to go on."; }
-    if (asking && n.tagName === "P" && /^_?Reply in this thread to answer/.test(n.textContent.trim())) { const m_ = /waiting up to (\d+) minutes/.exec(n.textContent); n.innerHTML = `<em>Press an answer, or write your own to @Onix. The run waits${m_ ? ` up to ${m_[1]} minutes` : ""}.</em>`; }   /* in words, the answer names Onix (or the place's switch is on): people talking here do not answer it */
+    if (asking && n.tagName === "P" && /^_?Reply in this thread to answer/.test(n.textContent.trim())) { const m_ = /waiting up to (\d+) minutes/.exec(n.textContent); n.className = "askcap"; n.innerHTML = `<em>Press an answer, or write your own to @Onix. The run waits${m_ ? ` up to ${m_[1]} minutes` : ""}.</em>`; }   /* in words, the answer names Onix (or the place's switch is on): people talking here do not answer it */
     if (BLOCK(n)) { flush(); out.push(blockPart(n)); } else run.push(n); }
   flush();
   if (!out.length && !onyx) { const t = (root.textContent || "").trim(); out.push({t: "b", tag: "p", html: esc(t || " ")}); }
@@ -129,9 +148,11 @@ function partsOf(m) {
 /* the server still speaks of the agent by its old name; a person reads Onix. Text nodes only, so code and links keep theirs. */
 function onyxWords(html) {
   tpl.innerHTML = html.replace(/Pear worker failed\./g, "Onix failed.").replace(/Pear worker cancelled\./g, "Stopped.");
-  const w = document.createTreeWalker(tpl.content, NodeFilter.SHOW_TEXT); for (let n = w.nextNode(); n; n = w.nextNode()) { if (n.parentNode.closest && n.parentNode.closest("code, pre, a")) continue; if (/\bPear\b/.test(n.data)) n.data = n.data.replace(/\bPear('s)?\b/g, "Onix$1"); }
+  const w = document.createTreeWalker(tpl.content, NodeFilter.SHOW_TEXT); for (let n = w.nextNode(); n; n = w.nextNode()) { if (n.parentNode.closest && n.parentNode.closest("code, pre, a")) continue; if (/\bPear\b/.test(n.data)) n.data = agentText(n.data); }   /* "Pear worker is not starting" is "Onix is not starting": the internal word never reaches a person */
   return tpl.innerHTML;
 }
+/* a line of the server's (an overview, an activity, a summary) that names the agent by its old name */
+const agentText = (t) => String(t || "").replace(/\bPear worker\b/g, "Onix").replace(/\bPear('s)?\b/g, "Onix$1");
 const plainOf = (html) => { tpl.innerHTML = html || ""; return onyxWords(tpl.innerHTML) && tpl.content.textContent; };
 function partEl(p, m) {
   let e;
@@ -188,7 +209,7 @@ function show(e, on) { if (!e) return; if (e === band.jump) band.el.classList.to
 const syncJump = () => show(band.jump, tab === "Chat" && dist() >= 4);
 /* a write that adds to the feed: older rows are shown where they were and released to where they are. One forced layout. */
 function grown(write, token = "move", o = {}) {
-  const ref = firstRow(), before = ref ? M.rest(ref).top : 0; const out = write();
+  const ref = firstRow(), before = ref ? M.rest(ref).top : 0; const out = write(); hugAll();
   if (pinned) pin();
   const d = ref && ref.isConnected ? before - M.rest(ref).top : 0;
   if (d) M.release(lane, {y: d}, token, o);
@@ -205,15 +226,18 @@ function press(root, sel, fn) {
 const subs = () => [...streams.values()].sort((a, b) => (repoStreams.has(b.stream_id) - repoStreams.has(a.stream_id)) || a.name.localeCompare(b.name));
 const countOf = (key) => (unread.get(key) || {size: 0}).size;
 const streamCount = (sid) => { let n = 0; for (const [k, s] of unread) if (k.startsWith(`s:${sid}:`)) n += s.size; return n; };
-const MARK_RANK = {needs: 3, live: 2, failed: 1};
+const MARK_RANK = {needs: 5, live: 4, queued: 3, failed: 2, paused: 1};
+/* a live run's mark: waiting on me (the balloon), working (the ball, or the dot), or queued behind another (the egg, or the ring) */
+const runMark = (r, status = r.status) => (r.waiting ? "needs" : status === "queued" ? "queued" : "live");
+const LIVE_MARKS = new Set(["needs", "live", "queued"]);
 const streamMark = (sid) => { let m = null; for (const [k, v] of marks) if (k.startsWith(`s:${sid}:`) && (!m || MARK_RANK[v] > MARK_RANK[m])) m = v; return m; };
-const trailHTML = (key, sel) => { const m = marks.get(key), n = countOf(key); return m ? mk(m, m === "live" ? "live" : "") : n && !sel ? `<span class="n fig">${fig(n)}</span>` : ""; };   /* one trailing thing by priority: needs you, failed, live, unread */
+const trailHTML = (key, sel) => { const m = marks.get(key), n = countOf(key); return m ? mk(m) : n && !sel ? `<span class="n fig">${fig(n)}</span>` : ""; };   /* one trailing thing by priority: needs you, failed, live, unread */
 function rowHTML(key, cls, lead, label, trail, extra = "") { return `<button class="row ${cls}" data-k="${esc(key)}"${extra}>${lead}<span class="lab">${esc(label)}</span>${trail}</button>`; }
 function drawNav() {
   const y = navScroll.scrollTop, cur = place && place.key; let h = "";
   for (const s of subs()) { const sid = s.stream_id, repo = repoStreams.has(sid), open = expanded.has(sid), list = topicsOf.get(sid);
     const glyph = repo ? (open ? "repo-open" : "repo") : s.invite_only ? "lock" : "hash", cm = streamMark(sid), cn = streamCount(sid);
-    const trail = open ? "" : cm ? mk(cm, cm === "live" ? "live" : "") : cn ? `<span class="n fig">${fig(cn)}</span>` : "";
+    const trail = open ? "" : cm ? mk(cm) : cn ? `<span class="n fig">${fig(cn)}</span>` : "";
     h += `<div class="grp" data-sid="${sid}">` + rowHTML("c:" + sid, (repo ? "repo" : "chan") + (!open && cn ? " new-in" : "") + (!open && cur && place.stream_id === sid ? " sel" : ""), ic(glyph), s.name, trail, ` aria-expanded="${open}"`);
     if (open) { h += '<div class="kids">';
       if (!list) h += '<span class="none">Loading</span>';
@@ -228,8 +252,10 @@ function drawNav() {
   for (const d of dms) { const k = dkey(d.user_ids), sel = k === cur, ids = d.user_ids.length ? d.user_ids : [ME];
     const lead = ids.length > 1 ? `<span class="avs">${ids.slice(0, 2).map((i) => faceOf(i, "s14")).join("")}</span>` : faceOf(ids[0], "s20", presOf(ids[0]));
     h += rowHTML(k, (sel ? "sel" : "") + (countOf(k) ? " new-in" : ""), lead, (ids.length === 1 ? nameOf(ids[0]) : ids.map((i) => nameOf(i).split(/[ ,]/)[0]).join(", ")) + (d.user_ids.length ? "" : " (you)"), trailHTML(k, sel)); }
-  navScroll.innerHTML = h; host(navScroll); navScroll.scrollTop = y;
+  navScroll.innerHTML = h; host(navScroll); navScroll.scrollTop = y; navMore();
 }
+/* the nav's list fades under the me row while there is more of it below */
+const navMore = () => navScroll.classList.toggle("more", navScroll.scrollTop + navScroll.clientHeight < navScroll.scrollHeight - 1);
 const rowOf = (key) => $$(".row", navScroll).find((r) => r.dataset.k === key);
 function drawTrail(key) { const r = rowOf(key); if (!r) { if (key.startsWith("s:")) { const sid = +key.split(":")[1]; if (!expanded.has(sid)) drawNav(); } return; }
   const sel = r.classList.contains("sel"), html = trailHTML(key, sel), old = $(":scope > .mk, :scope > .n", r), was = old ? old.outerHTML : "";
@@ -260,18 +286,19 @@ async function adoptLive(r0) { if (r0.session_kind === "side" || !liveNow(r0)) r
   const k = tkey(s.stream_id, r0.topic || ""), c = places.get(k); let list = c && c.runsLoaded ? c.runs : runsSeen.get(k); if (!list) runsSeen.set(k, (list = []));
   let r = list.find((x) => x.id === r0.id); if (!r) { r = askState(r0); list.unshift(r); }   /* known already (the place was opened, or an event came): that copy is newer */
   if (c && c.loaded) inferAsk(r, c.msgs); else { try { const mr = await api("GET", "messages", {narrow: [{operator: "channel", operand: s.stream_id}, {operator: "topic", operand: r.topic}], anchor: "newest", num_before: 6, num_after: 0, apply_markdown: true, client_gravatar: false}); inferAsk(r, mr.messages); } catch (e) {} }
-  if (!liveNow(r)) return; const want = r.waiting ? "needs" : "live"; if (marks.get(k) !== want) { marks.set(k, want); drawTrail(k); } }
+  if (!liveNow(r)) return; const want = runMark(r); if (marks.get(k) !== want) { marks.set(k, want); drawTrail(k); } }
 function toggleStream(sid) { if (expanded.has(sid)) expanded.delete(sid); else { expanded.add(sid); loadTopics(sid); } store.set("open", JSON.stringify([...expanded])); drawNav(); }
 
 /* ---------- places ---------- */
 function placeFromKey(key) {
   if (key === "home") return HOME;
+  if (key === "partner") return pack ? PARTNER : null;
   if (key.startsWith("s:")) { const i = key.indexOf(":", 2), sid = +key.slice(2, i), s = streams.get(sid); if (!s) return null; const lower = key.slice(i + 1), known = (topicsOf.get(sid) || []).find((t) => t.name.toLowerCase() === lower); return {key, kind: "topic", stream_id: sid, stream: s.name, topic: known ? known.name : lower, repo: repoStreams.has(sid)}; }
   if (key.startsWith("d:")) { const ids = key.slice(2).split(",").filter(Boolean).map(Number); return {key, kind: "dm", ids, repo: false}; }
   return null;
 }
-const hashOf = (p) => (p.kind === "home" ? "#home" : p.kind === "topic" ? `#c/${p.stream_id}/${encodeURIComponent(p.topic)}` : `#d/${p.ids.join(",")}`);
-function placeFromHash() { const h = location.hash; if (h === "#home") return HOME; let m = /^#c\/(\d+)\/(.*)$/.exec(h); if (m && streams.has(+m[1])) { let t = m[2]; try { t = decodeURIComponent(t); } catch (e) {} const p = placeFromKey(tkey(+m[1], t)); if (p) p.topic = (topicsOf.get(+m[1]) || []).find((x) => x.name.toLowerCase() === t.toLowerCase())?.name ?? t; return p; }
+const hashOf = (p) => (p.kind === "home" ? "#home" : p.kind === "partner" ? "#partner" : p.kind === "topic" ? `#c/${p.stream_id}/${encodeURIComponent(p.topic)}` : `#d/${p.ids.join(",")}`);
+function placeFromHash() { const h = location.hash; if (h === "#home") return HOME; if (h === "#partner") return pack ? PARTNER : null; let m = /^#c\/(\d+)\/(.*)$/.exec(h); if (m && streams.has(+m[1])) { let t = m[2]; try { t = decodeURIComponent(t); } catch (e) {} const p = placeFromKey(tkey(+m[1], t)); if (p) p.topic = (topicsOf.get(+m[1]) || []).find((x) => x.name.toLowerCase() === t.toLowerCase())?.name ?? t; return p; }
   m = /^#d\/([\d,]*)$/.exec(h); if (m) return placeFromKey(dkey(m[1].split(",").filter(Boolean).map(Number))); return null; }
 const cacheOf = (p) => { let c = places.get(p.key); if (!c) { c = {place: p, msgs: [], byId: new Map(), loaded: false, oldest: false, loading: false, runs: [], ctx: null, typers: new Map(), open: new Set()}; places.set(p.key, c); } return c; };
 const narrowOf = (p) => (p.kind === "topic" ? [{operator: "channel", operand: p.stream_id}, {operator: "topic", operand: p.topic}] : [{operator: "dm", operand: p.ids.length ? p.ids : [ME]}]);
@@ -305,13 +332,15 @@ function answered(r) { r.waiting = false; r.answeredAt = r.resumedAt = now() / 1
 const liveNow = (r) => r.status === "queued" || r.status === "running";
 /* a question can pass its time while no event comes: every few seconds the waiting runs are read against the clock */
 function sweepAsks() { let any = false;
-  for (const [k, runs] of runsSeen) for (const r of runs) { if (!r.waiting || !liveNow(r)) continue; settleAsk(r); if (r.waiting) continue; any = true; if (marks.get(k) === "needs") { marks.set(k, "live"); drawTrail(k); } }
+  for (const [k, runs] of runsSeen) for (const r of runs) { if (!r.waiting || !liveNow(r)) continue; settleAsk(r); if (r.waiting) continue; any = true; if (marks.get(k) === "needs") { marks.set(k, runMark(r)); drawTrail(k); } }
   if (any) { drawHomeRow(); if (P && place && place.kind !== "home") drawRunState(); } }
 const waitingRun = (c) => { const r = c && liveRun(c); return r && r.waiting ? r : null; };
 const runsSeen = new Map();                                /* place key -> runs, from the nav's scan and from places opened: what Home reads */
 const askedAt = (c, r) => { if (r.askedAt) return r.askedAt; const q = c.msgs.filter((m) => isOnix(m.sender_id) && typeof m.id === "number" && m.id > r.trigger_message_id && QUESTION.test(m.content || "")).pop(); return q ? q.timestamp : r.date_updated || r.date_created; };
 /* the options under the question in sight are live only while its run waits */
-function drawAsks() { if (!P || !lane) return; const r = waitingRun(P), all = $$(".blk.ask", lane), last = all[all.length - 1]; all.forEach((q) => { const on = !!r && q === last; $$(".opt", q).forEach((o) => o.setAttribute("aria-disabled", String(!on)));   /* not disabled: a control disabled under the pointer drops the focus to the page */ q.classList.toggle("done", !on); }); }
+function drawAsks() { if (!P || !lane) return; const r = waitingRun(P), all = $$(".blk.ask", lane), last = all[all.length - 1]; all.forEach((q) => { const on = !!r && q === last; $$(".opt", q).forEach((o) => o.setAttribute("aria-disabled", String(!on)));   /* not disabled: a control disabled under the pointer drops the focus to the page */ q.classList.toggle("done", !on);
+    /* the caption under the options says what is true now: a question the run no longer waits on does not say it waits */
+    const cap = q.nextElementSibling && $("p.askcap > em", q.nextElementSibling); if (cap) { if (cap.dataset.live == null) cap.dataset.live = cap.textContent; const t = on ? cap.dataset.live : "The run no longer waits for an answer here."; if (cap.textContent !== t) cap.textContent = t; } }); }
 async function fetchCtx(c) { const p = c.place; if (p.kind !== "topic" || !p.repo) return; try { const r = await api("GET", "pear/topic-context", {stream: p.stream, topic: p.topic}); c.ctx = r.pear_topic_context; } catch (e) { c.ctxError = e.message; } }
 const liveRun = (c) => c.runs.find((r) => r.status === "queued" || r.status === "running");
 const runOfMsg = (c, id) => c.runs.find((r) => r.result_message_id === id);
@@ -324,23 +353,29 @@ async function openPlace(p, o = {}) {
   store.set("place", p.key);
   if (p.kind === "topic" && !expanded.has(p.stream_id)) { expanded.add(p.stream_id); loadTopics(p.stream_id); store.set("open", JSON.stringify([...expanded])); }
   if (tab !== "Chat") setTab("Chat", true);
-  if (threadTx && !lane.contains(threadTx)) threadTx = null; if (editing) endEdit(); closePicker(); closeMenu(); overHide();
-  showHome(p.kind === "home"); $$(".row", navFixed).forEach((r) => r.classList.toggle("sel", r.dataset.k === "home" && p.kind === "home"));
+  if (threadTx && !lane.contains(threadTx)) threadTx = null; if (editing) endEdit(); closePicker(); closeMenu(); closeInfo(true); overHide();
+  showHome(p.kind === "home", p.kind === "partner"); $$(".row", navFixed).forEach((r) => r.classList.toggle("sel", r.dataset.k === "home" && p.kind === "home")); closeCard(); drawPickerBand();
+  if (p.kind === "partner") { drawNav(); drawHeader(); drawRunState(true); drawPicker(); drawSide(); drawComposer(); if (prev && prev.key !== p.key) M.release($("#picker"), {y: T["pane-rise"] || 4}, "touch", {id: "pane"}); ready(); return; }
   if (p.kind === "home") { drawNav(); drawHeader(); drawRunState(true); drawSide(); drawComposer(); drawHome(); if (prev && prev.key !== p.key) M.release($("#home"), {y: T["pane-rise"] || 4}, "touch", {id: "pane"}); fetchMentions(); return; }
   drawNav(); drawHeader(); drawLane(); drawRunState(true); drawSide(); drawTyping(); drawComposer();
   if (prev && prev.key !== p.key) M.release(lane, {y: T["pane-rise"] || 4}, "touch", {id: "pane"});
   ready();
   const c = P, fresh = !c.loaded;
   const jobs = [fresh ? fetchMsgs(c) : null, fetchRuns(c), c.ctx ? null : fetchCtx(c)];
-  await jobs[0]; if (place !== p) return; if (fresh) { drawLane(); }
+  if (RECEIPTS && p.kind === "topic") loadMembers(p.stream_id);
+  await jobs[0]; if (place !== p) return; if (fresh) { drawLane(); } pollReceipts({open: true});
   await jobs[1]; if (place !== p) return; inferAsk(liveRun(c), c.msgs); drawRunState(true); drawFooters(); drawSide(); drawAsks();
-  { const r = liveRun(c), k = p.key, m_ = r ? (r.waiting ? "needs" : "live") : null; if (m_ && marks.get(k) !== m_) { marks.set(k, m_); drawTrail(k); drawHomeTrail(); } }
-  await jobs[2]; if (place !== p) return; drawHeader(); drawSide(); drawComposer();
+  { const r = liveRun(c), k = p.key, m_ = r ? runMark(r) : null; if (m_ && marks.get(k) !== m_) { marks.set(k, m_); drawTrail(k); drawHomeTrail(); } }
+  await jobs[2]; if (place !== p) return; drawHeader(); drawSide(); drawComposer(); syncPaused(c);
   markRead(c);
   if (!fresh) fetchCtx(c).then(() => { if (place === p) { drawHeader(); drawSide(); } });
 }
+/* a worktree its people paused (the topic's context says so) shows Zz in the nav while no run is live there */
+function syncPaused(c) { const k = c.place.key, paused = !!(c.ctx && c.ctx.is_paused) && !liveRun(c), was = marks.get(k);
+  if (paused && !was) { marks.set(k, "paused"); drawTrail(k); } else if (!paused && was === "paused") { marks.delete(k); drawTrail(k); } }
 /* Home is a pane of its own: no conversation, no band, no field */
-function showHome(on) { if (!feed) return; feed.hidden = on; panes.Home.hidden = !on; $("main > .dock").hidden = on; band.el.hidden = on; main.classList.toggle("bare", on); }
+/* the picker is a place of its own too, with the band (its one sentence) and the field (its search) */
+function showHome(on, picker = false) { if (!feed) return; feed.hidden = on || picker; panes.Home.hidden = !on; if (panes.Partner) panes.Partner.hidden = !picker; $("main > .dock").hidden = on; band.el.hidden = on; main.classList.toggle("bare", on); R.classList.toggle("picking", picker); }
 function markRead(c) { const set = unread.get(c.place.key); if (!set || !set.size || document.hidden) return; const ids = [...set].filter((i) => typeof i === "number"); unread.delete(c.place.key); drawTrail(c.place.key); if (ids.length) api("POST", "messages/flags", {messages: ids, op: "add", flag: "read"}).catch(() => {}); }
 
 /* ---------- the header: the repository's facts, from the worktree's real state ---------- */
@@ -351,6 +386,7 @@ const planRun = (c) => { const l = liveRun(c); if (l && l.plan && l.plan.length)
 const stepMark = (s, run) => (s.status === "completed" ? "done" : s.status === "in_progress" ? (run.status === "failed" ? "failed" : run.status === "cancelled" ? "cancelled" : run.status === "done" ? "done" : "live") : run.status === "cancelled" ? "cancelled" : "left");
 function repoPath(url, fallback) { const m = /([^/:]+\/[^/]+?)(?:\.git)?\/?$/.exec(url || ""); return m ? m[1] : fallback; }
 function headCfg() { const p = place, c = P;
+  if (p.kind === "partner") return {kind: "plain", path: esc(meName), title: "Choose your partner", say: "", checklist: {title: "Your partner"}, seg: pick.seg, has: !!(me_() && me_().species)};
   if (p.kind === "home") { const {needs} = homeRows(), n = needs.filter((x) => x.verb === "Answer").length, live = [...runsSeen.values()].filter((rs) => rs.some((r) => (r.status === "queued" || r.status === "running") && !r.waiting)).length;
     return {kind: "plain", title: "Home", say: (n ? `${n === 1 ? "One question waits" : n + " questions wait"} for you.` : needs.length ? "A run failed." : "Nothing waits for you.") + (live ? ` ${live === 1 ? "One run is" : live + " runs are"} live.` : ""), checklist: {title: "Running"}}; }
   if (p.kind === "dm") { const ids = p.ids.length ? p.ids : [ME], one = ids.length === 1 ? ids[0] : 0, pr = one ? presOf(one) : "";
@@ -364,9 +400,10 @@ function headCfg() { const p = place, c = P;
   return {path, title, branch: g && !ctx.branch_is_topic_default ? esc(g.branch) : "", dist: distance, commit: {who: lc ? esc(lc.author) : "", subj: lc ? esc(lc.subject) : "", sha: lc ? esc(lc.sha) : "", age: lc ? age(lc.timestamp) : ""}, tab, changes: g ? g.changed_count : 0, checklist: progOf(c)}; }
 function drawHeader() { const cfg = headCfg(), wt = cfg.kind !== "plain"; R.classList.toggle("wt", wt); if (!wt && tab !== "Chat") setTab("Chat", true);
   const sig = JSON.stringify(cfg); if (hd && hd._sig === sig) return;
-  const t = el("template"); t.innerHTML = headHTML(cfg); const neu = t.content.firstElementChild; hd.replaceWith(neu); hd = neu; hd._sig = sig; host(hd); snap(hd);
+  const t = el("template"); t.innerHTML = headHTML(cfg); const neu = t.content.firstElementChild; if (place.kind === "partner") pickerHead(neu); hd.replaceWith(neu); hd = neu; hd._sig = sig; host(hd); snap(hd);
+  { const subj = $(".commit .subj", hd); if (subj) { let w0 = 0; new ResizeObserver(() => { const w = subj.parentElement.clientWidth; if (w !== w0) { w0 = w; wordcut(subj); } }).observe(subj.parentElement); } }   /* the subject is cut again when the window changes width */
   const sp = $("#side > .hdg"); if (sp) { sp.innerHTML = progHTML(cfg.checklist, "prog-side"); host(sp); }
-  $$("[aria-label='More']", hd).forEach((b) => (b.dataset.tip = "More: in the old interface for now")); $$("a.repo, button.fact.branch, button.fact.commit", hd).forEach((b) => (b.dataset.tip = "Not in the beta yet")); $$("#side > .hdg button.prog").forEach((b) => (b.dataset.tip = "The checklist is below")); const pg = $("#prog", hd); if (pg) pg.dataset.tip = "The checklist is in the column at 1408 px and wider"; }
+  $$("[aria-label='More']", hd).forEach((b) => (b.dataset.tip = "More: in the old interface for now")); if (place.kind !== "partner") $$("a.repo, button.fact.branch, button.fact.commit", hd).forEach((b) => (b.dataset.tip = "Not in the beta yet")); $$("#side > .hdg button.prog").forEach((b) => (b.dataset.tip = "The checklist is below")); const pg = $("#prog", hd); if (pg) pg.dataset.tip = "The checklist is in the column at 1408 px and wider"; }
 function drawProg() { const cfg = progOf(P); const a = $("#prog", hd), b = $("#prog-side"); const sig = JSON.stringify(cfg); if (drawProg.sig === sig + place.key) return; drawProg.sig = sig + place.key;
   if (a) { const t = el("template"); t.innerHTML = progHTML(cfg, "prog"); a.replaceWith(t.content.firstElementChild); host(hd); } if (b) { const t = el("template"); t.innerHTML = progHTML(cfg, "prog-side"); b.replaceWith(t.content.firstElementChild); host(side); } if (hd) hd._sig = ""; }
 
@@ -375,20 +412,21 @@ const kindOf = (m) => (isOnix(m.sender_id) ? "onyx" : m.sender_id === ME ? "me" 
 function named(cl) { for (let x = cl.previousElementSibling; x; x = x.previousElementSibling) { if (!x.classList.contains("cl") || x.classList.contains("me")) continue; return x.dataset.sid !== cl.dataset.sid; } return true; }
 function newSection(c, m, kind, o) {
   const cl = el("section", "cl " + kind); cl.dataset.sid = m.sender_id; cl.dataset.day = dayKey(m.timestamp); c.append(cl);
-  if (kind === "onyx") { const lab = named(cl); cl.classList.toggle("lab", lab); cl.innerHTML = sigil(28) + (lab ? '<div class="who">Onix</div>' : ""); }
+  if (kind === "onyx") { const lab = named(cl); cl.classList.toggle("lab", lab); cl.innerHTML = faceOf(m.sender_id) + (lab ? '<div class="who">Onix</div>' : ""); }
   else if (kind === "them") { const solo = place.kind === "dm" && place.ids.length === 1, lab = !solo && named(cl); cl.classList.add("s-" + stoneOf(m.sender_id)); cl.classList.toggle("lab", lab);
     cl.innerHTML = o.thread ? `<div class="who">${faceOf(m.sender_id, "s20")}${esc(nameOf(m.sender_id))}</div>` : faceOf(m.sender_id) + (lab ? `<div class="who">${esc(nameOf(m.sender_id))}</div>` : ""); if (o.thread) cl.classList.add("lab"); }
   return cl;
 }
 /* a turn's bubbles: the first keeps its lower inner corner square, the last its upper one; the turn's time stands on its last bubble */
 function finish(cl) { if (cl.classList.contains("onyx")) return; const bs = $$(":scope > .bl > .b", cl); bs.forEach((b, i) => { b.classList.toggle("u", i < bs.length - 1); b.classList.toggle("t", i > 0); });
-  $$(":scope > .bl > time, :scope > .rcpt.at", cl).forEach((t) => t.remove()); const lastPart = $$(":scope > [data-part]", cl).pop(); if (!lastPart || cl.dataset.pending) return;
+  $$(":scope > .bl > time, :scope > .bl > .rt, :scope > .rcpt.at", cl).forEach((t) => t.remove()); const lastPart = $$(":scope > [data-part]", cl).pop(); if (!lastPart || cl.dataset.pending) return;
   const edited = (mid) => { const c = msgIndex.get(+mid), x = c && c.byId.get(+mid); return !!(x && (x.edited || x.last_edit_timestamp)); };
   /* an edited message that is not the turn's last says so on its own last bubble; the last one says it with the time */
   const lastOf = new Map(); for (const b of $$(":scope > .bl[data-mid]", cl)) lastOf.set(b.dataset.mid, b);
   for (const [mid, b] of lastOf) if (mid !== lastPart.dataset.mid && edited(mid)) b.append(el("time", "ed", "Edited"));
   const ts = +cl.dataset.ts, t = el("time", "", (edited(lastPart.dataset.mid) ? "Edited " : "") + hhmm(ts)); t.title = new Date(ts * 1000).toLocaleString();
-  if (lastPart.classList.contains("bl")) lastPart.append(t); else { const r = el("div", "rcpt at" + (cl.classList.contains("me") ? " end" : "")); r.append(t); lastPart.after(r); } }
+  const cell = RECEIPTS && cl.classList.contains("me") ? receiptButton(t, lastPart.dataset.mid) : t;   /* my turn: the time and its ticks, one button */
+  if (lastPart.classList.contains("bl")) lastPart.append(cell); else { const r = el("div", "rcpt at" + (cl.classList.contains("me") ? " end" : "")); r.append(cell); lastPart.after(r); } }
 function appendMessage(c, m, o = {}) {
   const kind = kindOf(m), d = dayKey(m.timestamp);
   if (!o.thread && c._day !== d) { c.append(el("div", "day", dayLabel(m.timestamp))); c._day = d; }
@@ -397,14 +435,23 @@ function appendMessage(c, m, o = {}) {
   const join = kind !== "onyx" && cl && cl.classList.contains("cl") && +cl.dataset.sid === m.sender_id && !cl.dataset.closed && m.timestamp - +cl.dataset.ts < 600 && !cl.classList.contains("onyx");
   if (!join) cl = newSection(c, m, kind, o);
   cl.dataset.ts = m.timestamp;
-  const parts = partsOf(m).map((p) => partEl(p, m)); cl.append(...parts);
+  const parts = partsOf(m).map((p) => partEl(p, m)); cl.append(...parts); const evo = evoCaption(m); if (evo) cl.append(evo);
   if (kind === "onyx") { cl.dataset.mid = m.id; if (!parts.length) cl.append(placeholderAns(m)); syncOnix(cl, m); }
   if (kind === "onyx" && m.submessages && m.submessages.length) cl.append(el("div", "note nw", 'This answer carries an artifact, which the beta does not draw yet. <a href="/#narrow/near/' + m.id + '">Open it in the old interface</a>.'));
   if (m.failed) failMark(cl, m); if (m.pending || m.failed) $$(`[data-mid="${m.id}"] .b`, cl).forEach((b) => b.classList.toggle("unsent", !!m.failed));
   drawReactions(cl, m); if (!o.thread) drawThreadLine(cl, m);
-  finish(cl); hush(cl); return {cl, parts};
+  finish(cl); hush(cl); toHug.add(cl); return {cl, parts};
 }
-const hush = (root) => $$(".rc, [data-thread], .tl .lk, .line .lk, .bl > .lk", root).forEach((b) => (b.tabIndex = -1));
+/* a wrapped bubble is as wide as its longest line, as a chat bubble hugs its words: read every waiting bubble's line boxes
+   after one write, then set the widths. A one-paragraph bubble only (a list's bullets stand outside its line boxes); a width
+   that would change the bubble's lines is not kept. */
+const toHug = new Set();
+function hugAll() { if (!toHug.size) return; const bs = []; for (const cl of toHug) if (cl.isConnected && !cl.classList.contains("onyx")) bs.push(...$$(":scope > .bl > p.b:not(.jumbo)", cl)); toHug.clear(); if (!bs.length) return;
+  bs.forEach((b) => (b.style.width = "")); const range = document.createRange();
+  const want = bs.map((b) => { const h = b.offsetHeight; if (h <= 40) return null; range.selectNodeContents(b); const rs = [...range.getClientRects()].filter((x) => x.width > 0); if (!rs.length) return null; const cs = getComputedStyle(b); return {h, w: Math.ceil(Math.max(...rs.map((x) => x.right)) - Math.min(...rs.map((x) => x.left)) + parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight)) + 1}; });
+  bs.forEach((b, i) => { if (want[i]) b.style.width = want[i].w + "px"; });
+  bs.forEach((b, i) => { if (want[i] && b.offsetHeight !== want[i].h) b.style.width = ""; }); }
+const hush = (root) => $$(".rc, .rt, [data-thread], .tl .lk, .line .lk, .bl > .lk", root).forEach((b) => (b.tabIndex = -1));
 function drawLane(o = {}) {
   const c = P, h0 = feed.scrollHeight, y0 = feed.scrollTop; lane.textContent = ""; lane._day = null;
   const set = unread.get(place.key), firstUnread = set && set.size ? Math.min(...[...set].filter((i) => typeof i === "number")) : null;
@@ -413,6 +460,7 @@ function drawLane(o = {}) {
   for (const m of list) appendMessage(lane, m, {unreadAt: firstUnread});
   for (const id of c.open) openThread(id, true);
   if (!list.length) lane.append(el("div", "empty", c.error ? esc(c.error) : !c.loaded ? "Loading" : place.kind === "dm" ? "No messages yet." : "Nothing here yet. Say something."));
+  hugAll();
   if (o.keep) { feed.scrollTop = y0 + (feed.scrollHeight - h0); lastSet = feed.scrollTop; } else if (pinned) pin();
   edge(); syncJump();
 }
@@ -445,17 +493,120 @@ function applyReaction(c, m, ev, mine) {
 async function react(m, r) {   /* my reaction: it lands in this frame; the server is told; if it refuses, it is taken back */
   if (typeof m.id !== "number") return; const has = (m.reactions || []).some((x) => x.user_id === ME && x.emoji_code === r.emoji_code && x.reaction_type === r.reaction_type);
   const ev = {op: has ? "remove" : "add", user_id: ME, emoji_name: r.emoji_name, emoji_code: r.emoji_code, reaction_type: r.reaction_type}; applyReaction(P, m, ev, true);
-  try { await api(has ? "DELETE" : "POST", `messages/${m.id}/reactions`, {emoji_name: r.emoji_name, emoji_code: r.emoji_code, reaction_type: r.reaction_type}); }
+  try { await api(has ? "DELETE" : "POST", `messages/${m.id}/reactions`, {emoji_name: r.emoji_name, emoji_code: r.emoji_code, reaction_type: r.reaction_type}); refreshPartners({fold: true, wait: 2000}); }
   catch (e) { applyReaction(msgIndex.get(m.id) || P, m, {...ev, op: has ? "add" : "remove"}, false); note(e.message); }
 }
+/* ----- read receipts: step 1 of the r4 receipts study (design/r4/receipts/RECEIPTS.md), on the existing endpoint -----
+   My turns carry ticks beside their time, in a 16 px cell that exists from the frame of the send and changes only what it
+   holds: nothing for the first 400 ms of a send, then a ring while it is in flight; one tick once the server has it (it is
+   then in everyone's feed: Zulip's "delivered"); two in the second ink once someone counted has read it; two in my colour
+   once everyone counted has. They are read from GET messages/{id}/read_receipts, for my own recent messages only, and never
+   more than RCPT_CAP times a minute. Info (pressing the ticks, More > Info, or I on a message) lists who has read a message
+   and who has not yet. None of it is drawn when the organization has read receipts off. No sound: someone reading is
+   neither my action nor something that needs me. */
+const RECEIPTS = DATA.readReceipts === "on";
+const RCPT_CAP = 12;                                       /* background requests to read_receipts in any 60 s (opening places, polling, signs of life) */
+const RCPT_INFO_CAP = 12;                                  /* Info's own budget: what I asked for answers at once, whatever the background spent */
+const RCPT_POLL = 30000, RCPT_RECENT = 15 * 60, RCPT_FRESH = 10000, RCPT_OPEN = 6;
+const rcpt = new Map();                                    /* message id -> {read: Set of user ids, at, err} */
+const rcptLog = [], rcptInfoLog = [], rcptInflight = new Map(), members = new Map();
+let muted = new Set(), info = null;
+stats.receipts = {requests: 0, refused: 0, maxPerMinute: 0};
+function rcptAllowed(forInfo) { const t = performance.now(), log = forInfo ? rcptInfoLog : rcptLog; while (log.length && t - log[0] >= 60000) log.shift();
+  if (log.length >= (forInfo ? RCPT_INFO_CAP : RCPT_CAP)) { stats.receipts.refused++; return false; }
+  log.push(t); stats.receipts.requests++; if (!forInfo) stats.receipts.maxPerMinute = Math.max(stats.receipts.maxPerMinute, log.length); else stats.receipts.info = (stats.receipts.info || 0) + 1; return true; }
+function fetchReceipts(id, o = {}) { if (!RECEIPTS || typeof id !== "number") return Promise.resolve(null); const had = rcpt.get(id);
+  if (had && !o.force && performance.now() - had.at < RCPT_FRESH) return Promise.resolve(had);
+  if (rcptInflight.has(id)) return rcptInflight.get(id);
+  if (!rcptAllowed(!!o.retry)) { if (o.retry) setTimeout(() => { if (info && info.id === id) fetchReceipts(id, o); }, 60000 - (performance.now() - rcptInfoLog[0]) + 50); return Promise.resolve(had || null); }   /* Info has its own budget; past twelve Infos in a minute, it waits for the minute to free one */
+  const p = api("GET", `messages/${id}/read_receipts`).then((r) => ({read: new Set(r.user_ids), at: performance.now()}), (e) => ({read: had ? had.read : new Set(), at: performance.now(), err: e.message}))
+    .then((x) => { rcpt.set(id, x); rcptInflight.delete(id); drawTicks(id); if (info && info.id === id) drawInfo(); return x; });
+  rcptInflight.set(id, p); return p; }
+function loadMembers(sid) { if (members.has(sid)) return Promise.resolve(members.get(sid));
+  const p = api("GET", `streams/${sid}/members`).then((r) => { const s = new Set(r.subscribers); members.set(sid, s); $$(".rt[data-info]", lane).forEach((b) => drawTicks(+b.dataset.info)); if (info) drawInfo(); return s; }, () => { members.delete(sid); return null; });
+  members.set(sid, p); return p; }
+/* who a message's receipts count, as far as the page can know: the channel's subscribers now (or the conversation's
+   people), less the sender, bots (Onix among them: it answers, it does not read), deactivated people and people I muted.
+   Null until the channel's subscribers are known. */
+function audience(m) { const c = msgIndex.get(m.id), p = c && c.place; if (!p || p.kind === "home") return null;
+  let ids; if (p.kind === "topic") { const s = members.get(p.stream_id); if (!(s instanceof Set)) return null; ids = [...s]; } else ids = [ME, ...p.ids];
+  return [...new Set(ids)].filter((i) => i !== m.sender_id && !muted.has(i) && people.has(i) && !people.get(i).bot && people.get(i).active); }
+function tickState(m) { if (!m || m.failed) return "none"; if (m.local || m.pending || typeof m.id !== "number") return "pending";
+  const x = rcpt.get(m.id), who = audience(m); if (!x) return "sent";
+  const others = [...x.read].some((i) => i !== m.sender_id); if (!who || !who.length) return others ? "read" : "sent";   /* a reader the page cannot count (not subscribed now) still reads */
+  return who.every((i) => x.read.has(i)) ? "all" : others ? "read" : "sent"; }
+const TICKS = {
+  pending: '<circle cx="8.5" cy="8.5" r="4.5"/><path d="M8.5 6v3h2"/>',
+  sent: '<path d="M3.5 8.5l3 3 6-6"/>',
+  read: '<path d="M1.5 8.5l3 3 6-6"/><path d="M7.5 10.5l1 1 6-6"/>'};
+TICKS.all = TICKS.read;
+const tickSVG = (st) => (TICKS[st] ? `<svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><g class="n">${TICKS[st]}</g></svg>` : "");
+function tickWords(m, st) { const x = rcpt.get(m.id), who = audience(m);
+  if (st === "pending") return "Sending"; if (st === "none") return "Not sent";
+  if (st === "sent") return "Sent. Not read yet";
+  if (who && who.length === 1) return "Read";
+  return who && who.length ? `Read by ${who.filter((i) => x.read.has(i)).length} of ${who.length}` : `Read by ${[...x.read].filter((i) => i !== m.sender_id).length}`; }
+/* the time and the ticks: one button, which opens Info */
+function receiptButton(t, mid) { const b = el("button", "rt"); b.dataset.info = mid; b.tabIndex = -1; const cell = el("span", "tk"); b.append(t, cell);
+  const id = /^\d+$/.test(mid) ? +mid : mid, c = msgIndex.get(id); paintTick(b, c && c.byId.get(id), false); return b; }
+function paintTick(b, m, motion) { const cell = $(".tk", b), st = tickState(m), was = cell.dataset.s; if (was === st) return;
+  cell.dataset.s = st; const same = (was === "read" && st === "all") || (was === "all" && st === "read"); if (!same) cell.innerHTML = tickSVG(st);
+  const words = tickWords(m, st); b.setAttribute("aria-label", `${words}. Message info`); b.dataset.tip = words;
+  const svg = $("svg", cell); if (!motion || !svg || same) return;
+  if (was === "pending" && st === "sent") M.land(svg); else if (st === "read" || st === "all") M.appear(svg, 0, T["fade-in"]); }
+function drawTicks(id) { if (!lane) return; for (const b of $$(`.rt[data-info="${id}"]`, lane)) { const c = msgIndex.get(id), m = c && c.byId.get(id); if (m) paintTick(b, m, true); } }
+/* which of my messages to ask about: each of my turns' last message (the one whose time and ticks show), newest first.
+   On opening a place, the latest few that are not known to be read by everyone; after that only my latest turn, and only
+   while it is younger than RCPT_RECENT: every RCPT_POLL while the page is in view, when someone in the place shows a sign
+   of life (a message, a reaction, typing), and when I come back to the page. */
+function pollReceipts(o = {}) { if (!RECEIPTS || !P || !place || place.kind === "home" || document.hidden || tab !== "Chat") return;
+  const ids = $$(".cl.me .rt[data-info]", lane).filter((b) => !b.closest(".thr-in")).map((b) => +b.dataset.info).filter(Number.isFinite).reverse().slice(0, o.open ? RCPT_OPEN : 1);
+  for (const id of ids) { const m = P.byId.get(id); if (!m) continue; const st = tickState(m), old = now() / 1000 - m.timestamp > RCPT_RECENT;
+    if (st === "all" || (old && (!o.open || rcpt.has(id)))) continue; fetchReceipts(id); } }
+let lifeTimer = 0;
+const signOfLife = () => { clearTimeout(lifeTimer); lifeTimer = setTimeout(() => pollReceipts(), 1500); };
+/* Info: who has read a message, and who has not yet. Above the message it describes (below when there is no room), never
+   over the field; the conversation stays live under it. Rows keep the order they had when it opened: a change rewrites a
+   row's trailing cell and the heading's figure. */
+function toggleInfo(id, from, kbd) { if (info && info.id === id) { closeInfo(); return; } openInfo(id, from, kbd); }
+function openInfo(id, from, kbd) { closeInfo(true); closeMenu(); overHide(); const m = P && P.byId.get(id); if (!RECEIPTS || !m || typeof id !== "number") { ready(); return; }
+  const box = el("div", "info raised float"); box.setAttribute("role", "dialog"); box.setAttribute("aria-label", "Message info"); box.tabIndex = -1;
+  info = {id, el: box, from, kbd, order: null}; main.append(box); if (place.kind === "topic") loadMembers(place.stream_id); drawInfo(); placeInfo();
+  $$(`.rt[data-info="${id}"]`, lane).forEach((b) => b.classList.add("open")); box.focus({preventScroll: true}); M.release(box, {y: T["pane-rise"] || 4}, "move");
+  fetchReceipts(id, {force: true, retry: true}); }
+function placeInfo() { if (!info) return; const id = info.id, box = info.el, mr = main.getBoundingClientRect(), fr = feed.getBoundingClientRect(), dock = $("main > .dock").getBoundingClientRect();
+  const parts = $$(`[data-mid="${id}"]`, lane).filter((x) => x.matches(".bl, [data-part], .cl")), first = parts[0], last = parts[parts.length - 1]; if (!first) return;
+  const rt = $(`.rt[data-info="${id}"]`, lane), a = first.getBoundingClientRect(), z = last.getBoundingClientRect(), h = box.offsetHeight, w = box.offsetWidth;
+  const left = clamp((rt ? rt.getBoundingClientRect().left : a.left) - mr.left, 8, mr.width - w - 8);
+  let top = a.top - h - 8; if (top < fr.top + 8) top = z.bottom + 8; if (top + h > dock.top - 8) top = Math.max(fr.top + 8, a.top - h - 8);
+  box.style.cssText = `position:absolute;left:${Math.round(left)}px;top:${Math.round(top - mr.top)}px`; }
+function drawInfo() { if (!info) return; const c = msgIndex.get(info.id), m = c && c.byId.get(info.id); if (!m) { closeInfo(); return; }
+  const x = rcpt.get(info.id), who = audience(m), mine = m.sender_id === ME, solo = !!who && who.length === 1 && place.kind === "dm";
+  const read = x ? [...x.read].filter((i) => i !== m.sender_id) : [], counted = who || [];
+  if (!info.order && x) { const byName = (a, b) => nameOf(a).localeCompare(nameOf(b)); info.order = [...read.sort(byName), ...counted.filter((i) => !x.read.has(i)).sort(byName)]; }
+  const n = counted.filter((i) => x && x.read.has(i)).length;
+  const head = !x ? "Loading" : solo ? (n ? "Read" : "Not read yet") : !n && !read.length ? "No one has read this yet" : counted.length ? `Read by <span class="fig">${fig(n)}</span> of ${counted.length}` : `Read by <span class="fig">${fig(read.length)}</span>`;
+  const end = mine ? `Sent ${hhmm(m.timestamp)}` : `${esc(nameOf(m.sender_id).split(/[ ,]/)[0])}, ${hhmm(m.timestamp)}`;
+  const trail = (i) => (x && x.read.has(i) ? "Read" : solo ? (presOf(i) === "on" ? "Here now" : presOf(i) === "away" ? "Away" : "Not yet") : "Not yet");
+  const rows = (info.order || []).map((i) => `<li class="${x && x.read.has(i) ? "" : "not"}">${faceOf(i, "s20", presOf(i))}<span class="t">${esc(nameOf(i))}</span><span class="e">${trail(i)}</span></li>`).join("");
+  const run = c.runs && c.runs.find((r) => r.trigger_message_id === info.id), runWord = run ? ({queued: "Queued", running: run.waiting ? "Asks you" : "Working", done: `Answered ${hhmm(run.date_finished || run.date_updated || run.date_created)}`, failed: "Failed", cancelled: "Stopped"}[run.status] || "") : "";
+  const err = x && x.err ? `<p class="bad">Could not load who read this. <button class="lk" data-info-retry>Retry</button></p>` : "";
+  info.el.innerHTML = `<div class="ih"><b>${head}</b><span class="e">${end}</span></div>${err}<ul class="ls">${rows}</ul>${run ? `<ul class="ls agent"><li>${faceOf([...pearBots][0], "s20")}<span class="t">Onix</span><span class="e">${esc(runWord)}</span></li></ul>` : ""}`;
+  host(info.el); }
+function closeInfo(quiet) { if (!info) return; const {el: box, from, kbd} = info; info = null; $$(".rt.open", lane).forEach((b) => b.classList.remove("open")); box.inert = true; M.leave(box, () => box.remove());
+  if (quiet) return; if (kbd && from && from.isConnected) M.focusKbd(from); else ready(); }
 /* ----- threads: the root says how many replies it has; a press opens them under it, in the conversation ----- */
 const repliesOf = (c, id) => c.msgs.filter((m) => m.thread_root_message_id === id);
+/* under my own right-aligned bubbles a thread line starts where its words end, at a fraction of a CSS px. Its width is rounded
+   up to a whole px once it is laid out (before it is painted, with no forced layout), so its faces land on whole CSS px
+   (SPRITES.md section 5) */
+const wholeWidth = typeof ResizeObserver === "function" ? new ResizeObserver((es) => { for (const e of es) { const t = e.target, w = e.borderBoxSize && e.borderBoxSize[0] ? e.borderBoxSize[0].inlineSize : t.getBoundingClientRect().width; if (w % 1) t.style.width = Math.ceil(w) + "px"; wholeWidth.unobserve(t); } }) : null;
 function drawThreadLine(cl, m) {
   $$(`.tl[data-mid="${m.id}"]`, cl).forEach((x) => x.remove()); const c = P, loaded = repliesOf(c, m.id), s = m.reply_summary, n = Math.max(loaded.length, s ? s.reply_count || 0 : 0); if (!n) return;
   const last = loaded[loaded.length - 1], who = s && s.participants ? s.participants.map((p) => p.user_id) : [...new Set(loaded.map((x) => x.sender_id))];
   const snippet = last ? `${nameOf(last.sender_id).split(/[ ,]/)[0]}: ${plainOf(last.content).replace(/\s+/g, " ").trim().slice(0, 80)}` : s && s.last_sender ? `${nameOf(s.last_sender.user_id).split(/[ ,]/)[0]} replied ${age(s.last_reply_at)} ago` : "";
   const tl = el("div", "tl", `<span class="avs">${who.slice(0, 3).map((i) => faceOf(i, "s18")).join("")}</span><button class="lk${c.open.has(m.id) ? " on" : ""}" data-thread="${m.id}">${n} ${n === 1 ? "reply" : "replies"}</button><span class="sn">${esc(snippet)}</span>`); tl.dataset.mid = m.id;
-  const own = $$(`:scope > [data-mid="${m.id}"]:not(.tl):not(.thr-in)`, cl); (own[own.length - 1] || cl.lastElementChild).after(tl); cl.dataset.closed = 1; host(tl);
+  const own = $$(`:scope > [data-mid="${m.id}"]:not(.tl):not(.thr-in)`, cl); (own[own.length - 1] || cl.lastElementChild).after(tl); cl.dataset.closed = 1; host(tl); if (wholeWidth && cl.classList.contains("me")) wholeWidth.observe(tl);
 }
 /* a thread opens where it is, under its root, with its own flat field at its foot; a reply goes to the thread */
 function openThread(id, quiet, o = {}) { const cl = sectionOf(id); if (!cl) return; const tl = $(`.tl[data-mid="${id}"]`, cl); let box = $(`.thr-in[data-mid="${id}"]`, cl);
@@ -464,8 +615,8 @@ function openThread(id, quiet, o = {}) { const cl = sectionOf(id); if (!cl) retu
   P.open.add(id); box = el("div", "thr-in"); box.dataset.mid = id; const list = repliesOf(P, id), m = P.byId.get(id), want = m && m.reply_summary ? m.reply_summary.reply_count || 0 : list.length;
   const anchor = tl || $$(`:scope > [data-mid="${id}"]:not(.thr-in)`, cl).pop() || cl.lastElementChild;
   const write = () => { anchor.after(box); if (want > list.length) { box.append(el("div", "note more-replies", `Loading ${want - list.length} earlier ${want - list.length === 1 ? "reply" : "replies"}`)); fetchThread(P, id); } for (const r of list) appendMessage(box, r, {thread: true}); box.append(threadField(id)); };
-  if (quiet) write(); else {   /* the root stays where it was read; the view moves only to bring the thread's field into sight, never the root out of it */
-    haltLane(); pinned = false; const y = feed.scrollTop; write(); feed.scrollTop = y;
+  if (quiet) { write(); hugAll(); } else {   /* the root stays where it was read; the view moves only to bring the thread's field into sight, never the root out of it */
+    haltLane(); pinned = false; const y = feed.scrollTop; write(); hugAll(); feed.scrollTop = y;
     const f = $(":scope > .cz", box).getBoundingClientRect(), fr = feed.getBoundingClientRect(), rr = (tl || anchor).getBoundingClientRect(), up = Math.min(f.bottom - (fr.bottom - 8), rr.top - (fr.top + 28));
     if (up > 0) { feed.scrollTop += up; M.release(lane, {y: up}, "move"); } lastSet = feed.scrollTop; pinned = dist() < 4; edge(); syncJump(); M.release(box, {y: -(T.rise || 6)}, "touch"); M.appear(box, 0.3); }
   if (tl) $(".lk", tl).classList.add("on");
@@ -514,6 +665,10 @@ function syncOnix(cl, m) {   /* the working mark rides the end of the words whil
     if (!head) { head = el("span", "head", wk(true)); p.append(head); } else if (head.parentNode !== p) p.append(head); else if (head.nextSibling && !(head.nextSibling.classList && head.nextSibling.classList.contains("rca"))) p.append(head);
     head.classList.toggle("first", !p.textContent.trim()); const f = $(":scope > .line.foot", cl); if (f) f.remove(); }
   else { if (head) { head.classList.add("gone"); M.leave(head); }   /* the mark fades where it stood: it takes no room in its line, and moving it out to the turn's end put it between the words and the footer, whose gap then changed by 4 px when it went */
+    /* a run stopped before it said anything says so on the one line its words would have had ("Stopped after 1s.", drawFooter):
+       no footer is added, so the turn keeps the height it had while live and nothing below or above it moves */
+    const r = runOfMsg(c, m.id), said = $$(":scope > .ans", cl).some((a) => a.textContent.trim() || a.querySelector("img")) || !!$(":scope > [data-part]:not(.ans)", cl);
+    if (r && r.status === "cancelled" && !said) { const a = $$(":scope > .ans", cl).pop() || cl.appendChild(placeholderAns(m)); let p = $("p", a); if (!p) { p = el("p"); a.append(p); } p.prepend(document.createTextNode("Stopped.")); p._src = "Stopped."; a._src = "<p>Stopped.</p>"; }
     $$(":scope > .ans", cl).forEach((a) => { if (!a.textContent.trim() && !a.querySelector("img")) a.remove(); });
     const f = drawFooter(cl, m); cl.classList.toggle("held", !f && (was || cl.classList.contains("held"))); }   /* a run that settles with no footer keeps the footer's room while it is the last thing said: the conversation does not drop */
 }
@@ -551,8 +706,8 @@ function morphAns(ans, html, head) {
 function updateMessage(c, m, firstWordsAt) {
   if (c !== P) return; const cl = sectionOf(m.id); if (!cl) { if (!m.thread_root_message_id) drawLane({keep: !pinned}); return; }
   if (!cl.classList.contains("onyx")) {   /* a person's edit: that message's parts are rebuilt in place */
-    const write = () => { const old = $$(`:scope > [data-part][data-mid="${m.id}"]`, cl), parts = partsOf(m).map((p) => partEl(p, m)); if (old.length) { old[0].before(...parts); old.forEach((x) => x.remove()); } else cl.append(...parts); drawReactions(cl, m); finish(cl); hush(cl); };
-    if (cl.closest(".thr-in")) write(); else grown(write, "move"); return; }
+    const write = () => { const old = $$(`:scope > [data-part][data-mid="${m.id}"]`, cl), parts = partsOf(m).map((p) => partEl(p, m)); if (old.length) { old[0].before(...parts); old.forEach((x) => x.remove()); } else cl.append(...parts); drawReactions(cl, m); finish(cl); hush(cl); toHug.add(cl); };
+    if (cl.closest(".thr-in")) { write(); hugAll(); } else grown(write, "move"); return; }
   const h0 = feed.scrollHeight, hadWords = !!cl.querySelector(".ans") && cl.querySelector(".ans").textContent.trim().length > 0;
   const wrote = morphOnix(cl, m); syncOnix(cl, m); drawReactions(cl, m); loadPics(cl);
   if (wrote && firstWordsAt && !hadWords && cl.textContent.trim()) { const t = firstWordsAt; requestAnimationFrame(() => setTimeout(() => { stats.firstWords.push(Math.round((performance.now() - t) * 10) / 10); drawLab(); }, 0)); }
@@ -574,6 +729,7 @@ const startsBlock = (t) => /^\s*(```|~~~|[-*+] |\d+[.)] |> ?)/.test(t);
 const addressed = (bare) => `${agentMention}${startsBlock(bare) ? "\n\n" : " "}${bare}`;
 const addressedEcho = (bare) => (startsBlock(bare) ? '<p><span class="mention">Onix</span></p>' + echoHTML(bare) : echoHTML(bare).replace(/^<p>/, '<p><span class="mention">Onix</span> '));
 function send(o = {}) {
+  if (place && place.kind === "partner") { choosePick(); return; }   /* on the picker, Return chooses */
   const at = o.at ?? performance.now(), t0 = performance.now(), typed = o.text ?? tx.textContent.trim(), files = o.text != null ? [] : atts.filter((a) => a.url);
   if (editing && o.text == null) { saveEdit(typed, at); return; }
   if (atts.some((a) => !a.url && !a.failed)) { note("Still uploading"); M.refuse(sh); return; }
@@ -596,9 +752,9 @@ function send(o = {}) {
   pinned = true; haltLane();
   const row = grown(() => { $$(":scope > .empty", lane).forEach((x) => x.remove()); addMsg(c, m); const r = appendMessage(lane, m); if (o.text == null) { tx.textContent = ""; atts = []; drawAtts(); } syncField(); if (ph) { addMsg(c, ph); r.onyx = appendMessage(lane, ph); } return r; }, "touch", {clamp: {y: 240}});
   const b = $$(".b", row.parts[row.parts.length - 1] || row.cl).pop(); if (b) M.appear(b, 0.6);   /* my bubble rises out of the field into its place with the conversation, one piece, on touch */
-  S.play(live && toOnix ? "steer" : "send", 0, at);
+  S.play(live && toOnix ? "steer" : "send", 0, at); hopOnce($(".row.me", nav)); refreshPartners({fold: true, wait: 2000});   /* my face hops once; what I sent counts, after the frame */
   if (row.onyx) { const g = $(".sigil", row.onyx.cl), w = $(".head > svg", row.onyx.cl); if (w) M.land(w); if (g) M.appear(g); S.play("ack", 0.12, at); }
-  if (ask && toOnix) { c.answering = false; answered(ask); marks.set(p.key, "live"); drawRunState(); drawAsks(); drawTrail(p.key); drawHomeRow(p.key); }   /* the answer is in: the band says Working again, its clock from now */
+  if (ask && toOnix) { c.answering = false; answered(ask); marks.set(p.key, runMark(ask)); drawRunState(); drawAsks(); drawTrail(p.key); drawHomeRow(p.key); }   /* the answer is in: the band says Working again, its clock from now */
   ready();
   const task = performance.now() - t0, rec = {task: Math.round(task * 100) / 100, sinceKey: null, painted: null}; stats.sends.push(rec);
   requestAnimationFrame(() => setTimeout(() => { rec.painted = Math.round((performance.now() - at) * 10) / 10; rec.sinceKey = Math.round((t0 - at) * 10) / 10; drawLab(); }, 0));
@@ -612,15 +768,16 @@ async function transmit(c, m, ph) {
   if (m.toOnix) q.pear_followup = true;                 /* what today's client sends when its Pear control is on (web/src/compose.ts) */
   try { const r = await api("POST", "messages", q); if (m.pending) { adopt(c, m, r.id); }
     if (ph) setTimeout(() => { if (ph.local && c.byId.has(ph.id)) { dropLocal(c, ph); note("Onix did not start a run for that message."); } }, 20000); }
-  catch (e) { m.pending = false; m.failed = e.net ? true : e.message; if (ph) dropLocal(c, ph); if (c === P) { const cl = sectionOf(m.id); if (cl) { $$(`[data-mid="${m.id}"] .b`, cl).forEach((b) => b.classList.add("unsent")); failMark(cl, m); M.refuse($$(`.bl[data-mid="${m.id}"] .b`, cl).pop() || cl); } } S.play("fail"); }
+  catch (e) { m.pending = false; m.failed = e.net ? true : e.message; if (ph) dropLocal(c, ph); if (c === P) { const cl = sectionOf(m.id); if (cl) { $$(`[data-mid="${m.id}"] .b`, cl).forEach((b) => b.classList.add("unsent")); failMark(cl, m); M.refuse($$(`.bl[data-mid="${m.id}"] .b`, cl).pop() || cl); } drawTicks(m.id); } S.play("fail"); }
 }
 function dropLocal(c, x) { c.byId.delete(x.id); msgIndex.delete(x.id); c.msgs = c.msgs.filter((y) => y !== x); if (c !== P) return; const cl = sectionOf(x.id); if (cl) M.leave(cl, () => { const y = feed.scrollTop; cl.remove(); feed.scrollTop = y; }); }
 /* the server's copy of what I sent: my row takes its id. Nothing on screen changes unless the server rendered it differently. */
 function adopt(c, m, id, server) {
-  const old = m.id; if (old !== id) { c.byId.delete(old); msgIndex.delete(old); m.id = id; c.byId.set(id, m); msgIndex.set(id, c); if (c === P) $$(`[data-mid="${old}"]`, lane).forEach((n) => (n.dataset.mid = id)); if (c === P) $$(".cl", lane).forEach((n) => { if (n.dataset.mid === String(old)) n.dataset.mid = id; }); }
+  const old = m.id; if (old !== id) { c.byId.delete(old); msgIndex.delete(old); m.id = id; c.byId.set(id, m); msgIndex.set(id, c); if (c === P) $$(`[data-mid="${old}"]`, lane).forEach((n) => (n.dataset.mid = id)); if (c === P) $$(".cl", lane).forEach((n) => { if (n.dataset.mid === String(old)) n.dataset.mid = id; }); if (c === P) $$(`.rt[data-info="${old}"]`, lane).forEach((n) => (n.dataset.info = id)); }
   m.local = false; m.pending = false; m.failed = false;
   if (server) { const was = JSON.stringify(partsOf(m).map((p) => [p.t, p.html])); Object.assign(m, server, {id}); const is = JSON.stringify(partsOf(m).map((p) => [p.t, p.html])); if (c === P && was !== is) updateMessage(c, m); }
   c.msgs.sort((a, b) => (typeof a.id === "number" && typeof b.id === "number" ? a.id - b.id : 0));
+  if (c === P) drawTicks(id);   /* sent: one tick lands */
 }
 function retry(id) { const m = P.byId.get(id); if (!m || !m.failed) return; m.failed = false; m.pending = true; const cl = sectionOf(m.id); if (cl) { $$(`[data-mid="${m.id}"] .b`, cl).forEach((b) => b.classList.remove("unsent")); $$(`.bl[data-mid="${m.id}"] > .meta, .bl[data-mid="${m.id}"] > .lk`, cl).forEach((x) => x.remove()); } S.play("send"); transmit(P, m, null); ready(); }
 
@@ -634,7 +791,7 @@ function onMessage(ev) {
   if (!mine && !flags.includes("read")) { if (seenNow) api("POST", "messages/flags", {messages: [m.id], op: "add", flag: "read"}).catch(() => {}); else { let s = unread.get(key); if (!s) unread.set(key, (s = new Set())); s.add(m.id); drawTrail(key); if (flags.includes("mentioned") || flags.includes("stream_wildcard_mentioned") || flags.includes("topic_wildcard_mentioned")) mentions.set(m.id, m); drawHomeRow(key); } }
   { const runs = (c && c.runsLoaded ? c.runs : runsSeen.get(key)) || [], r = runs.find((x) => x.status === "queued" || x.status === "running");   /* a question asked, or answered by someone */
     if (r && isOnix(m.sender_id) && QUESTION.test(m.content || "")) { r.waiting = true; r.answeredAt = 0; r.askedAt = m.timestamp; r.question = questionOf(m); marks.set(key, "needs"); drawTrail(key); drawHomeRow(key); if (c === P) drawRunState(); }
-    else if (r && r.waiting && !isOnix(m.sender_id) && namesOnix(m)) { answered(r); marks.set(key, "live"); drawTrail(key); drawHomeRow(key); if (c === P) drawRunState(); } }
+    else if (r && r.waiting && !isOnix(m.sender_id) && namesOnix(m)) { answered(r); marks.set(key, runMark(r)); drawTrail(key); drawHomeRow(key); if (c === P) drawRunState(); } }
   if (!c || !c.loaded) return;
   if (ev.local_message_id && c.byId.has(ev.local_message_id)) { adopt(c, c.byId.get(ev.local_message_id), m.id, m); return; }
   if (c.byId.has(m.id)) { const mine_ = c.byId.get(m.id); adopt(c, mine_, m.id, m); return; }
@@ -647,7 +804,7 @@ function onMessage(ev) {
   if (tab !== "Chat") { $$(":scope > .empty", lane).forEach((x) => x.remove()); appendMessage(lane, m); return; }
   const row = grown(() => { $$(":scope > .empty", lane).forEach((x) => x.remove()); return appendMessage(lane, m); }, "settle");
   if (pinned) { const last = row.parts[row.parts.length - 1], b = last && ($(".b", last) || last); if (b && !isOnix(m.sender_id)) { M.release(b, {y: T.rise || 6}, "settle", {id: "in"}); M.appear(b); } else if (isOnix(m.sender_id)) M.appear(row.cl, 0.3); }
-  if (!mine && !isOnix(m.sender_id)) S.play("arrive");
+  if (!mine && !isOnix(m.sender_id)) { S.play("arrive"); signOfLife(); hopOnce(row.cl); refreshPartners({wait: 4000, force: true}); }
 }
 function onUpdate(ev, at) {
   const c = msgIndex.get(ev.message_id); if (!c) return; const m = c.byId.get(ev.message_id); if (!m) return;
@@ -661,7 +818,7 @@ function onRun(ev) {
   const list = c ? c.runs : runsSeen.get(key) || []; if (!runsSeen.has(key)) runsSeen.set(key, list);
   let r = list.find((x) => x.id === ev.run_id); const fresh = !r; if (!r) { r = {id: ev.run_id, session_kind: "shared", date_created: ev.run_date_created, plan: null, overview: null, tool_count: 0, waiting: false}; list.unshift(r); }
   if (!live) r.waiting = false; else if (ev.event_type === "question_waiting" && !(r.answeredAt && now() / 1000 - r.answeredAt < 20)) { if (!r.waiting) r.askedAt = r.askedAt || ev.date_created; r.waiting = true; settleAsk(r); }   /* the server's heartbeat while it waits */
-  const was = marks.get(key), want = live ? (r.waiting ? "needs" : "live") : null; if (live) { if (was !== want) { marks.set(key, want); drawTrail(key); } } else if (was === "live" || was === "needs") { if (ev.status === "failed" && !(place && place.key === key)) marks.set(key, "failed"); else marks.delete(key); drawTrail(key); }
+  const was = marks.get(key), want = live ? runMark(r, ev.status) : null; if (live) { if (was !== want) { marks.set(key, want); drawTrail(key); } } else if (LIVE_MARKS.has(was)) { if (ev.status === "failed" && !(place && place.key === key)) marks.set(key, "failed"); else marks.delete(key); drawTrail(key); }
   drawHomeRow(key);
   if (!c) return;
   const wasLive = r.status === "queued" || r.status === "running";
@@ -675,11 +832,11 @@ function onRun(ev) {
   if (r.result_message_id) { const cl = sectionOf(r.result_message_id), m = c.byId.get(r.result_message_id); if (cl && m) { const before = feed.scrollHeight; syncOnix(cl, m); const d = feed.scrollHeight - before; if (d) follow(d, cl); } }   /* what the conversation grew by: a footer that lands in the room the live run kept grows nothing */
   if (wasLive && !live) { S.play(ev.status === "failed" ? "fail" : "done"); refreshCtx(c, 600); }
 }
-function onReaction(ev) { const c = msgIndex.get(ev.message_id); if (!c) return; const m = c.byId.get(ev.message_id); if (m) applyReaction(c, m, ev, false); }
+function onReaction(ev) { const c = msgIndex.get(ev.message_id); if (!c) return; const m = c.byId.get(ev.message_id); if (m) applyReaction(c, m, ev, false); if (c === P && ev.user_id !== ME) signOfLife(); }
 function onFlags(ev) { if (ev.flag !== "read" || ev.op !== "add") return; if (ev.all) { unread.clear(); drawNav(); return; } const ids = new Set(ev.messages); for (const [k, s] of unread) { let ch = false; for (const i of ids) if (s.delete(i)) ch = true; if (ch) { if (!s.size) unread.delete(k); drawTrail(k); } } }
 function onDelete(ev) { const ids = ev.message_ids || [ev.message_id]; let redraw = false; for (const id of ids) { const c = msgIndex.get(id); if (!c) continue; const m = c.byId.get(id); c.byId.delete(id); msgIndex.delete(id); c.msgs = c.msgs.filter((x) => x !== m); if (c === P) redraw = true; } if (redraw) drawLane({keep: !pinned}); }
 function onTyping(ev) { const key = ev.message_type === "stream" ? tkey(ev.stream_id, ev.topic || "") : dkey((ev.recipients || []).map((u) => u.user_id).filter((i) => i !== ME)), c = places.get(key), id = ev.sender.user_id; if (!c || id === ME || isOnix(id)) return;   /* Onix's own sign that it is working is its mark, not a typing bubble */
-  clearTimeout(c.typers.get(id)); if (ev.op === "start") c.typers.set(id, setTimeout(() => { c.typers.delete(id); if (c === P) drawTyping(); }, 16000)); else c.typers.delete(id); if (c === P) drawTyping(); }
+  clearTimeout(c.typers.get(id)); if (ev.op === "start" && c === P) signOfLife(); if (ev.op === "start") c.typers.set(id, setTimeout(() => { c.typers.delete(id); if (c === P) drawTyping(); }, 16000)); else c.typers.delete(id); if (c === P) drawTyping(); }
 function drawTyping() { const ids = [...P.typers.keys()], ty = band.ty, on = ids.length > 0, sig = ids.join(","); if (ty._sig === sig) return; ty._sig = sig;
   if (on) { ty.innerHTML = (ids.length > 1 ? `<span class="avs">${ids.map((i) => faceOf(i)).join("")}</span>` : faceOf(ids[0])) + `<p class="tyb${ids.length === 1 ? " s-" + stoneOf(ids[0]) : ""}" id="tyb">${dots()}</p><span class="nm">${esc(ids.map((i) => nameOf(i).split(/[ ,]/)[0]).join(" and "))}</span>`; }
   ty.classList.toggle("chip", on && !band.run.classList.contains("off")); show(ty, on); }
@@ -696,7 +853,7 @@ function handle(ev, at) {
 async function poll() { let wait = 0;
   while (!signedOut.done) {
     const open = setTimeout(() => setDown(false), 3000);   /* a long-poll still open after 3 s is an answering server: without this the label said "not answering" until the next event or heartbeat */
-    try { const r = await api("GET", "events", {queue_id: queue, last_event_id: lastEvent}); const at = performance.now(); clearTimeout(open); setDown(false); wait = 0; for (const ev of r.events) { lastEvent = Math.max(lastEvent, ev.id); handle(ev, at); } }
+    try { const r = await api("GET", "events", {queue_id: queue, last_event_id: lastEvent}); const at = performance.now(); clearTimeout(open); setDown(false); wait = 0; await partnersFirst(r.events); for (const ev of r.events) { lastEvent = Math.max(lastEvent, ev.id); handle(ev, at); } }
     catch (e) { clearTimeout(open); if (signedOut.done) return; if (e.code === "BAD_EVENT_QUEUE_ID") { try { await api("GET", "users/me"); await register(); for (const c of places.values()) { c.loaded = false; c.msgs = c.msgs.filter((m) => m.local); c.byId = new Map(c.msgs.map((m) => [m.id, m])); c.oldest = false; } if (place) openPlace(place, {force: true, keepHash: true}); } catch (x) {} } else { setDown(true); wait = Math.min(15000, wait ? wait * 2 : 1000); await sleep(wait); } }
   }
 }
@@ -714,27 +871,34 @@ function askSession() { if (signedOut.done || document.hidden || performance.now
 let stopping = 0;
 /* the band's far end says what the run is doing: its own overview line, else its current activity when that is a thing
    it is doing (a command, a file) and not the runtime's bookkeeping or the request repeated */
-function actOf(c, r) { if (r.overview) return r.overview; const a = (r.current_activity || "").trim(), trig = c.byId.get(r.trigger_message_id), asked = trig ? (trig.raw || (trig.content || "").replace(/<[^>]+>/g, "")).replace(/^\s*@?\**(Pear|Onyx|Onix)\**\s*/i, "").trim() : "";
-  if (!a || /^(Codex\b.*|Completed\.?|Running Pear worker\.?|Rate limit.*|Queued.*|Pear worker.*)$/i.test(a) || (asked && asked.startsWith(a.replace(/…$|\.\.\.$/, "").slice(0, 40)))) return ""; return a; }
+function actOf(c, r) { if (r.overview) return agentText(r.overview); const a = (r.current_activity || "").trim(), trig = c.byId.get(r.trigger_message_id), asked = trig ? (trig.raw || (trig.content || "").replace(/<[^>]+>/g, "")).replace(/^\s*@?\**(Pear|Onyx|Onix)\**\s*/i, "").trim() : "";
+  if (!a || /^(Codex\b.*|Completed\.?|Running Pear worker\.?|Rate limit.*|Queued.*|Pear worker.*)$/i.test(a) || (asked && asked.startsWith(a.replace(/…$|\.\.\.$/, "").slice(0, 40)))) return ""; return agentText(a); }
 function drawRunState(cut) {
   const r = liveRun(P), ask = waitingRun(P), wt = place.kind === "topic" && place.repo, raised = !!r && (!!ask || now() / 1000 - r.date_created > 0.4 || (r.plan && r.plan.length) || r.tool_count > 0), b = band;
   if (r && !raised) setTimeout(() => { if (P && liveRun(P) === r) drawRunState(); }, 450);
-  b.run.classList.toggle("att", !!ask); const lead = $(":scope > .mk", b.run); if (lead && lead.classList.contains("needs") !== !!ask) lead.outerHTML = mk(ask ? "needs" : "live");
-  if (raised) { const word = ask ? "Onix asks" : stopping === r.id ? "Stopping" : r.status === "queued" ? "Queued" : "Working", cur = $(":scope > :not(.gone):not(.sz)", b.st);
+  b.run.classList.toggle("att", !!ask); const lead = $(":scope > .mk", b.run), want = r ? runMark(r) : "live"; if (lead && !lead.classList.contains(want)) lead.outerHTML = mk(want);
+  const quiet = !!r && !ask && quietRun(r);
+  if (raised) { const word = ask ? "Onix asks" : stopping === r.id ? "Stopping" : r.status === "queued" ? "Queued" : quiet ? "Quiet" : "Working", cur = $(":scope > :not(.gone):not(.sz)", b.st);
     if (!cur || cur.textContent !== word) { if (cut || b.run.classList.contains("off")) b.st.innerHTML = `<span>${word}</span><i class="sz">Stopping</i>`; else M.swap(b.st, `<span>${word}</span>`, {quiet: true, seq: true}); }
-    tick(true); const act = actOf(P, r); if (b.act.textContent !== act) b.act.textContent = act; b.stop.setAttribute("aria-disabled", stopping === r.id); }
+    tick(true); const act = quiet ? `No word from this run since ${dayLabel(lastSign(r))} ${hhmm(lastSign(r))}. The server still lists it as running.` : actOf(P, r); if (b.act.textContent !== act) b.act.textContent = act; b.stop.setAttribute("aria-disabled", stopping === r.id); }
   if (cut) { b.run.classList.toggle("off", !raised); b.run.inert = !raised; b.run.style.opacity = ""; } else show(b.run, raised);
   b.ty.classList.toggle("chip", raised && P.typers.size > 0);
-  setVerb(editing ? "Save" : ask && onyxNow() ? "Answer" : raised && wt && onyxHere() ? "Steer" : "Send", cut);   /* with the switch off a waiting run is answered by its options or by naming @Onix */
+  setVerb(place.kind === "partner" ? "Choose" : editing ? "Save" : ask && onyxNow() ? "Answer" : raised && wt && onyxHere() ? "Steer" : "Send", cut);   /* with the switch off a waiting run is answered by its options or by naming @Onix */
   if (!r) stopping = 0;
   drawAsks();
 }
-function tick(force) { if (!P) return; const r = liveRun(P); if (!r || band.run.classList.contains("off") && !force) return; const v = mmss(Math.max(0, Math.floor(now() / 1000 - (r.waiting ? askedAt(P, r) : r.resumedAt || r.date_created)))); if (force) band.clock.innerHTML = fig(v); else M.figure(band.clock, v, {cut: true}); }   /* asking: since the question; working: since the run started or went on after a question */
+/* a run the server still calls running that has given no sign of life for a long while (an old fixture, a worker that died):
+   the band says it is quiet and for how long, not that it has been working all that time */
+const QUIET_AFTER = 15 * 60;
+const lastSign = (r) => Math.max(r.date_updated || 0, r.date_created || 0, r.resumedAt || 0);
+const quietRun = (r) => r.status === "running" && !r.waiting && now() / 1000 - lastSign(r) > QUIET_AFTER;
+function tick(force) { if (!P) return; const r = liveRun(P); if (!r || band.run.classList.contains("off") && !force) return; if (!r.waiting && quietRun(r) && !/Quiet/.test(band.st.textContent)) { drawRunState(); return; }
+  const v = mmss(Math.max(0, Math.floor(now() / 1000 - (r.waiting ? askedAt(P, r) : quietRun(r) ? lastSign(r) : r.resumedAt || r.date_created)))); if (force) band.clock.innerHTML = fig(v); else M.figure(band.clock, v, {cut: true}); }   /* asking: since the question; working: since the run started or went on after a question */
 const placeName = () => (place ? (place.kind === "home" ? "Home" : place.kind === "dm" ? (place.ids.length === 1 ? nameOf(place.ids[0]) : place.ids.length ? place.ids.map((i) => nameOf(i).split(/[ ,]/)[0]).join(", ") : "yourself") : topicLabel(place.topic)) : "");
 /* the placeholder says what Return will do; on a view that is not Chat, with Onix on, it names what is in view */
-const phText = () => (verb === "Steer" ? "Steer Onix" : verb === "Answer" ? "Answer Onix" : verb === "Save" ? "Edit your message" : !onyxHere() ? "Message " + placeName() : tab !== "Chat" ? `Ask Onix about ${tab === "README" ? "the README" : tab === "Files" ? (P && P.fileName ? P.fileName : "these files") : "these changes"}` : `Ask Onix in ${placeName()}`);
+const phText = () => (place && place.kind === "partner" ? `Search ${pack ? (pack.count || 1025).toLocaleString("en") : "1,025"} by name or number` : verb === "Steer" ? "Steer Onix" : verb === "Answer" ? "Answer Onix" : verb === "Save" ? "Edit your message" : !onyxHere() ? "Message " + placeName() : tab !== "Chat" ? `Ask Onix about ${tab === "README" ? "the README" : tab === "Files" ? (P && P.fileName ? P.fileName : "these files") : "these changes"}` : `Ask Onix in ${placeName()}`);
 function setVerb(v, cut) { const cur = $(":scope > span:not(.gone)", ph), same = v === verb;
-  if (!same) { const up = ["Send", "Steer", "Answer", "Save"].indexOf(v) > ["Send", "Steer", "Answer", "Save"].indexOf(verb) ? 1 : -1; verb = v; if (cut) { $$(":scope > :not(.sz)", goc).forEach((x) => x.remove()); goc.insertAdjacentHTML("afterbegin", `<span>${v}</span>`); } else M.swap(goc, `<span>${v}</span>`, {dir: up, seq: true}); go.setAttribute("aria-label", v); go.dataset.tip = v; }
+  if (!same) { const up = ["Send", "Steer", "Answer", "Save", "Choose"].indexOf(v) > ["Send", "Steer", "Answer", "Save", "Choose"].indexOf(verb) ? 1 : -1; verb = v; if (cut) { $$(":scope > :not(.sz)", goc).forEach((x) => x.remove()); goc.insertAdjacentHTML("afterbegin", `<span>${v}</span>`); } else M.swap(goc, `<span>${v}</span>`, {dir: up, seq: true}); go.setAttribute("aria-label", v); go.dataset.tip = v; }
   const text = phText();   /* read after the verb has changed: read before, the field kept saying "Steer Onix" after a run ended */
   if (!cur || cur.textContent !== text) { if (cut || same) ph.innerHTML = `<span>${esc(text)}</span>`; else M.swap(ph, `<span>${esc(text)}</span>`, {quiet: true, seq: true}); } }
 async function stop() { const r = P && liveRun(P); if (!r || stopping === r.id) { ready(); return; } stopping = r.id; drawRunState(); ready();
@@ -742,27 +906,35 @@ async function stop() { const r = P && liveRun(P); if (!r || stopping === r.id) 
 function drawComposer() { const wt = place.kind === "topic" && place.repo, on = onyxHere(), ctx = P.ctx; toBtn.hidden = !wt; modeBtn.hidden = !wt; modeBtn.classList.remove("off");
   toBtn.classList.toggle("off", !on); toBtn.setAttribute("aria-pressed", on); toBtn.dataset.tip = on ? "Onix answers what you send here. Press to talk to people only" : "What you send here goes to people. Press to have Onix answer";
   if (wt && ctx) { const label = modeLabel(ctx); const sl = $(".slot", modeBtn); if (sl && sl._v !== label) { sl._v = label; sl.innerHTML = `<span>${esc(label)}</span><i class="sz">${esc(label)}</i>`; } }
-  modeBtn.dataset.tip = "Model, speed and effort for this worktree"; modeBtn.dataset.key = "⌘/"; setVerb(verb, true); }
+  modeBtn.dataset.tip = "Model, speed and effort for this worktree"; modeBtn.dataset.key = "⌘/"; setVerb(verb, true); placeJump(); }
+/* Jump to latest stands left of the model label, whose width follows the model's name */
+function placeJump() { if (!band || !band.el || !band.jump || !modeBtn) return; const box = band.jump.offsetParent || band.el, r = modeBtn.hidden ? null : modeBtn.getBoundingClientRect(), b = box.getBoundingClientRect(); band.el.style.setProperty("--jump-right", r && r.width ? `${Math.ceil(b.right - r.left) + 8}px` : ""); }
 const syncField = () => cz.classList.toggle("has-text", !!tx.textContent.trim() || atts.length > 0);
 
 /* ---------- the column: the checklist's standing home, Changes, Runs, People ---------- */
 function drawSide() {
   const c = P, p = place, wt = p.kind === "topic" && p.repo; let h = "";
   if (p.kind === "home") { const live = []; for (const [k, rs] of runsSeen) { const r = rs.find((x) => x.status === "queued" || x.status === "running"), q = placeFromKey(k); if (r && q) live.push({k, r, q}); }
-    h += '<section class="sec grow" id="sec-running"><ul class="ls">' + (live.length ? live.map(({k, r, q}) => `<li class="on" data-k="${esc(k)}">${mk(r.waiting ? "needs" : "live", r.waiting ? "" : "live")}<span class="t">${esc(topicLabel(q.topic))}</span><span class="e"><span class="d">${esc(q.stream)}</span></span></li>`).join("") : `<li>${ic("check")}<span class="t">${homeScanned ? "No run is live" : "Looking"}</span><span class="e"></span></li>`) + "</ul></section>";
+    h += '<section class="sec grow" id="sec-running"><ul class="ls">' + (live.length ? live.map(({k, r, q}) => `<li class="on" data-k="${esc(k)}">${mk(runMark(r))}<span class="t">${esc(topicLabel(q.topic))}</span><span class="e"><span class="d">${esc(q.stream)}</span></span></li>`).join("") : `<li>${ic("check")}<span class="t">${homeScanned ? "No run is live" : "Looking"}</span><span class="e"></span></li>`) + "</ul></section>";
     const here = [...people.values()].filter((u) => !u.bot && u.active && u.id !== ME && presOf(u.id) === "on").slice(0, 8);
     h += '<section class="sec foot" id="sec-people"><div class="sh"><span>People</span></div><ul class="ls">' + `<li>${faceOf(ME, "s20", "on")}<span class="t">${esc(meName)}</span><span class="e"></span></li>` + here.map((u) => `<li data-k="${esc(dkey([u.id]))}">${faceOf(u.id, "s20", "on")}<span class="t">${esc(u.name)}</span><span class="e"></span></li>`).join("") + "</ul></section>";
     if (outline._sig === h) return; outline._sig = h; outline.innerHTML = h; host(outline); fitLists(side); return; }
+  if (p.kind === "partner") { h = pack ? pickerSideHTML() : ""; if (outline._sig === h) return; outline._sig = h; outline.innerHTML = h; host(outline); return; }
   if (wt) { const run = planRun(c);
-    if (run) { const live = run.status === "queued" || run.status === "running"; h += '<ol class="chk" id="steps">' + run.plan.map((s) => { const mkn = stepMark(s, run), cls = mkn === "live" ? "now" : mkn; return `<li class="step ${cls}">${mk(mkn, mkn === "live" ? "live" : "")}<span class="t">${inlineMd(s.step)}</span><span class="e"></span></li>` + (mkn === "live" && live && run.overview ? `<li class="ev act"><i></i><span class="t cell"><span>${esc(run.overview)}</span></span><span class="e"></span></li>` : ""); }).join("") + "</ol>"; }
+    if (run) { const live = run.status === "queued" || run.status === "running";
+      /* the checklist reserves the rows it has held in this run, up to seven: a plan that grows pushes the lists below once */
+      c.chkRows = c.chkRows || {}; const rows = Math.min(7, Math.max(c.chkRows[run.id] || 0, run.plan.length + (live && run.overview ? 1 : 0))); c.chkRows[run.id] = rows;
+      h += `<ol class="chk" id="steps" style="--rows:${rows}">` + run.plan.map((s) => { const mkn = stepMark(s, run), cls = mkn === "live" ? "now" : mkn; return `<li class="step ${cls}">${mk(mkn, mkn === "live" ? "live" : "")}<span class="t">${inlineMd(agentText(s.step))}</span><span class="e"></span></li>` + (mkn === "live" && live && run.overview ? `<li class="ev act"><i></i><span class="t cell"><span>${esc(agentText(run.overview))}</span></span><span class="e"></span></li>` : ""); }).join("") + "</ol>"; }
     else h += `<div class="note">${c.runsLoaded ? (c.runs.length ? "The runs here had no plan. A run that plans its work shows its steps here." : "No run here yet.") : "Loading"}</div>`;
     const g = c.ctx && c.ctx.git && c.ctx.git.available ? c.ctx.git : null, files = g ? g.changed_files || [] : [];
-    h += `<section class="sec slots" id="sec-changes" style="--slots:4"><div class="sh"><span>Changes</span><span class="e"><button class="lk" data-goto="Changes">Review</button></span></div><ul class="ls">` + (files.length ? files.map((f) => `<li>${ic("file")}<span class="t"><code>${esc(mid(f.path, 26))}</code></span><span class="e"><span class="kd">${esc(f.kind)}</span></span></li>`).join("") : `<li>${ic(g ? "check" : "file")}<span class="t">${g ? "No uncommitted changes" : c.ctx ? "No worktree yet" : "Loading"}</span><span class="e"></span></li>`) + "</ul></section>";
-    h += '<section class="sec grow" id="sec-runs"><div class="sh"><span>Runs</span></div><ul class="ls">' + c.runs.slice(0, 30).map((r) => { const live = r.status === "queued" || r.status === "running", m = live ? "live" : r.status === "done" ? "done" : r.status === "failed" ? "failed" : r.status === "cancelled" ? "cancelled" : "left", trig = c.byId.get(r.trigger_message_id), title = trig ? (trig.raw || (trig.content || "").replace(/<[^>]+>/g, "")).replace(/^\s*@?\**(Pear|Onyx|Onix)\**\s*/i, "").trim() : (r.summary || "Run " + r.id).replace(/\bPear\b/g, "Onix");
-      return `<li class="${live ? "on" : ""}">${mk(r.waiting && live ? "needs" : m, live && !r.waiting ? "live" : "")}<span class="t">${esc(title.slice(0, 80))}</span><span class="e"><span class="d">${live ? esc(age(r.date_created)) : esc(dayKey(r.date_created) === dayKey(now() / 1000) ? hhmm(r.date_created) : shortDay(r.date_created))}</span></span></li>`; }).join("") + (c.runs.length ? "" : `<li>${ic("trace")}<span class="t">${c.runsLoaded ? "No runs yet" : "Loading"}</span><span class="e"></span></li>`) + "</ul></section>";
-    h += `<p class="note old-ui">Monitors, sub-agents and traces: <a href="/#narrow/channel/${p.stream_id}/topic/${encodeURIComponent(p.topic)}">this worktree in the old interface</a>.</p>`; }
+    c.changeRows = Math.min(4, Math.max(1, files.length, c.changeRows || 0));   /* the rows Changes has held while the place is open, up to four */
+    h += `<section class="sec slots" id="sec-changes" style="--slots:${c.changeRows}"><div class="sh"><span>Changes</span><span class="e"><button class="lk" data-goto="Changes">Review</button></span></div><ul class="ls">` + (files.length ? files.map((f) => `<li>${ic("file")}<span class="t"><code>${esc(mid(f.path, 26))}</code></span><span class="e"><span class="kd">${esc(f.kind)}</span></span></li>`).join("") : `<li>${ic(g ? "check" : "file")}<span class="t">${g ? "No uncommitted changes" : c.ctx ? "No worktree yet" : "Loading"}</span><span class="e"></span></li>`) + "</ul></section>";
+    h += '<section class="sec grow" id="sec-runs"><div class="sh"><span>Runs</span></div><ul class="ls">' + c.runs.slice(0, 30).map((r) => { const live = r.status === "queued" || r.status === "running", m = live ? "live" : r.status === "done" ? "done" : r.status === "failed" ? "failed" : r.status === "cancelled" ? "cancelled" : "left", trig = c.byId.get(r.trigger_message_id), title = trig ? (trig.raw || (trig.content || "").replace(/<[^>]+>/g, "")).replace(/^\s*@?\**(Pear|Onyx|Onix)\**\s*/i, "").trim() : agentText(r.summary || "Run " + r.id);
+      return `<li class="${live ? "on" : ""}">${mk(live ? runMark(r) : m)}<span class="t">${esc(title.slice(0, 80))}</span><span class="e"><span class="d">${live ? esc(age(r.date_created)) : esc(dayKey(r.date_created) === dayKey(now() / 1000) ? hhmm(r.date_created) : shortDay(r.date_created))}</span></span></li>`; }).join("") + (c.runs.length ? "" : `<li>${ic("trace")}<span class="t">${c.runsLoaded ? "No runs yet" : "Loading"}</span><span class="e"></span></li>`)
+      + `<li class="old keep">${ic("open")}<span class="t">Monitors, sub-agents, traces</span><span class="e"><a class="lk" href="/#narrow/channel/${p.stream_id}/topic/${encodeURIComponent(p.topic)}" data-tip="This worktree in the old interface">Open</a></span></li></ul></section>`; }
   const ids = p.kind === "dm" ? [ME, ...p.ids] : [...new Set(c.msgs.filter((m) => !isOnix(m.sender_id)).map((m) => m.sender_id))].slice(-8);
-  h += `<section class="sec ${wt ? "foot" : "grow"}" id="sec-people"><div class="sh"><span>People</span></div><ul class="ls">` + (wt ? `<li>${sigil(20)}<span class="t">Onix</span><span class="e"></span></li>` : "") + ids.map((i) => `<li>${faceOf(i, "s20", presOf(i))}<span class="t">${esc(nameOf(i))}</span><span class="e"></span></li>`).join("") + "</ul></section>";
+  /* in a channel with no repository the column's heading already says People (headCfg) */
+  h += `<section class="sec ${wt ? "foot" : "grow"}" id="sec-people">${p.kind === "topic" && !p.repo ? "" : '<div class="sh"><span>People</span></div>'}<ul class="ls">` + (wt ? `<li>${faceOf([...pearBots][0], "s20")}<span class="t">Onix</span><span class="e"></span></li>` : "") + ids.map((i) => `<li>${faceOf(i, "s20", presOf(i))}<span class="t">${esc(nameOf(i))}</span><span class="e"></span></li>`).join("") + "</ul></section>";
   if (outline._sig === h) return; outline._sig = h; outline.innerHTML = h; host(outline); fitLists(side);
 }
 const mid = (s, n) => { if (s.length <= n) return s; const k = (n - 1) >> 1; return s.slice(0, n - 1 - k) + "…" + s.slice(-k); };
@@ -850,14 +1022,15 @@ function act(name, t, btn, kbd) { const m = msgOf(t); if (!m) return;   /* from 
 /* More: what can be done to this message. Mine can be edited and deleted; any can be linked or copied. */
 function openMenu(m, btn) { closeMenu(); const mine = m.sender_id === ME && typeof m.id === "number", items = [];
   if (mine && !isOnix(m.sender_id)) items.push(["edit", "Edit", "E"], ["delete", "Delete", ""]);
-  items.push(["copy", "Copy text", "C"], ["link", "Copy link", ""]);
+  items.push(["copy", "Copy text", "C"], ["link", "Copy link", ""]); if (RECEIPTS && typeof m.id === "number") items.push(["info", "Info", "I"]);
   menu = el("div", "menu raised float", items.map(([k, label, key]) => `<button class="mi" data-mi="${k}" tabindex="-1">${label}<span class="k">${key}</span></button>`).join("")); menu.setAttribute("role", "menu");
   const r = btn.getBoundingClientRect(), mr = main.getBoundingClientRect(); menu.style.cssText = `position:absolute;left:${Math.round(r.left - mr.left)}px;top:${Math.round(r.bottom - mr.top + 4)}px`; main.append(menu); host(menu);
   let hi = 0; const mark = () => $$(".mi", menu).forEach((x, i) => x.classList.toggle("hl", i === hi)); mark();
-  menu._key = (e) => { const d = {ArrowDown: 1, ArrowUp: -1}[e.key]; if (d) { e.preventDefault(); hi = clamp(hi + d, 0, items.length - 1); mark(); return true; } if (e.key === "Enter") { e.preventDefault(); $$(".mi", menu)[hi].click(); return true; } if (e.key === "Escape") { e.preventDefault(); closeMenu(); ready(); return true; } return false; };
+  menu._key = (e) => { const d = {ArrowDown: 1, ArrowUp: -1}[e.key]; if (d) { e.preventDefault(); hi = clamp(hi + d, 0, items.length - 1); mark(); return true; } if (e.key === "Enter") { e.preventDefault(); $$(".mi", menu)[hi].click(); return true; } if (e.key === "Escape") { e.preventDefault(); closeMenu(); ready(); return true; }
+    const hot = items.findIndex(([, , key]) => key && key.toLowerCase() === e.key.toLowerCase()); if (hot >= 0 && !e.metaKey && !e.ctrlKey) { e.preventDefault(); $$(".mi", menu)[hot].click(); return true; } return false; };
   menu._t = overAt;
-  press(menu, ".mi", (b) => { const k = b.dataset.mi, t = menu._t; closeMenu(); overHide();
-    if (k === "edit") startEdit(m); else if (k === "delete") confirmDelete(m);
+  press(menu, ".mi", (b, e, ptr) => { const k = b.dataset.mi, t = menu._t; closeMenu(); overHide();
+    if (k === "edit") startEdit(m); else if (k === "delete") confirmDelete(m); else if (k === "info") openInfo(m.id, t, !ptr);
     else if (k === "copy") { try { navigator.clipboard.writeText(plainText(t)).catch(() => {}); } catch (e) {} note("Copied"); ready(); }
     else if (k === "link") { const p = place, u = p.kind === "topic" ? `${location.origin}/#narrow/channel/${p.stream_id}/topic/${encodeURIComponent(p.topic)}/near/${m.id}` : `${location.origin}/#narrow/near/${m.id}`; try { navigator.clipboard.writeText(u).catch(() => {}); } catch (e) {} note("Link copied"); ready(); } });
   M.release(menu, {y: -(T["pane-rise"] || 4)}, "touch"); }
@@ -894,16 +1067,19 @@ function drawAtts() { let box = $(".atts", cz); if (!atts.length) { if (box) box
    The choice is the worktree's (POST pear/topic-context, the endpoint today's runtime menu uses). ---------- */
 const FALLBACK_EFFORTS = [{effort: "low", label: "Low"}, {effort: "medium", label: "Medium"}, {effort: "high", label: "High"}, {effort: "xhigh", label: "XHigh"}];
 const effortsFor = (ctx, model) => { const e = (ctx.model_catalog || []).find((x) => x.slug === model); return e && e.supported_reasoning_levels && e.supported_reasoning_levels.length ? e.supported_reasoning_levels : ctx.reasoning_efforts && ctx.reasoning_efforts.length ? ctx.reasoning_efforts : FALLBACK_EFFORTS; };
-const modelsOf = (ctx) => { const cat = ctx.model_catalog || []; const list = cat.map((e) => ({slug: e.slug, name: e.display_name || e.slug, tiers: Array.isArray(e.service_tiers) ? e.service_tiers : [], dflt: e.default_reasoning_level}));
-  if (!list.length) for (const sl of ctx.model_choices || []) list.push({slug: sl, name: sl, tiers: []}); if (ctx.model && !list.some((x) => x.slug === ctx.model)) list.unshift({slug: ctx.model, name: ctx.model, tiers: []}); return list; };
+/* a model named the way people say it, from its id: "gpt-6-astra" is "GPT-6 Astra", "gpt-5.6-sol" is "GPT-5.6 Sol" */
+const modelName = (slug) => { const w = String(slug || "").split("-").filter(Boolean); if (!w.length) return String(slug || ""); const cap = (x) => (/^\d/.test(x) ? x : x[0].toUpperCase() + x.slice(1));
+  return w[0].toLowerCase() === "gpt" && w.length > 1 ? ["GPT-" + w[1], ...w.slice(2).map(cap)].join(" ") : w.map(cap).join(" "); };
+const modelsOf = (ctx) => { const cat = ctx.model_catalog || []; const list = cat.map((e) => ({slug: e.slug, name: modelName(e.slug), tiers: Array.isArray(e.service_tiers) ? e.service_tiers : [], dflt: e.default_reasoning_level}));
+  if (!list.length) for (const sl of ctx.model_choices || []) list.push({slug: sl, name: modelName(sl), tiers: []}); if (ctx.model && !list.some((x) => x.slug === ctx.model)) list.unshift({slug: ctx.model, name: modelName(ctx.model), tiers: []}); return list; };
 const tierNames = (tiers) => tiers.map((t) => (typeof t === "string" ? t : t.name || t.display_name || t.id || "")).filter(Boolean).join(", ");
 /* the speed is the server's service tier (PEAR_WORKER_SERVICE_TIER, one for every worktree), named on a model whose catalog
-   offers it: "6-astra Ultrafast · Medium". Codex takes "fast" for its priority tier. */
+   offers it: "GPT-6 Astra · Ultrafast · Medium". Codex takes "fast" for its priority tier. */
 const tierId = (t) => String(typeof t === "string" ? t : (t && (t.id || t.name || t.display_name)) || "").toLowerCase();
 const tierOf = (ctx, model) => { const want = String((runtimeCfg && runtimeCfg.service_tier) || "").toLowerCase(); if (!want) return "";
   const id = want === "fast" ? "priority" : want, m = modelsOf(ctx).find((x) => x.slug === model), t = m && m.tiers.find((x) => tierId(x) === id || tierId(x) === want);
   return !t ? "" : (typeof t === "object" && (t.display_name || t.name)) || (id === "priority" ? "Fast" : id[0].toUpperCase() + id.slice(1)); };
-const modeLabel = (ctx) => { const m = modelsOf(ctx).find((x) => x.slug === ctx.model), e = effortsFor(ctx, ctx.model).find((x) => x.effort === ctx.reasoning_effort), tier = tierOf(ctx, ctx.model); return `${m ? m.name.replace(/^GPT-/, "") : ctx.model}${tier ? " " + tier : ""} · ${e ? e.label : ctx.reasoning_effort}`; };
+const modeLabel = (ctx) => { const m = modelsOf(ctx).find((x) => x.slug === ctx.model), e = effortsFor(ctx, ctx.model).find((x) => x.effort === ctx.reasoning_effort), tier = tierOf(ctx, ctx.model); return `${m ? m.name : modelName(ctx.model)}${tier ? " · " + tier : ""} · ${e ? e.label : ctx.reasoning_effort}`; };
 function togglePicker(o = {}) { if (pop) { closePicker({back: o.kbd}); return; } const ctx = P && P.ctx; if (!ctx || !place.repo || modeBtn.hidden) { ready(); return; }
   pop = el("div", "pop raised float"); const r = modeBtn.getBoundingClientRect(), mr = main.getBoundingClientRect(); pop.style.cssText = `position:absolute;right:${Math.max(8, Math.round(mr.right - r.right))}px;bottom:${Math.round(mr.bottom - r.top + 6)}px`;
   main.append(pop); drawPop(); modeBtn.classList.add("open"); modeBtn.setAttribute("aria-expanded", "true");
@@ -939,6 +1115,7 @@ function places_() { const out = [{key: "home", label: "Home", glyph: ic("home")
   for (const u of people.values()) { if (u.bot || u.id === ME || !u.active) continue; const k = dkey([u.id]); if (seen.has(k)) continue; out.push({key: k, label: u.name, glyph: faceOf(u.id, "s20"), cap: "Direct message"}); }
   if (place && place.repo) for (const v of ["README", "Files", "Changes"]) out.push({cmd: () => setTab(v), label: `Open ${v}`, glyph: ic(v === "README" ? "doc" : v === "Files" ? "folder" : "diff"), cap: topicLabel(place.topic)});
   if (P && liveRun(P)) out.push({cmd: stop, label: "Stop the run", glyph: ic("stop"), cap: "⌘."});
+  if (pack) out.push({cmd: openPicker, label: me_() && me_().species ? "Change partner" : "Choose your partner", glyph: faceOf(ME, "s20"), cap: ""});
   out.push({cmd: () => S.set(!S.on()), label: S.on() ? "Turn sound off" : "Turn sound on", glyph: ic(S.on() ? "mute" : "sound"), cap: ""}, {cmd: () => (location.href = "/"), label: "Open the old interface", glyph: ic("open"), cap: ""});
   return out; }
 function score(it, q) { if (!q) return it.key === "home" ? 0 : 1; const l = it.label.toLowerCase(), h = (it.hay || it.label + " " + it.cap).toLowerCase(); if (l.startsWith(q)) return 0; if (new RegExp("(^|[\\s/_-])" + q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).test(l)) return 1; if (l.includes(q)) return 2; if (h.includes(q)) return 3; const words = q.split(/\s+/).filter(Boolean); return words.length > 1 && words.every((w) => h.includes(w)) ? 4 : -1; }
@@ -976,7 +1153,7 @@ function homeRows() { const needs = [], ment = [], news = [];
   for (const [k, set] of unread) { if (!set.size || !k.startsWith("s:")) continue; const p = placeFromKey(k); if (!p || !p.repo || ment.some((x) => x.k === k)) continue; news.push({k, g: ic("repo"), text: `${set.size} new ${set.size === 1 ? "message" : "messages"} in ${topicLabel(p.topic)}`, where: p.stream, n: set.size}); }
   news.sort((a, b) => b.n - a.n); return {needs, ment, news}; }
 /* the question's own words: the first "**header** — question" line of Onix's message */
-function questionOf(m) { tpl.innerHTML = m.content || ""; const p = [...tpl.content.querySelectorAll("p")].find((x) => x.querySelector("strong") && / — /.test(x.textContent)); return p ? p.textContent.split(" — ").slice(1).join(" — ").trim() : ""; }
+function questionOf(m) { tpl.innerHTML = m.content || ""; const p = [...tpl.content.querySelectorAll("p")].find((x) => x.querySelector("strong") && / — /.test(x.textContent)); return p ? agentText(p.textContent.split(" — ").slice(1).join(" — ").trim()) : ""; }
 const hrowHTML = (r) => `<div class="hrow${r.verb ? " act" : ""}" role="button" tabindex="${r.verb ? -1 : 0}" data-k="${esc(r.k)}"><span class="g">${r.g}</span><span class="tx"><p>${esc(r.text)}</p><span class="wh">${esc(r.where)}</span></span>${r.verb ? `<span class="v"><button class="${r.go ? "go" : "lk"}" data-k="${esc(r.k)}"${r.verb === "Answer" ? " data-answer" : ""}>${r.verb}</button></span>` : r.time ? `<time>${hhmm(r.time)}</time>` : ""}</div>`;
 function drawHome() { if (!place || place.kind !== "home") return; const box = $("#home"), {needs, ment, news} = homeRows(); let h = '<div class="home">';
   if (needs.length) h += needs.map(hrowHTML).join(""); h += `<div class="gh">Mentions of you</div>` + (ment.length ? ment.map(hrowHTML).join("") : '<p class="note">No unread mentions.</p>');
@@ -989,6 +1166,243 @@ function drawHomeRow() { clearTimeout(homeTimer); homeTimer = setTimeout(() => {
 function drawHomeTrail() { const r = $('.row[data-k="home"]', nav); if (!r) return; const n = [...marks.values()].filter((v) => v === "needs").length, old = $(":scope > .mk", r); if (!!old === !!n) return; if (old) old.remove(); if (n) { r.insertAdjacentHTML("beforeend", mk("needs")); M.appear(r.lastElementChild); } }
 async function scanAll() { await Promise.all([scanLive(), ...[...repoStreams].map((sid) => loadTopics(sid))]); homeScanned = true; drawHomeRow(); }   /* the repositories' topics name the rows */
 async function fetchMentions() { try { const r = await api("GET", "messages", {narrow: [{operator: "is", operand: "mentioned"}], anchor: "newest", num_before: 60, num_after: 0, apply_markdown: true, client_gravatar: false}); for (const m of r.messages) if (!(m.flags || []).includes("read")) mentions.set(m.id, m); } catch (e) { return; } drawHomeRow(); }
+
+/* ---------- partners: the Pokémon each person chose (the r4 partner and sprite studies) ----------
+   The pack (species.json and the sprites) is not in git: the server serves it from its git-ignored sprite directory to
+   signed-in people (zerver/views/armada_beta.py, /beta/sprites/...), and partners come from GET armada/partners. With no
+   pack, or a server without the agent, every face stays initials and nothing here draws.
+   A face is a sprite at whole CSS pixels (one sprite pixel a CSS pixel; two in the picker's column and the card), in a box
+   the size of the face it replaces, so a partner arriving or evolving moves nothing. The sprite stands on its feet at the
+   box's foot, centred on what it draws (its content box, measured by tools/armada/sprites.py), in a window it may overflow
+   upward in the gutter and is cut by in lists; it never catches the pointer. Still at rest; it hops (+1, -3 px, 133 ms a
+   step) under the pointer or focus, while its person types, when their message lands, and on my send. Onix's face stays
+   still while its run is live: the ball is the run's one loop (MARKS.md, direction A). */
+const SPRITE_V = DATA.spriteVersion || "";
+let pack = null, partners = null, partnersAt = 0;
+const OFFERED = [];                                        /* species ids the picker offers: first forms the pack draws, Onix's line left out */
+const spritePath = (path) => "/beta/sprites/" + path.split("/").map(encodeURIComponent).join("/");
+const spriteSrc = (sid, shiny) => { const sp = pack && pack.species[sid] && pack.species[sid].sprite; return !sp ? "" : spritePath(shiny && sp.shiny ? sp.shiny : sp.regular); };
+/* a sprite that does not load (a pack missing a file, a server that lost it) is never an empty box: every face drawn from it
+   goes back to initials where it stands, and stays so on this page */
+const brokenSprites = new Set();
+let facesDue = false;
+document.addEventListener("error", (e) => { const img = e.target; if (!(img instanceof HTMLImageElement) || !img.closest(".pk")) return; brokenSprites.add(img.getAttribute("src"));
+  if (!facesDue) { facesDue = true; requestAnimationFrame(() => { facesDue = false; refreshFaces(); drawMeRow(); }); } }, true);
+const agentLine = () => (pack && pack.species["95"] ? pack.species["95"].line : 95);
+function partnerOf(id) { if (!pack || !partners) return null;
+  if (isOnix(id)) { const a = partners.agent; return a && a.species && pack.species[a.species] ? {species: a.species, shiny: false, stone: "flint"} : null; }
+  const p = partners.partners[id]; return p && pack.species[p.species] && pack.species[p.species].sprite ? p : null; }
+const speciesName = (sid) => (pack && pack.species[sid] ? pack.species[sid].name : "");
+/* the sprite in a window w by h (CSS px) at k CSS px a sprite pixel: feet on the window's foot, centred on the drawing */
+function spriteHTML(sid, shiny, k, w, h, lazy) { const s = pack.species[sid], sp = s && s.sprite; if (!sp) return "";
+  const useShiny = !!shiny && !!sp.shiny, box = useShiny ? sp.shiny_box : sp.box, [bx, by, bw, bh] = box;
+  const left = Math.round(w / 2 - (bx + bw / 2) * k), top = h - (by + bh) * k;
+  return `<img src="${esc(spriteSrc(sid, useShiny))}" alt="" draggable="false" decoding="async"${lazy ? ' loading="lazy"' : ""} style="left:${left}px;top:${top}px;width:${sp.size[0] * k}px;height:${sp.size[1] * k}px">`; }
+/* the windows: [box, window width, window height] by face size. 28 is the gutter's (40 wide, cut at the sides only, so a
+   face never reaches the lane); 20 and 18 are a list's and a caption's (cut on every side). */
+const PK = {28: [28, 40, 32], 20: [20, 28, 28], 18: [18, 22, 20]};
+function pkFace(p, size, cls, pres, uid) { const [b, w, h] = PK[size] || PK[28], img = spriteHTML(p.species, p.shiny, 1, w, h); if (!img) return "";
+  return `<i class="pk s${size} ${(cls || "").replace(/\bs\d+\b/g, "")} ${pres || ""}" data-uid="${uid}" data-fs="${esc(p.species)}:${p.shiny ? 1 : 0}" aria-hidden="true"><span class="win" style="left:${(b - w) / 2}px;top:${b - h}px;width:${w}px;height:${h}px">${img}</span></i>`; }
+/* a large drawing: the picker's cells (1x) and its column and the card (2x), the window the whole canvas */
+function pkBig(sid, shiny, k, cls = "", lazy = false) { const sp = pack.species[sid] && pack.species[sid].sprite, w = 68 * k, h = 56 * k; if (!sp) return "";
+  return `<i class="pk big ${cls}" style="width:${w}px;height:${h}px" aria-hidden="true"><span class="win" style="left:0;top:0;width:${w}px;height:${h}px">${spriteHTML(sid, shiny, k, w, h, lazy)}</span></i>`; }
+/* a picker cell's drawing: two CSS px a sprite pixel (SPRITES.md section 5), the cell's width, as tall as the drawing; a drawing
+   wider than the cell is cut at its sides, never scaled */
+const CELL_W = 96;
+function pkCell(sid) { const sp = pack.species[sid].sprite, h = sp.box[3] * 2;
+  return `<i class="pk big" style="width:${CELL_W}px;height:${h}px" aria-hidden="true"><span class="win" style="left:0;top:0;width:${CELL_W}px;height:${h}px">${spriteHTML(sid, false, 2, CELL_W, h, true)}</span></i>`; }
+/* one hop, two steps: for a message that lands and for my send. Reduced motion: none. */
+function hopOnce(face) { const img = face && face.querySelector && face.querySelector(".pk img"); if (!img || M.reduced()) return;
+  img.animate([{transform: "translateY(1px)", easing: "step-end"}, {transform: "translateY(-3px)", offset: 0.5, easing: "step-end"}, {transform: "translateY(0)"}], {duration: 266 * M.SLOW}); }
+
+async function loadPartners() { if (!SPRITE_V) return;
+  try { const [p, st] = await Promise.all([fetch(`/beta/sprites/species.json?v=${encodeURIComponent(SPRITE_V)}`, {credentials: "same-origin", redirect: "error"}).then((r) => (r.ok ? r.json() : null)), api("GET", "armada/partners")]);
+    if (!p || !p.species || !st.on) return; pack = p; partners = st; partnersAt = performance.now();
+    OFFERED.length = 0; for (const [sid, s] of Object.entries(pack.species)) if (s.first && s.sprite && s.line !== agentLine()) OFFERED.push(sid);
+    OFFERED.sort((a, b) => pack.species[a].num - pack.species[b].num || a.localeCompare(b, "en", {numeric: true})); }
+  catch (e) { pack = null; partners = null; } }
+/* the team's partners change rarely (a choice, an evolution): they are asked for again every two minutes, on coming back to
+   the page, a little after someone speaks, and after my own send and reaction (which count, so mine are folded then) */
+let partnerTimer = 0;
+async function fetchPartners(fold) { partnersAt = performance.now(); try { applyPartners(await api(fold ? "POST" : "GET", fold ? "armada/partner/fold" : "armada/partners")); } catch (e) {} }
+function refreshPartners(o = {}) { if (!pack) return; clearTimeout(partnerTimer); partnerTimer = setTimeout(() => {
+    if (!o.force && performance.now() - partnersAt < 30000) return; fetchPartners(o.fold); }, o.wait ?? 1500); }
+/* the caption "Evolved into X" is laid out with its bubble, never added under a bubble already drawn. So a batch of events
+   that brings a message from someone who can evolve their partner now (the server's may_change), or that comes while what
+   the page knows of partners is over PARTNERS_STALE_MS old, waits for the team's partners first: one request, at most
+   PARTNERS_FIRST_MS. Messages from Onix and my own never wait (my bubble was drawn when I pressed Return). Four seconds
+   after someone else's message the page asks again, after the fold their own page makes two seconds after their send:
+   a level that a message crossed is known before that person's next message comes. */
+const PARTNERS_FIRST_MS = 400, PARTNERS_STALE_MS = 15000;
+async function partnersFirst(events) { if (!pack || !partners) return;
+  const stale = performance.now() - partnersAt > PARTNERS_STALE_MS;
+  const due = events.some((ev) => { if (ev.type !== "message") return false; const id = ev.message.sender_id; if (id === ME || isOnix(id)) return false; const p = partners.partners[id]; return stale || !!(p && p.may_change); });
+  if (due) await Promise.race([fetchPartners(false), sleep(PARTNERS_FIRST_MS)]); }
+function applyPartners(st) { if (!st || !st.on || !pack) return; const before = JSON.stringify(partners && partners.partners) + JSON.stringify(partners && partners.agent); partners = st; partnersAt = performance.now();
+  if (before !== JSON.stringify(st.partners) + JSON.stringify(st.agent)) refreshFaces();
+  drawMeRow(); if (card) drawCard(); if (place && place.kind === "partner") { drawPicker(); drawSide(); drawPickerBand(); } momentDue(); }
+const me_ = () => (partners && partners.me) || null;
+/* every face on the page that is out of date is redrawn where it stands (same box), on the fade; bubbles take the new stone */
+function refreshFaces() {
+  for (const f of $$("[data-uid][data-fs]")) { if (!(+f.dataset.uid > 0)) continue; const uid = +f.dataset.uid, cls = f.getAttribute("class") || "", size = f.matches(".pk") ? +((/\bs(\d+)\b/.exec(cls) || [])[1] || 28) : f.matches("svg") ? (/\bs(\d+)\b/.exec(cls) ? +/\bs(\d+)\b/.exec(cls)[1] : 28) : faceSize(cls);
+    const pres = /\bon\b/.test(cls) ? "on" : /\baway\b/.test(cls) ? "away" : "", keep = cls.split(/\s+/).filter((c) => /^s\d+$/.test(c)).join(" ");
+    const t = el("template"); t.innerHTML = faceOf(uid, keep || (size === 28 ? "" : "s" + size), pres); const neu = t.content.firstElementChild; if (!neu || neu.dataset.fs === f.dataset.fs) continue;
+    for (const c of cls.split(/\s+/)) if (c && !/^(av|pk|sigil|agent|in-disc|on|away|s\d+|p-\w+|big)$/.test(c) && !neu.classList.contains(c)) neu.classList.add(c);
+    f.replaceWith(neu); if (!M.reduced()) M.appear(neu, 0, T["fade-in"]); }
+  for (const cl of $$(".cl.them[data-sid]")) { const want = "s-" + stoneOf(+cl.dataset.sid); if (!cl.classList.contains(want)) { [...cl.classList].filter((c) => c.startsWith("s-")).forEach((c) => cl.classList.remove(c)); cl.classList.add(want); } }
+  drawNav(); if (P && place && place.kind !== "home" && place.kind !== "partner") drawSide(); }
+
+/* ----- the caption the team sees: my next bubble after an evolution carries one line, laid out with that bubble ----- */
+function evoCaption(m) { if (typeof m.sender_id !== "number" || isOnix(m.sender_id)) return null; const p = partnerOf(m.sender_id); if (!p || !p.evolved_at) return null;
+  const since = Math.floor(p.evolved_at); if (m.timestamp < since) return null;   /* a message's time is in whole seconds; the evolution's is not */
+  const c = msgIndex.get(m.id); if (!c) return null; const first = c.msgs.find((x) => x.sender_id === m.sender_id && x.timestamp >= since && !x.thread_root_message_id); if (first !== m) return null;
+  const e = el("div", "evo", `${faceOf(m.sender_id, "s18")}<span>${p.evolved_kind === "shiny" ? esc(`${speciesName(p.species)} turned shiny`) : esc(`Evolved into ${speciesName(p.species)}`)}</span>`); e.dataset.mid = m.id; return e; }
+
+/* ----- the picker: a place (#partner), not a dialog. Starters first, then each generation; the field is its search ----- */
+const PARTNER = {key: "partner", kind: "partner", repo: false};
+const pick = {seg: "starters", q: "", sel: null, picks: {}, back: null, refused: new Set()};
+const GEN_NAMES = ["", "1", "2", "3", "4", "5", "6", "7", "8", "9"];
+/* the lines held, by line: the holders the server lists, and a line the server refused me that it does not list (held by
+   someone I cannot see), as Someone's */
+const takenLines = () => { const out = new Map(); if (!partners) return out; for (const [uid, p] of Object.entries(partners.partners)) { const s = pack.species[p.species]; if (s) out.set(s.line, +uid); } for (const l of pick.refused) if (!out.has(l)) out.set(l, -1); return out; };
+/* the first form of a species' line: what the picker offers for it */
+const firstOf = (sid) => { let cur = sid; for (let i = 0; i < 6 && pack.species[cur] && pack.species[cur].prevo && pack.species[pack.species[cur].prevo]; i++) cur = pack.species[cur].prevo; return cur; };
+/* the search: a name (prefix, then word start, then substring) or a number (that Pokédex number and no other), across every
+   form in the pack. A later form finds its line's first form, with a hint saying which to choose. */
+function matches(q) { q = q.trim().toLowerCase(); if (!q) return null; const n = /^#?0*(\d+)$/.exec(q), found = [], hints = [], all = Object.keys(pack.species);
+  const add = (sid) => { const first = firstOf(sid), name = pack.species[sid].name, own = rank(first) >= 0;
+    if (!OFFERED.includes(first)) { const h = `The agent has ${pack.species[first] ? pack.species[first].name : name}'s line.`; if (pack.species[first] && pack.species[first].line === agentLine() && hints.length < 2 && !hints.includes(h)) hints.push(h); return; }
+    if (!found.includes(first)) found.push(first); if (first !== sid && !own && hints.length < 2 && !hints.some((h) => h.endsWith(`choose ${pack.species[first].name}`) || h.endsWith(`choose ${pack.species[first].name}.`))) hints.push(endSentence(`${name} grows from ${pack.species[first].name}: choose ${pack.species[first].name}`)); };
+  const rank = (sid) => { if (n) return String(pack.species[sid].num) === n[1] ? 0 : -1; const l = pack.species[sid].name.toLowerCase(); return l.startsWith(q) ? 0 : new RegExp("(^|[\\s(-])" + q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).test(l) ? 1 : l.includes(q) ? 2 : -1; };
+  const key = (sid) => [rank(sid), pack.species[sid].form ? 1 : 0, pack.species[sid].num];
+  all.map((sid) => [sid, key(sid)]).filter((x) => x[1][0] >= 0).sort((a, b) => a[1][0] - b[1][0] || a[1][1] - b[1][1] || a[1][2] - b[1][2]).forEach((x) => add(x[0]));
+  return {found, hints}; }
+function pickerSections() { const m = matches(pick.q); if (m) return [["Found", m.found, m.hints]];
+  const starters = (pack.starters || []).filter((sid) => OFFERED.includes(sid)), out = [];
+  if (pick.seg === "starters" || pick.seg === "all") out.push(["Starters", starters]);
+  for (let g = 1; g <= 9; g++) if (pick.seg === "all" || pick.seg === String(g)) out.push([`Generation ${g}`, OFFERED.filter((sid) => pack.species[sid].gen === g)]);
+  return out; }
+const visibleCells = () => pickerSections().flatMap((x) => x[1]);
+function cellHTML(sid, taken) { const holder = taken.get(pack.species[sid].line), mine = holder === ME, other = holder != null && !mine;
+  return `<button class="pkc${other ? " taken" : ""}${sid === pick.sel ? " sel" : ""}" data-sid="${esc(sid)}" role="option" aria-selected="${sid === pick.sel}" tabindex="-1">${pkCell(sid)}<span class="nm">${esc(pack.species[sid].name)}</span><span class="cap">${other ? esc(nameOf(holder).split(/[ ,]/)[0]) : mine ? "Yours" : ""}</span></button>`; }
+function drawPicker() { const box = $("#picker"); if (!box || !pack) return; const taken = takenLines(), secs = pickerSections(), y = panes.Partner.scrollTop;
+  if (!pick.sel || !visibleCells().includes(pick.sel)) pick.sel = visibleCells().find((sid) => !taken.has(pack.species[sid].line)) || visibleCells()[0] || null;
+  let h = `<div class="pkp"><p class="pkintro">Your partner is your face here. It levels up as you use Armada, and evolves.</p><div class="pkdetail">${detailHTML()}</div>`;
+  for (const [title, list, hints] of secs) h += `<h2 class="pkh">${esc(title)}</h2>` + (hints && hints.length ? `<p class="note pkhint">${esc(hints.join(" "))}</p>` : "") + (list.length ? `<div class="pkg" role="listbox" aria-label="${esc(title)}">${list.map((sid) => cellHTML(sid, taken)).join("")}</div>` : '<p class="note">Nothing by that name or number.</p>');
+  box.innerHTML = h + "</div>"; host(box); panes.Partner.scrollTop = y; drawPickerSide(); syncPickVerb(); drawPickerBand(); }
+function selectCell(sid, o = {}) { if (!sid) return; pick.sel = sid; for (const b of $$(".pkc", panes.Partner)) { const on = b.dataset.sid === sid; b.classList.toggle("sel", on); b.setAttribute("aria-selected", String(on)); }
+  const b = $$(".pkc", panes.Partner).find((x) => x.dataset.sid === sid); if (b && o.scroll) b.scrollIntoView({block: "nearest"}); drawPickerSide(); syncPickVerb(); }
+/* arrows move through the grid as it is drawn: Left and Right in reading order, Up and Down to the nearest cell above or below */
+function movePick(key) { const cells = $$(".pkc", panes.Partner); if (!cells.length) return; const i = Math.max(0, cells.findIndex((b) => b.dataset.sid === pick.sel)), cur = cells[i];
+  let n = null; if (key === "ArrowLeft") n = cells[i - 1]; else if (key === "ArrowRight") n = cells[i + 1];
+  else { const r = cur.getBoundingClientRect(), down = key === "ArrowDown"; let best = null, bd = 1e9;
+    for (const b of cells) { const q = b.getBoundingClientRect(); if (down ? q.top <= r.top + 4 : q.top >= r.top - 4) continue; const dy = Math.abs(q.top - r.top), d = dy * 1000 + Math.abs(q.left - r.left); if (d < bd) { bd = d; best = b; } } n = best; }
+  if (n) selectCell(n.dataset.sid, {scroll: true}); }
+/* the line from the chosen form, with the level each form arrives at, and the branches my level passes on the way */
+function lineOf(sid) { const out = [], L = (me_() && me_().evolve_levels) || [16, 30]; let cur = [sid];
+  while (cur.length && out.length < 4) { out.push({forms: cur, level: out.length ? L[out.length - 1] || null : null}); cur = cur.length === 1 ? nextForms(cur[0]) : []; }
+  return out; }
+function nextForms(sid) { const out = []; for (const e of (pack.species[sid] || {evos: []}).evos) { if (!pack.species[e]) continue; if (pack.species[e].sprite) out.push(e); else out.push(...nextForms(e).filter((x) => !out.includes(x))); } return out; }
+/* what my level makes of a choice, as the server will: as far along the line as it allows, with my picks at branches */
+function arrivalOf(sid) { const me = me_(), L = (me && me.evolve_levels) || [16, 30], level = me ? me.level : 1, stages = L.filter((x) => level >= x).length; let cur = sid, branch = null;
+  for (let i = 0; i < stages; i++) { const n = nextForms(cur); if (!n.length) break; if (n.length === 1) { cur = n[0]; continue; } const p = pick.picks[cur]; if (p && n.includes(p)) { cur = p; continue; } branch = {at: cur, choices: n}; break; }
+  return {sid: cur, branch}; }
+/* how many evolutions lie between the chosen form and this one (the server's steps_from) */
+const stepsFrom = (first, sid) => { let n = 0, cur = sid; while (cur && cur !== first && pack.species[cur]) { cur = pack.species[cur].prevo; n++; } return cur === first ? n : 0; };
+const typeWords = (sid) => pack.species[sid].types.join(" and ");
+const STONE_OF_TYPE = {Grass: "moss", Bug: "moss", Water: "larimar", Ice: "larimar", Flying: "lapis", Dragon: "lapis", Psychic: "amethyst", Poison: "amethyst", Ghost: "amethyst", Fire: "rose", Fighting: "rose", Fairy: "rose", Normal: "flint", Rock: "flint", Steel: "flint", Dark: "flint", Electric: "citrine", Ground: "citrine"};
+const stoneOfSpecies = (sid) => { const t = pack.species[sid].types; return STONE_OF_TYPE[t[0] === "Normal" && t[1] ? t[1] : t[0]] || "flint"; };
+function detailHTML() { const sid = pick.sel; if (!sid || !pack.species[sid]) return ""; const s = pack.species[sid], taken = takenLines(), holder = taken.get(s.line), arr = arrivalOf(sid);
+  const line = lineOf(sid).map((st) => `<li>${st.forms.length === 1 ? pkFace({species: st.forms[0], shiny: false}, 20, "", "", 0) : ic("branch")}<span class="t">${st.forms.map((f) => esc(pack.species[f].name)).join(" or ")}</span><span class="e">${st.level ? `level ${st.level}` : "now"}</span></li>`).join("");
+  const branch = arr.branch ? `<p class="pkbr">Your level passes ${esc(pack.species[arr.branch.at].name)}'s evolution. Choose what it becomes:</p><div class="seg pkpicks">${arr.branch.choices.map((c) => `<button data-pickfor="${esc(arr.branch.at)}" data-pick="${esc(c)}">${esc(pack.species[c].name)}</button>`).join("")}</div>` : "";
+  const sample = `<div class="pksample cl them s-${stoneOfSpecies(arr.sid)}">${pkFace({species: arr.sid, shiny: false}, 28, "", "", 0)}<div class="bl"><p class="b">Morning, team.</p></div></div>`;
+  return `<div class="pkbig2">${pkBig(sid, false, 2)}</div><p class="pkno"><span class="fig">#${String(s.num).padStart(3, "0")}</span> ${esc(s.name)}</p><p class="pkty">${esc(typeWords(sid))}. Your bubbles would be ${stoneOfSpecies(arr.sid)}.</p>`
+    + (holder != null && holder !== ME ? `<p class="pkty bad">${esc(nameOf(holder))} has this line.</p>` : "")
+    + `<div class="sh"><span>Line</span></div><ul class="ls pkline">${line}</ul>${branch}<div class="sh"><span>How it looks</span></div>${sample}`; }
+function drawPickerSide() { const d = $(".pkdetail", panes.Partner); if (d) { d.innerHTML = detailHTML(); host(d); } if (place && place.kind === "partner") drawSide(); }
+function pickerSideHTML() { const taken = [...takenLines()].filter(([, uid]) => partners.partners[uid]).sort((a, b) => nameOf(a[1]).localeCompare(nameOf(b[1])));
+  const rows = taken.map(([, uid]) => `<li>${faceOf(uid, "s20")}<span class="t">${esc(nameOf(uid))}</span><span class="e"><span class="d">${esc(speciesName(partners.partners[uid].species))}</span></span></li>`).join("");
+  const onix = [...pearBots][0], a = partners.agent && partners.agent.species;
+  return `<section class="sec pkcol">${detailHTML()}</section><section class="sec foot"><div class="sh"><span>Taken</span></div><ul class="ls">${rows}${onix && a ? `<li>${faceOf(onix, "s20")}<span class="t">Onix</span><span class="e"><span class="d">${esc(speciesName(a))}</span></span></li>` : ""}</ul></section>`; }
+const pickFree = () => { const s = pick.sel && pack.species[pick.sel]; if (!s) return false; const h = takenLines().get(s.line); return h == null || h === ME; };
+/* a sentence ends in one full stop, also after a name that ends in one ("Mime Jr.") */
+const endSentence = (t) => (t.endsWith(".") ? t : `${t}.`);
+function syncPickVerb() { if (place && place.kind === "partner") go.classList.toggle("armed", pickFree()); }
+function drawPickerBand() { const b = band && band.pk; if (!b) return; const on = !!place && place.kind === "partner" && !!pack; b.hidden = !on; if (!on) return; const me = me_(), sid = pick.sel;
+  if (!sid || !me) { b.textContent = ""; return; } const holder = takenLines().get(pack.species[sid].line);
+  if (holder != null && holder !== ME) { b.textContent = `${nameOf(holder)} has ${pack.species[sid].name}'s line. Choose another.`; return; }
+  const arr = arrivalOf(sid), word = me.xp ? `You are level ${me.level} from your history.` : "You start at level 1.";
+  b.textContent = endSentence(`${word} ${pack.species[sid].name} arrives as ${pack.species[arr.sid].name}${arr.branch ? `, and you choose its evolution` : ""}`); }
+/* the picker's header: line 2 is a switch of text controls (Starters, All, the nine generations), and Later at the right */
+function pickerHead(h) { const say = $(".l2 .say", h), end = $(".l2 .end", h); if (!say || !end) return; const has = !!(me_() && me_().species);
+  const segs = [["starters", "Starters"], ["all", "All"], ...GEN_NAMES.slice(1).map((g) => [g, g])];
+  say.outerHTML = `<div class="seg pkseg" role="tablist" aria-label="Show">${segs.map(([k, l]) => `<button role="tab" data-seg="${k}" aria-selected="${pick.seg === k && !pick.q}"${pick.seg === k && !pick.q ? ' class="on"' : ""}${/^\d$/.test(k) ? ` aria-label="Generation ${k}"` : ""}>${l}</button>`).join("")}</div>`;
+  end.innerHTML = `<button class="lk later" data-later>${has ? "Keep " + esc(speciesName(me_().species)) : "Later"}</button>`; }
+async function choosePick() { if (!pickFree()) { M.refuse(sh); S.play("nope"); return; } const sid = pick.sel, into = Object.values(pick.picks);
+  try { applyPartners(await api("POST", "armada/partner", {species: sid, into})); S.play("tick"); leavePicker(); }
+  catch (e) { note(e.message); if (e.status !== 400) return;
+    /* refused (someone took the line first): the picker shows who has it now; a line the server still does not list as held
+       (its holder is someone I cannot see) is drawn as taken by Someone, so Choose is not armed on it again */
+    const line = pack.species[sid].line; await fetchPartners(false); if (!takenLines().has(line)) { pick.refused.add(line); if (place && place.kind === "partner") { drawPicker(); drawSide(); } } } }
+async function putOff() { const me = me_(); if (me && !me.species && !me.later) { try { applyPartners(await api("POST", "armada/partner", {later: true})); } catch (e) { note(e.message); return; } } leavePicker(); }
+function leavePicker() { const back = pick.back && pick.back.kind !== "partner" ? pick.back : null; pick.q = ""; tx.textContent = ""; syncField(); openPlace(back || HOME); }
+/* changing later: the same place with my partner selected, under the switch that shows it */
+function selectMine() { const me = me_(); if (!me || !me.chosen || !pack.species[me.chosen]) return; pick.sel = me.chosen; pick.q = ""; if (!(pack.starters || []).includes(me.chosen)) pick.seg = String(pack.species[me.chosen].gen); }
+function openPicker() { if (!pack) return; closeCard(); if (place && place.kind !== "partner") pick.back = place; selectMine(); openPlace(PARTNER); }
+
+/* ----- my partner card: a raised card above my own face in the account row. My level and experience, what comes next, my
+   stone, today's experience, Change partner; Evolve when I held it; the branch's choices when it waits on me. ----- */
+let card = null;
+function drawMeRow() { const r = $(".row.me", nav); if (!r) return; const me = me_(), t = el("template"); t.innerHTML = faceOf(ME, "s20"); const f = $(":scope > .av, :scope > .pk", r), neu = t.content.firstElementChild;
+  if (f && neu && f.dataset.fs !== neu.dataset.fs) f.replaceWith(neu);
+  const wait = !!(me && me.ready && !me.held && me.ready.choices.length > 1), mark = $(":scope > .mk", r); if (wait && !mark) r.insertAdjacentHTML("beforeend", mk("needs")); else if (!wait && mark) mark.remove();
+  r.dataset.tip = !pack ? "Signed in as " + meName : me && me.species ? "Your partner" : "Choose your partner"; }
+function openCard() { if (card) { closeCard(); return; } if (!pack) return; const me = me_(); if (!me || !me.species) { openPicker(); return; }
+  card = el("div", "pcard raised float"); card.setAttribute("role", "dialog"); card.setAttribute("aria-label", "Your partner"); document.body.append(card); drawCard(); M.release(card, {y: T["pane-rise"] || 4}, "move"); M.appear(card); }
+function closeCard() { if (!card || card.classList.contains("moment")) return; const c = card; card = null; c.inert = true; M.leave(c); }
+function drawCard() { if (!card || card.classList.contains("moment")) return; const me = me_(); if (!me || !me.species) { closeCard(); return; } const s = pack.species[me.species], r = me.ready;
+  const into = me.next_level_xp ? Math.max(0, Math.min(1, (me.xp - me.level_xp) / (me.next_level_xp - me.level_xp))) : 1;
+  const nx = nextForms(me.species), L = me.evolve_levels || [16, 30], at = L[stepsFrom(me.chosen, me.species)];
+  const next = r && r.kind === "evolve" ? "" : nx.length && at ? `Next: ${nx.map((x) => pack.species[x].name).join(" or ")} at level ${at}.` : nx.length ? "" : me.shiny ? "The end of its line, and shiny." : "The end of its line.";
+  let act = ""; if (r && r.choices.length > 1) act = `<p>${esc(s.name)} can evolve. Choose what it becomes:</p><div class="seg pkpicks">${r.choices.map((c) => `<button data-evolve="${esc(c)}">${esc(pack.species[c].name)}</button>`).join("")}</div>`;
+  else if (r && me.held) act = `<p>You kept ${esc(s.name)} as it is.</p><div class="btns"><button class="go" data-evolve="${esc(r.choices[0])}">${r.kind === "shiny" ? "Make it shiny" : "Evolve"}</button></div>`;
+  card.innerHTML = `<div class="ih"><b>${esc(s.name)}${me.shiny ? " (shiny)" : ""}</b><span class="e">Level <span class="fig">${fig(me.level)}</span></span></div><div class="stage">${pkBig(me.species, me.shiny, 2)}</div>`
+    + `<div class="xpbar" role="img" aria-label="${me.xp} experience"><i style="width:${Math.round(into * 100)}%"></i></div><p class="cap">${me.next_level_xp ? `${me.xp - me.level_xp} of ${me.next_level_xp - me.level_xp} to level ${me.level + 1}` : "Level 100"}. Today +${me.today_xp}.</p>`
+    + (next ? `<p class="cap">${esc(next)}</p>` : "") + `<p class="cap">Your bubbles are ${esc(partnerOf(ME) ? partnerOf(ME).stone : stoneOfSpecies(me.species))}, as others see them.</p>${act}<div class="btns"><button class="btn" data-change>Change partner</button></div>`;
+  host(card); }
+async function evolveTo(into, hold) { try { applyPartners(await api("POST", "armada/partner/evolve", hold ? {hold: true} : {into})); } catch (e) { note(e.message); } }
+
+/* ----- the moment: about 1.4 s in the card, only for me, only when I am idle. Outlines of the old and new forms trade places
+   faster and faster, eight pixels burst, the new form lands in colour with one hop. Any key or a press outside ends it where it
+   stands (the evolution happens); Stop, or Esc with the field empty, keeps the old form (held). It never takes focus. ----- */
+let moment = null, lastKey = -1e9, pressing = false, momentTimer = 0;
+function momentDue() { clearTimeout(momentTimer); const me = me_(); if (!pack || !me || !me.ready || me.held || moment) return; if (me.ready.choices.length > 1) { drawMeRow(); return; }
+  const idle = document.visibilityState === "visible" && !pressing && performance.now() - lastKey >= 3000 && !(document.activeElement === tx && tx.textContent.trim()) && !pal && !menu && !pop && !dialogOpen && !info && !(place && place.kind === "partner");
+  if (idle) playMoment(me.ready.choices[0]); else momentTimer = setTimeout(momentDue, 500); }
+function playMoment(into) { const me = me_(), from = me.species, shiny = me.ready.kind === "shiny"; if (card) { card.remove(); card = null; }
+  moment = {into, from, shiny, done: false, timers: []}; const c = card = el("div", "pcard raised float moment"); c.setAttribute("role", "status"); document.body.append(c);
+  const oldImg = pkBig(from, me.shiny, 2, "old"), newImg = pkBig(into, shiny || me.shiny, 2, "new");
+  c.innerHTML = `<div class="ih"><b>${esc(pack.species[from].name)} is evolving</b><span class="e">Level <span class="fig">${fig(me.level)}</span></span></div><div class="stage">${oldImg}${newImg}<span class="bits"></span></div><p class="say"></p><p class="cap"></p><div class="btns"><button class="btn" data-stop>Stop</button></div>`;
+  const stage = $(".stage", c), o = $(".pk.old", stage), n = $(".pk.new", stage); n.hidden = true; M.release(c, {y: T["pane-rise"] || 4}, "move"); M.appear(c);
+  const at = (ms, fn) => moment.timers.push(setTimeout(fn, ms * M.SLOW)); S.play("evolve");
+  if (M.reduced()) { at(500, () => { o.hidden = true; n.hidden = false; M.appear(n, 0, 200); }); at(700, () => landMoment()); return; }
+  at(340, () => o.classList.add("ghost")); let t = 340, showNew = false;
+  for (const d of [240, 200, 160, 120, 90, 70, 60]) { t += Math.round(d * 0.81); at(t, () => { showNew = !showNew; o.hidden = showNew; n.hidden = !showNew; n.classList.add("ghost"); }); }
+  at(1100, () => { const bits = $(".bits", stage); bits.innerHTML = "<i></i>".repeat(8); stage.classList.add("pulse"); });
+  at(1380, () => landMoment()); }
+function landMoment() { if (!moment || moment.done) return; const c = card, {from, into, shiny} = moment; moment.done = true; moment.timers.forEach(clearTimeout);
+  const o = $(".pk.old", c), n = $(".pk.new", c); if (o) o.hidden = true; if (n) { n.hidden = false; n.classList.remove("ghost"); hopOnce(c.querySelector(".stage")); }
+  const name = pack.species[into].name; $(".ih b", c).textContent = shiny ? `${name} (shiny)` : name; $(".say", c).textContent = shiny ? `${name} turned shiny.` : `${pack.species[from].name} evolved into ${name}.`;
+  const nx = nextForms(into), L = (me_() && me_().evolve_levels) || [16, 30], lvl = L[stepsFrom(me_().chosen, into)];
+  $("p.cap", c).textContent = `Your bubbles ${stoneOfSpecies(into) === stoneOfSpecies(from) ? "stay" : "are now"} ${stoneOfSpecies(into)}.${nx.length && lvl ? ` Next: ${nx.map((x) => pack.species[x].name).join(" or ")} at level ${lvl}.` : ""}`;
+  const st = $("[data-stop]", c); if (st) st.remove(); evolveTo(into, false);
+  setTimeout(() => endMoment(), 4000 * M.SLOW); }
+/* a key or a press outside: the evolution happens and the card shows its end at once, then fades */
+function cutMoment() { if (!moment) return; if (!moment.done) landMoment(); endMoment(true); }
+function endMoment(now_) { if (!moment || !card) { moment = null; return; } if (!now_ && card.matches(":hover")) { setTimeout(() => endMoment(), 1000); return; } const c = card; card = null; moment = null; c.inert = true; M.leave(c); }
+function holdMoment() { if (!moment || moment.done) return; moment.timers.forEach(clearTimeout); const c = card, from = moment.from; moment = null; c.classList.remove("moment");
+  const o = $(".pk.old", c), n = $(".pk.new", c); if (o) { o.hidden = false; o.classList.remove("ghost"); } if (n) n.hidden = true; $(".stage", c).classList.remove("pulse"); $(".bits", c).innerHTML = "";
+  $(".ih b", c).textContent = pack.species[from].name; $(".say", c).textContent = `${pack.species[from].name} stays as it is. Evolve it from this card when you like.`; evolveTo(null, true).then(() => drawCard()); }
 
 /* ---------- the Lab: what is real, what is not, and the few real controls ---------- */
 const NOT = ["New, the workspace menu, More in the header; settings", "The keyboard selection of messages; a reaction picker (React and a double press give 👍; a chip toggles)", "Queue (⌘Return), sub-agents, the trace, artifacts, monitors", "Diffs, Commit, pull requests, file editing, syntax colour in Files", "The checklist as a sheet below 1408 px", "Sending my own typing; presence after load; moved or renamed topics; channels I am not subscribed to", "The typing bubble growing into the message (it appears, it does not morph)"];
@@ -1012,16 +1426,30 @@ function drawLab() { if (!lab || !lab.classList.contains("open")) return; const 
     <h4>Measured in this page</h4><p class="num">Last send: task ${last ? last.task + " ms" : "none yet"}, Return to bubble painted ${last && last.painted != null ? last.painted + " ms" : "none yet"}<br>First streamed event to its words painted: ${fw != null ? fw + " ms" : "none yet"}<br>Last run: ${rn ? `${rn.events} events in ${rn.seconds} s (${rn.perSecond} per second)` : "none yet"}<br>Events handled: ${stats.events}. Requests made: ${stats.api}.</p>
     <h4>Not in the beta yet</h4><ul>${NOT.map((x) => `<li>${x}</li>`).join("")}</ul>
     <p style="color:var(--ink-2)">Return sends. In a repository the Onix switch in the field is off until you turn it on there; on, Return starts a run, and while a run is live it steers it (⌘. stops it). Writing @Onix asks it either way. ⌘K jumps anywhere.</p>`; }
-function note(text) { M.say(go, text, 2400); }
+/* what Tab stops on, in document order: what the browser would stop on, shown and not inert */
+const tabStops = () => $$("a[href], button, input, [tabindex], [contenteditable]").filter((x) => x.tabIndex >= 0 && !x.disabled && !x.hidden && !x.closest("[inert], [hidden]") && x.getClientRects().length > 0 && getComputedStyle(x).visibility !== "hidden");
+function note(text) { M.say(go, agentText(text), 2400); }
 
 /* ---------- start ---------- */
+/* the themed marks (the ball for a live run, the egg for a queued one) are not in git: the server serves them from its
+   git-ignored web/sprites/licensed/marks/ to signed-in people (zerver/views/armada_beta.py). They are read before the
+   first draw, as data: only each path's tone and its drawing commands are kept. Without them the plain dot and ring are
+   drawn (kit/marks.js). */
+async function loadThemedMarks() {
+  const get = async (name) => { try { const r = await fetch(`/beta/sprites/marks/${name}`, {credentials: "same-origin", redirect: "error"}); if (!r.ok) return null;
+    const doc = new DOMParser().parseFromString(await r.text(), "image/svg+xml"); return doc.querySelector("parsererror") ? null : doc.documentElement; } catch (e) { return null; } };
+  const paths = (root) => [...root.querySelectorAll("path")].map((x) => { const d = x.getAttribute("d") || "", t = x.getAttribute("class"); return /^[MmHhVvZz0-9.\s-]+$/.test(d) ? `<path${t === "t-b" || t === "t-h" ? ` class="${t}"` : ""} d="${d}"/>` : ""; }).join("");
+  const [ball, egg] = await Promise.all([get("ball.svg"), get("egg.svg")]), themed = window.BETA_THEMED;
+  if (ball) { const frames = [...ball.children].filter((g) => g.tagName === "g").map(paths); if (frames.length === 3 && frames.every(Boolean)) themed.live = {frames, rest: frames[1]}; }
+  if (egg) { const d = paths(egg); if (d) themed.queued = {rest: d}; }
+}
 async function register() {
-  const r = await api("POST", "register", {fetch_event_types: ["subscription", "realm_user", "presence", "update_message_flags", "message", "recent_private_conversations", "realm_bot", "stream"], event_types: ["message", "update_message", "reaction", "pear_run", "pear_workspace_changed", "typing", "delete_message", "update_message_flags"], apply_markdown: true, client_gravatar: false,
+  const r = await api("POST", "register", {fetch_event_types: ["muted_users", "subscription", "realm_user", "presence", "update_message_flags", "message", "recent_private_conversations", "realm_bot", "stream"], event_types: ["message", "update_message", "reaction", "pear_run", "pear_workspace_changed", "typing", "delete_message", "update_message_flags"], apply_markdown: true, client_gravatar: false,
     client_capabilities: {notification_settings_null: true, bulk_message_deletion: true, user_avatar_url_field_optional: false, stream_typing_notifications: true, user_settings_object: true, linkifier_url_template: true, user_list_incomplete: false, include_deactivated_groups: false, archived_channels: false, empty_topic_name: true}});
   if (!r.user_id || (ME && r.user_id !== ME)) { signedOut(); throw Object.assign(new Error("Signed out"), {status: 401}); }   /* no session: the server registered a spectator */
   queue = r.queue_id; lastEvent = r.last_event_id; skew = r.server_timestamp * 1000 - Date.now(); ME = r.user_id; meName = r.full_name; presences = r.presences || {};
   people.clear(); for (const u of [...(r.realm_users || []), ...(r.cross_realm_bots || [])]) people.set(u.user_id, {id: u.user_id, name: u.full_name, email: u.email, bot: u.is_bot, active: u.is_active !== false});
-  pearBots.clear(); (r.pear_bot_user_ids || []).forEach((i) => pearBots.add(i));
+  pearBots.clear(); (r.pear_bot_user_ids || []).forEach((i) => pearBots.add(i)); muted = new Set((r.muted_users || []).map((u) => u.id));
   streams.clear(); for (const s of r.subscriptions || []) if (!s.is_archived) streams.set(s.stream_id, s);
   repoStreams.clear(); (r.pear_project_stream_ids || []).forEach((i) => streams.has(i) && repoStreams.add(i));
   dms = (r.recent_private_conversations || []).slice(0, 12);
@@ -1030,11 +1458,12 @@ async function register() {
 async function boot() {
   store.del("onyx");   /* the old switch for every place */
   const bootEl = el("div", "", "Loading"); bootEl.id = "boot"; document.body.append(bootEl);
-  try { await register(); api("GET", "pear/session").then((r) => { if (r.pear_session && r.pear_session.agent_mention) agentMention = r.pear_session.agent_mention; }).catch(() => {}); }
+  try { await Promise.all([register(), loadThemedMarks(), loadPartners()]); api("GET", "pear/session").then((r) => { if (r.pear_session && r.pear_session.agent_mention) agentMention = r.pear_session.agent_mention; }).catch(() => {}); }
   catch (e) { if (signedOut.done) { bootEl.remove(); return; } bootEl.innerHTML = `<p>The beta could not load: ${esc(e.message)}. <a href="/">Open the old interface</a></p>`; return; }
   frame({nav: "", path: "", title: "", dist: "", commit: {who: "", sha: "", subj: "", age: ""}, tab: "Chat", checklist: {title: "Checklist"}, band: {}, composer: {text: "", verb: "Send", mode: "", focus: false}});
   main = $("main"); feed = $("#pane"); lane = $("#col"); nav = $("nav"); side = $("#side"); outline = $("#outline"); hd = $("main > header.hd");
   band = {el: $("main > .band"), ty: $("#ty"), run: $("#run"), jump: $("#jump"), clock: $("#clock"), st: $("#run-st"), act: $("#act"), stop: $("#stop")};
+  band.pk = el("p", "pkb"); band.pk.hidden = true; $(".lane", band.el).append(band.pk);   /* the picker's one sentence */
   cz = $("main > .dock .cz"); tx = $(".tx", cz); sh = $(".sh", cz); go = $(".disc", cz); goc = $(".disc .cell", cz); ph = $(".ph", cz); toBtn = $(".k.to", cz); modeBtn = $(".k.mode", cz);
   panes = {Chat: feed}; $$("main > .pane[data-pane]").forEach((x) => (panes[x.dataset.pane] = x));
   $$(".slot > i, .pc > i").forEach((i) => i.classList.add("sz"));
@@ -1042,7 +1471,17 @@ async function boot() {
   /* the nav: the kit's top row, a scroller of real places, and me */
   const top = $(".top", nav); nav.textContent = ""; navScroll = el("div", "scroll"); navFixed = el("div", "fixed", `<button class="row" data-k="jump" data-tip="Jump to" data-key="⌘K">${ic("search")}<span class="lab">Jump to</span></button><button class="row" data-k="home">${ic("home")}<span class="lab">Home</span></button><a class="row old" href="/" data-tip="The old interface, with everything the beta does not have yet">${ic("open")}<span class="lab">Old interface</span></a>`);
   nav.append(top, navFixed, navScroll); const meRow = el("button", "row me", `${faceOf(ME, "s20")}<span class="lab">${esc(meName)}</span>`); nav.append(meRow); host(nav);
-  $(".wk-name", top).dataset.tip = "The workspace menu is in the old interface"; $(".new", top).dataset.tip = "New: in the old interface for now"; meRow.dataset.tip = "Signed in as " + meName;
+  $(".wk-name", top).dataset.tip = "The workspace menu is in the old interface"; $(".new", top).dataset.tip = "New: in the old interface for now"; meRow.dataset.tip = "Signed in as " + meName; drawMeRow();
+  /* my face opens my partner's card (or the picker, before I have one); the picker's switch, Later, its cells; the card's controls */
+  press(nav, ".row.me", () => { if (pack) openCard(); ready(); });
+  press(main, "[data-seg]", (b) => { pick.seg = b.dataset.seg; if (pick.q) { pick.q = ""; tx.textContent = ""; syncField(); } pick.sel = null; hd._sig = ""; drawHeader(); drawPicker(); drawPickerBand(); panes.Partner.scrollTop = 0; ready(); });
+  press(main, "[data-later]", () => putOff());
+  press(panes.Partner, ".pkc", (b) => { selectCell(b.dataset.sid); drawPickerBand(); ready(); });
+  panes.Partner.addEventListener("dblclick", (e) => { const b = e.target.closest(".pkc"); if (b) { selectCell(b.dataset.sid); choosePick(); } });
+  press(document.body, "[data-pick]", (b) => { pick.picks[b.dataset.pickfor] = b.dataset.pick; drawPickerSide(); drawPickerBand(); ready(); });
+  press(document.body, ".pcard [data-change]", () => openPicker());
+  press(document.body, ".pcard [data-evolve]", (b) => playMoment(b.dataset.evolve));
+  press(document.body, ".pcard [data-stop]", () => { holdMoment(); ready(); });
   /* attach: the Plus opens the file chooser; a paste or a drop of files does the same */
   fileIn = el("input"); fileIn.type = "file"; fileIn.multiple = true; fileIn.hidden = true; document.body.append(fileIn); fileIn.addEventListener("change", () => { [...fileIn.files].forEach(upload); fileIn.value = ""; ready(); });
   tx.addEventListener("paste", (e) => { const f = [...(e.clipboardData && e.clipboardData.files || [])]; if (f.length) { e.preventDefault(); f.forEach(upload); } });
@@ -1053,18 +1492,25 @@ async function boot() {
   /* the field */
   toBtn.insertAdjacentHTML("beforeend", '<span class="tl">Onix</span>'); toBtn.classList.replace("sq", "w");   /* the switch says its name, in both states */
   cz.classList.remove("is-focus", "has-text", "is-off"); tx.innerHTML = ""; tx.contentEditable = "plaintext-only"; tx.classList.add("m-caret", "idle"); go.classList.remove("armed");
-  let caret = 0; tx.addEventListener("input", () => { syncField(); go.classList.toggle("armed", !!tx.textContent.trim()); tx.classList.remove("idle"); clearTimeout(caret); caret = setTimeout(() => tx.classList.add("idle"), T["caret-hold"] || 600); });
-  tx.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); send({at: e.timeStamp}); go.classList.remove("armed"); return; }
+  let caret = 0; tx.addEventListener("input", () => { syncField(); go.classList.toggle("armed", !!tx.textContent.trim()); tx.classList.remove("idle"); clearTimeout(caret); caret = setTimeout(() => tx.classList.add("idle"), T["caret-hold"] || 600);
+    if (place && place.kind === "partner") { pick.q = tx.textContent; pick.sel = null; hd._sig = ""; drawHeader(); drawPicker(); drawPickerBand(); } });   /* on the picker the field is its search, across every generation */
+  tx.addEventListener("keydown", (e) => { if (place && place.kind === "partner" && !e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey) {   /* the picker: arrows move through the grid, Return chooses, Esc clears the search */
+      if (/^Arrow(Up|Down|Left|Right)$/.test(e.key)) { e.preventDefault(); movePick(e.key); drawPickerBand(); return; }
+      if (e.key === "Escape" && tx.textContent) { e.preventDefault(); e.stopPropagation(); tx.textContent = ""; tx.dispatchEvent(new Event("input")); return; } }
+    if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); send({at: e.timeStamp}); if (!(place && place.kind === "partner")) go.classList.remove("armed"); return; }
     if (e.key === "Escape" && editing) { e.preventDefault(); e.stopPropagation(); endEdit(); return; }
     if (e.key === "ArrowUp" && !tx.textContent && !editing && !e.shiftKey && !atts.length && !pop) { const m = P && P.msgs.filter((x) => x.sender_id === ME && typeof x.id === "number" && !x.thread_root_message_id).pop(); if (m) { e.preventDefault(); startEdit(m); } } });   /* Up in an empty field edits my last message */
   go.addEventListener("click", (e) => { send({at: e.timeStamp}); go.classList.remove("armed"); });
   /* a press on a control does not take focus from the field */
-  const KEEP = ".tab, nav .row, nav .mo, .cz button, .rc, .jump, .stop, .prog, .sec .lk, .ls > li, [data-thread], .tree .row, .line .lk, .bl > .lk, .hd button, .mo, .over .c, .menu .mi, .pop button, .pal .mi, .opt, .hrow, .dlg button";
+  const KEEP = ".tab, nav .row, nav .mo, .cz button, .rc, .jump, .stop, .prog, .sec .lk, .ls > li, [data-thread], .tree .row, .line .lk, .bl > .lk, .hd button, .mo, .over .c, .menu .mi, .pop button, .pal .mi, .opt, .hrow, .dlg button, .rt, .info button, .pcard button, .pkc, .pkseg button, [data-later], [data-pick]";
   document.addEventListener("mousedown", (e) => { if (e.target.closest && e.target.closest(KEEP)) e.preventDefault(); }, true);
   /* the field is ready after everything: a press that ends anywhere outside a control or a selection hands the caret back */
   document.addEventListener("mouseup", (e) => setTimeout(() => { const a = document.activeElement; if (a === tx || (a && a.closest("#lab, input, textarea, .thr-in .tx, .pal, .dlg, .pop")) || (e.target.closest && e.target.closest("#lab")) || !getSelection().isCollapsed) return; ready(); }, 0));
   /* a press outside a menu, the picker or the palette closes it and keeps what was pressed */
-  addEventListener("pointerdown", (e) => { if (menu && !e.target.closest(".menu")) closeMenu(); if (pop && !e.target.closest(".pop, .k.mode")) closePicker(); if (pal && !e.target.closest(".pal")) palette(false); }, true);
+  addEventListener("pointerdown", (e) => { pressing = true; if (moment && !e.target.closest(".pcard")) cutMoment(); else if (card && !e.target.closest(".pcard, .row.me")) closeCard();
+    if (info && !e.target.closest(".info, .rt")) closeInfo(true);
+    if (menu && !e.target.closest(".menu")) closeMenu(); if (pop && !e.target.closest(".pop, .k.mode")) closePicker(); if (pal && !e.target.closest(".pal")) palette(false); }, true);
+  addEventListener("pointerup", () => { pressing = false; }, true); addEventListener("pointercancel", () => { pressing = false; }, true);
   M.wire(); M.warm();
   press(navFixed, ".row[data-k]", (r) => { if (r.dataset.k === "jump") palette(); else openPlace(HOME); });
   press(navScroll, ".row", (r) => { const k = r.dataset.k; if (k.startsWith("c:")) { toggleStream(+k.slice(2)); ready(); return; } openPlace(placeFromKey(k)); });
@@ -1084,23 +1530,40 @@ async function boot() {
   press(lane, ".rc", (rc) => { const part = rc.closest(".rcs"), m = P.byId.get(+part.dataset.mid); if (m) react(m, {emoji_name: rc.dataset.name, emoji_code: rc.dataset.code, reaction_type: rc.dataset.type}); ready(); });
   press(lane, "[data-thread]", (b) => { openThread(+b.dataset.thread, false, {focus: true}); });
   press(lane, "[data-retry]", (b) => retry(b.dataset.retry));
+  press(lane, ".rt[data-info]", (b, e, ptr) => { const id = +b.dataset.info; if (Number.isFinite(id)) toggleInfo(id, b, !ptr); else ready(); });
+  press(main, "[data-info-retry]", () => { if (info) fetchReceipts(info.id, {force: true, retry: true}); });
   press($("#tree"), ".row", (r) => pickEntry(r));
   /* a double press on a message is my thumbs-up (React in the overlay does the same) */
   lane.addEventListener("dblclick", (e) => { const n = e.target.closest("[data-mid]"); if (!n || e.target.closest(".rc, button, a")) return; const m = P.byId.get(+n.dataset.mid); if (m) { getSelection().removeAllRanges(); react(m, {emoji_name: "+1", emoji_code: "1f44d", reaction_type: "unicode_emoji"}); } ready(); });
   feed.addEventListener("scroll", () => { edge(); if (tab !== "Chat") return; if (Math.abs(feed.scrollTop - lastSet) < 1) return; lastSet = -1; pinned = dist() < 4; syncJump();
     if (feed.scrollTop < 240 && P && P.loaded && !P.oldest && !P.loading) { const c = P; fetchMsgs(c, true).then(() => { if (P === c) drawLane({keep: true}); }); const mu = $(".more-up", lane); if (mu) mu.textContent = "Loading earlier messages"; } }, {passive: true});
+  navScroll.addEventListener("scroll", navMore, {passive: true}); new ResizeObserver(navMore).observe(navScroll);
+  /* a wrapped bubble keeps hugging its words when the lane's width changes, and once the faces have loaded */
+  let laneW = 0; new ResizeObserver(() => { const w = lane.clientWidth; if (w === laneW) return; laneW = w; $$(".cl", lane).forEach((x) => toHug.add(x)); hugAll(); }).observe(lane);
+  document.fonts.ready.then(() => { $$(".cl", lane).forEach((x) => toHug.add(x)); hugAll(); });
   feed.addEventListener("wheel", haltLane, {passive: true}); feed.addEventListener("touchstart", haltLane, {passive: true});
   band.el.addEventListener("wheel", (e) => { if (tab !== "Chat") return; haltLane(); feed.scrollTop += e.deltaY; }, {passive: true});
   new ResizeObserver(() => { if (tab === "Chat" && pinned) pin(); syncJump(); }).observe(feed);
   let dockH = 0; new ResizeObserver(([e]) => { const h = e.borderBoxSize ? e.borderBoxSize[0].blockSize : e.contentRect.height, was = dockH; dockH = h; if (!was || h === was || tab !== "Chat") return; if (pinned) { pin(); M.release(lane, {y: h - was}, "touch"); } M.release(band.el, {y: h - was}, "touch"); }).observe($("main > .dock"));
   new ResizeObserver(() => fitLists(side)).observe(outline);
-  new ResizeObserver(() => { if (tab === "Chat" && pinned && !M.current(lane)[0].y) { pin(); edge(); } }).observe(lane);   /* a face that loads late, an image that arrives: the end stays the end */
-  addEventListener("keydown", (e) => { const mod = e.metaKey || e.ctrlKey; if (mod && e.key === ".") { e.preventDefault(); stop(); return; }
+  new ResizeObserver(() => { if (tab === "Chat" && pinned && !M.current(lane)[0].y) { pin(); edge(); } }).observe(lane, {box: "border-box"});   /* a face that loads late, an image that arrives, the room a live run keeps (the lane's padding): the end stays the end */
+  addEventListener("keydown", (e) => { lastKey = performance.now();
+    if (moment) { if (e.key === "Escape" && !moment.done && !tx.textContent.trim()) { e.preventDefault(); holdMoment(); return; } cutMoment(); }   /* any key ends the moment where it stands (the evolution happens) and goes on to the field; Esc with the field empty keeps the old form */
+    if (card && e.key === "Escape") { e.preventDefault(); closeCard(); ready(); return; }
+    const mod = e.metaKey || e.ctrlKey; if (mod && e.key === ".") { e.preventDefault(); stop(); return; }
     if (mod && e.key.toLowerCase() === "k") { e.preventDefault(); palette(); return; }
     if (mod && e.key === "/") { e.preventDefault(); togglePicker({kbd: true}); return; }
     if (pop && (e.key === "ArrowDown" || e.key === "ArrowUp") && !pop.contains(document.activeElement)) { e.preventDefault(); focusPop(); return; }   /* opened with the pointer: an arrow goes into it */
     if (menu && menu._key(e)) return;
+    /* Tab goes round the page: from the last stop to the first (the nav), never onto the page itself in between */
+    if (e.key === "Tab" && !e.defaultPrevented && !mod && !e.altKey) { const all = tabStops(), i = all.indexOf(document.activeElement);
+      if (all.length && !e.shiftKey && i === all.length - 1) { e.preventDefault(); all[0].focus(); return; }
+      if (all.length && e.shiftKey && i === 0) { e.preventDefault(); all[all.length - 1].focus(); return; } }
     if (pop && e.key === "Escape") { e.preventDefault(); closePicker(); return; }
+    if (e.key === "Escape" && info) { e.preventDefault(); closeInfo(); return; }
+    /* I: Info on the message I stand on (its turn in the Tab order, or under the pointer with its controls up) */
+    if (RECEIPTS && !mod && !e.altKey && (e.key === "i" || e.key === "I") && !info) { const a = document.activeElement, t = a && a.dataset && a.dataset.door ? a : a && over && over.contains(a) ? overAt : null, m = t && msgOf(t);
+      if (m && typeof m.id === "number") { e.preventDefault(); openInfo(m.id, a, true); return; } }
     if (e.key === "Escape") { if (lab.classList.contains("open")) lab.classList.remove("open"); else if (editing) endEdit(); else if (threadTx) threadTx = null; else if (answering()) { P.answering = false; drawRunState(); } ready(); return; }
     const onControl = !!document.activeElement && document.activeElement !== document.body && document.activeElement.matches("button, a, [role=button], [tabindex]:not(#pane)");   /* Space there presses it */
     if (e.key === " " && onControl) return;
@@ -1108,8 +1571,10 @@ async function boot() {
     if (!mod && !e.altKey && e.key.length === 1 && tab === "Chat" && document.activeElement !== tx && !(document.activeElement && document.activeElement.closest("#lab, input, textarea"))) ready(); });   /* a letter typed anywhere goes to the field */
   addEventListener("popstate", () => { const p = placeFromHash(); if (p) openPlace(p, {keepHash: true}); });
   addEventListener("hashchange", () => { const p = placeFromHash(); if (p && (!place || p.key !== place.key)) openPlace(p, {keepHash: true}); });
-  document.addEventListener("visibilitychange", () => { if (document.hidden) return; askSession(); if (P) markRead(P); });
-  addEventListener("focus", askSession);
+  document.addEventListener("visibilitychange", () => { if (document.hidden) return; askSession(); if (P) markRead(P); signOfLife(); refreshPartners({wait: 500}); });
+  setInterval(() => refreshPartners({wait: 0}), 120000);   /* the team's partners: a choice or an evolution elsewhere shows here within two minutes */
+  addEventListener("focus", () => { askSession(); signOfLife(); });
+  setInterval(() => pollReceipts(), RCPT_POLL);
   setInterval(() => tick(false), 500);
   setInterval(sweepAsks, 5000);   /* a question past the server's wait stops reading as waiting, with no event to say so */
   setInterval(() => { if (P && P.ctx && hd) { hd._sig = ""; drawHeader(); } }, 60000);
@@ -1121,12 +1586,16 @@ async function boot() {
   if (!p) { const s = subs()[0]; if (s) { expanded.add(s.stream_id); await loadTopics(s.stream_id); const t = (topicsOf.get(s.stream_id) || [])[0]; if (t) p = placeFromKey(tkey(s.stream_id, t.name)); } }
   if (p && p.kind === "topic") { await loadTopics(p.stream_id); const t = (topicsOf.get(p.stream_id) || []).find((x) => x.name.toLowerCase() === p.topic.toLowerCase()); if (t) p.topic = t.name; }
   if (!p && dms[0]) p = placeFromKey(dkey(dms[0].user_ids));
+  /* the first visit after partners arrived: the page opens on the picker, and keeps where it was going for afterwards */
+  if (pack && me_() && !me_().species && !me_().later && (!p || p.kind !== "partner")) { pick.back = p; p = PARTNER; }
+  if (p && p.kind === "partner") selectMine();
   bootEl.remove();
   if (p) openPlace(p, {replace: true}); else drawNav();
+  setTimeout(momentDue, 3000);   /* an evolution ready at load plays after the first idle 3 s */
   poll();
   /* Home needs every worktree's runs and my unread mentions: asked once, after the first place is drawn, then kept by events */
   setTimeout(() => { scanAll(); if (!place || place.kind !== "home") fetchMentions(); }, 300);   /* Home, opened first, has asked for them already */
 }
-window.armadaBeta = {stats, get place() { return place; }, get cache() { return P; }, openPlace: (k) => openPlace(placeFromKey(k)), tkey, dkey, streams, send, stop, setTab, marks, unread, runsSeen, palette, togglePicker, openThread, startEdit, confirmDelete, get verb() { return verb; }, get atts() { return atts; }, QUESTION_TIMEOUT, sweepAsks, handle, redraw: () => { if (place && place.kind !== "home") { drawRunState(true); drawAsks(); } drawNav(); drawHomeRow(); }};   /* for checks from a driver */
+window.armadaBeta = {get partners() { return partners; }, get pack() { return !!pack; }, applyPartners, refreshPartners, openCard, openPicker, playMoment, get moment() { return moment; }, hopOnce, stats, get place() { return place; }, get pinned() { return pinned; }, get cache() { return P; }, openPlace: (k) => openPlace(placeFromKey(k)), tkey, dkey, streams, send, stop, setTab, marks, unread, runsSeen, palette, togglePicker, openThread, startEdit, confirmDelete, get verb() { return verb; }, get atts() { return atts; }, QUESTION_TIMEOUT, sweepAsks, handle, redraw: () => { if (place && place.kind !== "home") { drawRunState(true); drawAsks(); } drawNav(); drawHomeRow(); }};   /* for checks from a driver */
 document.addEventListener("DOMContentLoaded", boot);
 })();

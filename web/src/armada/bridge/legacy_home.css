@@ -9,6 +9,24 @@
         margin-inline: var(--lx) 0;
     }
 
+    /* Their own ground was the old page's; the frame's plane is theirs
+       now, in both themes. What sticks to the pane's top keeps a ground,
+       the plane's, so that rows pass under it. */
+    #inbox-view .inbox-container {
+        min-height: 100%;
+        background-color: transparent;
+    }
+
+    #inbox-view .inbox-container #inbox-pane .search_group,
+    #recent_view .recent_view_container #recent_view_table {
+        background-color: var(--content);
+    }
+
+    /* No field stands under Home: no room is kept for one. */
+    #recent_view {
+        padding-bottom: 0;
+    }
+
     #recent_view_bottom_whitespace {
         height: auto;
     }

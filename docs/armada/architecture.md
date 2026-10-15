@@ -15,20 +15,22 @@ build plan in `var/armada-overhaul/design/final3/PLAN.md`.
 
 This file is maintained by hand, from documents that are not in the
 repository: `var/armada-overhaul/design/final3/SPEC-ENGINEERING.md` and
-`PLAN.md` (the engineering specification and the plan; last changed at 02:24
-on 14 October 2026), the user's brief (`var/armada-overhaul/BRIEF.md`, through
-statement 21), and the reports of the packages built so far
-(`var/armada-overhaul/build/F0.md` to `F4.md`), where they record what was
-built differently from the specification. No script writes it. A change to
-the design or to the plan is made in this file as well, by whoever makes it,
-and this file is what the code is held to.
+`PLAN.md` (the engineering specification and the plan; last changed on 15
+October 2026, from the corrections of F2b and F5 listed in
+`var/armada-overhaul/build/STAGE-NOTES.md`), the user's brief
+(`var/armada-overhaul/BRIEF.md`, through statement 21, and statement 24 for
+the beta's partners), and the reports of the packages built so far
+(`var/armada-overhaul/build/F0.md` to `F5.md`), where they record what was
+built differently from the specification. No script writes it. A change to the
+design or to the plan is made in this file as well, by whoever makes it, and
+this file is what the code is held to.
 
 ## The decisions on one page
 
 | Question                | Decision                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Targets                 | Electron is the main target. Chromium 132 and later (Electron 34 and later) and Safari 18 and later are gated; Firefox 140 and later is best effort and not gated. English only. The user accepted these on 14 October. The frame is drawn from 1100 px wide; below 1040 the nav becomes a sheet; phones are not drawn (the plan's reading, not the user's word). Polyfills and old-browser fallbacks are deleted.                                                                                                                                                                                                                                        |
-| Frame                   | One CSS grid written once in the server template, the same on every place: a worktree, a channel, a direct message and Home have one two-line header, one lane, one column, one band and one field. The document never scrolls. Each pane owns one native scroller. The conversation and the column beside it are one centred composition, computed in CSS from the pane's width; the column stands when the pane is 1160 or wider (a 1408 window), on every place **(P-8)**, and it is not a grid track.                                                                                                                                                 |
+| Frame                   | One CSS grid written once in the server template, the same on every place: a worktree, a channel, a direct message and Home have one two-line header, one lane, one column, one band and one field. The document never scrolls. Each pane owns one native scroller. The conversation and the column beside it are one centred composition, computed in CSS from the window's width less the nav; the column stands when the pane is 1160 or wider (a 1408 window), on every place **(P-8)**, and it is not a grid track.                                                                                                                                  |
 | Feed scroll             | A block scroller with `overflow-anchor: none` and one controller: a pinned flag kept by the scroll event, one ResizeObserver through which every height change passes.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | Rendering               | Preact `.tsx` for all chrome, on a kit. The feed is an imperative keyed renderer in plain TypeScript, with no Preact, jQuery or Handlebars in it. The field is a native `<textarea>`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | State                   | One small store per domain; views read stores and emit intents; only `api/` touches the network. Runs are realm-wide, fed by a snapshot in `/register` and by events.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
@@ -216,10 +218,16 @@ place: a two-line header, the conversation's lane, the column beside it, the
 band and the field. The document never scrolls; each pane owns one native
 scroller. The conversation and the column are one centred composition computed
 in CSS from the pane's width (`--col`, `--side-w`, `--side-gap`, `--comp`,
-`--lx`); no script writes them. The column is positioned over the grid and is
-not a track, so that showing or folding it moves nothing. Layout is read only
-in the after-layout phase (`frame/after_layout.ts`, `motion/`, `feed/scroll.ts`,
-`surfaces/composer/origin.ts`), never after a write inside an input task.
+`--lx`); no script writes them. The pane's width is the window's less the nav
+(`--W`), switched by a media query on a 1408 window (`frame/frame.css`), and
+not read from the plane as a size container: the field sits in the plane on an
+`auto` track, so a size container restyled the whole plane on every key (1.45
+ms of style a key, F5). A media query cannot read `--nav-w`, so when the nav
+becomes draggable, B1 moves the threshold with it. The column is positioned
+over the grid and is not a track, so that showing or folding it moves nothing.
+Layout is read only in the after-layout phase (`frame/after_layout.ts`,
+`motion/`, `feed/scroll.ts`, `surfaces/composer/origin.ts`), never after a
+write inside an input task.
 
 ## Rendering
 
@@ -311,7 +319,7 @@ its budget. Checks the table calls new are created by the plan's packages.
 | message search results                         | a search is run from the palette                                                           | never                                          |
 | sound buffers                                  | rendered on the first gesture; the `AudioContext` does not exist before it, or while muted | n/a                                            |
 
-**Gone from every bundle:** the Handlebars compiler (one import, 208 kB minified), Sentry (370 kB), core-js and the `light-dark()` expansion, jquery-validation, both emoji sprite sheets, FontAwesome, flatpickr, the 24 webpack entries Armada does not serve. Kept entries: `app`, `common`, `signup`, `register`, `dev-login`, `error-styles`, `desktop-login`, and the dev showroom.
+**Gone from every bundle:** the Handlebars compiler (one import, 208 kB minified), Sentry (370 kB), core-js, regenerator-runtime and the `light-dark()` expansion, jquery-validation, both emoji sprite sheets, FontAwesome, flatpickr, and the webpack entries of pages Armada stops serving, each with its route (K-96). Kept entries: `app`, `common`, `signup`, `register`, `dev-login`, `error-styles`, `desktop-login`, the dev showroom, and four pages Armada serves: `portico` (error and account pages), `redirect-to-post` (the link in a sign-up email), `desktop-redirect` (the desktop app's sign-in) and `help` (`/policies/`).
 
 ## Names
 
@@ -321,3 +329,10 @@ its budget. Checks the table calls new are created by the plan's packages.
 | **Onyx**   | the agent, to people. It is one server constant, sent to clients in `/register`; strings say `{agent}`. The mention is `@**Onyx**`. No file, class, token or identifier is named after the agent: it was renamed once already. Code says `agent`, `run`, `worktree`, `repository`                                                                                                                     |
 | **pear**   | the wire and the server until its own rename: `Pear*` models, `/json/pear/` routes, `PEAR_*` settings, `pear_run` and the new `pear_stream`, `pear_topic` and `pear_runtime` events, management commands, deploy scripts. New server code written by this plan stays in that namespace, so the later rename is one mechanical pass. In the frontend the word may appear only in `web/src/armada/api/` |
 | **Zulip**  | nowhere in the interface                                                                                                                                                                                                                                                                                                                                                                              |
+
+The hosted beta's partners (the Pokémon each person chooses, which levels up
+and evolves with use) have no model yet: until the rename step (statement 24)
+moves them to a `Partner` model with its migration, each person's row is JSON
+in a `BotStorageData` row under the agent's bot, key `partner:<user_id>`,
+written only by `zerver/lib/partner.py`. No other application code reads or
+writes those rows.

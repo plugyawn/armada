@@ -100,7 +100,9 @@ say so.
 The plan is `var/armada-overhaul/design/final3/PLAN.md`: 35 packages in
 five stages. Each package's report is
 `var/armada-overhaul/build/<id>.md`, with its verification beside it.
-Nothing is committed yet. Built so far, the Foundation packages:
+A checkpoint of the work is committed and pushed on `ui-overhaul`
+(`89fb6f54e4`, 14 October, before the rename of "pear"); work since then
+is uncommitted on top of it. Built so far, the Foundation packages:
 
 - **F0, pins**: the behaviour checks in `tools/armada-checks/` (feed,
   echo, keyboard, stream, parts, interaction stability), the breakages
@@ -169,7 +171,7 @@ limactl shell armada -- arm shot <scenario>    # screenshots of the running app
 ```
 
 `tools/lint` here also lints files git does not track yet, because the
-rebuild's work is uncommitted until its orchestrator commits it.
+rebuild's work is uncommitted between the orchestrator's commits.
 
 **The gates.** A change is finished when `arm lint` passes on its files,
 its node tests pass, and the `arm check` assertions it affects have the

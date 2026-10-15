@@ -113,6 +113,9 @@ EMBEDDED_BOTS_ENABLED = True
 # The production template restricts agent runs and repository URLs to
 # trusted users; the development realm's users all drive the agent.
 PEAR_WORKER_TRUSTED_USERS_ONLY = False
+# Off by default and in the production template, since the memory Codex
+# consolidates is shared by every topic's agent; on for development.
+PEAR_WORKER_CODEX_MEMORIES = True
 
 SYSTEM_ONLY_REALMS: set[str] = set()
 USING_PGROONGA = True

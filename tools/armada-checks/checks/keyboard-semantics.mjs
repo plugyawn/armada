@@ -211,7 +211,9 @@ async function escape_order(ctx) {
     // A thread beside the conversation: Esc closes it and the topic stays.
     await ctx.open(ctx.topics.threads, {fresh: true});
     const topic = (await layers(ctx)).hash;
-    await ctx.click("threadLaunch", {which: "first"});
+    // The last launch: in the frame's pane the first can lie under the
+    // recipient bar that sticks to the pane's top.
+    await ctx.click("threadLaunch");
     await ctx.page
         .waitForFunction(() => window.__ac.all("threadPane").length > 0, {timeout: 5000})
         .catch(() => undefined);
@@ -685,7 +687,7 @@ async function mac_conventions(ctx) {
         "Cmd-W closes what is open beside the conversation (here a thread)",
         async () => {
             await ctx.open(ctx.topics.threads, {fresh: true});
-            await ctx.click("threadLaunch", {which: "first"});
+            await ctx.click("threadLaunch");
             await ctx.page.waitForFunction(() => window.__ac.all("threadPane").length > 0, {
                 timeout: 5000,
             });

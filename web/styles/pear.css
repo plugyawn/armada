@@ -1993,13 +1993,6 @@ body.message-thread-pane-open #pear-agent-roster {
     color: var(--pear-ink-1);
 }
 
-/* The desktop pane needs no header of its own -- the sidebar's top row
-   carries the tabs. The mobile sheet keeps its full header. */
-#message-thread-pane:not(.message-thread-pane-mobile)
-    .message-thread-pane-header {
-    display: none;
-}
-
 #pear-agent-roster {
     /* Same box the pane fills: below the top row, and against the same
        background as the People tab -- no separate surface, no cutoff. */
@@ -2135,16 +2128,6 @@ body.message-thread-pane-open #pear-agent-roster {
     &[hidden] {
         display: none;
     }
-
-    &.message-thread-pane-mobile {
-        position: fixed;
-        z-index: 105;
-        inset: 0;
-        width: 100vw;
-        max-width: none;
-        border: 0;
-        background: var(--pear-surface-0);
-    }
 }
 
 .message-thread-pane-header {
@@ -2259,13 +2242,6 @@ body.message-thread-pane-open #pear-agent-roster {
         color: var(--pear-ink-1);
         outline: none;
     }
-}
-
-/* On desktop the tabs own pane navigation; the ✕ only earns its slot on
-   the mobile full-viewport sheet. Esc closes everywhere. */
-#message-thread-pane:not(.message-thread-pane-mobile)
-    .message-thread-pane-close {
-    display: none;
 }
 
 .message-thread-agent-bar {

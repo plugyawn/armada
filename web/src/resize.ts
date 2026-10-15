@@ -105,7 +105,6 @@ export function reset_compose_message_max_height(bottom_whitespace_height?: numb
         "max-height",
         bottom_whitespace_height - compose_non_textarea_height,
     );
-    $("#scroll-to-bottom-button-container").css("bottom", compose_height);
     compose_ui.autosize_textarea($("#compose-textarea"));
 }
 

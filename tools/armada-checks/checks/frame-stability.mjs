@@ -7,6 +7,7 @@ import * as fs from "node:fs";
 import path from "node:path";
 import {fileURLToPath} from "node:url";
 
+import {VIEWPORT} from "../lib/browser.mjs";
 import {describe_rect, drift, max} from "../lib/stats.mjs";
 import {dispatches, start_trace, stop_trace} from "../lib/trace.mjs";
 
@@ -452,7 +453,6 @@ async function composition(ctx) {
         await ctx.click("tabChat");
         await ctx.settle(500, 4000);
     }
-    await ctx.page.setViewport({width: 1440, height: 900, deviceScaleFactor: 1});
 }
 
 // Dragging the window from 1100 to 1920: the composition follows in CSS.
@@ -508,7 +508,16 @@ async function resize_drag(ctx) {
     ctx.info("resize.old-handlers-dispatched", handlers.length, {
         note: `resize events with script listeners (the old app's); ${handlers.reduce((sum, item) => sum + item.layouts, 0)} layouts forced inside them`,
     });
-    await ctx.page.setViewport({width: 1440, height: 900, deviceScaleFactor: 1});
+}
+
+// A scenario that changes the window gives it back, even when it fails, so
+// the next one is measured at the size it compares against.
+async function with_viewport_restored(ctx, body) {
+    try {
+        await body();
+    } finally {
+        await ctx.page.setViewport(VIEWPORT);
+    }
 }
 
 // The scroll edge: one line on the header's lower edge while content lies
@@ -691,10 +700,10 @@ export async function run(ctx) {
         await no_ghost_pane(ctx);
     });
     await ctx.scenario("composition", async () => {
-        await composition(ctx);
+        await with_viewport_restored(ctx, async () => composition(ctx));
     });
     await ctx.scenario("resize", async () => {
-        await resize_drag(ctx);
+        await with_viewport_restored(ctx, async () => resize_drag(ctx));
     });
     await ctx.scenario("scroll-edge", async () => {
         await scroll_edge(ctx);

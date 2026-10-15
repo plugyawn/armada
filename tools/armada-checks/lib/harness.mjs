@@ -6,7 +6,7 @@
 import {BASE, VIEWPORT, sleep} from "./browser.mjs";
 import {mutate_script, mutation_applied, requested_mutation} from "./mutate.mjs";
 import {install_page_helpers} from "./page.mjs";
-import {SELECTORS, TOPICS} from "./selectors.mjs";
+import {PROBE, SELECTORS, TOPICS} from "./selectors.mjs";
 import {round} from "./stats.mjs";
 
 const OPERATORS = {
@@ -18,6 +18,10 @@ const OPERATORS = {
 // Console noise that is produced by the development tooling rather than by
 // the application.
 const IGNORED_CONSOLE = [/\[webpack-dev-server\]/, /\[HMR\]/, /Download the React DevTools/];
+
+// Whether this run's probe topic (selectors.mjs, PROBE) has a message yet;
+// one run is one process, shared by every check of the run.
+let probe_ready = false;
 
 export class CheckContext {
     constructor(browser, name) {
@@ -321,6 +325,9 @@ export class CheckContext {
         }
         await this.page.goto(`${this.base}/${hash}`, {waitUntil: "load"});
         await this.app_ready();
+        if (hash === TOPICS.probe) {
+            await this.ensure_probe();
+        }
         if (rows) {
             await this.wait_for_rows();
         }
@@ -340,6 +347,9 @@ export class CheckContext {
 
     // Same-document navigation, the way a click on a link does it.
     async navigate(hash, {rows = hash.startsWith("#narrow")} = {}) {
+        if (hash === TOPICS.probe) {
+            await this.ensure_probe();
+        }
         await this.page.evaluate((target) => {
             window.location.hash = target;
         }, hash);
@@ -352,6 +362,49 @@ export class CheckContext {
             await this.wait_for_rows();
         }
         await this.settle();
+    }
+
+    // The run's probe topic starts with one message, so that a check that
+    // opens it before anything was sent there finds a conversation, with a
+    // message of the user's own to reply to and to edit. The page must
+    // already be showing the application.
+    async ensure_probe() {
+        if (probe_ready) {
+            return;
+        }
+        const narrow = [
+            {operator: "channel", operand: PROBE.stream_id},
+            {operator: "topic", operand: PROBE.topic},
+        ];
+        const existing = await this.api("GET", "/json/messages", {
+            anchor: "newest",
+            num_before: 1,
+            num_after: 0,
+            narrow,
+        });
+        if (existing.status !== 200) {
+            throw new Error(`cannot read ${PROBE.topic}: HTTP ${existing.status}`);
+        }
+        if (existing.data.messages.length === 0) {
+            let response;
+            for (let attempt = 0; attempt < 5; attempt += 1) {
+                response = await this.api("POST", "/json/messages", {
+                    type: "stream",
+                    to: PROBE.stream_id,
+                    topic: PROBE.topic,
+                    content: "armada-checks: the messages of one run of the checks",
+                });
+                if (response.status !== 429) {
+                    break;
+                }
+                // The server limits how fast one user may post.
+                await sleep((Number(response.data?.["retry-after"]) || 10) * 1000 + 500);
+            }
+            if (response.status !== 200) {
+                throw new Error(`cannot start ${PROBE.topic}: HTTP ${response.status}`);
+            }
+        }
+        probe_ready = true;
     }
 
     async wait_for_rows() {

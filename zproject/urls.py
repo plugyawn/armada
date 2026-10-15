@@ -20,7 +20,14 @@ from zerver.lib.rest import rest_path
 from zerver.lib.url_redirects import DOCUMENTATION_REDIRECTS, get_integration_category_redirects
 from zerver.views.alert_words import add_alert_words, list_alert_words, remove_alert_words
 from zerver.views.antispam import get_challenge
-from zerver.views.armada_beta import armada_beta
+from zerver.views.armada_beta import (
+    armada_beta,
+    armada_beta_sprite,
+    get_armada_partners,
+    post_armada_partner,
+    post_armada_partner_evolve,
+    post_armada_partner_fold,
+)
 from zerver.views.attachments import list_by_user, remove
 from zerver.views.auth import (
     api_fetch_api_key,
@@ -424,6 +431,17 @@ v1_api_and_json_patterns = [
     rest_path("drafts/<int:draft_id>", PATCH=edit_draft, DELETE=delete_draft),
     # navigation_views -> zerver.views.navigation_views
     rest_path("navigation_views", GET=get_navigation_views, POST=add_navigation_view),
+    # INTERIM BETA: partners, in the interim bot-storage rows
+    # (zerver/lib/partner.py); they move with the Partner model.
+    rest_path("armada/partners", GET=(get_armada_partners, {"intentionally_undocumented"})),
+    rest_path("armada/partner", POST=(post_armada_partner, {"intentionally_undocumented"})),
+    rest_path(
+        "armada/partner/evolve",
+        POST=(post_armada_partner_evolve, {"intentionally_undocumented"}),
+    ),
+    rest_path(
+        "armada/partner/fold", POST=(post_armada_partner_fold, {"intentionally_undocumented"})
+    ),
     rest_path(
         "pear/session",
         GET=(get_pear_session_backend, {"intentionally_undocumented"}),
@@ -760,8 +778,11 @@ v1_api_and_json_patterns = [
 # endpoint for use by code), you should add it here.
 i18n_urls = [
     path("", home, name="home"),
-    # INTERIM BETA: the second interface; removed with web/src/armada/beta/.
+    # INTERIM BETA: the second interface, and its themed marks, partner
+    # sprites and species (served to signed-in people only); removed with
+    # web/src/armada/beta/.
     path("beta/", armada_beta),
+    path("beta/sprites/<path:path>", armada_beta_sprite),
     # We have a desktop-specific landing page in case we change our /
     # to not log in in the future. We don't want to require a new
     # desktop app build for everyone in that case

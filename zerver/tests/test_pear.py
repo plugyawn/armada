@@ -228,6 +228,7 @@ class PearComputedSettingsEnvTest(TestCase):
             "PEAR_WORKER_MODEL": "",
             "PEAR_WORKER_MODEL_CHOICES": "gpt-5.5,gpt-5.4-mini gpt-5.3-codex-spark",
             "PEAR_WORKER_FAST_MODE": "off",
+            "PEAR_WORKER_CODEX_MEMORIES": "on",
             "PEAR_WORKER_TIMEOUT_SECONDS": "42",
             "PEAR_WORKER_TRUSTED_USERS_ONLY": "yes",
             "PEAR_WORKER_TRUSTED_USER_IDS": "1, 2 3",
@@ -246,6 +247,7 @@ class PearComputedSettingsEnvTest(TestCase):
             ["gpt-5.5", "gpt-5.4-mini", "gpt-5.3-codex-spark"],
         )
         self.assertFalse(values["PEAR_WORKER_FAST_MODE"])
+        self.assertTrue(values["PEAR_WORKER_CODEX_MEMORIES"])
         self.assertEqual(values["PEAR_WORKER_TIMEOUT_SECONDS"], 42)
         self.assertTrue(values["PEAR_WORKER_TRUSTED_USERS_ONLY"])
         self.assertEqual(values["PEAR_WORKER_TRUSTED_USER_IDS"], [1, 2, 3])
@@ -2923,6 +2925,7 @@ class PearSessionDefaultsTest(TestCase):
             output_limit=200,
             service_tier="fast",
             fast_mode_enabled=True,
+            memories_enabled=True,
             reasoning_effort="medium",
             popen_command=fake_popen,
         )

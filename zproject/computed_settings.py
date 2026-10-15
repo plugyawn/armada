@@ -1428,6 +1428,7 @@ _PEAR_ENV_OVERRIDES: Final[dict[str, Callable[[str], object]]] = {
     "PEAR_WORKER_TIMEOUT_SECONDS": _pear_parse_int,
     "PEAR_WORKER_OUTPUT_LIMIT": _pear_parse_int,
     "PEAR_WORKER_CODEX_EPHEMERAL": _pear_parse_bool,
+    "PEAR_WORKER_CODEX_MEMORIES": _pear_parse_bool,
     "PEAR_CODEX_SKILLS_DIR": _pear_parse_optional_string,
     "PEAR_WORKER_TRUSTED_USERS_ONLY": _pear_parse_bool,
     "PEAR_WORKER_TRUSTED_USER_IDS": _pear_parse_int_list,

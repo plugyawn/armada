@@ -42,11 +42,15 @@ const RECIPE = {   /* [tier dBFS, priority, set, parts: [make, start s, relative
   mention: [-20, 3, "default", [[() => bar(NOTE.D5, 0.38), 0, 0], [() => bar(NOTE.A5, 0.38), 0, -3], [() => bar(NOTE.D6, 0.40), 0.12, -2]]],
   arrive: [-36, 0, "full", [[() => bar(NOTE.Fs5, 0.12, {mallet: -90}), 0, 0]]],
   react: [-36, 0, "default", [[() => bar(NOTE.B5, 0.06), 0, 0]]],
+  /* a partner evolving (only for its person): one soft tick for each trade of outlines, faster and faster, then D5, F#5, A5 and a
+     quiet D6 as the new form lands; about 1.4 s, between done and send. Its own drawing, none of the games' audio. */
+  evolve: [-28, 2, "default", [...[0.534, 0.696, 0.826, 0.923, 0.996, 1.053, 1.102].map((t) => [() => bar(NOTE.A5, 0.03, {lp: 2400, mallet: -90}), t, -16]),   /* the trades (beta.js, playMoment) */
+    [() => bar(NOTE.D5, 0.3), 1.38, 0], [() => bar(NOTE.Fs5, 0.3), 1.44, -1], [() => bar(NOTE.A5, 0.32), 1.5, -2], [() => bar(NOTE.D6, 0.42), 1.56, -8]]],
 };
 const AUDITION = 12;   /* the reel's +12 dB, so laptop speakers carry it; the shipped levels are the tiers */
 const FULL = new URLSearchParams(location.search).get("sounds") === "full";
 function loudest100(b) { const W = Math.round(0.1 * SR); let best = 0, acc = 0; for (let i = 0; i < b.length; i++) { acc += b[i] * b[i]; if (i >= W) acc -= b[i - W] * b[i - W]; if (acc > best) best = acc; } return Math.sqrt(best / W); }
-function renderSound(name) { rseed = 1; const [tier, , , parts] = RECIPE[name], b = new Float32Array(Math.round(0.8 * SR));
+function renderSound(name) { rseed = 1; const [tier, , , parts] = RECIPE[name], b = new Float32Array(Math.round(Math.max(0.8, Math.max(...parts.map((x) => x[1])) + 0.6) * SR));
   for (const [make, t0, g] of parts) { const a = make(), o = Math.round(t0 * SR), k = db(g); for (let i = 0; i < a.length && o + i < b.length; i++) b[o + i] += a[i] * k; }
   const gain = db(tier) / loudest100(b); for (let i = 0; i < b.length; i++) b[i] *= gain; return b; }
 function soundTable() { return Object.keys(RECIPE).map((n) => { const b = renderSound(n); let peak = 0, last = 0; for (let i = 0; i < b.length; i++) { const a = Math.abs(b[i]); if (a > peak) peak = a; } for (let i = 0; i < b.length; i++) if (Math.abs(b[i]) > peak * 0.001) last = i;

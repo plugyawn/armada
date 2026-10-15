@@ -5,6 +5,6 @@ kept puppet/zulip/manifests/app_frontend_base.pp  # pear_* queues, pear_monitor_
 kept puppet/zulip/templates/supervisor/zulip.conf.template.erb  # pear_worker runs as slots 0 and 1
 kept zproject/prod_settings_template.py  # the Armada section: EMBEDDED_BOTS_ENABLED and every PEAR_* setting
 kept zerver/views/streams.py  # a channel's repository URL only from a trusted user (PEAR_WORKER_TRUSTED_USERS_ONLY)
-kept zproject/computed_settings.py  # PEAR_WORKER_MODEL_CHOICES honoured from settings.py; PEAR_WORKER_TRUSTED_USERS_ONLY
-kept zproject/dev_settings.py  # PEAR_WORKER_TRUSTED_USERS_ONLY off in development and tests
+kept zproject/computed_settings.py  # PEAR_WORKER_MODEL_CHOICES honoured from settings.py; PEAR_WORKER_TRUSTED_USERS_ONLY; PEAR_WORKER_CODEX_MEMORIES
+kept zproject/dev_settings.py  # PEAR_WORKER_TRUSTED_USERS_ONLY off and PEAR_WORKER_CODEX_MEMORIES on in development and tests
 kept docs/production/ai-integrations.md  # hosted servers pointed at docs/armada/deploy.md instead of os-user isolation

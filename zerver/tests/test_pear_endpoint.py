@@ -2,6 +2,7 @@ import shutil
 import subprocess
 import tempfile
 import threading
+from collections.abc import Sequence
 from datetime import timedelta
 from pathlib import Path
 from types import SimpleNamespace
@@ -45,7 +46,7 @@ from zerver.lib.pear import (
     get_pear_session_payload,
     write_pear_live_run_state,
 )
-from zerver.lib.pear_agent import PearProcessIsolation
+from zerver.lib.pear_agent import PearCodexAppServerToolRunner, PearProcessIsolation
 from zerver.lib.pear_gate import (
     get_pear_followup_service_bot_event,
     get_selected_pear_bot_user_id_for_realm,
@@ -84,8 +85,10 @@ from zerver.lib.pear_worker import (
     pear_git_current_branch_name,
     pear_git_output,
     pear_git_status_delta,
+    pear_initialize_bare_origin,
     pear_read_text_path,
     pear_referenced_conversations,
+    pear_run_git_checked,
     pear_seed_empty_bare_origin,
     pear_topic_branch_name,
     pear_topic_isolation_user_exists,
@@ -2228,6 +2231,32 @@ class PearSessionEndpointTest(ZulipTestCase):
         failure_event = PearWorkerRunEvent.objects.get(run=run, event_type="failed")
         self.assertEqual(failure_event.payload["reason"], "missing_trigger_message")
 
+    def test_codex_memories_follow_the_setting(self) -> None:
+        owner = self.example_user("hamlet")
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            base_workdir = Path(temp_dir) / "base"
+            self.create_git_repository(base_workdir)
+            with self.settings(
+                PEAR_WORKER_AGENT_RUNTIME="codex-app-server",
+                PEAR_WORKER_WORKDIR=str(base_workdir),
+                PEAR_TOPIC_WORKDIR_ROOT=str(Path(temp_dir) / "topics"),
+            ):
+                context = ensure_pear_workspace_node(
+                    owner,
+                    stream=PEAR_DEFAULT_STREAM,
+                    topic="memories",
+                )
+                for enabled, expected in ((True, "true"), (False, "false")):
+                    with self.settings(PEAR_WORKER_CODEX_MEMORIES=enabled):
+                        runtime = build_pear_worker_runtime_from_settings(
+                            workdir_override=context.workdir,
+                        )
+                    assert isinstance(runtime.tool_runner, PearCodexAppServerToolRunner)
+                    command = runtime.tool_runner.build_command()
+                    self.assertIn(f"features.memories={expected}", command)
+                    self.assertNotIn(f"features.memories={'false' if enabled else 'true'}", command)
+
     def test_topic_worker_sandbox_downgrades_full_access_to_workspace_write(self) -> None:
         owner = self.example_user("hamlet")
 
@@ -2914,7 +2943,9 @@ class PearSessionEndpointTest(ZulipTestCase):
         self.login_user(owner)
         repository_url = "https://github.com/NVIDIA/Megatron-LM.git"
 
-        def initialize_without_network(origin: Path, *, repository_url: str) -> tuple[str, str]:
+        def initialize_without_network(
+            origin: Path, *, repository_url: str, fetch_timeout_seconds: int
+        ) -> tuple[str, str]:
             subprocess.run(
                 ["git", "init", "--bare", "--quiet", "--initial-branch=main", str(origin)],
                 check=True,
@@ -2984,7 +3015,9 @@ class PearSessionEndpointTest(ZulipTestCase):
         self.subscribe(owner, "megatron-lm")
         repository_url = "https://github.com/NVIDIA/Megatron-LM.git"
 
-        def initialize_without_network(origin: Path, *, repository_url: str) -> tuple[str, str]:
+        def initialize_without_network(
+            origin: Path, *, repository_url: str, fetch_timeout_seconds: int
+        ) -> tuple[str, str]:
             subprocess.run(
                 ["git", "init", "--bare", "--quiet", "--initial-branch=dev", str(origin)],
                 check=True,
@@ -3036,6 +3069,67 @@ class PearSessionEndpointTest(ZulipTestCase):
             self.assertEqual(topic_context.branch_name, "optimizer-work")
             self.assertEqual(topic_context.base_ref, "dev")
             self.assertEqual(topic_context.project_id, channel_context.project_id)
+
+    def test_operator_attach_fetches_with_its_own_timeout(self) -> None:
+        owner = self.example_user("hamlet")
+        self.subscribe(owner, "megatron-lm")
+        repository_url = "https://github.com/NVIDIA/Megatron-LM.git"
+        fetch_timeouts: list[int] = []
+
+        def record_fetch(command: Sequence[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
+            if "fetch" in command:
+                fetch_timeouts.append(kwargs["timeout"])
+            return pear_run_git_checked(command, **kwargs)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            upstream = Path(temp_dir) / "upstream"
+            self.create_git_repository(upstream)
+
+            def initialize_from_local_upstream(
+                origin: Path, *, repository_url: str, fetch_timeout_seconds: int
+            ) -> tuple[str, str]:
+                base = pear_initialize_bare_origin(
+                    origin,
+                    repository_url=str(upstream),
+                    fetch_timeout_seconds=fetch_timeout_seconds,
+                )
+                subprocess.run(
+                    [
+                        "git",
+                        "--git-dir",
+                        str(origin),
+                        "remote",
+                        "set-url",
+                        "upstream",
+                        repository_url,
+                    ],
+                    check=True,
+                    timeout=10,
+                )
+                return base
+
+            with (
+                self.settings(PEAR_TOPIC_WORKDIR_ROOT=str(Path(temp_dir) / "topics")),
+                patch(
+                    "zerver.lib.pear_worker.pear_initialize_bare_origin",
+                    side_effect=initialize_from_local_upstream,
+                ),
+                patch("zerver.lib.pear_worker.pear_run_git_checked", side_effect=record_fetch),
+            ):
+                channel_context = configure_pear_channel_repository_workspace(
+                    owner,
+                    stream="megatron-lm",
+                    repository_url=repository_url,
+                    fetch_timeout_seconds=3600,
+                )
+
+            self.assertEqual(fetch_timeouts, [3600])
+            project = PearProject.objects.get(
+                realm=owner.realm, stream=get_stream("megatron-lm", owner.realm)
+            )
+            self.assertEqual(project.clone_status, PearProject.READY)
+            self.assertEqual(project.repository_url, repository_url)
+            self.assertTrue(Path(channel_context.workdir, "README.md").exists())
 
     def test_topic_context_does_not_use_general_topic_as_repository_parent(self) -> None:
         owner = self.example_user("hamlet")

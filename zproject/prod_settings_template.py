@@ -937,6 +937,13 @@ PEAR_WORKER_TRUSTED_USERS_ONLY = True
 ## True keeps Codex threads in memory only; a restart then loses a
 ## topic's conversation with the agent.
 # PEAR_WORKER_CODEX_EPHEMERAL = False
+## Codex's memories feature. Every topic's agent shares one CODEX_HOME,
+## and Codex injects the memory summary it consolidates from past
+## sessions into every new session, so what an agent read in one
+## channel, a private one included, can reach a run in another. Off
+## for a new server; turn it on only if every channel's content may be
+## seen by everyone who can address the agent.
+PEAR_WORKER_CODEX_MEMORIES = False
 ## Codex skills copied into the agent's CODEX_HOME before each run.
 ## Unset, deployments/../pear/skills is used if it exists.
 # PEAR_CODEX_SKILLS_DIR = "/srv/armada/skills"

@@ -1777,6 +1777,7 @@ def pear_initialize_bare_origin(
     origin: Path,
     *,
     repository_url: str,
+    fetch_timeout_seconds: int = PEAR_REPOSITORY_CLONE_TIMEOUT_SECONDS,
 ) -> tuple[str, str]:
     pear_run_git_checked(
         ["git", "init", "--bare", "--quiet", "--initial-branch=main", str(origin)],
@@ -1805,6 +1806,7 @@ def pear_initialize_bare_origin(
                 "+refs/heads/*:refs/remotes/upstream/*",
             ],
             error_message="Could not clone the Git repository.",
+            timeout=fetch_timeout_seconds,
         )
         remote_refs = pear_run_git_checked(
             [
@@ -1869,6 +1871,7 @@ def ensure_pear_project_origin(
     project: PearProject,
     *,
     refresh_upstream: bool = False,
+    fetch_timeout_seconds: int = PEAR_REPOSITORY_CLONE_TIMEOUT_SECONDS,
 ) -> Path:
     origin = pear_expected_project_cache_path(
         user_profile,
@@ -1916,6 +1919,7 @@ def ensure_pear_project_origin(
                             "+refs/heads/*:refs/remotes/upstream/*",
                         ],
                         error_message="Could not refresh the Git repository.",
+                        timeout=fetch_timeout_seconds,
                     )
                 base_ref = (
                     project.default_base_ref.strip()
@@ -1948,6 +1952,7 @@ def ensure_pear_project_origin(
                     base_ref, base_commit = pear_initialize_bare_origin(
                         temporary,
                         repository_url=project.repository_url.strip(),
+                        fetch_timeout_seconds=fetch_timeout_seconds,
                     )
                     os.replace(temporary, origin)
                 finally:
@@ -1987,7 +1992,13 @@ def configure_pear_channel_repository_workspace(
     *,
     stream: str,
     repository_url: str,
+    fetch_timeout_seconds: int = PEAR_REPOSITORY_CLONE_TIMEOUT_SECONDS,
 ) -> PearWorkspaceNode:
+    """Give a channel its repository and fetch it.  Channel creation calls
+    this inside its request; an operator attaching a repository too large
+    to fetch within the web server's request limit calls it from
+    `manage.py shell` with a longer fetch_timeout_seconds
+    (docs/armada/deploy.md, 6.5)."""
     stream, _topic = pear_topic_scope(stream, "")
     clean_url = clean_pear_repository_url(repository_url)
     project = pear_project_for_stream(user_profile, stream=stream)
@@ -2022,6 +2033,7 @@ def configure_pear_channel_repository_workspace(
         user_profile,
         project,
         refresh_upstream=True,
+        fetch_timeout_seconds=fetch_timeout_seconds,
     )
     return ensure_pear_workspace_node(
         user_profile,
@@ -2648,6 +2660,7 @@ def build_pear_worker_runtime_from_settings(
                 output_limit=settings.PEAR_WORKER_OUTPUT_LIMIT,
                 service_tier=settings.PEAR_WORKER_SERVICE_TIER,
                 fast_mode_enabled=settings.PEAR_WORKER_FAST_MODE,
+                memories_enabled=settings.PEAR_WORKER_CODEX_MEMORIES,
                 reasoning_effort=reasoning_effort,
                 ephemeral=settings.PEAR_WORKER_CODEX_EPHEMERAL,
                 process_isolation=process_isolation_override,

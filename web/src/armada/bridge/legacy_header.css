@@ -83,9 +83,9 @@
         -webkit-app-region: no-drag;
     }
 
-    /* The old navbar's alerts, raised under the header across the
-       composition (frame.css places their host): over the conversation's
-       top, never over the header's controls. */
+    /* The old navbar's alerts, raised under the header across the lane
+       (frame.css places their host): over the conversation's top, never
+       over the header's controls or the column. */
     #navbar_alerts_wrapper .banner {
         margin-top: var(--s-2);
         box-shadow: var(--shadow-raised);

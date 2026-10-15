@@ -17,7 +17,7 @@ bridges, is higher than it was (`tools/armada/fork_ledger.d/counts.json`).
 The first three must reach 0 at the final close.
 
 - Old Armada frontend modules (`web/src/*.ts` added by the fork): 42
-- Files under `web/src/armada/bridge/`: 0
+- Files under `web/src/armada/bridge/`: 12
 - Entries in `ARMADA_EXEMPT_FILES` (`tools/test-js-with-node`): 46
 - Stylesheets under `web/styles/`: 70, of which 3 are the fork's own old sheets
 - Old Armada templates under `web/templates/`: 10
@@ -25,27 +25,23 @@ The first three must reach 0 at the final close.
 
 ## Zulip files that differ from the fork base
 
-233 files.
+275 files.
 
-- Changed by the proof of concept, not yet dealt with by the rebuild: 199
-- Hooked: upstream file with marked calls into `web/src/armada/hooks/`: 0
-- Bridged: old code kept alive until a named package replaces it: 2
+- Changed by the proof of concept, not yet dealt with by the rebuild: 171
+- Hooked: upstream file with marked calls into `web/src/armada/hooks/`: 2
+- Bridged: old code kept alive until a named package replaces it: 29
 - Absorbed: deleted and rewritten under `web/src/armada/`: 0
-- Deleted: 0
-- Changed in place and staying (toolchain, configuration, server code, tests): 32
+- Deleted: 3
+- Changed in place and staying (toolchain, configuration, server code, tests): 70
 - Unaccounted for (lint fails): 0
 
 ### Changed by the proof of concept, not yet dealt with by the rebuild
 
 - `README.md`
-- `docs/production/ai-integrations.md`
-- `pnpm-workspace.yaml`
-- `puppet/zulip/manifests/app_frontend_base.pp`
 - `scripts/lib/check_rabbitmq_queue.py`
 - `static/images/favicon.png`
 - `static/images/favicon.svg`
 - `static/images/logo/apple-touch-icon-precomposed.png`
-- `templates/zerver/app/index.html`
 - `templates/zerver/development/dev_login.html`
 - `templates/zerver/login.html`
 - `tools/run-dev`
@@ -53,40 +49,28 @@ The first three must reach 0 at the final close.
 - `web/src/bootstrap_typeahead.ts`
 - `web/src/bot_helper.ts`
 - `web/src/buddy_list.ts`
-- `web/src/bundles/app.ts`
-- `web/src/click_handlers.ts`
-- `web/src/compose.ts`
 - `web/src/compose_notifications.ts`
 - `web/src/compose_recipient.ts`
 - `web/src/compose_reply.ts`
 - `web/src/compose_setup.ts`
-- `web/src/compose_ui.ts`
 - `web/src/compose_validate.ts`
 - `web/src/composebox_typeahead.ts`
 - `web/src/condense.ts`
 - `web/src/drafts.ts`
 - `web/src/drafts_overlay_ui.ts`
-- `web/src/echo.ts`
 - `web/src/emoji_picker.ts`
 - `web/src/filter.ts`
-- `web/src/hotkey.ts`
 - `web/src/information_density.ts`
 - `web/src/left_sidebar_navigation_area.ts`
 - `web/src/lightbox.ts`
 - `web/src/message_actions_popover.ts`
-- `web/src/message_edit.ts`
 - `web/src/message_edit_history.ts`
 - `web/src/message_fetch.ts`
 - `web/src/message_helper.ts`
-- `web/src/message_list.ts`
 - `web/src/message_list_hover.ts`
-- `web/src/message_list_view.ts`
 - `web/src/message_lists.ts`
 - `web/src/message_report.ts`
 - `web/src/message_store.ts`
-- `web/src/message_view.ts`
-- `web/src/message_view_header.ts`
-- `web/src/message_viewport.ts`
 - `web/src/narrow_title.ts`
 - `web/src/navigation_views.ts`
 - `web/src/playground_links_popover.ts`
@@ -98,7 +82,6 @@ The first three must reach 0 at the final close.
 - `web/src/search_pill.ts`
 - `web/src/search_suggestion.ts`
 - `web/src/server_events.js`
-- `web/src/server_events_dispatch.js`
 - `web/src/server_message.ts`
 - `web/src/settings_bots.ts`
 - `web/src/settings_components.ts`
@@ -115,12 +98,10 @@ The first three must reach 0 at the final close.
 - `web/src/tippyjs.ts`
 - `web/src/topic_list.ts`
 - `web/src/topic_list_data.ts`
-- `web/src/transmit.ts`
 - `web/src/typeahead.ts`
 - `web/src/typeahead_helper.ts`
 - `web/src/typing.ts`
 - `web/src/typing_events.ts`
-- `web/src/ui_init.js`
 - `web/src/ui_report.ts`
 - `web/src/unread_ops.ts`
 - `web/src/upload.ts`
@@ -131,13 +112,11 @@ The first three must reach 0 at the final close.
 - `web/styles/banners.css`
 - `web/styles/blueslip.css`
 - `web/styles/buttons.css`
-- `web/styles/compose.css`
 - `web/styles/dark_theme.css`
 - `web/styles/inbox.css`
 - `web/styles/input_pill.css`
 - `web/styles/inputs.css`
 - `web/styles/left_sidebar.css`
-- `web/styles/message_header.css`
 - `web/styles/message_view_header.css`
 - `web/styles/modal.css`
 - `web/styles/popovers.css`
@@ -148,7 +127,6 @@ The first three must reach 0 at the final close.
 - `web/styles/settings.css`
 - `web/styles/subscriptions.css`
 - `web/styles/tooltips.css`
-- `web/styles/zulip.css`
 - `web/templates/about_zulip.hbs`
 - `web/templates/compose.hbs`
 - `web/templates/compose_control_buttons.hbs`
@@ -172,9 +150,7 @@ The first three must reach 0 at the final close.
 - `web/templates/typeahead_list_item.hbs`
 - `web/tests/compose_reply.test.cjs`
 - `web/tests/composebox_typeahead.test.cjs`
-- `web/tests/dispatch.test.cjs`
 - `web/tests/filter.test.cjs`
-- `web/tests/hotkey.test.cjs`
 - `web/tests/message_events.test.cjs`
 - `web/tests/message_fetch.test.cjs`
 - `web/tests/message_list_data.test.cjs`
@@ -228,54 +204,126 @@ The first three must reach 0 at the final close.
 - `zerver/views/message_edit.py`
 - `zerver/views/message_fetch.py`
 - `zerver/views/message_send.py`
-- `zerver/views/streams.py`
 - `zerver/views/submessage.py`
 - `zerver/views/users.py`
 - `zerver/worker/base.py`
 - `zerver/worker/embedded_bots.py`
-- `zproject/computed_settings.py`
-- `zproject/dev_settings.py`
-- `zproject/urls.py`
+
+### Hooked: upstream file with marked calls into `web/src/armada/hooks/`
+
+- `web/src/message_view_header.ts`: the place, the worktree's facts and views, line 2's sentence
+- `web/src/ui_init.js`: calls boot.ts; scroll_bar.ts gone
 
 ### Bridged: old code kept alive until a named package replaces it
 
+- `web/src/alert_words_ui.ts` (A4): imports the Handlebars runtime, not the compiler; goes with alert words (K-15)
+- `web/src/channel.ts` (A1): no Sentry spans around requests (K-93)
+- `web/src/click_handlers.ts` (D1): a click in the composer no longer looks for a message row; F5: a click on a thread's preview opens only the thread
+- `web/src/compose.ts` (B3): the field is sized by the browser, not by autosize
+- `web/src/compose_actions.ts` (B3): the field is sized by the browser, not by autosize
+- `web/src/compose_send_menu_popover.ts` (B3): the reminder note is sized through compose_ui
+- `web/src/compose_ui.ts` (B3): size_textarea_to_content and its fallback replace autosize
+- `web/src/echo.ts` (C1): no Sentry disparity tag (K-93)
+- `web/src/emojisets.ts` (C7): the sprite and its stylesheet are fetched when the first emoji appears (K-66 removes them)
+- `web/src/fenced_code.ts` (C1): KaTeX is handed over once loaded
+- `web/src/hotkey.ts` (A5): Esc with a thread open closes the thread and does not also go to the home view
+- `web/src/inbox_ui.ts` (B5): Inbox scrolls in its pane
+- `web/src/info_overlay.ts` (D1): the formatting help fills in its math examples once KaTeX has arrived
+- `web/src/markdown.ts` (I4): KaTeX is fetched on first use
+- `web/src/message_edit.ts` (C1): the edit box is sized through compose_ui
+- `web/src/message_list.ts` (D1): the edit box is sized through compose_ui
+- `web/src/message_list_view.ts` (D1): the edit box is sized through compose_ui
+- `web/src/message_scroll.ts` (C1): listens to the feed's scroller, not the document
+- `web/src/message_view.ts` (D1): no Sentry spans around a narrow (K-93)
+- `web/src/message_viewport.ts` (C1): the feed's scroller in the pane; no navbar or compose arithmetic
+- `web/src/recent_view_ui.ts` (B5): Recent scrolls in its pane
+- `web/src/resize.ts` (B3): a field resized by hand stops being sized to its text; the limit allows for its bottom room; F5 deleted the rest but the composer's maximum height
+- `web/src/sent_messages.ts` (C1): tracks only what the delayed-event restart needs; the Sentry spans are gone (K-93)
+- `web/src/transmit.ts` (C1): a send is no longer wrapped in a Sentry span (K-93)
+- `web/src/views_util.ts` (B5): the document-scroll render test is gone with the document scroll
 - `web/styles/app_variables.css` (I4): the old font variables hold the two new stacks
+- `web/styles/compose.css` (B3): field-sizing: content
 - `web/styles/message_row.css` (D1): a comment that named the pixel face
+- `web/templates/popovers/left_sidebar/left_sidebar_view_popover_item.hbs` (A5): a view without a count no longer throws
+
+### Deleted
+
+- `patches/autosize.patch`: nothing imports autosize
+- `web/src/scroll_bar.ts`
+- `web/src/sentry.ts`: Sentry in the client (K-93)
 
 ### Changed in place and staying (toolchain, configuration, server code, tests)
 
 - `.claude/CLAUDE.md`: guidance that matches the brief
 - `.claude/skills/visual-test/SKILL.md`: arm shot, arm check, the showroom
 - `.gitignore`: web/fonts/licensed/ and the generated font sheet
+- `.prettierignore`: interim beta: web/src/armada/beta is not formatted
+- `docs/contributing/code-style.md`: Babel adds no polyfills (K-95)
+- `docs/production/ai-integrations.md`: hosted servers pointed at docs/armada/deploy.md instead of os-user isolation
 - `eslint.config.js`: .tsx; the rules of web/src/armada/
 - `package.json`: @babel/plugin-transform-react-jsx; preact at run time
 - `pnpm-lock.yaml`
+- `pnpm-workspace.yaml`: the autosize patch is gone with the package; core-js is no longer installed
+- `puppet/zulip/manifests/app_frontend_base.pp`: pear\_\* queues, pear_monitor_worker among them
+- `puppet/zulip/templates/supervisor/zulip.conf.template.erb`: pear_worker runs as slots 0 and 1
 - `stylelint.config.js`: the rules of web/src/armada/
+- `templates/zerver/app/index.html`: the frame, the inlined sprite; the splash and both logos deleted
 - `templates/zerver/base.html`: font preloads; data-palette
 - `tools/lib/provision_inner.py`: one call: tools/setup/build_armada_fonts
 - `tools/lint`: .tsx; untracked files; the fork ledger
 - `tools/linter_lib/custom_check.py`: system typefaces; motion literals
+- `tools/linter_lib/exclude.py`: interim beta: web/src/armada/beta is not linted
 - `tools/test-js-with-node`: runs web/tests/armada/; Armada's exempt list
 - `tools/update-prod-static`: one call: tools/setup/build_armada_fonts
 - `tsconfig.json`: JSX for Preact
 - `version.py`: PROVISION_VERSION, for the new dev dependency
+- `web/.browserslistrc`: Chromium and Edge 132, Safari 18, Firefox 140 (K-95)
 - `web/babel.config.js`: the JSX transform
+- `web/src/base_page_params.ts`: a comment no longer names sentry.ts
+- `web/src/blueslip.ts`: no Sentry (K-93); the development error display is a lazy chunk
+- `web/src/blueslip_stacktrace.ts`: BlueslipError moved to blueslip.ts, which loads this module on demand
+- `web/src/bundles/app.ts`: no jquery-validation in the app (K-92)
 - `web/src/bundles/common.ts`: the tokens, palettes and faces; three font packages out
+- `web/src/gif_picker_ui.ts`: the overlay scroll lock deleted
+- `web/src/modals.ts`: the overlay scroll lock deleted
+- `web/src/overlay_util.ts`: the overlay scroll lock deleted
+- `web/src/overlays.ts`: the overlay scroll lock deleted
+- `web/src/resize_handler.ts`: scroll_bar.ts gone
+- `web/src/server_events_dispatch.js`: the fluid layout width setting no longer lays anything out
 - `web/src/zulip_test.ts`: one export, inject_events, for the checks
+- `web/styles/message_header.css`: the container-query fallback deleted
+- `web/styles/zulip.css`: no document scroll; the three-column max-width rules and their fallbacks deleted
+- `web/templates/navbar.hbs`: the bar, its sidebar toggles and the logo deleted (K-77, K-37): the old title, facts, search and menus on line 1; also the interim beta's "Try the beta" link, which goes with the beta
 - `web/tests/clipboard_handler.test.cjs`: test isolation, before F0
+- `web/tests/compose.test.cjs`: no autosize to stand in for
 - `web/tests/compose_actions.test.cjs`: test isolation, before F0
 - `web/tests/compose_paste.test.cjs`: test isolation, before F0
 - `web/tests/compose_ui.test.cjs`: test isolation, before F0
+- `web/tests/dispatch.test.cjs`: scroll_bar.ts gone
+- `web/tests/echo.test.cjs`: no disparity to count
+- `web/tests/fenced_code.test.cjs`: math before and after KaTeX is handed over
 - `web/tests/folder_dropdown_widget.test.cjs`: test isolation, before F0
+- `web/tests/hotkey.test.cjs`: Esc and Ctrl+[ with a thread open
 - `web/tests/lib/index.cjs`: .tsx in node tests
+- `web/tests/markdown.test.cjs`: KaTeX is fetched on first use
 - `web/tests/message_list_view.test.cjs`: F0 deleted its tests that read CSS source
+- `web/tests/transmit.test.cjs`: no span wrapper to stand in for
 - `web/tests/typeahead_helper.test.cjs`: test isolation, before F0
+- `web/webpack.assets.json`: interim beta: the armada-beta entry
 - `web/webpack.config.ts`: .tsx; the zulip cascade layer
+- `web/webpack.dev-assets.json`: the armada-showroom entry
 - `zerver/lib/templates.py`: font_preloads, armada_palette
 - `zerver/management/commands/makemessages.py`: extract from .tsx
 - `zerver/tests/test_templates.py`: tests of font_preloads and armada_palette
+- `zerver/views/development/showroom.py`: showroom_armada: /devtools/armada/
+- `zerver/views/streams.py`: a channel's repository URL only from a trusted user (PEAR_WORKER_TRUSTED_USERS_ONLY)
+- `zproject/computed_settings.py`: PEAR_WORKER_MODEL_CHOICES honoured from settings.py; PEAR_WORKER_TRUSTED_USERS_ONLY; PEAR_WORKER_CODEX_MEMORIES
 - `zproject/default_settings.py`: ARMADA_PALETTE
+- `zproject/dev_settings.py`: PEAR_WORKER_TRUSTED_USERS_ONLY off and PEAR_WORKER_CODEX_MEMORIES on in development and tests
+- `zproject/dev_urls.py`: the route to it
 - `zproject/jinja2/__init__.py`: font_preloads, armada_palette
+- `zproject/prod_settings_template.py`: the Armada section: EMBEDDED*BOTS_ENABLED and every PEAR*\* setting
+- `zproject/urls.py`: interim beta: the /beta/ route, its sprites and the partner routes
 
 ## Old Armada frontend modules
 

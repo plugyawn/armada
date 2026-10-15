@@ -22,5 +22,34 @@ versions, into the subdirectories named:
 - `showdown/pokedex.ts`: species and evolution data (MIT), 538,263 bytes, from
   https://raw.githubusercontent.com/smogon/pokemon-showdown/3a766f2cfb5e51c1e428cfe87d0dba91a8f01640/data/pokedex.ts
 
+## `species.json`: the partner pack's species (generated)
+
+`tools/armada/sprites.py` (committed) reads `showdown/pokedex.ts` (as text,
+never run), `pokesprite/data/pokemon.json` and the sprites, measures each
+sprite's content box, and writes `species.json` here: every species and
+regional form, its types, its line (prevo, evolutions, how), its sprites
+(regular and shiny) and their boxes. It names Pokémon, so it stays here
+and is never committed. Run it after the sprites change:
+
+    python3 tools/armada/sprites.py [--dir <this directory>]
+
+(Python 3.10 or later; in the dev VM, `limactl shell armada -- arm sh
+"python tools/armada/sprites.py --dir /Users/progyan/runix/zulip/web/sprites/licensed"`.)
+The server serves it and the sprites to signed-in people only, at
+`/beta/sprites/<path>` (`zerver/views/armada_beta.py`); without it,
+partners are off and faces are initials.
+
 The study that chose these sources is `var/armada-overhaul/design/r4/sprites/SPRITES.md`
 on the machine the rebuild is done on.
+
+## `marks/`: the interim beta's themed run marks
+
+`marks/ball.svg` (a live run: three drawings, lean left, upright, lean right,
+14 units apart) and `marks/egg.svg` (a queued run) are original drawings from
+the r4 marks study, kept out of git because the ball is recognisably the
+games' design. The beta reads them through `/beta/sprites/marks/<name>`
+(`zerver/views/armada_beta.py`), which serves only those two names, only to
+signed-in people, from this directory or from `$ARMADA_SPRITE_DIR/marks/`.
+Without them the beta draws a dot and a ring. To make them, run
+`node var/armada-overhaul/build/beta2/gen/marks.mjs` on the machine the
+rebuild is done on. They go with the beta.

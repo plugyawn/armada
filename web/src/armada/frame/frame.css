@@ -7,18 +7,25 @@
    track: it is placed over the plane, so nothing in the grid knows whether
    it is there. The document never scrolls; each pane owns its scroller.
 
-   The composition (the conversation and the column) is computed here from
-   the plane's own width, `100cqi`, and from nothing a script writes. Its
-   figures are the design's table, so this file holds them as literals; the
-   stylelint override for this file allows `px` and `cqi` for that reason.
+   The composition (the conversation and the column) is computed in CSS from
+   the pane's width W (`--W` of the tokens: the window less the nav) and
+   from nothing a script writes. Its figures are the design's table, so
+   this file holds them as literals; the stylelint override for this file
+   allows `px` for that reason.
+
+   W is not read as a container's own width (`100cqi`), as the engineering
+   specification first had it: the field lives inside the plane and its
+   track is `auto`, so every keystroke lays the plane out again, and a
+   plane that is a size container then restyles everything under it, twice
+   a key (1.45 ms of style a key in the dev VM, against 0.04). The window's
+   width gives the same rectangles at every size and costs nothing a key.
 
    In the surfaces' layer, because the frame places the kit's components in
    its cells (the column, More) and must win over their own widths. */
 
-/* Registered, so that each is a length computed where it is set (a child
-   of the plane, against the plane's width) and inherited as that length:
-   unregistered, `100cqi` would be resolved again against whichever old
-   element that reads it happens to be a container. */
+/* Registered, so that each is a length computed once, on the root, and
+   inherited as that length, not a formula substituted again in every rule
+   that reads it. */
 @property --col {
     syntax: "<length>";
     inherits: true;
@@ -132,7 +139,6 @@
 
     .armada-plane {
         grid-column: 2;
-        container: plane / inline-size;
         display: grid;
         grid-template-rows:
             calc(var(--h-line1) + var(--h-line2)) minmax(0, 1fr)
@@ -145,23 +151,19 @@
         isolation: isolate;
     }
 
-    .armada-plane > * {
-        --side-w: 0px;
-        --side-gap: 0px;
-        --col: min(704px, 100cqi - 104px);
-        --comp: calc(var(--col) + var(--side-gap) + var(--side-w));
-        --lx: max(72px, round(down, (100cqi - var(--comp)) / 2, 1px));
-        --rx: calc(100cqi - var(--lx) - var(--comp));
-    }
-
-    /* 1160 is a 1408 window at the nav's 248: a nav dragged wider folds the
-       column instead of crushing it. */
-    @container plane (width >= 1160px) {
-        .armada-plane > * {
-            --col: clamp(704px, round(down, 56cqi, 1px), 840px);
-            --side-w: clamp(320px, round(down, 26.5cqi, 1px), 440px);
-            --side-gap: clamp(40px, round(down, 3.3cqi, 1px), 56px);
+    /* The column stands when the pane is 1160 or wider: a 1408 window at
+       the nav's 248. Under it the tokens' own composition holds (the
+       conversation alone, `min(704px, W - 104px)`). A media query cannot
+       read `--nav-w`; when the nav can be dragged wider (B1), the threshold
+       moves with it there. */
+    @media (width >= 1408px) {
+        /* stylelint-disable custom-property-pattern -- --W is the design's name */
+        :root {
+            --col: clamp(704px, round(down, 0.56 * var(--W), 1px), 840px);
+            --side-w: clamp(320px, round(down, 0.265 * var(--W), 1px), 440px);
+            --side-gap: clamp(40px, round(down, 0.033 * var(--W), 1px), 56px);
         }
+        /* stylelint-enable custom-property-pattern */
     }
 
     /* Home is not a conversation: no band, no field. */
@@ -384,7 +386,7 @@
 
     /* Under the threshold the column is its first heading, at the lane's
        right edge, More 4 px before it, on every place. */
-    @container plane (width < 1160px) {
+    @media (width < 1408px) {
         .armada-frame-column {
             bottom: auto;
             left: calc(var(--lx) + var(--col) - var(--fold-w));
@@ -401,13 +403,15 @@
     }
 
     /* ---- Raised over the pane: the old rail's sheet from the window's
-       right edge, and the old alerts under the header, across the
-       composition. Neither moves anything under it. */
+       right edge, and the old alerts under the header, across the lane.
+       Neither moves anything under it. */
 
+    /* From the header's lower edge (SPEC-DESIGN section 3): the header's
+       controls and the column's heading stay in reach while it is open. */
     [data-armada="sheet"] {
         position: absolute;
         z-index: var(--z-sheet);
-        top: 0;
+        top: calc(var(--h-line1) + var(--h-line2));
         right: 0;
         bottom: 0;
         width: var(--sheet-w);
@@ -421,12 +425,14 @@
         display: block;
     }
 
+    /* Over the lane, not the composition: the column's headings stay in
+       sight under an alert. */
     [data-armada="alerts"] {
         position: absolute;
         z-index: var(--z-alert);
         top: calc(var(--h-line1) + var(--h-line2));
         left: var(--lx);
-        width: var(--comp);
+        width: var(--col);
     }
 
     [data-armada="failure"] {

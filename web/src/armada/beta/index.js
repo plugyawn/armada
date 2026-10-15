@@ -13,6 +13,7 @@ import "./kit/mock.css";
 import "./kit/proto.css";
 import "./beta.css";
 import "./kit/glyphs.js";
+import "./kit/marks.js";
 import "./kit/kit.js";
 import "./kit/motion.js";
 import "./kit/sound.js";

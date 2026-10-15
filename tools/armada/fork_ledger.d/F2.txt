@@ -1,6 +1,6 @@
 # F2, load fixes and today's hot spots.
 bridged:A4 web/src/alert_words_ui.ts  # imports the Handlebars runtime, not the compiler; goes with alert words (K-15)
-bridged:D1 web/src/click_handlers.ts  # a click in the composer no longer looks for a message row
+bridged:D1 web/src/click_handlers.ts  # a click in the composer no longer looks for a message row; F5: a click on a thread's preview opens only the thread
 bridged:B3 web/src/compose.ts  # the field is sized by the browser, not by autosize
 bridged:B3 web/src/compose_actions.ts  # the field is sized by the browser, not by autosize
 bridged:B3 web/src/compose_send_menu_popover.ts  # the reminder note is sized through compose_ui
@@ -12,7 +12,7 @@ bridged:I4 web/src/markdown.ts  # KaTeX is fetched on first use
 bridged:C1 web/src/message_edit.ts  # the edit box is sized through compose_ui
 bridged:D1 web/src/message_list.ts  # the edit box is sized through compose_ui
 bridged:D1 web/src/message_list_view.ts  # the edit box is sized through compose_ui
-bridged:F5 web/src/resize.ts  # a field resized by hand stops being sized to its text; the limit allows for its bottom room
+bridged:B3 web/src/resize.ts  # a field resized by hand stops being sized to its text; the limit allows for its bottom room; F5 deleted the rest but the composer's maximum height
 bridged:B3 web/styles/compose.css  # field-sizing: content
 bridged:A5 web/templates/popovers/left_sidebar/left_sidebar_view_popover_item.hbs  # a view without a count no longer throws
 kept web/tests/compose.test.cjs  # no autosize to stand in for

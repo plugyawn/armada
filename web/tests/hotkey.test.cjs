@@ -47,6 +47,7 @@ const emoji_picker = mock_esm("../src/emoji_picker", {
     start_picker_for_message_reaction() {},
 });
 const gear_menu = mock_esm("../src/gear_menu");
+const hashchange = mock_esm("../src/hashchange");
 const info_overlay = mock_esm("../src/info_overlay");
 const lightbox = mock_esm("../src/lightbox");
 const list_util = mock_esm("../src/list_util");
@@ -54,6 +55,7 @@ const message_actions_popover = mock_esm("../src/message_actions_popover");
 const message_edit = mock_esm("../src/message_edit");
 const message_edit_history = mock_esm("../src/message_edit_history");
 const message_lists = mock_esm("../src/message_lists");
+const message_threads = mock_esm("../src/message_threads");
 const user_topics_ui = mock_esm("../src/user_topics_ui");
 const message_view = mock_esm("../src/message_view");
 const narrow_state = mock_esm("../src/narrow_state");
@@ -146,8 +148,11 @@ emoji.initialize({
 
 const settings_config = zrequire("settings_config");
 const {set_realm} = zrequire("state_data");
+const {initialize_user_settings} = zrequire("user_settings");
 const realm = make_realm();
 set_realm(realm);
+// Esc goes home when this is set, as it is by default.
+initialize_user_settings({user_settings: {web_escape_navigates_to_home_view: true}});
 
 function stubbing(module, func_name_to_stub, test_function) {
     with_overrides(({override}) => {
@@ -743,6 +748,38 @@ test_while_not_editing_text("motion_keys", () => {
     assert_mapping("down_arrow", drafts_overlay_ui, "handle_keyboard_events");
     delete overlays.any_active;
     delete overlays.drafts_open;
+});
+
+test_while_not_editing_text("Esc and Ctrl+[ with a thread open", ({override}) => {
+    // The escape path reads which layer is on top before it reaches the
+    // thread; with nothing else open, the thread is the topmost.
+    $.set_results(".navbar-item:focus", []);
+    override(overlays, "any_active", () => false);
+    override(sidebar_ui, "any_sidebar_expanded_as_overlay", () => false);
+    let thread_open = true;
+    const closes = [];
+    override(message_threads, "is_open", () => thread_open);
+    override(message_threads, "close", (options) => {
+        closes.push(options);
+        thread_open = false;
+    });
+    const home = [];
+    override(hashchange, "set_hash_to_home_view", (triggered_by_escape_key) => {
+        home.push(triggered_by_escape_key);
+    });
+    const target = Object.create(globalThis.HTMLElement.prototype);
+
+    // Esc closes the thread, puts focus back where it was opened from,
+    // and does not also go home.
+    assert.ok(hotkey.process_keydown({key: "Escape", target}));
+    assert.deepEqual(closes, [{restore_focus: true}]);
+    assert.deepEqual(home, []);
+
+    // Ctrl+[ goes home unconditionally, closing the thread on its way.
+    thread_open = true;
+    assert.ok(hotkey.process_keydown({key: "[", code: "BracketLeft", ctrlKey: true, target}));
+    assert.deepEqual(closes, [{restore_focus: true}, {restore_focus: false}]);
+    assert.deepEqual(home, [true]);
 });
 
 run_test("test new user input hook called", () => {

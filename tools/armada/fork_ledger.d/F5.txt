@@ -1,5 +1,6 @@
 # F5, the frame, the composition, seams and bridges.
 kept templates/zerver/app/index.html  # the frame, the inlined sprite; the splash and both logos deleted
+kept web/templates/navbar.hbs  # the bar, its sidebar toggles and the logo deleted (K-77, K-37): the old title, facts, search and menus on line 1; also the interim beta's "Try the beta" link, which goes with the beta
 bridged:C1 web/src/message_viewport.ts  # the feed's scroller in the pane; no navbar or compose arithmetic
 bridged:C1 web/src/message_scroll.ts  # listens to the feed's scroller, not the document
 hooked web/src/message_view_header.ts  # the place, the worktree's facts and views, line 2's sentence
@@ -18,3 +19,4 @@ kept web/styles/zulip.css  # no document scroll; the three-column max-width rule
 kept web/styles/message_header.css  # the container-query fallback deleted
 kept web/tests/dispatch.test.cjs  # scroll_bar.ts gone
 bridged:A5 web/src/hotkey.ts  # Esc with a thread open closes the thread and does not also go to the home view
+kept web/tests/hotkey.test.cjs  # Esc and Ctrl+[ with a thread open

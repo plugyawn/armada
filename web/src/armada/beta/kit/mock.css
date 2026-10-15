@@ -83,7 +83,7 @@
   --fill-1: rgb(17 20 25 / 0.06); --fill-2: rgb(17 20 25 / 0.1); --fill-3: rgb(17 20 25 / 0.14);
   --block: #f0f1ee; --line: #e4e4e2; --edge: #e0e0e1; --edge-2: #bcbdbf; --edge-ctl: #868888;
   --bubble: #e1e0db; --bubble-me: #0239b8; --on-me: #ffffff; --chip: #ffffff;
-  --b-moss: #d6e5d5; --b-larimar: #cde5e6; --b-lapis: #d3e1f1; --b-amethyst: #e3dcee; --b-rose: #efd9e0; --b-flint: #e1e0db;
+  --b-moss: #d6e5d5; --b-larimar: #cde5e6; --b-lapis: #d3e1f1; --b-amethyst: #e3dcee; --b-rose: #efd9e0; --b-flint: #e1e0db; --b-citrine: #ece4c9;
   --accent: #0239b8; --accent-hover: #0232a2; --accent-press: #022b8c; --on-accent: #ffffff; --accent-text: #0239b8;
   --ring: rgb(2 57 184 / 1);
   --success: #04665e; --attention: #996a05; --failure: #af023b;
@@ -104,7 +104,7 @@
   --fill-1: rgb(237 238 241 / 0.06); --fill-2: rgb(237 238 241 / 0.105); --fill-3: rgb(237 238 241 / 0.15);
   --block: #242529; --line: #323336; --edge: #525458; --edge-2: #717377; --edge-ctl: #828487;
   --bubble: #323438; --bubble-me: #2559ca; --on-me: #ffffff; --chip: #3e4145;
-  --b-moss: #2b382b; --b-larimar: #22393a; --b-lapis: #293542; --b-amethyst: #373140; --b-rose: #402e35; --b-flint: #323438;
+  --b-moss: #2b382b; --b-larimar: #22393a; --b-lapis: #293542; --b-amethyst: #373140; --b-rose: #402e35; --b-flint: #323438; --b-citrine: #36322a;
   --accent: #2c62d7; --accent-hover: #2756bd; --accent-press: #214aa3; --on-accent: #ffffff; --accent-text: #88b0fe;
   --ring: rgb(136 176 254 / 1);
   --success: #23dbc1; --attention: #f0c551; --failure: #fd736d;
@@ -122,7 +122,7 @@
   --fill-1: rgb(237 238 241 / 0.06); --fill-2: rgb(237 238 241 / 0.105); --fill-3: rgb(237 238 241 / 0.15);
   --block: #242529; --line: #323336; --edge: #525458; --edge-2: #717377; --edge-ctl: #828487;
   --bubble: #323438; --bubble-me: #2559ca; --on-me: #ffffff; --chip: #3e4145;
-  --b-moss: #2b382b; --b-larimar: #22393a; --b-lapis: #293542; --b-amethyst: #373140; --b-rose: #402e35; --b-flint: #323438;
+  --b-moss: #2b382b; --b-larimar: #22393a; --b-lapis: #293542; --b-amethyst: #373140; --b-rose: #402e35; --b-flint: #323438; --b-citrine: #36322a;
   --accent: #2c62d7; --accent-hover: #2756bd; --accent-press: #214aa3; --on-accent: #ffffff; --accent-text: #88b0fe;
   --ring: rgb(136 176 254 / 1);
   --success: #23dbc1; --attention: #f0c551; --failure: #fd736d;
@@ -169,25 +169,38 @@ em { font-style: italic; } strong, b { font-weight: 500; }
 .i2 { color: var(--ink-2); } .dim { color: var(--dim); }
 .c-att { color: var(--attention); } .c-fail { color: var(--failure); } .c-ok { color: var(--success); }
 /* code is coloured, on its own surface: four roles, the same in both themes */
-:is(pre, code, .src, .dl) .k { color: var(--syn-k); } :is(pre, code, .src, .dl) .s { color: var(--syn-s); }
-:is(pre, code, .src, .dl) .n { color: var(--syn-n); } :is(pre, code, .src, .dl) .c { color: var(--syn-c); }
+/* the four syntax inks; beta.js maps the server's highlighting onto .sx-*, which no control uses (.c and .k are controls) */
+:is(pre, code, .src, .dl) .sx-k { color: var(--syn-k); } :is(pre, code, .src, .dl) .sx-s { color: var(--syn-s); }
+:is(pre, code, .src, .dl) .sx-n { color: var(--syn-n); } :is(pre, code, .src, .dl) .sx-c { color: var(--syn-c); }
 /* what was added and what was removed, as counts */
 .m .a, .a.m { color: var(--add-ink); } .m .d, .d.m { color: var(--del-ink); }
 
 /* ---- drawn marks. Strokes are for what people use; pixels are for Onix and what it is doing. */
-.ic { width: 16px; height: 16px; flex: none; display: block; overflow: visible; fill: none; stroke: currentColor; stroke-width: var(--ic-w); stroke-linecap: butt; stroke-linejoin: round; }
+.ic { width: 16px; height: 16px; flex: none; display: block; overflow: visible; fill: none; stroke: currentColor; stroke-width: var(--ic-w); stroke-linecap: round; stroke-linejoin: round; }
 .ic .n { transform: translate(var(--ic-n), var(--ic-n)); } .ic .f { fill: currentColor; stroke: none; }
 .ic.s8 { width: 8px; height: 8px; } .ic.s18 { width: 18px; height: 18px; }
 .mk { width: 14px; height: 14px; flex: none; display: block; fill: currentColor; }
 .mk.s28 { width: 28px; height: 28px; }
+/* a mark is two tones of one ink (r4 marks study): the second tone is the shaded side, never the only carrier of a shape */
+:root { --tone: 0.42; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --tone: 0.45; } }
+:root[data-theme="dark"] { --tone: 0.45; }
+:is(.mk, .sigil) .t-b { opacity: var(--tone); }
+.mk.left { color: var(--ink-2); opacity: 0.7; }                   /* a step not reached: a small ring, lighter than everything around it */
 .sigil { flex: none; display: block; fill: currentColor; width: 14px; height: 14px; }
-.sigil.s20 { width: 20px; height: 20px; } .sigil.s28 { width: 28px; height: 28px; } .sigil.s64 { width: 64px; height: 64px; }
-/* Onix working: the one loop. A small stone with a bed stepping down through it, at the head of the stream. One sprite
-   of four drawings side by side, moved in steps: no frame can be blank. */
+.sigil.s16 { width: 16px; height: 16px; } .sigil.s18 { width: 18px; height: 18px; } .sigil.s20 { width: 20px; height: 20px; } .sigil.s28 { width: 28px; height: 28px; } .sigil.s64 { width: 64px; height: 64px; }
+/* Onix's face (beta.js agentFace): boulders in a flint disc, as a person without a picture has initials in one */
+.sigil.agent > .disc { fill: var(--p-flint); } .sigil.agent.in-disc > g { fill: var(--p-flint-ink); }
+/* Onix working: the one loop, at the head of the stream and nowhere else. One strip of three drawings 14 px apart, moved a
+   drawing at a time on --step (100 ms), twelve steps (1.2 s), resting inside the loop. Themed: the ball's capture wobble,
+   lean left, upright, lean right, then upright at rest for 900 ms; its outline never moves. Plain: the dot draws in to a
+   point and back, then rests. Elsewhere a live run is the same drawing, still. */
 .wk { overflow: hidden; }
-.wk > g { transform: translateX(-21px); }                       /* at rest: the whole stone, the last drawing */
-.wk.live > g { animation: wk calc(var(--step) * 8) steps(4, jump-none) infinite; }
-@keyframes wk { from { transform: translateX(0); } to { transform: translateX(-21px); } }
+.wk.ball > g { transform: translateX(-14px); } .wk.dot > g { transform: translateX(0); }   /* at rest */
+.wk.ball.live > g { animation: wk-wobble calc(var(--step) * 12) step-end infinite; }
+.wk.dot.live > g { animation: wk-dot calc(var(--step) * 12) step-end infinite; }
+@keyframes wk-wobble { 0% { transform: translateX(0); } 8.333% { transform: translateX(-14px); } 16.667% { transform: translateX(-28px); } 25%, 100% { transform: translateX(-14px); } }
+@keyframes wk-dot { 0% { transform: translateX(-14px); } 8.333% { transform: translateX(-28px); } 16.667% { transform: translateX(-14px); } 25%, 100% { transform: translateX(0); } }
 .head { display: inline-block; width: 0; height: 0; position: relative; vertical-align: baseline; }
 .head > .mk { position: absolute; left: 6px; top: -13px; }
 .head.first > .mk { left: 0; }
@@ -197,10 +210,10 @@ em { font-style: italic; } strong, b { font-weight: 500; }
 .dots circle:nth-child(2) { animation-delay: calc(var(--caret-period) * 0.15); } .dots circle:nth-child(3) { animation-delay: calc(var(--caret-period) * 0.3); }
 @keyframes dot { 0%, 60%, 100% { opacity: 0.35; transform: scale(0.83); } 30% { opacity: 1; transform: scale(1.17); } }
 .dots.s { width: 13px; height: 3px; }
-@media (prefers-reduced-motion: reduce) { .wk.live > g, .dots circle, .m-caret.idle, .idle > .cur { animation: none; } .dots circle { opacity: 0.7; transform: none; } }
-:root[data-motion="reduced"] :is(.wk.live > g, .dots circle, .m-caret.idle, .idle > .cur) { animation: none; }
+@media (prefers-reduced-motion: reduce) { :is(.wk.ball, .wk.dot).live > g, .dots circle, .m-caret.idle, .idle > .cur { animation: none; } .dots circle { opacity: 0.7; transform: none; } }
+:root[data-motion="reduced"] :is(:is(.wk.ball, .wk.dot).live > g, .dots circle, .m-caret.idle, .idle > .cur) { animation: none; }
 :root[data-motion="reduced"] .dots circle { opacity: 0.7; transform: none; }
-.off .dots circle, [inert] .wk > g { animation: none; }   /* a loop on a thing that is not shown does not run */
+.off .dots circle, [inert] :is(.wk.ball, .wk.dot).live > g { animation: none; }   /* a loop on a thing that is not shown does not run */
 
 /* ================= motion, the stylesheet half. motion.js is the only file that calls element.animate. =================
    Hover and press: the fill is a layer behind the label, so it settles in from a slightly smaller box while the label
@@ -395,6 +408,7 @@ main > .feed { margin-bottom: calc(-1 * var(--h-band)); }
 .b { max-width: min(var(--bubble-max), calc(var(--col) * 0.78)); min-height: var(--h-l); padding: var(--pad-y) var(--pad-x); border-radius: var(--r-bubble); background: var(--bubble); position: relative; overflow-wrap: break-word; transform-origin: 0 0; }
 .s-moss .b { background: var(--b-moss); } .s-larimar .b { background: var(--b-larimar); } .s-lapis .b { background: var(--b-lapis); }
 .s-amethyst .b { background: var(--b-amethyst); } .s-rose .b { background: var(--b-rose); } .s-flint .b { background: var(--b-flint); }
+.s-citrine .b { background: var(--b-citrine); }   /* partners: Electric and Ground, bubbles only (r4 partner study, section 8) */
 .cl.me .b { background: var(--bubble-me); color: var(--on-me); }
 .b.t { border-top-left-radius: var(--r-ctl); } .b.u { border-bottom-left-radius: var(--r-ctl); }
 .cl.me .b.t { border-top-left-radius: var(--r-bubble); border-top-right-radius: var(--r-ctl); }
@@ -520,7 +534,7 @@ pre.blk, .blk pre { font: var(--t-code); white-space: pre; overflow: hidden; }
 .band .ty > .avs .av { box-shadow: 0 0 0 2px var(--plane); } .band .ty > .avs .av + .av { margin-left: -12px; }
 .tyb { width: 44px; height: var(--h-m); border-radius: var(--r-pop) var(--r-pop) var(--r-pop) var(--r-ctl); background: var(--bubble); display: grid; place-items: center; flex: none; }
 .tyb.s-moss { background: var(--b-moss); } .tyb.s-larimar { background: var(--b-larimar); } .tyb.s-lapis { background: var(--b-lapis); }
-.tyb.s-amethyst { background: var(--b-amethyst); } .tyb.s-rose { background: var(--b-rose); }
+.tyb.s-amethyst { background: var(--b-amethyst); } .tyb.s-rose { background: var(--b-rose); } .tyb.s-flint { background: var(--b-flint); } .tyb.s-citrine { background: var(--b-citrine); }
 .band .ty .nm { font: var(--t-caption); color: var(--ink-2); white-space: nowrap; }
 /* while a run holds the band's line the face stays where it was and the dots ride on it */
 .band .ty.chip > .tyb { position: absolute; right: calc(100% + 3px); top: 16px; width: 22px; height: 14px; border-radius: 7px; box-shadow: 0 0 0 2px var(--plane); }

@@ -7,14 +7,6 @@
         "since": "2026-10-14",
         "max": 90
     },
-    "design-lint/app.home.longer-than-440ms": {
-        "measured": 1,
-        "unit": "",
-        "threshold": "== 0",
-        "audit": "SPEC-ENGINEERING.md section 11 and SPEC-DESIGN.md sections 4 to 8: the design language counted on the old interface's home screen (longer-than-440ms). Created by F4 as a known failure with today's figure; each surface's package turns its part to fixed. The ceiling is today's figure and a quarter, because these screens hold live fixture data whose count moves a little between runs.",
-        "since": "2026-10-14",
-        "max": 2
-    },
     "design-lint/app.home.radii-off-the-scale": {
         "measured": 89,
         "unit": "",
@@ -193,31 +185,10 @@
         "audit": "var/armada-overhaul/maps/runtime-semantics.md, Measured facts: a running run costs about 1,507 layouts, 3,747 style recalcs and 4.67 s of main thread per minute, plus 10 POST attention + 1 GET runs.",
         "since": "2026-10-13"
     },
-    "idle-cost/wall-monitors.layouts-per-minute": {
-        "measured": 615,
-        "unit": "",
-        "threshold": "<= 120",
-        "audit": "var/armada-overhaul/maps/runtime-semantics.md, Measured facts: a wall with 5 monitors costs about 610 layouts, 3,625 style recalcs and 2.18 s of main thread per minute, plus 12 GET /json/pear/monitors.",
-        "since": "2026-10-13"
-    },
-    "idle-cost/wall-monitors.main-thread-ms-per-minute": {
-        "measured": 1625.1,
-        "unit": "ms",
-        "threshold": "<= 1000",
-        "audit": "var/armada-overhaul/maps/runtime-semantics.md, Measured facts: a wall with 5 monitors costs about 610 layouts, 3,625 style recalcs and 2.18 s of main thread per minute, plus 12 GET /json/pear/monitors.",
-        "since": "2026-10-13"
-    },
     "idle-cost/wall-monitors.requests-per-minute": {
         "measured": 12,
         "unit": "",
         "threshold": "<= 6",
-        "audit": "var/armada-overhaul/maps/runtime-semantics.md, Measured facts: a wall with 5 monitors costs about 610 layouts, 3,625 style recalcs and 2.18 s of main thread per minute, plus 12 GET /json/pear/monitors.",
-        "since": "2026-10-13"
-    },
-    "idle-cost/wall-monitors.style-recalcs-per-minute": {
-        "measured": 3999,
-        "unit": "",
-        "threshold": "<= 240",
         "audit": "var/armada-overhaul/maps/runtime-semantics.md, Measured facts: a wall with 5 monitors costs about 610 layouts, 3,625 style recalcs and 2.18 s of main thread per minute, plus 12 GET /json/pear/monitors.",
         "since": "2026-10-13"
     },
@@ -502,11 +473,12 @@
         "max": 1708
     },
     "startup/cumulative-layout-shift.median": {
-        "measured": 0.553,
+        "measured": 0.164,
         "unit": "",
         "threshold": "<= 0.01",
-        "audit": "var/armada-overhaul/maps/perf-input.md, Startup: cumulative layout shift 0.52 (0.33-0.55) on a topic load; shell.md, Instability \"Page load\".",
-        "since": "2026-10-13"
+        "audit": "var/armada-overhaul/maps/perf-input.md, Startup: cumulative layout shift 0.52 (0.33-0.55) on a topic load; shell.md, Instability \"Page load\". F5 (2026-10-14): the splash and the document scroll are gone and the median is 0.155 to 0.157 (from 0.553); all of it is one shift on a cold load of the long topic, about 3.6 s in, when the old view re-renders the topic from the server's answer and places the first unread message again (rows move about 508 px in the pane; build/F5.md). That is the old feed's (C1); the plan's ceiling of 0.10 for F5 is not met, so the ceiling is today's range (0.155 to 0.164 in F5's runs) and a little more.",
+        "since": "2026-10-13",
+        "max": 0.17
     },
     "startup/fonts.requests-after-first-paint": {
         "measured": 3,
@@ -576,13 +548,6 @@
         "audit": "var/armada-overhaul/design/final/SPEC-ENGINEERING.md, sections 6 and 8 (Stream): today an answer arrives as whole-message edits every 200 ms (zerver/lib/pear.py, PEAR_PERSISTENT_ASSISTANT_FLUSH_INTERVAL_SECONDS) and each one re-renders the row (var/armada-overhaul/maps/feed-agent.md, Instability). Fixed by C2 (stream writer), on B6's deltas. It was 34 to 53 over fifteen runs; the ceiling stops it from growing.",
         "since": "2026-10-13",
         "max": 60
-    },
-    "stream-cost/400wps.frames-word-hidden": {
-        "measured": 178,
-        "unit": "",
-        "threshold": "<= 0",
-        "audit": "var/armada-overhaul/design/final/SPEC-ENGINEERING.md, sections 6 and 8 (Stream): today an answer arrives as whole-message edits every 200 ms (zerver/lib/pear.py, PEAR_PERSISTENT_ASSISTANT_FLUSH_INTERVAL_SECONDS) and each one re-renders the row (var/armada-overhaul/maps/feed-agent.md, Instability). Found by this check: once the answer is longer than the condense limit the live message is cut by \"Show more\" (condense.ts), so the newest words are not on screen while they stream. Fixed by C2; CUTS.md removes condensing.",
-        "since": "2026-10-13"
     },
     "stream-cost/400wps.layouts-per-event": {
         "measured": 11.6,
@@ -722,19 +687,19 @@
         "max": 276
     },
     "weight/css-rules": {
-        "measured": 7721,
+        "measured": 8217,
         "unit": "",
         "threshold": "<= 2500",
-        "audit": "New in F2 (2026-10-14). var/armada-overhaul/maps/lean-weight.md, Runtime weight: 9,811 rules on 13 October. F2 no longer loads the emoji sprite's 1,913 rules before an emoji is shown, and the check counts that sheet apart (its note says whether it was loaded), so an emoji in the fixture topic does not move the figure; the sprites are cut with K-66. F2b (2026-10-14) set the browser targets (K-95): 257 fewer rules in the app's stylesheets on the same tree (8,241 to 7,984, var/armada-overhaul/build/F2b.md), so the ceiling is 7,978 less 257.",
+        "audit": "New in F2 (2026-10-14). var/armada-overhaul/maps/lean-weight.md, Runtime weight: 9,811 rules on 13 October. F2 no longer loads the emoji sprite's 1,913 rules before an emoji is shown, and the check counts that sheet apart (its note says whether it was loaded), so an emoji in the fixture topic does not move the figure; the sprites are cut with K-66. F2b (2026-10-14) set the browser targets (K-95): 257 fewer rules in the app's stylesheets on the same tree (8,241 to 7,984, var/armada-overhaul/build/F2b.md), which put the old sheets at 7,720. The page reads 8,213 because the kit's stylesheet (src_armada_kit_index_ts.css, 493 rules) now loads with the app entry, imported by F5's frame (var/armada-overhaul/build/F2b-verify/sheets.txt); the ceiling is that reading, and those 493 rules are the kit's and the frame's, not the old sheets'. F5 (2026-10-14): rules for the old scroll-to-bottom button in the band (bridge/legacy_composer.css) and for Inbox and Recent on the plane's ground (bridge/legacy_home.css): 8,218. F5-verify (2026-10-15): one rule more, which keeps the old thread pane inside the sheet under the old xl breakpoint (bridge/legacy_column.css): 8,219. F5 after verification (2026-10-15): that rule now holds the thread over the whole sheet at every width, one more ends the old alerts where the open sheet starts (bridge/legacy_column.css), and the three old thread-pane rules it made dead are deleted from web/styles/pear.css: 8,217.",
         "since": "2026-10-14",
-        "max": 7721
+        "max": 8217
     },
     "weight/dom-nodes": {
-        "measured": 1645,
+        "measured": 1866,
         "unit": "",
         "threshold": "<= 900",
-        "audit": "New in F2 (2026-10-14). var/armada-overhaul/maps/lean-weight.md, Runtime weight: 1,695 elements on the short worktree topic on 13 October, most of them hidden overlays and sidebars rendered at startup. The count moves by a few elements with what the sidebars hold (1,645 alone, 1,647 in a full run), so the ceiling is the audit's 1,695.",
+        "audit": "New in F2 (2026-10-14). var/armada-overhaul/maps/lean-weight.md, Runtime weight: 1,695 elements on the short worktree topic on 13 October, most of them hidden overlays and sidebars rendered at startup. The count moves by a few elements with what the sidebars hold (1,645 alone, 1,647 in a full run), so the ceiling is the audit's 1,695. F5 (2026-10-14): the frame inlines the glyph and mark sprite once in the page (PLAN.md F5; 216 elements in templates/zerver/app/armada_sprite.svg), so the ceiling is 1,866, measured in F5's full run.",
         "since": "2026-10-14",
-        "max": 1695
+        "max": 1866
     }
 }

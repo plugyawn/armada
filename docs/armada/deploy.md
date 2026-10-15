@@ -14,8 +14,9 @@ any Ubuntu 24.04 machine.
 Armada is a Zulip server, so it installs the way Zulip does (a release
 tarball and `scripts/setup/install`), plus the things this file adds for the
 agent. Zulip's own production documentation (`docs/production/`) is right for
-everything that is not marked as Armada's. The agent is named Onyx in the
-interface; the server, its settings and its bot account still say Pear.
+everything that is not marked as Armada's. The agent is named Onix in the
+interface; the server, its settings and its bot account still say Pear
+until the rename.
 
 **What was tested and what was not.** On 14 October 2026, on the Armada dev
 VM (Ubuntu 24.04.5, 6 vCPU, 10 GB): the production asset build of the
@@ -26,7 +27,7 @@ with the sysctl below; Codex's read-deny permission profile
 ([Security](#security)); the supervisor configuration rendered from the
 template; and a real agent run on `gpt-6-sol` with the `ultrafast` tier
 ([The base model](#the-base-model)). **Not tested anywhere:** building the
-tarball itself (it needs a commit, and nothing is committed yet),
+tarball itself (no commit was chosen for it),
 `scripts/setup/install`, puppet, supervisor, nginx, the certificate,
 Tailscale, `scripts/upgrade-zulip` and the backup tool on an Armada server.
 They are stock Zulip and should behave as Zulip documents them, but no
@@ -37,9 +38,8 @@ Armada server has been installed yet. Each step below says which kind it is.
 You need:
 
 - **The work committed** ([Commit the work](#0-commit-the-work)). The
-  tarball is built from a commit; today nothing on `ui-overhaul` is
-  committed, so nothing can be deployed until someone decides what to
-  commit and commits it.
+  tarball is built from a commit, so the state the team gets has to be
+  chosen and committed first.
 - **An Ubuntu 24.04 machine**: for this Mac, a second Lima VM (below). For a
   team of up to ten: 4 vCPU, 6 to 8 GB RAM, 2 to 4 GB swap and 25 to 40 GB
   of disk ([Sizing](#sizing)).
@@ -61,8 +61,9 @@ You need:
   below protect and what they cost.
 
 What needs your own accounts (nobody else can do these steps for you):
-Tailscale (an admin of the tailnet: MagicDNS and HTTPS certificates on,
-people invited, the access rule); ChatGPT (the Codex device login, 6.3);
+Tailscale (a second account whose tailnet holds only the VM, or admin of
+your own: MagicDNS and HTTPS certificates on, the access policy, the
+share or the invitations); ChatGPT (the Codex device login, 6.3);
 GitHub or your Git host (a deploy key, only for private repositories, 6.5);
 an SMTP relay, if you want invitations and password-reset email.
 
@@ -107,13 +108,14 @@ the VM can reach on the tailnet.
    organization administrators and the user ids in
    `PEAR_WORKER_TRUSTED_USER_IDS` may start a run, steer one, answer its
    questions, set up a monitor, or give a new channel a repository URL.
-   _Cost:_ everyone else can chat but not use Onyx; when they address it,
-   Onyx answers that they are not allowed. The beta's composer has an Onyx
-   switch that is on by default, so an untrusted member's ordinary message in
-   a repository channel gets that answer until they turn it off. Add every
-   teammate you trust with the server's secrets to the list (step 4). Turning
-   it off (`False` and an empty list) lets every member do all of the above:
-   say so to the team if you choose it.
+   _Cost:_ everyone else can chat but not use Onix; when they address it,
+   Onix answers that they are not allowed. In the beta, a message goes to
+   Onix only when its author names it, turns on the composer's Onix switch
+   (off by default, remembered per topic in that browser) or answers a
+   question a run is waiting on; so an untrusted member's ordinary message
+   draws no refusal. Add every teammate you trust with the server's secrets
+   to the list (step 4). Turning it off (`False` and an empty list) lets
+   every member do all of the above: say so to the team if you choose it.
 2. **Only trusted people make the server fetch a URL.** The same rule
    covers the repository URL of a new channel; members may still create
    ordinary channels (Zulip's own channel-creation permission is unchanged).
@@ -130,28 +132,69 @@ the VM can reach on the tailnet.
    forwards every port the VM listens on, PostgreSQL's and RabbitMQ's
    included, to the Mac's `localhost`. _Cost:_ files go in and out with
    `limactl copy`, not through a shared folder.
-5. **The VM reaches nothing on the tailnet.** A Tailscale access rule that
-   lets the team reach the VM on port 443 and lets the VM start no
-   connection into the tailnet. _Cost:_ none for the beta; open specific
-   ports later if the server must reach a tailnet service.
+5. **The team reaches only the VM, and the VM reaches nothing on the
+   tailnet.** Share the VM with them from a tailnet of its own, or tag it
+   and write the access policy given in
+   [Hosting on this Mac](#hosting-on-this-mac); never invite them into a
+   tailnet whose policy is still the default allow-all, which lets every
+   device reach every other. _Cost:_ a second Tailscale account, or a
+   policy file to keep; open specific ports later if the server must reach
+   a tailnet service.
 6. **`workspace-write`, never `danger-full-access`.** The agent has no network
    and writes only in its worktree. (`danger-full-access` is downgraded to
    `workspace-write` anyway unless the isolation is `os-user`.) _Cost:_ an
    agent cannot install packages or fetch anything; work that needs the
    network is done by a person.
+7. **Codex memories off.** `PEAR_WORKER_CODEX_MEMORIES = False`, which the
+   template sets. With the default isolation, every topic's agent runs
+   with one `CODEX_HOME`, `/home/zulip/.codex`, so to Codex they are all
+   one user. With its
+   memories feature on, Codex condenses past sessions into
+   `memories/memory_summary.md` and `memories/MEMORY.md` there, and its own
+   instructions for that step say the summary "will be injected at the
+   beginning of every new session for the same user". What an agent read
+   in a private channel could then appear in another channel's run without
+   anyone asking for it. Read from Codex 0.157.1 (its feature list, its
+   built-in prompts and the dev VM's store, which held no consolidated
+   memory yet); not reproduced. With the setting off, the server passes
+   `features.memories=false` to every app-server, whatever a `config.toml`
+   in `CODEX_HOME` says. _Cost:_ an agent remembers nothing between topics
+   beyond what is in the topic, its worktree and the Codex thread it
+   resumes. The dev environment keeps memories on.
 
-What the rule does not cover, unchanged from before: any member who can see
-a run may still cancel, pause or resume it (stopping the agent is open to
-everyone; resuming starts nothing new), and any member who can read a
-repository channel may create, edit, rename and delete files in its topics'
-worktrees through the Files view. A file planted that way can carry
-instructions that a trusted person's next run reads. The server opens every
-worktree path without following symbolic links, so a link an agent makes
-does not let the Files view read outside the worktree.
+What the rule does not cover:
 
-What remains: a trusted person (or a prompt in a repository they cloned, or
-in a file a member wrote, above) can get an agent to read the server's secrets, the Codex login, transcripts and
-other topics' worktrees into a channel the team can read. For a beta used by
+- **Anything posted in a topic reaches the next run there.** Every run's
+  prompt carries the topic's last 30 messages, each cut to 1,200
+  characters, from every sender, named as such. So anyone who can post in
+  a repository topic can write instructions that a trusted person's next
+  run in that topic reads, and the agent may follow them with everything
+  it can do (above: read the server's secrets and post them into the
+  topic). The trust rule does not help: the run is the trusted person's.
+  What limits it: only people who may post in that channel can do it, and
+  only the last 30 messages count. To close it, make each repository
+  channel one that only trusted people may post in: a private channel
+  with only them subscribed, or Zulip's "who can post" channel setting
+  limited to a group of them. Read a topic before you address Onix in it.
+  (Conversations linked from a trusted person's own message are read with
+  that person's access, so they add nothing the person could not read.)
+- **Any member who can read a repository channel may create, edit, rename
+  and delete files in its topics' worktrees** through the Files view. A
+  file planted that way can carry instructions in the same way. The server
+  opens every worktree path without following symbolic links, so a link an
+  agent makes does not let the Files view read outside the worktree.
+- **Any member who can see a run may cancel, pause or resume it**
+  (stopping the agent is open to everyone; resuming starts nothing new).
+- **Any member may change a topic's model and effort**
+  (`POST /json/pear/topic-context` has no trust check, and the model may be
+  any short name, not only those in `PEAR_WORKER_MODEL_CHOICES`). The next
+  run in that topic then uses it. That changes cost, quota and speed, not
+  what an agent can reach.
+
+What remains: a trusted person (or a prompt in a repository they cloned,
+or in a message or a file a member wrote, above) can get an agent to read
+the server's secrets, the Codex login, transcripts and other topics'
+worktrees into a channel the team can read. For a beta used by
 one team on a private network, that is the accepted risk of this setup. If a
 secret is ever posted, treat it as exposed: delete the message, change the
 secret (a new `secret_key` in `/etc/zulip/zulip-secrets.conf` and a restart
@@ -219,9 +262,11 @@ sandbox kept on.
 
 ## 0. Commit the work
 
-_Needs a decision by you._ Deploying needs the work committed, and nothing on
-`ui-overhaul` is: about 150 modified files, 10 deleted and 21 untracked paths
-on 14 October, with several people still editing the tree. Decide:
+_Needs a decision by you._ Deploying needs the work committed. On 14
+October at 19:21 a checkpoint of `ui-overhaul` was committed
+(`89fb6f54e4`, "Checkpoint the interface rebuild before the rename"); the
+work since then, this guide's own changes included, is not, and several
+people are still editing the tree. Decide:
 
 - **The branch** the server is built from (`ui-overhaul`, or a deploy branch
   cut from it).
@@ -251,9 +296,11 @@ beta runs in a second Lima VM, `armada-beta`, separate from the dev VM. The
 dev VM cannot double as the server: PostgreSQL, RabbitMQ, Redis, nginx and
 the `zulip` user would collide with the dev environment's.
 
-**Disk first.** On 14 October the Mac had between 15 and 19 GB free over
-the day (about 18 GB at 18:00), and the dev VM already takes 18 GB. Zulip asks for 10 GB free on
-top of the system (about 25 GB of disk in all); Armada adds repositories,
+**Disk first.** On 14 October the Mac had between 14 and 19 GB free over
+the day (14 GB at 20:50, `df -h /System/Volumes/Data`), and the dev VM
+already takes 18 GB. That is below the floor this section sets: **free
+space before you start.** Zulip asks for 10 GB free on top of the system
+(about 25 GB of disk in all); Armada adds repositories,
 worktrees and the Codex CLI. Estimated, not measured: the beta VM uses about
 12 to 15 GB once installed, and grows with every repository, topic worktree
 and upgrade (each upgrade keeps the previous version, about 2 GB). Lima's
@@ -283,21 +330,75 @@ was not created here.) Run every server command below inside it:
 `limactl shell armada-beta`, then `sudo -i`. Copy files in with
 `limactl copy FILE armada-beta:/tmp/`.
 
-**Tailscale** (your tailnet admin account):
+**Tailscale** (_untested here_; from Tailscale's documentation, "Sharing
+your machines" and "Access control"). Do **not** invite the team into your
+own tailnet as it is: a new tailnet's policy lets every device reach every
+other, so a teammate would reach your Mac and every other device of yours,
+and the VM (where every agent runs) would too. Pick one of two ways.
 
-1. In the Tailscale admin console, turn on MagicDNS and HTTPS certificates.
-   Machine names then appear in public certificate-transparency logs; name
-   the machine accordingly.
-2. In the VM, install Tailscale from its documented package source and run
-   `tailscale up --hostname=armada-beta`; open the printed URL and approve
-   the machine.
-3. Give it a tag (for example `tag:armada-beta`) and an access rule that
-   lets the team reach it on 443 and lets it start no connection into the
-   tailnet (item 5).
-4. Invite the team to the tailnet, or share the machine with them.
+_Recommended: share the VM from a tailnet of its own._ A shared machine is
+the only thing its recipients reach, and Tailscale quarantines it: it
+accepts their connections but cannot start one into their tailnets.
 
-The server's name is then `armada-beta.<tailnet>.ts.net`: that is
-`EXTERNAL_HOST`, the `--hostname` of step 3, and the address the team opens.
+1. Make a second Tailscale account for the beta (any identity provider
+   Tailscale accepts), which gives it a tailnet of its own. In that
+   tailnet's admin console, turn on MagicDNS and HTTPS certificates.
+   Machine names then appear in public certificate-transparency logs;
+   name the machine accordingly.
+2. In that tailnet's access controls, replace the default rule with this
+   one, so that people it is shared with reach HTTPS and nothing else (not
+   the VM's SSH server, for one):
+
+   ```json
+   {
+     "grants": [{ "src": ["autogroup:shared"], "dst": ["*"], "ip": ["443"] }]
+   }
+   ```
+
+3. In the VM, install Tailscale from its documented package source and run
+   `tailscale up --hostname=armada-beta`; open the printed URL, sign in
+   with the second account and approve the machine. Leave it untagged:
+   alone in its tailnet, a tag adds nothing.
+4. In the admin console, Machines, the machine's menu, **Share**: share it
+   by email with each teammate, and with your own everyday account. Each
+   needs a Tailscale account of their own (free) and accepts the share
+   there; Tailscale lets only an owner or admin of a tailnet accept one, so
+   a teammate whose only tailnet is their employer's may need a personal
+   one.
+
+The VM is then alone in its tailnet, so it reaches nothing of anyone's.
+
+_Or, in your own tailnet: tag the VM and replace the policy._ Every
+teammate joins your tailnet as a member. Write the whole policy file as
+below (in the admin console, Access controls; your addresses in place of
+the examples). It replaces the allow-all rule for the whole tailnet: your
+own devices keep reaching everything, the team reaches the VM's port 443
+only, and nothing allows a connection from the VM, so it can start none.
+If your tailnet already has rules of its own, merge these into them.
+
+```json
+{
+  "tagOwners": { "tag:armada-beta": ["you@example.com"] },
+  "groups": { "group:armada-team": ["alex@example.com", "sam@example.com"] },
+  "acls": [
+    { "action": "accept", "src": ["you@example.com"], "dst": ["*:*"] },
+    { "action": "accept", "src": ["group:armada-team"], "dst": ["tag:armada-beta:443"] }
+  ]
+}
+```
+
+Then, in the VM, `tailscale up --hostname=armada-beta
+--advertise-tags=tag:armada-beta` (or apply the tag to the machine in the
+admin console, Machines, "Edit ACL tags"), and invite the team from Users.
+A tagged machine belongs to the tag, not to you, so `you@example.com`'s
+rule does not let it reach your devices.
+
+Either way the server's name is `armada-beta.<tailnet>.ts.net`, `<tailnet>`
+being the tailnet the VM is in: that is `EXTERNAL_HOST`, the `--hostname`
+of the Zulip install (step 3 below), and the address the team opens. With sharing, check from one
+teammate's machine that the name resolves and the page opens before
+telling everyone (Tailscale names shared machines by their own tailnet;
+not tried here).
 
 **The certificate.** Install Zulip with a self-signed certificate (step 3),
 then replace it with Tailscale's, which every browser and the Electron app
@@ -315,10 +416,23 @@ from a weekly root cron job. (`tailscale serve` in front of Zulip is the
 other way: it needs Zulip's `http_only` and `[loadbalancer]` settings,
 `docs/production/reverse-proxies.md`, and was not tried.)
 
-**When the Mac sleeps, the beta is down**, and runs in progress are cut off
-and retried once when it wakes. If the team relies on it during the day, set
-the Mac not to sleep on power (System Settings, or `pmset`), and keep it on
-power and online.
+**When the Mac sleeps, the beta is unreachable.** Lima's VM is suspended
+with the Mac and resumes when it wakes: its processes continue where they
+stopped, nothing restarts. Seen on the dev VM (same Lima 2.2.1, `vz`): it
+has run since 13 October through the Mac's sleeps on 14 October, and each
+wake left its clock behind by up to 33 minutes until Lima's guest agent
+set it again. What a run that was going at the time does after the wake
+is **not verified**: Codex's connection to OpenAI may have been dropped
+by the far end and be retried or fail; RabbitMQ may count the sleep
+against the consumer timeout of 6.6 and deliver the run again. Check such
+runs after a wake.
+
+`--plain` turns the guest agent off, so in the beta VM the clock is set
+only by Ubuntu's own time service: check that `timedatectl` says "System
+clock synchronized: yes" (`systemd-timesyncd` is on by default), and after
+a wake give it a few minutes. If the team relies on the beta during the
+day, set the Mac not to sleep on power (System Settings, or `pmset`), and
+keep it on power and online.
 
 ## 1. Build a release tarball (on the build machine)
 
@@ -326,21 +440,47 @@ _Stock Zulip, untested here (it needs the commit of step 0)._ In the dev VM,
 the commit arrives in `/srv/armada/zulip` through the sync loop (`.git` is
 synced). The build needs about 5 GB of free memory for webpack (measured
 peak 4.7 to 5.2 GB): stop the dev server first, agreeing a moment with
-anyone using it, or build on another machine.
+anyone using it, or build on another machine. From the Mac:
+
+```bash
+limactl shell armada -- /home/progyan.guest/armada-stop.sh     # stops the dev server
+limactl shell armada
+```
+
+Then, in the dev VM:
 
 ```bash
 cd /srv/armada/zulip
 test -z "$(git status --porcelain)" && echo clean    # must print clean
 # Only with the licensed web fonts; see Fonts. Never the test files.
 export ARMADA_FONT_DIR=/srv/fonts/soehne
+# The build works in this directory (about 3 GB); keep it inside the VM.
+export OUTPUT_DIR=/srv/armada/release-build
+rm -rf "$OUTPUT_DIR" && mkdir -p "$OUTPUT_DIR"
 ./tools/build-release-tarball armada-$(date +%Y%m%d)-$(git rev-parse --short HEAD)
+# The checkout is mounted from the Mac: copying the tarball there brings it out.
+mkdir -p /Users/progyan/runix/zulip/var/release
+cp "$OUTPUT_DIR"/zulip-server-armada-*.tar.gz /Users/progyan/runix/zulip/var/release/
+rm -rf "$OUTPUT_DIR"
+exit
 ```
 
-It prints the path of `zulip-server-armada-….tar.gz`. It copies the
-committed tree, installs its Python and production Node dependencies, runs
-`tools/update-prod-static`, and packs the code with the built assets. Copy
-the tarball to the server: `limactl copy …tar.gz armada-beta:/tmp/` (or
-`scp` to a remote server).
+Without `OUTPUT_DIR`, the script builds in a new directory under the dev
+VM's own `/tmp`, which the Mac cannot see. It copies the committed tree,
+installs its Python and production Node dependencies, runs
+`tools/update-prod-static`, packs the code with the built assets, and
+prints the tarball's path. `var/` is ignored by git and by the sync loop,
+so the tarball neither ships nor travels back into the VM's copy. Back on
+the Mac, start the dev server again and copy the tarball into the beta VM:
+
+```bash
+limactl shell armada -- /home/progyan.guest/armada-restart.sh
+limactl copy var/release/zulip-server-armada-*.tar.gz armada-beta:/tmp/
+```
+
+(Run from the checkout, `/Users/progyan/runix/zulip`; to a remote
+server, `scp` instead.) Delete the copy in `var/release/` once the server
+runs: a tarball built with the licensed fonts contains them.
 
 - **The fonts in `ARMADA_FONT_DIR` are shipped to every browser** that opens
   the server, under hashed names. Use only files whose licence covers web
@@ -429,6 +569,7 @@ PEAR_TOPIC_WORKDIR_ROOT = "/srv/armada/worktrees"
 PEAR_WORKER_WORKDIR = "/srv/armada/worktrees/_scratch"
 PEAR_WORKER_SANDBOX = "workspace-write"
 PEAR_WORKER_TRUSTED_USERS_ONLY = True     # already set in a new install; see Security
+PEAR_WORKER_CODEX_MEMORIES = False        # already set in a new install; see Security
 PEAR_WORKER_TRUSTED_USER_IDS = []         # fill in after step 5
 PEAR_WORKER_MAX_ACTIVE_RUNS_PER_REALM = 3
 PEAR_WORKER_MODEL = "gpt-6-astra"
@@ -454,7 +595,7 @@ for user in UserProfile.objects.filter(is_bot=False, is_active=True):
 "
 ```
 
-Put the people who may drive Onyx in `PEAR_WORKER_TRUSTED_USER_IDS` and
+Put the people who may drive Onix in `PEAR_WORKER_TRUSTED_USER_IDS` and
 restart (6.7). Organization administrators may always.
 
 Do not apply the settings yet; step 6 restarts the server once everything
@@ -630,35 +771,74 @@ pushing from the server or reading the Changes view.
   sudo -u zulip -H git ls-remote git@github.com:OWNER/REPO.git   # must list refs
   ```
 
-**Large repositories time out.** The first fetch runs inside the web request
-that creates the channel. Git is allowed 180 seconds, but in production
-uwsgi kills a request after 55 seconds (`harakiri`) and nginx gives up at 60
-(the dev server has neither limit, so this was never seen there). A
-repository that takes longer to fetch: the browser gets an error (502) while
-the channel itself was created; its repository is recorded but never
-fetched, and a half-written `.…git.*` directory is left in
-`/srv/armada/worktrees/projects/`. Opening a topic there tries the fetch
-again inside a request, and fails the same way. The workaround is to fetch
-it once outside the web server, as `zulip`, after creating the channel:
+**Large repositories: attach them from the shell.** The first fetch runs
+inside the web request that creates the channel, and in production uwsgi
+kills a request after 55 seconds (`harakiri` in
+`puppet/zulip/templates/uwsgi.ini.template.erb`; nginx gives up at 60;
+the dev server has neither limit). Git itself is allowed 180 seconds. A
+public repository of a few hundred megabytes, Armada's own among them
+(about 645 MB of history, every branch fetched), will likely take longer
+than 55 seconds. What happens then, read from the code
+(`add_subscriptions_backend` in `zerver/views/streams.py` runs in one
+database transaction, and calls the fetch inside it), not reproduced:
+
+- uwsgi kills the worker outright (SIGKILL; the template sets no graceful
+  timeout), so no Python cleanup runs, and the browser gets an error
+  (502).
+- PostgreSQL rolls the whole request back: **the channel does not exist**,
+  and neither does its repository record. Creating it again with the same
+  URL fails the same way.
+- The fetch itself is a separate `git` process: it keeps running until it
+  ends, into a temporary directory named after the channel,
+  `.<name>.git.<random>`, in
+  `/srv/armada/worktrees/projects/`, which nothing removes. Each attempt
+  leaves one.
+
+So for a repository that may take more than about 40 seconds to fetch,
+attach it from the shell, where the web server's limit does not apply and
+you choose git's:
+
+1. Create the channel **without** a repository URL, as a **private**
+   channel with only you subscribed, so that nobody opens a topic in it
+   first. (Any use of the agent in a channel with no repository, choosing a
+   model included, gives it an empty repository of its own, after which
+   attaching one is refused: "This channel already has local work.")
+2. As `zulip`, attach the repository, here with an hour for the fetch:
+
+   ```bash
+   cd /home/zulip/deployments/current
+   ./manage.py shell -c "
+   from zerver.lib.pear_worker import configure_pear_channel_repository_workspace
+   from zerver.models import UserProfile
+   user = UserProfile.objects.get(delivery_email='YOU@example.com', realm_id=REALM_ID)
+   configure_pear_channel_repository_workspace(
+       user, stream='CHANNEL', repository_url='URL', fetch_timeout_seconds=3600
+   )
+   "
+   ```
+
+   This is what channel creation does with a URL (as `YOU`, who must be
+   subscribed to the channel), with a timeout of your choosing: it records
+   the URL, fetches every branch into the channel's bare clone and makes
+   the channel's own worktree. It prints nothing when it succeeds. A
+   traceback ending in an error such as "Could not clone the Git
+   repository." means the fetch failed or ran out of time: check the URL
+   with `git ls-remote` as `zulip`, then run it again.
+
+3. Subscribe the team, or make the channel public, in the channel's
+   settings.
+
+Clean up after a killed request: once no `git fetch` from it is still
+running (`pgrep -u zulip -a git`), remove what it left:
 
 ```bash
-cd /home/zulip/deployments/current
-./manage.py shell -c "
-from zerver.lib.pear_worker import ensure_pear_project_origin, pear_project_for_stream
-from zerver.models import UserProfile
-user = UserProfile.objects.get(delivery_email='YOU@example.com', realm_id=REALM_ID)
-ensure_pear_project_origin(user, pear_project_for_stream(user, stream='CHANNEL'))
-"
-# The failed attempts' half-written directories (files are locks; keep them):
 find /srv/armada/worktrees/projects -maxdepth 1 -type d -name '.*.git.*' -exec rm -rf {} +
 ```
 
-Remove those directories only once no `git fetch` is still running
-(`pgrep -u zulip -a git`): the killed request leaves its fetch running.
-
-That fetch still has the 180-second limit. The same 55 seconds also bounds
-creating a topic's worktree, which is a local clone of the bare one: only a
-very large checkout comes near it.
+(The `.….git.lock` files beside them are locks, not directories; the
+command leaves them.) The same 55 seconds also bound creating a topic's
+worktree, a local clone of the bare one: only a very large checkout comes
+near it.
 
 ### 6.6 Long runs and RabbitMQ
 
@@ -708,7 +888,7 @@ curl -sS -X POST -u YOUR_EMAIL https://armada-beta.<tailnet>.ts.net/api/v1/pear/
 
 The answer's `pear_config` should say `"enabled": true`,
 `"worker_runtime_ready": true` and `"worker_runtime_auth_ready": true`. The
-bot is called Pear; the interface shows it as Onyx.
+bot is called Pear; the interface shows it as Onix.
 
 ### 6.8 Check it
 
@@ -857,8 +1037,9 @@ running at once in the organization; beyond it a new request is refused.
 - "Could not clone the Git repository": as `zulip`, `git ls-remote` the URL
   (6.5).
 - Creating a repository channel answers with an error after about a minute,
-  but the channel exists: the repository took longer than 55 seconds to
-  fetch (6.5, "Large repositories time out").
+  and the channel does not exist: the repository took longer than 55
+  seconds to fetch, and the whole request was rolled back. Attach it from
+  the shell (6.5, "Large repositories").
 - A run starts over after 30 minutes or six hours: the consumer timeout of
   6.6 (check the policy is in effect).
 - Runs stay queued: `supervisorctl status | grep pear_worker`; both slots

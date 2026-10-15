@@ -9,21 +9,31 @@
 
   // ---- stroked glyphs: 16 px box, 14 live, one weight on whole device pixels, butt caps. Never scaled.
   window.ic = (n, cls) => { const g = GLYPHS[n]; if (!g) return ""; return `<svg class="ic ${cls || ""}" viewBox="0 0 16 16" aria-hidden="true">${g.s ? `<g class="n">${g.s}</g>` : ""}${g.f ? `<g class="f">${g.f}</g>` : ""}</svg>`; };
-  // ---- Onix's marks: 7 x 7 cells, told apart by shape. done, live, left, needs, failed, paused, cancelled. 14 px; 28 on Home.
-  const MKCLS = {needs: "c-att", failed: "c-fail"};
-  window.mk = (n, cls) => `<svg class="mk ${n} ${MKCLS[n] || ""} ${cls || ""}" viewBox="0 0 7 7" shape-rendering="crispEdges" aria-hidden="true">${MARKS[n] || ""}</svg>`;
-  // the working mark: the live stone with one bed stepping down through it. The one loop a live run has. One sprite of
-  // four drawings side by side, stepped by a transform, so no frame is ever blank. One element for the life of an answer.
-  window.wk = (live = true, cls) => `<svg class="mk wk${live ? " live" : ""} ${cls || ""}" viewBox="0 0 7 7" shape-rendering="crispEdges" aria-hidden="true"${live ? ' data-m="live"' : ""}><g>${WORK.map((r, i) => `<g transform="translate(${7 * i} 0)">${r}</g>`).join("")}</g></svg>`;
-  // the sigil: Onix, and nothing else. A cut stone with an unbroken outline and two tilted beds inside it. 28 where a
-  // person shows a face, 20 in a list and in the field, 64 on an empty worktree. "20h" is its outline: Onix will not
-  // answer. It never loops; `live` is accepted and ignored so older callers keep working.
-  window.sigil = (size = 28, live = false, cls) => { const s = SIGILS[size] || SIGILS[28], px = parseInt(size, 10);
-    return `<svg class="sigil s${px}${/h$/.test(size) ? " hol" : " sol"} ${cls || ""}" viewBox="0 0 ${s.n} ${s.n}" shape-rendering="crispEdges" aria-hidden="true">${s.r}</svg>`; };
+  // ---- the marks of a run and of a step (r4 marks study): 12 by 12 cells of one CSS pixel, in the 14 px box (28 on Home,
+  // 2 px a cell). done, live, queued, needs, paused, failed, cancelled; "left" is a step not reached. Each state has its
+  // own silhouette; a hue only on needs (attention) and failed (failure). Drawings: marks.js (plain, committed), and the
+  // themed ball and egg that beta.js puts in BETA_THEMED before the first draw when this server has them.
+  const MKCLS = {needs: "c-att", failed: "c-fail"}, THEMED = window.BETA_THEMED = window.BETA_THEMED || {};
+  const BOX = 'viewBox="-1 -1 14 14" shape-rendering="crispEdges"';
+  window.mk = (n, cls) => `<svg class="mk ${n} ${MKCLS[n] || ""} ${cls || ""}" ${BOX} aria-hidden="true">${(THEMED[n] && THEMED[n].rest) || BETA_MARKS[n] || ""}</svg>`;
+  // the working mark: the one loop a live run has, at the head of the stream. A strip of three drawings 14 apart (the
+  // ball's lean left, upright and lean right, or the plain dot's three sizes), moved a drawing at a time (mock.css), so no
+  // frame is blank. One element for the life of an answer.
+  window.wk = (live = true, cls) => { const t = THEMED.live, frames = t ? t.frames : BETA_DOT_LOOP;
+    return `<svg class="mk wk ${t ? "ball" : "dot"}${live ? " live" : ""} ${cls || ""}" ${BOX} aria-hidden="true"${live ? ' data-m="live"' : ""}><g>${frames.map((f, i) => `<g transform="translate(${14 * i} 0)">${f}</g>`).join("")}</g></svg>`; };
+  // Onix's face: the one place it is drawn, so the party sprite can take its place later by replacing this function alone.
+  // Today it is direction B of the study: three faceted boulders in a flint disc where a person shows a face (28 in the
+  // gutter, 20 in lists, 18 in a thread's line), bare at 14; in the field, bare at 16, solid when Onix will answer and an
+  // outline ("field-off") when it will not.
+  window.agentFace = (size = 28, cls = "") => { const F = BETA_AGENT_FACES, f = size === "field" ? F["bare-16"] : size === "field-off" ? F["line-16"] : F["disc-" + size] || (size <= 14 ? F["bare-14"] : F["disc-28"]), disc = f.off > 0;
+    const state = size === "field" ? " sol" : size === "field-off" ? " hol" : "";
+    return `<svg class="sigil agent s${f.n}${disc ? " in-disc" : ""}${state} ${cls}" viewBox="0 0 ${f.n} ${f.n}" aria-hidden="true">${disc ? `<circle class="disc" cx="${f.n / 2}" cy="${f.n / 2}" r="${f.n / 2}"/>` : ""}<g transform="translate(${f.off} ${f.off})" shape-rendering="crispEdges">${f.d}</g></svg>`; };
+  window.sigil = (size = 28, live = false, cls) => (String(size) === "20h" ? agentFace("field-off", cls) : agentFace(parseInt(size, 10) || 28, cls));
   window.dots = (cls) => `<svg class="dots ${cls || ""}" viewBox="0 0 26 6" aria-hidden="true"><circle cx="3" cy="3" r="3"/><circle cx="13" cy="3" r="3"/><circle cx="23" cy="3" r="3"/></svg>`;
   // a face: initials on the person's stone (a photo when there is one). "KH:lapis", "De:me", with " on" or " away".
   window.face = (spec, cls) => { const [who, pres] = spec.split(" "), [i, st] = who.split(":"); const small = /s20|s18/.test(cls || ""), bare = /s14/.test(cls || "");   // a 14 px disc is too small for a letter
-    return `<i class="av p-${st || "flint"} ${pres || ""} ${cls || ""}">${bare ? "" : small ? i[0] : i}</i>`; };
+    const first = (() => { try { const it = new Intl.Segmenter(undefined, {granularity: "grapheme"}).segment(i)[Symbol.iterator]().next(); return it.done ? "" : it.value.segment; } catch (e) { return i.slice(0, 1); } })();   // a letter with its marks, never half of one
+    return `<i class="av p-${st || "flint"} ${pres || ""} ${cls || ""}">${bare ? "" : small ? first : i}</i>`; };
   window.faces = (list, cls) => `<span class="avs">${list.map((f) => face(f, cls)).join("")}</span>`;
   const stone = (spec) => ((spec || "").split(" ")[0].split(":")[1]) || "flint";
   // reaction chips: "👍 2, ❤️ me, 🎉 3 me, +2"
@@ -43,10 +53,15 @@
     root.querySelectorAll(".hd .commit .subj").forEach((e) => wordcut(e));
     // the working mark rides the end of a line of text, which ends on a fraction: it is moved onto the pixel grid
     root.querySelectorAll(".head > .mk").forEach((m) => { m.style.marginLeft = ""; const f = m.getBoundingClientRect().left % 1; if (f) m.style.marginLeft = (1 - f) + "px"; }); });
-  // a line of words that does not fit its cell is cut at a word and ends in an ellipsis: never inside a word
+  // a line of words that does not fit its cell is cut at a word and ends in an ellipsis. When the cut at a word would leave
+  // the cell more than a third empty (the next word is long: "Add…" and a gap), it is cut inside that word instead.
+  const textWidth = (e) => { const r = document.createRange(); r.selectNodeContents(e); return r.getBoundingClientRect().width; };
   window.wordcut = (e, text) => { if (!e) return; if (text != null) e.dataset.full = text; const full = e.dataset.full || (e.dataset.full = e.textContent); e.textContent = full; e.title = "";
-    if (e.scrollWidth <= e.clientWidth) return; const w = full.split(" "); e.title = full;
-    for (let n = w.length - 1; n > 0; n--) { e.textContent = w.slice(0, n).join(" ").replace(/[,;:.]$/, "") + "…"; if (e.scrollWidth <= e.clientWidth) return; } };
+    if (e.scrollWidth <= e.clientWidth) return; const w = full.split(" "), room = e.clientWidth; e.title = full; let fit = 0;   /* the room the cell has: with the whole line in it, it is as wide as it can be */
+    for (let n = w.length - 1; n > 0; n--) { e.textContent = w.slice(0, n).join(" ").replace(/[,;:.]$/, "") + "…"; if (e.scrollWidth <= e.clientWidth) { fit = n; break; } }
+    if (fit && room - textWidth(e) <= room / 3) return;
+    let lo = 1, hi = full.length - 1; while (lo < hi) { const m = (lo + hi + 1) >> 1; e.textContent = full.slice(0, m).trimEnd() + "…"; if (e.scrollWidth <= e.clientWidth) lo = m; else hi = m - 1; }
+    e.textContent = full.slice(0, lo).trimEnd() + "…"; };
   // the column's lists have heights that do not depend on what they hold. The checklist is seven rows; a list with
   // slots is that many rows; the list that grows takes the room left, in whole rows. A row that has no slot is not
   // drawn: it is counted in a quiet "n more" that stands in the gap under its list and opens the rest. A checklist
@@ -54,13 +69,19 @@
   const outer = (li) => li.offsetHeight + (parseFloat(getComputedStyle(li).marginBottom) || 0);
   window.fitLists = (root = document) => root.querySelectorAll("aside.side > .out").forEach((out) => {
     const H = parseFloat(getComputedStyle(out).getPropertyValue("--h-m")) || 28;
-    const fit = (ul, host, head) => { if (!ul) return; const open = host.classList.contains("all"), rows = [...ul.children].filter((x) => x.tagName === "LI"); rows.forEach((x) => x.classList.remove("xr"));
-      const max = Math.floor((ul.clientHeight + 1) / H) * H; let used = 0, cut = 0, late = 0;
-      if (!open) for (const li of head ? rows.slice().reverse() : rows) { if (li.classList.contains("late")) { late++; continue; } const h = outer(li); if (cut || used + h > max + 1) { li.classList.add("xr"); cut++; } else used += h; }
+    // A row marked "keep" (the Runs list's last row, which opens the old interface) is never folded. When rows are folded
+    // the "n more" line needs a slot of its own: in a growing list it takes the last row's room (or, before a kept row,
+    // the room above that row), so it never stands on what follows the list.
+    const fit = (ul, host, head) => { if (!ul) return; const open = host.classList.contains("all"), rows = [...ul.children].filter((x) => x.tagName === "LI"), keep = rows.filter((x) => x.classList.contains("keep")), grow = host.classList.contains("grow");
+      rows.forEach((x) => x.classList.remove("xr")); keep.forEach((x) => (x.style.marginTop = ""));
+      const max = Math.floor((ul.clientHeight + 1) / H) * H, fixed = keep.reduce((n, li) => n + outer(li), 0); let used = 0, cut = 0, late = 0; const shown = [];
+      if (!open) for (const li of head ? rows.slice().reverse() : rows) { if (li.classList.contains("keep")) continue; if (li.classList.contains("late")) { late++; continue; } const h = outer(li); if (cut || used + h + fixed > max + 1) { li.classList.add("xr"); cut++; } else { used += h; shown.push(li); } }
       cut += late;
+      if (!open && !head && grow && cut && (keep.length || ul.clientHeight - used - fixed < H)) { const last = shown.pop(); if (last) { used -= outer(last); last.classList.add("xr"); cut++; } }
       let b = ul.nextElementSibling; if (!b || !b.classList.contains("mo")) { b = document.createElement("button"); b.className = "mo"; b.tabIndex = -1; ul.after(b); }
       const n = open ? rows.length : cut; b.hidden = !(open ? b.dataset.n > 0 : n > 0); if (!open) b.dataset.n = n; b.textContent = open ? "Show fewer" : head ? `${n} earlier` : `${n} more`;
-      b.style.top = (ul.offsetTop + (host.classList.contains("grow") && !open ? used : ul.offsetHeight)) + "px"; };
+      if (!open && cut && keep.length) keep[0].style.marginTop = H + "px";
+      b.style.top = (ul.offsetTop + (grow && !open ? used : ul.offsetHeight)) + "px"; };
     out.querySelectorAll(":scope > .chk").forEach((ul) => fit(ul, ul, true));
     out.querySelectorAll(":scope > .sec.slots, :scope > .sec.grow").forEach((s) => fit(s.querySelector(":scope > .ls"), s, false));
     host(out); });
@@ -150,7 +171,7 @@
     const ph = c.placeholder || (verb === "Steer" ? "Steer Onix" : verb === "Answer" ? "Answer Onix" : verb === "Reply" ? "Reply in thread" : "Message " + title);
     const cur = c.focus === false || c.off ? "" : '<span class="cur"></span>';
     const body = (c.file ? `<span class="att">${ic("file")}${c.file}</span>` : "") + (c.text ? c.text.replace(/</g, "&lt;") + cur : cur);
-    const to = c.plain === 2 || (c.plain === 1 && !c.onyx) ? "" : `<button class="k to${on ? "" : " off"}" aria-pressed="${on}" aria-label="Onix answers" data-tip="${on ? "Onix answers this message" : "For people only"}">${sigil(20)}${sigil("20h")}</button>`;
+    const to = c.plain === 2 || (c.plain === 1 && !c.onyx) ? "" : `<button class="k to${on ? "" : " off"}" aria-pressed="${on}" aria-label="Onix answers" data-tip="${on ? "Onix answers this message" : "For people only"}">${agentFace("field")}${agentFace("field-off")}</button>`;
     const mode = c.plain ? "" : `<button class="k mode${on ? "" : " off"}${c.open ? " open" : ""}" aria-label="Model and effort" data-tip="Model and effort"><span class="slot"><span>${c.mode || "Sol Fast · High"}</span><i>Sol Fast · Medium</i></span>${ic("down")}</button>`;
     return `<div class="cz${c.plain === 1 ? " flat" : ""}${c.focus === false || c.off ? "" : " is-focus"}${c.text ? " has-text" : ""}${c.off ? " is-off" : ""}" ${id ? ` id="${id}"` : ""}><div class="sh">${c.plain === 1 ? "" : `<button class="out" aria-label="Attach" data-tip="Attach">${ic("plus")}</button>`}<div class="txw"><span class="ph cell"><span>${ph}</span></span><div class="tx" role="textbox" aria-multiline="true" aria-label="Message">${body}</div></div>
       ${to}${mode}<button class="disc dip${armed ? " armed" : ""}" aria-label="${verb}" data-tip="${verb}" data-key="Return"><span class="cell"><span>${verb}</span><i class="sz">Answer</i></span></button></div></div>`; };

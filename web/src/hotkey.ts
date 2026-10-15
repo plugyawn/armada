@@ -547,10 +547,14 @@ function process_escape_key(e: JQuery.KeyDownEvent): boolean {
         return true;
     }
 
-    // An open thread is the topmost layer left; its own listener closes
-    // it, and this Esc does nothing more.
+    // An open thread is the topmost layer left: Esc closes it and does
+    // nothing more; Ctrl+[ closes it on its way home.
     if (message_threads.is_open()) {
-        return true;
+        const escape = e.key === "Escape";
+        message_threads.close({restore_focus: escape});
+        if (escape) {
+            return true;
+        }
     }
 
     /* The Ctrl+[ hotkey navigates to the home view

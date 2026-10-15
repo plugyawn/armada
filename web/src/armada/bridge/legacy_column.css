@@ -12,6 +12,26 @@
         max-width: none;
     }
 
+    /* A thread fills the sheet at every width, over the rail's filter
+       row, with its own heading and close button. The old stylesheet's
+       rules that hid those two on a wide window, and made the pane a fixed
+       layer over the whole window on a narrow one, are deleted. */
+    #right-sidebar-container #message-thread-pane {
+        position: absolute;
+        inset: 0;
+        width: auto;
+        max-width: none;
+        background-color: var(--raised);
+    }
+
+    /* The old alerts stand across the lane (frame.css); while the sheet is
+       open they end where it starts, so neither covers the other. */
+    .armada-plane:has(> [data-armada="sheet"][data-state="open"])
+        > [data-armada="alerts"],
+    body.message-thread-pane-open .armada-plane > [data-armada="alerts"] {
+        width: min(var(--col), 100% - var(--lx) - var(--sheet-w));
+    }
+
     #right-sidebar-container > .right-sidebar {
         position: static;
         width: auto;

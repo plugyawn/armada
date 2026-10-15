@@ -56,21 +56,31 @@ async function type_text(ctx, label, text) {
     // application's), and the scroll's own end is a timer 100 ms after its
     // last event (message_scroll.ts, scroll_finished) that reads layout.
     // On a busy machine both were still under way when typing began, and
-    // were counted as typing: wait until the page has stopped moving.
+    // were counted as typing: wait until the feed has stopped moving. The
+    // feed scrolls inside the frame, not the document (lib/page.mjs,
+    // ac.scroller).
     await ctx.settle(400, 4000);
-    await ctx.page.evaluate(async () => {
-        let position = window.scrollY;
+    const still = await ctx.page.evaluate(async () => {
+        let position = window.__ac.scroll_state().top;
         let still_since = performance.now();
         const started = still_since;
+        let moves = 0;
         while (performance.now() - still_since < 400 && performance.now() - started < 4000) {
             await new Promise((resolve) => {
                 setTimeout(resolve, 50);
             });
-            if (window.scrollY !== position) {
-                position = window.scrollY;
+            const top = window.__ac.scroll_state().top;
+            if (top !== position) {
+                position = top;
                 still_since = performance.now();
+                moves += 1;
             }
         }
+        return {
+            ms: Math.round(still_since - started),
+            moves,
+            is_document: window.__ac.scroll_state().is_document,
+        };
     });
     const rows = await ctx.page.evaluate(() => window.__ac.all("messageRow").length);
     const long_tasks_before = await ctx.page.evaluate(() => window.__ac.long_tasks.length);
@@ -101,7 +111,7 @@ async function type_text(ctx, label, text) {
     const timer_layouts = timers(events).filter((timer) => timer.layouts > 0);
 
     ctx.assert(`${label}.characters-typed`, typed ?? null, "==", keys, {
-        note: `${per_key.length} keystrokes traced, ${rows} message rows in the feed`,
+        note: `${per_key.length} keystrokes traced, ${rows} message rows in the feed; the feed (${still.is_document ? "the document" : "its own scroller"}) moved ${still.moves} times and was still from ${still.ms} ms before typing began`,
     });
     ctx.assert(
         `${label}.handler-forced-layouts.max-per-key`,

@@ -183,6 +183,18 @@ export const SELECTORS = {
     ],
 };
 
+// Where the checks' real sends go: a topic of this run's own. A topic the
+// suite sent to on every run grew past the old view's render window
+// (about 400 messages), and from then on every send re-rendered the view
+// and showed "Scroll down to view your message"; a topic that holds one
+// run's sends never grows. The harness writes its first message the first
+// time a check opens it (CheckContext.ensure_probe).
+const RUN_STAMP = new Date().toISOString().replaceAll(/\D/g, "").slice(0, 14);
+export const PROBE = {
+    stream_id: 2,
+    topic: `armada-checks-${RUN_STAMP}-${process.pid}`,
+};
+
 // Fixture locations (var/armada-overhaul/SEED.md).
 export const TOPICS = {
     short: "#narrow/channel/22-click/topic/option-groups",
@@ -192,8 +204,8 @@ export const TOPICS = {
     wall: "#narrow/channel/22-click/topic/demo-wall-monitors",
     completed: "#narrow/channel/22-click/topic/demo-completed-run",
     threads: "#narrow/channel/22-click/topic/demo-threads",
-    // Messages sent by send-cost go here and nowhere else.
-    probe: "#narrow/channel/2-sandbox/topic/armada-checks",
+    // Messages the checks send go here and nowhere else.
+    probe: `#narrow/channel/${PROBE.stream_id}-sandbox/topic/${PROBE.topic}`,
     plainChannel: "#narrow/channel/3-Verona",
     // The semantics checks' own topic (lib/fixtures.mjs) and its channel,
     // which holds several topics.

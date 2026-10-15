@@ -527,6 +527,21 @@ const BUILT_IN = {
         ],
     },
 
+    // ---- send-cost -----------------------------------------------------
+    "every-send-needs-a-scroll": {
+        about: 'every own send shows "Sent! Scroll down to view your message." above the composer, as every send to the old, long probe topic did',
+        check: "send-cost",
+        only: "plain",
+        breaks: ["send-cost/plain.compose-height-changes"],
+        edits: [
+            {
+                find: /\.notify_local_mixes\(messages, need_user_to_scroll, \{/g,
+                replace: ".notify_local_mixes(messages, true, {",
+                min: 1,
+            },
+        ],
+    },
+
     // ---- stream-cost ---------------------------------------------------
     "stream-edits-are-ignored": {
         about: "an update_message event no longer changes what the row shows",

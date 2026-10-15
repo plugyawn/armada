@@ -73,9 +73,10 @@ nav > .fixed > .row.sel { background-color: var(--fill-3); }
 .opt { height: auto; min-height: var(--h-k); padding-top: 4px; padding-bottom: 4px; text-align: left; max-width: 100%; }
 .opt .d { font: var(--t-text); color: var(--ink-2); }
 .blk.ask.done .opt .k { opacity: 0.5; }
-/* an attachment waits as a chip before the words; the field's height does not change */
-.cz .txw > .atts { float: left; display: flex; gap: var(--s-1); margin: 4px var(--s-2) 0 0; max-width: 60%; }
-.cz .att { margin: 0; max-width: 100%; }
+/* an attachment waits as a chip on a row of its own above the words: attaching adds that one row to the field, and the words
+   keep the field's whole width, so they never wrap because of a chip. Many chips stay on the one row and scroll sideways. */
+.cz .txw > .atts { display: flex; gap: var(--s-1); padding-top: var(--s-1); max-width: 100%; overflow-x: auto; scrollbar-width: none; }
+.cz .att { flex: none; max-width: 240px; margin: 0; }
 .cz .att .an { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .cz .att.up .an, .cz .att.bad .an { color: var(--ink-2); }
 .cz .att .x { width: 20px; height: 20px; display: inline-grid; place-items: center; border-radius: var(--r-ctl); margin-right: -4px; }
@@ -106,8 +107,6 @@ nav > .fixed > .row.sel { background-color: var(--fill-3); }
 #home .hrow:hover { background-color: var(--fill-1); }
 #home .note { padding-left: var(--pad-x); }
 .hrow > .g .mk { width: 28px; height: 28px; }
-.out > .old-ui { padding: var(--s-4) var(--s-2) 0; }
-.out > .old-ui a { color: var(--accent-text); }
 .pop { width: max-content; min-width: 280px; max-width: 400px; }
 .pop .steps { gap: var(--s-1); }
 /* a bubble never gives up its width to a reaction or a time beside it: what it holds stays where it was read */
@@ -129,10 +128,174 @@ nav > .fixed > .row.old { text-decoration: none; color: var(--ink-2); }
 .cl.me .bl > .over { left: auto; right: calc(100% + 6px); }
 /* a message is a stop for the keyboard: the ring is the window's one ring (motion.js) */
 .b[tabindex], .cl.onyx[tabindex] { outline: none; }
-/* Jump to latest stands left of the model label, which is wider here than the prototype's ("6-Astra Ultrafast · Medium"
-   against "Sol Fast · High"): the prototype's 176 px put the two on top of each other */
-.band .jump { right: 216px; }
-.band .run { margin-right: 216px; }
+/* Jump to latest stands left of the model label, whose width follows the model's name ("GPT-6 Astra · Ultrafast · Medium"
+   against the prototype's "Sol Fast · High"): placeJump() in beta.js measures it into --jump-right */
+.band .jump { right: var(--jump-right, 216px); }
+.band .run { margin-right: var(--jump-right, 216px); }
+/* in the picker the field is a search: Choose takes my colour only when Return would choose (.armed), never for the text */
+.picking .cz.has-text .disc:not(.armed) { background: transparent; color: var(--ink-2); }
 #boot > p { max-width: 480px; text-align: center; }
 #boot a { color: var(--accent-text); }
+
+/* ---------- round two: the r4 type and spacing pass (design/r4/type/TYPE-SPACING.md, A1 and A3 to A11) ----------
+   A2 (code comments drawn as a control) is fixed where it began: the syntax inks are .sx-* classes now (beta.js, PYG). */
+/* A1. The column: every heading's first row stands 4 under it; lists reserve the rows they hold (beta.js sets
+   --rows and --slots); sections are 24 apart. */
+aside.side > .out { padding-top: 0; margin-top: calc(var(--h-m) + var(--s-1) - var(--h-line2)); }
+aside.side > .out > :first-child { margin-top: 0; }
+aside.side .sec .sh { margin-bottom: var(--s-1); }
+main > aside.side > .out > .chk { height: calc(var(--rows, 7) * var(--h-m)); }
+aside.side .sec { margin-top: var(--s-6); }
+aside.side .sec.foot { margin-top: auto; padding-top: var(--s-6); }
+aside.side .sec.grow + .sec.foot { margin-top: var(--s-6); padding-top: 0; }
+aside.side .mo { height: var(--s-6); }
+/* Home has no field to stand level with: People follows Running */
+aside.side:has(#sec-running) .sec.grow { flex: none; }
+aside.side:has(#sec-running) .sec.grow > .ls { flex: none; }
+aside.side:has(#sec-running) .sec.foot { margin-top: var(--s-6); padding-top: 0; }
+
+/* A3. Code inside talk at 15: x-height 7.95 against Söhne's 8.37 at 16. Blocks and chrome keep 14. */
+.b code, .ans code, .hrow p code { font-size: 15px; line-height: 0; }
+/* A3b. Short inline code does not break at its own hyphens (beta.js marks it .nw). */
+:is(.b, .ans) code.nw { white-space: nowrap; }
+
+/* A4. A bold-only paragraph is rendered as h4 (beta.js): 20 above, 4 below. */
+.ans h4 { margin-top: var(--s-5); }
+
+/* A5. A code block: 12 above and below its lines, 16 at the sides. */
+pre.blk { padding-top: var(--s-3); padding-bottom: var(--s-3); }
+
+/* A6. Onix's paragraph and the list it introduces: a part's gap. */
+.ans p + :is(ul, ol) { margin-top: var(--gap-part); }
+
+/* A7. The nav: "n more" on the labels' edge; the list fades under the me row while there is more below
+   (beta.js toggles .more on nav > .scroll as it does for the band). */
+nav .kids > .mo { margin-left: 0; }
+nav > .scroll.more { -webkit-mask-image: linear-gradient(#000 calc(100% - var(--s-5)), transparent); mask-image: linear-gradient(#000 calc(100% - var(--s-5)), transparent); }
+
+/* A8. Home: a heading's empty sentence is a row 4 under it. */
+#home .home .gh + .note { padding-top: 0; margin-top: var(--s-1); height: var(--h-m); display: flex; align-items: center; }
+
+/* A9. The beta's note is the last row of Runs; an empty sentence in the column stands on the labels' edge. */
+aside.side .ls > li.old > .t { color: var(--ink-2); }
+aside.side .ls > li.old .lk { text-decoration: none; }
+aside.side > .out > .note { padding: 0 0 0 calc(20px + var(--s-2)); min-height: var(--h-m); display: flex; align-items: center; }
+
+/* A10. The place's Title in Kräftig. */
+.hd .title { font-weight: 500; }
+
+/* A11. A person's bubble does not end on one short word (not Onix's streaming words, which would re-break). */
+.b { text-wrap: pretty; }
+
+/* ---------- round two: read receipts (design/r4/receipts/RECEIPTS.md, step 1) ----------
+   My turn's time and its ticks are one button, [time][4][16 px cell] beside the bubble; its hit area is 24 high, outdented
+   4 px on every side, so the time's words stand where a plain time's do. The cell is there from the frame of the send and
+   only what it holds changes. */
+.bl > .rt, .rcpt > .rt { display: inline-flex; align-items: center; gap: var(--s-1); height: 24px; padding: 4px; margin: -4px -4px 6px; border-radius: var(--r-ctl); font: var(--t-caption); color: var(--ink-2); font-variant-numeric: tabular-nums; white-space: nowrap; flex: none; }
+.rcpt > .rt { margin-bottom: -4px; }
+.rt:hover { background-color: var(--fill-1); } .rt:active { background-color: var(--fill-press); } .rt.open { background-color: var(--fill-3); color: var(--ink-1); }
+.rt > .tk { width: 16px; height: 16px; display: block; flex: none; color: var(--ink-2); transition: color var(--fade-in) linear; }
+.rt > .tk[data-s="all"] { color: var(--accent-text); }   /* read by everyone counted: my colour */
+.rt > .tk[data-s="pending"] > svg { animation: tk-late var(--step) step-end calc(var(--step) * 4) both; }   /* a send shows its ring only after 400 ms */
+@keyframes tk-late { from { opacity: 0; } to { opacity: 1; } }
+/* Info: a raised popover of rows, above the message it describes */
+.info.float { z-index: 9; }
+.info { width: 320px; border-radius: var(--r-block); padding: var(--s-1) var(--s-2) var(--s-2); outline: none; }
+.info .ih { display: flex; align-items: center; gap: var(--s-2); height: var(--h-m); font: var(--t-strong); }
+.info .ih .e { margin-left: auto; font: var(--t-caption); color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.info .ls > li > .t { font: var(--t-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.info .ls > li > .e { font: var(--t-caption); color: var(--ink-1); font-variant-numeric: tabular-nums; }
+.info .ls > li.not > .e { color: var(--ink-2); }
+.info .ls.agent { margin-top: var(--s-1); padding-top: var(--s-1); box-shadow: inset 0 1px 0 var(--line); }
+.info .bad { font: var(--t-caption); color: var(--failure); min-height: var(--h-m); display: flex; align-items: center; gap: var(--s-2); }
+
+/* ---------- partners (beta.js, "partners"; the r4 partner and sprite studies) ---------- */
+/* a face is a sprite in the box the initials had, so nothing moves when one arrives or evolves. One sprite pixel a CSS pixel,
+   never resampled; the sprite stands on the box's foot, overflows upward in the gutter (cut at the gutter's sides) and is cut
+   by its window in lists; it never catches the pointer. */
+.pk { position: relative; display: inline-block; flex: none; width: 28px; height: 28px; font-style: normal; }
+.pk.s20 { width: 20px; height: 20px; } .pk.s18 { width: 18px; height: 18px; }
+.pk > .win { position: absolute; overflow: clip; pointer-events: none; }
+.pk.s28 > .win { overflow: clip visible; }
+.pk.big > .win { overflow: visible; }
+.pk img { position: absolute; max-width: none; image-rendering: pixelated; pointer-events: none; user-select: none; }
+.cl > .pk { position: absolute; left: calc(-1 * var(--gutter)); top: var(--s-1); }
+.cl.lab > .pk { top: var(--s-6); }
+.cl.onyx > .pk { top: -2px; } .cl.onyx.lab > .pk { top: 18px; }
+.cl > .pk + *, .cl.onyx > .pk + * { margin-top: 0; }
+.row > .pk { margin: 0 -2px; } .ls > li > .pk { margin: 0; }
+.avs > .pk + :is(.pk, .av), .avs > .av + .pk { margin-left: -4px; }
+.band .ty > .pk { position: absolute; right: calc(100% + var(--s-3)); top: 0; }
+.pk.on::after, .pk.away::after { content: ""; position: absolute; right: -1.5px; bottom: -1.5px; width: 7px; height: 7px; border-radius: var(--r-round); background: var(--ink-1); box-shadow: 0 0 0 2px var(--plane); }
+.pk.away::after { background: linear-gradient(90deg, var(--ink-1) 50%, var(--plane) 50%); box-shadow: inset 0 0 0 1.5px var(--ink-1), 0 0 0 2px var(--plane); }
+
+/* the party hop: +1 px, then -3 px, 133 ms a step, by transform only. Under the pointer or focus, while its person types, on a
+   picker cell that is selected. Nothing hops at rest, and nothing with motion reduced. Onix's face stays still while its run
+   is live: the ball is the run's one loop (MARKS.md, direction A). */
+@keyframes pk-hop { 0% { transform: translateY(1px); } 50% { transform: translateY(-3px); } }
+:is(.cl > .pk:hover, nav .row:is(:hover, :focus-visible) > .pk, .ls > li:hover > .pk, .hrow:is(:hover, :focus-visible) .pk, .band .ty .pk, .pkc:is(:hover, .sel) .pk) img { animation: pk-hop 266ms step-end infinite; }
+:root[data-motion="reduced"] .pk img { animation: none !important; }   /* above every trigger's selector, whatever its weight */
+@media (prefers-reduced-motion: reduce) { .pk img { animation: none !important; } }
+
+/* the caption the team sees under my first bubble after an evolution */
+.cl > .evo { display: flex; align-items: center; gap: var(--s-2); height: 20px; margin-top: var(--gap-same); padding-left: var(--pad-x); font: var(--t-caption); color: var(--ink-2); white-space: nowrap; }
+.cl.me > .evo { align-self: flex-end; padding: 0 var(--pad-x) 0 0; }
+
+/* the picker: a place with the frame's header, band and field. Cells 88 by 100; a taken line's sprite at 38% */
+main > .pane[data-pane="Partner"] { overflow-y: auto; scrollbar-width: none; }
+#picker .pkp { padding: var(--s-4) 0 var(--s-8); }
+#picker .pkintro { font: var(--t-text); color: var(--ink-2); padding-left: var(--pad-x); }
+#picker .pkh { font: var(--t-strong); height: var(--h-m); display: flex; align-items: center; padding-left: var(--pad-x); margin-top: var(--s-6); }
+#picker .pkhint { padding-top: 0; margin-bottom: var(--s-2); }   /* the form to choose, when the search found a later one */
+/* a cell draws its creature at two CSS px a sprite pixel, in a window as tall as the drawing: a row is as tall as its tallest
+   drawing, and the drawings of a row stand on one line above their names */
+#picker .pkg { display: grid; grid-template-columns: repeat(auto-fill, 96px); gap: var(--s-1); padding-left: var(--s-1); }
+.pkc { width: 96px; border-radius: var(--r-ctl); display: grid; grid-template-rows: 1fr auto auto; justify-items: center; padding-top: var(--s-2); position: relative; }
+.pkc > .pk.big { align-self: end; }
+.pkc > .pk.big > .win { overflow: clip visible; }
+.pkc:hover { background: var(--fill-1); } .pkc.sel { background: var(--fill-3); }
+.pkc > .nm { font: var(--t-caption); color: var(--ink-1); max-width: 92px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
+.pkc > .cap { font: var(--t-caption); color: var(--ink-2); height: 16px; max-width: 92px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pkc.taken > .pk { opacity: 0.38; }
+.hd .pkseg { flex: none; } .hd .pkseg button { font: var(--t-text); }
+.hd .l2 .end > .later { font: var(--t-strong); }
+.band .pkb { position: absolute; left: 0; right: 0; top: 0; height: var(--h-m); display: flex; align-items: center; font: var(--t-text); color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-left: var(--pad-x); }
+.band .pkb[hidden] { display: none; }
+:root.picking .band .ty { display: none; }
+/* the selected one: in the column at 1408 px and wider, at the top of the pane below that */
+.pkdetail { padding: var(--s-4) var(--pad-x) 0; display: grid; grid-template-columns: 136px minmax(0, 1fr); column-gap: var(--s-4); align-content: start; }
+.pkdetail > .pkbig2 { grid-row: span 6; }
+.pkdetail > :is(.sh, .ls, .pksample) { display: none; }
+@media (min-width: 1408px) { :root.col .pkdetail { display: none; } }
+.pkbig2 { width: 136px; height: 112px; }
+.pkno { font: var(--t-strong); margin-top: var(--s-2); } .pkno .fig { color: var(--ink-2); font: var(--t-text); margin-right: var(--s-1); }
+.pkty { font: var(--t-text); color: var(--ink-2); } .pkty.bad { color: var(--failure); }
+.pkcol .sh, .pkcol .pkbr { margin-top: var(--s-3); } .pkbr { font: var(--t-text); color: var(--ink-2); }
+.pkpicks { flex-wrap: wrap; margin-top: var(--s-1); } .pkpicks button { font: var(--t-text); }
+.pksample { position: relative; margin: var(--s-1) 0 0 var(--gutter); display: flex; flex-direction: column; align-items: flex-start; }
+.pksample > .pk { position: absolute; left: calc(-1 * var(--gutter)); top: var(--s-1); }
+
+/* my partner's card: a raised card above my own face, over the nav's rows, never over the conversation */
+.pcard { position: fixed; left: var(--s-2); bottom: 52px; width: 232px; z-index: 20; border-radius: 14px; padding: var(--s-1) var(--s-3) var(--s-3); }
+.pcard .ih { display: flex; align-items: center; gap: var(--s-2); height: var(--h-m); font: var(--t-strong); }
+.pcard .ih .e { margin-left: auto; font: var(--t-caption); color: var(--ink-2); }
+.pcard .stage { position: relative; width: 136px; height: 112px; margin: var(--s-1) auto; border-radius: var(--r-block); }
+.pcard .stage > .pk { position: absolute; left: 0; top: 0; }
+.pcard .stage.pulse { animation: pk-pulse 280ms step-end 1; }
+@keyframes pk-pulse { 0% { background: var(--fill-2); } 100% { background: transparent; } }
+.pcard .pk.ghost img { filter: brightness(0); }
+:root[data-theme="dark"] .pcard .pk.ghost img { filter: brightness(0) invert(1); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .pcard .pk.ghost img { filter: brightness(0) invert(1); } }
+.pcard .bits { position: absolute; left: 50%; top: 50%; }
+.pcard .bits > i { position: absolute; width: 2px; height: 2px; background: var(--ink-1); animation: pk-bit 280ms linear 1 forwards; }
+.pcard .bits > i:nth-child(1) { --dx: 0px; --dy: -34px; } .pcard .bits > i:nth-child(2) { --dx: 24px; --dy: -24px; } .pcard .bits > i:nth-child(3) { --dx: 34px; --dy: 0px; } .pcard .bits > i:nth-child(4) { --dx: 24px; --dy: 24px; }
+.pcard .bits > i:nth-child(5) { --dx: 0px; --dy: 34px; } .pcard .bits > i:nth-child(6) { --dx: -24px; --dy: 24px; } .pcard .bits > i:nth-child(7) { --dx: -34px; --dy: 0px; } .pcard .bits > i:nth-child(8) { --dx: -24px; --dy: -24px; }
+@keyframes pk-bit { from { transform: translate(0, 0); opacity: 1; } to { transform: translate(var(--dx), var(--dy)); opacity: 0; } }
+.pcard .xpbar { height: 6px; background: var(--fill-2); margin-top: var(--s-2); }
+.pcard .xpbar > i { display: block; height: 6px; background: var(--ink-1); }
+.pcard .cap { font: var(--t-caption); color: var(--ink-2); margin-top: var(--s-1); }
+.pcard .say { font: var(--t-text); margin-top: var(--s-1); }
+.pcard p:not(.cap):not(.say) { font: var(--t-text); margin-top: var(--s-2); }
+.pcard .btns { display: flex; gap: var(--s-2); margin-top: var(--s-3); justify-content: flex-end; }
+
 }   /* @layer zulip.armada-beta */

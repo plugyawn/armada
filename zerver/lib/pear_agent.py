@@ -1420,6 +1420,7 @@ class PearCodexAppServerToolRunner:
         output_limit: int,
         service_tier: str | None = None,
         fast_mode_enabled: bool = False,
+        memories_enabled: bool = False,
         reasoning_effort: str | None = None,
         ephemeral: bool = False,
         process_isolation: PearProcessIsolation | None = None,
@@ -1435,6 +1436,7 @@ class PearCodexAppServerToolRunner:
         self.output_limit = output_limit
         self.service_tier = service_tier
         self.fast_mode_enabled = fast_mode_enabled
+        self.memories_enabled = memories_enabled
         self.reasoning_effort = reasoning_effort
         self.ephemeral = ephemeral
         self.process_isolation = process_isolation
@@ -1490,7 +1492,10 @@ class PearCodexAppServerToolRunner:
             args.extend(["--config", f'service_tier="{self.service_tier}"'])
         if self.fast_mode_enabled:
             args.extend(["--config", "features.fast_mode=true"])
-        args.extend(["--config", "features.memories=true"])
+        # Explicit either way, so a config.toml in CODEX_HOME cannot turn
+        # memories on behind the setting.
+        memories = "true" if self.memories_enabled else "false"
+        args.extend(["--config", f"features.memories={memories}"])
         if self.reasoning_effort:
             args.extend(["--config", f'model_reasoning_effort="{self.reasoning_effort}"'])
         return args

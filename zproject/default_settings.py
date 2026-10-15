@@ -777,6 +777,29 @@ TOPIC_SUMMARIZATION_PARAMETERS: dict[str, Any] = {}
 # element, so changing it needs no rebuild of the frontend.
 ARMADA_PALETTE: Literal["lapis", "tide", "citrine", "onyx"] = "lapis"
 
+# Partners (zerver/lib/partner.py): how use becomes experience, and the
+# levels at which a partner changes. Levels are computed from experience
+# when they are read, so retuning these needs no migration.
+# A day's experience: XP_DAY for a day I sent something, XP_MESSAGE a
+# message (at most CAP_MESSAGES), XP_RUN a run I started that ended done
+# or failed (at most CAP_RUNS), XP_REACTION a reaction someone else put on
+# my message (at most CAP_REACTIONS).
+PARTNER_XP_DAY = 25
+PARTNER_XP_MESSAGE = 1
+PARTNER_XP_RUN = 5
+PARTNER_XP_REACTION = 1
+PARTNER_CAP_MESSAGES = 30
+PARTNER_CAP_RUNS = 8
+PARTNER_CAP_REACTIONS = 10
+# The first and the second evolution, counted from the form a person chose;
+# a species that never evolves turns shiny at the last of these.
+PARTNER_EVOLVE_LEVELS: tuple[int, ...] = (16, 30)
+PARTNER_SHINY_LEVEL = 50
+# The agent's own partner evolves once this many runs are done, started by
+# at least this many people (or by every active person in a smaller team).
+PARTNER_AGENT_RUNS = 1000
+PARTNER_AGENT_HANDS = 3
+
 # Pear pair-programming worker runtime. Use "codex-app-server" for direct Codex
 # app-server control with persistent threads, streaming events, and same-turn
 # steering. Ambient addressing is configured separately with
@@ -803,6 +826,11 @@ PEAR_WORKER_APPROVAL_POLICY: Literal["untrusted", "on-request", "never"] = "on-r
 PEAR_WORKER_TIMEOUT_SECONDS = 19800
 PEAR_WORKER_OUTPUT_LIMIT = 50000
 PEAR_WORKER_CODEX_EPHEMERAL = False
+# Codex's memories feature.  Every topic's agent shares one CODEX_HOME,
+# and Codex injects the memory summary it consolidates from past
+# sessions into every new session, so what one channel's run saw can
+# reach another channel's run.  dev_settings.py turns it on.
+PEAR_WORKER_CODEX_MEMORIES = False
 PEAR_CODEX_SKILLS_DIR: str | None = None
 # Who may drive the agent (start, steer and answer runs; set up monitors)
 # and give a new channel a repository URL.  Organization administrators

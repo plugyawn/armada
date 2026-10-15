@@ -21,6 +21,28 @@
         padding-block: calc(var(--s-1) / 2);
     }
 
+    /* The old "scroll to bottom" button stands in the band, at the lane's
+       right edge, where the design keeps Jump to latest, and no longer
+       floats over the newest rows. The band's height is its cell; it is
+       placed from the old box's padding edge, one hairline inside the
+       band and the lane. */
+    #compose #scroll-to-bottom-button-container {
+        bottom: 100%;
+        right: 0;
+    }
+
+    #compose #scroll-to-bottom-button-clickable-area {
+        width: var(--h-l);
+        height: var(--h-l);
+    }
+
+    #compose
+        #scroll-to-bottom-button-clickable-area
+        :is(#scroll-to-bottom-button, #scroll-to-bottom-button-underlay) {
+        width: var(--h-m);
+        height: var(--h-m);
+    }
+
     /* Home is not a conversation: the box is there only while it is open. */
     [data-place="home"] #compose:not(.compose-box-open) {
         display: none;

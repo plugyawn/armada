@@ -5,8 +5,10 @@
 //
 // Runs each check in a fresh page of one headless Chromium, prints one line
 // per assertion, writes a JSON report, and exits non-zero unless the suite is
-// green. See README.md in this directory.
+// green. One run at a time: it takes /tmp/armada-check.lock (lib/lock.mjs).
+// See README.md in this directory.
 
+import {spawnSync} from "node:child_process";
 import * as fs from "node:fs";
 import path from "node:path";
 import {fileURLToPath} from "node:url";
@@ -14,6 +16,7 @@ import {fileURLToPath} from "node:url";
 import {BASE, USER, VIEWPORT, launch, login} from "./lib/browser.mjs";
 import {classify, rewrite_known, stale_ids} from "./lib/classify.mjs";
 import {CheckContext} from "./lib/harness.mjs";
+import {run_under_lock} from "./lib/lock.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO = path.resolve(HERE, "../..");
@@ -163,6 +166,13 @@ async function main() {
             `no such check: ${unknown.join(", ")} (have: ${all_checks.map((check) => check.name).join(", ")})`,
         );
         return 2;
+    }
+    const locked = run_under_lock({
+        spawn: spawnSync,
+        argv: [process.execPath, ...process.execArgv, ...process.argv.slice(1)],
+    });
+    if (locked !== undefined) {
+        return locked;
     }
     const checks =
         options.names.length > 0

@@ -109,7 +109,8 @@ Run the checks your change can affect three times and require identical
 statuses. `FAIL` is a regression or a new assertion; `FIXED` means a known
 failure now passes and its entry leaves `known.json` (only Foundation
 packages and stage closes edit that file). A full run takes about ten
-minutes and is run under `flock /tmp/armada-check.lock`.
+minutes; every run takes `/tmp/armada-check.lock` itself and waits for
+another run to finish.
 
 ## 6. Components: the showroom
 

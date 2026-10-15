@@ -15,6 +15,7 @@ import * as os from "node:os";
 import path from "node:path";
 import {fileURLToPath} from "node:url";
 
+import {run_under_lock} from "./lock.mjs";
 import {MUTATIONS, REPLACED_BY} from "./mutate.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -26,6 +27,15 @@ const unknown = wanted.filter((name) => !(name in MUTATIONS));
 if (unknown.length > 0) {
     console.error(`no such mutation: ${unknown.join(", ")}`);
     process.exit(2);
+}
+// The whole proof holds the checks' lock; each run.mjs it starts finds it
+// held by this process and does not wait for it.
+const locked = run_under_lock({
+    spawn: spawnSync,
+    argv: [process.execPath, ...process.execArgv, ...process.argv.slice(1)],
+});
+if (locked !== undefined) {
+    process.exit(locked);
 }
 const names = wanted.length > 0 ? wanted : Object.keys(MUTATIONS);
 const results = [];

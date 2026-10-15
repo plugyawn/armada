@@ -16,6 +16,7 @@ export const FULLY_COVERED = [
     "lib/classify.mjs",
     "lib/known.mjs",
     "lib/known_lint.mjs",
+    "lib/lock.mjs",
     "lib/mutate.mjs",
     "lib/stats.mjs",
 ];

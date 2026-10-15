@@ -31,6 +31,15 @@ anywhere the repository's `puppeteer` and a Chromium are available:
 `ARMADA_CHECKS_SHOTS=<directory>` to get a screenshot of the page whenever a
 scenario or a tour step gives up.
 
+One run at a time: `run.mjs` and `lib/prove.mjs` take
+`/tmp/armada-check.lock` themselves (`lib/lock.mjs`), by running again
+under `flock`, and say so when they wait for another run. A run started
+under the lock already (`flock /tmp/armada-check.lock arm check`, or
+`run.mjs` started by the proof) sees the lock held by its parent and goes
+on. `ARMADA_CHECKS_LOCK` names another lock file and
+`ARMADA_CHECKS_LOCK_WAIT` how many seconds to wait (3600); a run that
+gives up waiting ends with `ENV-ERROR` and exit status 3.
+
 Output is one line per assertion:
 
     PASS       frame-stability/long.navbar.drift  0px <= 0.5px  (0,0 1440x40)
@@ -352,7 +361,7 @@ The logic that decides a result is tested like the product's pure code:
 
 runs `test/*.test.mjs` with node's test runner and fails unless every
 module listed in `FULLY_COVERED` in `selftest.mjs` (the ratchet in
-`lib/classify.mjs`, the `known.json` lint, `lib/stats.mjs`,
+`lib/classify.mjs`, the `known.json` lint, the lock, `lib/stats.mjs`,
 `lib/mutate.mjs`) has 100% of its
 lines, branches and functions covered. It needs no browser and no
 server, and takes about a second.
@@ -369,6 +378,7 @@ server, and takes about a second.
     lib/classify.mjs     the ratchet: a run against known.json, and its rewrite
     lib/known.mjs        what a known.json entry holds; the rule that it only improves
     lib/known_lint.mjs   that rule against git (known-lint.mjs runs it)
+    lib/lock.mjs         one run at a time, under /tmp/armada-check.lock
     lib/fixtures.mjs     the checks' own topic; events for messages and edits
     lib/mutate.mjs       deliberate breakage of the application, by name
     lib/prove.mjs        runs every mutation; the pins must turn red

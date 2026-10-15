@@ -8,7 +8,7 @@ it can see. This file applies to every change.
   statement coverage from its first file. Enforced by:
   `tools/test-js-with-node --coverage` (`ARMADA_FULLY_COVERED_GLOBS`).
 - The harness's own logic (the ratchet, its statistics, the mutations, the
-  `known.json` lint) has tests in `tools/armada-checks/test/` at 100% of lines, branches and
+  `known.json` lint, the lock) has tests in `tools/armada-checks/test/` at 100% of lines, branches and
   functions.
   Enforced by: `node tools/armada-checks/selftest.mjs` (`FULLY_COVERED`).
 - Components are tested for behaviour with a real DOM
@@ -34,9 +34,9 @@ it can see. This file applies to every change.
 - An assertion must be able to fail: give it a precondition that reports
   "not measurable", and break it on purpose once. Enforced by:
   `tools/armada-checks/lib/prove.mjs`, run in the VM as its header says.
-- A full `arm check` (about ten minutes) or the whole proof runs under
-  `flock /tmp/armada-check.lock`, one at a time. Enforced by: convention;
-  long runs have taken the dev server down once.
+- `arm check` and the proof run one at a time: long runs side by side have
+  taken the dev server down once. Enforced by: `run.mjs` and `prove.mjs`,
+  which take `/tmp/armada-check.lock` themselves (`lib/lock.mjs`).
 - A deleted module's tests are deleted in the same change, and its entry
   leaves `ARMADA_EXEMPT_FILES`. Enforced by the coverage run
   (`tools/test-js-with-node --coverage`): a listed file that is gone gets

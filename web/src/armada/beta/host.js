@@ -34,11 +34,13 @@ import {choosePick, drawPicker, drawPickerBand, drawPickerSide, movePick, openPi
 import {card, closeCard, cutMoment, faceAt, holdMoment, moment, momentDue, openCard, playMoment, wireCard} from "./partner_card.js";
 import {buildLab, lab} from "./lab.js";
 import {wireMentions} from "./mentions.js";
+import {onPost, wirePages} from "./pages.js";
 
 /* event dispatch (connection.js): what each event type the page registers for does; a module's own types are named here */
 on("message", onMessage); on("update_message", onUpdate); on("agent_run", onRun); on("reaction", onReaction);
 on("update_message_flags", onFlags); on("delete_message", onDelete); on("typing", onTyping); on("workspace_changed", onWorkspaceChanged);
 on("armada_partner", onPartner); on("read_receipts", onReadReceipts); on("restart", onRestart);
+on("armada_post", onPost);
 let fileIn = null;
 /* what Tab stops on, in document order: what the browser would stop on, shown and not inert */
 const tabStops = () => $$("a[href], button, input, [tabindex], [contenteditable]").filter((x) => x.tabIndex >= 0 && !x.disabled && !x.hidden && !x.closest("[inert], [hidden]") && x.getClientRects().length > 0 && getComputedStyle(x).visibility !== "hidden");
@@ -54,6 +56,7 @@ async function boot() {
   press(nav, ".row.me", () => { openCard(); ready(); }); wireCard();
   press(main, "[data-seg]", (b) => { pick.seg = b.dataset.seg; if (pick.q) { pick.q = ""; tx.textContent = ""; syncField(); } pick.sel = null; state.hd._sig = ""; drawHeader(); drawPicker(); drawPickerBand(); panes.Partner.scrollTop = 0; ready(); });
   press(main, "[data-later]", () => putOff());
+  wirePages();   /* a person's page, a post, the editor (pages.js) */
   press(panes.Partner, ".pkc", (b) => { selectCell(b.dataset.sid); drawPickerBand(); ready(); });
   panes.Partner.addEventListener("dblclick", (e) => { const b = e.target.closest(".pkc"); if (b) { selectCell(b.dataset.sid); choosePick(); } });
   press(document.body, "[data-pick]", (b) => { pick.picks[b.dataset.pickfor] = b.dataset.pick; drawPickerSide(); drawPickerBand(); ready(); });
@@ -64,7 +67,7 @@ async function boot() {
   fileIn = el("input"); fileIn.type = "file"; fileIn.multiple = true; fileIn.hidden = true; document.body.append(fileIn); fileIn.addEventListener("change", () => { [...fileIn.files].forEach(upload); fileIn.value = ""; ready(); });
   tx.addEventListener("paste", (e) => { const f = [...(e.clipboardData && e.clipboardData.files || [])]; if (f.length) { e.preventDefault(); f.forEach(upload); } });
   addEventListener("dragover", (e) => { if (e.dataTransfer && [...e.dataTransfer.types].includes("Files")) e.preventDefault(); });
-  addEventListener("drop", (e) => { const f = [...(e.dataTransfer && e.dataTransfer.files || [])]; if (!f.length) return; e.preventDefault(); if (state.place && state.place.kind !== "home") f.forEach(upload); });
+  addEventListener("drop", (e) => { const f = [...(e.dataTransfer && e.dataTransfer.files || [])]; if (!f.length) return; e.preventDefault(); if (state.place && state.place.kind !== "home" && state.place.kind !== "page") f.forEach(upload); });   /* the editor takes its own drops (pages.js) */
   tx.addEventListener("focus", () => { state.threadTx = null; });
   buildOver(); wireMentions();
   /* the field */

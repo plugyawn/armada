@@ -11,6 +11,7 @@ import {planRun, stepMark} from "./checklist.js";
 import {homeScanned} from "./home.js";
 import {pack} from "./partners.js";
 import {pickerSideHTML} from "./partner_picker.js";
+import {pagesSideHTML} from "./pages.js";
 
 /* ---------- the column: the checklist's standing home, Changes, Runs, People ---------- */
 function drawSide() {
@@ -20,6 +21,7 @@ function drawSide() {
     const here = [...people.values()].filter((u) => !u.bot && u.active && u.id !== state.ME && presOf(u.id) === "on").slice(0, 8);
     h += '<section class="sec foot" id="sec-people"><div class="sh"><span>People</span></div><ul class="ls">' + `<li>${faceOf(state.ME, "s20", "on")}<span class="t">${esc(state.meName)}</span><span class="e"></span></li>` + here.map((u) => `<li data-k="${esc(dkey([u.id]))}">${faceOf(u.id, "s20", "on")}<span class="t">${esc(u.name)}</span><span class="e"></span></li>`).join("") + "</ul></section>";
     if (outline._sig === h) return; outline._sig = h; outline.innerHTML = h; host(outline); fitLists(side); return; }
+  if (p.kind === "page") { h = pagesSideHTML(); if (outline._sig === h) return; outline._sig = h; outline.innerHTML = h; host(outline); fitLists(side); return; }
   if (p.kind === "partner") { h = pack ? pickerSideHTML() : ""; if (outline._sig === h) return; outline._sig = h; outline.innerHTML = h; host(outline); return; }
   if (wt) { const run = planRun(c);
     if (run) { const live = run.status === "queued" || run.status === "running";

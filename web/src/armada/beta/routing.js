@@ -21,6 +21,7 @@ import {drawHome, drawHomeTrail, fetchMentions, HOME} from "./home.js";
 import {pack} from "./partners.js";
 import {drawPicker, drawPickerBand, PARTNER} from "./partner_picker.js";
 import {closeCard} from "./partner_card.js";
+import {openPage, pageFromHash, pageFromKey, pageHash} from "./pages.js";
 
 const tkey = (sid, topic) => `s:${sid}:${topic.toLowerCase()}`, dkey = (ids) => "d:" + [...ids].sort((a, b) => a - b).join(",");
 const topicLabel = (t) => t || "general chat";
@@ -29,12 +30,13 @@ const topicLabel = (t) => t || "general chat";
 function placeFromKey(key) {
   if (key === "home") return HOME;
   if (key === "partner") return pack ? PARTNER : null;
+  if (/^(page|post|edit):/.test(key)) return pageFromKey(key);
   if (key.startsWith("s:")) { const i = key.indexOf(":", 2), sid = +key.slice(2, i), s = streams.get(sid); if (!s) return null; const lower = key.slice(i + 1), known = (topicsOf.get(sid) || []).find((t) => t.name.toLowerCase() === lower); return {key, kind: "topic", stream_id: sid, stream: s.name, topic: known ? known.name : lower, repo: repoStreams.has(sid)}; }
   if (key.startsWith("d:")) { const ids = key.slice(2).split(",").filter(Boolean).map(Number); return {key, kind: "dm", ids, repo: false}; }
   return null;
 }
-const hashOf = (p) => (p.kind === "home" ? "#home" : p.kind === "partner" ? "#partner" : p.kind === "topic" ? `#c/${p.stream_id}/${encodeURIComponent(p.topic)}` : `#d/${p.ids.join(",")}`);
-function placeFromHash() { const h = location.hash; if (h === "#home") return HOME; if (h.startsWith("#narrow/")) return placeFromNarrow(h); if (h === "#partner") return pack ? PARTNER : null; let m = /^#c\/(\d+)\/(.*)$/.exec(h); if (m && streams.has(+m[1])) { let t = m[2]; try { t = decodeURIComponent(t); } catch (e) {} const p = placeFromKey(tkey(+m[1], t)); if (p) p.topic = (topicsOf.get(+m[1]) || []).find((x) => x.name.toLowerCase() === t.toLowerCase())?.name ?? t; return p; }
+const hashOf = (p) => (p.kind === "home" ? "#home" : p.kind === "page" ? pageHash(p) : p.kind === "partner" ? "#partner" : p.kind === "topic" ? `#c/${p.stream_id}/${encodeURIComponent(p.topic)}` : `#d/${p.ids.join(",")}`);
+function placeFromHash() { const h = location.hash; if (h === "#home") return HOME; if (h.startsWith("#narrow/")) return placeFromNarrow(h); if (h === "#partner") return pack ? PARTNER : null; if (/^#(page|post|edit)\//.test(h)) return pageFromHash(h); let m = /^#c\/(\d+)\/(.*)$/.exec(h); if (m && streams.has(+m[1])) { let t = m[2]; try { t = decodeURIComponent(t); } catch (e) {} const p = placeFromKey(tkey(+m[1], t)); if (p) p.topic = (topicsOf.get(+m[1]) || []).find((x) => x.name.toLowerCase() === t.toLowerCase())?.name ?? t; return p; }
   m = /^#d\/([\d,]*)$/.exec(h); if (m) return placeFromKey(dkey(m[1].split(",").filter(Boolean).map(Number))); return null; }
 /* a link written for the old interface (a notification email, a link someone pasted): #narrow/channel/<id>-<name>/topic/<topic>
    (with /near/<id> or /with/<id> after it), or #narrow/dm/<ids>-<name>, opens the place it names; any other narrow, none */
@@ -66,8 +68,9 @@ async function openPlace(p, o = {}) {
   if (p.kind === "topic" && !expanded.has(p.stream_id)) { expanded.add(p.stream_id); loadTopics(p.stream_id); store.set("open", JSON.stringify([...expanded])); }
   if (state.tab !== "Chat") setTab("Chat", true);
   if (state.threadTx && !lane.contains(state.threadTx)) state.threadTx = null; if (editing) endEdit(); closePicker(); closeMenu(); closeInfo(true); overHide();
-  showHome(p.kind === "home", p.kind === "partner"); $$(".row", navFixed).forEach((r) => r.classList.toggle("sel", r.dataset.k === "home" && p.kind === "home")); closeCard(); drawPickerBand();
+  showHome(p.kind === "home", p.kind === "partner", p.kind === "page"); $$(".row", navFixed).forEach((r) => r.classList.toggle("sel", r.dataset.k === "home" && p.kind === "home")); closeCard(); drawPickerBand();
   if (p.kind === "partner") { drawNav(); drawHeader(); drawRunState(true); drawPicker(); drawSide(); drawComposer(); if (prev && prev.key !== p.key) M.release($("#picker"), {y: T["pane-rise"] || 4}, "touch", {id: "pane"}); ready(); return; }
+  if (p.kind === "page") { drawNav(); drawHeader(); drawRunState(true); drawSide(); drawComposer(); if (prev && prev.key !== p.key) M.release($("#page"), {y: T["pane-rise"] || 4}, "touch", {id: "pane"}); openPage(p); return; }
   if (p.kind === "home") { drawNav(); drawHeader(); drawRunState(true); drawSide(); drawComposer(); drawHome(); if (prev && prev.key !== p.key) M.release($("#home"), {y: T["pane-rise"] || 4}, "touch", {id: "pane"}); fetchMentions(); return; }
   drawNav(); drawHeader(); drawLane(); drawRunState(true); drawSide(); drawTyping(); drawComposer();
   if (prev && prev.key !== p.key) M.release(lane, {y: T["pane-rise"] || 4}, "touch", {id: "pane"});
@@ -87,7 +90,8 @@ function syncPaused(c) { const k = c.place.key, paused = !!(c.ctx && c.ctx.is_pa
   if (paused && !was) { marks.set(k, "paused"); drawTrail(k); } else if (!paused && was === "paused") { marks.delete(k); drawTrail(k); } }
 /* Home is a pane of its own: no conversation, no band, no field */
 /* the picker is a place of its own too, with the band (its one sentence) and the field (its search) */
-function showHome(on, picker = false) { if (!feed) return; feed.hidden = on || picker; panes.Home.hidden = !on; if (panes.Partner) panes.Partner.hidden = !picker; $("main > .dock").hidden = on; band.el.hidden = on; main.classList.toggle("bare", on); R.classList.toggle("picking", picker); }
+/* a person's page, a post and the editor are one pane (pages.js), with no band and no field, as Home */
+function showHome(on, picker = false, page = false) { if (!feed) return; feed.hidden = on || picker || page; panes.Home.hidden = !on; if (panes.Partner) panes.Partner.hidden = !picker; if (panes.Page) panes.Page.hidden = !page; $("main > .dock").hidden = on || page; band.el.hidden = on || page; main.classList.toggle("bare", on || page); R.classList.toggle("picking", picker); }
 function markRead(c) { const set = unread.get(c.place.key); if (!set || !set.size || document.hidden) return; const ids = [...set].filter((i) => typeof i === "number"); unread.delete(c.place.key); drawTrail(c.place.key); if (ids.length) api("POST", "messages/flags", {messages: ids, op: "add", flag: "read"}).catch(() => {}); }
 let ctxTimer = 0;
 function refreshCtx(c, ms = 1000) { clearTimeout(ctxTimer); ctxTimer = setTimeout(async () => { await fetchCtx(c); if (c === state.P) { drawHeader(); drawSide(); if (state.tab === "Changes") drawChanges(); } }, ms); }

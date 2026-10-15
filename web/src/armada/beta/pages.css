@@ -1,0 +1,69 @@
+/* INTERIM BETA (/beta/): personal pages (pages.js), plain as Bear Blog in Armada's type: design/r5/round4/index.html,
+   section 3. Tokens only; every colour comes from the kit's palette, so dark follows. Deleted with this directory. */
+@layer zulip.armada-beta {   /* see index.js: the beta's sheets sit at the bottom of the cascade */
+
+/* the page is a column at reading width, its text on the conversation's text edge */
+#page .site { max-width: calc(var(--doc) + var(--pad-x)); padding: var(--s-6) 0 var(--s-10) var(--pad-x); }
+#page .site > .note { padding-left: 0; }
+
+/* the face and the line about them. My line is a button that becomes a field in the same place, its words where they were */
+#page .top { display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: var(--s-3); align-items: start; }
+#page .bio { font: var(--t-talk); color: var(--ink-2); padding: 2px 0 0; text-align: left; min-height: 26px; overflow-wrap: anywhere; }   /* (28 px face - 24 px line) / 2: the first line sits on the face's middle; 2 + 24, so a button has no room to centre its line lower */
+#page button.bio { cursor: text; border-radius: var(--r-ctl); }
+#page button.bio:hover { color: var(--ink-1); }
+#page button.bio.empty { color: var(--dim); }
+/* editing: the field and the hidden line share one cell, so the words stay where they were; the well is a shadow, not a box */
+#page .bioed { display: grid; }
+#page .bioed > .bio { grid-area: 1 / 1; }
+#page .bioed > [data-state="mirror"] { visibility: hidden; white-space: pre-wrap; }
+#page textarea.bio { display: block; width: 100%; resize: none; overflow: hidden; border: 0; outline: none; color: var(--ink-1); background: var(--fill-1); box-shadow: 0 0 0 var(--s-1) var(--fill-1); border-radius: var(--r-ctl); }
+
+/* the posts, newest first: the date, the title; a draft of mine says so */
+#page ul.posts { margin-top: var(--s-6); }
+#page ul.posts > li { display: grid; grid-template-columns: 120px minmax(0, 1fr) auto; column-gap: var(--s-3); align-items: baseline; padding: var(--s-1) 0; font: var(--t-talk); }
+#page ul.posts time { color: var(--ink-2); font-variant-numeric: tabular-nums; white-space: nowrap; }
+#page ul.posts a { color: var(--ink-1); text-decoration: none; box-shadow: inset 0 -1px 0 var(--edge); overflow-wrap: anywhere; transition: box-shadow var(--fade-out) linear; }
+#page ul.posts a:hover { box-shadow: inset 0 -1px 0 var(--ink-2); }
+#page ul.posts > li.draft a { color: var(--ink-2); }
+#page ul.posts .tag { font: var(--t-caption); color: var(--ink-2); background: var(--fill-1); border-radius: var(--r-mark); padding: 0 var(--s-1); }
+#page .none { margin-top: var(--s-6); font: var(--t-talk); color: var(--ink-2); }
+
+/* the foot: what the page is, and what I can do here */
+#page .foot { margin-top: var(--s-8); padding-top: var(--s-3); box-shadow: inset 0 1px 0 var(--edge); display: flex; align-items: center; gap: var(--s-4); min-height: calc(var(--h-m) + var(--s-3)); font: var(--t-text); color: var(--ink-2); }
+#page .foot a { color: var(--ink-2); text-decoration: none; }
+#page .foot a:hover { color: var(--ink-1); }
+#page .foot :is(.edit, .acts) { margin-left: auto; }
+#page .foot .edit { font: var(--t-strong); color: var(--ink-1); }
+#page .foot .acts { display: flex; align-items: center; gap: var(--s-3); }
+#page .foot .acts .lk { margin: 0; }
+#page .lk.danger { color: var(--failure); }
+
+/* a post: set like the conversation, at reading width */
+#page article.post { padding-left: 0; }
+#page article.post h1 { font: var(--t-display); overflow-wrap: anywhere; }
+#page article.post .meta { font: var(--t-text); color: var(--ink-2); margin-top: var(--s-1); }
+#page article.post .meta + * { margin-top: var(--s-5); }
+#page article.post ol { max-width: var(--doc); margin-top: var(--gap-para); padding-left: 20px; list-style: decimal; }
+
+/* the editor: the title as the post's title, Write and Preview, the Markdown in a well */
+#page .editor .ttl { display: block; width: 100%; font: var(--t-display); color: var(--ink-1); background: none; border: 0; padding: 0; outline: none; }
+#page .editor .ttl::placeholder, #page .editor .src::placeholder { color: var(--dim); }
+#page .editor .seg { margin-top: var(--s-4); margin-left: calc(-1 * var(--s-3)); }
+#page .editor :is(.src, .prev) { display: block; margin-top: var(--s-3); min-height: 40vh; }
+#page .editor .src { width: calc(100% + var(--pad-x)); margin-left: calc(-1 * var(--pad-x)); padding: var(--s-3) var(--pad-x); font: var(--t-talk); color: var(--ink-1); background: var(--fill-1); border: 0; border-radius: var(--r-block); resize: vertical; outline: none; transition: box-shadow var(--fade-out) linear; }
+#page .editor .src:focus { box-shadow: var(--shadow-field-focus); }
+#page .editor :is(.src, .prev)[hidden] { display: none; }
+#page .editor .prev > .note { padding-left: 0; }
+#page .editor .say { font: var(--t-text); color: var(--ink-2); min-height: var(--h-s); margin-top: var(--s-2); display: flex; align-items: center; }   /* a slot that is always there: a message never moves the buttons */
+#page .editor .foot { margin-top: var(--s-2); }
+#page .editor .foot button:disabled { opacity: 0.5; }
+
+/* the column: everyone's pages; mine first */
+#sec-pages .ls > li[data-k]:hover > .t { color: var(--ink-1); }
+
+/* deleting a post is asked first */
+.dlg.postdel { position: absolute; left: calc(50% - 200px); top: 160px; }
+.dlg.postdel .q { font: var(--t-strong); }
+.dlg.postdel .d { color: var(--ink-2); margin-top: var(--s-2); }
+
+}   /* @layer zulip.armada-beta */

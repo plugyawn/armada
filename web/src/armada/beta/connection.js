@@ -28,7 +28,7 @@ const link = createLink({
   hidden: () => document.hidden,
   online: () => navigator.onLine !== false,
   registerParams: () => ({fetch_event_types: ["muted_users", "subscription", "realm_user", "presence", "update_message_flags", "message", "recent_private_conversations", "realm_bot", "stream"],
-    event_types: ["message", "update_message", "reaction", "agent_run", "workspace_changed", "typing", "delete_message", "update_message_flags", "armada_partner", "read_receipts", "restart"], apply_markdown: true, client_gravatar: false,
+    event_types: ["message", "update_message", "reaction", "agent_run", "workspace_changed", "typing", "delete_message", "update_message_flags", "armada_partner", "read_receipts", "restart", "armada_post"], apply_markdown: true, client_gravatar: false,
     client_capabilities: {notification_settings_null: true, bulk_message_deletion: true, user_avatar_url_field_optional: false, stream_typing_notifications: true, user_settings_object: true, linkifier_url_template: true, user_list_incomplete: false, include_deactivated_groups: false, archived_channels: false, empty_topic_name: true}}),
   onRegister: applyRegister,
   onEvent: handle,

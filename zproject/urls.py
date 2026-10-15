@@ -808,8 +808,8 @@ v1_api_and_json_patterns = [
 # endpoint for use by code), you should add it here.
 i18n_urls = [
     path("", home, name="home"),
-    # INTERIM BETA: the second interface, and its themed marks, partner
-    # sprites and species (served to signed-in people only); removed with
+    # INTERIM BETA: the second interface, and its partner sprites and
+    # species (served to signed-in people only); removed with
     # web/src/armada/beta/.
     path("beta/", armada_beta),
     path("beta/sprites/<path:path>", armada_beta_sprite),

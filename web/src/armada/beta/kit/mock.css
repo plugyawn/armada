@@ -192,14 +192,11 @@ em { font-style: italic; } strong, b { font-weight: 500; }
 /* Onix's face (kit.js agentFace, which faces.js draws): boulders in a flint disc, as a person without a picture has initials in one */
 .sigil.agent > .disc { fill: var(--p-flint); } .sigil.agent.in-disc > g { fill: var(--p-flint-ink); }
 /* Onix working: the one loop, at the head of the stream and nowhere else. One strip of three drawings 14 px apart, moved a
-   drawing at a time on --step (100 ms), twelve steps (1.2 s), resting inside the loop. Themed: the ball's capture wobble,
-   lean left, upright, lean right, then upright at rest for 900 ms; its outline never moves. Plain: the dot draws in to a
-   point and back, then rests. Elsewhere a live run is the same drawing, still. */
+   drawing at a time on --step (100 ms), twelve steps (1.2 s), resting inside the loop: the dot draws in to a point and
+   back, then rests. Elsewhere a live run is the same drawing, still. */
 .wk { overflow: hidden; }
-.wk.ball > g { transform: translateX(-14px); } .wk.dot > g { transform: translateX(0); }   /* at rest */
-.wk.ball.live > g { animation: wk-wobble calc(var(--step) * 12) step-end infinite; }
+.wk.dot > g { transform: translateX(0); }   /* at rest */
 .wk.dot.live > g { animation: wk-dot calc(var(--step) * 12) step-end infinite; }
-@keyframes wk-wobble { 0% { transform: translateX(0); } 8.333% { transform: translateX(-14px); } 16.667% { transform: translateX(-28px); } 25%, 100% { transform: translateX(-14px); } }
 @keyframes wk-dot { 0% { transform: translateX(-14px); } 8.333% { transform: translateX(-28px); } 16.667% { transform: translateX(-14px); } 25%, 100% { transform: translateX(0); } }
 .head { display: inline-block; width: 0; height: 0; position: relative; vertical-align: baseline; }
 .head > .mk { position: absolute; left: 6px; top: -13px; }
@@ -210,10 +207,10 @@ em { font-style: italic; } strong, b { font-weight: 500; }
 .dots circle:nth-child(2) { animation-delay: calc(var(--caret-period) * 0.15); } .dots circle:nth-child(3) { animation-delay: calc(var(--caret-period) * 0.3); }
 @keyframes dot { 0%, 60%, 100% { opacity: 0.35; transform: scale(0.83); } 30% { opacity: 1; transform: scale(1.17); } }
 .dots.s { width: 13px; height: 3px; }
-@media (prefers-reduced-motion: reduce) { :is(.wk.ball, .wk.dot).live > g, .dots circle, .m-caret.idle, .idle > .cur { animation: none; } .dots circle { opacity: 0.7; transform: none; } }
-:root[data-motion="reduced"] :is(:is(.wk.ball, .wk.dot).live > g, .dots circle, .m-caret.idle, .idle > .cur) { animation: none; }
+@media (prefers-reduced-motion: reduce) { .wk.dot.live > g, .dots circle, .m-caret.idle, .idle > .cur { animation: none; } .dots circle { opacity: 0.7; transform: none; } }
+:root[data-motion="reduced"] :is(.wk.dot.live > g, .dots circle, .m-caret.idle, .idle > .cur) { animation: none; }
 :root[data-motion="reduced"] .dots circle { opacity: 0.7; transform: none; }
-.off .dots circle, [inert] :is(.wk.ball, .wk.dot).live > g { animation: none; }   /* a loop on a thing that is not shown does not run */
+.off .dots circle, [inert] .wk.dot.live > g { animation: none; }   /* a loop on a thing that is not shown does not run */
 
 /* ================= motion, the stylesheet half. motion.js is the only file that calls element.animate. =================
    Hover and press: the fill is a layer behind the label, so it settles in from a slightly smaller box while the label

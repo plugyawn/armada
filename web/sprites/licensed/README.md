@@ -52,15 +52,3 @@ partners are off and faces are initials.
 
 The study that chose these sources is `var/armada-overhaul/design/r4/sprites/SPRITES.md`
 on the machine the rebuild is done on.
-
-## `marks/`: the interim beta's themed run marks
-
-`marks/ball.svg` (a live run: three drawings, lean left, upright, lean right,
-14 units apart) and `marks/egg.svg` (a queued run) are original drawings from
-the r4 marks study, kept out of git because the ball is recognisably the
-games' design. The beta reads them through `/beta/sprites/marks/<name>`
-(`zerver/views/armada_beta.py`), which serves only those two names, only to
-signed-in people, from this directory or from `$ARMADA_SPRITE_DIR/marks/`.
-Without them the beta draws a dot and a ring. To make them, run
-`node var/armada-overhaul/build/beta2/gen/marks.mjs` on the machine the
-rebuild is done on. They go with the beta.

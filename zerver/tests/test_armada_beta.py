@@ -254,6 +254,7 @@ class ArmadaBetaTest(ZulipTestCase):
         with tempfile.TemporaryDirectory() as sprites:
             os.makedirs(os.path.join(sprites, "marks"))
             os.makedirs(os.path.join(sprites, "made"))
+            # A themed mark the beta no longer reads: served to no one.
             with open(os.path.join(sprites, "marks", "ball.svg"), "w") as f:
                 f.write('<svg xmlns="http://www.w3.org/2000/svg"></svg>')
             with open(os.path.join(sprites, "made", "1.png"), "wb") as f:
@@ -282,20 +283,12 @@ class ArmadaBetaTest(ZulipTestCase):
     def test_sprites_are_served_to_signed_in_people_only(self) -> None:
         with self.sprite_dir() as sprites:
             # Signed out: sent to sign in, and no file is in the answer.
-            for path in ["marks/ball.svg", "made/1.png", "species.json"]:
+            for path in ["made/1.png", "species.json"]:
                 result = self.client_get(f"/beta/sprites/{path}")
                 self.assertEqual(result.status_code, 302)
                 self.assertIn("/login/", result["Location"])
 
             self.login("hamlet")
-            result = self.client_get("/beta/sprites/marks/ball.svg")
-            self.assertEqual(result.status_code, 200)
-            self.assertEqual(result["Content-Type"], "image/svg+xml")
-            self.assertEqual(result["Cache-Control"], "private, max-age=3600")
-            self.assertEqual(result["X-Content-Type-Options"], "nosniff")
-            self.assertIn("sandbox", result["Content-Security-Policy"])
-            self.assertEqual(result.content, b'<svg xmlns="http://www.w3.org/2000/svg"></svg>')
-
             result = self.client_get("/beta/sprites/made/1.png")
             self.assertEqual(result.status_code, 200)
             self.assertEqual(result["Content-Type"], "image/png")
@@ -309,14 +302,15 @@ class ArmadaBetaTest(ZulipTestCase):
             self.assertEqual(result["Cache-Control"], "private, max-age=31536000, immutable")
             self.assertEqual(orjson.loads(result.content)["species"]["1"]["name"], "Creature 1")
 
-            # A file that is not on this server, a name that is not a themed
-            # mark, a file of another kind, a directory, and every way out
-            # of the directory (a link included): none is served.
+            # A file that is not on this server, a file of another kind (the
+            # themed marks the beta once read among them), a directory, and
+            # every way out of the directory (a link included): none is
+            # served.
             os.symlink("/etc/hostname", os.path.join(sprites, "made", "out.png"))
             for path in [
                 "made/2.png",
+                "marks/ball.svg",
                 "marks/egg.svg",
-                "marks/notes.svg",
                 "notes.txt",
                 "made",
                 "made/out.png",
@@ -334,11 +328,11 @@ class ArmadaBetaTest(ZulipTestCase):
             self.assertEqual(self.client_post("/beta/sprites/made/1.png").status_code, 405)
 
         # A directory that is there but holds nothing: no pack, so the page
-        # draws initials and the plain marks, and every file is a 404.
+        # draws initials, and every file is a 404.
         with tempfile.TemporaryDirectory() as empty:
             with mock.patch.dict(os.environ, {"ARMADA_SPRITE_DIR": empty}):
                 self.assertIn('data-sprite-version=""', self.client_get("/beta/").content.decode())
-                for path in ["species.json", "made/1.png", "marks/ball.svg"]:
+                for path in ["species.json", "made/1.png"]:
                     self.assertEqual(self.client_get(f"/beta/sprites/{path}").status_code, 404)
 
         # With no sprite directory at all, every file is a 404.

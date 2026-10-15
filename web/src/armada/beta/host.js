@@ -15,7 +15,7 @@ import {band, bindFrame, cz, feed, go, lane, main, nav, navFixed, navScroll, out
 import {answering, drawAtts, drawComposer, onixHere, onixKey, ready, syncField, upload, verb} from "./composer.js";
 import {dist, drawLane, edge, firstRow, haltLane, hugAll, pin, syncJump, toHug} from "./feed.js";
 import {drawNav, loadTopics, navMore, subs, toggleStream} from "./nav.js";
-import {drawAsks, loadThemedMarks, runsSeen, sweepAsks, waitingRun} from "./runs.js";
+import {drawAsks, runsSeen, sweepAsks, waitingRun} from "./runs.js";
 import {drawHeader} from "./header.js";
 import {react} from "./reactions.js";
 import {closeInfo, fetchReceipts, info, openInfo, pollReceipts, RCPT_POLL, RECEIPTS, signOfLife, toggleInfo} from "./receipts.js";
@@ -46,7 +46,7 @@ const tabStops = () => $$("a[href], button, input, [tabindex], [contenteditable]
 async function boot() {
   store.del("onix");   /* the old switch for every place */
   const bootEl = el("div", "", "Loading"); bootEl.id = "boot"; document.body.append(bootEl);
-  try { await Promise.all([register(), loadThemedMarks(), loadPartners()]); api("GET", "armada/session").then((r) => { if (r.armada_session && r.armada_session.agent_mention) state.agentMention = r.armada_session.agent_mention; }).catch(() => {}); }
+  try { await Promise.all([register(), loadPartners()]); api("GET", "armada/session").then((r) => { if (r.armada_session && r.armada_session.agent_mention) state.agentMention = r.armada_session.agent_mention; }).catch(() => {}); }
   catch (e) { if (signedOut.done) { bootEl.remove(); return; } bootEl.innerHTML = `<p>The beta could not load: ${esc(e.message)}. <a href="/">Open the old interface</a></p>`; return; }
   bindFrame();
   /* my face opens my card, any other face that person's (partner_card.js); the picker's switch, Later, its cells; the card's controls */

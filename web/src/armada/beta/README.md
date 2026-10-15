@@ -11,10 +11,6 @@ Delete it when the rebuild's conversation lands.
   `proto.css`, `glyphs.js`, `marks.js`, `kit.js`, `motion.js`, `sound.js`. Each script sets window globals (`ic`, `mk`,
   `wk`, `agentFace`, `frame`, `M`, `S`, ...). `marks.js` holds the committed plain marks and Onix's face (the r4 marks
   study's drawings); `kit.js`'s `agentFace` is the one place the face is drawn, so a party sprite can replace it.
-- The themed marks (the ball for a live run, the egg for a queued one) are not in git: they live in
-  `web/sprites/licensed/marks/` (git-ignored), are served to signed-in people only by `armada_beta_themed_mark`
-  (`/beta/sprites/marks/<name>`), and are read by `runs.js` (`loadThemedMarks`) before the first draw. Without them
-  the page draws a dot and a ring.
 - Partners (round three): the picker place (`#partner`), faces, the card and the evolution moment are in
   `partners.js`, `partner_picker.js` and `partner_card.js`; the sprites and `species.json` come from the git-ignored `web/sprites/licensed/` through
   `/beta/sprites/<path>`, partners from `/json/armada/partners` (`zerver/lib/partner.py`, in interim bot-storage rows).
@@ -58,7 +54,7 @@ into the engineered client deletes the module it replaces.
 | `threads.js` | threads, opened in place, with their own field | feed |
 | `hover.js` | the message's controls: the hover overlay, More, edit, delete | feed |
 | `events.js` | what each live event does to the page | feed |
-| `runs.js` | runs: their marks (and the themed ones), the live runs at load, the questions they wait on | feed |
+| `runs.js` | runs: their marks, the live runs at load, the questions they wait on | feed |
 | `checklist.js` | the run's checklist, in the header and the column | feed |
 | `column.js` | the column: the checklist's standing home, Changes, Runs, People | feed |
 | `nav.js` | the nav: channels, topics, direct messages, their trailing marks and counts | none this sprint |
@@ -99,7 +95,7 @@ Three rules keep the modules apart:
 - No module imports `host.js`; only the entry, `index.js`, does.
 
 Served by `zerver/views/armada_beta.py` (`@zulip_login_required`) through `templates/zerver/armada_beta.html`; its
-themed marks by the same file's `armada_beta_themed_mark`.
+sprites by the same file's `armada_beta_sprite`.
 
 To delete the beta, remove all of these in one change:
 
@@ -112,7 +108,7 @@ To delete the beta, remove all of these in one change:
 - in `web/templates/navbar.hbs`, the `armada-beta-link` anchor and its comment
 - the `web/src/armada/beta` lines (and their comments) in `eslint.config.js`, `stylelint.config.js`
   (`ignoreFiles`), `.prettierignore` and `tools/linter_lib/exclude.py`
-- `tools/armada/fork_ledger.d/beta.txt`, the `marks/` section of `web/sprites/licensed/README.md`, and the `beta/` lines in `docs/armada/architecture.md`
+- `tools/armada/fork_ledger.d/beta.txt` and the `beta/` lines in `docs/armada/architecture.md`
   ("Directories"), in `.claude/CLAUDE.md` ("Where the build is") and in `.claude/rules/fork-boundary.md`
 
 `git grep --untracked -n -e "INTERIM BETA" -e armada-beta -e armada_beta -e armada/beta` finds every one of them.

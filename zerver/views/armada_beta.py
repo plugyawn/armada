@@ -42,12 +42,6 @@ from zerver.models import AgentRun, Stream, UserProfile
 # live runs than this has Home show the newest.
 ARMADA_BETA_LIVE_RUN_LIMIT = 100
 
-# The themed marks: the ball (a live run) and the egg (a queued one). They
-# are recognisably the games' designs and the repository is public, so
-# they live in the git-ignored web/sprites/licensed/marks/ (or under
-# ARMADA_SPRITE_DIR) and are served only to signed-in people. Without
-# them the page draws its committed plain marks (a dot and a ring).
-ARMADA_BETA_THEMED_MARKS = frozenset({"ball.svg", "egg.svg"})
 # Sprites and the pack's species never change under one name (a new pack
 # is a new ?v= on species.json), so a browser keeps them for a year.
 ARMADA_BETA_SPRITE_CACHE = "private, max-age=31536000, immutable"
@@ -132,13 +126,11 @@ def sprite_login_required(
 def armada_beta_sprite(request: HttpRequest, path: str) -> HttpResponse:
     """A file of the git-ignored sprite directory, to a signed-in person
     of this realm only (a signed-out request is sent to sign in, like
-    /beta/ itself): a themed mark (marks/<name>, only the names in
-    ARMADA_BETA_THEMED_MARKS), a sprite (any .png), or the pack's
-    species.json. Nothing outside the directory is served: the path is
-    resolved, links included, and must stay inside it. Anything else, and
-    any file that is not on this server, is a 404, and so is any path the
-    file system refuses (a NUL byte, a name too long, a file used as a
-    directory)."""
+    /beta/ itself): a sprite (any .png) or the pack's species.json.
+    Nothing outside the directory is served: the path is resolved, links
+    included, and must stay inside it. Anything else, and any file that
+    is not on this server, is a 404, and so is any path the file system
+    refuses (a NUL byte, a name too long, a file used as a directory)."""
     if "\0" in path:
         raise Http404
     root = os.path.realpath(armada_sprite_dir())
@@ -146,11 +138,7 @@ def armada_beta_sprite(request: HttpRequest, path: str) -> HttpResponse:
     if not full.startswith(root + os.sep):
         raise Http404
     relative = os.path.relpath(full, root)
-    if relative.startswith("marks" + os.sep):
-        if os.path.basename(relative) not in ARMADA_BETA_THEMED_MARKS:
-            raise Http404
-        content_type = "image/svg+xml"
-    elif relative.endswith(".png"):
+    if relative.endswith(".png"):
         content_type = "image/png"
     elif relative == "species.json":
         content_type = "application/json"
@@ -163,13 +151,7 @@ def armada_beta_sprite(request: HttpRequest, path: str) -> HttpResponse:
         raise Http404
     response = HttpResponse(content, content_type=content_type)
     response["X-Content-Type-Options"] = "nosniff"
-    if content_type == "image/svg+xml":
-        response["Cache-Control"] = "private, max-age=3600"
-        # The page reads the file's paths as data; opened on its own, the
-        # file may run nothing.
-        response["Content-Security-Policy"] = "default-src 'none'; sandbox"
-    else:
-        response["Cache-Control"] = ARMADA_BETA_SPRITE_CACHE
+    response["Cache-Control"] = ARMADA_BETA_SPRITE_CACHE
     return response
 
 

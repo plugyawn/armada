@@ -11,16 +11,13 @@
   window.ic = (n, cls) => { const g = GLYPHS[n]; if (!g) return ""; return `<svg class="ic ${cls || ""}" viewBox="0 0 16 16" aria-hidden="true">${g.s ? `<g class="n">${g.s}</g>` : ""}${g.f ? `<g class="f">${g.f}</g>` : ""}</svg>`; };
   // ---- the marks of a run and of a step (r4 marks study): 12 by 12 cells of one CSS pixel, in the 14 px box (28 on Home,
   // 2 px a cell). done, live, queued, needs, paused, failed, cancelled; "left" is a step not reached. Each state has its
-  // own silhouette; a hue only on needs (attention) and failed (failure). Drawings: marks.js (plain, committed), and the
-  // themed ball and egg that runs.js puts in BETA_THEMED before the first draw when this server has them.
-  const MKCLS = {needs: "c-att", failed: "c-fail"}, THEMED = window.BETA_THEMED = window.BETA_THEMED || {};
+  // own silhouette; a hue only on needs (attention) and failed (failure). Drawings: marks.js.
+  const MKCLS = {needs: "c-att", failed: "c-fail"};
   const BOX = 'viewBox="-1 -1 14 14" shape-rendering="crispEdges"';
-  window.mk = (n, cls) => `<svg class="mk ${n} ${MKCLS[n] || ""} ${cls || ""}" ${BOX} aria-hidden="true">${(THEMED[n] && THEMED[n].rest) || BETA_MARKS[n] || ""}</svg>`;
-  // the working mark: the one loop a live run has, at the head of the stream. A strip of three drawings 14 apart (the
-  // ball's lean left, upright and lean right, or the plain dot's three sizes), moved a drawing at a time (mock.css), so no
-  // frame is blank. One element for the life of an answer.
-  window.wk = (live = true, cls) => { const t = THEMED.live, frames = t ? t.frames : BETA_DOT_LOOP;
-    return `<svg class="mk wk ${t ? "ball" : "dot"}${live ? " live" : ""} ${cls || ""}" ${BOX} aria-hidden="true"${live ? ' data-m="live"' : ""}><g>${frames.map((f, i) => `<g transform="translate(${14 * i} 0)">${f}</g>`).join("")}</g></svg>`; };
+  window.mk = (n, cls) => `<svg class="mk ${n} ${MKCLS[n] || ""} ${cls || ""}" ${BOX} aria-hidden="true">${BETA_MARKS[n] || ""}</svg>`;
+  // the working mark: the one loop a live run has, at the head of the stream. A strip of the dot's three sizes 14 apart,
+  // moved a drawing at a time (mock.css), so no frame is blank. One element for the life of an answer.
+  window.wk = (live = true, cls) => `<svg class="mk wk dot${live ? " live" : ""} ${cls || ""}" ${BOX} aria-hidden="true"${live ? ' data-m="live"' : ""}><g>${BETA_DOT_LOOP.map((f, i) => `<g transform="translate(${14 * i} 0)">${f}</g>`).join("")}</g></svg>`;
   // Onix's face: the one place it is drawn, so the party sprite can take its place later by replacing this function alone.
   // Today it is direction B of the study: three faceted boulders in a flint disc where a person shows a face (28 in the
   // gutter, 20 in lists, 18 in a thread's line), bare at 14; in the field, bare at 16, solid when Onix will answer and an

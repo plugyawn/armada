@@ -13,7 +13,7 @@ import {drawRunState} from "./band.js";
 import {drawHomeRow, questionOf} from "./home.js";
 
 const MARK_RANK = {needs: 5, live: 4, queued: 3, failed: 2, paused: 1};
-/* a live run's mark: waiting on me (the balloon), working (the ball, or the dot), or queued behind another (the egg, or the ring) */
+/* a live run's mark: waiting on me (the balloon), working, or queued behind another */
 const runMark = (r, status = r.status) => (r.waiting ? "needs" : status === "queued" ? "queued" : "live");
 const LIVE_MARKS = new Set(["needs", "live", "queued"]);
 /* which worktrees have a run going: the page was given the live runs in my channels at load (zerver/views/armada_beta.py),
@@ -60,18 +60,6 @@ function drawAsks() { if (!state.P || !lane) return; const r = waitingRun(state.
 const liveRun = (c) => c.runs.find((r) => r.status === "queued" || r.status === "running");
 const runOfMsg = (c, id) => c.runs.find((r) => r.result_message_id === id);
 const hasWorktree = (c) => !!(c.ctx && c.ctx.workspace_uuid && c.ctx.git && c.ctx.git.available);
-/* the themed marks (the ball for a live run, the egg for a queued one) are not in git: the server serves them from its
-   git-ignored web/sprites/licensed/marks/ to signed-in people (zerver/views/armada_beta.py). They are read before the
-   first draw, as data: only each path's tone and its drawing commands are kept. Without them the plain dot and ring are
-   drawn (kit/marks.js). */
-async function loadThemedMarks() {
-  const get = async (name) => { try { const r = await fetch(`/beta/sprites/marks/${name}`, {credentials: "same-origin", redirect: "error"}); if (!r.ok) return null;
-    const doc = new DOMParser().parseFromString(await r.text(), "image/svg+xml"); return doc.querySelector("parsererror") ? null : doc.documentElement; } catch (e) { return null; } };
-  const paths = (root) => [...root.querySelectorAll("path")].map((x) => { const d = x.getAttribute("d") || "", t = x.getAttribute("class"); return /^[MmHhVvZz0-9.\s-]+$/.test(d) ? `<path${t === "t-b" || t === "t-h" ? ` class="${t}"` : ""} d="${d}"/>` : ""; }).join("");
-  const [ball, egg] = await Promise.all([get("ball.svg"), get("egg.svg")]), themed = window.BETA_THEMED;
-  if (ball) { const frames = [...ball.children].filter((g) => g.tagName === "g").map(paths); if (frames.length === 3 && frames.every(Boolean)) themed.live = {frames, rest: frames[1]}; }
-  if (egg) { const d = paths(egg); if (d) themed.queued = {rest: d}; }
-}
 
-export {answered, askedAt, askState, drawAsks, hasWorktree, inferAsk, LIVE_MARKS, liveRun, loadThemedMarks,
-  MARK_RANK, namesOnix, runMark, runOfMsg, runsSeen, scanLive, settleAsk, sweepAsks, waitingRun};
+export {answered, askedAt, askState, drawAsks, hasWorktree, inferAsk, LIVE_MARKS, liveRun, MARK_RANK, namesOnix,
+  runMark, runOfMsg, runsSeen, scanLive, settleAsk, sweepAsks, waitingRun};

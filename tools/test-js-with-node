@@ -386,7 +386,6 @@ ARMADA_EXEMPT_FILES = make_set(
         "web/tests/legacy_workspace_files.test.cjs",
         "web/tests/legacy_workspace_markdown_editor.test.cjs",
         "web/tests/legacy_workspace_shell.test.cjs",
-        "web/tests/legacy_workspace_source_editor.test.cjs",
         "web/tests/message_threads.test.cjs",
     ]
 )

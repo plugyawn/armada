@@ -19,9 +19,9 @@ const {window} = dom;
 window.setTimeout = global.setTimeout;
 const fake_clear_timeout = global.clearTimeout;
 function clear_timeout(timer) {
-    if (timer !== -1) {
-        fake_clear_timeout(timer);
-    }
+    // CodeMirror clears an unset timer as -1, which Node refuses; whether
+    // it clears a set one depends on timing, so this has no branch.
+    fake_clear_timeout(timer === -1 ? undefined : timer);
 }
 window.clearTimeout = clear_timeout;
 set_global("clearTimeout", clear_timeout);

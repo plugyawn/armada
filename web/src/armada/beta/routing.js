@@ -9,7 +9,7 @@ import {drawLane} from "./feed.js";
 import {drawNav, drawTrail, loadTopics} from "./nav.js";
 import {askState, drawAsks, inferAsk, liveRun, runMark, runsSeen} from "./runs.js";
 import {drawHeader} from "./header.js";
-import {closeInfo, loadMembers, pollReceipts, RECEIPTS} from "./receipts.js";
+import {closeInfo, loadMembers, loadReceipts, RECEIPTS} from "./receipts.js";
 import {drawFooters} from "./agent_turn.js";
 import {drawTyping} from "./events.js";
 import {drawRunState} from "./band.js";
@@ -68,7 +68,7 @@ async function openPlace(p, o = {}) {
   const c = state.P, fresh = !c.loaded;
   const jobs = [fresh ? fetchMsgs(c) : null, fetchRuns(c), c.ctx ? null : fetchCtx(c)];
   if (RECEIPTS && p.kind === "topic") loadMembers(p.stream_id);
-  await jobs[0]; if (state.place !== p) return; if (fresh) { drawLane(); } pollReceipts({open: true});
+  await jobs[0]; if (state.place !== p) return; if (fresh) { drawLane(); loadReceipts(); }
   await jobs[1]; if (state.place !== p) return; inferAsk(liveRun(c), c.msgs); drawRunState(true); drawFooters(); drawSide(); drawAsks();
   { const r = liveRun(c), k = p.key, m_ = r ? runMark(r) : null; if (m_ && marks.get(k) !== m_) { marks.set(k, m_); drawTrail(k); drawHomeTrail(); } }
   await jobs[2]; if (state.place !== p) return; drawHeader(); drawSide(); drawComposer(); syncPaused(c);

@@ -2,25 +2,26 @@
 
 import {$, $$, clamp, el, esc, T} from "./util.js";
 import {armadaBots, DATA, msgIndex, people, state, stats} from "./state.js";
-import {hhmm, now} from "./time.js";
+import {hhmm} from "./time.js";
 import {api} from "./connection.js";
 import {feed, lane, main} from "./frame.js";
 import {faceOf, nameOf, presOf} from "./faces.js";
 import {ready} from "./composer.js";
 import {closeMenu, overHide} from "./hover.js";
 
-/* ----- read receipts: step 1 of the r4 receipts study (design/r4/receipts/RECEIPTS.md), on the existing endpoint -----
+/* ----- read receipts: the r4 receipts study (design/r4/receipts/RECEIPTS.md), pushed by the server (contract C2) -----
    My turns carry ticks beside their time, in a 16 px cell that exists from the frame of the send and changes only what it
    holds: nothing for the first 400 ms of a send, then a ring while it is in flight; one tick once the server has it (it is
    then in everyone's feed: Zulip's "delivered"); two in the second ink once someone counted has read it; two in my colour
-   once everyone counted has. They are read from GET messages/{id}/read_receipts, for my own recent messages only, and never
-   more than RCPT_CAP times a minute. Info (pressing the ticks, More > Info, or I on a message) lists who has read a message
-   and who has not yet. None of it is drawn when the organization has read receipts off. No sound: someone reading is
+   once everyone counted has. Opening a place asks who has read my latest messages there, in one request to GET
+   armada/read_receipts (never more than RCPT_CAP times a minute); after that the server says when someone reads one of my
+   messages (a read_receipts event), and the page asks nothing. Info (pressing the ticks, More > Info, or I on a message)
+   asks for its message in full and lists who has read it and who has not yet. None of it is drawn when the organization has read receipts off. No sound: someone reading is
    neither my action nor something that needs me. */
 const RECEIPTS = DATA.readReceipts === "on";
-const RCPT_CAP = 12;                                       /* background requests to read_receipts in any 60 s (opening places, polling, signs of life) */
+const RCPT_CAP = 12;                                       /* background requests for receipts in any 60 s (opening places) */
 const RCPT_INFO_CAP = 12;                                  /* Info's own budget: what I asked for answers at once, whatever the background spent */
-const RCPT_POLL = 30000, RCPT_RECENT = 15 * 60, RCPT_FRESH = 10000, RCPT_OPEN = 6;
+const RCPT_FRESH = 10000, RCPT_BATCH = 20;                 /* RCPT_BATCH: my latest messages a place asks about (the endpoint takes 100) */
 const rcpt = new Map();                                    /* message id -> {read: Set of user ids, at, err} */
 const rcptLog = [], rcptInfoLog = [], rcptInflight = new Map(), members = new Map();
 let info = null;
@@ -68,16 +69,17 @@ function paintTick(b, m, motion) { const cell = $(".tk", b), st = tickState(m), 
   const svg = $("svg", cell); if (!motion || !svg || same) return;
   if (was === "pending" && st === "sent") M.land(svg); else if (st === "read" || st === "all") M.appear(svg, 0, T["fade-in"]); }
 function drawTicks(id) { if (!lane) return; for (const b of $$(`.rt[data-info="${id}"]`, lane)) { const c = msgIndex.get(id), m = c && c.byId.get(id); if (m) paintTick(b, m, true); } }
-/* which of my messages to ask about: each of my turns' last message (the one whose time and ticks show), newest first.
-   On opening a place, the latest few that are not known to be read by everyone; after that only my latest turn, and only
-   while it is younger than RCPT_RECENT: every RCPT_POLL while the page is in view, when someone in the place shows a sign
-   of life (a message, a reaction, typing), and when I come back to the page. */
-function pollReceipts(o = {}) { if (!RECEIPTS || !state.P || !state.place || state.place.kind === "home" || document.hidden || state.tab !== "Chat") return;
-  const ids = $$(".cl.me .rt[data-info]", lane).filter((b) => !b.closest(".thr-in")).map((b) => +b.dataset.info).filter(Number.isFinite).reverse().slice(0, o.open ? RCPT_OPEN : 1);
-  for (const id of ids) { const m = state.P.byId.get(id); if (!m) continue; const st = tickState(m), old = now() / 1000 - m.timestamp > RCPT_RECENT;
-    if (st === "all" || (old && (!o.open || rcpt.has(id)))) continue; fetchReceipts(id); } }
-let lifeTimer = 0;
-const signOfLife = () => { clearTimeout(lifeTimer); lifeTimer = setTimeout(() => pollReceipts(), 1500); };
+/* on opening a place: who has read my latest messages there that are not yet read by everyone, in one request */
+function loadReceipts() { if (!RECEIPTS || !state.P || !state.place || state.place.kind === "home") return; const c = state.P;
+  const ids = c.msgs.filter((m) => m.sender_id === state.ME && typeof m.id === "number" && !m.thread_root_message_id).slice(-RCPT_BATCH).filter((m) => tickState(m) !== "all").map((m) => m.id);
+  if (!ids.length || !rcptAllowed(false)) return;
+  api("GET", "armada/read_receipts", {message_ids: ids}).then((r) => { const at = performance.now(), got = r.read_receipts || {};
+    for (const id of ids) { const had = rcpt.get(id); rcpt.set(id, {read: new Set([...(got[id] || []), ...(had ? had.read : [])]), at}); drawTicks(id); }   /* a reader the event told of meanwhile stays */
+    if (info && ids.includes(info.id)) drawInfo(); }, () => {}); }
+/* someone read my messages (the read_receipts event, sent to their sender): a tick lands where it stands */
+function onReadReceipts(ev) { if (!RECEIPTS) return; const at = performance.now();
+  for (const id of ev.message_ids) { const x = rcpt.get(id); if (x) x.read.add(ev.user_id); else rcpt.set(id, {read: new Set([ev.user_id]), at}); drawTicks(id); }
+  if (info && ev.message_ids.includes(info.id)) drawInfo(); }
 /* Info: who has read a message, and who has not yet. Above the message it describes (below when there is no room), never
    over the field; the conversation stays live under it. Rows keep the order they had when it opened: a change rewrites a
    row's trailing cell and the heading's figure. */
@@ -109,5 +111,5 @@ function drawInfo() { if (!info) return; const c = msgIndex.get(info.id), m = c 
 function closeInfo(quiet) { if (!info) return; const {el: box, from, kbd} = info; info = null; $$(".rt.open", lane).forEach((b) => b.classList.remove("open")); box.inert = true; M.leave(box, () => box.remove());
   if (quiet) return; if (kbd && from && from.isConnected) M.focusKbd(from); else ready(); }
 
-export {closeInfo, drawTicks, fetchReceipts, info, loadMembers, openInfo, pollReceipts, RCPT_POLL, receiptButton,
-  RECEIPTS, signOfLife, toggleInfo};
+export {closeInfo, drawTicks, fetchReceipts, info, loadMembers, loadReceipts, onReadReceipts, openInfo, receiptButton,
+  RECEIPTS, toggleInfo};

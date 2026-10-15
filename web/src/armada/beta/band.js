@@ -19,7 +19,7 @@ function actOf(c, r) { if (r.overview) return r.overview; const a = (r.current_a
 function drawRunState(cut) {
   const r = liveRun(state.P), ask = waitingRun(state.P), wt = state.place.kind === "topic" && state.place.repo, raised = !!r && (!!ask || now() / 1000 - r.date_created > 0.4 || (r.plan && r.plan.length) || r.tool_count > 0), b = band;
   if (r && !raised) setTimeout(() => { if (state.P && liveRun(state.P) === r) drawRunState(); }, 450);
-  b.run.classList.toggle("att", !!ask); const lead = $(":scope > .mk", b.run), want = r ? runMark(r) : "live"; if (lead && !lead.classList.contains(want)) lead.outerHTML = mk(want);
+  b.run.classList.toggle("att", !!ask); const lead = $(":scope > .mk", b.run), want = r ? runMark(r) : "live"; if (lead && !lead.classList.contains(want)) lead.outerHTML = want === "live" ? wk(true) : mk(want);
   const quiet = !!r && !ask && quietRun(r);
   if (raised) { const word = ask ? "Onix asks" : stopping === r.id ? "Stopping" : r.status === "queued" ? "Queued" : quiet ? "Quiet" : "Working", cur = $(":scope > :not(.gone):not(.sz)", b.st);
     if (!cur || cur.textContent !== word) { if (cut || b.run.classList.contains("off")) b.st.innerHTML = `<span>${word}</span><i class="sz">Stopping</i>`; else M.swap(b.st, `<span>${word}</span>`, {quiet: true, seq: true}); }

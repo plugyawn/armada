@@ -1,4 +1,4 @@
-// Armada mock kit, third final: draws the glyphs, Onix's pixel marks and the frame every screen shares (nav, header,
+// Armada mock kit, third final: draws the glyphs, the marks of a run and the frame every screen shares (nav, header,
 // band, composer, the column's first heading), so the frame cannot differ between two screens or two places. Screens
 // supply the pane's content and the body of the column beside it. Data for the drawings is glyphs.js (tools/icons.py).
 (function () {
@@ -9,22 +9,36 @@
 
   // ---- stroked glyphs: 16 px box, 14 live, one weight on whole device pixels, butt caps. Never scaled.
   window.ic = (n, cls) => { const g = GLYPHS[n]; if (!g) return ""; return `<svg class="ic ${cls || ""}" viewBox="0 0 16 16" aria-hidden="true">${g.s ? `<g class="n">${g.s}</g>` : ""}${g.f ? `<g class="f">${g.f}</g>` : ""}</svg>`; };
-  // ---- the marks of a run and of a step (r4 marks study): 12 by 12 cells of one CSS pixel, in the 14 px box (28 on Home,
-  // 2 px a cell). done, live, queued, needs, paused, failed, cancelled; "left" is a step not reached. Each state has its
-  // own silhouette; a hue only on needs (attention) and failed (failure). Drawings: marks.js.
+  // ---- the marks of a run and of a step: vector drawings in the 14 px box (28 on Home). done, live, queued, needs, paused,
+  // failed, cancelled; "left" is a step not reached. Each state has its own silhouette; a hue only on needs (attention)
+  // and failed (failure). Drawings: marks.js, and the thinking star below.
   const MKCLS = {needs: "c-att", failed: "c-fail"};
-  const BOX = 'viewBox="-1 -1 14 14" shape-rendering="crispEdges"';
-  window.mk = (n, cls) => `<svg class="mk ${n} ${MKCLS[n] || ""} ${cls || ""}" ${BOX} aria-hidden="true">${BETA_MARKS[n] || ""}</svg>`;
-  // the working mark: the one loop a live run has, at the head of the stream. A strip of the dot's three sizes 14 apart,
-  // moved a drawing at a time (mock.css), so no frame is blank. One element for the life of an answer.
-  window.wk = (live = true, cls) => `<svg class="mk wk dot${live ? " live" : ""} ${cls || ""}" ${BOX} aria-hidden="true"${live ? ' data-m="live"' : ""}><g>${BETA_DOT_LOOP.map((f, i) => `<g transform="translate(${14 * i} 0)">${f}</g>`).join("")}</g></svg>`;
-  // Onix's face: the one place it is drawn, so the party sprite can take its place later by replacing this function alone.
-  // Today it is direction B of the study: three faceted boulders in a flint disc where a person shows a face (28 in the
-  // gutter, 20 in lists, 18 in a thread's line), bare at 14; in the field, bare at 16, solid when Onix will answer and an
-  // outline ("field-off") when it will not.
-  window.agentFace = (size = 28, cls = "") => { const F = BETA_AGENT_FACES, f = size === "field" ? F["bare-16"] : size === "field-off" ? F["line-16"] : F["disc-" + size] || (size <= 14 ? F["bare-14"] : F["disc-28"]), disc = f.off > 0;
+  // the thinking star (design/r5/round4): a dot sprouts four rays, four more grow between them, then eight finer ones,
+  // and the star folds back to a dot, turning slowly. Each generation of rays is a layer of its own, scaled from the
+  // centre and turned by mock.css, so the loop runs on the compositor at the display's rate, and stays sharp. Still, it
+  // holds at four rays.
+  const K = 14 / 16, at = (v) => +(7 + v).toFixed(3);
+  const rays = (n, off, len, w) => { let d = ""; for (let i = 0; i < n; i++) { const a = off + (i * 2 * Math.PI) / n, c = Math.cos(a), s = Math.sin(a), h = (w * K) / 2, l = len * K;
+    d += `M${at(s * h)} ${at(-c * h)}L${at(c * l)} ${at(s * l)}L${at(-s * h)} ${at(c * h)}Z`; } return d; };
+  const STAR = [rays(4, 0, 7.2, 1.7), rays(4, Math.PI / 4, 5.2, 1.5), rays(8, Math.PI / 8, 3.8, 1.1)];
+  const layer = (cls, inner) => `<svg class="${cls}" viewBox="0 0 14 14">${inner}</svg>`;
+  const starHTML = (cls, attrs = "") => `<span class="${cls}"${attrs}><span class="spin">${STAR.map((d, i) => layer("g" + (i + 1), `<path d="${d}"/>`)).join("")}${layer("g0", `<circle cx="7" cy="7" r="${+(1.1 * K).toFixed(3)}"/>`)}</span></span>`;
+  BETA_MARKS.live = `<path d="${STAR[0]}"/><circle cx="7" cy="7" r="${+(1.6 * K).toFixed(3)}"/>`;
+  window.mk = (n, cls) => `<svg class="mk ${n} ${MKCLS[n] || ""} ${cls || ""}" viewBox="0 0 14 14" aria-hidden="true">${BETA_MARKS[n] || ""}</svg>`;
+  // the working mark: the star, turning, at the head of the stream and in the band. One element for the life of an answer.
+  window.wk = (live = true, cls) => starHTML(`mk wk star${live ? " live" : ""} ${cls || ""}`, ` aria-hidden="true"${live ? ' data-m="live"' : ""}`);
+  // a step's mark in a checklist followed live: one element for the life of the step, its state in data-s (left, live,
+  // done, failed, cancelled). A step that starts shrinks its ring into the dot the star grows from; a step that finishes
+  // folds its star into a tick that draws itself (mock.css).
+  window.smk = (s, cls) => `<span class="mk sm ${cls || ""}" data-s="${s}" aria-hidden="true">${layer("ring", BETA_MARKS.left)}${starHTML("star live")}${layer("tick", BETA_MARKS.done.replace("<path ", '<path pathLength="1" '))}${layer("x", BETA_MARKS.failed)}${layer("bar", BETA_MARKS.cancelled)}</span>`;
+  // Onix's mark: three faceted stones, smallest to largest. Statement 28 took it out of the conversation; the field's
+  // switch still draws it, solid when Onix will answer and an outline ("field-off") when it will not, and a list draws it
+  // in a flint disc where a person shows a face.
+  const facet = (cx, cy, r) => "M" + [0, 1, 2, 3, 4, 5, 6, 7].map((i) => { const a = Math.PI / 8 + (i * Math.PI) / 4; return `${+(cx + r * Math.cos(a)).toFixed(2)} ${+(cy + r * Math.sin(a)).toFixed(2)}`; }).join("L") + "Z";
+  const STONES = facet(3, 3, 2.2) + facet(7, 7.4, 2.7) + facet(11.7, 11.7, 3.5);
+  window.agentFace = (size = 28, cls = "") => { const field = size === "field" || size === "field-off", n = field ? 16 : size, disc = !field && n > 14;
     const state = size === "field" ? " sol" : size === "field-off" ? " hol" : "";
-    return `<svg class="sigil agent s${f.n}${disc ? " in-disc" : ""}${state} ${cls}" viewBox="0 0 ${f.n} ${f.n}" aria-hidden="true">${disc ? `<circle class="disc" cx="${f.n / 2}" cy="${f.n / 2}" r="${f.n / 2}"/>` : ""}<g transform="translate(${f.off} ${f.off})" shape-rendering="crispEdges">${f.d}</g></svg>`; };
+    return `<svg class="sigil agent s${n}${disc ? " in-disc" : ""}${state} ${cls}" viewBox="0 0 16 16" aria-hidden="true">${disc ? '<circle class="disc" cx="8" cy="8" r="8"/>' : ""}<path${size === "field-off" ? ' class="s"' : ""}${disc ? ' transform="translate(2.4 2.4) scale(0.7)"' : ""} d="${STONES}"/></svg>`; };
   window.sigil = (size = 28, live = false, cls) => (String(size) === "20h" ? agentFace("field-off", cls) : agentFace(parseInt(size, 10) || 28, cls));
   window.dots = (cls) => `<svg class="dots ${cls || ""}" viewBox="0 0 26 6" aria-hidden="true"><circle cx="3" cy="3" r="3"/><circle cx="13" cy="3" r="3"/><circle cx="23" cy="3" r="3"/></svg>`;
   // a face: initials on the person's stone (a photo when there is one). "KH:lapis", "De:me", with " on" or " away".
@@ -43,7 +57,7 @@
   window.fig = (v) => [...String(v)].map((c) => `<span${/\d/.test(c) ? "" : /[A-Za-z−+]/.test(c) ? ' class="w"' : ' class="p"'}>${c === "<" ? "&lt;" : c === "&" ? "&amp;" : c}</span>`).join("");
 
   // Whatever takes its width from its text is rounded up to a whole pixel, so nothing after it starts on a fraction:
-  // a glyph, a pixel mark and a right-aligned word all stand on whole pixels.
+  // a glyph, a mark and a right-aligned word all stand on whole pixels.
   const FACES = ['400 14px "Söhne"', '500 14px "Söhne"', '400 16px "Söhne"', '600 20px "Söhne"', '400 14px "Geist Mono"'];
   window.snap = (root) => Promise.all(FACES.map((f) => document.fonts.load(f))).then(() => document.fonts.ready).then(() => {
     root.querySelectorAll(".b, .go, .tab, .hd .l2 .prog, .hd .repo, .hd .sl, .hd .title, .hd .dist, .hd .pr, .hd .commit .by, .disc, .band .sw, .who, .tl .lk, .line > span, .opt").forEach((e) => { if (e.style.width || e.closest(".ans")) return; const r = e.getBoundingClientRect(); if (r.width % 1 && (!e.classList.contains("b") || r.height <= 37)) e.style.width = Math.ceil(r.width) + "px"; });
@@ -161,7 +175,7 @@
   };
   window.bandHTML = (b = {}) => { const r = b.run, t = b.typing;
     const ty = `<span class="ty${t ? "" : " off"}${t && r ? " chip" : ""}" id="ty">${!t ? "" : t.length > 1 ? faces(t.map((x) => x[0])) : face(t[0][0])}<p class="tyb${t && t.length === 1 ? " s-" + stone(t[0][0]) : ""}" id="tyb">${dots()}</p>${t ? `<span class="nm">${t.map((x) => x[1]).join(" and ")}</span>` : ""}</span>`;
-    const run = `<span class="run${r ? "" : " off"}${r && r.att ? " att" : ""}${r && r.quiet ? " quiet" : ""}" id="run">${r && r.att ? mk("needs") : mk(r && r.mk || "live")}<span class="sg"><span class="sw cell" id="run-st"><span>${r ? r.state : "Working"}</span></span><span class="clock fig" id="clock">${fig(r ? r.clock || "" : "0:00")}</span></span>${!r || r.stop !== false ? `<button class="stop" id="stop" data-tip="Stop the run" data-key="⌘.">${ic("stop")}Stop</button>` : ""}<span class="act" id="act">${r && r.act || ""}</span></span>`;
+    const run = `<span class="run${r ? "" : " off"}${r && r.att ? " att" : ""}${r && r.quiet ? " quiet" : ""}" id="run">${r && r.att ? mk("needs") : r && r.mk && r.mk !== "live" ? mk(r.mk) : wk(!!r)}<span class="sg"><span class="sw cell" id="run-st"><span>${r ? r.state : "Working"}</span></span><span class="clock fig" id="clock">${fig(r ? r.clock || "" : "0:00")}</span></span>${!r || r.stop !== false ? `<button class="stop" id="stop" data-tip="Stop the run" data-key="⌘.">${ic("stop")}Stop</button>` : ""}<span class="act" id="act">${r && r.act || ""}</span></span>`;
     return `<div class="lane">${ty}${b.undo ? `<span class="undo">${b.undo}${b.noverb ? "" : `<button class="lk">Undo</button>`}</span>` : run}<button class="jump${b.jump ? "" : " off"}" id="jump" tabindex="-1">${ic("latest")}Jump to latest</button></div>`; };
   // the composer. c.plain: 1 a thread's field (flat, no Plus, no model; Onix only if it is in the thread), 2 a place with no agent.
   window.composerHTML = (c = {}, title = "", id = "cz") => { const verb = c.verb || "Send", armed = !!c.text && !c.off && c.focus !== false, on = c.agent !== false;

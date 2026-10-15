@@ -9,8 +9,9 @@ Delete it when the rebuild's conversation lands.
   `host.js`, the page.
 - `kit/`: the prototype's `mock.css` (its `@font-face` lines removed; the app's faces are imported instead),
   `proto.css`, `glyphs.js`, `marks.js`, `kit.js`, `motion.js`, `sound.js`. Each script sets window globals (`ic`, `mk`,
-  `wk`, `agentFace`, `frame`, `M`, `S`, ...). `marks.js` holds the committed plain marks and Onix's face (the r4 marks
-  study's drawings); `kit.js`'s `agentFace` is the one place the face is drawn, so a party sprite can replace it.
+  `wk`, `smk`, `agentFace`, `frame`, `M`, `S`, ...). `marks.js` holds the marks of a run and of a step, as vectors;
+  `kit.js` draws them (`mk`), the thinking star (`wk`, and `smk` for a step followed live) and Onix's mark
+  (`agentFace`, the one place it is drawn).
 - Partners (round three): the picker place (`#partner`), faces, the card and the evolution moment are in
   `partners.js`, `partner_picker.js` and `partner_card.js`; the sprites and `species.json` come from the git-ignored `web/sprites/licensed/` through
   `/beta/sprites/<path>`, partners from `/json/armada/partners` (`zerver/lib/partner.py`, in interim bot-storage rows).

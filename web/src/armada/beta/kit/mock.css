@@ -175,29 +175,49 @@ em { font-style: italic; } strong, b { font-weight: 500; }
 /* what was added and what was removed, as counts */
 .m .a, .a.m { color: var(--add-ink); } .m .d, .d.m { color: var(--del-ink); }
 
-/* ---- drawn marks. Strokes are for what people use; pixels are for Onix and what it is doing. */
+/* ---- drawn marks. Strokes are for what people use; the marks of a run are vector drawings in the 14 px box, filled or
+   stroked in one ink, never pixels (statement 29). */
 .ic { width: 16px; height: 16px; flex: none; display: block; overflow: visible; fill: none; stroke: currentColor; stroke-width: var(--ic-w); stroke-linecap: round; stroke-linejoin: round; }
 .ic .n { transform: translate(var(--ic-n), var(--ic-n)); } .ic .f { fill: currentColor; stroke: none; }
 .ic.s8 { width: 8px; height: 8px; } .ic.s18 { width: 18px; height: 18px; }
-.mk { width: 14px; height: 14px; flex: none; display: block; fill: currentColor; }
+.mk { width: 14px; height: 14px; flex: none; display: block; fill: currentColor; overflow: visible; }
 .mk.s28 { width: 28px; height: 28px; }
-/* a mark is two tones of one ink (r4 marks study): the second tone is the shaded side, never the only carrier of a shape */
-:root { --tone: 0.42; }
-@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --tone: 0.45; } }
-:root[data-theme="dark"] { --tone: 0.45; }
-:is(.mk, .sigil) .t-b { opacity: var(--tone); }
-.mk.left { color: var(--ink-2); opacity: 0.7; }                   /* a step not reached: a small ring, lighter than everything around it */
+:is(.mk, .sigil) .s { fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.mk .s.thin, .sigil .s { stroke-width: 1.25; } .mk .s.dash { stroke-dasharray: 1 1; stroke-linecap: butt; }   /* queued: the ring in eight dashes (pathLength 16) */
+.mk.left { color: var(--ink-2); opacity: 0.7; }                   /* a step not reached: a ring, lighter than everything around it */
 .sigil { flex: none; display: block; fill: currentColor; width: 14px; height: 14px; }
 .sigil.s16 { width: 16px; height: 16px; } .sigil.s18 { width: 18px; height: 18px; } .sigil.s20 { width: 20px; height: 20px; } .sigil.s28 { width: 28px; height: 28px; } .sigil.s64 { width: 64px; height: 64px; }
-/* Onix's face (kit.js agentFace, which faces.js draws): boulders in a flint disc, as a person without a picture has initials in one */
-.sigil.agent > .disc { fill: var(--p-flint); } .sigil.agent.in-disc > g { fill: var(--p-flint-ink); }
-/* Onix working: the one loop, at the head of the stream and nowhere else. One strip of three drawings 14 px apart, moved a
-   drawing at a time on --step (100 ms), twelve steps (1.2 s), resting inside the loop: the dot draws in to a point and
-   back, then rests. Elsewhere a live run is the same drawing, still. */
-.wk { overflow: hidden; }
-.wk.dot > g { transform: translateX(0); }   /* at rest */
-.wk.dot.live > g { animation: wk-dot calc(var(--step) * 12) step-end infinite; }
-@keyframes wk-dot { 0% { transform: translateX(-14px); } 8.333% { transform: translateX(-28px); } 16.667% { transform: translateX(-14px); } 25%, 100% { transform: translateX(0); } }
+/* Onix's mark (kit.js agentFace): stones in a flint disc, as a person without a picture has initials in one */
+.sigil.agent > .disc { fill: var(--p-flint); } .sigil.agent.in-disc > path { fill: var(--p-flint-ink); }
+/* Onix working: the thinking star, the one loop, at the head of the stream, in the band and on the step being worked.
+   Three generations of rays and the dot, each a layer scaled from the centre, in a layer that turns once in 12 s; one
+   cycle of growing, holding and folding is 2.2 s (design/r5/round4: grow 0.9 s, hold 0.2 s, fold 0.9 s, rest). Only
+   transforms run, so the compositor draws it at the display's rate. Elsewhere a live run is the same star, still. */
+.star .spin { display: block; position: relative; width: 100%; height: 100%; }
+.star svg { position: absolute; inset: 0; width: 100%; height: 100%; fill: currentColor; overflow: visible; }
+.star .g2, .star .g3 { transform: scale(0); }   /* at rest: four rays */
+.star.live .spin { animation: star-turn 12s linear infinite; }
+.star.live :is(.g0, .g1, .g2, .g3) { animation: 2.2s cubic-bezier(0.65, 0, 0.35, 1) infinite; }
+.star.live .g0 { animation-name: star-dot; } .star.live .g1 { animation-name: star-g1; } .star.live .g2 { animation-name: star-g2; } .star.live .g3 { animation-name: star-g3; }
+@keyframes star-turn { to { transform: rotate(1turn); } }
+@keyframes star-dot { 0% { transform: scale(1); } 12.3%, 78.7% { transform: scale(1.4545); } 91%, 100% { transform: scale(1); } }
+@keyframes star-g1 { 0%, 4.92% { transform: scale(0); } 17.22%, 73.78% { transform: scale(1); } 86.08%, 100% { transform: scale(0); } }
+@keyframes star-g2 { 0%, 13.12% { transform: scale(0); } 27.06%, 63.94% { transform: scale(1); } 77.88%, 100% { transform: scale(0); } }
+@keyframes star-g3 { 0%, 22.55% { transform: scale(0); } 37.72%, 53.28% { transform: scale(1); } 68.45%, 100% { transform: scale(0); } }
+/* a step's mark (kit.js smk): its four drawings stacked, one shown for its state. A step that starts shrinks its ring
+   into the dot the star grows from; a step that finishes folds its star away while its tick draws itself. The star's
+   loop holds where it is while it is not the step being worked. */
+.mk.sm { position: relative; }
+.mk.sm > * { position: absolute; inset: 0; width: 100%; height: 100%; }
+.sm > .ring { color: var(--ink-2); opacity: 0.7; transition: transform var(--move-t) var(--spring-move), opacity var(--move-t) linear; }
+.sm:not([data-s="left"]) > .ring { transform: scale(0.2); opacity: 0; }
+.sm > .star { transform: scale(0); transition: transform var(--settle-t) var(--spring-settle); }
+.sm[data-s="live"] > .star { transform: scale(1); }
+.sm:not([data-s="live"]) > .star :is(.spin, svg) { animation-play-state: paused; }
+.sm > .tick .s { stroke-dasharray: 1; stroke-dashoffset: 1; transition: stroke-dashoffset var(--settle-t) ease-out; }
+.sm[data-s="done"] > .tick .s { stroke-dashoffset: 0; }
+.sm > :is(.x, .bar) { opacity: 0; transition: opacity var(--move-t) linear; }
+.sm[data-s="failed"] > .x, .sm[data-s="cancelled"] > .bar { opacity: 1; }
 .head { display: inline-block; width: 0; height: 0; position: relative; vertical-align: baseline; }
 .head > .mk { position: absolute; left: 6px; top: -13px; }
 .head.first > .mk { left: 0; }
@@ -207,10 +227,10 @@ em { font-style: italic; } strong, b { font-weight: 500; }
 .dots circle:nth-child(2) { animation-delay: calc(var(--caret-period) * 0.15); } .dots circle:nth-child(3) { animation-delay: calc(var(--caret-period) * 0.3); }
 @keyframes dot { 0%, 60%, 100% { opacity: 0.35; transform: scale(0.83); } 30% { opacity: 1; transform: scale(1.17); } }
 .dots.s { width: 13px; height: 3px; }
-@media (prefers-reduced-motion: reduce) { .wk.dot.live > g, .dots circle, .m-caret.idle, .idle > .cur { animation: none; } .dots circle { opacity: 0.7; transform: none; } }
-:root[data-motion="reduced"] :is(.wk.dot.live > g, .dots circle, .m-caret.idle, .idle > .cur) { animation: none; }
+@media (prefers-reduced-motion: reduce) { .star.live :is(.spin, svg), .dots circle, .m-caret.idle, .idle > .cur { animation: none; } .dots circle { opacity: 0.7; transform: none; } }
+:root[data-motion="reduced"] :is(.star.live .spin, .star.live svg, .dots circle, .m-caret.idle, .idle > .cur) { animation: none; }
 :root[data-motion="reduced"] .dots circle { opacity: 0.7; transform: none; }
-.off .dots circle, [inert] .wk.dot.live > g { animation: none; }   /* a loop on a thing that is not shown does not run */
+.off .dots circle, [inert] .star.live :is(.spin, svg) { animation: none; }   /* a loop on a thing that is not shown does not run */
 
 /* ================= motion, the stylesheet half. motion.js is the only file that calls element.animate. =================
    Hover and press: the fill is a layer behind the label, so it settles in from a slightly smaller box while the label

@@ -5,7 +5,8 @@
         "threshold": "== 0",
         "audit": "SPEC-ENGINEERING.md section 11 and SPEC-DESIGN.md sections 4 to 8: the design language counted on the old interface's home screen (curves-not-springs). Created by F4 as a known failure with today's figure; each surface's package turns its part to fixed. The ceiling is today's figure and a quarter, because these screens hold live fixture data whose count moves a little between runs.",
         "since": "2026-10-14",
-        "max": 90
+        "max": 90,
+        "owner": "F4"
     },
     "design-lint/app.home.radii-off-the-scale": {
         "measured": 89,
@@ -13,7 +14,8 @@
         "threshold": "== 0",
         "audit": "SPEC-ENGINEERING.md section 11 and SPEC-DESIGN.md sections 4 to 8: the design language counted on the old interface's home screen (radii-off-the-scale). Created by F4 as a known failure with today's figure; each surface's package turns its part to fixed. The ceiling is today's figure and a quarter, because these screens hold live fixture data whose count moves a little between runs.",
         "since": "2026-10-14",
-        "max": 112
+        "max": 112,
+        "owner": "F4"
     },
     "design-lint/app.home.shadows-not-tokens": {
         "measured": 3,
@@ -21,7 +23,8 @@
         "threshold": "== 0",
         "audit": "SPEC-ENGINEERING.md section 11 and SPEC-DESIGN.md sections 4 to 8: the design language counted on the old interface's home screen (shadows-not-tokens). Created by F4 as a known failure with today's figure; each surface's package turns its part to fixed. The ceiling is today's figure and a quarter, because these screens hold live fixture data whose count moves a little between runs.",
         "since": "2026-10-14",
-        "max": 4
+        "max": 4,
+        "owner": "F4"
     },
     "design-lint/app.home.sizes-off-the-scale": {
         "measured": 29,
@@ -29,7 +32,8 @@
         "threshold": "== 0",
         "audit": "SPEC-ENGINEERING.md section 11 and SPEC-DESIGN.md sections 4 to 8: the design language counted on the old interface's home screen (sizes-off-the-scale). Created by F4 as a known failure with today's figure; each surface's package turns its part to fixed. The ceiling is today's figure and a quarter, because these screens hold live fixture data whose count moves a little between runs.",
         "since": "2026-10-14",
-        "max": 37
+        "max": 37,
+        "owner": "F4"
     },
     "design-lint/app.home.text-under-12px": {
         "measured": 12,
@@ -37,7 +41,8 @@
         "threshold": "== 0",
         "audit": "SPEC-ENGINEERING.md section 11 and SPEC-DESIGN.md sections 4 to 8: the design language counted on the old interface's home screen (text-under-12px). Created by F4 as a known failure with today's figure; each surface's package turns its part to fixed. The ceiling is today's figure and a quarter, because these screens hold live fixture data whose count moves a little between runs.",
         "since": "2026-10-14",
-        "max": 15
+        "max": 15,
+        "owner": "F4"
     },
     "design-lint/app.live-run.curves-not-springs": {
         "measured": 127,
@@ -45,7 +50,8 @@
         "threshold": "== 0",
         "audit": "SPEC-ENGINEERING.md section 11 and SPEC-DESIGN.md sections 4 to 8: the design language counted on the old interface's live-run screen (curves-not-springs). Created by F4 as a known failure with today's figure; each surface's package turns its part to fixed. The ceiling is today's figure and a quarter, because these screens hold live fixture data whose count moves a little between runs.",
         "since": "2026-10-14",
-        "max": 159
+        "max": 159,
+        "owner": "F4"
     },
     "design-lint/app.live-run.longer-than-440ms": {
         "measured": 1,
@@ -53,7 +59,8 @@
         "threshold": "== 0",
         "audit": "SPEC-ENGINEERING.md section 11 and SPEC-DESIGN.md sections 4 to 8: the design language counted on the old interface's live-run screen (longer-than-440ms). Created by F4 as a known failure with today's figure; each surface's package turns its part to fixed. The ceiling is today's figure and a quarter, because these screens hold live fixture data whose count moves a little between runs.",
         "since": "2026-10-14",
-        "max": 2
+        "max": 2,
+        "owner": "F4"
     },
     "design-lint/app.live-run.radii-off-the-scale": {
         "measured": 170,
@@ -61,7 +68,8 @@
         "threshold": "== 0",
         "audit": "SPEC-ENGINEERING.md section 11 and SPEC-DESIGN.md sections 4 to 8: the design language counted on the old interface's live-run screen (radii-off-the-scale). Created by F4 as a known failure with today's figure; each surface's package turns its part to fixed. The ceiling is today's figure and a quarter, because these screens hold live fixture data whose count moves a little between runs.",
         "since": "2026-10-14",
-        "max": 213
+        "max": 213,
+        "owner": "F4"
     },
     "design-lint/app.live-run.shadows-not-tokens": {
         "measured": 4,
@@ -69,7 +77,8 @@
         "threshold": "== 0",
         "audit": "SPEC-ENGINEERING.md section 11 and SPEC-DESIGN.md sections 4 to 8: the design language counted on the old interface's live-run screen (shadows-not-tokens). Created by F4 as a known failure with today's figure; each surface's package turns its part to fixed. The ceiling is today's figure and a quarter, because these screens hold live fixture data whose count moves a little between runs.",
         "since": "2026-10-14",
-        "max": 5
+        "max": 5,
+        "owner": "F4"
     },
     "design-lint/app.live-run.sizes-off-the-scale": {
         "measured": 54,
@@ -77,7 +86,8 @@
         "threshold": "== 0",
         "audit": "SPEC-ENGINEERING.md section 11 and SPEC-DESIGN.md sections 4 to 8: the design language counted on the old interface's live-run screen (sizes-off-the-scale). Created by F4 as a known failure with today's figure; each surface's package turns its part to fixed. The ceiling is today's figure and a quarter, because these screens hold live fixture data whose count moves a little between runs.",
         "since": "2026-10-14",
-        "max": 68
+        "max": 68,
+        "owner": "F4"
     },
     "design-lint/app.live-run.text-under-12px": {
         "measured": 15,
@@ -85,7 +95,8 @@
         "threshold": "== 0",
         "audit": "SPEC-ENGINEERING.md section 11 and SPEC-DESIGN.md sections 4 to 8: the design language counted on the old interface's live-run screen (text-under-12px). Created by F4 as a known failure with today's figure; each surface's package turns its part to fixed. The ceiling is today's figure and a quarter, because these screens hold live fixture data whose count moves a little between runs.",
         "since": "2026-10-14",
-        "max": 19
+        "max": 19,
+        "owner": "F4"
     },
     "design-lint/app.settled.capitals-or-tracked-runs": {
         "measured": 1,
@@ -93,7 +104,8 @@
         "threshold": "== 0",
         "audit": "SPEC-ENGINEERING.md section 11 and SPEC-DESIGN.md sections 4 to 8: the design language counted on the old interface's settled screen (capitals-or-tracked-runs). Created by F4 as a known failure with today's figure; each surface's package turns its part to fixed. The ceiling is today's figure and a quarter, because these screens hold live fixture data whose count moves a little between runs.",
         "since": "2026-10-14",
-        "max": 2
+        "max": 2,
+        "owner": "F4"
     },
     "design-lint/app.settled.curves-not-springs": {
         "measured": 119,
@@ -101,7 +113,8 @@
         "threshold": "== 0",
         "audit": "SPEC-ENGINEERING.md section 11 and SPEC-DESIGN.md sections 4 to 8: the design language counted on the old interface's settled screen (curves-not-springs). Created by F4 as a known failure with today's figure; each surface's package turns its part to fixed. The ceiling is today's figure and a quarter, because these screens hold live fixture data whose count moves a little between runs.",
         "since": "2026-10-14",
-        "max": 149
+        "max": 149,
+        "owner": "F4"
     },
     "design-lint/app.settled.longer-than-440ms": {
         "measured": 1,
@@ -109,7 +122,8 @@
         "threshold": "== 0",
         "audit": "SPEC-ENGINEERING.md section 11 and SPEC-DESIGN.md sections 4 to 8: the design language counted on the old interface's settled screen (longer-than-440ms). Created by F4 as a known failure with today's figure; each surface's package turns its part to fixed. The ceiling is today's figure and a quarter, because these screens hold live fixture data whose count moves a little between runs.",
         "since": "2026-10-14",
-        "max": 2
+        "max": 2,
+        "owner": "F4"
     },
     "design-lint/app.settled.radii-off-the-scale": {
         "measured": 139,
@@ -117,7 +131,8 @@
         "threshold": "== 0",
         "audit": "SPEC-ENGINEERING.md section 11 and SPEC-DESIGN.md sections 4 to 8: the design language counted on the old interface's settled screen (radii-off-the-scale). Created by F4 as a known failure with today's figure; each surface's package turns its part to fixed. The ceiling is today's figure and a quarter, because these screens hold live fixture data whose count moves a little between runs.",
         "since": "2026-10-14",
-        "max": 174
+        "max": 174,
+        "owner": "F4"
     },
     "design-lint/app.settled.shadows-not-tokens": {
         "measured": 3,
@@ -125,7 +140,8 @@
         "threshold": "== 0",
         "audit": "SPEC-ENGINEERING.md section 11 and SPEC-DESIGN.md sections 4 to 8: the design language counted on the old interface's settled screen (shadows-not-tokens). Created by F4 as a known failure with today's figure; each surface's package turns its part to fixed. The ceiling is today's figure and a quarter, because these screens hold live fixture data whose count moves a little between runs.",
         "since": "2026-10-14",
-        "max": 4
+        "max": 4,
+        "owner": "F4"
     },
     "design-lint/app.settled.sizes-off-the-scale": {
         "measured": 123,
@@ -133,7 +149,8 @@
         "threshold": "== 0",
         "audit": "SPEC-ENGINEERING.md section 11 and SPEC-DESIGN.md sections 4 to 8: the design language counted on the old interface's settled screen (sizes-off-the-scale). Created by F4 as a known failure with today's figure; each surface's package turns its part to fixed. The ceiling is today's figure and a quarter, because these screens hold live fixture data whose count moves a little between runs.",
         "since": "2026-10-14",
-        "max": 154
+        "max": 154,
+        "owner": "F4"
     },
     "design-lint/app.settled.text-under-12px": {
         "measured": 18,
@@ -141,182 +158,233 @@
         "threshold": "== 0",
         "audit": "SPEC-ENGINEERING.md section 11 and SPEC-DESIGN.md sections 4 to 8: the design language counted on the old interface's settled screen (text-under-12px). Created by F4 as a known failure with today's figure; each surface's package turns its part to fixed. The ceiling is today's figure and a quarter, because these screens hold live fixture data whose count moves a little between runs.",
         "since": "2026-10-14",
-        "max": 23
+        "max": 23,
+        "owner": "F4"
     },
     "feed-semantics/anchor.edit-above.offset": {
         "measured": 179.15,
         "unit": "px",
         "threshold": "<= 0.5",
         "audit": "var/armada-overhaul/maps/core-scroll-layout.md, Must keep working: \"Anchoring: selected row keeps its viewport offset across append, prepend, rerender, condense/expand, edit\". Found by this check: it does not hold for an edit today. An update_message for a message above the selected one re-renders that row and the offset is not restored, so the selected row moves by the height the edit added. Append and prepend do hold (anchor.append.offset, anchor.prepend.offset).",
-        "since": "2026-10-13"
+        "since": "2026-10-13",
+        "max": 268.72,
+        "owner": "C1"
     },
     "feed-semantics/autoscroll.own-send.jumps-from-anywhere": {
         "measured": 0,
         "unit": "",
         "threshold": "== 1",
         "audit": "var/armada-overhaul/maps/core-scroll-layout.md, Must keep working: \"autoscroll only when at bottom or sent by me\". Found by this check: a send made while scrolled up does not bring the feed to the message; append returns need_user_to_scroll when it started scrolled up (message_list_view.ts, started_scrolled_up) and a banner asks the reader to scroll. SPEC-DESIGN.md wants \"Jump to latest on my send\". The send from the bottom does follow (autoscroll.own-send.jumps).",
-        "since": "2026-10-13"
+        "since": "2026-10-13",
+        "max": 0,
+        "owner": "C1"
     },
     "idle-cost/live-run.layouts-per-minute": {
         "measured": 1299,
         "unit": "",
         "threshold": "<= 120",
         "audit": "var/armada-overhaul/maps/runtime-semantics.md, Measured facts: a running run costs about 1,507 layouts, 3,747 style recalcs and 4.67 s of main thread per minute, plus 10 POST attention + 1 GET runs.",
-        "since": "2026-10-13"
+        "since": "2026-10-13",
+        "max": 1680,
+        "owner": "C2"
     },
     "idle-cost/live-run.main-thread-ms-per-minute": {
         "measured": 3674.1,
         "unit": "ms",
         "threshold": "<= 1000",
         "audit": "var/armada-overhaul/maps/runtime-semantics.md, Measured facts: a running run costs about 1,507 layouts, 3,747 style recalcs and 4.67 s of main thread per minute, plus 10 POST attention + 1 GET runs.",
-        "since": "2026-10-13"
+        "since": "2026-10-13",
+        "max": 19009.88,
+        "owner": "C2"
     },
     "idle-cost/live-run.requests-per-minute": {
         "measured": 12,
         "unit": "",
         "threshold": "<= 6",
         "audit": "var/armada-overhaul/maps/runtime-semantics.md, Measured facts: a running run costs about 1,507 layouts, 3,747 style recalcs and 4.67 s of main thread per minute, plus 10 POST attention + 1 GET runs.",
-        "since": "2026-10-13"
+        "since": "2026-10-13",
+        "max": 19,
+        "owner": "B2"
     },
     "idle-cost/live-run.style-recalcs-per-minute": {
         "measured": 4440,
         "unit": "",
         "threshold": "<= 240",
         "audit": "var/armada-overhaul/maps/runtime-semantics.md, Measured facts: a running run costs about 1,507 layouts, 3,747 style recalcs and 4.67 s of main thread per minute, plus 10 POST attention + 1 GET runs.",
-        "since": "2026-10-13"
+        "since": "2026-10-13",
+        "max": 5588,
+        "owner": "C2"
     },
     "idle-cost/wall-monitors.requests-per-minute": {
         "measured": 12,
         "unit": "",
         "threshold": "<= 6",
         "audit": "var/armada-overhaul/maps/runtime-semantics.md, Measured facts: a wall with 5 monitors costs about 610 layouts, 3,625 style recalcs and 2.18 s of main thread per minute, plus 12 GET /json/armada/monitors.",
-        "since": "2026-10-13"
+        "since": "2026-10-13",
+        "max": 15,
+        "owner": "B8"
     },
     "interaction-stability/composer.open.conversation.drift": {
         "measured": 52,
         "unit": "px",
         "threshold": "<= 0.5",
         "audit": "var/armada-overhaul/maps/core-scroll-layout.md, Must keep working: \"Compose: opening scrolls the selected message clear (compose_actions.ts:263-278)\"; var/armada-overhaul/maps/compose.md, Instability. The conversation scrolls when the composer opens. In the rebuilt frame the composer is always there. Fixed by F5 and B3.",
-        "since": "2026-10-13"
+        "since": "2026-10-13",
+        "max": 89,
+        "owner": "B3"
     },
     "interaction-stability/reaction.another-person.conversation.drift": {
         "measured": 33.14,
         "unit": "px",
         "threshold": "<= 0.5",
         "audit": "var/armada-overhaul/design/final/PLAN.md, C1 acceptance: \"A first reaction changes no row's rectangle\". Found by this check: someone else's first reaction on a message above moves the conversation by the height of the row of pills. Fixed by C1.",
-        "since": "2026-10-13"
+        "since": "2026-10-13",
+        "max": 41.43,
+        "owner": "C1"
     },
     "interaction-stability/reaction.mine.conversation.drift": {
         "measured": 32.72,
         "unit": "px",
         "threshold": "<= 0.5",
         "audit": "var/armada-overhaul/design/final/PLAN.md, C1 acceptance: \"A first reaction changes no row's rectangle\". Found by this check: today the first reaction on a message adds a row of pills under it (message_reactions.hbs) and everything below moves by its height. Fixed by C1.",
-        "since": "2026-10-13"
+        "since": "2026-10-13",
+        "max": 40.9,
+        "owner": "C1"
     },
     "interaction-stability/reaction.removed.conversation.drift": {
         "measured": 32.72,
         "unit": "px",
         "threshold": "<= 0.5",
         "audit": "var/armada-overhaul/design/final/PLAN.md, C1 acceptance: \"A first reaction changes no row's rectangle\". Found by this check: removing the last reaction takes the row of pills away again and everything below moves back. Fixed by C1.",
-        "since": "2026-10-13"
+        "since": "2026-10-13",
+        "max": 40.9,
+        "owner": "C1"
     },
     "interaction-stability/work-details.close.conversation.drift": {
         "measured": 768.13,
         "unit": "px",
         "threshold": "<= 0.5",
         "audit": "var/armada-overhaul/maps/right-rail.md, Problems: \"Escape closes the popover and also runs Zulip's Escape hotkey, which leaves the topic for Inbox\". The conversation is gone from the screen (width 768 -> 0). Fixed by B4 with A5's Esc rule.",
-        "since": "2026-10-13"
+        "since": "2026-10-13",
+        "max": 960.17,
+        "owner": "B4"
     },
     "interaction-stability/work-details.close.frame.drift": {
         "measured": 126,
         "unit": "px",
         "threshold": "<= 0.5",
         "audit": "var/armada-overhaul/maps/right-rail.md, Problems: \"Escape closes the popover and also runs Zulip's Escape hotkey, which leaves the topic for Inbox\". The frame changes because the view does. Fixed by B4 with A5's Esc rule.",
-        "since": "2026-10-13"
+        "since": "2026-10-13",
+        "max": 158,
+        "owner": "B4"
     },
     "keyboard-semantics/esc.never-navigates": {
         "measured": 0,
         "unit": "",
         "threshold": "== 1",
         "audit": "var/armada-overhaul/design/final/PLAN.md, Appendix B: new. Today Esc with nothing open goes to the home view (hotkey.ts:549-555, web_escape_navigates_to_home_view); CUTS.md K-72 \"Esc no longer navigates Home\". Fixed by A5.",
-        "since": "2026-10-13"
+        "since": "2026-10-13",
+        "max": 0,
+        "owner": "A5"
     },
     "keyboard-semantics/mac.cmd-brackets-go-back-and-forward": {
         "measured": 0,
         "unit": "",
         "threshold": "== 1",
         "audit": "var/armada-overhaul/design/final/PLAN.md, Appendix B: one of the twelve Mac conventions, new behaviour that today's application does not have; built by D5. Today neither chord changes the view; only Ctrl-[ is bound, to Esc. Measured with the page reporting a Mac (navigator.platform MacIntel, set by the check): elsewhere hotkey.ts drops every chord with the command key.",
-        "since": "2026-10-13"
+        "since": "2026-10-13",
+        "max": 0,
+        "owner": "A5"
     },
     "keyboard-semantics/mac.cmd-comma-opens-settings": {
         "measured": 0,
         "unit": "",
         "threshold": "== 1",
         "audit": "var/armada-overhaul/design/final/PLAN.md, Appendix B: one of the twelve Mac conventions, new behaviour that today's application does not have; built by C5. Today the chord does nothing. Measured with the page reporting a Mac (navigator.platform MacIntel, set by the check): elsewhere hotkey.ts drops every chord with the command key.",
-        "since": "2026-10-13"
+        "since": "2026-10-13",
+        "max": 0,
+        "owner": "C5"
     },
     "keyboard-semantics/mac.cmd-f-finds-in-conversation": {
         "measured": 0,
         "unit": "",
         "threshold": "== 1",
         "audit": "var/armada-overhaul/design/final/PLAN.md, Appendix B: one of the twelve Mac conventions, new behaviour that today's application does not have; built by D5. Today the application does nothing with the chord (a real browser opens its own find bar). Measured with the page reporting a Mac (navigator.platform MacIntel, set by the check): elsewhere hotkey.ts drops every chord with the command key.",
-        "since": "2026-10-13"
+        "since": "2026-10-13",
+        "max": 0,
+        "owner": "D1"
     },
     "keyboard-semantics/mac.cmd-j-opens-checklist": {
         "measured": 0,
         "unit": "",
         "threshold": "== 1",
         "audit": "var/armada-overhaul/design/final/PLAN.md, Appendix B: one of the twelve Mac conventions, new behaviour that today's application does not have; built by B2. There is no checklist today and the chord does nothing. Measured with the page reporting a Mac (navigator.platform MacIntel, set by the check): elsewhere hotkey.ts drops every chord with the command key.",
-        "since": "2026-10-13"
+        "since": "2026-10-13",
+        "max": 0,
+        "owner": "B4"
     },
     "keyboard-semantics/mac.cmd-k-opens-palette": {
         "measured": 0,
         "unit": "",
         "threshold": "== 1",
         "audit": "var/armada-overhaul/design/final/PLAN.md, Appendix B: one of the twelve Mac conventions, new behaviour that today's application does not have; built by A5. Today Cmd-K puts the caret in the search box (hotkey.ts, search_with_k); seen by this check. Measured with the page reporting a Mac (navigator.platform MacIntel, set by the check): elsewhere hotkey.ts drops every chord with the command key.",
-        "since": "2026-10-13"
+        "since": "2026-10-13",
+        "max": 0,
+        "owner": "A5"
     },
     "keyboard-semantics/mac.cmd-period-stops-run": {
         "measured": 0,
         "unit": "",
         "threshold": "== 1",
         "audit": "var/armada-overhaul/design/final/PLAN.md, Appendix B: one of the twelve Mac conventions, new behaviour that today's application does not have; built by B2. Today Cmd-. is bound to narrowing to the compose target (hotkey.ts, narrow_to_compose_target); with the composer closed, as in this check, nothing happens and no request is made. Measured with the page reporting a Mac (navigator.platform MacIntel, set by the check): elsewhere hotkey.ts drops every chord with the command key.",
-        "since": "2026-10-13"
+        "since": "2026-10-13",
+        "max": 0,
+        "owner": "B2"
     },
     "keyboard-semantics/mac.cmd-w-closes-pane": {
         "measured": 0,
         "unit": "",
         "threshold": "== 1",
         "audit": "var/armada-overhaul/design/final/PLAN.md, Appendix B: one of the twelve Mac conventions, new behaviour that today's application does not have; built by D5. Today the chord does nothing and the thread stays open (a real browser closes the tab before the page sees it). Measured with the page reporting a Mac (navigator.platform MacIntel, set by the check): elsewhere hotkey.ts drops every chord with the command key.",
-        "since": "2026-10-13"
+        "since": "2026-10-13",
+        "max": 0,
+        "owner": "B4"
     },
     "keyboard-semantics/mac.context-menu-on-right-click": {
         "measured": 0,
         "unit": "",
         "threshold": "== 1",
         "audit": "var/armada-overhaul/design/final/PLAN.md, Appendix B: one of the twelve Mac conventions, new behaviour that today's application does not have; built by A5. Today a right-click on a sidebar row shows the browser's menu.",
-        "since": "2026-10-13"
+        "since": "2026-10-13",
+        "max": 0,
+        "owner": "A5"
     },
     "keyboard-semantics/mac.esc-dismisses-topmost-only": {
         "measured": 0,
         "unit": "",
         "threshold": "== 1",
         "audit": "var/armada-overhaul/design/final/PLAN.md, Appendix B: one of the twelve Mac conventions, new behaviour that today's application does not have; built by A5. Today the second Esc closes the composer (the draft is kept, the field is gone); keyboard-semantics/esc.closes-open-composer pins that until this is built and is retired with it (CUTS.md, K-09).",
-        "since": "2026-10-13"
+        "since": "2026-10-13",
+        "max": 0,
+        "owner": "B3"
     },
     "keyboard-semantics/mac.menus-press-drag-release": {
         "measured": 0,
         "unit": "",
         "threshold": "== 1",
         "audit": "var/armada-overhaul/design/final/PLAN.md, Appendix B: one of the twelve Mac conventions, new behaviour that today's application does not have; built by A5. Today menus open on the click, after the button is released.",
-        "since": "2026-10-13"
+        "since": "2026-10-13",
+        "max": 0,
+        "owner": "A5"
     },
     "keyboard-semantics/mac.restore-after-reload": {
         "measured": 0,
         "unit": "",
         "threshold": "== 1",
         "audit": "var/armada-overhaul/design/final/PLAN.md, Appendix B: one of the twelve Mac conventions, new behaviour that today's application does not have; built by D5. Today a reload keeps the view and the selected message but the composer comes back closed; the draft is kept and returns when the composer is opened (echo-semantics/echo.unsent.survives-reload).",
-        "since": "2026-10-13"
+        "since": "2026-10-13",
+        "max": 0,
+        "owner": "A1"
     },
     "keyboard-semantics/tab.composer-order": {
         "measured": 2,
@@ -324,7 +392,8 @@
         "threshold": "== 0",
         "audit": "var/armada-overhaul/design/final/PLAN.md, Appendix B: \"Tab reaches every composer control with a ring\". Found by this check: Tab from the field leaves the composer after Cancel without reaching \"Expand compose box\" and \"Drafts\", which follow the field in the document. var/armada-overhaul/maps/compose.md lists the toolbar's 28 controls. Fixed by B3.",
         "since": "2026-10-13",
-        "max": 2
+        "max": 2,
+        "owner": "B3"
     },
     "keyboard-semantics/tab.composer-ring": {
         "measured": 3,
@@ -332,7 +401,8 @@
         "threshold": "== 0",
         "audit": "var/armada-overhaul/design/final/PLAN.md, Appendix B: \"Tab reaches every composer control with a ring\". Found by this check: \"Send options\" and the formatting bar's two scroll buttons look the same focused as at rest (no outline or shadow is added on the control or its pseudo-elements). Fixed by B3.",
         "since": "2026-10-13",
-        "max": 3
+        "max": 3,
+        "owner": "B3"
     },
     "parts-corpus/cases-differing": {
         "measured": 10,
@@ -340,28 +410,35 @@
         "threshold": "== 0",
         "audit": "var/armada-overhaul/design/final/SPEC-ENGINEERING.md, section 5, The split: client and server must give the same parts and text. Found by this check: ten Markdown test cases render different words on the client (the five translate_emoticons cases, which depend on a user setting; four invalid <time> cases; multiline_strong). None differs in kind (cases-differing-in-kind passes). Fixed by C1, or the cases are declared server-only in the corpus.",
         "since": "2026-10-13",
-        "max": 10
-    },
-    "send-cost/image-link.row-before-server": {
-        "measured": 0,
-        "unit": "",
-        "threshold": "== 1",
-        "audit": "var/armada-overhaul/maps/perf-input.md, Send: local echo is skipped for media links, YouTube URLs, @**topic** (markdown.ts:26-47) and slash commands (echo.ts:330); the row waits for the server.",
-        "since": "2026-10-13"
+        "max": 10,
+        "owner": "C1"
     },
     "send-cost/agent.client-ack-before-server": {
         "measured": 0,
         "unit": "",
         "threshold": "== 1",
         "audit": "var/armada-overhaul/maps/perf-input.md, Send: \"@[Onix]: 0 of 12 sends produced any client-side [Onix] indicator before server data\"; the working line appears only on the agent_run server event.",
-        "since": "2026-10-13"
+        "since": "2026-10-13",
+        "max": 0,
+        "owner": "C2"
+    },
+    "send-cost/image-link.row-before-server": {
+        "measured": 0,
+        "unit": "",
+        "threshold": "== 1",
+        "audit": "var/armada-overhaul/maps/perf-input.md, Send: local echo is skipped for media links, YouTube URLs, @**topic** (markdown.ts:26-47) and slash commands (echo.ts:330); the row waits for the server.",
+        "since": "2026-10-13",
+        "max": 0,
+        "owner": "B3"
     },
     "send-cost/plain.content-replaced-by-server-echo": {
         "measured": 1,
         "unit": "",
         "threshold": "<= 0",
         "audit": "var/armada-overhaul/maps/perf-input.md, Send: the server echo replaces the row (echo.process_from_server -> rerender_messages -> $row.replaceWith, message_list_view.ts:3679) in every echoed send.",
-        "since": "2026-10-13"
+        "since": "2026-10-13",
+        "max": 2,
+        "owner": "C1"
     },
     "send-cost/plain.enter-forced-layouts": {
         "measured": 8,
@@ -369,84 +446,107 @@
         "threshold": "<= 1",
         "audit": "var/armada-overhaul/maps/perf-input.md, Send: 18 forced layouts per Return, identical in all 44 echoed sends (10 from autosize / clear_preview_area). F2 (2026-10-14) removed autosize's ten; 8 remain in the send path itself (B3, C1). var/armada-overhaul/build/F2.md.",
         "since": "2026-10-13",
-        "max": 8
+        "max": 8,
+        "owner": "B3"
     },
     "send-cost/plain.enter-handler-ms.median": {
         "measured": 32.622,
         "unit": "ms",
         "threshold": "<= 8",
         "audit": "var/armada-overhaul/maps/perf-input.md, Send: Return handler 23-49 ms median in the development build; budget 8 ms.",
-        "since": "2026-10-13"
+        "since": "2026-10-13",
+        "max": 57.02,
+        "owner": "B3"
     },
     "send-cost/plain.row-replaced-by-server-echo": {
         "measured": 1,
         "unit": "",
         "threshold": "<= 0",
         "audit": "var/armada-overhaul/maps/perf-input.md, Send: the server echo replaces the row (echo.process_from_server -> rerender_messages -> $row.replaceWith, message_list_view.ts:3679) in every echoed send.",
-        "since": "2026-10-13"
+        "since": "2026-10-13",
+        "max": 2,
+        "owner": "C1"
     },
     "send-cost/rapid.six-unacknowledged.rows-shown": {
-        "measured": 4,
+        "measured": 3,
         "unit": "",
         "threshold": "== 6",
         "audit": "var/armada-overhaul/maps/perf-input.md, Send: local echo stops once five sends are unacknowledged (local_message.ts:27).",
-        "since": "2026-10-13"
+        "since": "2026-10-13",
+        "max": 3,
+        "owner": "B3"
     },
     "send-cost/slash-command.row-before-server": {
         "measured": 0,
         "unit": "",
         "threshold": "== 1",
         "audit": "var/armada-overhaul/maps/perf-input.md, Send: local echo is skipped for media links, YouTube URLs, @**topic** (markdown.ts:26-47) and slash commands (echo.ts:330); the row waits for the server.",
-        "since": "2026-10-13"
+        "since": "2026-10-13",
+        "max": 0,
+        "owner": "B3"
     },
     "send-cost/topic-mention.row-before-server": {
         "measured": 0,
         "unit": "",
         "threshold": "== 1",
         "audit": "var/armada-overhaul/maps/perf-input.md, Send: local echo is skipped for media links, YouTube URLs, @**topic** (markdown.ts:26-47) and slash commands (echo.ts:330); the row waits for the server.",
-        "since": "2026-10-13"
+        "since": "2026-10-13",
+        "max": 0,
+        "owner": "B3"
     },
     "send-cost/video-link.row-before-server": {
         "measured": 0,
         "unit": "",
         "threshold": "== 1",
         "audit": "var/armada-overhaul/maps/perf-input.md, Send: local echo is skipped for media links, YouTube URLs, @**topic** (markdown.ts:26-47) and slash commands (echo.ts:330); the row waits for the server.",
-        "since": "2026-10-13"
+        "since": "2026-10-13",
+        "max": 0,
+        "owner": "B3"
     },
     "sidebar-stability/click-channel-below.clicked-row.moved": {
         "measured": 246.79,
         "unit": "px",
         "threshold": "<= 0.5",
         "audit": "var/armada-overhaul/maps/left-sidebar.md, Instability #1: clicking channel B below open channel A moves B up by the height of A's topic list; the pointer lands on another row.",
-        "since": "2026-10-13"
+        "since": "2026-10-13",
+        "max": 322.23,
+        "owner": "B1"
     },
     "sidebar-stability/click-channel-below.pointer-still-on-clicked-row": {
         "measured": 0,
         "unit": "",
         "threshold": "== 1",
         "audit": "var/armada-overhaul/maps/left-sidebar.md, Instability #1: clicking channel B below open channel A moves B up by the height of A's topic list; the pointer lands on another row.",
-        "since": "2026-10-13"
+        "since": "2026-10-13",
+        "max": 0,
+        "owner": "B1"
     },
     "sidebar-stability/filter-space.cleared.moved": {
         "measured": 175.99,
         "unit": "px",
         "threshold": "<= 0.5",
         "audit": "var/armada-overhaul/maps/left-sidebar.md, Instability #9 and Problem 3a: a space typed in the filter flips Views to expanded (+176px) and the state persists.",
-        "since": "2026-10-13"
+        "since": "2026-10-13",
+        "max": 219.99,
+        "owner": "B1"
     },
     "sidebar-stability/home-view-switch.rows-above-open-channel.drift": {
         "measured": 25.15,
         "unit": "px",
         "threshold": "<= 0.5",
         "audit": "var/armada-overhaul/maps/left-sidebar.md, Instability #3: Inbox/Recent <-> channel moves every row 25.1px (the active-view row is shown only while condensed and active).",
-        "since": "2026-10-13"
+        "since": "2026-10-13",
+        "max": 31.44,
+        "owner": "B1"
     },
     "sidebar-stability/topic-list-paint.topic-text.shift": {
         "measured": 20.02,
         "unit": "px",
         "threshold": "<= 0.5",
         "audit": "var/armada-overhaul/maps/left-sidebar.md, Instability #4: topic text shifts +20px when the worktree icon arrives from /json/armada/workspace-topics (legacy_workspace_marks.ts:39-66).",
-        "since": "2026-10-13"
+        "since": "2026-10-13",
+        "max": 25.03,
+        "owner": "B1"
     },
     "size/initial-css.minified-kb": {
         "measured": 1040,
@@ -454,7 +554,8 @@
         "threshold": "<= 160",
         "audit": "New in F2 (2026-10-14), measured by tools/armada/size/measure.mjs (production build of the app entry, esbuild minification). var/armada-overhaul/maps/lean-weight.md, Initial payload: 1.22 MB of minified CSS before first paint; the old sheets go stage by stage. F2b (2026-10-14) set the browser targets (K-95): light-dark() and color-mix() are no longer expanded, 1,284 kB to 1,035 kB on the same tree (var/armada-overhaul/build/F2b.md). R1 (2026-10-15) raised the ceiling to 1,040 kB: the rename's rule A gave the old interface's class names, custom properties and attributes the prefix legacy-, two letters longer than the old one, in about 2,200 places: 1,034,357 to 1,038,953 bytes on exported trees, 1,039,617 in the dev checkout (var/armada-overhaul/build/R1.md).",
         "since": "2026-10-14",
-        "max": 1040
+        "max": 1040,
+        "owner": "F2"
     },
     "size/initial-js.minified-kb": {
         "measured": 5106,
@@ -462,7 +563,8 @@
         "threshold": "<= 2000",
         "audit": "New in F2 (2026-10-14), measured by tools/armada/size/measure.mjs (production build of the app entry, esbuild minification). var/armada-overhaul/maps/lean-weight.md, Initial payload: 5.94 MB on 13 October. F2 took the Handlebars compiler, KaTeX and both emoji stylesheets out of the first load; Sentry, jquery-validation and core-js waited on the user's answers (var/armada-overhaul/build/F2.md). 5,423 kB at F2's report, 5,424 kB after its verification fixes (the help's math filled in late, the composer fallback's box-sizing). The ceiling has no headroom: any addition to the app entry turns it red. It steps down as stages delete code. F2b (2026-10-14) took Sentry (K-93), jquery-validation (K-92) and core-js (K-95) out and made the development stack-trace display a chunk of its own: 5,103 kB at 18:15, 5,104 kB at its last runs (other packages' edits in between), still above the plan's 4,900 (var/armada-overhaul/build/F2b.md). Again no headroom. R1 (2026-10-15) raised the ceiling to 5,106 kB: the same rename gave the old interface's class names and templates the longer prefix legacy-: 5,104,229 to 5,105,830 bytes measured on exported trees (var/armada-overhaul/build/R1.md).",
         "since": "2026-10-14",
-        "max": 5106
+        "max": 5106,
+        "owner": "F2"
     },
     "size/lazy-chunk.largest-minified-kb": {
         "measured": 1708,
@@ -470,7 +572,8 @@
         "threshold": "<= 800",
         "audit": "New in F2 (2026-10-14), measured by tools/armada/size/measure.mjs (production build of the app entry, esbuild minification). The largest chunk fetched on first use is zxcvbn's dictionaries (password_quality.ts, 1.7 MB), loaded by the password field of the settings; it goes with the old settings (K-97, D1).",
         "since": "2026-10-14",
-        "max": 1708
+        "max": 1708,
+        "owner": "F2"
     },
     "startup/cumulative-layout-shift.median": {
         "measured": 0.164,
@@ -478,7 +581,8 @@
         "threshold": "<= 0.01",
         "audit": "var/armada-overhaul/maps/perf-input.md, Startup: cumulative layout shift 0.52 (0.33-0.55) on a topic load; shell.md, Instability \"Page load\". F5 (2026-10-14): the splash and the document scroll are gone and the median is 0.155 to 0.157 (from 0.553); all of it is one shift on a cold load of the long topic, about 3.6 s in, when the old view re-renders the topic from the server's answer and places the first unread message again (rows move about 508 px in the pane; build/F5.md). That is the old feed's (C1); the plan's ceiling of 0.10 for F5 is not met, so the ceiling is today's range (0.155 to 0.164 in F5's runs) and a little more.",
         "since": "2026-10-13",
-        "max": 0.17
+        "max": 0.17,
+        "owner": "I3"
     },
     "startup/fonts.requests-after-first-paint": {
         "measured": 3,
@@ -486,7 +590,8 @@
         "threshold": "<= 0",
         "audit": "Added by F3 with the font preloads (var/armada-overhaul/build/F3.md). The five faces a first paint uses are preloaded; three files are still first asked for after it: the old interface's two icon fonts (zulip-icons.woff2, fontawesome-webfont.woff2), which go when the sprite replaces them and the old sheets are deleted, and Söhne's italic, which SPEC-ENGINEERING.md section 7 loads on use and the long topic uses in its first rows. With no Söhne on the machine the third file is Hanken Grotesk's italic instead. This check opens the long topic only: a screen with italic punctuation (Verona) asks for Hanken's italic as a fourth file while Klim's test files, which hold no punctuation, are in use (var/armada-overhaul/build/F3-verify.md, defect 2).",
         "since": "2026-10-14",
-        "max": 3
+        "max": 3,
+        "owner": "F3"
     },
     "startup/late-font-requests": {
         "measured": 3,
@@ -494,14 +599,17 @@
         "threshold": "<= 0",
         "audit": "var/armada-overhaul/maps/perf-input.md, Startup: 7 font files, no preload; six are discovered only when the app first lays out text (requested at 1119-1338 ms). F3 (2026-10-14) preloads the five text faces of a first paint; 3 remain: the old interface's two icon fonts and Söhne's italic, loaded on use (Hanken Grotesk's italic when the machine has no Söhne; var/armada-overhaul/build/F3.md).",
         "since": "2026-10-13",
-        "max": 3
+        "max": 3,
+        "owner": "F3"
     },
     "startup/longest-task-ms.median": {
         "measured": 388,
         "unit": "ms",
         "threshold": "<= 100",
         "audit": "var/armada-overhaul/maps/perf-input.md, Startup: longest task 305 ms (253-446); budget 100 ms.",
-        "since": "2026-10-13"
+        "since": "2026-10-13",
+        "max": 504,
+        "owner": "D4"
     },
     "stream-cost/1200wps.forced-layouts": {
         "measured": 38,
@@ -509,14 +617,17 @@
         "threshold": "<= 0",
         "audit": "var/armada-overhaul/design/final/SPEC-ENGINEERING.md, sections 6 and 8 (Stream): today an answer arrives as whole-message edits every 200 ms (zerver/lib/armada.py, ARMADA_PERSISTENT_ASSISTANT_FLUSH_INTERVAL_SECONDS) and each one re-renders the row (var/armada-overhaul/maps/feed-agent.md, Instability). Fixed by C2 (stream writer), on B6's deltas. It was 34 to 53 over fifteen runs; the ceiling stops it from growing.",
         "since": "2026-10-13",
-        "max": 60
+        "max": 60,
+        "owner": "C2"
     },
     "stream-cost/1200wps.frames-word-hidden": {
         "measured": 188,
         "unit": "",
         "threshold": "<= 0",
         "audit": "var/armada-overhaul/design/final/SPEC-ENGINEERING.md, sections 6 and 8 (Stream): today an answer arrives as whole-message edits every 200 ms (zerver/lib/armada.py, ARMADA_PERSISTENT_ASSISTANT_FLUSH_INTERVAL_SECONDS) and each one re-renders the row (var/armada-overhaul/maps/feed-agent.md, Instability). Found by this check: once the answer is longer than the condense limit the live message is cut by \"Show more\" (condense.ts), so the newest words are not on screen while they stream. Fixed by C2; CUTS.md removes condensing.",
-        "since": "2026-10-13"
+        "since": "2026-10-13",
+        "max": 239,
+        "owner": "C2"
     },
     "stream-cost/1200wps.layouts-per-event": {
         "measured": 11.8,
@@ -524,14 +635,17 @@
         "threshold": "<= 2",
         "audit": "var/armada-overhaul/design/final/SPEC-ENGINEERING.md, sections 6 and 8 (Stream): the budget there is 1.1 layouts a frame, which ten events in two hundred frames cannot exceed; this counts the same layouts per event applied. Found by this check: 112 to 122 layouts for ten whole-message edits over fifteen runs, most of them forced by the re-render (forced-layouts). Fixed by C2 (stream writer), on B6's deltas.",
         "since": "2026-10-14",
-        "max": 14
+        "max": 14,
+        "owner": "C2"
     },
     "stream-cost/1200wps.words-waiting.max-frames": {
         "measured": 80.274,
         "unit": "",
         "threshold": "<= 2",
         "audit": "var/armada-overhaul/design/final/SPEC-ENGINEERING.md, sections 6 and 8 (Stream): today an answer arrives as whole-message edits every 200 ms (zerver/lib/armada.py, ARMADA_PERSISTENT_ASSISTANT_FLUSH_INTERVAL_SECONDS) and each one re-renders the row (var/armada-overhaul/maps/feed-agent.md, Instability). A word waits up to the 200 ms between edits plus the re-render. Fixed by B6 (deltas) and C2.",
-        "since": "2026-10-13"
+        "since": "2026-10-13",
+        "max": 104.32,
+        "owner": "C2"
     },
     "stream-cost/1200wps.writes-per-event": {
         "measured": 1.2,
@@ -539,7 +653,8 @@
         "threshold": "<= 1",
         "audit": "var/armada-overhaul/design/final/SPEC-ENGINEERING.md, sections 6 and 8 (Stream, one write a frame): today each update_message re-renders the answer and two of the ten are followed by a second write. Found by this check. Fixed by C2 (stream writer).",
         "since": "2026-10-13",
-        "max": 1.2
+        "max": 1.2,
+        "owner": "C2"
     },
     "stream-cost/400wps.forced-layouts": {
         "measured": 34,
@@ -547,7 +662,8 @@
         "threshold": "<= 0",
         "audit": "var/armada-overhaul/design/final/SPEC-ENGINEERING.md, sections 6 and 8 (Stream): today an answer arrives as whole-message edits every 200 ms (zerver/lib/armada.py, ARMADA_PERSISTENT_ASSISTANT_FLUSH_INTERVAL_SECONDS) and each one re-renders the row (var/armada-overhaul/maps/feed-agent.md, Instability). Fixed by C2 (stream writer), on B6's deltas. It was 34 to 53 over fifteen runs; the ceiling stops it from growing.",
         "since": "2026-10-13",
-        "max": 60
+        "max": 60,
+        "owner": "C2"
     },
     "stream-cost/400wps.layouts-per-event": {
         "measured": 11.6,
@@ -555,14 +671,17 @@
         "threshold": "<= 2",
         "audit": "var/armada-overhaul/design/final/SPEC-ENGINEERING.md, sections 6 and 8 (Stream): the budget there is 1.1 layouts a frame, which ten events in two hundred frames cannot exceed; this counts the same layouts per event applied. Found by this check: 112 to 122 layouts for ten whole-message edits over fifteen runs, most of them forced by the re-render (forced-layouts). Fixed by C2 (stream writer), on B6's deltas.",
         "since": "2026-10-14",
-        "max": 14
+        "max": 14,
+        "owner": "C2"
     },
     "stream-cost/400wps.words-waiting.max-frames": {
         "measured": 81.927,
         "unit": "",
         "threshold": "<= 2",
         "audit": "var/armada-overhaul/design/final/SPEC-ENGINEERING.md, sections 6 and 8 (Stream): today an answer arrives as whole-message edits every 200 ms (zerver/lib/armada.py, ARMADA_PERSISTENT_ASSISTANT_FLUSH_INTERVAL_SECONDS) and each one re-renders the row (var/armada-overhaul/maps/feed-agent.md, Instability). A word waits up to the 200 ms between edits plus the re-render. Fixed by B6 (deltas) and C2.",
-        "since": "2026-10-13"
+        "since": "2026-10-13",
+        "max": 110.93,
+        "owner": "C2"
     },
     "stream-cost/400wps.writes-per-event": {
         "measured": 1.2,
@@ -570,105 +689,134 @@
         "threshold": "<= 1",
         "audit": "var/armada-overhaul/design/final/SPEC-ENGINEERING.md, sections 6 and 8 (Stream, one write a frame): today each update_message re-renders the answer and two of the ten are followed by a second write. Found by this check. Fixed by C2 (stream writer).",
         "since": "2026-10-13",
-        "max": 1.2
+        "max": 1.2,
+        "owner": "C2"
     },
     "stream-cost/ack.empty-frames": {
         "measured": 55,
         "unit": "",
         "threshold": "<= 0",
         "audit": "var/armada-overhaul/maps/perf-input.md, Send: \"@[Onix]: 0 of 12 sends produced any client-side [Onix] indicator before server data\"; SPEC-ENGINEERING.md section 8, Onix acknowledged. Fixed by C2.",
-        "since": "2026-10-13"
+        "since": "2026-10-13",
+        "max": 70,
+        "owner": "C2"
     },
     "stream-cost/ack.same-element": {
         "measured": 0,
         "unit": "",
         "threshold": "== 1",
         "audit": "var/armada-overhaul/maps/perf-input.md, Send: \"@[Onix]: 0 of 12 sends produced any client-side [Onix] indicator before server data\"; SPEC-ENGINEERING.md section 8, Onix acknowledged: the acknowledging element must be the one that later holds the answer. Today there is no such element. The assertion reads 0 until C2, which owns stream-cost.mjs, writes the half that follows the acknowledging element to the first words.",
-        "since": "2026-10-13"
+        "since": "2026-10-13",
+        "max": 0,
+        "owner": "C2"
     },
     "topic-entry-stability/first-visit.headerValues.frames-late": {
         "measured": 3,
         "unit": "",
         "threshold": "== 0",
         "audit": "PLAN.md, F5 and Appendix A: the header's values (branch, distance, commit) replace the old rail card, whose railCard.frames-late F5 retired with it. Until B2 draws them the old panel fills the commit line one context fetch after the header is shown (legacy_panel.ts), so they are late by that fetch; B2 turns this to fixed.",
-        "since": "2026-10-14"
+        "since": "2026-10-14",
+        "max": 9,
+        "owner": "B2"
     },
     "topic-entry-stability/switch-first-visit.headerValues.frames-late": {
         "measured": 28,
         "unit": "",
         "threshold": "== 0",
         "audit": "PLAN.md, F5 and Appendix A: the header's values (branch, distance, commit) replace the old rail card, whose railCard.frames-late F5 retired with it. Until B2 draws them the old panel fills the commit line one context fetch after the header is shown (legacy_panel.ts), so they are late by that fetch; B2 turns this to fixed.",
-        "since": "2026-10-14"
+        "since": "2026-10-14",
+        "max": 35,
+        "owner": "B2"
     },
     "topic-switch-cost/revisit-long.requests-per-switch": {
         "measured": 3,
         "unit": "",
         "threshold": "<= 2",
         "audit": "var/armada-overhaul/maps/perf-input.md, Navigation: every topic switch sends GET /json/messages plus /json/armada/runs and /json/armada/monitors, even for a cached view.",
-        "since": "2026-10-13"
+        "since": "2026-10-13",
+        "max": 4,
+        "owner": "I2"
     },
     "topic-switch-cost/revisit-long.revisit-ms.median": {
         "measured": 49.2,
         "unit": "ms",
         "threshold": "<= 16",
         "audit": "var/armada-overhaul/maps/perf-input.md, Navigation: a revisit re-renders the view from scratch (53-170 ms for 77 rows); budget 16 ms.",
-        "since": "2026-10-13"
+        "since": "2026-10-13",
+        "max": 110.63,
+        "owner": "C1"
     },
     "topic-switch-cost/revisit-long.rows-rendered-again": {
         "measured": 122,
         "unit": "",
         "threshold": "<= 0",
         "audit": "var/armada-overhaul/maps/perf-input.md, Navigation: message_view.show builds a new MessageList and renders every row on every narrow. The harness counts twice the visible rows: the list is rendered from cache and again when the fetch returns.",
-        "since": "2026-10-13"
+        "since": "2026-10-13",
+        "max": 193,
+        "owner": "C1"
     },
     "topic-switch-cost/revisit-short.requests-per-switch": {
         "measured": 3,
         "unit": "",
         "threshold": "<= 2",
         "audit": "var/armada-overhaul/maps/perf-input.md, Navigation: every topic switch sends GET /json/messages plus /json/armada/runs and /json/armada/monitors, even for a cached view.",
-        "since": "2026-10-13"
+        "since": "2026-10-13",
+        "max": 4,
+        "owner": "I2"
     },
     "topic-switch-cost/revisit-short.revisit-ms.median": {
         "measured": 32.6,
         "unit": "ms",
         "threshold": "<= 16",
         "audit": "var/armada-overhaul/maps/perf-input.md, Navigation: a revisit re-renders the view from scratch (53-170 ms for 77 rows); budget 16 ms.",
-        "since": "2026-10-13"
+        "since": "2026-10-13",
+        "max": 54.88,
+        "owner": "C1"
     },
     "topic-switch-cost/revisit-short.rows-rendered-again": {
         "measured": 4,
         "unit": "",
         "threshold": "<= 0",
         "audit": "var/armada-overhaul/maps/perf-input.md, Navigation: message_view.show builds a new MessageList and renders every row on every narrow. The harness counts twice the visible rows: the list is rendered from cache and again when the fetch returns.",
-        "since": "2026-10-13"
+        "since": "2026-10-13",
+        "max": 5,
+        "owner": "C1"
     },
     "typing-cost/tokens.handler-forced-layouts.max-per-key": {
         "measured": 63,
         "unit": "",
         "threshold": "<= 0",
         "audit": "var/armada-overhaul/maps/perf-input.md, Typing, token text: keyup forces up to 63 layouts in one event and typeahead is rebuilt through tippy + popper on each keyup (long tasks of 56-316 ms). F2 (2026-10-14) removed the autosize timer, which was the rest of it (var/armada-overhaul/build/F2.md).",
-        "since": "2026-10-13"
+        "since": "2026-10-13",
+        "max": 80,
+        "owner": "B3"
     },
     "typing-cost/tokens.layouts-per-key": {
         "measured": 5.82,
         "unit": "",
         "threshold": "<= 1.5",
         "audit": "var/armada-overhaul/maps/perf-input.md, Typing, token text: keyup forces up to 63 layouts in one event and typeahead is rebuilt through tippy + popper on each keyup (long tasks of 56-316 ms). F2 (2026-10-14) removed the autosize timer, which was the rest of it (var/armada-overhaul/build/F2.md).",
-        "since": "2026-10-13"
+        "since": "2026-10-13",
+        "max": 9.77,
+        "owner": "B3"
     },
     "typing-cost/tokens.long-tasks": {
         "measured": 1,
         "unit": "",
         "threshold": "<= 0",
         "audit": "var/armada-overhaul/maps/perf-input.md, Typing, token text: keyup forces up to 63 layouts in one event and typeahead is rebuilt through tippy + popper on each keyup (long tasks of 56-316 ms). F2 (2026-10-14) removed the autosize timer, which was the rest of it (var/armada-overhaul/build/F2.md).",
-        "since": "2026-10-13"
+        "since": "2026-10-13",
+        "max": 3,
+        "owner": "B3"
     },
     "typing-cost/tokens.style-recalcs-per-key": {
         "measured": 6.5,
         "unit": "",
         "threshold": "<= 2",
         "audit": "var/armada-overhaul/maps/perf-input.md, Typing, token text: keyup forces up to 63 layouts in one event and typeahead is rebuilt through tippy + popper on each keyup (long tasks of 56-316 ms). F2 (2026-10-14) removed the autosize timer, which was the rest of it (var/armada-overhaul/build/F2.md).",
-        "since": "2026-10-13"
+        "since": "2026-10-13",
+        "max": 13.14,
+        "owner": "B3"
     },
     "typing-cost/tokens.timers-forcing-layout": {
         "measured": 7,
@@ -676,7 +824,8 @@
         "threshold": "<= 0",
         "audit": "F2 (2026-10-14) removed the autosize timer (205 of these, one a key). 7 remain, one for each typeahead that opens: bootstrap_typeahead.ts repositions its popper from a 1 ms timer (onShow: popperInstance.update, then a rectangle read). They go with the typeahead (B3). var/armada-overhaul/build/F2.md.",
         "since": "2026-10-13",
-        "max": 7
+        "max": 7,
+        "owner": "F2"
     },
     "weight/body-listeners": {
         "measured": 276,
@@ -684,7 +833,8 @@
         "threshold": "<= 40",
         "audit": "New in F2 (2026-10-14). var/armada-overhaul/maps/lean-weight.md, Runtime weight: 276 jQuery handlers delegated on body (213 of them click); every click walks the list. They go with the old modules that bind them.",
         "since": "2026-10-14",
-        "max": 276
+        "max": 276,
+        "owner": "F2"
     },
     "weight/css-rules": {
         "measured": 8217,
@@ -692,7 +842,8 @@
         "threshold": "<= 2500",
         "audit": "New in F2 (2026-10-14). var/armada-overhaul/maps/lean-weight.md, Runtime weight: 9,811 rules on 13 October. F2 no longer loads the emoji sprite's 1,913 rules before an emoji is shown, and the check counts that sheet apart (its note says whether it was loaded), so an emoji in the fixture topic does not move the figure; the sprites are cut with K-66. F2b (2026-10-14) set the browser targets (K-95): 257 fewer rules in the app's stylesheets on the same tree (8,241 to 7,984, var/armada-overhaul/build/F2b.md), which put the old sheets at 7,720. The page reads 8,213 because the kit's stylesheet (src_armada_kit_index_ts.css, 493 rules) now loads with the app entry, imported by F5's frame (var/armada-overhaul/build/F2b-verify/sheets.txt); the ceiling is that reading, and those 493 rules are the kit's and the frame's, not the old sheets'. F5 (2026-10-14): rules for the old scroll-to-bottom button in the band (bridge/legacy_composer.css) and for Inbox and Recent on the plane's ground (bridge/legacy_home.css): 8,218. F5-verify (2026-10-15): one rule more, which keeps the old thread pane inside the sheet under the old xl breakpoint (bridge/legacy_column.css): 8,219. F5 after verification (2026-10-15): that rule now holds the thread over the whole sheet at every width, one more ends the old alerts where the open sheet starts (bridge/legacy_column.css), and the three old thread-pane rules it made dead are deleted from web/styles/legacy.css: 8,217.",
         "since": "2026-10-14",
-        "max": 8217
+        "max": 8217,
+        "owner": "F2"
     },
     "weight/dom-nodes": {
         "measured": 1866,
@@ -700,6 +851,7 @@
         "threshold": "<= 900",
         "audit": "New in F2 (2026-10-14). var/armada-overhaul/maps/lean-weight.md, Runtime weight: 1,695 elements on the short worktree topic on 13 October, most of them hidden overlays and sidebars rendered at startup. The count moves by a few elements with what the sidebars hold (1,645 alone, 1,647 in a full run), so the ceiling is the audit's 1,695. F5 (2026-10-14): the frame inlines the glyph and mark sprite once in the page (PLAN.md F5; 216 elements in templates/zerver/app/armada_sprite.svg), so the ceiling is 1,866, measured in F5's full run.",
         "since": "2026-10-14",
-        "max": 1866
+        "max": 1866,
+        "owner": "F2"
     }
 }

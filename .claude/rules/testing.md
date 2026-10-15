@@ -7,8 +7,8 @@ it can see. This file applies to every change.
   registry, `feed/parts.ts`) has node tests in `web/tests/armada/` and 100%
   statement coverage from its first file. Enforced by:
   `tools/test-js-with-node --coverage` (`ARMADA_FULLY_COVERED_GLOBS`).
-- The harness's own logic (the ratchet, its statistics, the mutations) has
-  tests in `tools/armada-checks/test/` at 100% of lines, branches and
+- The harness's own logic (the ratchet, its statistics, the mutations, the
+  `known.json` lint) has tests in `tools/armada-checks/test/` at 100% of lines, branches and
   functions.
   Enforced by: `node tools/armada-checks/selftest.mjs` (`FULLY_COVERED`).
 - Components are tested for behaviour with a real DOM
@@ -21,8 +21,13 @@ it can see. This file applies to every change.
   `tools/armada-checks/README.md`.
 - `known.json` is a ratchet: a known failure you repair must report `FIXED`
   and nothing may report `FAIL`, `ERROR` or `STALE`. Enforced by: `arm check`
-  (its exit status). Only Foundation packages and stage closes edit the
-  file: that is the plan's rule 5, not a check.
+  (its exit status). Every entry has an `owner` and a `max`, and the file
+  only improves on the base branch (entries deleted, ceilings lowered); a
+  new entry or a raised ceiling needs a `Ratchet-exception:` trailer, which
+  only the orchestrator writes. Enforced by: `arm lint` (the
+  `armada-known` linter, `tools/armada-checks/known-lint.mjs`). Only
+  Foundation packages and stage closes edit the file: that is the plan's
+  rule 5, not a check.
 - Counts gate; a time gates only at three times its budget. Run the checks
   your change names three times and require identical statuses.
   Enforced by: `arm check` thresholds; your report shows the three runs.

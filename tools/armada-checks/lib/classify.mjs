@@ -2,6 +2,8 @@
 // --update-known and --accept-failures write back. Pure, so that the
 // harness's own tests (tools/armada-checks/test/) can hold it at 100%.
 
+import {beyond_max} from "./known.mjs";
+
 export function format_value(value, unit) {
     return value === null ? "n/a" : `${value}${unit}`;
 }
@@ -34,9 +36,13 @@ export function classify(result, known, seen, print) {
             assertion.status = "FAIL";
             counts.fail += 1;
             print("FAIL", assertion.id, `${detail}  [known failure is no longer measurable]`);
-        } else if (entry && typeof entry.max === "number" && assertion.value > entry.max) {
-            // A known failure that carries a ceiling: a count that is wrong
-            // today (uncaught exceptions) must still not grow.
+        } else if (
+            entry &&
+            typeof entry.max === "number" &&
+            beyond_max(assertion.value, entry.max, assertion.operator, assertion.threshold)
+        ) {
+            // Every known failure carries a ceiling (lib/known.mjs): a
+            // count that is wrong today must still not get worse.
             assertion.status = "FAIL";
             counts.fail += 1;
             print("FAIL", assertion.id, `${detail}  [known at most ${entry.max}; it got worse]`);
@@ -69,6 +75,23 @@ export function stale_ids(known, results, seen) {
     );
 }
 
+// The ceiling --accept-failures records: a new entry's is what it measures
+// today; an existing one keeps its own unless the value got worse, which
+// raises it. The known.json lint refuses a raised ceiling without a
+// Ratchet-exception.
+function accepted_max(existing, assertion) {
+    if (typeof existing?.max !== "number") {
+        return assertion.value;
+    }
+    if (
+        assertion.value !== null &&
+        beyond_max(assertion.value, existing.max, assertion.operator, assertion.threshold)
+    ) {
+        return assertion.value;
+    }
+    return existing.max;
+}
+
 // The known.json that --update-known and --accept-failures write: entries
 // sorted by id. Moves `totals` and each assertion's status the way the
 // rewrite does.
@@ -85,17 +108,16 @@ export function rewrite_known(known, results, stale, options, totals, today) {
                 next.set(assertion.id, {...next.get(assertion.id), measured: assertion.value});
             } else if (assertion.status === "FAIL" && options.accept_failures) {
                 const existing = next.get(assertion.id);
+                const max = accepted_max(existing, assertion);
                 next.set(assertion.id, {
                     measured: assertion.value,
                     unit: assertion.unit,
                     threshold: `${assertion.operator} ${assertion.threshold}`,
+                    ...(max === null ? {} : {max}),
+                    owner: existing?.owner ?? "TODO: the package that turns it to FIXED",
                     audit:
                         existing?.audit ?? "TODO: say which audit or commit explains this failure",
                     since: existing?.since ?? today,
-                    // Accepting a count that grew past its ceiling raises the ceiling.
-                    ...(typeof existing?.max === "number" && assertion.value !== null
-                        ? {max: Math.max(existing.max, assertion.value)}
-                        : {}),
                 });
                 totals.fail -= 1;
                 totals.known_fail += 1;

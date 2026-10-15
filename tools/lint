@@ -261,6 +261,11 @@ def run() -> None:
         description="Every Zulip file the fork changed is accounted for (docs/armada/fork-ledger.md)",
     )
     linter_config.external_linter(
+        "armada-known",
+        ["node", "tools/armada-checks/known-lint.mjs"],
+        description="tools/armada-checks/known.json only improves, and every entry has an owner and a max",
+    )
+    linter_config.external_linter(
         "armada-palette",
         ["tools/armada/palette.py", "--check", "--quiet"],
         description="The palette files are what tools/armada/palette.py writes, and pass its gates",

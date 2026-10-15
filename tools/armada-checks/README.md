@@ -55,17 +55,35 @@ the change repaired.
 
 ### Known failures that must not get worse
 
-A `known.json` entry may carry `"max": <number>`. The assertion then stays
-`KNOWN-FAIL` only while its value is at most that; above it the line is
-`FAIL` ("it got worse"). Use it for counts that are wrong today but must not
-grow: `console-clean/uncaught-exceptions` is known at 3, and a fourth
-exception anywhere on the tour turns the suite red. Without `max` a known
-failure is not compared with its recorded value (milliseconds and per-minute
-counts move from run to run), so a known failure getting worse is silent.
+Every `known.json` entry names the package that turns it to `FIXED`
+(`owner`, from PLAN.md appendix A) and the worst value it may still reach
+(`max`); `lib/known.mjs` says what an entry holds. Worse is measured from
+the threshold: for `<=` and `== 0` `max` is a ceiling; for a flag that
+must be 1 and measures 0 it is 0, which nothing can be worse than. Above
+it the line is `FAIL` ("it got worse"): `console-clean/uncaught-exceptions`
+known at 3 means a fourth exception anywhere on the tour turns the suite
+red. The entries that had no `max` before 15 October took the worst value
+seen in the runs of 13 to 15 October and a quarter; a flag or a count that
+must reach a value (`== 1`, `== 6`) took today's value.
 
 A known failure whose value can no longer be measured (the element it looks
 at is gone or renamed) is also `FAIL`: it could otherwise never report
 `FIXED`.
+
+### known.json only improves
+
+`tools/lint` runs `known-lint.mjs` (the `armada-known` linter), which fails
+unless every entry is complete (an owner, a max, an audit without `TODO`,
+a date) and the file improves on where the branch left `ui-overhaul`
+(`ARMADA_RATCHET_BASE` names another base): an entry may be deleted, its
+`max` lowered, its owner, audit and measured value changed; it may not be
+added, have its threshold or unit changed, or have its `max` raised. A
+commit between the merge base and `HEAD` whose message has a
+`Ratchet-exception: <id>, <id>` trailer lets those ids change anyway; only
+the orchestrator writes one. Change the file with `--update-known`, which
+removes what is fixed and refreshes measured values; `--accept-failures`
+writes new entries with `TODO` in their owner and audit, which the lint
+refuses until a person fills them in.
 
 ### When a line says FAIL
 
@@ -334,7 +352,8 @@ The logic that decides a result is tested like the product's pure code:
 
 runs `test/*.test.mjs` with node's test runner and fails unless every
 module listed in `FULLY_COVERED` in `selftest.mjs` (the ratchet in
-`lib/classify.mjs`, `lib/stats.mjs`, `lib/mutate.mjs`) has 100% of its
+`lib/classify.mjs`, the `known.json` lint, `lib/stats.mjs`,
+`lib/mutate.mjs`) has 100% of its
 lines, branches and functions covered. It needs no browser and no
 server, and takes about a second.
 
@@ -348,6 +367,8 @@ server, and takes about a second.
     fixtures/            recorded runs, their source text, the corpus list
     lib/browser.mjs      launch, dev login, viewport
     lib/classify.mjs     the ratchet: a run against known.json, and its rewrite
+    lib/known.mjs        what a known.json entry holds; the rule that it only improves
+    lib/known_lint.mjs   that rule against git (known-lint.mjs runs it)
     lib/fixtures.mjs     the checks' own topic; events for messages and edits
     lib/mutate.mjs       deliberate breakage of the application, by name
     lib/prove.mjs        runs every mutation; the pins must turn red

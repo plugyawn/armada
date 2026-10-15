@@ -114,10 +114,32 @@ test("rewrite_known with --update-known drops the fixed and the stale, refreshes
     assert.equal(results[0].assertions[2].status, "FAIL");
 });
 
+test("classify measures getting worse from the threshold, whichever way it fails", () => {
+    const known = {
+        "c/floor": {measured: 6, max: 5},
+        "c/flag": {measured: 0, max: 0},
+        "c/count": {measured: 4, max: 4},
+    };
+    const result = {
+        assertions: [
+            assertion("c/floor", 4, false, {operator: ">=", threshold: 10}),
+            assertion("c/flag", 0, false, {operator: "==", threshold: 1}),
+            assertion("c/count", 3, false, {operator: "==", threshold: 6}),
+        ],
+        measurements: [],
+    };
+    run(result, known);
+    assert.deepEqual(
+        result.assertions.map((entry) => entry.status),
+        ["FAIL", "KNOWN-FAIL", "FAIL"],
+    );
+});
+
 test("rewrite_known with --accept-failures records new failures and keeps what it knew", () => {
     const known = {
-        "c/b-grew": {measured: 2, max: 3, audit: "old audit", since: "2026-10-01"},
-        "c/a-flat": {measured: 2, audit: "flat"},
+        "c/b-grew": {measured: 2, max: 3, owner: "B3", audit: "old audit", since: "2026-10-01"},
+        "c/a-flat": {measured: 2, max: 3, audit: "flat"},
+        "c/d-within": {measured: 2, max: 3, owner: "C1", audit: "within", since: "2026-10-02"},
     };
     const results = [
         {
@@ -125,11 +147,13 @@ test("rewrite_known with --accept-failures records new failures and keeps what i
                 {...assertion("c/b-grew", 5, false), status: "FAIL"},
                 {...assertion("c/a-flat", null, false), status: "FAIL"},
                 {...assertion("c/c-new", 7, false, {unit: "px", operator: "=="}), status: "FAIL"},
+                {...assertion("c/d-within", 1, false), status: "FAIL"},
+                {...assertion("c/e-unmeasured", null, false), status: "FAIL"},
                 {...assertion("c/fixed", 0, true), status: "FIXED"},
             ],
         },
     ];
-    const counts = {...totals(), fail: 3, fixed: 1, stale: 1};
+    const counts = {...totals(), fail: 5, fixed: 1, stale: 1};
     const next = rewrite_known(
         known,
         results,
@@ -138,19 +162,28 @@ test("rewrite_known with --accept-failures records new failures and keeps what i
         counts,
         "2026-10-15",
     );
-    assert.deepEqual(Object.keys(next), ["c/a-flat", "c/b-grew", "c/c-new"]);
+    assert.deepEqual(Object.keys(next), [
+        "c/a-flat",
+        "c/b-grew",
+        "c/c-new",
+        "c/d-within",
+        "c/e-unmeasured",
+    ]);
     assert.deepEqual(next["c/b-grew"], {
         measured: 5,
         unit: "",
         threshold: "<= 0",
+        max: 5,
+        owner: "B3",
         audit: "old audit",
         since: "2026-10-01",
-        max: 5,
     });
     assert.deepEqual(next["c/a-flat"], {
         measured: null,
         unit: "",
         threshold: "<= 0",
+        max: 3,
+        owner: "TODO: the package that turns it to FIXED",
         audit: "flat",
         since: "2026-10-15",
     });
@@ -158,8 +191,12 @@ test("rewrite_known with --accept-failures records new failures and keeps what i
         measured: 7,
         unit: "px",
         threshold: "== 0",
+        max: 7,
+        owner: "TODO: the package that turns it to FIXED",
         audit: "TODO: say which audit or commit explains this failure",
         since: "2026-10-15",
     });
-    assert.deepEqual(counts, {...totals(), known_fail: 3, fixed: 1, stale: 1});
+    assert.equal(next["c/d-within"].max, 3);
+    assert.equal("max" in next["c/e-unmeasured"], false);
+    assert.deepEqual(counts, {...totals(), known_fail: 5, fixed: 1, stale: 1});
 });

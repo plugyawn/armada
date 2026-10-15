@@ -1,0 +1,11 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="UTF-8" />
+        <meta http-equiv="refresh" content="{{ retry_after_seconds }}" />
+        <title>{{ _("Please wait") }} | Armada</title>
+    </head>
+    <body>
+        <p>{% trans %}The server asked this page to wait. It will reload by itself in {{ retry_after_string }}.{% endtrans %}</p>
+    </body>
+</html>

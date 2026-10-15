@@ -1,0 +1,3 @@
+# Fixes found by dogfooding Armada. The page-429 fix's test is in
+# zerver/tests/test_rate_limiter.py, whose line is server-events'.
+kept zerver/middleware.py  # a rate-limited page load gets a page that reloads after the wait, not the JSON error

@@ -1,5 +1,6 @@
 import cProfile
 import logging
+import math
 import os
 import tempfile
 import time
@@ -30,11 +31,17 @@ from zerver.actions.message_summary import get_ai_requests, get_ai_time
 from zerver.lib.cache import get_remote_cache_requests, get_remote_cache_time
 from zerver.lib.db_connections import reset_queries
 from zerver.lib.debug import maybe_tracemalloc_listen
-from zerver.lib.exceptions import ErrorCode, JsonableError, MissingAuthenticationError, WebhookError
+from zerver.lib.exceptions import (
+    ErrorCode,
+    JsonableError,
+    MissingAuthenticationError,
+    RateLimitedError,
+    WebhookError,
+)
 from zerver.lib.markdown import get_markdown_requests, get_markdown_time
 from zerver.lib.per_request_cache import flush_per_request_caches
 from zerver.lib.push_notifications import FailedToConnectBouncerError, InternalBouncerServerError
-from zerver.lib.rate_limiter import RateLimitResult
+from zerver.lib.rate_limiter import RateLimitResult, readable_expiry_string_for_html
 from zerver.lib.request import RequestNotes
 from zerver.lib.response import (
     AsynchronousResponse,
@@ -396,6 +403,29 @@ class JsonErrorHandler(MiddlewareMixin):
             else:
                 # For /json routes, ask for session authentication.
                 return json_unauthorized(www_authenticate="session")
+
+        if (
+            isinstance(exception, RateLimitedError)
+            and exception.secs_to_freedom is not None
+            and request.method == "GET"
+            and RequestNotes.get_notes(request).error_format == "HTML"
+            and request.get_preferred_type(["application/json", "text/html"]) == "text/html"
+        ):
+            # A page load in a browser would show the JSON error and stop
+            # there; instead, show a page that loads again once the wait
+            # is over.  Requests from the web client keep the JSON error.
+            retry_after_seconds = math.ceil(exception.secs_to_freedom)
+            response = render(
+                request,
+                "zerver/rate_limited_reload.html",
+                context={
+                    "retry_after_seconds": retry_after_seconds,
+                    "retry_after_string": readable_expiry_string_for_html(retry_after_seconds),
+                },
+                status=429,
+            )
+            response["Retry-After"] = str(retry_after_seconds)
+            return response
 
         if isinstance(exception, JsonableError):
             response = json_response_from_error(exception)

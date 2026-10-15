@@ -409,5 +409,62 @@ class EventQueueBudgetTest(ZulipTestCase):
             self.assertEqual(self.api_post(hamlet, "/api/v1/register").status_code, 429)
 
 
+class RateLimitedPageLoadTest(ZulipTestCase):
+    """A person whose budget is spent and who loads a page in the
+    browser is shown a page that waits as long as the server asks and
+    then loads again, not the JSON error meant for the web client."""
+
+    @ratelimit_rule(60, 2, domain="api_by_user")
+    def test_page_load_waits_and_reloads(self) -> None:
+        hamlet = self.example_user("hamlet")
+        RateLimitedUser(hamlet).clear_history()
+        self.login_user(hamlet)
+
+        # Whole seconds, so that the wait the limiter reports is exact.
+        with time_machine.travel(int(time.time()), tick=False) as traveller:
+            for _ in range(2):
+                self.assert_json_success(self.client_get("/json/users/me"))
+            traveller.shift(10.5)
+
+            result = self.client_get(
+                "/", HTTP_ACCEPT="text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+            )
+            self.assertEqual(result.status_code, 429)
+            self.assertEqual(result["Content-Type"], "text/html; charset=utf-8")
+            # 19.5 seconds, rounded up.
+            self.assertEqual(result["Retry-After"], "20")
+            html = result.content.decode()
+            self.assertIn('<meta http-equiv="refresh" content="20" />', html)
+            self.assertIn(
+                "The server asked this page to wait. It will reload by itself in 20\xa0seconds.",
+                html,
+            )
+            self.assertNotIn("RATE_LIMIT_HIT", html)
+
+            # The web client's own requests keep the JSON error, even
+            # when they say they prefer HTML.
+            with self.assertLogs("zerver.lib.rate_limiter", level="WARNING") as logs:
+                result = self.client_get("/json/users/me", HTTP_ACCEPT="text/html")
+            self.assertEqual(
+                logs.output,
+                [
+                    "WARNING:zerver.lib.rate_limiter:429 to the web client:"
+                    f" user {hamlet.id}, GET /json/users/me, api_by_user, retry after 19.50s"
+                ],
+            )
+            self.assertEqual(result.status_code, 429)
+            self.assertEqual(result["Retry-After"], "19.5")
+            self.assertEqual(
+                orjson.loads(result.content),
+                {
+                    "result": "error",
+                    "msg": "API usage exceeded rate limit; see https://zulip.com/api/http-headers#rate-limiting-response-headers",
+                    "code": "RATE_LIMIT_HIT",
+                    "retry-after": 19.5,
+                },
+            )
+        RateLimitedUser(hamlet).clear_history()
+
+
 # Don't load the base class as a test: https://bugs.python.org/issue17519.
 del RateLimiterBackendBase

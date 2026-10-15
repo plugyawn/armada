@@ -245,6 +245,7 @@ path_maps: dict[str, dict[str, str]] = {
 message_id_to_attachments: dict[str, dict[int, list[str]]] = {
     "zerver_message": collections.defaultdict(list),
     "zerver_scheduledmessage": collections.defaultdict(list),
+    "zerver_post": collections.defaultdict(list),
 }
 
 
@@ -257,6 +258,11 @@ def map_messages_to_attachments(data: ImportedTableData) -> None:
             message_id_to_attachments["zerver_scheduledmessage"][scheduled_message_id].append(
                 attachment["path_id"]
             )
+
+        # Armada's pages posts; an export from before them, or from
+        # another product, has none.
+        for post_id in attachment.setdefault("armada_posts", []):
+            message_id_to_attachments["zerver_post"][post_id].append(attachment["path_id"])
 
 
 def validate_and_resolve_relative_path(
@@ -2116,6 +2122,13 @@ def do_import_realm(
         fix_message_content_attributes(
             realm=realm, sender_map=sender_map, messages=data["zerver_post"]
         )
+        # Its links to its uploads name the new paths, as a message's
+        # do (fix_upload_links); its claims come with the attachments.
+        for post in data["zerver_post"]:
+            for path_id in message_id_to_attachments["zerver_post"][post["id"]]:
+                old_path = path_maps["new_attachment_path_to_old_path"][path_id]
+                post["content"] = post["content"].replace(old_path, path_id)
+                post["rendered_content"] = post["rendered_content"].replace(old_path, path_id)
         update_model_ids(Post, data, "post")
         bulk_import_model(data, Post)
 
@@ -2517,6 +2530,8 @@ def import_attachments(data: ImportedTableData) -> None:
         "zerver_attachment_scheduled_messages",
         "scheduledmessage_id",
     )
+    # Armada's pages posts, which hold their claims on uploads.
+    posts_m2m_tuple = format_m2m_data("post", "armada_posts", "zerver_post_attachments", "post_id")
 
     # Next, load the parent rows.
     bulk_import_model(data, parent_model)
@@ -2528,6 +2543,7 @@ def import_attachments(data: ImportedTableData) -> None:
         for m2m_table_name, m2m_rows, child_id in [
             messages_m2m_tuple,
             scheduled_messages_m2m_tuple,
+            posts_m2m_tuple,
         ]:
             sql_template = SQL(
                 """

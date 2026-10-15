@@ -498,6 +498,39 @@ class RealmImportExportTest(ExportFile):
         fn = export_fn(f"uploads/{attachment.path_id}")
         self.assertFalse(os.path.exists(fn))
 
+    def test_export_includes_the_uploads_of_exported_posts(self) -> None:
+        realm = get_realm("zulip")
+        hamlet = self.example_user("hamlet")
+
+        def upload(file_name: str) -> str:
+            url = upload_message_attachment(file_name, "text/plain", b"zulip!", hamlet)[0]
+            return url.removeprefix("/user_uploads/")
+
+        published_path_id = upload("published.txt")
+        draft_path_id = upload("draft.txt")
+        published = create_post(
+            hamlet, "Published", f"[file](/user_uploads/{published_path_id})", draft=False
+        )
+        create_post(
+            hamlet,
+            "Draft",
+            f"[file](/user_uploads/{draft_path_id}), [again](/user_uploads/{published_path_id})",
+            draft=True,
+        )
+
+        # A public export holds the published post, so its upload and
+        # its claim; the draft stays out, and so do its upload and its
+        # claims, even on an upload that is exported.
+        self.export_realm_and_create_auditlog(realm, export_type=RealmExport.EXPORT_PUBLIC)
+        (record,) = read_json("attachment.json")["zerver_attachment"]
+        self.assertEqual(
+            (record["path_id"], record["messages"], record["armada_posts"]),
+            (published_path_id, [], [published.id]),
+        )
+        with open(export_fn(f"uploads/{published_path_id}"), "rb") as f:
+            self.assertEqual(f.read(), b"zulip!")
+        self.assertFalse(os.path.exists(export_fn(f"uploads/{draft_path_id}")))
+
     @use_s3_backend
     def test_export_files_from_s3(self) -> None:
         create_s3_buckets(settings.S3_AUTH_UPLOADS_BUCKET, settings.S3_AVATAR_BUCKET)
@@ -1650,9 +1683,15 @@ class RealmImportExportTest(ExportFile):
         # A partner whose experience was never counted counts from the start.
         Partner.objects.create(user_profile=othello, realm=original_realm)
 
-        # data to test import of pages and posts
+        # data to test import of pages and posts, and of a post's upload
         update_bio(hamlet, "Prince of Denmark")
-        create_post(hamlet, "To be", "@**Cordelia, Lear's daughter**, or not to be", draft=False)
+        skull_url = upload_message_attachment("skull.txt", "text/plain", b"alas", hamlet)[0]
+        create_post(
+            hamlet,
+            "To be",
+            f"@**Cordelia, Lear's daughter**, or not to be: [Yorick]({skull_url})",
+            draft=False,
+        )
         create_post(hamlet, "Notes", "a draft", draft=True)
 
         # data to test import of onboaring step
@@ -2314,8 +2353,26 @@ class RealmImportExportTest(ExportFile):
                     )
                 )
 
+            def without_upload_paths(post: Post) -> str:
+                # An upload's path names its realm, so a post's link to
+                # its upload, which the import rewrites, is compared by
+                # the upload's file name.
+                content = post.content
+                for attachment in post.attachments.all():
+                    self.assertIn(f"/user_uploads/{attachment.path_id}", post.rendered_content)
+                    self.assertIn(f"/user_uploads/{attachment.path_id}", content)
+                    content = content.replace(attachment.path_id, attachment.file_name)
+                return content
+
             return {
-                (post.author.full_name, post.title, post.content, post.draft, mentioned(post))
+                (
+                    post.author.full_name,
+                    post.title,
+                    without_upload_paths(post),
+                    post.draft,
+                    mentioned(post),
+                    frozenset(post.attachments.values_list("file_name", flat=True)),
+                )
                 for post in Post.objects.filter(realm=r).select_related("author")
             }
 

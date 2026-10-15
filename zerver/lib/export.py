@@ -16,6 +16,7 @@ import secrets
 import shutil
 import subprocess
 import tempfile
+from collections import defaultdict
 from collections.abc import Callable, Iterable, Iterator, Mapping
 from contextvars import ContextVar
 from dataclasses import dataclass
@@ -325,9 +326,6 @@ NON_EXPORTED_TABLES = {
     "zerver_repository",
     "zerver_workspace",
     "zerver_workspaceentrymutationreceipt",
-    # Which uploads each pages post claims; the uploads that only a
-    # post claims are left out with them.
-    "zerver_post_attachments",
 }
 
 IMPLICIT_TABLES = {
@@ -335,6 +333,9 @@ IMPLICIT_TABLES = {
     # the parent table.
     "zerver_attachment_messages",
     "zerver_attachment_scheduled_messages",
+    # A pages post's claims on uploads travel on the attachment rows,
+    # as a message's do (fetch_attachment_data).
+    "zerver_post_attachments",
 }
 
 ATTACHMENT_TABLES = {
@@ -1351,8 +1352,11 @@ def add_user_profile_child_configs(user_profile_config: Config) -> None:
         # its author's consent.
         limit_to_consenting_users=False,
         custom_process_results=custom_process_post,
-        # Its claims on uploads are not exported (NON_EXPORTED_TABLES).
+        # Its claims on uploads travel on the attachment rows, as a
+        # message's do (fetch_attachment_data); the export reads the
+        # posts it holds to find them.
         exclude=["attachments"],
+        use_iterator=False,
     )
 
     Config(
@@ -1556,16 +1560,30 @@ def custom_fetch_user_profile_cross_realm(response: TableData, context: Context)
 
 
 def fetch_attachment_data(
-    response: TableData, realm_id: int, message_ids: set[int], scheduled_message_ids: set[int]
+    response: TableData,
+    realm_id: int,
+    message_ids: set[int],
+    scheduled_message_ids: set[int],
+    post_ids: set[int],
 ) -> list[Attachment]:
     attachments = list(
         Attachment.objects.filter(
-            Q(messages__in=message_ids) | Q(scheduled_messages__in=scheduled_message_ids),
+            Q(messages__in=message_ids)
+            | Q(scheduled_messages__in=scheduled_message_ids)
+            | Q(armada_posts__in=post_ids),
             realm_id=realm_id,
         )
         .distinct("path_id")
         .order_by("path_id")
     )
+    # A pages post holds its claims, so each attachment row is given
+    # the exported posts that claim it, as it has its messages.
+    claiming_post_ids: dict[int, list[int]] = defaultdict(list)
+    for attachment_id, post_id in Post.objects.filter(id__in=post_ids).values_list(
+        "attachments", "id"
+    ):
+        if attachment_id is not None:
+            claiming_post_ids[attachment_id].append(post_id)
 
     def postprocess_attachment(row: Record) -> Record:
         row = floatify_datetime_fields(row, "zerver_attachment")
@@ -1576,6 +1594,7 @@ def fetch_attachment_data(
             scheduled_message_ids
         )
         row["scheduled_messages"] = sorted(filtered_scheduled_message_ids)
+        row["armada_posts"] = sorted(claiming_post_ids[row["id"]])
         return row
 
     """
@@ -2728,6 +2747,7 @@ def do_export_realm(
         output_dir=output_dir,
         message_ids=message_ids,
         scheduled_message_ids=exportable_scheduled_message_ids,
+        post_ids={post["id"] for post in response["zerver_post"]},
     )
 
     logging.info("Exporting uploaded files and avatars")
@@ -2763,7 +2783,11 @@ def do_export_realm(
 
 
 def export_attachment_table(
-    realm: Realm, output_dir: Path, message_ids: set[int], scheduled_message_ids: set[int]
+    realm: Realm,
+    output_dir: Path,
+    message_ids: set[int],
+    scheduled_message_ids: set[int],
+    post_ids: set[int],
 ) -> list[Attachment]:
     response: TableData = {}
     attachments = fetch_attachment_data(
@@ -2771,6 +2795,7 @@ def export_attachment_table(
         realm_id=realm.id,
         message_ids=message_ids,
         scheduled_message_ids=scheduled_message_ids,
+        post_ids=post_ids,
     )
     output_file = os.path.join(output_dir, "attachment.json")
     write_table_data(output_file=output_file, data=response)

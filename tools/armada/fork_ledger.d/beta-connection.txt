@@ -2,7 +2,6 @@
 # people, the old one at /legacy/ (linked from nowhere); the sign-in and
 # sign-up pages named Armada.
 kept zerver/views/home.py  # / serves the new interface to signed-in people (ARMADA_NEW_INTERFACE_AT_ROOT); /legacy/ serves the old one
-kept zproject/test_extra_settings.py  # the old interface's own tests read it at /: ARMADA_NEW_INTERFACE_AT_ROOT off
 kept templates/zerver/login.html  # titled Armada, not Zulip
 kept templates/zerver/create_user/accounts_home.html  # titled and headed Armada, not Zulip
 kept templates/zerver/create_user/register.html  # titled Armada; the name hint says Armada

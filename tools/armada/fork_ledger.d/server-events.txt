@@ -5,6 +5,6 @@ kept zerver/decorator.py  # authenticated views take the rate limit domain of th
 kept zerver/lib/rest.py  # the rate_limit_domain= view flag
 kept zerver/lib/rate_limiter.py  # a 429 to the web client is logged
 kept zerver/tests/test_rate_limiter.py  # the event queue's budgets and the 429 log line
-kept zproject/test_extra_settings.py  # events_by_user and register_by_user are off in tests, like api_by_user; tests never read a downloaded partner pack (ARMADA_SPRITE_DIR)
+kept zproject/test_extra_settings.py  # events_by_user and register_by_user are off in tests, like api_by_user; tests never read a downloaded partner pack (ARMADA_SPRITE_DIR); ARMADA_NEW_INTERFACE_AT_ROOT is off, so the old interface's own tests read it at / (beta-connection)
 kept zproject/tornado_urls.py  # GET and DELETE /events count against events_by_user
 kept zerver/tests/test_message_flags.py  # marking messages read also sends the senders' read_receipts events

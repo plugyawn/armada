@@ -18,21 +18,21 @@ The first three must reach 0 at the final close.
 
 - Old Armada frontend modules (`web/src/*.ts` added by the fork): 42
 - Files under `web/src/armada/bridge/`: 12
-- Entries in `ARMADA_EXEMPT_FILES` (`tools/test-js-with-node`): 46
+- Entries in `ARMADA_EXEMPT_FILES` (`tools/test-js-with-node`): 45
 - Stylesheets under `web/styles/`: 70, of which 3 are the fork's own old sheets
 - Old Armada templates under `web/templates/`: 10
 - Files in `web/` that name a system typeface: 5
 
 ## Zulip files that differ from the fork base
 
-279 files.
+302 files.
 
-- Changed by the proof of concept, not yet dealt with by the rebuild: 86
+- Changed by the proof of concept, not yet dealt with by the rebuild: 82
 - Hooked: upstream file with marked calls into `web/src/armada/hooks/`: 2
 - Bridged: old code kept alive until a named package replaces it: 29
 - Absorbed: deleted and rewritten under `web/src/armada/`: 0
-- Deleted: 3
-- Changed in place and staying (toolchain, configuration, server code, tests): 159
+- Deleted: 8
+- Changed in place and staying (toolchain, configuration, server code, tests): 181
 - Unaccounted for (lint fails): 0
 
 ### Changed by the proof of concept, not yet dealt with by the rebuild
@@ -42,7 +42,6 @@ The first three must reach 0 at the final close.
 - `static/images/favicon.svg`
 - `static/images/logo/apple-touch-icon-precomposed.png`
 - `templates/zerver/development/dev_login.html`
-- `templates/zerver/login.html`
 - `web/src/animate.ts`
 - `web/src/bootstrap_typeahead.ts`
 - `web/src/bot_helper.ts`
@@ -110,10 +109,7 @@ The first three must reach 0 at the final close.
 - `zerver/actions/message_delete.py`
 - `zerver/actions/message_summary.py`
 - `zerver/actions/users.py`
-- `zerver/lib/narrow.py`
-- `zerver/lib/queue.py`
 - `zerver/lib/realm_logo.py`
-- `zerver/lib/retention.py`
 - `zerver/lib/topic.py`
 - `zerver/tests/fixtures/llm/summary.json`
 - `zerver/tests/test_bots.py`
@@ -163,6 +159,11 @@ The first three must reach 0 at the final close.
 
 ### Deleted
 
+- `.github/workflows/api-docs-update-check.yml`: reports Zulip's API changes to chat.zulip.org
+- `.github/workflows/auto-add-parent-label.yml`: Zulip's issue labels
+- `.github/workflows/update-oneclick-apps.yml`: Zulip's DigitalOcean one-click app
+- `.github/workflows/zulip-ci.yml`: Zulip's distribution on five systems; armada-ci.yml runs Armada's checks
+- `.github/workflows/zulip-cloud-deploy.yaml`: Zulip Cloud's deploy notices
 - `patches/autosize.patch`: nothing imports autosize
 - `web/src/scroll_bar.ts`
 - `web/src/sentry.ts`: Sentry in the client (K-93)
@@ -171,6 +172,9 @@ The first three must reach 0 at the final close.
 
 - `.claude/CLAUDE.md`: guidance that matches the brief
 - `.claude/skills/visual-test/SKILL.md`: arm shot, arm check, the showroom
+- `.github/pull_request_template.md`: the package's report: acceptance, pictures, needs the user
+- `.github/workflows/codeql-analysis.yml`: scans Armada's trunk and its pull requests
+- `.github/workflows/production-suite.yml`: runs on release tags only
 - `.gitignore`: web/fonts/licensed/ and the generated font sheet
 - `.prettierignore`: interim beta: web/src/armada/beta is not formatted
 - `docs/contributing/code-style.md`: Babel adds no polyfills (K-95)
@@ -179,13 +183,18 @@ The first three must reach 0 at the final close.
 - `package.json`: @babel/plugin-transform-react-jsx; preact at run time
 - `pnpm-lock.yaml`
 - `pnpm-workspace.yaml`: the autosize patch is gone with the package; core-js is no longer installed
+- `puppet/zulip/files/postgresql/pg_backup_and_purge`: parses backup times with fractional seconds (Spaces reports them)
 - `puppet/zulip/manifests/app_frontend_base.pp`: armada\_\* queues, armada_monitor_worker among them
 - `puppet/zulip/manifests/profile/rabbitmq.pp`: sets the consumer-timeout policy of the agent's armada\_\* queues
 - `puppet/zulip/templates/supervisor/zulip.conf.template.erb`: armada_worker runs as slots 0 and 1
 - `scripts/lib/check_rabbitmq_queue.py`: the agent's queues and stats files are armada\_\*
 - `stylelint.config.js`: the rules of web/src/armada/
+- `templates/zerver/accounts_send_confirm.html`: titled Armada, not Zulip
 - `templates/zerver/app/index.html`: the frame, the inlined sprite; the splash and both logos deleted
 - `templates/zerver/base.html`: font preloads; data-palette
+- `templates/zerver/create_user/accounts_home.html`: titled and headed Armada, not Zulip
+- `templates/zerver/create_user/register.html`: titled Armada; the name hint says Armada
+- `templates/zerver/login.html`: titled Armada, not Zulip
 - `tools/lib/provision_inner.py`: one call: tools/setup/build_armada_fonts
 - `tools/lint`: .tsx; untracked files; the fork ledger; configuration files for the old code name's check (R1)
 - `tools/linter_lib/custom_check.py`: system typefaces; motion literals; the old code name (R1)
@@ -253,7 +262,7 @@ The first three must reach 0 at the final close.
 - `web/templates/compose_control_buttons.hbs`: the old interface's classes and attributes are legacy-\*
 - `web/templates/message_body.hbs`: the old interface's classes and attributes are legacy-\*
 - `web/templates/message_controls.hbs`: the old interface's classes and attributes are legacy-\*
-- `web/templates/navbar.hbs`: the bar, its sidebar toggles and the logo deleted (K-77, K-37): the old title, facts, search and menus on line 1; also the interim beta's "Try the beta" link, which goes with the beta
+- `web/templates/navbar.hbs`: the bar, its sidebar toggles and the logo deleted (K-77, K-37): the old title, facts, search and menus on line 1; the interim beta's "Try the beta" link deleted (the new interface is at /)
 - `web/templates/popovers/message_actions_popover.hbs`: the old interface's classes and attributes are legacy-\*
 - `web/templates/right_sidebar.hbs`: the old interface's classes and attributes are legacy-\*
 - `web/templates/settings/bot_list_admin.hbs`: includes the renamed settings partial
@@ -286,10 +295,12 @@ The first three must reach 0 at the final close.
 - `web/webpack.config.ts`: .tsx; the zulip cascade layer
 - `web/webpack.dev-assets.json`: the armada-showroom entry
 - `zerver/actions/message_edit.py`: follows the renamed modules: their paths, armada\_\* names and wire names
+- `zerver/actions/message_flags.py`: every path that marks messages read sends the senders' read_receipts events
 - `zerver/actions/message_send.py`: follows the renamed modules: their paths, armada\_\* names and wire names
 - `zerver/actions/streams.py`: follows the renamed modules: their paths, armada\_\* names and wire names
 - `zerver/apps.py`: registers the check that refuses the agent's settings under their old names
 - `zerver/checks.py`: the check that refuses the agent's settings under their old names
+- `zerver/decorator.py`: authenticated views take the rate limit domain of their route
 - `zerver/lib/bot_config.py`: the agent's embedded bot service is named armada
 - `zerver/lib/bot_lib.py`: follows the renamed modules: their paths, armada\_\* names and wire names
 - `zerver/lib/event_schema.py`: the agent's events are agent_run and workspace_changed
@@ -298,24 +309,34 @@ The first three must reach 0 at the final close.
 - `zerver/lib/integrations.py`: the agent's embedded bot service is named armada
 - `zerver/lib/message.py`: the message field is is_agent_message
 - `zerver/lib/message_cache.py`: follows the renamed modules: their paths, armada\_\* names and wire names
+- `zerver/lib/narrow.py`: the thread anchor's values query is annotated
+- `zerver/lib/queue.py`: the priority consumer's callback is a typed function
+- `zerver/lib/rate_limiter.py`: a 429 to the web client is logged
+- `zerver/lib/rest.py`: the rate_limit_domain= view flag
+- `zerver/lib/retention.py`: the deleted replies' root ids are cast to list[int]
 - `zerver/lib/templates.py`: font_preloads, armada_palette
+- `zerver/lib/test_runner.py`: records a failing subtest under its test, so --rerun and CI's known-failure list see it
 - `zerver/lib/upload/__init__.py`: a comment names the agent by its role
 - `zerver/management/commands/makemessages.py`: extract from .tsx
 - `zerver/models/__init__.py`: exports the agent's models by their plain nouns (AgentRun, Repository, Workspace, ...)
 - `zerver/models/bots.py`: the agent's six models take plain nouns; 0810_rename_agent_models moves the tables
 - `zerver/models/messages.py`: comments name the product and the agent's workspace
 - `zerver/openapi/zulip.yaml`: documents the message field is_agent_message (API changelog ZF-092e84)
+- `zerver/tests/test_auth_backends.py`: the sign-in and sign-up pages' Armada titles and headings
 - `zerver/tests/test_checks.py`: tests the check that refuses the agent's settings under their old names
 - `zerver/tests/test_event_system.py`: follows the renamed modules: their paths, armada\_\* names and wire names
 - `zerver/tests/test_events.py`: follows the renamed modules: their paths, armada\_\* names and wire names
 - `zerver/tests/test_home.py`: the register keys are agent_user_ids and repository_stream_ids
 - `zerver/tests/test_message_dict.py`: follows the renamed modules: their paths, armada\_\* names and wire names
+- `zerver/tests/test_message_flags.py`: marking messages read also sends the senders' read_receipts events
 - `zerver/tests/test_queue.py`: the agent's queues are armada\_\*
+- `zerver/tests/test_rate_limiter.py`: the event queue's budgets and the 429 log line
 - `zerver/tests/test_service_bot_system.py`: follows the renamed modules: their paths, armada\_\* names and wire names, and the agent's models by their plain nouns
 - `zerver/tests/test_submessage.py`: follows the renamed modules: their paths, armada\_\* names and wire names
 - `zerver/tests/test_templates.py`: tests of font_preloads and armada_palette
 - `zerver/tornado/event_queue.py`: the agent's events are agent_run and workspace_changed
 - `zerver/views/development/showroom.py`: showroom_armada: /devtools/armada/
+- `zerver/views/home.py`: / serves the new interface to signed-in people (ARMADA_NEW_INTERFACE_AT_ROOT); /legacy/ serves the old one
 - `zerver/views/message_send.py`: the send parameter is agent_followup
 - `zerver/views/streams.py`: a channel's repository URL only from a trusted user (ARMADA_WORKER_TRUSTED_USERS_ONLY)
 - `zerver/views/submessage.py`: follows the renamed modules: their paths, armada\_\* names and wire names
@@ -327,6 +348,8 @@ The first three must reach 0 at the final close.
 - `zproject/dev_urls.py`: the route to it
 - `zproject/jinja2/__init__.py`: font_preloads, armada_palette
 - `zproject/prod_settings_template.py`: the Armada section: EMBEDDED*BOTS_ENABLED and every ARMADA*\* setting
+- `zproject/test_extra_settings.py`: events_by_user and register_by_user are off in tests, like api_by_user; tests never read a downloaded partner pack (ARMADA_SPRITE_DIR); ARMADA_NEW_INTERFACE_AT_ROOT is off, so the old interface's own tests read it at / (beta-connection)
+- `zproject/tornado_urls.py`: GET and DELETE /events count against events_by_user
 - `zproject/urls.py`: interim beta: the /beta/ route, its sprites and the partner routes
 
 ## Old Armada frontend modules

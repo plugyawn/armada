@@ -1,0 +1,3 @@
+# Armada's tables in Zulip's realm export and import: which are exported,
+# and how each comes back on import.
+kept zerver/lib/export.py  # declares Armada's tables, and how each is exported

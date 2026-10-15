@@ -141,6 +141,9 @@ ALL_ZULIP_TABLES = {
     "social_auth_partial",
     "social_auth_usersocialauth",
     "two_factor_phonedevice",
+    "zerver_agentmonitor",
+    "zerver_agentrun",
+    "zerver_agentrunevent",
     "zerver_alertword",
     "zerver_archivedattachment",
     "zerver_archivedattachment_messages",
@@ -197,6 +200,7 @@ ALL_ZULIP_TABLES = {
     "zerver_realmreactivationstatus",
     "zerver_realmuserdefault",
     "zerver_recipient",
+    "zerver_repository",
     "zerver_savedsnippet",
     "zerver_scheduledemail",
     "zerver_scheduledemail_users",
@@ -217,6 +221,8 @@ ALL_ZULIP_TABLES = {
     "zerver_userprofile_user_permissions",
     "zerver_userstatus",
     "zerver_usertopic",
+    "zerver_workspace",
+    "zerver_workspaceentrymutationreceipt",
     "zerver_muteduser",
 }
 
@@ -298,6 +304,16 @@ NON_EXPORTED_TABLES = {
     # channel email addresses include the server's hostname.
     "zerver_channelemailaddress",
     # For any tables listed below here, it's a bug that they are not present in the export.
+    #
+    # The agent's tables: its repositories and their worktrees, which
+    # name paths on the old server's disk, and its runs, monitors and
+    # their records.  Moving them needs the worktrees moved too.
+    "zerver_agentmonitor",
+    "zerver_agentrun",
+    "zerver_agentrunevent",
+    "zerver_repository",
+    "zerver_workspace",
+    "zerver_workspaceentrymutationreceipt",
 }
 
 IMPLICIT_TABLES = {

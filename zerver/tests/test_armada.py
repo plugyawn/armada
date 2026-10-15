@@ -6,14 +6,17 @@ import json
 import queue
 import random
 import threading
-from collections.abc import Callable
+from collections.abc import Callable, Iterator, Sequence
 from pathlib import Path
 from subprocess import Popen
 from tempfile import TemporaryDirectory
 from types import SimpleNamespace
-from typing import Any, NoReturn, cast
+from typing import Any, Literal, NoReturn, TypedDict, cast
 from unittest import TestCase
 from unittest.mock import Mock, call, patch
+from urllib.request import Request
+
+from typing_extensions import NotRequired, Self, Unpack, override
 
 from zerver.lib.armada import (
     ARMADA_ACTIVE_SESSION_ENDPOINT,
@@ -44,7 +47,6 @@ from zerver.lib.armada import (
     ARMADA_REVIEW_PROMPT,
     ARMADA_RUNS_ENDPOINT,
     ARMADA_SAVE_WORK_PROMPT,
-    ARMADA_SERVER_CONTRACT_VERSION,
     ARMADA_SESSION_ENDPOINT,
     ARMADA_STATUS_CHECK_PROMPT,
     ARMADA_TOPIC_PREFIX,
@@ -56,6 +58,7 @@ from zerver.lib.armada import (
     ArmadaEmbeddedBotHandler,
     ArmadaPendingSteeringEvent,
     ArmadaReferencedThread,
+    ArmadaUserInputProvider,
     ArmadaWorkerLeaseLostError,
     ArmadaWorkerRunResult,
     ArmadaWorkerRuntime,
@@ -118,20 +121,37 @@ from zerver.lib.armada_agent import (
     build_armada_codex_turn_prompt,
     parse_armada_addressing_json_output,
 )
+from zerver.lib.armada_constants import ARMADA_SERVER_CONTRACT_VERSION
 from zerver.lib.armada_worker import (
     ARMADA_ADDRESSING_QUEUE_NAME,
+    ARMADA_WORKER_HEARTBEAT_INTERVAL_SECONDS,
     ARMADA_WORKER_QUEUE_NAMES,
     ArmadaQueueWorkerDispatcher,
     armada_provision_codex_skills,
+    armada_worker_home_slot,
     armada_worker_queue_name,
 )
 from zerver.lib.exceptions import JsonableError
 from zerver.lib.queue import QueueEventDiscardError, SimpleQueueClient
 from zerver.worker import armada_worker as armada_worker_module
 from zerver.worker.armada_addressing import ArmadaAddressingWorker
+from zerver.worker.base import QueueProcessingWorker
 from zerver.worker.embedded_bots import EmbeddedBotWorker
 from zproject import computed_settings as armada_computed_settings
 from zproject import configured_settings
+
+
+class FakeAppServerRequest(TypedDict):
+    id: NotRequired[int]
+    method: str
+    params: dict[str, Any]
+
+
+class FakeWaitForTurnKwargs(TypedDict):
+    thread_id: str
+    turn_id: str | None
+    event_callback: ArmadaWorkerTranscriptCallback
+    turn_context: NotRequired[ArmadaAppServerTurnContext]
 
 
 class FakeArmadaWorkerRunStore:
@@ -142,7 +162,7 @@ class FakeArmadaWorkerRunStore:
 
     def start(
         self,
-        bot_handler,
+        bot_handler: object,
         message_id: int,
         *,
         stream: str,
@@ -164,7 +184,7 @@ class FakeArmadaWorkerRunStore:
 
     def record(
         self,
-        bot_handler,
+        bot_handler: object,
         message_id: int,
         status: str,
         *,
@@ -188,8 +208,8 @@ class FakeArmadaInlineWorkerDispatcher:
 
     def dispatch(
         self,
-        armada_handler,
-        bot_handler,
+        armada_handler: ArmadaEmbeddedBotHandler,
+        bot_handler: object,
         message: dict[str, Any],
         *,
         content: str,
@@ -222,7 +242,7 @@ class FakeArmadaInlineWorkerDispatcher:
         )
 
 
-def make_test_armada_handler(**kwargs) -> ArmadaEmbeddedBotHandler:
+def make_test_armada_handler(**kwargs: Any) -> ArmadaEmbeddedBotHandler:
     kwargs.setdefault("worker_run_store", FakeArmadaWorkerRunStore())
     kwargs.setdefault("worker_dispatcher", FakeArmadaInlineWorkerDispatcher())
     return ArmadaEmbeddedBotHandler(**kwargs)
@@ -349,7 +369,7 @@ class ArmadaSessionDefaultsTest(TestCase):
 
     def test_structured_artifacts_never_enter_run_telemetry_or_summary(self) -> None:
         raw = '{"version":1,"blocks":[{"type":"copy","body":"private detail"}]}'
-        results = [{"label": "Artifact", "value": raw}]
+        results: list[ArmadaWorkerToolResult] = [{"label": "Artifact", "value": raw}]
         self.assertEqual(armada_worker_summary_from_tool_results(results), "")
         sanitized = armada_worker_event_tool_results(results)
         self.assertEqual(sanitized[0]["label"], "Artifact")
@@ -726,6 +746,7 @@ class ArmadaSessionDefaultsTest(TestCase):
         self.assertEqual(config["worker_runtime_login_method"], "codex-cli")
         self.assertEqual(config["worker_runtime_login_command"], "codex login")
         self.assertEqual(config["worker_runtime_login_target"], "worker-environment")
+        assert config["worker_runtime_login_instructions"] is not None
         self.assertIn(
             "worker environment",
             config["worker_runtime_login_instructions"],
@@ -1046,6 +1067,7 @@ class ArmadaSessionDefaultsTest(TestCase):
         self.assertEqual(summary["request_count"], 1)
         self.assertEqual(summary["worker_state"], "blocked_paused")
         self.assertFalse(summary["worker_can_run"])
+        assert summary["worker_blocked_reason"] is not None
         self.assertIn("paused", summary["worker_blocked_reason"])
 
     def test_pause_like_prose_is_only_a_codex_request(self) -> None:
@@ -1317,6 +1339,7 @@ class ArmadaSessionDefaultsTest(TestCase):
         self.assertEqual(summary["state"], "not_started")
         self.assertEqual(summary["worker_state"], "blocked_missing_stream")
         self.assertFalse(summary["worker_can_run"])
+        assert summary["worker_blocked_reason"] is not None
         self.assertIn("channel", summary["worker_blocked_reason"])
 
     def test_build_worker_progress_message(self) -> None:
@@ -1476,7 +1499,7 @@ class ArmadaSessionDefaultsTest(TestCase):
         self.assertEqual(progress_message, "I'll run the checks.")
 
     def test_build_worker_progress_message_coalesces_dynamic_tool_result(self) -> None:
-        events = [
+        events: list[ArmadaWorkerTranscriptEvent] = [
             {
                 "kind": "tool",
                 "status": "running",
@@ -1514,7 +1537,7 @@ class ArmadaSessionDefaultsTest(TestCase):
         )
 
     def test_distinct_transcript_tool_events_count_actions_not_updates(self) -> None:
-        events = [
+        events: list[ArmadaWorkerTranscriptEvent] = [
             {
                 "kind": "command",
                 "status": "running",
@@ -1638,8 +1661,12 @@ class ArmadaSessionDefaultsTest(TestCase):
         seen_tasks: list[str] = []
 
         def tool_runner(
-            active_session, task: str, *, event_callback=None, **kwargs
-        ) -> list[dict[str, str]]:
+            active_session: ArmadaActiveSessionSummary,
+            task: str,
+            *,
+            event_callback: ArmadaWorkerTranscriptCallback | None = None,
+            **kwargs: object,
+        ) -> list[ArmadaWorkerToolResult]:
             seen_worker_states.append(active_session["worker_state"])
             seen_tasks.append(task)
             return [
@@ -1678,7 +1705,7 @@ class ArmadaSessionDefaultsTest(TestCase):
                 *,
                 event_callback: ArmadaWorkerTranscriptCallback | None = None,
                 **kwargs: object,
-            ) -> list[dict[str, str]]:
+            ) -> list[ArmadaWorkerToolResult]:
                 return []
 
             def close(self) -> None:
@@ -1696,6 +1723,7 @@ class ArmadaSessionDefaultsTest(TestCase):
                 self.label = label
                 self.closed = False
 
+            @override
             def close(self) -> None:
                 self.closed = True
 
@@ -1753,6 +1781,9 @@ class ArmadaSessionDefaultsTest(TestCase):
                 )
 
                 self.assertEqual(created_runtimes, [first_runtime, second_runtime, third_runtime])
+                assert isinstance(first_runtime, FakeRuntime)
+                assert isinstance(second_runtime, FakeRuntime)
+                assert isinstance(third_runtime, FakeRuntime)
                 self.assertFalse(first_runtime.closed)
                 self.assertTrue(second_runtime.closed)
                 self.assertFalse(third_runtime.closed)
@@ -1775,6 +1806,7 @@ class ArmadaSessionDefaultsTest(TestCase):
                 super().__init__()
                 self.configurations: list[tuple[str, str]] = []
 
+            @override
             def configure_turn(self, *, model: str, reasoning_effort: str) -> None:
                 self.configurations.append((model, reasoning_effort))
 
@@ -1816,6 +1848,7 @@ class ArmadaSessionDefaultsTest(TestCase):
                 super().__init__()
                 self.closed = False
 
+            @override
             def close(self) -> None:
                 self.closed = True
 
@@ -1845,6 +1878,7 @@ class ArmadaSessionDefaultsTest(TestCase):
                 super().__init__()
                 self.close_count = 0
 
+            @override
             def close(self) -> None:
                 self.close_count += 1
 
@@ -1887,9 +1921,7 @@ class ArmadaSessionDefaultsTest(TestCase):
         ):
             worker.run_liveness_loop()
 
-        worker.run_liveness_stop.wait.assert_any_call(
-            armada_worker_module.ARMADA_WORKER_HEARTBEAT_INTERVAL_SECONDS
-        )
+        worker.run_liveness_stop.wait.assert_any_call(ARMADA_WORKER_HEARTBEAT_INTERVAL_SECONDS)
         run_liveness_pass.assert_called_once_with()
         reset_queries.assert_called_once_with()
         self.assertGreaterEqual(close_connections.call_count, 2)
@@ -1943,7 +1975,7 @@ class ArmadaSessionDefaultsTest(TestCase):
 
         worker.run_liveness_stop.set.assert_called_once_with()
         worker.run_liveness_thread.join.assert_called_once_with(
-            timeout=armada_worker_module.ARMADA_WORKER_HEARTBEAT_INTERVAL_SECONDS
+            timeout=ARMADA_WORKER_HEARTBEAT_INTERVAL_SECONDS
         )
 
     def test_armada_worker_shutdown_aborts_uncached_runtime_and_joins_side_pump(self) -> None:
@@ -1955,7 +1987,7 @@ class ArmadaSessionDefaultsTest(TestCase):
             patch.object(worker, "stop_side_pump") as stop_side_pump,
             patch.object(worker, "stop_liveness_loop") as stop_liveness_loop,
             patch.object(armada_worker_module, "close_armada_worker_runtimes") as close_runtimes,
-            patch.object(armada_worker_module.QueueProcessingWorker, "stop") as super_stop,
+            patch.object(QueueProcessingWorker, "stop") as super_stop,
         ):
             worker.stop()
 
@@ -2008,13 +2040,13 @@ class ArmadaSessionDefaultsTest(TestCase):
         side_started = threading.Event()
         parent_returned = threading.Event()
 
-        def next_queued_side_run(**kwargs) -> object | None:
+        def next_queued_side_run(**kwargs: object) -> object | None:
             try:
                 return queued_runs.get_nowait()
             except queue.Empty:
                 return None
 
-        def consume_side(event: dict[str, object], *, side_runtime) -> None:
+        def consume_side(event: dict[str, object], *, side_runtime: ArmadaWorkerRuntime) -> None:
             self.assertEqual(event, {"message_id": 73})
             self.assertIs(side_runtime, runtime)
             self.assertFalse(parent_returned.is_set())
@@ -2266,7 +2298,7 @@ class ArmadaSessionDefaultsTest(TestCase):
         )
 
     def test_worker_completed_message_preserves_final_answer_after_long_tool_details(self) -> None:
-        transcript_events = [
+        transcript_events: list[ArmadaWorkerTranscriptEvent] = [
             {
                 "kind": "assistant",
                 "status": "done",
@@ -2349,8 +2381,12 @@ class ArmadaSessionDefaultsTest(TestCase):
         tool_was_called = False
 
         def tool_runner(
-            active_session, task: str, *, event_callback=None, **kwargs
-        ) -> list[dict[str, str]]:
+            active_session: ArmadaActiveSessionSummary,
+            task: str,
+            *,
+            event_callback: ArmadaWorkerTranscriptCallback | None = None,
+            **kwargs: object,
+        ) -> list[ArmadaWorkerToolResult]:
             nonlocal tool_was_called
             tool_was_called = True
             return []
@@ -2365,6 +2401,7 @@ class ArmadaSessionDefaultsTest(TestCase):
         self.assertEqual(result["tool_count"], 0)
         self.assertFalse(tool_was_called)
         self.assertIsNotNone(result["content"])
+        assert result["content"] is not None
         self.assertIn("Onix is not starting.", result["content"])
         self.assertIn("paused", result["content"])
 
@@ -2704,10 +2741,10 @@ class ArmadaSessionDefaultsTest(TestCase):
         class FakeResponse:
             status = 200
 
-            def __enter__(self):
+            def __enter__(self) -> Self:
                 return self
 
-            def __exit__(self, *args) -> None:
+            def __exit__(self, *args: object) -> None:
                 pass
 
             def read(self) -> bytes:
@@ -2731,7 +2768,7 @@ class ArmadaSessionDefaultsTest(TestCase):
                     }
                 ).encode()
 
-        def fake_urlopen(request, **kwargs):
+        def fake_urlopen(request: Request, **kwargs: object) -> FakeResponse:
             calls.append((request, kwargs))
             return FakeResponse()
 
@@ -2764,6 +2801,7 @@ class ArmadaSessionDefaultsTest(TestCase):
         )
         self.assertEqual(len(calls), 1)
         request, kwargs = calls[0]
+        assert request.data is not None
         request_payload = json.loads(request.data.decode())
         self.assertEqual(kwargs["timeout"], 7)
         self.assertEqual(request.full_url, "https://example.test/interactions")
@@ -2952,7 +2990,7 @@ class ArmadaSessionDefaultsTest(TestCase):
 
         class FakeStdin:
             def __init__(self) -> None:
-                self.lines: list[dict[str, object]] = []
+                self.lines: list[FakeAppServerRequest] = []
 
             def write(self, value: str) -> int:
                 self.lines.append(json.loads(value))
@@ -2965,7 +3003,7 @@ class ArmadaSessionDefaultsTest(TestCase):
             def __init__(self, lines: list[str]) -> None:
                 self.lines = lines
 
-            def __iter__(self):
+            def __iter__(self) -> Iterator[str]:
                 return iter(self.lines)
 
             def read(self) -> str:
@@ -3029,11 +3067,11 @@ class ArmadaSessionDefaultsTest(TestCase):
             def terminate(self) -> None:
                 pass
 
-        def fake_popen(command, **kwargs):
+        def fake_popen(command: Sequence[str], **kwargs: object) -> Popen[str]:
             calls.append((command, kwargs))
             process = FakeProcess()
             processes.append(process)
-            return process
+            return cast(Popen[str], process)
 
         runner = ArmadaCodexAppServerToolRunner(
             codex_bin="codex",
@@ -3051,7 +3089,7 @@ class ArmadaSessionDefaultsTest(TestCase):
         )
         streamed_events = []
 
-        def record_event(event) -> None:
+        def record_event(event: ArmadaWorkerTranscriptEvent) -> None:
             streamed_events.append(event)
             if event["kind"] == "command" and event["status"] == "running":
                 self.assertTrue(runner.steer("Make it the 30th prime."))
@@ -3143,7 +3181,7 @@ class ArmadaSessionDefaultsTest(TestCase):
 
         class FakeStdin:
             def __init__(self) -> None:
-                self.lines: list[dict[str, object]] = []
+                self.lines: list[FakeAppServerRequest] = []
 
             def write(self, value: str) -> int:
                 self.lines.append(json.loads(value))
@@ -3156,7 +3194,7 @@ class ArmadaSessionDefaultsTest(TestCase):
             def __init__(self, lines: list[str]) -> None:
                 self.lines = lines
 
-            def __iter__(self):
+            def __iter__(self) -> Iterator[str]:
                 return iter(self.lines)
 
         class FakeProcess:
@@ -3197,11 +3235,11 @@ class ArmadaSessionDefaultsTest(TestCase):
             def terminate(self) -> None:
                 pass
 
-        def fake_popen(command, **kwargs):
+        def fake_popen(command: Sequence[str], **kwargs: object) -> Popen[str]:
             calls.append((command, kwargs))
             process = FakeProcess()
             processes.append(process)
-            return process
+            return cast(Popen[str], process)
 
         runner = ArmadaCodexAppServerToolRunner(
             codex_bin="codex",
@@ -3281,16 +3319,18 @@ class ArmadaSessionDefaultsTest(TestCase):
         sent_replies: list[str] = []
         classifier_calls: list[str] = []
 
-        def active_session_loader(message, bot_handler):
+        def active_session_loader(
+            message: dict[str, Any], bot_handler: object
+        ) -> ArmadaActiveSessionSummary:
             return loaded_session
 
         def addressing_intent_classifier(
             *,
             content: str,
-            active_session,
+            active_session: ArmadaActiveSessionSummary | None,
             active_run: bool,
-            message,
-            bot_handler,
+            message: dict[str, Any],
+            bot_handler: object,
         ) -> ArmadaAmbientDecision:
             classifier_calls.append(f"{content}:{active_run}")
             return {
@@ -3299,7 +3339,13 @@ class ArmadaSessionDefaultsTest(TestCase):
                 "presentation": "diff",
             }
 
-        def tool_runner(active_session, task, *, event_callback=None, **kwargs):
+        def tool_runner(
+            active_session: ArmadaActiveSessionSummary,
+            task: str,
+            *,
+            event_callback: ArmadaWorkerTranscriptCallback | None = None,
+            **kwargs: object,
+        ) -> list[ArmadaWorkerToolResult]:
             seen_tasks.append(task)
             return [
                 {
@@ -3314,7 +3360,7 @@ class ArmadaSessionDefaultsTest(TestCase):
 
             def start(
                 self,
-                bot_handler,
+                bot_handler: object,
                 message_id: int,
                 *,
                 stream: str,
@@ -3325,7 +3371,7 @@ class ArmadaSessionDefaultsTest(TestCase):
 
             def record(
                 self,
-                bot_handler,
+                bot_handler: object,
                 message_id: int,
                 status: str,
                 *,
@@ -3381,13 +3427,15 @@ class ArmadaSessionDefaultsTest(TestCase):
         )
         sent_replies: list[str] = []
 
-        def active_session_loader(message, bot_handler):
+        def active_session_loader(
+            message: dict[str, Any], bot_handler: object
+        ) -> ArmadaActiveSessionSummary:
             return loaded_session
 
         class FakeRunStore:
             def start(
                 self,
-                bot_handler,
+                bot_handler: object,
                 message_id: int,
                 *,
                 stream: str,
@@ -3397,7 +3445,7 @@ class ArmadaSessionDefaultsTest(TestCase):
 
             def record(
                 self,
-                bot_handler,
+                bot_handler: object,
                 message_id: int,
                 status: str,
                 *,
@@ -3445,7 +3493,9 @@ class ArmadaSessionDefaultsTest(TestCase):
         recorded_events: list[tuple[int, str, str, dict[str, object]]] = []
         metadata_updates: list[tuple[int, dict[str, object]]] = []
 
-        def active_session_loader(message, bot_handler):
+        def active_session_loader(
+            message: dict[str, Any], bot_handler: object
+        ) -> ArmadaActiveSessionSummary:
             return loaded_session
 
         class FakeRunStore:
@@ -3455,7 +3505,7 @@ class ArmadaSessionDefaultsTest(TestCase):
 
             def active_worker_run_message_id(
                 self,
-                bot_handler,
+                bot_handler: object,
                 *,
                 stream: str,
                 topic: str,
@@ -3465,7 +3515,7 @@ class ArmadaSessionDefaultsTest(TestCase):
 
             def start(
                 self,
-                bot_handler,
+                bot_handler: object,
                 message_id: int,
                 *,
                 stream: str,
@@ -3476,7 +3526,7 @@ class ArmadaSessionDefaultsTest(TestCase):
 
             def record(
                 self,
-                bot_handler,
+                bot_handler: object,
                 message_id: int,
                 status: str,
                 *,
@@ -3489,7 +3539,7 @@ class ArmadaSessionDefaultsTest(TestCase):
 
             def record_event(
                 self,
-                bot_handler,
+                bot_handler: object,
                 message_id: int,
                 event_type: str,
                 *,
@@ -3500,7 +3550,7 @@ class ArmadaSessionDefaultsTest(TestCase):
 
             def update_metadata(
                 self,
-                bot_handler,
+                bot_handler: object,
                 message_id: int,
                 **metadata: object,
             ) -> None:
@@ -3567,21 +3617,21 @@ class ArmadaSessionDefaultsTest(TestCase):
         sent_replies: list[tuple[int, str]] = []
 
         class FakeRunStore:
-            def active_worker_run_message_id(self, *args, **kwargs) -> int:
+            def active_worker_run_message_id(self, *args: object, **kwargs: object) -> int:
                 return 100
 
-            def side_start_blocked_reason(self, *args, **kwargs) -> None:
+            def side_start_blocked_reason(self, *args: object, **kwargs: object) -> None:
                 return None
 
-            def start_side(self, bot_handler, message_id: int, **kwargs) -> bool:
+            def start_side(self, bot_handler: object, message_id: int, **kwargs: object) -> bool:
                 side_starts.append({"message_id": message_id, **kwargs})
                 return True
 
-            def record_event(self, *args, **kwargs) -> None:
+            def record_event(self, *args: object, **kwargs: object) -> None:
                 raise AssertionError("a threaded side turn must not steer the shared run")
 
         class FakeDispatcher:
-            def dispatch(self, *args, **kwargs) -> None:
+            def dispatch(self, *args: object, **kwargs: object) -> None:
                 dispatches.append(kwargs)
 
         class FakeBotHandler:
@@ -3641,25 +3691,25 @@ class ArmadaSessionDefaultsTest(TestCase):
         sent_replies: list[tuple[int, str]] = []
 
         class FakeRunStore:
-            def active_worker_run_message_id(self, *args, **kwargs) -> int:
+            def active_worker_run_message_id(self, *args: object, **kwargs: object) -> int:
                 # An unrelated shared turn is active elsewhere in this topic.
                 return 100
 
-            def start_blocked_reason(self, *args, **kwargs) -> None:
+            def start_blocked_reason(self, *args: object, **kwargs: object) -> None:
                 return None
 
-            def start(self, bot_handler, message_id: int, **kwargs) -> bool:
+            def start(self, bot_handler: object, message_id: int, **kwargs: object) -> bool:
                 shared_starts.append({"message_id": message_id, **kwargs})
                 return True
 
-            def start_side(self, *args, **kwargs) -> bool:
+            def start_side(self, *args: object, **kwargs: object) -> bool:
                 raise AssertionError("an unrelated root must not create a side fork")
 
-            def record_event(self, *args, **kwargs) -> None:
+            def record_event(self, *args: object, **kwargs: object) -> None:
                 raise AssertionError("an unrelated root must not steer the active run")
 
         class FakeDispatcher:
-            def dispatch(self, *args, **kwargs) -> None:
+            def dispatch(self, *args: object, **kwargs: object) -> None:
                 dispatches.append(kwargs)
 
         class FakeBotHandler:
@@ -3708,20 +3758,20 @@ class ArmadaSessionDefaultsTest(TestCase):
         sent_replies: list[str] = []
 
         class FakeRunStore:
-            def active_worker_run_message_id(self, *args, **kwargs) -> int:
+            def active_worker_run_message_id(self, *args: object, **kwargs: object) -> int:
                 return 204
 
-            def start_blocked_reason(self, *args, **kwargs) -> None:
+            def start_blocked_reason(self, *args: object, **kwargs: object) -> None:
                 return None
 
-            def start(self, bot_handler, message_id: int, **kwargs) -> bool:
+            def start(self, bot_handler: object, message_id: int, **kwargs: object) -> bool:
                 return True
 
-            def record_event(self, *args, **kwargs) -> None:
+            def record_event(self, *args: object, **kwargs: object) -> None:
                 raise AssertionError("same-trigger redelivery must not become steering")
 
         class FakeDispatcher:
-            def dispatch(self, *args, **kwargs) -> None:
+            def dispatch(self, *args: object, **kwargs: object) -> None:
                 dispatches.append(kwargs)
 
         class FakeBotHandler:
@@ -3762,13 +3812,15 @@ class ArmadaSessionDefaultsTest(TestCase):
         sent_replies: list[str] = []
         recorded_events: list[tuple[int, str, str, dict[str, object]]] = []
 
-        def active_session_loader(message, bot_handler):
+        def active_session_loader(
+            message: dict[str, Any], bot_handler: object
+        ) -> ArmadaActiveSessionSummary:
             return loaded_session
 
         class FakeRunStore:
             def active_worker_run_message_id(
                 self,
-                bot_handler,
+                bot_handler: object,
                 *,
                 stream: str,
                 topic: str,
@@ -3777,7 +3829,7 @@ class ArmadaSessionDefaultsTest(TestCase):
 
             def record_event(
                 self,
-                bot_handler,
+                bot_handler: object,
                 message_id: int,
                 event_type: str,
                 *,
@@ -3788,7 +3840,7 @@ class ArmadaSessionDefaultsTest(TestCase):
 
             def update_metadata(
                 self,
-                bot_handler,
+                bot_handler: object,
                 message_id: int,
                 **metadata: object,
             ) -> None:
@@ -3833,10 +3885,18 @@ class ArmadaSessionDefaultsTest(TestCase):
         seen_tasks: list[str] = []
         sent_replies: list[str] = []
 
-        def active_session_loader(message, bot_handler):
+        def active_session_loader(
+            message: dict[str, Any], bot_handler: object
+        ) -> ArmadaActiveSessionSummary:
             return loaded_session
 
-        def tool_runner(active_session, task, *, event_callback=None, **kwargs):
+        def tool_runner(
+            active_session: ArmadaActiveSessionSummary,
+            task: str,
+            *,
+            event_callback: ArmadaWorkerTranscriptCallback | None = None,
+            **kwargs: object,
+        ) -> list[ArmadaWorkerToolResult]:
             seen_tasks.append(task)
             return [
                 {
@@ -3851,7 +3911,7 @@ class ArmadaSessionDefaultsTest(TestCase):
 
             def start(
                 self,
-                bot_handler,
+                bot_handler: object,
                 message_id: int,
                 *,
                 stream: str,
@@ -3862,7 +3922,7 @@ class ArmadaSessionDefaultsTest(TestCase):
 
             def record(
                 self,
-                bot_handler,
+                bot_handler: object,
                 message_id: int,
                 status: str,
                 *,
@@ -3920,10 +3980,18 @@ class ArmadaSessionDefaultsTest(TestCase):
         seen_tasks: list[str] = []
         sent_replies: list[str] = []
 
-        def active_session_loader(message, bot_handler):
+        def active_session_loader(
+            message: dict[str, Any], bot_handler: object
+        ) -> ArmadaActiveSessionSummary:
             return loaded_session
 
-        def tool_runner(active_session, task, *, event_callback=None, **kwargs):
+        def tool_runner(
+            active_session: ArmadaActiveSessionSummary,
+            task: str,
+            *,
+            event_callback: ArmadaWorkerTranscriptCallback | None = None,
+            **kwargs: object,
+        ) -> list[ArmadaWorkerToolResult]:
             seen_tasks.append(task)
             return [
                 {
@@ -3941,7 +4009,7 @@ class ArmadaSessionDefaultsTest(TestCase):
 
             def start(
                 self,
-                bot_handler,
+                bot_handler: object,
                 message_id: int,
                 *,
                 stream: str,
@@ -3952,7 +4020,7 @@ class ArmadaSessionDefaultsTest(TestCase):
 
             def record(
                 self,
-                bot_handler,
+                bot_handler: object,
                 message_id: int,
                 status: str,
                 *,
@@ -4013,10 +4081,18 @@ class ArmadaSessionDefaultsTest(TestCase):
         seen_tasks: list[str] = []
         sent_replies: list[str] = []
 
-        def active_session_loader(message, bot_handler):
+        def active_session_loader(
+            message: dict[str, Any], bot_handler: object
+        ) -> ArmadaActiveSessionSummary:
             return loaded_session
 
-        def tool_runner(active_session, task, *, event_callback=None, **kwargs):
+        def tool_runner(
+            active_session: ArmadaActiveSessionSummary,
+            task: str,
+            *,
+            event_callback: ArmadaWorkerTranscriptCallback | None = None,
+            **kwargs: object,
+        ) -> list[ArmadaWorkerToolResult]:
             seen_tasks.append(task)
             return [
                 {
@@ -4031,7 +4107,7 @@ class ArmadaSessionDefaultsTest(TestCase):
 
             def start(
                 self,
-                bot_handler,
+                bot_handler: object,
                 message_id: int,
                 *,
                 stream: str,
@@ -4042,7 +4118,7 @@ class ArmadaSessionDefaultsTest(TestCase):
 
             def record(
                 self,
-                bot_handler,
+                bot_handler: object,
                 message_id: int,
                 status: str,
                 *,
@@ -4096,10 +4172,18 @@ class ArmadaSessionDefaultsTest(TestCase):
         seen_tasks: list[str] = []
         sent_replies: list[str] = []
 
-        def active_session_loader(message, bot_handler):
+        def active_session_loader(
+            message: dict[str, Any], bot_handler: object
+        ) -> ArmadaActiveSessionSummary:
             return loaded_session
 
-        def tool_runner(active_session, task, *, event_callback=None, **kwargs):
+        def tool_runner(
+            active_session: ArmadaActiveSessionSummary,
+            task: str,
+            *,
+            event_callback: ArmadaWorkerTranscriptCallback | None = None,
+            **kwargs: object,
+        ) -> list[ArmadaWorkerToolResult]:
             seen_tasks.append(task)
             return [
                 {
@@ -4114,7 +4198,7 @@ class ArmadaSessionDefaultsTest(TestCase):
 
             def start(
                 self,
-                bot_handler,
+                bot_handler: object,
                 message_id: int,
                 *,
                 stream: str,
@@ -4125,7 +4209,7 @@ class ArmadaSessionDefaultsTest(TestCase):
 
             def record(
                 self,
-                bot_handler,
+                bot_handler: object,
                 message_id: int,
                 status: str,
                 *,
@@ -4179,21 +4263,30 @@ class ArmadaSessionDefaultsTest(TestCase):
         sent_replies: list[str] = []
         classifier_calls: list[tuple[str, str]] = []
 
-        def active_session_loader(message, bot_handler):
+        def active_session_loader(
+            message: dict[str, Any], bot_handler: object
+        ) -> ArmadaActiveSessionSummary:
             return loaded_session
 
-        def tool_runner(active_session, task, *, event_callback=None, **kwargs):
+        def tool_runner(
+            active_session: ArmadaActiveSessionSummary,
+            task: str,
+            *,
+            event_callback: ArmadaWorkerTranscriptCallback | None = None,
+            **kwargs: object,
+        ) -> list[ArmadaWorkerToolResult]:
             seen_tasks.append(task)
             return [{"label": "Verification", "value": "Router accepted"}]
 
         def addressing_intent_classifier(
             *,
             content: str,
-            active_session,
+            active_session: ArmadaActiveSessionSummary | None,
             active_run: bool,
-            message,
-            bot_handler,
+            message: dict[str, Any],
+            bot_handler: object,
         ) -> ArmadaAmbientDecision:
+            assert active_session is not None
             classifier_calls.append((content, active_session["response_policy"]))
             return {
                 "addressee": "agent",
@@ -4208,7 +4301,7 @@ class ArmadaSessionDefaultsTest(TestCase):
 
             def start(
                 self,
-                bot_handler,
+                bot_handler: object,
                 message_id: int,
                 *,
                 stream: str,
@@ -4219,7 +4312,7 @@ class ArmadaSessionDefaultsTest(TestCase):
 
             def record(
                 self,
-                bot_handler,
+                bot_handler: object,
                 message_id: int,
                 status: str,
                 *,
@@ -4230,7 +4323,9 @@ class ArmadaSessionDefaultsTest(TestCase):
             ) -> None:
                 pass
 
-            def update_metadata(self, bot_handler, message_id: int, **metadata: object) -> None:
+            def update_metadata(
+                self, bot_handler: object, message_id: int, **metadata: object
+            ) -> None:
                 self.metadata.append((message_id, metadata))
 
         class FakeBotHandler:
@@ -4282,16 +4377,18 @@ class ArmadaSessionDefaultsTest(TestCase):
         sent_replies: list[str] = []
         warm_calls: list[tuple[int, str, str]] = []
 
-        def active_session_loader(message, bot_handler):
+        def active_session_loader(
+            message: dict[str, Any], bot_handler: object
+        ) -> ArmadaActiveSessionSummary:
             return loaded_session
 
         def addressing_intent_classifier(
             *,
             content: str,
-            active_session,
+            active_session: ArmadaActiveSessionSummary | None,
             active_run: bool,
-            message,
-            bot_handler,
+            message: dict[str, Any],
+            bot_handler: object,
         ) -> ArmadaAmbientDecision:
             return {
                 "addressee": "general",
@@ -4302,7 +4399,7 @@ class ArmadaSessionDefaultsTest(TestCase):
         class FakeRunStore:
             def start(
                 self,
-                bot_handler,
+                bot_handler: object,
                 message_id: int,
                 *,
                 stream: str,
@@ -4312,7 +4409,7 @@ class ArmadaSessionDefaultsTest(TestCase):
 
             def record(
                 self,
-                bot_handler,
+                bot_handler: object,
                 message_id: int,
                 status: str,
                 *,
@@ -4330,12 +4427,13 @@ class ArmadaSessionDefaultsTest(TestCase):
         class FakeDispatcher:
             def warm(
                 self,
-                bot_handler,
+                bot_handler: object,
                 message: dict[str, object],
                 *,
                 stream: str,
                 topic: str,
             ) -> None:
+                assert isinstance(message["id"], int)
                 warm_calls.append((int(message["id"]), stream, topic))
 
         make_test_armada_handler(
@@ -4429,7 +4527,9 @@ class ArmadaSessionDefaultsTest(TestCase):
         user_profile = SimpleNamespace(id=99)
         message = {"id": 210, "content": "Can you check the build?"}
         worker = object.__new__(ArmadaAddressingWorker)
-        worker.armada_handler = SimpleNamespace(handle_message=Mock())
+        worker.armada_handler = cast(
+            ArmadaEmbeddedBotHandler, SimpleNamespace(handle_message=Mock())
+        )
 
         with (
             patch(
@@ -4440,7 +4540,7 @@ class ArmadaSessionDefaultsTest(TestCase):
         ):
             worker.consume({"user_profile_id": 99, "message": message})
 
-        worker.armada_handler.handle_message.assert_called_once_with(
+        cast(Mock, worker.armada_handler.handle_message).assert_called_once_with(
             message,
             bot_handler_class.return_value,
         )
@@ -4459,16 +4559,18 @@ class ArmadaSessionDefaultsTest(TestCase):
         sent_replies: list[str] = []
         recorded_events: list[tuple[int, str, str]] = []
 
-        def active_session_loader(message, bot_handler):
+        def active_session_loader(
+            message: dict[str, Any], bot_handler: object
+        ) -> ArmadaActiveSessionSummary:
             return loaded_session
 
         def addressing_intent_classifier(
             *,
             content: str,
-            active_session,
+            active_session: ArmadaActiveSessionSummary | None,
             active_run: bool,
-            message,
-            bot_handler,
+            message: dict[str, Any],
+            bot_handler: object,
         ) -> ArmadaAmbientDecision:
             return {
                 "addressee": "agent",
@@ -4479,7 +4581,7 @@ class ArmadaSessionDefaultsTest(TestCase):
         class FakeRunStore:
             def active_worker_run_message_id(
                 self,
-                bot_handler,
+                bot_handler: object,
                 *,
                 stream: str,
                 topic: str,
@@ -4488,7 +4590,7 @@ class ArmadaSessionDefaultsTest(TestCase):
 
             def start(
                 self,
-                bot_handler,
+                bot_handler: object,
                 message_id: int,
                 *,
                 stream: str,
@@ -4498,7 +4600,7 @@ class ArmadaSessionDefaultsTest(TestCase):
 
             def record(
                 self,
-                bot_handler,
+                bot_handler: object,
                 message_id: int,
                 status: str,
                 *,
@@ -4511,7 +4613,7 @@ class ArmadaSessionDefaultsTest(TestCase):
 
             def record_event(
                 self,
-                bot_handler,
+                bot_handler: object,
                 message_id: int,
                 event_type: str,
                 *,
@@ -4522,7 +4624,7 @@ class ArmadaSessionDefaultsTest(TestCase):
 
             def update_metadata(
                 self,
-                bot_handler,
+                bot_handler: object,
                 message_id: int,
                 **metadata: object,
             ) -> None:
@@ -4566,7 +4668,9 @@ class ArmadaSessionDefaultsTest(TestCase):
         )
         loaded_messages: list[dict[str, object]] = []
 
-        def active_session_loader(message, bot_handler):
+        def active_session_loader(
+            message: dict[str, Any], bot_handler: object
+        ) -> ArmadaActiveSessionSummary:
             loaded_messages.append(message)
             return loaded_session
 
@@ -4650,7 +4754,7 @@ class ArmadaSessionDefaultsTest(TestCase):
 
             def start(
                 self,
-                bot_handler,
+                bot_handler: object,
                 message_id: int,
                 *,
                 stream: str,
@@ -4661,7 +4765,7 @@ class ArmadaSessionDefaultsTest(TestCase):
 
             def record(
                 self,
-                bot_handler,
+                bot_handler: object,
                 message_id: int,
                 status: str,
                 *,
@@ -4674,7 +4778,7 @@ class ArmadaSessionDefaultsTest(TestCase):
 
             def register_progress_message(
                 self,
-                bot_handler,
+                bot_handler: object,
                 message_id: int,
                 *,
                 stream: str,
@@ -4741,7 +4845,7 @@ class ArmadaSessionDefaultsTest(TestCase):
         class FakeRunStore:
             def start(
                 self,
-                bot_handler,
+                bot_handler: object,
                 message_id: int,
                 *,
                 stream: str,
@@ -4792,7 +4896,7 @@ class ArmadaSessionDefaultsTest(TestCase):
         class ChannelOnlyRunStore:
             def start_blocked_reason(
                 self,
-                bot_handler,
+                bot_handler: object,
                 message_id: int,
                 *,
                 stream: str,
@@ -4846,7 +4950,7 @@ class ArmadaSessionDefaultsTest(TestCase):
 
         with patch("zerver.lib.armada_worker.queue_json_publish_rollback_unsafe") as publish:
             ArmadaQueueWorkerDispatcher().dispatch(
-                SimpleNamespace(),
+                cast(ArmadaEmbeddedBotHandler, SimpleNamespace()),
                 bot_handler,
                 message,
                 content="fix the checkout test",
@@ -4888,7 +4992,7 @@ class ArmadaSessionDefaultsTest(TestCase):
             self.assertRaisesRegex(AssertionError, "requires a channel topic"),
         ):
             ArmadaQueueWorkerDispatcher().dispatch(
-                SimpleNamespace(),
+                cast(ArmadaEmbeddedBotHandler, SimpleNamespace()),
                 bot_handler,
                 message,
                 content="fix the checkout test",
@@ -4915,7 +5019,7 @@ class ArmadaSessionDefaultsTest(TestCase):
 
         with patch("zerver.lib.armada_worker.queue_json_publish_rollback_unsafe") as publish:
             ArmadaQueueWorkerDispatcher().dispatch(
-                SimpleNamespace(),
+                cast(ArmadaEmbeddedBotHandler, SimpleNamespace()),
                 bot_handler,
                 message,
                 content="@Onix what's up, bot?",
@@ -5021,7 +5125,7 @@ class ArmadaSessionDefaultsTest(TestCase):
             worker._consume(event)
 
     def test_only_the_home_worker_warms_a_topic(self) -> None:
-        home_slot = armada_worker_module.armada_worker_home_slot(
+        home_slot = armada_worker_home_slot(
             17,
             stream="devel",
             topic="warm",
@@ -5049,7 +5153,7 @@ class ArmadaSessionDefaultsTest(TestCase):
         worker = object.__new__(ArmadaMonitorWorker)
         worker.q = Mock(spec=SimpleQueueClient)
 
-        with patch.object(armada_worker_module.QueueProcessingWorker, "start") as parent_start:
+        with patch.object(QueueProcessingWorker, "start") as parent_start:
             worker.start()
 
         parent_start.assert_called_once_with()
@@ -5067,7 +5171,7 @@ class ArmadaSessionDefaultsTest(TestCase):
 
             def start(
                 self,
-                bot_handler,
+                bot_handler: object,
                 message_id: int,
                 *,
                 stream: str,
@@ -5077,7 +5181,7 @@ class ArmadaSessionDefaultsTest(TestCase):
 
             def record(
                 self,
-                bot_handler,
+                bot_handler: object,
                 message_id: int,
                 status: str,
                 *,
@@ -5102,8 +5206,12 @@ class ArmadaSessionDefaultsTest(TestCase):
                 updated_messages.append(message)
 
         def tool_runner(
-            active_session, task: str, *, event_callback=None, **kwargs
-        ) -> list[dict[str, str]]:
+            active_session: ArmadaActiveSessionSummary,
+            task: str,
+            *,
+            event_callback: ArmadaWorkerTranscriptCallback | None = None,
+            **kwargs: object,
+        ) -> list[ArmadaWorkerToolResult]:
             tool_seen_statuses.append(visible_status_by_id[501])
             return [
                 {
@@ -5155,6 +5263,7 @@ class ArmadaSessionDefaultsTest(TestCase):
             updated_messages[1]["content"],
             ARMADA_NO_VISIBLE_RESPONSE_MESSAGE,
         )
+        assert isinstance(updated_messages[1]["content"], str)
         self.assertNotIn("Status: working...", updated_messages[1]["content"])
         self.assertEqual(
             run_store.records,
@@ -5169,25 +5278,35 @@ class ArmadaSessionDefaultsTest(TestCase):
         typing_signals: list[str] = []
 
         class FakeRunStore:
-            def record(self, bot_handler, message_id, status, **kwargs) -> None:
+            def record(
+                self, bot_handler: object, message_id: int, status: str, **kwargs: object
+            ) -> None:
                 pass
 
-            def record_event(self, bot_handler, message_id, event_type, **kwargs) -> None:
+            def record_event(
+                self, bot_handler: object, message_id: int, event_type: str, **kwargs: object
+            ) -> None:
                 pass
 
-            def update_metadata(self, bot_handler, message_id, **metadata) -> None:
+            def update_metadata(
+                self, bot_handler: object, message_id: int, **metadata: object
+            ) -> None:
                 pass
 
         class FakeBotHandler:
-            def send_reply(self, message, response) -> dict[str, int]:
+            def send_reply(self, message: dict[str, object], response: str) -> dict[str, int]:
                 return {"id": 4242}
 
-            def update_message(self, message) -> None:
+            def update_message(self, message: dict[str, object]) -> None:
                 pass
 
         def tool_runner(
-            active_session, task: str, *, event_callback=None, **kwargs
-        ) -> list[dict[str, str]]:
+            active_session: ArmadaActiveSessionSummary,
+            task: str,
+            *,
+            event_callback: ArmadaWorkerTranscriptCallback | None = None,
+            **kwargs: object,
+        ) -> list[ArmadaWorkerToolResult]:
             return [{"label": "Verification", "value": "typing test"}]
 
         message = {
@@ -5204,11 +5323,15 @@ class ArmadaSessionDefaultsTest(TestCase):
             worker_run_store=FakeRunStore(),
         )
 
+        def send_typing_notification(
+            bot_handler: object, *, stream: str, topic: str, operator: str
+        ) -> bool:
+            typing_signals.append(operator)
+            return True
+
         with patch(
             "zerver.lib.armada.send_armada_worker_typing_notification",
-            side_effect=lambda bot_handler, *, stream, topic, operator: (
-                typing_signals.append(operator) or True
-            ),
+            side_effect=send_typing_notification,
         ):
             handler.run_worker_turn(
                 message,
@@ -5234,7 +5357,7 @@ class ArmadaSessionDefaultsTest(TestCase):
         class FakeRunStore:
             def record(
                 self,
-                bot_handler,
+                bot_handler: object,
                 message_id: int,
                 status: str,
                 *,
@@ -5247,7 +5370,7 @@ class ArmadaSessionDefaultsTest(TestCase):
 
             def record_event(
                 self,
-                bot_handler,
+                bot_handler: object,
                 message_id: int,
                 event_type: str,
                 *,
@@ -5258,7 +5381,7 @@ class ArmadaSessionDefaultsTest(TestCase):
 
             def update_metadata(
                 self,
-                bot_handler,
+                bot_handler: object,
                 message_id: int,
                 **metadata: object,
             ) -> None:
@@ -5278,12 +5401,14 @@ class ArmadaSessionDefaultsTest(TestCase):
                 updated_messages.append(message)
 
         class NonPostingRuntime(ArmadaWorkerRuntime):
+            @override
             def run(
                 self,
                 *,
                 active_session: ArmadaActiveSessionSummary,
                 task: str = "",
                 event_callback: ArmadaWorkerTranscriptCallback | None = None,
+                user_input_provider: ArmadaUserInputProvider | None = None,
             ) -> ArmadaWorkerRunResult:
                 if event_callback is not None:
                     event_callback(
@@ -5358,7 +5483,7 @@ class ArmadaSessionDefaultsTest(TestCase):
         class FakeRunStore:
             def record(
                 self,
-                bot_handler,
+                bot_handler: object,
                 message_id: int,
                 status: str,
                 *,
@@ -5371,7 +5496,7 @@ class ArmadaSessionDefaultsTest(TestCase):
 
             def record_event(
                 self,
-                bot_handler,
+                bot_handler: object,
                 message_id: int,
                 event_type: str,
                 *,
@@ -5382,7 +5507,7 @@ class ArmadaSessionDefaultsTest(TestCase):
 
             def update_metadata(
                 self,
-                bot_handler,
+                bot_handler: object,
                 message_id: int,
                 **metadata: object,
             ) -> None:
@@ -5397,12 +5522,14 @@ class ArmadaSessionDefaultsTest(TestCase):
                 updated_messages.append(message)
 
         class QuietTranscriptRuntime(ArmadaWorkerRuntime):
+            @override
             def run(
                 self,
                 *,
                 active_session: ArmadaActiveSessionSummary,
                 task: str = "",
                 event_callback: ArmadaWorkerTranscriptCallback | None = None,
+                user_input_provider: ArmadaUserInputProvider | None = None,
             ) -> ArmadaWorkerRunResult:
                 if event_callback is not None:
                     event_callback(
@@ -5472,7 +5599,7 @@ class ArmadaSessionDefaultsTest(TestCase):
         class FakeRunStore:
             def record(
                 self,
-                bot_handler,
+                bot_handler: object,
                 message_id: int,
                 status: str,
                 *,
@@ -5492,8 +5619,12 @@ class ArmadaSessionDefaultsTest(TestCase):
                 updated_messages.append(message)
 
         def tool_runner(
-            active_session, task: str, *, event_callback=None, **kwargs
-        ) -> list[dict[str, str]]:
+            active_session: ArmadaActiveSessionSummary,
+            task: str,
+            *,
+            event_callback: ArmadaWorkerTranscriptCallback | None = None,
+            **kwargs: object,
+        ) -> list[ArmadaWorkerToolResult]:
             return [{"label": "Result", "value": long_result}]
 
         payload = get_armada_session_payload()
@@ -5541,7 +5672,7 @@ class ArmadaSessionDefaultsTest(TestCase):
         class FakeRunStore:
             def record(
                 self,
-                bot_handler,
+                bot_handler: object,
                 message_id: int,
                 status: str,
                 *,
@@ -5554,7 +5685,7 @@ class ArmadaSessionDefaultsTest(TestCase):
 
             def record_event(
                 self,
-                bot_handler,
+                bot_handler: object,
                 message_id: int,
                 event_type: str,
                 *,
@@ -5565,7 +5696,7 @@ class ArmadaSessionDefaultsTest(TestCase):
 
             def update_metadata(
                 self,
-                bot_handler,
+                bot_handler: object,
                 message_id: int,
                 **metadata: object,
             ) -> None:
@@ -5585,11 +5716,12 @@ class ArmadaSessionDefaultsTest(TestCase):
                 updated_messages.append(message)
 
         def tool_runner(
-            active_session,
+            active_session: ArmadaActiveSessionSummary,
             task: str,
             *,
             event_callback: ArmadaWorkerTranscriptCallback | None = None,
-        ) -> list[dict[str, str]]:
+            user_input_provider: ArmadaUserInputProvider | None = None,
+        ) -> list[ArmadaWorkerToolResult]:
             assert event_callback is not None
             event_callback(
                 {
@@ -5688,7 +5820,7 @@ class ArmadaSessionDefaultsTest(TestCase):
         class FakeRunStore:
             def record(
                 self,
-                bot_handler,
+                bot_handler: object,
                 message_id: int,
                 status: str,
                 *,
@@ -5701,7 +5833,7 @@ class ArmadaSessionDefaultsTest(TestCase):
 
             def record_event(
                 self,
-                bot_handler,
+                bot_handler: object,
                 message_id: int,
                 event_type: str,
                 *,
@@ -5712,7 +5844,7 @@ class ArmadaSessionDefaultsTest(TestCase):
 
             def update_metadata(
                 self,
-                bot_handler,
+                bot_handler: object,
                 message_id: int,
                 **metadata: object,
             ) -> None:
@@ -5730,11 +5862,12 @@ class ArmadaSessionDefaultsTest(TestCase):
                 updated_messages.append(message)
 
         def tool_runner(
-            active_session,
+            active_session: ArmadaActiveSessionSummary,
             task: str,
             *,
             event_callback: ArmadaWorkerTranscriptCallback | None = None,
-        ) -> list[dict[str, str]]:
+            user_input_provider: ArmadaUserInputProvider | None = None,
+        ) -> list[ArmadaWorkerToolResult]:
             assert event_callback is not None
             event_callback(
                 {
@@ -5791,24 +5924,30 @@ class ArmadaSessionDefaultsTest(TestCase):
             def __enter__(self) -> None:
                 raise ArmadaWorkerLeaseLostError("attempt 1 lost its lease")
 
-            def __exit__(self, *args: object) -> bool:
+            def __exit__(self, *args: object) -> Literal[False]:
                 return False
 
         class FakeRunStore:
-            def record(self, bot_handler, message_id, status, **kwargs) -> None:
+            def record(
+                self, bot_handler: object, message_id: int, status: str, **kwargs: object
+            ) -> None:
                 recorded_statuses.append(status)
 
-            def record_event(self, bot_handler, message_id, event_type, **kwargs) -> None:
+            def record_event(
+                self, bot_handler: object, message_id: int, event_type: str, **kwargs: object
+            ) -> None:
                 pass
 
-            def update_metadata(self, bot_handler, message_id, **metadata) -> None:
+            def update_metadata(
+                self, bot_handler: object, message_id: int, **metadata: object
+            ) -> None:
                 pass
 
-            def worker_completion(self, bot_handler, message_id) -> LostCompletion:
+            def worker_completion(self, bot_handler: object, message_id: int) -> LostCompletion:
                 return LostCompletion()
 
         class FakeBotHandler:
-            def send_reply(self, message, response) -> dict[str, int]:
+            def send_reply(self, message: dict[str, object], response: str) -> dict[str, int]:
                 sent_replies.append(response)
                 return {"id": 9001}
 
@@ -5821,11 +5960,12 @@ class ArmadaSessionDefaultsTest(TestCase):
 
             def __call__(
                 self,
-                active_session,
+                active_session: ArmadaActiveSessionSummary,
                 task: str,
                 *,
                 event_callback: ArmadaWorkerTranscriptCallback | None = None,
-            ) -> list[dict[str, str]]:
+                user_input_provider: ArmadaUserInputProvider | None = None,
+            ) -> list[ArmadaWorkerToolResult]:
                 return [{"label": "Result", "value": "must not become visible"}]
 
             def close(self) -> None:
@@ -5877,7 +6017,7 @@ class ArmadaSessionDefaultsTest(TestCase):
 
             def record(
                 self,
-                bot_handler,
+                bot_handler: object,
                 message_id: int,
                 status: str,
                 *,
@@ -5890,7 +6030,7 @@ class ArmadaSessionDefaultsTest(TestCase):
 
             def record_event(
                 self,
-                bot_handler,
+                bot_handler: object,
                 message_id: int,
                 event_type: str,
                 *,
@@ -5901,13 +6041,13 @@ class ArmadaSessionDefaultsTest(TestCase):
 
             def update_metadata(
                 self,
-                bot_handler,
+                bot_handler: object,
                 message_id: int,
                 **metadata: object,
             ) -> None:
                 metadata_updates.append(metadata)
 
-            def cancel_requested(self, bot_handler, message_id: int) -> bool:
+            def cancel_requested(self, bot_handler: object, message_id: int) -> bool:
                 self.cancel_checks += 1
                 return self.cancel_checks >= 2
 
@@ -5928,11 +6068,12 @@ class ArmadaSessionDefaultsTest(TestCase):
 
             def __call__(
                 self,
-                active_session,
+                active_session: ArmadaActiveSessionSummary,
                 task: str,
                 *,
                 event_callback: ArmadaWorkerTranscriptCallback | None = None,
-            ) -> list[dict[str, str]]:
+                user_input_provider: ArmadaUserInputProvider | None = None,
+            ) -> list[ArmadaWorkerToolResult]:
                 assert event_callback is not None
                 event_callback(
                     {
@@ -6007,7 +6148,7 @@ class ArmadaSessionDefaultsTest(TestCase):
         class FakeRunStore:
             def record(
                 self,
-                bot_handler,
+                bot_handler: object,
                 message_id: int,
                 status: str,
                 *,
@@ -6020,7 +6161,7 @@ class ArmadaSessionDefaultsTest(TestCase):
 
             def record_event(
                 self,
-                bot_handler,
+                bot_handler: object,
                 message_id: int,
                 event_type: str,
                 *,
@@ -6031,7 +6172,7 @@ class ArmadaSessionDefaultsTest(TestCase):
 
             def update_metadata(
                 self,
-                bot_handler,
+                bot_handler: object,
                 message_id: int,
                 **metadata: object,
             ) -> None:
@@ -6045,12 +6186,16 @@ class ArmadaSessionDefaultsTest(TestCase):
             def update_message(self, message: dict[str, object]) -> None:
                 raise AssertionError("loader failure has no progress message to update")
 
-        def active_session_loader(message, bot_handler) -> NoReturn:
+        def active_session_loader(message: dict[str, Any], bot_handler: object) -> NoReturn:
             raise RuntimeError("database unavailable")
 
         def tool_runner(
-            active_session, task: str, *, event_callback=None, **kwargs
-        ) -> list[dict[str, str]]:
+            active_session: ArmadaActiveSessionSummary,
+            task: str,
+            *,
+            event_callback: ArmadaWorkerTranscriptCallback | None = None,
+            **kwargs: object,
+        ) -> list[ArmadaWorkerToolResult]:
             raise AssertionError("runtime must not run after a loader failure")
 
         message = {
@@ -6098,7 +6243,7 @@ class ArmadaSessionDefaultsTest(TestCase):
         class FakeRunStore:
             def record(
                 self,
-                bot_handler,
+                bot_handler: object,
                 message_id: int,
                 status: str,
                 *,
@@ -6157,13 +6302,19 @@ class ArmadaSessionDefaultsTest(TestCase):
             ],
         )
 
-        def active_session_loader(message, bot_handler):
+        def active_session_loader(
+            message: dict[str, Any], bot_handler: object
+        ) -> ArmadaActiveSessionSummary:
             loaded_message_ids.append(message["id"])
             return refreshed_session
 
         def tool_runner(
-            active_session, task: str, *, event_callback=None, **kwargs
-        ) -> list[dict[str, str]]:
+            active_session: ArmadaActiveSessionSummary,
+            task: str,
+            *,
+            event_callback: ArmadaWorkerTranscriptCallback | None = None,
+            **kwargs: object,
+        ) -> list[ArmadaWorkerToolResult]:
             prompt = build_armada_codex_turn_prompt(active_session, task)
             tool_seen_prompts.append(prompt)
             return [
@@ -6219,7 +6370,7 @@ class ArmadaSessionDefaultsTest(TestCase):
         class FakeRunStore:
             def record(
                 self,
-                bot_handler,
+                bot_handler: object,
                 message_id: int,
                 status: str,
                 *,
@@ -6232,7 +6383,7 @@ class ArmadaSessionDefaultsTest(TestCase):
 
             def record_event(
                 self,
-                bot_handler,
+                bot_handler: object,
                 message_id: int,
                 event_type: str,
                 *,
@@ -6243,7 +6394,7 @@ class ArmadaSessionDefaultsTest(TestCase):
 
             def update_metadata(
                 self,
-                bot_handler,
+                bot_handler: object,
                 message_id: int,
                 **metadata: object,
             ) -> None:
@@ -6251,7 +6402,7 @@ class ArmadaSessionDefaultsTest(TestCase):
 
             def steering_events_after(
                 self,
-                bot_handler,
+                bot_handler: object,
                 message_id: int,
                 *,
                 after_event_id: int,
@@ -6279,8 +6430,13 @@ class ArmadaSessionDefaultsTest(TestCase):
 
         class FakeToolRunner:
             def __call__(
-                self, active_session, task: str, *, event_callback=None, **kwargs
-            ) -> list[dict[str, str]]:
+                self,
+                active_session: ArmadaActiveSessionSummary,
+                task: str,
+                *,
+                event_callback: ArmadaWorkerTranscriptCallback | None = None,
+                **kwargs: object,
+            ) -> list[ArmadaWorkerToolResult]:
                 tool_seen_tasks.append(task)
                 tool_seen_threads.append(active_session["latest_codex_thread_id"])
                 if len(tool_seen_tasks) == 1:
@@ -6561,7 +6717,7 @@ class ArmadaSessionDefaultsTest(TestCase):
         class DuplicateRunStore:
             def start(
                 self,
-                bot_handler,
+                bot_handler: object,
                 message_id: int,
                 *,
                 stream: str,
@@ -6571,7 +6727,7 @@ class ArmadaSessionDefaultsTest(TestCase):
 
             def record(
                 self,
-                bot_handler,
+                bot_handler: object,
                 message_id: int,
                 status: str,
                 *,
@@ -6613,7 +6769,13 @@ class ArmadaSessionDefaultsTest(TestCase):
             def send_reply(self, message: dict[str, object], response: str) -> None:
                 sent_replies.append(response)
 
-        def tool_runner(active_session, task: str, *, event_callback=None, **kwargs) -> NoReturn:
+        def tool_runner(
+            active_session: ArmadaActiveSessionSummary,
+            task: str,
+            *,
+            event_callback: ArmadaWorkerTranscriptCallback | None = None,
+            **kwargs: object,
+        ) -> NoReturn:
             raise RuntimeError("codex adapter failed")
 
         bot_handler = FakeBotHandler()
@@ -7284,7 +7446,7 @@ class ArmadaAppServerProtocolCitizenTest(TestCase):
 
     def test_runtime_reconciliation_restores_native_descendant_threads(self) -> None:
         runner = self.make_runner(isolated=True)
-        emitted: list[dict[str, Any]] = []
+        emitted: list[ArmadaWorkerTranscriptEvent] = []
         with patch.object(
             runner,
             "request",
@@ -7434,7 +7596,7 @@ class ArmadaAppServerProtocolCitizenTest(TestCase):
                 "params": {"threadId": "root-1", "turn": {"id": "root-turn"}},
             },
         ]
-        streamed: list[dict[str, object]] = []
+        streamed: list[ArmadaWorkerTranscriptEvent] = []
         with patch.object(runner, "next_message", side_effect=messages):
             result = runner.wait_for_turn(
                 thread_id="root-1",
@@ -7494,11 +7656,13 @@ class ArmadaAppServerProtocolCitizenTest(TestCase):
         process = SimpleNamespace(
             stdout=[json.dumps({"method": "old/generation", "params": {}})],
         )
-        runner.messages = replacement_messages  # type: ignore[assignment]
+        runner.messages = replacement_messages
 
-        runner.read_messages(process, old_messages)  # type: ignore[arg-type]
+        runner.read_messages(cast(Popen[str], process), old_messages)
 
-        self.assertEqual(old_messages.get_nowait()["method"], "old/generation")
+        message = old_messages.get_nowait()
+        assert message is not None
+        self.assertEqual(message["method"], "old/generation")
         self.assertIsNone(old_messages.get_nowait())
         self.assertTrue(replacement_messages.empty())
 
@@ -7518,7 +7682,7 @@ class ArmadaAppServerProtocolCitizenTest(TestCase):
             latest_codex_trigger_message_id=11,
             current_trigger_message_id=12,
         )
-        events: list[dict[str, object]] = []
+        events: list[ArmadaWorkerTranscriptEvent] = []
         with (
             patch.object(runner, "ensure_started"),
             patch.object(runner, "ensure_thread", return_value="root-1"),
@@ -7546,7 +7710,9 @@ class ArmadaAppServerProtocolCitizenTest(TestCase):
         )
         requests: list[tuple[str, dict[str, Any]]] = []
 
-        def request(method, params, **kwargs):
+        def request(
+            method: str, params: dict[str, Any], **kwargs: object
+        ) -> dict[str, dict[str, str]]:
             requests.append((method, params))
             if method == "thread/fork":
                 return {"thread": {"id": "side-1"}}
@@ -7608,7 +7774,9 @@ class ArmadaAppServerProtocolCitizenTest(TestCase):
         requests: list[tuple[str, dict[str, Any]]] = []
         next_turn = iter(("side-turn-1", "side-turn-2"))
 
-        def request(method, params, **kwargs):
+        def request(
+            method: str, params: dict[str, Any], **kwargs: object
+        ) -> dict[str, dict[str, str]]:
             requests.append((method, params))
             if method == "thread/fork":
                 return {"thread": {"id": "side-1"}}
@@ -7666,7 +7834,9 @@ class ArmadaAppServerProtocolCitizenTest(TestCase):
         )
         requests: list[tuple[str, dict[str, Any]]] = []
 
-        def request(method, params, **kwargs):
+        def request(
+            method: str, params: dict[str, Any], **kwargs: object
+        ) -> dict[str, dict[str, str]]:
             requests.append((method, params))
             if method == "thread/fork":
                 return {"thread": {"id": "side-broken"}}
@@ -7703,7 +7873,9 @@ class ArmadaAppServerProtocolCitizenTest(TestCase):
             runner.side_thread_ids_by_conversation_key[key] = thread_id
         requests: list[tuple[str, dict[str, Any]]] = []
 
-        def request(method, params, **kwargs):
+        def request(
+            method: str, params: dict[str, Any], **kwargs: object
+        ) -> dict[str, dict[str, str]]:
             requests.append((method, params))
             if method == "thread/fork":
                 return {"thread": {"id": "side-new"}}
@@ -7768,7 +7940,9 @@ class ArmadaAppServerProtocolCitizenTest(TestCase):
         )
         requests: list[tuple[str, dict[str, Any]]] = []
 
-        def request(method, params, **kwargs):
+        def request(
+            method: str, params: dict[str, Any], **kwargs: object
+        ) -> dict[str, dict[str, str]]:
             requests.append((method, params))
             if method == "thread/fork":
                 return {"thread": {"id": "side-live"}}
@@ -7818,7 +7992,9 @@ class ArmadaAppServerProtocolCitizenTest(TestCase):
             latest_codex_trigger_message_id=11,
         )
 
-        def request(method, params, **kwargs):
+        def request(
+            method: str, params: dict[str, Any], **kwargs: object
+        ) -> dict[str, dict[str, str]]:
             if method == "thread/fork":
                 self.assertEqual(params["threadId"], "root-live")
                 return {"thread": {"id": "side-live"}}
@@ -7889,14 +8065,14 @@ class ArmadaAppServerProtocolCitizenTest(TestCase):
         runner.active_turn_id = "root-turn-1"
         root_questions: list[list[dict[str, object]]] = []
         side_questions: list[list[dict[str, object]]] = []
-        root_events: list[dict[str, Any]] = []
-        side_events: list[dict[str, Any]] = []
+        root_events: list[ArmadaWorkerTranscriptEvent] = []
+        side_events: list[ArmadaWorkerTranscriptEvent] = []
 
-        def root_provider(questions):
+        def root_provider(questions: list[dict[str, Any]]) -> dict[str, list[str]]:
             root_questions.append(questions)
             return {"root-question": ["root-answer"]}
 
-        def side_provider(questions):
+        def side_provider(questions: list[dict[str, Any]]) -> dict[str, list[str]]:
             side_questions.append(questions)
             return {"side-question": ["side-answer"]}
 
@@ -8069,9 +8245,11 @@ class ArmadaAppServerProtocolCitizenTest(TestCase):
             latest_codex_trigger_message_id=11,
             current_trigger_message_id=12,
         )
-        events: list[dict[str, Any]] = []
+        events: list[ArmadaWorkerTranscriptEvent] = []
 
-        def request(method, params, **kwargs):
+        def request(
+            method: str, params: dict[str, Any], **kwargs: object
+        ) -> dict[str, dict[str, str]]:
             if method == "thread/fork":
                 return {"thread": {"id": "side-1"}}
             if method == "turn/start":
@@ -8105,7 +8283,7 @@ class ArmadaAppServerProtocolCitizenTest(TestCase):
             stream_exists=True,
             messages=[(12, "@Onix start", False)],
         )
-        events: list[dict[str, object]] = []
+        events: list[ArmadaWorkerTranscriptEvent] = []
         with patch.object(
             runner,
             "request",
@@ -8137,9 +8315,9 @@ class ArmadaAppServerProtocolCitizenTest(TestCase):
             latest_codex_trigger_message_id=11,
             current_trigger_message_id=12,
         )
-        events: list[dict[str, object]] = []
+        events: list[ArmadaWorkerTranscriptEvent] = []
 
-        def wait_for_turn(**kwargs):
+        def wait_for_turn(**kwargs: Unpack[FakeWaitForTurnKwargs]) -> tuple[str, int, int, int]:
             kwargs["event_callback"](
                 {
                     "kind": "assistant",
@@ -8180,9 +8358,9 @@ class ArmadaAppServerProtocolCitizenTest(TestCase):
             latest_codex_trigger_message_id=11,
             current_trigger_message_id=12,
         )
-        events: list[dict[str, object]] = []
+        events: list[ArmadaWorkerTranscriptEvent] = []
 
-        def wait_for_turn(**kwargs):
+        def wait_for_turn(**kwargs: Unpack[FakeWaitForTurnKwargs]) -> tuple[str, int, int, int]:
             for event_thread_id in ("other-child", "unknown-child"):
                 kwargs["event_callback"](
                     {
@@ -8206,7 +8384,7 @@ class ArmadaAppServerProtocolCitizenTest(TestCase):
 
     def test_interrupt_uses_the_native_turn_id_field(self) -> None:
         runner = self.make_runner(isolated=True)
-        runner.process = SimpleNamespace(poll=lambda: None)
+        runner.process = cast(Popen[str], SimpleNamespace(poll=lambda: None))
         runner.active_thread_id = "root-1"
         runner.active_turn_id = "turn-1"
         with patch.object(runner, "send_message") as send_message:

@@ -509,6 +509,7 @@ run_test("names, titles and lines are words, never markup", async () => {
     const side = new DOMParser().parseFromString(pages.pagesSideHTML(), "text/html");
     assert.equal(side.querySelector("img, script"), null);
     assert.equal(side.querySelector("li .t").textContent, name);
+    assert.ok(pages.pageItems().some((item) => item.label === `${name}'s page`));
     assert.equal(window.hit, undefined);
     beta_state.people.delete(HOSTILE);
 });
@@ -646,4 +647,14 @@ run_test("live: a post published, retitled or removed elsewhere", async () => {
     assert.equal(view().querySelector("textarea").value, "Mine");
     clock.tick(300);
     await settle();
+});
+
+run_test("Jump to reaches my page, a new post and everyone's page, never the agent's", () => {
+    const items = pages.pageItems();
+    assert.deepEqual(
+        items.map((item) => item.label),
+        ["Your page", "New post", "Iago Smith's page"],
+    );
+    assert.equal(items[0].key, `page:${ME}`);
+    assert.equal(items[2].key, `page:${IAGO}`);
 });

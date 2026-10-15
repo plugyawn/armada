@@ -2,7 +2,7 @@
    them, and their posts, newest first; a post is set like the conversation, at reading width; my own page has an editor
    (Markdown, a preview, draft or publish, edit, delete). Everyone here can read a page, and so can the agent, which drafts
    a post on the page of the person who asked (never publishes it): such a draft says so. Reached from a person's card
-   (partner_card.js opens "page:<id>") and from the column, which lists everyone's pages.
+   (partner_card.js opens "page:<id>"), from Jump to, and from the column, which lists everyone's pages.
    Places: "page:<user id>" a person's page, "post:<id>" one post, "edit:<id>" or "edit:new" the editor; their addresses are
    #page/<id>, #post/<id>, #edit/<id> and #edit/new. routing.js hands every such key, address and opening to this module.
    The page has no band and no field (like Home): the editor's title and Markdown are their own inputs. Live: an armada_post
@@ -237,6 +237,13 @@ function pageHead() {
   else say_ = p.post_id ? "Editing a post on your page." : "A new post on your page.";
   return {kind: "plain", title: esc(uid ? nameOf(uid) : "Pages"), say: esc(say_), checklist: {title: "Pages"}};
 }
+/* Jump to: my page, a new post, and everyone's page by their name */
+function pageItems() {
+  const out = [{key: `page:${state.ME}`, label: "Your page", glyph: faceOf(state.ME, "s20"), cap: "Page"}, {cmd: () => go("edit:new"), label: "New post", glyph: ic("edit"), cap: "Your page"}];
+  for (const u of people.values()) if (!u.bot && u.active && u.id !== state.ME) out.push({key: `page:${u.id}`, label: `${u.name}'s page`, glyph: faceOf(u.id, "s20"), cap: "Page"});
+  return out;
+}
+
 /* ---------- live: a post added, changed or removed anywhere. What it changes is asked again, once, and drawn ---------- */
 const stale = new Set(); let staleTimer = 0;
 function onPost(ev) {
@@ -272,5 +279,5 @@ function wirePages() {
   box.addEventListener("drop", (e) => { const f = [...((e.dataTransfer && e.dataTransfer.files) || [])]; if (!f.length) return; e.preventDefault(); e.stopPropagation(); const src = $(".src", box); if (src && !src.hidden) f.forEach((x) => attach(x, src)); });
 }
 
-export {drawPage, ed, onPost, openPage, pageFromHash, pageFromKey, pageHash, pageHead, pages, pagesSideHTML,
+export {drawPage, ed, onPost, openPage, pageFromHash, pageFromKey, pageHash, pageHead, pageItems, pages, pagesSideHTML,
   posts, wirePages};

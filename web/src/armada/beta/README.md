@@ -68,14 +68,14 @@ into the engineered client deletes the module it replaces.
 | `home.js` | Home: what needs me | none this sprint |
 | `palette.js` | Jump to (⌘K) | none this sprint |
 | `lab.js` | the Lab: what is real, what is not, and its controls | none this sprint |
-| `pages.js` | personal pages (contract C5): a person's page, a post, my editor; their places (`page:`, `post:`, `edit:`), the column's list of pages, the `armada_post` event | pages |
+| `pages.js` | personal pages (contract C5): a person's page, a post, my editor; their places (`page:`, `post:`, `edit:`), the column's list of pages, their rows in Jump to, the `armada_post` event | pages |
 
 Personal pages (contract C5) are `pages.js`, with its sheet `pages.css` and its pane (`#page`) in the template. Its place
 kind, `page`, reaches the shared modules on one line each: `routing.js` hands its keys, addresses and opening to it
 (`pageFromKey`, `pageHash`, `pageFromHash`, `openPage`) and hides the band and the field for it, as for Home;
-`header.js` asks it for the header (`pageHead`), `column.js` for the column (`pagesSideHTML`); `host.js` wires its pane
-(`wirePages`) and its event (`armada_post`, also in `register()`'s `event_types`). A person's card opens
-`page:<user id>`.
+`header.js` asks it for the header (`pageHead`), `column.js` for the column (`pagesSideHTML`), `palette.js` for its rows
+in Jump to (`pageItems`); `host.js` wires its pane (`wirePages`) and its event (`armada_post`, also in `register()`'s
+`event_types`). A person's card opens `page:<user id>`.
 
 ## Seams
 

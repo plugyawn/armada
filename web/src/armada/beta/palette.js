@@ -14,6 +14,7 @@ import {closeMenu, overHide} from "./hover.js";
 import {closePicker} from "./model_picker.js";
 import {me_, pack} from "./partners.js";
 import {openPicker} from "./partner_picker.js";
+import {pageItems} from "./pages.js";
 
 /* ---------- Jump to (⌘K): every place I can go to, by name ---------- */
 let pal = null;
@@ -22,6 +23,7 @@ function places_() { const out = [{key: "home", label: "Home", glyph: ic("home")
   for (const s of subs()) { const repo = repoStreams.has(s.stream_id); for (const t of topicsOf.get(s.stream_id) || []) out.push({key: tkey(s.stream_id, t.name), label: topicLabel(t.name), glyph: ic(repo ? "repo" : s.invite_only ? "lock" : "hash"), cap: s.name, hay: `${s.name} ${t.name}`}); }
   const seen = new Set(); for (const d of state.dms) { const k = dkey(d.user_ids); seen.add(k); const ids = d.user_ids.length ? d.user_ids : [state.ME]; out.push({key: k, label: ids.map(nameOf).join(", "), glyph: faceOf(ids[0], "s20"), cap: "Direct message"}); }
   for (const u of people.values()) { if (u.bot || u.id === state.ME || !u.active) continue; const k = dkey([u.id]); if (seen.has(k)) continue; out.push({key: k, label: u.name, glyph: faceOf(u.id, "s20"), cap: "Direct message"}); }
+  out.push(...pageItems());
   if (state.place && state.place.repo) for (const v of ["README", "Files", "Changes"]) out.push({cmd: () => setTab(v), label: `Open ${v}`, glyph: ic(v === "README" ? "doc" : v === "Files" ? "folder" : "diff"), cap: topicLabel(state.place.topic)});
   if (state.P && liveRun(state.P)) out.push({cmd: stop, label: "Stop the run", glyph: ic("stop"), cap: "⌘."});
   if (pack) out.push({cmd: openPicker, label: me_() && me_().species ? "Change partner" : "Choose your partner", glyph: faceOf(state.ME, "s20"), cap: ""});

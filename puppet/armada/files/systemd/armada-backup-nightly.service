@@ -1,0 +1,11 @@
+[Unit]
+Description=Armada: nightly database dump to restic, retention and check
+Documentation=file:///home/zulip/deployments/current/docs/armada/operations.md
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/armada-backup nightly
+Nice=19
+IOSchedulingClass=idle

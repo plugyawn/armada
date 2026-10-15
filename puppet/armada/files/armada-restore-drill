@@ -1,0 +1,153 @@
+#!/bin/bash
+# Armada's restore drill: prove the backups in Spaces restore, with only the
+# offline keys, and time each step (docs/armada/operations.md, "Restore
+# drill").
+#
+#   armada-restore-drill KEYFILE [WORKDIR]
+#
+# KEYFILE is the offline key file (~/.config/armada/backup-keys on the
+# operator's Mac, copied to a root-only file for the drill and removed
+# after); the drill uses its read-only key, so it cannot change the
+# backups. WORKDIR (default /var/tmp/armada-drill) is removed at the end.
+#
+# What it does, on a scratch droplet or beside a live server:
+#   1. wal-g: fetch the latest base backup and replay the archived WAL into
+#      a throwaway PostgreSQL on port 5499 that archives nothing, then read
+#      row counts and the newest message;
+#   2. restic: restore the latest file snapshot, and the latest nightly
+#      database dump, and list what they hold;
+#   3. print a summary: each step's seconds, the counts, and the age of the
+#      newest restored message (the database's recovery point).
+# Needs PostgreSQL 17's server binaries, wal-g and restic. Runs as root.
+set -euo pipefail
+
+keyfile="${1:?usage: armada-restore-drill KEYFILE [WORKDIR]}"
+work="${2:-/var/tmp/armada-drill}"
+pgbin=/usr/lib/postgresql/17/bin
+port=5499
+
+key() {
+    crudini --get "$keyfile" backup "$1"
+}
+
+started=$(date +%s)
+step_started=$started
+step() {
+    local now
+    now=$(date +%s)
+    echo "drill: $1 took $((now - step_started)) s"
+    step_started=$now
+}
+
+cleanup() {
+    local status=$?
+    if [ "$status" -ne 0 ] && [ -f "$work/log/postgres.log" ]; then
+        echo "drill: FAILED; the restored PostgreSQL's log ends:" >&2
+        tail -n 20 "$work/log/postgres.log" >&2
+    fi
+    if [ -f "$work/pg/postmaster.pid" ]; then
+        setpriv --reuid=postgres --regid=postgres --init-groups \
+            "$pgbin/pg_ctl" -D "$work/pg" -m immediate stop >/dev/null 2>&1 || true
+    fi
+    rm -rf "$work"
+}
+trap cleanup EXIT
+
+rm -rf "$work"
+# postgres reads the wal-g configuration in here.
+install -d -m 0711 "$work"
+install -d -o postgres -g postgres -m 0700 "$work/pg" "$work/socket" "$work/log"
+
+# wal-g, configured from the key file alone, with the read-only key.
+umask 077
+cat >"$work/walg.json" <<EOF
+{
+  "WALG_S3_PREFIX": "$(key walg_prefix)",
+  "AWS_ENDPOINT": "https://$(key spaces_endpoint)",
+  "AWS_REGION": "$(key spaces_region)",
+  "AWS_ACCESS_KEY_ID": "$(key drill_access_key)",
+  "AWS_SECRET_ACCESS_KEY": "$(key drill_secret_key)",
+  "WALG_LIBSODIUM_KEY": "$(key walg_libsodium_key_hex)",
+  "WALG_LIBSODIUM_KEY_TRANSFORM": "hex"
+}
+EOF
+chown postgres:postgres "$work/walg.json"
+walg() {
+    setpriv --reuid=postgres --regid=postgres --init-groups env HOME="$work" \
+        wal-g --config "$work/walg.json" "$@"
+}
+
+walg backup-list 2>/dev/null | tail -n 1 | sed 's/^/drill: latest base backup: /'
+walg backup-fetch "$work/pg" LATEST 2>&1 | tail -n 1
+step "fetching the base backup"
+
+# A minimal configuration: nothing is archived from here, nothing listens
+# on the network, and it takes no connections until recovery ends (so it
+# need not match the primary's max_connections).
+cat >"$work/pg/postgresql.conf" <<EOF
+port = $port
+listen_addresses = ''
+unix_socket_directories = '$work/socket'
+archive_mode = off
+shared_buffers = 128MB
+max_connections = 20
+hot_standby = off
+restore_command = 'wal-g --config $work/walg.json wal-fetch "%f" "%p"'
+recovery_target_action = 'promote'
+EOF
+cat >"$work/pg/pg_hba.conf" <<EOF
+local all postgres peer
+EOF
+touch "$work/pg/pg_ident.conf"
+touch "$work/pg/recovery.signal"
+chown -R postgres:postgres "$work/pg"
+setpriv --reuid=postgres --regid=postgres --init-groups env HOME="$work" \
+    "$pgbin/pg_ctl" -D "$work/pg" -l "$work/log/postgres.log" -w -t 1800 start >/dev/null
+# Recovery ends when the archive has no next segment; then it promotes,
+# and pg_ctl's wait for connections ends.
+until [ "$(setpriv --reuid=postgres --regid=postgres --init-groups \
+    psql -h "$work/socket" -p "$port" -d zulip -Atc 'SELECT pg_is_in_recovery()' 2>/dev/null)" = "f" ]; do
+    sleep 1
+done
+step "replaying the archived WAL"
+
+sql() {
+    setpriv --reuid=postgres --regid=postgres --init-groups \
+        psql -h "$work/socket" -p "$port" -d zulip -Atc "$1"
+}
+echo "drill: restored database: $(sql "SELECT count(*) FROM zulip.zerver_message") messages," \
+    "$(sql "SELECT count(*) FROM zulip.zerver_userprofile") users," \
+    "$(sql "SELECT count(*) FROM zulip.zerver_stream") channels"
+echo "drill: newest restored message: id $(sql "SELECT max(id) FROM zulip.zerver_message")," \
+    "$(sql "SELECT round(extract(epoch FROM now() - max(date_sent))) FROM zulip.zerver_message") s old"
+echo "drill: replay ended at $(grep -o 'last completed transaction was at log time .*' "$work/log/postgres.log" | tail -n 1)"
+step "reading the restored database"
+
+# restic, with the read-only key, which cannot write restic's locks.
+export RESTIC_REPOSITORY RESTIC_PASSWORD AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY
+RESTIC_REPOSITORY="$(key restic_repository)"
+RESTIC_PASSWORD="$(key restic_password)"
+AWS_ACCESS_KEY_ID="$(key drill_access_key)"
+AWS_SECRET_ACCESS_KEY="$(key drill_secret_key)"
+export RESTIC_CACHE_DIR="$work/restic-cache"
+restic --no-lock snapshots --compact --latest 1 --tag files | sed -n '3p' | sed 's/^/drill: latest file snapshot: /'
+restic --no-lock restore latest --tag files --target "$work/files" --quiet
+for path in /etc/zulip /home/zulip/uploads /srv/armada/worktrees /srv/armada/sprites /home/zulip/.codex; do
+    if [ -e "$work/files$path" ]; then
+        echo "drill: restored $path: $(find "$work/files$path" -type f | wc -l) files"
+    fi
+done
+if [ -e "$work/files/home/zulip/.codex/auth.json" ]; then
+    echo "drill: FAILED: the Codex login is in the backup" >&2
+    exit 1
+fi
+step "restoring the file snapshot"
+
+restic --no-lock restore latest --tag database --target "$work/database" --quiet
+dump="$(find "$work/database" -name 'zulip-backup.tar.gz' | head -n 1)"
+tar -xzf "$dump" -C "$work/database"
+echo "drill: nightly dump: Zulip $(head -n 1 "$work/database/zulip-backup/zulip-version")," \
+    "$("$pgbin/pg_restore" --list "$work/database/zulip-backup/database" | grep -c 'TABLE DATA') tables of data readable"
+step "restoring the nightly dump"
+
+echo "drill: passed in $(($(date +%s) - started)) s"

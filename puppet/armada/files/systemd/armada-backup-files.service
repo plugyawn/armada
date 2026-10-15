@@ -1,0 +1,11 @@
+[Unit]
+Description=Armada: hourly restic snapshot of uploads, worktrees and settings
+Documentation=file:///home/zulip/deployments/current/docs/armada/operations.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/armada-backup files
+Nice=19
+IOSchedulingClass=idle

@@ -1,0 +1,9 @@
+[Unit]
+Description=Armada: nightly backup, at 03:00 in India (21:30 UTC)
+
+[Timer]
+OnCalendar=*-*-* 21:30:00 UTC
+Persistent=true
+
+[Install]
+WantedBy=timers.target

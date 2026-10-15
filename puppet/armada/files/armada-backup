@@ -1,0 +1,101 @@
+#!/bin/bash
+# Armada's file backups: restic, to the Spaces bucket the database's
+# wal-g archive also uses (puppet/armada/manifests/backups.pp).
+#
+#   armada-backup files     hourly: uploads, worktrees, /etc/zulip, sprites,
+#                           the agent's Codex state without its login, and
+#                           the zulip user's SSH keys
+#   armada-backup nightly   Zulip's own backup (database dump and settings)
+#                           into the same repository, then retention and a
+#                           check of the repository's structure
+#   armada-backup init      create the repository, once per bucket
+#   armada-backup restic …  restic itself, with the repository's settings
+#                           (snapshots, restore, check, stats)
+#
+# Runs as root. The repository is named in /etc/zulip/zulip.conf
+# ([armada] backup_restic_repository); its password and the Spaces key are
+# in /etc/zulip/zulip-secrets.conf. Each success touches a stamp in
+# /var/lib/armada-backup, which armada-ops-check reads for the backups' age.
+set -euo pipefail
+
+state=/var/lib/armada-backup
+secrets=/etc/zulip/zulip-secrets.conf
+
+conf_get() {
+    crudini --get "$1" "$2" "$3" 2>/dev/null || true
+}
+
+RESTIC_REPOSITORY="$(conf_get /etc/zulip/zulip.conf armada backup_restic_repository)"
+if [ -z "$RESTIC_REPOSITORY" ]; then
+    echo "armada-backup: no [armada] backup_restic_repository in /etc/zulip/zulip.conf" >&2
+    exit 1
+fi
+AWS_ACCESS_KEY_ID="$(conf_get "$secrets" secrets s3_backups_key)"
+AWS_SECRET_ACCESS_KEY="$(conf_get "$secrets" secrets s3_backups_secret_key)"
+RESTIC_PASSWORD="$(conf_get "$secrets" secrets armada_backup_restic_password)"
+if [ -z "$RESTIC_PASSWORD" ] || [ -z "$AWS_ACCESS_KEY_ID" ]; then
+    echo "armada-backup: armada_backup_restic_password or s3_backups_key missing from $secrets" >&2
+    exit 1
+fi
+export RESTIC_REPOSITORY AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY RESTIC_PASSWORD
+export RESTIC_CACHE_DIR="$state/cache"
+
+# Everything here runs at idle priority, so a backup never slows a send or
+# an agent's tools.
+restic_idle() {
+    nice -n 19 ionice -c 3 restic "$@"
+}
+
+backup_files() {
+    local paths=() path
+    for path in /home/zulip/uploads /srv/armada/worktrees /etc/zulip /srv/armada/sprites \
+        /home/zulip/.codex /home/zulip/.ssh; do
+        if [ -e "$path" ]; then
+            paths+=("$path")
+        fi
+    done
+    # The Codex login is never backed up: after a restore a person signs in
+    # again (docs/armada/operations.md). Rebuildable caches stay out too.
+    restic_idle backup --quiet --tag files \
+        --exclude /home/zulip/.codex/auth.json \
+        --exclude /home/zulip/.codex/tmp \
+        --exclude /home/zulip/.codex/cache \
+        --exclude node_modules --exclude .venv --exclude __pycache__ \
+        "${paths[@]}"
+    touch "$state/files.ok"
+}
+
+backup_nightly() {
+    local dump="$state/dump/zulip-backup.tar.gz"
+    install -d -o zulip -g zulip -m 0700 "$state/dump"
+    rm -f "$dump"
+    # Uploads are in the hourly snapshots; this is the database and
+    # /etc/zulip in Zulip's own restorable format, a second way back beside
+    # wal-g's archive.
+    nice -n 19 ionice -c 3 su zulip -c \
+        "/home/zulip/deployments/current/manage.py backup --skip-uploads --output=$dump" >/dev/null
+    restic_idle backup --quiet --tag database "$dump"
+    rm -f "$dump"
+    touch "$state/database.ok"
+    restic_idle forget --quiet --tag files --keep-hourly 48 --keep-daily 14 --keep-weekly 8 --keep-monthly 6
+    restic_idle forget --quiet --tag database --keep-daily 14 --keep-weekly 8 --keep-monthly 6
+    restic_idle prune --quiet
+    restic_idle check --quiet
+    touch "$state/nightly.ok"
+}
+
+# zulip writes the nightly dump into $state/dump, so it may pass through.
+install -d -m 0711 "$state"
+case "${1:-}" in
+    files) backup_files ;;
+    nightly) backup_nightly ;;
+    init) restic cat config >/dev/null 2>&1 || restic init ;;
+    restic)
+        shift
+        exec restic "$@"
+        ;;
+    *)
+        echo "usage: armada-backup files|nightly|init|restic ARGS..." >&2
+        exit 2
+        ;;
+esac

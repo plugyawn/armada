@@ -13,6 +13,7 @@ import {openThread} from "./threads.js";
 import {updateMessage} from "./agent_turn.js";
 import {addressedEcho, ONIX_AT} from "./send.js";
 import {drawRunState} from "./band.js";
+import {openCard} from "./partner_card.js";
 
 /* ---------- the message's controls: the hover overlay, its menu, edit and delete ----------
    One raised object with four controls (React, Reply in thread, Copy text, More) on the bubble's open side, or on
@@ -58,6 +59,7 @@ function act(name, t, btn, kbd) { const m = msgOf(t); if (!m) return;   /* from 
 function openMenu(m, btn) { closeMenu(); const mine = m.sender_id === state.ME && typeof m.id === "number", items = [];
   if (mine && !isOnix(m.sender_id)) items.push(["edit", "Edit", "E"], ["delete", "Delete", ""]);
   items.push(["copy", "Copy text", "C"], ["link", "Copy link", ""]); if (RECEIPTS && typeof m.id === "number") items.push(["info", "Info", "I"]);
+  if (m.sender_id > 0 && m.sender_id !== state.ME && !isOnix(m.sender_id)) items.push(["card", "Card", ""]);   /* the sender's card, which a face opens to the pointer */
   menu = el("div", "menu raised float", items.map(([k, label, key]) => `<button class="mi" data-mi="${k}" tabindex="-1">${label}<span class="k">${key}</span></button>`).join("")); menu.setAttribute("role", "menu");
   const r = btn.getBoundingClientRect(), mr = main.getBoundingClientRect(); menu.style.cssText = `position:absolute;left:${Math.round(r.left - mr.left)}px;top:${Math.round(r.bottom - mr.top + 4)}px`; main.append(menu); host(menu);
   let hi = 0; const mark = () => $$(".mi", menu).forEach((x, i) => x.classList.toggle("hl", i === hi)); mark();
@@ -65,7 +67,7 @@ function openMenu(m, btn) { closeMenu(); const mine = m.sender_id === state.ME &
     const hot = items.findIndex(([, , key]) => key && key.toLowerCase() === e.key.toLowerCase()); if (hot >= 0 && !e.metaKey && !e.ctrlKey) { e.preventDefault(); $$(".mi", menu)[hot].click(); return true; } return false; };
   menu._t = overAt;
   press(menu, ".mi", (b, e, ptr) => { const k = b.dataset.mi, t = menu._t; closeMenu(); overHide();
-    if (k === "edit") startEdit(m); else if (k === "delete") confirmDelete(m); else if (k === "info") openInfo(m.id, t, !ptr);
+    if (k === "edit") startEdit(m); else if (k === "delete") confirmDelete(m); else if (k === "info") openInfo(m.id, t, !ptr); else if (k === "card") openCard(m.sender_id, t);
     else if (k === "copy") { try { navigator.clipboard.writeText(plainText(t)).catch(() => {}); } catch (e) {} note("Copied"); ready(); }
     else if (k === "link") { const p = state.place, u = p.kind === "topic" ? `${location.origin}/#narrow/channel/${p.stream_id}/topic/${encodeURIComponent(p.topic)}/near/${m.id}` : `${location.origin}/#narrow/near/${m.id}`; try { navigator.clipboard.writeText(u).catch(() => {}); } catch (e) {} note("Link copied"); ready(); } });
   M.release(menu, {y: -(T["pane-rise"] || 4)}, "touch"); }

@@ -31,7 +31,7 @@ import {drawHome, drawHomeRow, fetchMentions, HOME, scanAll} from "./home.js";
 import {applyPartners, hopOnce, loadPartners, me_, pack, partners, refreshPartners} from "./partners.js";
 import {choosePick, drawPicker, drawPickerBand, drawPickerSide, movePick, openPicker, PARTNER, pick, putOff,
   selectCell, selectMine} from "./partner_picker.js";
-import {card, closeCard, cutMoment, holdMoment, moment, momentDue, openCard, playMoment} from "./partner_card.js";
+import {card, closeCard, cutMoment, faceAt, holdMoment, moment, momentDue, openCard, playMoment, wireCard} from "./partner_card.js";
 import {buildLab, lab} from "./lab.js";
 
 /* event dispatch (connection.js): what each event type the page registers for does; a module's own types are named here */
@@ -48,8 +48,8 @@ async function boot() {
   try { await Promise.all([register(), loadThemedMarks(), loadPartners()]); api("GET", "armada/session").then((r) => { if (r.armada_session && r.armada_session.agent_mention) state.agentMention = r.armada_session.agent_mention; }).catch(() => {}); }
   catch (e) { if (signedOut.done) { bootEl.remove(); return; } bootEl.innerHTML = `<p>The beta could not load: ${esc(e.message)}. <a href="/">Open the old interface</a></p>`; return; }
   bindFrame();
-  /* my face opens my partner's card (or the picker, before I have one); the picker's switch, Later, its cells; the card's controls */
-  press(nav, ".row.me", () => { if (pack) openCard(); ready(); });
+  /* my face opens my card, any other face that person's (partner_card.js); the picker's switch, Later, its cells; the card's controls */
+  press(nav, ".row.me", () => { openCard(); ready(); }); wireCard();
   press(main, "[data-seg]", (b) => { pick.seg = b.dataset.seg; if (pick.q) { pick.q = ""; tx.textContent = ""; syncField(); } pick.sel = null; state.hd._sig = ""; drawHeader(); drawPicker(); drawPickerBand(); panes.Partner.scrollTop = 0; ready(); });
   press(main, "[data-later]", () => putOff());
   press(panes.Partner, ".pkc", (b) => { selectCell(b.dataset.sid); drawPickerBand(); ready(); });
@@ -83,7 +83,7 @@ async function boot() {
   /* the field is ready after everything: a press that ends anywhere outside a control or a selection hands the caret back */
   document.addEventListener("mouseup", (e) => setTimeout(() => { const a = document.activeElement; if (a === tx || (a && a.closest("#lab, input, textarea, .thr-in .tx, .pal, .dlg, .pop")) || (e.target.closest && e.target.closest("#lab")) || !getSelection().isCollapsed) return; ready(); }, 0));
   /* a press outside a menu, the picker or the palette closes it and keeps what was pressed */
-  addEventListener("pointerdown", (e) => { state.pressing = true; if (moment && !e.target.closest(".pcard")) cutMoment(); else if (card && !e.target.closest(".pcard, .row.me")) closeCard();
+  addEventListener("pointerdown", (e) => { state.pressing = true; if (moment && !e.target.closest(".pcard")) cutMoment(); else if (card && !e.target.closest(".pcard, .row.me") && !faceAt(e)) closeCard();
     if (info && !e.target.closest(".info, .rt")) closeInfo(true);
     if (menu && !e.target.closest(".menu")) closeMenu(); if (pop && !e.target.closest(".pop, .k.mode")) closePicker(); if (pal && !e.target.closest(".pal")) palette(false); }, true);
   addEventListener("pointerup", () => { state.pressing = false; }, true); addEventListener("pointercancel", () => { state.pressing = false; }, true);

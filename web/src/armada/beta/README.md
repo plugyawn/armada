@@ -44,7 +44,7 @@ into the engineered client deletes the module it replaces.
 | `faces.js` | names, initials, stones, presence, `faceOf()` | faces |
 | `partners.js` | the sprite pack, the team's partners, faces redrawn, the evolution caption | faces |
 | `partner_picker.js` | the partner picker, a place (`#partner`) | faces |
-| `partner_card.js` | my partner card and the evolution moment: where the profile card grows | faces |
+| `partner_card.js` | a person's card (any face opens it; mine from the account row) and the evolution moment | faces |
 | `composer.js` | the field: the agent switch, the verb, the placeholder, attachments, `note()`, `ready()` | composer |
 | `send.js` | sending: the words addressed and echoed, `send()`, `retry()` | composer |
 | `model_picker.js` | the model and effort picker | composer |

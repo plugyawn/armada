@@ -1,15 +1,16 @@
 "use strict";
 
-// The interim beta's faces (web/src/armada/beta/faces.js, partners.js),
-// with a real DOM: a face stands its partner's Scarlet/Violet icon on a
-// circle, initials stand in where there is no icon, the agent has no face,
-// and the picker offers only species with an icon. The beta reads the
-// kit's window globals when it draws; the few it needs here are given as
-// stand-ins that draw nothing of their own.
+// The interim beta's faces and person cards (web/src/armada/beta/faces.js,
+// partners.js, partner_card.js), with a real DOM: a face stands its
+// partner's Scarlet/Violet icon on a circle, initials stand in where there
+// is no icon, the agent has no face, the picker offers only species with
+// an icon, and a press on a face opens that person's card. The beta reads
+// the kit's window globals when it draws; the few it needs here are given
+// as stand-ins that draw nothing of their own.
 
 const assert = require("node:assert/strict");
 
-const {set_global, zrequire} = require("../lib/namespace.cjs");
+const {clock, set_global, zrequire} = require("../lib/namespace.cjs");
 const real_dom = require("../lib/real_dom.cjs");
 const {run_test} = require("../lib/test.cjs");
 
@@ -49,6 +50,8 @@ const IAGO = 5;
 const CORDELIA = 6;
 const KING = 7;
 const AGENT = 9;
+const EVE = 8;
+const EVIL = `<img src="x" onerror="globalThis.pwned = 1">`;
 
 const sv = (num, w, h) => ({path: `sv/${num}.png`, size: [w, h], box: [0, 0, w, h]});
 const gen8 = (slug) => ({
@@ -131,9 +134,46 @@ const PARTNERS = {
         evolve_levels: [16, 30],
     },
 };
+const NOW = Date.now();
 const ANSWERS = [
     [/^\/beta\/sprites\/species\.json/, () => PACK],
     [/^\/json\/armada\/partners$/, () => PARTNERS],
+    [/^\/json\/users\/5$/, () => ({result: "success", user: {timezone: "Asia/Kolkata"}})],
+    [/^\/json\/users\/7$/, () => ({result: "success", user: {timezone: ""}})],
+    [/^\/json\/users\/8$/, () => ({result: "success", user: {timezone: `Asia/${EVIL}`}})],
+    [
+        /^\/json\/messages\?/,
+        (url) =>
+            url.includes("%22operand%22%3A8")
+                ? {
+                      result: "success",
+                      messages: [
+                          {
+                              id: 12,
+                              type: "stream",
+                              stream_id: 13,
+                              subject: EVIL,
+                              display_recipient: EVIL,
+                              timestamp: Math.floor(NOW / 1000) - 60,
+                          },
+                      ],
+                  }
+                : url.includes("%22operand%22%3A5")
+                  ? {
+                        result: "success",
+                        messages: [
+                            {
+                                id: 11,
+                                type: "stream",
+                                stream_id: 10,
+                                subject: "option-groups",
+                                display_recipient: "click",
+                                timestamp: Math.floor(NOW / 1000) - 240,
+                            },
+                        ],
+                    }
+                  : {result: "success", messages: []},
+    ],
 ];
 set_global("fetch", async (url) => {
     const answer = ANSWERS.find(([pattern]) => pattern.test(url));
@@ -145,6 +185,7 @@ set_global("fetch", async (url) => {
 const beta_state = zrequire("armada/beta/state.js");
 const partners = zrequire("armada/beta/partners.js");
 const faces = zrequire("armada/beta/faces.js");
+const card = zrequire("armada/beta/partner_card.js");
 
 beta_state.state.ME = ME;
 beta_state.state.meName = "Desdemona";
@@ -154,6 +195,7 @@ for (const [id, name] of [
     [IAGO, "Iago Smith"],
     [CORDELIA, "Cordelia"],
     [KING, "King Hamlet"],
+    [EVE, `${EVIL}Eve`],
     [AGENT, "Onix"],
 ]) {
     beta_state.people.set(id, {
@@ -165,11 +207,23 @@ for (const [id, name] of [
     });
 }
 beta_state.streams.set(10, {stream_id: 10, name: "click"});
+beta_state.streams.set(13, {stream_id: 13, name: EVIL});
 
+// What a card fetches resolves through promises alone (the stand-in fetch never waits on a timer).
+async function settle() {
+    for (let i = 0; i < 50; i += 1) {
+        await Promise.resolve();
+    }
+}
 function drawn(html) {
     const t = document.createElement("template");
     t.innerHTML = html;
     return t.content.firstElementChild;
+}
+function shown(html) {
+    const element = drawn(html);
+    document.body.append(element);
+    return element;
 }
 
 run_test("with no pack every face is initials", () => {
@@ -230,4 +284,156 @@ run_test("the agent has no face: nothing in the gutter, an empty cell in a list"
 run_test("a partner never grows out of its face", () => {
     assert.deepEqual(partners.withIcons(["26", "26-alola"]), ["26"]);
     assert.deepEqual(partners.withIcons(["16"]), ["16"]);
+    const [share, next, at] = card.growth("25", 23, [16, 30]);
+    assert.deepEqual(next, ["26"]);
+    assert.equal(at, 30);
+    assert.equal(share, (23 - 16) / (30 - 16));
+    assert.deepEqual(card.growth("6", 50, [16, 30]), [0.5, [], null]);
+});
+
+run_test("the card's words", () => {
+    assert.equal(card.presenceWords(ME), "Active now");
+    assert.equal(card.presenceWords(IAGO, "on"), "Active now");
+    assert.equal(card.presenceWords(IAGO, "away"), "Away");
+    const seen = {"5@example.com": {aggregated: {status: "idle", timestamp: NOW / 1000 - 7200}}};
+    assert.equal(card.presenceWords(IAGO, "", seen, NOW), "Active 2h ago");
+    assert.equal(card.presenceWords(IAGO, "", {}, NOW), "Offline");
+    assert.match(
+        card.localTime("Asia/Kolkata", Date.UTC(2026, 9, 15, 9, 0)),
+        /^2:30\s?PM in Kolkata$|^14:30 in Kolkata$/,
+    );
+    assert.equal(card.localTime(""), "");
+    assert.equal(card.localTime("Not/AZone"), "");
+    assert.equal(card.mentionOf(IAGO), "@**Iago Smith**");
+    beta_state.people.set(12, {
+        id: 12,
+        name: "Iago Smith",
+        email: "12@example.com",
+        bot: false,
+        active: true,
+    });
+    assert.equal(card.mentionOf(IAGO), "@**Iago Smith|5**");
+    beta_state.people.delete(12);
+    assert.equal(card.lastPlace(undefined), null);
+    assert.equal(
+        card.lastPlace({
+            type: "stream",
+            stream_id: 10,
+            subject: "",
+            display_recipient: "click",
+            timestamp: 1,
+        }).label,
+        "click / general chat",
+    );
+    assert.equal(
+        card.lastPlace({type: "private", display_recipient: [{id: ME}, {id: IAGO}], timestamp: 1})
+            .label,
+        "A direct message",
+    );
+});
+
+run_test("a press on a face opens that person's card, and again closes it", async () => {
+    card.wireCard();
+    const face = shown(
+        `<section class="cl them">${faces.faceOf(IAGO)}</section>`,
+    ).firstElementChild;
+    dom.click(face.querySelector("img") ?? face);
+    let open = document.querySelector('[role="dialog"]');
+    assert.ok(open, "the card opened");
+    assert.equal(open.getAttribute("aria-label"), "Iago Smith");
+    assert.match(open.textContent, /Iago Smith/);
+    assert.match(open.textContent, /Charmeleon/);
+    assert.match(open.textContent, /Level 20/);
+    assert.match(open.textContent, /Charizard at level 30/);
+    const buttons = new Set([...open.querySelectorAll("button")].map((b) => b.textContent));
+    assert.ok(buttons.has("Message"));
+    assert.ok(!buttons.has("Sign out"));
+    // Its facts arrive after it opens, into cells it already has.
+    await settle();
+    assert.match(open.textContent, /Local time.*in Kolkata/);
+    assert.match(open.textContent, /click \/ option-groups · 4m/);
+    dom.click(face);
+    assert.equal(document.querySelector('[role="dialog"]'), null);
+
+    // Someone with no partner, who has said nothing and set no time zone.
+    const king = shown(faces.faceOf(KING));
+    dom.click(king);
+    await settle();
+    open = document.querySelector('[role="dialog"]');
+    assert.match(open.textContent, /Not set/);
+    assert.match(open.textContent, /Nothing yet/);
+    card.closeCard();
+});
+
+run_test("a card takes focus when it opens, and Tab goes round its buttons", async () => {
+    beta_state.state.place = {key: "s:10:option-groups", kind: "topic"};
+    dom.click(shown(faces.faceOf(IAGO)));
+    await settle();
+    // It takes focus once the press that opened it has ended.
+    clock.tick(0);
+    const open = document.querySelector('[role="dialog"]');
+    // On the card itself, so that Return presses nothing.
+    assert.equal(document.activeElement, open);
+    const buttons = [...open.querySelectorAll("button")];
+    assert.ok(buttons.length > 1);
+    for (const button of [...buttons, buttons[0]]) {
+        dom.press("Tab");
+        assert.equal(document.activeElement, button);
+    }
+    dom.press("Tab", {shiftKey: true});
+    assert.equal(document.activeElement, buttons.at(-1));
+    card.closeCard();
+    beta_state.state.place = null;
+});
+
+run_test("a face in the nav opens no card", () => {
+    const nav = shown(`<nav>${faces.faceOf(IAGO, "s20")}</nav>`);
+    dom.click(nav.firstElementChild);
+    assert.equal(document.querySelector('[role="dialog"]'), null);
+});
+
+run_test("my own card offers Change partner and Sign out", () => {
+    card.openCard();
+    const open = document.querySelector('[role="dialog"]');
+    assert.equal(open.getAttribute("aria-label"), "You");
+    assert.match(open.textContent, /Pikachu/);
+    assert.match(open.textContent, /124 of 124 to level 16|0 of 124 to level 16/);
+    assert.match(open.textContent, /Next: Raichu at level 30\./);
+    const buttons = [...open.querySelectorAll("button")].map((b) => b.textContent);
+    assert.deepEqual(buttons, ["Change partner", "Sign out"]);
+    card.openCard();
+    assert.equal(document.querySelector('[role="dialog"]'), null);
+});
+
+run_test("a card writes names, places and zones as text, never as markup", async () => {
+    const face = shown(faces.faceOf(EVE));
+    assert.equal(face.querySelector("img"), null);
+    dom.click(face);
+    await settle();
+    const open = document.querySelector('[role="dialog"]');
+    assert.equal(open.getAttribute("aria-label"), `${EVIL}Eve`);
+    assert.equal(open.querySelector("img[onerror]"), null);
+    assert.equal(open.querySelector("[onerror]"), null);
+    assert.ok(open.querySelector(".ih b").textContent.startsWith(EVIL));
+    assert.ok(open.textContent.includes(`${EVIL} / ${EVIL}`));
+    assert.equal(globalThis.pwned, undefined);
+    card.closeCard();
+});
+
+run_test("Mention writes the person into the open field and closes the card", () => {
+    const field = shown(`<div class="tx" contenteditable="true">hi</div>`);
+    beta_state.state.threadTx = field;
+    const face = shown(faces.faceOf(IAGO));
+    dom.click(face);
+    const open = document.querySelector('[role="dialog"]');
+    // Mention is offered only where there is a conversation.
+    assert.equal(open.querySelector("[data-card-mention]"), null);
+    card.closeCard();
+    beta_state.state.place = {key: "s:10:option-groups", kind: "topic"};
+    dom.click(face);
+    dom.click(document.querySelector("[data-card-mention]"));
+    assert.equal(field.textContent, "hi @**Iago Smith** ");
+    assert.equal(document.querySelector('[role="dialog"]'), null);
+    beta_state.state.threadTx = null;
+    beta_state.state.place = null;
 });

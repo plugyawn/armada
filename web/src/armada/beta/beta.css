@@ -241,6 +241,9 @@ aside.side > .out > .note { padding: 0 0 0 calc(20px + var(--s-2)); min-height: 
    so there Onix keeps that edge. */
 .av.none { background: none; }
 .feed .lane > .cl.onix { margin-left: calc(-1 * var(--gutter)); }
+/* a face opens its person's card */
+[data-uid][data-fs]:not(nav *, .pal *, .pcard *, #picker *, .pkcol *) { cursor: pointer; }
+.av.big { font: var(--t-title); }
 
 /* the hop: up 3 px and down, by transform only. Under the pointer, while its person types, on a picker cell that is selected.
    Nothing hops at rest, and nothing with motion reduced. */
@@ -286,12 +289,25 @@ main > .pane[data-pane="Partner"] { overflow-y: auto; scrollbar-width: none; }
 .pksample { position: relative; margin: var(--s-1) 0 0 var(--gutter); display: flex; flex-direction: column; align-items: flex-start; }
 .pksample > .pk { position: absolute; left: calc(-1 * var(--gutter)); top: var(--s-1); }
 
-/* my partner's card: a raised card above my own face, over the nav's rows, never over the conversation */
+/* a person's card: mine a raised card above my own face, over the nav's rows; anyone else's beside the face that was pressed
+   (partner_card.js places it, .at). Their partner large on its circle with room above for its head, then lines of one height
+   each, so what arrives after the card opens fills a cell and never changes its size. */
 .pcard { position: fixed; left: var(--s-2); bottom: 52px; width: 232px; z-index: 20; border-radius: 14px; padding: var(--s-1) var(--s-3) var(--s-3); }
+.pcard.at { bottom: auto; width: 264px; }   /* mine fits the nav (248); another's has the conversation beside it */
 .pcard .ih { display: flex; align-items: center; gap: var(--s-2); height: var(--h-m); font: var(--t-strong); }
-.pcard .ih .e { margin-left: auto; font: var(--t-caption); color: var(--ink-2); }
-.pcard .stage { position: relative; width: 136px; height: 112px; margin: var(--s-1) auto; border-radius: var(--r-block); }
-.pcard .stage > .pk { position: absolute; left: 0; top: 0; }
+.pcard .ih b { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pcard .ih .e { margin-left: auto; flex: none; font: var(--t-caption); color: var(--ink-2); }
+.pcard .stage { position: relative; height: 96px; margin: var(--s-1) auto 0; display: grid; place-items: end center; border-radius: var(--r-block); }
+.pcard.moment .stage { width: 136px; height: 112px; display: block; margin-bottom: var(--s-1); }
+.pcard.moment .stage > .pk { position: absolute; left: 0; top: 0; }
+.pcard .pkline { display: flex; align-items: baseline; gap: var(--s-2); font: var(--t-text); margin-top: var(--s-3); }
+.pcard .pkline .e { margin-left: auto; font: var(--t-caption); color: var(--ink-2); }
+.pcard .facts { display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: var(--s-3); row-gap: var(--s-1); margin: var(--s-3) 0 0; font: var(--t-caption); }
+.pcard .facts dt { color: var(--ink-2); }
+.pcard .facts dd { margin: 0; height: 16px; display: flex; align-items: center; gap: var(--s-1); min-width: 0; white-space: nowrap; overflow: hidden; }
+.pcard .facts dd .lk { display: block; flex: 0 1 auto; height: 16px; margin: 0; padding: 0; font: var(--t-caption); min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.pcard .facts dd .d { color: var(--ink-2); flex: none; }
+.pcard .facts dd .mk { flex: none; }
 .pcard .stage.pulse { animation: pk-pulse 280ms step-end 1; }
 @keyframes pk-pulse { 0% { background: var(--fill-2); } 100% { background: transparent; } }
 .pcard .pk.ghost img { filter: brightness(0); }
@@ -306,7 +322,7 @@ main > .pane[data-pane="Partner"] { overflow-y: auto; scrollbar-width: none; }
 .pcard .xpbar > i { display: block; height: 6px; background: var(--ink-1); }
 .pcard .cap { font: var(--t-caption); color: var(--ink-2); margin-top: var(--s-1); }
 .pcard .say { font: var(--t-text); margin-top: var(--s-1); }
-.pcard p:not(.cap):not(.say) { font: var(--t-text); margin-top: var(--s-2); }
+.pcard p:not(.cap, .say, .pkline) { font: var(--t-text); margin-top: var(--s-2); }
 .pcard .btns { display: flex; gap: var(--s-2); margin-top: var(--s-3); justify-content: flex-end; }
 
 }   /* @layer zulip.armada-beta */
